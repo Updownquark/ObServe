@@ -37,6 +37,7 @@ import org.qommons.Causable.CausableKey;
 import org.qommons.ConcurrentHashSet;
 import org.qommons.IdentityKey;
 import org.qommons.Lockable;
+import org.qommons.QommonsUtils;
 import org.qommons.Ternian;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
@@ -1620,11 +1621,19 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public CollectionElement<T> getElementsBySource(ElementId sourceEl) throws NoSuchElementException {
+		public BetterList<CollectionElement<T>> getElementsBySource(ElementId sourceEl) throws NoSuchElementException {
 			if (isReversed && sourceEl instanceof ElementId.ReversedElementId)
 				sourceEl = sourceEl.reverse();
-			CollectionElement<E> adj = theSource.getElementsBySource(sourceEl);
-			return adj == null ? null : elementFor(adj, null);
+			return QommonsUtils.map2(theSource.getElementsBySource(sourceEl), el -> elementFor(el, null));
+		}
+
+		@Override
+		public BetterList<ElementId> getSourceElements(ElementId localElement, BetterCollection<?> sourceCollection) {
+			if (isReversed && localElement instanceof ElementId.ReversedElementId)
+				localElement = localElement.reverse();
+			if (sourceCollection == this)
+				return theSource.getSourceElements(localElement, theSource);
+			return theSource.getSourceElements(localElement, sourceCollection);
 		}
 
 		/**
@@ -1805,8 +1814,18 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public int hashCode() {
+			return BetterCollection.hashCode(this);
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return BetterCollection.equals(this, obj);
+		}
+
+		@Override
 		public String toString() {
-			return ObservableCollection.toString(this);
+			return BetterCollection.toString(this);
 		}
 	}
 
@@ -2104,18 +2123,23 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public CollectionElement<T> getElementsBySource(ElementId sourceEl) throws NoSuchElementException {
+		public BetterList<CollectionElement<T>> getElementsBySource(ElementId sourceEl) throws NoSuchElementException {
 			try (Transaction t = lock(false, null)) {
 				if (sourceEl instanceof DerivedElementHolder
 					&& ((DerivedElementHolder<?>) sourceEl).treeNode.getRoot().equals(theDerivedElements.getRoot()))
-					return getElement(sourceEl);
+					return BetterList.of(getElement(sourceEl));
 
-				DerivedCollectionElement<T> el = theFlow.getElementBySource(sourceEl);
-				if (el == null)
-					return null;
-				DerivedElementHolder<T> found = theDerivedElements.searchValue(de -> el.compareTo(de.element),
-					SortedSearchFilter.OnlyMatch);
-				return found == null ? null : elementFor(found);
+				return QommonsUtils.map2(theFlow.getElementsBySource(sourceEl), el -> {
+					return elementFor(//
+						theDerivedElements.searchValue(de -> el.compareTo(de.element), SortedSearchFilter.OnlyMatch));
+				});
+			}
+		}
+
+		@Override
+		public BetterList<ElementId> getSourceElements(ElementId localElement, BetterCollection<?> sourceCollection) {
+			try (Transaction t = lock(false, null)) {
+				return theFlow.getSourceElements(((DerivedElementHolder<T>) localElement).element, sourceCollection);
 			}
 		}
 
@@ -2250,12 +2274,12 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public boolean equals(Object obj) {
-			return ObservableCollection.equals(this, obj);
+			return BetterCollection.equals(this, obj);
 		}
 
 		@Override
 		public String toString() {
-			return ObservableCollection.toString(this);
+			return BetterCollection.toString(this);
 		}
 
 		@Override
@@ -2451,11 +2475,19 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public BetterList<CollectionElement<E>> getElementsBySource(ElementId sourceEl) throws NoSuchElementException {
+		public BetterList<CollectionElement<E>> getElementsBySource(ElementId sourceEl) {
 			ObservableCollection<? extends E> current = getWrapped().get();
 			if (current == null)
-				throw new NoSuchElementException();
+				return BetterList.empty();
 			return ((ObservableCollection<E>) current).getElementsBySource(sourceEl);
+		}
+
+		@Override
+		public BetterList<ElementId> getSourceElements(ElementId localElement, BetterCollection<?> sourceCollection) {
+			ObservableCollection<? extends E> current = getWrapped().get();
+			if (current == null)
+				return BetterList.empty();
+			return current.getSourceElements(localElement, sourceCollection);
 		}
 
 		@Override

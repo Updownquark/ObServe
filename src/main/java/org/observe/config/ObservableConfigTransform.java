@@ -24,6 +24,7 @@ import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.Lockable;
+import org.qommons.QommonsUtils;
 import org.qommons.StructuredTransactable;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
@@ -654,10 +655,11 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 
 			@Override
 			public BetterList<CollectionElement<E>> getElementsBySource(ElementId sourceEl) {
-				CollectionElement<ConfigElement> el = theElements.values().getElementsBySource(sourceEl);
-				if (el != null)
-					return el.get().immutable();
-				return MutableCollectionElement.immutable(theElements.get(sourceEl));
+				BetterList<CollectionElement<ConfigElement>> els = theElements.values().getElementsBySource(sourceEl);
+				if (!els.isEmpty())
+					return QommonsUtils.map2(els, el -> el.get().immutable());
+				ConfigElement el = theElements.get(sourceEl);
+				return el == null ? BetterList.empty() : BetterList.of(el.immutable());
 			}
 
 			@Override
@@ -703,12 +705,12 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 
 			@Override
 			public boolean equals(Object obj) {
-				return ObservableCollection.equals(this, obj);
+				return BetterCollection.equals(this, obj);
 			}
 
 			@Override
 			public String toString() {
-				return ObservableCollection.toString(this);
+				return BetterCollection.toString(this);
 			}
 		}
 	}
@@ -797,13 +799,9 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 	}
 
 	static class ObservableConfigEntityValues<E> extends ObservableConfigBackedCollection<E> implements ObservableValueSet<E> {
-		private final ObservableConfigFormatSet theFieldParser;
-
 		ObservableConfigEntityValues(ObservableValue<? extends ObservableConfig> collectionElement, Runnable ceCreate,
-			EntityConfigFormat<E> format, String childName, ObservableConfigFormatSet fieldParser, Observable<?> until, boolean listen) {
+			EntityConfigFormat<E> format, String childName, Observable<?> until, boolean listen) {
 			super(collectionElement, ceCreate, format.getEntityType().getType(), format, childName, until, listen);
-
-			theFieldParser = fieldParser;
 		}
 
 		@Override

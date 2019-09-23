@@ -100,7 +100,7 @@ public class ObservableConfigFormatSet {
 			String childName = StringUtils.singularize(configName);
 			TypeToken<?> elementType = type.resolveType(ObservableValueSet.class.getTypeParameters()[0]);
 			EntityConfigFormat<Object> elementFormat = (EntityConfigFormat<Object>) getEntityFormat(elementType);
-			format = (ObservableConfigFormat<T>) ObservableConfigFormat.<Object> ofEntitySet(elementFormat, childName, this);
+			format = (ObservableConfigFormat<T>) ObservableConfigFormat.<Object> ofEntitySet(elementFormat, childName);
 			theFormatCache.put(type, format);
 			return format;
 		} else if (EntityReflector.isEntityType(raw)) {

@@ -246,7 +246,7 @@ public interface ObservableConfigFormat<E> {
 			for (int i = 0; i < fieldFormats.length; i++)
 				fieldFormats[i] = formats.getConfigFormat(entityType.getFields().get(i));
 			theFieldChildNames = entityType.getFields().keySet().createMap(//
-					fieldIndex -> StringUtils.parseByCase(entityType.getFields().keySet().get(fieldIndex), true).toKebabCase())
+				fieldIndex -> StringUtils.parseByCase(entityType.getFields().keySet().get(fieldIndex), true).toKebabCase())
 				.unmodifiable();
 			Map<String, String> fcnReverse = new LinkedHashMap<>();
 			for (int i = 0; i < theFieldChildNames.keySize(); i++)
@@ -542,8 +542,7 @@ public interface ObservableConfigFormat<E> {
 		};
 	}
 
-	static <E> ObservableConfigFormat<ObservableValueSet<E>> ofEntitySet(EntityConfigFormat<E> elementFormat, String childName,
-		ObservableConfigFormatSet fieldParser) {
+	static <E> ObservableConfigFormat<ObservableValueSet<E>> ofEntitySet(EntityConfigFormat<E> elementFormat, String childName) {
 		return new ObservableConfigFormat<ObservableValueSet<E>>() {
 			@Override
 			public void format(ObservableValueSet<E> value, ObservableValueSet<E> preValue, ObservableConfig config,
@@ -558,7 +557,7 @@ public interface ObservableConfigFormat<E> {
 				Observable<?> until) throws ParseException {
 				if (previousValue == null) {
 					return new ObservableConfigTransform.ObservableConfigEntityValues<>(config, create::get, elementFormat, childName,
-						fieldParser, until, false);
+						until, false);
 				} else {
 					((ObservableConfigTransform.ObservableConfigEntityValues<E>) previousValue).onChange(change);
 					return previousValue;

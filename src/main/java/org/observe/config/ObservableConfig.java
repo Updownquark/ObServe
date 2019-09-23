@@ -717,7 +717,7 @@ public class ObservableConfig implements StructuredTransactable {
 				throw new IllegalStateException("Format for " + theType + " is not entity-enabled");
 			return new ObservableConfigTransform.ObservableConfigEntityValues<>(//
 				getDescendant(true), createDescendant(true)::get, (ObservableConfigFormat.EntityConfigFormat<T>) entityFormat,
-				getChildName(), getFormatSet(), theUntil, true);
+				getChildName(), theUntil, true);
 		}
 	}
 

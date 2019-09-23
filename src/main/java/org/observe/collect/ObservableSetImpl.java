@@ -35,8 +35,10 @@ import org.observe.collect.ObservableCollectionImpl.FlattenedValueCollection;
 import org.observe.collect.ObservableCollectionImpl.PassiveDerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.ReversedObservableCollection;
 import org.observe.util.WeakListening;
+import org.qommons.QommonsUtils;
 import org.qommons.Ternian;
 import org.qommons.Transaction;
+import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterMap;
 import org.qommons.collect.BetterSet;
@@ -219,8 +221,13 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public DerivedCollectionElement<T> getElementBySource(ElementId sourceEl) {
-			return theWrapped.getElementBySource(sourceEl);
+		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl) {
+			return theWrapped.getElementsBySource(sourceEl);
+		}
+
+		@Override
+		public BetterList<ElementId> getSourceElements(DerivedCollectionElement<T> localElement, BetterCollection<?> sourceCollection) {
+			return theWrapped.getSourceElements(localElement, sourceCollection);
 		}
 
 		@Override
@@ -611,11 +618,14 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public DerivedCollectionElement<T> getElementBySource(ElementId sourceEl) {
-			DerivedCollectionElement<T> parentEl = theParent.getElementBySource(sourceEl);
-			if (parentEl == null)
-				return null;
-			return theElementsByValue.get(parentEl.get());
+		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl) {
+			return QommonsUtils.map2(theParent.getElementsBySource(sourceEl), parentEl -> theElementsByValue.get(parentEl.get()));
+		}
+
+		@Override
+		public BetterList<ElementId> getSourceElements(DerivedCollectionElement<T> localElement, BetterCollection<?> sourceCollection) {
+			return BetterList.of(((UniqueElement) localElement).theParentElements.keySet().stream()//
+				.flatMap(el -> theParent.getSourceElements(el, sourceCollection).stream()));
 		}
 
 		/**
