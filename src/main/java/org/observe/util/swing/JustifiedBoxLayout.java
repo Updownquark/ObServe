@@ -193,8 +193,10 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 
 	@Override
 	public Dimension maximumLayoutSize(Container parent) {
+		if (theMainAlign != Alignment.JUSTIFIED && theCrossAlign != Alignment.JUSTIFIED)
+			return new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE);
 		int main = 0;
-		int cross = 0;
+		int cross = theCrossAlign == Alignment.JUSTIFIED ? 0 : Integer.MAX_VALUE;
 		boolean first = true;
 		for (Component comp : parent.getComponents()) {
 			if (!comp.isVisible())
@@ -210,6 +212,8 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 			if (compCross > cross)
 				cross = compCross;
 		}
+		if (theMainAlign != Alignment.JUSTIFIED)
+			main = Integer.MAX_VALUE;
 		Insets insets = parent.getInsets();
 		int hIns = insets.left + insets.right;
 		int vIns = insets.top + insets.bottom;
@@ -266,6 +270,7 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 			break;
 		case CENTER:
 			pad = (parentLength - preferredLength) / (components.size() + 1);
+			pos += pad;
 			break;
 		case TRAILING:
 			pos = parentLength - preferredLength;
