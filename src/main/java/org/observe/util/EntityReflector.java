@@ -569,7 +569,7 @@ public class EntityReflector<E> {
 		@Override
 		public String toString() {
 			StringBuilder str = new StringBuilder().append(theReflector.getType()).append('.').append(theMethod.getName()).append('(');
-			StringUtils.conversational(", ", null).print(str, theParameters, (p, s) -> s.append(p.getName()));
+			StringUtils.conversational(", ", null).print(str, theParameters, (s, p) -> s.append(p.getName()));
 			str.append(')');
 			return str.toString();
 		}
