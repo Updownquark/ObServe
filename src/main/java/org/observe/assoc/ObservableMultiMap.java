@@ -24,6 +24,7 @@ import org.observe.collect.ObservableCollection.SubscriptionCause;
 import org.observe.collect.ObservableSet;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
+import org.qommons.Identifiable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
@@ -54,7 +55,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		@Override
 		public <P1, P2> TypeToken<? extends ObservableMultiMap> createCompoundType(TypeToken<P1> param1, TypeToken<P2> param2) {
 			return new TypeToken<ObservableMultiMap<P1, P2>>() {}.where(new TypeParameter<P1>() {}, param1)
-					.where(new TypeParameter<P2>() {}, param2);
+				.where(new TypeParameter<P2>() {}, param2);
 		}
 	}).parameterized();
 
@@ -464,6 +465,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		private final ObservableMultiMap<K, V> theSource;
 		private final BiFunction<K, ObservableCollection<V>, ObservableValue<V>> theValueMap;
 		private final TypeToken<Map.Entry<K, V>> theEntryType;
+		private Object theIdentity;
 
 		public SingleMap(ObservableMultiMap<K, V> outer, BiFunction<K, ObservableCollection<V>, ObservableValue<V>> valueMap) {
 			theSource = outer;
@@ -477,6 +479,13 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 
 		protected BiFunction<K, ObservableCollection<V>, ObservableValue<V>> getValueMap() {
 			return theValueMap;
+		}
+
+		@Override
+		public Object getIdentity() {
+			if (theIdentity == null)
+				theIdentity = Identifiable.wrap(theSource.getIdentity(), "single", theValueMap);
+			return theIdentity;
 		}
 
 		@Override

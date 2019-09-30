@@ -25,6 +25,7 @@ import org.observe.config.ObservableConfig.ObservableConfigPath;
 import org.observe.config.ObservableConfig.ObservableConfigPathElement;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
+import org.qommons.Identifiable;
 import org.qommons.QommonsUtils;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
@@ -385,12 +386,21 @@ public class ObservableConfigContent {
 	 * @param <C> The config sub-type
 	 */
 	protected static class FullObservableConfigContent<C extends ObservableConfig> extends AbstractObservableConfigContent<C> {
+		private Object theIdentity;
+
 		/**
 		 * @param config The parent config
 		 * @param type The config sub-type
 		 */
 		public FullObservableConfigContent(ObservableConfig config, TypeToken<C> type) {
 			super(config, type);
+		}
+
+		@Override
+		public Object getIdentity() {
+			if (theIdentity == null)
+				theIdentity = Identifiable.wrap(getConfig(), "allContent");
+			return theIdentity;
 		}
 
 		@Override
@@ -583,6 +593,7 @@ public class ObservableConfigContent {
 	 */
 	protected static class SimpleObservableConfigContent<C extends ObservableConfig> extends AbstractObservableConfigContent<C> {
 		private final ObservableConfigPathElement thePathElement;
+		private Object theIdentity;
 
 		/**
 		 * @param config The parent config
@@ -592,6 +603,13 @@ public class ObservableConfigContent {
 		public SimpleObservableConfigContent(ObservableConfig config, TypeToken<C> type, ObservableConfigPathElement pathEl) {
 			super(config, type);
 			thePathElement = pathEl;
+		}
+
+		@Override
+		public Object getIdentity() {
+			if (theIdentity == null)
+				theIdentity = Identifiable.wrap(getConfig(), "content", thePathElement);
+			return theIdentity;
 		}
 
 		@Override

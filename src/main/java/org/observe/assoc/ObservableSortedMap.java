@@ -11,6 +11,7 @@ import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSortedSet;
+import org.qommons.Identifiable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterSortedMap;
 import org.qommons.collect.BetterSortedSet.SortedSearchFilter;
@@ -126,6 +127,15 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 	default ObservableSortedMap<K, V> descendingMap() {
 		ObservableSortedMap<K, V> outer = this;
 		return new ObservableSortedMap<K, V>() {
+			private Object theIdentity;
+
+			@Override
+			public Object getIdentity() {
+				if (theIdentity == null)
+					theIdentity = Identifiable.wrap(outer.getIdentity(), "descendingMap");
+				return theIdentity;
+			}
+
 			@Override
 			public boolean isLockSupported() {
 				return outer.isLockSupported();
