@@ -7,6 +7,7 @@ import java.awt.event.InputEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.text.ParseException;
+import java.util.function.Function;
 
 import javax.swing.JTextField;
 import javax.swing.ToolTipManager;
@@ -20,6 +21,7 @@ import org.qommons.io.Format;
 public class ObservableTextField<E> extends JTextField {
 	private final SettableValue<E> theValue;
 	private final Format<E> theFormat;
+	private Function<? super E, String> theWarning;
 	private boolean reformatOnCommit;
 	private boolean isInternallyChanging;
 	private boolean isDirty;
@@ -28,10 +30,13 @@ public class ObservableTextField<E> extends JTextField {
 	private final Color disabled_bg;
 	private final Color error_bg = new Color(255, 200, 200);
 	private final Color error_disabled_bg = new Color(200, 150, 150);
+	private final Color warning_bg = new Color(250, 200, 90);
+	private final Color warning_disabled_bg = new Color(235, 220, 150);
 
 	private boolean revertOnFocusLoss;
 	private boolean commitOnType;
 	private String theError;
+	private String theWarningMsg;
 	private boolean isExternallyEnabled;
 	private String theToolTip;
 
@@ -54,7 +59,7 @@ public class ObservableTextField<E> extends JTextField {
 		});
 		theValue.isEnabled().changes().takeUntil(until).act(evt -> {
 			checkEnabled();
-			setErrorState(theError);
+			setErrorState(theError, evt.getNewValue());
 		});
 		getDocument().addDocumentListener(new DocumentListener() {
 			@Override
@@ -83,11 +88,11 @@ public class ObservableTextField<E> extends JTextField {
 				try {
 					E parsed = theFormat.parse(getText());
 					String err = theValue.isAcceptable(parsed);
-					setErrorState(err);
+					setErrorState(err, parsed);
 					if (err == null && commitOnType)
 						doCommit(parsed, cause, false);
 				} catch (ParseException e) {
-					setErrorState(e.getMessage() == null ? "Invalid text" : e.getMessage());
+					setErrorState(e.getMessage() == null ? "Invalid text" : e.getMessage(), (String) null);
 				}
 			}
 		});
@@ -131,6 +136,40 @@ public class ObservableTextField<E> extends JTextField {
 
 	public Format<E> getFormat() {
 		return theFormat;
+	}
+
+	/**
+	 * Configures a warning message as a function of this text field's value. The user will be allowed to enter a value with a warning but a
+	 * UI hit will be provided that there may be some problem with the value.
+	 *
+	 * @param warning The function to provide a warning message or null for no warning
+	 * @return This text field
+	 */
+	public ObservableTextField<E> withWarning(Function<? super E, String> warning) {
+		if (warning == null)
+			return clearWarning();
+		if (theWarning == null)
+			theWarning = warning;
+		else {
+			Function<? super E, String> oldWarning = theWarning;
+			theWarning = v -> {
+				String msg = oldWarning.apply(v);
+				if (msg == null)
+					msg = warning.apply(v);
+				return msg;
+			};
+		}
+		return this;
+	}
+
+	/**
+	 * Clears this text field's {@link #withWarning(Function) warning}
+	 *
+	 * @return This text field
+	 */
+	public ObservableTextField<E> clearWarning() {
+		theWarning = null;
+		return this;
 	}
 
 	/**
@@ -182,7 +221,7 @@ public class ObservableTextField<E> extends JTextField {
 	@Override
 	public void setToolTipText(String text) {
 		theToolTip = text;
-		setErrorState(theError);
+		setErrorState(theError, theWarningMsg);
 	}
 
 	public void revertEdits() {
@@ -197,9 +236,9 @@ public class ObservableTextField<E> extends JTextField {
 		E parsed;
 		try {
 			parsed = theFormat.parse(text);
-			setErrorState(null);
+			setErrorState(null, parsed);
 		} catch (ParseException e) {
-			setErrorState(e.getMessage() == null ? "Parsing failed" : e.getMessage());
+			setErrorState(e.getMessage() == null ? "Parsing failed" : e.getMessage(), (String) null);
 			return;
 		}
 		doCommit(parsed, cause, true);
@@ -212,7 +251,7 @@ public class ObservableTextField<E> extends JTextField {
 			if (maybeReformat && reformatOnCommit)
 				setText(theFormat.format(parsed));
 		} catch (IllegalArgumentException | UnsupportedOperationException e) {
-			setErrorState(e.getMessage());
+			setErrorState(e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName(), (String) null);
 		} finally {
 			isInternallyChanging = false;
 		}
@@ -237,15 +276,22 @@ public class ObservableTextField<E> extends JTextField {
 		}
 	}
 
+	public void redisplayWarningTooltip() {
+		if (theWarningMsg != null) {
+			super.setToolTipText(theWarningMsg);
+			setTooltipVisible(true);
+		}
+	}
+
 	private void setValue(E value) {
 		String formatted;
 		try {
 			formatted = theFormat.format(value);
-			setErrorState(null);
+			setErrorState(null, value);
 		} catch (RuntimeException e) {
 			System.err.println(ObservableTextField.class.getName() + " could not format value " + value);
 			e.printStackTrace();
-			setErrorState("Could not format value " + value);
+			setErrorState("Could not format value " + value, value);
 			return;
 		}
 		isInternallyChanging = true;
@@ -262,22 +308,43 @@ public class ObservableTextField<E> extends JTextField {
 			super.setEnabled(enabled);
 	}
 
-	private void setErrorState(String error) {
+	private void setErrorState(String error, E parsedValue) {
+		String warningMsg;
+		if (error != null)
+			warningMsg = null;
+		else if (theWarning == null)
+			warningMsg = null;
+		else
+			warningMsg = theWarning.apply(parsedValue);
+		setErrorState(error, warningMsg);
+	}
+
+	private void setErrorState(String error, String warningMsg) {
 		boolean prevError = theError != null;
 		theError = error;
+		theWarningMsg = warningMsg;
 		String disabled = theValue.isEnabled().get();
 		if (theError != null) {
 			if (disabled != null)
 				setBackground(error_disabled_bg);
 			else
 				setBackground(error_bg);
-		} else if (disabled != null)
-			setBackground(disabled_bg);
-		else
-			setBackground(normal_bg);
+		} else if (warningMsg != null) {
+			if (disabled != null)
+				setBackground(warning_disabled_bg);
+			else
+				setBackground(warning_bg);
+		} else {
+			if (disabled != null)
+				setBackground(disabled_bg);
+			else
+				setBackground(normal_bg);
+		}
 
 		if (theError != null)
 			redisplayErrorTooltip();
+		else if (theWarningMsg != null)
+			redisplayWarningTooltip();
 		else {
 			if (prevError)
 				setTooltipVisible(false);
