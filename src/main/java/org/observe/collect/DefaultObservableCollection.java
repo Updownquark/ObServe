@@ -1,6 +1,7 @@
 package org.observe.collect;
 
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.LinkedList;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -11,9 +12,15 @@ import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
+import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.ElementId;
+import org.qommons.collect.FastFailLockingStrategy;
 import org.qommons.collect.MutableCollectionElement;
+import org.qommons.collect.StampedLockingStrategy;
 import org.qommons.collect.ValueStoredCollection;
+import org.qommons.tree.BetterTreeList;
+import org.qommons.tree.RedBlackNodeList;
+import org.qommons.tree.SortedTreeList;
 
 import com.google.common.reflect.TypeToken;
 
@@ -23,6 +30,136 @@ import com.google.common.reflect.TypeToken;
  * @param <E> The type for the collection
  */
 public class DefaultObservableCollection<E> implements ObservableCollection<E> {
+	/** @param <E> The type of elements in the collection */
+	public static class Builder<E> {
+		private final TypeToken<E> theType;
+		private BetterList<E> theBacking;
+		private CollectionLockingStrategy theLocker;
+		private Comparator<? super E> theSorting;
+		private Function<ElementId, ElementId> theElementSource;
+		private String theDescription;
+
+		/**
+		 * @param type The type of elements in the collection
+		 * @param initDescrip The initial (default) description for the collection
+		 */
+		protected Builder(TypeToken<E> type, String initDescrip) {
+			theType = type;
+			theDescription = initDescrip;
+		}
+
+		/**
+		 * @param backing The pre-set backing for the collection
+		 * @return This builder
+		 */
+		public Builder<E> withBacking(BetterList<E> backing) {
+			theBacking = backing;
+			return this;
+		}
+
+		/**
+		 * @param locker The locker for the collection
+		 * @return This builder
+		 */
+		public Builder<E> withLocker(CollectionLockingStrategy locker) {
+			theLocker = locker;
+			return this;
+		}
+
+		/**
+		 * @param safe Whether the collection should be thread-safe
+		 * @return This builder
+		 */
+		public Builder<E> safe(boolean safe) {
+			withLocker(safe ? new StampedLockingStrategy() : new FastFailLockingStrategy());
+			return this;
+		}
+
+		/**
+		 * Specifies that the collection should maintain an order (but not necessarily distinctness) among its elements
+		 * 
+		 * @param sorting The sorting for the collection
+		 * @return This builder
+		 */
+		public Builder<E> sortBy(Comparator<? super E> sorting) {
+			theSorting = sorting;
+			return this;
+		}
+
+		/**
+		 * @param description The description for the collection
+		 * @return This builder
+		 */
+		public Builder<E> withDescription(String description) {
+			theDescription = description;
+			return this;
+		}
+
+		/**
+		 * @param elementSource A function to look up elements in the {@link #withBacking(BetterList) backing} collection by source element
+		 *        ID
+		 * @return This builder
+		 */
+		public Builder<E> withElementSource(Function<ElementId, ElementId> elementSource) {
+			theElementSource = elementSource;
+			return this;
+		}
+
+		/** @return The type for the collection */
+		protected TypeToken<E> getType() {
+			return theType;
+		}
+
+		/** @return The pre-set backing for the collection */
+		protected BetterList<E> getBacking() {
+			BetterList<E> backing = theBacking;
+			theBacking = null; // Can only be used once
+			return backing;
+		}
+
+		/** @return The element source for the collection */
+		protected Function<ElementId, ElementId> getElementSource() {
+			return theElementSource;
+		}
+
+		/** @return The description for the collection */
+		protected String getDescription() {
+			return theDescription;
+		}
+
+		/** @return The locker for the collection */
+		protected CollectionLockingStrategy getLocker() {
+			if (theLocker != null)
+				return theLocker;
+			else
+				return new StampedLockingStrategy();
+		}
+
+		/** @return The sorting for the collection */
+		protected Comparator<? super E> getSorting() {
+			return theSorting;
+		}
+
+		/** @return A new, empty collection */
+		public ObservableCollection<E> build() {
+			BetterList<E> backing = theBacking;
+			if (backing == null) {
+				RedBlackNodeList.RBNLBuilder<E, ?> builder = theSorting != null ? SortedTreeList.buildTreeList(theSorting)
+					: BetterTreeList.build();
+				backing = builder.withDescription(theDescription).withLocker(getLocker()).build();
+			}
+			return new DefaultObservableCollection<>(theType, backing, theElementSource);
+		}
+	}
+
+	/**
+	 * @param type The type for the new collection
+	 * @return A builder to build a new ObservableCollection
+	 */
+	public static <E> Builder<E> build(TypeToken<E> type) {
+		return new Builder<>(type, "observable-collection");
+	}
+
 	private final TypeToken<E> theType;
 	private final LinkedList<Causable> theTransactionCauses;
 	private final BetterList<E> theValues;
@@ -56,6 +193,11 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	/** @return This collection's backing values */
 	protected BetterList<E> getValues() {
 		return theValues;
+	}
+
+	@Override
+	public Object getIdentity() {
+		return theValues.getIdentity();
 	}
 
 	@Override
