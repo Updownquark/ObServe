@@ -592,8 +592,8 @@ public class ObservableTableModel<R> implements TableModel {
 		return Subscription.forAll(subs.toArray(new Subscription[subs.size()]));
 	}
 
-	private static <R, C> void hookUp(JTable table, TableColumn tblColumn, int columnIndex, CategoryRenderStrategy<? super R, C> column,
-		ObservableTableModel<R> model) {
+	private static <R, C> void hookUp(JTable table, TableColumn tblColumn, int columnIndex,
+		CategoryRenderStrategy<? super R, ? extends C> column, ObservableTableModel<R> model) {
 		if (column.getIdentifier() != null)
 			tblColumn.setIdentifier(column.getIdentifier());
 		else

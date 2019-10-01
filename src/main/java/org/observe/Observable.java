@@ -2,7 +2,9 @@ package org.observe;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.BiFunction;
@@ -12,8 +14,10 @@ import java.util.function.Supplier;
 
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
-import org.qommons.ListenerSet;
+import org.qommons.Identifiable;
 import org.qommons.Lockable;
+import org.qommons.QommonsUtils;
+import org.qommons.StringUtils;
 import org.qommons.TimeUtils;
 import org.qommons.Transaction;
 import org.qommons.collect.ListenerList;
@@ -27,7 +31,7 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <T> The type of values this observable provides
  */
-public interface Observable<T> extends Lockable {
+public interface Observable<T> extends Lockable, Identifiable {
 	/** This class's type key */
 	@SuppressWarnings("rawtypes")
 	static TypeTokens.TypeKey<Observable> TYPE_KEY = TypeTokens.get().keyFor(Observable.class)
@@ -76,44 +80,7 @@ public interface Observable<T> extends Lockable {
 
 	/** @return An observable that will fire once when this observable completes (the value will be null) */
 	default Observable<T> completed() {
-		Observable<T> outer = this;
-		class CompleteObserver implements Observer<T> {
-			private final Observer<? super T> wrapped;
-
-			CompleteObserver(Observer<? super T> wrap) {
-				wrapped = wrap;
-			}
-
-			@Override
-			public <V extends T> void onNext(V value) {}
-
-			@Override
-			public <V extends T> void onCompleted(V value) {
-				wrapped.onNext(value);
-				wrapped.onCompleted(value);
-			}
-		}
-		return new Observable<T>() {
-			@Override
-			public Subscription subscribe(Observer<? super T> observer) {
-				return outer.subscribe(new CompleteObserver(observer));
-			}
-
-			@Override
-			public boolean isSafe() {
-				return outer.isSafe();
-			}
-
-			@Override
-			public Transaction lock() {
-				return outer.lock();
-			}
-
-			@Override
-			public Transaction tryLock() {
-				return outer.tryLock();
-			}
-		};
+		return new CompletionObservable<>(this, false);
 	}
 
 	/**
@@ -121,39 +88,7 @@ public interface Observable<T> extends Lockable {
 	 *         as well when this observable completes.
 	 */
 	default Observable<T> fireOnComplete() {
-		Observable<T> outer = this;
-		return new Observable<T>() {
-			@Override
-			public Subscription subscribe(Observer<? super T> observer) {
-				return outer.subscribe(new Observer<T>() {
-					@Override
-					public <V extends T> void onNext(V value) {
-						observer.onNext(value);
-					}
-
-					@Override
-					public <V extends T> void onCompleted(V value) {
-						observer.onNext(value);
-						observer.onCompleted(value);
-					}
-				});
-			}
-
-			@Override
-			public boolean isSafe() {
-				return outer.isSafe();
-			}
-
-			@Override
-			public Transaction lock() {
-				return outer.lock();
-			}
-
-			@Override
-			public Transaction tryLock() {
-				return outer.tryLock();
-			}
-		};
+		return new CompletionObservable<>(this, true);
 	}
 
 	/**
@@ -178,7 +113,7 @@ public interface Observable<T> extends Lockable {
 	 * @return An observable that provides the values of this observable, mapped by the given function
 	 */
 	default <R> Observable<R> map(Function<? super T, R> func) {
-		return new ComposedObservable<>(args -> func.apply((T) args[0]), this);
+		return new ComposedObservable<>(args -> func.apply((T) args[0]), "map", this);
 	}
 
 	/**
@@ -217,7 +152,7 @@ public interface Observable<T> extends Lockable {
 	 * @return A new observable whose values are the specified combination of this observable and the others'
 	 */
 	default <V, R> Observable<R> combine(Observable<V> other, BiFunction<? super T, ? super V, R> func) {
-		return new ComposedObservable<>(args -> func.apply((T) args[0], (V) args[1]), this, other);
+		return new ComposedObservable<>(args -> func.apply((T) args[0], (V) args[1]), "combine", this, other);
 	}
 
 	/**
@@ -299,82 +234,7 @@ public interface Observable<T> extends Lockable {
 	 * @return An observable that pushes a value each time any of the given observables pushes a value
 	 */
 	public static <V> Observable<V> or(Observable<? extends V>... obs) {
-		return new Observable<V>() {
-			@Override
-			public Subscription subscribe(Observer<? super V> observer) {
-				Subscription[] subs = new Subscription[obs.length];
-				boolean[] init = new boolean[] { true };
-				for (int i = 0; i < obs.length; i++) {
-					int index = i;
-					Lockable[] others = new Lockable[obs.length - 1];
-					for (int j = 0; j < obs.length; j++) {
-						if (j < index)
-							others[j] = obs[j];
-						else if (j > index)
-							others[j - 1] = obs[j];
-					}
-					subs[i] = obs[i].subscribe(new Observer<V>() {
-						@Override
-						public <V2 extends V> void onNext(V2 value) {
-							try (Transaction t = Lockable.lockAll(others)) {
-								observer.onNext(value);
-							}
-						}
-
-						@Override
-						public <V2 extends V> void onCompleted(V2 value) {
-							try (Transaction t = Lockable.lockAll(others)) {
-								subs[index] = null;
-								boolean allDone = !init[0];
-								for (int j = 0; allDone && j < subs.length; j++)
-									if (subs[j] != null)
-										allDone = false;
-								if (allDone)
-									observer.onCompleted(value);
-							}
-						}
-					});
-				}
-				init[0] = false;
-				boolean allDone = true;
-				for (int j = 0; allDone && j < subs.length; j++)
-					if (subs[j] != null)
-						allDone = false;
-				if (allDone)
-					observer.onCompleted(null);
-				return Subscription.forAll(subs);
-			}
-
-			@Override
-			public boolean isSafe() {
-				for (Observable<?> o : obs)
-					if (!o.isSafe())
-						return false;
-				return true;
-			}
-
-			@Override
-			public Transaction lock() {
-				return Lockable.lockAll(obs);
-			}
-
-			@Override
-			public Transaction tryLock() {
-				return Lockable.tryLockAll(obs);
-			}
-
-			@Override
-			public String toString() {
-				StringBuilder ret = new StringBuilder("or(");
-				for (int i = 0; i < obs.length; i++) {
-					if (i > 0)
-						ret.append(", ");
-					ret.append(obs[i]);
-				}
-				ret.append(')');
-				return ret.toString();
-			}
-		};
+		return new OrObservable<>(Arrays.asList(obs));
 	}
 
 	/**
@@ -384,10 +244,19 @@ public interface Observable<T> extends Lockable {
 	 */
 	public static <T> Observable<T> constant(T value) {
 		return new Observable<T>() {
+			private Object theIdentity;
+			@Override
+			public Object getIdentity() {
+				if (theIdentity == null)
+					theIdentity = Identifiable.idFor(value, () -> String.valueOf(value), () -> Objects.hashCode(value),
+						other -> Objects.equals(value, other));
+				return theIdentity;
+			}
+
 			@Override
 			public Subscription subscribe(Observer<? super T> observer) {
 				observer.onNext(value);
-				return () -> {};
+				return Subscription.NONE;
 			}
 
 			@Override
@@ -422,9 +291,16 @@ public interface Observable<T> extends Lockable {
 
 	/** An empty observable that never does anything */
 	public static Observable<?> empty = new Observable<Object>() {
+		private final Object theIdentity = Identifiable.baseId("empty", this);
+
+		@Override
+		public Object getIdentity() {
+			return theIdentity;
+		}
+
 		@Override
 		public Subscription subscribe(Observer<? super Object> observer) {
-			return () -> {};
+			return Subscription.NONE;
 		}
 
 		@Override
@@ -479,106 +355,31 @@ public interface Observable<T> extends Lockable {
 	}
 
 	/**
-	 * Implements {@link #chain()}
+	 * An abstract class that handles some code needed for wrapping a single observable to produce another
 	 *
-	 * @param <T> The type of the observable
+	 * @param <F> The type of wrapped observable
+	 * @param <T> The type of this observable
 	 */
-	class DefaultChainingObservable<T> implements ChainingObservable<T> {
-		private final Observable<T> theWrapped;
+	abstract class WrappingObservable<F, T> implements Observable<T> {
+		protected final Observable<F> theWrapped;
+		private Object theIdentity;
 
-		private final Observable<Void> theCompletion;
-
-		private final Observer<Void> theCompletionController;
-
-		/**
-		 * @param wrap The observable that this chaining observable reflects the values of
-		 * @param completion The completion observable that will emit a value when the {@link #unsubscribe()} method of any link in the
-		 *        chain is called. May be null if this is the first link in the chain, in which case the observable and its controller will
-		 *        be created.
-		 * @param controller The controller for the completion observable. May be null if <code>completion</code> is null.
-		 */
-		public DefaultChainingObservable(Observable<T> wrap, Observable<Void> completion, Observer<Void> controller) {
-			theWrapped = wrap;
-			if (completion != null) {
-				theCompletion = completion;
-				theCompletionController = controller;
-			} else {
-				theCompletion = new SimpleObservable<>();
-				theCompletionController = (Observer<Void>) theCompletion;
-			}
+		public WrappingObservable(Observable<F> wrapped) {
+			theWrapped = wrapped;
 		}
 
-		@Override
-		public void unsubscribe() {
-			theCompletionController.onNext(null);
-		}
-
-		@Override
-		public Observable<T> unchain() {
+		protected Observable<F> getWrapped() {
 			return theWrapped;
 		}
 
 		@Override
-		public ChainingObservable<T> subscribe(Observer<? super T> observer) {
-			theWrapped.takeUntil(theCompletion).subscribe(observer);
-			return this;
+		public Object getIdentity() {
+			if (theIdentity == null)
+				theIdentity = createIdentity();
+			return theIdentity;
 		}
 
-		@Override
-		public ChainingObservable<T> act(Consumer<? super T> action) {
-			theWrapped.takeUntil(theCompletion).act(action);
-			return this;
-		}
-
-		@Override
-		public ChainingObservable<T> completed() {
-			return new DefaultChainingObservable<>(theWrapped.completed(), theCompletion, theCompletionController);
-		}
-
-		@Override
-		public ChainingObservable<T> noInit() {
-			return new DefaultChainingObservable<>(theWrapped.noInit(), theCompletion, theCompletionController);
-		}
-
-		@Override
-		public ChainingObservable<T> filter(Function<? super T, Boolean> func) {
-			return new DefaultChainingObservable<>(theWrapped.filter(func), theCompletion, theCompletionController);
-		}
-
-		@Override
-		public <R> ChainingObservable<R> map(Function<? super T, R> func) {
-			return new DefaultChainingObservable<>(theWrapped.map(func), theCompletion, theCompletionController);
-		}
-
-		@Override
-		public <R> ChainingObservable<R> filterMap(Function<? super T, R> func) {
-			return new DefaultChainingObservable<>(theWrapped.filterMap(func), theCompletion, theCompletionController);
-		}
-
-		@Override
-		public <V, R> ChainingObservable<R> combine(Observable<V> other, BiFunction<? super T, ? super V, R> func) {
-			return new DefaultChainingObservable<>(theWrapped.combine(other, func), theCompletion, theCompletionController);
-		}
-
-		@Override
-		public ChainingObservable<T> takeUntil(Observable<?> until) {
-			return new DefaultChainingObservable<>(theWrapped.takeUntil(until), theCompletion, theCompletionController);
-		}
-
-		@Override
-		public ChainingObservable<T> take(int times) {
-			return new DefaultChainingObservable<>(theWrapped.take(times), theCompletion, theCompletionController);
-		}
-
-		@Override
-		public ChainingObservable<T> skip(int times) {
-			return new DefaultChainingObservable<>(theWrapped.skip(times), theCompletion, theCompletionController);
-		}
-
-		@Override
-		public ChainingObservable<T> skip(Supplier<Integer> times) {
-			return new DefaultChainingObservable<>(theWrapped.skip(times), theCompletion, theCompletionController);
-		}
+		protected abstract Object createIdentity();
 
 		@Override
 		public boolean isSafe() {
@@ -596,8 +397,167 @@ public interface Observable<T> extends Lockable {
 		}
 
 		@Override
+		public int hashCode() {
+			return getIdentity().hashCode();
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return obj instanceof Observable && getIdentity().equals(((Observable<?>) obj).getIdentity());
+		}
+
+		@Override
 		public String toString() {
-			return theWrapped.toString();
+			return getIdentity().toString();
+		}
+	}
+
+	/**
+	 * Implements {@link Observable#completed()}
+	 *
+	 * @param <T> The type of the observable
+	 */
+	class CompletionObservable<T> extends WrappingObservable<T, T> {
+		private final boolean fireOnNext;
+
+		public CompletionObservable(Observable<T> wrapped, boolean fireOnNext) {
+			super(wrapped);
+			this.fireOnNext = fireOnNext;
+		}
+
+		@Override
+		public Subscription subscribe(Observer<? super T> observer) {
+			class CompleteObserver implements Observer<T> {
+				private final Observer<? super T> wrapped;
+
+				CompleteObserver(Observer<? super T> wrap) {
+					wrapped = wrap;
+				}
+
+				@Override
+				public <V extends T> void onNext(V value) {
+					if (fireOnNext)
+						wrapped.onNext(value);
+				}
+
+				@Override
+				public <V extends T> void onCompleted(V value) {
+					wrapped.onNext(value);
+					wrapped.onCompleted(value);
+				}
+			}
+			return getWrapped().subscribe(new CompleteObserver(observer));
+		}
+
+		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getWrapped().getIdentity(), "completed");
+		}
+	}
+
+	/**
+	 * Implements {@link #chain()}
+	 *
+	 * @param <T> The type of the observable
+	 */
+	class DefaultChainingObservable<T> extends WrappingObservable<T, T> implements ChainingObservable<T> {
+		private final Observable<Void> theCompletion;
+
+		private final Observer<Void> theCompletionController;
+
+		/**
+		 * @param wrap The observable that this chaining observable reflects the values of
+		 * @param completion The completion observable that will emit a value when the {@link #unsubscribe()} method of any link in the
+		 *        chain is called. May be null if this is the first link in the chain, in which case the observable and its controller will
+		 *        be created.
+		 * @param controller The controller for the completion observable. May be null if <code>completion</code> is null.
+		 */
+		public DefaultChainingObservable(Observable<T> wrap, Observable<Void> completion, Observer<Void> controller) {
+			super(wrap);
+			if (completion != null) {
+				theCompletion = completion;
+				theCompletionController = controller;
+			} else {
+				theCompletion = new SimpleObservable<>();
+				theCompletionController = (Observer<Void>) theCompletion;
+			}
+		}
+
+		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getWrapped().getIdentity(), "chain");
+		}
+
+		@Override
+		public void unsubscribe() {
+			theCompletionController.onNext(null);
+		}
+
+		@Override
+		public Observable<T> unchain() {
+			return getWrapped();
+		}
+
+		@Override
+		public ChainingObservable<T> subscribe(Observer<? super T> observer) {
+			theWrapped.takeUntil(theCompletion).subscribe(observer);
+			return this;
+		}
+
+		@Override
+		public ChainingObservable<T> act(Consumer<? super T> action) {
+			theWrapped.takeUntil(theCompletion).act(action);
+			return this;
+		}
+
+		@Override
+		public ChainingObservable<T> completed() {
+			return new DefaultChainingObservable<>(unchain().completed(), theCompletion, theCompletionController);
+		}
+
+		@Override
+		public ChainingObservable<T> noInit() {
+			return new DefaultChainingObservable<>(unchain().noInit(), theCompletion, theCompletionController);
+		}
+
+		@Override
+		public ChainingObservable<T> filter(Function<? super T, Boolean> func) {
+			return new DefaultChainingObservable<>(unchain().filter(func), theCompletion, theCompletionController);
+		}
+
+		@Override
+		public <R> ChainingObservable<R> map(Function<? super T, R> func) {
+			return new DefaultChainingObservable<>(unchain().map(func), theCompletion, theCompletionController);
+		}
+
+		@Override
+		public <R> ChainingObservable<R> filterMap(Function<? super T, R> func) {
+			return new DefaultChainingObservable<>(unchain().filterMap(func), theCompletion, theCompletionController);
+		}
+
+		@Override
+		public <V, R> ChainingObservable<R> combine(Observable<V> other, BiFunction<? super T, ? super V, R> func) {
+			return new DefaultChainingObservable<>(unchain().combine(other, func), theCompletion, theCompletionController);
+		}
+
+		@Override
+		public ChainingObservable<T> takeUntil(Observable<?> until) {
+			return new DefaultChainingObservable<>(unchain().takeUntil(until), theCompletion, theCompletionController);
+		}
+
+		@Override
+		public ChainingObservable<T> take(int times) {
+			return new DefaultChainingObservable<>(unchain().take(times), theCompletion, theCompletionController);
+		}
+
+		@Override
+		public ChainingObservable<T> skip(int times) {
+			return new DefaultChainingObservable<>(unchain().skip(times), theCompletion, theCompletionController);
+		}
+
+		@Override
+		public ChainingObservable<T> skip(Supplier<Integer> times) {
+			return new DefaultChainingObservable<>(unchain().skip(times), theCompletion, theCompletionController);
 		}
 	}
 
@@ -606,15 +566,14 @@ public interface Observable<T> extends Lockable {
 	 *
 	 * @param <T> The type of the observable
 	 */
-	class NoInitObservable<T> implements Observable<T> {
-		private final Observable<T> theWrapped;
-
+	class NoInitObservable<T> extends WrappingObservable<T, T> {
 		protected NoInitObservable(Observable<T> wrap) {
-			theWrapped = wrap;
+			super(wrap);
 		}
 
-		protected Observable<T> getWrapped() {
-			return theWrapped;
+		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getWrapped().getIdentity(), "noInit");
 		}
 
 		@Override
@@ -635,26 +594,6 @@ public interface Observable<T> extends Lockable {
 			initialized[0] = true;
 			return ret;
 		}
-
-		@Override
-		public boolean isSafe() {
-			return theWrapped.isSafe();
-		}
-
-		@Override
-		public Transaction lock() {
-			return theWrapped.lock();
-		}
-
-		@Override
-		public Transaction tryLock() {
-			return theWrapped.tryLock();
-		}
-
-		@Override
-		public String toString() {
-			return theWrapped + ".noInit()";
-		}
 	}
 
 	/**
@@ -663,18 +602,17 @@ public interface Observable<T> extends Lockable {
 	 * @param <T> The type of the observable to filter-map
 	 * @param <R> The type of the mapped observable
 	 */
-	class FilteredObservable<T, R> implements Observable<R> {
-		private final Observable<T> theWrapped;
-
+	class FilteredObservable<T, R> extends WrappingObservable<T, R> {
 		private final Function<? super T, R> theMap;
 
 		protected FilteredObservable(Observable<T> wrap, Function<? super T, R> map) {
-			theWrapped = wrap;
+			super(wrap);
 			theMap = map;
 		}
 
-		protected Observable<T> getWrapped() {
-			return theWrapped;
+		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getWrapped().getIdentity(), "map", theMap);
 		}
 
 		protected Function<? super T, R> getMap() {
@@ -735,23 +673,26 @@ public interface Observable<T> extends Lockable {
 
 		private final Function<Object[], T> theFunction;
 
-		private final ListenerSet<Observer<? super T>> theObservers;
+		private final ListenerList<Observer<? super T>> theObservers;
+
+		private final String theOperation;
+		private Object theIdentity;
 
 		/**
 		 * @param function The function that operates on the argument observables to produce this observable's value
+		 * @param operation A description of the composition operation
 		 * @param composed The argument observables whose values are passed to the function
 		 */
-		public ComposedObservable(Function<Object[], T> function, Observable<?>... composed) {
+		public ComposedObservable(Function<Object[], T> function, String operation, Observable<?>... composed) {
 			theFunction = function;
 			theComposed = java.util.Collections.unmodifiableList(java.util.Arrays.asList(composed));
-			theObservers = new ListenerSet<>();
-			theObservers.setUsedListener(new Consumer<Boolean>() {
+			theObservers = ListenerList.build().withFastSize(false).withInUse(new ListenerList.InUseListener() {
 				private final Subscription[] composedSubs = new Subscription[theComposed.size()];
 
 				private final Object[] values = new Object[theComposed.size()];
 
 				@Override
-				public void accept(Boolean used) {
+				public void inUseChanged(boolean used) {
 					if (used) {
 						for (int i = 0; i < theComposed.size(); i++) {
 							int index = i;
@@ -797,13 +738,24 @@ public interface Observable<T> extends Lockable {
 						}
 					}
 				}
-			});
+			}).build();
+			theOperation = operation;
+		}
+
+		@Override
+		public Object getIdentity() {
+			if (theIdentity == null) {
+				Object[] obsIds = new Object[theComposed.size() - 1];
+				for (int i = 0; i < obsIds.length; i++)
+					obsIds[i] = theComposed.get(i + 1).getIdentity();
+				theIdentity = Identifiable.wrap(theComposed.get(0).getIdentity(), theOperation, obsIds);
+			}
+			return theIdentity;
 		}
 
 		@Override
 		public Subscription subscribe(Observer<? super T> observer) {
-			theObservers.add(observer);
-			return () -> theObservers.remove(observer);
+			return theObservers.add(observer, false)::run;
 		}
 
 		/** @return The observables that this observable uses as sources */
@@ -840,8 +792,7 @@ public interface Observable<T> extends Lockable {
 	 *
 	 * @param <T> The type of the observable
 	 */
-	class ObservableTakenUntil<T> implements Observable<T> {
-		private final Observable<T> theWrapped;
+	class ObservableTakenUntil<T> extends WrappingObservable<T, T> {
 		private final Observable<?> theUntil;
 		private final boolean isTerminating;
 		private final Supplier<T> theDefaultValue;
@@ -851,14 +802,15 @@ public interface Observable<T> extends Lockable {
 		}
 
 		protected ObservableTakenUntil(Observable<T> wrap, Observable<?> until, boolean terminate, Supplier<T> def) {
-			theWrapped = wrap;
+			super(wrap);
 			theUntil = until;
 			isTerminating = terminate;
 			theDefaultValue = def;
 		}
 
-		protected Observable<T> getWrapped() {
-			return theWrapped;
+		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getWrapped().getIdentity(), (isTerminating ? "takeUntil" : "unsubscribeOn"), theUntil.getIdentity());
 		}
 
 		protected Observable<?> getUntil() {
@@ -898,26 +850,6 @@ public interface Observable<T> extends Lockable {
 				untilSub[0].unsubscribe();
 			};
 		}
-
-		@Override
-		public boolean isSafe() {
-			return theWrapped.isSafe();
-		}
-
-		@Override
-		public Transaction lock() {
-			return theWrapped.lock();
-		}
-
-		@Override
-		public Transaction tryLock() {
-			return theWrapped.tryLock();
-		}
-
-		@Override
-		public String toString() {
-			return theWrapped + ".takeUntil(" + theUntil + ")";
-		}
 	}
 
 	/**
@@ -925,18 +857,17 @@ public interface Observable<T> extends Lockable {
 	 *
 	 * @param <T> The type of the observable
 	 */
-	class ObservableTakenTimes<T> implements Observable<T> {
-		private final Observable<T> theWrapped;
-
+	class ObservableTakenTimes<T> extends WrappingObservable<T, T> {
 		private final int theTimes;
 
 		protected ObservableTakenTimes(Observable<T> wrap, int times) {
-			theWrapped = wrap;
+			super(wrap);
 			theTimes = times;
 		}
 
-		protected Observable<T> getWrapped() {
-			return theWrapped;
+		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getWrapped().getIdentity(), "take", theTimes);
 		}
 
 		protected int getTimes() {
@@ -978,26 +909,6 @@ public interface Observable<T> extends Lockable {
 				}
 			};
 		}
-
-		@Override
-		public boolean isSafe() {
-			return theWrapped.isSafe();
-		}
-
-		@Override
-		public Transaction lock() {
-			return theWrapped.lock();
-		}
-
-		@Override
-		public Transaction tryLock() {
-			return theWrapped.tryLock();
-		}
-
-		@Override
-		public String toString() {
-			return theWrapped + ".take(" + theTimes + ")";
-		}
 	}
 
 	/**
@@ -1005,18 +916,17 @@ public interface Observable<T> extends Lockable {
 	 *
 	 * @param <T> The type of the observable
 	 */
-	class SkippingObservable<T> implements Observable<T> {
-		private final Observable<T> theWrapped;
-
+	class SkippingObservable<T> extends WrappingObservable<T, T> {
 		private final Supplier<Integer> theTimes;
 
 		protected SkippingObservable(Observable<T> wrap, Supplier<Integer> times) {
-			theWrapped = wrap;
+			super(wrap);
 			theTimes = times;
 		}
 
-		protected Observable<T> getWrapped() {
-			return theWrapped;
+		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getWrapped().getIdentity(), "skip", theTimes);
 		}
 
 		protected Supplier<Integer> getTimes() {
@@ -1040,26 +950,6 @@ public interface Observable<T> extends Lockable {
 				}
 			});
 		}
-
-		@Override
-		public boolean isSafe() {
-			return theWrapped.isSafe();
-		}
-
-		@Override
-		public Transaction lock() {
-			return theWrapped.lock();
-		}
-
-		@Override
-		public Transaction tryLock() {
-			return theWrapped.tryLock();
-		}
-
-		@Override
-		public String toString() {
-			return theWrapped + ".skip(" + theTimes + ")";
-		}
 	}
 
 	/**
@@ -1067,17 +957,17 @@ public interface Observable<T> extends Lockable {
 	 *
 	 * @param <T> The type of values that the observable publishes
 	 */
-	class SafeObservable<T> implements Observable<T> {
-		private final Observable<T> theWrapped;
+	class SafeObservable<T> extends WrappingObservable<T, T> {
 		private final ReentrantReadWriteLock theLock;
 
 		protected SafeObservable(Observable<T> wrap) {
-			theWrapped = wrap;
+			super(wrap);
 			theLock = new ReentrantReadWriteLock();
 		}
 
-		protected Observable<T> getWrapped() {
-			return theWrapped;
+		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getWrapped().getIdentity(), "safe");
 		}
 
 		@Override
@@ -1119,12 +1009,95 @@ public interface Observable<T> extends Lockable {
 		public Transaction tryLock() {
 			return Lockable.tryLockAll(theWrapped, Lockable.lockable(theLock, false));
 		}
+	}
+
+	/**
+	 * Implements {@link Observable#or(Observable...)}
+	 *
+	 * @param <V> The super type of the observables being or-ed
+	 */
+	class OrObservable<V> implements Observable<V> {
+		private final List<? extends Observable<? extends V>> theObservables;
+
+		private Object theIdentity;
+
+		public OrObservable(List<? extends Observable<? extends V>> obs) {
+			this.theObservables = obs;
+		}
 
 		@Override
-		public String toString() {
-			return theWrapped.toString();
+		public Object getIdentity() {
+			if (theIdentity == null) {
+				theIdentity = Identifiable.idFor(theObservables, () -> {
+					return StringUtils.conversational(", ", null).print(theObservables, StringBuilder::append).toString();
+				}, () -> theObservables.hashCode(), other -> theObservables.equals(other));
+			}
+			return theIdentity;
 		}
-	}
+
+		@Override
+		public Subscription subscribe(Observer<? super V> observer) {
+			Subscription[] subs = new Subscription[theObservables.size()];
+			boolean[] init = new boolean[] { true };
+			for (int i = 0; i < theObservables.size(); i++) {
+				int index = i;
+				Lockable[] others = new Lockable[theObservables.size() - 1];
+				for (int j = 0; j < theObservables.size(); j++) {
+					if (j < index)
+						others[j] = theObservables.get(j);
+					else if (j > index)
+						others[j - 1] = theObservables.get(j);
+				}
+				subs[i] = theObservables.get(i).subscribe(new Observer<V>() {
+					@Override
+					public <V2 extends V> void onNext(V2 value) {
+						try (Transaction t = Lockable.lockAll(others)) {
+							observer.onNext(value);
+						}
+					}
+
+					@Override
+					public <V2 extends V> void onCompleted(V2 value) {
+						try (Transaction t = Lockable.lockAll(others)) {
+							subs[index] = null;
+							boolean allDone = !init[0];
+							for (int j = 0; allDone && j < subs.length; j++)
+								if (subs[j] != null)
+									allDone = false;
+							if (allDone)
+								observer.onCompleted(value);
+						}
+					}
+				});
+			}
+			init[0] = false;
+			boolean allDone = true;
+			for (int j = 0; allDone && j < subs.length; j++)
+				if (subs[j] != null)
+					allDone = false;
+			if (allDone)
+				observer.onCompleted(null);
+			return Subscription.forAll(subs);
+		}
+
+		@Override
+		public boolean isSafe() {
+			for (Observable<?> o : theObservables)
+				if (!o.isSafe())
+					return false;
+			return true;
+		}
+
+		@Override
+		public Transaction lock() {
+			return Lockable.lockAll(theObservables);
+		}
+
+		@Override
+		public Transaction tryLock() {
+			return Lockable.tryLockAll(theObservables);
+		}
+	};
 
 	/**
 	 * Implements {@link Observable#flatten(Observable)}
@@ -1133,9 +1106,17 @@ public interface Observable<T> extends Lockable {
 	 */
 	class FlattenedObservable<T> implements Observable<T> {
 		private final Observable<? extends Observable<? extends T>> theWrapper;
+		private Object theIdentity;
 
 		protected FlattenedObservable(Observable<? extends Observable<? extends T>> wrapper) {
 			theWrapper = wrapper;
+		}
+
+		@Override
+		public Object getIdentity() {
+			if (theIdentity == null)
+				theIdentity = Identifiable.wrap(theWrapper.getIdentity(), "flatten");
+			return theIdentity;
 		}
 
 		protected Observable<? extends Observable<? extends T>> getWrapper() {
@@ -1194,6 +1175,15 @@ public interface Observable<T> extends Lockable {
 
 	/** Implements {@link Observable#onVmShutdown()} */
 	class VmShutdownObservable implements Observable<Void> {
+		private Object theIdentity;
+
+		@Override
+		public Object getIdentity() {
+			if (theIdentity == null)
+				theIdentity = Identifiable.baseId("vmShutdown", this);
+			return theIdentity;
+		}
+
 		@Override
 		public Subscription subscribe(Observer<? super Void> observer) {
 			Thread hook = new Thread(() -> {
@@ -1241,6 +1231,8 @@ public interface Observable<T> extends Lockable {
 
 		private Duration theInitDelay;
 
+		private Object theIdentity;
+
 		public IntervalObservable(QommonsTimer timer, Duration initDelay, Duration interval, Duration until,
 			Function<? super Duration, ? extends T> value, Consumer<? super T> postAction) {
 			theTimer = timer;
@@ -1263,6 +1255,26 @@ public interface Observable<T> extends Lockable {
 			thePostAction = postAction;
 			if (until != null)
 				theTask.endIn(until, true);
+		}
+
+		@Override
+		public Object getIdentity() {
+			if (theIdentity == null) {
+				StringBuilder str = new StringBuilder("every(");
+				if (theInitDelay == null)
+					str.append("null");
+				else
+					QommonsUtils.printDuration(theInitDelay, str, true);
+				str.append(", ");
+				QommonsUtils.printDuration(theTask.getFrequency(), str, true);
+				str.append(", ");
+				if (theTask.getLastRun() == null)
+					str.append("null");
+				else
+					QommonsUtils.printDuration(Duration.between(Instant.now(), theTask.getLastRun()), str, true);
+				theIdentity = Identifiable.baseId(str.toString(), this);
+			}
+			return theIdentity;
 		}
 
 		public IntervalObservable<T> actualDuration(boolean actual) {

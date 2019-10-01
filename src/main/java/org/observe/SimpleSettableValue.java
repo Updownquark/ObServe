@@ -20,6 +20,7 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 
 	private final TypeToken<T> theType;
 	private final boolean isNullable;
+	private long theStamp;
 	private T theValue;
 
 	/**
@@ -65,6 +66,11 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 		return theValue;
 	}
 
+	@Override
+	public long getStamp() {
+		return theStamp;
+	}
+
 	protected void fireInitial(Observer<? super ObservableValueEvent<T>> observer) {
 		ObservableValueEvent<T> event = createInitialEvent(get(), null);
 		try (Transaction t = Causable.use(event)) {
@@ -81,6 +87,7 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 			theEventer.getLock().writeLock().lock();
 		try {
 			T old = theValue;
+			theStamp++;
 			theValue = value;
 			ObservableValueEvent<T> evt = createChangeEvent(old, value, cause);
 			try (Transaction t = ObservableValueEvent.use(evt)) {

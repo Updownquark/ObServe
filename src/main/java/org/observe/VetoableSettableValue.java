@@ -26,7 +26,7 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <T> The type of the value
  */
-public class VetoableSettableValue<T> implements SettableStampedValue<T> {
+public class VetoableSettableValue<T> implements SettableValue<T> {
 	private final TypeToken<T> theType;
 	private final boolean isNullable;
 	private final ReentrantReadWriteLock theLock;

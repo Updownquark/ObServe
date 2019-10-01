@@ -18,10 +18,12 @@ import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
 import org.qommons.Causable;
-import org.qommons.ListenerSet;
+import org.qommons.Identifiable;
 import org.qommons.Lockable;
+import org.qommons.Stamped;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
+import org.qommons.collect.ListenerList;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -33,7 +35,7 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <T> The compile-time type of this observable's value
  */
-public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lockable {
+public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lockable, Stamped, Identifiable {
 	/** This class's type key */
 	@SuppressWarnings("rawtypes")
 	static TypeTokens.TypeKey<ObservableValue> TYPE_KEY = TypeTokens.get().keyFor(ObservableValue.class)
@@ -200,7 +202,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 			options.accept(xform);
 		return new ComposedObservableValue<>(type, args -> {
 			return function.apply((T) args[0]);
-		}, new XformDef(xform), this);
+		}, "map", new XformDef(xform), this);
 	}
 
 	/**
@@ -251,7 +253,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 				System.err.println("null args");
 				throw e;
 			}
-		}, new XformDef(xform), this, arg);
+		}, "combine", new XformDef(xform), this, arg);
 	}
 
 	/**
@@ -290,7 +292,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 			options.accept(xform);
 		return new ComposedObservableValue<>(type, args -> {
 			return function.apply((T) args[0], (U) args[1], (V) args[2]);
-		}, new XformDef(xform), this, arg2, arg3);
+		}, "combine", new XformDef(xform), this, arg2, arg3);
 	}
 
 	/**
@@ -494,7 +496,55 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 			: type;
 		XformOptions.SimpleXformOptions opts = new XformOptions.SimpleXformOptions();
 		options.accept(opts);
-		return new ComposedObservableValue<>(t, c -> value.get(), new XformOptions.XformDef(opts), components);
+		return new ComposedObservableValue<>(t, c -> value.get(), "assemble", new XformOptions.XformDef(opts), components);
+	}
+
+	/**
+	 * Handles some of the boilerplate associated with an observable value wrapping another
+	 *
+	 * @param <F> The type of the wrapped value
+	 * @param <T> The type of this value
+	 */
+	abstract class WrappingObservableValue<F, T> implements ObservableValue<T> {
+		protected final ObservableValue<F> theWrapped;
+		private Object theIdentity;
+
+		public WrappingObservableValue(ObservableValue<F> wrapped) {
+			theWrapped = wrapped;
+		}
+
+		protected ObservableValue<? extends F> getWrapped() {
+			return theWrapped;
+		}
+
+		@Override
+		public Object getIdentity() {
+			if (theIdentity == null)
+				theIdentity = createIdentity();
+			return theIdentity;
+		}
+
+		protected abstract Object createIdentity();
+
+		@Override
+		public long getStamp() {
+			return theWrapped.getStamp();
+		}
+
+		@Override
+		public int hashCode() {
+			return getIdentity().hashCode();
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return getIdentity().equals(obj);
+		}
+
+		@Override
+		public String toString() {
+			return getIdentity().toString();
+		}
 	}
 
 	/**
@@ -505,11 +555,19 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 	public class ObservableValueChanges<T> implements Observable<ObservableValueEvent<T>> {
 		private final ObservableValue<T> theValue;
 		private final Observable<ObservableValueEvent<T>> theNoInitChanges;
+		private Object theIdentity;
 
 		/** @param value The value that this changes observable is for */
 		public ObservableValueChanges(ObservableValue<T> value) {
 			theValue = value;
 			theNoInitChanges = value.noInitChanges();
+		}
+
+		@Override
+		public Object getIdentity() {
+			if (theIdentity == null)
+				theIdentity = Identifiable.wrap(theValue.getIdentity(), "changes");
+			return theIdentity;
 		}
 
 		@Override
@@ -540,22 +598,22 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 
 		@Override
 		public int hashCode() {
-			return theValue.hashCode();
+			return getIdentity().hashCode();
 		}
 
 		@Override
 		public boolean equals(Object o) {
-			return o instanceof ObservableValueChanges && theValue.equals(((ObservableValueChanges<?>) o).theValue);
+			return o instanceof Observable && getIdentity().equals(((Observable<?>) o).getIdentity());
 		}
 
 		@Override
 		public String toString() {
-			return theValue + " changes";
+			return getIdentity().toString();
 		}
 	}
 
 	/**
-	 * An observable that depends on the values of other observables
+	 * An observable value that depends on the values of other observable values
 	 *
 	 * @param <T> The type of the composed observable
 	 */
@@ -564,7 +622,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 
 		private final BiFunction<Object[], T, T> theFunction;
 
-		private final ListenerSet<Observer<? super ObservableValueEvent<T>>> theObservers;
+		private final ListenerList<Observer<? super ObservableValueEvent<T>>> theObservers;
 
 		private final TypeToken<T> theType;
 
@@ -572,45 +630,51 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 
 		private T theValue;
 
+		private final String theOperation;
+		private Object theIdentity;
+
 		/**
 		 * @param function The function that operates on the argument observables to produce this observable's value
+		 * @param operation A description of the composition operation
 		 * @param options Options determining the behavior of the observable
 		 * @param composed The argument observables whose values are passed to the function
 		 */
-		public ComposedObservableValue(Function<Object[], T> function, XformDef options, ObservableValue<?>... composed) {
-			this(null, function, options, composed);
+		public ComposedObservableValue(Function<Object[], T> function, String operation, XformDef options, ObservableValue<?>... composed) {
+			this(null, function, operation, options, composed);
 		}
 
 		/**
 		 * @param type The type for this value
 		 * @param function The function that operates on the argument observables to produce this observable's value
+		 * @param operation A description of the composition operation
 		 * @param options Options determining the behavior of the observable
 		 * @param composed The argument observables whose values are passed to the function
 		 */
-		public ComposedObservableValue(TypeToken<T> type, Function<Object[], T> function, XformDef options,
+		public ComposedObservableValue(TypeToken<T> type, Function<Object[], T> function, String operation, XformDef options,
 			ObservableValue<?>... composed) {
-			this(type, (args, old) -> function.apply(args), options, composed);
+			this(type, (args, old) -> function.apply(args), operation, options, composed);
 		}
 
 		/**
 		 * @param type The type for this value
 		 * @param function The function that operates on the argument observables to produce this observable's value
+		 * @param operation A description of the composition operation
 		 * @param options Options determining the behavior of the observable
 		 * @param composed The argument observables whose values are passed to the function
 		 */
-		public ComposedObservableValue(TypeToken<T> type, BiFunction<Object[], T, T> function, XformDef options,
+		public ComposedObservableValue(TypeToken<T> type, BiFunction<Object[], T, T> function, String operation, XformDef options,
 			ObservableValue<?>... composed) {
 			theFunction = function;
+			theOperation = operation;
 			theOptions = options == null ? new XformDef(new XformOptions.SimpleXformOptions()) : options;
 			theType = type != null ? type
 				: (TypeToken<T>) TypeToken.of(function.getClass()).resolveType(Function.class.getTypeParameters()[1]);
 			theComposed = java.util.Collections.unmodifiableList(java.util.Arrays.asList(composed));
-			theObservers = new ListenerSet<>();
 			final Subscription[] composedSubs = new Subscription[theComposed.size()];
 			boolean[] completed = new boolean[1];
-			theObservers.setUsedListener(new Consumer<Boolean>() {
+			theObservers = ListenerList.build().withFastSize(false).withInUse(new ListenerList.InUseListener() {
 				@Override
-				public void accept(Boolean used) {
+				public void inUseChanged(boolean used) {
 					if (used) {
 						XformOptions.XformCacheHandler<Object, T>[] caches = new XformOptions.XformCacheHandler[composed.length];
 						boolean[] initialized = new boolean[composed.length];
@@ -732,7 +796,23 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 					}
 					return combine(composedValues);
 				}
-			});
+			}).build();
+		}
+
+		@Override
+		public Object getIdentity() {
+			if (theIdentity == null) {
+				Object[] obsIds = new Object[theComposed.size() - 1];
+				for (int i = 0; i < obsIds.length; i++)
+					obsIds[i] = theComposed.get(i + 1).getIdentity();
+				theIdentity = Identifiable.wrap(theComposed.get(0).getIdentity(), theOperation, obsIds);
+			}
+			return theIdentity;
+		}
+
+		@Override
+		public long getStamp() {
+			return Stamped.compositeStamp(theComposed, Stamped::getStamp);
 		}
 
 		@Override
@@ -757,7 +837,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 
 		@Override
 		public T get() {
-			if (theOptions.isCached() && theObservers.isUsed())
+			if (theOptions.isCached() && !theObservers.isEmpty())
 				return theValue;
 			else {
 				Object[] composed = new Object[theComposed.size()];
@@ -780,8 +860,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 			return new Observable<ObservableValueEvent<T>>() {
 				@Override
 				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-					theObservers.add(observer);
-					return () -> theObservers.remove(observer);
+					return theObservers.add(observer, true)::run;
 				}
 
 				@Override
@@ -802,8 +881,18 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 		}
 
 		@Override
+		public int hashCode() {
+			return getIdentity().hashCode();
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return getIdentity().equals(obj);
+		}
+
+		@Override
 		public String toString() {
-			return theComposed.toString();
+			return getIdentity().toString();
 		}
 	}
 
@@ -812,20 +901,15 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 	 *
 	 * @param <T> The type of the value
 	 */
-	class ObservableValueTakenUntil<T> implements ObservableValue<T> {
-		private final ObservableValue<T> theWrapped;
+	class ObservableValueTakenUntil<T> extends WrappingObservableValue<T, T> {
 		private final Observable<ObservableValueEvent<T>> theChanges;
 
 		protected ObservableValueTakenUntil(ObservableValue<T> wrap, Observable<?> until, boolean terminate) {
-			theWrapped = wrap;
-			theChanges = new Observable.ObservableTakenUntil<>(theWrapped.noInitChanges(), until, terminate, () -> {
-				T value = theWrapped.get();
-				return theWrapped.createChangeEvent(value, value, null);
+			super(wrap);
+			theChanges = new Observable.ObservableTakenUntil<>(wrap.noInitChanges(), until, terminate, () -> {
+				T value = wrap.get();
+				return wrap.createChangeEvent(value, value, null);
 			});
-		}
-
-		protected ObservableValue<T> getWrapped() {
-			return theWrapped;
 		}
 
 		@Override
@@ -849,17 +933,18 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 	 *
 	 * @param <T> The type of the value
 	 */
-	class RefreshingObservableValue<T> implements ObservableValue<T> {
-		private final ObservableValue<T> theWrapped;
+	class RefreshingObservableValue<T> extends WrappingObservableValue<T, T> {
 		private final Observable<?> theRefresh;
+		private Object theChangesIdentity;
 
 		protected RefreshingObservableValue(ObservableValue<T> wrap, Observable<?> refresh) {
-			theWrapped = wrap;
+			super(wrap);
 			theRefresh = refresh;
 		}
 
-		protected ObservableValue<T> getWrapped() {
-			return theWrapped;
+		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getWrapped().getIdentity(), "refresh", theRefresh.getIdentity());
 		}
 
 		protected Observable<?> getRefresh() {
@@ -879,6 +964,14 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 		@Override
 		public Observable<ObservableValueEvent<T>> noInitChanges() {
 			return new Observable<ObservableValueEvent<T>>() {
+				@Override
+				public Object getIdentity() {
+					if (theChangesIdentity == null)
+						theChangesIdentity = Identifiable.wrap(theWrapped.noInitChanges().getIdentity(), "refresh",
+							theRefresh.getIdentity());
+					return theChangesIdentity;
+				}
+
 				@Override
 				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
 					Subscription[] refireSub = new Subscription[1];
@@ -948,6 +1041,8 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 		private final TypeToken<T> theType;
 		private final T theValue;
 
+		private Object theIdentity;
+
 		/**
 		 * @param type The type of this observable value
 		 * @param value This observable value's value
@@ -955,6 +1050,19 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 		public ConstantObservableValue(TypeToken<T> type, T value) {
 			theType = type;
 			theValue = TypeTokens.get().cast(type, value);
+		}
+
+		@Override
+		public Object getIdentity() {
+			if (theIdentity == null)
+				theIdentity = Identifiable.idFor(theValue, () -> String.valueOf(theValue), () -> Objects.hashCode(theValue),
+					other -> Objects.equals(theValue, other));
+			return theIdentity;
+		}
+
+		@Override
+		public long getStamp() {
+			return 0;
 		}
 
 		@Override
