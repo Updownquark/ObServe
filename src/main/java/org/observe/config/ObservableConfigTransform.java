@@ -23,8 +23,10 @@ import org.observe.config.ObservableConfigFormat.EntityConfigFormat;
 import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
+import org.qommons.Identifiable;
 import org.qommons.Lockable;
 import org.qommons.QommonsUtils;
+import org.qommons.StructuredStamped;
 import org.qommons.StructuredTransactable;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
@@ -41,7 +43,7 @@ import org.qommons.tree.BetterTreeMap;
 
 import com.google.common.reflect.TypeToken;
 
-public abstract class ObservableConfigTransform implements StructuredTransactable {
+public abstract class ObservableConfigTransform implements StructuredTransactable, StructuredStamped {
 	private final ObservableValue<? extends ObservableConfig> theParent;
 	private final Runnable theParentCreate;
 	private final Observable<?> theUntil;
@@ -59,7 +61,7 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 			isConnected = ObservableValue.of(true);
 			theUntil = theParent.noInitChanges().filter(evt -> evt.getOldValue() != evt.getNewValue());
 		} else {
-			isConnected = ObservableValue.of(TypeTokens.get().BOOLEAN, () -> _isConnected, until.take(1));
+			isConnected = ObservableValue.of(TypeTokens.get().BOOLEAN, () -> _isConnected, () -> _isConnected ? 0 : 1, until.take(1));
 			theUntil = Observable.or(until, //
 				theParent.noInitChanges().takeUntil(until).filter(evt -> evt.getOldValue() != evt.getNewValue()));
 		}
@@ -138,6 +140,7 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 		return Lockable.tryLock(theParent, () -> Lockable.lockable(theParent.get(), write, structural, cause));
 	}
 
+	@Override
 	public long getStamp(boolean structuralOnly) {
 		return structuralOnly ? theStructureStamp : theStamp;
 	}
@@ -155,6 +158,9 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 		private E theValue;
 		private final ValueHolder<E> theModifyingValue;
 
+		private Object theIdentity;
+		private Object theChangesIdentity;
+
 		public ObservableConfigValue(ObservableValue<? extends ObservableConfig> parent, Runnable ceCreate, Observable<?> until,
 			TypeToken<E> type, ObservableConfigFormat<E> format, boolean listen) {
 			super(parent, ceCreate, until);
@@ -165,6 +171,13 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 			theModifyingValue = new ValueHolder<>();
 
 			init(until, listen);
+		}
+
+		@Override
+		public Object getIdentity() {
+			if (theIdentity == null)
+				theIdentity = Identifiable.wrap(getParent().getIdentity(), "value", theFormat);
+			return theIdentity;
 		}
 
 		@Override
@@ -179,7 +192,14 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 
 		@Override
 		public Observable<ObservableValueEvent<E>> noInitChanges() {
-			return new Observable<ObservableValueEvent<E>>() {
+			class OCVChanges extends AbstractIdentifiable implements Observable<ObservableValueEvent<E>> {
+				@Override
+				protected Object createIdentity() {
+					if (theChangesIdentity == null)
+						theChangesIdentity = Identifiable.wrap(ObservableConfigValue.this.getIdentity(), "noInitChanges");
+					return theChangesIdentity;
+				}
+
 				@Override
 				public boolean isSafe() {
 					return true;
@@ -204,7 +224,8 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 				public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
 					return theListeners.add(observer, true)::run;
 				}
-			};
+			}
+			return new OCVChanges();
 		}
 
 		@Override
@@ -460,7 +481,7 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 
 			public ConfigElement(ObservableConfig config, ValueHolder<E> value) {
 				this.theConfig = config;
-				theElementObservable = new SimpleObservable<>(null, false, null, b -> b.unsafe());
+				theElementObservable = new SimpleObservable<>(null, null, false, null, ListenerList.build().unsafe());
 
 				if (value != null && value.isPresent()) {
 					theFormat.format(value.get(), null, config, v -> theValue = v, Observable.or(getUntil(), theElementObservable));
@@ -560,6 +581,15 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 		}
 
 		protected abstract class OCBCCollection implements ObservableCollection<E> {
+			private Object theIdentity;
+
+			@Override
+			public Object getIdentity() {
+				if (theIdentity == null)
+					theIdentity = Identifiable.wrap(getParent().getIdentity(), "values", theFormat, theChildName);
+				return theIdentity;
+			}
+
 			@Override
 			public long getStamp(boolean structuralOnly) {
 				return ObservableConfigBackedCollection.this.getStamp(structuralOnly);

@@ -3,6 +3,7 @@ package org.observe.collect;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
+import org.qommons.Identifiable;
 import org.qommons.Transaction;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
@@ -51,7 +52,7 @@ public interface ObservableElement<T> extends ObservableValue<T> {
 
 	@Override
 	default Observable<ObservableValueEvent<T>> changes() {
-		return elementChanges().map(evt -> evt);
+		return (Observable<ObservableValueEvent<T>>) (Observable<?>) elementChanges();
 	}
 
 	@Override
@@ -91,10 +92,20 @@ public interface ObservableElement<T> extends ObservableValue<T> {
 	 * @return An element that is always empty ({@link #get() value}==null, {@link #getElementId() element}==null)
 	 */
 	static <T> ObservableElement<T> empty(TypeToken<T> type) {
-		class EmptyElement implements ObservableElement<T> {
+		class EmptyElement extends AbstractIdentifiable implements ObservableElement<T> {
 			@Override
 			public TypeToken<T> getType() {
 				return type;
+			}
+
+			@Override
+			public long getStamp() {
+				return 0;
+			}
+
+			@Override
+			protected Object createIdentity() {
+				return Identifiable.baseId("empty-element", "empty-element");
 			}
 
 			@Override

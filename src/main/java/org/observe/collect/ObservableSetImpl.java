@@ -35,6 +35,7 @@ import org.observe.collect.ObservableCollectionImpl.FlattenedValueCollection;
 import org.observe.collect.ObservableCollectionImpl.PassiveDerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.ReversedObservableCollection;
 import org.observe.util.WeakListening;
+import org.qommons.Identifiable;
 import org.qommons.QommonsUtils;
 import org.qommons.Ternian;
 import org.qommons.Transaction;
@@ -208,6 +209,11 @@ public class ObservableSetImpl {
 
 		ActiveSetMgrPlaceholder(ActiveCollectionManager<E, I, T> wrapped) {
 			theWrapped = wrapped;
+		}
+
+		@Override
+		public Object getIdentity() {
+			return theWrapped.getIdentity();
 		}
 
 		@Override
@@ -579,6 +585,11 @@ public class ObservableSetImpl {
 			isPreservingSourceOrder = preserveSourceOrder;
 
 			theDebug = Debug.d().debug(DistinctManager.class).add("distinct");
+		}
+
+		@Override
+		public Object getIdentity() {
+			return Identifiable.wrap(theParent.getIdentity(), "distinct");
 		}
 
 		@Override

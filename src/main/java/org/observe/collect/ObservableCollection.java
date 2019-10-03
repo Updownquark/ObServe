@@ -29,6 +29,7 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveSetManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
+import org.qommons.Identifiable;
 import org.qommons.Lockable;
 import org.qommons.Ternian;
 import org.qommons.Transactable;
@@ -316,6 +317,16 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	default ObservableValue<Integer> observeSize() {
 		return new ObservableCollectionImpl.ReducedValue<E, Integer, Integer>(this, TypeToken.of(Integer.TYPE)) {
 			@Override
+			protected Object createIdentity() {
+				return Identifiable.wrap(getCollection().getIdentity(), "size");
+			}
+
+			@Override
+			public long getStamp() {
+				return getCollection().getStamp(true);
+			}
+
+			@Override
 			public Integer get() {
 				return getCollection().size();
 			}
@@ -358,7 +369,12 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 *         this collection changes. Unlike {@link #changes()}, this observable will only fire 1 event per transaction.
 	 */
 	default Observable<Object> simpleChanges() {
-		return new Observable<Object>() {
+		class SimpleChanges extends AbstractIdentifiable implements Observable<Object> {
+			@Override
+			protected Object createIdentity() {
+				return Identifiable.wrap(ObservableCollection.this.getIdentity(), "simpleChanges");
+			}
+
 			@Override
 			public Subscription subscribe(Observer<Object> observer) {
 				Causable.CausableKey key = Causable.key(//
@@ -382,7 +398,8 @@ public interface ObservableCollection<E> extends BetterList<E> {
 			public Transaction tryLock() {
 				return ObservableCollection.this.tryLock(false, false, null);
 			}
-		};
+		}
+		return new SimpleChanges();
 	}
 
 	// Observable containment
@@ -502,6 +519,11 @@ public interface ObservableCollection<E> extends BetterList<E> {
 			private final T RECALC = (T) new Object(); // Placeholder indicating that the value must be recalculated from scratch
 
 			@Override
+			protected Object createIdentity() {
+				return Identifiable.wrap(getCollection().getIdentity(), "reduce", seed, add, remove);
+			}
+
+			@Override
 			public T get() {
 				T ret = seed;
 				for (E element : ObservableCollection.this)
@@ -547,11 +569,6 @@ public interface ObservableCollection<E> extends BetterList<E> {
 					return get();
 				else
 					return updated;
-			}
-
-			@Override
-			public String toString() {
-				return "reduce " + ObservableCollection.this;
 			}
 		};
 	}
@@ -681,7 +698,12 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 * @return An observable that is notified for every event on any observable in the collection
 	 */
 	static <T> Observable<T> fold(ObservableCollection<? extends Observable<? extends T>> coll) {
-		return new Observable<T>() {
+		class FoldedCollectionObservable extends AbstractIdentifiable implements Observable<T> {
+			@Override
+			protected Object createIdentity() {
+				return Identifiable.wrap(coll.getIdentity(), "fold");
+			}
+
 			@Override
 			public Subscription subscribe(Observer<? super T> observer) {
 				HashMap<ElementId, Subscription> subscriptions = new HashMap<>();
@@ -717,12 +739,8 @@ public interface ObservableCollection<E> extends BetterList<E> {
 			public Transaction tryLock() {
 				return Lockable.tryLockAll(Lockable.lockable(coll), coll);
 			}
-
-			@Override
-			public String toString() {
-				return "fold(" + coll + ")";
-			}
-		};
+		}
+		return new FoldedCollectionObservable();
 	}
 
 	/**

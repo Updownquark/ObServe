@@ -27,6 +27,7 @@ import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.QommonsUtils;
+import org.qommons.Stamped;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
@@ -42,6 +43,11 @@ import com.google.common.reflect.TypeToken;
 
 /** Contains implementation classes for {@link ObservableConfig} methods */
 public class ObservableConfigContent {
+	/**
+	 * Observes a config's descendant at a path
+	 * 
+	 * @param <C> The sub-type of config
+	 */
 	protected static class ObservableConfigChild<C extends ObservableConfig> implements ObservableValue<C> {
 		private final TypeToken<C> theType;
 		private final ObservableConfig theRoot;
@@ -50,7 +56,14 @@ public class ObservableConfigContent {
 		private final long[] thePathElementStamps;
 		private Subscription thePathSubscription;
 		private final ListenerList<Observer<? super ObservableValueEvent<C>>> theListeners;
+		private Object theIdentity;
+		private Object theChangesIdentity;
 
+		/**
+		 * @param type The sub-type of config
+		 * @param root The root config to observe
+		 * @param path The path of the descendant to observe
+		 */
 		public ObservableConfigChild(TypeToken<C> type, ObservableConfig root, ObservableConfigPath path) {
 			theType = type;
 			theRoot = root;
@@ -163,6 +176,19 @@ public class ObservableConfigContent {
 		}
 
 		@Override
+		public long getStamp() {
+			resolvePath(0, false);
+			return Stamped.compositeStamp(thePathElementStamps);
+		}
+
+		@Override
+		public Object getIdentity() {
+			if (theIdentity == null)
+				theIdentity = Identifiable.wrap(theRoot, "descendant", thePath);
+			return theIdentity;
+		}
+
+		@Override
 		public C get() {
 			try (Transaction t = lock()) {
 				resolvePath(0, false);
@@ -204,6 +230,13 @@ public class ObservableConfigContent {
 		public Observable<ObservableValueEvent<C>> noInitChanges() {
 			return new Observable<ObservableValueEvent<C>>() {
 				@Override
+				public Object getIdentity() {
+					if (theChangesIdentity == null)
+						theChangesIdentity = Identifiable.wrap(ObservableConfigChild.this.getIdentity(), "noInitChanges");
+					return theChangesIdentity;
+				}
+
+				@Override
 				public Subscription subscribe(Observer<? super ObservableValueEvent<C>> observer) {
 					return theListeners.add(observer, true)::run;
 				}
@@ -226,9 +259,16 @@ public class ObservableConfigContent {
 		}
 	}
 
+	/** Observes the value of a config's path descendant */
 	protected static class ObservableConfigValue implements SettableValue<String> {
 		private final ObservableConfigChild<ObservableConfig> theConfigChild;
+		private Object theIdentity;
+		private Object theChangesIdentity;
 
+		/**
+		 * @param root The root config to observe
+		 * @param path The path of the config's descendant to observe the value of
+		 */
 		public ObservableConfigValue(ObservableConfig root, ObservableConfigPath path) {
 			theConfigChild = new ObservableConfigChild<>(ObservableConfig.TYPE, root, path);
 		}
@@ -236,6 +276,22 @@ public class ObservableConfigContent {
 		@Override
 		public TypeToken<String> getType() {
 			return TypeTokens.get().STRING;
+		}
+
+		@Override
+		public long getStamp() {
+			long stamp = theConfigChild.getStamp();
+			ObservableConfig child = theConfigChild.get();
+			if (child != null)
+				stamp ^= Long.rotateRight(child.getStamp(), 32);
+			return stamp;
+		}
+
+		@Override
+		public Object getIdentity() {
+			if (theIdentity == null)
+				theIdentity = Identifiable.wrap(theConfigChild.getIdentity(), "value");
+			return theIdentity;
 		}
 
 		@Override
@@ -252,6 +308,13 @@ public class ObservableConfigContent {
 		@Override
 		public Observable<ObservableValueEvent<String>> noInitChanges() {
 			return new Observable<ObservableValueEvent<String>>() {
+				@Override
+				public Object getIdentity() {
+					if(theChangesIdentity==null)
+						theChangesIdentity = Identifiable.wrap(ObservableConfigValue.this.getIdentity(), "noInitChanges");
+					return theChangesIdentity;
+				}
+
 				@Override
 				public boolean isSafe() {
 					return true;

@@ -33,6 +33,7 @@ import org.observe.util.TypeTokens;
 import org.observe.util.swing.CategoryRenderStrategy.CategoryMouseListener;
 import org.qommons.Transaction;
 import org.qommons.collect.CollectionElement;
+import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement;
 
 import com.google.common.reflect.TypeToken;
@@ -269,7 +270,7 @@ public class ObservableTableModel<R> implements TableModel {
 			// // so it can do its row- and column-indexed filtering before the row asks for it
 			// table.setModel(new DefaultTableModel());
 			// }
-			SimpleObservable<Void> until = new SimpleObservable<>(null, false, null, b -> b.unsafe());
+			SimpleObservable<Void> until = new SimpleObservable<>(null, null, false, null, ListenerList.build().unsafe());
 			subs.add(() -> until.onNext(null));
 			// ObservableTableFiltering<R, ObservableTableModel<R>> rowFilter = new ObservableTableFiltering<>(model, until);
 			// TableRowSorter<ObservableTableModel<R>> rowSorter = new TableRowSorter<>(model);

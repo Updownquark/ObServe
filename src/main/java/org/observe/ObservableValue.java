@@ -1,5 +1,6 @@
 package org.observe;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
@@ -9,6 +10,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.IntSupplier;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -76,17 +78,53 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 
 	@Override
 	default Transaction lock() {
-		return changes().lock();
+		return noInitChanges().lock();
 	}
 
 	@Override
 	default Transaction tryLock() {
-		return changes().tryLock();
+		return noInitChanges().tryLock();
 	}
 
 	/** @return An observable that just reports this observable value's value in an observable without the event */
 	default Observable<T> value() {
-		return changes().map(evt -> evt.getNewValue());
+		class ValueObservable extends AbstractIdentifiable implements Observable<T> {
+			@Override
+			public Subscription subscribe(Observer<? super T> observer) {
+				return ObservableValue.this.changes().subscribe(new Observer<ObservableValueEvent<T>>() {
+					@Override
+					public <V extends ObservableValueEvent<T>> void onNext(V value) {
+						observer.onNext(value.getNewValue());
+					}
+
+					@Override
+					public <V extends ObservableValueEvent<T>> void onCompleted(V value) {
+						observer.onCompleted(value.getNewValue());
+					}
+				});
+			}
+
+			@Override
+			public boolean isSafe() {
+				return ObservableValue.this.noInitChanges().isSafe();
+			}
+
+			@Override
+			public Transaction lock() {
+				return ObservableValue.this.lock();
+			}
+
+			@Override
+			public Transaction tryLock() {
+				return ObservableValue.this.tryLock();
+			}
+
+			@Override
+			protected Object createIdentity() {
+				return Identifiable.wrap(ObservableValue.this.getIdentity(), "value");
+			}
+		}
+		return new ValueObservable();
 	}
 
 	/**
@@ -142,26 +180,25 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 	 * @return An observable value identical to this one but whose change events are mapped by the given function
 	 */
 	default ObservableValue<T> mapEvent(Function<? super ObservableValueEvent<T>, ObservableValueEvent<T>> eventMap) {
-		ObservableValue<T> outer = this;
-		return new ObservableValue<T>() {
+		return new WrappingObservableValue<T, T>(this) {
 			@Override
 			public TypeToken<T> getType() {
-				return outer.getType();
+				return getWrapped().getType();
 			}
 
 			@Override
 			public T get() {
-				return outer.get();
+				return getWrapped().get();
 			}
 
 			@Override
 			public Observable<ObservableValueEvent<T>> noInitChanges() {
-				return outer.noInitChanges().map(eventMap);
+				return getWrapped().noInitChanges().map(eventMap);
 			}
 
 			@Override
-			public String toString() {
-				return outer.toString();
+			protected Object createIdentity() {
+				return getWrapped().getIdentity();
 			}
 		};
 	}
@@ -357,11 +394,12 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 	 * @param <X> The compile-time type of the value to wrap
 	 * @param type The run-time type of the value to wrap
 	 * @param value Supplies the value for the observable
+	 * @param stamp The stamp for the synthetic value
 	 * @param changes The observable that signals that the value may have changed
 	 * @return An observable that supplies the value of the given supplier, firing change events when the given observable fires
 	 */
-	public static <X> ObservableValue<X> of(TypeToken<X> type, Supplier<? extends X> value, Observable<?> changes) {
-		return new SyntheticObservable<>(type, value, changes);
+	public static <X> ObservableValue<X> of(TypeToken<X> type, Supplier<? extends X> value, IntSupplier stamp, Observable<?> changes) {
+		return new SyntheticObservable<>(type, value, stamp, changes);
 	}
 
 	/**
@@ -391,10 +429,12 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 	 *         completes.
 	 */
 	public static <T> Observable<T> flattenObservableValue(ObservableValue<? extends Observable<? extends T>> value) {
-		return new Observable<T>() {
+		Observable<ObservableValueEvent<? extends Observable<? extends T>>> changes;
+		changes = (Observable<ObservableValueEvent<? extends Observable<? extends T>>>) (Observable<?>) value.changes();
+		return new Observable.WrappingObservable<ObservableValueEvent<? extends Observable<? extends T>>, T>(changes) {
 			@Override
 			public Subscription subscribe(Observer<? super T> observer) {
-				return value.changes().subscribe(new Observer<ObservableValueEvent<? extends Observable<? extends T>>>() {
+				return getWrapped().subscribe(new Observer<ObservableValueEvent<? extends Observable<? extends T>>>() {
 					@Override
 					public <E extends ObservableValueEvent<? extends Observable<? extends T>>> void onNext(E event) {
 						if (event.getNewValue() != null) {
@@ -437,6 +477,11 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 			@Override
 			public Transaction tryLock() {
 				return Lockable.tryLock(value.changes(), value::get);
+			}
+
+			@Override
+			protected Object createIdentity() {
+				return Identifiable.wrap(value.getIdentity(), "flatten");
 			}
 		};
 	}
@@ -513,7 +558,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 			theWrapped = wrapped;
 		}
 
-		protected ObservableValue<? extends F> getWrapped() {
+		protected ObservableValue<F> getWrapped() {
 			return theWrapped;
 		}
 
@@ -858,6 +903,15 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 		@Override
 		public Observable<ObservableValueEvent<T>> noInitChanges() {
 			return new Observable<ObservableValueEvent<T>>() {
+				private Object theChangesIdentity;
+
+				@Override
+				public Object getIdentity() {
+					if (theChangesIdentity == null)
+						theChangesIdentity = Identifiable.wrap(ComposedObservableValue.this.getIdentity(), "noInitChanges");
+					return theChangesIdentity;
+				}
+
 				@Override
 				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
 					return theObservers.add(observer, true)::run;
@@ -903,13 +957,22 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 	 */
 	class ObservableValueTakenUntil<T> extends WrappingObservableValue<T, T> {
 		private final Observable<ObservableValueEvent<T>> theChanges;
+		private final boolean isTerminating;
+		private final Observable<?> theUntil;
 
 		protected ObservableValueTakenUntil(ObservableValue<T> wrap, Observable<?> until, boolean terminate) {
 			super(wrap);
+			isTerminating = terminate;
+			theUntil = until;
 			theChanges = new Observable.ObservableTakenUntil<>(wrap.noInitChanges(), until, terminate, () -> {
 				T value = wrap.get();
 				return wrap.createChangeEvent(value, value, null);
 			});
+		}
+
+		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getWrapped().getIdentity(), isTerminating ? "takeUntil" : "unsubscribeOn", theUntil);
 		}
 
 		@Override
@@ -1087,24 +1150,41 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 	}
 
 	/**
-	 * Implements {@link ObservableValue#of(TypeToken, Supplier, Observable)}
+	 * Implements {@link ObservableValue#of(TypeToken, Supplier, IntSupplier, Observable)}
 	 *
 	 * @param <T> The type of this value
 	 */
 	class SyntheticObservable<T> implements ObservableValue<T> {
 		private final TypeToken<T> theType;
 		private final Supplier<? extends T> theValue;
+		private final IntSupplier theStamp;
 		private final Observable<?> theChanges;
+		private Object theIdentity;
+		private Object theChangeIdentity;
+		private Object theNoInitChangeIdentity;
 
-		public SyntheticObservable(TypeToken<T> type, Supplier<? extends T> value, Observable<?> changes) {
+		public SyntheticObservable(TypeToken<T> type, Supplier<? extends T> value, IntSupplier stamp, Observable<?> changes) {
 			theType = type;
 			theValue = value;
+			theStamp = stamp;
 			theChanges = changes;
 		}
 
 		@Override
 		public TypeToken<T> getType() {
 			return theType;
+		}
+
+		@Override
+		public long getStamp() {
+			return theStamp.getAsInt();
+		}
+
+		@Override
+		public Object getIdentity() {
+			if (theIdentity == null)
+				theIdentity = Identifiable.wrap(theChanges.getIdentity(), "synthetic", theValue);
+			return theIdentity;
 		}
 
 		@Override
@@ -1124,6 +1204,19 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 
 		private Observable<ObservableValueEvent<T>> changes(boolean withInit) {
 			return new Observable<ObservableValueEvent<T>>() {
+				@Override
+				public Object getIdentity() {
+					if (withInit) {
+						if (theChangeIdentity == null)
+							theChangeIdentity = Identifiable.wrap(SyntheticObservable.this.getIdentity(), "changes");
+						return theChangeIdentity;
+					} else {
+						if (theNoInitChangeIdentity == null)
+							theNoInitChangeIdentity = Identifiable.wrap(SyntheticObservable.this.getIdentity(), "noInitChanges");
+						return theNoInitChangeIdentity;
+					}
+				}
+
 				@Override
 				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
 					class SyntheticChanges implements Observer<Object> {
@@ -1201,20 +1294,19 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 	 *
 	 * @param <T> The type of the value
 	 */
-	class SafeObservableValue<T> implements ObservableValue<T> {
-		private final ObservableValue<T> theWrapped;
-
+	class SafeObservableValue<T> extends WrappingObservableValue<T, T> {
 		public SafeObservableValue(ObservableValue<T> wrap) {
-			theWrapped = wrap;
-		}
-
-		protected ObservableValue<T> getWrapped() {
-			return theWrapped;
+			super(wrap);
 		}
 
 		@Override
 		public TypeToken<T> getType() {
 			return theWrapped.getType();
+		}
+
+		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getWrapped().getIdentity(), "safe");
 		}
 
 		@Override
@@ -1242,6 +1334,9 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 		private final ObservableValue<? extends ObservableValue<? extends T>> theValue;
 		private final TypeToken<T> theType;
 		private final Supplier<? extends T> theDefaultValue;
+		private Object theIdentity;
+		private Object theChangesIdentity;
+		private Object theNoInitChangesIdentity;
 
 		protected FlattenedObservableValue(ObservableValue<? extends ObservableValue<? extends T>> value,
 			Supplier<? extends T> defaultValue) {
@@ -1254,6 +1349,22 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 
 		protected ObservableValue<? extends ObservableValue<? extends T>> getWrapped() {
 			return theValue;
+		}
+
+		@Override
+		public Object getIdentity() {
+			if (theIdentity == null)
+				theIdentity = Identifiable.wrap(theValue.getIdentity(), "flatten");
+			return theIdentity;
+		}
+
+		@Override
+		public long getStamp() {
+			long stamp = theValue.getStamp();
+			ObservableValue<? extends T> wrapped = theValue.get();
+			if (wrapped != null)
+				stamp ^= Long.rotateRight(wrapped.getStamp(), 32);
+			return stamp;
 		}
 
 		@Override
@@ -1311,6 +1422,19 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 
 			public FlattenedValueChanges(boolean withInitialEvent) {
 				this.withInitialEvent = withInitialEvent;
+			}
+
+			@Override
+			public Object getIdentity() {
+				if (withInitialEvent) {
+					if (theChangesIdentity == null)
+						theChangesIdentity = Identifiable.wrap(FlattenedObservableValue.this.getIdentity(), "changes");
+					return theChangesIdentity;
+				} else {
+					if (theNoInitChangesIdentity == null)
+						theNoInitChangesIdentity = Identifiable.wrap(FlattenedObservableValue.this.getIdentity(), "noInitChanges");
+					return theNoInitChangesIdentity;
+				}
 			}
 
 			@Override
@@ -1440,6 +1564,8 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 		private final ObservableValue<? extends T>[] theValues;
 		private final Predicate<? super T> theTest;
 		private final Supplier<? extends T> theDefault;
+		private Object theIdentity;
+		private Object theChangesIdentity;
 
 		protected FirstObservableValue(TypeToken<T> type, ObservableValue<? extends T>[] values, Predicate<? super T> test,
 			Supplier<? extends T> def) {
@@ -1452,6 +1578,29 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 		@Override
 		public TypeToken<T> getType() {
 			return theType;
+		}
+
+		@Override
+		public Object getIdentity() {
+			if (theIdentity == null) {
+				StringBuilder str = new StringBuilder("first(");
+				List<Object> obsIds = new ArrayList<>(theValues.length + 2);
+				for (ObservableValue<? extends T> value : theValues) {
+					obsIds.add(value.getIdentity());
+					str.append(value.getIdentity()).append(", ");
+				}
+				obsIds.add(theTest);
+				str.append(theTest).append(", ");
+				obsIds.add(theDefault);
+				str.append(theDefault).append(')');
+				theIdentity = Identifiable.baseId(str.toString(), obsIds);
+			}
+			return theIdentity;
+		}
+
+		@Override
+		public long getStamp() {
+			return Stamped.compositeStamp(Arrays.asList(theValues), Stamped::getStamp);
 		}
 
 		@Override
@@ -1478,6 +1627,13 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 		}
 
 		class FirstValueChanges implements Observable<ObservableValueEvent<T>> {
+			@Override
+			public Object getIdentity() {
+				if (theChangesIdentity == null)
+					theChangesIdentity = Identifiable.wrap(FirstObservableValue.this.getIdentity(), "changes");
+				return theChangesIdentity;
+			}
+
 			@Override
 			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
 				if (theValues.length == 0) {

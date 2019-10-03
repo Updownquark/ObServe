@@ -35,6 +35,8 @@ import org.qommons.BiTuple;
 import org.qommons.Causable;
 import org.qommons.Causable.CausableKey;
 import org.qommons.ConcurrentHashSet;
+import org.qommons.Identifiable;
+import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.IdentityKey;
 import org.qommons.Lockable;
 import org.qommons.QommonsUtils;
@@ -107,7 +109,7 @@ public final class ObservableCollectionImpl {
 	 *
 	 * @param <E> The type of values in the collection
 	 */
-	public static class CollectionChangesObservable<E> implements Observable<CollectionChangeEvent<E>> {
+	public static class CollectionChangesObservable<E> extends AbstractIdentifiable implements Observable<CollectionChangeEvent<E>> {
 		/**
 		 * Tracks a set of changes corresponding to a set of {@link ObservableCollectionEvent}s, so those changes can be fired at once
 		 *
@@ -171,6 +173,11 @@ public final class ObservableCollectionImpl {
 				evt.getRootCausable().onFinish(key).compute(SESSION_TRACKER_PROPERTY,
 					(k, tracker) -> accumulate((SessionChangeTracker<E>) tracker, evt, observer));
 			});
+		}
+
+		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(collection.getIdentity(), "changes");
 		}
 
 		/**
@@ -363,11 +370,12 @@ public final class ObservableCollectionImpl {
 	 *
 	 * @param <E> The type of the element
 	 */
-	public static abstract class AbstractObservableElementFinder<E> implements ObservableElement<E> {
+	public static abstract class AbstractObservableElementFinder<E> extends AbstractIdentifiable implements ObservableElement<E> {
 		private final ObservableCollection<E> theCollection;
 		private final Comparator<CollectionElement<? extends E>> theElementCompare;
 		private final Supplier<? extends E> theDefault;
 		private final Observable<?> theRefresh;
+		private Object theChangesIdentity;
 
 		/**
 		 * @param collection The collection to find elements in
@@ -392,6 +400,11 @@ public final class ObservableCollectionImpl {
 		@Override
 		public TypeToken<E> getType() {
 			return theCollection.getType();
+		}
+
+		@Override
+		public long getStamp() {
+			return theCollection.getStamp();
 		}
 
 		@Override
@@ -430,7 +443,14 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public Observable<ObservableElementEvent<E>> elementChanges() {
-			return new Observable<ObservableElementEvent<E>>() {
+			class ElementChanges extends AbstractIdentifiable implements Observable<ObservableElementEvent<E>> {
+				@Override
+				protected Object createIdentity() {
+					if (theChangesIdentity == null)
+						theChangesIdentity = Identifiable.wrap(AbstractObservableElementFinder.this.getIdentity(), "elementChanges");
+					return theChangesIdentity;
+				}
+
 				@Override
 				public Subscription subscribe(Observer<? super ObservableElementEvent<E>> observer) {
 					try (Transaction t = Lockable.lockAll(theRefresh, Lockable.lockable(theCollection, false, false, null))) {
@@ -623,6 +643,7 @@ public final class ObservableCollectionImpl {
 					return theCollection.tryLock(false, false, null);
 				}
 			};
+			return new ElementChanges();
 		}
 
 		private class SimpleElement implements CollectionElement<E> {
@@ -682,6 +703,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getCollection().getIdentity(), "find", theTest, describe(isFirst));
+		}
+
+		@Override
 		protected boolean find(Consumer<? super CollectionElement<? extends E>> onElement) {
 			return getCollection().find(theTest, onElement, isFirst.withDefault(true));
 		}
@@ -718,6 +744,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getCollection().getIdentity(), "equivalent", theValue, isFirst ? "first" : "last");
+		}
+
+		@Override
 		protected boolean find(Consumer<? super CollectionElement<? extends E>> onElement) {
 			return getCollection().forElement(theValue, onElement, isFirst);
 		}
@@ -726,6 +757,22 @@ public final class ObservableCollectionImpl {
 		protected boolean test(E value) {
 			return getCollection().equivalence().elementEquals(theValue, value);
 		}
+	}
+
+	static String describe(Ternian first) {
+		String str = null;
+		switch (first) {
+		case FALSE:
+			str = "last";
+			break;
+		case NONE:
+			str = "any";
+			break;
+		case TRUE:
+			str = "first";
+			break;
+		}
+		return str;
 	}
 
 	/**
@@ -757,6 +804,11 @@ public final class ObservableCollectionImpl {
 			}, def, refresh);
 			theCompare = compare;
 			isFirst = first;
+		}
+
+		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getCollection().getIdentity(), "best", theCompare, describe(isFirst));
 		}
 
 		@Override
@@ -792,9 +844,10 @@ public final class ObservableCollectionImpl {
 	 * @param <X> The type of the intermediate result used for calculation
 	 * @param <T> The type of the produced value
 	 */
-	public static abstract class ReducedValue<E, X, T> implements ObservableValue<T> {
+	public static abstract class ReducedValue<E, X, T> extends AbstractIdentifiable implements ObservableValue<T> {
 		private final ObservableCollection<E> theCollection;
 		private final TypeToken<T> theDerivedType;
+		private Object theChangesIdentity;
 
 		/**
 		 * @param collection The collection to reduce
@@ -816,8 +869,20 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public long getStamp() {
+			return theCollection.getStamp();
+		}
+
+		@Override
 		public Observable<ObservableValueEvent<T>> noInitChanges() {
 			return new Observable<ObservableValueEvent<T>>() {
+				@Override
+				public Object getIdentity() {
+					if (theChangesIdentity == null)
+						theChangesIdentity = Identifiable.wrap(ReducedValue.this.getIdentity(), "noInitChanges");
+					return theChangesIdentity;
+				}
+
 				@Override
 				public boolean isSafe() {
 					return theCollection.isLockSupported();
@@ -1152,10 +1217,11 @@ public final class ObservableCollectionImpl {
 	 * @param <E> The type of the left collection
 	 * @param <X> The type of the right collection
 	 */
-	public abstract static class IntersectionValue<E, X> implements ObservableValue<Boolean> {
+	public abstract static class IntersectionValue<E, X> extends AbstractIdentifiable implements ObservableValue<Boolean> {
 		private final ObservableCollection<E> theLeft;
 		private final ObservableCollection<X> theRight;
 		private final Predicate<ValueCounts<E, X>> theSatisfiedCheck;
+		private Object theChangesIdentity;
 
 		/**
 		 * @param left The left collection
@@ -1184,8 +1250,20 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public long getStamp() {
+			return theLeft.getStamp() ^ Long.rotateRight(theRight.getStamp(), 32);
+		}
+
+		@Override
 		public Observable<ObservableValueEvent<Boolean>> changes() {
 			return new Observable<ObservableValueEvent<Boolean>>() {
+				@Override
+				public Object getIdentity() {
+					if (theChangesIdentity == null)
+						theChangesIdentity = Identifiable.wrap(IntersectionValue.this.getIdentity(), "changes");
+					return theChangesIdentity;
+				}
+
 				@Override
 				public boolean isSafe() {
 					return theLeft.isLockSupported() && theRight.isLockSupported();
@@ -1253,11 +1331,17 @@ public final class ObservableCollectionImpl {
 			theValue = value;
 		}
 
+		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getLeft().getIdentity(), "contains", theValue.getIdentity());
+		}
+
 		private static <T> ObservableCollection<T> toCollection(ObservableValue<T> value) {
 			ObservableValue<ObservableCollection<T>> cv = value.map(v -> ObservableCollection.of(value.getType(), v));
 			return ObservableCollection.flattenValue(cv);
 		}
 
+		@SuppressWarnings("unlikely-arg-type")
 		@Override
 		public Boolean get() {
 			return getLeft().contains(theValue.get());
@@ -1280,6 +1364,12 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getLeft().getIdentity(), "containsAll", getRight().getIdentity());
+		}
+
+		@SuppressWarnings("unlikely-arg-type")
+		@Override
 		public Boolean get() {
 			return getLeft().containsAll(getRight());
 		}
@@ -1298,6 +1388,11 @@ public final class ObservableCollectionImpl {
 		 */
 		public ContainsAnyValue(ObservableCollection<E> left, ObservableCollection<X> right) {
 			super(left, right, counts -> counts.getCommonCount() > 0);
+		}
+
+		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getLeft().getIdentity(), "containsAny", getRight().getIdentity());
 		}
 
 		@Override
@@ -1404,7 +1499,7 @@ public final class ObservableCollectionImpl {
 	 * @param <E> The type of the source collection
 	 * @param <T> The type of values in the collection
 	 */
-	public static class PassiveDerivedCollection<E, T> implements DerivedCollection<T> {
+	public static class PassiveDerivedCollection<E, T> extends AbstractIdentifiable implements DerivedCollection<T> {
 		private final ObservableCollection<E> theSource;
 		private final PassiveCollectionManager<E, ?, T> theFlow;
 		private final Equivalence<? super T> theEquivalence;
@@ -1429,6 +1524,11 @@ public final class ObservableCollectionImpl {
 		/** @return The passive manager that produces this collection's elements */
 		protected PassiveCollectionManager<E, ?, T> getFlow() {
 			return theFlow;
+		}
+
+		@Override
+		protected Object createIdentity() {
+			return theFlow.getIdentity();
 		}
 
 		@Override
@@ -1843,7 +1943,7 @@ public final class ObservableCollectionImpl {
 	 *
 	 * @param <T> The type of values in the collection
 	 */
-	public static class ActiveDerivedCollection<T> implements DerivedCollection<T> {
+	public static class ActiveDerivedCollection<T> extends AbstractIdentifiable implements DerivedCollection<T> {
 		/**
 		 * Holds a {@link ObservableCollectionDataFlowImpl.DerivedCollectionElement}s for an {@link ActiveDerivedCollection}
 		 *
@@ -1996,6 +2096,11 @@ public final class ObservableCollectionImpl {
 				theListeners.forEach(//
 					listener -> listener.accept(event));
 			}
+		}
+
+		@Override
+		protected Object createIdentity() {
+			return theFlow.getIdentity();
 		}
 
 		@Override
@@ -2329,7 +2434,7 @@ public final class ObservableCollectionImpl {
 	 *
 	 * @param <E> The type of elements in the collection
 	 */
-	public static class FlattenedValueCollection<E> implements ObservableCollection<E> {
+	public static class FlattenedValueCollection<E> extends AbstractIdentifiable implements ObservableCollection<E> {
 		private final ObservableValue<? extends ObservableCollection<? extends E>> theCollectionObservable;
 		private final TypeToken<E> theType;
 		private final Equivalence<? super E> theEquivalence;
@@ -2356,6 +2461,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(theCollectionObservable.getIdentity(), "flatten");
+		}
+
+		@Override
 		public boolean isLockSupported() {
 			return true;
 		}
@@ -2373,9 +2483,11 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public long getStamp(boolean structuralOnly) {
+			long stamp = theCollectionObservable.getStamp();
 			ObservableCollection<? extends E> coll = theCollectionObservable.get();
-			// TODO Add stamps to ObservableValue?
-			return coll == null ? -1 : coll.getStamp(structuralOnly);
+			if (coll != null)
+				stamp ^= Long.rotateRight(coll.getStamp(structuralOnly), 32);
+			return stamp;
 		}
 
 		@Override
@@ -2383,7 +2495,6 @@ public final class ObservableCollectionImpl {
 			ObservableCollection<? extends E> coll = theCollectionObservable.get();
 			return coll == null || coll.isContentControlled();
 		}
-
 
 		@Override
 		public Equivalence<? super E> equivalence() {

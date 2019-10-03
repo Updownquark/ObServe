@@ -43,8 +43,10 @@ import org.observe.util.TypeTokens;
 import org.observe.util.WeakListening;
 import org.qommons.BiTuple;
 import org.qommons.Causable;
+import org.qommons.Identifiable;
 import org.qommons.Lockable;
 import org.qommons.QommonsUtils;
+import org.qommons.Stamped;
 import org.qommons.StructuredTransactable;
 import org.qommons.Ternian;
 import org.qommons.Transactable;
@@ -60,6 +62,7 @@ import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.OptimisticContext;
+import org.qommons.collect.ValueStoredCollection;
 import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BetterTreeMap;
 import org.qommons.tree.BinaryTreeNode;
@@ -179,7 +182,7 @@ public class ObservableCollectionDataFlowImpl {
 	 * @param <I> An intermediate type
 	 * @param <T> The type of the derived collection that can use this manager
 	 */
-	public static interface CollectionOperation<E, I, T> extends StructuredTransactable {
+	public static interface CollectionOperation<E, I, T> extends Identifiable, StructuredTransactable {
 		/** @return The type of collection that this operation would produce */
 		TypeToken<T> getTargetType();
 
@@ -314,8 +317,17 @@ public class ObservableCollectionDataFlowImpl {
 		 */
 		Comparable<DerivedCollectionElement<T>> getElementFinder(T value);
 
+		/**
+		 * @param sourceEl The source element to find
+		 * @return The elements in this flow influenced by the given element from a source
+		 */
 		BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl);
 
+		/**
+		 * @param localElement The element in this flow
+		 * @param sourceCollection The source collection to get source elements from
+		 * @return The elements in the given collection that influence the given local element
+		 */
 		BetterList<ElementId> getSourceElements(DerivedCollectionElement<T> localElement, BetterCollection<?> sourceCollection);
 
 		/**
@@ -366,21 +378,71 @@ public class ObservableCollectionDataFlowImpl {
 		void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening);
 	}
 
+	/**
+	 * An {@link ActiveCollectionManager} that will produce an observable {@link org.qommons.collect.ValueStoredCollection}
+	 *
+	 * @param <E> The type of the source collection
+	 * @param <I> An intermediate type
+	 * @param <T> The type of the derived collection that this manager can power
+	 */
 	public static interface ActiveSetManager<E, I, T> extends ActiveCollectionManager<E, I, T> {
+		/**
+		 * @param element The element to check the structure's consistency at
+		 * @return Whether the collection's storage appears to be consistent at the given element
+		 * @see ValueStoredCollection#isConsistent(ElementId)
+		 */
 		boolean isConsistent(DerivedCollectionElement<T> element);
 
+		/**
+		 * @return Whether the collection's storage is consistent
+		 * @see ValueStoredCollection#checkConsistency()
+		 */
 		boolean checkConsistency();
 
+		/**
+		 * @param <X> The tracking data type
+		 * @param element The element to repair the structure's consistency at
+		 * @param listener The listener to monitor repairs. May be null.
+		 * @return Whether any inconsistencies were found
+		 * @see ValueStoredCollection#repair(ElementId, org.qommons.collect.ValueStoredCollection.RepairListener)
+		 */
 		<X> boolean repair(DerivedCollectionElement<T> element, RepairListener<T, X> listener);
 
+		/**
+		 * @param <X> The tracking data type
+		 * @param listener The listener to monitor repairs. May be null.
+		 * @return Whether any inconsistencies were found
+		 * @see ValueStoredCollection#repair(org.qommons.collect.ValueStoredCollection.RepairListener)
+		 */
 		<X> boolean repair(RepairListener<T, X> listener);
 	}
 
+	/**
+	 * The data flow equivalent of the {@link org.qommons.collect.ValueStoredCollection.RepairListener}
+	 *
+	 * @param <E> The type of values in the collection/flow
+	 * @param <X> The type of the tracking data created by this listener
+	 */
 	public interface RepairListener<E, X> {
+		/**
+		 * @param element The element removed
+		 * @return The tracking data for the element
+		 * @see org.qommons.collect.ValueStoredCollection.RepairListener#removed(CollectionElement)
+		 */
 		X removed(DerivedCollectionElement<E> element);
 
+		/**
+		 * @param value The value previously {@link #removed(DerivedCollectionElement)} and not re-added
+		 * @param data The tracking data from {@link #removed(DerivedCollectionElement)}
+		 * @see org.qommons.collect.ValueStoredCollection.RepairListener#disposed(Object, Object)
+		 */
 		void disposed(E value, X data);
 
+		/**
+		 * @param element The element {@link #removed(DerivedCollectionElement) removed} and re-added to the collection/flow
+		 * @param data The tracking data from {@link #removed(DerivedCollectionElement)}
+		 * @see org.qommons.collect.ValueStoredCollection.RepairListener#transferred(CollectionElement, Object)
+		 */
 		void transferred(DerivedCollectionElement<E> element, X data);
 	}
 
@@ -562,7 +624,7 @@ public class ObservableCollectionDataFlowImpl {
 			listener.removed(value, cause);
 	}
 
-	public static StructuredTransactable structureAffectedPassLockThroughToParent(CollectionOperation<?, ?, ?> parent) {
+	static StructuredTransactable structureAffectedPassLockThroughToParent(CollectionOperation<?, ?, ?> parent) {
 		return new StructuredTransactable() {
 			@Override
 			public boolean isLockSupported() {
@@ -606,7 +668,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 	}
 
-	public static Transaction structureAffectedTryPassLockThroughToParent(CollectionOperation<?, ?, ?> parent, boolean write,
+	static Transaction structureAffectedTryPassLockThroughToParent(CollectionOperation<?, ?, ?> parent, boolean write,
 		boolean structural, Object cause) {
 		if (write) {
 			// If the caller is doing the modifications, we can prevent any potential updates that would affect the child's structure
@@ -1448,6 +1510,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public Object getIdentity() {
+			return theSource.getIdentity();
+		}
+
+		@Override
 		public boolean isLockSupported() {
 			return theSource.isLockSupported();
 		}
@@ -1531,6 +1598,11 @@ public class ObservableCollectionDataFlowImpl {
 
 		protected ObservableCollection<E> getSource() {
 			return theSource;
+		}
+
+		@Override
+		public Object getIdentity() {
+			return theSource.getIdentity();
 		}
 
 		@Override
@@ -1701,6 +1773,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public Object getIdentity() {
+			return Identifiable.wrap(theParent.getIdentity(), "reverse");
+		}
+
+		@Override
 		public TypeToken<T> getTargetType() {
 			return theParent.getTargetType();
 		}
@@ -1778,6 +1855,11 @@ public class ObservableCollectionDataFlowImpl {
 
 		ActiveReversedManager(ActiveCollectionManager<E, ?, T> parent) {
 			theParent = parent;
+		}
+
+		@Override
+		public Object getIdentity() {
+			return Identifiable.wrap(theParent.getIdentity(), "reverse");
 		}
 
 		@Override
@@ -1889,6 +1971,11 @@ public class ObservableCollectionDataFlowImpl {
 					comp = t1.getValue2().compareTo(t2.getValue2());
 				return comp;
 			};
+		}
+
+		@Override
+		public Object getIdentity() {
+			return Identifiable.wrap(theParent.getIdentity(), "sorted", theCompare);
 		}
 
 		@Override
@@ -2136,6 +2223,11 @@ public class ObservableCollectionDataFlowImpl {
 		FilteredCollectionManager(ActiveCollectionManager<E, ?, T> parent, Function<? super T, String> filter) {
 			theParent = parent;
 			theFilter = filter;
+		}
+
+		@Override
+		public Object getIdentity() {
+			return Identifiable.wrap(theParent.getIdentity(), "filter", theFilter);
 		}
 
 		@Override
@@ -2510,7 +2602,7 @@ public class ObservableCollectionDataFlowImpl {
 		private final ActiveCollectionManager<E, ?, T> theParent;
 		private final ObservableCollection<X> theFilter;
 		private final Equivalence<? super T> theEquivalence; // Make this a field since we'll need it often
-		/** Whether a value's presence in the right causes the value in the left to be present (true) or absent (false) in the result */
+		/** Whether a value's presence in the right causes the value in the left to be present (false) or absent (true) in the result */
 		private final boolean isExclude;
 		private Map<T, IntersectionElement> theValues;
 		// The following two fields are needed because the values may mutate
@@ -2524,6 +2616,11 @@ public class ObservableCollectionDataFlowImpl {
 			theEquivalence = parent.equivalence();
 			isExclude = exclude;
 			theValues = theEquivalence.createMap();
+		}
+
+		@Override
+		public Object getIdentity() {
+			return Identifiable.wrap(theParent.getIdentity(), isExclude ? "without" : "intersect", theFilter);
 		}
 
 		@Override
@@ -2685,6 +2782,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public Object getIdentity() {
+			return Identifiable.wrap(theParent.getIdentity(), "withEquivalence", theEquivalence);
+		}
+
+		@Override
 		public TypeToken<T> getTargetType() {
 			return theParent.getTargetType();
 		}
@@ -2762,6 +2864,11 @@ public class ObservableCollectionDataFlowImpl {
 		ActiveEquivalenceSwitchedManager(ActiveCollectionManager<E, ?, T> parent, Equivalence<? super T> equivalence) {
 			theParent = parent;
 			theEquivalence = equivalence;
+		}
+
+		@Override
+		public Object getIdentity() {
+			return Identifiable.wrap(theParent.getIdentity(), "withEquivalence", theEquivalence);
 		}
 
 		@Override
@@ -2851,6 +2958,11 @@ public class ObservableCollectionDataFlowImpl {
 			theMap = map;
 			theEquivalence = equivalence;
 			theOptions = options;
+		}
+
+		@Override
+		public Object getIdentity() {
+			return Identifiable.wrap(theParent.getIdentity(), "map", theMap);
 		}
 
 		@Override
@@ -3092,6 +3204,11 @@ public class ObservableCollectionDataFlowImpl {
 			theMap = map;
 			theEquivalence = equivalence;
 			theOptions = options;
+		}
+
+		@Override
+		public Object getIdentity() {
+			return Identifiable.wrap(theParent.getIdentity(), "map", theMap);
 		}
 
 		@Override
@@ -3367,6 +3484,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public Object getIdentity() {
+			return Identifiable.wrap(theParent.getIdentity(), "map", theDef.getIdentity());
+		}
+
+		@Override
 		public TypeToken<T> getTargetType() {
 			return theTargetType;
 		}
@@ -3425,6 +3547,16 @@ public class ObservableCollectionDataFlowImpl {
 				private TypeToken<Function<? super E, T>> theType;
 
 				@Override
+				public Object getIdentity() {
+					return Identifiable.wrap(parentMap.getIdentity(), "combine", theDef.getIdentity());
+				}
+
+				@Override
+				public long getStamp() {
+					return parentMap.getStamp() ^ Stamped.compositeStamp(theDef.getArgs(), Stamped::getStamp);
+				}
+
+				@Override
 				public TypeToken<Function<? super E, T>> getType() {
 					if (theType == null)
 						theType = functionType((TypeToken<E>) parentMap.getType().resolveType(Function.class.getTypeParameters()[0]),
@@ -3460,8 +3592,13 @@ public class ObservableCollectionDataFlowImpl {
 						private CombinedMap theCurrentMap;
 
 						@Override
+						public Object getIdentity() {
+							return Identifiable.wrap(parentMap.changes().getIdentity(), "combine", theDef.getIdentity());
+						}
+
+						@Override
 						public boolean isSafe() {
-							return Lockable.isLockSupported(theDef.getArgs());
+							return false;
 						}
 
 						@Override
@@ -3807,6 +3944,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public Object getIdentity() {
+			return Identifiable.wrap(theParent.getIdentity(), "map", theDef.getIdentity());
+		}
+
+		@Override
 		public TypeToken<T> getTargetType() {
 			return theTargetType;
 		}
@@ -4041,6 +4183,7 @@ public class ObservableCollectionDataFlowImpl {
 								ObservableCollectionDataFlowImpl.update(theListener, values.getValue1(), values.getValue2(), cause);
 						}
 
+						@SuppressWarnings("unlikely-arg-type")
 						@Override
 						public void removed(I value, Object cause) {
 							try (Transaction t = lockArgs()) {
@@ -4127,6 +4270,11 @@ public class ObservableCollectionDataFlowImpl {
 		PassiveRefreshingCollectionManager(PassiveCollectionManager<E, ?, T> parent, Observable<?> refresh) {
 			theParent = parent;
 			theRefresh = refresh;
+		}
+
+		@Override
+		public Object getIdentity() {
+			return Identifiable.wrap(theParent.getIdentity(), "refresh", theRefresh.getIdentity());
 		}
 
 		@Override
@@ -4219,6 +4367,11 @@ public class ObservableCollectionDataFlowImpl {
 			theParent = parent;
 			theRefresh = refresh;
 			theElements = new BetterTreeList<>(false);
+		}
+
+		@Override
+		public Object getIdentity() {
+			return Identifiable.wrap(theParent.getIdentity(), "refresh", theRefresh.getIdentity());
 		}
 
 		@Override
@@ -4455,6 +4608,11 @@ public class ObservableCollectionDataFlowImpl {
 			theRefresh = refresh;
 			theRefreshObservables = BetterHashMap.build().unsafe().buildMap();
 			theLock = new ReentrantReadWriteLock();
+		}
+
+		@Override
+		public Object getIdentity() {
+			return Identifiable.wrap(theParent.getIdentity(), "refresh", theRefresh);
 		}
 
 		@Override
@@ -4698,6 +4856,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public Object getIdentity() {
+			return theParent.getIdentity();
+		}
+
+		@Override
 		public TypeToken<T> getTargetType() {
 			return theParent.getTargetType();
 		}
@@ -4862,6 +5025,11 @@ public class ObservableCollectionDataFlowImpl {
 		ActiveModFilteredManager(ActiveCollectionManager<E, ?, T> parent, ModFilterer<T> filter) {
 			theParent = parent;
 			theFilter = filter;
+		}
+
+		@Override
+		public Object getIdentity() {
+			return theParent.getIdentity();
 		}
 
 		@Override
@@ -5045,6 +5213,11 @@ public class ObservableCollectionDataFlowImpl {
 
 			theOuterElements = new BetterTreeList<>(false);
 			theLock = new ReentrantReadWriteLock();
+		}
+
+		@Override
+		public Object getIdentity() {
+			return Identifiable.wrap(theParent.getIdentity(), "flatten", theMap);
 		}
 
 		@Override

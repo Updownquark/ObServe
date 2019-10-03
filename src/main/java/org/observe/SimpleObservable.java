@@ -3,6 +3,7 @@ package org.observe;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 
+import org.qommons.Identifiable;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.ListenerList;
@@ -14,6 +15,7 @@ import org.qommons.collect.ListenerList;
  */
 public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 	private final Consumer<? super Observer<? super T>> theOnSubscribe;
+	private final Object theIdentity;
 	private boolean isAlive = true;
 	private final ListenerList<Observer<? super T>> theListeners;
 	private final boolean isInternalState;
@@ -38,11 +40,12 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 	 * @param safe Whether this observable is externally thread-safed
 	 */
 	public SimpleObservable(Consumer<? super Observer<? super T>> onSubscribe, boolean internalState, boolean safe) {
-		this(onSubscribe, internalState, safe ? new ReentrantReadWriteLock() : null, null);
+		this(onSubscribe, null, internalState, safe ? new ReentrantReadWriteLock() : null, null);
 	}
 
-	public SimpleObservable(Consumer<? super Observer<? super T>> onSubscribe, boolean internalState, ReentrantReadWriteLock lock,
-		Consumer<ListenerList.Builder> listeningOptions) {
+	public SimpleObservable(Consumer<? super Observer<? super T>> onSubscribe, Object identity, boolean internalState,
+		ReentrantReadWriteLock lock, ListenerList.Builder listening) {
+		theIdentity = identity != null ? identity : Identifiable.baseId("observable", this);
 		/* Java's ConcurrentLinkedQueue has a problem (for me) that makes the class unusable here.  As documented in fireNext() below, the
 		 * behavior of observables is advertised such that if a listener is added by a listener, the new listener will be added at the end
 		 * of the listeners and will be notified for the currently firing value.  ConcurrentLinkedQueue allows for this except when the
@@ -53,10 +56,9 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 		 * mine.
 		 */
 		// theListeners = new ConcurrentLinkedQueue<>();
-		ListenerList.Builder listeningBuilder = ListenerList.build();
-		if (listeningOptions != null)
-			listeningOptions.accept(listeningBuilder);
-		theListeners = listeningBuilder.build();
+		if (listening == null)
+			listening = ListenerList.build();
+		theListeners = listening.build();
 		theOnSubscribe = onSubscribe;
 		isInternalState = internalState;
 		theLock = lock;
@@ -64,6 +66,11 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 
 	protected ReentrantReadWriteLock getLock() {
 		return theLock;
+	}
+
+	@Override
+	public Object getIdentity() {
+		return theIdentity;
 	}
 
 	@Override
@@ -135,6 +142,11 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 
 		ReadOnlyObservable(SimpleObservable<T> wrap) {
 			theWrapped = wrap;
+		}
+
+		@Override
+		public Object getIdentity() {
+			return theWrapped.getIdentity();
 		}
 
 		@Override

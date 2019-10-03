@@ -1180,7 +1180,7 @@ public class ObservableCollectionsTest {
 		assertThat(compare1, collectionsEqual(correct, true));
 	}
 
-	/** Tests {@link CollectionDataFlow#flatMapC(TypeToken, Function)} */
+	/** Tests {@link CollectionDataFlow#flatMap(TypeToken, Function)} */
 	@Test
 	public void observableCollectionFlatten() {
 		ObservableSet<Integer> set1 = ObservableCollection.create(intType).flow().distinct().collect();
@@ -1620,7 +1620,7 @@ public class ObservableCollectionsTest {
 		}
 	}
 
-	/** Tests {@link ObservableCollection#observeFind(Predicate, Supplier, boolean)} */
+	/** Tests {@link ObservableCollection#observeFind(Predicate)} */
 	@Test
 	public void observableListFind() {
 		ObservableCollection<Integer> list = ObservableCollection.create(intType);

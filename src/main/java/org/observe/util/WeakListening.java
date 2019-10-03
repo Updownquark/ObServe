@@ -267,6 +267,11 @@ public class WeakListening {
 			}
 
 			@Override
+			public Object getIdentity() {
+				return observable.getIdentity();
+			}
+
+			@Override
 			public boolean isSafe() {
 				return observable.isSafe();
 			}

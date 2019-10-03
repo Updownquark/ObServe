@@ -691,6 +691,10 @@ public interface Observable<T> extends Lockable, Identifiable {
 
 				private final Object[] values = new Object[theComposed.size()];
 
+				{
+					Arrays.fill(values, NONE);
+				}
+
 				@Override
 				public void inUseChanged(boolean used) {
 					if (used) {
@@ -722,11 +726,13 @@ public interface Observable<T> extends Lockable, Identifiable {
 								}
 
 								private void fireNext(T next) {
-									theObservers.forEach(listener -> listener.onNext(next));
+									theObservers.forEach(//
+										listener -> listener.onNext(next));
 								}
 
 								private void fireCompleted(T next) {
-									theObservers.forEach(listener -> listener.onCompleted(next));
+									theObservers.forEach(//
+										listener -> listener.onCompleted(next));
 								}
 							});
 						}
@@ -734,7 +740,7 @@ public interface Observable<T> extends Lockable, Identifiable {
 						for (int i = 0; i < theComposed.size(); i++) {
 							composedSubs[i].unsubscribe();
 							composedSubs[i] = null;
-							values[i] = null;
+							values[i] = NONE;
 						}
 					}
 				}
@@ -782,8 +788,18 @@ public interface Observable<T> extends Lockable, Identifiable {
 		}
 
 		@Override
+		public int hashCode() {
+			return getIdentity().hashCode();
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return obj instanceof Observable && getIdentity().equals(((Observable<?>) obj).getIdentity());
+		}
+
+		@Override
 		public String toString() {
-			return theComposed.toString();
+			return getIdentity().toString();
 		}
 	}
 

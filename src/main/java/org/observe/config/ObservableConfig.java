@@ -40,8 +40,10 @@ import org.observe.config.ObservableConfigContent.SimpleObservableConfigContent;
 import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
 import org.qommons.Causable;
+import org.qommons.Identifiable;
 import org.qommons.Lockable;
 import org.qommons.StringUtils;
+import org.qommons.StructuredStamped;
 import org.qommons.StructuredTransactable;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
@@ -74,7 +76,7 @@ import com.google.common.reflect.TypeToken;
  * configurable collections of child configurations as standard observable structures.
  * </p>
  */
-public class ObservableConfig implements StructuredTransactable {
+public class ObservableConfig implements StructuredTransactable, StructuredStamped {
 	public static final char PATH_SEPARATOR = '/';
 	public static final String PATH_SEPARATOR_STR = "" + PATH_SEPARATOR;
 	public static final String EMPTY_PATH = "".intern();
@@ -761,6 +763,7 @@ public class ObservableConfig implements StructuredTransactable {
 			return t;
 	}
 
+	@Override
 	public long getStamp(boolean structuralOnly) {
 		return structuralOnly ? theStructureModCount : theModCount;
 	}
@@ -1494,10 +1497,18 @@ public class ObservableConfig implements StructuredTransactable {
 	private static class ObservableConfigChangesObservable implements Observable<ObservableConfigEvent> {
 		private final ObservableConfig theConfig;
 		private final ObservableConfigPath thePath;
+		private Object theIdentity;
 
 		ObservableConfigChangesObservable(ObservableConfig config, ObservableConfigPath path) {
 			theConfig = config;
 			thePath = path;
+		}
+
+		@Override
+		public Object getIdentity() {
+			if (theIdentity == null)
+				theIdentity = Identifiable.wrap(theConfig, "watch", thePath);
+			return theIdentity;
 		}
 
 		@Override

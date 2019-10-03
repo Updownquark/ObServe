@@ -1,12 +1,16 @@
 package org.observe.collect;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
 import org.observe.ObservableValue;
 import org.observe.XformOptions;
+import org.qommons.Identifiable;
+import org.qommons.StringUtils;
 import org.qommons.TriFunction;
 import org.qommons.collect.BetterHashSet;
 
@@ -55,7 +59,7 @@ public class Combination {
 	 * @param <E> The source type
 	 * @param <T> The target type
 	 */
-	public static class CombinedFlowDef<E, T> extends XformOptions.XformDef {
+	public static class CombinedFlowDef<E, T> extends XformOptions.XformDef implements Identifiable {
 		private final Set<ObservableValue<?>> theArgs;
 		private final BiFunction<? super CombinedValues<? extends E>, ? super T, ? extends T> theCombination;
 		private final Function<? super CombinedValues<T>, ? extends E> theReverse;
@@ -76,6 +80,18 @@ public class Combination {
 			theCombination = combination;
 			theReverse = reverse;
 			isManyToOne = manyToOne;
+		}
+
+		@Override
+		public Object getIdentity() {
+			StringBuilder descrip = new StringBuilder("combine(");
+			List<Object> ids = new ArrayList<>(theArgs.size() + 1);
+			ids.add(theCombination);
+			descrip.append(theCombination).append(", ");
+			ids.addAll(theArgs);
+			StringUtils.conversational(", ", null).print(descrip, theArgs, (str, v) -> str.append(v.getIdentity()));
+			descrip.append(')');
+			return Identifiable.baseId(descrip.toString(), ids);
 		}
 
 		/** @return The observable values to combine with each source element */
