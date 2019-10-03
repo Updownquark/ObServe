@@ -2467,7 +2467,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public boolean isLockSupported() {
-			return true;
+			return theCollectionObservable.isLockSupported();
 		}
 
 		@Override
@@ -2636,6 +2636,18 @@ public final class ObservableCollectionImpl {
 				((ObservableCollection<E>) coll).setValue(elements, value);
 			else if (!elements.isEmpty())
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+		}
+
+		@Override
+		public Observable<? extends CollectionChangeEvent<E>> changes() {
+			return ObservableValue.flattenObservableValue(theCollectionObservable.map(coll -> coll != null
+				? (Observable<? extends CollectionChangeEvent<E>>) (Observable<?>) coll.changes() : Observable.empty()));
+		}
+
+		@Override
+		public Observable<Object> simpleChanges() {
+			return ObservableValue
+				.flattenObservableValue(theCollectionObservable.map(coll -> coll != null ? coll.simpleChanges() : Observable.empty()));
 		}
 
 		@Override
