@@ -45,7 +45,7 @@ public class ObservableChainTester implements Testable {
 
 	private static final int MAX_CHAIN_LENGTH = 15;
 
-	private final List<ObservableCollectionLink<?, ?>> theChain = new ArrayList<>();
+	private final List<ObservableChainLink<?, ?>> theChain = new ArrayList<>();
 
 	@Override
 	public void accept(TestHelper helper) {
@@ -82,11 +82,11 @@ public class ObservableChainTester implements Testable {
 	private <E> void assemble(TestHelper helper) {
 		//Tend toward smaller chain lengths, but allow longer ones occasionally
 		int chainLength = helper.getInt(2, helper.getInt(2, MAX_CHAIN_LENGTH));
-		ObservableCollectionLink<?, ?> initLink = BaseCollectionLink.createInitialLink(null, helper, 0, Ternian.NONE, null);
+		ObservableChainLink<?, ?> initLink = BaseCollectionLink.createInitialLink(null, helper, 0, Ternian.NONE, null);
 		theChain.add(initLink);
 		initLink.initialize(helper);
 		while (theChain.size() < chainLength) {
-			ObservableCollectionLink<?, ?> nextLink = theChain.get(theChain.size() - 1).derive(helper);
+			ObservableChainLink<?, ?> nextLink = theChain.get(theChain.size() - 1).derive(helper);
 			theChain.add(nextLink);
 			nextLink.initialize(helper);
 		}
@@ -111,10 +111,10 @@ public class ObservableChainTester implements Testable {
 		long modifications = 0;
 		for (int tri = 0; tri < tries; tri++) {
 			int linkIndex = helper.getInt(0, theChain.size());
-			ObservableCollectionLink<?, ?> targetLink = theChain.get(linkIndex);
+			ObservableChainLink<?, ?> targetLink = theChain.get(linkIndex);
 			boolean finished = false;
 			boolean useTransaction = helper.getBoolean(.75);
-			try (Transaction t = useTransaction ? targetLink.getCollection().lock(true, null) : Transaction.NONE) {
+			try (Transaction t = useTransaction ? targetLink.lock(true, null) : Transaction.NONE) {
 				int transactionMods = (int) helper.getDouble(1, 10, 26);
 				if (transactionMods == 25)
 					transactionMods = 0; // Want the probability of no-op transactions to be small but present

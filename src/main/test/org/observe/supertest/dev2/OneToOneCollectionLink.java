@@ -34,7 +34,7 @@ public abstract class OneToOneCollectionLink<S, T> extends ObservableCollectionL
 	protected abstract S reverse(T value);
 
 	@Override
-	protected void initialize(TestHelper helper) {
+	public void initialize(TestHelper helper) {
 		for (CollectionLinkElement<?, S> sourceEl : theSourceLink.getElements())
 			expectAddFromSource(sourceEl);
 	}

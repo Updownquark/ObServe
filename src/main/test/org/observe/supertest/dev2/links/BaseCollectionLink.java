@@ -29,7 +29,7 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	}
 
 	@Override
-	protected void initialize(TestHelper helper) {
+	public void initialize(TestHelper helper) {
 		theExpectedElements.addAll(getElements());
 	}
 
@@ -53,7 +53,7 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	}
 
 	@Override
-	public CollectionLinkElement<?, T> expectAdd(T value, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before,
+	public CollectionLinkElement<T, T> expectAdd(T value, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before,
 		boolean first, OperationRejection rejection) {
 		BinaryTreeNode<CollectionLinkElement<T, T>> newNode = theExpectedElements.addElement(null, //
 			after == null ? null : after.getExpectedAddress(), //
