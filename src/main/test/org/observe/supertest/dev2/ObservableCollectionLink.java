@@ -27,6 +27,7 @@ import org.observe.collect.ObservableCollectionDataFlowImpl;
 import org.observe.collect.ObservableCollectionEvent;
 import org.observe.supertest.dev2.links.FilteredCollectionLink;
 import org.observe.supertest.dev2.links.MappedCollectionLink;
+import org.observe.supertest.dev2.links.ModFilteredCollectionLink;
 import org.observe.supertest.dev2.links.ReversedCollectionLink;
 import org.qommons.ArrayUtils;
 import org.qommons.TestHelper;
@@ -343,7 +344,6 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 			}
 			expectModification(ops, subListStart, subListEnd, helper);
 			clearCollection(ops, modify, helper);
-			Collections.reverse(ops); // Indices need to be descending
 		}).or(1, () -> {
 			if (helper.isReproducing())
 				System.out.println("Check bounds");
@@ -429,10 +429,9 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 	}
 
 	@Override
-	public <X> ObservableCollectionLink<T, X> derive(TestHelper helper) {
-		ValueHolder<ObservableCollectionLink<T, X>> derived = new ValueHolder<>();
-		TestHelper.RandomAction action = helper//
-			.doAction(1, () -> { // map
+	public <X> ObservableChainLink<T, X> derive(TestHelper helper) {
+		TestHelper.RandomSupplier<ObservableCollectionLink<T, X>> action = helper//
+			.<ObservableCollectionLink<T, X>> supply(1, () -> { // map
 				TestValueType nextType = TestValueType.nextType(helper);
 				SimpleSettableValue<TypeTransformation<T, X>> txValue = new SimpleSettableValue<>(
 					(TypeToken<TypeTransformation<T, X>>) (TypeToken<?>) new TypeToken<Object>() {}, false);
@@ -450,10 +449,9 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 					options.accept(o.cache(helper.getBoolean()).fireIfUnchanged(needsUpdateReeval || helper.getBoolean())
 						.reEvalOnUpdate(needsUpdateReeval || helper.getBoolean()));
 				});
-				theDerivedLink = new MappedCollectionLink<>(this,
+				return new MappedCollectionLink<>(this,
 					new ObservableCollectionTestDef<>(nextType, derivedFlow, variableMap, !needsUpdateReeval), helper, txValue, variableMap,
 					new FlowOptions.MapDef<>(options.get()));
-				derived.accept((ObservableCollectionLink<T, X>) theDerivedLink);
 				// TODO mapEquivalent
 			})//
 			.or(1, () -> { // reverse
@@ -462,9 +460,8 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 					derivedFlow = theDef.flow.reverse();
 				else
 					derivedFlow = theCollection.reverse().flow();
-				theDerivedLink = new ReversedCollectionLink<>(this,
+				return (ObservableCollectionLink<T, X>) new ReversedCollectionLink<>(this,
 					new ObservableCollectionTestDef<>(theDef.type, derivedFlow, true, theDef.checkOldValues), helper);
-				derived.accept((ObservableCollectionLink<T, X>) theDerivedLink);
 			})//
 			// TODO size
 			// TODO contains
@@ -474,39 +471,39 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 			// TODO reduce
 			// TODO flow reverse
 			/*.or(1, () -> { // filter/refresh
-			// Getting a java.lang.InternalError: Enclosing method not found when I try to do the TypeToken right.
-			// It doesn't matter here anyway
-			SimpleSettableValue<Function<T, String>> filterValue = new SimpleSettableValue<>(
-				(TypeToken<Function<T, String>>) (TypeToken<?>) new TypeToken<Object>() {}, false);
-			filterValue.set(FilteredCollectionLink.filterFor(theDef.type, helper), null);
-			boolean variableFilter = helper.getBoolean();
-			CollectionDataFlow<?, ?, T> flow = theDef.flow;
-			if (variableFilter)
-				flow = flow.refresh(filterValue.changes().noInit()); // The refresh has to be UNDER the filter
-			CollectionDataFlow<?, ?, T> derivedFlow = flow.filter(v -> filterValue.get().apply(v));
-			theDerivedLink = new FilteredCollectionLink<>(this, theType, derivedFlow, helper, isCheckingRemovedValues, filterValue,
-				variableFilter);
-			derived.accept((ObservableCollectionLink<T, X>) theDerivedLink);
+		// Getting a java.lang.InternalError: Enclosing method not found when I try to do the TypeToken right.
+		// It doesn't matter here anyway
+		SimpleSettableValue<Function<T, String>> filterValue = new SimpleSettableValue<>(
+			(TypeToken<Function<T, String>>) (TypeToken<?>) new TypeToken<Object>() {}, false);
+		filterValue.set(FilteredCollectionLink.filterFor(theDef.type, helper), null);
+		boolean variableFilter = helper.getBoolean();
+		CollectionDataFlow<?, ?, T> flow = theDef.flow;
+		if (variableFilter)
+			flow = flow.refresh(filterValue.changes().noInit()); // The refresh has to be UNDER the filter
+		CollectionDataFlow<?, ?, T> derivedFlow = flow.filter(v -> filterValue.get().apply(v));
+		theDerivedLink = new FilteredCollectionLink<>(this, theType, derivedFlow, helper, isCheckingRemovedValues, filterValue,
+			variableFilter);
+		derived.accept((ObservableCollectionLink<T, X>) theDerivedLink);
 		})//*/
 			// TODO whereContained
 			// TODO refreshEach
 			// TODO combine
 			/*.or(1, () -> { // flattenValues
-			theDerivedLink = FlattenedValuesLink.createFlattenedValuesLink(this, theDef.flow, helper);
-			derived.accept((ObservableCollectionLink<T, X>) theDerivedLink);
+		theDerivedLink = FlattenedValuesLink.createFlattenedValuesLink(this, theDef.flow, helper);
+		derived.accept((ObservableCollectionLink<T, X>) theDerivedLink);
 		})//*/
 			// TODO flatMap
 			/*.or(1, () -> { // sorted
-			Comparator<T> compare = SortedCollectionLink.compare(theType, helper);
-			CollectionDataFlow<?, ?, T> derivedFlow = theFlow.sorted(compare);
-			theDerivedLink = new SortedCollectionLink<>(this, theType, derivedFlow, helper, isCheckingRemovedValues, compare);
-			derived.accept((ObservableCollectionLink<T, X>) theDerivedLink);
+		Comparator<T> compare = SortedCollectionLink.compare(theType, helper);
+		CollectionDataFlow<?, ?, T> derivedFlow = theFlow.sorted(compare);
+		theDerivedLink = new SortedCollectionLink<>(this, theType, derivedFlow, helper, isCheckingRemovedValues, compare);
+		derived.accept((ObservableCollectionLink<T, X>) theDerivedLink);
 		})//*/
 			/*.or(1, () -> { // distinct
-			derived.accept((ObservableCollectionLink<T, X>) deriveDistinct(helper, false));
+		derived.accept((ObservableCollectionLink<T, X>) deriveDistinct(helper, false));
 		})//
 		.or(1, () -> { // distinct sorted
-			derived.accept((ObservableCollectionLink<T, X>) deriveDistinctSorted(helper, false));
+		derived.accept((ObservableCollectionLink<T, X>) deriveDistinctSorted(helper, false));
 		})*/;//
 		/*if (theCollection instanceof ObservableSortedSet) {
 			ObservableSortedSet<T> sortedSet = (ObservableSortedSet<T>) theCollection;
@@ -563,15 +560,16 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 				}
 				filter.accept(f);
 			});
-			theDerivedLink = new ModFilteredCollectionLink<>(this, theDef.type, derivedFlow, helper,
-				new ObservableCollectionDataFlowImpl.ModFilterer<>(filter.get()), theDef.checkOldValues);
-			derived.accept((ObservableCollectionLink<T, X>) theDerivedLink);
+			return (ObservableCollectionLink<T, X>) new ModFilteredCollectionLink<>(this,
+				new ObservableCollectionTestDef<>(theDef.type, derivedFlow, true, theDef.checkOldValues), helper,
+				new ObservableCollectionDataFlowImpl.ModFilterer<>(filter.get()));
 		})//
 		// TODO groupBy
 		// TODO groupBy(Sorted)
 		;
-		action.execute(null);
-		return derived.get();
+		ObservableCollectionLink<T, X> derived = action.get(null);
+		theDerivedLink = derived;
+		return derived;
 	}
 
 	protected ObservableCollectionLink<T, T> deriveDistinct(TestHelper helper, boolean asRoot) {
@@ -654,7 +652,7 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 			int minIdx = ops.get(0).minIndex;
 			int maxIdx = ops.get(0).maxIndex;
 			for (int i = 1; i < ops.size(); i++)
-				if (ops.get(i).minIndex != minIdx)
+				if (ops.get(i).minIndex != minIdx && ops.get(i).maxIndex == maxIdx)
 					return false;
 			return true;
 		}
@@ -699,12 +697,6 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 			str.append(']');
 			return str.toString();
 		}
-
-		public static boolean isAddAllIndex(List<? extends CollectionOp<?>> ops) {
-			return !ops.isEmpty()//
-				&& ops.get(0).type == CollectionChangeType.add && ops.get(0).minIndex >= 0//
-				&& CollectionOp.isSameType(ops) && CollectionOp.isSameIndex(ops);
-		}
 	}
 
 	private void expectModification(List<CollectionOp<T>> ops, int subListStart, int subListEnd, TestHelper helper) {
@@ -717,11 +709,13 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 			if (rep.minIndex >= 0) {
 				int sz = Math.min(theExpectedElements.size(), subListEnd) - subListStart;
 				if (rep.minIndex < 0) {
-					rep.reject(rep.minIndex + " of " + sz, true);
-					continue;
+					for (CollectionOp<T> op : ops)
+						op.reject(rep.minIndex + " of " + sz, true);
+					return;
 				} else if (rep.maxIndex > sz) {
-					rep.reject(rep.maxIndex + " of " + sz, true);
-					continue;
+					for (CollectionOp<T> op : ops)
+						op.reject(rep.maxIndex + " of " + sz, true);
+					return;
 				}
 				if (subListStart + rep.minIndex == theExpectedElements.size()) {
 					after = theExpectedElements.peekLast();
@@ -878,12 +872,11 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 		}
 	}
 
-	private void addAll(int index, boolean first, List<CollectionOp<T>> ops, BetterList<T> modify, int subListStart,
-		int subListEnd, TestHelper helper) {
+	private void addAll(int index, boolean first, List<CollectionOp<T>> ops, BetterList<T> modify, int subListStart, int subListEnd,
+		TestHelper helper) {
 		int preModSize = modify.size();
 		int preSize = theCollection.size();
 		List<T> values = ops.stream().map(op -> op.value).collect(Collectors.toList());
-		boolean expectError = false;
 		ElementId after, before;
 		if (index < 0) {
 			before = after = null;
@@ -893,6 +886,9 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 		} else if (index == modify.size()) {
 			before = null;
 			after = CollectionElement.getElementId(modify.getTerminalElement(false));
+		} else {
+			after = modify.getElement(index).getElementId();
+			before = modify.getAdjacentElement(after, true).getElementId();
 		}
 		int addable = 0;
 		for (int i = 0; i < ops.size(); i++) {
@@ -900,26 +896,15 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 			Assert.assertEquals(ops.get(i).getMessage() != null, msg != null);
 			if (msg == null)
 				addable++;
-			expectError |= ops.get(i).isError();
 		}
 		boolean modified;
-		boolean error;
-		try {
-			if (index >= 0)
-				modified = modify.addAll(index, values);
-			else
-				modified = modify.addAll(values);
-			error = false;
-		} catch (UnsupportedOperationException | IllegalArgumentException e) {
-			modified = false;
-			error = true;
-		}
-		Assert.assertEquals(expectError, error);
-		if (!error) {
-			Assert.assertEquals(modified, addable > 0);
-			Assert.assertEquals(preModSize + addable, modify.size());
-			Assert.assertEquals(preSize + addable, theCollection.size());
-		}
+		if (index >= 0)
+			modified = modify.addAll(index, values);
+		else
+			modified = modify.addAll(values);
+		Assert.assertEquals(modified, addable > 0);
+		Assert.assertEquals(preModSize + addable, modify.size());
+		Assert.assertEquals(preSize + addable, theCollection.size());
 	}
 
 	private void removeSingle(CollectionOp<T> op, BetterList<T> modify, TestHelper helper) {

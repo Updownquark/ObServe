@@ -59,4 +59,9 @@ public class ModFilteredCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 		}
 		return super.expectAdd(value, after, before, first, rejection);
 	}
+
+	@Override
+	public String toString(){
+		return "modFilter(" + theFilter + ")";
+	}
 }

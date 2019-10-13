@@ -28,12 +28,19 @@ public class ReversedCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 		CollectionLinkElement<?, T> sourceEl = theSourceLink.expectAdd(reverse(value), //
 			before == null ? null : ((CollectionLinkElement<T, T>) before).getSourceElements().getFirst(), //
 				after == null ? null : ((CollectionLinkElement<T, T>) after).getSourceElements().getFirst(), //
-			first, rejection);
+					first, rejection);
+		if (rejection.isRejected())
+			return null;
 		newElement = addFromSource(sourceEl);
 		if (after != null && newElement.getExpectedAddress().compareTo(after.getExpectedAddress()) < 0)
 			throw new IllegalStateException("Added in wrong order");
 		if (before != null && newElement.getExpectedAddress().compareTo(before.getExpectedAddress()) > 0)
 			throw new IllegalStateException("Added in wrong order");
 		return newElement;
+	}
+
+	@Override
+	public String toString() {
+		return "reverse()";
 	}
 }

@@ -4,8 +4,6 @@ import java.util.Comparator;
 import java.util.List;
 
 import org.observe.collect.DefaultObservableCollection;
-import org.observe.collect.DefaultObservableSortedSet;
-import org.observe.collect.FlowOptions;
 import org.observe.supertest.dev2.CollectionLinkElement;
 import org.observe.supertest.dev2.ExpectedCollectionOperation;
 import org.observe.supertest.dev2.ObservableCollectionLink;
@@ -15,10 +13,8 @@ import org.qommons.Ternian;
 import org.qommons.TestHelper;
 import org.qommons.ValueHolder;
 import org.qommons.collect.BetterList;
-import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.CircularArrayList;
 import org.qommons.tree.BetterTreeList;
-import org.qommons.tree.BetterTreeSet;
 import org.qommons.tree.BinaryTreeNode;
 
 import com.google.common.reflect.TypeToken;
@@ -90,7 +86,8 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 				});
 			}
 		}
-		if (withSorted != Ternian.FALSE) {
+		/*TODO
+		 if (withSorted != Ternian.FALSE) {
 			action.or(.5, () -> {
 				// Tree-backed sorted set
 				Comparator<? super E> compare2 = compare != null ? compare : SortedCollectionLink.compare(fType, helper);
@@ -106,7 +103,7 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 			action.or(1.25, () -> { // TODO Change this probability to .25
 				holder.accept(FlattenedValueLink.createFlattenedLink(fType, helper, depth, withSorted, compare));
 			});
-		}
+		}*/
 		// TODO ObservableValue
 		// TODO ObservableMultiMap
 		// TODO ObservableMap
@@ -114,5 +111,10 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		// TODO ObservableGraph?
 		action.execute(null);
 		return holder.get();
+	}
+
+	@Override
+	public String toString() {
+		return "base(" + getType() + ")";
 	}
 }

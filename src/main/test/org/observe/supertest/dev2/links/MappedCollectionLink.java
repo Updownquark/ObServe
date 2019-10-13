@@ -56,6 +56,14 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 		return (TypeTransformation<E, T>) transforms.get(helper.getInt(0, transforms.size()));
 	}
 
+	@Override
+	public String toString() {
+		String str = "map(" + theCurrentMap;
+		if (isMapVariable)
+			str += " variable";
+		return str + ")";
+	}
+
 	private static <E> TypeTransformation<E, E> identity() {
 		return new TypeTransformation<E, E>() {
 			@Override
