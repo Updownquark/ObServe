@@ -2,6 +2,7 @@ package org.observe;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -750,6 +751,10 @@ public interface Observable<T> extends Lockable {
 
 				private final Object[] values = new Object[theComposed.size()];
 
+				{
+					Arrays.fill(values, NONE);
+				}
+
 				@Override
 				public void accept(Boolean used) {
 					if (used) {
@@ -793,7 +798,7 @@ public interface Observable<T> extends Lockable {
 						for (int i = 0; i < theComposed.size(); i++) {
 							composedSubs[i].unsubscribe();
 							composedSubs[i] = null;
-							values[i] = null;
+							values[i] = NONE;
 						}
 					}
 				}
