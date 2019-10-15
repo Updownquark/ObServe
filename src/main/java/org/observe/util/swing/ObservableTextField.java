@@ -1,6 +1,11 @@
 package org.observe.util.swing;
 
 import java.awt.Color;
+import java.awt.Font;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.Insets;
+import java.awt.RenderingHints;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.awt.event.InputEvent;
@@ -8,8 +13,11 @@ import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.text.ParseException;
 
+import javax.swing.Icon;
 import javax.swing.JTextField;
 import javax.swing.ToolTipManager;
+import javax.swing.UIManager;
+import javax.swing.border.Border;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 
@@ -34,8 +42,15 @@ public class ObservableTextField<E> extends JTextField {
 	private String theError;
 	private boolean isExternallyEnabled;
 	private String theToolTip;
+	// Some of this is lifted and modified from https://gmigdos.wordpress.com/2010/03/30/java-a-custom-jtextfield-for-searching/
+	private Icon theIcon;
+	private Insets dummyInsets;
+	private String theEmptyText;
 
 	public ObservableTextField(SettableValue<E> value, Format<E> format, Observable<?> until) {
+		Border border = UIManager.getBorder("TextField.border");
+		dummyInsets = border.getBorderInsets(this);
+
 		theValue = value;
 		theFormat = format;
 		if (until == null)
@@ -104,10 +119,14 @@ public class ObservableTextField<E> extends JTextField {
 			@Override
 			public void focusGained(FocusEvent e) {
 				selectAll();
+				if (theEmptyText != null)
+					repaint();
 			}
 
 			@Override
 			public void focusLost(FocusEvent e) {
+				if (theEmptyText != null)
+					repaint();
 				if (isDirty) {
 					isInternallyChanging = true;
 					try {
@@ -173,6 +192,34 @@ public class ObservableTextField<E> extends JTextField {
 		return this;
 	}
 
+	public Icon getIcon() {
+		return theIcon;
+	}
+
+	public ObservableTextField<E> setIcon(Icon icon) {
+		theIcon = icon;
+		if (theIcon != null) {
+			int textX = 2;
+
+			int iconWidth = theIcon.getIconWidth();
+			int x = dummyInsets.left + 5;// this is our icon's x
+			textX = x + iconWidth + 2; // this is the x where text should start
+
+			setMargin(new Insets(2, textX, 2, 2));
+		} else
+			setMargin(dummyInsets);
+		return this;
+	}
+
+	public String getEmptyText() {
+		return theEmptyText;
+	}
+
+	public ObservableTextField<E> setEmptyText(String emptyText) {
+		theEmptyText = emptyText;
+		return this;
+	}
+
 	@Override
 	public void setEnabled(boolean enabled) {
 		isExternallyEnabled = enabled;
@@ -185,6 +232,37 @@ public class ObservableTextField<E> extends JTextField {
 		setErrorState(theError);
 	}
 
+	@Override
+	protected void paintComponent(Graphics g) {
+		super.paintComponent(g);
+
+		if (theIcon != null) {
+			int iconHeight = theIcon.getIconHeight();
+			int x = dummyInsets.left + 5;// this is our icon's x
+			int y = (this.getHeight() - iconHeight) / 2;
+			theIcon.paintIcon(this, g, x, y);
+		}
+
+		if (!this.hasFocus() && this.getText().equals("") && theEmptyText != null) {
+			int height = getHeight();
+			Font prev = g.getFont();
+			Font italic = prev.deriveFont(Font.ITALIC);
+			Color prevColor = g.getColor();
+			g.setFont(italic);
+			g.setColor(UIManager.getColor("textInactiveText"));
+			int h = g.getFontMetrics().getHeight();
+			int textBottom = (height - h) / 2 + h - 4;
+			int x = this.getInsets().left;
+			Graphics2D g2d = (Graphics2D) g;
+			RenderingHints hints = g2d.getRenderingHints();
+			g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+			g2d.drawString(theEmptyText, x, textBottom);
+			g2d.setRenderingHints(hints);
+			g.setFont(prev);
+			g.setColor(prevColor);
+		}
+
+	}
 	public void revertEdits() {
 		setValue(theValue.get());
 	}
