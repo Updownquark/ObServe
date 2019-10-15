@@ -55,7 +55,7 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 			after == null ? null : after.getExpectedAddress(), //
 				before == null ? null : before.getExpectedAddress(), //
 					first);
-		CollectionLinkElement<T, T> newElement = new CollectionLinkElement<>(this, newNode.getElementId(), value);
+		CollectionLinkElement<T, T> newElement = new CollectionLinkElement<>(this, value).setExpectedAddress(newNode.getElementId());
 		theExpectedElements.mutableElement(newNode.getElementId()).set(newElement);
 		if (after != null && newElement.getExpectedAddress().compareTo(after.getExpectedAddress()) < 0)
 			throw new IllegalStateException("Added in wrong order");

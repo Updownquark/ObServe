@@ -40,4 +40,21 @@ public class ExpectedCollectionOperation<S, T> {
 	public String isRejected() {
 		return isRejected;
 	}
+
+	@Override
+	public String toString() {
+		StringBuilder str = new StringBuilder();
+		switch (theType) {
+		case add:
+			str.append('+').append(theValue);
+			break;
+		case remove:
+			str.append('-').append(theValue);
+			break;
+		case set:
+			str.append(theOldValue).append("->").append(theValue);
+			break;
+		}
+		return str.toString();
+	}
 }

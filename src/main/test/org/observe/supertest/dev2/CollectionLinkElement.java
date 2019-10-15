@@ -17,9 +17,8 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 
 	private T theValue;
 
-	public CollectionLinkElement(ObservableCollectionLink<S, T> collectionLink, ElementId address, T value) {
+	public CollectionLinkElement(ObservableCollectionLink<S, T> collectionLink, T value) {
 		theCollectionLink = collectionLink;
-		theExpectedAddress = address;
 		theValue = value;
 
 		theSourceElements = new BetterTreeSet<>(false, CollectionLinkElement::compareTo);
@@ -44,6 +43,16 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 
 	public ElementId getCollectionAddress() {
 		return theCollectionAddress;
+	}
+
+	public CollectionLinkElement<S, T> setElementAddress(ElementId address) {
+		theElementAddress = address;
+		return this;
+	}
+
+	public CollectionLinkElement<S, T> setExpectedAddress(ElementId address) {
+		theExpectedAddress = address;
+		return this;
 	}
 
 	public CollectionLinkElement<S, T> setCollectionAddress(ElementId address) {
@@ -109,5 +118,13 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 		theValue = fromCollection.theValue;
 		theElementAddress = fromCollection.theElementAddress;
 		theCollectionAddress = fromCollection.theCollectionAddress;
+	}
+
+	@Override
+	public String toString() {
+		if (theCollectionAddress != null)
+			return theValue + "@" + getIndex();
+		else
+			return String.valueOf(theValue);
 	}
 }

@@ -40,6 +40,7 @@ import org.qommons.collect.BetterSortedSet.SortedSearchFilter;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
+import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BinaryTreeNode;
 
@@ -111,7 +112,8 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 						newNode = theElements.addElement(null, null, adjacent.getElementId(), false);
 				}
 				theElements.mutableElement(newNode.getElementId()).set(//
-					new CollectionLinkElement<>(ObservableCollectionLink.this, newNode.getElementId(), newValue).setCollectionAddress(id));
+					new CollectionLinkElement<>(ObservableCollectionLink.this, newValue).setCollectionAddress(id)
+					.setElementAddress(newNode.getElementId()));
 			}
 
 			private void removeElement(ElementId id, T oldValue) {
@@ -202,7 +204,7 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 			expectModification(Arrays.asList(op), subListStart, subListEnd, helper);
 			addSingle(op, modify, helper);
 		}).or(1, () -> { // Add in position range
-			int minIndex = (int) helper.getDouble(0, modify.size(), modify.size() / 3);
+			int minIndex = (int) helper.getDouble(0, modify.size() / 3, modify.size());
 			int maxIndex = helper.getInt(minIndex, modify.size());
 			CollectionOp<T> op = new CollectionOp<>(add, theSupplier.apply(helper), minIndex, maxIndex, helper.getBoolean());
 			if (helper.isReproducing())
@@ -234,8 +236,8 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 					System.out.println("Set, but empty");
 				return;
 			}
-			CollectionOp<T> op = helper.getBoolean(.95) ? createIndexOp(set, theSupplier.apply(helper), helper.getInt(0, subListEnd))//
-				: createIndexRangeOp(set, theSupplier.apply(helper), subListEnd, helper);
+			CollectionOp<T> op = helper.getBoolean(.95) ? createIndexOp(set, theSupplier.apply(helper), helper.getInt(0, modify.size()))//
+				: createIndexRangeOp(set, theSupplier.apply(helper), modify.size(), helper);
 			if (helper.isReproducing())
 				System.out.println(op);
 			expectModification(Arrays.asList(op), subListStart, subListEnd, helper);
@@ -386,18 +388,18 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 			@Override
 			public CollectionLinkElement<S, T> added(CollectionLinkElement<S, T> o, int mIdx, int retIdx) {
 				if (o.getElementAddress() != null)
-					error.append("Unexpected removal of ").append(o).append('\n');
+					error.append("Unexpected removal of ").append(o.get()).append(" at ").append(retIdx).append('\n');
 				else
-					error.append("Expected addition of ").append(o).append('\n');
+					error.append("Expected addition of ").append(o.get()).append(" at ").append(mIdx).append('\n');
 				return null;// No change
 			}
 
 			@Override
 			public CollectionLinkElement<S, T> removed(CollectionLinkElement<S, T> o, int oIdx, int incMod, int retIdx) {
 				if (o.getElementAddress() != null)
-					error.append("Expected removal of ").append(o).append('\n');
+					error.append("Expected removal of ").append(o.get()).append(" at ").append(oIdx).append('\n');
 				else
-					error.append("Unexpected addition of ").append(o).append('\n');
+					error.append("Unexpected addition of ").append(o.get()).append(" at ").append(retIdx).append('\n');
 				return o; // No change
 			}
 
@@ -405,7 +407,7 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 			public CollectionLinkElement<S, T> set(CollectionLinkElement<S, T> o1, int idx1, int incMod, CollectionLinkElement<S, T> o2,
 				int idx2, int retIdx) {
 				if (theDef.orderImportant && incMod != retIdx)
-					error.append(o2.get()).append("Expected at index ").append(idx2).append(", but found at ").append(idx1)
+						error.append(o2.get()).append(" expected at index ").append(idx2).append(", but found at ").append(idx1)
 					.append('\n');
 				o2.validateAgainst(o1, error);
 				return o2; // Replace with the expected element
@@ -474,15 +476,15 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 		// Getting a java.lang.InternalError: Enclosing method not found when I try to do the TypeToken right.
 		// It doesn't matter here anyway
 		SimpleSettableValue<Function<T, String>> filterValue = new SimpleSettableValue<>(
-			(TypeToken<Function<T, String>>) (TypeToken<?>) new TypeToken<Object>() {}, false);
+		(TypeToken<Function<T, String>>) (TypeToken<?>) new TypeToken<Object>() {}, false);
 		filterValue.set(FilteredCollectionLink.filterFor(theDef.type, helper), null);
 		boolean variableFilter = helper.getBoolean();
 		CollectionDataFlow<?, ?, T> flow = theDef.flow;
 		if (variableFilter)
-			flow = flow.refresh(filterValue.changes().noInit()); // The refresh has to be UNDER the filter
+		flow = flow.refresh(filterValue.changes().noInit()); // The refresh has to be UNDER the filter
 		CollectionDataFlow<?, ?, T> derivedFlow = flow.filter(v -> filterValue.get().apply(v));
 		theDerivedLink = new FilteredCollectionLink<>(this, theType, derivedFlow, helper, isCheckingRemovedValues, filterValue,
-			variableFilter);
+		variableFilter);
 		derived.accept((ObservableCollectionLink<T, X>) theDerivedLink);
 		})//*/
 			// TODO whereContained
@@ -724,60 +726,69 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 					after = null;
 					before = theExpectedElements.peekFirst();
 				} else {
-					after = subListStart + rep.minIndex == 0 ? null : theExpectedElements.get(subListStart + rep.minIndex);
+					after = subListStart + rep.minIndex == 0 ? null : theExpectedElements.get(subListStart + rep.minIndex - 1);
 					before = subListStart + rep.maxIndex == theExpectedElements.size() ? null
 						: theExpectedElements.get(subListStart + rep.maxIndex);
 				}
 			} else
 				after = before = null;
+			int added = 0;
 			for (CollectionOp<T> op : ops) {
 				CollectionLinkElement<S, T> newElement = expectAdd(op.value, after, before, op.towardBeginning, op);
 				if (!op.isRejected()) {
 					int index = theExpectedElements.getElementsBefore(newElement.getExpectedAddress());
-					if (index < subListStart + op.minIndex || index > subListStart + op.maxIndex)
+					if (op.minIndex >= 0 && (index < subListStart + op.minIndex || index > subListStart + op.maxIndex + added))
 						throw new IllegalStateException("Added in wrong location");
 					if (theDerivedLink != null)
-						theDerivedLink.expectFromSource(new ExpectedCollectionOperation<>(newElement, op.type, op.value, op.value));
+						theDerivedLink.expectFromSource(//
+							new ExpectedCollectionOperation<>(newElement, op.type, op.value, op.value));
+					added++;
 				}
 			}
 			break;
 		case remove:
 			if (rep.minIndex >= 0) {
-				CollectionElement<CollectionLinkElement<S, T>> el = theExpectedElements.getElement(rep.minIndex);
-				for (CollectionOp<T> op : ops) {
-					expect(new ExpectedCollectionOperation<>(el.get(), rep.type, el.get().get(), el.get().get()), op);
+				for (int i = ops.size() - 1; i >= 0; i--) {
+					CollectionOp<T> op = ops.get(i);
+					CollectionElement<CollectionLinkElement<S, T>> el = theExpectedElements.getElement(op.minIndex);
+					expect(//
+						new ExpectedCollectionOperation<>(el.get(), rep.type, el.get().get(), el.get().get()), op);
 					if (!op.isRejected()) {
-						theExpectedElements.mutableElement(el.getElementId()).remove();
 						if (theDerivedLink != null)
-							theDerivedLink.expectFromSource(new ExpectedCollectionOperation<>(el.get(), op.type, op.value, op.value));
+							theDerivedLink.expectFromSource(//
+								new ExpectedCollectionOperation<>(el.get(), op.type, op.value, op.value));
 					}
-
-					el = theExpectedElements.getAdjacentElement(el.getElementId(), true);
 				}
 			} else {
 				for (CollectionOp<T> op : ops) {
-					CollectionElement<CollectionLinkElement<S, T>> el = theExpectedElements.getElement(rep.minIndex);
-					if (theCollection.equivalence().elementEquals(el.get().get(), op.value)) {
-						expect(new ExpectedCollectionOperation<>(el.get(), rep.type, el.get().get(), el.get().get()), op);
-						if (!op.isRejected()) {
-							theExpectedElements.mutableElement(el.getElementId()).remove();
-							if (theDerivedLink != null)
-								theDerivedLink
-								.expectFromSource(new ExpectedCollectionOperation<>(el.get(), op.type, el.get().get(), el.get().get()));
-						}
-						break;
-					} else
-						el = theExpectedElements.getAdjacentElement(el.getElementId(), true);
+					CollectionElement<CollectionLinkElement<S, T>> el = theExpectedElements.getTerminalElement(true);
+					while (el != null) {
+						if (theCollection.equivalence().elementEquals(el.get().get(), op.value)) {
+							expect(//
+								new ExpectedCollectionOperation<>(el.get(), rep.type, el.get().get(), el.get().get()), op);
+							if (!op.isRejected()) {
+								theExpectedElements.mutableElement(el.getElementId()).remove();
+								if (theDerivedLink != null)
+									theDerivedLink.expectFromSource(//
+										new ExpectedCollectionOperation<>(el.get(), op.type, el.get().get(), el.get().get()));
+							}
+							break;
+						} else
+							el = theExpectedElements.getAdjacentElement(el.getElementId(), true);
+					}
 				}
 			}
 			break;
 		case set:
 			for (CollectionOp<T> op : ops) {
 				CollectionLinkElement<S, T> el = theExpectedElements.get(op.minIndex);
-				expect(new ExpectedCollectionOperation<>(el, rep.type, el.get(), op.value), op);
+				T oldValue = el.get();
+				expect(//
+					new ExpectedCollectionOperation<>(el, rep.type, el.get(), op.value), op);
 				if (!op.isRejected()) {
 					if (theDerivedLink != null)
-						theDerivedLink.expectFromSource(new ExpectedCollectionOperation<>(el, op.type, el.get(), op.value));
+						theDerivedLink.expectFromSource(//
+							new ExpectedCollectionOperation<>(el, op.type, oldValue, op.value));
 				}
 			}
 			break;
@@ -790,7 +801,7 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 		CollectionElement<T> element;
 		int preSize = theCollection.size();
 		int preModSize = modify.size();
-		if (op.minIndex < 0) {
+		if (op.minIndex < 0 || modify.isEmpty()) {
 			msg = modify.canAdd(op.value);
 			// Test simple add value
 			try {
@@ -916,6 +927,10 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 		if (op.minIndex < 0) {
 			// Remove by value
 			element = modify.getElement(op.value, true);
+			if (element == null) {
+				op.reject(StdMsg.NOT_FOUND, false);
+				return;
+			}
 			msg = modify.mutableElement(element.getElementId()).canRemove();
 			while (msg != null) {
 				do {

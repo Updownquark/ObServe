@@ -103,8 +103,8 @@ public abstract class OneToOneCollectionLink<S, T> extends ObservableCollectionL
 			else
 				newNode = theExpectedElements.addElement(null, null, adjacent.getElementId(), false);
 		}
-		CollectionLinkElement<S, T> newElement = new CollectionLinkElement<>(this, newNode.getElementId(), map(sourceEl.getValue()))
-			.withSourceElement(sourceEl);
+		CollectionLinkElement<S, T> newElement = new CollectionLinkElement<>(this, map(sourceEl.getValue()))
+			.setExpectedAddress(newNode.getElementId()).withSourceElement(sourceEl);
 		theExpectedElements.mutableElement(newNode.getElementId()).set(newElement);
 		return newElement;
 	}
@@ -124,7 +124,8 @@ public abstract class OneToOneCollectionLink<S, T> extends ObservableCollectionL
 		if (found == null)
 			throw new IllegalStateException("Accounting error: Derived element for " + sourceEl + " not found");
 		CollectionLinkElement<S, T> element = found.get();
-		Assert.assertTrue(getCollection().equivalence().elementEquals(element.get(), map(oldSrcValue)));
+		if (!getCollection().equivalence().elementEquals(element.get(), map(oldSrcValue)))
+			Assert.assertTrue("Wrong value removed", false);
 		theExpectedElements.mutableElement(found.getElementId()).remove();
 		ExpectedCollectionOperation<S, T> result = new ExpectedCollectionOperation<>(element, CollectionChangeType.remove, element.get(),
 			element.get());
@@ -140,7 +141,8 @@ public abstract class OneToOneCollectionLink<S, T> extends ObservableCollectionL
 			throw new IllegalStateException("Accounting error: Derived element for " + sourceEl + " not found");
 		CollectionLinkElement<S, T> element = found.get();
 		T oldValue = element.get();
-		Assert.assertTrue(getCollection().equivalence().elementEquals(oldValue, map(oldSrcValue)));
+		if (!getCollection().equivalence().elementEquals(oldValue, map(oldSrcValue)))
+			Assert.assertTrue("Wrong value updated", false);
 		element.setValue(map(sourceEl.get()));
 		ExpectedCollectionOperation<S, T> result = new ExpectedCollectionOperation<>(element, CollectionChangeType.set, oldValue,
 			element.get());
