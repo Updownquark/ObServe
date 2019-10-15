@@ -20,11 +20,19 @@ import javax.swing.tree.TreeCellRenderer;
 import org.qommons.TriFunction;
 
 public interface ObservableCellRenderer<M, C> {
+	String renderAsText(Supplier<M> modelValue, C columnValue);
+
 	Component getCellRendererComponent(Component parent, Supplier<M> modelValue, C columnValue, boolean selected, boolean expanded,
 		boolean leaf, boolean hasFocus, int row, int column);
 
-	public static <M, C> ObservableCellRenderer<M, C> fromTableRenderer(TableCellRenderer renderer) {
+	public static <M, C> ObservableCellRenderer<M, C> fromTableRenderer(TableCellRenderer renderer,
+		BiFunction<Supplier<M>, C, String> asText) {
 		class FlatTableCellRenderer implements ObservableCellRenderer<M, C> {
+			@Override
+			public String renderAsText(Supplier<M> modelValue, C columnValue) {
+				return asText.apply(modelValue, columnValue);
+			}
+
 			@Override
 			public Component getCellRendererComponent(Component parent, Supplier<M> modelValue, C columnValue, boolean selected,
 				boolean expanded, boolean leaf, boolean hasFocus, int row, int column) {
@@ -35,8 +43,14 @@ public interface ObservableCellRenderer<M, C> {
 		return new FlatTableCellRenderer();
 	}
 
-	public static <M, C> ObservableCellRenderer<M, C> fromTreeRenderer(TreeCellRenderer renderer) {
+	public static <M, C> ObservableCellRenderer<M, C> fromTreeRenderer(TreeCellRenderer renderer,
+		BiFunction<Supplier<M>, C, String> asText) {
 		class FlatTreeCellRenderer implements ObservableCellRenderer<M, C> {
+			@Override
+			public String renderAsText(Supplier<M> modelValue, C columnValue) {
+				return asText.apply(modelValue, columnValue);
+			}
+
 			@Override
 			public Component getCellRendererComponent(Component parent, Supplier<M> modelValue, C columnValue, boolean selected,
 				boolean expanded, boolean leaf, boolean hasFocus, int row, int column) {
@@ -74,6 +88,16 @@ public interface ObservableCellRenderer<M, C> {
 		private Consumer<? super JLabel> theLabelModifier;
 		private BiConsumer<? super C, ? super JLabel> theValueLabelModifier;
 		private TriFunction<? super M, ? super C, ? super JLabel, ?> theRowValueLabelModifier;
+		private final BiFunction<Supplier<M>, C, String> theTextRenderer;
+
+		public DefaultObservableCellRenderer(BiFunction<Supplier<M>, C, String> textRenderer) {
+			theTextRenderer = textRenderer;
+		}
+
+		@Override
+		public String renderAsText(Supplier<M> modelValue, C columnValue) {
+			return theTextRenderer.apply(modelValue, columnValue);
+		}
 
 		@Override
 		public Component getCellRendererComponent(Component parent, Supplier<M> modelValue, C columnValue, boolean selected,
@@ -146,6 +170,10 @@ public interface ObservableCellRenderer<M, C> {
 
 	public static <M, C, R extends JLabel> DefaultObservableCellRenderer<M, C> formatted(BiFunction<? super M, ? super C, String> format) {
 		class BiFormattedCellRenderer extends DefaultObservableCellRenderer<M, C> {
+			public BiFormattedCellRenderer() {
+				super((m, c) -> format.apply(m.get(), c));
+			}
+
 			@Override
 			protected Object getRenderValue(Supplier<M> modelValue, C columnValue, boolean selected, boolean expanded, boolean leaf,
 				boolean hasFocus, int row, int column) {
@@ -157,6 +185,10 @@ public interface ObservableCellRenderer<M, C> {
 
 	public static <M, C, R extends JLabel> DefaultObservableCellRenderer<M, C> formatted(Function<? super C, String> format) {
 		class BiFormattedCellRenderer extends DefaultObservableCellRenderer<M, C> {
+			public BiFormattedCellRenderer() {
+				super((m, c) -> format.apply(c));
+			}
+
 			@Override
 			protected Object getRenderValue(Supplier<M> modelValue, C columnValue, boolean selected, boolean expanded, boolean leaf,
 				boolean hasFocus, int row, int column) {
