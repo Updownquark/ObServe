@@ -24,9 +24,11 @@ import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JScrollPane;
 import javax.swing.JSlider;
 import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
+import javax.swing.JTable;
 import javax.swing.JToggleButton;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.event.ChangeListener;
@@ -42,6 +44,9 @@ import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
 import org.qommons.collect.ListenerList;
 import org.qommons.io.Format;
+
+import com.google.common.reflect.TypeParameter;
+import com.google.common.reflect.TypeToken;
 
 /** Utilities for the org.observe.util.swing package */
 public class ObservableSwingUtils {
@@ -578,6 +583,8 @@ public class ObservableSwingUtils {
 		FieldPanelPopulator<C> addButton(ObservableValue<String> text, ObservableAction<?> action,
 			Consumer<PanelPopulatorField<Object, JButton>> modify);
 
+		<R> FieldPanelPopulator<C> addTable(ObservableCollection<R> rows, Consumer<TableBuilder<R>> table);
+
 		default FieldPanelPopulator<C> addHPanel(String fieldName, String layoutType, Consumer<HorizPanel> modify) {
 			LayoutManager layout;
 			if (layoutType == null)
@@ -771,6 +778,11 @@ public class ObservableSwingUtils {
 			return this;
 		}
 
+		public AbstractPanelPopulatorField<E> modifyEditor(Consumer<E> modify) {
+			modify.accept(getEditor());
+			return this;
+		}
+
 		protected boolean isGrow() {
 			return isGrow;
 		}
@@ -837,6 +849,7 @@ public class ObservableSwingUtils {
 			return this;
 		}
 
+		@Override
 		public PanelPopulatorField<F, E> modifyEditor(Consumer<E> modify) {
 			modify.accept(getEditor());
 			return this;
@@ -1043,6 +1056,12 @@ public class ObservableSwingUtils {
 			return this;
 		}
 
+		@Override
+		public TabbedPanePopulator modifyEditor(Consumer<JTabbedPane> modify) {
+			super.modifyEditor(modify);
+			return this;
+		}
+
 		public TabbedPanePopulator withTab(Object tabID, Component component, Consumer<TabPopulator> tab) {
 			TabPopulator t = new TabPopulator(tabID, component);
 			tab.accept(t);
@@ -1161,15 +1180,21 @@ public class ObservableSwingUtils {
 			}
 		}
 
-		protected void doAdd(AbstractPanelPopulatorField<?> field) {
+		protected void doAdd(AbstractPanelPopulatorField<?> field, boolean withScroll) {
 			Component component = field.getComponent();
 			String constraints = null;
 			if (field.isGrow() && getContainer().getLayout().getClass().getName().startsWith("net.mig"))
 				constraints = "growx, pushx";
+			if (withScroll) {
+				JScrollPane scroll = new JScrollPane(component);
+				scroll.getVerticalScrollBar().setUnitIncrement(10);
+				component = scroll;
+			}
 			getContainer().add(component, constraints);
 			if (field.isVisible() != null) {
+				Component fComponent = component;
 				field.isVisible().changes().takeUntil(_getUntil()).act(evt -> {
-					component.setVisible(evt.getNewValue());
+					fComponent.setVisible(evt.getNewValue());
 				});
 			}
 		}
@@ -1323,7 +1348,15 @@ public class ObservableSwingUtils {
 		public FieldPanelPopulator<JPanel> addTabs(Consumer<TabbedPanePopulator> tabs) {
 			TabbedPanePopulator tabPane = new TabbedPanePopulator(theUntil);
 			tabs.accept(tabPane);
-			doAdd(tabPane);
+			doAdd(tabPane, false);
+			return this;
+		}
+
+		@Override
+		public <R> FieldPanelPopulator<JPanel> addTable(ObservableCollection<R> rows, Consumer<TableBuilder<R>> table) {
+			TableBuilder<R> tb = new TableBuilder<>(rows);
+			table.accept(tb);
+			doAdd(tb, true);
 			return this;
 		}
 
@@ -1392,11 +1425,19 @@ public class ObservableSwingUtils {
 		public FieldPanelPopulator<C> addTabs(Consumer<TabbedPanePopulator> tabs) {
 			TabbedPanePopulator tabPane = new TabbedPanePopulator(theUntil);
 			tabs.accept(tabPane);
-			doAdd(tabPane);
+			doAdd(tabPane, false);
 			return this;
 		}
 
-		protected void doAdd(AbstractPanelPopulatorField<?> field) {
+		@Override
+		public <R> FieldPanelPopulator<C> addTable(ObservableCollection<R> rows, Consumer<TableBuilder<R>> table) {
+			TableBuilder<R> tb = new TableBuilder<>(rows);
+			table.accept(tb);
+			doAdd(tb, true);
+			return this;
+		}
+
+		protected void doAdd(AbstractPanelPopulatorField<?> field, boolean withScroll) {
 			StringBuilder constraints = new StringBuilder();
 			if (field.isGrow())
 				constraints.append("growx, pushx");
@@ -1404,10 +1445,16 @@ public class ObservableSwingUtils {
 				constraints.append(", ");
 			constraints.append("span, wrap");
 			Component component = field.getComponent();
+			if (withScroll) {
+				JScrollPane scroll = new JScrollPane(component);
+				scroll.getVerticalScrollBar().setUnitIncrement(10);
+				component = scroll;
+			}
 			getContainer().add(component, constraints.toString());
 			if (field.isVisible() != null) {
+				Component fComponent = component;
 				field.isVisible().changes().takeUntil(_getUntil()).act(evt -> {
-					component.setVisible(evt.getNewValue());
+					fComponent.setVisible(evt.getNewValue());
 				});
 			}
 		}
@@ -1445,6 +1492,74 @@ public class ObservableSwingUtils {
 						postLabel.setVisible(evt.getNewValue());
 				});
 			}
+		}
+	}
+
+	public static class TableBuilder<R> extends AbstractPanelPopulatorField<JTable> {
+		private final ObservableCollection<R> theRows;
+		private ObservableCollection<? extends CategoryRenderStrategy<? super R, ?>> theColumns;
+
+		public TableBuilder(ObservableCollection<R> rows) {
+			super(new JTable());
+			theRows = rows;
+		}
+
+		@Override
+		public TableBuilder<R> visibleWhen(ObservableValue<Boolean> visible) {
+			super.visibleWhen(visible);
+			return this;
+		}
+
+		@Override
+		public TableBuilder<R> fill() {
+			super.fill();
+			return this;
+		}
+
+		@Override
+		public TableBuilder<R> modifyEditor(Consumer<JTable> modify) {
+			super.modifyEditor(modify);
+			return this;
+		}
+
+		public TableBuilder<R> withColumns(ObservableCollection<? extends CategoryRenderStrategy<? super R, ?>> columns) {
+			theColumns = columns;
+			return this;
+		}
+
+		public TableBuilder<R> withColumn(CategoryRenderStrategy<? super R, ?> column) {
+			if (theColumns == null)
+				theColumns = ObservableCollection
+				.create(new TypeToken<CategoryRenderStrategy<? super R, ?>>() {}.where(new TypeParameter<R>() {}, theRows.getType()));
+			((ObservableCollection<CategoryRenderStrategy<? super R, ?>>) theColumns).add(column);
+			return this;
+		}
+
+		public <C> TableBuilder<R> withColumn(String name, TypeToken<C> type, Function<? super R, ? extends C> accessor, //
+			Consumer<CategoryRenderStrategy<R, C>> column) {
+			CategoryRenderStrategy<R, C> col = new CategoryRenderStrategy<>(name, type, accessor);
+			if (column != null)
+				column.accept(col);
+			return withColumn(col);
+		}
+
+		public <C> TableBuilder<R> withColumn(String name, Class<C> type, Function<? super R, ? extends C> accessor, //
+			Consumer<CategoryRenderStrategy<R, C>> column) {
+			return withColumn(name, TypeTokens.get().of(type), accessor, column);
+		}
+
+		public ObservableTableModel<R> buildModel() {
+			return new ObservableTableModel<>(theRows, theColumns);
+		}
+
+		public JTable buildTable(Observable<?> until) {
+			ObservableTableModel<R> model = buildModel();
+			JTable table = getEditor();
+			table.setModel(model);
+			Subscription sub = ObservableTableModel.hookUp(table, model);
+			if (until != null)
+				until.take(1).act(__ -> sub.unsubscribe());
+			return table;
 		}
 	}
 }
