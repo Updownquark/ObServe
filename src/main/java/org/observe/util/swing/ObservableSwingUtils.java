@@ -26,6 +26,7 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JSlider;
 import javax.swing.JSpinner;
+import javax.swing.JTabbedPane;
 import javax.swing.JToggleButton;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.event.ChangeListener;
@@ -520,10 +521,12 @@ public class ObservableSwingUtils {
 		/* TODO
 		 * toggle/radio buttons
 		 * slider
+		 * tabs
+		 * split pane
 		 * table
 		 * tree
 		 * better button controls (visibility, variable text, etc.)
-		 * form controls (e.g. press enter in a text field and a submit action (also tied to a button) fires
+		 * form controls (e.g. press enter in a text field and a submit action (also tied to a button) fires)
 		 */
 
 		default FieldPanelPopulator<C> addIntSpinnerField(String fieldName, SettableValue<Integer> value,
@@ -599,6 +602,8 @@ public class ObservableSwingUtils {
 		}
 
 		FieldPanelPopulator<C> addHPanel(String fieldName, LayoutManager layout, Consumer<HorizPanel> modify);
+
+		FieldPanelPopulator<C> addTabs(Consumer<TabbedPanePopulator> tabs);
 
 		default FieldPanelPopulator<C> spacer(int size){
 			return addComponent(null, Box.createRigidArea(new Dimension(size, size)), null);
@@ -737,26 +742,57 @@ public class ObservableSwingUtils {
 		}
 	}
 
-	public static class PanelPopulatorField<F, E> {
-		private ObservableValue<String> theFieldName;
-		private Consumer<FontAdjuster<JLabel>> theFieldLabelModifier;
+	public static abstract class AbstractPanelPopulatorField<E> {
 		private final E theEditor;
-		private ObservableValue<String> theTooltip;
-		private SettableValue<ObservableValue<String>> theSettableTooltip;
-		private ObservableValue<String> thePostLabel;
 		private boolean isGrow;
 		private ObservableValue<Boolean> isVisible;
-		private Consumer<FontAdjuster<?>> theFont;
 
-		PanelPopulatorField(String fieldName, E editor) {
-			theFieldName = fieldName == null ? null : ObservableValue.of(fieldName);
+		AbstractPanelPopulatorField(E editor) {
 			theEditor = editor;
-			theSettableTooltip = new SimpleSettableValue<>(ObservableValue.TYPE_KEY.getCompoundType(String.class), true);
-			theTooltip = ObservableValue.flatten(theSettableTooltip);
 		}
 
 		public E getEditor() {
 			return theEditor;
+		}
+
+		public AbstractPanelPopulatorField<E> visibleWhen(ObservableValue<Boolean> visible) {
+			isVisible = visible;
+			return this;
+		}
+
+		protected Component getComponent() {
+			if (!(theEditor instanceof Component))
+				throw new IllegalStateException("Editor is not a component");
+			return (Component) theEditor;
+		}
+
+		public AbstractPanelPopulatorField<E> fill() {
+			isGrow = true;
+			return this;
+		}
+
+		protected boolean isGrow() {
+			return isGrow;
+		}
+
+		protected ObservableValue<Boolean> isVisible() {
+			return isVisible;
+		}
+	}
+
+	public static class PanelPopulatorField<F, E> extends AbstractPanelPopulatorField<E> {
+		private ObservableValue<String> theFieldName;
+		private Consumer<FontAdjuster<JLabel>> theFieldLabelModifier;
+		private ObservableValue<String> theTooltip;
+		private SettableValue<ObservableValue<String>> theSettableTooltip;
+		private ObservableValue<String> thePostLabel;
+		private Consumer<FontAdjuster<?>> theFont;
+
+		PanelPopulatorField(String fieldName, E editor) {
+			super(editor);
+			theFieldName = fieldName == null ? null : ObservableValue.of(fieldName);
+			theSettableTooltip = new SimpleSettableValue<>(ObservableValue.TYPE_KEY.getCompoundType(String.class), true);
+			theTooltip = ObservableValue.flatten(theSettableTooltip);
 		}
 
 		public PanelPopulatorField<F, E> withFieldName(String fieldName) {
@@ -795,13 +831,14 @@ public class ObservableSwingUtils {
 			return this;
 		}
 
+		@Override
 		public PanelPopulatorField<F, E> visibleWhen(ObservableValue<Boolean> visible) {
-			isVisible = visible;
+			super.visibleWhen(visible);
 			return this;
 		}
 
 		public PanelPopulatorField<F, E> modifyEditor(Consumer<E> modify) {
-			modify.accept(theEditor);
+			modify.accept(getEditor());
 			return this;
 		}
 
@@ -809,12 +846,12 @@ public class ObservableSwingUtils {
 			return theTooltip;
 		}
 
+		@Override
 		protected Component getComponent() {
-			if (!(theEditor instanceof Component))
-				throw new IllegalStateException("Editor is not a component");
+			Component c = super.getComponent();
 			if (theFont != null)
-				theFont.accept(new FontAdjuster<>((Component) theEditor));
-			return (Component) theEditor;
+				theFont.accept(new FontAdjuster<>(c));
+			return c;
 		}
 
 		public PanelPopulatorField<F, E> withTooltip(String tooltip) {
@@ -836,8 +873,9 @@ public class ObservableSwingUtils {
 			return this;
 		}
 
+		@Override
 		public PanelPopulatorField<F, E> fill() {
-			isGrow = true;
+			super.fill();
 			return this;
 		}
 
@@ -871,14 +909,6 @@ public class ObservableSwingUtils {
 
 		protected ObservableValue<String> getPostLabel() {
 			return thePostLabel;
-		}
-
-		protected boolean isGrow() {
-			return isGrow;
-		}
-
-		protected ObservableValue<Boolean> isVisible() {
-			return isVisible;
 		}
 	}
 
@@ -993,6 +1023,102 @@ public class ObservableSwingUtils {
 		}
 	}
 
+	public static class TabbedPanePopulator extends AbstractPanelPopulatorField<JTabbedPane> {
+		private final Observable<?> theUntil;
+
+		TabbedPanePopulator(Observable<?> until) {
+			super(new JTabbedPane());
+			theUntil = until;
+		}
+
+		@Override
+		public TabbedPanePopulator visibleWhen(ObservableValue<Boolean> visible) {
+			super.visibleWhen(visible);
+			return this;
+		}
+
+		@Override
+		public TabbedPanePopulator fill() {
+			super.fill();
+			return this;
+		}
+
+		public TabbedPanePopulator withTab(Object tabID, Component component, Consumer<TabPopulator> tab) {
+			TabPopulator t = new TabPopulator(tabID, component);
+			tab.accept(t);
+			getEditor().add(t.getComponent(theUntil));
+			return this;
+		}
+
+		public TabbedPanePopulator withTabVPanel(Object tabID, Consumer<FieldPanelPopulator<JPanel>> panel, Consumer<TabPopulator> tab) {
+			FieldPanelPopulator<JPanel> fieldPanel = new MigFieldPanelPopulator<>(null, theUntil);
+			panel.accept(fieldPanel);
+			return withTab(tabID, fieldPanel.getContainer(), tab);
+		}
+
+		public TabbedPanePopulator withTabHPanel(Object tabID, String layoutType, Consumer<HorizPanel> panel, Consumer<TabPopulator> tab) {
+			LayoutManager layout;
+			if (layoutType == null)
+				layoutType = "box";
+			switch (layoutType.toLowerCase()) {
+			case "mig":
+				layout = createMigLayout(false, () -> "use addHPanel(String, LayoutManager, Consumer)");
+				break;
+			case "ctr":
+			case "center":
+				layout = new JustifiedBoxLayout(false).mainCenter();
+				break;
+			case "box":
+			case "just":
+			case "justify":
+			case "justified":
+			default:
+				layout = new JustifiedBoxLayout(false).mainJustified();
+				break;
+			}
+			return withTabHPanel(tabID, layout, panel, tab);
+		}
+
+		public TabbedPanePopulator withTabHPanel(Object tabID, LayoutManager layout, Consumer<HorizPanel> panel,
+			Consumer<TabPopulator> tab) {
+			HorizPanel fieldPanel = new HorizPanel(null, layout, theUntil);
+			panel.accept(fieldPanel);
+			return withTab(tabID, fieldPanel.getContainer(), tab);
+		}
+	}
+
+	public static class TabPopulator {
+		private final Object theID;
+		private final Component theComponent;
+		private ObservableValue<String> theName;
+
+		public TabPopulator(Object id, Component component) {
+			theID = id;
+			theComponent = component;
+		}
+
+		public TabPopulator setName(String name) {
+			theName = ObservableValue.of(name);
+			return this;
+		}
+
+		public TabPopulator setName(ObservableValue<String> name) {
+			theName = name;
+			return this;
+		}
+
+		protected ObservableValue<String> getName() {
+			return theName;
+		}
+
+		protected Component getComponent(Observable<?> until) {
+			if (theName == null)
+				throw new IllegalArgumentException("Failed to set name on tab for " + theComponent);
+			theName.changes().takeUntil(until).act(evt -> theComponent.setName(evt.getNewValue()));
+			return theComponent;
+		}
+	}
+
 	public static class HorizPanel extends PanelPopulatorField<Object, JPanel> implements FieldPanelPopulatorImpl<JPanel> {
 		private final Observable<?> theUntil;
 
@@ -1031,6 +1157,19 @@ public class ObservableSwingUtils {
 					component.setVisible(evt.getNewValue());
 					if (postLabel != null)
 						postLabel.setVisible(evt.getNewValue());
+				});
+			}
+		}
+
+		protected void doAdd(AbstractPanelPopulatorField<?> field) {
+			Component component = field.getComponent();
+			String constraints = null;
+			if (field.isGrow() && getContainer().getLayout().getClass().getName().startsWith("net.mig"))
+				constraints = "growx, pushx";
+			getContainer().add(component, constraints);
+			if (field.isVisible() != null) {
+				field.isVisible().changes().takeUntil(_getUntil()).act(evt -> {
+					component.setVisible(evt.getNewValue());
 				});
 			}
 		}
@@ -1181,6 +1320,14 @@ public class ObservableSwingUtils {
 		}
 
 		@Override
+		public FieldPanelPopulator<JPanel> addTabs(Consumer<TabbedPanePopulator> tabs) {
+			TabbedPanePopulator tabPane = new TabbedPanePopulator(theUntil);
+			tabs.accept(tabPane);
+			doAdd(tabPane);
+			return this;
+		}
+
+		@Override
 		public <S> HorizPanel addComponent(String fieldName, S component, Consumer<PanelPopulatorField<Object, S>> modify) {
 			FieldPanelPopulatorImpl.super.addComponent(fieldName, component, modify);
 			return this;
@@ -1239,6 +1386,30 @@ public class ObservableSwingUtils {
 		@Override
 		public Observable<?> _getUntil() {
 			return theUntil;
+		}
+
+		@Override
+		public FieldPanelPopulator<C> addTabs(Consumer<TabbedPanePopulator> tabs) {
+			TabbedPanePopulator tabPane = new TabbedPanePopulator(theUntil);
+			tabs.accept(tabPane);
+			doAdd(tabPane);
+			return this;
+		}
+
+		protected void doAdd(AbstractPanelPopulatorField<?> field) {
+			StringBuilder constraints = new StringBuilder();
+			if (field.isGrow())
+				constraints.append("growx, pushx");
+			if (constraints.length() > 0)
+				constraints.append(", ");
+			constraints.append("span, wrap");
+			Component component = field.getComponent();
+			getContainer().add(component, constraints.toString());
+			if (field.isVisible() != null) {
+				field.isVisible().changes().takeUntil(_getUntil()).act(evt -> {
+					component.setVisible(evt.getNewValue());
+				});
+			}
 		}
 
 		@Override
