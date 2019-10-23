@@ -3,20 +3,21 @@ package org.observe.util.swing;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
+import javax.swing.ListModel;
 import javax.swing.ListSelectionModel;
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
 
-import org.observe.Observable;
 import org.observe.Subscription;
-import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.util.TypeTokens;
 import org.qommons.Transaction;
+import org.qommons.collect.BetterSortedSet.SortedSearchFilter;
 import org.qommons.collect.CollectionElement;
+
+import com.google.common.reflect.TypeToken;
 
 /**
  * A ListSelectionModel backed by observable collections
@@ -24,58 +25,47 @@ import org.qommons.collect.CollectionElement;
  * @param <E> The type of item to select
  */
 public class ObservableListSelectionModel<E> implements ListSelectionModel {
-	private final ObservableCollection<E> theValues;
+	private final ListModel<E> theValues;
 	private final ObservableSortedSet<Integer> theSelectedIndexes;
 	private final ObservableCollection<E> theSelectedValues;
 	private final Map<ListSelectionListener, Subscription> theListeners;
 	private int theSelectionMode;
 	private int theAnchor;
 	private int theLead;
-	private boolean isValueAdjusting;
+	private Transaction valueAdjusting;
 
 	/**
+	 * @param type The type of the model values
 	 * @param values The list of values to be selected from
-	 * @param until The observable that, when fired, will dispose of this model's persistent resources
 	 */
-	public ObservableListSelectionModel(ObservableCollection<E> values, Observable<?> until) {
+	public ObservableListSelectionModel(TypeToken<E> type, ListModel<E> values) {
 		theValues = values;
-		theSelectedIndexes = ObservableSortedSet.create(TypeTokens.get().of(Integer.TYPE), Integer::compare).flow()
+		ObservableSortedSet<Integer>[] selectedIndexes = new ObservableSortedSet[1];
+		theSelectedIndexes = selectedIndexes[0] = ObservableSortedSet.create(TypeTokens.get().of(Integer.TYPE), Integer::compare).flow()
 			.filterMod(fm -> fm.filterAdd(idx -> {
 				if (idx < 0)
 					return "Negative index";
-				else if (idx >= theValues.size())
+				else if (idx >= theValues.getSize())
 					return "Index>size";
-				else
-					return null;
-			})).collect();
-		theSelectedValues = theSelectedIndexes.flow().map(values.getType(), idx -> theValues.get(idx)).collect();
-		theListeners = new LinkedHashMap<>();
-
-		Subscription sub = theValues.changes().act(evt -> {
-			switch (evt.type) {
-			case add:
-				break;
-			case remove:
-				try (Transaction t = theSelectedIndexes.lock(true, evt)) {
-					theSelectedIndexes.removeAll(evt.getElementsReversed().stream().map(el -> el.index).collect(Collectors.toList()));
-				}
-				break;
-			case set:
-				try (Transaction t = theSelectedIndexes.lock(true, evt)) {
-					for (CollectionChangeEvent.ElementChange<E> el : evt.elements) {
-						CollectionElement<Integer> selectedEl = theSelectedIndexes.getElement(Integer.valueOf(el.index), true);
-						if (selectedEl != null)
-							theSelectedIndexes.mutableElement(selectedEl.getElementId()).set(el.index); // Update
+				if (!selectedIndexes[0].isEmpty()) {
+					switch (theSelectionMode) {
+					case ListSelectionModel.SINGLE_SELECTION:
+						return "Single-selection only";
+					case ListSelectionModel.SINGLE_INTERVAL_SELECTION:
+						if (idx < selectedIndexes[0].first() - 1 || idx > selectedIndexes[0].last() + 1)
+							return "Selection would not be contiguous";
+						break;
 					}
 				}
-			}
-		});
-		if (until != null)
-			until.take(1).act(v -> sub.unsubscribe());
+				return null;
+			})).collect();
+		theSelectedValues = theSelectedIndexes.flow().map(type, index -> theValues.getElementAt(index), opts -> opts.cache(false))
+			.unmodifiable().collect();
+		theListeners = new LinkedHashMap<>();
 	}
 
-	/** @return The list of values being selected from */
-	public ObservableCollection<E> getValues() {
+	/** @return The values being selected from */
+	public ListModel<E> getValues() {
 		return theValues;
 	}
 
@@ -84,7 +74,7 @@ public class ObservableListSelectionModel<E> implements ListSelectionModel {
 		return theSelectedIndexes;
 	}
 
-	/** @return The selected values */
+	/** @return The selected values -- unmodifiable */
 	public ObservableCollection<E> getSelectedValues() {
 		return theSelectedValues;
 	}
@@ -102,6 +92,15 @@ public class ObservableListSelectionModel<E> implements ListSelectionModel {
 
 	@Override
 	public void addSelectionInterval(int index0, int index1) {
+		if (index0 == -1 || index1 == -1) {
+			return;
+		}
+		// If we only allow a single selection, channel through
+		// setSelectionInterval() to enforce the rule.
+		if (getSelectionMode() == SINGLE_SELECTION) {
+			setSelectionInterval(index0, index1);
+			return;
+		}
 		try (Transaction t = theSelectedIndexes.lock(true, null)) {
 			for (int i = Math.min(index0, index1); i <= Math.max(index0, index1); i++)
 				theSelectedIndexes.add(i);
@@ -167,25 +166,44 @@ public class ObservableListSelectionModel<E> implements ListSelectionModel {
 
 	@Override
 	public void insertIndexInterval(int index, int length, boolean before) {
-		if (before)
-			addSelectionInterval(index - length + 1, index);
-		else
-			addSelectionInterval(index, index + length - 1);
+		CollectionElement<Integer> el = theSelectedIndexes.getTerminalElement(false);
+		while (el != null) {
+			int comp = Integer.compare(el.get(), index);
+			if (comp > 0 || (comp == 0 && before))
+				theSelectedIndexes.mutableElement(el.getElementId()).set(el.get() + length);
+			else
+				break;
+			el = theSelectedIndexes.getAdjacentElement(el.getElementId(), false);
+		}
 	}
 
 	@Override
 	public void removeIndexInterval(int index0, int index1) {
-		removeSelectionInterval(index0, index1);
+		int length = index1 - index0 + 1;
+		CollectionElement<Integer> el = theSelectedIndexes.search(i -> Integer.compare(index0, i), SortedSearchFilter.Greater);
+		while (el != null) {
+			if (el.get() <= index1)
+				theSelectedIndexes.mutableElement(el.getElementId()).remove();
+			else
+				theSelectedIndexes.mutableElement(el.getElementId()).set(el.get() - length);
+			el = theSelectedIndexes.getAdjacentElement(el.getElementId(), true);
+		}
 	}
 
 	@Override
 	public void setValueIsAdjusting(boolean valueIsAdjusting) {
-		isValueAdjusting = valueIsAdjusting;
+		if (valueIsAdjusting) {
+			if (valueAdjusting == null)
+				valueAdjusting = theSelectedIndexes.lock(true, null);
+		} else if (valueAdjusting != null) {
+			valueAdjusting.close();
+			valueAdjusting = null;
+		}
 	}
 
 	@Override
 	public boolean getValueIsAdjusting() {
-		return isValueAdjusting;
+		return valueAdjusting != null;
 	}
 
 	@Override
@@ -220,124 +238,4 @@ public class ObservableListSelectionModel<E> implements ListSelectionModel {
 		if (sub != null)
 			sub.unsubscribe();
 	}
-
-	/* This is not working
-	public static <T> ObservableCollection<T> observableSelection(ObservableCollection<T> dataModel, ListSelectionModel selectionModel,
-		Observable<?> until) {
-		if (until == null)
-			until = Observable.empty;
-		ObservableSortedSet<ElementId> selectedElements = ObservableSortedSet.create(TypeTokens.get().of(ElementId.class),
-			ElementId::compareTo);
-		BitSet selection = new BitSet();
-		for (int i = selectionModel.getMinSelectionIndex(); i <= selectionModel.getMaxSelectionIndex(); i++) {
-			if (selectionModel.isSelectedIndex(i)) {
-				selection.set(i);
-				selectedElements.add(dataModel.getElement(i).getElementId());
-			}
-		}
-		Subscription modelSub = dataModel.onChange(evt -> {
-			switch (evt.getType()) {
-			case add:
-			case remove:
-				break; // Should be taken care of by the UI
-			case set:
-				CollectionElement<ElementId> found = selectedElements.getElement(evt.getElementId(), true);
-				if (found != null)
-					try (Transaction t = selectedElements.lock(true, false, evt)) {
-						selectedElements.mutableElement(found.getElementId()).set(evt.getElementId());
-					}
-				break;
-			}
-		});
-		until.take(1).act(v -> modelSub.unsubscribe());
-		Causable[] cause = new Causable[1];
-		Transaction[] causeFinish = new Transaction[1];
-		ListSelectionListener listener = evt -> {
-			Object c;
-			if (evt.getValueIsAdjusting()) {
-				if (cause[0] == null) {
-					c = cause[0] = Causable.simpleCause(null);
-					causeFinish[0] = Causable.use(cause[0]);
-				} else
-					c = cause[0];
-			} else if (cause[0] != null) {
-				c = cause[0];
-				cause[0] = null;
-			} else
-				c = evt;
-			try (Transaction t = selectedElements.lock(true, c)) {
-				if (selectionModel.isSelectedIndex(evt.getFirstIndex())) {
-					// Selection added
-					int i = selection.nextClearBit(evt.getFirstIndex());
-					if (i <= evt.getLastIndex()) {
-						CollectionElement<T> el = dataModel.getElement(i);
-						CollectionElement<ElementId> idEl = selectedElements.search(el.getElementId(), SortedSearchFilter.Less);
-						for (; i <= evt.getLastIndex(); i++) {
-							if (idEl == null) {
-								// Means the new selection will be at the beginning of the selection list
-								if (selectedElements.isEmpty())
-									idEl = selectedElements.addElement(el.getElementId(), true);
-								else
-									idEl = selectedElements.addElement(el.getElementId(),
-										selectedElements.getTerminalElement(true).getElementId(), null, true);
-							} else
-								idEl = selectedElements.addElement(el.getElementId(), idEl.getElementId(), null, true);
-						}
-						selection.set(evt.getFirstIndex(), evt.getLastIndex() + 1);
-					}
-				} else {
-					// Selection removed
-					int i = selection.previousSetBit(evt.getLastIndex());
-					int post = selection.nextSetBit(i + 1);
-					CollectionElement<ElementId> idEl;
-					if (post < 0)
-						idEl = selectedElements.getTerminalElement(false);
-					else {
-						BitSet copy = (BitSet) selection.clone();
-						copy.clear(0, i + 1);
-						// Now copy's cardinality is the number of selected elements beyond the event's range
-						idEl = selectedElements.getElement(selectedElements.size() - copy.cardinality() - 1);
-					}
-					for (; i >= evt.getFirstIndex(); i--) {
-						if (!selection.get(i))
-							continue;
-						CollectionElement<ElementId> prev = selectedElements.getAdjacentElement(idEl.getElementId(), false);
-						selectedElements.mutableElement(idEl.getElementId()).remove();
-						idEl = prev;
-					}
-					selection.clear(evt.getFirstIndex(), evt.getLastIndex() + 1);
-				}
-			} finally {
-				if (causeFinish[0] != null && !evt.getValueIsAdjusting()) {
-					causeFinish[0].close();
-					causeFinish[0] = null;
-				}
-			}
-		};
-		selectionModel.addListSelectionListener(listener);
-		until.act(v -> selectionModel.removeListSelectionListener(listener));
-		selectedElements.changes().takeUntil(until).act(evt -> {
-			int[][] intervals = ObservableSwingUtils.getContinuousIntervals(evt.elements, evt.type != CollectionChangeType.remove);
-			switch (evt.type) {
-			case add:
-				for (int[] interval : intervals)
-					selectionModel.addSelectionInterval(interval[0], interval[1]);
-				break;
-			case remove:
-				for (int[] interval : intervals)
-					selectionModel.removeSelectionInterval(interval[0], interval[1]);
-				break;
-			case set:
-				break;
-			}
-		});
-		return selectedElements.flow()
-			.map(dataModel.getType(), el -> dataModel.getElement(el).get(), opts -> opts.cache(false).withReverse(v -> {
-				CollectionElement<T> el = dataModel.getElement(v, true);
-				if (el == null)
-					throw new IllegalArgumentException("Value not present in model");
-				else
-					return el.getElementId();
-			})).filterMod(fm -> fm.filterAdd(v -> dataModel.contains(v) ? null : "Value not present in model")).collectPassive();
-	}*/
 }
