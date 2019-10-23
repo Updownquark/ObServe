@@ -7,12 +7,16 @@ import java.awt.EventQueue;
 import java.awt.Font;
 import java.awt.LayoutManager;
 import java.awt.LayoutManager2;
+import java.awt.Rectangle;
 import java.awt.event.ActionListener;
+import java.beans.PropertyChangeListener;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -30,8 +34,12 @@ import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
 import javax.swing.JTable;
 import javax.swing.JToggleButton;
+import javax.swing.ListSelectionModel;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.event.ChangeListener;
+import javax.swing.event.ListDataEvent;
+import javax.swing.event.ListDataListener;
+import javax.swing.event.ListSelectionListener;
 
 import org.observe.Observable;
 import org.observe.ObservableAction;
@@ -42,6 +50,12 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
+import org.observe.util.swing.ObservableSwingUtils.PanelPopulatorField;
+import org.qommons.ArrayUtils;
+import org.qommons.Causable;
+import org.qommons.Causable.CausableKey;
+import org.qommons.QommonsUtils;
+import org.qommons.Transaction;
 import org.qommons.collect.ListenerList;
 import org.qommons.io.Format;
 
@@ -526,9 +540,10 @@ public class ObservableSwingUtils {
 		/* TODO
 		 * toggle/radio buttons
 		 * slider
-		 * tabs
 		 * split pane
-		 * table
+		 * scroll pane
+		 * accordion pane
+		 * value selector
 		 * tree
 		 * better button controls (visibility, variable text, etc.)
 		 * form controls (e.g. press enter in a text field and a submit action (also tied to a button) fires)
@@ -622,7 +637,7 @@ public class ObservableSwingUtils {
 	private interface FieldPanelPopulatorImpl<C extends Container> extends FieldPanelPopulator<C> {
 		Observable<?> _getUntil();
 
-		abstract void doAdd(PanelPopulatorField<?, ?> field);
+		abstract void doAdd(AbstractPanelPopulatorField<?> field);
 
 		@Override
 		default <F> FieldPanelPopulator<C> addTextField(String fieldName, SettableValue<F> field, Format<F> format,
@@ -740,6 +755,22 @@ public class ObservableSwingUtils {
 		}
 
 		@Override
+		default FieldPanelPopulator<C> addTabs(Consumer<TabbedPanePopulator> tabs) {
+			TabbedPanePopulator tabPane = new TabbedPanePopulator(_getUntil());
+			tabs.accept(tabPane);
+			doAdd(tabPane);
+			return this;
+		}
+
+		@Override
+		default <R> FieldPanelPopulator<C> addTable(ObservableCollection<R> rows, Consumer<TableBuilder<R>> table) {
+			TableBuilder<R> tb = new TableBuilder<>(rows);
+			table.accept(tb);
+			doAdd(tb);
+			return this;
+		}
+
+		@Override
 		default <S> FieldPanelPopulator<C> addComponent(String fieldName, S component, Consumer<PanelPopulatorField<Object, S>> modify) {
 			PanelPopulatorField<Object, S> subPanel = new PanelPopulatorField<>(fieldName, component);
 			if (modify != null)
@@ -767,7 +798,7 @@ public class ObservableSwingUtils {
 			return this;
 		}
 
-		protected Component getComponent() {
+		protected Component getComponent(Observable<?> until) {
 			if (!(theEditor instanceof Component))
 				throw new IllegalStateException("Editor is not a component");
 			return (Component) theEditor;
@@ -790,6 +821,12 @@ public class ObservableSwingUtils {
 		protected ObservableValue<Boolean> isVisible() {
 			return isVisible;
 		}
+
+		public abstract ObservableValue<String> getTooltip();
+
+		protected abstract JLabel createFieldNameLabel(Observable<?> until);
+
+		protected abstract JLabel createPostLabel(Observable<?> until);
 	}
 
 	public static class PanelPopulatorField<F, E> extends AbstractPanelPopulatorField<E> {
@@ -855,13 +892,14 @@ public class ObservableSwingUtils {
 			return this;
 		}
 
+		@Override
 		public ObservableValue<String> getTooltip() {
 			return theTooltip;
 		}
 
 		@Override
-		protected Component getComponent() {
-			Component c = super.getComponent();
+		protected Component getComponent(Observable<?> until) {
+			Component c = super.getComponent(until);
 			if (theFont != null)
 				theFont.accept(new FontAdjuster<>(c));
 			return c;
@@ -896,6 +934,7 @@ public class ObservableSwingUtils {
 			return theFieldName;
 		}
 
+		@Override
 		protected JLabel createFieldNameLabel(Observable<?> until) {
 			if (theFieldName == null)
 				return null;
@@ -908,6 +947,7 @@ public class ObservableSwingUtils {
 			return fieldNameLabel;
 		}
 
+		@Override
 		protected JLabel createPostLabel(Observable<?> until) {
 			if (thePostLabel == null)
 				return null;
@@ -1104,6 +1144,21 @@ public class ObservableSwingUtils {
 			panel.accept(fieldPanel);
 			return withTab(tabID, fieldPanel.getContainer(), tab);
 		}
+
+		@Override
+		public ObservableValue<String> getTooltip() {
+			return null;
+		}
+
+		@Override
+		protected JLabel createFieldNameLabel(Observable<?> until) {
+			return null;
+		}
+
+		@Override
+		protected JLabel createPostLabel(Observable<?> until) {
+			return null;
+		}
 	}
 
 	public static class TabPopulator {
@@ -1157,12 +1212,12 @@ public class ObservableSwingUtils {
 		}
 
 		@Override
-		public void doAdd(PanelPopulatorField<?, ?> field) {
+		public void doAdd(AbstractPanelPopulatorField<?> field) {
 			JLabel fieldNameLabel = field.createFieldNameLabel(_getUntil());
 			if (fieldNameLabel != null)
 				getContainer().add(fieldNameLabel);
 			JLabel postLabel = field.createPostLabel(_getUntil());
-			Component component = field.getComponent();
+			Component component = field.getComponent(_getUntil());
 			String constraints = null;
 			if (field.isGrow() && getContainer().getLayout().getClass().getName().startsWith("net.mig"))
 				constraints = "growx, pushx";
@@ -1176,25 +1231,6 @@ public class ObservableSwingUtils {
 					component.setVisible(evt.getNewValue());
 					if (postLabel != null)
 						postLabel.setVisible(evt.getNewValue());
-				});
-			}
-		}
-
-		protected void doAdd(AbstractPanelPopulatorField<?> field, boolean withScroll) {
-			Component component = field.getComponent();
-			String constraints = null;
-			if (field.isGrow() && getContainer().getLayout().getClass().getName().startsWith("net.mig"))
-				constraints = "growx, pushx";
-			if (withScroll) {
-				JScrollPane scroll = new JScrollPane(component);
-				scroll.getVerticalScrollBar().setUnitIncrement(10);
-				component = scroll;
-			}
-			getContainer().add(component, constraints);
-			if (field.isVisible() != null) {
-				Component fComponent = component;
-				field.isVisible().changes().takeUntil(_getUntil()).act(evt -> {
-					fComponent.setVisible(evt.getNewValue());
 				});
 			}
 		}
@@ -1345,22 +1381,6 @@ public class ObservableSwingUtils {
 		}
 
 		@Override
-		public FieldPanelPopulator<JPanel> addTabs(Consumer<TabbedPanePopulator> tabs) {
-			TabbedPanePopulator tabPane = new TabbedPanePopulator(theUntil);
-			tabs.accept(tabPane);
-			doAdd(tabPane, false);
-			return this;
-		}
-
-		@Override
-		public <R> FieldPanelPopulator<JPanel> addTable(ObservableCollection<R> rows, Consumer<TableBuilder<R>> table) {
-			TableBuilder<R> tb = new TableBuilder<>(rows);
-			table.accept(tb);
-			doAdd(tb, true);
-			return this;
-		}
-
-		@Override
 		public <S> HorizPanel addComponent(String fieldName, S component, Consumer<PanelPopulatorField<Object, S>> modify) {
 			FieldPanelPopulatorImpl.super.addComponent(fieldName, component, modify);
 			return this;
@@ -1422,45 +1442,7 @@ public class ObservableSwingUtils {
 		}
 
 		@Override
-		public FieldPanelPopulator<C> addTabs(Consumer<TabbedPanePopulator> tabs) {
-			TabbedPanePopulator tabPane = new TabbedPanePopulator(theUntil);
-			tabs.accept(tabPane);
-			doAdd(tabPane, false);
-			return this;
-		}
-
-		@Override
-		public <R> FieldPanelPopulator<C> addTable(ObservableCollection<R> rows, Consumer<TableBuilder<R>> table) {
-			TableBuilder<R> tb = new TableBuilder<>(rows);
-			table.accept(tb);
-			doAdd(tb, true);
-			return this;
-		}
-
-		protected void doAdd(AbstractPanelPopulatorField<?> field, boolean withScroll) {
-			StringBuilder constraints = new StringBuilder();
-			if (field.isGrow())
-				constraints.append("growx, pushx");
-			if (constraints.length() > 0)
-				constraints.append(", ");
-			constraints.append("span, wrap");
-			Component component = field.getComponent();
-			if (withScroll) {
-				JScrollPane scroll = new JScrollPane(component);
-				scroll.getVerticalScrollBar().setUnitIncrement(10);
-				component = scroll;
-			}
-			getContainer().add(component, constraints.toString());
-			if (field.isVisible() != null) {
-				Component fComponent = component;
-				field.isVisible().changes().takeUntil(_getUntil()).act(evt -> {
-					fComponent.setVisible(evt.getNewValue());
-				});
-			}
-		}
-
-		@Override
-		public void doAdd(PanelPopulatorField<?, ?> field) {
+		public void doAdd(AbstractPanelPopulatorField<?> field) {
 			JLabel fieldNameLabel = field.createFieldNameLabel(_getUntil());
 			if (fieldNameLabel != null)
 				getContainer().add(fieldNameLabel, "align right");
@@ -1479,7 +1461,7 @@ public class ObservableSwingUtils {
 					constraints.append(", ");
 				constraints.append("span, wrap");
 			}
-			Component component = field.getComponent();
+			Component component = field.getComponent(_getUntil());
 			getContainer().add(component, constraints.toString());
 			if (postLabel != null)
 				getContainer().add(postLabel, "wrap");
@@ -1498,6 +1480,9 @@ public class ObservableSwingUtils {
 	public static class TableBuilder<R> extends AbstractPanelPopulatorField<JTable> {
 		private final ObservableCollection<R> theRows;
 		private ObservableCollection<? extends CategoryRenderStrategy<? super R, ?>> theColumns;
+		private SettableValue<R> theSelectionValue;
+		private ObservableCollection<R> theSelectionValues;
+		private List<TableAction<R>> theActions;
 
 		public TableBuilder(ObservableCollection<R> rows) {
 			super(new JTable());
@@ -1548,18 +1533,437 @@ public class ObservableSwingUtils {
 			return withColumn(name, TypeTokens.get().of(type), accessor, column);
 		}
 
+		public TableBuilder<R> withSelection(SettableValue<R> selection, boolean enforceSingleSelection) {
+			theSelectionValue = selection;
+			if (enforceSingleSelection)
+				getEditor().getSelectionModel().setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+			return this;
+		}
+
+		public TableBuilder<R> withSelection(ObservableCollection<R> selection) {
+			theSelectionValues = selection;
+			return this;
+		}
+
+		public TableBuilder<R> withAdd(Supplier<? extends R> creator, Function<ObservableAction<R>, ObservableAction<R>> actionMod,
+			Consumer<PanelPopulatorField<Object, JButton>> button) {}
+
+		public TableBuilder<R> withRemove(Consumer<? super List<? extends R>> deletion,
+			Function<ObservableAction<Object>, ObservableAction<Object>> actionMod,
+			Consumer<PanelPopulatorField<Object, JButton>> button) {}
+
+		public TableBuilder<R> withCopy(Function<? super R, ? extends R> copier,
+			Function<ObservableAction<R>, ObservableAction<R>> actionMod,
+			Consumer<PanelPopulatorField<Object, JButton>> button) {}
+
+		public TableBuilder<R> withAction(Consumer<? super R> action, Function<ObservableAction<R>, ObservableAction<R>> actionMod,
+			Consumer<PanelPopulatorField<Object, JButton>> button) {}
+
 		public ObservableTableModel<R> buildModel() {
 			return new ObservableTableModel<>(theRows, theColumns);
 		}
 
-		public JTable buildTable(Observable<?> until) {
+		@Override
+		public Component getComponent(Observable<?> until) {
 			ObservableTableModel<R> model = buildModel();
 			JTable table = getEditor();
 			table.setModel(model);
 			Subscription sub = ObservableTableModel.hookUp(table, model);
 			if (until != null)
 				until.take(1).act(__ -> sub.unsubscribe());
-			return table;
+
+			JScrollPane scroll = new JScrollPane(table);
+			// Default scroll increments are ridiculously small
+			scroll.getVerticalScrollBar().setUnitIncrement(10);
+			scroll.getHorizontalScrollBar().setUnitIncrement(10);
+
+			// Selection
+			Supplier<List<R>> selectionGetter = () -> {
+				ListSelectionModel selModel = table.getSelectionModel();
+				List<R> selValues = new ArrayList<>(selModel.getMaxSelectionIndex() - selModel.getMinSelectionIndex() + 1);
+				for (int i = 0; i < model.getRowModel().getSize(); i++) {
+					if (selModel.isSelectedIndex(i))
+						selValues.add(model.getRowModel().getElementAt(i));
+				}
+				return selValues;
+			};
+			if (theSelectionValue != null) {
+				SettableValue<R> selection = theSelectionValue;
+				boolean[] callbackLock = new boolean[1];
+				ListSelectionListener selListener = e -> {
+					ListSelectionModel selModel = table.getSelectionModel();
+					if (selModel.getValueIsAdjusting() || callbackLock[0])
+						return;
+					callbackLock[0] = true;
+					try {
+						if (selModel.getMinSelectionIndex() >= 0 && selModel.getMinSelectionIndex() == selModel.getMaxSelectionIndex()) {
+							selection.set(model.getRowModel().getElementAt(selModel.getMinSelectionIndex()), e);
+						} else if (selection.get() != null)
+							selection.set(null, e);
+					} finally {
+						callbackLock[0] = false;
+					}
+				};
+				ListDataListener modelListener = new ListDataListener() {
+					@Override
+					public void intervalRemoved(ListDataEvent e) {}
+
+					@Override
+					public void intervalAdded(ListDataEvent e) {}
+
+					@Override
+					public void contentsChanged(ListDataEvent e) {
+						ListSelectionModel selModel = table.getSelectionModel();
+						if (selModel.getMinSelectionIndex() < 0 || selModel.getMinSelectionIndex() != selModel.getMaxSelectionIndex())
+							return;
+						callbackLock[0] = true;
+						try {
+							if (e.getIndex0() <= selModel.getMinSelectionIndex() && e.getIndex1() >= selModel.getMinSelectionIndex())
+								selection.set(model.getRowModel().getElementAt(selModel.getMinSelectionIndex()), e);
+						} finally {
+							callbackLock[0] = false;
+						}
+					}
+				};
+				PropertyChangeListener selModelListener = evt -> {
+					((ListSelectionModel) evt.getOldValue()).removeListSelectionListener(selListener);
+					((ListSelectionModel) evt.getNewValue()).addListSelectionListener(selListener);
+				};
+				table.getSelectionModel().addListSelectionListener(selListener);
+				table.addPropertyChangeListener("selectionModel", selModelListener);
+				model.getRowModel().addListDataListener(modelListener);
+				selection.changes().takeUntil(until).act(evt -> onEQ(() -> {
+					if (callbackLock[0])
+						return;
+					callbackLock[0] = true;
+					try {
+						ListSelectionModel selModel = table.getSelectionModel();
+						if (evt.getNewValue() == null) {
+							selModel.clearSelection();
+							return;
+						}
+						for (int i = 0; i < model.getRowModel().getSize(); i++) {
+							if (model.getRows().equivalence().elementEquals(model.getRowModel().getElementAt(i), evt.getNewValue())) {
+								selModel.setSelectionInterval(i, i);
+								Rectangle r = table.getCellRect(i, 0, false);
+								table.scrollRectToVisible(r);
+								break;
+							}
+						}
+					} finally {
+						callbackLock[0] = false;
+					}
+				}));
+
+				until.take(1).act(__ -> {
+					table.removePropertyChangeListener("selectionModel", selModelListener);
+					table.getSelectionModel().removeListSelectionListener(selListener);
+					model.getRowModel().removeListDataListener(modelListener);
+				});
+			}
+			if (theSelectionValues != null) {
+				ObservableCollection<R> selection = theSelectionValues;
+				boolean[] callbackLock = new boolean[1];
+				Consumer<Object> syncSelection = cause -> {
+					List<R> selValues = selectionGetter.get();
+					try (Transaction selT = selection.lock(true, cause)) {
+						ArrayUtils.adjust(selection, selValues,
+							ArrayUtils.acceptAllDifferences(model.getRows().equivalence()::elementEquals));
+					}
+				};
+				ListSelectionListener selListener = e -> {
+					ListSelectionModel selModel = table.getSelectionModel();
+					if (selModel.getValueIsAdjusting() || callbackLock[0])
+						return;
+					callbackLock[0] = true;
+					try {
+						if (selModel.getMinSelectionIndex() < 0) {
+							selection.clear();
+							return;
+						}
+						syncSelection.accept(e);
+					} finally {
+						callbackLock[0] = false;
+					}
+				};
+				ListDataListener modelListener = new ListDataListener() {
+					@Override
+					public void intervalRemoved(ListDataEvent e) {}
+
+					@Override
+					public void intervalAdded(ListDataEvent e) {}
+
+					@Override
+					public void contentsChanged(ListDataEvent e) {
+						int selIdx = 0;
+						callbackLock[0] = true;
+						ListSelectionModel selModel = table.getSelectionModel();
+						try (Transaction t = selection.lock(true, e)) {
+							for (int i = selModel.getMinSelectionIndex(); i <= selModel.getMaxSelectionIndex() && i <= e.getIndex1(); i++) {
+								if (selModel.isSelectedIndex(i)) {
+									if (i >= e.getIndex0())
+										selection.mutableElement(selection.getElement(selIdx).getElementId())
+										.set(model.getRowModel().getElementAt(i));
+									selIdx++;
+								}
+							}
+						} finally {
+							callbackLock[0] = false;
+						}
+					}
+				};
+				PropertyChangeListener selModelListener = evt -> {
+					((ListSelectionModel) evt.getOldValue()).removeListSelectionListener(selListener);
+					((ListSelectionModel) evt.getNewValue()).addListSelectionListener(selListener);
+				};
+				table.getSelectionModel().addListSelectionListener(selListener);
+				table.addPropertyChangeListener("selectionModel", selModelListener);
+				model.getRowModel().addListDataListener(modelListener);
+				syncSelection.accept(null);
+				CausableKey key = Causable.key((c, d) -> {
+					table.getSelectionModel().setValueIsAdjusting(false);
+					syncSelection.accept(c);
+				});
+				selection.changes().takeUntil(until).act(evt -> {
+					if (callbackLock[0])
+						return;
+					ListSelectionModel selModel = table.getSelectionModel();
+					if (!selModel.getValueIsAdjusting())
+						selModel.setValueIsAdjusting(true);
+					evt.getRootCausable().onFinish(key);
+					callbackLock[0] = true;
+					try {
+						int intervalStart = -1;
+						switch (evt.type) {
+						case add:
+							for (int i = 0; i < model.getRowModel().getSize(); i++) {
+								if (selModel.isSelectedIndex(i)) {
+									if (intervalStart >= 0) {
+										selModel.addSelectionInterval(intervalStart, i - 1);
+										intervalStart = -1;
+									}
+									continue;
+								}
+								boolean added = false;
+								for (R value : evt.getValues()) {
+									if (model.getRows().equivalence().elementEquals(model.getRowModel().getElementAt(i), value)) {
+										added = true;
+										break;
+									}
+								}
+								if (added) {
+									if (intervalStart < 0)
+										intervalStart = i;
+								} else if (intervalStart >= 0) {
+									selModel.addSelectionInterval(intervalStart, i - 1);
+									intervalStart = -1;
+								}
+							}
+							if (intervalStart >= 0)
+								selModel.addSelectionInterval(intervalStart, model.getRowModel().getSize() - 1);
+							break;
+						case remove:
+							for (int i = model.getRowModel().getSize() - 1; i >= 0; i--) {
+								if (!selModel.isSelectedIndex(i)) {
+									if (intervalStart >= 0) {
+										selModel.removeSelectionInterval(i + 1, intervalStart);
+										intervalStart = -1;
+									}
+									continue;
+								}
+								boolean removed = false;
+								for (R value : evt.getValues()) {
+									if (model.getRows().equivalence().elementEquals(model.getRowModel().getElementAt(i), value)) {
+										removed = true;
+										break;
+									}
+								}
+								if (removed) {
+									if (intervalStart < 0)
+										intervalStart = i;
+								} else if (intervalStart >= 0) {
+									selModel.removeSelectionInterval(i + 1, intervalStart);
+									intervalStart = -1;
+								}
+							}
+							if (intervalStart >= 0)
+								selModel.removeSelectionInterval(0, intervalStart);
+							break;
+						case set:
+							break; // This doesn't have meaning here
+						}
+					} finally {
+						callbackLock[0] = false;
+					}
+				});
+
+				until.take(1).act(__ -> {
+					table.removePropertyChangeListener("selectionModel", selModelListener);
+					table.getSelectionModel().removeListSelectionListener(selListener);
+					model.getRowModel().removeListDataListener(modelListener);
+				});
+			}
+			if (!theActions.isEmpty()) {
+				ListSelectionListener selListener = e -> {
+					List<R> selection = selectionGetter.get();
+					for (TableAction<R> action : theActions)
+						action.updateEnablement(selection, e);
+				};
+				ListDataListener dataListener = new ListDataListener() {
+					@Override
+					public void intervalAdded(ListDataEvent e) {}
+
+					@Override
+					public void intervalRemoved(ListDataEvent e) {}
+
+					@Override
+					public void contentsChanged(ListDataEvent e) {
+						ListSelectionModel selModel = table.getSelectionModel();
+						if (selModel.getMinSelectionIndex() >= 0 && e.getIndex0() >= selModel.getMinSelectionIndex()
+							&& e.getIndex1() <= selModel.getMaxSelectionIndex()) {
+							List<R> selection = selectionGetter.get();
+							for (TableAction<R> action : theActions)
+								action.updateEnablement(selection, e);
+						}
+					}
+				};
+				List<R> selection = selectionGetter.get();
+				for (TableAction<R> action : theActions)
+					action.updateEnablement(selection, null);
+
+				PropertyChangeListener selModelListener = evt -> {
+					((ListSelectionModel) evt.getOldValue()).removeListSelectionListener(selListener);
+					((ListSelectionModel) evt.getNewValue()).addListSelectionListener(selListener);
+				};
+				table.getSelectionModel().addListSelectionListener(selListener);
+				table.addPropertyChangeListener("selectionModel", selModelListener);
+				model.getRowModel().addListDataListener(dataListener);
+				until.take(1).act(__ -> {
+					table.removePropertyChangeListener("selectionModel", selModelListener);
+					table.getSelectionModel().removeListSelectionListener(selListener);
+					model.getRowModel().removeListDataListener(dataListener);
+				});
+			}
+
+			return scroll;
+		}
+
+		@Override
+		public ObservableValue<String> getTooltip() {
+			return null;
+		}
+
+		@Override
+		protected JLabel createFieldNameLabel(Observable<?> until) {
+			return null;
+		}
+
+		@Override
+		protected JLabel createPostLabel(Observable<?> until) {
+			return null;
+		}
+	}
+
+	public static class TableAction<R> {
+		final Consumer<? super List<? extends R>> theAction;
+		final Supplier<List<R>> theSelectedValues;
+		private Function<? super R, String> theEnablement;
+		private boolean zeroAllowed;
+		private boolean multipleAllowed;
+		private boolean actWhenAnyEnabled;
+		private ObservableAction<?> theObservableAction;
+		private SettableValue<String> theEnabledString;
+		private Consumer<PanelPopulatorField<Object, JButton>> theButtonMod;
+
+		TableAction(Consumer<? super List<? extends R>> action, Supplier<List<R>> selectedValues) {
+			theAction = action;
+			theSelectedValues = selectedValues;
+			theEnabledString = new SimpleSettableValue<>(String.class, true);
+			theObservableAction = new ObservableAction<Object>() {
+				@Override
+				public TypeToken<Object> getType() {
+					return TypeTokens.get().OBJECT;
+				}
+
+				@Override
+				public Object act(Object cause) throws IllegalStateException {
+					List<R> selected = theSelectedValues.get();
+					if (theEnablement != null)
+						selected = QommonsUtils.filterMap(selected, v -> theEnablement.apply(v) == null, null);
+					theAction.accept(selected);
+					return null;
+				}
+
+				@Override
+				public ObservableValue<String> isEnabled() {
+					return theEnabledString;
+				}
+			};
+			multipleAllowed = true;
+		}
+
+		public TableAction<R> modifyAction(Function<? super ObservableAction<?>, ? extends ObservableAction<?>> actionMod) {
+			theObservableAction = actionMod.apply(theObservableAction);
+			return this;
+		}
+
+		public TableAction<R> modifyButton(Consumer<PanelPopulatorField<Object, JButton>> buttonMod) {
+			if (theButtonMod == null)
+				theButtonMod = buttonMod;
+			else {
+				Consumer<PanelPopulatorField<Object, JButton>> oldButtonMod = theButtonMod;
+				theButtonMod = field -> {
+					oldButtonMod.accept(field);
+					buttonMod.accept(field);
+				};
+			}
+			return this;
+		}
+
+		void updateEnablement(List<R> selectedValues, Object cause) {
+			if (!zeroAllowed && selectedValues.isEmpty())
+				theEnabledString.set("Nothing selected", cause);
+			else if (!multipleAllowed && selectedValues.size() > 1)
+				theEnabledString.set("Multiple items selected", cause);
+			else {
+				if (theEnablement != null) {
+					Set<String> messages = null;
+					boolean anyAllowed = false;
+					for (R value : selectedValues) {
+						String msg = theEnablement.apply(value);
+						if (msg == null)
+							anyAllowed = true;
+						else {
+							if (messages == null)
+								messages = new LinkedHashSet<>();
+							messages.add(msg);
+						}
+					}
+					if (messages.isEmpty())
+						theEnabledString.set(null, cause);
+					else if (actWhenAnyEnabled && (anyAllowed || zeroAllowed))
+						theEnabledString.set(null, cause);
+					else if (messages.size() == 1)
+						theEnabledString.set(messages.iterator().next(), cause);
+					else {
+						StringBuilder message = new StringBuilder("<html>");
+						boolean first = true;
+						for (String msg : messages) {
+							if (!first)
+								message.append("<br>");
+							else
+								first = false;
+							message.append(msg);
+						}
+						theEnabledString.set(message.toString(), cause);
+					}
+				} else
+					theEnabledString.set(null, cause);
+			}
+		}
+
+		void addButton(HorizPanel panel) {
+			panel.addButton((String) null, theObservableAction, theButtonMod);
 		}
 	}
 }
