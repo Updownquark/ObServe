@@ -1068,6 +1068,8 @@ public class ObservableConfig implements StructuredTransactable {
 	}
 
 	public static class XmlEncoding {
+		public static final XmlEncoding DEFAULT = new XmlEncoding("::", "::", "__", Collections.emptyMap()); // TODO
+
 		public final String encodingPrefix;
 		public final String encodingReplacement;
 		public final String emptyContent;
