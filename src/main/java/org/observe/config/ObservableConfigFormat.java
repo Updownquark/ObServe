@@ -424,12 +424,14 @@ public interface ObservableConfigFormat<E> {
 				else
 					formatField(entityType.getFields().get(i), fieldValues.get(i), config, f -> {}, until);
 			}
-			return entityType.create(//
+			E instance = entityType.create(//
 				idx -> fieldValues.get(idx), //
 				(idx, value) -> {
 					fieldValues.put(idx, value);
 					formatField(entityType.getFields().get(idx), value, config, v -> fieldValues.put(idx, v), until);
 				});
+			entityType.associate(instance, "until", until);
+			return instance;
 		}
 
 		void formatField(ConfiguredValueField<? super E, ?> field, Object fieldValue, ObservableConfig entityConfig,

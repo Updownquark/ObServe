@@ -26,6 +26,7 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.IntFunction;
 
+import org.observe.config.Cached;
 import org.observe.entity.impl.ObservableEntityUtils;
 import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
@@ -599,6 +600,28 @@ public class EntityReflector<E> {
 		}
 	}
 
+	public static class CachedFieldGetter<E, F> extends FieldGetter<E, F> {
+		private final MethodHandle theHandle;
+
+		public CachedFieldGetter(EntityReflector<E> reflector, Method method, ReflectedField<E, F> field, MethodHandle handle) {
+			super(reflector, method, field);
+			theHandle = handle;
+		}
+
+		@Override
+		protected F invokeLocal(E proxy, Object[] args, IntFunction<Object> fieldGetter, BiConsumer<Integer, Object> fieldSetter) {
+			if (theHandle == null)
+				throw new IllegalStateException("Unable to reflectively invoke default method " + getInvokable());
+			Object value = fieldGetter.apply(getField().getFieldIndex());
+			if (value == null) {
+				value = super.invokeLocal(proxy, args, fieldGetter, fieldSetter);
+				if (value != null)
+					fieldSetter.accept(getField().getFieldIndex(), value);
+			}
+			return (F) value;
+		}
+	}
+
 	public static class FieldSetter<E, F> extends FieldRelatedMethod<E, F, Object> {
 		private final SetterReturnType theReturnType;
 
@@ -967,7 +990,10 @@ public class EntityReflector<E> {
 			if (fieldName != null) {
 				if (fieldOverrides.contains(fieldName))
 					continue;
-				else if (customMethods.contains(m) || m.isDefault()) {
+				else if (customMethods.contains(m)) {
+					fieldOverrides.add(fieldName);
+					continue;
+				} else if (m.isDefault() && m.getAnnotation(Cached.class) == null) {
 					fieldOverrides.add(fieldName);
 					continue;
 				}
@@ -1006,6 +1032,17 @@ public class EntityReflector<E> {
 						errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.ERROR, m, "No access to " + m + ": " + e));
 						continue;
 					}
+				}
+				if (m.getAnnotation(Cached.class) != null) {
+					String fieldName = theGetterFilter.apply(m);
+					ReflectedField<? super E, ?> field = fieldName == null ? null : fields.get(fieldName);
+					if (field != null) {
+						CachedFieldGetter<E, ?> method = new CachedFieldGetter<>(this, m, (ReflectedField<E, ?>) field, handle);
+						method.setElement(methods.addElement(method, false).getElementId());
+						continue;
+					} else
+						errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.WARNING, m,
+							"Default method is marked as Cached, but is not a field"));
 				}
 				DefaultMethod<E, ?> method = new DefaultMethod<>(this, m, handle);
 				method.setElement(methods.addElement(method, false).getElementId());
@@ -1076,7 +1113,11 @@ public class EntityReflector<E> {
 		for (CollectionElement<MethodInterpreter<S, ?>> superMethod : superR.getMethods().elements()) {
 			MethodInterpreter<E, ?> subMethod = methods.searchValue(superMethod.get(), SortedSearchFilter.OnlyMatch);
 			if (subMethod == null) {
-				if (superMethod.get() instanceof FieldGetter)
+				if (superMethod.get() instanceof CachedFieldGetter)
+					subMethod = new CachedFieldGetter<>(this, superMethod.get().getMethod(),
+						fields.get(((FieldGetter<?, ?>) superMethod.get()).getField().getName()),
+						((CachedFieldGetter<E, ?>) superMethod.get()).theHandle);
+				else if (superMethod.get() instanceof FieldGetter)
 					subMethod = new FieldGetter<>(this, superMethod.get().getMethod(),
 						fields.get(((FieldGetter<?, ?>) superMethod.get()).getField().getName()));
 				else if (superMethod.get() instanceof FieldSetter)
