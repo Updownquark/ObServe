@@ -1,18 +1,22 @@
 package org.observe.util.swing;
 
+import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.EventQueue;
 import java.awt.Font;
+import java.awt.Image;
 import java.awt.LayoutManager;
 import java.awt.LayoutManager2;
 import java.awt.Rectangle;
 import java.awt.event.ActionListener;
 import java.beans.PropertyChangeListener;
 import java.lang.reflect.InvocationTargetException;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
@@ -22,10 +26,14 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 import javax.swing.Box;
+import javax.swing.Icon;
+import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
+import javax.swing.JList;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
@@ -34,6 +42,7 @@ import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
 import javax.swing.JTable;
 import javax.swing.JToggleButton;
+import javax.swing.ListModel;
 import javax.swing.ListSelectionModel;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.event.ChangeListener;
@@ -48,14 +57,16 @@ import org.observe.SettableValue;
 import org.observe.SimpleSettableValue;
 import org.observe.Subscription;
 import org.observe.collect.CollectionChangeEvent;
+import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
-import org.observe.util.swing.ObservableSwingUtils.PanelPopulatorField;
 import org.qommons.ArrayUtils;
 import org.qommons.Causable;
 import org.qommons.Causable.CausableKey;
+import org.qommons.IntList;
 import org.qommons.QommonsUtils;
 import org.qommons.Transaction;
+import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ListenerList;
 import org.qommons.io.Format;
 
@@ -449,6 +460,282 @@ public class ObservableSwingUtils {
 	}
 
 	/**
+	 * Synchronizes the selection of a list model with an observable collection. The synchronization works in both ways: UI changes to the
+	 * selection will cause value changes in the table, and external changes to the selection will affect UI selection, if possible. Some
+	 * external changes are incompatible with selection synchronization, including adding values that are not present in the model, adding
+	 * duplicate values that are not present multiple times in the model, and set operations. When such operations occur, they will be
+	 * undone when their transaction ends.
+	 *
+	 * <p>
+	 * If multiple equivalent values are present in the model and they are selected via external change to the selection collection, (or if
+	 * multiple equivalent values are selected and then are unselected externally) the position of the (un)selected value is undetermined.
+	 * </p>
+	 *
+	 * @param component The component (such as a JTable or JList) containing the selection model
+	 * @param model The list model with data that may be selected
+	 * @param selectionModel Supplies the selected model, which may change at any time
+	 * @param equivalence The equivalence by which to synchronize the 2 selection mechanisms
+	 * @param selection The collection to synchronize with the UI selection
+	 * @param until An observable whose firing will release all resources and listeners installed by this sync operation
+	 * @return The selection collection
+	 */
+	public static <E> ObservableCollection<E> syncSelection(Component component, //
+		ListModel<E> model, Supplier<ListSelectionModel> selectionModel, Equivalence<? super E> equivalence,
+		ObservableCollection<E> selection, Observable<?> until) {
+		Supplier<List<E>> selectionGetter = () -> getSelection(model, selectionModel.get());
+		boolean[] callbackLock = new boolean[1];
+		Consumer<Object> syncSelection = cause -> {
+			List<E> selValues = selectionGetter.get();
+			try (Transaction selT = selection.lock(true, cause)) {
+				ArrayUtils.adjust(selection, selValues, ArrayUtils.acceptAllDifferences(equivalence::elementEquals));
+			}
+		};
+		ListSelectionListener selListener = e -> {
+			ListSelectionModel selModel = selectionModel.get();
+			if (selModel.getValueIsAdjusting() || callbackLock[0])
+				return;
+			callbackLock[0] = true;
+			try {
+				if (selModel.getMinSelectionIndex() < 0) {
+					selection.clear();
+					return;
+				}
+				syncSelection.accept(e);
+			} finally {
+				callbackLock[0] = false;
+			}
+		};
+		ListDataListener modelListener = new ListDataListener() {
+			@Override
+			public void intervalRemoved(ListDataEvent e) {}
+
+			@Override
+			public void intervalAdded(ListDataEvent e) {}
+
+			@Override
+			public void contentsChanged(ListDataEvent e) {
+				int selIdx = 0;
+				callbackLock[0] = true;
+				ListSelectionModel selModel = selectionModel.get();
+				try (Transaction t = selection.lock(true, e)) {
+					for (int i = selModel.getMinSelectionIndex(); i <= selModel.getMaxSelectionIndex() && i <= e.getIndex1(); i++) {
+						if (selModel.isSelectedIndex(i)) {
+							if (i >= e.getIndex0())
+								selection.mutableElement(selection.getElement(selIdx).getElementId()).set(model.getElementAt(i));
+							selIdx++;
+						}
+					}
+				} finally {
+					callbackLock[0] = false;
+				}
+			}
+		};
+		PropertyChangeListener selModelListener = evt -> {
+			((ListSelectionModel) evt.getOldValue()).removeListSelectionListener(selListener);
+			((ListSelectionModel) evt.getNewValue()).addListSelectionListener(selListener);
+		};
+		selectionModel.get().addListSelectionListener(selListener);
+		if (component != null)
+			component.addPropertyChangeListener("selectionModel", selModelListener);
+		model.addListDataListener(modelListener);
+		syncSelection.accept(null);
+		CausableKey key = Causable.key((c, d) -> onEQ(() -> {
+			selectionModel.get().setValueIsAdjusting(false);
+			syncSelection.accept(c);
+		}));
+		selection.changes().takeUntil(until).act(evt -> onEQ(() -> {
+			if (callbackLock[0])
+				return;
+			ListSelectionModel selModel = selectionModel.get();
+			if (!selModel.getValueIsAdjusting())
+				selModel.setValueIsAdjusting(true);
+			evt.getRootCausable().onFinish(key);
+			callbackLock[0] = true;
+			try {
+				int intervalStart = -1;
+				switch (evt.type) {
+				case add:
+					for (int i = 0; i < model.getSize(); i++) {
+						if (selModel.isSelectedIndex(i)) {
+							if (intervalStart >= 0) {
+								selModel.addSelectionInterval(intervalStart, i - 1);
+								intervalStart = -1;
+							}
+							continue;
+						}
+						boolean added = false;
+						for (E value : evt.getValues()) {
+							if (equivalence.elementEquals(model.getElementAt(i), value)) {
+								added = true;
+								break;
+							}
+						}
+						if (added) {
+							if (intervalStart < 0)
+								intervalStart = i;
+						} else if (intervalStart >= 0) {
+							selModel.addSelectionInterval(intervalStart, i - 1);
+							intervalStart = -1;
+						}
+					}
+					if (intervalStart >= 0)
+						selModel.addSelectionInterval(intervalStart, model.getSize() - 1);
+					break;
+				case remove:
+					for (int i = model.getSize() - 1; i >= 0; i--) {
+						if (!selModel.isSelectedIndex(i)) {
+							if (intervalStart >= 0) {
+								selModel.removeSelectionInterval(i + 1, intervalStart);
+								intervalStart = -1;
+							}
+							continue;
+						}
+						boolean removed = false;
+						for (E value : evt.getValues()) {
+							if (equivalence.elementEquals(model.getElementAt(i), value)) {
+								removed = true;
+								break;
+							}
+						}
+						if (removed) {
+							if (intervalStart < 0)
+								intervalStart = i;
+						} else if (intervalStart >= 0) {
+							selModel.removeSelectionInterval(i + 1, intervalStart);
+							intervalStart = -1;
+						}
+					}
+					if (intervalStart >= 0)
+						selModel.removeSelectionInterval(0, intervalStart);
+					break;
+				case set:
+					break; // This doesn't have meaning here
+				}
+			} finally {
+				callbackLock[0] = false;
+			}
+		}));
+
+		until.take(1).act(__ -> onEQ(() -> {
+			if (component != null)
+				component.removePropertyChangeListener("selectionModel", selModelListener);
+			selectionModel.get().removeListSelectionListener(selListener);
+			model.removeListDataListener(modelListener);
+		}));
+
+		return selection;
+	}
+
+	public static <E> List<E> getSelection(ListModel<E> model, ListSelectionModel selectionModel) {
+		if (selectionModel.isSelectionEmpty())
+			return Collections.emptyList();
+		List<E> selValues = new ArrayList<>(selectionModel.getMaxSelectionIndex() - selectionModel.getMinSelectionIndex() + 1);
+		for (int i = selectionModel.getMinSelectionIndex(); i <= selectionModel.getMaxSelectionIndex(); i++) {
+			if (selectionModel.isSelectedIndex(i))
+				selValues.add(model.getElementAt(i));
+		}
+		return selValues;
+	}
+
+	public static <E> SettableValue<E> syncSelection(Component component, ListModel<E> model, Supplier<ListSelectionModel> selectionModel,
+		Equivalence<? super E> equivalence, SettableValue<E> selection, Observable<?> until, boolean enforceSingleSelection) {
+		if (enforceSingleSelection)
+			selectionModel.get().setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+		boolean[] callbackLock = new boolean[1];
+		ListSelectionListener selListener = e -> {
+			ListSelectionModel selModel = selectionModel.get();
+			if (selModel.getValueIsAdjusting() || callbackLock[0])
+				return;
+			callbackLock[0] = true;
+			try {
+				if (selModel.getMinSelectionIndex() >= 0 && selModel.getMinSelectionIndex() == selModel.getMaxSelectionIndex()) {
+					selection.set(model.getElementAt(selModel.getMinSelectionIndex()), e);
+				} else if (selection.get() != null)
+					selection.set(null, e);
+			} finally {
+				callbackLock[0] = false;
+			}
+		};
+		ListDataListener modelListener = new ListDataListener() {
+			@Override
+			public void intervalRemoved(ListDataEvent e) {}
+
+			@Override
+			public void intervalAdded(ListDataEvent e) {}
+
+			@Override
+			public void contentsChanged(ListDataEvent e) {
+				ListSelectionModel selModel = selectionModel.get();
+				if (selModel.getMinSelectionIndex() < 0 || selModel.getMinSelectionIndex() != selModel.getMaxSelectionIndex())
+					return;
+				callbackLock[0] = true;
+				try {
+					if (e.getIndex0() <= selModel.getMinSelectionIndex() && e.getIndex1() >= selModel.getMinSelectionIndex())
+						selection.set(model.getElementAt(selModel.getMinSelectionIndex()), e);
+				} finally {
+					callbackLock[0] = false;
+				}
+			}
+		};
+		PropertyChangeListener selModelListener = evt -> {
+			((ListSelectionModel) evt.getOldValue()).removeListSelectionListener(selListener);
+			((ListSelectionModel) evt.getNewValue()).addListSelectionListener(selListener);
+		};
+		selectionModel.get().addListSelectionListener(selListener);
+		if (component != null)
+			component.addPropertyChangeListener("selectionModel", selModelListener);
+		model.addListDataListener(modelListener);
+		selection.changes().takeUntil(until).act(evt -> onEQ(() -> {
+			if (callbackLock[0])
+				return;
+			callbackLock[0] = true;
+			try {
+				ListSelectionModel selModel = selectionModel.get();
+				if (evt.getNewValue() == null) {
+					selModel.clearSelection();
+					return;
+				}
+				for (int i = 0; i < model.getSize(); i++) {
+					if (equivalence.elementEquals(model.getElementAt(i), evt.getNewValue())) {
+						selModel.setSelectionInterval(i, i);
+						Rectangle rowBounds = null;
+						if (component instanceof JTable)
+							rowBounds = ((JTable) component).getCellRect(i, 0, false);
+						else if (component instanceof JList)
+							rowBounds = ((JList<?>) component).getCellBounds(i, i);
+						if (rowBounds != null)
+							((JComponent) component).scrollRectToVisible(rowBounds);
+						break;
+					}
+				}
+			} finally {
+				callbackLock[0] = false;
+			}
+		}));
+
+		until.take(1).act(__ -> {
+			if (component != null)
+				component.removePropertyChangeListener("selectionModel", selModelListener);
+			selectionModel.get().removeListSelectionListener(selListener);
+			model.removeListDataListener(modelListener);
+		});
+
+		return selection;
+	}
+
+	public static ImageIcon getFixedIcon(Class<?> clazz, String location, int width, int height) {
+		ImageIcon icon;
+		URL searchUrl = (clazz != null ? clazz : ObservableSwingUtils.class).getResource(location);
+		if (searchUrl != null) {
+			icon = new ImageIcon(searchUrl);
+			if (icon.getIconWidth() != width || icon.getIconHeight() != height)
+				icon = new ImageIcon(icon.getImage().getScaledInstance(width, height, Image.SCALE_SMOOTH));
+		} else
+			icon = null;
+		return icon;
+	}
+
+	/**
 	 * Sorts a list of element changes and returns the start and end of each continuous interval in the list
 	 *
 	 * @param elChanges The element changes to parse into intervals
@@ -542,11 +829,14 @@ public class ObservableSwingUtils {
 		 * slider
 		 * split pane
 		 * scroll pane
-		 * accordion pane
+		 * accordion pane?
 		 * value selector
 		 * tree
-		 * better button controls (visibility, variable text, etc.)
+		 * better button controls (variable text, easier icon selection, etc.)
 		 * form controls (e.g. press enter in a text field and a submit action (also tied to a button) fires)
+		 * styles: borders, background...
+		 *
+		 * Common locking (RRWL, CLS)
 		 */
 
 		default FieldPanelPopulator<C> addIntSpinnerField(String fieldName, SettableValue<Integer> value,
@@ -583,9 +873,6 @@ public class ObservableSwingUtils {
 		// }
 		//
 		// public <F> MigPanelPopulatorField<F, JSlider> addSliderField(String fieldName, SettableValue<Integer> value) {}
-		//
-		// public <F> MigPanelPopulatorField<F, ObservableTableModel<F>> addTable(ObservableCollection<F> rows,
-		// ObservableCollection<CategoryRenderStrategy<? super F, ?>> columns) {}
 		//
 		// public <F> MigPanelPopulatorField<F, ObservableTreeModel> addTree(Object root,
 		// Function<Object, ? extends ObservableCollection<?>> branching) {}
@@ -930,10 +1217,6 @@ public class ObservableSwingUtils {
 			return this;
 		}
 
-		protected ObservableValue<String> getFieldName() {
-			return theFieldName;
-		}
-
 		@Override
 		protected JLabel createFieldNameLabel(Observable<?> until) {
 			if (theFieldName == null)
@@ -953,15 +1236,9 @@ public class ObservableSwingUtils {
 				return null;
 			JLabel postLabel = new JLabel(thePostLabel.get());
 			thePostLabel.changes().takeUntil(until).act(evt -> postLabel.setText(evt.getNewValue()));
-			if (theFieldLabelModifier != null)
-				theFieldLabelModifier.accept(new FontAdjuster<>(postLabel));
 			if (theFont != null)
 				theFont.accept(new FontAdjuster<>(postLabel));
 			return postLabel;
-		}
-
-		protected ObservableValue<String> getPostLabel() {
-			return thePostLabel;
 		}
 	}
 
@@ -1545,19 +1822,104 @@ public class ObservableSwingUtils {
 			return this;
 		}
 
-		public TableBuilder<R> withAdd(Supplier<? extends R> creator, Function<ObservableAction<R>, ObservableAction<R>> actionMod,
-			Consumer<PanelPopulatorField<Object, JButton>> button) {}
+		public List<R> getSelection() {
+			return ObservableSwingUtils.getSelection(((ObservableTableModel<R>) getEditor().getModel()).getRowModel(),
+				getEditor().getSelectionModel());
+		}
 
-		public TableBuilder<R> withRemove(Consumer<? super List<? extends R>> deletion,
-			Function<ObservableAction<Object>, ObservableAction<Object>> actionMod,
-			Consumer<PanelPopulatorField<Object, JButton>> button) {}
+		private Icon getAddIcon() {
+			return getFixedIcon(null, "icons/add.png", 16, 16);
+		}
 
-		public TableBuilder<R> withCopy(Function<? super R, ? extends R> copier,
-			Function<ObservableAction<R>, ObservableAction<R>> actionMod,
-			Consumer<PanelPopulatorField<Object, JButton>> button) {}
+		private Icon getRemoveIcon() {
+			return getFixedIcon(null, "icons/remove.png", 16, 16);
+		}
 
-		public TableBuilder<R> withAction(Consumer<? super R> action, Function<ObservableAction<R>, ObservableAction<R>> actionMod,
-			Consumer<PanelPopulatorField<Object, JButton>> button) {}
+		private Icon getCopyIcon() {
+			return getFixedIcon(null, "icons/copy.png", 16, 16);
+		}
+
+		public TableBuilder<R> withAdd(Supplier<? extends R> creator, Consumer<TableAction<R>> actionMod) {
+			return withMultiAction(values -> {
+				R value=creator.get();
+				CollectionElement<R> el=theRows.addElement(value, false);
+				//Assuming here that the action is only called on the EDT,
+				//meaning the above add operation has now been propagated to the list model and the selection model
+				//It also means that the row model is sync'd with the collection, so we can use the index from the collection here
+				int index=theRows.getElementsBefore(el.getElementId());
+				getEditor().getSelectionModel().setSelectionInterval(index, index);
+			}, action->{
+				action.allowForMultiSelection(true).allowForEmptySelection(true).allowForAnyEnabled(true)//
+				.modifyButton(button -> button.modifyEditor(b -> b.setIcon(getAddIcon())).withTooltip("Add new item"));
+				if(actionMod!=null)
+					actionMod.accept(action);
+			});
+		}
+
+		public TableBuilder<R> withRemove(Consumer<? super List<? extends R>> deletion, Consumer<TableAction<R>> actionMod) {
+			return withMultiAction(deletion, action -> {
+				action.allowForMultiSelection(true)//
+				.modifyButton(button -> button.modifyEditor(b -> b.setIcon(getRemoveIcon())).withTooltip("Remove selected items"));
+				if (actionMod != null)
+					actionMod.accept(action);
+			});
+		}
+
+		public TableBuilder<R> withCopy(Function<? super R, ? extends R> copier, Consumer<TableAction<R>> actionMod) {
+			return withMultiAction(values -> {
+				// Ignore the given values and use the selection model so we get the indexes right in the case of duplicates
+				ListSelectionModel selModel = getEditor().getSelectionModel();
+				IntList newSelection = new IntList();
+				try (Transaction t = theRows.lock(true, null)) {
+					// Not only do we need to obtain a write lock,but we also need to allow the EDT to purge any queued actions
+					// to ensure that the model is caught up with the source collection
+					EventQueue.invokeAndWait(() -> {
+						for (int i = selModel.getMinSelectionIndex(); i >= 0 && i <= selModel.getMaxSelectionIndex(); i++) {
+							if (!selModel.isSelectedIndex(i))
+								continue;
+							CollectionElement<R> toCopy = theRows.getElement(i);
+							R copy = copier.apply(toCopy.get());
+							CollectionElement<R> copied;
+							if (theRows.canAdd(copy, toCopy.getElementId(), null) == null)
+								copied = theRows.addElement(copy, toCopy.getElementId(), null, true);
+							else
+								copied = theRows.addElement(copy, false);
+							newSelection.add(theRows.getElementsBefore(copied.getElementId()));
+						}
+					});
+					selModel.setValueIsAdjusting(true);
+					selModel.clearSelection();
+					for (int[] interval : getContinuousIntervals(newSelection.toArray(), true))
+						selModel.addSelectionInterval(interval[0], interval[1]);
+					selModel.setValueIsAdjusting(false);
+				} catch (InvocationTargetException e) {
+					if (e.getTargetException() instanceof RuntimeException)
+						throw (RuntimeException) e.getTargetException();
+					else
+						throw (Error) e.getTargetException();
+				} catch (InterruptedException e) {
+				}
+			}, action -> {
+				action.allowForMultiSelection(true)//
+				.modifyButton(button -> button.modifyEditor(b -> b.setIcon(getCopyIcon())).withTooltip("Duplicate selected items"));
+				if (actionMod != null)
+					actionMod.accept(action);
+			});
+		}
+
+		public TableBuilder<R> withAction(Consumer<? super R> action, Consumer<TableAction<R>> actionMod) {
+			return withMultiAction(values -> {
+				for (R value : values)
+					action.accept(value);
+			}, actionMod);
+		}
+
+		public TableBuilder<R> withMultiAction(Consumer<? super List<? extends R>> action, Consumer<TableAction<R>> actionMod) {
+			TableAction<R> ta = new TableAction<>(action, this::getSelection);
+			actionMod.accept(ta);
+			theActions.add(ta);
+			return this;
+		}
 
 		public ObservableTableModel<R> buildModel() {
 			return new ObservableTableModel<>(theRows, theColumns);
@@ -1587,227 +1949,17 @@ public class ObservableSwingUtils {
 				}
 				return selValues;
 			};
-			if (theSelectionValue != null) {
-				SettableValue<R> selection = theSelectionValue;
-				boolean[] callbackLock = new boolean[1];
-				ListSelectionListener selListener = e -> {
-					ListSelectionModel selModel = table.getSelectionModel();
-					if (selModel.getValueIsAdjusting() || callbackLock[0])
-						return;
-					callbackLock[0] = true;
-					try {
-						if (selModel.getMinSelectionIndex() >= 0 && selModel.getMinSelectionIndex() == selModel.getMaxSelectionIndex()) {
-							selection.set(model.getRowModel().getElementAt(selModel.getMinSelectionIndex()), e);
-						} else if (selection.get() != null)
-							selection.set(null, e);
-					} finally {
-						callbackLock[0] = false;
-					}
-				};
-				ListDataListener modelListener = new ListDataListener() {
-					@Override
-					public void intervalRemoved(ListDataEvent e) {}
-
-					@Override
-					public void intervalAdded(ListDataEvent e) {}
-
-					@Override
-					public void contentsChanged(ListDataEvent e) {
-						ListSelectionModel selModel = table.getSelectionModel();
-						if (selModel.getMinSelectionIndex() < 0 || selModel.getMinSelectionIndex() != selModel.getMaxSelectionIndex())
-							return;
-						callbackLock[0] = true;
-						try {
-							if (e.getIndex0() <= selModel.getMinSelectionIndex() && e.getIndex1() >= selModel.getMinSelectionIndex())
-								selection.set(model.getRowModel().getElementAt(selModel.getMinSelectionIndex()), e);
-						} finally {
-							callbackLock[0] = false;
-						}
-					}
-				};
-				PropertyChangeListener selModelListener = evt -> {
-					((ListSelectionModel) evt.getOldValue()).removeListSelectionListener(selListener);
-					((ListSelectionModel) evt.getNewValue()).addListSelectionListener(selListener);
-				};
-				table.getSelectionModel().addListSelectionListener(selListener);
-				table.addPropertyChangeListener("selectionModel", selModelListener);
-				model.getRowModel().addListDataListener(modelListener);
-				selection.changes().takeUntil(until).act(evt -> onEQ(() -> {
-					if (callbackLock[0])
-						return;
-					callbackLock[0] = true;
-					try {
-						ListSelectionModel selModel = table.getSelectionModel();
-						if (evt.getNewValue() == null) {
-							selModel.clearSelection();
-							return;
-						}
-						for (int i = 0; i < model.getRowModel().getSize(); i++) {
-							if (model.getRows().equivalence().elementEquals(model.getRowModel().getElementAt(i), evt.getNewValue())) {
-								selModel.setSelectionInterval(i, i);
-								Rectangle r = table.getCellRect(i, 0, false);
-								table.scrollRectToVisible(r);
-								break;
-							}
-						}
-					} finally {
-						callbackLock[0] = false;
-					}
-				}));
-
-				until.take(1).act(__ -> {
-					table.removePropertyChangeListener("selectionModel", selModelListener);
-					table.getSelectionModel().removeListSelectionListener(selListener);
-					model.getRowModel().removeListDataListener(modelListener);
-				});
-			}
-			if (theSelectionValues != null) {
-				ObservableCollection<R> selection = theSelectionValues;
-				boolean[] callbackLock = new boolean[1];
-				Consumer<Object> syncSelection = cause -> {
-					List<R> selValues = selectionGetter.get();
-					try (Transaction selT = selection.lock(true, cause)) {
-						ArrayUtils.adjust(selection, selValues,
-							ArrayUtils.acceptAllDifferences(model.getRows().equivalence()::elementEquals));
-					}
-				};
-				ListSelectionListener selListener = e -> {
-					ListSelectionModel selModel = table.getSelectionModel();
-					if (selModel.getValueIsAdjusting() || callbackLock[0])
-						return;
-					callbackLock[0] = true;
-					try {
-						if (selModel.getMinSelectionIndex() < 0) {
-							selection.clear();
-							return;
-						}
-						syncSelection.accept(e);
-					} finally {
-						callbackLock[0] = false;
-					}
-				};
-				ListDataListener modelListener = new ListDataListener() {
-					@Override
-					public void intervalRemoved(ListDataEvent e) {}
-
-					@Override
-					public void intervalAdded(ListDataEvent e) {}
-
-					@Override
-					public void contentsChanged(ListDataEvent e) {
-						int selIdx = 0;
-						callbackLock[0] = true;
-						ListSelectionModel selModel = table.getSelectionModel();
-						try (Transaction t = selection.lock(true, e)) {
-							for (int i = selModel.getMinSelectionIndex(); i <= selModel.getMaxSelectionIndex() && i <= e.getIndex1(); i++) {
-								if (selModel.isSelectedIndex(i)) {
-									if (i >= e.getIndex0())
-										selection.mutableElement(selection.getElement(selIdx).getElementId())
-										.set(model.getRowModel().getElementAt(i));
-									selIdx++;
-								}
-							}
-						} finally {
-							callbackLock[0] = false;
-						}
-					}
-				};
-				PropertyChangeListener selModelListener = evt -> {
-					((ListSelectionModel) evt.getOldValue()).removeListSelectionListener(selListener);
-					((ListSelectionModel) evt.getNewValue()).addListSelectionListener(selListener);
-				};
-				table.getSelectionModel().addListSelectionListener(selListener);
-				table.addPropertyChangeListener("selectionModel", selModelListener);
-				model.getRowModel().addListDataListener(modelListener);
-				syncSelection.accept(null);
-				CausableKey key = Causable.key((c, d) -> {
-					table.getSelectionModel().setValueIsAdjusting(false);
-					syncSelection.accept(c);
-				});
-				selection.changes().takeUntil(until).act(evt -> {
-					if (callbackLock[0])
-						return;
-					ListSelectionModel selModel = table.getSelectionModel();
-					if (!selModel.getValueIsAdjusting())
-						selModel.setValueIsAdjusting(true);
-					evt.getRootCausable().onFinish(key);
-					callbackLock[0] = true;
-					try {
-						int intervalStart = -1;
-						switch (evt.type) {
-						case add:
-							for (int i = 0; i < model.getRowModel().getSize(); i++) {
-								if (selModel.isSelectedIndex(i)) {
-									if (intervalStart >= 0) {
-										selModel.addSelectionInterval(intervalStart, i - 1);
-										intervalStart = -1;
-									}
-									continue;
-								}
-								boolean added = false;
-								for (R value : evt.getValues()) {
-									if (model.getRows().equivalence().elementEquals(model.getRowModel().getElementAt(i), value)) {
-										added = true;
-										break;
-									}
-								}
-								if (added) {
-									if (intervalStart < 0)
-										intervalStart = i;
-								} else if (intervalStart >= 0) {
-									selModel.addSelectionInterval(intervalStart, i - 1);
-									intervalStart = -1;
-								}
-							}
-							if (intervalStart >= 0)
-								selModel.addSelectionInterval(intervalStart, model.getRowModel().getSize() - 1);
-							break;
-						case remove:
-							for (int i = model.getRowModel().getSize() - 1; i >= 0; i--) {
-								if (!selModel.isSelectedIndex(i)) {
-									if (intervalStart >= 0) {
-										selModel.removeSelectionInterval(i + 1, intervalStart);
-										intervalStart = -1;
-									}
-									continue;
-								}
-								boolean removed = false;
-								for (R value : evt.getValues()) {
-									if (model.getRows().equivalence().elementEquals(model.getRowModel().getElementAt(i), value)) {
-										removed = true;
-										break;
-									}
-								}
-								if (removed) {
-									if (intervalStart < 0)
-										intervalStart = i;
-								} else if (intervalStart >= 0) {
-									selModel.removeSelectionInterval(i + 1, intervalStart);
-									intervalStart = -1;
-								}
-							}
-							if (intervalStart >= 0)
-								selModel.removeSelectionInterval(0, intervalStart);
-							break;
-						case set:
-							break; // This doesn't have meaning here
-						}
-					} finally {
-						callbackLock[0] = false;
-					}
-				});
-
-				until.take(1).act(__ -> {
-					table.removePropertyChangeListener("selectionModel", selModelListener);
-					table.getSelectionModel().removeListSelectionListener(selListener);
-					model.getRowModel().removeListDataListener(modelListener);
-				});
-			}
+			if (theSelectionValue != null)
+				syncSelection(table, model.getRowModel(), table::getSelectionModel, model.getRows().equivalence(), theSelectionValue, until,
+					false);
+			if (theSelectionValues != null)
+				syncSelection(table, model.getRowModel(), table::getSelectionModel, model.getRows().equivalence(), theSelectionValues,
+					until);
 			if (!theActions.isEmpty()) {
 				ListSelectionListener selListener = e -> {
 					List<R> selection = selectionGetter.get();
 					for (TableAction<R> action : theActions)
-						action.updateEnablement(selection, e);
+						action.updateSelection(selection, e);
 				};
 				ListDataListener dataListener = new ListDataListener() {
 					@Override
@@ -1823,13 +1975,13 @@ public class ObservableSwingUtils {
 							&& e.getIndex1() <= selModel.getMaxSelectionIndex()) {
 							List<R> selection = selectionGetter.get();
 							for (TableAction<R> action : theActions)
-								action.updateEnablement(selection, e);
+								action.updateSelection(selection, e);
 						}
 					}
 				};
 				List<R> selection = selectionGetter.get();
 				for (TableAction<R> action : theActions)
-					action.updateEnablement(selection, null);
+					action.updateSelection(selection, null);
 
 				PropertyChangeListener selModelListener = evt -> {
 					((ListSelectionModel) evt.getOldValue()).removeListSelectionListener(selListener);
@@ -1843,9 +1995,16 @@ public class ObservableSwingUtils {
 					table.getSelectionModel().removeListSelectionListener(selListener);
 					model.getRowModel().removeListDataListener(dataListener);
 				});
-			}
-
-			return scroll;
+				HorizPanel buttonPanel = new HorizPanel(null,
+					new JustifiedBoxLayout(false).setMainAlignment(JustifiedBoxLayout.Alignment.LEADING), until);
+				for (TableAction<R> action : theActions)
+					action.addButton(buttonPanel);
+				JPanel tablePanel = new JPanel(new BorderLayout());
+				tablePanel.add(buttonPanel.getComponent(until), BorderLayout.NORTH);
+				tablePanel.add(scroll, BorderLayout.CENTER);
+				return tablePanel;
+			} else
+				return scroll;
 		}
 
 		@Override
@@ -1868,11 +2027,13 @@ public class ObservableSwingUtils {
 		final Consumer<? super List<? extends R>> theAction;
 		final Supplier<List<R>> theSelectedValues;
 		private Function<? super R, String> theEnablement;
+		private Function<? super List<? extends R>, String> theTooltip;
 		private boolean zeroAllowed;
 		private boolean multipleAllowed;
 		private boolean actWhenAnyEnabled;
 		private ObservableAction<?> theObservableAction;
 		private SettableValue<String> theEnabledString;
+		private SettableValue<String> theTooltipString;
 		private Consumer<PanelPopulatorField<Object, JButton>> theButtonMod;
 
 		TableAction(Consumer<? super List<? extends R>> action, Supplier<List<R>> selectedValues) {
@@ -1902,6 +2063,64 @@ public class ObservableSwingUtils {
 			multipleAllowed = true;
 		}
 
+		/**
+		 * @param allow Whether this action should be enabled when multiple values are selected
+		 * @return This action
+		 */
+		public TableAction<R> allowForMultiSelection(boolean allow) {
+			multipleAllowed = allow;
+			return this;
+		}
+
+		/**
+		 * @param allow Whether this action should be enabled when no values are selected
+		 * @return This action
+		 */
+		public TableAction<R> allowForEmptySelection(boolean allow) {
+			zeroAllowed = allow;
+			return this;
+		}
+
+		/**
+		 * @param allow Whether this action should be enabled when the action is not {@link #allowWhen(Function, Consumer) allowed} for some
+		 *        values, but the set of the values for which the action is allowed match this action's
+		 *        {@link #allowForMultiSelection(boolean) multi} and {@link #allowForEmptySelection(boolean) empty} selection settings.
+		 * @return This action
+		 */
+		public TableAction<R> allowForAnyEnabled(boolean allow) {
+			actWhenAnyEnabled = allow;
+			return this;
+		}
+
+		public TableAction<R> allowWhen(Function<? super R, String> filter, Consumer<ActionEnablement<R>> operation) {
+			Function<? super R, String> newFilter;
+			if (operation != null) {
+				ActionEnablement<R> next = new ActionEnablement<>(filter);
+				operation.accept(next);
+				newFilter = next;
+			} else
+				newFilter = filter;
+			if (theEnablement == null)
+				theEnablement = newFilter;
+			else {
+				Function<? super R, String> oldFilter = theEnablement;
+				theEnablement = value -> {
+					String msg = oldFilter.apply(value);
+					if (msg != null)
+						return msg;
+					return newFilter.apply(value);
+				};
+			}
+			return this;
+		}
+
+		public TableAction<R> withTooltip(Function<? super List<? extends R>, String> tooltip) {
+			theTooltip = tooltip;
+			if (tooltip != null)
+				theTooltipString = new SimpleSettableValue<>(String.class, true);
+			return this;
+		}
+
 		public TableAction<R> modifyAction(Function<? super ObservableAction<?>, ? extends ObservableAction<?>> actionMod) {
 			theObservableAction = actionMod.apply(theObservableAction);
 			return this;
@@ -1920,7 +2139,7 @@ public class ObservableSwingUtils {
 			return this;
 		}
 
-		void updateEnablement(List<R> selectedValues, Object cause) {
+		void updateSelection(List<R> selectedValues, Object cause) {
 			if (!zeroAllowed && selectedValues.isEmpty())
 				theEnabledString.set("Nothing selected", cause);
 			else if (!multipleAllowed && selectedValues.size() > 1)
@@ -1928,23 +2147,31 @@ public class ObservableSwingUtils {
 			else {
 				if (theEnablement != null) {
 					Set<String> messages = null;
-					boolean anyAllowed = false;
+					int allowedCount = 0;
 					for (R value : selectedValues) {
 						String msg = theEnablement.apply(value);
 						if (msg == null)
-							anyAllowed = true;
+							allowedCount++;
 						else {
 							if (messages == null)
 								messages = new LinkedHashSet<>();
 							messages.add(msg);
 						}
 					}
-					if (messages.isEmpty())
+					boolean error = false;
+					if (!actWhenAnyEnabled && !messages.isEmpty()) {
+						error = true;
+					} else if (allowedCount == 0 && !zeroAllowed) {
+						error = true;
+						if (messages.isEmpty())
+							messages.add("Nothing selected");
+					} else if (allowedCount > 1 && !multipleAllowed) {
+						error = true;
+						if (messages.isEmpty())
+							messages.add("Multiple items selected");
+					}
+					if (!error)
 						theEnabledString.set(null, cause);
-					else if (actWhenAnyEnabled && (anyAllowed || zeroAllowed))
-						theEnabledString.set(null, cause);
-					else if (messages.size() == 1)
-						theEnabledString.set(messages.iterator().next(), cause);
 					else {
 						StringBuilder message = new StringBuilder("<html>");
 						boolean first = true;
@@ -1960,10 +2187,89 @@ public class ObservableSwingUtils {
 				} else
 					theEnabledString.set(null, cause);
 			}
+
+			if (theTooltipString != null && theEnabledString.get() == null) { // No point generating the tooltip if the disabled strign will
+				// show
+				theTooltipString.set(theTooltip.apply(selectedValues), cause);
+			}
 		}
 
 		void addButton(HorizPanel panel) {
-			panel.addButton((String) null, theObservableAction, theButtonMod);
+			panel.addButton((String) null, theObservableAction, button -> {
+				if (theTooltipString != null)
+					button.withTooltip(theTooltipString);
+				if (theButtonMod != null)
+					theButtonMod.accept(button);
+			});
+		}
+	}
+
+	public static class ActionEnablement<E> implements Function<E, String> {
+		private Function<? super E, String> theEnablement;
+
+		public ActionEnablement(Function<? super E, String> enablement) {
+			theEnablement = enablement;
+		}
+
+		public ActionEnablement<E> or(Function<? super E, String> filter, Consumer<ActionEnablement<E>> operation) {
+			Function<? super E, String> newFilter;
+			if (operation == null) {
+				newFilter = filter;
+			} else {
+				ActionEnablement<E> next = new ActionEnablement<>(filter);
+				operation.accept(next);
+				newFilter = next;
+			}
+			if (theEnablement == null)
+				theEnablement = filter;
+			else {
+				Function<? super E, String> oldFilter = theEnablement;
+				// TODO Use LambdaUtils here to make the Object methods work well
+				theEnablement = value -> {
+					String msg = oldFilter.apply(value);
+					if (msg == null)
+						return null;
+					return newFilter.apply(value);
+				};
+			}
+			return this;
+		}
+
+		public ActionEnablement<E> and(Function<? super E, String> filter, Consumer<ActionEnablement<E>> operation) {
+			Function<? super E, String> newFilter;
+			if (operation == null) {
+				newFilter = filter;
+			} else {
+				ActionEnablement<E> next = new ActionEnablement<>(filter);
+				operation.accept(next);
+				newFilter = next;
+			}
+			if (theEnablement == null)
+				theEnablement = filter;
+			else {
+				Function<? super E, String> oldFilter = theEnablement;
+				// TODO Use LambdaUtils here to make the Object methods work well
+				theEnablement = value -> {
+					String msg = oldFilter.apply(value);
+					if (msg != null)
+						return msg;
+					return newFilter.apply(value);
+				};
+			}
+			return this;
+		}
+
+		@Override
+		public String apply(E value) {
+			if (theEnablement == null)
+				return null;
+			else
+				return theEnablement.apply(value);
+		}
+
+		@Override
+		public String toString() {
+			return String.valueOf(theEnablement);
 		}
 	}
 }

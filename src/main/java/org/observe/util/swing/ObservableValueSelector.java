@@ -1,7 +1,5 @@
 package org.observe.util.swing;
 
-import java.awt.Image;
-import java.net.URL;
 import java.util.BitSet;
 import java.util.LinkedList;
 import java.util.List;
@@ -9,7 +7,7 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
-import javax.swing.ImageIcon;
+import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
@@ -433,18 +431,11 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		scroll.getVerticalScrollBar().setUnitIncrement(8);
 		if (withFiltering) {
 			withColumnFiltering(c -> true);
-			ImageIcon searchImg;
-			URL searchUrl = getClass().getResource("/icons/search.png");
-			if (searchUrl != null) {
-				searchImg = new ImageIcon(searchUrl);
-				if (searchImg.getIconWidth() != 16 || searchImg.getIconHeight() != 16)
-					searchImg = new ImageIcon(searchImg.getImage().getScaledInstance(16, 16, Image.SCALE_SMOOTH));
-			} else
-				searchImg = null;
+			Icon searchIcon = ObservableSwingUtils.getFixedIcon(getClass(), "/icons/search.png", 16, 16);
 			theSearchField = new ObservableTextField<>(theFilterText, Format.TEXT, until).setCommitOnType(true)//
 				.setEmptyText("Search...");
-			if (searchImg != null)
-				theSearchField.setIcon(searchImg);
+			if (searchIcon != null)
+				theSearchField.setIcon(searchIcon);
 			theFilterText.noInitChanges().act(evt -> {
 				try (Transaction t = theSelectableValues.lock(true, evt)) {
 					filterChanged(evt.getNewValue());
