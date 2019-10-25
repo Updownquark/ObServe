@@ -356,11 +356,17 @@ public class Combination {
 	 * A structure that is operated on to produce the elements of a combined collection
 	 *
 	 * @param <E> The type of the source element (or the value to be reversed)
-	 * @see ObservableCollection.CollectionDataFlow#combineWith(ObservableValue, TypeToken)
+	 * @see ObservableCollection.CollectionDataFlow#combine(TypeToken, Function)
 	 */
-	interface CombinedValues<E> {
+	public interface CombinedValues<E> {
+		/** @return The value of the element from the collection */
 		E getElement();
 
+		/**
+		 * @param <T> The type of the combined value
+		 * @param arg The observable value combined into this combination
+		 * @return The value of the given observable in this combined element
+		 */
 		<T> T get(ObservableValue<T> arg);
 	}
 
