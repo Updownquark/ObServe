@@ -1,13 +1,19 @@
 package org.observe.util.swing;
 
+import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Dimension;
+import java.awt.EventQueue;
 import java.awt.LayoutManager;
 import java.awt.LayoutManager2;
+import java.beans.PropertyChangeListener;
 import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -19,35 +25,86 @@ import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
 import javax.swing.JTable;
+import javax.swing.ListSelectionModel;
 import javax.swing.SpinnerNumberModel;
+import javax.swing.event.ListDataEvent;
+import javax.swing.event.ListDataListener;
+import javax.swing.event.ListSelectionListener;
 
 import org.observe.Observable;
 import org.observe.ObservableAction;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.SimpleSettableValue;
+import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
-import org.observe.util.swing.ObservableSwingUtils.ActionEnablement;
-import org.observe.util.swing.ObservableSwingUtils.FieldPanelPopulator;
 import org.observe.util.swing.ObservableSwingUtils.FontAdjuster;
+import org.qommons.IntList;
+import org.qommons.QommonsUtils;
+import org.qommons.Transaction;
+import org.qommons.collect.CollectionElement;
 import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.RRWLockingStrategy;
 import org.qommons.io.Format;
 
+import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
 
 public class PanelPopulation {
-	public interface PanelPopulator<C extends Container, P extends PanelPopulator<C, P>> {
+	/**
+	 * <p>
+	 * This method creates an API structure that makes building a panel of vertical fields very easy.
+	 * </p>
+	 * <p>
+	 * This API uses net.miginfocom.swing.MigLayout, but this class is not packaged with ObServe, so it must be provided by the caller. If
+	 * the panel's layout is not a MigLayout (or the panel is null), the API will attempt to reflectively instantiate one, so MigLayout must
+	 * be on the classpath.
+	 * </p>
+	 * <p>
+	 * If the MigLayout is set for the container's layout, its fillx and hidemode 3 layout constraints should be set.
+	 * </p>
+	 *
+	 * @param <C> The type of the container
+	 * @param panel The container to add the field widgets to. If null, a new {@link JPanel} will be created (be sure
+	 *        net.miginfocom.swing.MigLayout is in your classpath to use this).
+	 * @param until The observable that, when fired, will release all associated resources
+	 * @return The API structure to add fields with
+	 */
+	public static <C extends Container> VPanelPopulator<C, ?> populateVPanel(C panel, Observable<?> until) {
+		if (panel == null)
+			panel = (C) new JPanel();
+		return new MigFieldPanel<>(panel, until == null ? Observable.empty() : until);
+	}
+
+	public static <C extends Container> PanelPopulator<C, ?> populateHPanel(C panel, String layoutType, Observable<?> until) {
+		return populateHPanel(panel, layoutType == null ? null : makeLayout(layoutType), until);
+	}
+
+	public static <C extends Container> PanelPopulator<C, ?> populateHPanel(C panel, LayoutManager layout, Observable<?> until) {
+		if (panel == null)
+			panel = (C) new JPanel(layout);
+		else if (layout != null)
+			panel.setLayout(layout);
+		return new SimpleHPanel<>(null, panel, until == null ? Observable.empty() : until);
+	}
+
+	public static <R> TableBuilder<R, ?> buildTable(ObservableCollection<R> rows) {
+		return new SimpleTableBuilder<>(rows);
+	}
+
+	public interface PanelPopulator<C extends Container, P extends PanelPopulator<C, P>> extends ComponentEditor<C, P> {
 		<F> P addTextField(String fieldName, SettableValue<F> field, Format<F> format,
 			Consumer<FieldEditor<ObservableTextField<F>, ?>> modify);
 
 		<F> P addLabel(String fieldName, SettableValue<F> field, Format<F> format, Consumer<FieldEditor<JLabel, ?>> modify);
 
-		FieldPanelPopulator<C> addCheckField(String fieldName, SettableValue<Boolean> field, Consumer<FieldEditor<JCheckBox, ?>> modify);
+		P addCheckField(String fieldName, SettableValue<Boolean> field, Consumer<FieldEditor<JCheckBox, ?>> modify);
 
 		/* TODO
 		 * toggle/radio buttons
@@ -57,7 +114,6 @@ public class PanelPopulation {
 		 * accordion pane?
 		 * value selector
 		 * tree
-		 * better button controls (variable text, easier icon selection, etc.)
 		 * form controls (e.g. press enter in a text field and a submit action (also tied to a button) fires)
 		 * styles: borders, background...
 		 *
@@ -101,11 +157,7 @@ public class PanelPopulation {
 		// public <F> MigPanelPopulatorField<F, ObservableTreeModel> addTree(Object root,
 		// Function<Object, ? extends ObservableCollection<?>> branching) {}
 
-		default P addButton(String text, ObservableAction<?> action, Consumer<ButtonEditor<?>> modify) {
-			return addButton(ObservableValue.of(text), action, modify);
-		}
-
-		P addButton(ObservableValue<String> text, ObservableAction<?> action, Consumer<ButtonEditor<?>> modify);
+		P addButton(String buttonText, ObservableAction<?> action, Consumer<ButtonEditor<?>> modify);
 
 		<R> P addTable(ObservableCollection<R> rows, Consumer<TableBuilder<R, ?>> table);
 
@@ -115,39 +167,20 @@ public class PanelPopulation {
 			return addComponent(null, Box.createRigidArea(new Dimension(size, size)), null);
 		}
 
-		<S> P addComponent(String fieldName, S component, Consumer<ComponentEditor<S, ?>> modify);
+		<S> P addComponent(String fieldName, S component, Consumer<FieldEditor<S, ?>> modify);
 
 		C getContainer();
 	}
 
-	public interface VPanelPopulator<C extends Container, P extends PanelPopulator<C, P>> {
+	public interface VPanelPopulator<C extends Container, P extends VPanelPopulator<C, P>> extends PanelPopulator<C, P> {
 		default P addHPanel(String fieldName, String layoutType, Consumer<HPanelPopulator<?, ?>> panel) {
-			LayoutManager layout;
-			if (layoutType == null)
-				layoutType = "box";
-			switch (layoutType.toLowerCase()) {
-			case "mig":
-				layout = createMigLayout(false, () -> "use addHPanel(String, LayoutManager, Consumer)");
-				break;
-			case "ctr":
-			case "center":
-				layout = new JustifiedBoxLayout(false).mainCenter();
-				break;
-			case "box":
-			case "just":
-			case "justify":
-			case "justified":
-			default:
-				layout = new JustifiedBoxLayout(false).mainJustified();
-				break;
-			}
-			return addHPanel(fieldName, layout, panel);
+			return addHPanel(fieldName, makeLayout(layoutType), panel);
 		}
 
 		P addHPanel(String fieldName, LayoutManager layout, Consumer<HPanelPopulator<?, ?>> panel);
 	}
 
-	public interface HPanelPopulator<C extends Container, P extends PanelPopulator<C, P>> {
+	public interface HPanelPopulator<C extends Container, P extends HPanelPopulator<C, P>> extends PanelPopulator<C, P>, FieldEditor<C, P> {
 		P addVPanel(Consumer<VPanelPopulator<?, ?>> panel);
 	}
 
@@ -174,6 +207,12 @@ public class PanelPopulation {
 
 		P withPostLabel(ObservableValue<String> postLabel);
 
+		default P withTooltip(String tooltip){
+			return withTooltip(tooltip == null ? null : ObservableValue.of(tooltip));
+		}
+
+		P withTooltip(ObservableValue<String> tooltip);
+
 		P modifyFieldLabel(Consumer<ObservableSwingUtils.FontAdjuster<?>> font);
 
 		P withFont(Consumer<ObservableSwingUtils.FontAdjuster<?>> font);
@@ -186,11 +225,15 @@ public class PanelPopulation {
 
 		P withText(ObservableValue<String> text);
 
-		P withIcon(Icon icon);
-
 		default P withIcon(Class<?> resourceAnchor, String location, int width, int height) {
 			return withIcon(ObservableSwingUtils.getFixedIcon(resourceAnchor, location, width, height));
 		}
+
+		default P withIcon(Icon icon) {
+			return withIcon(icon == null ? null : ObservableValue.of(icon));
+		}
+
+		P withIcon(ObservableValue<? extends Icon> icon);
 	}
 
 	public interface ComboEditor<F, P extends ComboEditor<F, P>> extends FieldEditor<JComboBox<F>, P> {
@@ -204,14 +247,18 @@ public class PanelPopulation {
 	}
 
 	public interface TabPaneEditor<E, P extends TabPaneEditor<E, P>> extends ComponentEditor<E, P> {
-		P withVTab(Object tabID, Consumer<VPanelPopulator<?, ?>> panel);
+		P withVTab(Object tabID, Consumer<VPanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier);
 
-		P withHTab(Object tabID, Consumer<HPanelPopulator<?, ?>> panel);
+		default P withHTab(Object tabID, String layoutType, Consumer<HPanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier) {
+			return withHTab(tabID, makeLayout(layoutType), panel, tabModifier);
+		}
 
-		P withTab(Object tabID, Component tabComponent, Consumer<TabEditor<E, ?>> tabModifier);
+		P withHTab(Object tabID, LayoutManager layout, Consumer<HPanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier);
+
+		P withTab(Object tabID, Component tabComponent, Consumer<TabEditor<?>> tabModifier);
 	}
 
-	public interface TabEditor<E, P extends TabEditor<E, P>> extends ComponentEditor<E, P> {
+	public interface TabEditor<P extends TabEditor<P>> {
 		default P setName(String name) {
 			return setName(ObservableValue.of(name));
 		}
@@ -222,9 +269,11 @@ public class PanelPopulation {
 	}
 
 	public interface TableBuilder<R, P extends TableBuilder<R, P>> extends ComponentEditor<JTable, P> {
-		TableBuilder<R, P> withColumn(CategoryRenderStrategy<? super R, ?> column);
+		P withColumns(ObservableCollection<? extends CategoryRenderStrategy<? super R, ?>> columns);
 
-		default <C> TableBuilder<R, P> withColumn(String name, TypeToken<C> type, Function<? super R, ? extends C> accessor, //
+		P withColumn(CategoryRenderStrategy<? super R, ?> column);
+
+		default <C> P withColumn(String name, TypeToken<C> type, Function<? super R, ? extends C> accessor, //
 			Consumer<CategoryRenderStrategy<R, C>> column) {
 			CategoryRenderStrategy<R, C> col = new CategoryRenderStrategy<>(name, type, accessor);
 			if (column != null)
@@ -232,38 +281,52 @@ public class PanelPopulation {
 			return withColumn(col);
 		}
 
-		default <C> TableBuilder<R, P> withColumn(String name, Class<C> type, Function<? super R, ? extends C> accessor, //
+		default <C> P withColumn(String name, Class<C> type, Function<? super R, ? extends C> accessor, //
 			Consumer<CategoryRenderStrategy<R, C>> column) {
 			return withColumn(name, TypeTokens.get().of(type), accessor, column);
 		}
 
-		TableBuilder<R, P> withSelection(SettableValue<R> selection, boolean enforceSingleSelection);
+		P withSelection(SettableValue<R> selection, boolean enforceSingleSelection);
 
-		TableBuilder<R, P> withSelection(ObservableCollection<R> selection);
+		P withSelection(ObservableCollection<R> selection);
 
 		List<R> getSelection();
 
-		TableBuilder<R, P> withAdd(Supplier<? extends R> creator, Consumer<TableAction<R, ?>> actionMod);
+		P withAdd(Supplier<? extends R> creator, Consumer<TableAction<R, ?>> actionMod);
 
-		TableBuilder<R, P> withRemove(Consumer<? super List<? extends R>> deletion, Consumer<TableAction<R, ?>> actionMod);
+		P withRemove(Consumer<? super List<? extends R>> deletion, Consumer<TableAction<R, ?>> actionMod);
 
-		TableBuilder<R, P> withCopy(Function<? super R, ? extends R> copier, Consumer<TableAction<R, ?>> actionMod);
+		P withCopy(Function<? super R, ? extends R> copier, Consumer<TableAction<R, ?>> actionMod);
 
-		default TableBuilder<R, P> withAction(Consumer<? super R> action, Consumer<TableAction<R, ?>> actionMod) {
+		default P withAction(Consumer<? super R> action, Consumer<TableAction<R, ?>> actionMod) {
 			return withMultiAction(values -> {
 				for (R value : values)
 					action.accept(value);
 			}, actionMod);
 		}
 
-		TableBuilder<R, P> withMultiAction(Consumer<? super List<? extends R>> action, Consumer<TableAction<R, ?>> actionMod);
+		P withMultiAction(Consumer<? super List<? extends R>> action, Consumer<TableAction<R, ?>> actionMod);
 	}
 
 	public interface TableAction<R, A extends TableAction<R, A>> {
+		/**
+		 * @param allowed Whether this action should be enabled when multiple values are selected
+		 * @return This action
+		 */
 		A allowForMultiple(boolean allowed);
 
+		/**
+		 * @param allowed Whether this action should be enabled when no values are selected
+		 * @return This action
+		 */
 		A allowForEmpty(boolean allowed);
 
+		/**
+		 * @param allowed Whether this action should be enabled when the action is not {@link #allowWhen(Function, Consumer) allowed} for
+		 *        some values, but the set of the values for which the action is allowed match this action's
+		 *        {@link #allowForMultiple(boolean) multi} and {@link #allowForEmpty(boolean) empty} selection settings.
+		 * @return This action
+		 */
 		A allowForAnyEnabled(boolean allowed);
 
 		A allowWhen(Function<? super R, String> filter, Consumer<ActionEnablement<R>> operation);
@@ -273,6 +336,75 @@ public class PanelPopulation {
 		A modifyAction(Function<? super ObservableAction<?>, ? extends ObservableAction<?>> actionMod);
 
 		A modifyButton(Consumer<ButtonEditor<?>> buttonMod);
+	}
+
+	public static class ActionEnablement<E> implements Function<E, String> {
+		private Function<? super E, String> theEnablement;
+
+		public ActionEnablement(Function<? super E, String> enablement) {
+			theEnablement = enablement;
+		}
+
+		public ActionEnablement<E> or(Function<? super E, String> filter, Consumer<ActionEnablement<E>> operation) {
+			Function<? super E, String> newFilter;
+			if (operation == null) {
+				newFilter = filter;
+			} else {
+				ActionEnablement<E> next = new ActionEnablement<>(filter);
+				operation.accept(next);
+				newFilter = next;
+			}
+			if (theEnablement == null)
+				theEnablement = filter;
+			else {
+				Function<? super E, String> oldFilter = theEnablement;
+				// TODO Use LambdaUtils here to make the Object methods work well
+				theEnablement = value -> {
+					String msg = oldFilter.apply(value);
+					if (msg == null)
+						return null;
+					return newFilter.apply(value);
+				};
+			}
+			return this;
+		}
+
+		public ActionEnablement<E> and(Function<? super E, String> filter, Consumer<ActionEnablement<E>> operation) {
+			Function<? super E, String> newFilter;
+			if (operation == null) {
+				newFilter = filter;
+			} else {
+				ActionEnablement<E> next = new ActionEnablement<>(filter);
+				operation.accept(next);
+				newFilter = next;
+			}
+			if (theEnablement == null)
+				theEnablement = filter;
+			else {
+				Function<? super E, String> oldFilter = theEnablement;
+				// TODO Use LambdaUtils here to make the Object methods work well
+				theEnablement = value -> {
+					String msg = oldFilter.apply(value);
+					if (msg != null)
+						return msg;
+					return newFilter.apply(value);
+				};
+			}
+			return this;
+		}
+
+		@Override
+		public String apply(E value) {
+			if (theEnablement == null)
+				return null;
+			else
+				return theEnablement.apply(value);
+		}
+
+		@Override
+		public String toString() {
+			return String.valueOf(theEnablement);
+		}
 	}
 
 	static final String MIG_LAYOUT_CLASS_NAME = "net.miginfocom.swing.MigLayout";
@@ -292,15 +424,168 @@ public class PanelPopulation {
 		return migLayout;
 	}
 
+	static LayoutManager makeLayout(String layoutType) {
+		LayoutManager layout;
+		if (layoutType == null)
+			layoutType = "box";
+		switch (layoutType.toLowerCase()) {
+		case "mig":
+			layout = createMigLayout(false, () -> "use addHPanel(String, LayoutManager, Consumer)");
+			break;
+		case "ctr":
+		case "center":
+			layout = new JustifiedBoxLayout(false).mainCenter();
+			break;
+		case "box":
+		case "just":
+		case "justify":
+		case "justified":
+		default:
+			layout = new JustifiedBoxLayout(false).mainJustified();
+			break;
+		}
+		return layout;
+	}
+
 	private PanelPopulation() {}
 
-	interface PartialComponentEditorImpl<E, P extends PartialComponentEditorImpl<E, P>> extends ComponentEditor<E, P> {
+	interface PartialPanelPopulatorImpl<C extends Container, P extends PartialPanelPopulatorImpl<C, P>> extends PanelPopulator<C, P> {
 		Observable<?> getUntil();
 
 		void doAdd(AbstractComponentEditor<?, ?> field, Component fieldLabel, Component postLabel);
+
+		default void doAdd(SimpleFieldEditor<?, ?> field) {
+			doAdd(field, field.createFieldNameLabel(getUntil()), field.createPostLabel(getUntil()));
+		}
+
+		@Override
+		default <F> P addTextField(String fieldName, SettableValue<F> field, Format<F> format,
+			Consumer<FieldEditor<ObservableTextField<F>, ?>> modify) {
+			SimpleFieldEditor<ObservableTextField<F>, ?> fieldPanel = new SimpleFieldEditor<>(fieldName,
+				new ObservableTextField<>(field, format, getUntil()));
+			fieldPanel.getTooltip().changes().takeUntil(getUntil()).act(evt -> fieldPanel.getEditor().setToolTipText(evt.getNewValue()));
+			if (modify != null)
+				modify.accept(fieldPanel);
+			doAdd(fieldPanel);
+			return (P) this;
+		}
+
+		@Override
+		default <F> P addLabel(String fieldName, SettableValue<F> field, Format<F> format, Consumer<FieldEditor<JLabel, ?>> modify) {
+			JLabel label = new JLabel();
+			SimpleFieldEditor<JLabel, ?> fieldPanel = new SimpleFieldEditor<>(fieldName, label);
+			fieldPanel.getTooltip().changes().takeUntil(getUntil()).act(evt -> fieldPanel.getEditor().setToolTipText(evt.getNewValue()));
+			field.isEnabled().combine((enabled, tt) -> enabled == null ? tt : enabled, fieldPanel.getTooltip()).changes()
+			.takeUntil(getUntil()).act(evt -> label.setToolTipText(evt.getNewValue()));
+			if (modify != null)
+				modify.accept(fieldPanel);
+			doAdd(fieldPanel);
+			return (P) this;
+		}
+
+		@Override
+		default P addCheckField(String fieldName, SettableValue<Boolean> field, Consumer<FieldEditor<JCheckBox, ?>> modify) {
+			SimpleFieldEditor<JCheckBox, ?> fieldPanel = new SimpleFieldEditor<>(fieldName, new JCheckBox());
+			Subscription sub = ObservableSwingUtils.checkFor(fieldPanel.getEditor(), fieldPanel.getTooltip(), field);
+			getUntil().take(1).act(__ -> sub.unsubscribe());
+			if (modify != null)
+				modify.accept(fieldPanel);
+			doAdd(fieldPanel);
+			return (P) this;
+		}
+
+		@Override
+		default <F> P addSpinnerField(String fieldName, JSpinner spinner, SettableValue<F> value, Function<? super F, ? extends F> purifier,
+			Consumer<SteppedFieldEditor<JSpinner, F, ?>> modify) {
+			SimpleSteppedFieldEditor<JSpinner, F, ?> fieldPanel = new SimpleSteppedFieldEditor<>(fieldName, spinner, stepSize -> {
+				((SpinnerNumberModel) spinner.getModel()).setStepSize((Number) stepSize);
+			});
+			ObservableSwingUtils.spinnerFor(spinner, fieldPanel.getTooltip().get(), value, purifier);
+			if (modify != null)
+				modify.accept(fieldPanel);
+			doAdd(fieldPanel);
+			return (P) this;
+		}
+
+		@Override
+		default <F> P addComboField(String fieldName, SettableValue<F> value, List<? extends F> availableValues,
+			Consumer<ComboEditor<F, ?>> modify) {
+			ObservableCollection<? extends F> observableValues;
+			if (availableValues instanceof ObservableCollection)
+				observableValues = (ObservableCollection<F>) availableValues;
+			else
+				observableValues = ObservableCollection.of(value.getType(), availableValues);
+			SimpleComboEditor<F, ?> fieldPanel = new SimpleComboEditor<>(fieldName, new JComboBox<>());
+			Subscription sub = ObservableComboBoxModel.comboFor(fieldPanel.getEditor(), fieldPanel.getTooltip(),
+				fieldPanel::getTooltip, observableValues, value);
+			getUntil().take(1).act(__ -> sub.unsubscribe());
+			if (modify != null)
+				modify.accept(fieldPanel);
+			doAdd(fieldPanel);
+			return (P) this;
+		}
+
+		@Override
+		default P addButton(String buttonText, ObservableAction<?> action, Consumer<ButtonEditor<?>> modify) {
+			JButton button = new JButton();
+			button.addActionListener(evt -> action.act(evt));
+			SimpleButtonEditor<?> field = new SimpleButtonEditor<>(null, button).withText(buttonText);
+			action.isEnabled().combine((enabled, tt) -> enabled == null ? tt : enabled, field.getTooltip()).changes().takeUntil(getUntil())
+			.act(evt -> button.setToolTipText(evt.getNewValue()));
+			action.isEnabled().takeUntil(getUntil()).changes().act(evt -> button.setEnabled(evt.getNewValue() == null));
+			if (modify != null)
+				modify.accept(field);
+			if (field.getText() != null)
+				field.getText().changes().takeUntil(getUntil()).act(evt -> button.setText(evt.getNewValue()));
+			if (field.getIcon() != null)
+				field.getIcon().changes().takeUntil(getUntil()).act(evt -> button.setIcon(evt.getNewValue()));
+			doAdd(field);
+			return (P) this;
+		}
+
+		@Override
+		default P addTabs(Consumer<TabPaneEditor<JTabbedPane, ?>> tabs) {
+			SimpleTabPaneEditor<?> tabPane = new SimpleTabPaneEditor<>(getUntil());
+			tabs.accept(tabPane);
+			doAdd(tabPane, null, null);
+			return (P) this;
+		}
+
+		@Override
+		default <R> P addTable(ObservableCollection<R> rows, Consumer<TableBuilder<R, ?>> table) {
+			SimpleTableBuilder<R, ?> tb = new SimpleTableBuilder<>(rows);
+			table.accept(tb);
+			doAdd(tb, null, null);
+			return (P) this;
+		}
+
+		@Override
+		default <S> P addComponent(String fieldName, S component, Consumer<FieldEditor<S, ?>> modify) {
+			SimpleFieldEditor<S, ?> subPanel = new SimpleFieldEditor<>(fieldName, component);
+			if (modify != null)
+				modify.accept(subPanel);
+			doAdd(subPanel);
+			return (P) this;
+		}
+
+		default P addHPanel(String fieldName, LayoutManager layout, Consumer<HPanelPopulator<?, ?>> panel) {
+			SimpleHPanel<?> subPanel = new SimpleHPanel<>(fieldName, new JPanel(layout), getUntil());
+			if (panel != null)
+				panel.accept(subPanel);
+			doAdd(subPanel);
+			return (P) this;
+		}
+
+		default P addVPanel(Consumer<VPanelPopulator<?, ?>> panel) {
+			MigFieldPanel<?> subPanel = new MigFieldPanel<>(null, getUntil());
+			if (panel != null)
+				panel.accept(subPanel);
+			doAdd(subPanel, null, null);
+			return (P) this;
+		}
 	}
 
-	abstract class PanelPopulatorImpl<C extends Container, P extends PanelPopulatorImpl<C, P>> implements PanelPopulator<C, P> {
+	static abstract class PanelPopulatorImpl<C extends Container, P extends PanelPopulatorImpl<C, P>> implements PanelPopulator<C, P> {
 		private final C theContainer;
 		private final Observable<?> theUntil;
 		private final ReentrantReadWriteLock theLock;
@@ -337,9 +622,7 @@ public class PanelPopulation {
 		protected abstract void doAdd(AbstractComponentEditor<?, ?> field, Component fieldLabel, Component postLabel);
 	}
 
-	class MigFieldPanel<C extends Container> implements PanelPopulator<C, MigFieldPanel<C>> {}
-
-	abstract class AbstractComponentEditor<E, P extends AbstractComponentEditor<E, P>> implements ComponentEditor<E, P> {
+	static abstract class AbstractComponentEditor<E, P extends AbstractComponentEditor<E, P>> implements ComponentEditor<E, P> {
 		private final E theEditor;
 		private boolean isGrow;
 		private ObservableValue<Boolean> isVisible;
@@ -393,7 +676,85 @@ public class PanelPopulation {
 		protected abstract Component createPostLabel(Observable<?> until);
 	}
 
-	class SimpleFieldEditor<E, P extends SimpleFieldEditor<E, P>> extends AbstractComponentEditor<E, P> implements FieldEditor<E, P> {
+	static class MigFieldPanel<C extends Container> extends AbstractComponentEditor<C, MigFieldPanel<C>>
+	implements PartialPanelPopulatorImpl<C, MigFieldPanel<C>>, VPanelPopulator<C, MigFieldPanel<C>> {
+		private final Observable<?> theUntil;
+
+		public MigFieldPanel(C container, Observable<?> until) {
+			super(container);
+			theUntil = until == null ? Observable.empty() : until;
+			if (container.getLayout() == null || !MIG_LAYOUT_CLASS_NAME.equals(container.getLayout().getClass().getName())) {
+				LayoutManager2 migLayout = createMigLayout(true, () -> "install the layout before using this class");
+				container.setLayout(migLayout);
+			}
+		}
+
+		@Override
+		public MigFieldPanel<C> addHPanel(String fieldName, LayoutManager layout, Consumer<HPanelPopulator<?, ?>> panel) {
+			return PartialPanelPopulatorImpl.super.addHPanel(fieldName, layout, panel);
+		}
+
+		@Override
+		public C getContainer() {
+			return getEditor();
+		}
+
+		@Override
+		public Observable<?> getUntil() {
+			return theUntil;
+		}
+
+		@Override
+		public void doAdd(AbstractComponentEditor<?, ?> field, Component fieldLabel, Component postLabel) {
+			if (fieldLabel != null)
+				getContainer().add(fieldLabel, "align right");
+			StringBuilder constraints = new StringBuilder();
+			if (field.isGrow())
+				constraints.append("growx, pushx");
+			if (postLabel != null) {
+				if (fieldLabel == null) {
+					if (constraints.length() > 0)
+						constraints.append(", ");
+					constraints.append("span 2");
+				}
+			} else {
+				if (constraints.length() > 0)
+					constraints.append(", ");
+				constraints.append("span, wrap");
+			}
+			Component component = field.getComponent(getUntil());
+			getContainer().add(component, constraints.toString());
+			if (postLabel != null)
+				getContainer().add(postLabel, "wrap");
+			if (field.isVisible() != null) {
+				field.isVisible().changes().takeUntil(getUntil()).act(evt -> {
+					if (fieldLabel != null)
+						fieldLabel.setVisible(evt.getNewValue());
+					component.setVisible(evt.getNewValue());
+					if (postLabel != null)
+						postLabel.setVisible(evt.getNewValue());
+				});
+			}
+		}
+
+		@Override
+		public ObservableValue<String> getTooltip() {
+			return null;
+		}
+
+		@Override
+		protected Component createFieldNameLabel(Observable<?> until) {
+			return null;
+		}
+
+		@Override
+		protected Component createPostLabel(Observable<?> until) {
+			return null;
+		}
+	}
+
+	static class SimpleFieldEditor<E, P extends SimpleFieldEditor<E, P>> extends AbstractComponentEditor<E, P>
+	implements FieldEditor<E, P> {
 		private ObservableValue<String> theFieldName;
 		private Consumer<FontAdjuster<?>> theFieldLabelModifier;
 		private ObservableValue<String> theTooltip;
@@ -449,6 +810,12 @@ public class PanelPopulation {
 		}
 
 		@Override
+		public P withTooltip(ObservableValue<String> tooltip) {
+			theSettableTooltip.set(tooltip, null);
+			return (P) this;
+		}
+
+		@Override
 		public ObservableValue<String> getTooltip() {
 			return theTooltip;
 		}
@@ -475,6 +842,605 @@ public class PanelPopulation {
 			if (theFont != null)
 				theFont.accept(new FontAdjuster<>(postLabel));
 			return postLabel;
+		}
+	}
+
+	static class SimpleHPanel<C extends Container> extends SimpleFieldEditor<C, SimpleHPanel<C>>
+	implements PartialPanelPopulatorImpl<C, SimpleHPanel<C>>, HPanelPopulator<C, SimpleHPanel<C>> {
+		private final Observable<?> theUntil;
+
+		SimpleHPanel(String fieldName, C editor, Observable<?> until) {
+			super(fieldName, editor);
+			theUntil = until;
+		}
+
+		@Override
+		public C getContainer() {
+			return getEditor();
+		}
+
+		@Override
+		public SimpleHPanel<C> addVPanel(Consumer<VPanelPopulator<?, ?>> panel) {
+			return PartialPanelPopulatorImpl.super.addVPanel(panel);
+		}
+
+		@Override
+		public Observable<?> getUntil() {
+			return theUntil;
+		}
+
+		@Override
+		public void doAdd(AbstractComponentEditor<?, ?> field, Component fieldLabel, Component postLabel) {
+			if (fieldLabel != null)
+				getContainer().add(fieldLabel);
+			Component component = field.getComponent(getUntil());
+			String constraints = null;
+			if (field.isGrow() && getContainer().getLayout().getClass().getName().startsWith("net.mig"))
+				constraints = "growx, pushx";
+			getContainer().add(component, constraints);
+			if (postLabel != null)
+				getContainer().add(postLabel);
+			if (field.isVisible() != null) {
+				field.isVisible().changes().takeUntil(getUntil()).act(evt -> {
+					if (fieldLabel != null)
+						fieldLabel.setVisible(evt.getNewValue());
+					component.setVisible(evt.getNewValue());
+					if (postLabel != null)
+						postLabel.setVisible(evt.getNewValue());
+				});
+			}
+		}
+	}
+
+	static class SimpleButtonEditor<P extends SimpleButtonEditor<P>> extends SimpleFieldEditor<JButton, P> implements ButtonEditor<P> {
+		private ObservableValue<String> theText;
+		private ObservableValue<? extends Icon> theIcon;
+
+		SimpleButtonEditor(String fieldName, JButton editor) {
+			super(fieldName, editor);
+		}
+
+		public ObservableValue<String> getText() {
+			return theText;
+		}
+
+		public ObservableValue<? extends Icon> getIcon() {
+			return theIcon;
+		}
+
+		@Override
+		public P withText(ObservableValue<String> text) {
+			theText = text;
+			return (P) this;
+		}
+
+		@Override
+		public P withIcon(ObservableValue<? extends Icon> icon) {
+			theIcon = icon;
+			return (P) this;
+		}
+	}
+
+	static class SimpleSteppedFieldEditor<E, F, P extends SimpleSteppedFieldEditor<E, F, P>> extends SimpleFieldEditor<E, P>
+	implements SteppedFieldEditor<E, F, P> {
+		private final Consumer<F> theStepSizeChange;
+
+		SimpleSteppedFieldEditor(String fieldName, E editor, Consumer<F> stepSizeChange) {
+			super(fieldName, editor);
+			theStepSizeChange = stepSizeChange;
+		}
+
+		@Override
+		public P withStepSize(F stepSize) {
+			theStepSizeChange.accept(stepSize);
+			return (P) this;
+		}
+	}
+
+	static class SimpleComboEditor<F, P extends SimpleComboEditor<F, P>> extends SimpleFieldEditor<JComboBox<F>, P>
+	implements ComboEditor<F, P> {
+		private Function<? super F, String> theValueTooltip;
+
+		SimpleComboEditor(String fieldName, JComboBox<F> editor) {
+			super(fieldName, editor);
+		}
+
+		@Override
+		public P withValueTooltip(Function<? super F, String> tooltip) {
+			theValueTooltip = tooltip;
+			return (P) this;
+		}
+
+		@Override
+		public String getTooltip(F value) {
+			return theValueTooltip == null ? null : theValueTooltip.apply(value);
+		}
+	}
+
+	static class SimpleTabPaneEditor<P extends SimpleTabPaneEditor<P>> extends AbstractComponentEditor<JTabbedPane, P>
+	implements TabPaneEditor<JTabbedPane, P> {
+		private final Observable<?> theUntil;
+
+		SimpleTabPaneEditor(Observable<?> until) {
+			super(new JTabbedPane());
+			theUntil = until;
+		}
+
+		@Override
+		public P withVTab(Object tabID, Consumer<VPanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier) {
+			MigFieldPanel<JPanel> fieldPanel = new MigFieldPanel<>(null, theUntil);
+			panel.accept(fieldPanel);
+			return withTab(tabID, fieldPanel.getContainer(), tabModifier);
+		}
+
+		@Override
+		public P withHTab(Object tabID, LayoutManager layout, Consumer<HPanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier) {
+			SimpleHPanel<JPanel> hPanel = new SimpleHPanel<>(null, new JPanel(layout), theUntil);
+			panel.accept(hPanel);
+			return withTab(tabID, hPanel.getContainer(), tabModifier);
+		}
+
+		@Override
+		public P withTab(Object tabID, Component tabComponent, Consumer<TabEditor<?>> tabModifier) {
+			SimpleTabEditor<?> t = new SimpleTabEditor<>(tabID, tabComponent);
+			tabModifier.accept(t);
+			getEditor().add(t.getComponent(theUntil));
+			return (P) this;
+		}
+
+		@Override
+		public ObservableValue<String> getTooltip() {
+			return null;
+		}
+
+		@Override
+		protected Component createFieldNameLabel(Observable<?> until) {
+			return null;
+		}
+
+		@Override
+		protected Component createPostLabel(Observable<?> until) {
+			return null;
+		}
+	}
+
+	static class SimpleTabEditor<P extends SimpleTabEditor<P>> implements TabEditor<P> {
+		@SuppressWarnings("unused")
+		private final Object theID;
+		private final Component theComponent;
+		private ObservableValue<String> theName;
+
+		public SimpleTabEditor(Object id, Component component) {
+			theID = id;
+			theComponent = component;
+		}
+
+		@Override
+		public P setName(ObservableValue<String> name) {
+			theName = name;
+			return (P) this;
+		}
+
+		@Override
+		public ObservableValue<String> getName() {
+			return theName;
+		}
+
+		protected Component getComponent(Observable<?> until) {
+			if (theName == null)
+				throw new IllegalArgumentException("Failed to set name on tab for " + theComponent);
+			theName.changes().takeUntil(until).act(evt -> theComponent.setName(evt.getNewValue()));
+			return theComponent;
+		}
+	}
+
+	static class SimpleTableBuilder<R, P extends SimpleTableBuilder<R, P>> extends AbstractComponentEditor<JTable, P>
+	implements TableBuilder<R, P> {
+		private final ObservableCollection<R> theRows;
+		private ObservableCollection<? extends CategoryRenderStrategy<? super R, ?>> theColumns;
+		private SettableValue<R> theSelectionValue;
+		private ObservableCollection<R> theSelectionValues;
+		private List<SimpleTableAction<R, ?>> theActions;
+
+		SimpleTableBuilder(ObservableCollection<R> rows) {
+			super(new JTable());
+			theRows = rows;
+		}
+
+		@Override
+		public P withColumns(ObservableCollection<? extends CategoryRenderStrategy<? super R, ?>> columns) {
+			theColumns = columns;
+			return (P) this;
+		}
+
+		@Override
+		public P withColumn(CategoryRenderStrategy<? super R, ?> column) {
+			if (theColumns == null)
+				theColumns = ObservableCollection
+				.create(new TypeToken<CategoryRenderStrategy<? super R, ?>>() {}.where(new TypeParameter<R>() {}, theRows.getType()));
+			((ObservableCollection<CategoryRenderStrategy<? super R, ?>>) theColumns).add(column);
+			return (P) this;
+		}
+
+		@Override
+		public P withSelection(SettableValue<R> selection, boolean enforceSingleSelection) {
+			theSelectionValue = selection;
+			if (enforceSingleSelection)
+				getEditor().getSelectionModel().setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+			return (P) this;
+		}
+
+		@Override
+		public P withSelection(ObservableCollection<R> selection) {
+			theSelectionValues = selection;
+			return (P) this;
+		}
+
+		@Override
+		public List<R> getSelection() {
+			return ObservableSwingUtils.getSelection(((ObservableTableModel<R>) getEditor().getModel()).getRowModel(),
+				getEditor().getSelectionModel());
+		}
+
+		private Icon getAddIcon() {
+			return ObservableSwingUtils.getFixedIcon(null, "icons/add.png", 16, 16);
+		}
+
+		private Icon getRemoveIcon() {
+			return ObservableSwingUtils.getFixedIcon(null, "icons/remove.png", 16, 16);
+		}
+
+		private Icon getCopyIcon() {
+			return ObservableSwingUtils.getFixedIcon(null, "icons/copy.png", 16, 16);
+		}
+
+		@Override
+		public P withAdd(Supplier<? extends R> creator, Consumer<TableAction<R, ?>> actionMod) {
+			return withMultiAction(values -> {
+				R value=creator.get();
+				CollectionElement<R> el=theRows.addElement(value, false);
+				//Assuming here that the action is only called on the EDT,
+				//meaning the above add operation has now been propagated to the list model and the selection model
+				//It also means that the row model is sync'd with the collection, so we can use the index from the collection here
+				int index=theRows.getElementsBefore(el.getElementId());
+				getEditor().getSelectionModel().setSelectionInterval(index, index);
+			}, action->{
+				action.allowForMultiple(true).allowForEmpty(true).allowForAnyEnabled(true)//
+				.modifyButton(button -> button.withIcon(getAddIcon()).withTooltip("Add new item"));
+				if(actionMod!=null)
+					actionMod.accept(action);
+			});
+		}
+
+		@Override
+		public P withRemove(Consumer<? super List<? extends R>> deletion, Consumer<TableAction<R, ?>> actionMod) {
+			return withMultiAction(deletion, action -> {
+				action.allowForMultiple(true).withTooltip(items -> "Remove selected item" + (items.size() == 1 ? "" : "s"))//
+				.modifyButton(button -> button.withIcon(getRemoveIcon()));
+				if (actionMod != null)
+					actionMod.accept(action);
+			});
+		}
+
+		@Override
+		public P withCopy(Function<? super R, ? extends R> copier, Consumer<TableAction<R, ?>> actionMod) {
+			return withMultiAction(values -> {
+				// Ignore the given values and use the selection model so we get the indexes right in the case of duplicates
+				ListSelectionModel selModel = getEditor().getSelectionModel();
+				IntList newSelection = new IntList();
+				try (Transaction t = theRows.lock(true, null)) {
+					// Not only do we need to obtain a write lock,but we also need to allow the EDT to purge any queued actions
+					// to ensure that the model is caught up with the source collection
+					EventQueue.invokeAndWait(() -> {
+						for (int i = selModel.getMinSelectionIndex(); i >= 0 && i <= selModel.getMaxSelectionIndex(); i++) {
+							if (!selModel.isSelectedIndex(i))
+								continue;
+							CollectionElement<R> toCopy = theRows.getElement(i);
+							R copy = copier.apply(toCopy.get());
+							CollectionElement<R> copied;
+							if (theRows.canAdd(copy, toCopy.getElementId(), null) == null)
+								copied = theRows.addElement(copy, toCopy.getElementId(), null, true);
+							else
+								copied = theRows.addElement(copy, false);
+							newSelection.add(theRows.getElementsBefore(copied.getElementId()));
+						}
+					});
+					selModel.setValueIsAdjusting(true);
+					selModel.clearSelection();
+					for (int[] interval : ObservableSwingUtils.getContinuousIntervals(newSelection.toArray(), true))
+						selModel.addSelectionInterval(interval[0], interval[1]);
+					selModel.setValueIsAdjusting(false);
+				} catch (InvocationTargetException e) {
+					if (e.getTargetException() instanceof RuntimeException)
+						throw (RuntimeException) e.getTargetException();
+					else
+						throw (Error) e.getTargetException();
+				} catch (InterruptedException e) {}
+			}, action -> {
+				action.allowForMultiple(true).withTooltip(items -> "Duplicate selected item" + (items.size() == 1 ? "" : "s"))//
+				.modifyButton(button -> button.withIcon(getCopyIcon()));
+				if (actionMod != null)
+					actionMod.accept(action);
+			});
+		}
+
+		@Override
+		public P withMultiAction(Consumer<? super List<? extends R>> action, Consumer<TableAction<R, ?>> actionMod) {
+			SimpleTableAction<R, ?> ta = new SimpleTableAction<>(action, this::getSelection);
+			actionMod.accept(ta);
+			theActions.add(ta);
+			return (P) this;
+		}
+
+		@Override
+		public ObservableValue<String> getTooltip() {
+			return null;
+		}
+
+		@Override
+		protected Component createFieldNameLabel(Observable<?> until) {
+			return null;
+		}
+
+		@Override
+		protected Component createPostLabel(Observable<?> until) {
+			return null;
+		}
+
+		@Override
+		protected Component getComponent(Observable<?> until) {
+			ObservableTableModel<R> model = new ObservableTableModel<>(theRows, theColumns);
+			JTable table = getEditor();
+			table.setModel(model);
+			Subscription sub = ObservableTableModel.hookUp(table, model);
+			if (until != null)
+				until.take(1).act(__ -> sub.unsubscribe());
+
+			JScrollPane scroll = new JScrollPane(table);
+			// Default scroll increments are ridiculously small
+			scroll.getVerticalScrollBar().setUnitIncrement(10);
+			scroll.getHorizontalScrollBar().setUnitIncrement(10);
+
+			// Selection
+			Supplier<List<R>> selectionGetter = () -> {
+				ListSelectionModel selModel = table.getSelectionModel();
+				List<R> selValues = new ArrayList<>(selModel.getMaxSelectionIndex() - selModel.getMinSelectionIndex() + 1);
+				for (int i = 0; i < model.getRowModel().getSize(); i++) {
+					if (selModel.isSelectedIndex(i))
+						selValues.add(model.getRowModel().getElementAt(i));
+				}
+				return selValues;
+			};
+			if (theSelectionValue != null)
+				ObservableSwingUtils.syncSelection(table, model.getRowModel(), table::getSelectionModel, model.getRows().equivalence(),
+					theSelectionValue, until, false);
+			if (theSelectionValues != null)
+				ObservableSwingUtils.syncSelection(table, model.getRowModel(), table::getSelectionModel, model.getRows().equivalence(),
+					theSelectionValues, until);
+			if (!theActions.isEmpty()) {
+				ListSelectionListener selListener = e -> {
+					List<R> selection = selectionGetter.get();
+					for (SimpleTableAction<R, ?> action : theActions)
+						action.updateSelection(selection, e);
+				};
+				ListDataListener dataListener = new ListDataListener() {
+					@Override
+					public void intervalAdded(ListDataEvent e) {}
+
+					@Override
+					public void intervalRemoved(ListDataEvent e) {}
+
+					@Override
+					public void contentsChanged(ListDataEvent e) {
+						ListSelectionModel selModel = table.getSelectionModel();
+						if (selModel.getMinSelectionIndex() >= 0 && e.getIndex0() >= selModel.getMinSelectionIndex()
+							&& e.getIndex1() <= selModel.getMaxSelectionIndex()) {
+							List<R> selection = selectionGetter.get();
+							for (SimpleTableAction<R, ?> action : theActions)
+								action.updateSelection(selection, e);
+						}
+					}
+				};
+				List<R> selection = selectionGetter.get();
+				for (SimpleTableAction<R, ?> action : theActions)
+					action.updateSelection(selection, null);
+
+				PropertyChangeListener selModelListener = evt -> {
+					((ListSelectionModel) evt.getOldValue()).removeListSelectionListener(selListener);
+					((ListSelectionModel) evt.getNewValue()).addListSelectionListener(selListener);
+				};
+				table.getSelectionModel().addListSelectionListener(selListener);
+				table.addPropertyChangeListener("selectionModel", selModelListener);
+				model.getRowModel().addListDataListener(dataListener);
+				until.take(1).act(__ -> {
+					table.removePropertyChangeListener("selectionModel", selModelListener);
+					table.getSelectionModel().removeListSelectionListener(selListener);
+					model.getRowModel().removeListDataListener(dataListener);
+				});
+				SimpleHPanel<JPanel> buttonPanel = new SimpleHPanel<>(null,
+					new JPanel(new JustifiedBoxLayout(false).setMainAlignment(JustifiedBoxLayout.Alignment.LEADING)), until);
+				for (SimpleTableAction<R, ?> action : theActions)
+					action.addButton(buttonPanel);
+				JPanel tablePanel = new JPanel(new BorderLayout());
+				tablePanel.add(buttonPanel.getComponent(until), BorderLayout.NORTH);
+				tablePanel.add(scroll, BorderLayout.CENTER);
+				return tablePanel;
+			} else
+				return scroll;
+		}
+	}
+
+	static class SimpleTableAction<R, A extends SimpleTableAction<R, A>> implements TableAction<R, A> {
+		final Consumer<? super List<? extends R>> theAction;
+		final Supplier<List<R>> theSelectedValues;
+		private Function<? super R, String> theEnablement;
+		private Function<? super List<? extends R>, String> theTooltip;
+		private boolean zeroAllowed;
+		private boolean multipleAllowed;
+		private boolean actWhenAnyEnabled;
+		private ObservableAction<?> theObservableAction;
+		private SettableValue<String> theEnabledString;
+		private SettableValue<String> theTooltipString;
+		private Consumer<ButtonEditor<?>> theButtonMod;
+
+		SimpleTableAction(Consumer<? super List<? extends R>> action, Supplier<List<R>> selectedValues) {
+			theAction = action;
+			theSelectedValues = selectedValues;
+			theEnabledString = new SimpleSettableValue<>(String.class, true);
+			theObservableAction = new ObservableAction<Object>() {
+				@Override
+				public TypeToken<Object> getType() {
+					return TypeTokens.get().OBJECT;
+				}
+
+				@Override
+				public Object act(Object cause) throws IllegalStateException {
+					List<R> selected = theSelectedValues.get();
+					if (theEnablement != null)
+						selected = QommonsUtils.filterMap(selected, v -> theEnablement.apply(v) == null, null);
+					theAction.accept(selected);
+					return null;
+				}
+
+				@Override
+				public ObservableValue<String> isEnabled() {
+					return theEnabledString;
+				}
+			};
+			multipleAllowed = true;
+		}
+
+		@Override
+		public A allowForMultiple(boolean allow) {
+			multipleAllowed = allow;
+			return (A) this;
+		}
+
+		@Override
+		public A allowForEmpty(boolean allow) {
+			zeroAllowed = allow;
+			return (A) this;
+		}
+
+		@Override
+		public A allowForAnyEnabled(boolean allow) {
+			actWhenAnyEnabled = allow;
+			return (A) this;
+		}
+
+		@Override
+		public A allowWhen(Function<? super R, String> filter, Consumer<ActionEnablement<R>> operation) {
+			Function<? super R, String> newFilter;
+			if (operation != null) {
+				ActionEnablement<R> next = new ActionEnablement<>(filter);
+				operation.accept(next);
+				newFilter = next;
+			} else
+				newFilter = filter;
+			if (theEnablement == null)
+				theEnablement = newFilter;
+			else {
+				Function<? super R, String> oldFilter = theEnablement;
+				theEnablement = value -> {
+					String msg = oldFilter.apply(value);
+					if (msg != null)
+						return msg;
+					return newFilter.apply(value);
+				};
+			}
+			return (A) this;
+		}
+
+		@Override
+		public A withTooltip(Function<? super List<? extends R>, String> tooltip) {
+			theTooltip = tooltip;
+			if (tooltip != null)
+				theTooltipString = new SimpleSettableValue<>(String.class, true);
+			return (A) this;
+		}
+
+		@Override
+		public A modifyAction(Function<? super ObservableAction<?>, ? extends ObservableAction<?>> actionMod) {
+			theObservableAction = actionMod.apply(theObservableAction);
+			return (A) this;
+		}
+
+		@Override
+		public A modifyButton(Consumer<ButtonEditor<?>> buttonMod) {
+			if (theButtonMod == null)
+				theButtonMod = buttonMod;
+			else {
+				Consumer<ButtonEditor<?>> oldButtonMod = theButtonMod;
+				theButtonMod = field -> {
+					oldButtonMod.accept(field);
+					buttonMod.accept(field);
+				};
+			}
+			return (A) this;
+		}
+
+		void updateSelection(List<R> selectedValues, Object cause) {
+			if (!zeroAllowed && selectedValues.isEmpty())
+				theEnabledString.set("Nothing selected", cause);
+			else if (!multipleAllowed && selectedValues.size() > 1)
+				theEnabledString.set("Multiple items selected", cause);
+			else {
+				if (theEnablement != null) {
+					Set<String> messages = null;
+					int allowedCount = 0;
+					for (R value : selectedValues) {
+						String msg = theEnablement.apply(value);
+						if (msg == null)
+							allowedCount++;
+						else {
+							if (messages == null)
+								messages = new LinkedHashSet<>();
+							messages.add(msg);
+						}
+					}
+					boolean error = false;
+					if (!actWhenAnyEnabled && !messages.isEmpty()) {
+						error = true;
+					} else if (allowedCount == 0 && !zeroAllowed) {
+						error = true;
+						if (messages.isEmpty())
+							messages.add("Nothing selected");
+					} else if (allowedCount > 1 && !multipleAllowed) {
+						error = true;
+						if (messages.isEmpty())
+							messages.add("Multiple items selected");
+					}
+					if (!error)
+						theEnabledString.set(null, cause);
+					else {
+						StringBuilder message = new StringBuilder("<html>");
+						boolean first = true;
+						for (String msg : messages) {
+							if (!first)
+								message.append("<br>");
+							else
+								first = false;
+							message.append(msg);
+						}
+						theEnabledString.set(message.toString(), cause);
+					}
+				} else
+					theEnabledString.set(null, cause);
+			}
+
+			if (theTooltipString != null && theEnabledString.get() == null) { // No point generating the tooltip if the disabled strign will
+				// show
+				theTooltipString.set(theTooltip.apply(selectedValues), cause);
+			}
+		}
+
+		void addButton(HPanelPopulator<?, ?> panel) {
+			panel.addButton((String) null, theObservableAction, button -> {
+				if (theTooltipString != null)
+					button.withTooltip(theTooltipString);
+				if (theButtonMod != null)
+					theButtonMod.accept(button);
+			});
 		}
 	}
 }
