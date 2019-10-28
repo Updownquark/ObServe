@@ -675,7 +675,7 @@ public class ObservableSwingUtils {
 						selModel.setSelectionInterval(i, i);
 						Rectangle rowBounds = null;
 						if (component instanceof JTable)
-							rowBounds = ((JTable) component).getCellRect(i, 0, false);
+							rowBounds = ((JTable) component).getCellRect(((JTable) component).convertRowIndexToModel(i), 0, false);
 						else if (component instanceof JList)
 							rowBounds = ((JList<?>) component).getCellBounds(i, i);
 						if (rowBounds != null)
