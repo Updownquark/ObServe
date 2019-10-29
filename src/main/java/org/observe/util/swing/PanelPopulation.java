@@ -12,6 +12,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -43,7 +44,9 @@ import org.observe.SettableValue;
 import org.observe.SimpleSettableValue;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
+import org.observe.util.SafeObservableCollection;
 import org.observe.util.TypeTokens;
+import org.observe.util.swing.ListFilter.FilteredValue;
 import org.observe.util.swing.ObservableSwingUtils.FontAdjuster;
 import org.qommons.IntList;
 import org.qommons.QommonsUtils;
@@ -82,11 +85,11 @@ public class PanelPopulation {
 		return new MigFieldPanel<>(panel, until == null ? Observable.empty() : until);
 	}
 
-	public static <C extends Container> PanelPopulator<C, ?> populateHPanel(C panel, String layoutType, Observable<?> until) {
+	public static <C extends Container> HPanelPopulator<C, ?> populateHPanel(C panel, String layoutType, Observable<?> until) {
 		return populateHPanel(panel, layoutType == null ? null : makeLayout(layoutType), until);
 	}
 
-	public static <C extends Container> PanelPopulator<C, ?> populateHPanel(C panel, LayoutManager layout, Observable<?> until) {
+	public static <C extends Container> HPanelPopulator<C, ?> populateHPanel(C panel, LayoutManager layout, Observable<?> until) {
 		if (panel == null)
 			panel = (C) new JPanel(layout);
 		else if (layout != null)
@@ -173,15 +176,15 @@ public class PanelPopulation {
 	}
 
 	public interface VPanelPopulator<C extends Container, P extends VPanelPopulator<C, P>> extends PanelPopulator<C, P> {
-		default P addHPanel(String fieldName, String layoutType, Consumer<HPanelPopulator<?, ?>> panel) {
+		default P addHPanel(String fieldName, String layoutType, Consumer<HPanelPopulator<JPanel, ?>> panel) {
 			return addHPanel(fieldName, makeLayout(layoutType), panel);
 		}
 
-		P addHPanel(String fieldName, LayoutManager layout, Consumer<HPanelPopulator<?, ?>> panel);
+		P addHPanel(String fieldName, LayoutManager layout, Consumer<HPanelPopulator<JPanel, ?>> panel);
 	}
 
 	public interface HPanelPopulator<C extends Container, P extends HPanelPopulator<C, P>> extends PanelPopulator<C, P>, FieldEditor<C, P> {
-		P addVPanel(Consumer<VPanelPopulator<?, ?>> panel);
+		P addVPanel(Consumer<VPanelPopulator<JPanel, ?>> panel);
 	}
 
 	public interface ComponentEditor<E, P extends ComponentEditor<E, P>> {
@@ -207,7 +210,7 @@ public class PanelPopulation {
 
 		P withPostLabel(ObservableValue<String> postLabel);
 
-		default P withTooltip(String tooltip){
+		default P withTooltip(String tooltip) {
 			return withTooltip(tooltip == null ? null : ObservableValue.of(tooltip));
 		}
 
@@ -291,6 +294,8 @@ public class PanelPopulation {
 		P withSelection(ObservableCollection<R> selection);
 
 		List<R> getSelection();
+
+		P withFiltering(ObservableValue<? extends ListFilter> filter);
 
 		P withAdd(Supplier<? extends R> creator, Consumer<TableAction<R, ?>> actionMod);
 
@@ -516,8 +521,8 @@ public class PanelPopulation {
 			else
 				observableValues = ObservableCollection.of(value.getType(), availableValues);
 			SimpleComboEditor<F, ?> fieldPanel = new SimpleComboEditor<>(fieldName, new JComboBox<>());
-			Subscription sub = ObservableComboBoxModel.comboFor(fieldPanel.getEditor(), fieldPanel.getTooltip(),
-				fieldPanel::getTooltip, observableValues, value);
+			Subscription sub = ObservableComboBoxModel.comboFor(fieldPanel.getEditor(), fieldPanel.getTooltip(), fieldPanel::getTooltip,
+				observableValues, value);
 			getUntil().take(1).act(__ -> sub.unsubscribe());
 			if (modify != null)
 				modify.accept(fieldPanel);
@@ -568,16 +573,16 @@ public class PanelPopulation {
 			return (P) this;
 		}
 
-		default P addHPanel(String fieldName, LayoutManager layout, Consumer<HPanelPopulator<?, ?>> panel) {
-			SimpleHPanel<?> subPanel = new SimpleHPanel<>(fieldName, new JPanel(layout), getUntil());
+		default P addHPanel(String fieldName, LayoutManager layout, Consumer<HPanelPopulator<JPanel, ?>> panel) {
+			SimpleHPanel<JPanel> subPanel = new SimpleHPanel<>(fieldName, new JPanel(layout), getUntil());
 			if (panel != null)
 				panel.accept(subPanel);
 			doAdd(subPanel);
 			return (P) this;
 		}
 
-		default P addVPanel(Consumer<VPanelPopulator<?, ?>> panel) {
-			MigFieldPanel<?> subPanel = new MigFieldPanel<>(null, getUntil());
+		default P addVPanel(Consumer<VPanelPopulator<JPanel, ?>> panel) {
+			MigFieldPanel<JPanel> subPanel = new MigFieldPanel<>(new JPanel(), getUntil());
 			if (panel != null)
 				panel.accept(subPanel);
 			doAdd(subPanel, null, null);
@@ -690,7 +695,7 @@ public class PanelPopulation {
 		}
 
 		@Override
-		public MigFieldPanel<C> addHPanel(String fieldName, LayoutManager layout, Consumer<HPanelPopulator<?, ?>> panel) {
+		public MigFieldPanel<C> addHPanel(String fieldName, LayoutManager layout, Consumer<HPanelPopulator<JPanel, ?>> panel) {
 			return PartialPanelPopulatorImpl.super.addHPanel(fieldName, layout, panel);
 		}
 
@@ -860,7 +865,7 @@ public class PanelPopulation {
 		}
 
 		@Override
-		public SimpleHPanel<C> addVPanel(Consumer<VPanelPopulator<?, ?>> panel) {
+		public SimpleHPanel<C> addVPanel(Consumer<VPanelPopulator<JPanel, ?>> panel) {
 			return PartialPanelPopulatorImpl.super.addVPanel(panel);
 		}
 
@@ -1046,6 +1051,7 @@ public class PanelPopulation {
 		SimpleTableBuilder(ObservableCollection<R> rows) {
 			super(new JTable());
 			theRows = rows;
+			theActions = new LinkedList<>();
 		}
 
 		@Override
@@ -1078,6 +1084,12 @@ public class PanelPopulation {
 		}
 
 		@Override
+		public P withFiltering(ObservableValue<? extends ListFilter> filter) {
+			theFilter = filter;
+			return (P) this;
+		}
+
+		@Override
 		public List<R> getSelection() {
 			return ObservableSwingUtils.getSelection(((ObservableTableModel<R>) getEditor().getModel()).getRowModel(),
 				getEditor().getSelectionModel(), null);
@@ -1098,17 +1110,17 @@ public class PanelPopulation {
 		@Override
 		public P withAdd(Supplier<? extends R> creator, Consumer<TableAction<R, ?>> actionMod) {
 			return withMultiAction(values -> {
-				R value=creator.get();
-				CollectionElement<R> el=theRows.addElement(value, false);
-				//Assuming here that the action is only called on the EDT,
-				//meaning the above add operation has now been propagated to the list model and the selection model
-				//It also means that the row model is sync'd with the collection, so we can use the index from the collection here
-				int index=theRows.getElementsBefore(el.getElementId());
+				R value = creator.get();
+				CollectionElement<R> el = theRows.addElement(value, false);
+				// Assuming here that the action is only called on the EDT,
+				// meaning the above add operation has now been propagated to the list model and the selection model
+				// It also means that the row model is sync'd with the collection, so we can use the index from the collection here
+				int index = theRows.getElementsBefore(el.getElementId());
 				getEditor().getSelectionModel().setSelectionInterval(index, index);
-			}, action->{
+			}, action -> {
 				action.allowForMultiple(true).allowForEmpty(true).allowForAnyEnabled(true)//
 				.modifyButton(button -> button.withIcon(getAddIcon()).withTooltip("Add new item"));
-				if(actionMod!=null)
+				if (actionMod != null)
 					actionMod.accept(action);
 			});
 		}
@@ -1190,10 +1202,47 @@ public class PanelPopulation {
 
 		@Override
 		protected Component getComponent(Observable<?> until) {
-			ObservableTableModel<R> model = new ObservableTableModel<>(theRows, theColumns);
+			ObservableTableModel<R> model;
+			ObservableCollection<ListFilter.FilteredValue<R>> filtered;
+			if (theFilter != null) {
+				ObservableCollection<R> safeRows = new SafeObservableCollection<>(theRows, EventQueue::isDispatchThread,
+					EventQueue::invokeLater, until);
+				ObservableCollection<CategoryRenderStrategy<? super R, ?>> safeColumns = new SafeObservableCollection<>(//
+					(ObservableCollection<CategoryRenderStrategy<? super R, ?>>) theColumns, EventQueue::isDispatchThread,
+					EventQueue::invokeLater, until);
+				filtered = ListFilter.applyFilter(safeRows, //
+					() -> QommonsUtils.filterMap(safeColumns, c -> c.isFilterable(), c -> row -> c.print(row)), //
+					theFilter, until);
+				model = new ObservableTableModel<>(filtered.flow().map(theRows.getType(), f -> f.value, opts -> opts.withElementSetting(//
+					new ObservableCollection.ElementSetter<ListFilter.FilteredValue<R>, R>() {
+						@Override
+						public String setElement(FilteredValue<R> element, R newValue, boolean replace) {
+							element.setValue(newValue);
+							return null;
+						}
+					})).collectActive(until), //
+					true, safeColumns, true);
+			} else {
+				filtered = null;
+				model = new ObservableTableModel<>(theRows, theColumns);
+			}
 			JTable table = getEditor();
 			table.setModel(model);
-			Subscription sub = ObservableTableModel.hookUp(table, model);
+			Subscription sub = ObservableTableModel.hookUp(table, model, //
+				filtered == null ? null : new ObservableTableModel.TableRenderContext() {
+				@Override
+				public int[][] getEmphaticRegions(int row, int column) {
+					ListFilter.FilteredValue<R> fv = filtered.get(row);
+					int c = 0;
+					for (int i = 0; i < column; i++) {
+						if (model.getColumn(i).isFilterable())
+							c++;
+					}
+						if (c >= fv.getColumns() || fv.isTrivial())
+						return null;
+					return fv.getMatches(c);
+				}
+			});
 			if (until != null)
 				until.take(1).act(__ -> sub.unsubscribe());
 

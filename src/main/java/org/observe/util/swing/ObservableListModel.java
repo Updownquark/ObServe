@@ -15,6 +15,7 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
+import org.observe.util.SafeObservableCollection;
 import org.qommons.Transaction;
 import org.qommons.tree.BetterTreeList;
 
@@ -30,17 +31,24 @@ public class ObservableListModel<E> implements ListModel<E> {
 	 * documenting the modification
 	 */
 	private final List<E> theCachedData;
+	private final boolean isSafe;
 	private final List<ListDataListener> theListeners;
 	private Subscription theListening;
 	private final AtomicInteger thePendingUpdates;
 	private volatile boolean isEventing;
 
-	/**
-	 * @param wrap
-	 *            The observable list to back this model
-	 */
+	/** @param wrap The observable collection to back this model */
 	public ObservableListModel(ObservableCollection<E> wrap) {
+		this(wrap, false);
+	}
+
+	/**
+	 * @param wrap The observable collection to back this model
+	 * @param safe Whether the collection is already {@link SafeObservableCollection safe}
+	 */
+	public ObservableListModel(ObservableCollection<E> wrap, boolean safe) {
 		theWrapped = wrap;
+		isSafe = safe;
 		theCachedData = new ArrayList<>();
 		theListeners = new BetterTreeList<>(false);
 		thePendingUpdates = new AtomicInteger();
@@ -105,7 +113,7 @@ public class ObservableListModel<E> implements ListModel<E> {
 			theListening = theWrapped.changes().act(event -> {
 				// All internal data representation mutation and event firing must be done on the EDT
 				thePendingUpdates.getAndIncrement();
-				if (EventQueue.isDispatchThread() && !isEventing)
+				if (isSafe || (EventQueue.isDispatchThread() && !isEventing))
 					handleEvent(event);
 				else
 					EventQueue.invokeLater(() -> handleEvent(event));

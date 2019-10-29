@@ -16,11 +16,12 @@ import javax.swing.JTree;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.tree.TreePath;
 
+import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.ObservableComboBoxModel;
 import org.observe.util.swing.ObservableListModel;
-import org.observe.util.swing.ObservableListSelectionModel;
+import org.observe.util.swing.ObservableSwingUtils;
 import org.observe.util.swing.ObservableTreeModel;
 
 import com.google.common.reflect.TypeToken;
@@ -97,9 +98,9 @@ public class ObservableDemoGui extends JPanel {
 		ObservableCollection<Integer> selectedValues = ObservableCollection.flattenValue(//
 			theSelectedCategory.map(cat -> cat == null ? ObservableCollection.of(TypeTokens.get().INT) : cat.values));
 		theValueList = new JList<>(new ObservableListModel<>(selectedValues));
-		ObservableListSelectionModel<Integer> selectionModel = new ObservableListSelectionModel<>(selectedValues, null);
-		theValueList.setSelectionModel(selectionModel);
-		theSelectedValues = selectionModel.getSelectedValues();
+		theSelectedValues = ObservableCollection.create(TypeTokens.get().INT);
+		ObservableSwingUtils.syncSelection(theValueList, theValueList.getModel(), theValueList::getSelectionModel, Equivalence.DEFAULT,
+			theSelectedValues, Observable.empty());
 		theValueSpinner = new JSpinner(new SpinnerNumberModel(0, 0, 100000, 1));
 		theValueAddButton = new JButton("Add Value");
 		theValueAddButton.addActionListener(evt -> theValueAddObservable.onNext((Integer) theValueSpinner.getValue()));

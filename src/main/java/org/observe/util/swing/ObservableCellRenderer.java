@@ -20,10 +20,14 @@ import javax.swing.tree.TreeCellRenderer;
 import org.qommons.TriFunction;
 
 public interface ObservableCellRenderer<M, C> {
+	public interface CellRenderContext {
+		int[][] getEmphaticRegions();
+	}
+
 	String renderAsText(Supplier<M> modelValue, C columnValue);
 
 	Component getCellRendererComponent(Component parent, Supplier<M> modelValue, C columnValue, boolean selected, boolean expanded,
-		boolean leaf, boolean hasFocus, int row, int column);
+		boolean leaf, boolean hasFocus, int row, int column, CellRenderContext ctx);
 
 	public static <M, C> ObservableCellRenderer<M, C> fromTableRenderer(TableCellRenderer renderer,
 		BiFunction<Supplier<M>, C, String> asText) {
@@ -35,9 +39,11 @@ public interface ObservableCellRenderer<M, C> {
 
 			@Override
 			public Component getCellRendererComponent(Component parent, Supplier<M> modelValue, C columnValue, boolean selected,
-				boolean expanded, boolean leaf, boolean hasFocus, int row, int column) {
-				return renderer.getTableCellRendererComponent(parent instanceof JTable ? (JTable) parent : null, columnValue, selected,
-					hasFocus, row, column);
+				boolean expanded, boolean leaf, boolean hasFocus, int row, int column, CellRenderContext ctx) {
+				return tryEmphasize(//
+					renderer.getTableCellRendererComponent(parent instanceof JTable ? (JTable) parent : null, columnValue, selected,
+						hasFocus, row, column),
+					ctx);
 			}
 		}
 		return new FlatTableCellRenderer();
@@ -53,12 +59,47 @@ public interface ObservableCellRenderer<M, C> {
 
 			@Override
 			public Component getCellRendererComponent(Component parent, Supplier<M> modelValue, C columnValue, boolean selected,
-				boolean expanded, boolean leaf, boolean hasFocus, int row, int column) {
-				return renderer.getTreeCellRendererComponent(parent instanceof JTree ? (JTree) parent : null, columnValue, selected,
-					expanded, leaf, row, hasFocus);
+				boolean expanded, boolean leaf, boolean hasFocus, int row, int column, CellRenderContext ctx) {
+				return tryEmphasize(//
+					renderer.getTreeCellRendererComponent(parent instanceof JTree ? (JTree) parent : null, columnValue, selected, expanded,
+						leaf, row, hasFocus),
+					ctx);
 			}
 		}
 		return new FlatTreeCellRenderer();
+	}
+
+	public static Component tryEmphasize(Component comp, CellRenderContext ctx) {
+		if (!(comp instanceof JLabel))
+			return comp;
+		JLabel label = (JLabel) comp;
+		String text = label.getText();
+		if (text.startsWith("<hml>") || text.startsWith("<HTML>"))
+			return comp;
+		int[][] regions = ctx.getEmphaticRegions();
+		if (regions == null || regions.length == 0)
+			return comp;
+		StringBuilder newText = new StringBuilder("<html>");
+		boolean emphasized = false;
+		for (int c = 0; c < text.length(); c++) {
+			boolean newEmph = false;
+			for (int[] region : regions) {
+				if (c >= region[0] && c < region[1]) {
+					newEmph = true;
+					break;
+				}
+			}
+			if (newEmph && !emphasized)
+				newText.append("<b>");
+			else if (!newEmph && emphasized)
+				newText.append("</b>");
+			newText.append(text.charAt(c));
+		}
+		if (emphasized)
+			newText.append("</b>");
+
+		label.setText(newText.toString());
+		return comp;
 	}
 
 	public static abstract class SimpleObservableCellRenderer<M, C, R extends Component> implements ObservableCellRenderer<M, C> {
@@ -70,13 +111,13 @@ public interface ObservableCellRenderer<M, C> {
 
 		@Override
 		public Component getCellRendererComponent(Component parent, Supplier<M> modelValue, C columnValue, boolean selected,
-			boolean expanded, boolean leaf, boolean hasFocus, int row, int column) {
-			render(theComponent, parent, modelValue, columnValue, selected, expanded, leaf, hasFocus, row, column);
+			boolean expanded, boolean leaf, boolean hasFocus, int row, int column, CellRenderContext ctx) {
+			render(theComponent, parent, modelValue, columnValue, selected, expanded, leaf, hasFocus, row, column, ctx);
 			return theComponent;
 		}
 
 		protected abstract void render(R component, Component parent, Supplier<M> modelValue, C columnValue, boolean selected,
-			boolean expanded, boolean leaf, boolean hasFocus, int row, int column);
+			boolean expanded, boolean leaf, boolean hasFocus, int row, int column, CellRenderContext ctx);
 	}
 
 	public static class DefaultObservableCellRenderer<M, C> implements ObservableCellRenderer<M, C> {
@@ -101,7 +142,7 @@ public interface ObservableCellRenderer<M, C> {
 
 		@Override
 		public Component getCellRendererComponent(Component parent, Supplier<M> modelValue, C columnValue, boolean selected,
-			boolean expanded, boolean leaf, boolean hasFocus, int row, int column) {
+			boolean expanded, boolean leaf, boolean hasFocus, int row, int column, CellRenderContext ctx) {
 			Object rendered = getRenderValue(modelValue, columnValue, selected, expanded, leaf, hasFocus, row, column);
 			Component c;
 			if (parent instanceof JTable) {
@@ -122,7 +163,7 @@ public interface ObservableCellRenderer<M, C> {
 				theLabel.setText(String.valueOf(rendered));
 				c = theLabel;
 			}
-			return c;
+			return tryEmphasize(c, ctx);
 		}
 
 		protected Object getRenderValue(Supplier<M> modelValue, C columnValue, boolean selected, boolean expanded, boolean leaf,

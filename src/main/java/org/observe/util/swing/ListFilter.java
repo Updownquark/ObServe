@@ -1,6 +1,7 @@
 package org.observe.util.swing;
 
 import java.text.ParseException;
+import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.function.Function;
@@ -12,24 +13,25 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
+import org.qommons.StringUtils;
 import org.qommons.io.Format;
 
 import com.google.common.reflect.TypeToken;
 
 public interface ListFilter {
-	public static class FilteredValue<E> {
+	public static class FilteredValue<E> implements Comparable<FilteredValue<?>> {
 		E value;
-
-		int[][] matches;
+		int[][][] matches;
+		boolean isTrivial;
 
 		public FilteredValue(E value, int columns) {
 			this.value = value;
-			matches = new int[columns][];
+			matches = new int[columns][][];
 		}
 
 		void columnsChanged(int columns) {
 			if (matches.length != columns)
-				matches = new int[columns][];
+				matches = new int[columns][][];
 		}
 
 		public E getValue() {
@@ -43,28 +45,64 @@ public interface ListFilter {
 		public boolean hasMatch() {
 			if (matches == null)
 				return true;
-			for (int[] m : matches)
-				if (m != null)
+			for (int c = 0; c < matches.length; c++)
+				if (matches(c))
 					return true;
 			return false;
 		}
 
+		public boolean isTrivial() {
+			return isTrivial;
+		}
+
+		public int getColumns() {
+			return matches.length;
+		}
+
 		public boolean matches(int column) {
-			return matches[column] != null;
+			return matches[column] != null && matches[column].length > 0;
 		}
 
-		public int getStart(int column) {
-			return matches[column] == null ? -1 : matches[column][0];
+		public int[][] getMatches(int column) {
+			return matches[column];
 		}
 
-		public int getEnd(int column) {
-			return matches[column] == null ? -1 : matches[column][1];
+		@Override
+		public int compareTo(FilteredValue<?> o) {
+			int thisMin = -1;
+			int thisCount = 0;
+			for (int[][] cm : matches) {
+				for (int[] m : cm) {
+					if (thisMin < 0 || m[0] < thisMin)
+						thisMin = m[0];
+					thisCount++;
+				}
+			}
+			int thatMin = -1;
+			int thatCount = 0;
+			for (int[][] cm : o.matches) {
+				for (int[] m : cm) {
+					if (thisCount == 0)
+						return 1;
+					if (thatMin < 0 || m[0] < thatMin)
+						thatMin = m[0];
+					thatCount++;
+				}
+			}
+			int comp = -Integer.compare(thisCount, thatCount);
+			if (comp == 0)
+				comp = Integer.compare(thisMin, thatMin);
+			return comp;
 		}
 	}
 
-	int[] findMatch(CharSequence text);
+	int[][] findMatches(CharSequence text);
 
-	public static final Pattern INT_RANGE_PATTERN = Pattern.compile("(?<i1>\\d)\\-(?<i2>\\d)");
+	default boolean isTrivial() {
+		return false;
+	}
+
+	public static final Pattern INT_RANGE_PATTERN = Pattern.compile("(?<i1>\\d+)\\-(?<i2>\\d+)");
 
 	public static final Format<ListFilter> FORMAT = new Format<ListFilter>() {
 		@Override
@@ -134,16 +172,29 @@ public interface ListFilter {
 					v = new FilteredValue<>(cv.getElement(), renders.size());
 				ListFilter f = cv.get(filter);
 				int i = 0;
-				for (Function<? super E, ? extends CharSequence> r : renders)
-					old.matches[i++] = f.findMatch(r.apply(v.value));
+				boolean trivial = f.isTrivial();
+				for (Function<? super E, ? extends CharSequence> r : renders) {
+					v.matches[i++] = f.findMatches(r.apply(v.value));
+					v.isTrivial = trivial;
+				}
 				return v;
-			})).filter(fv -> fv.hasMatch() ? null : "No match").collectActive(until);
+			})).filter(fv -> fv.hasMatch() ? null : "No match").sorted(FilteredValue::compareTo).collectActive(until);
 	}
 
 	public static final ListFilter INCLUDE_ALL = new ListFilter() {
 		@Override
-		public int[] findMatch(CharSequence value) {
-			return new int[] { 0, value.length() };
+		public int[][] findMatches(CharSequence value) {
+			return new int[][] { new int[] { 0, value.length() } };
+		}
+
+		@Override
+		public boolean isTrivial() {
+			return true;
+		}
+
+		@Override
+		public String toString() {
+			return "";
 		}
 	};
 
@@ -155,16 +206,20 @@ public interface ListFilter {
 		}
 
 		@Override
-		public int[] findMatch(CharSequence toSearch) {
+		public int[][] findMatches(CharSequence toSearch) {
 			int c, textIdx;
-			for (c = 0, textIdx = 0; c < toSearch.length() && textIdx < theMatcher.length(); c++) {
+			List<int[]> matches = null;
+			for (c = 0, textIdx = 0; c < toSearch.length(); c++) {
 				if (Character.toLowerCase(toSearch.charAt(c)) == theMatcher.charAt(textIdx))
 					textIdx++;
+				if (textIdx == theMatcher.length()) {
+					if (matches == null)
+						matches = new LinkedList<>();
+					matches.add(new int[] { c - textIdx, c });
+					textIdx = 0;
+				}
 			}
-			if (textIdx == theMatcher.length())
-				return new int[] { c - textIdx, c };
-			else
-				return null;
+			return matches == null ? null : matches.toArray(new int[matches.size()][]);
 		}
 
 		@Override
@@ -178,28 +233,34 @@ public interface ListFilter {
 		private final String theHigh;
 
 		public RangeFilter(String low, String high) {
-			int comp = low.compareTo(high);
+			int comp = StringUtils.compareNumberTolerant(low, high, true, true);
 			theLow = comp <= 0 ? low : high;
 			theHigh = comp <= 0 ? high : low;
 		}
 
 		@Override
-		public int[] findMatch(CharSequence toSearch) {
+		public int[][] findMatches(CharSequence toSearch) {
+			List<int[]> matches = null;
 			int digitStart = -1;
 			for (int c = 0; c < toSearch.length(); c++) {
 				if (Character.isDigit(toSearch.charAt(c))) {
 					if (digitStart < 0)
 						digitStart = c;
 				} else if (digitStart >= 0) {
-					if (isIncluded(toSearch, digitStart, c))
-						return new int[] { digitStart, c };
+					if (isIncluded(toSearch, digitStart, c)) {
+						if (matches == null)
+							matches = new LinkedList<>();
+						matches.add(new int[] { digitStart, c });
+					}
 					digitStart = -1;
 				}
 			}
-			if (digitStart >= 0 && isIncluded(toSearch, digitStart, toSearch.length()))
-				return new int[] { digitStart, toSearch.length() };
-			else
-				return null;
+			if (digitStart >= 0 && isIncluded(toSearch, digitStart, toSearch.length())) {
+				if (matches == null)
+					matches = new LinkedList<>();
+				matches.add(new int[] { digitStart, toSearch.length() });
+			}
+			return matches == null ? null : matches.toArray(new int[matches.size()][]);
 		}
 
 		private boolean isIncluded(CharSequence toSearch, int start, int end) {
@@ -244,14 +305,30 @@ public interface ListFilter {
 		}
 
 		@Override
-		public int[] findMatch(CharSequence value) {
-			int[] minIndex = null;
+		public int[][] findMatches(CharSequence value) {
+			List<int[]> matches = null;
 			for (ListFilter filter : theFilters) {
-				int[] index = filter.findMatch(value);
-				if (index != null && (minIndex == null || index[0] < minIndex[0]))
-					minIndex = index;
+				int[][] match = filter.findMatches(value);
+				if (match != null && match.length > 0) {
+					if (matches == null)
+						matches = new LinkedList<>();
+					for (int[] m : match)
+						matches.add(m);
+				}
 			}
-			return minIndex;
+			if (matches == null)
+				return null;
+			int[][] ret = matches.toArray(new int[matches.size()][]);
+			Arrays.sort(ret, (m1, m2) -> Integer.compare(m1[0], m2[0]));
+			return ret;
+		}
+
+		@Override
+		public boolean isTrivial() {
+			for (ListFilter f : theFilters)
+				if (!f.isTrivial())
+					return false;
+			return true;
 		}
 
 		@Override
