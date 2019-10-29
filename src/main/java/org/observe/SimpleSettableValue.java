@@ -5,6 +5,7 @@ import java.util.function.Consumer;
 
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
+import org.qommons.Identifiable;
 import org.qommons.Transaction;
 import org.qommons.collect.ListenerList;
 
@@ -20,6 +21,8 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 
 	private final TypeToken<T> theType;
 	private final boolean isNullable;
+	private final Object theIdentity;
+	private long theStamp;
 	private T theValue;
 
 	/**
@@ -40,14 +43,32 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 
 	public SimpleSettableValue(TypeToken<T> type, boolean nullable, ReentrantReadWriteLock lock,
 		Consumer<ListenerList.Builder> listeningOptions) {
+		this(type, "settable-value", nullable, lock, listeningFor(listeningOptions));
+	}
+
+	private static ListenerList.Builder listeningFor(Consumer<ListenerList.Builder> listeningOptions) {
+		ListenerList.Builder listening = ListenerList.build();
+		if (listeningOptions != null)
+			listeningOptions.accept(listening);
+		return listening;
+	}
+
+	SimpleSettableValue(TypeToken<T> type, String description, boolean nullable, ReentrantReadWriteLock lock,
+		ListenerList.Builder listening) {
 		theType = type;
 		isNullable = nullable && !type.isPrimitive();
-		theEventer = createEventer(lock, listeningOptions);
+		theIdentity = Identifiable.baseId(description, this);
+		theEventer = createEventer(lock, listening);
 	}
 
 	@Override
 	public TypeToken<T> getType() {
 		return theType;
+	}
+
+	@Override
+	public Object getIdentity() {
+		return theIdentity;
 	}
 
 	@Override
@@ -63,6 +84,11 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 	@Override
 	public T get() {
 		return theValue;
+	}
+
+	@Override
+	public long getStamp() {
+		return theStamp;
 	}
 
 	protected void fireInitial(Observer<? super ObservableValueEvent<T>> observer) {
@@ -81,6 +107,7 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 			theEventer.getLock().writeLock().lock();
 		try {
 			T old = theValue;
+			theStamp++;
 			theValue = value;
 			ObservableValueEvent<T> evt = createChangeEvent(old, value, cause);
 			try (Transaction t = ObservableValueEvent.use(evt)) {
@@ -108,9 +135,8 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 	}
 
 	/** @return The observable for this value to use to fire its initial and change events */
-	protected SimpleObservable<ObservableValueEvent<T>> createEventer(ReentrantReadWriteLock lock,
-		Consumer<ListenerList.Builder> listeningOptions) {
-		return new SimpleObservable<>(null, true, lock, listeningOptions);
+	protected SimpleObservable<ObservableValueEvent<T>> createEventer(ReentrantReadWriteLock lock, ListenerList.Builder listening) {
+		return new SimpleObservable<>(null, Identifiable.wrap(theIdentity, "noInitChanges"), true, lock, listening);
 	}
 
 	@Override

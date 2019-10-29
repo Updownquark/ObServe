@@ -47,6 +47,11 @@ public abstract class ObservableCollectionWrapper<E> implements ObservableCollec
 	}
 
 	@Override
+	public Object getIdentity() {
+		return getWrapped().getIdentity();
+	}
+
+	@Override
 	public CollectionElement<E> getElement(int index) {
 		return getWrapped().getElement(index);
 	}

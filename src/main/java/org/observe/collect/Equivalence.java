@@ -8,6 +8,7 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 
 import org.observe.util.TypeTokens;
+import org.qommons.Identifiable;
 import org.qommons.QommonsUtils;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
@@ -286,6 +287,7 @@ public interface Equivalence<E> {
 		private final BetterSet<E> theWrapped;
 		private final Function<? super E2, ? extends T> theMap;
 		private final Function<? super T, ? extends E2> theReverse;
+		private Object theIdentity;
 
 		public MappedSet(MappedEquivalence<E, E2, T> equiv, BetterSet<E> wrapped, Function<? super E2, ? extends T> map,
 			Function<? super T, ? extends E2> reverse) {
@@ -293,6 +295,13 @@ public interface Equivalence<E> {
 			theWrapped = wrapped;
 			theMap = map;
 			theReverse = reverse;
+		}
+
+		@Override
+		public Object getIdentity() {
+			if (theIdentity == null)
+				theIdentity = Identifiable.wrap(theWrapped.getIdentity(), "map", theMap);
+			return theIdentity;
 		}
 
 		@Override
@@ -594,6 +603,7 @@ public interface Equivalence<E> {
 		private final BetterMap<E, V> theWrapped;
 		private final Function<? super E2, ? extends T> theMap;
 		private final Function<? super T, ? extends E2> theReverse;
+		private Object theIdentity;
 
 		public MappedMap(MappedEquivalence<E, E2, T> equiv, BetterMap<E, V> wrapped, Function<? super E2, ? extends T> map,
 			Function<? super T, ? extends E2> reverse) {
@@ -601,6 +611,13 @@ public interface Equivalence<E> {
 			theWrapped = wrapped;
 			theMap = map;
 			theReverse = reverse;
+		}
+
+		@Override
+		public Object getIdentity() {
+			if (theIdentity == null)
+				theIdentity = Identifiable.wrap(theWrapped.getIdentity(), "map", theMap);
+			return theIdentity;
 		}
 
 		@Override

@@ -22,6 +22,7 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionMan
 import org.observe.collect.ObservableSetImpl.DistinctBaseFlow;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
+import org.qommons.Identifiable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterSet;
 import org.qommons.collect.BetterSortedSet;
@@ -85,6 +86,11 @@ public class ObservableSortedSetImpl {
 		@Override
 		protected ObservableSortedSet<E> getCollection() {
 			return (ObservableSortedSet<E>) super.getCollection();
+		}
+
+		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getCollection().getIdentity(), "find", theSearch, theFilter);
 		}
 
 		@Override

@@ -6,6 +6,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
+import org.qommons.Identifiable;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.ListenerList;
@@ -14,7 +15,7 @@ import com.google.common.reflect.TypeToken;
 
 /**
  * <p>
- * A stamped settable value that allows listeners to veto events. I.e. a listener being notified of a new value can then call
+ * A settable value that allows listeners to veto events. I.e. a listener being notified of a new value can then call
  * {@link #set(Object, Object)} to change the value. When this happens, listeners that have not yet been notified of the previous value
  * never will be. The {@link ObservableValueEvent} instances that each listener receives will have an
  * {@link ObservableValueEvent#getOldValue() old value} of the value that the listener was last notified of.
@@ -26,8 +27,9 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <T> The type of the value
  */
-public class VetoableSettableValue<T> implements SettableStampedValue<T> {
+public class VetoableSettableValue<T> implements SettableValue<T> {
 	private final TypeToken<T> theType;
+	private final String theDescription;
 	private final boolean isNullable;
 	private final ReentrantReadWriteLock theLock;
 	private final ListenerList<ListenerHolder<T>> theListeners;
@@ -35,6 +37,9 @@ public class VetoableSettableValue<T> implements SettableStampedValue<T> {
 	private volatile T theValue;
 	private volatile long theStamp;
 	private boolean isAlive;
+
+	private Object theIdentity;
+	private Object theChangesIdentity;
 
 	/**
 	 * @param type The type of the value
@@ -50,18 +55,33 @@ public class VetoableSettableValue<T> implements SettableStampedValue<T> {
 	 * @param lock The lock for this value;
 	 */
 	public VetoableSettableValue(TypeToken<T> type, boolean nullable, ReentrantReadWriteLock lock) {
+		this(type, "settable-value", nullable, ListenerList.build(), lock);
+	}
+
+	VetoableSettableValue(TypeToken<T> type, String description, boolean nullable, ListenerList.Builder listening,
+		ReentrantReadWriteLock lock) {
 		theType = type;
+		theDescription = description;
 		isNullable = nullable;
 		theLock = lock;
-		// We secure this list ourselves, so no need for any thread-safety
-		theListeners = ListenerList.build().forEachSafe(false).allowReentrant().withFastSize(false)
-			.withSyncType(ListenerList.SynchronizationType.NONE).build();
+		if (theLock != null) {
+			// We secure this list ourselves, so no need for any thread-safety
+			listening.forEachSafe(false).allowReentrant().withFastSize(false).withSyncType(ListenerList.SynchronizationType.NONE);
+		}
+		theListeners = listening.build();
 		isAlive = true;
 	}
 
 	@Override
 	public TypeToken<T> getType() {
 		return theType;
+	}
+
+	@Override
+	public Object getIdentity() {
+		if (theIdentity == null)
+			theIdentity = Identifiable.baseId(theDescription, this);
+		return theIdentity;
 	}
 
 	/** @return Whether null can be assigned to this value */
@@ -211,6 +231,13 @@ public class VetoableSettableValue<T> implements SettableStampedValue<T> {
 	}
 
 	private class VSVChanges implements Observable<ObservableValueEvent<T>> {
+		@Override
+		public Object getIdentity() {
+			if (theChangesIdentity == null)
+				theChangesIdentity = Identifiable.wrap(VSVChanges.this.getIdentity(), "noInitChanges");
+			return theChangesIdentity;
+		}
+
 		@Override
 		public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
 			Lock lock = theLock == null ? null : theLock.readLock();

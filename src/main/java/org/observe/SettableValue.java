@@ -1,5 +1,6 @@
 package org.observe;
 
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -8,7 +9,9 @@ import java.util.function.Supplier;
 import org.observe.XformOptions.SimpleXformOptions;
 import org.observe.XformOptions.XformDef;
 import org.observe.util.TypeTokens;
+import org.qommons.Identifiable;
 import org.qommons.TriFunction;
+import org.qommons.collect.ListenerList;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -27,13 +30,14 @@ public interface SettableValue<T> extends ObservableValue<T> {
 		public <P> TypeToken<? extends SettableValue> createCompoundType(TypeToken<P> param) {
 			return new TypeToken<SettableValue<P>>() {}.where(new TypeParameter<P>() {}, param);
 		}
-		});
+	});
 	/** This class's wildcard {@link TypeToken} */
 	static TypeToken<SettableValue<?>> TYPE = TYPE_KEY.parameterized();
 
 	/** TypeToken for String.class */
 	TypeToken<String> STRING_TYPE = TypeTokens.get().of(String.class);
 
+	/** A string-typed observable that always returns null */
 	ObservableValue<String> ALWAYS_ENABLED = ObservableValue.of(STRING_TYPE, null);
 
 	/**
@@ -129,6 +133,16 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			}
 
 			@Override
+			public Object getIdentity() {
+				return SettableValue.this.getIdentity();
+			}
+
+			@Override
+			public long getStamp() {
+				return SettableValue.this.getStamp();
+			}
+
+			@Override
 			public T get() {
 				return SettableValue.this.get();
 			}
@@ -150,29 +164,13 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 * @return A settable value that rejects values that return other than null for the given test
 	 */
 	default SettableValue<T> filterAccept(Function<? super T, String> accept) {
-		SettableValue<T> outer = this;
-		return new SettableValue<T>() {
-			@Override
-			public TypeToken<T> getType() {
-				return outer.getType();
-			}
-
-			@Override
-			public T get() {
-				return outer.get();
-			}
-
-			@Override
-			public Observable<ObservableValueEvent<T>> noInitChanges() {
-				return SettableValue.this.noInitChanges();
-			}
-
+		return new WrappingSettableValue<T>(this) {
 			@Override
 			public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
 				String error = accept.apply(value);
 				if (error != null)
 					throw new IllegalArgumentException(error);
-				return outer.set(value, cause);
+				return theWrapped.set(value, cause);
 			}
 
 			@Override
@@ -180,17 +178,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 				String error = accept.apply(value);
 				if (error != null)
 					return error;
-				return outer.isAcceptable(value);
-			}
-
-			@Override
-			public ObservableValue<String> isEnabled() {
-				return outer.isEnabled();
-			}
-
-			@Override
-			public String toString() {
-				return outer.toString();
+				return theWrapped.isAcceptable(value);
 			}
 		};
 	}
@@ -204,42 +192,11 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 * @return The settable
 	 */
 	default SettableValue<T> onSet(Consumer<T> onSetAction) {
-		SettableValue<T> outer = this;
-		return new SettableValue<T>() {
-			@Override
-			public TypeToken<T> getType() {
-				return outer.getType();
-			}
-
-			@Override
-			public T get() {
-				return outer.get();
-			}
-
-			@Override
-			public Observable<ObservableValueEvent<T>> noInitChanges() {
-				return SettableValue.this.noInitChanges();
-			}
-
+		return new WrappingSettableValue<T>(this) {
 			@Override
 			public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
 				onSetAction.accept(value);
-				return outer.set(value, cause);
-			}
-
-			@Override
-			public <V extends T> String isAcceptable(V value) {
-				return outer.isAcceptable(value);
-			}
-
-			@Override
-			public ObservableValue<String> isEnabled() {
-				return outer.isEnabled();
-			}
-
-			@Override
-			public String toString() {
-				return outer.toString();
+				return theWrapped.set(value, cause);
 			}
 		};
 	}
@@ -250,44 +207,18 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 *         a non-null value
 	 */
 	default SettableValue<T> disableWith(ObservableValue<String> enabled) {
-		SettableValue<T> outer = this;
-		return new SettableValue<T>() {
-			@Override
-			public TypeToken<T> getType() {
-				return outer.getType();
-			}
-
-			@Override
-			public T get() {
-				return outer.get();
-			}
-
-			@Override
-			public Observable<ObservableValueEvent<T>> noInitChanges() {
-				return SettableValue.this.noInitChanges();
-			}
-
+		return new WrappingSettableValue<T>(this) {
 			@Override
 			public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
 				String msg = enabled.get();
 				if (msg != null)
 					throw new IllegalArgumentException(msg);
-				return outer.set(value, cause);
-			}
-
-			@Override
-			public <V extends T> String isAcceptable(V value) {
-				return outer.isAcceptable(value);
+				return theWrapped.set(value, cause);
 			}
 
 			@Override
 			public ObservableValue<String> isEnabled() {
-				return ObservableValue.firstValue(TypeTokens.get().STRING, s -> s != null, () -> null, enabled, outer.isEnabled());
-			}
-
-			@Override
-			public String toString() {
-				return outer.toString();
+				return ObservableValue.firstValue(TypeTokens.get().STRING, s -> s != null, () -> null, enabled, theWrapped.isEnabled());
 			}
 		};
 	}
@@ -318,7 +249,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 		SettableValue<T> root = this;
 		return new ComposedSettableValue<R>(type, args -> {
 			return function.apply((T) args[0]);
-		}, new XformDef(xform), this) {
+		}, "map", new XformDef(xform), this) {
 			@Override
 			public <V extends R> R set(V value, Object cause) throws IllegalArgumentException {
 				T old = root.set(reverse.apply(value), cause);
@@ -372,7 +303,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 		SettableValue<T> root = this;
 		return new ComposedSettableValue<R>(type, args -> {
 			return function.apply((T) args[0], (U) args[1]);
-		}, new XformDef(xform), this, arg) {
+		}, "combine", new XformDef(xform), this, arg) {
 			@Override
 			public <V extends R> R set(V value, Object cause) throws IllegalArgumentException {
 				U argVal = arg.get();
@@ -414,7 +345,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 		SettableValue<T> root = this;
 		return new ComposedSettableValue<R>(type, args -> {
 			return function.apply((T) args[0], (U) args[1]);
-		}, new XformDef(xform), this, arg) {
+		}, "combine", new XformDef(xform), this, arg) {
 			@Override
 			public <V extends R> R set(V value, Object cause) throws IllegalArgumentException {
 				U argVal = arg.get();
@@ -426,7 +357,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			public <V extends R> String isAcceptable(V value) {
 				U argVal = arg.get();
 				String ret = accept.apply(value, argVal);
-				if(ret == null)
+				if (ret == null)
 					ret = root.isAcceptable(reverse.apply(value, arg.get()));
 				return ret;
 			}
@@ -478,7 +409,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 		SettableValue<T> root = this;
 		return new ComposedSettableValue<R>(type, args -> {
 			return function.apply((T) args[0], (U) args[1], (V) args[2]);
-		}, new XformDef(xform), this, arg2, arg3) {
+		}, "combine", new XformDef(xform), this, arg2, arg3) {
 			@Override
 			public <V2 extends R> R set(V2 value, Object cause) throws IllegalArgumentException {
 				U arg2Val = arg2.get();
@@ -500,7 +431,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	}
 
 	@Override
-	default SettableValue<T> takeUntil(Observable<?> until){
+	default SettableValue<T> takeUntil(Observable<?> until) {
 		return new SettableValueTakenUntil<>(this, until, true);
 	}
 
@@ -542,17 +473,86 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	}
 
 	/**
+	 * A utility class to make the boilerplate of creating settable values wrapping another settable value easier
+	 *
+	 * @param <T> The type of the value
+	 */
+	class WrappingSettableValue<T> implements SettableValue<T> {
+		protected final SettableValue<T> theWrapped;
+
+		public WrappingSettableValue(SettableValue<T> wrapped) {
+			theWrapped = wrapped;
+		}
+
+		@Override
+		public TypeToken<T> getType() {
+			return theWrapped.getType();
+		}
+
+		@Override
+		public T get() {
+			return theWrapped.get();
+		}
+
+		@Override
+		public Observable<ObservableValueEvent<T>> noInitChanges() {
+			return theWrapped.noInitChanges();
+		}
+
+		@Override
+		public long getStamp() {
+			return theWrapped.getStamp();
+		}
+
+		@Override
+		public Object getIdentity() {
+			return theWrapped.getIdentity();
+		}
+
+		@Override
+		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+			return theWrapped.set(value, cause);
+		}
+
+		@Override
+		public <V extends T> String isAcceptable(V value) {
+			return theWrapped.isAcceptable(value);
+		}
+
+		@Override
+		public ObservableValue<String> isEnabled() {
+			return theWrapped.isEnabled();
+		}
+
+		@Override
+		public int hashCode() {
+			return getIdentity().hashCode();
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return obj instanceof Identifiable && getIdentity().equals(((Identifiable) obj).getIdentity());
+		}
+
+		@Override
+		public String toString() {
+			return getIdentity().toString();
+		}
+	}
+
+	/**
 	 * Implements the SettableValue.combine methods
 	 *
 	 * @param <T> The type of the value
 	 */
 	abstract class ComposedSettableValue<T> extends ComposedObservableValue<T> implements SettableValue<T> {
-		public ComposedSettableValue(Function<Object[], T> function, XformDef options, ObservableValue<?>[] composed) {
-			super(function, options, composed);
+		public ComposedSettableValue(Function<Object[], T> function, String operation, XformDef options, ObservableValue<?>[] composed) {
+			super(function, operation, options, composed);
 		}
 
-		public ComposedSettableValue(TypeToken<T> type, Function<Object[], T> function, XformDef options, ObservableValue<?>... composed) {
-			super(type, function, options, composed);
+		public ComposedSettableValue(TypeToken<T> type, Function<Object[], T> function, String operation, XformDef options,
+			ObservableValue<?>... composed) {
+			super(type, function, operation, options, composed);
 		}
 	}
 
@@ -704,6 +704,73 @@ public interface SettableValue<T> extends ObservableValue<T> {
 				return ((SettableValue<T>) sv).set(value, cause);
 			else
 				throw new IllegalArgumentException("Wrapped value is not settable");
+		}
+	}
+
+	/**
+	 * @param <T> The type for the new value
+	 * @param type The type for the new value
+	 * @return A builder to create a new settable value
+	 */
+	static <T> Builder<T> build(TypeToken<T> type) {
+		return new Builder<>(type);
+	}
+
+	/** @param <T> The type for the settable value */
+	class Builder<T> {
+		private final TypeToken<T> theType;
+		private String theDescription;
+		private boolean isVetoable;
+		private boolean isSafe;
+		private ListenerList.Builder theListenerBuilder;
+		private T theInitialValue;
+		private boolean isNullable;
+
+		Builder(TypeToken<T> type) {
+			theType = type;
+			theDescription = "settable-value";
+			isSafe = true;
+			theListenerBuilder = ListenerList.build();
+			isNullable = true;
+		}
+
+		public Builder<T> vetoable() {
+			isVetoable = true;
+			return this;
+		}
+
+		public Builder<T> nullable(boolean nullable) {
+			isNullable = nullable;
+			return this;
+		}
+
+		public Builder<T> safe(boolean safe) {
+			isSafe = safe;
+			return this;
+		}
+
+		public Builder<T> withDescription(String description) {
+			theDescription = description;
+			return this;
+		}
+
+		public Builder<T> withListening(Consumer<ListenerList.Builder> listening) {
+			listening.accept(theListenerBuilder);
+			return this;
+		}
+
+		public Builder<T> withValue(T value) {
+			theInitialValue = value;
+			return this;
+		}
+
+		public SettableValue<T> build() {
+			if (isVetoable)
+				return new VetoableSettableValue<>(theType, theDescription, isNullable, theListenerBuilder,
+					isSafe ? new ReentrantReadWriteLock() : null).withValue(theInitialValue, null);
+			else
+				return new SimpleSettableValue<>(theType, theDescription, isNullable, isSafe ? new ReentrantReadWriteLock() : null,
+					theListenerBuilder).withValue(theInitialValue, null);
 		}
 	}
 }

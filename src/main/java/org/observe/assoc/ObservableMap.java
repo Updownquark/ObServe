@@ -19,8 +19,10 @@ import org.observe.collect.ObservableCollection.SubscriptionCause;
 import org.observe.collect.ObservableSet;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
+import org.qommons.Identifiable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
+import org.qommons.collect.BetterCollection.EmptyCollection;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterMap;
 import org.qommons.collect.CollectionElement;
@@ -313,6 +315,8 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 		return create(keyType, valueType, keyEquivalence, ObservableCollection.createDefaultBacking());
 	}
 
+	// TODO Make a builder
+
 	/**
 	 * @param <K> The (compile-time) key type for the map
 	 * @param <V> The (compile-time) value type for the map
@@ -378,6 +382,15 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 			}
 		}
 		return new ObservableMap<K, V>() {
+			private Object theIdentity;
+
+			@Override
+			public Object getIdentity() {
+				if (theIdentity == null)
+					theIdentity = Identifiable.baseId("observable-map", this);
+				return theIdentity;
+			}
+
 			@Override
 			public boolean isLockSupported() {
 				return keySet.isLockSupported();
@@ -584,6 +597,15 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 		TypeToken<Map.Entry<K, V>> entryType = buildEntryType(keyType, valueType);
 		ObservableSet<K> keySet = ObservableCollection.of(keyType).flow().distinct().collect();
 		return new ObservableMap<K, V>() {
+			private Object theIdentity;
+
+			@Override
+			public Object getIdentity() {
+				if (theIdentity == null)
+					theIdentity = Identifiable.idFor(this, this::toString, this::hashCode, other -> other instanceof EmptyCollection);
+				return theIdentity;
+			}
+
 			@Override
 			public TypeToken<K> getKeyType() {
 				return keyType;
