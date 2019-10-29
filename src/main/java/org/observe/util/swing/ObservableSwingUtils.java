@@ -457,12 +457,12 @@ public class ObservableSwingUtils {
 	public static <E> ObservableCollection<E> syncSelection(Component component, //
 		ListModel<E> model, Supplier<ListSelectionModel> selectionModel, Equivalence<? super E> equivalence,
 		ObservableCollection<E> selection, Observable<?> until) {
-		Supplier<List<E>> selectionGetter = () -> getSelection(model, selectionModel.get());
+		Supplier<List<E>> selectionGetter = () -> getSelection(model, selectionModel.get(), null);
 		boolean[] callbackLock = new boolean[1];
 		Consumer<Object> syncSelection = cause -> {
 			List<E> selValues = selectionGetter.get();
 			try (Transaction selT = selection.lock(true, cause)) {
-				ArrayUtils.adjust(selection, selValues, ArrayUtils.acceptAllDifferences(equivalence::elementEquals));
+				ArrayUtils.adjust(selection, selValues, ArrayUtils.acceptAllDifferences(equivalence::elementEquals, null));
 			}
 		};
 		ListSelectionListener selListener = e -> {
@@ -601,13 +601,13 @@ public class ObservableSwingUtils {
 		return selection;
 	}
 
-	public static <E> List<E> getSelection(ListModel<E> model, ListSelectionModel selectionModel) {
+	public static <E, V> List<V> getSelection(ListModel<E> model, ListSelectionModel selectionModel, Function<? super E, ? extends V> map) {
 		if (selectionModel.isSelectionEmpty())
 			return Collections.emptyList();
-		List<E> selValues = new ArrayList<>(selectionModel.getMaxSelectionIndex() - selectionModel.getMinSelectionIndex() + 1);
+		List<V> selValues = new ArrayList<>(selectionModel.getMaxSelectionIndex() - selectionModel.getMinSelectionIndex() + 1);
 		for (int i = selectionModel.getMinSelectionIndex(); i <= selectionModel.getMaxSelectionIndex(); i++) {
 			if (selectionModel.isSelectedIndex(i))
-				selValues.add(model.getElementAt(i));
+				selValues.add(map == null ? (V) model.getElementAt(i) : map.apply(model.getElementAt(i)));
 		}
 		return selValues;
 	}

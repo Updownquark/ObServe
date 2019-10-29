@@ -4,10 +4,11 @@ import java.text.ParseException;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.function.Function;
-import java.util.function.ToIntFunction;
+import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
@@ -15,7 +16,54 @@ import org.qommons.io.Format;
 
 import com.google.common.reflect.TypeToken;
 
-public abstract class ListFilter implements ToIntFunction<CharSequence> {
+public interface ListFilter {
+	public static class FilteredValue<E> {
+		E value;
+
+		int[][] matches;
+
+		public FilteredValue(E value, int columns) {
+			this.value = value;
+			matches = new int[columns][];
+		}
+
+		void columnsChanged(int columns) {
+			if (matches.length != columns)
+				matches = new int[columns][];
+		}
+
+		public E getValue() {
+			return value;
+		}
+
+		public void setValue(E value) {
+			this.value = value;
+		}
+
+		public boolean hasMatch() {
+			if (matches == null)
+				return true;
+			for (int[] m : matches)
+				if (m != null)
+					return true;
+			return false;
+		}
+
+		public boolean matches(int column) {
+			return matches[column] != null;
+		}
+
+		public int getStart(int column) {
+			return matches[column] == null ? -1 : matches[column][0];
+		}
+
+		public int getEnd(int column) {
+			return matches[column] == null ? -1 : matches[column][1];
+		}
+	}
+
+	int[] findMatch(CharSequence text);
+
 	public static final Pattern INT_RANGE_PATTERN = Pattern.compile("(?<i1>\\d)\\-(?<i2>\\d)");
 
 	public static final Format<ListFilter> FORMAT = new Format<ListFilter>() {
@@ -26,72 +74,80 @@ public abstract class ListFilter implements ToIntFunction<CharSequence> {
 
 		@Override
 		public ListFilter parse(CharSequence filterText) throws ParseException {
-			if (filterText == null || filterText.length() == 0)
-				return INCLUDE_ALL;
-			List<String> splitList = new LinkedList<>();
-			int contentStart = -1;
-			for (int c = 0; c < filterText.length(); c++) {
-				if (Character.isWhitespace(filterText.charAt(c))) {
-					if (contentStart >= 0) {
-						splitList.add(filterText.subSequence(contentStart, c).toString().toLowerCase());
-						contentStart -= 1;
-					}
-				} else if (contentStart < 0)
-					contentStart = c;
-			}
-			if (contentStart == 0)
-				splitList.add(filterText.toString().toLowerCase());
-			else if (contentStart >= 0)
-				splitList.add(filterText.subSequence(contentStart, filterText.length()).toString().toLowerCase());
-			else
-				splitList.add(filterText.toString()); // If all the text is whitespace, then search for whitespace
-			String[] split = splitList.toArray(new String[splitList.size()]);
-			ListFilter[] splitFilter = new ListFilter[split.length];
-			for (int i = 0; i < split.length; i++) {
-				Matcher m = INT_RANGE_PATTERN.matcher(split[i]);
-				if (m.matches())
-					splitFilter[i] = new RangeFilter(m.group("i1"), m.group("i2"));
-				else
-					splitFilter[i] = new SimpleFilter(split[i]);
-			}
-			if (splitFilter.length == 1)
-				return splitFilter[0];
-			else
-				return new OrFilter(splitFilter);
+			return ListFilter.parseFilterText(filterText);
 		}
 	};
 
-	private static final class FilteredValue<E> {
-		E value;
-		int matchIndex;
-
-		FilteredValue(E value, int matchIndex) {
-			this.value = value;
-			this.matchIndex = matchIndex;
+	public static ListFilter parseFilterText(CharSequence filterText) {
+		if (filterText == null || filterText.length() == 0)
+			return INCLUDE_ALL;
+		List<String> splitList = new LinkedList<>();
+		int contentStart = -1;
+		for (int c = 0; c < filterText.length(); c++) {
+			if (Character.isWhitespace(filterText.charAt(c))) {
+				if (contentStart >= 0) {
+					splitList.add(filterText.subSequence(contentStart, c).toString().toLowerCase());
+					contentStart -= 1;
+				}
+			} else if (contentStart < 0)
+				contentStart = c;
 		}
+		if (contentStart == 0)
+			splitList.add(filterText.toString().toLowerCase());
+		else if (contentStart >= 0)
+			splitList.add(filterText.subSequence(contentStart, filterText.length()).toString().toLowerCase());
+		else
+			splitList.add(filterText.toString()); // If all the text is whitespace, then search for whitespace
+		String[] split = splitList.toArray(new String[splitList.size()]);
+		ListFilter[] splitFilter = new ListFilter[split.length];
+		for (int i = 0; i < split.length; i++) {
+			Matcher m = INT_RANGE_PATTERN.matcher(split[i]);
+			if (m.matches())
+				splitFilter[i] = new RangeFilter(m.group("i1"), m.group("i2"));
+			else
+				splitFilter[i] = new SimpleFilter(split[i]);
+		}
+		if (splitFilter.length == 1)
+			return splitFilter[0];
+		else
+			return new OrFilter(splitFilter);
 	}
 
-	public static <E> ObservableCollection<E> filterBy(ObservableCollection<E> values,
-		Function<? super E, ? extends Iterable<? extends CharSequence>> render, ObservableValue<? extends ListFilter> filter) {
+	public static <E> ObservableCollection<FilteredValue<E>> applyFilterText(ObservableCollection<E> values,
+		Supplier<List<? extends Function<? super E, ? extends CharSequence>>> render, ObservableValue<? extends CharSequence> filter,
+		Observable<?> until) {
+		return applyFilter(values, render, filter.map(ListFilter::parseFilterText), until);
+	}
+
+	public static <E> ObservableCollection<FilteredValue<E>> applyFilter(ObservableCollection<E> values,
+		Supplier<List<? extends Function<? super E, ? extends CharSequence>>> render, ObservableValue<? extends ListFilter> filter,
+		Observable<?> until) {
 		return values.flow().combine((TypeToken<FilteredValue<E>>) (TypeToken<?>) TypeTokens.get().of(FilteredValue.class), //
 			combine -> combine.with(filter).build((cv, old) -> {
-				if (old == null) {
-					old.value = cv.getElement();
-					old.matchIndex = cv.get(filter).applyAsInt(cv.getElement());
-					return old;
+				List<? extends Function<? super E, ? extends CharSequence>> renders = render.get();
+				FilteredValue<E> v;
+				if (old != null) {
+					v = old;
+					v.setValue(cv.getElement());
+					v.columnsChanged(renders.size());
 				} else
-					return new FilteredValue<>(cv.getElement(), cv.get(filter).applyAsInt(cv.getElement()));
-			})).filter(fv -> fv.matchIndex >= 0 ? null : "No match").map(values.getType(), fv -> fv.value).collect();
+					v = new FilteredValue<>(cv.getElement(), renders.size());
+				ListFilter f = cv.get(filter);
+				int i = 0;
+				for (Function<? super E, ? extends CharSequence> r : renders)
+					old.matches[i++] = f.findMatch(r.apply(v.value));
+				return v;
+			})).filter(fv -> fv.hasMatch() ? null : "No match").collectActive(until);
 	}
 
 	public static final ListFilter INCLUDE_ALL = new ListFilter() {
 		@Override
-		public int applyAsInt(CharSequence value) {
-			return 0;
+		public int[] findMatch(CharSequence value) {
+			return new int[] { 0, value.length() };
 		}
 	};
 
-	public static class SimpleFilter extends ListFilter {
+	public static class SimpleFilter implements ListFilter {
 		private final String theMatcher;
 
 		public SimpleFilter(String matcher) {
@@ -99,16 +155,16 @@ public abstract class ListFilter implements ToIntFunction<CharSequence> {
 		}
 
 		@Override
-		public int applyAsInt(CharSequence toSearch) {
+		public int[] findMatch(CharSequence toSearch) {
 			int c, textIdx;
 			for (c = 0, textIdx = 0; c < toSearch.length() && textIdx < theMatcher.length(); c++) {
 				if (Character.toLowerCase(toSearch.charAt(c)) == theMatcher.charAt(textIdx))
 					textIdx++;
 			}
 			if (textIdx == theMatcher.length())
-				return c - textIdx;
+				return new int[] { c - textIdx, c };
 			else
-				return -1;
+				return null;
 		}
 
 		@Override
@@ -117,7 +173,7 @@ public abstract class ListFilter implements ToIntFunction<CharSequence> {
 		}
 	}
 
-	public static class RangeFilter extends ListFilter {
+	public static class RangeFilter implements ListFilter {
 		private final String theLow;
 		private final String theHigh;
 
@@ -128,7 +184,7 @@ public abstract class ListFilter implements ToIntFunction<CharSequence> {
 		}
 
 		@Override
-		public int applyAsInt(CharSequence toSearch) {
+		public int[] findMatch(CharSequence toSearch) {
 			int digitStart = -1;
 			for (int c = 0; c < toSearch.length(); c++) {
 				if (Character.isDigit(toSearch.charAt(c))) {
@@ -136,14 +192,14 @@ public abstract class ListFilter implements ToIntFunction<CharSequence> {
 						digitStart = c;
 				} else if (digitStart >= 0) {
 					if (isIncluded(toSearch, digitStart, c))
-						return digitStart;
+						return new int[] { digitStart, c };
 					digitStart = -1;
 				}
 			}
 			if (digitStart >= 0 && isIncluded(toSearch, digitStart, toSearch.length()))
-				return digitStart;
+				return new int[] { digitStart, toSearch.length() };
 			else
-				return -1;
+				return null;
 		}
 
 		private boolean isIncluded(CharSequence toSearch, int start, int end) {
@@ -180,7 +236,7 @@ public abstract class ListFilter implements ToIntFunction<CharSequence> {
 		}
 	}
 
-	public static class OrFilter extends ListFilter {
+	public static class OrFilter implements ListFilter {
 		private final ListFilter[] theFilters;
 
 		public OrFilter(ListFilter[] filters) {
@@ -188,11 +244,11 @@ public abstract class ListFilter implements ToIntFunction<CharSequence> {
 		}
 
 		@Override
-		public int applyAsInt(CharSequence value) {
-			int minIndex = -1;
+		public int[] findMatch(CharSequence value) {
+			int[] minIndex = null;
 			for (ListFilter filter : theFilters) {
-				int index = filter.applyAsInt(value);
-				if (index >= 0 && (minIndex < 0 || index < minIndex))
+				int[] index = filter.findMatch(value);
+				if (index != null && (minIndex == null || index[0] < minIndex[0]))
 					minIndex = index;
 			}
 			return minIndex;

@@ -390,7 +390,7 @@ public class ObservableTableFiltering<R, M extends ObservableTableModel<R>> exte
 
 		ObservableColumnFiltering(CategoryRenderStrategy<R, C> column) {
 			theColumn = column;
-			theFilterStrategy = column.getFilterability();
+			// theFilterStrategy = column.getFilterability();
 			theFilter = theFilterStrategy == null ? null : theFilterStrategy.createFilter();
 		}
 
@@ -407,11 +407,11 @@ public class ObservableTableFiltering<R, M extends ObservableTableModel<R>> exte
 		}
 
 		void updated() {
-			if (theFilterStrategy != theColumn.getFilterability()) {
-				// TODO Should there be some way to update the existing filter instead?
-				theFilter.clearFilters();
-				theFilter = theFilterStrategy == null ? null : theFilterStrategy.createFilter();
-			}
+			// if (theFilterStrategy != theColumn.getFilterability()) {
+			// // TODO Should there be some way to update the existing filter instead?
+			// theFilter.clearFilters();
+			// theFilter = theFilterStrategy == null ? null : theFilterStrategy.createFilter();
+			// }
 		}
 
 		@Override

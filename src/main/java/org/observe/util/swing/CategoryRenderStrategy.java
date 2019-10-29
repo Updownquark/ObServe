@@ -224,6 +224,7 @@ public class CategoryRenderStrategy<R, C> {
 	private boolean isResizable;
 
 	private Comparator<? super C> theSortability;
+	private boolean isFilterable;
 	private CategoryFilterStrategy<C> theFilterability;
 
 	public CategoryRenderStrategy(String name, TypeToken<C> type, Function<? super R, ? extends C> accessor) {
@@ -233,6 +234,7 @@ public class CategoryRenderStrategy<R, C> {
 		theMutator = new CategoryMutationStrategy();
 		theMinWidth = thePrefWidth = theMaxWidth = -1;
 		isResizable = true;
+		isFilterable = true;
 	}
 
 	public String getName() {
@@ -322,6 +324,14 @@ public class CategoryRenderStrategy<R, C> {
 		return theRenderer;
 	}
 
+	public String print(R rowValue) {
+		C colValue = getCategoryValue(rowValue);
+		if (theRenderer != null)
+			return theRenderer.renderAsText(() -> rowValue, colValue);
+		else
+			return String.valueOf(colValue);
+	}
+
 	public CategoryRenderStrategy<R, C> withWidth(String type, int width) {
 		switch (type.toLowerCase()) {
 		case "min":
@@ -379,17 +389,26 @@ public class CategoryRenderStrategy<R, C> {
 		return theSortability;
 	}
 
-	public CategoryRenderStrategy<R, C> filterableWith(CategoryFilterStrategy<C> filtering) {
-		theFilterability = filtering;
+	public CategoryRenderStrategy<R, C> filterable(boolean filterable) {
+		isFilterable = filterable;
 		return this;
 	}
 
-	public CategoryRenderStrategy<R, C> filterableWith(Function<CategoryRenderStrategy<?, C>, CategoryFilterStrategy<C>> filtering) {
-		theFilterability = filtering.apply(this);
-		return this;
+	public boolean isFilterable() {
+		return isFilterable;
 	}
 
-	public CategoryFilterStrategy<C> getFilterability() {
-		return theFilterability;
-	}
+	// public CategoryRenderStrategy<R, C> filterableWith(CategoryFilterStrategy<C> filtering) {
+	// theFilterability = filtering;
+	// return this;
+	// }
+	//
+	// public CategoryRenderStrategy<R, C> filterableWith(Function<CategoryRenderStrategy<?, C>, CategoryFilterStrategy<C>> filtering) {
+	// theFilterability = filtering.apply(this);
+	// return this;
+	// }
+	//
+	// public CategoryFilterStrategy<C> getFilterability() {
+	// return theFilterability;
+	// }
 }

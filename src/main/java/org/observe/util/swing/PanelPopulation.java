@@ -1041,6 +1041,7 @@ public class PanelPopulation {
 		private SettableValue<R> theSelectionValue;
 		private ObservableCollection<R> theSelectionValues;
 		private List<SimpleTableAction<R, ?>> theActions;
+		private ObservableValue<? extends ListFilter> theFilter;
 
 		SimpleTableBuilder(ObservableCollection<R> rows) {
 			super(new JTable());
@@ -1079,7 +1080,7 @@ public class PanelPopulation {
 		@Override
 		public List<R> getSelection() {
 			return ObservableSwingUtils.getSelection(((ObservableTableModel<R>) getEditor().getModel()).getRowModel(),
-				getEditor().getSelectionModel());
+				getEditor().getSelectionModel(), null);
 		}
 
 		private Icon getAddIcon() {
