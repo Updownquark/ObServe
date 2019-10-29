@@ -2,6 +2,7 @@ package org.observe.collect;
 
 import java.util.Collection;
 import java.util.LinkedList;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -28,22 +29,26 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	private final BetterList<E> theValues;
 	private final org.qommons.collect.ListenerList<Consumer<? super ObservableCollectionEvent<? extends E>>> theObservers;
 	private final Function<ElementId, ElementId> theElementSource;
+	private final BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> theSourceElements;
 
 	/**
 	 * @param type The type for this collection
 	 * @param list The list to hold this collection's elements
 	 */
 	public DefaultObservableCollection(TypeToken<E> type, BetterList<E> list) {
-		this(type, list, null);
+		this(type, list, null, null);
 	}
 
 	/**
 	 * @param type The type for this collection
 	 * @param list The list to hold this collection's elements
 	 * @param elementSource The function to provide element sources for this collection
+	 * @param sourceElements The function to provide source elements for elements in this collection
 	 * @see #getElementsBySource(ElementId)
+	 * @see #getSourceElements(ElementId, BetterCollection)
 	 */
-	public DefaultObservableCollection(TypeToken<E> type, BetterList<E> list, Function<ElementId, ElementId> elementSource) {
+	public DefaultObservableCollection(TypeToken<E> type, BetterList<E> list, //
+		Function<ElementId, ElementId> elementSource, BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> sourceElements) {
 		theType = type;
 		if (list instanceof ObservableCollection)
 			throw new UnsupportedOperationException("ObservableCollection is not supported here");
@@ -51,6 +56,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 		theValues = list;
 		theObservers = new org.qommons.collect.ListenerList<>("A collection may not be modified as a result of a change event");
 		theElementSource = elementSource;
+		theSourceElements = sourceElements;
 	}
 
 	/** @return This collection's backing values */
@@ -183,19 +189,24 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 
 	@Override
 	public BetterList<CollectionElement<E>> getElementsBySource(ElementId sourceEl) {
+		BetterList<CollectionElement<E>> els = theValues.getElementsBySource(sourceEl);
+		if (!els.isEmpty())
+			return els;
 		if (theElementSource != null) {
 			ElementId el = theElementSource.apply(sourceEl);
 			if (el == null)
 				return BetterList.empty();
 			return BetterList.of(getElement(el));
 		}
-		return theValues.getElementsBySource(sourceEl);
+		return BetterList.empty();
 	}
 
 	@Override
 	public BetterList<ElementId> getSourceElements(ElementId localElement, BetterCollection<?> sourceCollection) {
 		if (sourceCollection == this)
 			return theValues.getSourceElements(localElement, theValues); // Validate element
+		else if (theSourceElements != null)
+			return theSourceElements.apply(localElement, sourceCollection);
 		return theValues.getSourceElements(localElement, sourceCollection);
 	}
 
