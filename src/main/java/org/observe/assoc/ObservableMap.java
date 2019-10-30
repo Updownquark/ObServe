@@ -44,16 +44,33 @@ import com.google.common.reflect.TypeToken;
  * @param <V> The type of values this map stores
  */
 public interface ObservableMap<K, V> extends BetterMap<K, V> {
-	/** This class's wildcard {@link TypeToken} */
+	/** This class's type key */
 	@SuppressWarnings("rawtypes")
-	static TypeToken<ObservableMap<?, ?>> TYPE = TypeTokens.get().keyFor(ObservableMap.class)
+	static TypeTokens.TypeKey<ObservableMap> TYPE_KEY = TypeTokens.get().keyFor(ObservableMap.class)
 	.enableCompoundTypes(new TypeTokens.BinaryCompoundTypeCreator<ObservableMap>() {
 		@Override
 		public <P1, P2> TypeToken<? extends ObservableMap> createCompoundType(TypeToken<P1> param1, TypeToken<P2> param2) {
 			return new TypeToken<ObservableMap<P1, P2>>() {}.where(new TypeParameter<P1>() {}, param1).where(new TypeParameter<P2>() {},
 				param2);
 		}
-	}).parameterized();
+	});
+	/** This class's wildcard {@link TypeToken} */
+	@SuppressWarnings("rawtypes")
+	static TypeToken<ObservableMap<?, ?>> TYPE = TYPE_KEY.parameterized();
+
+	/** This type key for {@link java.util.Map.Entry} */
+	@SuppressWarnings("rawtypes")
+	static TypeTokens.TypeKey<Map.Entry> ENTRY_KEY = TypeTokens.get().keyFor(Map.Entry.class)
+		.enableCompoundTypes(new TypeTokens.BinaryCompoundTypeCreator<Map.Entry>() {
+			@Override
+			public <P1, P2> TypeToken<? extends Map.Entry> createCompoundType(TypeToken<P1> param1, TypeToken<P2> param2) {
+			return new TypeToken<Map.Entry<P1, P2>>() {}.where(new TypeParameter<P1>() {}, param1).where(new TypeParameter<P2>() {},
+				param2);
+			}
+	});
+	/** This wildcard {@link TypeToken} for {@link java.util.Map.Entry} */
+	@SuppressWarnings("rawtypes")
+	static TypeToken<Map.Entry<?, ?>> ENTRY_TYPE = ENTRY_KEY.parameterized();
 
 	/** @return The type of keys this map uses */
 	TypeToken<K> getKeyType();
@@ -72,9 +89,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 	 * @return The entry type for the map
 	 */
 	static <K, V> TypeToken<Map.Entry<K, V>> buildEntryType(TypeToken<K> keyType, TypeToken<V> valueType) {
-		return new TypeToken<Map.Entry<K, V>>() {}//
-		.where(new TypeParameter<K>() {}, keyType.wrap())//
-		.where(new TypeParameter<V>() {}, valueType.wrap());
+		return ENTRY_KEY.getCompoundType(keyType, valueType);
 	}
 
 	@Override
@@ -150,7 +165,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 	default <K2> ObservableValue<V> observe(K2 key) {
 		if (!keySet().belongs(key))
 			return ObservableValue.of(getValueType(), null);
-		return new ObservableValue<V>() {
+		class MapValueObservable extends AbstractIdentifiable implements ObservableValue<V> {
 			@Override
 			public TypeToken<V> getType() {
 				return getValueType();
@@ -167,7 +182,9 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 
 			@Override
 			public Observable<ObservableValueEvent<V>> noInitChanges() {
-				return new Observable<ObservableValueEvent<V>>() {
+				class MapValueChanges extends AbstractIdentifiable implements Observable<ObservableValueEvent<V>> {
+					private Object theId;
+
 					@Override
 					public Subscription subscribe(Observer<? super ObservableValueEvent<V>> observer) {
 						try (Transaction t = lock()) {
@@ -208,9 +225,26 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 					public Transaction tryLock() {
 						return ObservableMap.this.tryLock(false, false, null);
 					}
-				};
+
+					@Override
+					protected Object createIdentity() {
+						return Identifiable.wrap(MapValueObservable.this.getIdentity(), "noInitChanges");
+					}
+				}
+				return new MapValueChanges();
 			}
-		};
+
+			@Override
+			public long getStamp() {
+				return ObservableMap.this.getStamp(false);
+			}
+
+			@Override
+			protected Object createIdentity() {
+				return Identifiable.wrap(ObservableMap.this.getIdentity(), "observeValue", key);
+			}
+		}
+		return new MapValueObservable();
 	}
 
 	/**

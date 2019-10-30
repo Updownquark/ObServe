@@ -48,16 +48,18 @@ import com.google.common.reflect.TypeToken;
  * @param <V> The type of values stored in this map
  */
 public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
-	/** This class's wildcard {@link TypeToken} */
+	/** This class's type key */
 	@SuppressWarnings("rawtypes")
-	static TypeToken<ObservableMultiMap<?, ?>> TYPE = TypeTokens.get().keyFor(ObservableMultiMap.class)
+	static TypeTokens.TypeKey<ObservableMultiMap> TYPE_KEY=TypeTokens.get().keyFor(ObservableMultiMap.class)
 	.enableCompoundTypes(new TypeTokens.BinaryCompoundTypeCreator<ObservableMultiMap>() {
 		@Override
 		public <P1, P2> TypeToken<? extends ObservableMultiMap> createCompoundType(TypeToken<P1> param1, TypeToken<P2> param2) {
 			return new TypeToken<ObservableMultiMap<P1, P2>>() {}.where(new TypeParameter<P1>() {}, param1)
 				.where(new TypeParameter<P2>() {}, param2);
 		}
-	}).parameterized();
+	});
+	/** This class's wildcard {@link TypeToken} */
+	static TypeToken<ObservableMultiMap<?, ?>> TYPE = TYPE_KEY.parameterized();
 
 	/**
 	 * A {@link java.util.Map.Entry} with observable capabilities
