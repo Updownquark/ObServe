@@ -70,12 +70,14 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 			default:
 			}
 		});
+		boolean[] init = new boolean[1];
 		Subscription collSub = theCollection.subscribe(evt -> {
-			if (!theEventQueue.isEmpty() || !isOnEventThread.getAsBoolean())
+			if (init[0] && (!theEventQueue.isEmpty() || !isOnEventThread.getAsBoolean()))
 				theEventQueue.add((ObservableCollectionEvent<E>) evt, false);
 			else
 				eventOccurred((ObservableCollectionEvent<E>) evt);
 		}, true);
+		init[0] = true;
 		if (until != null)
 			until.take(1).act(__ -> collSub.unsubscribe());
 
@@ -85,10 +87,13 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 			.collect());
 	}
 
+	private boolean isFlushing;
+
 	protected void flush() {
 		if (!isOnEventThread.getAsBoolean())
 			throw new IllegalStateException("Operations on this collection may only occur on the event thread");
-		_flush(false);
+		if (isFlushing)
+			_flush(false);
 	}
 
 	private void _flush(boolean retryIfEmpty) {
@@ -97,6 +102,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 			theEventThreadExecutor.accept(() -> _flush(true));
 		while (evt != null) {
 			eventOccurred(evt.get());
+			evt = theEventQueue.poll(0);
 		}
 	}
 
