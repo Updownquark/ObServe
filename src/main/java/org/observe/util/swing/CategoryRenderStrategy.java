@@ -411,4 +411,9 @@ public class CategoryRenderStrategy<R, C> {
 	// public CategoryFilterStrategy<C> getFilterability() {
 	// return theFilterability;
 	// }
+
+	@Override
+	public String toString() {
+		return theName;
+	}
 }
