@@ -8,6 +8,7 @@ import java.awt.EventQueue;
 import java.awt.LayoutManager;
 import java.awt.LayoutManager2;
 import java.beans.PropertyChangeListener;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -414,15 +415,29 @@ public class PanelPopulation {
 
 	static final String MIG_LAYOUT_CLASS_NAME = "net.miginfocom.swing.MigLayout";
 
+	static final Constructor<? extends LayoutManager2> MIG_LAYOUT_CREATOR;
+
+	static {
+		Constructor<? extends LayoutManager2> creator;
+		try {
+			creator = Class.forName(MIG_LAYOUT_CLASS_NAME).asSubclass(LayoutManager2.class).getConstructor(String.class, String.class);
+		} catch (NoSuchMethodException | SecurityException | ClassNotFoundException e) {
+			System.err.println("Could not retrieve needed " + MIG_LAYOUT_CLASS_NAME + " constructor");
+			e.printStackTrace();
+			creator = null;
+		}
+		MIG_LAYOUT_CREATOR = creator;
+	}
+
 	static LayoutManager2 createMigLayout(boolean withInsets, Supplier<String> err) {
 		String layoutConstraints = "fillx, hidemode 3";
 		if (!withInsets)
 			layoutConstraints += ", insets 0";
 		LayoutManager2 migLayout;
 		try {
-			migLayout = (LayoutManager2) Class.forName(MIG_LAYOUT_CLASS_NAME).getConstructor(String.class).newInstance(layoutConstraints);
-		} catch (InstantiationException | IllegalAccessException | ClassNotFoundException | IllegalArgumentException
-			| InvocationTargetException | NoSuchMethodException | SecurityException e) {
+			migLayout = MIG_LAYOUT_CREATOR.newInstance(layoutConstraints, "[shrink][grow][shrink]");
+		} catch (InstantiationException | IllegalAccessException | IllegalArgumentException | InvocationTargetException
+			| SecurityException e) {
 			throw new IllegalStateException(
 				ObservableSwingUtils.class.getName() + " could not instantiate " + MIG_LAYOUT_CLASS_NAME + ": " + err.get(), e);
 		}
@@ -1238,7 +1253,7 @@ public class PanelPopulation {
 						if (model.getColumn(i).isFilterable())
 							c++;
 					}
-						if (c >= fv.getColumns() || fv.isTrivial())
+					if (c >= fv.getColumns() || fv.isTrivial())
 						return null;
 					return fv.getMatches(c);
 				}
