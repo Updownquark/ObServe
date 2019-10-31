@@ -60,6 +60,10 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			return this;
 		}
 
+		/**
+		 * @param equivalence The equivalence for the collection
+		 * @return This builder
+		 */
 		public Builder<E> withEquivalence(Equivalence<? super E> equivalence) {
 			theEquivalence = equivalence;
 			return this;
@@ -113,6 +117,11 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			return this;
 		}
 
+		/**
+		 * @param sourceElements A function to look up elements in a source collection from an element in the
+		 *        {@link #withBacking(BetterList) backing} collection
+		 * @return This builder
+		 */
 		public Builder<E> withSourceElements(BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> sourceElements) {
 			theSourceElements = sourceElements;
 			return this;
@@ -130,11 +139,17 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			return backing;
 		}
 
+		/** @return The equivalence for the collection */
+		protected Equivalence<? super E> getEquivalence() {
+			return theEquivalence;
+		}
+
 		/** @return The element source for the collection */
 		protected Function<ElementId, ElementId> getElementSource() {
 			return theElementSource;
 		}
 
+		/** @return The source element lookup function for the collection */
 		protected BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> getSourceElements() {
 			return theSourceElements;
 		}
@@ -198,6 +213,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	 * @param list The list to hold this collection's elements
 	 * @param elementSource The function to provide element sources for this collection
 	 * @param sourceElements The function to provide source elements for elements in this collection
+	 * @param equivalence The equivalence for the collection
 	 * @see #getElementsBySource(ElementId)
 	 * @see #getSourceElements(ElementId, BetterCollection)
 	 */

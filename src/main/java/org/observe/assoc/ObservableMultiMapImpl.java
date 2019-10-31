@@ -50,7 +50,7 @@ import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MapEntryHandle;
-import org.qommons.collect.MultiMapEntryHandle;
+import org.qommons.collect.MultiEntryValueHandle;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableElementSpliterator;
 import org.qommons.collect.SimpleMapEntry;
@@ -725,7 +725,7 @@ public class ObservableMultiMapImpl {
 		private final ActiveCollectionManager<E, ?, Map.Entry<K, V>> theParent;
 		private final TypeToken<K> theKeyType;
 		private final TypeToken<V> theValueType;
-		private final Consumer<ObservableMapEvent<K, V>> theEventListener;
+		private final Consumer<ObservableMultiMapEvent<K, V>> theEventListener;
 		private final Map<Map.Entry<K, V>, ListenerList<Consumer<? super ObservableCollectionEvent<? extends V>>>> theValueListeners;
 		private final AtomicLong theStructuralStamp;
 		private final AtomicLong theChangeStamp;
@@ -735,7 +735,7 @@ public class ObservableMultiMapImpl {
 
 		public GroupingManager(ActiveCollectionManager<E, ?, Map.Entry<K, V>> parent, //
 			TypeToken<K> keyType, TypeToken<V> valueType, //
-			FlowOptions.GroupingDef options, Consumer<ObservableMapEvent<K, V>> listener) {
+			FlowOptions.GroupingDef options, Consumer<ObservableMultiMapEvent<K, V>> listener) {
 			super(parent, options.isUsingFirst(), options.isPreservingSourceOrder());
 
 			theParent = parent;
@@ -837,7 +837,7 @@ public class ObservableMultiMapImpl {
 				if (theKeyId != null) {
 					int keyIndex = theAssembledKeys.getElementsBefore(theKeyId);
 					int valueIndex = getParentElements().keySet().getElementsBefore(node.getElementId());
-					fireEvent(new ObservableMapEvent<>(theKeyId, node.getElementId(), theKeyType, theValueType, //
+					fireEvent(new ObservableMultiMapEvent<>(theKeyId, node.getElementId(), theKeyType, theValueType, //
 						keyIndex, valueIndex, CollectionChangeType.add, parentEl.get().getKey(), null, parentEl.get().getValue(), cause));
 				}
 				return node;
@@ -852,7 +852,7 @@ public class ObservableMultiMapImpl {
 				int keyIndex = theAssembledKeys.getElementsBefore(theKeyId);
 				int valueIndex = getParentElements().keySet().getElementsBefore(parentEl.getElementId());
 				DerivedCollectionElement<Map.Entry<K, V>> active = getActiveElement();
-				fireEvent(new ObservableMapEvent<>(theKeyId, parentEl.getElementId(), theKeyType, theValueType, //
+				fireEvent(new ObservableMultiMapEvent<>(theKeyId, parentEl.getElementId(), theKeyType, theValueType, //
 					keyIndex, valueIndex, CollectionChangeType.set, active.get().getKey(), oldValue.getValue(), newValue.getValue(),
 					cause));
 			}
@@ -868,14 +868,14 @@ public class ObservableMultiMapImpl {
 				int keyIndex = theAssembledKeys.getElementsBefore(theKeyId);
 				int valueIndex = getParentElements().keySet().getElementsBefore(parentEl.getElementId());
 				DerivedCollectionElement<Map.Entry<K, V>> active = getActiveElement();
-				fireEvent(new ObservableMapEvent<>(theKeyId, parentEl.getElementId(), theKeyType, theValueType, //
+				fireEvent(new ObservableMultiMapEvent<>(theKeyId, parentEl.getElementId(), theKeyType, theValueType, //
 					keyIndex, valueIndex, CollectionChangeType.remove, active.get().getKey(), value.getValue(), value.getValue(), cause));
 				// If someone's listening to this, preserve the listeners in case the key appears in the map again
 				if (getParentElements().isEmpty() && !theListeners.isEmpty())
 					theValueListeners.put(new SimpleMapEntry<>(active.get().getKey(), null), theListeners);
 			}
 
-			private void fireEvent(ObservableMapEvent<K, V> event) {
+			private void fireEvent(ObservableMultiMapEvent<K, V> event) {
 				try (Transaction t = Causable.use(event)) {
 					theEventListener.accept(event);
 					theListeners.forEach(listener -> listener.accept(event));
@@ -894,7 +894,7 @@ public class ObservableMultiMapImpl {
 		protected final boolean uniqueValues;
 		private final ActiveCollectionManager<?, ?, Entry<K, V>> theEntries;
 
-		private final ListenerList<Consumer<? super ObservableMapEvent<? extends K, ? extends V>>> theEventListeners;
+		private final ListenerList<Consumer<? super ObservableMultiMapEvent<? extends K, ? extends V>>> theEventListeners;
 		private final GroupingManager<?, K, V> theGrouping;
 		private final ObservableSet<K> theKeySet;
 
@@ -998,14 +998,14 @@ public class ObservableMultiMapImpl {
 		}
 
 		@Override
-		public MultiMapEntryHandle<K, V> putEntry(K key, V value, boolean first) {
+		public MultiEntryValueHandle<K, V> putEntry(K key, V value, boolean first) {
 			Values values = new Values(key);
 			try (Transaction t = lock(true, true, null)) {
 				CollectionElement<V> valueEl = values.addElement(value, first);
 				if (valueEl == null)
 					return null;
 				ElementId keyId = values.getKeyId();
-				return new MultiMapEntryHandle<K, V>() {
+				return new MultiEntryValueHandle<K, V>() {
 					@Override
 					public ElementId getKeyId() {
 						return keyId;
@@ -1049,7 +1049,7 @@ public class ObservableMultiMapImpl {
 		}
 
 		@Override
-		public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action) {
+		public Subscription onChange(Consumer<? super ObservableMultiMapEvent<? extends K, ? extends V>> action) {
 			return theEventListeners.add(action, true)::run;
 		}
 

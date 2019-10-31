@@ -1,8 +1,10 @@
 package org.observe.assoc;
 
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.Map;
 import java.util.NoSuchElementException;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -13,9 +15,11 @@ import org.observe.Observer;
 import org.observe.Subscription;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.CollectionSubscription;
+import org.observe.collect.DefaultObservableCollection;
 import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.SubscriptionCause;
+import org.observe.collect.ObservableCollectionEvent;
 import org.observe.collect.ObservableSet;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
@@ -26,8 +30,8 @@ import org.qommons.collect.BetterCollection.EmptyCollection;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterMap;
 import org.qommons.collect.CollectionElement;
+import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.ElementId;
-import org.qommons.collect.ListenerList;
 import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
@@ -55,21 +59,19 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 		}
 	});
 	/** This class's wildcard {@link TypeToken} */
-	@SuppressWarnings("rawtypes")
 	static TypeToken<ObservableMap<?, ?>> TYPE = TYPE_KEY.parameterized();
 
 	/** This type key for {@link java.util.Map.Entry} */
 	@SuppressWarnings("rawtypes")
 	static TypeTokens.TypeKey<Map.Entry> ENTRY_KEY = TypeTokens.get().keyFor(Map.Entry.class)
-		.enableCompoundTypes(new TypeTokens.BinaryCompoundTypeCreator<Map.Entry>() {
-			@Override
-			public <P1, P2> TypeToken<? extends Map.Entry> createCompoundType(TypeToken<P1> param1, TypeToken<P2> param2) {
+	.enableCompoundTypes(new TypeTokens.BinaryCompoundTypeCreator<Map.Entry>() {
+		@Override
+		public <P1, P2> TypeToken<? extends Map.Entry> createCompoundType(TypeToken<P1> param1, TypeToken<P2> param2) {
 			return new TypeToken<Map.Entry<P1, P2>>() {}.where(new TypeParameter<P1>() {}, param1).where(new TypeParameter<P2>() {},
 				param2);
-			}
+		}
 	});
 	/** This wildcard {@link TypeToken} for {@link java.util.Map.Entry} */
-	@SuppressWarnings("rawtypes")
 	static TypeToken<Map.Entry<?, ?>> ENTRY_TYPE = ENTRY_KEY.parameterized();
 
 	/** @return The type of keys this map uses */
@@ -107,6 +109,17 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 	 */
 	Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action);
 
+	/** @return An observable collection of all the values stored in this map */
+	@Override
+	default ObservableCollection<V> values() {
+		return new ObservableMapValueCollection<>(this);
+	}
+
+	@Override
+	default ObservableSet<Map.Entry<K, V>> entrySet() {
+		return new ObservableEntrySet<>(this);
+	}
+
 	/**
 	 * @param action The action to perform on map events
 	 * @param forward Whether to subscribe to the map forward or reverse)
@@ -119,10 +132,10 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 			try (Transaction ct = SubscriptionCause.use(subCause)) {
 				int[] index = new int[] { forward ? 0 : size() - 1 };
 				entrySet().spliterator(forward).forEachElement(entryEl -> {
-					ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent<>(entryEl.getElementId(), entryEl.getElementId(),
+					ObservableMultiMapEvent<K, V> mapEvent = new ObservableMultiMapEvent<>(entryEl.getElementId(), entryEl.getElementId(),
 						getKeyType(), getValueType(), index[0], index[0], CollectionChangeType.add, entryEl.get().getKey(), null,
 						entryEl.get().getValue(), subCause);
-					try (Transaction mt = ObservableMapEvent.use(mapEvent)) {
+					try (Transaction mt = ObservableMultiMapEvent.use(mapEvent)) {
 						action.accept(mapEvent);
 					}
 					if (forward)
@@ -142,11 +155,10 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 					try (Transaction ct = SubscriptionCause.use(unsubCause)) {
 						int[] index = new int[] { forward ? 0 : size() - 1 };
 						entrySet().spliterator(forward).forEachElement(entryEl -> {
-							ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent<>(entryEl.getElementId(), entryEl.getElementId(),
-								getKeyType(),
-								getValueType(), index[0], index[0], CollectionChangeType.remove, entryEl.get().getKey(),
-								entryEl.get().getValue(), entryEl.get().getValue(), unsubCause);
-							try (Transaction mt = ObservableMapEvent.use(mapEvent)) {
+							ObservableMultiMapEvent<K, V> mapEvent = new ObservableMultiMapEvent<>(entryEl.getElementId(),
+								entryEl.getElementId(), getKeyType(), getValueType(), index[0], index[0], CollectionChangeType.remove,
+								entryEl.get().getKey(), entryEl.get().getValue(), entryEl.get().getValue(), unsubCause);
+							try (Transaction mt = ObservableMultiMapEvent.use(mapEvent)) {
 								action.accept(mapEvent);
 							}
 							if (!forward)
@@ -183,8 +195,6 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 			@Override
 			public Observable<ObservableValueEvent<V>> noInitChanges() {
 				class MapValueChanges extends AbstractIdentifiable implements Observable<ObservableValueEvent<V>> {
-					private Object theId;
-
 					@Override
 					public Subscription subscribe(Observer<? super ObservableValueEvent<V>> observer) {
 						try (Transaction t = lock()) {
@@ -248,77 +258,6 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 	}
 
 	/**
-	 * @param key The key to get the entry for
-	 * @return An {@link java.util.Map.Entry} that represents the given key's presence in this map
-	 */
-	default Map.Entry<K, V> entryFor(K key) {
-		CollectionElement<Map.Entry<K, V>> entryEl = entrySet().getElement(new SimpleMapEntry<>(key, null), true);
-		return entryEl != null ? entryEl.get() : new SimpleMapEntry<>(key, null);
-	}
-
-	/** @return An observable collection of {@link java.util.Map.Entry observable entries} of all the key-value pairs stored in this map */
-	default ObservableSet<Map.Entry<K, V>> observeEntries() {
-		return keySet().flow().mapEquivalent(getEntryType(), this::entryFor, entry -> entry.getKey(), options -> options.cache(false))
-			.collect();
-	}
-
-	/** @return An observable collection of all the values stored in this map */
-	@Override
-	default ObservableCollection<V> values() {
-		return keySet().flow().flattenValues(getValueType(), k -> observe(k)).collect();
-	}
-
-	@Override
-	default int size() {
-		return observeEntries().size();
-	}
-
-	@Override
-	default boolean isEmpty() {
-		return observeEntries().isEmpty();
-	}
-
-	@Override
-	default boolean containsKey(Object key) {
-		return keySet().contains(key);
-	}
-
-	@Override
-	default boolean containsValue(Object value) {
-		return keySet().stream().anyMatch(k -> equivalence().elementEquals(get(k), value));
-	}
-
-	@Override
-	default V get(Object key) {
-		return observe(key).get();
-	}
-
-	@Override
-	default ObservableSet<Entry<K, V>> entrySet() {
-		return (ObservableSet<Entry<K, V>>) (ObservableSet<?>) observeEntries();
-	}
-
-	@Override
-	default void putAll(Map<? extends K, ? extends V> m) {
-		try (Transaction t = lock(true, true, null)) {
-			for (Entry<? extends K, ? extends V> entry : m.entrySet())
-				put(entry.getKey(), entry.getValue());
-		}
-	}
-
-	@Override
-	default V remove(Object key) {
-		V ret = get(key);
-		keySet().remove(key);
-		return ret;
-	}
-
-	@Override
-	default void clear() {
-		keySet().clear();
-	}
-
-	/**
 	 * @return An observable that fires a (null) value whenever anything in this structure changes. This observable will only fire 1 event
 	 *         per transaction.
 	 */
@@ -327,58 +266,500 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 	}
 
 	/**
-	 * @param <K> The (compile-time) key type for the map
-	 * @param <V> The (compile-time) value type for the map
-	 * @param keyType The (run-time) key type for the map
-	 * @param valueType The (run-time) value type for the map
-	 * @return A new, empty, modifiable ObservableMap with the given types
+	 * Creates a builder to build an unconstrained {@link ObservableMap}
+	 *
+	 * @param keyType The key type for the map
+	 * @param valueType The value type for the map
+	 * @return The builder to build the map
 	 */
-	static <K, V> ObservableMap<K, V> create(TypeToken<K> keyType, TypeToken<V> valueType) {
-		return create(keyType, valueType, Equivalence.DEFAULT);
+	static <K, V> Builder<K, V> build(TypeToken<K> keyType, TypeToken<V> valueType) {
+		return new Builder<>(keyType, valueType, "ObservableMap");
 	}
 
 	/**
-	 * @param <K> The (compile-time) key type for the map
-	 * @param <V> The (compile-time) value type for the map
-	 * @param keyType The (run-time) key type for the map
-	 * @param valueType The (run-time) value type for the map
-	 * @param keyEquivalence The equivalence for the map's key set
-	 * @return A new, empty, modifiable ObservableMap with the given types and key equivalence
+	 * Builds an unconstrained {@link ObservableMap}
+	 *
+	 * @param <K> The key type for the map
+	 * @param <V> The value type for the map
 	 */
-	static <K, V> ObservableMap<K, V> create(TypeToken<K> keyType, TypeToken<V> valueType, Equivalence<Object> keyEquivalence) {
-		return create(keyType, valueType, keyEquivalence, ObservableCollection.createDefaultBacking());
+	class Builder<K, V> extends DefaultObservableCollection.Builder<K> {
+		private final TypeToken<V> theValueType;
+
+		Builder(TypeToken<K> keyType, TypeToken<V> valueType, String initDescrip) {
+			super(keyType, initDescrip);
+			theValueType = valueType;
+		}
+
+		@Override
+		public Builder<K, V> withBacking(BetterList<K> backing) {
+			super.withBacking(backing);
+			return this;
+		}
+
+		@Override
+		public Builder<K, V> withEquivalence(Equivalence<? super K> equivalence) {
+			super.withEquivalence(equivalence);
+			return this;
+		}
+
+		@Override
+		public Builder<K, V> withLocker(CollectionLockingStrategy locker) {
+			super.withLocker(locker);
+			return this;
+		}
+
+		@Override
+		public Builder<K, V> safe(boolean safe) {
+			super.safe(safe);
+			return this;
+		}
+
+		@Override
+		public Builder<K, V> sortBy(Comparator<? super K> sorting) {
+			super.sortBy(sorting);
+			return this;
+		}
+
+		@Override
+		public Builder<K, V> withDescription(String description) {
+			super.withDescription(description);
+			return this;
+		}
+
+		@Override
+		public Builder<K, V> withElementSource(Function<ElementId, ElementId> elementSource) {
+			super.withElementSource(elementSource);
+			return this;
+		}
+
+		@Override
+		public Builder<K, V> withSourceElements(BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> sourceElements) {
+			super.withSourceElements(sourceElements);
+			return this;
+		}
+
+		protected TypeToken<V> getValueType() {
+			return theValueType;
+		}
+
+		public ObservableMap<K, V> buildMap() {
+			Comparator<? super K> compare = getSorting();
+			DefaultObservableCollection.Builder<Map.Entry<K, V>> entryBuilder = DefaultObservableCollection
+				.build(buildEntryType(getType(), theValueType))//
+				.withBacking((BetterList<Map.Entry<K, V>>) (BetterList<?>) getBacking())//
+				.withDescription(getDescription())//
+				.withElementSource(getElementSource()).withSourceElements(getSourceElements())//
+				.withLocker(getLocker());
+			if (compare != null)
+				entryBuilder.sortBy((entry1, entry2) -> compare.compare(entry1.getKey(), entry2.getKey()));
+			return new DefaultObservableMap<>(getType(), theValueType, getEquivalence(), entryBuilder.build());
+		}
 	}
 
-	// TODO Make a builder
+	/**
+	 * @param <K> The key type for the map
+	 * @param <V> The value type for the map
+	 * @param keyType The key type for the map
+	 * @param valueType The value type for the map
+	 * @return An immutable, empty map with the given types
+	 */
+	static <K, V> ObservableMap<K, V> empty(TypeToken<K> keyType, TypeToken<V> valueType) {
+		return new EmtpyObservableMap<>(keyType, valueType);
+	}
 
 	/**
-	 * @param <K> The (compile-time) key type for the map
-	 * @param <V> The (compile-time) value type for the map
-	 * @param keyType The (run-time) key type for the map
-	 * @param valueType The (run-time) value type for the map
-	 * @param keyEquivalence The equivalence for the map's key set
-	 * @param entryCollection The BetterList to hold the map's entries. Should not be modified externally.
-	 * @return A new, empty, modifiable ObservableMap with the given types and key equivalence
+	 * Implements {@link ObservableMap#values()}
+	 *
+	 * @param <K> The key type of the map
+	 * @param <V> The value type of the map
 	 */
-	static <K, V> ObservableMap<K, V> create(TypeToken<K> keyType, TypeToken<V> valueType, Equivalence<? super K> keyEquivalence,
-		BetterList<Map.Entry<K, V>> entryCollection) {
-		TypeToken<Map.Entry<K, V>> entryType = new TypeToken<Map.Entry<K, V>>() {}.where(new TypeParameter<K>() {}, keyType.wrap())
-			.where(new TypeParameter<V>() {}, valueType.wrap());
-		ObservableSet<Map.Entry<K, V>> entrySet = ObservableCollection.create(entryType, entryCollection).flow().distinct().collect();
-		ObservableSet<Map.Entry<K, V>> exposedEntrySet = entrySet.flow().filterMod(fm -> fm.noAdd(StdMsg.UNSUPPORTED_OPERATION))
-			.collectPassive();
-		ObservableSet<K> keySet = entrySet.flow()
-			.mapEquivalent(keyType, Map.Entry::getKey, key -> new SimpleMapEntry<>(key, null),
-				opts -> opts.cache(false).reEvalOnUpdate(false).fireIfUnchanged(false))
-			.filterMod(fm -> fm.noAdd(StdMsg.UNSUPPORTED_OPERATION)).collectPassive();
-		ReentrantLock valueLock = new ReentrantLock();
-		Object[] firstCause = new Object[1];
-		int[] causeHeight = new int[1];
-		ListenerList<Consumer<? super ObservableMapEvent<? extends K, ? extends V>>> valueListeners = new ListenerList<>(
-			"This map must not be modified in response to another modification");
+	class ObservableMapValueCollection<K, V> extends BetterMap.BetterMapValueCollection<K, V> implements ObservableCollection<V> {
+		public ObservableMapValueCollection(ObservableMap<K, V> map) {
+			super(map);
+		}
+
+		@Override
+		protected ObservableMap<K, V> getMap() {
+			return (ObservableMap<K, V>) super.getMap();
+		}
+
+		@Override
+		public boolean isContentControlled() {
+			return true;
+		}
+
+		@Override
+		public TypeToken<V> getType() {
+			return getMap().getValueType();
+		}
+
+		@Override
+		public Equivalence<? super V> equivalence() {
+			return Equivalence.DEFAULT;
+		}
+
+		@Override
+		public CollectionElement<V> getElement(int index) throws IndexOutOfBoundsException {
+			return getMap().getEntryById(getMap().keySet().getElement(index).getElementId());
+		}
+
+		@Override
+		public int getElementsBefore(ElementId id) {
+			return getMap().keySet().getElementsBefore(id);
+		}
+
+		@Override
+		public int getElementsAfter(ElementId id) {
+			return getMap().keySet().getElementsAfter(id);
+		}
+
+		@Override
+		public void setValue(Collection<ElementId> elements, V value) {
+			try (Transaction t = lock(true, false, null)) {
+				for (ElementId entryId : elements) {
+					MutableMapEntryHandle<K, V> entry = getMap().mutableEntry(entryId);
+					entry.set(value);
+				}
+			}
+		}
+
+		@Override
+		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends V>> observer) {
+			return getMap().onChange(observer);
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableMap#entrySet()}
+	 *
+	 * @param <K> The key type of the map
+	 * @param <V> The value type of the map
+	 */
+	class ObservableEntrySet<K, V> extends BetterMap.BetterEntrySet<K, V> implements ObservableSet<Map.Entry<K, V>> {
+		private TypeToken<Map.Entry<K, V>> theType;
+		private Equivalence<Map.Entry<K, V>> theEquivalence;
+
+		public ObservableEntrySet(ObservableMap<K, V> map) {
+			super(map);
+		}
+
+		@Override
+		protected ObservableMap<K, V> getMap() {
+			return (ObservableMap<K, V>) super.getMap();
+		}
+
+		@Override
+		public TypeToken<Map.Entry<K, V>> getType() {
+			if (theType == null)
+				theType = buildEntryType(getMap().getKeyType(), getMap().getValueType());
+			return theType;
+		}
+
+		@Override
+		public boolean isContentControlled() {
+			return getMap().keySet().isContentControlled();
+		}
+
+		@Override
+		public Equivalence<? super Map.Entry<K, V>> equivalence() {
+			if (theEquivalence == null)
+				theEquivalence = getMap().keySet().equivalence().map((Class<Map.Entry<K, V>>) (Class<?>) Map.Entry.class, null, //
+					key -> new SimpleMapEntry<>(key, null, false), Map.Entry::getKey);
+			return theEquivalence;
+		}
+
+		@Override
+		public CollectionElement<Entry<K, V>> getElement(int index) throws IndexOutOfBoundsException {
+			return getElement(getMap().keySet().getElement(index).getElementId());
+		}
+
+		@Override
+		public int getElementsBefore(ElementId id) {
+			return getMap().keySet().getElementsBefore(id);
+		}
+
+		@Override
+		public int getElementsAfter(ElementId id) {
+			return getMap().keySet().getElementsAfter(id);
+		}
+
+		@Override
+		public void setValue(Collection<ElementId> elements, Map.Entry<K, V> value) {
+			try (Transaction t = lock(true, false, null)) {
+				for (ElementId entryId : elements) {
+					MutableMapEntryHandle<K, V> entry = getMap().mutableEntry(entryId);
+					if (!getMap().keySet().equivalence().elementEquals(entry.getKey(), value.getKey()))
+						throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+					entry.set(value.getValue());
+				}
+			}
+		}
+
+		@Override
+		public Map.Entry<K, V>[] toArray() {
+			try (Transaction t = lock(false, true, null)) {
+				Map.Entry<K, V>[] array = new Map.Entry[size()];
+				CollectionElement<K> keyElement = getMap().keySet().getTerminalElement(true);
+				for (int i = 0; keyElement != null; i++, keyElement = getMap().keySet().getAdjacentElement(keyElement.getElementId(),
+					true)) {
+					array[i++] = getMap().getEntryById(keyElement.getElementId());
+				}
+				return array;
+			}
+		}
+
+		@Override
+		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends Map.Entry<K, V>>> observer) {
+			return getMap().onChange(mapEvt -> {
+				MapEntryHandle<K, V> entry = getMap().getEntryById(mapEvt.getElementId());
+				Map.Entry<K, V> oldEntry;
+				if (mapEvt.getOldValue() == mapEvt.getNewValue())
+					oldEntry = entry;
+				else
+					oldEntry = new SimpleMapEntry<>(mapEvt.getKey(), mapEvt.getOldValue(), false);
+				ObservableCollectionEvent<Map.Entry<K, V>> entryEvt = new ObservableCollectionEvent<>(//
+					mapEvt.getElementId(), getType(), mapEvt.getIndex(), mapEvt.getType(), oldEntry, entry, mapEvt);
+				try (Transaction evtT = Causable.use(entryEvt)) {
+					observer.accept(entryEvt);
+				}
+			});
+		}
+	}
+
+	/**
+	 * A simple, unconstrained {@link ObservableMap} implementation
+	 *
+	 * @param <K> The key type of the map
+	 * @param <V> The value type of the map
+	 */
+	class DefaultObservableMap<K, V> extends AbstractIdentifiable implements ObservableMap<K, V> {
+		private final TypeToken<V> theValueType;
+		private final ObservableSet<Map.Entry<K, V>> theEntries;
+		private final ObservableSet<K> theKeySet;
+		private ObservableCollection<V> theValues;
+		private ObservableSet<Map.Entry<K, V>> theExposedEntries;
+
+		public DefaultObservableMap(TypeToken<K> keyType, TypeToken<V> valueType, Equivalence<? super K> keyEquivalence,
+			ObservableCollection<Map.Entry<K, V>> entries) {
+			theValueType = valueType;
+			if (keyEquivalence instanceof Equivalence.ComparatorEquivalence) {
+				Comparator<? super K> compare = ((Equivalence.ComparatorEquivalence<? super K>) keyEquivalence).comparator();
+				theEntries = entries.flow().distinctSorted((entry1, entry2) -> compare.compare(entry1.getKey(), entry2.getKey()), true)
+					.collect();
+			} else
+				theEntries = entries.flow().distinct().collect();
+			theKeySet = theEntries.flow()
+				.mapEquivalent(keyType, Map.Entry::getKey, key -> new SimpleMapEntry<>(key, null, false),
+					opts -> opts.withEquivalence(keyEquivalence).cache(false).reEvalOnUpdate(false).fireIfUnchanged(false))
+				.collectPassive();
+		}
+
+		@Override
+		public Object createIdentity() {
+			return Identifiable.baseId("observable-map", this);
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return theEntries.isLockSupported();
+		}
+
+		@Override
+		public Transaction lock(boolean write, boolean structural, Object cause) {
+			return theEntries.lock(write, structural, cause);
+		}
+
+		@Override
+		public TypeToken<K> getKeyType() {
+			return theKeySet.getType();
+		}
+
+		@Override
+		public TypeToken<V> getValueType() {
+			return theValueType;
+		}
+
+		@Override
+		public TypeToken<Map.Entry<K, V>> getEntryType() {
+			return theEntries.getType();
+		}
+
+		@Override
+		public Equivalence<? super V> equivalence() {
+			return Equivalence.DEFAULT;
+		}
+
+		@Override
+		public ObservableSet<K> keySet() {
+			return theKeySet;
+		}
+
+		@Override
+		public ObservableCollection<V> values() {
+			if (theValues == null)
+				theValues = ObservableMap.super.values();
+			return theValues;
+		}
+
+		@Override
+		public ObservableSet<Map.Entry<K, V>> entrySet() {
+			if (theExposedEntries == null)
+				theExposedEntries = ObservableMap.super.entrySet();
+			return theExposedEntries;
+		}
+
+		@Override
+		public MapEntryHandle<K, V> getEntry(K key) {
+			CollectionElement<Map.Entry<K, V>> entryEl = theEntries.getElement(new SimpleMapEntry<>(key, null), true);
+			return entryEl == null ? null : handleFor(entryEl);
+		}
+
+		@Override
+		public MapEntryHandle<K, V> getEntryById(ElementId entryId) {
+			CollectionElement<Map.Entry<K, V>> entryEl = theEntries.getElement(entryId);
+			return entryEl == null ? null : handleFor(entryEl);
+		}
+
+		@Override
+		public MapEntryHandle<K, V> putEntry(K key, V value, ElementId after, ElementId before, boolean first) {
+			try (Transaction t = lock(true, true, null)) {
+				CollectionElement<Map.Entry<K, V>> entryEl = theEntries.getElement(new SimpleMapEntry<>(key, null), true);
+				if (entryEl != null) {
+					entryEl.get().setValue(value);
+					return handleFor(entryEl);
+				}
+				MapEntry newEntry = new MapEntry(key, value);
+				entryEl = theEntries.addElement(newEntry, after, before, first);
+				newEntry.theElementId = entryEl.getElementId();
+				return handleFor(entryEl);
+			}
+		}
+
+		@Override
+		public MapEntryHandle<K, V> getOrPutEntry(K key, Function<? super K, ? extends V> value, boolean first, Runnable added) {
+			CollectionElement<Map.Entry<K, V>> entryEl = theEntries.getOrAdd(new SimpleMapEntry<>(key, value.apply(key)), first, added);
+			return entryEl == null ? null : handleFor(entryEl);
+		}
+
+		@Override
+		public MutableMapEntryHandle<K, V> mutableEntry(ElementId entryId) {
+			MutableCollectionElement<Map.Entry<K, V>> entryEl = theEntries.mutableElement(entryId);
+			return entryEl == null ? null : mutableHandleFor(entryEl);
+		}
+
+		private MapEntryHandle<K, V> handleFor(CollectionElement<Map.Entry<K, V>> entryEl) {
+			return new MapEntryHandle<K, V>() {
+				@Override
+				public ElementId getElementId() {
+					return entryEl.getElementId();
+				}
+
+				@Override
+				public V get() {
+					return entryEl.get().getValue();
+				}
+
+				@Override
+				public K getKey() {
+					return entryEl.get().getKey();
+				}
+			};
+		}
+
+		private MutableMapEntryHandle<K, V> mutableHandleFor(MutableCollectionElement<Map.Entry<K, V>> entryEl) {
+			return new MutableMapEntryHandle<K, V>() {
+				@Override
+				public K getKey() {
+					return entryEl.get().getKey();
+				}
+
+				@Override
+				public BetterCollection<V> getCollection() {
+					return values();
+				}
+
+				@Override
+				public ElementId getElementId() {
+					return entryEl.getElementId();
+				}
+
+				@Override
+				public V get() {
+					return entryEl.get().getValue();
+				}
+
+				@Override
+				public String isEnabled() {
+					return null;
+				}
+
+				@Override
+				public String isAcceptable(V value) {
+					if (value != null && !TypeTokens.get().isInstance(theValueType, value))
+						return StdMsg.BAD_TYPE;
+					return null;
+				}
+
+				@Override
+				public void set(V value) throws UnsupportedOperationException, IllegalArgumentException {
+					if (value != null && !TypeTokens.get().isInstance(theValueType, value))
+						throw new IllegalArgumentException(StdMsg.BAD_TYPE);
+					entryEl.get().setValue(value);
+				}
+
+				@Override
+				public String canRemove() {
+					return entryEl.canRemove();
+				}
+
+				@Override
+				public void remove() throws UnsupportedOperationException {
+					entryEl.remove();
+				}
+
+				@Override
+				public String canAdd(V value, boolean before) {
+					return StdMsg.UNSUPPORTED_OPERATION;
+				}
+
+				@Override
+				public ElementId add(V value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
+					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				}
+			};
+		}
+
+		@Override
+		public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action) {
+			return theEntries.onChange(evt -> {
+				V oldValue = ((MapEntry) evt.getNewValue()).getOldValue();
+				ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent<>(evt.getElementId(), getKeyType(), theValueType, evt.getIndex(),
+					evt.getType(), evt.getNewValue().getKey(), oldValue, evt.getNewValue().getValue(), evt);
+				try (Transaction t = Causable.use(mapEvent)) {
+					action.accept(mapEvent);
+				}
+			});
+		}
+
+		@Override
+		public int hashCode() {
+			return BetterMap.hashCode(this);
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return BetterMap.equals(this, obj);
+		}
+
+		@Override
+		public String toString() {
+			return entrySet().toString();
+		}
+
 		class MapEntry implements Map.Entry<K, V> {
 			private final K theKey;
 			private ElementId theElementId;
+			private V theOldValue;
 			private V theValue;
 
 			MapEntry(K key, V value) {
@@ -396,319 +777,145 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 				return theValue;
 			}
 
+			V getOldValue() {
+				return theOldValue;
+			}
+
 			@Override
 			public V setValue(V value) {
-				valueLock.lock();
-				try {
-					V oldValue = theValue;
-					theValue = value;
-					int index = entrySet.getElementsBefore(theElementId);
-					ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent<>(theElementId, theElementId, keyType, valueType, index,
-						index, CollectionChangeType.set, theKey, oldValue, value, firstCause[0]);
-					try (Transaction t = ObservableMapEvent.use(mapEvent)) {
-						valueListeners.forEach(//
-							listener -> listener.accept(mapEvent));
+				try (Transaction t = theEntries.lock(true, false, null)) {
+					V oldValue;
+					synchronized (this) {
+						oldValue = theValue;
+						theOldValue = oldValue;
+						theValue = value;
+						theEntries.mutableElement(theElementId).set(this);
 					}
 					return oldValue;
-				} finally {
-					valueLock.unlock();
 				}
 			}
 		}
-		return new ObservableMap<K, V>() {
-			private Object theIdentity;
-
-			@Override
-			public Object getIdentity() {
-				if (theIdentity == null)
-					theIdentity = Identifiable.baseId("observable-map", this);
-				return theIdentity;
-			}
-
-			@Override
-			public boolean isLockSupported() {
-				return keySet.isLockSupported();
-			}
-
-			@Override
-			public Transaction lock(boolean write, boolean structural, Object cause) {
-				Transaction entryLock = keySet.lock(write, structural, cause);
-				valueLock.lock();
-				boolean causeUsed = cause != null && causeHeight[0] == 0;
-				if (causeUsed)
-					firstCause[0] = cause;
-				if (cause != null)
-					causeHeight[0]++;
-				return () -> {
-					if (cause != null)
-						causeHeight[0]--;
-					if (causeUsed)
-						firstCause[0] = null;
-					valueLock.unlock();
-					entryLock.close();
-				};
-			}
-
-			@Override
-			public TypeToken<K> getKeyType() {
-				return keySet.getType();
-			}
-
-			@Override
-			public TypeToken<V> getValueType() {
-				return valueType;
-			}
-
-			@Override
-			public TypeToken<Map.Entry<K, V>> getEntryType() {
-				return entryType;
-			}
-
-			@Override
-			public Equivalence<? super V> equivalence() {
-				return Equivalence.DEFAULT;
-			}
-
-			@Override
-			public ObservableSet<K> keySet() {
-				return keySet;
-			}
-
-			@Override
-			public MapEntryHandle<K, V> getEntry(K key) {
-				CollectionElement<Map.Entry<K, V>> entryEl = entrySet.getElement(new SimpleMapEntry<>(key, null), true);
-				return entryEl == null ? null : handleFor(entryEl);
-			}
-
-			@Override
-			public MapEntryHandle<K, V> getEntryById(ElementId entryId) {
-				CollectionElement<Map.Entry<K, V>> entryEl = entrySet.getElement(entryId);
-				return entryEl == null ? null : handleFor(entryEl);
-			}
-
-			@Override
-			public MapEntryHandle<K, V> putEntry(K key, V value, ElementId after, ElementId before, boolean first) {
-				try (Transaction t = lock(true, true, null)) {
-					CollectionElement<Map.Entry<K, V>> entryEl = entrySet.getElement(new SimpleMapEntry<>(key, null), true);
-					if (entryEl != null) {
-						entryEl.get().setValue(value);
-						return handleFor(entryEl);
-					}
-					MapEntry newEntry = new MapEntry(key, value);
-					entryEl = entrySet.addElement(newEntry, after, before, first);
-					newEntry.theElementId = entryEl.getElementId();
-					return handleFor(entryEl);
-				}
-			}
-
-			@Override
-			public MapEntryHandle<K, V> getOrPutEntry(K key, Function<? super K, ? extends V> value, boolean first, Runnable added) {
-				CollectionElement<Map.Entry<K, V>> entryEl = entrySet.getOrAdd(new SimpleMapEntry<>(key, value.apply(key)), first, added);
-				return entryEl == null ? null : handleFor(entryEl);
-			}
-
-			@Override
-			public MutableMapEntryHandle<K, V> mutableEntry(ElementId entryId) {
-				MutableCollectionElement<Map.Entry<K, V>> entryEl = entrySet.mutableElement(entryId);
-				return entryEl == null ? null : mutableHandleFor(entryEl);
-			}
-
-			private MapEntryHandle<K, V> handleFor(CollectionElement<Map.Entry<K, V>> entryEl) {
-				return new MapEntryHandle<K, V>() {
-					@Override
-					public ElementId getElementId() {
-						return entryEl.getElementId();
-					}
-
-					@Override
-					public V get() {
-						return entryEl.get().getValue();
-					}
-
-					@Override
-					public K getKey() {
-						return entryEl.get().getKey();
-					}
-				};
-			}
-
-			private MutableMapEntryHandle<K, V> mutableHandleFor(MutableCollectionElement<Map.Entry<K, V>> entryEl) {
-				return new MutableMapEntryHandle<K, V>() {
-					@Override
-					public K getKey() {
-						return entryEl.get().getKey();
-					}
-
-					@Override
-					public BetterCollection<V> getCollection() {
-						return values();
-					}
-
-					@Override
-					public ElementId getElementId() {
-						return entryEl.getElementId();
-					}
-
-					@Override
-					public V get() {
-						return entryEl.get().getValue();
-					}
-
-					@Override
-					public String isEnabled() {
-						return null;
-					}
-
-					@Override
-					public String isAcceptable(V value) {
-						if (value != null && !TypeTokens.get().isInstance(valueType, value))
-							return StdMsg.BAD_TYPE;
-						return null;
-					}
-
-					@Override
-					public void set(V value) throws UnsupportedOperationException, IllegalArgumentException {
-						if (value != null && !TypeTokens.get().isInstance(valueType, value))
-							throw new IllegalArgumentException(StdMsg.BAD_TYPE);
-						entryEl.get().setValue(value);
-					}
-
-					@Override
-					public String canRemove() {
-						return entryEl.canRemove();
-					}
-
-					@Override
-					public void remove() throws UnsupportedOperationException {
-						entryEl.remove();
-					}
-
-					@Override
-					public String canAdd(V value, boolean before) {
-						return StdMsg.UNSUPPORTED_OPERATION;
-					}
-
-					@Override
-					public ElementId add(V value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-					}
-				};
-			}
-
-			@Override
-			public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action) {
-				Subscription entrySub = entrySet.onChange(evt -> {
-					V oldValue = evt.getType() == CollectionChangeType.add ? null : evt.getNewValue().getValue();
-					ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent<>(evt.getElementId(), evt.getElementId(), keyType, valueType,
-						evt.getIndex(), evt.getIndex(), evt.getType(), evt.getNewValue().getKey(), oldValue, evt.getNewValue().getValue(),
-						evt);
-					try (Transaction t = ObservableMapEvent.use(mapEvent)) {
-						action.accept(mapEvent);
-					}
-				});
-				Runnable valueSet = valueListeners.add(action, false);
-				return () -> {
-					valueSet.run();
-					entrySub.unsubscribe();
-				};
-			}
-
-			@Override
-			public ObservableSet<java.util.Map.Entry<K, V>> entrySet() {
-				return exposedEntrySet;
-			}
-		};
 	}
 
 	/**
-	 * @param <K> The key type for the map
-	 * @param <V> The value type for the map
-	 * @param keyType The key type for the map
-	 * @param valueType The value type for the map
-	 * @return An immutable, empty map with the given types
+	 * An empty {@link ObservableMap} implementation
+	 *
+	 * @param <K> The key type of the map
+	 * @param <V> The value type of the map
 	 */
-	static <K, V> ObservableMap<K, V> empty(TypeToken<K> keyType, TypeToken<V> valueType) {
-		TypeToken<Map.Entry<K, V>> entryType = buildEntryType(keyType, valueType);
-		ObservableSet<K> keySet = ObservableCollection.of(keyType).flow().distinct().collect();
-		return new ObservableMap<K, V>() {
-			private Object theIdentity;
+	class EmtpyObservableMap<K, V> extends AbstractIdentifiable implements ObservableMap<K, V> {
+		private final TypeToken<K> theKeyType;
+		private final TypeToken<V> theValueType;
+		private TypeToken<Map.Entry<K, V>> theEntryType;
+		private final ObservableSet<K> theKeySet;
+		private ObservableCollection<V> theValues;
+		private ObservableSet<Map.Entry<K, V>> theEntries;
 
-			@Override
-			public Object getIdentity() {
-				if (theIdentity == null)
-					theIdentity = Identifiable.idFor(this, this::toString, this::hashCode, other -> other instanceof EmptyCollection);
-				return theIdentity;
-			}
+		public EmtpyObservableMap(TypeToken<K> keyType, TypeToken<V> valueType) {
+			theKeyType = keyType;
+			theValueType = valueType;
+			theKeySet = ObservableCollection.of(keyType).flow().distinct().collect();
+		}
 
-			@Override
-			public TypeToken<K> getKeyType() {
-				return keyType;
-			}
+		@Override
+		public Object createIdentity() {
+			return Identifiable.idFor(this, this::toString, this::hashCode, other -> other instanceof EmptyCollection);
+		}
 
-			@Override
-			public TypeToken<V> getValueType() {
-				return valueType;
-			}
+		@Override
+		public TypeToken<K> getKeyType() {
+			return theKeyType;
+		}
 
-			@Override
-			public TypeToken<Map.Entry<K, V>> getEntryType() {
-				return entryType;
-			}
+		@Override
+		public TypeToken<V> getValueType() {
+			return theValueType;
+		}
 
-			@Override
-			public boolean isLockSupported() {
-				return true;
-			}
+		@Override
+		public TypeToken<Map.Entry<K, V>> getEntryType() {
+			if (theEntryType == null)
+				theEntryType = buildEntryType(theKeyType, theValueType);
+			return theEntryType;
+		}
 
-			@Override
-			public Transaction lock(boolean write, boolean structural, Object cause) {
-				return Transaction.NONE;
-			}
+		@Override
+		public boolean isLockSupported() {
+			return true;
+		}
 
-			@Override
-			public Equivalence<? super V> equivalence() {
-				return Equivalence.DEFAULT;
-			}
+		@Override
+		public Transaction lock(boolean write, boolean structural, Object cause) {
+			return Transaction.NONE;
+		}
 
-			@Override
-			public ObservableSet<K> keySet() {
-				return keySet;
-			}
+		@Override
+		public Equivalence<? super V> equivalence() {
+			return Equivalence.DEFAULT;
+		}
 
-			@Override
-			public MapEntryHandle<K, V> putEntry(K key, V value, ElementId after, ElementId before, boolean first) {
-				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-			}
+		@Override
+		public ObservableSet<K> keySet() {
+			return theKeySet;
+		}
 
-			@Override
-			public MapEntryHandle<K, V> getEntry(K key) {
-				return null;
-			}
+		@Override
+		public ObservableCollection<V> values() {
+			if (theValues == null)
+				theValues = ObservableMap.super.values();
+			return theValues;
+		}
 
-			@Override
-			public MapEntryHandle<K, V> getEntryById(ElementId entryId) {
-				throw new NoSuchElementException();
-			}
+		@Override
+		public ObservableSet<Entry<K, V>> entrySet() {
+			if (theEntries == null)
+				theEntries = ObservableMap.super.entrySet();
+			return theEntries;
+		}
 
-			@Override
-			public MapEntryHandle<K, V> getOrPutEntry(K key, Function<? super K, ? extends V> value, boolean first, Runnable added) {
-				return null;
-			}
+		@Override
+		public MapEntryHandle<K, V> putEntry(K key, V value, ElementId after, ElementId before, boolean first) {
+			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+		}
 
-			@Override
-			public MutableMapEntryHandle<K, V> mutableEntry(ElementId entryId) {
-				throw new NoSuchElementException();
-			}
+		@Override
+		public MapEntryHandle<K, V> getEntry(K key) {
+			return null;
+		}
 
-			@Override
-			public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action) {
-				return () -> {};
-			}
+		@Override
+		public MapEntryHandle<K, V> getEntryById(ElementId entryId) {
+			throw new NoSuchElementException();
+		}
 
-			@Override
-			public String toString() {
-				return entrySet().toString();
-			}
-		};
+		@Override
+		public MapEntryHandle<K, V> getOrPutEntry(K key, Function<? super K, ? extends V> value, boolean first, Runnable added) {
+			return null;
+		}
+
+		@Override
+		public MutableMapEntryHandle<K, V> mutableEntry(ElementId entryId) {
+			throw new NoSuchElementException();
+		}
+
+		@Override
+		public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action) {
+			return Subscription.NONE;
+		}
+
+		@Override
+		public int hashCode() {
+			return BetterMap.hashCode(this);
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return BetterMap.equals(this, obj);
+		}
+
+		@Override
+		public String toString() {
+			return entrySet().toString();
+		}
 	}
 }

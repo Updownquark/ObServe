@@ -40,7 +40,7 @@ import org.observe.ObservableValueTester;
 import org.observe.SimpleObservable;
 import org.observe.SimpleSettableValue;
 import org.observe.Subscription;
-import org.observe.assoc.ObservableMapEvent;
+import org.observe.assoc.ObservableMultiMapEvent;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableSortedMultiMap;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
@@ -451,9 +451,9 @@ public class ObservableCollectionsTest {
 	 */
 	public static <K, V, C extends List<V>> Subscription sync(ObservableMultiMap<K, V> map, Map<K, C> synced,
 		Supplier<? extends C> collectCreator) {
-		return map.subscribe(new Consumer<ObservableMapEvent<? extends K, ? extends V>>() {
+		return map.subscribe(new Consumer<ObservableMultiMapEvent<? extends K, ? extends V>>() {
 			@Override
-			public void accept(ObservableMapEvent<? extends K, ? extends V> evt) {
+			public void accept(ObservableMultiMapEvent<? extends K, ? extends V> evt) {
 				switch(evt.getType()){
 				case add:
 					synced.computeIfAbsent(evt.getKey(), k -> collectCreator.get()).add(evt.getIndex(), evt.getNewValue());
