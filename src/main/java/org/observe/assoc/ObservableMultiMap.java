@@ -1,8 +1,8 @@
 package org.observe.assoc;
 
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Objects;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -20,6 +20,7 @@ import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.DistinctDataFlow;
 import org.observe.collect.ObservableCollection.SubscriptionCause;
+import org.observe.collect.ObservableCollectionEvent;
 import org.observe.collect.ObservableSet;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
@@ -35,9 +36,12 @@ import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MultiEntryHandle;
 import org.qommons.collect.MultiEntryValueHandle;
 import org.qommons.collect.MultiMap;
+import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.MutableElementSpliterator;
 import org.qommons.collect.MutableMapEntryHandle;
+import org.qommons.collect.SimpleMapEntry;
+import org.qommons.collect.SimpleMultiEntry;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -215,60 +219,12 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 	 */
 	@Override
 	default ObservableSet<? extends MultiEntryHandle<K, V>> entrySet() {
-		return keySet().flow().mapEquivalent(getEntryType(), this::getEntry, entry -> entry.getKey(), options -> //
-		options.cache(false)).collect();
+		return new ObservableMultiMapEntrySet<>(this);
 	}
 
 	/** @return A collection of plain (non-observable) {@link java.util.Map.Entry entries}, one for each value in this map */
-	default ObservableCollection<Map.Entry<K, V>> observeSingleEntries() {
-		class DefaultMapEntry implements Map.Entry<K, V> {
-			private final K theKey;
-
-			private final V theValue;
-
-			DefaultMapEntry(K key, V value) {
-				theKey = key;
-				theValue = value;
-			}
-
-			@Override
-			public K getKey() {
-				return theKey;
-			}
-
-			@Override
-			public V getValue() {
-				return theValue;
-			}
-
-			@Override
-			public V setValue(V value) {
-				throw new UnsupportedOperationException();
-			}
-
-			@Override
-			public int hashCode() {
-				return Objects.hashCode(theKey);
-			}
-
-			@Override
-			public boolean equals(Object obj) {
-				return obj instanceof Map.Entry && Objects.equals(((Map.Entry<?, ?>) obj).getKey(), theKey);
-			}
-
-			@Override
-			public String toString() {
-				return theKey + "=" + theValue;
-			}
-		}
-		TypeToken<Map.Entry<K, V>> entryType = new TypeToken<Map.Entry<K, V>>() {}//
-		.where(new TypeParameter<K>() {}, getKeyType()).where(new TypeParameter<V>() {}, getValueType());
-
-		return entrySet().flow()
-			.flatMap(entryType, //
-				entry -> entry.getValues().flow().map(entryType, value -> new DefaultMapEntry(entry.getKey(), value),
-					options -> options.cache(false))//
-				).collect();
+	default ObservableCollection<MultiEntryValueHandle<K, V>> observeSingleEntries() {
+		return new ObservableSingleValueEntryCollection<>(this);
 	}
 
 	/**
@@ -340,6 +296,273 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 			str.append(entry.getKey()).append('=').append(entry.getValues());
 		}
 		return str.toString();
+	}
+
+	class ObservableMultiMapEntrySet<K, V> extends BetterMultiMapEntrySet<K, V> implements ObservableSet<MultiEntryHandle<K, V>> {
+		private Equivalence<? super MultiMap.MultiEntry<? extends K, ?>> theEquivalence;
+
+		public ObservableMultiMapEntrySet(BetterMultiMap<K, V> map) {
+			super(map);
+		}
+
+		@Override
+		protected ObservableMultiMap<K, V> getMap() {
+			return (ObservableMultiMap<K, V>) super.getMap();
+		}
+
+		@Override
+		public TypeToken<MultiEntryHandle<K, V>> getType() {
+			return getMap().getEntryType();
+		}
+
+		@Override
+		public Equivalence<? super MultiEntryHandle<K, V>> equivalence() {
+			if (theEquivalence == null)
+				theEquivalence = getMap().keySet().equivalence().map(
+					(Class<MultiMap.MultiEntry<? extends K, ?>>) (Class<?>) MultiMap.MultiEntry.class, null,
+					key -> new SimpleMultiEntry<>(key, false), MultiMap.MultiEntry::getKey);
+			return theEquivalence;
+		}
+
+		@Override
+		public boolean isContentControlled() {
+			return getMap().keySet().isContentControlled();
+		}
+
+		@Override
+		public int getElementsBefore(ElementId id) {
+			return getMap().keySet().getElementsBefore(id);
+		}
+
+		@Override
+		public int getElementsAfter(ElementId id) {
+			return getMap().keySet().getElementsAfter(id);
+		}
+
+		@Override
+		public CollectionElement<MultiEntryHandle<K, V>> getElement(int index) throws IndexOutOfBoundsException {
+			return entryFor(getMap().getEntryById(getMap().keySet().getElement(index).getElementId()));
+		}
+
+		@Override
+		public void setValue(Collection<ElementId> elements, MultiEntryHandle<K, V> value) {
+			if (!elements.isEmpty())
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+		}
+
+		@Override
+		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends MultiEntryHandle<K, V>>> observer) {
+			return getMap().onChange(mapEvt -> {
+				MultiEntryHandle<K, V> entry;
+				if (mapEvt.getKeyElement().isPresent())
+					entry = getMap().getEntryById(mapEvt.getKeyElement());
+				else
+					entry = new SyntheticEntry(mapEvt.getKeyElement(), mapEvt.getKey());
+				CollectionChangeType changeType;
+				if (mapEvt.getType() == CollectionChangeType.add && entry.getValues().size() == 1)
+					changeType = CollectionChangeType.add;
+				else if (mapEvt.getType() == CollectionChangeType.remove && !mapEvt.getKeyElement().isPresent())
+					changeType = CollectionChangeType.remove;
+				else
+					changeType = CollectionChangeType.set;
+
+				ObservableCollectionEvent<MultiEntryHandle<K, V>> collEvt = new ObservableCollectionEvent<>(//
+					mapEvt.getKeyElement(), getType(), mapEvt.getKeyIndex(), changeType, //
+					changeType == CollectionChangeType.add ? null : entry, entry, mapEvt);
+				try (Transaction evtT = Causable.use(collEvt)) {
+					observer.accept(collEvt);
+				}
+			});
+		}
+
+		private class SyntheticEntry implements MultiEntryHandle<K, V> {
+			private final ElementId theKeyId;
+			private final K theKey;
+
+			SyntheticEntry(ElementId keyId, K key) {
+				theKeyId = keyId;
+				theKey = key;
+			}
+
+			@Override
+			public K getKey() {
+				return theKey;
+			}
+
+			@Override
+			public ElementId getElementId() {
+				return theKeyId;
+			}
+
+			@Override
+			public BetterCollection<V> getValues() {
+				return BetterList.empty();
+			}
+		}
+	}
+
+	class ObservableSingleEntryCollection<K, V> extends BetterMapSingleEntryCollection<K, V>
+	implements ObservableCollection<MultiEntryValueHandle<K, V>> {
+		private Equivalence<? super Map.Entry<? extends K, ?>> theEquivalence;
+
+		public ObservableSingleEntryCollection(ObservableMultiMap<K, V> map) {
+			super(map);
+		}
+
+		@Override
+		protected ObservableMultiMap<K, V> getMap() {
+			return (ObservableMultiMap<K, V>) super.getMap();
+		}
+
+		@Override
+		public TypeToken<MultiEntryValueHandle<K, V>> getType() {
+			return getMap().getEntryValueType();
+		}
+
+		@Override
+		public Equivalence<? super MultiEntryValueHandle<K, V>> equivalence() {
+			if (theEquivalence == null)
+				theEquivalence = getMap().keySet().equivalence().map((Class<Map.Entry<? extends K, ?>>) (Class<?>) Map.Entry.class, null,
+					key -> new SimpleMapEntry<>(key, null), Map.Entry::getKey);
+			return theEquivalence;
+		}
+
+		@Override
+		public boolean isContentControlled() {
+			// We'll assume that if the key set is not content-controlled then the values won't be either
+			return getMap().keySet().isContentControlled();
+		}
+
+		@Override
+		public int getElementsBefore(ElementId id) {
+			MultiEntryValueHandle<K, V> handle = getElement(id).get();
+			MultiEntryHandle<K, V> entry = getMap().getEntryById(handle.getKeyId());
+			int before = getElements(entry.getValues(), id, true);
+			CollectionElement<K> keyEl = getMap().keySet().getAdjacentElement(entry.getElementId(), false);
+			while (keyEl != null) {
+				before += getMap().getEntryById(keyEl.getElementId()).getValues().size();
+				keyEl = getMap().keySet().getAdjacentElement(keyEl.getElementId(), false);
+			}
+			return before;
+		}
+
+		@Override
+		public int getElementsAfter(ElementId id) {
+			MultiEntryValueHandle<K, V> handle = getElement(id).get();
+			MultiEntryHandle<K, V> entry = getMap().getEntryById(handle.getKeyId());
+			int after = getElements(entry.getValues(), id, false);
+			CollectionElement<K> keyEl = getMap().keySet().getAdjacentElement(entry.getElementId(), true);
+			while (keyEl != null) {
+				after += getMap().getEntryById(keyEl.getElementId()).getValues().size();
+				keyEl = getMap().keySet().getAdjacentElement(keyEl.getElementId(), true);
+			}
+			return after;
+		}
+
+		private int getElements(BetterCollection<?> c, ElementId id, boolean before) {
+			if (c instanceof BetterList)
+				return ((BetterList<?>) c).getElementsBefore(id);
+			CollectionElement<?> el = c.getAdjacentElement(id, !before);
+			int elements = 0;
+			while (el != null) {
+				elements++;
+				el = c.getAdjacentElement(el.getElementId(), !before);
+			}
+			return elements;
+		}
+
+		@Override
+		public CollectionElement<MultiEntryValueHandle<K, V>> getElement(int index) throws IndexOutOfBoundsException {
+			CollectionElement<K> keyEl = getMap().keySet().getTerminalElement(true);
+			int size = 0;
+			while (keyEl != null) {
+				MultiEntryHandle<K, V> entry = getMap().getEntryById(keyEl.getElementId());
+				int entrySize = entry.getValues().size();
+				if (size + entrySize > index)
+					return entryFor(getMap().getEntryById(keyEl.getElementId(), getElement(entry.getValues(), index - size)));
+
+				size += entrySize;
+				keyEl = getMap().keySet().getAdjacentElement(keyEl.getElementId(), true);
+			}
+			throw new IndexOutOfBoundsException(index + " of " + size);
+		}
+
+		private ElementId getElement(BetterCollection<?> c, int index) {
+			if (c instanceof BetterList)
+				return ((BetterList<?>) c).getElement(index).getElementId();
+			if (index <= c.size() / 2) {
+				ElementId id = c.getTerminalElement(true).getElementId();
+				for (int i = 0; i < index; i++)
+					id = c.getAdjacentElement(id, true).getElementId();
+				return id;
+			} else {
+				ElementId id = c.getTerminalElement(false).getElementId();
+				for (int i = c.size() - 1; i > index; i--)
+					id = c.getAdjacentElement(id, false).getElementId();
+				return id;
+			}
+		}
+
+		@Override
+		public void setValue(Collection<ElementId> elements, MultiEntryValueHandle<K, V> value) {
+			for (ElementId el : elements) {
+				MutableCollectionElement<MultiEntryValueHandle<K, V>> entry = mutableElement(el);
+				entry.set(value);
+			}
+		}
+
+		@Override
+		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends MultiEntryValueHandle<K, V>>> observer) {
+			return getMap().onChange(mapEvt -> {
+				MultiEntryValueHandle<K, V> entry;
+				if (mapEvt.getKeyElement().isPresent() && mapEvt.getElementId().isPresent())
+					entry = getMap().getEntryById(mapEvt.getKeyElement(), mapEvt.getElementId());
+				else
+					entry = new SyntheticEntry(mapEvt.getKeyElement(), mapEvt.getKey(), mapEvt.getElementId(), mapEvt.getOldValue());
+				ElementId id = entryFor(entry).getElementId();
+
+				ObservableCollectionEvent<MultiEntryValueHandle<K, V>> collEvt = new ObservableCollectionEvent<>(//
+					id, getType(), getElementsBefore(id), mapEvt.getType(), //
+					mapEvt.getType() == CollectionChangeType.add ? null : entry, entry, mapEvt);
+				try (Transaction evtT = Causable.use(collEvt)) {
+					observer.accept(collEvt);
+				}
+			});
+		}
+
+		private class SyntheticEntry implements MultiEntryValueHandle<K, V> {
+			private final ElementId theKeyId;
+			private final K theKey;
+			private final ElementId theValueId;
+			private final V theValue;
+
+			SyntheticEntry(ElementId keyId, K key, ElementId valueId, V value) {
+				theKeyId = keyId;
+				theKey = key;
+				theValueId = valueId;
+				theValue = value;
+			}
+
+			@Override
+			public ElementId getKeyId() {
+				return theKeyId;
+			}
+
+			@Override
+			public K getKey() {
+				return theKey;
+			}
+
+			@Override
+			public ElementId getElementId() {
+				return theValueId;
+			}
+
+			@Override
+			public V get() {
+				return theValue;
+			}
+		}
 	}
 
 	/**
@@ -459,12 +682,12 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 
 		@Override
 		public MapEntryHandle<K, V> getEntryById(ElementId entryId) {
-			return entryFor(theSource.getEntry(entryId));
+			return entryFor(theSource.getEntryById(entryId));
 		}
 
 		@Override
 		public MutableMapEntryHandle<K, V> mutableEntry(ElementId entryId) {
-			return mutableEntryFor(theSource.getEntry(entryId));
+			return mutableEntryFor(theSource.getEntryById(entryId));
 		}
 
 		private MutableMapEntryHandle<K, V> mutableEntryFor(MultiEntryHandle<K, V> outerHandle) {
@@ -574,7 +797,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 				MultiEntryValueHandle<K, V> handle2 = theSource.putEntry(key, value, after, before, first);
 				if (handle2 == null)
 					return null;
-				outerHandle = theSource.getEntry(handle2.getKeyId());
+				outerHandle = theSource.getEntryById(handle2.getKeyId());
 				return entryFor(outerHandle);
 			}
 		}
