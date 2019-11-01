@@ -14,7 +14,8 @@ import org.observe.collect.ObservableCollectionEvent;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
-import org.qommons.collect.BetterSortedSet.SortedSearchFilter;
+import org.qommons.collect.BetterSortedList;
+import org.qommons.collect.BetterSortedList.SortedSearchFilter;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ListenerList;
@@ -127,7 +128,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 		if (!els.isEmpty()) {
 			flush();
 			ElementId id = els.getFirst().getElementId();
-			ElementRef<E> ref = theSyntheticBacking.search(r -> id.compareTo(r.sourceId), SortedSearchFilter.OnlyMatch).get();
+			ElementRef<E> ref = theSyntheticBacking.search(r -> id.compareTo(r.sourceId), BetterSortedList.SortedSearchFilter.OnlyMatch).get();
 			return ref.synthId;
 		}
 		return null;
@@ -208,7 +209,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 			CollectionElement<E> srcEl = theCollection.addElement(value, srcAfter, srcBefore, first);
 			if (srcEl == null)
 				return null;
-			ElementRef<E> ref = theSyntheticBacking.search(r -> srcEl.getElementId().compareTo(r.sourceId), SortedSearchFilter.OnlyMatch)
+			ElementRef<E> ref = theSyntheticBacking.search(r -> srcEl.getElementId().compareTo(r.sourceId), BetterSortedList.SortedSearchFilter.OnlyMatch)
 				.get();
 			return getElement(ref.synthId);
 		}

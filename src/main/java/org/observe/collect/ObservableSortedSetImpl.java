@@ -25,8 +25,9 @@ import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterSet;
+import org.qommons.collect.BetterSortedList;
+import org.qommons.collect.BetterSortedList.SortedSearchFilter;
 import org.qommons.collect.BetterSortedSet;
-import org.qommons.collect.BetterSortedSet.SortedSearchFilter;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
@@ -45,14 +46,14 @@ public class ObservableSortedSetImpl {
 	 */
 	public static class RelativeFinder<E> extends ObservableCollectionImpl.AbstractObservableElementFinder<E> {
 		private final Comparable<? super E> theSearch;
-		private final SortedSearchFilter theFilter;
+		private final BetterSortedList.SortedSearchFilter theFilter;
 
 		/**
 		 * @param set The sorted set to search
 		 * @param search The search comparable
 		 * @param filter The search filter
 		 */
-		public RelativeFinder(ObservableSortedSet<E> set, Comparable<? super E> search, SortedSearchFilter filter) {
+		public RelativeFinder(ObservableSortedSet<E> set, Comparable<? super E> search, BetterSortedList.SortedSearchFilter filter) {
 			super(set, (el1, el2) -> {
 				int comp1 = search.compareTo(el1.get());
 				int comp2 = search.compareTo(el2.get());
@@ -170,8 +171,8 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public ObservableSortedSet<E> subSet(Comparable<? super E> from, Comparable<? super E> to) {
-			return new ObservableSubSet<>(getWrapped(), BetterSortedSet.and(getFrom(), from, true),
-				BetterSortedSet.and(getTo(), to, false));
+			return new ObservableSubSet<>(getWrapped(), BetterSortedList.and(getFrom(), from, true),
+				BetterSortedList.and(getTo(), to, false));
 		}
 
 		@Override
@@ -310,7 +311,7 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public CollectionElement<E> search(Comparable<? super E> search, SortedSearchFilter filter) {
+		public CollectionElement<E> search(Comparable<? super E> search, BetterSortedList.SortedSearchFilter filter) {
 			return CollectionElement.reverse(getWrapped().search(v -> -search.compareTo(v), filter.opposite()));
 		}
 
@@ -690,7 +691,7 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public CollectionElement<T> search(Comparable<? super T> search, SortedSearchFilter filter) {
+		public CollectionElement<T> search(Comparable<? super T> search, BetterSortedList.SortedSearchFilter filter) {
 			CollectionElement<E> srcEl = getSource().search(mappedSearch(search), filter);
 			return srcEl == null ? null : elementFor(srcEl, null);
 		}
@@ -726,7 +727,7 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public CollectionElement<T> search(Comparable<? super T> search, SortedSearchFilter filter) {
+		public CollectionElement<T> search(Comparable<? super T> search, BetterSortedList.SortedSearchFilter filter) {
 			CollectionElement<DerivedElementHolder<T>> presentEl = getPresentElements().search(el -> search.compareTo(el.get()),
 				filter);
 			return presentEl == null ? null : elementFor(presentEl.get());
@@ -786,7 +787,7 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public CollectionElement<E> search(Comparable<? super E> search, SortedSearchFilter filter) {
+		public CollectionElement<E> search(Comparable<? super E> search, BetterSortedList.SortedSearchFilter filter) {
 			ObservableSortedSet<E> wrapped = getWrapped().get();
 			if (wrapped == null)
 				return null;
@@ -794,11 +795,11 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public CollectionElement<E> getOrAdd(E value, boolean first, Runnable added) {
+		public CollectionElement<E> getOrAdd(E value, ElementId after, ElementId before, boolean first, Runnable added) {
 			ObservableSortedSet<E> wrapped = getWrapped().get();
 			if (wrapped == null)
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-			return wrapped.getOrAdd(value, first, added);
+			return wrapped.getOrAdd(value, before, after, first, added);
 		}
 
 		@Override

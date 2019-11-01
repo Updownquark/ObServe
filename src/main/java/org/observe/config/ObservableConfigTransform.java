@@ -32,8 +32,8 @@ import org.qommons.Transaction;
 import org.qommons.ValueHolder;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
+import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.BetterSortedMap;
-import org.qommons.collect.BetterSortedSet.SortedSearchFilter;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ListenerList;
@@ -349,7 +349,7 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 			boolean elementChange = collectionChange.relativePath.size() == 1;
 			ObservableConfig config = collectionChange.relativePath.get(0);
 			if (elementChange && collectionChange.changeType == CollectionChangeType.add) {
-				CollectionElement<ElementId> el = theElements.keySet().search(config.getParentChildRef(), SortedSearchFilter.PreferLess);
+				CollectionElement<ElementId> el = theElements.keySet().search(config.getParentChildRef(), BetterSortedList.SortedSearchFilter.PreferLess);
 				ConfigElement newEl;
 				if (theNewElement != null)
 					newEl = theNewElement;

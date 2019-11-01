@@ -20,6 +20,7 @@ import org.observe.entity.ObservableEntityType;
 import org.observe.util.MethodRetrievingHandler;
 import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
+import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.QuickSet;
 import org.qommons.collect.QuickSet.QuickMap;
@@ -44,7 +45,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 	@Override
 	public ObservableEntityType<?> getEntityType(String entityName) {
 		return theEntityTypes.searchValue(et -> compareEntityTypes(entityName, et.getEntityName()),
-			BetterSortedSet.SortedSearchFilter.OnlyMatch);
+			BetterSortedList.SortedSearchFilter.OnlyMatch);
 	}
 
 	@Override

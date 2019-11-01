@@ -19,7 +19,8 @@ import org.observe.SimpleSettableValue;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSortedSet;
-import org.qommons.collect.BetterSortedSet.SortedSearchFilter;
+import org.qommons.collect.BetterSortedList;
+import org.qommons.collect.BetterSortedList.SortedSearchFilter;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
@@ -164,7 +165,7 @@ public class ObservableValueSelector<T, X> extends JPanel {
 				break;
 			case remove:
 				selectableEl = theSelectableValues.search(sv -> evt.getElementId().compareTo(sv.sourceElement.getElementId()),
-					SortedSearchFilter.OnlyMatch);
+					BetterSortedList.SortedSearchFilter.OnlyMatch);
 				selectableEl.get().remove();
 				break;
 			case set:

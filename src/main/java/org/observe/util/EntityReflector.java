@@ -31,8 +31,9 @@ import org.observe.entity.impl.ObservableEntityUtils;
 import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
 import org.qommons.collect.BetterCollections;
+import org.qommons.collect.BetterSortedList;
+import org.qommons.collect.BetterSortedList.SortedSearchFilter;
 import org.qommons.collect.BetterSortedSet;
-import org.qommons.collect.BetterSortedSet.SortedSearchFilter;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.QuickSet;
@@ -1012,7 +1013,7 @@ public class EntityReflector<E> {
 		if (clazz == null)
 			return;
 		for (Method m : clazz.getDeclaredMethods()) {
-			if (methods.search(method -> -method.compare(m), SortedSearchFilter.OnlyMatch) != null)
+			if (methods.search(method -> -method.compare(m), BetterSortedList.SortedSearchFilter.OnlyMatch) != null)
 				continue; // Overridden by a subclass and handled
 			BiFunction<? super E, Object[], ?> custom = customMethods.get(m);
 			if (custom != null) {
@@ -1111,7 +1112,7 @@ public class EntityReflector<E> {
 	private <S> void populateSuperMethods(QuickMap<String, ReflectedField<E, ?>> fields, BetterSortedSet<MethodInterpreter<E, ?>> methods,
 		EntityReflector<S> superR, int superIndex, List<EntityReflectionMessage> errors) {
 		for (CollectionElement<MethodInterpreter<S, ?>> superMethod : superR.getMethods().elements()) {
-			MethodInterpreter<E, ?> subMethod = methods.searchValue(superMethod.get(), SortedSearchFilter.OnlyMatch);
+			MethodInterpreter<E, ?> subMethod = methods.searchValue(superMethod.get(), BetterSortedList.SortedSearchFilter.OnlyMatch);
 			if (subMethod == null) {
 				if (superMethod.get() instanceof CachedFieldGetter)
 					subMethod = new CachedFieldGetter<>(this, superMethod.get().getMethod(),
@@ -1171,7 +1172,7 @@ public class EntityReflector<E> {
 		if (!method.getDeclaringClass().isAssignableFrom(theRawType))
 			throw new IllegalArgumentException("Method " + method + " cannot be applied to " + theType);
 		MethodSignature sig = new MethodSignature(method);
-		return theMethods.searchValue(m -> -m.compare(sig), SortedSearchFilter.OnlyMatch);
+		return theMethods.searchValue(m -> -m.compare(sig), BetterSortedList.SortedSearchFilter.OnlyMatch);
 	}
 
 	/**

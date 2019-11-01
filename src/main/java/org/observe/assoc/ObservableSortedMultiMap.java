@@ -19,8 +19,8 @@ import org.observe.collect.ObservableSortedSet;
 import org.observe.util.TypeTokens;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
+import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.BetterSortedMultiMap;
-import org.qommons.collect.BetterSortedSet.SortedSearchFilter;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MapEntryHandle;
@@ -49,9 +49,9 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 	}
 
 	@Override
-	default MultiEntryHandle<K, V> search(Comparable<? super K> search, SortedSearchFilter filter) {
+	default MultiEntryHandle<K, V> search(Comparable<? super K> search, BetterSortedList.SortedSearchFilter filter) {
 		CollectionElement<K> keyEl = keySet().search(search, filter);
-		return keyEl == null ? null : getEntry(keyEl.getElementId());
+		return keyEl == null ? null : getEntryById(keyEl.getElementId());
 	}
 
 	@Override
@@ -177,7 +177,7 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		}
 
 		@Override
-		public MapEntryHandle<K, V> searchEntries(Comparable<? super Entry<K, V>> search, SortedSearchFilter filter) {
+		public MapEntryHandle<K, V> searchEntries(Comparable<? super Entry<K, V>> search, BetterSortedList.SortedSearchFilter filter) {
 			CollectionElement<Map.Entry<K, V>> keyEntry = entrySet().search(search, filter);
 			if (keyEntry == null)
 				return null;

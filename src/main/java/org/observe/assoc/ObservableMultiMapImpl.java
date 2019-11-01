@@ -45,7 +45,7 @@ import org.qommons.Causable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
-import org.qommons.collect.BetterSortedSet;
+import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ListenerList;
@@ -1171,7 +1171,7 @@ public class ObservableMultiMapImpl {
 					Comparable<DerivedCollectionElement<Map.Entry<K, V>>> finder = theEntries
 						.getElementFinder(new SimpleMapEntry<>(theKey, value));
 					if (finder != null) {
-						return elementFor(group.getParentElements().keySet().search(finder, BetterSortedSet.SortedSearchFilter.OnlyMatch));
+						return elementFor(group.getParentElements().keySet().search(finder, BetterSortedList.SortedSearchFilter.OnlyMatch));
 					} else {
 						ElementId[] id = new ElementId[1];
 						MutableElementSpliterator<DerivedCollectionElement<Map.Entry<K, V>>> spliter = group.getParentElements().keySet()

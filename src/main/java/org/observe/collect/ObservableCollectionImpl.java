@@ -46,7 +46,8 @@ import org.qommons.Transaction;
 import org.qommons.ValueHolder;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
-import org.qommons.collect.BetterSortedSet.SortedSearchFilter;
+import org.qommons.collect.BetterSortedList;
+import org.qommons.collect.BetterSortedList.SortedSearchFilter;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ListenerList;
@@ -2190,7 +2191,7 @@ public final class ObservableCollectionImpl {
 				Comparable<DerivedCollectionElement<T>> finder = getFlow().getElementFinder(value);
 				if (finder != null) {
 					BinaryTreeNode<DerivedElementHolder<T>> found = theDerivedElements.search(holder -> finder.compareTo(holder.element), //
-						SortedSearchFilter.of(first, false));
+						BetterSortedList.SortedSearchFilter.of(first, false));
 					if (found == null || !equivalence().elementEquals(found.get().element.get(), value))
 						return null;
 					while (found.getChild(first) != null && equivalence().elementEquals(found.getChild(first).get().element.get(), value))
@@ -2236,7 +2237,7 @@ public final class ObservableCollectionImpl {
 
 				return QommonsUtils.map2(theFlow.getElementsBySource(sourceEl), el -> {
 					return elementFor(//
-						theDerivedElements.searchValue(de -> el.compareTo(de.element), SortedSearchFilter.OnlyMatch));
+						theDerivedElements.searchValue(de -> el.compareTo(de.element), BetterSortedList.SortedSearchFilter.OnlyMatch));
 				});
 			}
 		}
@@ -2343,7 +2344,7 @@ public final class ObservableCollectionImpl {
 
 		private DerivedElementHolder<T> idFromSynthetic(DerivedCollectionElement<T> added) {
 			BinaryTreeNode<DerivedElementHolder<T>> found = theDerivedElements.search(//
-				holder -> added.compareTo(holder.element), SortedSearchFilter.OnlyMatch);
+				holder -> added.compareTo(holder.element), BetterSortedList.SortedSearchFilter.OnlyMatch);
 			return found.get();
 		}
 

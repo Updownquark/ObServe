@@ -431,8 +431,8 @@ public interface Equivalence<E> {
 		}
 
 		@Override
-		public CollectionElement<T2> getOrAdd(T2 value, boolean first, Runnable added) {
-			return handleFor(theWrapped.getOrAdd(theReverse.apply(value), first, added));
+		public CollectionElement<T2> getOrAdd(T2 value, ElementId after, ElementId before, boolean first, Runnable added) {
+			return handleFor(theWrapped.getOrAdd(theReverse.apply(value), after, before, first, added));
 		}
 
 		@Override
@@ -636,8 +636,9 @@ public interface Equivalence<E> {
 		}
 
 		@Override
-		public MapEntryHandle<T2, V> getOrPutEntry(T2 key, Function<? super T2, ? extends V> value, boolean first, Runnable added) {
-			return handleFor(theWrapped.getOrPutEntry(theReverse.apply(key), k -> value.apply(key), first, added));
+		public MapEntryHandle<T2, V> getOrPutEntry(T2 key, Function<? super T2, ? extends V> value, ElementId after, ElementId before,
+			boolean first, Runnable added) {
+			return handleFor(theWrapped.getOrPutEntry(theReverse.apply(key), k -> value.apply(key), after, before, first, added));
 		}
 
 		private MapEntryHandle<T2, V> handleFor(MapEntryHandle<E, V> entry) {

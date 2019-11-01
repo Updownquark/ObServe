@@ -48,8 +48,9 @@ import org.qommons.StructuredTransactable;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
 import org.qommons.collect.BetterList;
+import org.qommons.collect.BetterSortedList;
+import org.qommons.collect.BetterSortedList.SortedSearchFilter;
 import org.qommons.collect.BetterSortedMap;
-import org.qommons.collect.BetterSortedSet.SortedSearchFilter;
 import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ListenerList;
@@ -1111,7 +1112,7 @@ public class ObservableConfig implements StructuredTransactable, StructuredStamp
 			int i;
 			for (i = 0; i < xmlName.length() && found == null; i++) {
 				int offset = i;
-				found = namedReplacements.search(r -> searchMatch(xmlName, r, offset), SortedSearchFilter.OnlyMatch);
+				found = namedReplacements.search(r -> searchMatch(xmlName, r, offset), BetterSortedList.SortedSearchFilter.OnlyMatch);
 			}
 			if (found == null)
 				return xmlName;
@@ -1124,7 +1125,7 @@ public class ObservableConfig implements StructuredTransactable, StructuredStamp
 				found = null;
 				for (; i < xmlName.length() && found == null; i++) {
 					int offset = i;
-					found = namedReplacements.search(r -> searchMatch(xmlName, r, offset), SortedSearchFilter.OnlyMatch);
+					found = namedReplacements.search(r -> searchMatch(xmlName, r, offset), BetterSortedList.SortedSearchFilter.OnlyMatch);
 				}
 			} while (found != null);
 			str.append(xmlName, i, xmlName.length());

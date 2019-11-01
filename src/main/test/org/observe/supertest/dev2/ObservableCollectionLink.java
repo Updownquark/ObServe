@@ -36,7 +36,8 @@ import org.qommons.ValueHolder;
 import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSet;
-import org.qommons.collect.BetterSortedSet.SortedSearchFilter;
+import org.qommons.collect.BetterSortedList;
+import org.qommons.collect.BetterSortedList.SortedSearchFilter;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
@@ -97,7 +98,7 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 
 			private void addElement(ElementId id, T newValue) {
 				BinaryTreeNode<CollectionLinkElement<S, T>> adjacent = theElements.search(node -> id.compareTo(node.getCollectionAddress()),
-					SortedSearchFilter.PreferLess);
+					BetterSortedList.SortedSearchFilter.PreferLess);
 				BinaryTreeNode<CollectionLinkElement<S, T>> newNode;
 				if (adjacent == null)
 					newNode = theElements.addElement(null, false);
@@ -118,7 +119,7 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 
 			private void removeElement(ElementId id, T oldValue) {
 				BinaryTreeNode<CollectionLinkElement<S, T>> found = theElements.search(node -> id.compareTo(node.getCollectionAddress()),
-					SortedSearchFilter.OnlyMatch);
+					BetterSortedList.SortedSearchFilter.OnlyMatch);
 				if (found == null)
 					throw new IllegalStateException("Accounting error--missing element " + id + " (" + oldValue + ")");
 				theElements.mutableElement(found.getElementId()).remove();
@@ -126,7 +127,7 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 
 			private void changeElement(ElementId id, T oldValue, T newValue) {
 				BinaryTreeNode<CollectionLinkElement<S, T>> found = theElements.search(node -> id.compareTo(node.getCollectionAddress()),
-					SortedSearchFilter.OnlyMatch);
+					BetterSortedList.SortedSearchFilter.OnlyMatch);
 				if (found == null)
 					throw new IllegalStateException(
 						"Accounting error--missing element " + id + " (" + oldValue + " for update to " + newValue + ")");

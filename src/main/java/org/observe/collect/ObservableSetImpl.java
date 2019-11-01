@@ -76,8 +76,8 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public CollectionElement<E> getOrAdd(E value, boolean first, Runnable added) {
-			return CollectionElement.reverse(getOrAdd(value, !first, added));
+		public CollectionElement<E> getOrAdd(E value, ElementId after, ElementId before, boolean first, Runnable added) {
+			return CollectionElement.reverse(getOrAdd(value, ElementId.reverse(before), ElementId.reverse(after), !first, added));
 		}
 
 		@Override
@@ -1174,13 +1174,13 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public CollectionElement<T> getOrAdd(T value, boolean first, Runnable added) {
+		public CollectionElement<T> getOrAdd(T value, ElementId after, ElementId before, boolean first, Runnable added) {
 			try (Transaction t = lock(true, null)) {
 				// Lock so the reversed value is consistent until it is added
 				FilterMapResult<T, E> reversed = getFlow().reverse(value, true);
 				if (reversed.throwIfError(IllegalArgumentException::new) != null)
 					return null;
-				CollectionElement<E> srcEl = getSource().getOrAdd(reversed.result, first, added);
+				CollectionElement<E> srcEl = getSource().getOrAdd(reversed.result, after, before, first, added);
 				return srcEl == null ? null : elementFor(srcEl, null);
 			}
 		}
@@ -1270,12 +1270,12 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public CollectionElement<T> getOrAdd(T value, boolean first, Runnable added) {
+		public CollectionElement<T> getOrAdd(T value, ElementId after, ElementId before, boolean first, Runnable added) {
 			// At the moment, the flow doesn't support this operation directly, so we have to do a double-dive
 			try (Transaction t = lock(true, null)) {
 				CollectionElement<T> element = getElement(value, first);
 				if (element == null) {
-					element = addElement(value, first);
+					element = addElement(value, after, before, first);
 					if (element != null && added != null)
 						added.run();
 				}
@@ -1339,7 +1339,7 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public CollectionElement<T> getOrAdd(T value, boolean first, Runnable added) {
+		public CollectionElement<T> getOrAdd(T value, ElementId after, ElementId before, boolean first, Runnable added) {
 			ElementId el = theIndex.get(value);
 			if (el != null)
 				return getElement(el);
@@ -1383,12 +1383,12 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public CollectionElement<E> getOrAdd(E value, boolean first, Runnable added) {
+		public CollectionElement<E> getOrAdd(E value, ElementId after, ElementId before, boolean first, Runnable added) {
 			// *Possibly* could figure out how to do this more efficiently, but for the moment this will work
 			try (Transaction t = lock(true, null)) {
 				CollectionElement<E> element = getElement(value, first);
 				if (element == null) {
-					element = addElement(value, first);
+					element = addElement(value, after, before, first);
 					if (element != null && added != null)
 						added.run();
 				}

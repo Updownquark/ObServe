@@ -647,8 +647,10 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		}
 
 		@Override
-		public MapEntryHandle<K, V> getOrPutEntry(K key, Function<? super K, ? extends V> value, boolean first, Runnable added) {
+		public MapEntryHandle<K, V> getOrPutEntry(K key, Function<? super K, ? extends V> value, ElementId afterKey, ElementId beforeKey,
+			boolean first, Runnable added) {
 			// At the moment, the multi-map doesn't support this operation directly, so we have to do a double-dive
+			// TODO It does now--rewrite this ASAP
 			try (Transaction t = lock(true, true, null)) {
 				MapEntryHandle<K, V> entry = getEntry(key);
 				if (entry == null) {

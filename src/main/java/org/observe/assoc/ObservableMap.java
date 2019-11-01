@@ -636,8 +636,10 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 		}
 
 		@Override
-		public MapEntryHandle<K, V> getOrPutEntry(K key, Function<? super K, ? extends V> value, boolean first, Runnable added) {
-			CollectionElement<Map.Entry<K, V>> entryEl = theEntries.getOrAdd(new SimpleMapEntry<>(key, value.apply(key)), first, added);
+		public MapEntryHandle<K, V> getOrPutEntry(K key, Function<? super K, ? extends V> value, ElementId afterKey, ElementId beforeKey,
+			boolean first, Runnable added) {
+			CollectionElement<Map.Entry<K, V>> entryEl = theEntries.getOrAdd(new SimpleMapEntry<>(key, value.apply(key)), afterKey,
+				beforeKey, first, added);
 			return entryEl == null ? null : handleFor(entryEl);
 		}
 
@@ -889,7 +891,8 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 		}
 
 		@Override
-		public MapEntryHandle<K, V> getOrPutEntry(K key, Function<? super K, ? extends V> value, boolean first, Runnable added) {
+		public MapEntryHandle<K, V> getOrPutEntry(K key, Function<? super K, ? extends V> value, ElementId after, ElementId before,
+			boolean first, Runnable added) {
 			return null;
 		}
 

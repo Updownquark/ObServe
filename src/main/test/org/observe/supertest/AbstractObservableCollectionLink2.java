@@ -39,7 +39,8 @@ import org.qommons.Transaction;
 import org.qommons.ValueHolder;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSet;
-import org.qommons.collect.BetterSortedSet.SortedSearchFilter;
+import org.qommons.collect.BetterSortedList;
+import org.qommons.collect.BetterSortedList.SortedSearchFilter;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ElementSpliterator;
@@ -164,7 +165,7 @@ public class AbstractObservableCollectionLink2<E, T> implements ObservableCollec
 		if (theCollection instanceof ObservableSortedSet) {
 			extraAction.or(5, () -> { // observeRelative
 				T value = theSupplier.apply(helper);
-				SortedSearchFilter filter = SortedSearchFilter.values()[helper.getInt(0, SortedSearchFilter.values().length)];
+				BetterSortedList.SortedSearchFilter filter = BetterSortedList.SortedSearchFilter.values()[helper.getInt(0, BetterSortedList.SortedSearchFilter.values().length)];
 				theExtras = ", " + filter.getSymbol() + value;
 				ObservableSortedSet<T> ss = (ObservableSortedSet<T>) theCollection;
 				theMonitoredElement = ss.observeRelative(ss.searchFor(value, 0), filter, () -> null);

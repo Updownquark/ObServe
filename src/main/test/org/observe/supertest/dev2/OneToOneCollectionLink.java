@@ -7,7 +7,8 @@ import org.junit.Assert;
 import org.observe.collect.CollectionChangeType;
 import org.qommons.TestHelper;
 import org.qommons.collect.BetterList;
-import org.qommons.collect.BetterSortedSet.SortedSearchFilter;
+import org.qommons.collect.BetterSortedList;
+import org.qommons.collect.BetterSortedList.SortedSearchFilter;
 import org.qommons.tree.BinaryTreeNode;
 
 public abstract class OneToOneCollectionLink<S, T> extends ObservableCollectionLink<S, T> {
@@ -90,7 +91,7 @@ public abstract class OneToOneCollectionLink<S, T> extends ObservableCollectionL
 
 	protected CollectionLinkElement<S, T> addFromSource(CollectionLinkElement<?, S> sourceEl) {
 		Comparable<? super CollectionLinkElement<S, T>> finder = theExpectedElementFinder.apply(sourceEl);
-		BinaryTreeNode<CollectionLinkElement<S, T>> adjacent = theExpectedElements.search(finder, SortedSearchFilter.PreferLess);
+		BinaryTreeNode<CollectionLinkElement<S, T>> adjacent = theExpectedElements.search(finder, BetterSortedList.SortedSearchFilter.PreferLess);
 		BinaryTreeNode<CollectionLinkElement<S, T>> newNode;
 		if (adjacent == null)
 			newNode = theExpectedElements.addElement(null, false);
@@ -120,7 +121,7 @@ public abstract class OneToOneCollectionLink<S, T> extends ObservableCollectionL
 
 	private List<ExpectedCollectionOperation<S, T>> expectRemoveFromSource(CollectionLinkElement<?, S> sourceEl, S oldSrcValue) {
 		Comparable<? super CollectionLinkElement<S, T>> finder = theExpectedElementFinder.apply(sourceEl);
-		BinaryTreeNode<CollectionLinkElement<S, T>> found = theExpectedElements.search(finder, SortedSearchFilter.OnlyMatch);
+		BinaryTreeNode<CollectionLinkElement<S, T>> found = theExpectedElements.search(finder, BetterSortedList.SortedSearchFilter.OnlyMatch);
 		if (found == null)
 			throw new IllegalStateException("Accounting error: Derived element for " + sourceEl + " not found");
 		CollectionLinkElement<S, T> element = found.get();
@@ -136,7 +137,7 @@ public abstract class OneToOneCollectionLink<S, T> extends ObservableCollectionL
 
 	private List<ExpectedCollectionOperation<S, T>> expectChangeFromSource(CollectionLinkElement<?, S> sourceEl, S oldSrcValue) {
 		Comparable<? super CollectionLinkElement<S, T>> finder = theExpectedElementFinder.apply(sourceEl);
-		BinaryTreeNode<CollectionLinkElement<S, T>> found = theExpectedElements.search(finder, SortedSearchFilter.OnlyMatch);
+		BinaryTreeNode<CollectionLinkElement<S, T>> found = theExpectedElements.search(finder, BetterSortedList.SortedSearchFilter.OnlyMatch);
 		if (found == null)
 			throw new IllegalStateException("Accounting error: Derived element for " + sourceEl + " not found");
 		CollectionLinkElement<S, T> element = found.get();

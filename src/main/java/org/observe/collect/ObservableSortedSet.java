@@ -8,6 +8,7 @@ import java.util.function.Supplier;
 
 import org.observe.ObservableValue;
 import org.observe.util.TypeTokens;
+import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.MutableElementSpliterator;
 import org.qommons.tree.BetterTreeList;
@@ -130,7 +131,7 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSe
 	 * @param def Produces a default value in the case that no element of this set matches the given search
 	 * @return An observable value with the result of the operation
 	 */
-	default ObservableElement<E> observeRelative(Comparable<? super E> search, SortedSearchFilter filter, Supplier<? extends E> def) {
+	default ObservableElement<E> observeRelative(Comparable<? super E> search, BetterSortedList.SortedSearchFilter filter, Supplier<? extends E> def) {
 		return new ObservableSortedSetImpl.RelativeFinder<>(this, search, filter);
 	}
 
