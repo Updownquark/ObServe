@@ -1,15 +1,12 @@
 package org.observe.assoc;
 
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.Map;
-import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
-import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.CollectionSubscription;
@@ -38,7 +35,6 @@ import org.qommons.collect.MultiEntryValueHandle;
 import org.qommons.collect.MultiMap;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
-import org.qommons.collect.MutableElementSpliterator;
 import org.qommons.collect.MutableMapEntryHandle;
 import org.qommons.collect.SimpleMapEntry;
 import org.qommons.collect.SimpleMultiEntry;
@@ -162,13 +158,12 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 				int keyIndex = keyForward ? 0 : entrySet.size() - 1;
 				CollectionElement<? extends MultiEntryHandle<K, V>> entry = entrySet.getTerminalElement(keyForward);
 				while (entry != null) {
-					int valueIndex = valueForward ? 1 : entry.get().getValues().size() - 1;
+					int valueIndex = valueForward ? 0 : entry.get().getValues().size() - 1;
 					CollectionElement<V> value = entry.get().getValues().getTerminalElement(valueForward);
 					while (value != null) {
 						ObservableMultiMapEvent<K, V> mapEvent = new ObservableMultiMapEvent<>(entry.getElementId(), value.getElementId(),
 							getKeyType(), getValueType(), keyIndex, valueIndex, CollectionChangeType.add, entry.get().getKey(), null,
-							value.get(),
-							subCause);
+							value.get(), subCause);
 						try (Transaction mt = ObservableMultiMapEvent.use(mapEvent)) {
 							action.accept(mapEvent);
 						}
@@ -192,7 +187,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 						int keyIndex = !keyForward ? 0 : entrySet.size() - 1;
 						CollectionElement<? extends MultiEntryHandle<K, V>> entry = entrySet.getTerminalElement(!keyForward);
 						while (entry != null) {
-							int valueIndex = !valueForward ? 1 : entry.get().getValues().size() - 1;
+							int valueIndex = !valueForward ? 0 : entry.get().getValues().size() - 1;
 							CollectionElement<V> value = entry.get().getValues().getTerminalElement(!valueForward);
 							while (value != null) {
 								ObservableMultiMapEvent<K, V> mapEvent = new ObservableMultiMapEvent<>(entry.getElementId(),
@@ -224,15 +219,12 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 
 	/** @return A collection of plain (non-observable) {@link java.util.Map.Entry entries}, one for each value in this map */
 	default ObservableCollection<MultiEntryValueHandle<K, V>> observeSingleEntries() {
-		return new ObservableSingleValueEntryCollection<>(this);
+		return new ObservableSingleEntryCollection<>(this);
 	}
 
-	/**
-	 * @param value The function to produce single (observable) values from each of this map's value collections
-	 * @return An ObservableMap whose values are the result of the given operation on this multi-map's entries
-	 */
-	default ObservableMap<K, V> single(BiFunction<K, ObservableCollection<V>, ObservableValue<V>> value) {
-		return new SingleMap<>(this, value);
+	/** @return An ObservableMap whose values are the first values in each of this multi-map's entries */
+	default ObservableMap<K, V> single() {
+		return new SingleMap<>(this);
 	}
 
 	/**
@@ -298,6 +290,12 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		return str.toString();
 	}
 
+	/**
+	 * Implements {@link ObservableMultiMap#entrySet()}
+	 *
+	 * @param <K> The key type of the map
+	 * @param <V> The value type of the map
+	 */
 	class ObservableMultiMapEntrySet<K, V> extends BetterMultiMapEntrySet<K, V> implements ObservableSet<MultiEntryHandle<K, V>> {
 		private Equivalence<? super MultiMap.MultiEntry<? extends K, ?>> theEquivalence;
 
@@ -401,6 +399,12 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		}
 	}
 
+	/**
+	 * Implements {@link ObservableMultiMap#singleEntries()}
+	 *
+	 * @param <K> The key type of the map
+	 * @param <V> The value type of the map
+	 */
 	class ObservableSingleEntryCollection<K, V> extends BetterMapSingleEntryCollection<K, V>
 	implements ObservableCollection<MultiEntryValueHandle<K, V>> {
 		private Equivalence<? super Map.Entry<? extends K, ?>> theEquivalence;
@@ -566,20 +570,18 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 	}
 
 	/**
-	 * Implements {@link ObservableMultiMap#single(BiFunction)}
+	 * Implements {@link ObservableMultiMap#single()}
 	 *
 	 * @param <K> The key-type of the map
 	 * @param <V> The value-type of the map
 	 */
 	class SingleMap<K, V> implements ObservableMap<K, V> {
 		private final ObservableMultiMap<K, V> theSource;
-		private final BiFunction<K, ObservableCollection<V>, ObservableValue<V>> theValueMap;
 		private final TypeToken<Map.Entry<K, V>> theEntryType;
 		private Object theIdentity;
 
-		public SingleMap(ObservableMultiMap<K, V> outer, BiFunction<K, ObservableCollection<V>, ObservableValue<V>> valueMap) {
+		public SingleMap(ObservableMultiMap<K, V> outer) {
 			theSource = outer;
-			theValueMap = valueMap;
 			theEntryType = ObservableMap.buildEntryType(getKeyType(), getValueType());
 		}
 
@@ -587,14 +589,10 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 			return theSource;
 		}
 
-		protected BiFunction<K, ObservableCollection<V>, ObservableValue<V>> getValueMap() {
-			return theValueMap;
-		}
-
 		@Override
 		public Object getIdentity() {
 			if (theIdentity == null)
-				theIdentity = Identifiable.wrap(theSource.getIdentity(), "single", theValueMap);
+				theIdentity = Identifiable.wrap(theSource.getIdentity(), "single");
 			return theIdentity;
 		}
 
@@ -637,7 +635,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		public <K2> ObservableValue<V> observe(K2 key) {
 			if (!theSource.keySet().belongs(key))
 				return ObservableValue.of(getValueType(), null);
-			return theValueMap.apply((K) key, theSource.get(key));
+			return theSource.get(key).observeFind(v -> true).at(true).find();
 		}
 
 		@Override
@@ -649,21 +647,10 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		@Override
 		public MapEntryHandle<K, V> getOrPutEntry(K key, Function<? super K, ? extends V> value, ElementId afterKey, ElementId beforeKey,
 			boolean first, Runnable added) {
-			// At the moment, the multi-map doesn't support this operation directly, so we have to do a double-dive
-			// TODO It does now--rewrite this ASAP
-			try (Transaction t = lock(true, true, null)) {
-				MapEntryHandle<K, V> entry = getEntry(key);
-				if (entry == null) {
-					entry = putEntry(key, value.apply(key), first);
-					if (entry != null && added != null)
-						added.run();
-				}
-				return entry;
-			}
+			return entryFor(theSource.getOrPutEntry(key, k -> BetterList.of(value.apply(k)), afterKey, beforeKey, first, added));
 		}
 
 		private MapEntryHandle<K, V> entryFor(MultiEntryHandle<K, V> outerHandle) {
-			ObservableValue<V> value = theValueMap.apply(outerHandle.getKey(), outerHandle.getValues());
 			return new MapEntryHandle<K, V>() {
 				@Override
 				public ElementId getElementId() {
@@ -672,7 +659,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 
 				@Override
 				public V get() {
-					return value.get();
+					return outerHandle.getValues().peekFirst();
 				}
 
 				@Override
@@ -693,7 +680,6 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		}
 
 		private MutableMapEntryHandle<K, V> mutableEntryFor(MultiEntryHandle<K, V> outerHandle) {
-			ObservableValue<V> mappedValue = theValueMap.apply(outerHandle.getKey(), outerHandle.getValues());
 			return new MutableMapEntryHandle<K, V>() {
 				@Override
 				public K getKey() {
@@ -712,96 +698,42 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 
 				@Override
 				public V get() {
-					return mappedValue.get();
+					return outerHandle.getValues().peekFirst();
 				}
 
 				@Override
 				public String isEnabled() {
-					if (mappedValue instanceof SettableValue)
-						return ((SettableValue<V>) mappedValue).isEnabled().get();
-					else if (outerHandle.getValues().isEmpty())
-						return null; // Unfortunately, there's no canAdd() method with no argument
-					else if (outerHandle.getValues().size() == 1)
-						return outerHandle.getValues().mutableElement(outerHandle.getValues().getTerminalElement(true).getElementId())
-							.isEnabled();
-					else
-						return StdMsg.ELEMENT_EXISTS;
+					return outerHandle.getValues().mutableElement(outerHandle.getValues().getTerminalElement(true).getElementId())
+						.isEnabled();
 				}
 
 				@Override
 				public String isAcceptable(V value) {
-					if (mappedValue instanceof SettableValue)
-						return ((SettableValue<V>) value).isAcceptable(value);
-					else if (outerHandle.getValues().isEmpty())
-						return outerHandle.getValues().canAdd(value);
-					else if (outerHandle.getValues().size() == 1)
-						return outerHandle.getValues().mutableElement(outerHandle.getValues().getTerminalElement(true).getElementId())
-							.isAcceptable(value);
-					else
-						return StdMsg.ELEMENT_EXISTS;
+					return outerHandle.getValues().mutableElement(outerHandle.getValues().getTerminalElement(true).getElementId())
+						.isAcceptable(value);
 				}
 
 				@Override
 				public void set(V value) throws UnsupportedOperationException, IllegalArgumentException {
-					if (mappedValue instanceof SettableValue)
-						((SettableValue<V>) mappedValue).set(value, null);
-					else if (outerHandle.getValues().isEmpty())
-						outerHandle.getValues().add(value);
-					else if (outerHandle.getValues().size() == 1)
-						outerHandle.getValues().set(0, value);
-					else
-						throw new UnsupportedOperationException(StdMsg.ELEMENT_EXISTS);
+					outerHandle.getValues().mutableElement(outerHandle.getValues().getTerminalElement(true).getElementId()).set(value);
 				}
 
 				@Override
 				public String canRemove() {
-					if (outerHandle.getValues().isEmpty())
-						return StdMsg.UNSUPPORTED_OPERATION;
-					MutableElementSpliterator<V> spliter = outerHandle.getValues().spliterator();
-					String[] msg = new String[1];
-					while (msg[0] == null && spliter.forElementM(el -> msg[0] = el.canRemove(), true)) {}
-					return msg[0];
+					for (CollectionElement<V> valueEl : outerHandle.getValues().elements()) {
+						String msg = outerHandle.getValues().mutableElement(valueEl.getElementId()).canRemove();
+						if (msg != null)
+							return msg;
+					}
+					return null;
 				}
 
 				@Override
 				public void remove() throws UnsupportedOperationException {
-					String msg = canRemove();
-					if (msg != null)
-						throw new UnsupportedOperationException(msg);
-					MutableElementSpliterator<V> spliter = outerHandle.getValues().spliterator();
-					while (spliter.forElementM(el -> el.remove(), true)) {}
+					for (CollectionElement<V> valueEl : outerHandle.getValues().elements())
+						outerHandle.getValues().mutableElement(valueEl.getElementId()).remove();
 				}
 			};
-		}
-
-		@Override
-		public MapEntryHandle<K, V> putEntry(K key, V value, ElementId after, ElementId before, boolean first) {
-			try (Transaction t = lock(true, true, null)) {
-				MultiEntryHandle<K, V> outerHandle = theSource.getEntry(key);
-				if (outerHandle != null) {
-					ObservableValue<V> mappedValue = theValueMap.apply(outerHandle.getKey(), outerHandle.getValues());
-					if (mappedValue instanceof SettableValue)
-						((SettableValue<V>) mappedValue).set(value, null);
-					else if (outerHandle.getValues().isEmpty())
-						outerHandle.getValues().add(value);
-					else if (outerHandle.getValues().size() == 1) {
-						outerHandle.getValues().set(0, value);
-					} else {
-						// Here we can't be sure that anything we do will result in the correct value being populated,
-						// short of clearing the collection and adding the value, which seems like overkill
-						throw new UnsupportedOperationException(StdMsg.ELEMENT_EXISTS);
-					}
-					return entryFor(outerHandle);
-				}
-				ObservableValue<V> mappedValue = theValueMap.apply(key, theSource.get(key));
-				if (mappedValue instanceof SettableValue)
-					((SettableValue<V>) mappedValue).set(value, null);
-				MultiEntryValueHandle<K, V> handle2 = theSource.putEntry(key, value, after, before, first);
-				if (handle2 == null)
-					return null;
-				outerHandle = theSource.getEntryById(handle2.getKeyId());
-				return entryFor(outerHandle);
-			}
 		}
 
 		@Override
@@ -818,92 +750,22 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 
 		@Override
 		public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action) {
-			boolean[] init = new boolean[1];
-			CollectionSubscription sub = subscribe(evt -> {
-				if (init[0])
-					action.accept(evt);
-			}, true);
-			init[0] = true;
-			return sub;
-		}
-
-		@Override
-		public CollectionSubscription subscribe(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action,
-			boolean forward) {
-			class EntrySubscription {
-				final K key;
-				Subscription sub;
-				V value;
-
-				EntrySubscription(K key) {
-					this.key = key;
+			return theSource.onChange(multiMapEvt -> {
+				if (multiMapEvt.getIndex() > 0)
+					return; // We only care about the first value for each key
+				ObservableMapEvent<K, V> mapEvt;
+				if (multiMapEvt.getType() == CollectionChangeType.remove && multiMapEvt.getKeyElement().isPresent()) {
+					V newValue = theSource.getEntryById(multiMapEvt.getKeyElement()).getValues().getFirst();
+					mapEvt = new ObservableMapEvent<>(multiMapEvt.getKeyElement(), getKeyType(), getValueType(), multiMapEvt.getKeyIndex(), //
+						CollectionChangeType.set, multiMapEvt.getKey(), multiMapEvt.getOldValue(), newValue, multiMapEvt);
+				} else {
+					mapEvt = new ObservableMapEvent<>(multiMapEvt.getKeyElement(), getKeyType(), getValueType(), multiMapEvt.getKeyIndex(), //
+						multiMapEvt.getType(), multiMapEvt.getKey(), multiMapEvt.getOldValue(), multiMapEvt.getNewValue(), multiMapEvt);
 				}
-			}
-			Map<ElementId, EntrySubscription> valueSubs = new HashMap<>();
-			try (Transaction t = lock(false, null)) {
-				Subscription outerSub = theSource.keySet().subscribe(evt -> {
-					switch (evt.getType()) {
-					case add:
-						ObservableValue<V> value = theValueMap.apply(evt.getNewValue(), theSource.get(evt.getNewValue()));
-						EntrySubscription entrySub = new EntrySubscription(evt.getNewValue());
-						entrySub.sub = value.changes().act(valueEvt -> {
-							CollectionChangeType mapEvtType;
-							int index;
-							if (valueEvt.isInitial()) {
-								mapEvtType = CollectionChangeType.add;
-								index = evt.getIndex();
-							} else {
-								mapEvtType = CollectionChangeType.set;
-								index = theSource.keySet().getElementsBefore(evt.getElementId());
-							}
-							entrySub.value = valueEvt.getNewValue();
-							ObservableMultiMapEvent<K, V> evt2 = new ObservableMultiMapEvent<>(evt.getElementId(), evt.getElementId(), //
-								getKeyType(), getValueType(), index, 0, //
-								mapEvtType, evt.getNewValue(), null, valueEvt.getNewValue(), valueEvt);
-							try (Transaction evtT = Causable.use(evt2)) {
-								action.accept(evt2);
-							}
-						});
-						valueSubs.put(evt.getElementId(), entrySub);
-						break;
-					case remove:
-						entrySub = valueSubs.remove(evt.getElementId());
-						entrySub.sub.unsubscribe();
-						ObservableMultiMapEvent<K, V> evt2 = new ObservableMultiMapEvent<>(evt.getElementId(), evt.getElementId(), //
-							getKeyType(), getValueType(), evt.getIndex(), 0, //
-							CollectionChangeType.remove, evt.getNewValue(), entrySub.value, entrySub.value, evt);
-						try (Transaction evtT = Causable.use(evt2)) {
-							action.accept(evt2);
-						}
-						break;
-					case set:
-						break;
-					}
-				}, forward);
-				return removeAll -> {
-					try (Transaction t2 = lock(false, false, null)) {
-						outerSub.unsubscribe();
-						for (EntrySubscription sub : valueSubs.values())
-							sub.sub.unsubscribe();
-						if (removeAll) {
-							Causable cause = Causable.simpleCause(null);
-							try (Transaction ct = Causable.use(cause)) {
-								for (Map.Entry<ElementId, EntrySubscription> entry : valueSubs.entrySet()) {
-									EntrySubscription sub = entry.getValue();
-									entry.getValue().sub.unsubscribe();
-									int index = theSource.keySet().getElementsBefore(entry.getKey());
-									ObservableMultiMapEvent<K, V> mapEvent = new ObservableMultiMapEvent<>(entry.getKey(), entry.getKey(), //
-										getKeyType(), getValueType(), index, 0, //
-										CollectionChangeType.remove, sub.key, sub.value, sub.value, cause);
-									try (Transaction mt = ObservableMultiMapEvent.use(mapEvent)) {
-										action.accept(mapEvent);
-									}
-								}
-							}
-						}
-					}
-				};
-			}
+				try (Transaction evtT = Causable.use(mapEvt)) {
+					action.accept(mapEvt);
+				}
+			});
 		}
 
 		@Override

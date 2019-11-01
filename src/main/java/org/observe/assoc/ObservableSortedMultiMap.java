@@ -2,12 +2,10 @@ package org.observe.assoc;
 
 import java.util.Comparator;
 import java.util.Map;
-import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.observe.Observable;
-import org.observe.ObservableValue;
 import org.observe.Subscription;
 import org.observe.collect.Equivalence;
 import org.observe.collect.FlowOptions.GroupingOptions;
@@ -118,8 +116,8 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 	SortedMultiMapFlow<K, V> flow();
 
 	@Override
-	default ObservableSortedMap<K, V> single(BiFunction<K, ObservableCollection<V>, ObservableValue<V>> value) {
-		return new SortedSingleMap<>(this, value);
+	default ObservableSortedMap<K, V> single() {
+		return new SortedSingleMap<>(this);
 	}
 
 	static <K, V> SortedMultiMapFlow<K, V> create(TypeToken<K> keyType, TypeToken<V> valueType, Comparator<? super K> keyCompare) {
@@ -166,9 +164,15 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		ObservableSortedMultiMap<K, V> gather(Observable<?> until, Consumer<GroupingOptions> options);
 	}
 
+	/**
+	 * Implements {@link ObservableSortedMultiMap#single()}
+	 * 
+	 * @param <K> The key type of the map
+	 * @param <V> The value type of the map
+	 */
 	class SortedSingleMap<K, V> extends SingleMap<K, V> implements ObservableSortedMap<K, V> {
-		public SortedSingleMap(ObservableSortedMultiMap<K, V> outer, BiFunction<K, ObservableCollection<V>, ObservableValue<V>> valueMap) {
-			super(outer, valueMap);
+		public SortedSingleMap(ObservableSortedMultiMap<K, V> outer) {
+			super(outer);
 		}
 
 		@Override
@@ -200,6 +204,12 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		}
 	}
 
+	/**
+	 * Implements {@link ObservableSortedMultiMap#reverse()}
+	 * 
+	 * @param <K> The key type of the map
+	 * @param <V> The value type of the map
+	 */
 	class ReversedObservableSortedMultiMap<K, V> extends BetterSortedMultiMap.ReversedSortedMultiMap<K, V>
 	implements ObservableSortedMultiMap<K, V> {
 		ReversedObservableSortedMultiMap(BetterSortedMultiMap<K, V> source) {

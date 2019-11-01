@@ -1,17 +1,12 @@
 package org.observe.assoc;
 
 import java.util.Objects;
-import java.util.function.Consumer;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
-import org.observe.Observer;
 import org.observe.SettableValue;
-import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
-import org.qommons.Causable;
-import org.qommons.Lockable;
 import org.qommons.Transaction;
 import org.qommons.collect.Graph;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
@@ -47,6 +42,16 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 		default ObservableGraph.Node<N, E> unsettable() {
 			ObservableGraph.Node<N, E> source = this;
 			return new ObservableGraph.Node<N, E>() {
+				@Override
+				public long getStamp() {
+					return source.getStamp();
+				}
+
+				@Override
+				public Object getIdentity() {
+					return source.getIdentity();
+				}
+
 				@Override
 				public TypeToken<N> getType() {
 					return source.getType();
@@ -129,6 +134,16 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 			ObservableGraph.Edge<N, E> source = this;
 			return new ObservableGraph.Edge<N, E>() {
 				@Override
+				public long getStamp() {
+					return source.getStamp();
+				}
+
+				@Override
+				public Object getIdentity() {
+					return source.getIdentity();
+				}
+
+				@Override
 				public TypeToken<E> getType() {
 					return source.getType();
 				}
@@ -208,38 +223,7 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 	 *         per transaction.
 	 */
 	default Observable<Object> changes() {
-		Observable<Object> nodeChanges = getNodes().simpleChanges();
-		Observable<Object> edgeChanges = getEdges().simpleChanges();
-		return new Observable<Object>() {
-			@Override
-			public boolean isSafe() {
-				return true;
-			}
-
-			@Override
-			public Subscription subscribe(Observer<? super Object> observer) {
-				Causable.CausableKey key = Causable.key((cause, data) -> observer.onNext(cause));
-				Consumer<Object> action = v -> {
-					if (v instanceof Causable)
-						((Causable) v).getRootCausable().onFinish(key);
-					else
-						observer.onNext(v);
-				};
-				Subscription nodeSub = nodeChanges.act(action);
-				Subscription edgeSub = edgeChanges.act(action);
-				return Subscription.forAll(nodeSub, edgeSub);
-			}
-
-			@Override
-			public Transaction lock() {
-				return Lockable.lockAll(nodeChanges, edgeChanges);
-			}
-
-			@Override
-			public Transaction tryLock() {
-				return Lockable.tryLockAll(nodeChanges, edgeChanges);
-			}
-		};
+		return Observable.or(getNodes().simpleChanges(), getEdges().simpleChanges());
 	}
 
 	/**
@@ -281,18 +265,6 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 			}
 		};
 	}
-
-	// default <N2, E2> ObservableGraph<N2, E2> map(Function<N, N2> nodeMap, Function<E, E2> edgeMap) {
-	// }
-	//
-	// default <V, N2> ObservableGraph<N2, E> combineNodes(ObservableValue<V> other, BiFunction<N, V, N2> map) {
-	// }
-	//
-	// default <V, E2> ObservableGraph<N, E2> combineEdges(ObservableValue<V> other, BiFunction<N, E, E2> map) {
-	// }
-
-	// default ObservableCollection<Edge<N, E>> traverse(Node<N, E> start, Node<N, E> end, Function<Edge<N, E>, Double> cost) {
-	// }
 
 	/**
 	 * @param <N> The type of node values in the graph
