@@ -12,6 +12,7 @@ import org.observe.util.TypeTokens;
 import org.qommons.Identifiable;
 import org.qommons.TriFunction;
 import org.qommons.collect.ListenerList;
+import org.qommons.collect.MutableCollectionElement.StdMsg;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -39,6 +40,8 @@ public interface SettableValue<T> extends ObservableValue<T> {
 
 	/** A string-typed observable that always returns null */
 	ObservableValue<String> ALWAYS_ENABLED = ObservableValue.of(STRING_TYPE, null);
+	/** A string-typed observable that always returns {@link org.qommons.collect.MutableCollectionElement.StdMsg#UNSUPPORTED_OPERATION} */
+	ObservableValue<String> ALWAYS_DISABLED = ObservableValue.of(STRING_TYPE, StdMsg.UNSUPPORTED_OPERATION);
 
 	/**
 	 * @param <V> The type of the value to set
@@ -126,37 +129,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 
 	/** @return This value, but not settable */
 	default ObservableValue<T> unsettable() {
-		return new ObservableValue<T>() {
-			@Override
-			public TypeToken<T> getType() {
-				return SettableValue.this.getType();
-			}
-
-			@Override
-			public Object getIdentity() {
-				return SettableValue.this.getIdentity();
-			}
-
-			@Override
-			public long getStamp() {
-				return SettableValue.this.getStamp();
-			}
-
-			@Override
-			public T get() {
-				return SettableValue.this.get();
-			}
-
-			@Override
-			public Observable<ObservableValueEvent<T>> noInitChanges() {
-				return SettableValue.this.noInitChanges();
-			}
-
-			@Override
-			public String toString() {
-				return SettableValue.this.toString();
-			}
-		};
+		return new UnsettableValue<>(this);
 	}
 
 	/**
@@ -470,6 +443,54 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	public static <T> SettableValue<T> flattenAsSettable(ObservableValue<? extends ObservableValue<T>> value,
 		Supplier<? extends T> defaultValue) {
 		return new SettableFlattenedObservableValue<>(value, defaultValue);
+	}
+
+	/**
+	 * Implements {@link SettableValue#unsettable()}
+	 *
+	 * @param <T> The type of the value
+	 */
+	class UnsettableValue<T> implements ObservableValue<T> {
+		private final SettableValue<T> theSource;
+
+		public UnsettableValue(SettableValue<T> value) {
+			theSource = value;
+		}
+
+		/** @return The source value */
+		protected SettableValue<T> getSource() {
+			return theSource;
+		}
+
+		@Override
+		public TypeToken<T> getType() {
+			return theSource.getType();
+		}
+
+		@Override
+		public Object getIdentity() {
+			return theSource.getIdentity();
+		}
+
+		@Override
+		public long getStamp() {
+			return theSource.getStamp();
+		}
+
+		@Override
+		public T get() {
+			return theSource.get();
+		}
+
+		@Override
+		public Observable<ObservableValueEvent<T>> noInitChanges() {
+			return theSource.noInitChanges();
+		}
+
+		@Override
+		public String toString() {
+			return theSource.toString();
+		}
 	}
 
 	/**

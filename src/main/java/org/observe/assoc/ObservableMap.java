@@ -9,7 +9,6 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.observe.Observable;
-import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
@@ -21,6 +20,7 @@ import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.SubscriptionCause;
 import org.observe.collect.ObservableCollectionEvent;
 import org.observe.collect.ObservableSet;
+import org.observe.collect.SettableElement;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
@@ -174,22 +174,38 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 	 * @param key The key to get the value for
 	 * @return An observable value that changes whenever the value for the given key changes in this map
 	 */
-	default <K2> ObservableValue<V> observe(K2 key) {
+	default <K2> SettableElement<V> observe(K2 key) {
 		if (!keySet().belongs(key))
-			return ObservableValue.of(getValueType(), null);
-		class MapValueObservable extends AbstractIdentifiable implements ObservableValue<V> {
+			return SettableElement.empty(getValueType());
+		class MapValueObservable extends AbstractIdentifiable implements SettableElement<V> {
+			private ElementId thePreviousElement;
+
 			@Override
 			public TypeToken<V> getType() {
 				return getValueType();
 			}
 
 			@Override
+			public ElementId getElementId() {
+				if (thePreviousElement == null || !thePreviousElement.isPresent()) {
+					MapEntryHandle<K, V> entry = getEntry((K) key);
+					thePreviousElement = entry == null ? null : entry.getElementId();
+				}
+				return thePreviousElement;
+			}
+
+			@Override
 			public V get() {
-				CollectionElement<Map.Entry<K, V>> entryEl = entrySet().getElement(new SimpleMapEntry<>((K) key, null), true);
-				if (entryEl != null)
-					return entryEl.get().getValue();
-				else
-					return null;
+				try (Transaction t = ObservableMap.this.lock(false, null)) {
+					MapEntryHandle<K, V> entry;
+					if (thePreviousElement != null && thePreviousElement.isPresent())
+						entry = getEntryById(thePreviousElement);
+					else {
+						entry = getEntry((K) key);
+						thePreviousElement = entry == null ? null : entry.getElementId();
+					}
+					return entry == null ? null : entry.getValue();
+				}
 			}
 
 			@Override

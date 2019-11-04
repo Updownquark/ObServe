@@ -48,6 +48,11 @@ public interface ObservableElement<T> extends ObservableValue<T> {
 	ElementId getElementId();
 
 	/** @return An observable of {@link ObservableValueEvent}s to alert a consumer to changes to this element's state */
+	default Observable<ObservableElementEvent<T>> elementNoInitChanges() {
+		return elementChanges().noInit();
+	}
+
+	/** @return An observable of {@link ObservableValueEvent}s to alert a consumer to changes to this element's state */
 	Observable<ObservableElementEvent<T>> elementChanges();
 
 	@Override
