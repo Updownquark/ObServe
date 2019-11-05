@@ -377,6 +377,8 @@ public final class ObservableCollectionImpl {
 		private final Observable<?> theRefresh;
 		private Object theChangesIdentity;
 
+		private ElementId theLastMatch;
+
 		/**
 		 * @param collection The collection to find elements in
 		 * @param elementCompare A comparator to determine whether to prefer one {@link #test(Object) matching} element over another. When
@@ -397,6 +399,22 @@ public final class ObservableCollectionImpl {
 			return theCollection;
 		}
 
+		/** @return The ID of the last known element matching this search */
+		protected ElementId getLastMatch() {
+			return theLastMatch;
+		}
+
+		/**
+		 * @param value The value of the last known element matching this search
+		 * @return Whether to use the element from {@link #get()} or {@link #getElementId()}
+		 */
+		protected abstract boolean useCachedMatch(E value);
+
+		/** @return The default value supplier for this finder (used when no element in the collection matches the search) */
+		protected Supplier<? extends E> getDefault() {
+			return theDefault;
+		}
+
 		@Override
 		public TypeToken<E> getType() {
 			return theCollection.getType();
@@ -409,22 +427,35 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public ElementId getElementId() {
-			ValueHolder<CollectionElement<E>> element = new ValueHolder<>();
-			find(el -> element.accept(new SimpleElement(el.getElementId(), el.get())));
-			if (element.get() != null)
-				return element.get().getElementId();
-			else
-				return null;
+			try (Transaction t = getCollection().lock(false, null)) {
+				if (theLastMatch != null && theLastMatch.isPresent() && useCachedMatch(getCollection().getElement(theLastMatch).get()))
+					return theLastMatch;
+				ValueHolder<CollectionElement<E>> element = new ValueHolder<>();
+				find(el -> element.accept(new SimpleElement(el.getElementId(), el.get())));
+				if (element.get() != null)
+					return theLastMatch = element.get().getElementId();
+				else {
+					theLastMatch = null;
+					return null;
+				}
+			}
 		}
 
 		@Override
 		public E get() {
-			ValueHolder<CollectionElement<E>> element = new ValueHolder<>();
-			find(el -> element.accept(new SimpleElement(el.getElementId(), el.get())));
-			if (element.get() != null)
-				return element.get().get();
-			else
-				return theDefault.get();
+			try (Transaction t = getCollection().lock(false, null)) {
+				if (theLastMatch != null && theLastMatch.isPresent() && useCachedMatch(getCollection().getElement(theLastMatch).get()))
+					return getCollection().getElement(theLastMatch).get();
+				ValueHolder<CollectionElement<E>> element = new ValueHolder<>();
+				find(el -> element.accept(new SimpleElement(el.getElementId(), el.get())));
+				if (element.get() != null) {
+					theLastMatch = element.get().getElementId();
+					return element.get().get();
+				} else {
+					theLastMatch = null;
+					return theDefault.get();
+				}
+			}
 		}
 
 		/**
@@ -588,6 +619,7 @@ public final class ObservableCollectionImpl {
 								if (Objects.equals(oldId, newId) && oldVal == newVal)
 									return;
 								theCurrentElement = element;
+								theLastMatch = element == null ? null : element.getElementId();
 								ObservableElementEvent<E> evt = createChangeEvent(oldId, oldVal, newId, newVal, cause);
 								try (Transaction evtT = Causable.use(evt)) {
 									observer.onNext(evt);
@@ -642,7 +674,8 @@ public final class ObservableCollectionImpl {
 				public Transaction tryLock() {
 					return theCollection.tryLock(false, false, null);
 				}
-			};
+			}
+			;
 			return new ElementChanges();
 		}
 
@@ -703,6 +736,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		protected boolean useCachedMatch(E value) {
+			return theTest.test(value);
+		}
+
+		@Override
 		protected Object createIdentity() {
 			return Identifiable.wrap(getCollection().getIdentity(), "find", theTest, describe(isFirst));
 		}
@@ -719,19 +757,144 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public ObservableValue<String> isEnabled() {
-			class Enabled extends AbstractIdentifiable implements ObservableValue<String> {}
+			class Enabled extends AbstractIdentifiable implements ObservableValue<String> {
+				@Override
+				public long getStamp() {
+					return getCollection().getStamp(false);
+				}
+
+				@Override
+				public TypeToken<String> getType() {
+					return TypeTokens.get().STRING;
+				}
+
+				@Override
+				public String get() {
+					String msg = null;
+					try (Transaction t = getCollection().lock(false, null)) {
+						ElementId lastMatch = getLastMatch();
+						if (lastMatch == null || !lastMatch.isPresent() || !theTest.test(getCollection().getElement(lastMatch).get())) {
+							lastMatch = getElementId();
+						}
+						if (lastMatch != null) {
+							msg = getCollection().mutableElement(lastMatch).isEnabled();
+							if (msg == null)
+								return null;
+						}
+						if (getDefault() != null)
+							msg = getCollection().canAdd(getDefault().get(), //
+								isFirst == Ternian.FALSE ? lastMatch : null, isFirst == Ternian.TRUE ? lastMatch : null);
+					}
+					if (msg == null)
+						msg = StdMsg.UNSUPPORTED_OPERATION;
+					return msg;
+				}
+
+				@Override
+				public Observable<ObservableValueEvent<String>> noInitChanges() {
+					class NoInitChanges extends AbstractIdentifiable implements Observable<ObservableValueEvent<String>> {
+						@Override
+						protected Object createIdentity() {
+							return Identifiable.wrap(Enabled.this.getIdentity(), "noInitChanges");
+						}
+
+						@Override
+						public Subscription subscribe(Observer<? super ObservableValueEvent<String>> observer) {
+							String[] oldValue = new String[] { get() };
+							return getCollection().onChange(collEvt -> {
+								if (theTest.test(collEvt.getNewValue())//
+									|| collEvt.getType() == CollectionChangeType.set && theTest.test(collEvt.getOldValue())) {
+									String newValue = get();
+									if (!Objects.equals(oldValue[0], newValue)) {
+										ObservableValueEvent<String> evt = createChangeEvent(oldValue[0], newValue, collEvt);
+										oldValue[0] = newValue;
+										try (Transaction evtT = Causable.use(evt)) {
+											observer.onNext(evt);
+										}
+									}
+								}
+							});
+						}
+
+						@Override
+						public boolean isSafe() {
+							return getCollection().isLockSupported();
+						}
+
+						@Override
+						public Transaction lock() {
+							return getCollection().lock(false, null);
+						}
+
+						@Override
+						public Transaction tryLock() {
+							return getCollection().tryLock(false, null);
+						}
+					}
+					return new NoInitChanges();
+				}
+
+				@Override
+				protected Object createIdentity() {
+					return Identifiable.wrap(ObservableCollectionFinder.this.getIdentity(), "enabled");
+				}
+			}
 			return new Enabled();
 		}
 
 		@Override
 		public <V extends E> String isAcceptable(V value) {
-
+			if (!theTest.test(value))
+				return StdMsg.ILLEGAL_ELEMENT;
+			String msg = null;
+			try (Transaction t = getCollection().lock(false, null)) {
+				ElementId lastMatch = getLastMatch();
+				if (lastMatch == null || !lastMatch.isPresent() || !theTest.test(getCollection().getElement(lastMatch).get())) {
+					lastMatch = getElementId();
+				}
+				if (lastMatch != null) {
+					msg = getCollection().mutableElement(lastMatch).isAcceptable(value);
+					if (msg == null)
+						return null;
+				}
+				if (getDefault() != null)
+					msg = getCollection().canAdd(getDefault().get(), //
+						isFirst == Ternian.FALSE ? lastMatch : null, isFirst == Ternian.TRUE ? lastMatch : null);
+			}
+			if (msg == null)
+				msg = StdMsg.UNSUPPORTED_OPERATION;
+			return msg;
 		}
 
 		@Override
 		public <V extends E> E set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
-			// TODO Auto-generated method stub
-			return null;
+			if (!theTest.test(value))
+				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+			String msg = null;
+			try (Transaction t = getCollection().lock(false, null)) {
+				ElementId lastMatch = getLastMatch();
+				if (lastMatch == null || !lastMatch.isPresent() || !theTest.test(getCollection().getElement(lastMatch).get())) {
+					lastMatch = getElementId();
+				}
+				if (lastMatch != null) {
+					msg = getCollection().mutableElement(lastMatch).isAcceptable(value);
+					if (msg == null) {
+						E oldValue = getCollection().getElement(lastMatch).get();
+						getCollection().mutableElement(lastMatch).set(value);
+						return oldValue;
+					}
+				}
+				if (getDefault() != null) {
+					msg = getCollection().canAdd(getDefault().get());
+					if (msg == null)
+						getCollection().addElement(getDefault().get(), //
+							isFirst == Ternian.FALSE ? lastMatch : null, isFirst == Ternian.TRUE ? lastMatch : null,
+								isFirst == Ternian.TRUE);
+				}
+			}
+			if (msg == null || msg.equals(StdMsg.UNSUPPORTED_OPERATION))
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+			throw new IllegalArgumentException(msg);
 		}
 	}
 
@@ -758,6 +921,11 @@ public final class ObservableCollectionImpl {
 			}, () -> null, null);
 			theValue = value;
 			isFirst = first;
+		}
+
+		@Override
+		protected boolean useCachedMatch(E value) {
+			return getCollection().equivalence().elementEquals(value, theValue);
 		}
 
 		@Override
@@ -821,6 +989,11 @@ public final class ObservableCollectionImpl {
 			}, def, refresh);
 			theCompare = compare;
 			isFirst = first;
+		}
+
+		@Override
+		protected boolean useCachedMatch(E value) {
+			return false; // Can't be sure that the cached match is the best one
 		}
 
 		@Override
@@ -910,14 +1083,13 @@ public final class ObservableCollectionImpl {
 					ValueHolder<X> x = new ValueHolder<>();
 					ValueHolder<T> value = new ValueHolder<>();
 					boolean[] init = new boolean[1];
-					Causable.CausableKey key = Causable
-						.key((root, values) -> {
-							T oldV = value.get();
-							T v = getValue((X) values.get("x"));
-							value.accept(v);
-							if (init[0])
-								fireChangeEvent(oldV, v, root, observer::onNext);
-						});
+					Causable.CausableKey key = Causable.key((root, values) -> {
+						T oldV = value.get();
+						T v = getValue((X) values.get("x"));
+						value.accept(v);
+						if (init[0])
+							fireChangeEvent(oldV, v, root, observer::onNext);
+					});
 					Subscription sub;
 					try (Transaction t = theCollection.lock(false, null)) {
 						x.accept(init());
@@ -959,10 +1131,9 @@ public final class ObservableCollectionImpl {
 			try (Transaction t = theCollection.lock(false, null)) {
 				ValueHolder<X> value = new ValueHolder<>(init());
 				int[] i = new int[1];
-				theCollection.spliterator()
-				.forEachElement(el -> {
-					ObservableCollectionEvent<? extends E> evt = new ObservableCollectionEvent<>(el.getElementId(),
-						theCollection.getType(), i[0]++, CollectionChangeType.add, null, el.get(), null);
+				theCollection.spliterator().forEachElement(el -> {
+					ObservableCollectionEvent<? extends E> evt = new ObservableCollectionEvent<>(el.getElementId(), theCollection.getType(),
+						i[0]++, CollectionChangeType.add, null, el.get(), null);
 					try (Transaction evtT = Causable.use(evt)) {
 						value.accept(update(value.get(), evt));
 					}
@@ -1358,7 +1529,6 @@ public final class ObservableCollectionImpl {
 			return ObservableCollection.flattenValue(cv);
 		}
 
-		@SuppressWarnings("unlikely-arg-type")
 		@Override
 		public Boolean get() {
 			return getLeft().contains(theValue.get());
@@ -1385,7 +1555,6 @@ public final class ObservableCollectionImpl {
 			return Identifiable.wrap(getLeft().getIdentity(), "containsAll", getRight().getIdentity());
 		}
 
-		@SuppressWarnings("unlikely-arg-type")
 		@Override
 		public Boolean get() {
 			return getLeft().containsAll(getRight());
@@ -1502,8 +1671,7 @@ public final class ObservableCollectionImpl {
 	 *
 	 * @param <T> The type of elements in the collection
 	 */
-	public static interface DerivedCollection<T> extends ObservableCollection<T> {
-	}
+	public static interface DerivedCollection<T> extends ObservableCollection<T> {}
 
 	/**
 	 * A derived collection, {@link ObservableCollection.CollectionDataFlow#collect() collected} from a
@@ -1654,8 +1822,7 @@ public final class ObservableCollectionImpl {
 			try (Transaction t = lock(true, false, null)) {
 				Function<? super E, ? extends T> map = theFlow.map().get();
 				theFlow.setValue(//
-					elements.stream().map(el -> theFlow.map(theSource.mutableElement(mapId(el)), map)).collect(Collectors.toList()),
-					value);
+					elements.stream().map(el -> theFlow.map(theSource.mutableElement(mapId(el)), map)).collect(Collectors.toList()), value);
 			}
 		}
 

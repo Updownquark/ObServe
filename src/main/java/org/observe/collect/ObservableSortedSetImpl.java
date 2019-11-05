@@ -90,6 +90,11 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
+		protected boolean useCachedMatch(E value) {
+			return false; // Can't use cached values for this
+		}
+
+		@Override
 		protected Object createIdentity() {
 			return Identifiable.wrap(getCollection().getIdentity(), "find", theSearch, theFilter);
 		}

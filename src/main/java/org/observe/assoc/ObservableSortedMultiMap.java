@@ -116,8 +116,8 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 	SortedMultiMapFlow<K, V> flow();
 
 	@Override
-	default ObservableSortedMap<K, V> single() {
-		return new SortedSingleMap<>(this);
+	default ObservableSortedMap<K, V> singleMap(boolean firstValue) {
+		return new SortedSingleMap<>(this, firstValue);
 	}
 
 	static <K, V> SortedMultiMapFlow<K, V> create(TypeToken<K> keyType, TypeToken<V> valueType, Comparator<? super K> keyCompare) {
@@ -165,14 +165,14 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 	}
 
 	/**
-	 * Implements {@link ObservableSortedMultiMap#single()}
-	 * 
+	 * Implements {@link ObservableSortedMultiMap#singleMap(boolean)}
+	 *
 	 * @param <K> The key type of the map
 	 * @param <V> The value type of the map
 	 */
-	class SortedSingleMap<K, V> extends SingleMap<K, V> implements ObservableSortedMap<K, V> {
-		public SortedSingleMap(ObservableSortedMultiMap<K, V> outer) {
-			super(outer);
+	class SortedSingleMap<K, V> extends ObservableSingleMap<K, V> implements ObservableSortedMap<K, V> {
+		public SortedSingleMap(ObservableSortedMultiMap<K, V> outer, boolean firstValue) {
+			super(outer, firstValue);
 		}
 
 		@Override
@@ -206,7 +206,7 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 
 	/**
 	 * Implements {@link ObservableSortedMultiMap#reverse()}
-	 * 
+	 *
 	 * @param <K> The key type of the map
 	 * @param <V> The value type of the map
 	 */

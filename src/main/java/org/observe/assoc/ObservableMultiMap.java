@@ -219,7 +219,8 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		return new ObservableSingleEntryCollection<>(this);
 	}
 
-	default ObservableMap<K, V> single(boolean firstValue) {
+	@Override
+	default ObservableMap<K, V> singleMap(boolean firstValue) {
 		return new ObservableSingleMap<>(this, firstValue);
 	}
 
@@ -617,17 +618,29 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		@Override
 		public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action) {
 			return getSource().onChange(multiMapEvt -> {
-				int todo = todo;// TODO logic in here isn't right for last value
+				int valueIndex = multiMapEvt.getIndex();
 				if (isFirstValue()) {
-					if (multiMapEvt.getIndex() > 0)
+					if (valueIndex > 0)
 						return; // We only care about the first value for each key
 				} else {
-					if (multiMapEvt.getIndex() != getSource().getEntryById(multiMapEvt.getKeyElement()).getValues().size() - 1)
+					int valueSize = getSource().getEntryById(multiMapEvt.getKeyElement()).getValues().size();
+					boolean isTarget = false;
+					switch (multiMapEvt.getType()) {
+					case add:
+					case set:
+						isTarget = valueIndex == valueSize - 1;
+						break;
+					case remove:
+						isTarget = valueIndex == valueSize;
+						break;
+					}
+					if (!isTarget)
 						return; // We only care about the last value for each key
 				}
 				ObservableMapEvent<K, V> mapEvt;
 				if (multiMapEvt.getType() == CollectionChangeType.remove && multiMapEvt.getKeyElement().isPresent()) {
-					V newValue = getSource().getEntryById(multiMapEvt.getKeyElement()).getValues().getFirst();
+					V newValue = CollectionElement.get(//
+						getSource().getEntryById(multiMapEvt.getKeyElement()).getValues().getTerminalElement(isFirstValue()));
 					mapEvt = new ObservableMapEvent<>(multiMapEvt.getKeyElement(), getKeyType(), getValueType(), multiMapEvt.getKeyIndex(), //
 						CollectionChangeType.set, multiMapEvt.getKey(), multiMapEvt.getOldValue(), newValue, multiMapEvt);
 				} else {
