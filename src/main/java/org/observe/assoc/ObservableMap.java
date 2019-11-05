@@ -4,11 +4,13 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.observe.Observable;
+import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
@@ -209,10 +211,10 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 			}
 
 			@Override
-			public Observable<ObservableValueEvent<V>> noInitChanges() {
-				class MapValueChanges extends AbstractIdentifiable implements Observable<ObservableValueEvent<V>> {
+			public Observable<ObservableElementEvent<V>> elementChangesNoInit() {
+				class MapValueChanges extends AbstractIdentifiable implements Observable<ObservableElementEvent<V>> {
 					@Override
-					public Subscription subscribe(Observer<? super ObservableValueEvent<V>> observer) {
+					public Subscription subscribe(Observer<? super ObservableElementEvent<V>> observer) {
 						try (Transaction t = lock()) {
 							boolean[] exists = new boolean[1];
 							Subscription sub = onChange(evt -> {
@@ -226,7 +228,13 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 								V oldValue = exists[0] ? evt.getOldValue() : null;
 								V newValue = newExists ? evt.getNewValue() : null;
 								exists[0] = newExists;
-								ObservableValueEvent<V> evt2 = createChangeEvent(oldValue, newValue, evt);
+								ObservableElementEvent<V> evt2 = new ObservableElementEvent<>(getType(), false, //
+									evt.getType() == CollectionChangeType.add ? null : evt.getElementId(), evt.getElementId(), //
+										oldValue, newValue, evt);
+								if (evt.getType() == CollectionChangeType.remove)
+									thePreviousElement = null;
+								else
+									thePreviousElement = evt.getElementId();
 								try (Transaction evtT = Causable.use(evt2)) {
 									observer.onNext(evt2);
 								}
@@ -268,6 +276,172 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 			@Override
 			protected Object createIdentity() {
 				return Identifiable.wrap(ObservableMap.this.getIdentity(), "observeValue", key);
+			}
+
+			@Override
+			public ObservableValue<String> isEnabled() {
+				class Enabled extends AbstractIdentifiable implements ObservableValue<String> {
+					@Override
+					public long getStamp() {
+						return ObservableMap.this.getStamp(false);
+					}
+
+					@Override
+					public Object createIdentity() {
+						return Identifiable.wrap(MapValueObservable.this.getIdentity(), "enabled");
+					}
+
+					@Override
+					public TypeToken<String> getType() {
+						return TypeTokens.get().STRING;
+					}
+
+					@Override
+					public String get() {
+						try (Transaction t = ObservableMap.this.lock(false, null)) {
+							MapEntryHandle<K, V> entry;
+							if (thePreviousElement != null && thePreviousElement.isPresent())
+								entry = getEntryById(thePreviousElement);
+							else {
+								entry = getEntry((K) key);
+								thePreviousElement = CollectionElement.getElementId(entry);
+							}
+							if (entry != null)
+								return mutableEntry(entry.getElementId()).isEnabled();
+							else
+								return keySet().canAdd((K) key, null, null);
+						}
+					}
+
+					@Override
+					public Observable<ObservableValueEvent<String>> noInitChanges() {
+						class NoInitChanges extends AbstractIdentifiable implements Observable<ObservableValueEvent<String>> {
+							@Override
+							public Subscription subscribe(Observer<? super ObservableValueEvent<String>> observer) {
+								String[] oldValue = new String[] { get() };
+								return ObservableMap.this.onChange(mapEvt -> {
+									if (keySet().equivalence().elementEquals(mapEvt.getKey(), key)) {
+										String newValue = get();
+										if (!Objects.equals(newValue, oldValue[0])) {
+											ObservableValueEvent<String> enabledEvt = createChangeEvent(oldValue[0], newValue, mapEvt);
+											try (Transaction evtT = Causable.use(enabledEvt)) {
+												observer.onNext(enabledEvt);
+											}
+										}
+									}
+								});
+							}
+
+							@Override
+							public boolean isSafe() {
+								return Enabled.this.isLockSupported();
+							}
+
+							@Override
+							public Transaction lock() {
+								return ObservableMap.this.lock(false, null);
+							}
+
+							@Override
+							public Transaction tryLock() {
+								return ObservableMap.this.tryLock(false, null);
+							}
+
+							@Override
+							protected Object createIdentity() {
+								return Identifiable.wrap(Enabled.this.getIdentity(), "noInitChanges");
+							}
+						}
+						return new NoInitChanges();
+					}
+				}
+				return new Enabled();
+			}
+
+			@Override
+			public <V2 extends V> String isAcceptable(V2 value) {
+				try (Transaction t = ObservableMap.this.lock(false, null)) {
+					MapEntryHandle<K, V> entry;
+					if (thePreviousElement != null && thePreviousElement.isPresent())
+						entry = getEntryById(thePreviousElement);
+					else {
+						entry = getEntry((K) key);
+						thePreviousElement = CollectionElement.getElementId(entry);
+					}
+					if (entry != null)
+						return mutableEntry(entry.getElementId()).isAcceptable(value);
+					else
+						return keySet().canAdd((K) key, null, null);
+				}
+			}
+
+			@Override
+			public <V2 extends V> V set(V2 value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+				try (Transaction t = ObservableMap.this.lock(false, cause)) {
+					MapEntryHandle<K, V> entry;
+					if (thePreviousElement != null && thePreviousElement.isPresent())
+						entry = getEntryById(thePreviousElement);
+					else {
+						entry = getEntry((K) key);
+						thePreviousElement = CollectionElement.getElementId(entry);
+					}
+					if (entry != null) {
+						V oldValue = entry.getValue();
+						mutableEntry(entry.getElementId()).set(value);
+						return oldValue;
+					} else {
+						mutableEntry(keySet().addElement((K) key, null, null, false).getElementId()).set(value);
+						return null;
+					}
+				}
+			}
+
+			@Override
+			public Observable<ObservableElementEvent<V>> elementChanges() {
+				class MapObservableWithInit extends AbstractIdentifiable implements Observable<ObservableElementEvent<V>> {
+					private final Observable<ObservableElementEvent<V>> changes = elementChangesNoInit();
+
+					@Override
+					public Object createIdentity() {
+						return Identifiable.wrap(MapValueObservable.this.getIdentity(), "changes");
+					}
+
+					@Override
+					public Subscription subscribe(Observer<? super ObservableElementEvent<V>> observer) {
+						try (Transaction t = ObservableMap.this.lock(false, null)) {
+							MapEntryHandle<K, V> entry;
+							if (thePreviousElement != null && thePreviousElement.isPresent())
+								entry = getEntryById(thePreviousElement);
+							else {
+								entry = getEntry((K) key);
+								thePreviousElement = CollectionElement.getElementId(entry);
+							}
+							ObservableElementEvent<V> initEvt = new ObservableElementEvent<>(getType(), true, null,
+								entry == null ? null : entry.getElementId(), //
+									null, entry == null ? null : entry.getValue(), null);
+							try (Transaction evtT = Causable.use(initEvt)) {
+								observer.onNext(initEvt);
+							}
+							return changes.subscribe(observer);
+						}
+					}
+
+					@Override
+					public boolean isSafe() {
+						return changes.isSafe();
+					}
+
+					@Override
+					public Transaction lock() {
+						return changes.lock();
+					}
+
+					@Override
+					public Transaction tryLock() {
+						return changes.tryLock();
+					}
+				}
+				return new MapObservableWithInit();
 			}
 		}
 		return new MapValueObservable();

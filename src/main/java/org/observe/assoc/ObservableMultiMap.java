@@ -17,7 +17,6 @@ import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.DistinctDataFlow;
 import org.observe.collect.ObservableCollection.SubscriptionCause;
 import org.observe.collect.ObservableCollectionEvent;
-import org.observe.collect.ObservableElement;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.SettableElement;
 import org.observe.util.TypeTokens;
@@ -567,14 +566,13 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 	}
 
 	/**
-	 * Implements {@link ObservableMultiMap#single()}
+	 * Implements {@link ObservableMultiMap#singleMap(boolean)}
 	 *
 	 * @param <K> The key-type of the map
 	 * @param <V> The value-type of the map
 	 */
 	class ObservableSingleMap<K, V> extends SingleMap<K, V> implements ObservableMap<K, V> {
 		private final TypeToken<Map.Entry<K, V>> theEntryType;
-		private Object theIdentity;
 
 		public ObservableSingleMap(ObservableMultiMap<K, V> outer, boolean firstValue) {
 			super(outer, firstValue);
@@ -613,10 +611,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 
 		@Override
 		public <K2> SettableElement<V> observe(K2 key) {
-			if (!getSource().keySet().belongs(key))
-				return SettableElement.empty(getValueType());
-			ObservableElement<V> element = getSource().get(key).observeFind(v -> true).at(true).find();
-			return new SettableElement<>() {};
+			return getSource().get(key).observeFind(v -> true).at(true).find();
 		}
 
 		@Override

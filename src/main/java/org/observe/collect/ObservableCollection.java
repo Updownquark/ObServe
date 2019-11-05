@@ -1543,7 +1543,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		}
 
 		/** @return The finder */
-		public ObservableElement<E> find() {
+		public SettableElement<E> find() {
 			return new ObservableCollectionImpl.ObservableCollectionFinder<>(theCollection, theCondition, theDefault, theLocation,
 				theRefresh);
 		}

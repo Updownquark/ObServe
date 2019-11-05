@@ -47,7 +47,6 @@ import org.qommons.ValueHolder;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedList;
-import org.qommons.collect.BetterSortedList.SortedSearchFilter;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ListenerList;
@@ -678,7 +677,7 @@ public final class ObservableCollectionImpl {
 	 *
 	 * @param <E> The type of the value
 	 */
-	public static class ObservableCollectionFinder<E> extends AbstractObservableElementFinder<E> {
+	public static class ObservableCollectionFinder<E> extends AbstractObservableElementFinder<E> implements SettableElement<E> {
 		private final Predicate<? super E> theTest;
 		private final Ternian isFirst;
 
@@ -716,6 +715,23 @@ public final class ObservableCollectionImpl {
 		@Override
 		protected boolean test(E value) {
 			return theTest.test(value);
+		}
+
+		@Override
+		public ObservableValue<String> isEnabled() {
+			class Enabled extends AbstractIdentifiable implements ObservableValue<String> {}
+			return new Enabled();
+		}
+
+		@Override
+		public <V extends E> String isAcceptable(V value) {
+
+		}
+
+		@Override
+		public <V extends E> E set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+			// TODO Auto-generated method stub
+			return null;
 		}
 	}
 
