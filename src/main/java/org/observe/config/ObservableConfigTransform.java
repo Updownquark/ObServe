@@ -26,8 +26,8 @@ import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.Lockable;
 import org.qommons.QommonsUtils;
-import org.qommons.StructuredStamped;
-import org.qommons.StructuredTransactable;
+import org.qommons.Stamped;
+import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
 import org.qommons.collect.BetterCollection;
@@ -43,13 +43,12 @@ import org.qommons.tree.BetterTreeMap;
 
 import com.google.common.reflect.TypeToken;
 
-public abstract class ObservableConfigTransform implements StructuredTransactable, StructuredStamped {
+public abstract class ObservableConfigTransform implements Transactable, Stamped {
 	private final ObservableValue<? extends ObservableConfig> theParent;
 	private final Runnable theParentCreate;
 	private final Observable<?> theUntil;
 
 	private long theStamp;
-	private long theStructureStamp;
 
 	private boolean _isConnected;
 	private ObservableValue<Boolean> isConnected;
@@ -75,7 +74,6 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 				if (evt.getNewValue() == evt.getOldValue())
 					return;
 				theStamp++;
-				theStructureStamp++;
 				ObservableConfig newParent = evt.getNewValue();
 				try (Transaction ceT = newParent == null ? Transaction.NONE : newParent.lock(false, null)) {
 					initConfig(evt.getNewValue(), evt);
@@ -89,10 +87,8 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 		return isConnected;
 	}
 
-	protected void incrementStamp(boolean structural) {
+	protected void incrementStamp() {
 		theStamp++;
-		if (structural)
-			theStructureStamp++;
 	}
 
 	protected ObservableValue<? extends ObservableConfig> getParent() {
@@ -131,18 +127,18 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 	}
 
 	@Override
-	public Transaction lock(boolean write, boolean structural, Object cause) {
-		return Lockable.lock(theParent, () -> Lockable.lockable(theParent.get(), write, structural, cause));
+	public Transaction lock(boolean write, Object cause) {
+		return Lockable.lock(theParent, () -> Lockable.lockable(theParent.get(), write, cause));
 	}
 
 	@Override
-	public Transaction tryLock(boolean write, boolean structural, Object cause) {
-		return Lockable.tryLock(theParent, () -> Lockable.lockable(theParent.get(), write, structural, cause));
+	public Transaction tryLock(boolean write, Object cause) {
+		return Lockable.tryLock(theParent, () -> Lockable.lockable(theParent.get(), write, cause));
 	}
 
 	@Override
-	public long getStamp(boolean structuralOnly) {
-		return structuralOnly ? theStructureStamp : theStamp;
+	public long getStamp() {
+		return theStamp;
 	}
 
 	protected abstract void initConfig(ObservableConfig parent, Object cause);
@@ -367,7 +363,7 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 				else
 					newElId = theElements.putEntry(config.getParentChildRef(), newEl, null, el.getElementId(), false).getElementId();
 				newEl.theElement = newElId;
-				incrementStamp(true);
+				incrementStamp();
 				fire(new ObservableCollectionEvent<>(newElId, theType, theElements.keySet().getElementsBefore(newElId),
 					CollectionChangeType.add, null, newEl.get(), collectionChange));
 			} else {
@@ -375,7 +371,7 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 				if (el == null) // Must be a different child
 					return;
 				if (collectionChange.relativePath.size() == 1 && collectionChange.changeType == CollectionChangeType.remove) {
-					incrementStamp(true);
+					incrementStamp();
 					theElements.mutableEntry(el.getElementId()).remove();
 					el.get().dispose();
 					fire(new ObservableCollectionEvent<>(el.getElementId(), theType,
@@ -392,7 +388,7 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 								ObservableValue.of(el.get().getConfig()), () -> collectionChange.eventTarget.addChild(theChildName),
 								el.get().get(), collectionChange.asFromChild(), getUntil());
 						E oldValue = el.get().get();
-						incrementStamp(false);
+						incrementStamp();
 						if (newValue != oldValue)
 							el.get()._set(newValue);
 						fire(new ObservableCollectionEvent<>(el.getElementId(), theType,
@@ -526,7 +522,7 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 			protected void setOp(E value) throws UnsupportedOperationException, IllegalArgumentException {
 				if (!isConnected().get())
 					throw new UnsupportedOperationException("Not connected");
-				try (Transaction t = lock(true, false, null)) {
+				try (Transaction t = lock(true, null)) {
 					if (!theConfig.getParentChildRef().isPresent())
 						throw new IllegalArgumentException(StdMsg.ELEMENT_REMOVED);
 					modifying = new ValueHolder<>(value);
@@ -591,8 +587,8 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 			}
 
 			@Override
-			public long getStamp(boolean structuralOnly) {
-				return ObservableConfigBackedCollection.this.getStamp(structuralOnly);
+			public long getStamp() {
+				return ObservableConfigBackedCollection.this.getStamp();
 			}
 
 			@Override
@@ -601,13 +597,13 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 			}
 
 			@Override
-			public Transaction lock(boolean write, boolean structural, Object cause) {
-				return ObservableConfigBackedCollection.this.lock(write, structural, cause);
+			public Transaction lock(boolean write, Object cause) {
+				return ObservableConfigBackedCollection.this.lock(write, cause);
 			}
 
 			@Override
-			public Transaction tryLock(boolean write, boolean structural, Object cause) {
-				return ObservableConfigBackedCollection.this.tryLock(write, structural, cause);
+			public Transaction tryLock(boolean write, Object cause) {
+				return ObservableConfigBackedCollection.this.tryLock(write, cause);
 			}
 
 			@Override

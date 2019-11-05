@@ -323,7 +323,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 
 			@Override
 			public long getStamp() {
-				return getCollection().getStamp(true);
+				return getCollection().getStamp();
 			}
 
 			@Override
@@ -391,12 +391,12 @@ public interface ObservableCollection<E> extends BetterList<E> {
 
 			@Override
 			public Transaction lock() {
-				return ObservableCollection.this.lock(false, false, null);
+				return ObservableCollection.this.lock(false, null);
 			}
 
 			@Override
 			public Transaction tryLock() {
-				return ObservableCollection.this.tryLock(false, false, null);
+				return ObservableCollection.this.tryLock(false, null);
 			}
 		}
 		return new SimpleChanges();

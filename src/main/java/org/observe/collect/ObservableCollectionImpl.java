@@ -351,12 +351,12 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public Transaction lock() {
-			return collection.lock(false, false, null);
+			return collection.lock(false, null);
 		}
 
 		@Override
 		public Transaction tryLock() {
-			return collection.tryLock(false, false, null);
+			return collection.tryLock(false, null);
 		}
 
 		@Override
@@ -484,7 +484,7 @@ public final class ObservableCollectionImpl {
 
 				@Override
 				public Subscription subscribe(Observer<? super ObservableElementEvent<E>> observer) {
-					try (Transaction t = Lockable.lockAll(theRefresh, Lockable.lockable(theCollection, false, false, null))) {
+					try (Transaction t = Lockable.lockAll(theRefresh, Lockable.lockable(theCollection, false, null))) {
 						class FinderListener implements Consumer<ObservableCollectionEvent<? extends E>> {
 							private SimpleElement theCurrentElement;
 							private final Causable.CausableKey theCollectionCauseKey;
@@ -667,12 +667,12 @@ public final class ObservableCollectionImpl {
 
 				@Override
 				public Transaction lock() {
-					return theCollection.lock(false, false, null);
+					return theCollection.lock(false, null);
 				}
 
 				@Override
 				public Transaction tryLock() {
-					return theCollection.tryLock(false, false, null);
+					return theCollection.tryLock(false, null);
 				}
 			}
 			;
@@ -760,7 +760,7 @@ public final class ObservableCollectionImpl {
 			class Enabled extends AbstractIdentifiable implements ObservableValue<String> {
 				@Override
 				public long getStamp() {
-					return getCollection().getStamp(false);
+					return getCollection().getStamp();
 				}
 
 				@Override
@@ -1108,12 +1108,12 @@ public final class ObservableCollectionImpl {
 
 				@Override
 				public Transaction lock() {
-					return theCollection.lock(false, false, null);
+					return theCollection.lock(false, null);
 				}
 
 				@Override
 				public Transaction tryLock() {
-					return theCollection.tryLock(false, false, null);
+					return theCollection.tryLock(false, null);
 				}
 			};
 		}
@@ -1737,20 +1737,18 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public Transaction lock(boolean write, boolean structural, Object cause) {
-			return Lockable.lockAll(Lockable.lockable(theSource, write, structural, cause),
-				Lockable.lockable(theFlow, write, structural, cause));
+		public Transaction lock(boolean write, Object cause) {
+			return Lockable.lockAll(Lockable.lockable(theSource, write, cause), Lockable.lockable(theFlow, write, cause));
 		}
 
 		@Override
-		public Transaction tryLock(boolean write, boolean structural, Object cause) {
-			return Lockable.tryLockAll(Lockable.lockable(theSource, write, structural, cause),
-				Lockable.lockable(theFlow, write, structural, cause));
+		public Transaction tryLock(boolean write, Object cause) {
+			return Lockable.tryLockAll(Lockable.lockable(theSource, write, cause), Lockable.lockable(theFlow, write, cause));
 		}
 
 		@Override
-		public long getStamp(boolean structuralOnly) {
-			return theSource.getStamp(structuralOnly);
+		public long getStamp() {
+			return theSource.getStamp();
 		}
 
 		@Override
@@ -1819,7 +1817,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public void setValue(Collection<ElementId> elements, T value) {
-			try (Transaction t = lock(true, false, null)) {
+			try (Transaction t = lock(true, null)) {
 				Function<? super E, ? extends T> map = theFlow.map().get();
 				theFlow.setValue(//
 					elements.stream().map(el -> theFlow.map(theSource.mutableElement(mapId(el)), map)).collect(Collectors.toList()), value);
@@ -2053,7 +2051,7 @@ public final class ObservableCollectionImpl {
 
 						@Override
 						public void accept(ObservableCollectionEvent<? extends E> evt) {
-							try (Transaction t = theFlow.lock(true, evt.getType() != CollectionChangeType.set, evt)) {
+							try (Transaction t = theFlow.lock(true, evt)) {
 								T oldValue, newValue;
 								switch (evt.getType()) {
 								case add:
@@ -2193,7 +2191,6 @@ public final class ObservableCollectionImpl {
 		private final AtomicInteger theListenerCount;
 		private final Equivalence<? super T> theEquivalence;
 		private final AtomicLong theModCount;
-		private final AtomicLong theStructureStamp;
 		private final WeakListening.Builder theWeakListening;
 
 		/**
@@ -2207,11 +2204,10 @@ public final class ObservableCollectionImpl {
 			theListenerCount = new AtomicInteger();
 			theEquivalence = flow.equivalence();
 			theModCount = new AtomicLong();
-			theStructureStamp = new AtomicLong();
 
 			// Begin listening
 			ElementAccepter<T> onElement = (el, cause) -> {
-				theStructureStamp.incrementAndGet();
+				theModCount.incrementAndGet();
 				DerivedElementHolder<T>[] holder = new DerivedElementHolder[] { createHolder(el) };
 				holder[0].treeNode = theDerivedElements.addElement(holder[0], false);
 				fireListeners(new ObservableCollectionEvent<>(holder[0], theFlow.getTargetType(), holder[0].treeNode.getNodesBefore(),
@@ -2219,11 +2215,11 @@ public final class ObservableCollectionImpl {
 				el.setListener(new CollectionElementListener<T>() {
 					@Override
 					public void update(T oldValue, T newValue, Object elCause) {
+						theModCount.incrementAndGet();
 						BinaryTreeNode<DerivedElementHolder<T>> left = holder[0].treeNode.getClosest(true);
 						BinaryTreeNode<DerivedElementHolder<T>> right = holder[0].treeNode.getClosest(false);
 						if ((left != null && left.get().element.compareTo(holder[0].element) > 0)
 							|| (right != null && right.get().element.compareTo(holder[0].element) < 0)) {
-							theStructureStamp.incrementAndGet();
 							// Remove the element and re-add at the new position.
 							int index = holder[0].treeNode.getNodesBefore();
 							theDerivedElements.mutableElement(holder[0].treeNode.getElementId()).remove();
@@ -2235,7 +2231,6 @@ public final class ObservableCollectionImpl {
 							fireListeners(new ObservableCollectionEvent<>(holder[0], theFlow.getTargetType(),
 								holder[0].treeNode.getNodesBefore(), CollectionChangeType.add, null, newValue, elCause));
 						} else {
-							theModCount.incrementAndGet();
 							fireListeners(new ObservableCollectionEvent<>(holder[0], getType(), holder[0].treeNode.getNodesBefore(),
 								CollectionChangeType.set, oldValue, newValue, elCause));
 						}
@@ -2243,7 +2238,7 @@ public final class ObservableCollectionImpl {
 
 					@Override
 					public void removed(T value, Object elCause) {
-						theStructureStamp.incrementAndGet();
+						theModCount.incrementAndGet();
 						int index = holder[0].treeNode.getNodesBefore();
 						if (holder[0].treeNode.getElementId().isPresent()) // May have been removed already
 							theDerivedElements.mutableElement(holder[0].treeNode.getElementId()).remove();
@@ -2327,18 +2322,18 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public Transaction lock(boolean write, boolean structural, Object cause) {
-			return theFlow.lock(write, structural, cause);
+		public Transaction lock(boolean write, Object cause) {
+			return theFlow.lock(write, cause);
 		}
 
 		@Override
-		public Transaction tryLock(boolean write, boolean structural, Object cause) {
-			return theFlow.tryLock(write, structural, cause);
+		public Transaction tryLock(boolean write, Object cause) {
+			return theFlow.tryLock(write, cause);
 		}
 
 		@Override
-		public long getStamp(boolean structuralOnly) {
-			return structuralOnly ? theStructureStamp.get() : theModCount.get();
+		public long getStamp() {
+			return theModCount.get();
 		}
 
 		@Override
@@ -2655,22 +2650,22 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public Transaction lock(boolean write, boolean structural, Object cause) {
-			return Lockable.lock(theCollectionObservable, () -> Lockable.lockable(theCollectionObservable.get(), write, structural, cause));
+		public Transaction lock(boolean write, Object cause) {
+			return Lockable.lock(theCollectionObservable, () -> Lockable.lockable(theCollectionObservable.get(), write, cause));
 		}
 
 		@Override
-		public Transaction tryLock(boolean write, boolean structural, Object cause) {
+		public Transaction tryLock(boolean write, Object cause) {
 			return Lockable.tryLock(theCollectionObservable,
-				() -> Lockable.lockable(theCollectionObservable.get(), write, structural, cause));
+				() -> Lockable.lockable(theCollectionObservable.get(), write, cause));
 		}
 
 		@Override
-		public long getStamp(boolean structuralOnly) {
+		public long getStamp() {
 			long stamp = theCollectionObservable.getStamp();
 			ObservableCollection<? extends E> coll = theCollectionObservable.get();
 			if (coll != null)
-				stamp ^= Long.rotateRight(coll.getStamp(structuralOnly), 32);
+				stamp ^= Long.rotateRight(coll.getStamp(), 32);
 			return stamp;
 		}
 

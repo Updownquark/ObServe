@@ -279,13 +279,13 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public Transaction lock(boolean write, boolean structural, Object cause) {
-			return theWrapped.lock(write, structural, cause);
+		public Transaction lock(boolean write, Object cause) {
+			return theWrapped.lock(write, cause);
 		}
 
 		@Override
-		public Transaction tryLock(boolean write, boolean structural, Object cause) {
-			return theWrapped.tryLock(write, structural, cause);
+		public Transaction tryLock(boolean write, Object cause) {
+			return theWrapped.tryLock(write, cause);
 		}
 
 		@Override
@@ -608,13 +608,13 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public Transaction lock(boolean write, boolean structural, Object cause) {
-			return ObservableCollectionDataFlowImpl.structureAffectedPassLockThroughToParent(theParent, write, structural, cause);
+		public Transaction lock(boolean write, Object cause) {
+			return ObservableCollectionDataFlowImpl.structureAffectedPassLockThroughToParent(theParent, write, cause);
 		}
 
 		@Override
-		public Transaction tryLock(boolean write, boolean structural, Object cause) {
-			return ObservableCollectionDataFlowImpl.structureAffectedTryPassLockThroughToParent(theParent, write, structural, cause);
+		public Transaction tryLock(boolean write, Object cause) {
+			return ObservableCollectionDataFlowImpl.structureAffectedTryPassLockThroughToParent(theParent, write, cause);
 		}
 
 		@Override

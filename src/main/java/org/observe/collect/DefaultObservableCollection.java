@@ -17,7 +17,7 @@ import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.FastFailLockingStrategy;
 import org.qommons.collect.MutableCollectionElement;
-import org.qommons.collect.StampedLockingStrategy;
+import org.qommons.collect.RRWLockingStrategy;
 import org.qommons.collect.ValueStoredCollection;
 import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.RedBlackNodeList;
@@ -83,7 +83,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 		 * @return This builder
 		 */
 		public Builder<E> safe(boolean safe) {
-			withLocker(safe ? new StampedLockingStrategy() : new FastFailLockingStrategy());
+			withLocker(safe ? new RRWLockingStrategy() : new FastFailLockingStrategy());
 			return this;
 		}
 
@@ -164,7 +164,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			if (theLocker != null)
 				return theLocker;
 			else
-				return new StampedLockingStrategy();
+				return new RRWLockingStrategy();
 		}
 
 		/** @return The sorting for the collection */
@@ -247,8 +247,8 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	}
 
 	@Override
-	public Transaction lock(boolean write, boolean structural, Object cause) {
-		Transaction t = theValues.lock(write, structural, cause);
+	public Transaction lock(boolean write, Object cause) {
+		Transaction t = theValues.lock(write, cause);
 		return addCause(t, write, cause);
 	}
 
@@ -285,8 +285,8 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	}
 
 	@Override
-	public Transaction tryLock(boolean write, boolean structural, Object cause) {
-		Transaction t = theValues.tryLock(write, structural, cause);
+	public Transaction tryLock(boolean write, Object cause) {
+		Transaction t = theValues.tryLock(write, cause);
 		return t == null ? null : addCause(t, write, cause);
 	}
 
@@ -295,8 +295,8 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	}
 
 	@Override
-	public long getStamp(boolean structuralOnly) {
-		return theValues.getStamp(structuralOnly);
+	public long getStamp() {
+		return theValues.getStamp();
 	}
 
 	@Override
@@ -472,7 +472,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 					// Correct the storage structure
 					boolean[] thisMoved = new boolean[1];
 					RepairOperation op = new RepairOperation(getCurrentCause());
-					try (Transaction opT = Causable.use(op); Transaction vt = lock(true, true, op)) {
+					try (Transaction opT = Causable.use(op); Transaction vt = lock(true, op)) {
 						((ValueStoredCollection<E>) theValues).repair(valueEl.getElementId(),
 							new ValueStoredCollection.RepairListener<E, Void>() {
 							@Override

@@ -45,7 +45,7 @@ import com.google.common.reflect.TypeToken;
 public class ObservableConfigContent {
 	/**
 	 * Observes a config's descendant at a path
-	 * 
+	 *
 	 * @param <C> The sub-type of config
 	 */
 	protected static class ObservableConfigChild<C extends ObservableConfig> implements ObservableValue<C> {
@@ -94,7 +94,7 @@ public class ObservableConfigContent {
 							if (evt.relativePath.get(pathIndex) != thePathElements[pathIndex])
 								break;
 							pathChange = pathChange.asFromChild();
-							thePathElementStamps[pathIndex] = thePathElements[pathIndex].getStamp(false);
+							thePathElementStamps[pathIndex] = thePathElements[pathIndex].getStamp();
 							pathIndex++;
 						}
 						handleChange(pathIndex, pathChange, evt);
@@ -202,7 +202,7 @@ public class ObservableConfigContent {
 			boolean changed = false;
 			int i;
 			for (i = startIndex; i < thePathElements.length; i++) {
-				long stamp = parent.getStamp(false);
+				long stamp = parent.getStamp();
 				ObservableConfig child;
 				if (thePathElementStamps[i] == stamp) {
 					// No need to check--nothing's changed
@@ -423,18 +423,18 @@ public class ObservableConfigContent {
 		}
 
 		@Override
-		public long getStamp(boolean structuralOnly) {
-			return theConfig.getStamp(structuralOnly);
+		public long getStamp() {
+			return theConfig.getStamp();
 		}
 
 		@Override
-		public Transaction lock(boolean write, boolean structural, Object cause) {
-			return theConfig.lock(write, structural, cause);
+		public Transaction lock(boolean write, Object cause) {
+			return theConfig.lock(write, cause);
 		}
 
 		@Override
-		public Transaction tryLock(boolean write, boolean structural, Object cause) {
-			return theConfig.tryLock(write, structural, cause);
+		public Transaction tryLock(boolean write, Object cause) {
+			return theConfig.tryLock(write, cause);
 		}
 
 		@Override

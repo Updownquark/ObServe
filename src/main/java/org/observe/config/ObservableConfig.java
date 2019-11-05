@@ -42,20 +42,19 @@ import org.qommons.ArrayUtils;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.Lockable;
+import org.qommons.Stamped;
 import org.qommons.StringUtils;
-import org.qommons.StructuredStamped;
-import org.qommons.StructuredTransactable;
+import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedList;
-import org.qommons.collect.BetterSortedList.SortedSearchFilter;
 import org.qommons.collect.BetterSortedMap;
 import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MapEntryHandle;
-import org.qommons.collect.StampedLockingStrategy;
+import org.qommons.collect.RRWLockingStrategy;
 import org.qommons.io.Format;
 import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BetterTreeMap;
@@ -77,7 +76,7 @@ import com.google.common.reflect.TypeToken;
  * configurable collections of child configurations as standard observable structures.
  * </p>
  */
-public class ObservableConfig implements StructuredTransactable, StructuredStamped {
+public class ObservableConfig implements Transactable, Stamped {
 	public static final char PATH_SEPARATOR = '/';
 	public static final String PATH_SEPARATOR_STR = "" + PATH_SEPARATOR;
 	public static final String EMPTY_PATH = "".intern();
@@ -399,7 +398,6 @@ public class ObservableConfig implements StructuredTransactable, StructuredStamp
 	private String theValue;
 	private final BetterList<ObservableConfig> theContent;
 	private final ListenerList<InternalObservableConfigListener> theListeners;
-	private long theStructureModCount;
 	private long theModCount;
 
 	protected ObservableConfig(String name, CollectionLockingStrategy locking) {
@@ -730,13 +728,13 @@ public class ObservableConfig implements StructuredTransactable, StructuredStamp
 	}
 
 	@Override
-	public Transaction lock(boolean write, boolean structural, Object cause) {
-		return withCause(theContent.lock(write, structural, cause), cause);
+	public Transaction lock(boolean write, Object cause) {
+		return withCause(theContent.lock(write, cause), cause);
 	}
 
 	@Override
-	public Transaction tryLock(boolean write, boolean structural, Object cause) {
-		return withCause(theContent.tryLock(write, structural, cause), cause);
+	public Transaction tryLock(boolean write, Object cause) {
+		return withCause(theContent.tryLock(write, cause), cause);
 	}
 
 	private Transaction withCause(Transaction t, Object cause) {
@@ -765,8 +763,8 @@ public class ObservableConfig implements StructuredTransactable, StructuredStamp
 	}
 
 	@Override
-	public long getStamp(boolean structuralOnly) {
-		return structuralOnly ? theStructureModCount : theModCount;
+	public long getStamp() {
+		return theModCount;
 	}
 
 	public ObservableConfig getChild(String path) {
@@ -822,7 +820,7 @@ public class ObservableConfig implements StructuredTransactable, StructuredStamp
 
 	public ObservableConfig addChild(ObservableConfig after, ObservableConfig before, boolean first, String name,
 		Consumer<ObservableConfig> preAddMod) {
-		try (Transaction t = lock(true, true, null)) {
+		try (Transaction t = lock(true, null)) {
 			ObservableConfig child = createChild(name, theLocking);
 			if (preAddMod != null)
 				preAddMod.accept(child);
@@ -845,7 +843,7 @@ public class ObservableConfig implements StructuredTransactable, StructuredStamp
 			throw new NullPointerException("Name must not be null");
 		else if (name.length() == 0)
 			throw new IllegalArgumentException("Name must not be empty");
-		try (Transaction t = lock(true, false, null)) {
+		try (Transaction t = lock(true, null)) {
 			String oldName = theName;
 			theName = name;
 			fire(CollectionChangeType.set, Collections.emptyList(), oldName, theValue);
@@ -854,7 +852,7 @@ public class ObservableConfig implements StructuredTransactable, StructuredStamp
 	}
 
 	public ObservableConfig setValue(String value) {
-		try (Transaction t = lock(true, false, null)) {
+		try (Transaction t = lock(true, null)) {
 			String oldValue = theValue;
 			theValue = value;
 			fire(CollectionChangeType.set, //
@@ -876,8 +874,8 @@ public class ObservableConfig implements StructuredTransactable, StructuredStamp
 
 	public ObservableConfig copyFrom(ObservableConfig source, boolean removeExtras) {
 		try (Transaction t = Lockable.lockAll(//
-			Lockable.lockable(source, false, false, null), //
-			Lockable.lockable(this, true, true, null))) {
+			Lockable.lockable(source, false, null), //
+			Lockable.lockable(this, true, null))) {
 			_copyFrom(source, removeExtras);
 		}
 		return this;
@@ -960,8 +958,6 @@ public class ObservableConfig implements StructuredTransactable, StructuredStamp
 
 	private void _fire(CollectionChangeType eventType, List<ObservableConfig> relativePath, String oldName, String oldValue, Object cause) {
 		theModCount++;
-		if (eventType != CollectionChangeType.set)
-			theStructureModCount++;
 		if (!theListeners.isEmpty()) {
 			ObservableConfigEvent event = new ObservableConfigEvent(eventType, this, oldName, oldValue, relativePath, getCurrentCause());
 			try (Transaction t = Causable.use(event)) {
@@ -1062,7 +1058,7 @@ public class ObservableConfig implements StructuredTransactable, StructuredStamp
 	}
 
 	public static ObservableConfig createRoot(String name) {
-		return createRoot(name, null, new StampedLockingStrategy());
+		return createRoot(name, null, new RRWLockingStrategy());
 	}
 
 	public static ObservableConfig createRoot(String name, String value, CollectionLockingStrategy locking) {

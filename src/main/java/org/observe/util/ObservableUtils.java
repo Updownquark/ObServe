@@ -88,7 +88,7 @@ public class ObservableUtils {
 			// The inner transaction is so that each c1 change is causably linked to a particular c2 change
 			ObservableCollectionLinkEvent linkEvt = new ObservableCollectionLinkEvent(c1, evt);
 			try (Transaction linkEvtT = Causable.use(linkEvt);
-				Transaction evtT = c2.lock(true, evt.getType() != CollectionChangeType.set, linkEvt)) {
+				Transaction evtT = c2.lock(true, linkEvt)) {
 				isLinkChanging[0] = true;
 				try {
 					switch (evt.getType()) {
@@ -120,7 +120,7 @@ public class ObservableUtils {
 			// The inner transaction is so that each c2 change is causably linked to a particular c1 change
 			ObservableCollectionLinkEvent linkEvt = new ObservableCollectionLinkEvent(c2, evt);
 			try (Transaction linkEvtT = Causable.use(linkEvt);
-				Transaction evtT = c1.lock(true, evt.getType() != CollectionChangeType.set, linkEvt)) {
+				Transaction evtT = c1.lock(true, linkEvt)) {
 				isLinkChanging[0] = true;
 				try {
 					switch (evt.getType()) {

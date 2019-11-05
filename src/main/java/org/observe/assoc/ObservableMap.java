@@ -257,7 +257,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 
 					@Override
 					public Transaction tryLock() {
-						return ObservableMap.this.tryLock(false, false, null);
+						return ObservableMap.this.tryLock(false, null);
 					}
 
 					@Override
@@ -270,7 +270,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 
 			@Override
 			public long getStamp() {
-				return ObservableMap.this.getStamp(false);
+				return ObservableMap.this.getStamp();
 			}
 
 			@Override
@@ -283,7 +283,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 				class Enabled extends AbstractIdentifiable implements ObservableValue<String> {
 					@Override
 					public long getStamp() {
-						return ObservableMap.this.getStamp(false);
+						return ObservableMap.this.getStamp();
 					}
 
 					@Override
@@ -605,7 +605,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 
 		@Override
 		public void setValue(Collection<ElementId> elements, V value) {
-			try (Transaction t = lock(true, false, null)) {
+			try (Transaction t = lock(true, null)) {
 				for (ElementId entryId : elements) {
 					MutableMapEntryHandle<K, V> entry = getMap().mutableEntry(entryId);
 					entry.set(value);
@@ -675,7 +675,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 
 		@Override
 		public void setValue(Collection<ElementId> elements, Map.Entry<K, V> value) {
-			try (Transaction t = lock(true, false, null)) {
+			try (Transaction t = lock(true, null)) {
 				for (ElementId entryId : elements) {
 					MutableMapEntryHandle<K, V> entry = getMap().mutableEntry(entryId);
 					if (!getMap().keySet().equivalence().elementEquals(entry.getKey(), value.getKey()))
@@ -687,7 +687,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 
 		@Override
 		public Map.Entry<K, V>[] toArray() {
-			try (Transaction t = lock(false, true, null)) {
+			try (Transaction t = lock(false, null)) {
 				Map.Entry<K, V>[] array = new Map.Entry[size()];
 				CollectionElement<K> keyElement = getMap().keySet().getTerminalElement(true);
 				for (int i = 0; keyElement != null; i++, keyElement = getMap().keySet().getAdjacentElement(keyElement.getElementId(),
@@ -755,8 +755,8 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 		}
 
 		@Override
-		public Transaction lock(boolean write, boolean structural, Object cause) {
-			return theEntries.lock(write, structural, cause);
+		public Transaction lock(boolean write, Object cause) {
+			return theEntries.lock(write, cause);
 		}
 
 		@Override
@@ -812,7 +812,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 
 		@Override
 		public MapEntryHandle<K, V> putEntry(K key, V value, ElementId after, ElementId before, boolean first) {
-			try (Transaction t = lock(true, true, null)) {
+			try (Transaction t = lock(true, null)) {
 				CollectionElement<Map.Entry<K, V>> entryEl = theEntries.getElement(new SimpleMapEntry<>(key, null), true);
 				if (entryEl != null) {
 					entryEl.get().setValue(value);
@@ -975,7 +975,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 
 			@Override
 			public V setValue(V value) {
-				try (Transaction t = theEntries.lock(true, false, null)) {
+				try (Transaction t = theEntries.lock(true, null)) {
 					V oldValue;
 					synchronized (this) {
 						oldValue = theValue;
@@ -1037,7 +1037,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 		}
 
 		@Override
-		public Transaction lock(boolean write, boolean structural, Object cause) {
+		public Transaction lock(boolean write, Object cause) {
 			return Transaction.NONE;
 		}
 

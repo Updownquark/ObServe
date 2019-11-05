@@ -15,7 +15,6 @@ import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedList;
-import org.qommons.collect.BetterSortedList.SortedSearchFilter;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ListenerList;
@@ -216,13 +215,13 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	}
 
 	@Override
-	public Transaction lock(boolean write, boolean structural, Object cause) {
-		return theCollection.lock(write, structural, cause);
+	public Transaction lock(boolean write, Object cause) {
+		return theCollection.lock(write, cause);
 	}
 
 	@Override
-	public Transaction tryLock(boolean write, boolean structural, Object cause) {
-		return theCollection.tryLock(write, structural, cause);
+	public Transaction tryLock(boolean write, Object cause) {
+		return theCollection.tryLock(write, cause);
 	}
 
 	@Override

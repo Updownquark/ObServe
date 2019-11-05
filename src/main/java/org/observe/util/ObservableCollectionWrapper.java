@@ -72,8 +72,8 @@ public abstract class ObservableCollectionWrapper<E> implements ObservableCollec
 	}
 
 	@Override
-	public long getStamp(boolean structuralOnly) {
-		return getWrapped().getStamp(structuralOnly);
+	public long getStamp() {
+		return getWrapped().getStamp();
 	}
 
 	@Override
@@ -135,13 +135,13 @@ public abstract class ObservableCollectionWrapper<E> implements ObservableCollec
 	}
 
 	@Override
-	public Transaction lock(boolean write, boolean structural, Object cause) {
-		return getWrapped().lock(write, structural, cause);
+	public Transaction lock(boolean write, Object cause) {
+		return getWrapped().lock(write, cause);
 	}
 
 	@Override
-	public Transaction tryLock(boolean write, boolean structural, Object cause) {
-		return getWrapped().tryLock(write, structural, cause);
+	public Transaction tryLock(boolean write, Object cause) {
+		return getWrapped().tryLock(write, cause);
 	}
 
 	@Override

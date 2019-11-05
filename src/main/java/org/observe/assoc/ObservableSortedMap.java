@@ -279,11 +279,6 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 		}
 
 		@Override
-		public Transaction lock(boolean write, boolean structural, Object cause) {
-			return theWrapped.lock(write, structural, cause);
-		}
-
-		@Override
 		public TypeToken<K> getKeyType() {
 			return theWrapped.getKeyType();
 		}
