@@ -17,7 +17,7 @@ import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.FastFailLockingStrategy;
 import org.qommons.collect.MutableCollectionElement;
-import org.qommons.collect.RRWLockingStrategy;
+import org.qommons.collect.StampedLockingStrategy;
 import org.qommons.collect.ValueStoredCollection;
 import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.RedBlackNodeList;
@@ -83,7 +83,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 		 * @return This builder
 		 */
 		public Builder<E> safe(boolean safe) {
-			withLocker(safe ? new RRWLockingStrategy() : new FastFailLockingStrategy());
+			withLocker(safe ? new StampedLockingStrategy() : new FastFailLockingStrategy());
 			return this;
 		}
 
@@ -164,7 +164,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			if (theLocker != null)
 				return theLocker;
 			else
-				return new RRWLockingStrategy();
+				return new StampedLockingStrategy();
 		}
 
 		/** @return The sorting for the collection */
