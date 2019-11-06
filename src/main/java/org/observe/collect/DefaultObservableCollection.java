@@ -414,13 +414,13 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	@Override
 	public void clear() {
 		try (Transaction t = lock(true, null)) {
-			int[] index = new int[] { size() - 1 };
-			theValues.spliterator(false).forEachElementM(el -> {
-				ObservableCollectionEvent<E> evt = new ObservableCollectionEvent<>(el.getElementId(), getType(), index[0]--,
-					CollectionChangeType.remove, el.get(), el.get(), getCurrentCause());
-				el.remove();
-				fire(evt);
-			}, false);
+			CollectionElement<E> el = getTerminalElement(true);
+			while (el != null) {
+				MutableCollectionElement<E> mutable = mutableElement(el.getElementId());
+				if (mutable.canRemove() == null)
+					mutable.remove();
+				el = getAdjacentElement(el.getElementId(), true);
+			}
 		}
 	}
 

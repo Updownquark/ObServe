@@ -132,19 +132,19 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 			Subscription sub = onChange(action);
 			SubscriptionCause subCause = new SubscriptionCause();
 			try (Transaction ct = SubscriptionCause.use(subCause)) {
-				int[] index = new int[] { forward ? 0 : size() - 1 };
-				entrySet().spliterator(forward).forEachElement(entryEl -> {
+				int index = forward ? 0 : size() - 1;
+				for (CollectionElement<Map.Entry<K, V>> entryEl : entrySet().elements()) {
 					ObservableMultiMapEvent<K, V> mapEvent = new ObservableMultiMapEvent<>(entryEl.getElementId(), entryEl.getElementId(),
-						getKeyType(), getValueType(), index[0], index[0], CollectionChangeType.add, entryEl.get().getKey(), null,
+						getKeyType(), getValueType(), index, index, CollectionChangeType.add, entryEl.get().getKey(), null,
 						entryEl.get().getValue(), subCause);
 					try (Transaction mt = ObservableMultiMapEvent.use(mapEvent)) {
 						action.accept(mapEvent);
 					}
 					if (forward)
-						index[0]++;
+						index++;
 					else
-						index[0]--;
-				}, forward);
+						index--;
+				}
 			}
 			return removeAll -> {
 				if (!removeAll) {
@@ -155,17 +155,17 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 					sub.unsubscribe();
 					SubscriptionCause unsubCause = new SubscriptionCause();
 					try (Transaction ct = SubscriptionCause.use(unsubCause)) {
-						int[] index = new int[] { forward ? 0 : size() - 1 };
-						entrySet().spliterator(forward).forEachElement(entryEl -> {
+						int index = !forward ? 0 : size() - 1;
+						for (CollectionElement<Map.Entry<K, V>> entryEl : entrySet().elements()) {
 							ObservableMultiMapEvent<K, V> mapEvent = new ObservableMultiMapEvent<>(entryEl.getElementId(),
-								entryEl.getElementId(), getKeyType(), getValueType(), index[0], index[0], CollectionChangeType.remove,
-								entryEl.get().getKey(), entryEl.get().getValue(), entryEl.get().getValue(), unsubCause);
+								entryEl.getElementId(), getKeyType(), getValueType(), index, index, CollectionChangeType.remove,
+								entryEl.get().getKey(), entryEl.get().getValue(), entryEl.get().getValue(), subCause);
 							try (Transaction mt = ObservableMultiMapEvent.use(mapEvent)) {
 								action.accept(mapEvent);
 							}
-							if (!forward)
-								index[0]--;
-						}, forward);
+							if (forward)
+								index--;
+						}
 					}
 				}
 			};

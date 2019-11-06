@@ -50,14 +50,12 @@ import org.qommons.Stamped;
 import org.qommons.Ternian;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
-import org.qommons.ValueHolder;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterHashMap;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterMap;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
-import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.OptimisticContext;
@@ -650,7 +648,7 @@ public class ObservableCollectionDataFlowImpl {
 	 * @param write Whether to obtain a write (exclusive) lock or a read (non-exclusive) lock
 	 * @param cause The cause of the lock
 	 * @return The parent lock to close to release it
-	 * @see StructuredTransactable#lock(boolean, boolean, Object)
+	 * @see Transactable#lock(boolean, Object)
 	 */
 	public static Transaction structureAffectedPassLockThroughToParent(CollectionOperation<?, ?, ?> parent, boolean write,
 		Object cause) {
@@ -5279,107 +5277,100 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
-			String[] msg = new String[1];
+			String msg = null;
 			try (Transaction t = theParent.lock(false, null)) {
-				ElementSpliterator<FlattenedHolder> outerSpliter;
-				if (after != null)
-					outerSpliter = theOuterElements.spliterator(((FlattenedElement) after).theHolder.holderElement, true);
-				else
-					outerSpliter = theOuterElements.spliterator();
-
-				boolean[] addable = new boolean[1];
-				boolean[] firstOuter = new boolean[1];
-				boolean[] lastOuter = new boolean[1];
-				while (!addable[0] && !lastOuter[0] && outerSpliter.forElement(holderEl -> {
+				boolean addable = false, firstOuter = false, lastOuter = false;
+				CollectionElement<FlattenedHolder> holderEl = after == null ? theOuterElements.getTerminalElement(true)
+					: theOuterElements.getElement(((FlattenedElement) after).theHolder.holderElement);
+				while (holderEl != null && !addable && !lastOuter) {
 					FlattenedHolder holder = holderEl.get();
-					lastOuter[0] = before != null && ((FlattenedElement) before).theHolder.holderElement.equals(holderEl.getElementId());
+					lastOuter = before != null && ((FlattenedElement) before).theHolder.holderElement.equals(holderEl.getElementId());
 					if (holder.manager == null)
-						return;
+						continue;
 					if (!TypeTokens.get().isInstance(holder.manager.getTargetType(), toAdd)
 						|| !holder.manager.equivalence().isElement(toAdd)) {
-						msg[0] = StdMsg.ILLEGAL_ELEMENT;
-						return;
+						msg = StdMsg.ILLEGAL_ELEMENT;
+						continue;
 					}
 					DerivedCollectionElement<T> innerAfter, innerBefore;
-					if (after != null && firstOuter[0])
+					if (after != null && firstOuter)
 						innerAfter = (DerivedCollectionElement<T>) ((FlattenedElement) after).theParentEl;
 					else
 						innerAfter = null;
-					if (before != null && lastOuter[0])
+					if (before != null && lastOuter)
 						innerBefore = (DerivedCollectionElement<T>) ((FlattenedElement) before).theParentEl;
 					else
 						innerBefore = null;
-					msg[0] = ((ActiveCollectionManager<?, ?, T>) holder.manager).canAdd(toAdd, innerAfter, innerBefore);
-					addable[0] = msg[0] == null;
-				}, true)) {
-					firstOuter[0] = false;
+					msg = ((ActiveCollectionManager<?, ?, T>) holder.manager).canAdd(toAdd, innerAfter, innerBefore);
+					addable = msg == null;
+					firstOuter = false;
 				}
-				if (addable[0])
+				if (addable)
 					return null;
 			}
-			if (msg[0] == null)
-				msg[0] = StdMsg.UNSUPPORTED_OPERATION;
-			return msg[0];
+			if (msg == null)
+				msg = StdMsg.UNSUPPORTED_OPERATION;
+			return msg;
 		}
 
 		@Override
 		public DerivedCollectionElement<T> addElement(T value, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before,
 			boolean first) {
-			String[] msg = new String[1];
-			ValueHolder<DerivedCollectionElement<T>> added = new ValueHolder<>();
+			String msg = null;
+			DerivedCollectionElement<T> added = null;
 			try (Transaction t = theParent.lock(false, null)) {
-				ElementSpliterator<FlattenedHolder> outerSpliter;
+				CollectionElement<FlattenedHolder> holderEl;
 				if (first) {
-					if (before != null)
-						outerSpliter = theOuterElements.spliterator(((FlattenedElement) before).theHolder.holderElement, false);
-					else
-						outerSpliter = theOuterElements.spliterator(false);
-				} else {
 					if (after != null)
-						outerSpliter = theOuterElements.spliterator(((FlattenedElement) after).theHolder.holderElement, true);
+						holderEl = theOuterElements.getElement(((FlattenedElement) after).theHolder.holderElement);
 					else
-						outerSpliter = theOuterElements.spliterator();
+						holderEl = theOuterElements.getTerminalElement(true);
+				} else {
+					if (before != null)
+						holderEl = theOuterElements.getElement(((FlattenedElement) before).theHolder.holderElement);
+					else
+						holderEl = theOuterElements.getTerminalElement(false);
 				}
-
-				boolean[] firstOuter = new boolean[] { first };
-				boolean[] lastOuter = new boolean[] { !first };
-				boolean[] reachedEnd = first ? lastOuter : firstOuter;
-				while (added.get() == null && !reachedEnd[0] && outerSpliter.forElement(holderEl -> {
+				boolean firstOuter = first;
+				boolean lastOuter = !first;
+				while (holderEl != null) {
 					FlattenedHolder holder = holderEl.get();
-					if (!lastOuter[0] && first)
-						lastOuter[0] = before != null
+					if (!lastOuter && first)
+						lastOuter = before != null
 						&& ((FlattenedElement) before).theHolder.holderElement.equals(holderEl.getElementId());
-					if (!firstOuter[0] && !first)
-						firstOuter[0] = after != null && ((FlattenedElement) after).theHolder.holderElement.equals(holderEl.getElementId());
+					if (!firstOuter && !first)
+						firstOuter = after != null && ((FlattenedElement) after).theHolder.holderElement.equals(holderEl.getElementId());
 					if (holder.manager == null)
-						return;
+						continue;
 					if (!TypeTokens.get().isInstance(holder.manager.getTargetType(), value)
 						|| !holder.manager.equivalence().isElement(value)) {
-						msg[0] = StdMsg.ILLEGAL_ELEMENT;
-						return;
+						msg = StdMsg.ILLEGAL_ELEMENT;
+						continue;
 					}
 					DerivedCollectionElement<T> innerAfter, innerBefore;
-					if (after != null && firstOuter[0])
+					if (after != null && firstOuter)
 						innerAfter = (DerivedCollectionElement<T>) ((FlattenedElement) after).theParentEl;
 					else
 						innerAfter = null;
-					if (before != null && lastOuter[0])
+					if (before != null && lastOuter)
 						innerBefore = (DerivedCollectionElement<T>) ((FlattenedElement) before).theParentEl;
 					else
 						innerBefore = null;
-					msg[0] = ((ActiveCollectionManager<?, ?, T>) holder.manager).canAdd(value, innerAfter, innerBefore);
-					if (msg[0] == null)
-						added.accept(((ActiveCollectionManager<?, ?, T>) holder.manager).addElement(value, innerAfter, innerBefore, first));
-				}, true)) {
-					firstOuter[0] = false;
+					msg = ((ActiveCollectionManager<?, ?, T>) holder.manager).canAdd(value, innerAfter, innerBefore);
+					if (msg == null)
+						added = ((ActiveCollectionManager<?, ?, T>) holder.manager).addElement(value, innerAfter, innerBefore, first);
+
+					firstOuter = false;
+					if (first ? lastOuter : firstOuter)
+						break;
 				}
 			}
-			if (added.get() != null)
-				return added.get();
-			if (msg[0] == null || msg[0].equals(StdMsg.UNSUPPORTED_OPERATION))
-				throw new UnsupportedOperationException(msg[0]);
+			if (added != null)
+				return added;
+			if (msg == null || msg.equals(StdMsg.UNSUPPORTED_OPERATION))
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 			else
-				throw new IllegalArgumentException(msg[0]);
+				throw new IllegalArgumentException(msg);
 		}
 
 		@Override

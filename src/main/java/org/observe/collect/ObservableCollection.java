@@ -6,7 +6,6 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Set;
-import java.util.Spliterator;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -63,11 +62,6 @@ import com.google.common.reflect.TypeToken;
  * with modifications to the derived collection affecting the source.</li>
  * <li><b>Modification Control</b> The {@link #flow() flow} API also supports constraints on how or whether a derived collection may be
  * {@link CollectionDataFlow#filterMod(Consumer) modified}.</li>
- * <li><b>Enhanced {@link Spliterator}s</b> ObservableCollections must implement {@link #spliterator(boolean)}, which returns a
- * {@link org.qommons.collect.MutableElementSpliterator}, which is an enhanced {@link Spliterator}. This has potential for the improved
- * performance associated with using {@link Spliterator} instead of {@link Iterator} as well as the reversibility and ability to
- * {@link MutableCollectionElement#add(Object, boolean) add}, {@link MutableCollectionElement#remove() remove}, or
- * {@link MutableCollectionElement#set(Object) replace} elements during iteration.</li>
  * <li><b>Transactionality</b> ObservableCollections support the {@link org.qommons.Transactable} interface, allowing callers to reserve a
  * collection for write or to ensure that the collection is not written to during an operation (for implementations that support this. See
  * {@link org.qommons.Transactable#isLockSupported() isLockSupported()}).</li>
@@ -76,9 +70,9 @@ import com.google.common.reflect.TypeToken;
  * <li><b>Custom {@link #equivalence() equivalence}</b> Instead of being a slave to each element's own {@link Object#equals(Object) equals}
  * scheme, collections can be defined with custom schemes which will affect any operations involving element comparison, such as
  * {@link #contains(Object)} and {@link #remove()}.</li>
- * <li><b>Enhanced element access</b> The {@link #forElement(Object, Consumer, boolean) forObservableElement} and
- * {@link #forMutableElement(Object, Consumer, boolean) forMutableElement} methods, along with several others, allow access to elements in
- * the array without the need and potentially without the performance cost of iterating.</li>
+ * <li><b>Enhanced element access</b> The {@link #getElement(Object, boolean) getElement} and {@link #mutableElement(ElementId)
+ * mutableElement} methods, along with several others, allow access to elements in the array without the need and potentially without the
+ * performance cost of iterating.</li>
  * </ul>
  *
  * @param <E> The type of element in the collection
@@ -150,13 +144,13 @@ public interface ObservableCollection<E> extends BetterList<E> {
 					if (c.isEmpty())
 						return false;
 					Set<E> cSet = ObservableCollectionImpl.toSet(this, equivalence(), c);
-					Spliterator<E> iter = spliterator();
-					boolean[] found = new boolean[1];
-					while (iter.tryAdvance(next -> {
-						found[0] = cSet.contains(next);
-					}) && !found[0]) {
+					CollectionElement<E> el = getTerminalElement(true);
+					while (el != null) {
+						if (cSet.contains(el))
+							return true;
+						el = getAdjacentElement(el.getElementId(), true);
 					}
-					return found[0];
+					return false;
 				}
 			}
 		}
@@ -281,20 +275,25 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		E[] array;
 		try (Transaction t = lock(false, null)) {
 			array = (E[]) java.lang.reflect.Array.newInstance(TypeTokens.get().wrap(TypeTokens.getRawType(getType())), size());
-			int[] i = new int[1];
-			spliterator().forEachRemaining(v -> array[i[0]++] = v);
+			return toArray(array);
 		}
-		return array;
 	}
 
 	@Override
 	default <T> T[] toArray(T[] a) {
 		ArrayList<E> ret;
 		try (Transaction t = lock(false, null)) {
-			ret = new ArrayList<>();
-			spliterator().forEachRemaining(v -> ret.add(v));
+			if (size() > a.length) { // Don't want to mess with this--let ArrayList do it
+				ret = new ArrayList<>(size());
+				ret.addAll(this);
+				return ret.toArray(a);
+			} else {
+				CollectionElement<E> el = getTerminalElement(true);
+				for (int index = 0; el != null; index++, el = getAdjacentElement(el.getElementId(), true))
+					a[index] = (T) el.get();
+				return a;
+			}
 		}
-		return ret.toArray(a);
 	}
 
 	// Simple utility methods

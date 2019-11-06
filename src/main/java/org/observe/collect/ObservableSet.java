@@ -3,12 +3,12 @@ package org.observe.collect;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
+import java.util.Spliterator;
 
 import org.observe.ObservableValue;
 import org.observe.collect.ObservableSetImpl.ConstantObservableSet;
 import org.observe.util.TypeTokens;
 import org.qommons.collect.BetterSet;
-import org.qommons.collect.MutableElementSpliterator;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -29,7 +29,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, BetterSet<E> 
 		public <P> TypeToken<? extends ObservableSet> createCompoundType(TypeToken<P> param) {
 			return new TypeToken<ObservableSet<P>>() {}.where(new TypeParameter<P>() {}, param);
 		}
-		});
+	});
 	/** This class's wildcard {@link TypeToken} */
 	static TypeToken<ObservableSet<?>> TYPE = TYPE_KEY.parameterized();
 
@@ -39,8 +39,8 @@ public interface ObservableSet<E> extends ObservableCollection<E>, BetterSet<E> 
 	}
 
 	@Override
-	default MutableElementSpliterator<E> spliterator() {
-		return ObservableCollection.super.spliterator();
+	default Spliterator<E> spliterator() {
+		return BetterSet.super.spliterator();
 	}
 
 	@Override

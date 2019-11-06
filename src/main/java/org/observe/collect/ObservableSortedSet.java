@@ -4,13 +4,13 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.Iterator;
+import java.util.Spliterator;
 import java.util.function.Supplier;
 
 import org.observe.ObservableValue;
 import org.observe.util.TypeTokens;
 import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.BetterSortedSet;
-import org.qommons.collect.MutableElementSpliterator;
 import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BetterTreeSet;
 
@@ -41,8 +41,8 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSe
 	}
 
 	@Override
-	default MutableElementSpliterator<E> spliterator() {
-		return ObservableSet.super.spliterator();
+	default Spliterator<E> spliterator() {
+		return BetterSortedSet.super.spliterator();
 	}
 
 	@Override
@@ -87,11 +87,6 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSe
 
 	@Override
 	abstract void clear();
-
-	@Override
-	default MutableElementSpliterator<E> spliterator(int index) {
-		return BetterSortedSet.super.spliterator(index);
-	}
 
 	@Override
 	default E lower(E e) {

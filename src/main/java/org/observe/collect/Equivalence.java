@@ -3,7 +3,6 @@ package org.observe.collect;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.Objects;
-import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -22,7 +21,6 @@ import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MutableCollectionElement;
-import org.qommons.collect.MutableElementSpliterator;
 import org.qommons.collect.MutableMapEntryHandle;
 import org.qommons.collect.ValueStoredCollection;
 import org.qommons.tree.BetterTreeMap;
@@ -453,16 +451,6 @@ public interface Equivalence<E> {
 		}
 
 		@Override
-		public MutableElementSpliterator<T2> spliterator(ElementId element, boolean asNext) {
-			return new MappedMutableSpliterator(theWrapped.spliterator(element, asNext));
-		}
-
-		@Override
-		public MutableElementSpliterator<T2> spliterator(boolean fromStart) {
-			return new MappedMutableSpliterator(theWrapped.spliterator(fromStart));
-		}
-
-		@Override
 		public String canAdd(T2 value) {
 			return theWrapped.canAdd(theReverse.apply(value));
 		}
@@ -515,54 +503,6 @@ public interface Equivalence<E> {
 		@Override
 		public void clear() {
 			theWrapped.clear();
-		}
-
-		private class MappedMutableSpliterator extends MutableElementSpliterator.SimpleMutableSpliterator<T2> {
-			private final MutableElementSpliterator<E> theWrappedSpliter;
-
-			public MappedMutableSpliterator(MutableElementSpliterator<E> wrap) {
-				super(MappedSet.this);
-				theWrappedSpliter = wrap;
-			}
-
-			@Override
-			public long estimateSize() {
-				return theWrappedSpliter.estimateSize();
-			}
-
-			@Override
-			public long getExactSizeIfKnown() {
-				return theWrappedSpliter.getExactSizeIfKnown();
-			}
-
-			@Override
-			public int characteristics() {
-				return theWrappedSpliter.characteristics();
-			}
-
-			@Override
-			public Comparator<? super T2> getComparator() {
-				Comparator<? super E> wrapCompare = theWrappedSpliter.getComparator();
-				if (wrapCompare == null)
-					return null;
-				return (t1, t2) -> wrapCompare.compare(theReverse.apply(t1), theReverse.apply(t2));
-			}
-
-			@Override
-			protected boolean internalForElement(Consumer<? super CollectionElement<T2>> action, boolean forward) {
-				return theWrappedSpliter.forElement(el -> action.accept(handleFor(el)), forward);
-			}
-
-			@Override
-			protected boolean internalForElementM(Consumer<? super MutableCollectionElement<T2>> action, boolean forward) {
-				return theWrappedSpliter.forElementM(el -> action.accept(mutableHandleFor(el)), forward);
-			}
-
-			@Override
-			public MutableElementSpliterator<T2> trySplit() {
-				MutableElementSpliterator<E> wrapSplit = theWrappedSpliter.trySplit();
-				return wrapSplit == null ? null : new MappedMutableSpliterator(wrapSplit);
-			}
 		}
 
 		private class MappedRepairListener<X> implements ValueStoredCollection.RepairListener<E, X> {

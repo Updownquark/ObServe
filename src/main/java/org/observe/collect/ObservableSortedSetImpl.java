@@ -187,7 +187,8 @@ public class ObservableSortedSetImpl {
 					private final BetterSortedSet<ElementId> thePresentElements;
 					{
 						thePresentElements = new BetterTreeSet<>(false, ElementId::compareTo);
-						spliterator().forEachElement(el -> thePresentElements.add(el.getElementId()), true);
+						for (CollectionElement<E> el : elements())
+							thePresentElements.add(el.getElementId());
 					}
 
 					@Override

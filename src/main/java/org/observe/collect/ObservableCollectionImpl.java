@@ -52,7 +52,6 @@ import org.qommons.collect.ElementId;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
-import org.qommons.collect.MutableElementSpliterator;
 import org.qommons.tree.BetterTreeSet;
 import org.qommons.tree.BinaryTreeNode;
 
@@ -747,7 +746,13 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		protected boolean find(Consumer<? super CollectionElement<? extends E>> onElement) {
-			return getCollection().find(theTest, onElement, isFirst.withDefault(true));
+			CollectionElement<E> element = getCollection().find(theTest, isFirst.withDefault(true));
+			if (element == null)
+				return false;
+			else {
+				onElement.accept(element);
+				return true;
+			}
 		}
 
 		@Override
@@ -935,7 +940,13 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		protected boolean find(Consumer<? super CollectionElement<? extends E>> onElement) {
-			return getCollection().forElement(theValue, onElement, isFirst);
+			CollectionElement<E> element = getCollection().getElement(theValue, isFirst);
+			if (element == null)
+				return false;
+			else {
+				onElement.accept(element);
+				return true;
+			}
 		}
 
 		@Override
@@ -1003,22 +1014,19 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		protected boolean find(Consumer<? super CollectionElement<? extends E>> onElement) {
-			ValueHolder<CollectionElement<E>> best = new ValueHolder<>();
-			boolean last = !isFirst.withDefault(true);
-			getCollection().spliterator().forEachElement(el -> {
-				if (!best.isPresent())
-					best.accept(el);
-				else {
-					int comp = theCompare.compare(el.get(), best.get().get());
-					if (comp < 0)
-						best.accept(el);
-					else if (last && comp == 0)
-						best.accept(el);
-				}
-			}, true);
-			if (best.isPresent())
-				onElement.accept(best.get());
-			return best.isPresent();
+			boolean first = isFirst.withDefault(true);
+			CollectionElement<E> best = null;
+			CollectionElement<E> el = getCollection().getTerminalElement(first);
+			while (el != null) {
+				if (best == null || theCompare.compare(el.get(), best.get()) < 0)
+					best = el;
+				el = getCollection().getAdjacentElement(el.getElementId(), first);
+			}
+			if (best != null) {
+				onElement.accept(best);
+				return true;
+			} else
+				return false;
 		}
 
 		@Override
@@ -1129,16 +1137,15 @@ public final class ObservableCollectionImpl {
 		/** @return The computation value for the collection's current state */
 		protected X getCurrent() {
 			try (Transaction t = theCollection.lock(false, null)) {
-				ValueHolder<X> value = new ValueHolder<>(init());
-				int[] i = new int[1];
-				theCollection.spliterator().forEachElement(el -> {
-					ObservableCollectionEvent<? extends E> evt = new ObservableCollectionEvent<>(el.getElementId(), theCollection.getType(),
-						i[0]++, CollectionChangeType.add, null, el.get(), null);
-					try (Transaction evtT = Causable.use(evt)) {
-						value.accept(update(value.get(), evt));
-					}
-				}, true);
-				return value.get();
+				X value = init();
+				CollectionElement<E> el = getCollection().getTerminalElement(true);
+				int index = 0;
+				while (el != null) {
+					value = update(value, new ObservableCollectionEvent<>(el.getElementId(), getCollection().getType(), index++, //
+						CollectionChangeType.add, null, el.get(), null));
+					el = getCollection().getAdjacentElement(el.getElementId(), true);
+				}
+				return value;
 			}
 		}
 
@@ -1808,10 +1815,15 @@ public final class ObservableCollectionImpl {
 				theSource.clear();
 			else {
 				boolean reverse = isReversed;
-				spliterator(!reverse).forEachElementM(el -> {
-					if (el.canRemove() == null)
-						el.remove();
-				}, !reverse);
+				try (Transaction t = lock(true, null)) {
+					CollectionElement<E> el = theSource.getTerminalElement(reverse);
+					while (el != null) {
+						MutableCollectionElement<E> mutable = theSource.mutableElement(el.getElementId());
+						if (mutable.canRemove() == null)
+							mutable.remove();
+						el = theSource.getAdjacentElement(el.getElementId(), reverse);
+					}
+				}
 			}
 		}
 
@@ -1861,16 +1873,14 @@ public final class ObservableCollectionImpl {
 						return srcEl == null ? null : elementFor(srcEl, null);
 					}
 				}
-				ElementId[] match = new ElementId[1];
 				boolean forward = first ^ isReversed;
-				MutableElementSpliterator<E> spliter = theSource.spliterator(forward);
-				while (match[0] == null && spliter.forElement(el -> {
+				CollectionElement<E> el = theSource.getTerminalElement(forward);
+				while (el != null) {
 					if (equivalence().elementEquals(map.apply(el.get()), value))
-						match[0] = el.getElementId();
-				}, forward)) {}
-				if (match[0] == null)
-					return null;
-				return elementFor(theSource.getElement(match[0]), map);
+						return elementFor(el, map);
+					el = theSource.getAdjacentElement(el.getElementId(), forward);
+				}
+				return null;
 			}
 		}
 
@@ -2032,17 +2042,18 @@ public final class ObservableCollectionImpl {
 					}
 					try (Transaction sourceLock = theSource.lock(false, evt)) {
 						currentMap[0] = evt.getNewValue();
-						MutableElementSpliterator<? extends E> sourceSpliter = theSource.spliterator(!isReversed);
-						int[] index = new int[1];
-						sourceSpliter.forEachElement(sourceEl -> {
-							E sourceVal = sourceEl.get();
-							ObservableCollectionEvent<? extends T> evt2 = new ObservableCollectionEvent<>(mapId(sourceEl.getElementId()),
-								getType(), index[0]++, CollectionChangeType.set, evt.getOldValue().apply(sourceVal),
+						CollectionElement<E> el = theSource.getTerminalElement(!isReversed);
+						int index = 0;
+						while (el != null) {
+							E sourceVal = el.get();
+							ObservableCollectionEvent<? extends T> evt2 = new ObservableCollectionEvent<>(mapId(el.getElementId()),
+								getType(), index++, CollectionChangeType.set, evt.getOldValue().apply(sourceVal),
 								currentMap[0].apply(sourceVal), evt);
 							try (Transaction evtT = Causable.use(evt2)) {
 								observer.accept(evt2);
 							}
-						}, !isReversed);
+							el = theSource.getAdjacentElement(el.getElementId(), !isReversed);
+						}
 					}
 				});
 				try (Transaction sourceT = theSource.lock(false, null)) {
