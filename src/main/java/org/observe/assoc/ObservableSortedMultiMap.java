@@ -36,9 +36,6 @@ import com.google.common.reflect.TypeToken;
  */
 public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>, BetterSortedMultiMap<K, V> {
 	@Override
-	Comparator<? super K> comparator();
-
-	@Override
 	ObservableSortedSet<K> keySet();
 
 	@Override

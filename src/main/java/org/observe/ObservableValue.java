@@ -438,7 +438,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 					@Override
 					public <E extends ObservableValueEvent<? extends Observable<? extends T>>> void onNext(E event) {
 						if (event.getNewValue() != null) {
-							event.getNewValue().takeUntil(value.changes().noInit()).subscribe(new Observer<T>() {
+							event.getNewValue().takeUntil(value.noInitChanges()).subscribe(new Observer<T>() {
 								@Override
 								public <V extends T> void onNext(V event2) {
 									observer.onNext(event2);

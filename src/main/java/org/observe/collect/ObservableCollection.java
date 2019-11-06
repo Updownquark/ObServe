@@ -196,19 +196,19 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		try (Transaction t = lock(false, null)) {
 			// Initial events
 			//			int[] index = new int[] { forward ? 0 : size() - 1 };
-			int [] index=new int[]{0};
+			int index = 0;
 			SubscriptionCause cause = new SubscriptionCause();
 			try (Transaction ct = SubscriptionCause.use(cause)) {
 				CollectionElement<E> el = getTerminalElement(forward);
 				while (el != null) {
-					ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), getType(), index[0],
+					ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), getType(), index,
 						CollectionChangeType.add, null, el.get(), cause);
 					try (Transaction evtT = Causable.use(event)) {
 						observer.accept(event);
 					}
 					el = getAdjacentElement(el.getElementId(), forward);
 					if (forward)
-						index[0]++;
+						index++;
 				}
 			}
 			// Subscribe changes
@@ -221,20 +221,20 @@ public interface ObservableCollection<E> extends BetterList<E> {
 				if (removeAll) {
 					// Remove events
 					// Remove elements in reverse order from how they were subscribed
-					int[] index = new int[] { !forward ? 0 : size() - 1 };
+					int index = !forward ? 0 : size() - 1;
 					SubscriptionCause cause = new SubscriptionCause();
 					try (Transaction ct = SubscriptionCause.use(cause)) {
 						CollectionElement<E> el = getTerminalElement(!forward);
 						while (el != null) {
 							E value = el.get();
-							ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), getType(), index[0],
+							ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), getType(), index,
 								CollectionChangeType.remove, value, value, cause);
 							try (Transaction evtT = Causable.use(event)) {
 								observer.accept(event);
 							}
 							el = getAdjacentElement(el.getElementId(), !forward);
 							if (forward)
-								index[0]--;
+								index--;
 						}
 					}
 				}
