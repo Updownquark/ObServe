@@ -115,7 +115,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 	 * @param valueType The value type of the map
 	 * @return The entry type for the map
 	 */
-	static <K, V> TypeToken<MultiEntryValueHandle<K, V>> buildEntryValueType(TypeToken<K> keyType, TypeToken<V> valueType) {
+	static <K, V> TypeToken<MultiEntryValueHandle<K, V>> buildValueEntryType(TypeToken<K> keyType, TypeToken<V> valueType) {
 		return VALUE_ENTRY_KEY.getCompoundType(keyType, valueType);
 	}
 
