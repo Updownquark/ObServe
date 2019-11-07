@@ -10,6 +10,7 @@ import org.observe.assoc.ObservableGraph;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
 import org.qommons.Transaction;
+import org.qommons.collect.CollectionElement;
 import org.qommons.collect.Graph;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.MutableGraph;
@@ -220,8 +221,8 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 
 	@Override
 	public boolean removeEdge(Graph.Edge<N, E> edge) {
-		boolean[] found = new boolean[1];
-		return theNodes.forElement((ObservableGraph.Node<N, E>) edge.getStart(), el -> found[0] = el.get().getOutward().remove(edge), true);
+		CollectionElement<ObservableGraph.Node<N, E>> nodeEl = theNodes.getElement((ObservableGraph.Node<N, E>) edge.getStart(), true);
+		return nodeEl != null && nodeEl.get().getOutward().remove(edge);
 	}
 
 	@Override
@@ -238,7 +239,10 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 	 * @param node The node to fire the event on
 	 */
 	public void reset(ObservableGraph.Node<N, E> node) {
-		theNodes.forMutableElement(node, el -> el.set(el.get()), true);
+		CollectionElement<ObservableGraph.Node<N, E>> nodeEl = theNodes.getElement(node, true);
+		if (nodeEl == null)
+			return;
+		theNodes.mutableElement(nodeEl.getElementId()).set(nodeEl.get());
 	}
 
 	/**
@@ -247,10 +251,15 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 	 * @param edge The edge to fire the event on
 	 */
 	public void reset(ObservableGraph.Edge<N, E> edge) {
-		theNodes.forElement(edge.getStart(), //
-			el -> ((ObservableCollection<ObservableGraph.Edge<N, E>>) el.get().getOutward()).forMutableElement(edge, //
-				edgeEl -> edgeEl.set(edgeEl.get()), true),
-			true);
+		CollectionElement<ObservableGraph.Node<N, E>> nodeEl = theNodes.getElement(edge.getStart(), true);
+		if (nodeEl == null)
+			return;
+		ObservableCollection<ObservableGraph.Edge<N, E>> edges = (ObservableCollection<ObservableGraph.Edge<N, E>>) nodeEl.get()
+			.getOutward();
+		CollectionElement<ObservableGraph.Edge<N, E>> edgeEl = edges.getElement(edge, true);
+		if (edgeEl == null)
+			return;
+		edges.mutableElement(edgeEl.getElementId()).set(edgeEl.get());
 	}
 
 	@Override
