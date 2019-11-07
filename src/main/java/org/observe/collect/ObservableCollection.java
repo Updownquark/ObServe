@@ -26,6 +26,7 @@ import org.observe.collect.FlowOptions.UniqueOptions;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveSetManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
+import org.observe.util.ObservableUtils;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
@@ -89,17 +90,6 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	});
 	/** This class's wildcard {@link TypeToken} */
 	static TypeToken<ObservableCollection<?>> TYPE = TYPE_KEY.parameterized();
-
-	/**
-	 * The {@link ObservableCollectionEvent#getCause() cause} for events fired for extant elements in the collection upon
-	 * {@link #subscribe(Consumer, boolean) subscription}
-	 */
-	public static class SubscriptionCause extends Causable {
-		/** Creates a subscription cause */
-		public SubscriptionCause() {
-			super(null);
-		}
-	}
 
 	// Additional contract methods
 
@@ -195,22 +185,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		Subscription changeSub;
 		try (Transaction t = lock(false, null)) {
 			// Initial events
-			//			int[] index = new int[] { forward ? 0 : size() - 1 };
-			int index = 0;
-			SubscriptionCause cause = new SubscriptionCause();
-			try (Transaction ct = SubscriptionCause.use(cause)) {
-				CollectionElement<E> el = getTerminalElement(forward);
-				while (el != null) {
-					ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), getType(), index,
-						CollectionChangeType.add, null, el.get(), cause);
-					try (Transaction evtT = Causable.use(event)) {
-						observer.accept(event);
-					}
-					el = getAdjacentElement(el.getElementId(), forward);
-					if (forward)
-						index++;
-				}
-			}
+			ObservableUtils.populateValues(this, observer, forward);
 			// Subscribe changes
 			changeSub = onChange(observer);
 		}
@@ -221,22 +196,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 				if (removeAll) {
 					// Remove events
 					// Remove elements in reverse order from how they were subscribed
-					int index = !forward ? 0 : size() - 1;
-					SubscriptionCause cause = new SubscriptionCause();
-					try (Transaction ct = SubscriptionCause.use(cause)) {
-						CollectionElement<E> el = getTerminalElement(!forward);
-						while (el != null) {
-							E value = el.get();
-							ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), getType(), index,
-								CollectionChangeType.remove, value, value, cause);
-							try (Transaction evtT = Causable.use(event)) {
-								observer.accept(event);
-							}
-							el = getAdjacentElement(el.getElementId(), !forward);
-							if (forward)
-								index--;
-						}
-					}
+					ObservableUtils.depopulateValues(this, observer, !forward);
 				}
 			}
 		};

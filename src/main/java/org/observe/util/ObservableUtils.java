@@ -1,9 +1,8 @@
 package org.observe.util;
 
+import java.util.function.Consumer;
 import java.util.function.Function;
 
-import org.observe.ObservableValue;
-import org.observe.ObservableValueEvent;
 import org.observe.Subscription;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
@@ -11,22 +10,79 @@ import org.observe.collect.ObservableCollectionEvent;
 import org.qommons.Causable;
 import org.qommons.Causable.CausableKey;
 import org.qommons.Transaction;
+import org.qommons.collect.CollectionElement;
 
 /** Utility methods for observables */
 public class ObservableUtils {
 	/**
-	 * Wraps an event from an observable value to use a different observable value as the source
-	 *
-	 * @param <T> The type of the value to wrap an event for
-	 * @param event The event to wrap
-	 * @param wrapper The wrapper observable to wrap the event for
-	 * @return An event with the same values as the given event, but created by the given observable
+	 * The {@link ObservableCollectionEvent#getCause() cause} for events fired for extant elements in the collection upon
+	 * {@link ObservableCollection#subscribe(Consumer, boolean) subscription}
 	 */
-	public static <T> ObservableValueEvent<T> wrap(ObservableValueEvent<? extends T> event, ObservableValue<T> wrapper) {
-		if (event.isInitial())
-			return wrapper.createInitialEvent(event.getNewValue(), event.getCause());
-		else
-			return wrapper.createChangeEvent(event.getOldValue(), event.getNewValue(), event.getCause());
+	public static class SubscriptionCause extends Causable {
+		/** Creates a subscription cause */
+		public SubscriptionCause() {
+			super(null);
+		}
+	}
+
+	/**
+	 * Fires an {@link CollectionChangeType#add add}-type {@link ObservableCollectionEvent} for each element in the given collection into
+	 * the given listener.
+	 *
+	 * @param collection The collection whose elements to populate into the listener
+	 * @param observer The listener to populate the collection events into
+	 * @param forward Whether to populate the values from the beginning first or end first
+	 */
+	public static <E> void populateValues(ObservableCollection<E> collection,
+		Consumer<? super ObservableCollectionEvent<? extends E>> observer, boolean forward) {
+		if (collection == null || collection.isEmpty())
+			return;
+		int index = 0;
+		// Assume the collection is already read-locked
+		SubscriptionCause cause = new SubscriptionCause();
+		try (Transaction ct = SubscriptionCause.use(cause)) {
+			CollectionElement<E> el = collection.getTerminalElement(forward);
+			while (el != null) {
+				ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), collection.getType(), index,
+					CollectionChangeType.add, null, el.get(), cause);
+				try (Transaction evtT = Causable.use(event)) {
+					observer.accept(event);
+				}
+				el = collection.getAdjacentElement(el.getElementId(), forward);
+				if (forward)
+					index++;
+			}
+		}
+	}
+
+	/**
+	 * Fires a {@link CollectionChangeType#remove remove}-type {@link ObservableCollectionEvent} for each element in the given collection
+	 * into the given listener.
+	 *
+	 * @param collection The collection whose elements to de-populate from the listener
+	 * @param observer The listener to de-populate the collection events from
+	 * @param forward Whether to de-populate the values from the beginning first or end first
+	 */
+	public static <E> void depopulateValues(ObservableCollection<E> collection,
+		Consumer<? super ObservableCollectionEvent<? extends E>> observer, boolean forward) {
+		if (collection == null || collection.isEmpty())
+			return;
+		int index = forward ? 0 : collection.size() - 1;
+		SubscriptionCause cause = new SubscriptionCause();
+		try (Transaction ct = SubscriptionCause.use(cause)) {
+			CollectionElement<E> el = collection.getTerminalElement(forward);
+			while (el != null) {
+				E value = el.get();
+				ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), collection.getType(), index,
+					CollectionChangeType.remove, value, value, cause);
+				try (Transaction evtT = Causable.use(event)) {
+					observer.accept(event);
+				}
+				el = collection.getAdjacentElement(el.getElementId(), forward);
+				if (!forward)
+					index--;
+			}
+		}
 	}
 
 	/**

@@ -28,6 +28,7 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.DerivedCollectionEle
 import org.observe.collect.ObservableCollectionDataFlowImpl.ElementAccepter;
 import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
 import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
+import org.observe.util.ObservableUtils;
 import org.observe.util.TypeTokens;
 import org.observe.util.WeakListening;
 import org.qommons.ArrayUtils;
@@ -2667,8 +2668,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
-			return Lockable.tryLock(theCollectionObservable,
-				() -> Lockable.lockable(theCollectionObservable.get(), write, cause));
+			return Lockable.tryLock(theCollectionObservable, () -> Lockable.lockable(theCollectionObservable.get(), write, cause));
 		}
 
 		@Override
@@ -2830,125 +2830,215 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public Observable<? extends CollectionChangeEvent<E>> changes() {
-			class Changes extends AbstractIdentifiable implements Observable<CollectionChangeEvent<E>>{
+			class Changes extends AbstractIdentifiable implements Observable<CollectionChangeEvent<E>> {
 				@Override
 				public Subscription subscribe(Observer<? super CollectionChangeEvent<E>> observer) {
-					ObservableCollection<? extends E> [] coll=new ObservableCollection[1];
-					Subscription [] collSub=new Subscription[1];
-					Subscription obsSub=theCollectionObservable.changes().subscribe(new Observer<ObservableValueEvent<? extends ObservableCollection<? extends E>>>(){
-						@Override
-						public <V extends ObservableValueEvent<? extends ObservableCollection<? extends E>>> void onNext(V value) {
-							if(collSub[0]!=null)
-								collSub[0].unsubscribe();
-							if(coll[0]!=null && value.getNewValue()!=null && coll[0].getIdentity().equals(value.getNewValue().getIdentity())){
-								//If the collections have the same identity, then the content can't have changed
-							} else{
-								if(coll[0]!=null){
-									CollectionChangeEvent<E> clearEvt=new CollectionChangeEvent<>(CollectionChangeType.remove, //
+					class ChangeObserver implements Observer<ObservableValueEvent<? extends ObservableCollection<? extends E>>> {
+						private Subscription collectionSub;
+						private ObservableCollection<? extends E> collection;
 
+						@Override
+						public <V extends ObservableValueEvent<? extends ObservableCollection<? extends E>>> void onNext(V collEvt) {
+							// If the collections have the same identity, then the content can't have changed
+							boolean clearAndAdd;
+							if (collEvt.isInitial())
+								clearAndAdd = false;
+							else if (collection == null || collEvt.getNewValue() == null)
+								clearAndAdd = true;
+							else
+								clearAndAdd = !collection.getIdentity().equals(collEvt.getNewValue().getIdentity());
+							if (collection != null) {
+								if (clearAndAdd) {
+									try (Transaction t = collection.lock(false, null)) {
+										collectionSub.unsubscribe();
+										collectionSub = null;
+										if (clearAndAdd) {
+											List<CollectionChangeEvent.ElementChange<E>> elements = new ArrayList<>(collection.size());
+											int index = 0;
+											for (E v : collection)
+												elements.add(new CollectionChangeEvent.ElementChange<>(v, v, index++));
+											CollectionChangeEvent<E> clearEvt = new CollectionChangeEvent<>(CollectionChangeType.remove, //
+												elements, collEvt);
+											try (Transaction evtT = Causable.use(clearEvt)) {
+												observer.onNext(clearEvt);
+											}
+										}
+									}
+								} else {
+									collectionSub.unsubscribe();
+									collectionSub = null;
 								}
-								// TODO Auto-generated method stub
-
+								collection = null;
 							}
-
-							@Override
-							public <V extends ObservableValueEvent<? extends ObservableCollection<? extends E>>> void onCompleted(V value) {
-								// TODO Auto-generated method stub
-
+							collection = collEvt.getNewValue();
+							if (collection != null) {
+								if (clearAndAdd) {
+									try (Transaction t = collection.lock(false, null)) {
+										List<CollectionChangeEvent.ElementChange<E>> elements = new ArrayList<>(collection.size());
+										int index = 0;
+										for (E v : collection)
+											elements.add(new CollectionChangeEvent.ElementChange<>(v, null, index++));
+										CollectionChangeEvent<E> populateEvt = new CollectionChangeEvent<>(CollectionChangeType.add, //
+											elements, collEvt);
+										try (Transaction evtT = Causable.use(populateEvt)) {
+											observer.onNext(populateEvt);
+										}
+										collectionSub = collection.changes()
+											.subscribe((Observer<CollectionChangeEvent<? extends E>>) observer);
+									}
+								} else
+									collectionSub = collection.changes().subscribe((Observer<CollectionChangeEvent<? extends E>>) observer);
 							}
-						});
-									return ()->{
-										obsSub.unsubscribe();
-										if(collSub[0]!=null)
-											collSub[0].unsubscribe();
-										collSub[0]=null;
-									};
-					}
-
-					@Override
-					public boolean isSafe() {
-						return theCollectionObservable.noInitChanges().isSafe();
-					}
-
-					@Override
-					public Transaction lock() {
-						return FlattenedValueCollection.this.lock(false, null);
-					}
-
-					@Override
-					public Transaction tryLock() {
-						return FlattenedValueCollection.this.tryLock(false, null);
-					}
-
-					@Override
-					protected Object createIdentity() {
-						return Identifiable.wrap(FlattenedValueCollection.this.getIdentity(), "changes");
-					}
-				}
-				return ObservableValue.flattenObservableValue(theCollectionObservable.map(coll -> coll != null
-					? (Observable<? extends CollectionChangeEvent<E>>) (Observable<?>) coll.changes() : Observable.empty()));
-			}
-
-			@Override
-			public Observable<Object> simpleChanges() {
-				return ObservableValue
-					.flattenObservableValue(theCollectionObservable.map(coll -> coll != null ? coll.simpleChanges() : Observable.empty()));
-			}
-
-			@Override
-			public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
-				return ObservableCollectionImpl.defaultOnChange(this, observer);
-			}
-
-			@Override
-			public CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer, boolean forward) {
-				CollectionSubscription[] collectSub = new CollectionSubscription[1];
-				Subscription valueSub = theCollectionObservable.changes()
-					.subscribe(new Observer<ObservableValueEvent<? extends ObservableCollection<? extends E>>>() {
-						@Override
-						public <V extends ObservableValueEvent<? extends ObservableCollection<? extends E>>> void onNext(V value) {
-							if (!value.isInitial() && value.getOldValue() == value.getNewValue())
-								return;
-							if (collectSub[0] != null) {
-								collectSub[0].unsubscribe(true);
-								collectSub[0] = null;
-							}
-							// Only honor the forward parameter for the initial value
-							boolean subscribeForward = value.isInitial() ? forward : true;
-							if (value.getNewValue() != null)
-								collectSub[0] = value.getNewValue().subscribe(observer, subscribeForward);
 						}
 
 						@Override
 						public <V extends ObservableValueEvent<? extends ObservableCollection<? extends E>>> void onCompleted(V value) {
-							if (collectSub[0] != null) {
-								collectSub[0].unsubscribe(true);
-								collectSub[0] = null;
-							}
+							unsubscribe();
 						}
-					});
-				return removeAll -> {
-					valueSub.unsubscribe();
-					if (collectSub[0] != null) {
-						collectSub[0].unsubscribe(removeAll);
-						collectSub[0] = null;
+
+						void unsubscribe() {
+							if (collectionSub != null) {
+								collectionSub.unsubscribe();
+								collectionSub = null;
+							}
+							collection = null;
+						}
 					}
-				};
-			}
+					ChangeObserver chgObserver = new ChangeObserver();
+					Subscription obsSub = theCollectionObservable.changes().subscribe(chgObserver);
+					return () -> {
+						obsSub.unsubscribe();
+						chgObserver.unsubscribe();
+					};
+				}
 
-			@Override
-			public int hashCode() {
-				return BetterCollection.hashCode(this);
-			}
+				@Override
+				public boolean isSafe() {
+					return theCollectionObservable.noInitChanges().isSafe();
+				}
 
-			@Override
-			public boolean equals(Object obj) {
-				return BetterCollection.equals(this, obj);
-			}
+				@Override
+				public Transaction lock() {
+					return FlattenedValueCollection.this.lock(false, null);
+				}
 
-			@Override
-			public String toString() {
-				return BetterCollection.toString(this);
+				@Override
+				public Transaction tryLock() {
+					return FlattenedValueCollection.this.tryLock(false, null);
+				}
+
+				@Override
+				protected Object createIdentity() {
+					return Identifiable.wrap(FlattenedValueCollection.this.getIdentity(), "changes");
+				}
 			}
+			return new Changes();
+		}
+
+		@Override
+		public Observable<Object> simpleChanges() {
+			return ObservableValue
+				.flattenObservableValue(theCollectionObservable.map(coll -> coll != null ? coll.simpleChanges() : Observable.empty()));
+		}
+
+		@Override
+		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
+			return subscribe(observer, false, true);
+		}
+
+		@Override
+		public CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer, boolean forward) {
+			return subscribe(observer, true, forward);
+		}
+
+		private CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer, boolean populate,
+			boolean forward) {
+			class ChangesSubscription implements Observer<ObservableValueEvent<? extends ObservableCollection<? extends E>>> {
+				ObservableCollection<? extends E> collection;
+				Subscription collectionSub;
+
+				@Override
+				public <V extends ObservableValueEvent<? extends ObservableCollection<? extends E>>> void onNext(V collEvt) {
+					// The only way we can avoid de-populating and populating the values into the listener is if the old and new collections
+					// share identity *and* element IDs, since those are part of the events and the contract of the subscribe method
+					boolean clearAndAdd;
+					if (!populate && collEvt.isInitial())
+						clearAndAdd = false;
+					else if (collection == null || collEvt.getNewValue() == null//
+						|| !collection.getIdentity().equals(collEvt.getNewValue().getIdentity()))
+						clearAndAdd = true;
+					else if ((collection.isEmpty() && collEvt.getNewValue().isEmpty())//
+						|| collection.getTerminalElement(true).getElementId()
+						.equals(collEvt.getNewValue().getTerminalElement(true).getElementId()))
+						clearAndAdd = false;
+					else
+						clearAndAdd = true;
+					if (collection != null) {
+						if (clearAndAdd) {
+							try (Transaction t = collection.lock(false, null)) {
+								collectionSub.unsubscribe();
+								collectionSub = null;
+								ObservableUtils.depopulateValues(collection, observer, !forward); // De-populate in opposite direction
+							}
+						} else { // Don't need to lock
+							collectionSub.unsubscribe();
+							collectionSub = null;
+						}
+					}
+					collection = collEvt.getNewValue();
+					if (collection != null) {
+						if (clearAndAdd) {
+							try (Transaction t = collection.lock(false, null)) {
+								ObservableUtils.populateValues(collection, observer, forward);
+								collectionSub = collection.onChange(observer);
+							}
+						} else // Don't need to lock
+							collectionSub = collection.onChange(observer);
+					}
+				}
+
+				@Override
+				public <V extends ObservableValueEvent<? extends ObservableCollection<? extends E>>> void onCompleted(V value) {
+					unsubscribe(true);
+				}
+
+				void unsubscribe(boolean removeAll) {
+					if (collection != null) {
+						if (removeAll) {
+							try (Transaction t = collection.lock(false, null)) {
+								collectionSub.unsubscribe();
+								collectionSub = null;
+								ObservableUtils.depopulateValues(collection, observer, !forward); // De-populate in opposite direction
+							}
+						} else { // Don't need to lock
+							collectionSub.unsubscribe();
+							collectionSub = null;
+						}
+						collection = null;
+					}
+				}
+			}
+			ChangesSubscription chgSub = new ChangesSubscription();
+			Subscription obsSub = theCollectionObservable.changes().subscribe(chgSub);
+			return removeAll -> {
+				obsSub.unsubscribe();
+				chgSub.unsubscribe(removeAll);
+			};
+		}
+
+		@Override
+		public int hashCode() {
+			return BetterCollection.hashCode(this);
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return BetterCollection.equals(this, obj);
+		}
+
+		@Override
+		public String toString() {
+			return BetterCollection.toString(this);
 		}
 	}
+}
