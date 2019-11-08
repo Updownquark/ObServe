@@ -39,7 +39,7 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 	public ObservableCollectionTester(String name, ObservableCollection<? extends E> collect, List<E> expected) {
 		theName = name;
 		theCollection = collect;
-		theSyncedCopy=new ArrayList<>();
+		theSyncedCopy = new ArrayList<>();
 		theBatchSyncedCopy = new ArrayList<>();
 		setSynced(true);
 		theExpected = expected;
@@ -47,6 +47,11 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 		checkRemovedValues = true;
 	}
 
+	/**
+	 * @param check Whether {@link ObservableCollectionEvent#getOldValue()} should be checked against the last known value for the element.
+	 *        In some cases, such as uncached mappings, this check may fail under non-error circumstances
+	 * @return This tester
+	 */
 	public ObservableCollectionTester<E> checkRemovedValues(boolean check) {
 		checkRemovedValues = check;
 		return this;
@@ -57,6 +62,7 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 		return theExpected;
 	}
 
+	/** @return Whether {@link ObservableCollectionEvent#getOldValue()} should be checked against the last known value for the element */
 	public boolean isCheckingRemovedValues() {
 		return checkRemovedValues;
 	}
@@ -139,7 +145,7 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 	 * @return The internal state that this tester maintains. Should always match the values of the observable collection when this tester
 	 *         is {@link #setSynced(boolean) synced}.
 	 */
-	public List<E> getSyncedCopy(){
+	public List<E> getSyncedCopy() {
 		return theSyncedCopy;
 	}
 

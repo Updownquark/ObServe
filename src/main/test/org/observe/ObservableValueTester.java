@@ -32,6 +32,7 @@ public class ObservableValueTester<T> extends AbstractObservableTester<T> {
 		setSynced(true);
 	}
 
+	/** @return The observable value being tested */
 	protected ObservableValue<? extends T> getValue() {
 		return theValue;
 	}
@@ -59,6 +60,7 @@ public class ObservableValueTester<T> extends AbstractObservableTester<T> {
 		});
 	}
 
+	/** @param evt The event that occurred */
 	protected void event(ObservableValueEvent<? extends T> evt) {
 		op();
 		Assert.assertEquals(theSynced, evt.getOldValue());

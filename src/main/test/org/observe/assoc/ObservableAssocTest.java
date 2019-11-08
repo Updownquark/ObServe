@@ -23,6 +23,7 @@ import com.google.common.reflect.TypeToken;
 
 /** Runs tests on the data structures built on top of observable collections. */
 public class ObservableAssocTest {
+	/** Tests the default multi-map produced by {@link ObservableMultiMap#create(TypeToken, TypeToken, Equivalence)} */
 	@Test
 	public void testDefaultMultiMap() {
 		ObservableMultiMap<Integer, Integer> map = ObservableMultiMap.create(intType, intType, Equivalence.DEFAULT).gather();
@@ -60,6 +61,7 @@ public class ObservableAssocTest {
 		}
 	}
 
+	/** Tests {@link org.observe.collect.ObservableCollection.CollectionDataFlow#groupBy(java.util.function.Function)} */
 	@Test
 	public void testGroupedMultiMap() {
 		ObservableCollection<Integer> list = ObservableCollection.create(intType);
@@ -101,6 +103,7 @@ public class ObservableAssocTest {
 
 	// TODO Add tests for maps, multi-maps, and graphs and more tests for trees
 
+	/** Tests {@link DefaultObservableGraph} */
 	@Test
 	public void testGraph() {
 		DefaultObservableGraph<Integer, Integer> graph = new DefaultObservableGraph<>(intType, intType);
