@@ -960,29 +960,26 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 * @return A multi-map flow that may be used to produce a multi-map of this flow's values, categorized by the given key mapping
 		 */
 		default <K> ObservableMultiMap.MultiMapFlow<K, T> groupBy(TypeToken<K> keyType, Function<? super T, ? extends K> keyMap) {
-			return groupBy(keyType, keyMap, Equivalence.DEFAULT);
+			return groupBy(flow -> flow.map(keyType, keyMap).distinct());
 		}
 
 		/**
 		 * @param <K> The key type for the map
 		 * @param keyType The key type for the map
 		 * @param keyMap The function to produce keys from this flow's values
-		 * @param keyEquivalence The equivalence set to be used for the key set's uniqueness
-		 * @return A multi-map flow that may be used to produce a multi-map of this flow's values, categorized by the given key mapping
+		 * @param keySorting The ordering for the key set
+		 * @return A sorted multi-map flow that may be used to produce a multi-map of this flow's values, categorized by the given key
+		 *         mapping
 		 */
-		<K> ObservableMultiMap.MultiMapFlow<K, T> groupBy(TypeToken<K> keyType, Function<? super T, ? extends K> keyMap,
-			Equivalence<? super K> keyEquivalence);
+		default <K> ObservableSortedMultiMap.SortedMultiMapFlow<K, T> groupBy(TypeToken<K> keyType, Function<? super T, ? extends K> keyMap,
+			Comparator<? super K> keySorting) {
+			return groupSorted(flow -> flow.map(keyType, keyMap).distinctSorted(keySorting, false));
+		}
 
-		/**
-		 * @param <K> The key type for the map
-		 * @param keyType The key type for the map
-		 * @param keyMap The function to produce keys from this flow's values
-		 * @param keyCompare The comparator to sort the keys
-		 * @return A sorted multi-map flow that may be used to produce a sorted multi-map of this flow's values, categorized by the given
-		 *         key mapping
-		 */
-		<K> ObservableSortedMultiMap.SortedMultiMapFlow<K, T> groupBy(TypeToken<K> keyType, Function<? super T, ? extends K> keyMap,
-			Comparator<? super K> keyCompare);
+		<K> ObservableMultiMap.MultiMapFlow<K, T> groupBy(Function<? super CollectionDataFlow<E, I, T>, DistinctDataFlow<E, ?, K>> keyFlow);
+
+		<K> ObservableSortedMultiMap.SortedMultiMapFlow<K, T> groupSorted(
+			Function<? super CollectionDataFlow<E, I, T>, DistinctSortedDataFlow<E, ?, K>> keyFlow);
 
 		// Terminal operations
 

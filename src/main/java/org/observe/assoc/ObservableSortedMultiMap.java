@@ -8,8 +8,6 @@ import java.util.function.Function;
 import org.observe.Observable;
 import org.observe.Subscription;
 import org.observe.collect.Equivalence;
-import org.observe.collect.FlowOptions.GroupingOptions;
-import org.observe.collect.FlowOptions.UniqueOptions;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
@@ -24,7 +22,6 @@ import org.qommons.collect.ElementId;
 import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MultiEntryHandle;
 import org.qommons.collect.MultiEntryValueHandle;
-import org.qommons.collect.MutableCollectionElement.StdMsg;
 
 import com.google.common.reflect.TypeToken;
 
@@ -128,37 +125,27 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 	}
 
 	interface SortedMultiMapFlow<K, V> extends MultiMapFlow<K, V> {
-		<K2> SortedMultiMapFlow<K2, V> withSortedKeys(Function<DistinctSortedDataFlow<?, ?, K>, DistinctSortedDataFlow<?, ?, K2>> keyMap);
+		default <K2> SortedMultiMapFlow<K2, V> withStillSortedKeys(
+			Function<DistinctSortedDataFlow<?, ?, K>, DistinctSortedDataFlow<?, ?, K2>> keyMap) {
+			return withSortedKeys(keys -> keyMap.apply((DistinctSortedDataFlow<?, ?, K>) keys));
+		}
 
 		@Override
 		<V2> SortedMultiMapFlow<K, V2> withValues(Function<CollectionDataFlow<?, ?, V>, CollectionDataFlow<?, ?, V2>> valueMap);
-
-		@Override
-		SortedMultiMapFlow<K, V> distinctForMap();
-
-		@Override
-		SortedMultiMapFlow<K, V> distinctForMap(Consumer<UniqueOptions> options);
 
 		@Override
 		SortedMultiMapFlow<K, V> reverse();
 
 		@Override
 		default ObservableSortedMultiMap<K, V> gather() {
-			return gather(options -> {});
+			return (ObservableSortedMultiMap<K, V>) MultiMapFlow.super.gather();
 		}
 
 		@Override
-		default ObservableSortedMultiMap<K, V> gather(Consumer<GroupingOptions> options) {
-			return gather(Observable.empty, options);
-		}
+		ObservableSortedMultiMap<K, V> gatherPassive();
 
 		@Override
-		default ObservableSortedMultiMap<K, V> gather(Observable<?> until) {
-			return gather(until, options -> {});
-		}
-
-		@Override
-		ObservableSortedMultiMap<K, V> gather(Observable<?> until, Consumer<GroupingOptions> options);
+		ObservableSortedMultiMap<K, V> gatherActive(Observable<?> until);
 	}
 
 	/**
@@ -264,6 +251,11 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		}
 
 		@Override
+		public ObservableSortedMultiMap<K, V> subMap(Comparable<? super K> from, Comparable<? super K> to) {
+			return getSource().subMap(from, to).reverse();
+		}
+
+		@Override
 		public Subscription onChange(Consumer<? super ObservableMultiMapEvent<? extends K, ? extends V>> action) {
 			try (Transaction t = lock(false, null)) {
 				return getSource().onChange(evt -> {
@@ -360,13 +352,22 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		}
 
 		@Override
+		public ObservableSortedMultiMap<K, V> subMap(Comparable<? super K> from, Comparable<? super K> to) {
+			return getWrapped().subMap(//
+				BetterSortedList.and(getLowerBound(), from, true), //
+				BetterSortedList.and(getUpperBound(), to, true));
+		}
+
+		@Override
 		public SortedMultiMapFlow<K, V> flow() {
-			return getWrapped().flow().withSortedKeys(keys -> keys.filter(k -> {
-				if (getLowerBound() != null && getLowerBound().compareTo(k) > 0)
-					return StdMsg.ILLEGAL_ELEMENT;
-				if (getUpperBound() != null && getUpperBound().compareTo(k) < 0)
-					return StdMsg.ILLEGAL_ELEMENT;
-				return null;
+			return getWrapped().flow().withStillSortedKeys(keys -> keys.filter(k -> {
+				int comp = isInRange(k);
+				if (comp < 0)
+					return "Key is too low";
+				else if (comp > 0)
+					return "Key is too high";
+				else
+					return null;
 			}));
 		}
 

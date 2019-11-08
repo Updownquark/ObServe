@@ -7,14 +7,14 @@ import java.util.function.Function;
 
 import org.observe.Observable;
 import org.observe.Subscription;
+import org.observe.assoc.ObservableSortedMultiMap.SortedMultiMapFlow;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.CollectionSubscription;
 import org.observe.collect.Equivalence;
-import org.observe.collect.FlowOptions.GroupingOptions;
-import org.observe.collect.FlowOptions.UniqueOptions;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.DistinctDataFlow;
+import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
 import org.observe.collect.ObservableCollectionEvent;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.SettableElement;
@@ -674,6 +674,8 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		 */
 		<K2> MultiMapFlow<K2, V> withKeys(Function<DistinctDataFlow<?, ?, K>, DistinctDataFlow<?, ?, K2>> keyMap);
 
+		<K2> SortedMultiMapFlow<K2, V> withSortedKeys(Function<DistinctDataFlow<?, ?, K>, DistinctSortedDataFlow<?, ?, K2>> keyMap);
+
 		/**
 		 * @param <V2> The value type for the derived flow
 		 * @param valueMap The function to produce a derived value flow from the value flow of each of this flow's entries' value
@@ -681,17 +683,6 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		 * @return The derived flow
 		 */
 		<V2> MultiMapFlow<K, V2> withValues(Function<CollectionDataFlow<?, ?, V>, CollectionDataFlow<?, ?, V2>> valueMap);
-
-		/** @return A flow that contains no 2 equivalent values in the entire map */
-		default MultiMapFlow<K, V> distinctForMap() {
-			return distinctForMap(options -> {});
-		}
-
-		/**
-		 * @param options Options governing the value distinctness
-		 * @return A flow that contains no 2 equivalent values in the entire map
-		 */
-		MultiMapFlow<K, V> distinctForMap(Consumer<UniqueOptions> options);
 
 		/**
 		 * @return A flow identical to this flow, but whose keys are reversed in the key set and whose values are reversed in each key's
@@ -709,30 +700,18 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 
 		/** @return An ObservableMultiMap derived from this flow's source by this flow's configuration */
 		default ObservableMultiMap<K, V> gather() {
-			return gather(options -> {});
+			if (prefersPassive())
+				return gatherPassive();
+			else
+				return gatherActive(Observable.empty());
 		}
 
-		/**
-		 * @param options Options governing the multi-map's grouping behavior
-		 * @return An ObservableMultiMap derived from this flow's source by this flow's configuration
-		 */
-		default ObservableMultiMap<K, V> gather(Consumer<GroupingOptions> options) {
-			return gather(Observable.empty, options);
-		}
+		ObservableMultiMap<K, V> gatherPassive();
 
 		/**
 		 * @param until The observable to terminate the active map's listening (to its source data)
 		 * @return An ObservableMultiMap derived from this flow's source by this flow's configuration
 		 */
-		default ObservableMultiMap<K, V> gather(Observable<?> until) {
-			return gather(until, options -> {});
-		}
-
-		/**
-		 * @param until The observable to terminate the active map's listening (to its source data)
-		 * @param options Options governing the multi-map's grouping behavior
-		 * @return An ObservableMultiMap derived from this flow's source by this flow's configuration
-		 */
-		ObservableMultiMap<K, V> gather(Observable<?> until, Consumer<GroupingOptions> options);
+		ObservableMultiMap<K, V> gatherActive(Observable<?> until);
 	}
 }

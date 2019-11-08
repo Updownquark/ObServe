@@ -427,7 +427,7 @@ public class ObservableSetImpl {
 	 */
 	public static class DistinctBaseFlow<E> extends BaseCollectionDataFlow<E> implements DistinctDataFlow<E, E, E> {
 		/** @param source The source set */
-		protected DistinctBaseFlow(ObservableSet<E> source) {
+		public DistinctBaseFlow(ObservableSet<E> source) {
 			super(source);
 		}
 

@@ -7,7 +7,11 @@ import org.observe.Observable;
 import org.observe.Subscription;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableMultiMapEvent;
+import org.observe.assoc.ObservableSortedMultiMap;
 import org.observe.collect.ObservableCollection;
+import org.observe.collect.ObservableCollection.CollectionDataFlow;
+import org.observe.collect.ObservableCollection.DistinctDataFlow;
+import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveSetManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionElementListener;
@@ -31,9 +35,11 @@ import org.qommons.tree.BetterTreeSet;
 
 import com.google.common.reflect.TypeToken;
 
-public class CollectionGatheredMultiMap<S, K, V> extends AbstractIdentifiable implements ObservableMultiMap<K, V> {
+public class DefaultActiveMultiMap<S, K, V> extends AbstractIdentifiable implements ObservableMultiMap<K, V> {
 	private final ObservableCollection<S> theSource;
-	private final ActiveCollectionManager<S, ?, K> theKeyManager;
+	private final DistinctDataFlow<S, ?, K> theKeyFlow;
+	private final CollectionDataFlow<S, ?, V> theValueFlow;
+	private final ActiveSetManager<S, ?, K> theKeyManager;
 	private final ActiveCollectionManager<S, ?, V> theValueManager;
 
 	private final WeakListening.Builder theWeakListening;
@@ -43,6 +49,8 @@ public class CollectionGatheredMultiMap<S, K, V> extends AbstractIdentifiable im
 	private final BetterTreeList<KeyEntry> theEntries;
 	private final BetterTreeList<KeyEntry> theActiveEntries;
 
+	private final KeySet theKeySet;
+
 	private final BetterSortedMap<ElementId, GroupedElementInfo> theElementInfo;
 
 	private long theStamp;
@@ -51,11 +59,13 @@ public class CollectionGatheredMultiMap<S, K, V> extends AbstractIdentifiable im
 	private final ListenerList<Consumer<? super ObservableMultiMapEvent<? extends K, ? extends V>>> theMapListeners;
 	private final ListenerList<Consumer<? super ObservableCollectionEvent<? extends K>>> theKeySetListeners;
 
-	public CollectionGatheredMultiMap(ObservableCollection<S> source, ActiveSetManager<S, ?, K> keyManager,
-		ActiveCollectionManager<S, ?, V> valueManager, Observable<?> until) {
+	public DefaultActiveMultiMap(ObservableCollection<S> source, DistinctDataFlow<S, ?, K> keyFlow, CollectionDataFlow<S, ?, V> valueFlow,
+		Observable<?> until) {
 		theSource = source;
-		theKeyManager = keyManager;
-		theValueManager = valueManager;
+		theKeyFlow = keyFlow;
+		theValueFlow = valueFlow;
+		theKeyManager = keyFlow.manageActive();
+		theValueManager = valueFlow.manageActive();
 
 		theEntries = new BetterTreeList<>(false);
 		theActiveEntries = new BetterTreeList<>(false);
@@ -102,6 +112,20 @@ public class CollectionGatheredMultiMap<S, K, V> extends AbstractIdentifiable im
 
 			}
 		}, listening);
+
+		theKeySet = new KeySet();
+	}
+
+	protected ObservableCollection<S> getSource() {
+		return theSource;
+	}
+
+	protected DistinctDataFlow<S, ?, K> getKeyFlow() {
+		return theKeyFlow;
+	}
+
+	protected CollectionDataFlow<S, ?, V> getValueFlow() {
+		return theValueFlow;
 	}
 
 	@Override
@@ -157,7 +181,7 @@ public class CollectionGatheredMultiMap<S, K, V> extends AbstractIdentifiable im
 
 	@Override
 	public ObservableSet<K> keySet() {
-		// TODO Auto-generated method stub
+		return theKeySet;
 	}
 
 	@Override
@@ -193,7 +217,22 @@ public class CollectionGatheredMultiMap<S, K, V> extends AbstractIdentifiable im
 
 	@Override
 	public MultiMapFlow<K, V> flow() {
-		// TODO Auto-generated method stub
+		if (this instanceof ObservableSortedMultiMap) {
+			return new DefaultSortedMultiMapFlow<S, K, V, K, V>((ObservableSortedMultiMap<K, V>) this, theSource,
+				(DistinctSortedDataFlow<S, ?, K>) theKeyFlow, theValueFlow) {
+				@Override
+				public ObservableSortedMultiMap<K, V> gatherPassive() {
+					return (ObservableSortedMultiMap<K, V>) DefaultActiveMultiMap.this;
+				}
+			};
+		} else {
+			return new DefaultMultiMapFlow<S, K, V, K, V>(this, theSource, theKeyFlow, theValueFlow) {
+				@Override
+				public ObservableMultiMap<K, V> gatherPassive() {
+					return DefaultActiveMultiMap.this;
+				}
+			};
+		}
 	}
 
 	@Override
@@ -287,4 +326,6 @@ public class CollectionGatheredMultiMap<S, K, V> extends AbstractIdentifiable im
 			theValues.add(value);
 		}
 	}
+
+	class KeySet implements ObservableSet<K> {}
 }

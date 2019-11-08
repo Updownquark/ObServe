@@ -23,10 +23,10 @@ import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
 import org.observe.XformOptions;
-import org.observe.assoc.ObservableMap;
 import org.observe.assoc.ObservableMultiMap.MultiMapFlow;
-import org.observe.assoc.ObservableMultiMapImpl;
 import org.observe.assoc.ObservableSortedMultiMap.SortedMultiMapFlow;
+import org.observe.assoc.impl.DefaultMultiMapFlow;
+import org.observe.assoc.impl.DefaultSortedMultiMapFlow;
 import org.observe.collect.Combination.CombinationPrecursor;
 import org.observe.collect.Combination.CombinedFlowDef;
 import org.observe.collect.FlowOptions.MapDef;
@@ -948,31 +948,6 @@ public class ObservableCollectionDataFlowImpl {
 		}
 	}
 
-	private static class GroupedEntry<K, T> implements Map.Entry<K, T> {
-		private final T theValue;
-		private final Function<? super T, ? extends K> theKeyMap;
-
-		GroupedEntry(T value, Function<? super T, ? extends K> keyMap) {
-			theValue = value;
-			theKeyMap = keyMap;
-		}
-
-		@Override
-		public K getKey() {
-			return theKeyMap.apply(theValue);
-		}
-
-		@Override
-		public T getValue() {
-			return theValue;
-		}
-
-		@Override
-		public T setValue(T value) {
-			throw new UnsupportedOperationException();
-		}
-	}
-
 	/**
 	 * An abstract {@link CollectionDataFlow} that delegates many of the derivation methods to standard implementations of this type
 	 *
@@ -1096,19 +1071,19 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public <K> MultiMapFlow<K, T> groupBy(TypeToken<K> keyType, Function<? super T, ? extends K> keyMap,
-			Equivalence<? super K> keyEquivalence) {
-			TypeToken<Map.Entry<K, T>> entryType = ObservableMap.buildEntryType(keyType, getTargetType());
-			return new ObservableMultiMapImpl.DefaultMultiMapFlow<>(map(entryType, v -> new GroupedEntry<>(v, keyMap)), keyEquivalence,
-				equivalence(), this instanceof DistinctDataFlow);
+		public <K> MultiMapFlow<K, T> groupBy(Function<? super CollectionDataFlow<E, I, T>, DistinctDataFlow<E, ?, K>> keyFlow) {
+			DistinctDataFlow<E, ?, K> keys = keyFlow.apply(this);
+			if (keys instanceof DistinctSortedDataFlow)
+				return new DefaultSortedMultiMapFlow<>(null, getSource(), (DistinctSortedDataFlow<E, ?, K>) keys, this);
+			else
+				return new DefaultMultiMapFlow<>(null, getSource(), keys, this);
 		}
 
 		@Override
-		public <K> SortedMultiMapFlow<K, T> groupBy(TypeToken<K> keyType, Function<? super T, ? extends K> keyMap,
-			Comparator<? super K> keyCompare) {
-			TypeToken<Map.Entry<K, T>> entryType = ObservableMap.buildEntryType(keyType, getTargetType());
-			return new ObservableMultiMapImpl.DefaultSortedMultiMapFlow<>(map(entryType, v -> new GroupedEntry<>(v, keyMap)),
-				Equivalence.of(TypeTokens.getRawType(keyType), keyCompare, true), equivalence(), this instanceof DistinctDataFlow);
+		public <K> SortedMultiMapFlow<K, T> groupSorted(
+			Function<? super CollectionDataFlow<E, I, T>, DistinctSortedDataFlow<E, ?, K>> keyFlow) {
+			DistinctSortedDataFlow<E, ?, K> keys = keyFlow.apply(this);
+			return new DefaultSortedMultiMapFlow<>(null, getSource(), keys, this);
 		}
 
 		@Override
@@ -1490,13 +1465,19 @@ public class ObservableCollectionDataFlowImpl {
 		}
 	}
 
-	private static class BaseCollectionPassThrough<E> implements PassiveCollectionManager<E, E, E> {
+	/**
+	 * Supports passive collection of a base collection flow
+	 *
+	 * @param <E> The type of the collection and therefore the flow
+	 */
+	public static class BaseCollectionPassThrough<E> implements PassiveCollectionManager<E, E, E> {
 		private static final ConcurrentHashMap<TypeToken<?>, TypeToken<? extends Function<?, ?>>> thePassThroughFunctionTypes = new ConcurrentHashMap<>();
 
 		private final ObservableCollection<E> theSource;
 		private final ObservableValue<Function<? super E, E>> theFunctionValue;
 
-		BaseCollectionPassThrough(ObservableCollection<E> source) {
+		/** @param source The source collection */
+		public BaseCollectionPassThrough(ObservableCollection<E> source) {
 			theSource = source;
 
 			TypeToken<E> srcType = theSource.getType();
@@ -2723,7 +2704,6 @@ public class ObservableCollectionDataFlowImpl {
 			listening.withConsumer((ObservableCollectionEvent<? extends X> evt) -> {
 				// We're not modifying, but we want to obtain an exclusive lock
 				// to ensure that nothing above or below us is firing events at the same time.
-				// TODO Maybe replace this with an independent lock on the base flow to avoid lock-writing?
 				try (Transaction t = theParent.lock(true, evt)) {
 					IntersectionElement element;
 					switch (evt.getType()) {

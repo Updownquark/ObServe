@@ -178,79 +178,6 @@ public interface FlowOptions {
 		}
 	}
 
-	/** Options used by {@link ObservableCollection.CollectionDataFlow#groupBy(TypeToken, Function)} */
-	class GroupingOptions extends XformOptions.SimpleXformOptions implements UniqueOptions {
-		private final boolean isSorted;
-		private boolean isStaticCategories = false;
-		private boolean isUsingFirst = false;
-		private boolean isPreservingSourceOrder = false;
-
-		public GroupingOptions(boolean sorted) {
-			isSorted = sorted;
-		}
-
-		@Override
-		public GroupingOptions reEvalOnUpdate(boolean reEval) {
-			return (GroupingOptions) super.reEvalOnUpdate(reEval);
-		}
-
-		@Override
-		public GroupingOptions fireIfUnchanged(boolean fire) {
-			return (GroupingOptions) super.fireIfUnchanged(fire);
-		}
-
-		@Override
-		public GroupingOptions cache(boolean cache) {
-			return (GroupingOptions) super.cache(cache);
-		}
-
-		/**
-		 * @param staticCategories Whether the categorization of the source values is static or dynamic
-		 * @return This option set
-		 */
-		public GroupingOptions withStaticCategories(boolean staticCategories) {
-			this.isStaticCategories = staticCategories;
-			return this;
-		}
-
-		@Override
-		public GroupingOptions useFirst(boolean useFirst) {
-			this.isUsingFirst = useFirst;
-			return this;
-		}
-
-		@Override
-		public boolean isUseFirst() {
-			return isUsingFirst;
-		}
-
-		@Override
-		public boolean canPreserveSourceOrder() {
-			return !isSorted;
-		}
-
-		@Override
-		public GroupingOptions preserveSourceOrder(boolean preserveOrder) {
-			if (isSorted && preserveOrder) {
-				System.err.println(
-					"Preserve source order is not allowed for sorted maps," + " where ordering is determined by the uniqueness itself");
-				return this;
-			}
-			isPreservingSourceOrder = preserveOrder;
-			return this;
-		}
-
-		@Override
-		public boolean isPreservingSourceOrder() {
-			return isPreservingSourceOrder;
-		}
-
-		/** @return Whether {@link #withStaticCategories(boolean) static categories} is set */
-		public boolean isStaticCategories() {
-			return isStaticCategories;
-		}
-	}
-
 	/**
 	 * An immutable version of {@link MapOptions}
 	 *
@@ -289,34 +216,6 @@ public interface FlowOptions {
 		/** @return Whether the mapping may produce the same output from different source values */
 		public boolean isManyToOne() {
 			return isManyToOne;
-		}
-	}
-
-	/** An immutable version of {@link GroupingOptions} */
-	class GroupingDef {
-		private final boolean isStaticCategories;
-		private final boolean isUsingFirst;
-		private final boolean isPreservingSourceOrder;
-
-		public GroupingDef(GroupingOptions options) {
-			isStaticCategories = options.isStaticCategories();
-			isUsingFirst = options.isUseFirst();
-			isPreservingSourceOrder = options.isPreservingSourceOrder();
-		}
-
-		/** @return Whether to assume that collection values will never change categories */
-		public boolean isStaticCategories() {
-			return isStaticCategories;
-		}
-
-		/** @return Whether to always use the mapped value of the earliest element in the collection as the representative key */
-		public boolean isUsingFirst() {
-			return isUsingFirst;
-		}
-
-		/** @return Whether to preserve the source collection's order in the key set */
-		public boolean isPreservingSourceOrder() {
-			return isPreservingSourceOrder;
 		}
 	}
 }
