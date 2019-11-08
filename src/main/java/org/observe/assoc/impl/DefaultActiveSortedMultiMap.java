@@ -11,13 +11,13 @@ public class DefaultActiveSortedMultiMap<S, K, V> extends DefaultActiveMultiMap<
 implements ObservableSortedMultiMap<K, V> {
 
 	public DefaultActiveSortedMultiMap(ObservableCollection<S> source, DistinctSortedDataFlow<S, ?, K> keyFlow,
-		CollectionDataFlow<S, ?, V> valueFlow, Observable<?> until) {
-		super(source, keyFlow, valueFlow, until);
+		CollectionDataFlow<S, ?, V> valueFlow, Observable<?> until, AddKeyHolder<K> addKey) {
+		super(source, keyFlow, valueFlow, until, addKey);
 	}
 
 	@Override
-	protected DistinctSortedDataFlow<S, ?, K> getKeyFlow() {
-		return (DistinctSortedDataFlow<S, ?, K>) super.getKeyFlow();
+	protected DistinctSortedDataFlow<S, ?, K> getActiveKeyFlow() {
+		return (DistinctSortedDataFlow<S, ?, K>) super.getActiveKeyFlow();
 	}
 
 	@Override

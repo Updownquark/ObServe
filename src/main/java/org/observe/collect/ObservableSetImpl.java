@@ -1164,7 +1164,7 @@ public class ObservableSetImpl {
 		 * @param source The source set
 		 * @param flow The data flow used to create the modified collection
 		 */
-		protected PassiveDerivedSet(ObservableSet<E> source, PassiveCollectionManager<E, ?, T> flow) {
+		public PassiveDerivedSet(ObservableSet<E> source, PassiveCollectionManager<E, ?, T> flow) {
 			super(source, flow);
 		}
 

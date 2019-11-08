@@ -25,6 +25,7 @@ import org.observe.Subscription;
 import org.observe.XformOptions;
 import org.observe.assoc.ObservableMultiMap.MultiMapFlow;
 import org.observe.assoc.ObservableSortedMultiMap.SortedMultiMapFlow;
+import org.observe.assoc.impl.AddKeyHolder;
 import org.observe.assoc.impl.DefaultMultiMapFlow;
 import org.observe.assoc.impl.DefaultSortedMultiMapFlow;
 import org.observe.collect.Combination.CombinationPrecursor;
@@ -126,6 +127,19 @@ public class ObservableCollectionDataFlowImpl {
 			if (isError)
 				throw type.apply(rejectReason);
 			return rejectReason;
+		}
+
+		/**
+		 * @throws UnsupportedOperationException If the rejection reason is that the operation is unsupported
+		 * @throws IllegalArgumentException If the rejection reason is that the argument was illegal
+		 */
+		public void throwIfRejected() throws UnsupportedOperationException, IllegalArgumentException {
+			if (rejectReason == null)
+				return;
+			else if (StdMsg.UNSUPPORTED_OPERATION.equals(rejectReason))
+				throw new UnsupportedOperationException(rejectReason);
+			else
+				throw new IllegalArgumentException(rejectReason);
 		}
 
 		/**
@@ -1071,19 +1085,49 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public <K> MultiMapFlow<K, T> groupBy(Function<? super CollectionDataFlow<E, I, T>, DistinctDataFlow<E, ?, K>> keyFlow) {
+		public <K> MultiMapFlow<K, T> groupBy(Function<? super CollectionDataFlow<E, I, T>, DistinctDataFlow<E, ?, K>> keyFlow,
+			BiFunction<K, T, T> reverse) {
 			DistinctDataFlow<E, ?, K> keys = keyFlow.apply(this);
+			CollectionDataFlow<E, ?, T> values;
+			AddKeyHolder.Default<K> addKey;
+			if (reverse != null) {
+				addKey = new AddKeyHolder.Default<>();
+				values = map(getTargetType(), v -> v, opts -> opts.withReverse(v -> {
+					if (addKey.get() != null)
+						return reverse.apply(addKey.get(), v);
+					else
+						return v;
+				}));
+			} else {
+				addKey = null;
+				values = this;
+			}
 			if (keys instanceof DistinctSortedDataFlow)
-				return new DefaultSortedMultiMapFlow<>(null, getSource(), (DistinctSortedDataFlow<E, ?, K>) keys, this);
+				return new DefaultSortedMultiMapFlow<E, K, T, K, T>(null, getSource(), (DistinctSortedDataFlow<E, ?, K>) keys, values,
+					addKey);
 			else
-				return new DefaultMultiMapFlow<>(null, getSource(), keys, this);
+				return new DefaultMultiMapFlow<>(null, getSource(), keys, values, addKey);
 		}
 
 		@Override
 		public <K> SortedMultiMapFlow<K, T> groupSorted(
-			Function<? super CollectionDataFlow<E, I, T>, DistinctSortedDataFlow<E, ?, K>> keyFlow) {
+			Function<? super CollectionDataFlow<E, I, T>, DistinctSortedDataFlow<E, ?, K>> keyFlow, BiFunction<K, T, T> reverse) {
 			DistinctSortedDataFlow<E, ?, K> keys = keyFlow.apply(this);
-			return new DefaultSortedMultiMapFlow<>(null, getSource(), keys, this);
+			CollectionDataFlow<E, ?, T> values;
+			AddKeyHolder.Default<K> addKey;
+			if (reverse != null) {
+				addKey = new AddKeyHolder.Default<>();
+				values = map(getTargetType(), v -> v, opts -> opts.withReverse(v -> {
+					if (addKey.get() != null)
+						return reverse.apply(addKey.get(), v);
+					else
+						return v;
+				}));
+			} else {
+				addKey = null;
+				values = this;
+			}
+			return new DefaultSortedMultiMapFlow<>(null, getSource(), keys, values, addKey);
 		}
 
 		@Override

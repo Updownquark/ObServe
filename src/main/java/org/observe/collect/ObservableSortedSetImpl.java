@@ -568,7 +568,7 @@ public class ObservableSortedSetImpl {
 	 */
 	public static class DistinctSortedBaseFlow<E> extends DistinctBaseFlow<E> implements DistinctSortedDataFlow<E, E, E> {
 		/** @param source The source set */
-		protected DistinctSortedBaseFlow(ObservableSortedSet<E> source) {
+		public DistinctSortedBaseFlow(ObservableSortedSet<E> source) {
 			super(source);
 		}
 

@@ -24,18 +24,29 @@ public class DefaultSortedMultiMapFlow<S, K0, V0, K, V> extends DefaultMultiMapF
 	 * @param source The source collection whose data the map is to be gathered from
 	 * @param keyFlow The data flow for the map's key set
 	 * @param valueFlow The data flow for all the map's values
+	 * @param addKey Stores the key for which the next value is to be added
 	 */
 	public DefaultSortedMultiMapFlow(ObservableSortedMultiMap<K, V> sourceMap, ObservableCollection<S> source,
-		DistinctSortedDataFlow<S, ?, K> keyFlow,
-		CollectionDataFlow<S, ?, V> valueFlow) {
-		super(sourceMap, source, keyFlow, valueFlow);
+		DistinctSortedDataFlow<S, ?, K> keyFlow, CollectionDataFlow<S, ?, V> valueFlow, AddKeyHolder<K> addKey) {
+		super(sourceMap, source, keyFlow, valueFlow, addKey);
 	}
 
+	/**
+	 * @param sourceMap The source map to support {@link #supportsPassive() passive} map flow
+	 * @param source The source collection whose data the map is to be gathered from
+	 * @param keyFlow The data flow for the map's key set
+	 * @param valueFlow The data flow for all the map's values
+	 * @param addKey Stores the key for which the next value is to be added
+	 * @param passiveKeyFlow The passive key flow if the flow supports {@link #gatherPassive() passive} gathering
+	 * @param passiveValueFlow The passive value flow if the flow supports {@link #gatherPassive() passive} gathering
+	 * @param passivePreferred Whether the flow not only supports, but prefers {@link #gatherPassive() passive} gathering
+	 */
 	protected DefaultSortedMultiMapFlow(ObservableSortedMultiMap<K0, V0> sourceMap, //
-		ObservableCollection<S> source, DistinctSortedDataFlow<S, ?, K> keyFlow, CollectionDataFlow<S, ?, V> valueFlow, //
+		ObservableCollection<S> source, DistinctSortedDataFlow<S, ?, K> keyFlow, CollectionDataFlow<S, ?, V> valueFlow,
+		AddKeyHolder<K> addKey, //
 		DistinctSortedDataFlow<K0, ?, K> passiveKeyFlow,
 		Function<CollectionDataFlow<V0, ?, V0>, CollectionDataFlow<V0, ?, V>> passiveValueFlow, boolean passivePreferred) {
-		super(sourceMap, source, keyFlow, valueFlow, passiveKeyFlow, passiveValueFlow, passivePreferred);
+		super(sourceMap, source, keyFlow, valueFlow, addKey, passiveKeyFlow, passiveValueFlow, passivePreferred);
 	}
 
 	@Override
