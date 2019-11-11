@@ -557,7 +557,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 	class ObservableMultiMapEntrySet<K, V> extends BetterMultiMapEntrySet<K, V> implements ObservableSet<MultiEntryHandle<K, V>> {
 		private Equivalence<? super MultiMap.MultiEntry<? extends K, ?>> theEquivalence;
 
-		public ObservableMultiMapEntrySet(BetterMultiMap<K, V> map) {
+		public ObservableMultiMapEntrySet(ObservableMultiMap<K, V> map) {
 			super(map);
 		}
 

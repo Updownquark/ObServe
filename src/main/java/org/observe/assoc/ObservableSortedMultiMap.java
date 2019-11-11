@@ -15,6 +15,7 @@ import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.util.TypeTokens;
 import org.qommons.Transaction;
+import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterMultiMap;
 import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.BetterSortedMultiMap;
@@ -39,7 +40,7 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 
 	@Override
 	default ObservableSortedSet<? extends MultiEntryHandle<K, V>> entrySet() {
-		return (ObservableSortedSet<? extends MultiEntryHandle<K, V>>) ObservableMultiMap.super.entrySet();
+		return new ObservableSortedMultiMapEntrySet<>(this);
 	}
 
 	@Override
@@ -192,6 +193,73 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		@Override
 		public ObservableSortedMultiMap<K, V> build(Observable<?> until) {
 			return (ObservableSortedMultiMap<K, V>) super.build(until);
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableSortedMultiMap#entrySet()}
+	 * 
+	 * @param <K> The key type of the map
+	 * @param <V> The value type of the map
+	 */
+	class ObservableSortedMultiMapEntrySet<K, V> extends ObservableMultiMapEntrySet<K, V>
+	implements ObservableSortedSet<MultiEntryHandle<K, V>> {
+		public ObservableSortedMultiMapEntrySet(ObservableSortedMultiMap<K, V> map) {
+			super(map);
+		}
+
+		@Override
+		protected ObservableSortedMultiMap<K, V> getMap() {
+			return (ObservableSortedMultiMap<K, V>) super.getMap();
+		}
+
+		@Override
+		public Comparator<? super MultiEntryHandle<K, V>> comparator() {
+			return (entry1, entry2) -> getMap().comparator().compare(entry1.getKey(), entry2.getKey());
+		}
+
+		@Override
+		public CollectionElement<MultiEntryHandle<K, V>> search(Comparable<? super MultiEntryHandle<K, V>> search,
+			SortedSearchFilter filter) {
+			TempEntry temp = new TempEntry();
+			CollectionElement<K> keyEl = getMap().keySet().search(key -> {
+				temp.key = key;
+				return search.compareTo(temp);
+			}, filter);
+			return keyEl == null ? null : entryFor(getMap().getEntryById(keyEl.getElementId()));
+		}
+
+		@Override
+		public int indexFor(Comparable<? super MultiEntryHandle<K, V>> search) {
+			TempEntry temp = new TempEntry();
+			return getMap().keySet().indexFor(key -> {
+				temp.key = key;
+				return search.compareTo(temp);
+			});
+		}
+
+		@Override
+		public MultiEntryHandle<K, V>[] toArray() {
+			return ObservableSortedSet.super.toArray();
+		}
+
+		class TempEntry implements MultiEntryHandle<K, V> {
+			K key;
+
+			@Override
+			public K getKey() {
+				return null;
+			}
+
+			@Override
+			public ElementId getElementId() {
+				throw new IllegalStateException("This method may not be called from a search");
+			}
+
+			@Override
+			public BetterCollection<V> getValues() {
+				throw new IllegalStateException("This method may not be called from a search");
+			}
 		}
 	}
 

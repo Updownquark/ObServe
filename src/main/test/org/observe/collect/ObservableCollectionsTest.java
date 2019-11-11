@@ -65,7 +65,7 @@ public class ObservableCollectionsTest {
 	private static boolean BARRAGE_USE_MAP = true;
 	private static boolean BARRAGE_USE_FILTER = true;
 	private static boolean BARRAGE_USE_COMBINE = true;
-	private static boolean BARRAGE_USE_MULTI_MAP = false;
+	private static boolean BARRAGE_USE_MULTI_MAP = true;
 
 	/** The primitive integer type, for re-use */
 	public static final TypeToken<Integer> intType = TypeToken.of(int.class);
@@ -468,7 +468,9 @@ public class ObservableCollectionsTest {
 				case set:
 					values = synced.get(evt.getKey());
 					Assert.assertNotNull(values);
-					assertEquals(evt.getOldValue(), values.set(evt.getIndex(), evt.getNewValue()));
+					V oldValue = values.set(evt.getIndex(), evt.getNewValue());
+					if (!Objects.equals(evt.getOldValue(), oldValue))
+						assertEquals(evt.getOldValue(), oldValue);
 					break;
 				}
 			}

@@ -536,9 +536,22 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		void updated(V oldValue, V newValue, Object cause) {
 			synchronized (DefaultActiveMultiMap.this) {
 				// Check source elements and adjust against keys
+				BetterSortedSet<GroupedElementInfo> elements = new BetterTreeSet<>(false, GroupedElementInfo::compareTo);
+				for (ElementId sourceElement : getValueManager().getSourceElements(theValueElement, getSourceCollection()))
+					elements.add(getSourceElementInfo(sourceElement));
+				MapEntryHandle<GroupedElementInfo, ElementId> source = theSources.getTerminalEntry(true);
+				while (source != null) {
+					if (!elements.remove(source.getKey())) {
+						source.getKey().removeValue(source.getElementId());
+						theSources.mutableEntry(source.getElementId()).remove();
+					}
+					source = theSources.getAdjacentEntry(source.getElementId(), true);
+				}
+				for (GroupedElementInfo info : elements)
+					theSources.put(info, info.addValue(this));
 				BetterSortedSet<KeyEntry> keys = new BetterTreeSet<>(false, KeyEntry::compareInternal);
-				for (ElementId sourceElement : getValueManager().getSourceElements(theValueElement, getSourceCollection())) {
-					GroupedElementInfo info = getSourceElementInfo(sourceElement);
+				for (GroupedElementInfo info : theSources.keySet()) {
+					info.checkKeys();
 					keys.addAll(info.theKeys);
 				}
 				// Remove this value in key entries that we don't belong to anymore
@@ -556,18 +569,8 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 				}
 
 				for (Map.Entry<KeyEntry, ElementId> entry : theKeys.entrySet()) {
-					if (entry.getKey().activeEntryId != null && entry.getKey().activeEntryId.isPresent()) {
-						ObservableMultiMapEvent<K, V> event = new ObservableMultiMapEvent<>(//
-							entry.getKey().activeEntryId, entry.getValue(), keyType, valueType, //
-							theActiveEntries.getElementsBefore(entry.getKey().activeEntryId), //
-							entry.getKey().theValues.theValues.getElementsBefore(entry.getValue()), //
-							CollectionChangeType.set, entry.getKey().get(), oldValue, newValue, cause);
-						try (Transaction evtT = Causable.use(event)) {
-							theMapListeners.forEach(//
-								listener -> listener.accept(event));
-						}
+					if (entry.getKey().activeEntryId != null && entry.getKey().activeEntryId.isPresent())
 						entry.getKey().theValues.valueUpdated(entry.getValue(), oldValue, newValue, cause);
-					}
 				}
 
 				// Add this value to keys that we didn't belong to before, but do now
@@ -618,7 +621,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		}
 
 		@Override
-		public int compareTo(DefaultActiveMultiMap<S, K, V>.GroupedElementInfo o) {
+		public int compareTo(GroupedElementInfo o) {
 			return sourceElement.compareTo(o.sourceElement);
 		}
 
@@ -626,32 +629,44 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 			return theKeys.addElement(key, false).getElementId();
 		}
 
-		ElementId addValue(ValueRef value) {
-			BetterList<DerivedCollectionElement<K>> keyElements = getKeyManager().getElementsBySource(sourceElement);
-			// I realize that this is the same as clear() and addAll(),
-			// but I'm leaving it this way because we may want to do some operation on each removed and added key at some point
-			// If this matures without such a need, replace all this
-			BetterSortedSet<KeyEntry> newKeys = new BetterTreeSet<>(false, KeyEntry::compareInternal);
-			for (DerivedCollectionElement<K> keyElement : keyElements)
-				newKeys.add(theEntries.searchValue(entry -> keyElement.compareTo(entry.theKeyElement), SortedSearchFilter.OnlyMatch));
+		void checkKeys() {
+			BetterSortedSet<DerivedCollectionElement<K>> keyElements = BetterTreeSet
+				.<DerivedCollectionElement<K>> buildTreeSet(DerivedCollectionElement::compareTo)//
+				.safe(false).build(getKeyManager().getElementsBySource(sourceElement));
 			for (CollectionElement<KeyEntry> key : theKeys.elements()) {
-				if (!newKeys.remove(key.get()))
+				CollectionElement<DerivedCollectionElement<K>> keyEl = keyElements.search(key.get().theKeyElement,
+					SortedSearchFilter.OnlyMatch);
+				if (keyEl != null)
+					keyElements.mutableElement(keyEl.getElementId()).remove(); // Accounted for
+				else {
+					key.get().theSources.remove(this);
 					theKeys.mutableElement(key.getElementId()).remove();
+				}
 			}
-			theKeys.addAll(newKeys);
+			for (DerivedCollectionElement<K> newKey : keyElements) {
+				KeyEntry entry = theEntries.searchValue(k -> newKey.compareTo(k.theKeyElement), SortedSearchFilter.OnlyMatch);
+				entry.theSources.put(this, addKey(entry));
+			}
+		}
+
+		ElementId addValue(ValueRef value) {
+			checkKeys();
 			return theValues.addElement(value, false).getElementId();
 		}
 
 		void removeKey(ElementId keyId) {
 			theKeys.mutableElement(keyId).remove();
-			if (theKeys.isEmpty() && theValues.isEmpty())
+			if (theValues.isEmpty() && theKeys.isEmpty() && elementInfoId.isPresent())
 				theElementInfo.mutableEntry(elementInfoId).remove();
 		}
 
 		void removeValue(ElementId valueId) {
 			theValues.mutableElement(valueId).remove();
-			if (theKeys.isEmpty() && theValues.isEmpty())
+			if (theValues.isEmpty() && (theKeys.isEmpty() || !sourceElement.isPresent()) && elementInfoId.isPresent()) {
+				for (KeyEntry key : theKeys)
+					key.theSources.remove(this);
 				theElementInfo.mutableEntry(elementInfoId).remove();
+			}
 		}
 	}
 
