@@ -963,6 +963,19 @@ public class ObservableSetImpl {
 							theElementsByValue.mutableEntry(theValueId).remove();
 							ObservableCollectionDataFlowImpl.removed(theListener, theValue, innerCause);
 						} else if (theActiveElement == parentEl) {
+							// TODO There is a bug here
+							// that is a failure to account for a consequence of the isPreservingSourceOrder setting:
+							// If the active element of a unique element is removed, then the order of the unique elements may have changed
+							// because the new active element may not be in the same order relative to the active elements of all the other
+							// unique elements.
+							// In this case, the correct operation is to fire are remove and re-add of the unique element
+							// HOWEVER, the BetterCollection contract states that an element cannot be removed and re-added
+							// (because then someone querying the ElementId.isPresent() for the old element
+							// would not be aware that the element has moved),
+							// and the UniqueElement's identity backs that of the ElementId in the collected collection.
+							// So what we actually need to to is to create a new UniqueElement with all the same information as this one,
+							// replace this element with the new one in the manager,
+							// then fire a remove on this one and then an add on the new one.
 							theDebug.act("remove:representativeChange").exec();
 							Map.Entry<DerivedCollectionElement<T>, T> activeEntry = theParentElements.firstEntry();
 							theActiveElement = activeEntry.getKey();

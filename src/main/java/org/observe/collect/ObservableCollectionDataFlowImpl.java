@@ -1092,12 +1092,7 @@ public class ObservableCollectionDataFlowImpl {
 			AddKeyHolder.Default<K> addKey;
 			if (reverse != null) {
 				addKey = new AddKeyHolder.Default<>();
-				values = map(getTargetType(), v -> v, opts -> opts.withReverse(v -> {
-					if (addKey.get() != null)
-						return reverse.apply(addKey.get(), v);
-					else
-						return v;
-				}));
+				values = gatherValues(addKey, reverse);
 			} else {
 				addKey = null;
 				values = this;
@@ -1117,17 +1112,21 @@ public class ObservableCollectionDataFlowImpl {
 			AddKeyHolder.Default<K> addKey;
 			if (reverse != null) {
 				addKey = new AddKeyHolder.Default<>();
-				values = map(getTargetType(), v -> v, opts -> opts.withReverse(v -> {
-					if (addKey.get() != null)
-						return reverse.apply(addKey.get(), v);
-					else
-						return v;
-				}));
+				values = gatherValues(addKey, reverse);
 			} else {
 				addKey = null;
 				values = this;
 			}
 			return new DefaultSortedMultiMapFlow<>(null, getSource(), keys, values, addKey);
+		}
+
+		private <K> CollectionDataFlow<E, ?, T> gatherValues(AddKeyHolder.Default<K> addKey, BiFunction<K, T, T> reverse) {
+			return map(getTargetType(), v -> v, opts -> opts.withReverse(v -> {
+				if (addKey.get() != null)
+					return reverse.apply(addKey.get(), v);
+				else
+					return v;
+			}));
 		}
 
 		@Override

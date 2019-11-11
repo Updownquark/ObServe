@@ -7,6 +7,7 @@ import java.util.function.Function;
 
 import org.observe.Observable;
 import org.observe.Subscription;
+import org.observe.collect.DefaultObservableCollection;
 import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
@@ -14,10 +15,11 @@ import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.util.TypeTokens;
 import org.qommons.Transaction;
-import org.qommons.collect.BetterList;
+import org.qommons.collect.BetterMultiMap;
 import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.BetterSortedMultiMap;
 import org.qommons.collect.CollectionElement;
+import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MultiEntryHandle;
@@ -114,16 +116,12 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		return new SortedSingleMap<>(this, firstValue);
 	}
 
-	static <K, V> SortedMultiMapFlow<K, V> create(TypeToken<K> keyType, TypeToken<V> valueType, Comparator<? super K> keyCompare) {
-		return create(keyType, valueType, keyCompare, ObservableCollection.createDefaultBacking());
-	}
-
-	static <K, V> SortedMultiMapFlow<K, V> create(TypeToken<K> keyType, TypeToken<V> valueType, Comparator<? super K> keyCompare,
-		BetterList<Map.Entry<K, V>> entryCollection) {
-		return (SortedMultiMapFlow<K, V>) ObservableMultiMap.create(keyType, valueType,
-			Equivalence.of(TypeTokens.getRawType(keyType), keyCompare, true));
-	}
-
+	/**
+	 * A {@link ObservableMultiMap.MultiMapFlow} that produces an {@link ObservableSortedMultiMap}
+	 *
+	 * @param <K> The key type for the map
+	 * @param <V> The value type for the map
+	 */
 	interface SortedMultiMapFlow<K, V> extends MultiMapFlow<K, V> {
 		default <K2> SortedMultiMapFlow<K2, V> withStillSortedKeys(
 			Function<DistinctSortedDataFlow<?, ?, K>, DistinctSortedDataFlow<?, ?, K2>> keyMap) {
@@ -146,6 +144,55 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 
 		@Override
 		ObservableSortedMultiMap<K, V> gatherActive(Observable<?> until);
+	}
+
+	/**
+	 * Builds a basic {@link ObservableSortedMultiMap}
+	 *
+	 * @param <K> The key type for the map
+	 * @param <V> The value type for the map
+	 */
+	class Builder<K, V> extends ObservableMultiMap.Builder<K, V> {
+		Builder(DefaultObservableCollection.Builder<MapEntry<K, V>> backingBuilder, TypeToken<K> keyType, TypeToken<V> valueType,
+			Comparator<? super K> sorting, String defaultDescrip) {
+			super(backingBuilder, keyType, valueType, defaultDescrip);
+			super.withKeyEquivalence(Equivalence.of(TypeTokens.getRawType(keyType), sorting, true));
+		}
+
+		@Override
+		public Builder<K, V> safe(boolean safe) {
+			super.safe(safe);
+			return this;
+		}
+
+		@Override
+		public Builder<K, V> withLocker(CollectionLockingStrategy locking) {
+			super.withLocker(locking);
+			return this;
+		}
+
+		@Override
+		public ObservableMultiMap.Builder<K, V> withKeyEquivalence(Equivalence<? super K> keyEquivalence) {
+			return new ObservableMultiMap.Builder<>(getBackingBuilder(), getKeyType(), getValueType(), getDescrip())//
+				.withKeyEquivalence(keyEquivalence).withValueEquivalence(getValueEquivalence());
+		}
+
+		@Override
+		public Builder<K, V> withValueEquivalence(Equivalence<? super V> valueEquivalence) {
+			super.withValueEquivalence(valueEquivalence);
+			return this;
+		}
+
+		@Override
+		public Builder<K, V> withDescription(String description) {
+			super.withDescription(description);
+			return this;
+		}
+
+		@Override
+		public ObservableSortedMultiMap<K, V> build(Observable<?> until) {
+			return (ObservableSortedMultiMap<K, V>) super.build(until);
+		}
 	}
 
 	/**
@@ -390,7 +437,7 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 
 		@Override
 		public String toString() {
-			return ObservableMultiMap.toString(this);
+			return BetterMultiMap.toString(this);
 		}
 	}
 }

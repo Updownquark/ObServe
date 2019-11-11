@@ -1,6 +1,7 @@
 package org.observe.assoc;
 
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -10,6 +11,7 @@ import org.observe.Subscription;
 import org.observe.assoc.ObservableSortedMultiMap.SortedMultiMapFlow;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.CollectionSubscription;
+import org.observe.collect.DefaultObservableCollection;
 import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
@@ -21,12 +23,14 @@ import org.observe.collect.SettableElement;
 import org.observe.util.ObservableUtils.SubscriptionCause;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
+import org.qommons.Identifiable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterMultiMap;
 import org.qommons.collect.BetterSet;
 import org.qommons.collect.CollectionElement;
+import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MultiEntryHandle;
 import org.qommons.collect.MultiEntryValueHandle;
@@ -236,55 +240,200 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 	MultiMapFlow<K, V> flow();
 
 	/**
-	 * @param <K> The (compile-time) key type for the map
-	 * @param <V> The (compile-time) value type for the map
-	 * @param keyType The (run-time) key type for the map
-	 * @param valueType The (run-time) value type for the map
-	 * @param keyEquivalence The equivalence to use for the map's key set distinctness
-	 * @return A flow that may be transformed, if desired, then {@link MultiMapFlow#gather() gathered} into an {@link ObservableMultiMap}
-	 */
-	static <K, V> MultiMapFlow<K, V> create(TypeToken<K> keyType, TypeToken<V> valueType, Equivalence<? super K> keyEquivalence) {
-		return create(keyType, valueType, keyEquivalence, ObservableCollection.createDefaultBacking());
-	}
-
-	/**
-	 * @param <K> The (compile-time) key type for the map
-	 * @param <V> The (compile-time) value type for the map
-	 * @param keyType The (run-time) key type for the map
-	 * @param valueType The (run-time) value type for the map
-	 * @param keyEquivalence The equivalence to use for the map's key set distinctness
-	 * @param entryCollection The list to hold the map's entries. Should not be modified externally.
-	 * @return A flow that may be transformed, if desired, then {@link MultiMapFlow#gather() gathered} into an {@link ObservableMultiMap}
-	 */
-	static <K, V> MultiMapFlow<K, V> create(TypeToken<K> keyType, TypeToken<V> valueType, Equivalence<? super K> keyEquivalence,
-		BetterList<Map.Entry<K, V>> entryCollection) {
-		TypeToken<Map.Entry<K, V>> entryType = new TypeToken<Map.Entry<K, V>>() {}.where(new TypeParameter<K>() {}, keyType.wrap())
-			.where(new TypeParameter<V>() {}, valueType.wrap());
-		ObservableCollection<Map.Entry<K, V>> simpleEntryCollection = ObservableCollection.create(entryType, entryCollection);
-		if (keyEquivalence instanceof Equivalence.ComparatorEquivalence)
-			return new ObservableMultiMapImpl.DefaultSortedMultiMapFlow<>(simpleEntryCollection.flow(),
-				(Equivalence.ComparatorEquivalence<? super K>) keyEquivalence, Equivalence.DEFAULT, false);
-		else
-			return new ObservableMultiMapImpl.DefaultMultiMapFlow<>(simpleEntryCollection.flow(), keyEquivalence, Equivalence.DEFAULT,
-				false);
-	}
-
-	/**
-	 * A default toString implementation for {@link ObservableMultiMap} implementations
+	 * Builds a basic {@link ObservableMultiMap}
 	 *
-	 * @param map The map to print
-	 * @return The string representation of the multi-map
+	 * @param <K> The key type for the map
+	 * @param <V> The value type for the map
+	 * @param keyType The key type for the map
+	 * @param valueType The value type for the map
+	 * @return A builder to build a new {@link ObservableMultiMap}
 	 */
-	public static String toString(ObservableMultiMap<?, ?> map) {
-		StringBuilder str = new StringBuilder();
-		boolean first = true;
-		for (MultiMap.MultiEntry<?, ?> entry : map.entrySet()) {
-			if (!first)
-				str.append('\n');
-			first = false;
-			str.append(entry.getKey()).append('=').append(entry.getValues());
+	public static <K, V> Builder<K, V> build(Class<K> keyType, Class<V> valueType) {
+		return build(TypeTokens.get().of(keyType), TypeTokens.get().of(valueType));
+	}
+
+	/**
+	 * Builds a basic {@link ObservableMultiMap}
+	 *
+	 * @param <K> The key type for the map
+	 * @param <V> The value type for the map
+	 * @param keyType The key type for the map
+	 * @param valueType The value type for the map
+	 * @return A builder to build a new {@link ObservableMultiMap}
+	 */
+	public static <K, V> Builder<K, V> build(TypeToken<K> keyType, TypeToken<V> valueType) {
+		return new Builder<>(null, keyType, valueType, "ObservableMultiMap");
+	}
+
+	/**
+	 * Builds a basic {@link ObservableMultiMap}
+	 *
+	 * @param <K> The key type for the map
+	 * @param <V> the value type for the map
+	 */
+	class Builder<K, V> {
+		/** A super-simple map entry class. The key and the value are both mutable. */
+		static class MapEntry<K, V> {
+			K key;
+			V value;
+
+			MapEntry(V value) {
+				this.value = value;
+			}
+
+			@Override
+			public String toString() {
+				return new StringBuilder().append(key).append('=').append(value).toString();
+			}
 		}
-		return str.toString();
+
+		@SuppressWarnings("rawtypes")
+		private static final TypeToken<MapEntry> INNER_ENTRY_TYPE = TypeTokens.get().of(MapEntry.class);
+
+		private final TypeToken<K> theKeyType;
+		private final TypeToken<V> theValueType;
+		private final DefaultObservableCollection.Builder<MapEntry<K, V>> theBackingBuilder;
+		private Equivalence<? super K> theKeyEquivalence;
+		private Equivalence<? super V> theValueEquivalence;
+		private String theDescription;
+
+		Builder(DefaultObservableCollection.Builder<MapEntry<K, V>> backingBuilder, //
+			TypeToken<K> keyType, TypeToken<V> valueType, String defaultDescrip) {
+			theKeyType = keyType;
+			theValueType = valueType;
+			if (backingBuilder == null)
+				backingBuilder = (DefaultObservableCollection.Builder<MapEntry<K, V>>) // Type hackery for performance reasons
+				(DefaultObservableCollection.Builder<?>) //
+				DefaultObservableCollection.build(INNER_ENTRY_TYPE);
+			theBackingBuilder = backingBuilder;
+			theKeyEquivalence = Equivalence.DEFAULT;
+			theValueEquivalence = Equivalence.DEFAULT;
+			theDescription = defaultDescrip;
+		}
+
+		/**
+		 * @param safe Whether the map should be thread-safe
+		 * @return This builder
+		 */
+		public Builder<K, V> safe(boolean safe) {
+			theBackingBuilder.safe(safe);
+			return this;
+		}
+
+		/**
+		 * @param locking The locking strategy for the map
+		 * @return This builder
+		 */
+		public Builder<K, V> withLocker(CollectionLockingStrategy locking) {
+			theBackingBuilder.withLocker(locking);
+			return this;
+		}
+
+		/**
+		 * @param sorting The sorting for the key set
+		 * @return A sorted builder with the same settings as this builder but that will build an {@link ObservableSortedMultiMap}
+		 */
+		public ObservableSortedMultiMap.Builder<K, V> sortedBy(Comparator<? super K> sorting) {
+			return new ObservableSortedMultiMap.Builder<>(theBackingBuilder, theKeyType, theValueType, sorting, theDescription);
+		}
+
+		/**
+		 * @param keyEquivalence The key equivalence for the multi-map
+		 * @return This builder, or if this builder is {@link #sortedBy(Comparator) sorted}, a new builder with the same settings as this
+		 *         one but the given key equivalence
+		 */
+		public Builder<K, V> withKeyEquivalence(Equivalence<? super K> keyEquivalence) {
+			theKeyEquivalence = keyEquivalence;
+			return this;
+		}
+
+		/**
+		 * @param valueEquivalence The value equivalence for the multi-map
+		 * @return This builder
+		 */
+		public Builder<K, V> withValueEquivalence(Equivalence<? super V> valueEquivalence) {
+			theValueEquivalence = valueEquivalence;
+			return this;
+		}
+
+		/**
+		 * @param description The description for the multi-map's {@link Identifiable#getIdentity() identity}
+		 * @return This builder
+		 */
+		public Builder<K, V> withDescription(String description) {
+			theDescription = description;
+			return this;
+		}
+
+		protected Equivalence<? super V> getValueEquivalence() {
+			return theValueEquivalence;
+		}
+
+		protected void setValueEquivalence(Equivalence<? super V> valueEquivalence) {
+			theValueEquivalence = valueEquivalence;
+		}
+
+		protected String getDescrip() {
+			return theDescription;
+		}
+
+		protected TypeToken<K> getKeyType() {
+			return theKeyType;
+		}
+
+		protected TypeToken<V> getValueType() {
+			return theValueType;
+		}
+
+		protected DefaultObservableCollection.Builder<MapEntry<K, V>> getBackingBuilder() {
+			return theBackingBuilder;
+		}
+
+		/**
+		 * @param until The observable that, when it fires, will release all of the gathered multi-map's resources
+		 * @return The new multi-map
+		 */
+		public ObservableMultiMap<K, V> build(Observable<?> until) {
+			ObservableCollection<MapEntry<K, V>> backing = theBackingBuilder.withDescription(theDescription + " backing").build();
+			MultiMapFlow<K, MapEntry<K, V>> mapFlow;
+			if (theKeyEquivalence instanceof Equivalence.ComparatorEquivalence) {
+				mapFlow = backing.flow()
+					.groupSorted(entries -> entries.map(theKeyType, //
+						entry -> entry.key, //
+						opts -> opts.withElementSetting((element, newValue, replace) -> {
+							if (replace)
+								element.key = newValue;
+							return null;
+						})).distinctSorted(((Equivalence.ComparatorEquivalence<K>) theKeyEquivalence).comparator(), true), //
+						(key, entry) -> {
+							entry.key = key;
+							return entry;
+						});
+			} else {
+				mapFlow = backing.flow().groupBy(//
+					entries -> entries.map(theKeyType, //
+						entry -> entry.key, //
+						opts -> opts.withElementSetting((element, newValue, replace) -> {
+							if (replace)
+								element.key = newValue;
+							return null;
+						}).withEquivalence(theKeyEquivalence)).distinct(), //
+					(key, entry) -> {
+						entry.key = key;
+						return entry;
+					});
+			}
+			return mapFlow.withValues(entries -> entries.map(theValueType, //
+				entry -> entry.value, //
+				opts -> opts.withElementSetting((element, newValue, replace) -> {
+					if (replace)
+						element.value = newValue;
+					return null;
+				}).withReverse(//
+					value -> new MapEntry<>(value)//
+					).withEquivalence(theValueEquivalence)))//
+				.gatherActive(until);
+		}
 	}
 
 	/**

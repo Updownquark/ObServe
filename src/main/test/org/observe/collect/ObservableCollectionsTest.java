@@ -146,12 +146,12 @@ public class ObservableCollectionsTest {
 		ObservableSortedMultiMap<Integer, Integer> groupedSorted;
 		NavigableMap<Integer, List<Integer>> groupedSortedSynced;
 		if (BARRAGE_USE_MULTI_MAP) {
-			grouped = coll.flow().groupBy(intType, groupFn).gather();
+			grouped = coll.flow().groupBy(intType, groupFn, null).gather();
 			d().set("grouped@" + depth, grouped);
 			groupedSynced = new LinkedHashMap<>();
 			ObservableCollectionsTest.sync(grouped, groupedSynced, () -> new ArrayList<>());
 
-			groupedSorted = coll.flow().groupBy(intType, groupFn, Integer::compareTo).gatherActive(null);
+			groupedSorted = coll.flow().groupBy(intType, groupFn, Integer::compareTo, null).gatherActive(null);
 			d().set("groupedSorted@" + depth, groupedSorted);
 			groupedSortedSynced = new TreeMap<>();
 			ObservableCollectionsTest.sync(groupedSorted, groupedSortedSynced, () -> new ArrayList<>());

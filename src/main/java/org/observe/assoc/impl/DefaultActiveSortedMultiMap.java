@@ -1,5 +1,7 @@
 package org.observe.assoc.impl;
 
+import java.util.Comparator;
+
 import org.observe.Observable;
 import org.observe.assoc.ObservableSortedMultiMap;
 import org.observe.collect.ObservableCollection;
@@ -7,10 +9,11 @@ import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSortedSet;
+import org.qommons.collect.CollectionElement;
 
 /**
  * A default, active implementation of {@link ObservableSortedMultiMap}
- * 
+ *
  * @param <S> The type of the source collection whose data the map is gathered from
  * @param <K> The key set of the map
  * @param <V> The value set of the map
@@ -30,11 +33,8 @@ implements ObservableSortedMultiMap<K, V> {
 	}
 
 	@Override
-	protected ObservableSet<K> createKeySet() {}
-
-	@Override
-	protected DistinctSortedDataFlow<S, ?, K> getActiveKeyFlow() {
-		return (DistinctSortedDataFlow<S, ?, K>) super.getActiveKeyFlow();
+	protected ObservableSet<K> createKeySet() {
+		return new SortedKeySet();
 	}
 
 	@Override
@@ -45,5 +45,23 @@ implements ObservableSortedMultiMap<K, V> {
 	@Override
 	public SortedMultiMapFlow<K, V> flow() {
 		return (SortedMultiMapFlow<K, V>) super.flow();
+	}
+
+	/** Implements {@link DefaultActiveSortedMultiMap#keySet()} */
+	protected class SortedKeySet extends KeySet implements ObservableSortedSet<K> {
+		@Override
+		public Comparator<? super K> comparator() {
+			return DefaultActiveSortedMultiMap.this.comparator();
+		}
+
+		@Override
+		public CollectionElement<K> search(Comparable<? super K> search, SortedSearchFilter filter) {
+			return getActiveEntries().searchValue(entry -> search.compareTo(entry.get()), filter);
+		}
+
+		@Override
+		public int indexFor(Comparable<? super K> search) {
+			return getActiveEntries().indexFor(entry -> search.compareTo(entry.get()));
+		}
 	}
 }
