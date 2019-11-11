@@ -13,13 +13,14 @@ import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.DistinctDataFlow;
 import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl;
-import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionOperation;
 import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
+import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSetImpl;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.collect.ObservableSortedSetImpl;
 import org.observe.util.TypeTokens;
+import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.QommonsUtils;
 import org.qommons.Transactable;
@@ -95,7 +96,7 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 	}
 
 	@Override
-	protected CollectionOperation<?, ?, V> getValueManager() {
+	protected PassiveCollectionManager<V0, ?, V> getValueManager() {
 		return theValueManager;
 	}
 
@@ -104,6 +105,10 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 		return theKeySet;
 	}
 
+	/**
+	 * @param srcEntry The entry from the source map to wrap
+	 * @return An entry for this map, backed by the given source entry
+	 */
 	protected MultiEntryHandle<K, V> entryFor(MultiEntryHandle<K0, V0> srcEntry) {
 		return srcEntry == null ? null : new MultiEntryHandle<K, V>() {
 			@Override
@@ -206,7 +211,33 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 
 	@Override
 	public Subscription onChange(Consumer<? super ObservableMultiMapEvent<? extends K, ? extends V>> action) {
-		// TODO Auto-generated method stub
+		return theSourceMap.onChange(sourceEvt -> {
+			Function<? super V0, ? extends V> valueMap = theValueManager.map().get();
+			V oldValue = null, newValue = null;
+			switch (sourceEvt.getType()) {
+			case add:
+				oldValue = null;
+				newValue = valueMap.apply(sourceEvt.getNewValue());
+				break;
+			case remove:
+				oldValue = valueMap.apply(sourceEvt.getOldValue());
+				newValue = oldValue;
+				break;
+			case set:
+				newValue = valueMap.apply(sourceEvt.getNewValue());
+				if (sourceEvt.getOldValue() == sourceEvt.getNewValue())
+					oldValue = newValue;
+				else
+					oldValue = valueMap.apply(sourceEvt.getOldValue());
+				break;
+			}
+			ObservableMultiMapEvent<K, V> event = new ObservableMultiMapEvent<>(sourceEvt.getKeyElement(), sourceEvt.getElementId(), //
+				getKeyType(), getValueType(), sourceEvt.getKeyIndex(), sourceEvt.getIndex(), sourceEvt.getType(), //
+				theKeyManager.map().get().apply(sourceEvt.getKey()), oldValue, newValue, sourceEvt);
+			try (Transaction evtT = Causable.use(event)) {
+				action.accept(event);
+			}
+		});
 	}
 
 	class MappedValueCollection extends AbstractIdentifiable implements BetterCollection<V> {
@@ -321,13 +352,88 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 						first ^ reversed));
 		}
 
-		CollectionElement<V> elementFor(CollectionElement<V0> sourceEl) {}
-
-		MutableCollectionElement<V> mutableElementFor(MutableCollectionElement<V0> sourceEl) {}
-
 		@Override
 		public void clear() {
 			theSourceValues.clear();
+		}
+
+		CollectionElement<V> elementFor(CollectionElement<V0> sourceEl) {
+			return new ValueElement(sourceEl);
+		}
+
+		MutableCollectionElement<V> mutableElementFor(MutableCollectionElement<V0> sourceEl) {
+			return new MutableValueElement(sourceEl);
+		}
+
+		class ValueElement implements CollectionElement<V> {
+			private final CollectionElement<V0> sourceEl;
+
+			ValueElement(CollectionElement<V0> sourceEl) {
+				this.sourceEl = sourceEl;
+			}
+
+			CollectionElement<V0> getSourceEl() {
+				return sourceEl;
+			}
+
+			@Override
+			public ElementId getElementId() {
+				return sourceEl.getElementId();
+			}
+
+			@Override
+			public V get() {
+				return theValueManager.map().get().apply(sourceEl.get());
+			}
+		}
+
+		class MutableValueElement extends ValueElement implements MutableCollectionElement<V> {
+			MutableValueElement(MutableCollectionElement<V0> sourceEl) {
+				super(sourceEl);
+			}
+
+			@Override
+			MutableCollectionElement<V0> getSourceEl() {
+				return (MutableCollectionElement<V0>) super.getSourceEl();
+			}
+
+			@Override
+			public BetterCollection<V> getCollection() {
+				return MappedValueCollection.this;
+			}
+
+			@Override
+			public String isEnabled() {
+				String msg = getValueManager().canReverse();
+				if (msg != null)
+					return msg;
+				return getSourceEl().isEnabled();
+			}
+
+			@Override
+			public String isAcceptable(V value) {
+				FilterMapResult<V, V0> reversed = getValueManager().reverse(value, false);
+				if (reversed.getRejectReason() != null)
+					return reversed.getRejectReason();
+				return getSourceEl().isAcceptable(reversed.result);
+			}
+
+			@Override
+			public void set(V value) throws UnsupportedOperationException, IllegalArgumentException {
+				FilterMapResult<V, V0> reversed = getValueManager().reverse(value, false);
+				reversed.throwIfRejected();
+				getSourceEl().set(reversed.result);
+			}
+
+			@Override
+			public String canRemove() {
+				return getSourceEl().canRemove();
+			}
+
+			@Override
+			public void remove() throws UnsupportedOperationException {
+				getSourceEl().remove();
+			}
 		}
 	}
 }
