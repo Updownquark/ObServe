@@ -43,6 +43,13 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 		this(onSubscribe, null, internalState, safe ? new ReentrantReadWriteLock() : null, null);
 	}
 
+	/**
+	 * @param onSubscribe The function to notify when a subscription is added to this observable
+	 * @param identity The identity for this observable
+	 * @param internalState Whether this observable is firing changes for some valued state
+	 * @param lock The lock for this observable
+	 * @param listening Listening options for this observable
+	 */
 	public SimpleObservable(Consumer<? super Observer<? super T>> onSubscribe, Object identity, boolean internalState,
 		ReentrantReadWriteLock lock, ListenerList.Builder listening) {
 		theIdentity = identity != null ? identity : Identifiable.baseId("observable", this);
@@ -64,6 +71,7 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 		theLock = lock;
 	}
 
+	/** @return This observable's lock */
 	protected ReentrantReadWriteLock getLock() {
 		return theLock;
 	}

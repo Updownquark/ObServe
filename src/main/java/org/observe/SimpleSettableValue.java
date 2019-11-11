@@ -4,7 +4,6 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 
 import org.observe.util.TypeTokens;
-import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.Transaction;
 import org.qommons.collect.ListenerList;
@@ -41,6 +40,12 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 		this(type, nullable, new ReentrantReadWriteLock(), null);
 	}
 
+	/**
+	 * @param type The type of the value
+	 * @param nullable Whether null can be assigned to the value
+	 * @param lock The lock for this value
+	 * @param listeningOptions Listening options for this value's listener list
+	 */
 	public SimpleSettableValue(TypeToken<T> type, boolean nullable, ReentrantReadWriteLock lock,
 		Consumer<ListenerList.Builder> listeningOptions) {
 		this(type, "settable-value", nullable, lock, listeningFor(listeningOptions));
@@ -91,13 +96,6 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 		return theStamp;
 	}
 
-	protected void fireInitial(Observer<? super ObservableValueEvent<T>> observer) {
-		ObservableValueEvent<T> event = createInitialEvent(get(), null);
-		try (Transaction t = Causable.use(event)) {
-			observer.onNext(event);
-		}
-	}
-
 	@Override
 	public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
 		String accept = isAcceptable(value);
@@ -134,7 +132,11 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 		return ALWAYS_ENABLED;
 	}
 
-	/** @return The observable for this value to use to fire its initial and change events */
+	/**
+	 * @param lock The lock for this value
+	 * @param listening Listening options for this value
+	 * @return The observable for this value to use to fire its initial and change events
+	 */
 	protected SimpleObservable<ObservableValueEvent<T>> createEventer(ReentrantReadWriteLock lock, ListenerList.Builder listening) {
 		return new SimpleObservable<>(null, Identifiable.wrap(theIdentity, "noInitChanges"), true, lock, listening);
 	}
