@@ -106,8 +106,6 @@ public class ObservableAssocTest {
 		}
 	}
 
-	// TODO Add tests for maps, multi-maps, and graphs and more tests for trees
-
 	/** Tests {@link DefaultObservableGraph} */
 	@Test
 	public void testGraph() {
