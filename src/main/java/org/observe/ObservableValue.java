@@ -10,7 +10,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.IntSupplier;
+import java.util.function.LongSupplier;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -398,7 +398,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 	 * @param changes The observable that signals that the value may have changed
 	 * @return An observable that supplies the value of the given supplier, firing change events when the given observable fires
 	 */
-	public static <X> ObservableValue<X> of(TypeToken<X> type, Supplier<? extends X> value, IntSupplier stamp, Observable<?> changes) {
+	public static <X> ObservableValue<X> of(TypeToken<X> type, Supplier<? extends X> value, LongSupplier stamp, Observable<?> changes) {
 		return new SyntheticObservable<>(type, value, stamp, changes);
 	}
 
@@ -1150,20 +1150,20 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 	}
 
 	/**
-	 * Implements {@link ObservableValue#of(TypeToken, Supplier, IntSupplier, Observable)}
+	 * Implements {@link ObservableValue#of(TypeToken, Supplier, LongSupplier, Observable)}
 	 *
 	 * @param <T> The type of this value
 	 */
 	class SyntheticObservable<T> implements ObservableValue<T> {
 		private final TypeToken<T> theType;
 		private final Supplier<? extends T> theValue;
-		private final IntSupplier theStamp;
+		private final LongSupplier theStamp;
 		private final Observable<?> theChanges;
 		private Object theIdentity;
 		private Object theChangeIdentity;
 		private Object theNoInitChangeIdentity;
 
-		public SyntheticObservable(TypeToken<T> type, Supplier<? extends T> value, IntSupplier stamp, Observable<?> changes) {
+		public SyntheticObservable(TypeToken<T> type, Supplier<? extends T> value, LongSupplier stamp, Observable<?> changes) {
 			theType = type;
 			theValue = value;
 			theStamp = stamp;
@@ -1177,7 +1177,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 
 		@Override
 		public long getStamp() {
-			return theStamp.getAsInt();
+			return theStamp.getAsLong();
 		}
 
 		@Override

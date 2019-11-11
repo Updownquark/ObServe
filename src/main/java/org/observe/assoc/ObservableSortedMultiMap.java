@@ -241,9 +241,8 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 	 * @param <K> The key type of the map
 	 * @param <V> The value type of the map
 	 */
-	class ReversedObservableSortedMultiMap<K, V> extends BetterSortedMultiMap.ReversedSortedMultiMap<K, V>
-	implements ObservableSortedMultiMap<K, V> {
-		ReversedObservableSortedMultiMap(BetterSortedMultiMap<K, V> source) {
+	class ReversedObservableSortedMultiMap<K, V> extends ReversedObservableMultiMap<K, V> implements ObservableSortedMultiMap<K, V> {
+		ReversedObservableSortedMultiMap(ObservableSortedMultiMap<K, V> source) {
 			super(source);
 		}
 
@@ -253,33 +252,8 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return getSource().isLockSupported();
-		}
-
-		@Override
 		public Comparator<? super K> comparator() {
 			return getSource().comparator().reversed();
-		}
-
-		@Override
-		public TypeToken<K> getKeyType() {
-			return getSource().getKeyType();
-		}
-
-		@Override
-		public TypeToken<V> getValueType() {
-			return getSource().getValueType();
-		}
-
-		@Override
-		public TypeToken<MultiEntryHandle<K, V>> getEntryType() {
-			return getSource().getEntryType();
-		}
-
-		@Override
-		public TypeToken<MultiEntryValueHandle<K, V>> getEntryValueType() {
-			return getSource().getEntryValueType();
 		}
 
 		@Override
@@ -290,11 +264,6 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		@Override
 		public ObservableSortedSet<? extends MultiEntryHandle<K, V>> entrySet() {
 			return (ObservableSortedSet<? extends MultiEntryHandle<K, V>>) super.entrySet();
-		}
-
-		@Override
-		public ObservableCollection<V> get(Object key) {
-			return (ObservableCollection<V>) super.get(key);
 		}
 
 		@Override
@@ -331,7 +300,7 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 
 		@Override
 		public ObservableSortedMultiMap<K, V> reverse() {
-			return (ObservableSortedMultiMap<K, V>) super.reverse();
+			return getSource();
 		}
 	}
 
@@ -391,6 +360,21 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 			Function<MultiEntryHandle<K, V>, MultiEntryHandle<K, V>> map = entry -> entry.reverse();
 			return ((ObservableSortedSet<MultiEntryHandle<K, V>>) getWrapped().entrySet()).reverse().flow()
 				.mapEquivalent(getWrapped().getEntryType(), map, map, options -> options.cache(false)).collectPassive();
+		}
+
+		@Override
+		public ObservableMultiEntry<K, V> watchById(ElementId keyId) {
+			// TODO This is technically incorrect, because the value of this particular key element could potentially change,
+			// leaving this map's key set
+			getEntryById(keyId);// Check to make sure the element is in this map
+			return getWrapped().watchById(keyId);
+		}
+
+		@Override
+		public ObservableMultiEntry<K, V> watch(K key) {
+			if (super.isInRange(key) != 0)
+				return ObservableMultiEntry.empty(key, getValueType());
+			return getWrapped().watch(key);
 		}
 
 		@Override

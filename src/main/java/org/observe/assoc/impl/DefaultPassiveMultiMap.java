@@ -19,6 +19,7 @@ import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSetImpl;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.collect.ObservableSortedSetImpl;
+import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
@@ -131,6 +132,21 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 	@Override
 	public MultiEntryHandle<K, V> getEntryById(ElementId keyId) {
 		return entryFor(theSourceMap.getEntryById(keyId));
+	}
+
+	@Override
+	public ObservableMultiEntry<K, V> watchById(ElementId keyId) {
+		ObservableMultiEntry<K0, V0> sourceEntry = theSourceMap.watchById(keyId);
+		return new PassivelyDerivedMultiEntry(theKeyManager.map().get().apply(sourceEntry.getKey()), sourceEntry);
+	}
+
+	@Override
+	public ObservableMultiEntry<K, V> watch(K key) {
+		FilterMapResult<K, K0> reversedKey = theKeyManager.reverse(key, true);
+		if (!reversedKey.isAccepted())
+			return new PassivelyDerivedMultiEntry(key, null);
+		else
+			return new PassivelyDerivedMultiEntry(key, theSourceMap.watch(reversedKey.result));
 	}
 
 	@Override
@@ -434,6 +450,30 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 			public void remove() throws UnsupportedOperationException {
 				getSourceEl().remove();
 			}
+		}
+	}
+
+	class PassivelyDerivedMultiEntry extends ObservableCollectionWrapper<V> implements ObservableMultiEntry<K, V> {
+		private final K theKey;
+		private final ObservableMultiEntry<K0, V0> theSourceEntry;
+
+		PassivelyDerivedMultiEntry(K key, ObservableMultiEntry<K0, V0> sourceEntry) {
+			theKey = key;
+			theSourceEntry = sourceEntry;
+			if (theSourceEntry != null)
+				init(theValueFlow.apply(theSourceEntry.flow()).collectPassive());
+			else
+				init(ObservableCollection.of(getValueType()));
+		}
+
+		@Override
+		public ElementId getKeyId() {
+			return theSourceEntry == null ? null : theSourceEntry.getKeyId();
+		}
+
+		@Override
+		public K getKey() {
+			return theKey;
 		}
 	}
 }

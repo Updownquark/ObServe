@@ -250,10 +250,14 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 	}
 
 	@Override
-	public ObservableCollection<V> get(Object key) {
-		if (!keySet().belongs(key))
-			return ObservableCollection.of(getValueType());
-		return new KeyValueCollection((K) key);
+	public ObservableMultiEntry<K, V> watch(K key) {
+		return new KeyValueCollection(key, null);
+	}
+
+	@Override
+	public ObservableMultiEntry<K, V> watchById(ElementId keyId) {
+		MultiEntryHandle<K, V> entry = getEntryById(keyId);
+		return new KeyValueCollection(entry.getKey(), (KeyEntry) entry);
 	}
 
 	@Override
@@ -1248,12 +1252,23 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 	}
 
 	/** Implements {@link DefaultActiveMultiMap#get(Object)} */
-	protected class KeyValueCollection extends AbstractIdentifiable implements ObservableCollection<V> {
+	protected class KeyValueCollection extends AbstractIdentifiable implements ObservableMultiEntry<K, V> {
 		private final K theKey;
 		private KeyEntry theCurrentEntry;
 
-		KeyValueCollection(K key) {
+		KeyValueCollection(K key, KeyEntry currentEntry) {
 			theKey = key;
+			theCurrentEntry = currentEntry;
+		}
+
+		@Override
+		public ElementId getKeyId() {
+			return CollectionElement.getElementId(getCurrentEntry(false));
+		}
+
+		@Override
+		public K getKey() {
+			return theKey;
 		}
 
 		@Override

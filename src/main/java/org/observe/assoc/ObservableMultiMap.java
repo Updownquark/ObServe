@@ -3,10 +3,12 @@ package org.observe.assoc;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.Map;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.observe.Observable;
+import org.observe.ObservableValue;
 import org.observe.Subscription;
 import org.observe.assoc.ObservableSortedMultiMap.SortedMultiMapFlow;
 import org.observe.collect.CollectionChangeType;
@@ -18,8 +20,10 @@ import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.DistinctDataFlow;
 import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
 import org.observe.collect.ObservableCollectionEvent;
+import org.observe.collect.ObservableCollectionImpl.ReversedObservableCollection;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.SettableElement;
+import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.ObservableUtils.SubscriptionCause;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
@@ -27,11 +31,14 @@ import org.qommons.Identifiable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
+import org.qommons.collect.BetterMap;
 import org.qommons.collect.BetterMultiMap;
 import org.qommons.collect.BetterSet;
+import org.qommons.collect.BetterSortedMap;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.ElementId;
+import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MultiEntryHandle;
 import org.qommons.collect.MultiEntryValueHandle;
 import org.qommons.collect.MultiMap;
@@ -39,6 +46,7 @@ import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.SimpleMapEntry;
 import org.qommons.collect.SimpleMultiEntry;
+import org.qommons.tree.BetterTreeMap;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -89,6 +97,78 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 	/** This wildcard {@link TypeToken} for {@link MultiEntryValueHandle} */
 	static TypeToken<MultiEntryValueHandle<?, ?>> VALUE_ENTRY_TYPE = VALUE_ENTRY_KEY.parameterized();
 
+	/**
+	 * Returned By {@link ObservableMultiMap#get(Object)}, a collection that also reports info on the searched key
+	 *
+	 * @param <K> The key type of the map
+	 * @param <V> The value type of the map
+	 */
+	interface ObservableMultiEntry<K, V> extends ObservableCollection<V> {
+		K getKey();
+
+		ElementId getKeyId();
+
+		@Override
+		default ObservableMultiEntry<K, V> reverse() {
+			return new ReversedObservableMultiEntry<>(this);
+		}
+
+		static <K, V> ObservableMultiEntry<K, V> empty(K key, TypeToken<V> valueType) {
+			return new EmptyMultiEntry<>(key, valueType);
+		}
+
+		/**
+		 * Implements {@link ObservableMultiMap.ObservableMultiEntry#reverse()}
+		 *
+		 * @param <K> The key type of the map
+		 * @param <V> The value type of the map
+		 */
+		class ReversedObservableMultiEntry<K, V> extends ReversedObservableCollection<V> implements ObservableMultiEntry<K, V> {
+			public ReversedObservableMultiEntry(ObservableMultiEntry<K, V> entry) {
+				super(entry);
+			}
+
+			@Override
+			protected ObservableMultiEntry<K, V> getWrapped() {
+				return (ObservableMultiEntry<K, V>) super.getWrapped();
+			}
+
+			@Override
+			public ElementId getKeyId() {
+				return ElementId.reverse(getWrapped().getKeyId());
+			}
+
+			@Override
+			public K getKey() {
+				return getWrapped().getKey();
+			}
+
+			@Override
+			public ObservableMultiEntry<K, V> reverse() {
+				return getWrapped();
+			}
+		}
+
+		class EmptyMultiEntry<K, V> extends ObservableCollectionWrapper<V> implements ObservableMultiEntry<K, V> {
+			private final K theKey;
+
+			public EmptyMultiEntry(K key, TypeToken<V> valueType) {
+				theKey = key;
+				init(ObservableCollection.of(valueType));
+			}
+
+			@Override
+			public K getKey() {
+				return theKey;
+			}
+
+			@Override
+			public ElementId getKeyId() {
+				return null;
+			}
+		}
+	}
+
 	/** @return The type of keys this map uses */
 	TypeToken<K> getKeyType();
 
@@ -131,11 +211,27 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 	ObservableSet<K> keySet();
 
 	/**
+	 * @param keyId The key element to watch
+	 * @return The entry for the given element in this map
+	 */
+	ObservableMultiEntry<K, V> watchById(ElementId keyId);
+
+	/**
+	 * @param key The key to watch
+	 * @return The entry for the given key in this map
+	 */
+	ObservableMultiEntry<K, V> watch(K key);
+
+	/**
 	 * @param key The key to get values for
 	 * @return The collection of values stored for the given key in this map. Never null.
 	 */
 	@Override
-	ObservableCollection<V> get(Object key);
+	default ObservableCollection<V> get(Object key) {
+		if (!keySet().belongs(key))
+			return ObservableCollection.of(getValueType());
+		return watch((K) key);
+	}
 
 	/**
 	 * @param action The action to perform on changes to this map
@@ -224,8 +320,24 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 	}
 
 	@Override
+	default ObservableMultiMap<K, V> reverse() {
+		return new ReversedObservableMultiMap<>(this);
+	}
+
+	@Override
 	default ObservableMap<K, V> singleMap(boolean firstValue) {
 		return new ObservableSingleMap<>(this, firstValue);
+	}
+
+	/**
+	 * @param <X> The type of the target map to build
+	 * @param valueType The value type for the target map to build
+	 * @param combination A function to combine all values for a key in this map into a value in the target map
+	 * @return A builder to build a map whose values are a combination of all values in this map for the same key
+	 */
+	default <X> CombinedObservableSingleMapBuilder<K, V, X> observeSingleMap(TypeToken<X> valueType,
+		Function<? super ObservableCollection<? extends V>, ? extends ObservableValue<? extends X>> combination) {
+		return new CombinedObservableSingleMapBuilder<>(this, valueType, combination);
 	}
 
 	/**
@@ -716,6 +828,105 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 	}
 
 	/**
+	 * Implements {@link ObservableMultiMap#reverse()}
+	 *
+	 * @param <K> The key type of the map
+	 * @param <V> The value type of the map
+	 */
+	class ReversedObservableMultiMap<K, V> extends ReversedMultiMap<K, V> implements ObservableMultiMap<K, V> {
+		public ReversedObservableMultiMap(ObservableMultiMap<K, V> source) {
+			super(source);
+		}
+
+		@Override
+		protected ObservableMultiMap<K, V> getSource() {
+			return (ObservableMultiMap<K, V>) super.getSource();
+		}
+
+		@Override
+		public TypeToken<K> getKeyType() {
+			return getSource().getKeyType();
+		}
+
+		@Override
+		public TypeToken<V> getValueType() {
+			return getSource().getValueType();
+		}
+
+		@Override
+		public TypeToken<MultiEntryHandle<K, V>> getEntryType() {
+			return getSource().getEntryType();
+		}
+
+		@Override
+		public TypeToken<MultiEntryValueHandle<K, V>> getEntryValueType() {
+			return getSource().getEntryValueType();
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return getSource().isLockSupported();
+		}
+
+		@Override
+		public ObservableSet<K> keySet() {
+			return getSource().keySet().reverse();
+		}
+
+		@Override
+		public ObservableSet<? extends MultiEntryHandle<K, V>> entrySet() {
+			return getSource().entrySet().reverse();
+		}
+
+		@Override
+		public ObservableMultiEntry<K, V> watchById(ElementId keyId) {
+			return getSource().watchById(keyId).reverse();
+		}
+
+		@Override
+		public ObservableMultiEntry<K, V> watch(K key) {
+			return getSource().watch(key).reverse();
+		}
+
+		@Override
+		public ObservableCollection<V> get(Object key) {
+			return getSource().get(key).reverse();
+		}
+
+		@Override
+		public ObservableMultiMap<K, V> reverse() {
+			return getSource();
+		}
+
+		@Override
+		public Subscription onChange(Consumer<? super ObservableMultiMapEvent<? extends K, ? extends V>> action) {
+			try (Transaction t = lock(false, null)) {
+				return getSource().onChange(evt -> {
+					int keySize = keySet().size();
+					if (keySize == 0)
+						keySize++; // May have just been removed
+					int keyIndex = keySize - evt.getKeyIndex() - 1;
+					int valueSize = get(evt.getKey()).size();
+					if (valueSize == 0)
+						valueSize++; // May have just been removed
+					int valueIndex = valueSize - evt.getIndex() - 1;
+					ObservableMultiMapEvent<K, V> event = new ObservableMultiMapEvent<>(//
+						evt.getKeyElement().reverse(), evt.getElementId().reverse(), getSource().getKeyType(), getSource().getValueType(), //
+						keyIndex, valueIndex, evt.getType(), evt.getKey(), evt.getOldValue(), evt.getNewValue(), evt);
+					try (Transaction mt = ObservableMultiMapEvent.use(event)) {
+						action.accept(event);
+					}
+				});
+			}
+		}
+
+		@Override
+		public MultiMapFlow<K, V> flow() {
+			return getSource().flow().reverse();
+		}
+	}
+
+	/**
 	 * Implements {@link ObservableMultiMap#singleMap(boolean)}
 	 *
 	 * @param <K> The key-type of the map
@@ -805,6 +1016,253 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		@Override
 		public String toString() {
 			return entrySet().toString();
+		}
+	}
+
+	/**
+	 * Builds a {@link BetterMap} whose values are a combination of all values of the same key from a {@link BetterMultiMap}
+	 *
+	 * @param <K> The key type of both maps
+	 * @param <V> The value type of the multi-map
+	 * @param <X> The value type of the target map
+	 */
+	class CombinedObservableSingleMapBuilder<K, V, X> extends CombinedSingleMapBuilder<K, V, X> {
+		private final Function<? super ObservableCollection<? extends V>, ? extends ObservableValue<? extends X>> theObservableCombination;
+		private final TypeToken<X> theValueType;
+
+		CombinedObservableSingleMapBuilder(ObservableMultiMap<K, V> source, TypeToken<X> valueType,
+			Function<? super ObservableCollection<? extends V>, ? extends ObservableValue<? extends X>> combination) {
+			super(source,
+				collection -> combination.apply(ObservableCollection.create(source.getValueType(), (BetterList<V>) collection)).get());
+			theObservableCombination = combination;
+			theValueType = valueType;
+		}
+
+		@Override
+		protected ObservableMultiMap<K, V> getSource() {
+			return (ObservableMultiMap<K, V>) super.getSource();
+		}
+
+		@Override
+		public CombinedObservableSingleMapBuilder<K, V, X> withReverse(
+			BiFunction<? super BetterCollection<? extends V>, ? super X, ? extends X> reverse) {
+			super.withReverse(reverse);
+			return this;
+		}
+
+		@Override
+		public CombinedObservableSingleMapBuilder<K, V, X> withReversibility(
+			Function<? super BetterCollection<? extends V>, String> reversibilityQuery) {
+			super.withReversibility(reversibilityQuery);
+			return this;
+		}
+
+		@Override
+		public CombinedObservableSingleMapBuilder<K, V, X> withValuedReversibility(
+			BiFunction<? super BetterCollection<? extends V>, ? super X, String> valuedReversibilityQuery) {
+			super.withValuedReversibility(valuedReversibilityQuery);
+			return this;
+		}
+
+		protected Function<? super ObservableCollection<? extends V>, ? extends ObservableValue<? extends X>> getObservableCombination() {
+			return theObservableCombination;
+		}
+
+		@Override
+		public ObservableMap<K, X> build() {
+			return new CombinedObservableSingleMap<>(getSource(), theValueType, getCombination(), theObservableCombination, getReverse(),
+				getReversibilityQuery(), getValuedReversibilityQuery());
+		}
+	}
+
+	/**
+	 * Implements the map built by {@link ObservableMultiMap#observeSingleMap(TypeToken, Function)}
+	 *
+	 * @param <K> The key type of both maps
+	 * @param <V> The value type of the source multi-map
+	 * @param <X> The value type of this map
+	 */
+	class CombinedObservableSingleMap<K, V, X> extends CombinedSingleMap<K, V, X> implements ObservableMap<K, X> {
+		private final TypeToken<X> theValueType;
+		private final Function<? super ObservableCollection<? extends V>, ? extends ObservableValue<? extends X>> theObservableCombination;
+
+		private TypeToken<Map.Entry<K, X>> theEntryType;
+
+		CombinedObservableSingleMap(ObservableMultiMap<K, V> outer, TypeToken<X> valueType,
+			Function<? super BetterCollection<? extends V>, ? extends X> combination,
+			Function<? super ObservableCollection<? extends V>, ? extends ObservableValue<? extends X>> observableCombination,
+				BiFunction<? super BetterCollection<? extends V>, ? super X, ? extends X> reverse,
+				Function<? super BetterCollection<? extends V>, String> reversibility,
+				BiFunction<? super BetterCollection<? extends V>, ? super X, String> valuedReversibility) {
+			super(outer, combination, reverse, reversibility, valuedReversibility);
+			theValueType = valueType;
+			theObservableCombination = observableCombination;
+		}
+
+		@Override
+		protected ObservableMultiMap<K, V> getSource() {
+			return (ObservableMultiMap<K, V>) super.getSource();
+		}
+
+		@Override
+		public ObservableSet<K> keySet() {
+			return (ObservableSet<K>) super.keySet();
+		}
+
+		@Override
+		public TypeToken<K> getKeyType() {
+			return getSource().getKeyType();
+		}
+
+		@Override
+		public TypeToken<X> getValueType() {
+			return theValueType;
+		}
+
+		@Override
+		public TypeToken<Map.Entry<K, X>> getEntryType() {
+			if (theEntryType == null)
+				theEntryType = ObservableMap.buildEntryType(getKeyType(), getValueType());
+			return theEntryType;
+		}
+
+		@Override
+		public Equivalence<? super X> equivalence() {
+			return Equivalence.DEFAULT;
+		}
+
+		@Override
+		public <K2> SettableElement<X> observe(K2 key) {
+			if (keySet().belongs(key))
+				return SettableElement.empty(getValueType());
+			ObservableMultiEntry<K, V> sourceValues = getSource().watch((K) key);
+			ObservableValue<? extends X> combined = theObservableCombination.apply(sourceValues);
+			class CombinedElement extends AbstractIdentifiable implements SettableElement<X> {
+				@Override
+				public Object createIdentity() {
+					return Identifiable.wrap(CombinedObservableSingleMap.this.getIdentity(), "value", key);
+				}
+
+				@Override
+				public TypeToken<X> getType() {
+					return getValueType();
+				}
+
+				@Override
+				public long getStamp() {
+					return sourceValues.getStamp();
+				}
+
+				@Override
+				public ElementId getElementId() {
+					return sourceValues.getKeyId();
+				}
+
+				@Override
+				public X get() {
+					return combined.get();
+				}
+
+				@Override
+				public ObservableValue<String> isEnabled() {
+					return ObservableValue.of(TypeTokens.get().STRING, //
+						() -> canReverse(sourceValues), //
+						sourceValues::getStamp, sourceValues.simpleChanges());
+				}
+
+				@Override
+				public <X2 extends X> String isAcceptable(X2 value) {
+					return canReverse(sourceValues, value);
+				}
+
+				@Override
+				public <X2 extends X> X set(X2 value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+					try (Transaction t = CombinedObservableSingleMap.this.lock(true, cause)) {
+						return reverse(sourceValues, value);
+					}
+				}
+
+				@Override
+				public Observable<ObservableElementEvent<X>> elementChanges() {
+					ElementId[] id = new ElementId[1];
+					return combined.changes().map(valueEvent -> {
+						ElementId oldId = id[0];
+						id[0] = sourceValues.getKeyId();
+						ObservableElementEvent<X> elementEvent = new ObservableElementEvent<>(getValueType(), valueEvent.isInitial(), oldId,
+							id[0], valueEvent.getOldValue(), valueEvent.getNewValue(), valueEvent);
+						Transaction elEvtFinish = Causable.use(elementEvent);
+						valueEvent.onFinish(Causable.key((__, ___) -> elEvtFinish.close()));
+						return elementEvent;
+					});
+				}
+			}
+			;
+			return new CombinedElement();
+		}
+
+		@Override
+		public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends X>> action) {
+			return subscribe(action, true, false);
+		}
+
+		private Subscription subscribe(Consumer<? super ObservableMapEvent<? extends K, ? extends X>> action, boolean forward,
+			boolean populate) {
+			class MapEntry {
+				final ObservableCollection<V> values;
+				final Subscription sub;
+				X value;
+
+				MapEntry(ObservableMultiEntry<K, V> entry) {
+					values = ObservableCollection.build(getSource().getValueType()).safe(false).build();
+					values.addAll(entry);
+					sub = theObservableCombination.apply(values).changes().act(evt -> value = evt.getNewValue());
+				}
+			}
+			BetterSortedMap<ElementId, MapEntry> entries = new BetterTreeMap<>(false, ElementId::compareTo);
+			try (Transaction t = getSource().lock(false, null)) {
+				if (!populate) {
+					for (CollectionElement<K> keyEl : getSource().keySet().elements())
+						entries.put(keyEl.getElementId(), new MapEntry(getSource().watchById(keyEl.getElementId())));
+				}
+				Consumer<ObservableMultiMapEvent<? extends K, ? extends V>> sourceChange = multiEvent -> {
+					boolean[] added = new boolean[1];
+					MapEntryHandle<ElementId, MapEntry> entry = entries.getOrPutEntry(multiEvent.getKeyElement(),
+						ki -> new MapEntry(getSource().watchById(ki)), null, null, false, () -> added[0] = true);
+					ObservableMapEvent<K, X> mapEvent;
+					if (added[0])
+						mapEvent = new ObservableMapEvent<>(multiEvent.getKeyElement(), getKeyType(), getValueType(),
+							multiEvent.getKeyIndex(), CollectionChangeType.add, multiEvent.getKey(), null, entry.get().value, multiEvent);
+					else {
+						X oldValue = entry.get().value;
+						boolean removed = false;
+						switch (multiEvent.getType()) {
+						case add:
+							entry.get().values.add(multiEvent.getIndex(), multiEvent.getNewValue());
+							break;
+						case remove:
+							entry.get().values.remove(multiEvent.getIndex());
+							removed = entry.get().values.isEmpty();
+							break;
+						case set:
+							entry.get().values.set(multiEvent.getIndex(), multiEvent.getNewValue());
+							break;
+						}
+						if (removed) {
+							entry.get().sub.unsubscribe();
+							entries.mutableEntry(entry.getElementId()).remove();
+							mapEvent = new ObservableMapEvent<>(multiEvent.getKeyElement(), getKeyType(), getValueType(),
+								multiEvent.getKeyIndex(), CollectionChangeType.remove, multiEvent.getKey(), oldValue, oldValue, multiEvent);
+						} else
+							mapEvent = new ObservableMapEvent<>(multiEvent.getKeyElement(), getKeyType(), getValueType(),
+								multiEvent.getKeyIndex(), CollectionChangeType.set, multiEvent.getKey(), oldValue, entry.get().value,
+								multiEvent);
+					}
+					try (Transaction evtT = Causable.use(mapEvent)) {
+						action.accept(mapEvent);
+					}
+				};
+				return populate ? getSource().subscribe(sourceChange, forward, forward) : getSource().onChange(sourceChange);
+			}
 		}
 	}
 
