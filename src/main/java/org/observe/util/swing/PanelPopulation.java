@@ -48,6 +48,7 @@ import org.observe.collect.ObservableCollection;
 import org.observe.util.SafeObservableCollection;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.ListFilter.FilteredValue;
+import org.observe.util.swing.ListFilter.ValueRenderer;
 import org.observe.util.swing.ObservableSwingUtils.FontAdjuster;
 import org.qommons.IntList;
 import org.qommons.QommonsUtils;
@@ -1226,7 +1227,23 @@ public class PanelPopulation {
 					(ObservableCollection<CategoryRenderStrategy<? super R, ?>>) theColumns, EventQueue::isDispatchThread,
 					EventQueue::invokeLater, until);
 				filtered = ListFilter.applyFilter(safeRows, //
-					() -> QommonsUtils.filterMap(safeColumns, c -> c.isFilterable(), c -> row -> c.print(row)), //
+					() -> QommonsUtils.<CategoryRenderStrategy<? super R, ?>, ValueRenderer<R>> map2(safeColumns,
+						c -> new ListFilter.ValueRenderer<R>() {
+							@Override
+							public String getName() {
+								return c.getName();
+							}
+
+							@Override
+							public boolean searchGeneral() {
+								return c.isFilterable();
+							}
+
+							@Override
+							public CharSequence render(R row) {
+								return c.print(row);
+							}
+						}), //
 					theFilter, until);
 				model = new ObservableTableModel<>(filtered.flow().map(theRows.getType(), f -> f.value, opts -> opts.withElementSetting(//
 					new ObservableCollection.ElementSetter<ListFilter.FilteredValue<R>, R>() {
