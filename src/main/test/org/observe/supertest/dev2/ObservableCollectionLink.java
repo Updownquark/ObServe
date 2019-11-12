@@ -37,7 +37,6 @@ import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSet;
 import org.qommons.collect.BetterSortedList;
-import org.qommons.collect.BetterSortedList.SortedSearchFilter;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
@@ -166,13 +165,13 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 	}
 
 	@Override
-	public Transaction lock(boolean write, boolean structural, Object cause) {
-		return getCollection().lock(write, structural, cause);
+	public Transaction lock(boolean write, Object cause) {
+		return getCollection().lock(write, cause);
 	}
 
 	@Override
-	public Transaction tryLock(boolean write, boolean structural, Object cause) {
-		return getCollection().tryLock(write, structural, cause);
+	public Transaction tryLock(boolean write, Object cause) {
+		return getCollection().tryLock(write, cause);
 	}
 
 	public ObservableCollection<T> getCollection() {
@@ -408,7 +407,7 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 			public CollectionLinkElement<S, T> set(CollectionLinkElement<S, T> o1, int idx1, int incMod, CollectionLinkElement<S, T> o2,
 				int idx2, int retIdx) {
 				if (theDef.orderImportant && incMod != retIdx)
-						error.append(o2.get()).append(" expected at index ").append(idx2).append(", but found at ").append(idx1)
+					error.append(o2.get()).append(" expected at index ").append(idx2).append(", but found at ").append(idx1)
 					.append('\n');
 				o2.validateAgainst(o1, error);
 				return o2; // Replace with the expected element
@@ -711,11 +710,7 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 			CollectionLinkElement<S, T> after, before;
 			if (rep.minIndex >= 0) {
 				int sz = Math.min(theExpectedElements.size(), subListEnd) - subListStart;
-				if (rep.minIndex < 0) {
-					for (CollectionOp<T> op : ops)
-						op.reject(rep.minIndex + " of " + sz, true);
-					return;
-				} else if (rep.maxIndex > sz) {
+				if (rep.maxIndex > sz) {
 					for (CollectionOp<T> op : ops)
 						op.reject(rep.maxIndex + " of " + sz, true);
 					return;

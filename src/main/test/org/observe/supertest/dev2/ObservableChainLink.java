@@ -1,9 +1,9 @@
 package org.observe.supertest.dev2;
 
-import org.qommons.StructuredTransactable;
 import org.qommons.TestHelper;
+import org.qommons.Transactable;
 
-public interface ObservableChainLink<S, T> extends StructuredTransactable {
+public interface ObservableChainLink<S, T> extends Transactable {
 	TestValueType getType();
 
 	ObservableChainLink<?, S> getSourceLink();
