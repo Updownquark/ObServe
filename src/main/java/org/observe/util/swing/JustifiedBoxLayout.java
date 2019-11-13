@@ -43,18 +43,22 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 		thePadding = 2;
 	}
 
+	/** @return Whether this layout lays its components out vertically or horizontally */
 	public boolean isVertical() {
 		return isVertical;
 	}
 
+	/** @return The alignment strategy for the main axis */
 	public Alignment getMainAlignment() {
 		return theMainAlign;
 	}
 
+	/** @return The alignment strategy for the cross axis */
 	public Alignment getCrossAlignment() {
 		return theCrossAlign;
 	}
 
+	/** @return The padding that this layout attempts to insert between components */
 	public int getPadding() {
 		return thePadding;
 	}

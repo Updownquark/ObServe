@@ -26,6 +26,11 @@ import org.observe.Observable;
 import org.observe.SettableValue;
 import org.qommons.io.Format;
 
+/**
+ * A text field that interacts with a {@link SettableValue}
+ * 
+ * @param <E> The type of the value
+ */
 public class ObservableTextField<E> extends JTextField {
 	private final SettableValue<E> theValue;
 	private final Format<E> theFormat;
@@ -52,6 +57,11 @@ public class ObservableTextField<E> extends JTextField {
 	private Insets dummyInsets;
 	private String theEmptyText;
 
+	/**
+	 * @param value The value for the text field to interact with
+	 * @param format The format to convert the value to text and back
+	 * @param until An observable that, when fired will release this text field's resources
+	 */
 	public ObservableTextField(SettableValue<E> value, Format<E> format, Observable<?> until) {
 		Border border = UIManager.getBorder("TextField.border");
 		dummyInsets = border.getBorderInsets(this);
@@ -149,10 +159,12 @@ public class ObservableTextField<E> extends JTextField {
 		});
 	}
 
+	/** @return The value controlled by this text field */
 	public SettableValue<E> getValue() {
 		return theValue;
 	}
 
+	/** @return The format converting between value and text */
 	public Format<E> getFormat() {
 		return theFormat;
 	}
@@ -221,20 +233,33 @@ public class ObservableTextField<E> extends JTextField {
 		return this;
 	}
 
+	/**
+	 * @param tooltip The tooltip for this text field (when enabled)
+	 * @return This text field
+	 */
 	public ObservableTextField<E> withToolTip(String tooltip) {
 		setToolTipText(tooltip);
 		return this;
 	}
 
+	/**
+	 * @param cols The minimum number of columns of text to display
+	 * @return This text field
+	 */
 	public ObservableTextField<E> withColumns(int cols) {
 		setColumns(cols);
 		return this;
 	}
 
+	/** @return This text field's icon */
 	public Icon getIcon() {
 		return theIcon;
 	}
 
+	/**
+	 * @param icon The icon to display on the left side of the text field
+	 * @return This text field
+	 */
 	public ObservableTextField<E> setIcon(Icon icon) {
 		theIcon = icon;
 		if (theIcon != null) {
@@ -250,10 +275,15 @@ public class ObservableTextField<E> extends JTextField {
 		return this;
 	}
 
+	/** @return The text to display (grayed) when the text field's text is empty */
 	public String getEmptyText() {
 		return theEmptyText;
 	}
 
+	/**
+	 * @param emptyText The text to display (grayed) when the text field's text is empty
+	 * @return This text field
+	 */
 	public ObservableTextField<E> setEmptyText(String emptyText) {
 		theEmptyText = emptyText;
 		return this;
@@ -302,10 +332,17 @@ public class ObservableTextField<E> extends JTextField {
 		}
 
 	}
+
+	/** Undoes any edits in this field's text, reverting to the formatted current value */
 	public void revertEdits() {
 		setValue(theValue.get());
 	}
 
+	/**
+	 * Causes any edits in this field's text to take effect, parsing it and setting it in the value
+	 *
+	 * @param cause The cause of the action (e.g. a swing event)
+	 */
 	public void flushEdits(Object cause) {
 		if (!isDirty)
 			return;
@@ -347,6 +384,7 @@ public class ObservableTextField<E> extends JTextField {
 		return theError;
 	}
 
+	/** Re-displays the parsing error message from this text field as a tooltip */
 	public void redisplayErrorTooltip() {
 		if (theError != null) {
 			super.setToolTipText(theError);
@@ -354,6 +392,7 @@ public class ObservableTextField<E> extends JTextField {
 		}
 	}
 
+	/** Re-displays the warning message from this text field as a tooltip */
 	public void redisplayWarningTooltip() {
 		if (theWarningMsg != null) {
 			super.setToolTipText(theWarningMsg);

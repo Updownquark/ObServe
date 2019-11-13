@@ -225,7 +225,6 @@ public class CategoryRenderStrategy<R, C> {
 
 	private Comparator<? super C> theSortability;
 	private boolean isFilterable;
-	private CategoryFilterStrategy<C> theFilterability;
 
 	public CategoryRenderStrategy(String name, TypeToken<C> type, Function<? super R, ? extends C> accessor) {
 		theName = name;

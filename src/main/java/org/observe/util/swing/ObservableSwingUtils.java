@@ -601,6 +601,14 @@ public class ObservableSwingUtils {
 		return selection;
 	}
 
+	/**
+	 * @param <E> The type of the values in the list model
+	 * @param <V> The type of the mapped values
+	 * @param model The list model to get selection for
+	 * @param selectionModel The selection model of the list or table
+	 * @param map The function to map the values to the target type
+	 * @return The list of currently selected model values
+	 */
 	public static <E, V> List<V> getSelection(ListModel<E> model, ListSelectionModel selectionModel, Function<? super E, ? extends V> map) {
 		if (selectionModel.isSelectionEmpty())
 			return Collections.emptyList();
@@ -612,6 +620,20 @@ public class ObservableSwingUtils {
 		return selValues;
 	}
 
+	/**
+	 * Synchronizes selection between a UI selection model and a single value
+	 *
+	 * @param <E> The type of the model values
+	 * @param component The component owning the model
+	 * @param model The list model of values
+	 * @param selectionModel The selection model of the list or table
+	 * @param equivalence The equivalence to use to test equality between values
+	 * @param selection The selection value to sync with
+	 * @param until The observable to remove all the listeners
+	 * @param enforceSingleSelection Whether to set the list's {@link ListSelectionModel#setSelectionMode(int) selection mode} to
+	 *        {@link ListSelectionModel#SINGLE_SELECTION single selection}
+	 * @return The selection
+	 */
 	public static <E> SettableValue<E> syncSelection(Component component, ListModel<E> model, Supplier<ListSelectionModel> selectionModel,
 		Equivalence<? super E> equivalence, SettableValue<E> selection, Observable<?> until, boolean enforceSingleSelection) {
 		if (enforceSingleSelection)
