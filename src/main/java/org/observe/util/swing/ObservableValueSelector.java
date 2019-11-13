@@ -48,8 +48,15 @@ import com.google.common.reflect.TypeToken;
  * </p>
  *
  * @param <T> The type of value to select
+ * @param <X> The type of the included value
  */
 public class ObservableValueSelector<T, X> extends JPanel {
+	/**
+	 * A value in an {@link ObservableValueSelector}
+	 *
+	 * @param <T> The type of value to select
+	 * @param <X> The type of the included value
+	 */
 	public static class SelectableValue<T, X> implements Comparable<SelectableValue<T, X>> {
 		final CollectionElement<T> sourceElement;
 		MutableCollectionElement<SelectableValue<T, X>> selectableElement;
@@ -65,22 +72,27 @@ public class ObservableValueSelector<T, X> extends JPanel {
 			this.included = included;
 		}
 
+		/** @return The selectable value */
 		public T getSource() {
 			return sourceElement.get();
 		}
 
+		/** @return The value for the included collection */
 		public X getDest() {
 			return theDestValue;
 		}
 
+		/** @return This value's element in the source collection */
 		public CollectionElement<T> getSourceElement() {
 			return sourceElement;
 		}
 
+		/** @return Whether the value is currently included */
 		public boolean isIncluded() {
 			return included;
 		}
 
+		/** @param included Whether the value should be included */
 		public void setIncluded(boolean included) {
 			if (this.included == included)
 				return;
@@ -118,7 +130,6 @@ public class ObservableValueSelector<T, X> extends JPanel {
 	private final ObservableCollection<SelectableValue<T, X>> theIncludedValues;
 
 	private final Function<? super T, ? extends X> theMap;
-	private final boolean reEvalOnUpdate;
 
 	private final JButton theIncludeAllButton;
 	private final JButton theIncludeButton;
@@ -132,6 +143,17 @@ public class ObservableValueSelector<T, X> extends JPanel {
 
 	private boolean isIncludedByDefault;
 
+	/**
+	 * @param sourceRows The collection of values to select from
+	 * @param sourceColumns The collection of columns to display in the source table
+	 * @param destColumns The collection of columns to display in the included table
+	 * @param map The mapping function from source to included value
+	 * @param reEvalOnUpdate Whether to re-evaluate the mapping function when a source value is updated
+	 * @param until The observable that, when fired, will release this selector's resources
+	 * @param includedByDefault Whether initial and new values in the source collection will automatically be included
+	 * @param filterFormat A format to produce table controls (e.g. filtering) from text. If null, {@link TableContentControl#FORMAT} will
+	 *        be used as a default.
+	 */
 	public ObservableValueSelector(ObservableCollection<T> sourceRows, //
 		ObservableCollection<? extends CategoryRenderStrategy<? super SelectableValue<T, X>, ?>> sourceColumns, //
 			ObservableCollection<? extends CategoryRenderStrategy<? super SelectableValue<T, X>, ?>> destColumns, //
@@ -140,7 +162,6 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		super(new JustifiedBoxLayout(false).crossJustified().mainJustified());
 		theSourceRows = sourceRows;
 		theMap = map;
-		this.reEvalOnUpdate = reEvalOnUpdate;
 		theSelectableValues = ObservableSortedSet.create(new TypeToken<SelectableValue<T, X>>() {
 		}, SelectableValue::compareTo);
 		theFilterText = new SimpleSettableValue<>(TableContentControl.class, false).withValue(TableContentControl.DEFAULT, null);
@@ -188,8 +209,8 @@ public class ObservableValueSelector<T, X> extends JPanel {
 			srcPanel -> srcPanel.addTextField(null, theFilterText, filterFormat == null ? TableContentControl.FORMAT : filterFormat, tf -> tf//
 				.modifyEditor(tfe -> {
 					theSearchField = tfe;
-							tfe.setCommitOnType(true).setEmptyText("Search or Sort...")
-								.withToolTip(TableContentControl.TABLE_CONTROL_TOOLTIP)
+					tfe.setCommitOnType(true).setEmptyText("Search or Sort...")
+					.withToolTip(TableContentControl.TABLE_CONTROL_TOOLTIP)
 					.setIcon(ObservableSwingUtils.getFixedIcon(getClass(), "/icons/search.png", 16, 16));
 				}).fill())//
 			.addTable(theSelectableValues, srcTbl -> {
@@ -408,47 +429,61 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		});
 	}
 
+	/** @return The collection of source values that are currently displayed to the user (i.e. not filtered) */
 	public ObservableCollection<SelectableValue<T, X>> getDisplayed() {
 		return theDisplayedValues;
 	}
 
+	/** @return The collection of included values */
 	public ObservableCollection<SelectableValue<T, X>> getIncluded() {
 		return theIncludedValues;
 	}
 
+	/** @return An observable that fires whenever the list selection (not inclusion) changes */
 	public Observable<Void> selectionChanges() {
 		return theSelectionChanges.readOnly();
 	}
 
+	/**
+	 * @param included Whether initial and new values in the source collection will automatically be included
+	 * @return This selector
+	 */
 	public ObservableValueSelector<T, X> setIncludeByDefault(boolean included) {
 		isIncludedByDefault = included;
 		return this;
 	}
 
+	/** @return This selector's search field */
 	public ObservableTextField<TableContentControl> getSearchField() {
 		return theSearchField;
 	}
 
+	/** @return This selector's include all button */
 	public JButton getIncludeAllButton() {
 		return theIncludeAllButton;
 	}
 
+	/** @return This selector's include selected button */
 	public JButton getIncludeButton() {
 		return theIncludeButton;
 	}
 
+	/** @return This selector's exclude selected button */
 	public JButton getExcludeButton() {
 		return theExcludeButton;
 	}
 
+	/** @return This selector's exclude all button */
 	public JButton getExcludeAllButton() {
 		return theExcludeAllButton;
 	}
 
+	/** @return This selector's source table widget */
 	public JTable getSourceTable() {
 		return theSourceTable;
 	}
 
+	/** @return This selector's included table widget */
 	public JTable getDestTable() {
 		return theDestTable;
 	}
