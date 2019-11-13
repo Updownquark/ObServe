@@ -47,11 +47,12 @@ import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.SafeObservableCollection;
 import org.observe.util.TypeTokens;
-import org.observe.util.swing.ListFilter.FilteredValue;
-import org.observe.util.swing.ListFilter.ValueRenderer;
 import org.observe.util.swing.ObservableSwingUtils.FontAdjuster;
+import org.observe.util.swing.TableContentControl.FilteredValue;
+import org.observe.util.swing.TableContentControl.ValueRenderer;
 import org.qommons.IntList;
 import org.qommons.QommonsUtils;
+import org.qommons.StringUtils;
 import org.qommons.Transaction;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.CollectionLockingStrategy;
@@ -297,7 +298,7 @@ public class PanelPopulation {
 
 		List<R> getSelection();
 
-		P withFiltering(ObservableValue<? extends ListFilter> filter);
+		P withFiltering(ObservableValue<? extends TableContentControl> filter);
 
 		P withAdd(Supplier<? extends R> creator, Consumer<TableAction<R, ?>> actionMod);
 
@@ -1062,7 +1063,7 @@ public class PanelPopulation {
 		private SettableValue<R> theSelectionValue;
 		private ObservableCollection<R> theSelectionValues;
 		private List<SimpleTableAction<R, ?>> theActions;
-		private ObservableValue<? extends ListFilter> theFilter;
+		private ObservableValue<? extends TableContentControl> theFilter;
 
 		SimpleTableBuilder(ObservableCollection<R> rows) {
 			super(new JTable());
@@ -1100,7 +1101,7 @@ public class PanelPopulation {
 		}
 
 		@Override
-		public P withFiltering(ObservableValue<? extends ListFilter> filter) {
+		public P withFiltering(ObservableValue<? extends TableContentControl> filter) {
 			theFilter = filter;
 			return (P) this;
 		}
@@ -1219,34 +1220,57 @@ public class PanelPopulation {
 		@Override
 		protected Component getComponent(Observable<?> until) {
 			ObservableTableModel<R> model;
-			ObservableCollection<ListFilter.FilteredValue<R>> filtered;
+			ObservableCollection<TableContentControl.FilteredValue<R>> filtered;
 			if (theFilter != null) {
 				ObservableCollection<R> safeRows = new SafeObservableCollection<>(theRows, EventQueue::isDispatchThread,
 					EventQueue::invokeLater, until);
 				ObservableCollection<CategoryRenderStrategy<? super R, ?>> safeColumns = new SafeObservableCollection<>(//
-					(ObservableCollection<CategoryRenderStrategy<? super R, ?>>) theColumns, EventQueue::isDispatchThread,
-					EventQueue::invokeLater, until);
-				filtered = ListFilter.applyFilter(safeRows, //
-					() -> QommonsUtils.<CategoryRenderStrategy<? super R, ?>, ValueRenderer<R>> map2(safeColumns,
-						c -> new ListFilter.ValueRenderer<R>() {
+					(ObservableCollection<CategoryRenderStrategy<? super R, ?>>) TableContentControl.applyColumnControl(theColumns,
+						theFilter, until),
+					EventQueue::isDispatchThread, EventQueue::invokeLater, until);
+				Observable<?> columnChanges = safeColumns.simpleChanges();
+				List<ValueRenderer<R>> renderers = new ArrayList<>();
+				columnChanges.act(__ -> {
+					renderers.clear();
+					for (CategoryRenderStrategy<? super R, ?> column : safeColumns) {
+						renderers.add(new TableContentControl.ValueRenderer<R>() {
 							@Override
 							public String getName() {
-								return c.getName();
+								return column.getName();
 							}
 
 							@Override
 							public boolean searchGeneral() {
-								return c.isFilterable();
+								return column.isFilterable();
 							}
 
 							@Override
 							public CharSequence render(R row) {
-								return c.print(row);
+								return column.print(row);
 							}
-						}), //
-					theFilter, until);
+
+							@Override
+							public int compare(R o1, R o2) {
+								Object c1 = column.getCategoryValue(o1);
+								Object c2 = column.getCategoryValue(o2);
+								if (c1 instanceof String && c2 instanceof String)
+									return StringUtils.compareNumberTolerant((String) c1, (String) c2, true, true);
+								else if (c1 instanceof Comparable && c2 instanceof Comparable) {
+									try {
+										return ((Comparable<Object>) c1).compareTo(c2);
+									} catch (ClassCastException e) {
+										// Ignore
+									}
+								}
+								return 0;
+							}
+						});
+					}
+				});
+				filtered = TableContentControl.applyRowControl(safeRows, () -> renderers, //
+					theFilter.refresh(safeColumns.simpleChanges()), until);
 				model = new ObservableTableModel<>(filtered.flow().map(theRows.getType(), f -> f.value, opts -> opts.withElementSetting(//
-					new ObservableCollection.ElementSetter<ListFilter.FilteredValue<R>, R>() {
+					new ObservableCollection.ElementSetter<TableContentControl.FilteredValue<R>, R>() {
 						@Override
 						public String setElement(FilteredValue<R> element, R newValue, boolean replace) {
 							element.setValue(newValue);
@@ -1264,15 +1288,10 @@ public class PanelPopulation {
 				filtered == null ? null : new ObservableTableModel.TableRenderContext() {
 				@Override
 				public int[][] getEmphaticRegions(int row, int column) {
-					ListFilter.FilteredValue<R> fv = filtered.get(row);
-					int c = 0;
-					for (int i = 0; i < column; i++) {
-						if (model.getColumn(i).isFilterable())
-							c++;
-					}
-					if (c >= fv.getColumns() || fv.isTrivial())
+					TableContentControl.FilteredValue<R> fv = filtered.get(row);
+					if (column >= fv.getColumns() || !fv.isFiltered())
 						return null;
-					return fv.getMatches(c);
+					return fv.getMatches(column);
 				}
 			});
 			if (until != null)

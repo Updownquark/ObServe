@@ -81,7 +81,10 @@ public interface ObservableCellRenderer<M, C> {
 			return comp;
 		StringBuilder newText = new StringBuilder("<html>");
 		boolean emphasized = false;
-		for (int c = 0; c < text.length(); c++) {
+		int start = regions[0][0];
+		if (start > 0)
+			newText.append(text, 0, start);
+		for (int c = start; c < text.length(); c++) {
 			boolean newEmph = false;
 			for (int[] region : regions) {
 				if (c >= region[0] && c < region[1]) {
@@ -93,10 +96,12 @@ public interface ObservableCellRenderer<M, C> {
 				newText.append("<b>");
 			else if (!newEmph && emphasized)
 				newText.append("</b>");
+			emphasized = newEmph;
 			newText.append(text.charAt(c));
 		}
 		if (emphasized)
 			newText.append("</b>");
+		newText.append("</html>");
 
 		label.setText(newText.toString());
 		return comp;

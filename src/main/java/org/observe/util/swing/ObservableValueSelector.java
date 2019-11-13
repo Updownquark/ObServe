@@ -20,7 +20,6 @@ import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSortedSet;
 import org.qommons.collect.BetterSortedList;
-import org.qommons.collect.BetterSortedList.SortedSearchFilter;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
@@ -126,10 +125,10 @@ public class ObservableValueSelector<T, X> extends JPanel {
 	private final JButton theExcludeButton;
 	private final JButton theExcludeAllButton;
 	private final JLabel theSelectionCountLabel;
-	private ObservableTextField<ListFilter> theSearchField;
+	private ObservableTextField<TableContentControl> theSearchField;
 	private final SimpleObservable<Void> theSelectionChanges;
 
-	private final SettableValue<ListFilter> theFilterText;
+	private final SettableValue<TableContentControl> theFilterText;
 
 	private boolean isIncludedByDefault;
 
@@ -137,14 +136,14 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		ObservableCollection<? extends CategoryRenderStrategy<? super SelectableValue<T, X>, ?>> sourceColumns, //
 			ObservableCollection<? extends CategoryRenderStrategy<? super SelectableValue<T, X>, ?>> destColumns, //
 				Function<? super T, ? extends X> map, boolean reEvalOnUpdate, Observable<?> until, //
-				boolean includedByDefault, Format<ListFilter> filterFormat) {
+				boolean includedByDefault, Format<TableContentControl> filterFormat) {
 		super(new JustifiedBoxLayout(false).crossJustified().mainJustified());
 		theSourceRows = sourceRows;
 		theMap = map;
 		this.reEvalOnUpdate = reEvalOnUpdate;
 		theSelectableValues = ObservableSortedSet.create(new TypeToken<SelectableValue<T, X>>() {
 		}, SelectableValue::compareTo);
-		theFilterText = new SimpleSettableValue<>(ListFilter.class, false).withValue(ListFilter.INCLUDE_ALL, null);
+		theFilterText = new SimpleSettableValue<>(TableContentControl.class, false).withValue(TableContentControl.DEFAULT, null);
 		theIncludedValues = theSelectableValues.flow().filter(sv -> sv.isIncluded() ? null : "Not Included").unmodifiable()
 			.collectActive(until);
 		isIncludedByDefault = includedByDefault;
@@ -186,10 +185,11 @@ public class ObservableValueSelector<T, X> extends JPanel {
 
 		PanelPopulation.populateHPanel(this, getLayout(), until)//
 		.addVPanel(
-			srcPanel -> srcPanel.addTextField(null, theFilterText, filterFormat == null ? ListFilter.FORMAT : filterFormat, tf -> tf//
+			srcPanel -> srcPanel.addTextField(null, theFilterText, filterFormat == null ? TableContentControl.FORMAT : filterFormat, tf -> tf//
 				.modifyEditor(tfe -> {
 					theSearchField = tfe;
-					tfe.setCommitOnType(true).setEmptyText("Search...")
+							tfe.setCommitOnType(true).setEmptyText("Search or Sort...")
+								.withToolTip(TableContentControl.TABLE_CONTROL_TOOLTIP)
 					.setIcon(ObservableSwingUtils.getFixedIcon(getClass(), "/icons/search.png", 16, 16));
 				}).fill())//
 			.addTable(theSelectableValues, srcTbl -> {
@@ -425,7 +425,7 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		return this;
 	}
 
-	public ObservableTextField<ListFilter> getSearchField() {
+	public ObservableTextField<TableContentControl> getSearchField() {
 		return theSearchField;
 	}
 
