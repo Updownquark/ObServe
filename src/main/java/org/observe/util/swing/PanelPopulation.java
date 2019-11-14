@@ -7,11 +7,13 @@ import java.awt.Dimension;
 import java.awt.EventQueue;
 import java.awt.LayoutManager;
 import java.awt.LayoutManager2;
+import java.awt.datatransfer.DataFlavor;
 import java.beans.PropertyChangeListener;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
@@ -19,6 +21,7 @@ import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import javax.swing.Box;
@@ -63,6 +66,8 @@ import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
 
 public class PanelPopulation {
+	// TODO Replace "MIG" everywhere here with "grid"
+
 	/**
 	 * <p>
 	 * This method creates an API structure that makes building a panel of vertical fields very easy.
@@ -82,17 +87,17 @@ public class PanelPopulation {
 	 * @param until The observable that, when fired, will release all associated resources
 	 * @return The API structure to add fields with
 	 */
-	public static <C extends Container> VPanelPopulator<C, ?> populateVPanel(C panel, Observable<?> until) {
+	public static <C extends Container> PanelPopulator<C, ?> populateVPanel(C panel, Observable<?> until) {
 		if (panel == null)
 			panel = (C) new JPanel();
 		return new MigFieldPanel<>(panel, until == null ? Observable.empty() : until);
 	}
 
-	public static <C extends Container> HPanelPopulator<C, ?> populateHPanel(C panel, String layoutType, Observable<?> until) {
+	public static <C extends Container> PanelPopulator<C, ?> populateHPanel(C panel, String layoutType, Observable<?> until) {
 		return populateHPanel(panel, layoutType == null ? null : makeLayout(layoutType), until);
 	}
 
-	public static <C extends Container> HPanelPopulator<C, ?> populateHPanel(C panel, LayoutManager layout, Observable<?> until) {
+	public static <C extends Container> PanelPopulator<C, ?> populateHPanel(C panel, LayoutManager layout, Observable<?> until) {
 		if (panel == null)
 			panel = (C) new JPanel(layout);
 		else if (layout != null)
@@ -115,15 +120,23 @@ public class PanelPopulation {
 		/* TODO
 		 * toggle/radio buttons
 		 * slider
-		 * split pane
+		 * progress bar
+		 * spinner
+		 * offloaded actions
+		 * menu button
+		 * (multi-) split pane (with configurable splitter panel)
 		 * scroll pane
 		 * accordion pane?
 		 * value selector
 		 * tree
+		 * settings menu
+		 * rotation
 		 * form controls (e.g. press enter in a text field and a submit action (also tied to a button) fires)
 		 * styles: borders, background...
 		 *
-		 * Common locking (RRWL, CLS)
+		 * Dragging!!!
+		 *
+		 * Complete common locking (RRWL, CLS)
 		 */
 
 		default P addIntSpinnerField(String fieldName, SettableValue<Integer> value,
@@ -175,19 +188,15 @@ public class PanelPopulation {
 
 		<S> P addComponent(String fieldName, S component, Consumer<FieldEditor<S, ?>> modify);
 
-		C getContainer();
-	}
+		P addVPanel(Consumer<PanelPopulator<JPanel, ?>> panel);
 
-	public interface VPanelPopulator<C extends Container, P extends VPanelPopulator<C, P>> extends PanelPopulator<C, P> {
-		default P addHPanel(String fieldName, String layoutType, Consumer<HPanelPopulator<JPanel, ?>> panel) {
+		default P addHPanel(String fieldName, String layoutType, Consumer<PanelPopulator<JPanel, ?>> panel) {
 			return addHPanel(fieldName, makeLayout(layoutType), panel);
 		}
 
-		P addHPanel(String fieldName, LayoutManager layout, Consumer<HPanelPopulator<JPanel, ?>> panel);
-	}
+		P addHPanel(String fieldName, LayoutManager layout, Consumer<PanelPopulator<JPanel, ?>> panel);
 
-	public interface HPanelPopulator<C extends Container, P extends HPanelPopulator<C, P>> extends PanelPopulator<C, P>, FieldEditor<C, P> {
-		P addVPanel(Consumer<VPanelPopulator<JPanel, ?>> panel);
+		C getContainer();
 	}
 
 	public interface ComponentEditor<E, P extends ComponentEditor<E, P>> {
@@ -242,6 +251,16 @@ public class PanelPopulation {
 		P withIcon(ObservableValue<? extends Icon> icon);
 	}
 
+	public interface ImageControl {
+		ImageControl variableLocation(Observable<String> location);
+
+		ImageControl variable(Observable<Icon> icon);
+
+		ImageControl withSize(int width, int height);
+
+		ImageControl withOpacity(double opacity);
+	}
+
 	public interface ComboEditor<F, P extends ComboEditor<F, P>> extends FieldEditor<JComboBox<F>, P> {
 		P withValueTooltip(Function<? super F, String> tooltip);
 
@@ -253,13 +272,13 @@ public class PanelPopulation {
 	}
 
 	public interface TabPaneEditor<E, P extends TabPaneEditor<E, P>> extends ComponentEditor<E, P> {
-		P withVTab(Object tabID, Consumer<VPanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier);
+		P withVTab(Object tabID, Consumer<PanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier);
 
-		default P withHTab(Object tabID, String layoutType, Consumer<HPanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier) {
+		default P withHTab(Object tabID, String layoutType, Consumer<PanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier) {
 			return withHTab(tabID, makeLayout(layoutType), panel, tabModifier);
 		}
 
-		P withHTab(Object tabID, LayoutManager layout, Consumer<HPanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier);
+		P withHTab(Object tabID, LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier);
 
 		P withTab(Object tabID, Component tabComponent, Consumer<TabEditor<?>> tabModifier);
 	}
@@ -413,6 +432,52 @@ public class PanelPopulation {
 		public String toString() {
 			return String.valueOf(theEnablement);
 		}
+	}
+
+	// Drag and cut/copy/paste
+
+	public interface TransferSource<E> {
+		<E2> TransferSource<E2> forType(Predicate<? super E> filter, Function<? super E, ? extends E2> map);
+		default <E2 extends E> TransferSource<E2> forType(Class<E2> type) {
+			return forType(value -> type.isInstance(value), value -> (E2) value);
+		}
+
+		TransferSource<E> draggable(boolean draggable);
+		TransferSource<E> copyable(boolean copyable);
+		TransferSource<E> movable(boolean movable);
+
+		TransferSource<E> appearance(Consumer<TransferAppearance<E>> image);
+
+		default TransferSource<E> toFlavor(DataFlavor flavor, DataTransform<? super E> transform) {
+			return toFlavor(Arrays.asList(flavor), transform);
+		}
+		TransferSource<E> toFlavor(Collection<? extends DataFlavor> flavors, DataTransform<? super E> transform);
+		TransferSource<E> toObject(); // TODO default this
+		// TODO default this, supporting multiple text-based flavors
+		TransferSource<E> toText(Function<? super E, ? extends CharSequence> toString);
+	}
+
+	public interface TransferAppearance<E> {
+		TransferAppearance<E> withDragIcon(String imageLocation, Consumer<ImageControl> imgConfig);
+		TransferAppearance<E> withDragOffset(int x, int y);
+		TransferAppearance<E> withVisualRep(String imageLocation, Consumer<ImageControl> imgConfig);
+	}
+
+	public interface DataTransform<E> {
+		Object transform(E value, DataFlavor flavor);
+	}
+
+	public interface TransferAccepter<E> {
+		<E2> TransferAccepter<E2> forType(Predicate<? super E2> filter, Function<? super E2, ? extends E> map);
+
+		TransferAccepter<E> draggable(boolean draggable);
+		TransferAccepter<E> pastable(boolean pastable);
+
+		default TransferAccepter<E> fromFlavor(DataFlavor flavor, Function<? super DataFlavor, ? extends E> data) {
+			return fromFlavor(Arrays.asList(flavor), data);
+		}
+		TransferAccepter<E> fromFlavor(Collection<? extends DataFlavor> flavor, Function<? super DataFlavor, ? extends E> data);
+		TransferAccepter<E> fromObject();
 	}
 
 	static final String MIG_LAYOUT_CLASS_NAME = "net.miginfocom.swing.MigLayout";
@@ -590,7 +655,8 @@ public class PanelPopulation {
 			return (P) this;
 		}
 
-		default P addHPanel(String fieldName, LayoutManager layout, Consumer<HPanelPopulator<JPanel, ?>> panel) {
+		@Override
+		default P addHPanel(String fieldName, LayoutManager layout, Consumer<PanelPopulator<JPanel, ?>> panel) {
 			SimpleHPanel<JPanel> subPanel = new SimpleHPanel<>(fieldName, new JPanel(layout), getUntil());
 			if (panel != null)
 				panel.accept(subPanel);
@@ -598,7 +664,8 @@ public class PanelPopulation {
 			return (P) this;
 		}
 
-		default P addVPanel(Consumer<VPanelPopulator<JPanel, ?>> panel) {
+		@Override
+		default P addVPanel(Consumer<PanelPopulator<JPanel, ?>> panel) {
 			MigFieldPanel<JPanel> subPanel = new MigFieldPanel<>(new JPanel(), getUntil());
 			if (panel != null)
 				panel.accept(subPanel);
@@ -699,7 +766,7 @@ public class PanelPopulation {
 	}
 
 	static class MigFieldPanel<C extends Container> extends AbstractComponentEditor<C, MigFieldPanel<C>>
-	implements PartialPanelPopulatorImpl<C, MigFieldPanel<C>>, VPanelPopulator<C, MigFieldPanel<C>> {
+	implements PartialPanelPopulatorImpl<C, MigFieldPanel<C>>, PanelPopulator<C, MigFieldPanel<C>> {
 		private final Observable<?> theUntil;
 
 		public MigFieldPanel(C container, Observable<?> until) {
@@ -709,11 +776,6 @@ public class PanelPopulation {
 				LayoutManager2 migLayout = createMigLayout(true, () -> "install the layout before using this class");
 				container.setLayout(migLayout);
 			}
-		}
-
-		@Override
-		public MigFieldPanel<C> addHPanel(String fieldName, LayoutManager layout, Consumer<HPanelPopulator<JPanel, ?>> panel) {
-			return PartialPanelPopulatorImpl.super.addHPanel(fieldName, layout, panel);
 		}
 
 		@Override
@@ -868,7 +930,7 @@ public class PanelPopulation {
 	}
 
 	static class SimpleHPanel<C extends Container> extends SimpleFieldEditor<C, SimpleHPanel<C>>
-	implements PartialPanelPopulatorImpl<C, SimpleHPanel<C>>, HPanelPopulator<C, SimpleHPanel<C>> {
+	implements PartialPanelPopulatorImpl<C, SimpleHPanel<C>> {
 		private final Observable<?> theUntil;
 
 		SimpleHPanel(String fieldName, C editor, Observable<?> until) {
@@ -879,11 +941,6 @@ public class PanelPopulation {
 		@Override
 		public C getContainer() {
 			return getEditor();
-		}
-
-		@Override
-		public SimpleHPanel<C> addVPanel(Consumer<VPanelPopulator<JPanel, ?>> panel) {
-			return PartialPanelPopulatorImpl.super.addVPanel(panel);
 		}
 
 		@Override
@@ -989,14 +1046,14 @@ public class PanelPopulation {
 		}
 
 		@Override
-		public P withVTab(Object tabID, Consumer<VPanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier) {
+		public P withVTab(Object tabID, Consumer<PanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier) {
 			MigFieldPanel<JPanel> fieldPanel = new MigFieldPanel<>(null, theUntil);
 			panel.accept(fieldPanel);
 			return withTab(tabID, fieldPanel.getContainer(), tabModifier);
 		}
 
 		@Override
-		public P withHTab(Object tabID, LayoutManager layout, Consumer<HPanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier) {
+		public P withHTab(Object tabID, LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier) {
 			SimpleHPanel<JPanel> hPanel = new SimpleHPanel<>(null, new JPanel(layout), theUntil);
 			panel.accept(hPanel);
 			return withTab(tabID, hPanel.getContainer(), tabModifier);
@@ -1529,13 +1586,13 @@ public class PanelPopulation {
 					theEnabledString.set(null, cause);
 			}
 
-			if (theTooltipString != null && theEnabledString.get() == null) { // No point generating the tooltip if the disabled strign will
+			if (theTooltipString != null && theEnabledString.get() == null) { // No point generating the tooltip if the disabled string will
 				// show
 				theTooltipString.set(theTooltip.apply(selectedValues), cause);
 			}
 		}
 
-		void addButton(HPanelPopulator<?, ?> panel) {
+		void addButton(PanelPopulator<?, ?> panel) {
 			panel.addButton((String) null, theObservableAction, button -> {
 				if (theTooltipString != null)
 					button.withTooltip(theTooltipString);
