@@ -10,6 +10,7 @@ import org.observe.XformOptions.SimpleXformOptions;
 import org.observe.XformOptions.XformDef;
 import org.observe.util.TypeTokens;
 import org.qommons.Identifiable;
+import org.qommons.Transactable;
 import org.qommons.TriFunction;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
@@ -742,6 +743,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 		private final TypeToken<T> theType;
 		private String theDescription;
 		private boolean isVetoable;
+		private Transactable theLock;
 		private boolean isSafe;
 		private ListenerList.Builder theListenerBuilder;
 		private T theInitialValue;
@@ -762,6 +764,11 @@ public interface SettableValue<T> extends ObservableValue<T> {
 
 		public Builder<T> nullable(boolean nullable) {
 			isNullable = nullable;
+			return this;
+		}
+
+		public Builder<T> withLock(Transactable lock) {
+			theLock = lock;
 			return this;
 		}
 
@@ -786,12 +793,15 @@ public interface SettableValue<T> extends ObservableValue<T> {
 		}
 
 		public SettableValue<T> build() {
+			Transactable lock = theLock;
+			if (lock == null && isSafe)
+				lock = Transactable.transactable(new ReentrantReadWriteLock());
 			if (isVetoable)
-				return new VetoableSettableValue<>(theType, theDescription, isNullable, theListenerBuilder,
-					isSafe ? new ReentrantReadWriteLock() : null).withValue(theInitialValue, null);
+				return new VetoableSettableValue<>(theType, theDescription, isNullable, theListenerBuilder, lock).withValue(theInitialValue,
+					null);
 			else
-				return new SimpleSettableValue<>(theType, theDescription, isNullable, isSafe ? new ReentrantReadWriteLock() : null,
-					theListenerBuilder).withValue(theInitialValue, null);
+				return new SimpleSettableValue<>(theType, theDescription, isNullable, lock, theListenerBuilder).withValue(theInitialValue,
+					null);
 		}
 	}
 }

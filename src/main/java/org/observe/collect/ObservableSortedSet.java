@@ -252,7 +252,7 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSe
 	 * @param compare The comparator to use to sort the set's values
 	 * @return A builder to create a new, empty, mutable observable sorted set
 	 */
-	static <E> DefaultObservableSortedSet.Builder<E> build(TypeToken<E> type, Comparator<? super E> compare) {
+	static <E> DefaultObservableSortedSet.Builder<E, ?> build(TypeToken<E> type, Comparator<? super E> compare) {
 		return DefaultObservableSortedSet.build(type, compare);
 	}
 

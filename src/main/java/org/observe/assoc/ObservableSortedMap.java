@@ -3,7 +3,6 @@ package org.observe.assoc;
 import java.util.Comparator;
 import java.util.Map;
 import java.util.NavigableMap;
-import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -17,12 +16,10 @@ import org.observe.collect.ObservableSortedSet;
 import org.observe.util.TypeTokens;
 import org.qommons.Identifiable;
 import org.qommons.Transaction;
-import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.BetterSortedMap;
 import org.qommons.collect.CollectionElement;
-import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MutableMapEntryHandle;
@@ -132,7 +129,7 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 	 * @param sorting The sorting for the map's keys
 	 * @return The builder to build the map
 	 */
-	static <K, V> Builder<K, V> build(TypeToken<K> keyType, TypeToken<V> valueType, Comparator<? super K> sorting) {
+	static <K, V> Builder<K, V, ?> build(TypeToken<K> keyType, TypeToken<V> valueType, Comparator<? super K> sorting) {
 		return new Builder<>(keyType, valueType, sorting, "ObservableMap");
 	}
 
@@ -141,60 +138,25 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 	 *
 	 * @param <K> The key type for the map
 	 * @param <V> The value type for the map
+	 * @param <B> The sub-type of the builder
 	 */
-	class Builder<K, V> extends ObservableMap.Builder<K, V> {
+	class Builder<K, V, B extends Builder<K, V, B>> extends ObservableMap.Builder<K, V, B> {
 		Builder(TypeToken<K> keyType, TypeToken<V> valueType, Comparator<? super K> sorting, String initDescrip) {
 			super(keyType, valueType, initDescrip);
 			sortBy(sorting);
 		}
 
 		@Override
-		public Builder<K, V> withBacking(BetterList<K> backing) {
-			super.withBacking(backing);
-			return this;
-		}
-
-		@Override
-		public Builder<K, V> withEquivalence(Equivalence<? super K> equivalence) {
+		public B withEquivalence(Equivalence<? super K> equivalence) {
 			throw new UnsupportedOperationException("Equivalence is determined by the comparator");
 		}
 
 		@Override
-		public Builder<K, V> withLocker(CollectionLockingStrategy locker) {
-			super.withLocker(locker);
-			return this;
-		}
-
-		@Override
-		public Builder<K, V> safe(boolean safe) {
-			super.safe(safe);
-			return this;
-		}
-
-		@Override
-		public Builder<K, V> sortBy(Comparator<? super K> sorting) {
+		public B sortBy(Comparator<? super K> sorting) {
 			if (sorting == null)
 				throw new IllegalArgumentException("Comparator cannot be null");
 			super.sortBy(sorting);
-			return this;
-		}
-
-		@Override
-		public Builder<K, V> withDescription(String description) {
-			super.withDescription(description);
-			return this;
-		}
-
-		@Override
-		public Builder<K, V> withElementSource(Function<ElementId, ElementId> elementSource) {
-			super.withElementSource(elementSource);
-			return this;
-		}
-
-		@Override
-		public Builder<K, V> withSourceElements(BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> sourceElements) {
-			super.withSourceElements(sourceElements);
-			return this;
+			return (B) this;
 		}
 
 		@Override

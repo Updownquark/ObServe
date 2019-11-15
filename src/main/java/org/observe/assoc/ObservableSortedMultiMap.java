@@ -154,7 +154,7 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 	 * @param <V> The value type for the map
 	 */
 	class Builder<K, V> extends ObservableMultiMap.Builder<K, V> {
-		Builder(DefaultObservableCollection.Builder<MapEntry<K, V>> backingBuilder, TypeToken<K> keyType, TypeToken<V> valueType,
+		Builder(DefaultObservableCollection.Builder<MapEntry<K, V>, ?> backingBuilder, TypeToken<K> keyType, TypeToken<V> valueType,
 			Comparator<? super K> sorting, String defaultDescrip) {
 			super(backingBuilder, keyType, valueType, defaultDescrip);
 			super.withKeyEquivalence(Equivalence.of(TypeTokens.getRawType(keyType), sorting, true));
@@ -198,7 +198,7 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 
 	/**
 	 * Implements {@link ObservableSortedMultiMap#entrySet()}
-	 * 
+	 *
 	 * @param <K> The key type of the map
 	 * @param <V> The value type of the map
 	 */

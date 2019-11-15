@@ -1,7 +1,6 @@
 package org.observe;
 
 import java.util.LinkedList;
-import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.observe.util.TypeTokens;
@@ -31,7 +30,7 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 	private final TypeToken<T> theType;
 	private final String theDescription;
 	private final boolean isNullable;
-	private final ReentrantReadWriteLock theLock;
+	private final Transactable theLock;
 	private final ListenerList<ListenerHolder<T>> theListeners;
 	private final VSVChanges theChanges = new VSVChanges();
 	private volatile T theValue;
@@ -46,7 +45,7 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 	 * @param nullable Whether null can be assigned to the value
 	 */
 	public VetoableSettableValue(TypeToken<T> type, boolean nullable) {
-		this(type, nullable, new ReentrantReadWriteLock());
+		this(type, nullable, Transactable.transactable(new ReentrantReadWriteLock()));
 	}
 
 	/**
@@ -54,12 +53,12 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 	 * @param nullable Whether null can be assigned to the value
 	 * @param lock The lock for this value;
 	 */
-	public VetoableSettableValue(TypeToken<T> type, boolean nullable, ReentrantReadWriteLock lock) {
+	public VetoableSettableValue(TypeToken<T> type, boolean nullable, Transactable lock) {
 		this(type, "settable-value", nullable, ListenerList.build(), lock);
 	}
 
 	VetoableSettableValue(TypeToken<T> type, String description, boolean nullable, ListenerList.Builder listening,
-		ReentrantReadWriteLock lock) {
+		Transactable lock) {
 		theType = type;
 		theDescription = description;
 		isNullable = nullable;
@@ -109,10 +108,7 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 		String accept = isAcceptable(value);
 		if (accept != null)
 			throw new IllegalArgumentException(accept);
-		Lock lock = theLock == null ? null : theLock.writeLock();
-		if (lock != null)
-			lock.lock();
-		try {
+		try (Transaction lock = theLock == null ? Transaction.NONE : theLock.lock(true, cause)) {
 			if (!isAlive)
 				throw new UnsupportedOperationException("This value is no longer alive");
 			long[] oldStamp = new long[] { theStamp };
@@ -157,9 +153,6 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 				}
 			}
 			return oldValue;
-		} finally {
-			if (lock != null)
-				lock.unlock();
 		}
 	}
 
@@ -184,10 +177,7 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 	 * @param cause The cause of the death
 	 */
 	protected void kill(Object cause) {
-		Lock lock = theLock == null ? null : theLock.writeLock();
-		if (lock != null)
-			lock.lock();
-		try {
+		try (Transaction lock = theLock == null ? Transaction.NONE : theLock.lock(true, cause)) {
 			if (!isAlive)
 				throw new UnsupportedOperationException("This value is no already dead");
 			isAlive = false;
@@ -207,9 +197,6 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 					});
 			}
 			theListeners.clear();
-		} finally {
-			if (lock != null)
-				lock.unlock();
 		}
 	}
 
@@ -240,17 +227,11 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 
 		@Override
 		public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-			Lock lock = theLock == null ? null : theLock.readLock();
-			if (lock != null)
-				lock.lock();
-			try {
+			try (Transaction lock = theLock == null ? Transaction.NONE : theLock.lock(false, null)) {
 				if (isAlive)
 					return theListeners.add(new ListenerHolder<>(observer, theStamp, theValue), false)::run;
 				else
 					return Subscription.NONE;
-			} finally {
-				if (lock != null)
-					lock.unlock();
 			}
 		}
 
@@ -261,12 +242,12 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 
 		@Override
 		public Transaction lock() {
-			return Transactable.lock(theLock, false);
+			return theLock == null ? Transaction.NONE : theLock.lock(false, null);
 		}
 
 		@Override
 		public Transaction tryLock() {
-			return Transactable.tryLock(theLock, false);
+			return theLock == null ? Transaction.NONE : theLock.tryLock(false, null);
 		}
 
 		@Override

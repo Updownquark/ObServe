@@ -5,6 +5,7 @@ import java.util.function.Consumer;
 
 import org.observe.util.TypeTokens;
 import org.qommons.Identifiable;
+import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.ListenerList;
 
@@ -48,7 +49,7 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 	 */
 	public SimpleSettableValue(TypeToken<T> type, boolean nullable, ReentrantReadWriteLock lock,
 		Consumer<ListenerList.Builder> listeningOptions) {
-		this(type, "settable-value", nullable, lock, listeningFor(listeningOptions));
+		this(type, "settable-value", nullable, lock == null ? null : Transactable.transactable(lock), listeningFor(listeningOptions));
 	}
 
 	private static ListenerList.Builder listeningFor(Consumer<ListenerList.Builder> listeningOptions) {
@@ -58,7 +59,7 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 		return listening;
 	}
 
-	SimpleSettableValue(TypeToken<T> type, String description, boolean nullable, ReentrantReadWriteLock lock,
+	SimpleSettableValue(TypeToken<T> type, String description, boolean nullable, Transactable lock,
 		ListenerList.Builder listening) {
 		theType = type;
 		isNullable = nullable && !type.isPrimitive();
@@ -101,20 +102,15 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 		String accept = isAcceptable(value);
 		if (accept != null)
 			throw new IllegalArgumentException(accept);
-		if (theEventer.isLockSupported())
-			theEventer.getLock().writeLock().lock();
-		try {
+		try (Transaction t = theEventer.lockWrite()) {
 			T old = theValue;
 			theStamp++;
 			theValue = value;
 			ObservableValueEvent<T> evt = createChangeEvent(old, value, cause);
-			try (Transaction t = ObservableValueEvent.use(evt)) {
+			try (Transaction evtT = ObservableValueEvent.use(evt)) {
 				theEventer.onNext(evt);
 			}
 			return old;
-		} finally {
-			if (theEventer.isLockSupported())
-				theEventer.getLock().writeLock().unlock();
 		}
 	}
 
@@ -137,7 +133,7 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 	 * @param listening Listening options for this value
 	 * @return The observable for this value to use to fire its initial and change events
 	 */
-	protected SimpleObservable<ObservableValueEvent<T>> createEventer(ReentrantReadWriteLock lock, ListenerList.Builder listening) {
+	protected SimpleObservable<ObservableValueEvent<T>> createEventer(Transactable lock, ListenerList.Builder listening) {
 		return new SimpleObservable<>(null, Identifiable.wrap(theIdentity, "noInitChanges"), true, lock, listening);
 	}
 

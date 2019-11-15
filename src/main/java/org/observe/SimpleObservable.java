@@ -19,7 +19,7 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 	private boolean isAlive = true;
 	private final ListenerList<Observer<? super T>> theListeners;
 	private final boolean isInternalState;
-	private final ReentrantReadWriteLock theLock;
+	private final Transactable theLock;
 
 	/** Creates a simple observable */
 	public SimpleObservable() {
@@ -52,6 +52,11 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 	 */
 	public SimpleObservable(Consumer<? super Observer<? super T>> onSubscribe, Object identity, boolean internalState,
 		ReentrantReadWriteLock lock, ListenerList.Builder listening) {
+		this(onSubscribe, identity, internalState, Transactable.transactable(lock), listening);
+	}
+
+	SimpleObservable(Consumer<? super Observer<? super T>> onSubscribe, Object identity, boolean internalState, Transactable lock,
+		ListenerList.Builder listening) {
 		theIdentity = identity != null ? identity : Identifiable.baseId("observable", this);
 		/* Java's ConcurrentLinkedQueue has a problem (for me) that makes the class unusable here.  As documented in fireNext() below, the
 		 * behavior of observables is advertised such that if a listener is added by a listener, the new listener will be added at the end
@@ -72,7 +77,7 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 	}
 
 	/** @return This observable's lock */
-	protected ReentrantReadWriteLock getLock() {
+	protected Transactable getLock() {
 		return theLock;
 	}
 
@@ -96,32 +101,22 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 
 	@Override
 	public <V extends T> void onNext(V value) {
-		if (theLock != null)
-			theLock.writeLock().lock();
-		try {
+		try (Transaction lock = theLock == null ? Transaction.NONE : theLock.lock(true, value)) {
 			if (!isAlive)
 				throw new IllegalStateException("Firing a value on a completed observable");
 			theListeners.forEach(//
 				observer -> observer.onNext(value));
-		} finally {
-			if (theLock != null)
-				theLock.writeLock().unlock();
 		}
 	}
 
 	@Override
 	public <V extends T> void onCompleted(V value) {
-		if (theLock != null)
-			theLock.writeLock().lock();
-		try {
+		try (Transaction lock = theLock == null ? Transaction.NONE : theLock.lock(true, value)) {
 			if (!isAlive)
 				return;
 			theListeners.forEach(//
 				observer -> observer.onCompleted(value));
 			theListeners.clear();
-		} finally {
-			if (theLock != null)
-				theLock.writeLock().unlock();
 		}
 	}
 
@@ -130,14 +125,24 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 		return theLock != null;
 	}
 
+	/**
+	 * Locks this observable exclusively, allowing {@link #onNext(Object)} or {@link #onCompleted(Object)} to be called on the current
+	 * thread while the lock is held.
+	 * 
+	 * @return The transaction to close to release the lock
+	 */
+	public Transaction lockWrite() {
+		return theLock == null ? Transaction.NONE : theLock.lock(true, null);
+	}
+
 	@Override
 	public Transaction lock() {
-		return Transactable.lock(theLock, false);
+		return theLock == null ? Transaction.NONE : theLock.lock(false, null);
 	}
 
 	@Override
 	public Transaction tryLock() {
-		return Transactable.tryLock(theLock, false);
+		return theLock == null ? Transaction.NONE : theLock.tryLock(false, null);
 	}
 
 	/** @return An observable that fires events from this SimpleObservable but cannot be used to initiate events */

@@ -15,7 +15,7 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <T> The type of value the action produces
  */
-public interface ObservableAction<T> {
+public interface ObservableAction<T> extends TypedValueContainer<T> {
 	/** This class's type key */
 	@SuppressWarnings("rawtypes")
 	static TypeTokens.TypeKey<ObservableAction> TYPE_KEY = TypeTokens.get().keyFor(ObservableAction.class)
@@ -27,9 +27,6 @@ public interface ObservableAction<T> {
 	});
 	/** This class's wildcard {@link TypeToken} */
 	static TypeToken<ObservableAction<?>> TYPE = TYPE_KEY.parameterized();
-
-	/** @return The run-time type of values that this action produces */
-	TypeToken<T> getType();
 
 	/**
 	 * @param cause An object that may have caused the action (e.g. a user event)

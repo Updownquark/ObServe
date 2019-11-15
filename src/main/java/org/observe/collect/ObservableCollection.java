@@ -17,6 +17,7 @@ import org.observe.ObservableValue;
 import org.observe.Observer;
 import org.observe.SettableValue;
 import org.observe.Subscription;
+import org.observe.TypedValueContainer;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableSortedMultiMap;
 import org.observe.collect.Combination.CombinationPrecursor;
@@ -78,7 +79,7 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <E> The type of element in the collection
  */
-public interface ObservableCollection<E> extends BetterList<E> {
+public interface ObservableCollection<E> extends BetterList<E>, TypedValueContainer<E> {
 	/** This class's type key */
 	@SuppressWarnings("rawtypes")
 	static TypeTokens.TypeKey<ObservableCollection> TYPE_KEY = TypeTokens.get().keyFor(ObservableCollection.class)
@@ -94,6 +95,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	// Additional contract methods
 
 	/** @return The type of elements in this collection */
+	@Override
 	TypeToken<E> getType();
 
 	@Override
@@ -596,7 +598,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 * @param type The type for the collection
 	 * @return A builder for a new, empty, mutable, observable collection
 	 */
-	static <E> DefaultObservableCollection.Builder<E> build(TypeToken<E> type) {
+	static <E> DefaultObservableCollection.Builder<E, ?> build(TypeToken<E> type) {
 		return DefaultObservableCollection.build(type);
 	}
 

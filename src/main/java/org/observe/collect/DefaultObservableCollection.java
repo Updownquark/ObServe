@@ -8,6 +8,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.observe.Subscription;
+import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
@@ -31,8 +32,11 @@ import com.google.common.reflect.TypeToken;
  * @param <E> The type for the collection
  */
 public class DefaultObservableCollection<E> implements ObservableCollection<E> {
-	/** @param <E> The type of elements in the collection */
-	public static class Builder<E> {
+	/**
+	 * @param <E> The type of elements in the collection
+	 * @param <B> The sub-type of the builder
+	 */
+	public static class Builder<E, B extends Builder<E, B>> {
 		private final TypeToken<E> theType;
 		private BetterList<E> theBacking;
 		private CollectionLockingStrategy theLocker;
@@ -52,39 +56,54 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 		}
 
 		/**
+		 * Copy constructor
+		 *
+		 * @param toCopy The builder to copy
+		 */
+		protected Builder(Builder<E, ?> toCopy) {
+			this(toCopy.theType, toCopy.theDescription);
+			theBacking = toCopy.theBacking;
+			theLocker = toCopy.theLocker;
+			theSorting = toCopy.theSorting;
+			theElementSource = toCopy.theElementSource;
+			theSourceElements = toCopy.theSourceElements;
+			theEquivalence = toCopy.theEquivalence;
+		}
+
+		/**
 		 * @param backing The pre-set backing for the collection
 		 * @return This builder
 		 */
-		public Builder<E> withBacking(BetterList<E> backing) {
+		public B withBacking(BetterList<E> backing) {
 			theBacking = backing;
-			return this;
+			return (B) this;
 		}
 
 		/**
 		 * @param equivalence The equivalence for the collection
 		 * @return This builder
 		 */
-		public Builder<E> withEquivalence(Equivalence<? super E> equivalence) {
+		public B withEquivalence(Equivalence<? super E> equivalence) {
 			theEquivalence = equivalence;
-			return this;
+			return (B) this;
 		}
 
 		/**
 		 * @param locker The locker for the collection
 		 * @return This builder
 		 */
-		public Builder<E> withLocker(CollectionLockingStrategy locker) {
+		public B withLocker(CollectionLockingStrategy locker) {
 			theLocker = locker;
-			return this;
+			return (B) this;
 		}
 
 		/**
 		 * @param safe Whether the collection should be thread-safe
 		 * @return This builder
 		 */
-		public Builder<E> safe(boolean safe) {
+		public B safe(boolean safe) {
 			withLocker(safe ? new StampedLockingStrategy() : new FastFailLockingStrategy());
-			return this;
+			return (B) this;
 		}
 
 		/**
@@ -93,8 +112,9 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 		 * @param sorting The sorting for the collection
 		 * @return This builder
 		 */
-		public Builder<E> sortBy(Comparator<? super E> sorting) {
+		public Builder<E, ?> sortBy(Comparator<? super E> sorting) {
 			theSorting = sorting;
+			theEquivalence = Equivalence.of(TypeTokens.getRawType(theType), sorting, true);
 			return this;
 		}
 
@@ -102,9 +122,9 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 		 * @param description The description for the collection
 		 * @return This builder
 		 */
-		public Builder<E> withDescription(String description) {
+		public B withDescription(String description) {
 			theDescription = description;
-			return this;
+			return (B) this;
 		}
 
 		/**
@@ -112,9 +132,9 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 		 *        ID
 		 * @return This builder
 		 */
-		public Builder<E> withElementSource(Function<ElementId, ElementId> elementSource) {
+		public B withElementSource(Function<ElementId, ElementId> elementSource) {
 			theElementSource = elementSource;
-			return this;
+			return (B) this;
 		}
 
 		/**
@@ -122,9 +142,25 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 		 *        {@link #withBacking(BetterList) backing} collection
 		 * @return This builder
 		 */
-		public Builder<E> withSourceElements(BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> sourceElements) {
+		public B withSourceElements(BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> sourceElements) {
 			theSourceElements = sourceElements;
-			return this;
+			return (B) this;
+		}
+
+		/** @return A builder to build an {@link ObservableSet} with these characteristics */
+		public SetBuilder<E, ?> distinct() {
+			if (theSorting != null)
+				return new DefaultObservableSortedSet.Builder<>(this, theSorting);
+			else
+				return new SetBuilder<>(this);
+		}
+
+		/**
+		 * @param sorting The sorting for the set
+		 * @return A builder to build an {@link ObservableSortedSet} with these characteristics
+		 */
+		public DefaultObservableSortedSet.Builder<E, ?> distinctSorted(Comparator<? super E> sorting) {
+			return new DefaultObservableSortedSet.Builder<>(this, sorting);
 		}
 
 		/** @return The type for the collection */
@@ -185,10 +221,45 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	}
 
 	/**
+	 * A builder that builds an {@link ObservableSet}
+	 *
+	 * @param <E> The type of the set to build
+	 * @param <B> The sub-type of the builder
+	 */
+	public static class SetBuilder<E, B extends SetBuilder<E, B>> extends Builder<E, B> {
+		/**
+		 * @param type The type of elements in the collection
+		 * @param initDescrip The initial (default) description for the collection
+		 */
+		protected SetBuilder(TypeToken<E> type, String initDescrip) {
+			super(type, initDescrip);
+		}
+
+		/**
+		 * Copy constructor
+		 *
+		 * @param toCopy The builder to copy
+		 */
+		protected SetBuilder(Builder<E, ?> toCopy) {
+			super(toCopy);
+		}
+
+		@Override
+		public SetBuilder<E, ?> distinct() {
+			return this;
+		}
+
+		@Override
+		public ObservableSet<E> build() {
+			return super.build().flow().distinct().collect();
+		}
+	}
+
+	/**
 	 * @param type The type for the new collection
 	 * @return A builder to build a new ObservableCollection
 	 */
-	public static <E> Builder<E> build(TypeToken<E> type) {
+	public static <E> Builder<E, ?> build(TypeToken<E> type) {
 		return new Builder<>(type, "observable-collection");
 	}
 

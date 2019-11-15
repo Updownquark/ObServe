@@ -37,7 +37,7 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <T> The compile-time type of this observable's value
  */
-public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lockable, Stamped, Identifiable {
+public interface ObservableValue<T> extends java.util.function.Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable {
 	/** This class's type key */
 	@SuppressWarnings("rawtypes")
 	static TypeTokens.TypeKey<ObservableValue> TYPE_KEY = TypeTokens.get().keyFor(ObservableValue.class)
@@ -49,9 +49,6 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 	});
 	/** This class's wildcard {@link TypeToken} */
 	static TypeToken<ObservableValue<?>> TYPE = TYPE_KEY.parameterized();
-
-	/** @return The run-time type of this value */
-	TypeToken<T> getType();
 
 	/** @return The current value of this observable */
 	@Override

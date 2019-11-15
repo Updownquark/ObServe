@@ -404,18 +404,18 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 
 		private final TypeToken<K> theKeyType;
 		private final TypeToken<V> theValueType;
-		private final DefaultObservableCollection.Builder<MapEntry<K, V>> theBackingBuilder;
+		private final DefaultObservableCollection.Builder<MapEntry<K, V>, ?> theBackingBuilder;
 		private Equivalence<? super K> theKeyEquivalence;
 		private Equivalence<? super V> theValueEquivalence;
 		private String theDescription;
 
-		Builder(DefaultObservableCollection.Builder<MapEntry<K, V>> backingBuilder, //
+		Builder(DefaultObservableCollection.Builder<MapEntry<K, V>, ?> backingBuilder, //
 			TypeToken<K> keyType, TypeToken<V> valueType, String defaultDescrip) {
 			theKeyType = keyType;
 			theValueType = valueType;
 			if (backingBuilder == null)
-				backingBuilder = (DefaultObservableCollection.Builder<MapEntry<K, V>>) // Type hackery for performance reasons
-				(DefaultObservableCollection.Builder<?>) //
+				backingBuilder = (DefaultObservableCollection.Builder<MapEntry<K, V>, ?>) // Type hackery for performance reasons
+				(DefaultObservableCollection.Builder<?, ?>) //
 				DefaultObservableCollection.build(INNER_ENTRY_TYPE);
 			theBackingBuilder = backingBuilder;
 			theKeyEquivalence = Equivalence.DEFAULT;
@@ -497,7 +497,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 			return theValueType;
 		}
 
-		protected DefaultObservableCollection.Builder<MapEntry<K, V>> getBackingBuilder() {
+		protected DefaultObservableCollection.Builder<MapEntry<K, V>, ?> getBackingBuilder() {
 			return theBackingBuilder;
 		}
 

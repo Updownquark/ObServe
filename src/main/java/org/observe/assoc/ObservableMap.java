@@ -5,7 +5,6 @@ import java.util.Comparator;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
-import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -32,7 +31,6 @@ import org.qommons.collect.BetterCollection.EmptyCollection;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterMap;
 import org.qommons.collect.CollectionElement;
-import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MutableCollectionElement;
@@ -462,7 +460,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 	 * @param valueType The value type for the map
 	 * @return The builder to build the map
 	 */
-	static <K, V> Builder<K, V> build(TypeToken<K> keyType, TypeToken<V> valueType) {
+	static <K, V> Builder<K, V, ?> build(TypeToken<K> keyType, TypeToken<V> valueType) {
 		return new Builder<>(keyType, valueType, "ObservableMap");
 	}
 
@@ -471,61 +469,14 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 	 *
 	 * @param <K> The key type for the map
 	 * @param <V> The value type for the map
+	 * @param <B> The sub-type of the builder
 	 */
-	class Builder<K, V> extends DefaultObservableCollection.Builder<K> {
+	class Builder<K, V, B extends Builder<K, V, B>> extends DefaultObservableCollection.Builder<K, B> {
 		private final TypeToken<V> theValueType;
 
 		Builder(TypeToken<K> keyType, TypeToken<V> valueType, String initDescrip) {
 			super(keyType, initDescrip);
 			theValueType = valueType;
-		}
-
-		@Override
-		public Builder<K, V> withBacking(BetterList<K> backing) {
-			super.withBacking(backing);
-			return this;
-		}
-
-		@Override
-		public Builder<K, V> withEquivalence(Equivalence<? super K> equivalence) {
-			super.withEquivalence(equivalence);
-			return this;
-		}
-
-		@Override
-		public Builder<K, V> withLocker(CollectionLockingStrategy locker) {
-			super.withLocker(locker);
-			return this;
-		}
-
-		@Override
-		public Builder<K, V> safe(boolean safe) {
-			super.safe(safe);
-			return this;
-		}
-
-		@Override
-		public Builder<K, V> sortBy(Comparator<? super K> sorting) {
-			super.sortBy(sorting);
-			return this;
-		}
-
-		@Override
-		public Builder<K, V> withDescription(String description) {
-			super.withDescription(description);
-			return this;
-		}
-
-		@Override
-		public Builder<K, V> withElementSource(Function<ElementId, ElementId> elementSource) {
-			super.withElementSource(elementSource);
-			return this;
-		}
-
-		@Override
-		public Builder<K, V> withSourceElements(BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> sourceElements) {
-			super.withSourceElements(sourceElements);
-			return this;
 		}
 
 		protected TypeToken<V> getValueType() {
@@ -534,7 +485,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 
 		public ObservableMap<K, V> buildMap() {
 			Comparator<? super K> compare = getSorting();
-			DefaultObservableCollection.Builder<Map.Entry<K, V>> entryBuilder = DefaultObservableCollection
+			DefaultObservableCollection.Builder<Map.Entry<K, V>, ?> entryBuilder = DefaultObservableCollection
 				.build(buildEntryType(getType(), theValueType))//
 				.withBacking((BetterList<Map.Entry<K, V>>) (BetterList<?>) getBacking())//
 				.withDescription(getDescription())//

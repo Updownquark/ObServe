@@ -13,7 +13,6 @@ import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.CollectionElement;
-import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ValueStoredCollection;
 import org.qommons.tree.BetterTreeSet;
@@ -30,8 +29,9 @@ public class DefaultObservableSortedSet<E> extends DefaultObservableCollection<E
 	 * Builds an {@link ObservableSortedSet}
 	 *
 	 * @param <E> The type of elements in the set
+	 * @param <B> The sub-type of the builder
 	 */
-	public static class Builder<E> extends DefaultObservableCollection.Builder<E> {
+	public static class Builder<E, B extends Builder<E, B>> extends DefaultObservableCollection.SetBuilder<E, B> {
 		/**
 		 * @param type The type of elements in the set
 		 * @param initDescrip The initial (default) description for the set
@@ -39,54 +39,33 @@ public class DefaultObservableSortedSet<E> extends DefaultObservableCollection<E
 		 */
 		protected Builder(TypeToken<E> type, String initDescrip, Comparator<? super E> sorting) {
 			super(type, initDescrip);
-			sortBy(sorting);
+			super.sortBy(sorting);
+		}
+
+		/**
+		 * @param toCopy The collection builder to copy
+		 * @param sorting The sorting for the set
+		 */
+		protected Builder(DefaultObservableCollection.Builder<E, ?> toCopy, Comparator<? super E> sorting) {
+			super(toCopy);
+			super.sortBy(sorting);
 		}
 
 		@Override
-		public Builder<E> withBacking(BetterList<E> backing) {
-			super.withBacking(backing);
-			return this;
+		public B withBacking(BetterList<E> backing) {
+			if (backing != null && !(backing instanceof BetterSortedSet))
+				throw new IllegalStateException("An ObservableSortedSet must be backed by an instance of BetterSortedSet");
+			return (B) this;
 		}
 
 		@Override
-		public Builder<E> withEquivalence(Equivalence<? super E> equivalence) {
+		public B withEquivalence(Equivalence<? super E> equivalence) {
 			throw new UnsupportedOperationException("Equivalence for sorted sets is defined by the comparator");
 		}
 
 		@Override
-		public Builder<E> withLocker(CollectionLockingStrategy locker) {
-			super.withLocker(locker);
-			return this;
-		}
-
-		@Override
-		public Builder<E> safe(boolean safe) {
-			super.safe(safe);
-			return this;
-		}
-
-		@Override
-		public Builder<E> sortBy(Comparator<? super E> sorting) {
-			super.sortBy(sorting);
-			return this;
-		}
-
-		@Override
-		public Builder<E> withDescription(String description) {
-			super.withDescription(description);
-			return this;
-		}
-
-		@Override
-		public Builder<E> withElementSource(Function<ElementId, ElementId> elementSource) {
-			super.withElementSource(elementSource);
-			return this;
-		}
-
-		@Override
-		public Builder<E> withSourceElements(BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> sourceElements) {
-			super.withSourceElements(sourceElements);
-			return this;
+		public DefaultObservableCollection.Builder<E, ?> sortBy(Comparator<? super E> sorting) {
+			return new DefaultObservableCollection.Builder<>(this);
 		}
 
 		@Override
@@ -105,7 +84,7 @@ public class DefaultObservableSortedSet<E> extends DefaultObservableCollection<E
 	 * @param sorting The sorting for the set
 	 * @return A builder to build a new sorted set
 	 */
-	public static <E> Builder<E> build(TypeToken<E> type, Comparator<? super E> sorting) {
+	public static <E> Builder<E, ?> build(TypeToken<E> type, Comparator<? super E> sorting) {
 		return new Builder<>(type, "observable-sorted-set", sorting);
 	}
 
