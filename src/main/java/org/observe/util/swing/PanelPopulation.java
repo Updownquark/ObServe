@@ -137,6 +137,8 @@ public class PanelPopulation {
 		 * Dragging!!!
 		 *
 		 * Complete common locking (RRWL, CLS)
+		 *
+		 * Table preferred size
 		 */
 
 		default P addIntSpinnerField(String fieldName, SettableValue<Integer> value,
@@ -204,7 +206,21 @@ public class PanelPopulation {
 
 		P visibleWhen(ObservableValue<Boolean> visible);
 
+		/**
+		 * Specifies that this component should fill the horizontal dimension of its panel (e.g. should expand so that there is no empty
+		 * space on the right side of its panel).
+		 *
+		 * @return This editor
+		 */
 		P fill();
+
+		/**
+		 * Specifies that this component should expand to fill the vertical dimension of its panel (e.g. should expand so that there is no
+		 * empty space at the bottom of its panel).
+		 *
+		 * @return This editor
+		 */
+		P fillV();
 
 		P modifyEditor(Consumer<? super E> modify);
 	}
@@ -713,7 +729,9 @@ public class PanelPopulation {
 
 	static abstract class AbstractComponentEditor<E, P extends AbstractComponentEditor<E, P>> implements ComponentEditor<E, P> {
 		private final E theEditor;
-		private boolean isGrow;
+		private boolean isFillH;
+		private boolean isFillV;
+
 		private ObservableValue<Boolean> isVisible;
 
 		AbstractComponentEditor(E editor) {
@@ -733,7 +751,13 @@ public class PanelPopulation {
 
 		@Override
 		public P fill() {
-			isGrow = true;
+			isFillH = true;
+			return (P) this;
+		}
+
+		@Override
+		public P fillV() {
+			isFillV = true;
 			return (P) this;
 		}
 
@@ -750,8 +774,12 @@ public class PanelPopulation {
 			return (Component) theEditor;
 		}
 
-		protected boolean isGrow() {
-			return isGrow;
+		protected boolean isFill() {
+			return isFillH;
+		}
+
+		protected boolean isFillV() {
+			return isFillV;
 		}
 
 		protected ObservableValue<Boolean> isVisible() {
@@ -793,8 +821,13 @@ public class PanelPopulation {
 			if (fieldLabel != null)
 				getContainer().add(fieldLabel, "align right");
 			StringBuilder constraints = new StringBuilder();
-			if (field.isGrow())
+			if (field.isFill())
 				constraints.append("growx, pushx");
+			if (field.isFillV()) {
+				if (constraints.length() > 0)
+					constraints.append(", ");
+				constraints.append("growy, pushy");
+			}
 			if (postLabel != null) {
 				if (fieldLabel == null) {
 					if (constraints.length() > 0)
@@ -954,8 +987,15 @@ public class PanelPopulation {
 				getContainer().add(fieldLabel);
 			Component component = field.getComponent(getUntil());
 			String constraints = null;
-			if (field.isGrow() && getContainer().getLayout().getClass().getName().startsWith("net.mig"))
-				constraints = "growx, pushx";
+			if ((field.isFill() || field.isFillV()) && getContainer().getLayout().getClass().getName().startsWith("net.mig")) {
+				if (field.isFill()) {
+					if (constraints.length() > 0)
+						constraints += ", ";
+					constraints = "growx, pushx";
+				}
+				if (field.isFillV())
+					constraints = "growy, pushy";
+			}
 			getContainer().add(component, constraints);
 			if (postLabel != null)
 				getContainer().add(postLabel);
