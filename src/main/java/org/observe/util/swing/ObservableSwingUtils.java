@@ -723,19 +723,24 @@ public class ObservableSwingUtils {
 	/**
 	 * @param clazz The class with which to get the resource, or null to use this class
 	 * @param location The resource location of the image file
+	 * @return The icon, or null if the resource could not be found
+	 */
+	public static ImageIcon getIcon(Class<?> clazz, String location) {
+		URL searchUrl = (clazz != null ? clazz : ObservableSwingUtils.class).getResource(location);
+		return searchUrl != null ? new ImageIcon(searchUrl) : null;
+	}
+
+	/**
+	 * @param clazz The class with which to get the resource, or null to use this class
+	 * @param location The resource location of the image file
 	 * @param width The width for the icon
 	 * @param height The height for the icon
 	 * @return The icon, or null if the resource could not be found
 	 */
 	public static ImageIcon getFixedIcon(Class<?> clazz, String location, int width, int height) {
-		ImageIcon icon;
-		URL searchUrl = (clazz != null ? clazz : ObservableSwingUtils.class).getResource(location);
-		if (searchUrl != null) {
-			icon = new ImageIcon(searchUrl);
-			if (icon.getIconWidth() != width || icon.getIconHeight() != height)
-				icon = new ImageIcon(icon.getImage().getScaledInstance(width, height, Image.SCALE_SMOOTH));
-		} else
-			icon = null;
+		ImageIcon icon = getIcon(clazz, location);
+		if (icon != null && icon.getIconWidth() != width || icon.getIconHeight() != height)
+			icon = new ImageIcon(icon.getImage().getScaledInstance(width, height, Image.SCALE_SMOOTH));
 		return icon;
 	}
 
@@ -810,7 +815,7 @@ public class ObservableSwingUtils {
 	 * @param until The observable that, when fired, will release all associated resources
 	 * @return The API structure to add fields with
 	 */
-	public static <C extends Container> PanelPopulation.VPanelPopulator<C, ?> populateFields(C container, Observable<?> until) {
+	public static <C extends Container> PanelPopulation.PanelPopulator<C, ?> populateFields(C container, Observable<?> until) {
 		return PanelPopulation.populateVPanel(container, until);
 	}
 }

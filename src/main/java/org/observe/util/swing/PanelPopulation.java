@@ -5,6 +5,7 @@ import java.awt.Component;
 import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.EventQueue;
+import java.awt.Image;
 import java.awt.LayoutManager;
 import java.awt.LayoutManager2;
 import java.awt.datatransfer.DataFlavor;
@@ -14,9 +15,11 @@ import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
@@ -26,10 +29,12 @@ import java.util.function.Supplier;
 
 import javax.swing.Box;
 import javax.swing.Icon;
+import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
@@ -45,8 +50,12 @@ import org.observe.Observable;
 import org.observe.ObservableAction;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
+import org.observe.SettableValue.Builder;
+import org.observe.SimpleObservable;
 import org.observe.SimpleSettableValue;
 import org.observe.Subscription;
+import org.observe.TypedValueContainer;
+import org.observe.collect.DefaultObservableCollection;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.SafeObservableCollection;
 import org.observe.util.TypeTokens;
@@ -56,9 +65,11 @@ import org.observe.util.swing.TableContentControl.ValueRenderer;
 import org.qommons.IntList;
 import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
+import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.CollectionLockingStrategy;
+import org.qommons.collect.FastFailLockingStrategy;
 import org.qommons.collect.RRWLockingStrategy;
 import org.qommons.io.Format;
 
@@ -90,7 +101,7 @@ public class PanelPopulation {
 	public static <C extends Container> PanelPopulator<C, ?> populateVPanel(C panel, Observable<?> until) {
 		if (panel == null)
 			panel = (C) new JPanel();
-		return new MigFieldPanel<>(panel, until == null ? Observable.empty() : until);
+		return new MigFieldPanel<>(panel, until == null ? Observable.empty() : until, new LazyLock());
 	}
 
 	public static <C extends Container> PanelPopulator<C, ?> populateHPanel(C panel, String layoutType, Observable<?> until) {
@@ -102,11 +113,35 @@ public class PanelPopulation {
 			panel = (C) new JPanel(layout);
 		else if (layout != null)
 			panel.setLayout(layout);
-		return new SimpleHPanel<>(null, panel, until == null ? Observable.empty() : until);
+		return new SimpleHPanel<>(null, panel, new LazyLock(), until == null ? Observable.empty() : until);
 	}
 
 	public static <R> TableBuilder<R, ?> buildTable(ObservableCollection<R> rows) {
-		return new SimpleTableBuilder<>(rows);
+		return new SimpleTableBuilder<>(rows, new LazyLock());
+	}
+
+	public static class LazyLock implements Supplier<Transactable> {
+		private final Supplier<Transactable> theLockCreator;
+		private Transactable theLock;
+
+		public LazyLock() {
+			this(() -> Transactable.transactable(new ReentrantReadWriteLock()));
+		}
+
+		public LazyLock(Supplier<Transactable> lockCreator) {
+			theLockCreator = lockCreator;
+		}
+
+		@Override
+		public Transactable get() {
+			if (theLock == null) {
+				synchronized (this) {
+					if (theLock == null)
+						theLock = theLockCreator.get();
+				}
+			}
+			return theLock;
+		}
 	}
 
 	public interface PanelPopulator<C extends Container, P extends PanelPopulator<C, P>> extends ComponentEditor<C, P> {
@@ -137,8 +172,6 @@ public class PanelPopulation {
 		 * Dragging!!!
 		 *
 		 * Complete common locking (RRWL, CLS)
-		 *
-		 * Table preferred size
 		 */
 
 		default P addIntSpinnerField(String fieldName, SettableValue<Integer> value,
@@ -198,6 +231,11 @@ public class PanelPopulation {
 
 		P addHPanel(String fieldName, LayoutManager layout, Consumer<PanelPopulator<JPanel, ?>> panel);
 
+		@Override
+		default Alert alert(String title, String message) {
+			return new SimpleAlert(getContainer(), title, message);
+		}
+
 		C getContainer();
 	}
 
@@ -223,6 +261,71 @@ public class PanelPopulation {
 		P fillV();
 
 		P modifyEditor(Consumer<? super E> modify);
+
+		Alert alert(String title, String message);
+
+		ValueCache values();
+	}
+
+	public interface ValueCache {
+		default <T> ObservableValue<T> declareValue(String name, ObservableValue<T> value) {
+			ObservableValue<? extends T> added = getOrDeclareValue(name, value.getType(), () -> value);
+			if (added != value)
+				throw new IllegalStateException("An ObservableValue named " + name + " has already been declared");
+			return value;
+		}
+		<T> ObservableValue<? extends T> getOrDeclareValue(String name, TypeToken<T> type,
+			Supplier<? extends ObservableValue<? extends T>> value);
+
+		default <T> SettableValue<T> declareSettable(String name, SettableValue<T> value) {
+			SettableValue<T> added = getOrDeclareSettable(name, value.getType(), builder -> value);
+			if (added != value)
+				throw new IllegalStateException("A SettableValue<" + value.getType() + "> named " + name + " has already been declared");
+			return value;
+		}
+		default <T> SettableValue<T> getOrDeclareSettable(String name, Class<T> type,
+			Function<SettableValue.Builder<T>, SettableValue<T>> builder) {
+			return getOrDeclareSettable(name, TypeTokens.get().of(type), builder);
+		}
+		<T> SettableValue<T> getOrDeclareSettable(String name, TypeToken<T> type,
+			Function<SettableValue.Builder<T>, SettableValue<T>> builder);
+
+		default <T> ObservableCollection<T> declareCollection(String name, ObservableCollection<T> value) {
+			ObservableCollection<T> added = getOrDeclareCollection(name, value.getType(), builder -> value);
+			if (added != value)
+				throw new IllegalStateException(
+					"An ObservableCollection<" + value.getType() + "> named " + name + " has already been declared");
+			return value;
+		}
+		default <T> ObservableCollection<T> getOrDeclareCollection(String name, Class<T> type,
+			Function<DefaultObservableCollection.Builder<T, ?>, ? extends ObservableCollection<T>> builder) {
+			return getOrDeclareCollection(name, TypeTokens.get().of(type), builder);
+		}
+		<T> ObservableCollection<T> getOrDeclareCollection(String name, TypeToken<T> type,
+			Function<DefaultObservableCollection.Builder<T, ?>, ? extends ObservableCollection<T>> builder);
+
+		default <T> ObservableValue<? extends T> getValue(String name, Class<T> type) {
+			return getValue(name, TypeTokens.get().of(type));
+		}
+		<T> ObservableValue<? extends T> getValue(String name, TypeToken<T> type);
+
+		default <T> SettableValue<T> getSettable(String name, Class<T> type) {
+			return getSettable(name, TypeTokens.get().of(type));
+		}
+		<T> SettableValue<T> getSettable(String name, TypeToken<T> type);
+		default <T> SettableValue<? super T> getAccepter(String name, Class<T> type) {
+			return getAccepter(name, TypeTokens.get().of(type));
+		}
+		<T> SettableValue<? super T> getAccepter(String name, TypeToken<T> type);
+
+		default <T> ObservableCollection<T> getCollection(String name, Class<T> type) {
+			return getCollection(name, TypeTokens.get().of(type));
+		}
+		<T> ObservableCollection<T> getCollection(String name, TypeToken<T> type);
+		default <T> ObservableCollection<? extends T> getSupplyCollection(String name, Class<T> type) {
+			return getSupplyCollection(name, TypeTokens.get().of(type));
+		}
+		<T> ObservableCollection<? extends T> getSupplyCollection(String name, TypeToken<T> type);
 	}
 
 	public interface FieldEditor<E, P extends FieldEditor<E, P>> extends ComponentEditor<E, P> {
@@ -268,9 +371,11 @@ public class PanelPopulation {
 	}
 
 	public interface ImageControl {
-		ImageControl variableLocation(Observable<String> location);
+		ImageControl setLocation(String location);
 
-		ImageControl variable(Observable<Icon> icon);
+		ImageControl variableLocation(ObservableValue<String> location);
+
+		ImageControl variable(ObservableValue<? extends Icon> icon);
 
 		ImageControl withSize(int width, int height);
 
@@ -450,6 +555,16 @@ public class PanelPopulation {
 		}
 	}
 
+	public interface Alert {
+		Alert info();
+		Alert warning();
+		Alert error();
+
+		Alert withIcon(String location, Consumer<ImageControl> image);
+
+		void display();
+	}
+
 	// Drag and cut/copy/paste
 
 	public interface TransferSource<E> {
@@ -552,10 +667,111 @@ public class PanelPopulation {
 
 	private PanelPopulation() {}
 
+	static class SimpleValueCache implements ValueCache {
+		private Map<String, TypedValueContainer<?>> theValues;
+		private final Supplier<Transactable> theLock;
+
+		SimpleValueCache(Supplier<Transactable> lock) {
+			theLock = lock;
+		}
+
+		private void init() {
+			if (theValues == null)
+				theValues = new HashMap<>();
+		}
+
+		private synchronized <T, V extends TypedValueContainer<T>> V getOrDeclare(String name, Class<?> holderType, TypeToken<T> type,
+			Supplier<? extends V> value, boolean upperBound, boolean lowerBound) {
+			if (theValues == null) {
+				if (value == null)
+					throw new IllegalArgumentException("No " + holderType.getSimpleName() + " named " + name + " found");
+				theValues = new HashMap<>();
+			}
+
+			TypedValueContainer<?> found;
+			if (value != null)
+				found = theValues.computeIfAbsent(name, k -> value.get());
+			else {
+				found = theValues.get(name);
+				if (found == null)
+					throw new IllegalArgumentException(holderType.getSimpleName() + "<" + type + "> " + name + " has not been declared");
+			}
+			if (!holderType.isInstance(found))
+				throw new IllegalArgumentException(found.getClass().getSimpleName() + " " + name + " cannot be used as a "
+					+ holderType.getSimpleName() + "<" + type + ">");
+
+			TypeToken<?> foundType = found.getType();
+			boolean matches;
+			String extension;
+			if (!upperBound) {
+				matches = foundType.isAssignableFrom(type);
+				extension = "? super ";
+			} else if (!lowerBound) {
+				matches = type.isAssignableFrom(foundType);
+				extension = "? extends ";
+			} else {
+				matches = foundType.equals(type);
+				extension = "";
+			}
+			if (!matches)
+				throw new IllegalArgumentException(holderType.getSimpleName() + "<" + foundType + "> " + name + " cannot be used as "
+					+ holderType.getSimpleName() + "<" + extension + type + ">");
+			return (V) found;
+		}
+
+		@Override
+		public <T> ObservableValue<? extends T> getOrDeclareValue(String name, TypeToken<T> type,
+			Supplier<? extends ObservableValue<? extends T>> value) {
+			return this.getOrDeclare(name, ObservableValue.class, type, () -> (ObservableValue<T>) value.get(), true, false);
+		}
+
+		@Override
+		public <T> SettableValue<T> getOrDeclareSettable(String name, TypeToken<T> type, Function<Builder<T>, SettableValue<T>> builder) {
+			return this.getOrDeclare(name, SettableValue.class, type, () -> builder.apply(//
+				SettableValue.build(type).safe(false).withLock(theLock.get()).withDescription(name)), true, true);
+		}
+
+		@Override
+		public <T> ObservableCollection<T> getOrDeclareCollection(String name, TypeToken<T> type,
+			Function<DefaultObservableCollection.Builder<T, ?>, ? extends ObservableCollection<T>> builder) {
+			Transactable lock = theLock.get();
+			CollectionLockingStrategy locking = lock == null ? new FastFailLockingStrategy() : new RRWLockingStrategy(lock);
+			return this.getOrDeclare(name, ObservableCollection.class, type, () -> builder.apply(//
+				DefaultObservableCollection.build(type).withLocker(locking).withDescription(name)), true, true);
+		}
+
+		@Override
+		public <T> ObservableValue<? extends T> getValue(String name, TypeToken<T> type) {
+			return this.<T, ObservableValue<T>> getOrDeclare(name, ObservableValue.class, type, null, true, false);
+		}
+
+		@Override
+		public <T> SettableValue<T> getSettable(String name, TypeToken<T> type) {
+			return this.<T, SettableValue<T>> getOrDeclare(name, SettableValue.class, type, null, true, true);
+		}
+
+		@Override
+		public <T> SettableValue<? super T> getAccepter(String name, TypeToken<T> type) {
+			return this.<T, SettableValue<T>> getOrDeclare(name, SettableValue.class, type, null, false, true);
+		}
+
+		@Override
+		public <T> ObservableCollection<T> getCollection(String name, TypeToken<T> type) {
+			return this.<T, ObservableCollection<T>> getOrDeclare(name, ObservableCollection.class, type, null, true, true);
+		}
+
+		@Override
+		public <T> ObservableCollection<? extends T> getSupplyCollection(String name, TypeToken<T> type) {
+			return this.<T, ObservableCollection<T>> getOrDeclare(name, ObservableCollection.class, type, null, true, false);
+		}
+	}
+
 	interface PartialPanelPopulatorImpl<C extends Container, P extends PartialPanelPopulatorImpl<C, P>> extends PanelPopulator<C, P> {
 		Observable<?> getUntil();
 
 		void doAdd(AbstractComponentEditor<?, ?> field, Component fieldLabel, Component postLabel);
+
+		Supplier<Transactable> getLock();
 
 		default void doAdd(SimpleFieldEditor<?, ?> field) {
 			doAdd(field, field.createFieldNameLabel(getUntil()), field.createPostLabel(getUntil()));
@@ -565,7 +781,7 @@ public class PanelPopulation {
 		default <F> P addTextField(String fieldName, SettableValue<F> field, Format<F> format,
 			Consumer<FieldEditor<ObservableTextField<F>, ?>> modify) {
 			SimpleFieldEditor<ObservableTextField<F>, ?> fieldPanel = new SimpleFieldEditor<>(fieldName,
-				new ObservableTextField<>(field, format, getUntil()));
+				new ObservableTextField<>(field, format, getUntil()), getLock());
 			fieldPanel.getTooltip().changes().takeUntil(getUntil()).act(evt -> fieldPanel.getEditor().setToolTipText(evt.getNewValue()));
 			if (modify != null)
 				modify.accept(fieldPanel);
@@ -576,7 +792,7 @@ public class PanelPopulation {
 		@Override
 		default <F> P addLabel(String fieldName, SettableValue<F> field, Format<F> format, Consumer<FieldEditor<JLabel, ?>> modify) {
 			JLabel label = new JLabel();
-			SimpleFieldEditor<JLabel, ?> fieldPanel = new SimpleFieldEditor<>(fieldName, label);
+			SimpleFieldEditor<JLabel, ?> fieldPanel = new SimpleFieldEditor<>(fieldName, label, getLock());
 			fieldPanel.getTooltip().changes().takeUntil(getUntil()).act(evt -> fieldPanel.getEditor().setToolTipText(evt.getNewValue()));
 			field.isEnabled().combine((enabled, tt) -> enabled == null ? tt : enabled, fieldPanel.getTooltip()).changes()
 			.takeUntil(getUntil()).act(evt -> label.setToolTipText(evt.getNewValue()));
@@ -588,7 +804,7 @@ public class PanelPopulation {
 
 		@Override
 		default P addCheckField(String fieldName, SettableValue<Boolean> field, Consumer<FieldEditor<JCheckBox, ?>> modify) {
-			SimpleFieldEditor<JCheckBox, ?> fieldPanel = new SimpleFieldEditor<>(fieldName, new JCheckBox());
+			SimpleFieldEditor<JCheckBox, ?> fieldPanel = new SimpleFieldEditor<>(fieldName, new JCheckBox(), getLock());
 			Subscription sub = ObservableSwingUtils.checkFor(fieldPanel.getEditor(), fieldPanel.getTooltip(), field);
 			getUntil().take(1).act(__ -> sub.unsubscribe());
 			if (modify != null)
@@ -600,9 +816,10 @@ public class PanelPopulation {
 		@Override
 		default <F> P addSpinnerField(String fieldName, JSpinner spinner, SettableValue<F> value, Function<? super F, ? extends F> purifier,
 			Consumer<SteppedFieldEditor<JSpinner, F, ?>> modify) {
-			SimpleSteppedFieldEditor<JSpinner, F, ?> fieldPanel = new SimpleSteppedFieldEditor<>(fieldName, spinner, stepSize -> {
-				((SpinnerNumberModel) spinner.getModel()).setStepSize((Number) stepSize);
-			});
+			SimpleSteppedFieldEditor<JSpinner, F, ?> fieldPanel = new SimpleSteppedFieldEditor<>(fieldName, spinner, getLock(),
+				stepSize -> {
+					((SpinnerNumberModel) spinner.getModel()).setStepSize((Number) stepSize);
+				});
 			ObservableSwingUtils.spinnerFor(spinner, fieldPanel.getTooltip().get(), value, purifier);
 			if (modify != null)
 				modify.accept(fieldPanel);
@@ -618,7 +835,7 @@ public class PanelPopulation {
 				observableValues = (ObservableCollection<F>) availableValues;
 			else
 				observableValues = ObservableCollection.of(value.getType(), availableValues);
-			SimpleComboEditor<F, ?> fieldPanel = new SimpleComboEditor<>(fieldName, new JComboBox<>());
+			SimpleComboEditor<F, ?> fieldPanel = new SimpleComboEditor<>(fieldName, new JComboBox<>(), getLock());
 			Subscription sub = ObservableComboBoxModel.comboFor(fieldPanel.getEditor(), fieldPanel.getTooltip(), fieldPanel::getTooltip,
 				observableValues, value);
 			getUntil().take(1).act(__ -> sub.unsubscribe());
@@ -632,7 +849,7 @@ public class PanelPopulation {
 		default P addButton(String buttonText, ObservableAction<?> action, Consumer<ButtonEditor<?>> modify) {
 			JButton button = new JButton();
 			button.addActionListener(evt -> action.act(evt));
-			SimpleButtonEditor<?> field = new SimpleButtonEditor<>(null, button).withText(buttonText);
+			SimpleButtonEditor<?> field = new SimpleButtonEditor<>(null, button, getLock()).withText(buttonText);
 			action.isEnabled().combine((enabled, tt) -> enabled == null ? tt : enabled, field.getTooltip()).changes().takeUntil(getUntil())
 			.act(evt -> button.setToolTipText(evt.getNewValue()));
 			action.isEnabled().takeUntil(getUntil()).changes().act(evt -> button.setEnabled(evt.getNewValue() == null));
@@ -648,7 +865,7 @@ public class PanelPopulation {
 
 		@Override
 		default P addTabs(Consumer<TabPaneEditor<JTabbedPane, ?>> tabs) {
-			SimpleTabPaneEditor<?> tabPane = new SimpleTabPaneEditor<>(getUntil());
+			SimpleTabPaneEditor<?> tabPane = new SimpleTabPaneEditor<>(getLock(), getUntil());
 			tabs.accept(tabPane);
 			doAdd(tabPane, null, null);
 			return (P) this;
@@ -656,7 +873,7 @@ public class PanelPopulation {
 
 		@Override
 		default <R> P addTable(ObservableCollection<R> rows, Consumer<TableBuilder<R, ?>> table) {
-			SimpleTableBuilder<R, ?> tb = new SimpleTableBuilder<>(rows);
+			SimpleTableBuilder<R, ?> tb = new SimpleTableBuilder<>(rows, getLock());
 			table.accept(tb);
 			doAdd(tb, null, null);
 			return (P) this;
@@ -664,7 +881,7 @@ public class PanelPopulation {
 
 		@Override
 		default <S> P addComponent(String fieldName, S component, Consumer<FieldEditor<S, ?>> modify) {
-			SimpleFieldEditor<S, ?> subPanel = new SimpleFieldEditor<>(fieldName, component);
+			SimpleFieldEditor<S, ?> subPanel = new SimpleFieldEditor<>(fieldName, component, getLock());
 			if (modify != null)
 				modify.accept(subPanel);
 			doAdd(subPanel);
@@ -673,7 +890,7 @@ public class PanelPopulation {
 
 		@Override
 		default P addHPanel(String fieldName, LayoutManager layout, Consumer<PanelPopulator<JPanel, ?>> panel) {
-			SimpleHPanel<JPanel> subPanel = new SimpleHPanel<>(fieldName, new JPanel(layout), getUntil());
+			SimpleHPanel<JPanel> subPanel = new SimpleHPanel<>(fieldName, new JPanel(layout), getLock(), getUntil());
 			if (panel != null)
 				panel.accept(subPanel);
 			doAdd(subPanel);
@@ -682,7 +899,7 @@ public class PanelPopulation {
 
 		@Override
 		default P addVPanel(Consumer<PanelPopulator<JPanel, ?>> panel) {
-			MigFieldPanel<JPanel> subPanel = new MigFieldPanel<>(new JPanel(), getUntil());
+			MigFieldPanel<JPanel> subPanel = new MigFieldPanel<>(new JPanel(), getUntil(), getLock());
 			if (panel != null)
 				panel.accept(subPanel);
 			doAdd(subPanel, null, null);
@@ -728,14 +945,18 @@ public class PanelPopulation {
 	}
 
 	static abstract class AbstractComponentEditor<E, P extends AbstractComponentEditor<E, P>> implements ComponentEditor<E, P> {
+		final Supplier<Transactable> theLock;
+		private final SimpleValueCache theValueCache;
 		private final E theEditor;
 		private boolean isFillH;
 		private boolean isFillV;
 
 		private ObservableValue<Boolean> isVisible;
 
-		AbstractComponentEditor(E editor) {
+		AbstractComponentEditor(E editor, Supplier<Transactable> lock) {
 			theEditor = editor;
+			theLock = lock;
+			theValueCache = new SimpleValueCache(lock);
 		}
 
 		@Override
@@ -767,7 +988,24 @@ public class PanelPopulation {
 			return (P) this;
 		}
 
-		protected Component getComponent(Observable<?> until) {
+		@Override
+		public ValueCache values() {
+			return theValueCache;
+		}
+
+		@Override
+		public Alert alert(String title, String message) {
+			return new SimpleAlert(getComponent(), title, message);
+		}
+
+		protected Component getOrCreateComponent(Observable<?> until) {
+			// Subclasses should override this if the editor is not a component or is not the component that should be added
+			if (!(theEditor instanceof Component))
+				throw new IllegalStateException("Editor is not a component");
+			return (Component) theEditor;
+		}
+
+		protected Component getComponent() {
 			// Subclasses should override this if the editor is not a component or is not the component that should be added
 			if (!(theEditor instanceof Component))
 				throw new IllegalStateException("Editor is not a component");
@@ -794,11 +1032,11 @@ public class PanelPopulation {
 	}
 
 	static class MigFieldPanel<C extends Container> extends AbstractComponentEditor<C, MigFieldPanel<C>>
-	implements PartialPanelPopulatorImpl<C, MigFieldPanel<C>>, PanelPopulator<C, MigFieldPanel<C>> {
+	implements PartialPanelPopulatorImpl<C, MigFieldPanel<C>> {
 		private final Observable<?> theUntil;
 
-		public MigFieldPanel(C container, Observable<?> until) {
-			super(container);
+		MigFieldPanel(C container, Observable<?> until, Supplier<Transactable> lock) {
+			super(container, lock);
 			theUntil = until == null ? Observable.empty() : until;
 			if (container.getLayout() == null || !MIG_LAYOUT_CLASS_NAME.equals(container.getLayout().getClass().getName())) {
 				LayoutManager2 migLayout = createMigLayout(true, () -> "install the layout before using this class");
@@ -814,6 +1052,11 @@ public class PanelPopulation {
 		@Override
 		public Observable<?> getUntil() {
 			return theUntil;
+		}
+
+		@Override
+		public Supplier<Transactable> getLock() {
+			return theLock;
 		}
 
 		@Override
@@ -839,7 +1082,7 @@ public class PanelPopulation {
 					constraints.append(", ");
 				constraints.append("span, wrap");
 			}
-			Component component = field.getComponent(getUntil());
+			Component component = field.getOrCreateComponent(getUntil());
 			getContainer().add(component, constraints.toString());
 			if (postLabel != null)
 				getContainer().add(postLabel, "wrap");
@@ -879,8 +1122,8 @@ public class PanelPopulation {
 		private ObservableValue<String> thePostLabel;
 		private Consumer<FontAdjuster<?>> theFont;
 
-		SimpleFieldEditor(String fieldName, E editor) {
-			super(editor);
+		SimpleFieldEditor(String fieldName, E editor, Supplier<Transactable> lock) {
+			super(editor, lock);
 			theFieldName = fieldName == null ? null : ObservableValue.of(fieldName);
 			theSettableTooltip = new SimpleSettableValue<>(ObservableValue.TYPE_KEY.getCompoundType(String.class), true);
 			theTooltip = ObservableValue.flatten(theSettableTooltip);
@@ -966,8 +1209,8 @@ public class PanelPopulation {
 	implements PartialPanelPopulatorImpl<C, SimpleHPanel<C>> {
 		private final Observable<?> theUntil;
 
-		SimpleHPanel(String fieldName, C editor, Observable<?> until) {
-			super(fieldName, editor);
+		SimpleHPanel(String fieldName, C editor, Supplier<Transactable> lock, Observable<?> until) {
+			super(fieldName, editor, lock);
 			theUntil = until;
 		}
 
@@ -982,10 +1225,15 @@ public class PanelPopulation {
 		}
 
 		@Override
+		public Supplier<Transactable> getLock() {
+			return theLock;
+		}
+
+		@Override
 		public void doAdd(AbstractComponentEditor<?, ?> field, Component fieldLabel, Component postLabel) {
 			if (fieldLabel != null)
 				getContainer().add(fieldLabel);
-			Component component = field.getComponent(getUntil());
+			Component component = field.getOrCreateComponent(getUntil());
 			String constraints = null;
 			if ((field.isFill() || field.isFillV()) && getContainer().getLayout().getClass().getName().startsWith("net.mig")) {
 				if (field.isFill()) {
@@ -1011,12 +1259,87 @@ public class PanelPopulation {
 		}
 	}
 
+	static class SimpleImageControl implements ImageControl {
+		private final SettableValue<ObservableValue<? extends Icon>> theSettableIcon;
+		private final ObservableValue<Icon> theIcon;
+		private final SimpleObservable<Void> theTweakObservable;
+		private int theWidth;
+		private int theHeight;
+		private double theOpacity;
+
+		public SimpleImageControl(String location) {
+			theTweakObservable = new SimpleObservable<>();
+			theSettableIcon = new SimpleSettableValue<>((Class<ObservableValue<? extends Icon>>) (Class<?>) ObservableValue.class, true);
+			setLocation(location);
+			theIcon = ObservableValue.flatten(theSettableIcon).refresh(theTweakObservable);
+			theWidth = -1;
+			theHeight = -1;
+			theOpacity = 1;
+		}
+
+		ImageIcon getIcon(String location) {
+			if (location == null)
+				return null;
+			ImageIcon icon = ObservableSwingUtils.getIcon(getClass(), location);
+			return adjustIcon(icon);
+		}
+
+		ImageIcon adjustIcon(ImageIcon icon) {
+			if (icon != null) {
+				if ((theWidth >= 0 && icon.getIconWidth() != theWidth) || (theHeight >= 0 && icon.getIconHeight() != theHeight)) {
+					icon = new ImageIcon(icon.getImage().getScaledInstance(//
+						theWidth >= 0 ? theWidth : icon.getIconWidth(), //
+							theHeight >= 0 ? theHeight : icon.getIconHeight(), //
+								Image.SCALE_SMOOTH));
+				}
+			}
+			return icon;
+		}
+
+		ObservableValue<Icon> getIcon() {
+			return theIcon;
+		}
+
+		@Override
+		public ImageControl setLocation(String location) {
+			return variableLocation(ObservableValue.of(TypeTokens.get().STRING, location));
+		}
+
+		@Override
+		public ImageControl variableLocation(ObservableValue<String> location) {
+			return variable(location.map(this::getIcon));
+		}
+
+		@Override
+		public ImageControl variable(ObservableValue<? extends Icon> icon) {
+			theSettableIcon.set(icon, null);
+			return this;
+		}
+
+		@Override
+		public ImageControl withSize(int width, int height) {
+			theWidth = width;
+			theHeight = height;
+			theTweakObservable.onNext(null);
+			return this;
+		}
+
+		@Override
+		public ImageControl withOpacity(double opacity) {
+			if (opacity < 0 || opacity >= 1)
+				throw new IllegalArgumentException("Opacity must be between 0 and 1, not " + opacity);
+			theOpacity = opacity;
+			theTweakObservable.onNext(null);
+			return this;
+		}
+	}
+
 	static class SimpleButtonEditor<P extends SimpleButtonEditor<P>> extends SimpleFieldEditor<JButton, P> implements ButtonEditor<P> {
 		private ObservableValue<String> theText;
 		private ObservableValue<? extends Icon> theIcon;
 
-		SimpleButtonEditor(String fieldName, JButton editor) {
-			super(fieldName, editor);
+		SimpleButtonEditor(String fieldName, JButton editor, Supplier<Transactable> lock) {
+			super(fieldName, editor, lock);
 		}
 
 		public ObservableValue<String> getText() {
@@ -1044,8 +1367,8 @@ public class PanelPopulation {
 	implements SteppedFieldEditor<E, F, P> {
 		private final Consumer<F> theStepSizeChange;
 
-		SimpleSteppedFieldEditor(String fieldName, E editor, Consumer<F> stepSizeChange) {
-			super(fieldName, editor);
+		SimpleSteppedFieldEditor(String fieldName, E editor, Supplier<Transactable> lock, Consumer<F> stepSizeChange) {
+			super(fieldName, editor, lock);
 			theStepSizeChange = stepSizeChange;
 		}
 
@@ -1060,8 +1383,8 @@ public class PanelPopulation {
 	implements ComboEditor<F, P> {
 		private Function<? super F, String> theValueTooltip;
 
-		SimpleComboEditor(String fieldName, JComboBox<F> editor) {
-			super(fieldName, editor);
+		SimpleComboEditor(String fieldName, JComboBox<F> editor, Supplier<Transactable> lock) {
+			super(fieldName, editor, lock);
 		}
 
 		@Override
@@ -1080,21 +1403,21 @@ public class PanelPopulation {
 	implements TabPaneEditor<JTabbedPane, P> {
 		private final Observable<?> theUntil;
 
-		SimpleTabPaneEditor(Observable<?> until) {
-			super(new JTabbedPane());
+		SimpleTabPaneEditor(Supplier<Transactable> lock, Observable<?> until) {
+			super(new JTabbedPane(), lock);
 			theUntil = until;
 		}
 
 		@Override
 		public P withVTab(Object tabID, Consumer<PanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier) {
-			MigFieldPanel<JPanel> fieldPanel = new MigFieldPanel<>(null, theUntil);
+			MigFieldPanel<JPanel> fieldPanel = new MigFieldPanel<>(null, theUntil, theLock);
 			panel.accept(fieldPanel);
 			return withTab(tabID, fieldPanel.getContainer(), tabModifier);
 		}
 
 		@Override
 		public P withHTab(Object tabID, LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier) {
-			SimpleHPanel<JPanel> hPanel = new SimpleHPanel<>(null, new JPanel(layout), theUntil);
+			SimpleHPanel<JPanel> hPanel = new SimpleHPanel<>(null, new JPanel(layout), theLock, theUntil);
 			panel.accept(hPanel);
 			return withTab(tabID, hPanel.getContainer(), tabModifier);
 		}
@@ -1162,8 +1485,10 @@ public class PanelPopulation {
 		private List<SimpleTableAction<R, ?>> theActions;
 		private ObservableValue<? extends TableContentControl> theFilter;
 
-		SimpleTableBuilder(ObservableCollection<R> rows) {
-			super(new JTable());
+		private Component theBuildComponent;
+
+		SimpleTableBuilder(ObservableCollection<R> rows, Supplier<Transactable> lock) {
+			super(new JTable(), lock);
 			theRows = rows;
 			theActions = new LinkedList<>();
 		}
@@ -1315,7 +1640,7 @@ public class PanelPopulation {
 		}
 
 		@Override
-		protected Component getComponent(Observable<?> until) {
+		protected Component getOrCreateComponent(Observable<?> until) {
 			ObservableTableModel<R> model;
 			ObservableCollection<TableContentControl.FilteredValue<R>> filtered;
 			if (theFilter != null) {
@@ -1456,15 +1781,21 @@ public class PanelPopulation {
 					model.getRowModel().removeListDataListener(dataListener);
 				});
 				SimpleHPanel<JPanel> buttonPanel = new SimpleHPanel<>(null,
-					new JPanel(new JustifiedBoxLayout(false).setMainAlignment(JustifiedBoxLayout.Alignment.LEADING)), until);
+					new JPanel(new JustifiedBoxLayout(false).setMainAlignment(JustifiedBoxLayout.Alignment.LEADING)), theLock, until);
 				for (SimpleTableAction<R, ?> action : theActions)
 					action.addButton(buttonPanel);
 				JPanel tablePanel = new JPanel(new BorderLayout());
-				tablePanel.add(buttonPanel.getComponent(until), BorderLayout.NORTH);
+				tablePanel.add(buttonPanel.getOrCreateComponent(until), BorderLayout.NORTH);
 				tablePanel.add(scroll, BorderLayout.CENTER);
-				return tablePanel;
+				theBuildComponent = tablePanel;
 			} else
-				return scroll;
+				theBuildComponent = scroll;
+			return theBuildComponent;
+		}
+
+		@Override
+		protected Component getComponent() {
+			return theBuildComponent;
 		}
 	}
 
@@ -1639,6 +1970,75 @@ public class PanelPopulation {
 				if (theButtonMod != null)
 					theButtonMod.accept(button);
 			});
+		}
+	}
+
+	enum AlertType {
+		PLAIN, INFO, WARNING, ERROR;
+	}
+
+	static class SimpleAlert implements Alert {
+		private final Component theComponent;
+		private String theTitle;
+		private String theMessage;
+		private AlertType theType;
+		private SimpleImageControl theImage;
+
+		SimpleAlert(Component component, String title, String message) {
+			theComponent = component;
+			theTitle = title;
+			theMessage = message;
+			theType = AlertType.PLAIN;
+		}
+
+		@Override
+		public Alert info() {
+			theType = AlertType.INFO;
+			return this;
+		}
+
+		@Override
+		public Alert warning() {
+			theType = AlertType.WARNING;
+			return this;
+		}
+
+		@Override
+		public Alert error() {
+			theType = AlertType.ERROR;
+			return this;
+		}
+
+		@Override
+		public Alert withIcon(String location, Consumer<ImageControl> image) {
+			if (theImage == null)
+				theImage = new SimpleImageControl(location);
+			if (image != null)
+				image.accept(theImage);
+			return this;
+		}
+
+		@Override
+		public void display() {
+			Icon icon = theImage == null ? null : theImage.getIcon().get();
+			if (icon != null)
+				JOptionPane.showMessageDialog(theComponent, theMessage, theTitle, getJOptionType(), icon);
+			else
+				JOptionPane.showMessageDialog(theComponent, theMessage, theTitle, getJOptionType());
+		}
+
+		private int getJOptionType() {
+			switch (theType) {
+			case PLAIN:
+				return JOptionPane.PLAIN_MESSAGE;
+			case INFO:
+				return JOptionPane.INFORMATION_MESSAGE;
+			case WARNING:
+				return JOptionPane.WARNING_MESSAGE;
+			case ERROR:
+				return JOptionPane.ERROR_MESSAGE;
+			}
+			return JOptionPane.ERROR_MESSAGE;
 		}
 	}
 }
