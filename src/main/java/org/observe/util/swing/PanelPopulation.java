@@ -148,7 +148,7 @@ public class PanelPopulation {
 		<F> P addTextField(String fieldName, SettableValue<F> field, Format<F> format,
 			Consumer<FieldEditor<ObservableTextField<F>, ?>> modify);
 
-		<F> P addLabel(String fieldName, SettableValue<F> field, Format<F> format, Consumer<FieldEditor<JLabel, ?>> modify);
+		<F> P addLabel(String fieldName, ObservableValue<F> field, Format<F> format, Consumer<FieldEditor<JLabel, ?>> modify);
 
 		P addCheckField(String fieldName, SettableValue<Boolean> field, Consumer<FieldEditor<JCheckBox, ?>> modify);
 
@@ -294,6 +294,7 @@ public class PanelPopulation {
 				throw new IllegalStateException("An ObservableValue named " + name + " has already been declared");
 			return value;
 		}
+
 		<T> ObservableValue<? extends T> getOrDeclareValue(String name, TypeToken<T> type,
 			Supplier<? extends ObservableValue<? extends T>> value);
 
@@ -303,10 +304,12 @@ public class PanelPopulation {
 				throw new IllegalStateException("A SettableValue<" + value.getType() + "> named " + name + " has already been declared");
 			return value;
 		}
+
 		default <T> SettableValue<T> getOrDeclareSettable(String name, Class<T> type,
 			Function<SettableValue.Builder<T>, SettableValue<T>> builder) {
 			return getOrDeclareSettable(name, TypeTokens.get().of(type), builder);
 		}
+
 		<T> SettableValue<T> getOrDeclareSettable(String name, TypeToken<T> type,
 			Function<SettableValue.Builder<T>, SettableValue<T>> builder);
 
@@ -317,34 +320,43 @@ public class PanelPopulation {
 					"An ObservableCollection<" + value.getType() + "> named " + name + " has already been declared");
 			return value;
 		}
+
 		default <T> ObservableCollection<T> getOrDeclareCollection(String name, Class<T> type,
 			Function<DefaultObservableCollection.Builder<T, ?>, ? extends ObservableCollection<T>> builder) {
 			return getOrDeclareCollection(name, TypeTokens.get().of(type), builder);
 		}
+
 		<T> ObservableCollection<T> getOrDeclareCollection(String name, TypeToken<T> type,
 			Function<DefaultObservableCollection.Builder<T, ?>, ? extends ObservableCollection<T>> builder);
 
 		default <T> ObservableValue<? extends T> getValue(String name, Class<T> type) {
 			return getValue(name, TypeTokens.get().of(type));
 		}
+
 		<T> ObservableValue<? extends T> getValue(String name, TypeToken<T> type);
 
 		default <T> SettableValue<T> getSettable(String name, Class<T> type) {
 			return getSettable(name, TypeTokens.get().of(type));
 		}
+
 		<T> SettableValue<T> getSettable(String name, TypeToken<T> type);
+
 		default <T> SettableValue<? super T> getAccepter(String name, Class<T> type) {
 			return getAccepter(name, TypeTokens.get().of(type));
 		}
+
 		<T> SettableValue<? super T> getAccepter(String name, TypeToken<T> type);
 
 		default <T> ObservableCollection<T> getCollection(String name, Class<T> type) {
 			return getCollection(name, TypeTokens.get().of(type));
 		}
+
 		<T> ObservableCollection<T> getCollection(String name, TypeToken<T> type);
+
 		default <T> ObservableCollection<? extends T> getSupplyCollection(String name, Class<T> type) {
 			return getSupplyCollection(name, TypeTokens.get().of(type));
 		}
+
 		<T> ObservableCollection<? extends T> getSupplyCollection(String name, TypeToken<T> type);
 	}
 
@@ -579,7 +591,9 @@ public class PanelPopulation {
 
 	public interface Alert {
 		Alert info();
+
 		Alert warning();
+
 		Alert error();
 
 		Alert withIcon(String location, Consumer<ImageControl> image);
@@ -591,12 +605,15 @@ public class PanelPopulation {
 
 	public interface TransferSource<E> {
 		<E2> TransferSource<E2> forType(Predicate<? super E> filter, Function<? super E, ? extends E2> map);
+
 		default <E2 extends E> TransferSource<E2> forType(Class<E2> type) {
 			return forType(value -> type.isInstance(value), value -> (E2) value);
 		}
 
 		TransferSource<E> draggable(boolean draggable);
+
 		TransferSource<E> copyable(boolean copyable);
+
 		TransferSource<E> movable(boolean movable);
 
 		TransferSource<E> appearance(Consumer<TransferAppearance<E>> image);
@@ -604,15 +621,20 @@ public class PanelPopulation {
 		default TransferSource<E> toFlavor(DataFlavor flavor, DataTransform<? super E> transform) {
 			return toFlavor(Arrays.asList(flavor), transform);
 		}
+
 		TransferSource<E> toFlavor(Collection<? extends DataFlavor> flavors, DataTransform<? super E> transform);
+
 		TransferSource<E> toObject(); // TODO default this
 		// TODO default this, supporting multiple text-based flavors
+
 		TransferSource<E> toText(Function<? super E, ? extends CharSequence> toString);
 	}
 
 	public interface TransferAppearance<E> {
 		TransferAppearance<E> withDragIcon(String imageLocation, Consumer<ImageControl> imgConfig);
+
 		TransferAppearance<E> withDragOffset(int x, int y);
+
 		TransferAppearance<E> withVisualRep(String imageLocation, Consumer<ImageControl> imgConfig);
 	}
 
@@ -624,12 +646,15 @@ public class PanelPopulation {
 		<E2> TransferAccepter<E2> forType(Predicate<? super E2> filter, Function<? super E2, ? extends E> map);
 
 		TransferAccepter<E> draggable(boolean draggable);
+
 		TransferAccepter<E> pastable(boolean pastable);
 
 		default TransferAccepter<E> fromFlavor(DataFlavor flavor, Function<? super DataFlavor, ? extends E> data) {
 			return fromFlavor(Arrays.asList(flavor), data);
 		}
+
 		TransferAccepter<E> fromFlavor(Collection<? extends DataFlavor> flavor, Function<? super DataFlavor, ? extends E> data);
+
 		TransferAccepter<E> fromObject();
 	}
 
@@ -812,12 +837,14 @@ public class PanelPopulation {
 		}
 
 		@Override
-		default <F> P addLabel(String fieldName, SettableValue<F> field, Format<F> format, Consumer<FieldEditor<JLabel, ?>> modify) {
+		default <F> P addLabel(String fieldName, ObservableValue<F> field, Format<F> format, Consumer<FieldEditor<JLabel, ?>> modify) {
 			JLabel label = new JLabel();
 			SimpleFieldEditor<JLabel, ?> fieldPanel = new SimpleFieldEditor<>(fieldName, label, getLock());
 			fieldPanel.getTooltip().changes().takeUntil(getUntil()).act(evt -> fieldPanel.getEditor().setToolTipText(evt.getNewValue()));
-			field.isEnabled().combine((enabled, tt) -> enabled == null ? tt : enabled, fieldPanel.getTooltip()).changes()
-			.takeUntil(getUntil()).act(evt -> label.setToolTipText(evt.getNewValue()));
+			if (field instanceof SettableValue) {
+				((SettableValue<F>) field).isEnabled().combine((enabled, tt) -> enabled == null ? tt : enabled, fieldPanel.getTooltip())
+				.changes().takeUntil(getUntil()).act(evt -> label.setToolTipText(evt.getNewValue()));
+			}
 			if (modify != null)
 				modify.accept(fieldPanel);
 			doAdd(fieldPanel);

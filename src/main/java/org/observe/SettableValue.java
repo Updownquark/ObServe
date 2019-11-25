@@ -243,6 +243,41 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	}
 
 	/**
+	 * @param <R> The type of the new settable value to create
+	 * @param type The type for the new value
+	 * @param function The function to map this value to another
+	 * @param reverse The function to map the other value to this one
+	 * @param options Options determining the behavior of the result
+	 * @return The mapped settable value
+	 */
+	public default <R> SettableValue<R> map(TypeToken<R> type, Function<? super T, R> function,
+		BiFunction<? super T, ? super R, ? extends T> reverse, Consumer<XformOptions> options) {
+		SimpleXformOptions xform = new SimpleXformOptions();
+		if (options != null)
+			options.accept(xform);
+		SettableValue<T> root = this;
+		return new ComposedSettableValue<R>(type, args -> {
+			return function.apply((T) args[0]);
+		}, "map", new XformDef(xform), this) {
+			@Override
+			public <V extends R> R set(V value, Object cause) throws IllegalArgumentException {
+				T old = root.set(reverse.apply(root.get(), value), cause);
+				return function.apply(old);
+			}
+
+			@Override
+			public <V extends R> String isAcceptable(V value) {
+				return root.isAcceptable(reverse.apply(root.get(), value));
+			}
+
+			@Override
+			public ObservableValue<String> isEnabled() {
+				return root.isEnabled();
+			}
+		};
+	}
+
+	/**
 	 * Composes this settable value with another observable value
 	 *
 	 * @param <U> The type of the value to compose this value with
