@@ -664,10 +664,13 @@ public class ObservableConfig implements Transactable, Stamped {
 		protected ObservableValue<? extends ObservableConfig> getDescendant(boolean parent) {
 			ObservableValue<? extends ObservableConfig> descendant;
 			if (thePath != null) {
-				if (parent && thePath.getElements().size() > 1)
-					descendant = observeDescendant(thePath.getParent());
-				else
-					descendant = ObservableValue.of(ObservableConfig.this);
+				if (parent) {
+					if (thePath.getElements().size() == 1)
+						descendant = ObservableValue.of(ObservableConfig.this);
+					else
+						descendant = observeDescendant(thePath.getParent());
+				} else
+					descendant = observeDescendant(thePath);
 			} else
 				descendant = ObservableValue.of(ObservableConfig.this);
 			return descendant;

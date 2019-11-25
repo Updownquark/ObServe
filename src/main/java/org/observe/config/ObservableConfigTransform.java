@@ -166,7 +166,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 			theListeners = ListenerList.build().allowReentrant().withFastSize(false).build();
 			theModifyingValue = new ValueHolder<>();
 
-			init(until, listen);
+			init(until == null ? Observable.empty() : until, listen);
 		}
 
 		@Override
@@ -208,12 +208,12 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 
 				@Override
 				public Transaction lock() {
-					return ObservableConfigValue.this.lock();
+					return ObservableConfigValue.this.lock(false, null);
 				}
 
 				@Override
 				public Transaction tryLock() {
-					return ObservableConfigValue.this.tryLock();
+					return ObservableConfigValue.this.tryLock(false, null);
 				}
 
 				@Override
@@ -286,6 +286,21 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 				theListeners.forEach(//
 					listener -> listener.onNext(event));
 			}
+		}
+
+		@Override
+		public int hashCode() {
+			return getIdentity().hashCode();
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return obj instanceof Identifiable && getIdentity().equals(((Identifiable) obj).getIdentity());
+		}
+
+		@Override
+		public String toString() {
+			return getIdentity().toString();
 		}
 	}
 

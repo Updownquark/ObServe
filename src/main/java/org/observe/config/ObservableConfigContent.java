@@ -26,6 +26,7 @@ import org.observe.config.ObservableConfig.ObservableConfigPathElement;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
+import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.QommonsUtils;
 import org.qommons.Stamped;
 import org.qommons.Transaction;
@@ -48,7 +49,7 @@ public class ObservableConfigContent {
 	 *
 	 * @param <C> The sub-type of config
 	 */
-	protected static class ObservableConfigChild<C extends ObservableConfig> implements ObservableValue<C> {
+	protected static class ObservableConfigChild<C extends ObservableConfig> extends AbstractIdentifiable implements ObservableValue<C> {
 		private final TypeToken<C> theType;
 		private final ObservableConfig theRoot;
 		private final ObservableConfigPath thePath;
@@ -56,7 +57,6 @@ public class ObservableConfigContent {
 		private final long[] thePathElementStamps;
 		private Subscription thePathSubscription;
 		private final ListenerList<Observer<? super ObservableValueEvent<C>>> theListeners;
-		private Object theIdentity;
 		private Object theChangesIdentity;
 
 		/**
@@ -182,10 +182,8 @@ public class ObservableConfigContent {
 		}
 
 		@Override
-		public Object getIdentity() {
-			if (theIdentity == null)
-				theIdentity = Identifiable.wrap(theRoot, "descendant", thePath);
-			return theIdentity;
+		protected Object createIdentity() {
+			return Identifiable.wrap(theRoot, "descendant", thePath);
 		}
 
 		@Override
@@ -260,9 +258,8 @@ public class ObservableConfigContent {
 	}
 
 	/** Observes the value of a config's path descendant */
-	protected static class ObservableConfigValue implements SettableValue<String> {
+	protected static class ObservableConfigValue extends AbstractIdentifiable implements SettableValue<String> {
 		private final ObservableConfigChild<ObservableConfig> theConfigChild;
-		private Object theIdentity;
 		private Object theChangesIdentity;
 
 		/**
@@ -288,10 +285,8 @@ public class ObservableConfigContent {
 		}
 
 		@Override
-		public Object getIdentity() {
-			if (theIdentity == null)
-				theIdentity = Identifiable.wrap(theConfigChild.getIdentity(), "value");
-			return theIdentity;
+		protected Object createIdentity() {
+			return Identifiable.wrap(theConfigChild.getIdentity(), "value");
 		}
 
 		@Override
@@ -307,9 +302,9 @@ public class ObservableConfigContent {
 
 		@Override
 		public Observable<ObservableValueEvent<String>> noInitChanges() {
-			return new Observable<ObservableValueEvent<String>>() {
+			class Changes extends AbstractIdentifiable implements Observable<ObservableValueEvent<String>> {
 				@Override
-				public Object getIdentity() {
+				protected Object createIdentity() {
 					if(theChangesIdentity==null)
 						theChangesIdentity = Identifiable.wrap(ObservableConfigValue.this.getIdentity(), "noInitChanges");
 					return theChangesIdentity;
@@ -357,7 +352,8 @@ public class ObservableConfigContent {
 						};
 					}
 				}
-			};
+			}
+			return new Changes();
 		}
 
 		@Override
