@@ -1,6 +1,7 @@
 package org.observe;
 
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -203,7 +204,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 * @param reverse The function to map the other value to this one
 	 * @return The mapped settable value
 	 */
-	public default <R> SettableValue<R> map(Function<? super T, R> function, Function<? super R, ? extends T> reverse) {
+	public default <R> SettableValue<R> map(Function<? super T, ? extends R> function, Function<? super R, ? extends T> reverse) {
 		return map(null, function, reverse, null);
 	}
 
@@ -215,8 +216,8 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 * @param options Options determining the behavior of the result
 	 * @return The mapped settable value
 	 */
-	public default <R> SettableValue<R> map(TypeToken<R> type, Function<? super T, R> function, Function<? super R, ? extends T> reverse,
-		Consumer<XformOptions> options) {
+	public default <R> SettableValue<R> map(TypeToken<R> type, Function<? super T, ? extends R> function,
+		Function<? super R, ? extends T> reverse, Consumer<XformOptions> options) {
 		SimpleXformOptions xform = new SimpleXformOptions();
 		if (options != null)
 			options.accept(xform);
@@ -250,7 +251,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 * @param options Options determining the behavior of the result
 	 * @return The mapped settable value
 	 */
-	public default <R> SettableValue<R> map(TypeToken<R> type, Function<? super T, R> function,
+	public default <R> SettableValue<R> map(TypeToken<R> type, Function<? super T, ? extends R> function,
 		BiFunction<? super T, ? super R, ? extends T> reverse, Consumer<XformOptions> options) {
 		SimpleXformOptions xform = new SimpleXformOptions();
 		if (options != null)
@@ -275,6 +276,23 @@ public interface SettableValue<T> extends ObservableValue<T> {
 				return root.isEnabled();
 			}
 		};
+	}
+
+	/**
+	 * Interprets this value as a selected value and returns a settable value for editing a particular field on the selected value
+	 *
+	 * @param fieldType The type of the field
+	 * @param getter The getter for the field
+	 * @param setter The setter for the field
+	 * @param options Options for the returned value--may be null
+	 * @return The field value
+	 */
+	default <F> SettableValue<F> asFieldEditor(TypeToken<F> fieldType, Function<? super T, ? extends F> getter,
+		BiConsumer<? super T, ? super F> setter, Consumer<XformOptions> options) {
+		return map(fieldType, value -> value == null ? null : getter.apply(value), (v, f) -> {
+			setter.accept(v, f);
+			return v;
+		}, options).disableWith(map(v -> v == null ? "Nothing selected" : null));
 	}
 
 	/**
@@ -762,6 +780,15 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			else
 				throw new IllegalArgumentException("Wrapped value is not settable");
 		}
+	}
+
+	/**
+	 * @param <T> The type for the new value
+	 * @param type The type for the new value
+	 * @return A builder to create a new settable value
+	 */
+	static <T> Builder<T> build(Class<T> type) {
+		return new Builder<>(TypeTokens.get().of(type));
 	}
 
 	/**
