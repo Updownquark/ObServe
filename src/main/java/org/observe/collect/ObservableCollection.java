@@ -604,6 +604,15 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 
 	/**
 	 * @param <E> The type for the collection
+	 * @param type The type for the collection
+	 * @return A builder for a new, empty, mutable, observable collection
+	 */
+	static <E> DefaultObservableCollection.Builder<E, ?> build(Class<E> type) {
+		return build(TypeTokens.get().of(type));
+	}
+
+	/**
+	 * @param <E> The type for the collection
 	 * @return A new list to back a collection created by {@link #create(TypeToken)}
 	 */
 	static <E> BetterList<E> createDefaultBacking() {
