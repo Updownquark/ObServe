@@ -443,6 +443,7 @@ public class TypeTokens {
 	public final TypeToken<Byte> BYTE;
 	public final TypeToken<Character> CHAR;
 	public final TypeToken<Object> OBJECT;
+	public final TypeToken<Void> VOID;
 	public final TypeToken<?> WILDCARD;
 
 	protected TypeTokens() {
@@ -457,6 +458,7 @@ public class TypeTokens {
 		wrappers.put(int.class, Integer.class);
 		wrappers.put(short.class, Short.class);
 		wrappers.put(byte.class, Byte.class);
+		wrappers.put(void.class, Void.class);
 		PRIMITIVE_TO_WRAPPER = Collections.unmodifiableMap(wrappers);
 		wrappers = new HashMap<>();
 		wrappers.put(Boolean.class, boolean.class);
@@ -467,6 +469,7 @@ public class TypeTokens {
 		wrappers.put(Integer.class, int.class);
 		wrappers.put(Short.class, short.class);
 		wrappers.put(Byte.class, byte.class);
+		wrappers.put(Void.class, void.class);
 		WRAPPER_TO_PRIMITIVE = Collections.unmodifiableMap(wrappers);
 
 		STRING = of(String.class);
@@ -479,6 +482,7 @@ public class TypeTokens {
 		BYTE = of(Byte.class);
 		CHAR = of(Character.class);
 		OBJECT = of(Object.class);
+		VOID = of(Void.class);
 		WILDCARD = new TypeToken<Class<?>>() {}.resolveType(Class.class.getTypeParameters()[0]);
 	}
 
