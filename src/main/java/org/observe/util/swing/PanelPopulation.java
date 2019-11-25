@@ -211,6 +211,26 @@ public class PanelPopulation {
 		// public <F> MigPanelPopulatorField<F, ObservableTreeModel> addTree(Object root,
 		// Function<Object, ? extends ObservableCollection<?>> branching) {}
 
+		default P addButton(String buttonText, Consumer<Object> action, Consumer<ButtonEditor<?>> modify) {
+			return addButton(buttonText, new ObservableAction<Void>() {
+				@Override
+				public TypeToken<Void> getType() {
+					return TypeTokens.get().of(Void.class);
+				}
+
+				@Override
+				public Void act(Object cause) throws IllegalStateException {
+					action.accept(cause);
+					return null;
+				}
+
+				@Override
+				public ObservableValue<String> isEnabled() {
+					return SettableValue.ALWAYS_ENABLED;
+				}
+			}, modify);
+		}
+
 		P addButton(String buttonText, ObservableAction<?> action, Consumer<ButtonEditor<?>> modify);
 
 		<R> P addTable(ObservableCollection<R> rows, Consumer<TableBuilder<R, ?>> table);
@@ -454,6 +474,8 @@ public class PanelPopulation {
 		}
 
 		P withMultiAction(Consumer<? super List<? extends R>> action, Consumer<TableAction<R, ?>> actionMod);
+
+		Component getOrCreateComponent(Observable<?> until);
 	}
 
 	public interface TableAction<R, A extends TableAction<R, A>> {
@@ -1234,17 +1256,17 @@ public class PanelPopulation {
 			if (fieldLabel != null)
 				getContainer().add(fieldLabel);
 			Component component = field.getOrCreateComponent(getUntil());
-			String constraints = null;
+			StringBuilder constraints = new StringBuilder();
 			if ((field.isFill() || field.isFillV()) && getContainer().getLayout().getClass().getName().startsWith("net.mig")) {
 				if (field.isFill()) {
 					if (constraints.length() > 0)
-						constraints += ", ";
-					constraints = "growx, pushx";
+						constraints.append(", ");
+					constraints.append("growx, pushx");
 				}
 				if (field.isFillV())
-					constraints = "growy, pushy";
+					constraints.append("growy, pushy");
 			}
-			getContainer().add(component, constraints);
+			getContainer().add(component, constraints.toString());
 			if (postLabel != null)
 				getContainer().add(postLabel);
 			if (field.isVisible() != null) {
@@ -1640,7 +1662,9 @@ public class PanelPopulation {
 		}
 
 		@Override
-		protected Component getOrCreateComponent(Observable<?> until) {
+		public Component getOrCreateComponent(Observable<?> until) {
+			if (theBuildComponent != null)
+				return theBuildComponent;
 			ObservableTableModel<R> model;
 			ObservableCollection<TableContentControl.FilteredValue<R>> filtered;
 			if (theFilter != null) {

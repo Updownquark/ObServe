@@ -15,7 +15,7 @@ import java.text.ParseException;
 import java.util.function.Function;
 
 import javax.swing.Icon;
-import javax.swing.JTextField;
+import javax.swing.JPasswordField;
 import javax.swing.ToolTipManager;
 import javax.swing.UIManager;
 import javax.swing.border.Border;
@@ -28,10 +28,10 @@ import org.qommons.io.Format;
 
 /**
  * A text field that interacts with a {@link SettableValue}
- * 
+ *
  * @param <E> The type of the value
  */
-public class ObservableTextField<E> extends JTextField {
+public class ObservableTextField<E> extends JPasswordField {
 	private final SettableValue<E> theValue;
 	private final Format<E> theFormat;
 	private Function<? super E, String> theWarning;
@@ -65,6 +65,7 @@ public class ObservableTextField<E> extends JTextField {
 	public ObservableTextField(SettableValue<E> value, Format<E> format, Observable<?> until) {
 		Border border = UIManager.getBorder("TextField.border");
 		dummyInsets = border.getBorderInsets(this);
+		setEchoChar((char) 0);
 
 		theValue = value;
 		theFormat = format;
@@ -111,7 +112,7 @@ public class ObservableTextField<E> extends JTextField {
 			private void checkText(Object cause) {
 				isDirty = true;
 				try {
-					E parsed = theFormat.parse(getText());
+					E parsed = theFormat.parse(new String(getPassword()));
 					String err = theValue.isAcceptable(parsed);
 					setErrorState(err, parsed);
 					if (err == null && commitOnType)
@@ -145,7 +146,7 @@ public class ObservableTextField<E> extends JTextField {
 				if (isDirty) {
 					isInternallyChanging = true;
 					try {
-						E parsed = theFormat.parse(getText());
+						E parsed = theFormat.parse(new String(getPassword()));
 						theValue.set(parsed, e);
 					} catch (ParseException | UnsupportedOperationException | IllegalArgumentException ex) {
 						isInternallyChanging = false;
@@ -251,6 +252,15 @@ public class ObservableTextField<E> extends JTextField {
 		return this;
 	}
 
+	/**
+	 * @param echoChar The echo character to show for each typed character of the password, or <code>(char) 0</code> to show the text
+	 * @return This text field
+	 */
+	public ObservableTextField<E> asPassword(char echoChar) {
+		setEchoChar(echoChar);
+		return this;
+	}
+
 	/** @return This text field's icon */
 	public Icon getIcon() {
 		return theIcon;
@@ -312,7 +322,7 @@ public class ObservableTextField<E> extends JTextField {
 			theIcon.paintIcon(this, g, x, y);
 		}
 
-		if (!this.hasFocus() && this.getText().equals("") && theEmptyText != null) {
+		if (!this.hasFocus() && this.getPassword().length == 0 && theEmptyText != null) {
 			int height = getHeight();
 			Font prev = g.getFont();
 			Font italic = prev.deriveFont(Font.ITALIC);
@@ -347,7 +357,7 @@ public class ObservableTextField<E> extends JTextField {
 		if (!isDirty)
 			return;
 		isDirty = false;
-		String text = getText();
+		String text = new String(getPassword());
 		E parsed;
 		try {
 			parsed = theFormat.parse(text);

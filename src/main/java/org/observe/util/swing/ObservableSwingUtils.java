@@ -4,11 +4,15 @@ import java.awt.Component;
 import java.awt.Container;
 import java.awt.EventQueue;
 import java.awt.Font;
+import java.awt.Frame;
 import java.awt.Image;
 import java.awt.Rectangle;
 import java.awt.event.ActionListener;
+import java.awt.event.ComponentEvent;
+import java.awt.event.ComponentListener;
 import java.beans.PropertyChangeListener;
 import java.net.URL;
+import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -42,6 +46,7 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
+import org.observe.config.ObservableConfig;
 import org.qommons.ArrayUtils;
 import org.qommons.Causable;
 import org.qommons.Causable.CausableKey;
@@ -739,9 +744,54 @@ public class ObservableSwingUtils {
 	 */
 	public static ImageIcon getFixedIcon(Class<?> clazz, String location, int width, int height) {
 		ImageIcon icon = getIcon(clazz, location);
-		if (icon != null && icon.getIconWidth() != width || icon.getIconHeight() != height)
+		if (icon != null && (icon.getIconWidth() != width || icon.getIconHeight() != height))
 			icon = new ImageIcon(icon.getImage().getScaledInstance(width, height, Image.SCALE_SMOOTH));
 		return icon;
+	}
+
+	/**
+	 * Initializes a frame's location and size from configuration (if present) and persists the frame's location to the config
+	 *
+	 * @param frame The frame whose location to configure
+	 * @param config The configuration to persist to
+	 * @return A subscription that will stop persisting the frame's location and size to the config
+	 */
+	public static Subscription configureFrameBounds(Frame frame, ObservableConfig config) {
+		// TODO At some point, maybe dynamically listen to the configuration to control the frame
+		if (config.get("x") != null) {
+			try {
+				frame.setBounds(config.getChild("x").asValue(int.class).parse(), //
+					config.getChild("y").asValue(int.class).parse(), //
+					config.getChild("width").asValue(int.class).parse(), //
+					config.getChild("height").asValue(int.class).parse()//
+					);
+			} catch (ParseException e) {
+				frame.pack();
+				frame.setLocationRelativeTo(null);
+			}
+		} else
+			frame.setLocationRelativeTo(null);
+		ComponentListener listener = new ComponentListener() {
+			@Override
+			public void componentResized(ComponentEvent e) {
+				config.set("width", String.valueOf(frame.getWidth()));
+				config.set("height", String.valueOf(frame.getHeight()));
+			}
+
+			@Override
+			public void componentMoved(ComponentEvent e) {
+				config.set("x", String.valueOf(frame.getX()));
+				config.set("y", String.valueOf(frame.getY()));
+			}
+
+			@Override
+			public void componentShown(ComponentEvent e) {}
+
+			@Override
+			public void componentHidden(ComponentEvent e) {}
+		};
+		frame.addComponentListener(listener);
+		return () -> frame.removeComponentListener(listener);
 	}
 
 	/**
