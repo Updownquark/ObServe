@@ -1,5 +1,6 @@
 package org.observe.util.swing;
 
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.EventQueue;
@@ -175,6 +176,15 @@ public class ObservableSwingUtils {
 		 */
 		public FontAdjuster<C> withSizeAndStyle(int style, float fontSize) {
 			label.setFont(label.getFont().deriveFont(style, fontSize));
+			return this;
+		}
+
+		/**
+		 * @param color The font color for the label
+		 * @return This holder
+		 */
+		public FontAdjuster<C> withColor(Color color) {
+			label.setForeground(color);
 			return this;
 		}
 

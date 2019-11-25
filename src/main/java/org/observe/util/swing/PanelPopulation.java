@@ -6,6 +6,7 @@ import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.EventQueue;
 import java.awt.Image;
+import java.awt.Insets;
 import java.awt.LayoutManager;
 import java.awt.LayoutManager2;
 import java.awt.datatransfer.DataFlavor;
@@ -22,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -38,6 +40,7 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
+import javax.swing.JSplitPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTable;
 import javax.swing.ListSelectionModel;
@@ -236,6 +239,10 @@ public class PanelPopulation {
 		<R> P addTable(ObservableCollection<R> rows, Consumer<TableBuilder<R, ?>> table);
 
 		P addTabs(Consumer<TabPaneEditor<JTabbedPane, ?>> tabs);
+
+		P addSplit(boolean vertical, Consumer<SplitPane<?>> split);
+
+		P addScroll(String fieldName, Consumer<ScrollPane<?>> scroll);
 
 		default P spacer(int size) {
 			return addComponent(null, Box.createRigidArea(new Dimension(size, size)), null);
@@ -446,6 +453,40 @@ public class PanelPopulation {
 		ObservableValue<String> getName();
 	}
 
+	public interface SplitPane<P extends SplitPane<P>> extends ComponentEditor<JSplitPane, P> {
+		P firstV(Consumer<PanelPopulator<?, ?>> vPanel);
+
+		default P firstH(String layoutType, Consumer<PanelPopulator<?, ?>> hPanel) {
+			return firstH(makeLayout(layoutType), hPanel);
+		}
+
+		P firstH(LayoutManager layout, Consumer<PanelPopulator<?, ?>> hPanel);
+
+		P first(Component component);
+
+		P lastV(Consumer<PanelPopulator<?, ?>> vPanel);
+
+		default P lastH(String layoutType, Consumer<PanelPopulator<?, ?>> hPanel) {
+			return lastH(makeLayout(layoutType), hPanel);
+		}
+
+		P lastH(LayoutManager layout, Consumer<PanelPopulator<?, ?>> hPanel);
+
+		P last(Component component);
+	}
+
+	public interface ScrollPane<P extends ScrollPane<P>> extends ComponentEditor<JScrollPane, P> {
+		P withVContent(Consumer<PanelPopulator<?, ?>> panel);
+
+		default P withHContent(String layoutType, Consumer<PanelPopulator<?, ?>> panel) {
+			return withHContent(makeLayout(layoutType), panel);
+		}
+
+		P withHContent(LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel);
+
+		P withContent(Component component);
+	}
+
 	public interface TableBuilder<R, P extends TableBuilder<R, P>> extends ComponentEditor<JTable, P> {
 		P withColumns(ObservableCollection<? extends CategoryRenderStrategy<? super R, ?>> columns);
 
@@ -462,6 +503,25 @@ public class PanelPopulation {
 		default <C> P withColumn(String name, Class<C> type, Function<? super R, ? extends C> accessor, //
 			Consumer<CategoryRenderStrategy<R, C>> column) {
 			return withColumn(name, TypeTokens.get().of(type), accessor, column);
+		}
+
+		default P withNameColumn(Function<? super R, String> getName, BiConsumer<? super R, String> setName, boolean unique,
+			Consumer<CategoryRenderStrategy<R, String>> column) {
+			return withColumn("Name", String.class, getName, col -> {
+				if (setName != null && unique) {
+					col.withMutation(mut -> mut.filterAccept((rowEl, name) -> {
+						if (StringUtils.isUniqueName(getRows(), getName, name, (R) rowEl.get())) {
+							return null;
+						} else {
+							String itemName = getItemName();
+							return new StringBuilder(StringUtils.getIndefiniteArticle(name)).append(' ').append(itemName).append(" named ")
+								.append(name).append(" already exists").toString();
+						}
+					}));
+				}
+				if (column != null)
+					column.accept(col);
+			});
 		}
 
 		P withSelection(SettableValue<R> selection, boolean enforceSingleSelection);
@@ -486,6 +546,12 @@ public class PanelPopulation {
 		}
 
 		P withMultiAction(Consumer<? super List<? extends R>> action, Consumer<TableAction<R, ?>> actionMod);
+
+		P withItemName(String itemName);
+
+		String getItemName();
+
+		ObservableCollection<? extends R> getRows();
 
 		Component getOrCreateComponent(Observable<?> until);
 	}
@@ -921,6 +987,22 @@ public class PanelPopulation {
 		}
 
 		@Override
+		default P addSplit(boolean vertical, Consumer<SplitPane<?>> split) {
+			SimpleSplitEditor<?> splitPane = new SimpleSplitEditor<>(vertical, getLock(), getUntil());
+			split.accept(splitPane);
+			doAdd(splitPane, null, null);
+			return (P) this;
+		}
+
+		@Override
+		default P addScroll(String fieldName, Consumer<ScrollPane<?>> scroll) {
+			SimpleScrollEditor<?> scrollPane = new SimpleScrollEditor<>(fieldName, getLock(), getUntil());
+			scroll.accept(scrollPane);
+			doAdd(scrollPane);
+			return (P) this;
+		}
+
+		@Override
 		default <R> P addTable(ObservableCollection<R> rows, Consumer<TableBuilder<R, ?>> table) {
 			SimpleTableBuilder<R, ?> tb = new SimpleTableBuilder<>(rows, getLock());
 			table.accept(tb);
@@ -1085,7 +1167,10 @@ public class PanelPopulation {
 		private final Observable<?> theUntil;
 
 		MigFieldPanel(C container, Observable<?> until, Supplier<Transactable> lock) {
-			super(container, lock);
+			super(//
+				container = (container != null ? container
+					: (C) new JPanel(createMigLayout(true, () -> "install the layout before using this class"))), //
+				lock);
 			theUntil = until == null ? Observable.empty() : until;
 			if (container.getLayout() == null || !MIG_LAYOUT_CLASS_NAME.equals(container.getLayout().getClass().getName())) {
 				LayoutManager2 migLayout = createMigLayout(true, () -> "install the layout before using this class");
@@ -1115,6 +1200,8 @@ public class PanelPopulation {
 			StringBuilder constraints = new StringBuilder();
 			if (field.isFill())
 				constraints.append("growx, pushx");
+			else if (fieldLabel == null && postLabel == null)
+				constraints.append("align center");
 			if (field.isFillV()) {
 				if (constraints.length() > 0)
 					constraints.append(", ");
@@ -1408,6 +1495,8 @@ public class PanelPopulation {
 		@Override
 		public P withIcon(ObservableValue<? extends Icon> icon) {
 			theIcon = icon;
+			if (icon != null)
+				getEditor().setMargin(new Insets(2, 2, 2, 2));
 			return (P) this;
 		}
 	}
@@ -1525,9 +1614,119 @@ public class PanelPopulation {
 		}
 	}
 
+	static class SimpleSplitEditor<P extends SimpleSplitEditor<P>> extends AbstractComponentEditor<JSplitPane, P> implements SplitPane<P> {
+		private final Observable<?> theUntil;
+
+		SimpleSplitEditor(boolean vertical, Supplier<Transactable> lock, Observable<?> until) {
+			super(new JSplitPane(vertical ? JSplitPane.VERTICAL_SPLIT : JSplitPane.HORIZONTAL_SPLIT), lock);
+			theUntil = until;
+		}
+
+		boolean hasSetFirst;
+		boolean hasSetLast;
+
+		@Override
+		public P firstV(Consumer<PanelPopulator<?, ?>> vPanel) {
+			MigFieldPanel<JPanel> fieldPanel = new MigFieldPanel<>(null, theUntil, theLock);
+			vPanel.accept(fieldPanel);
+			return first(fieldPanel.getOrCreateComponent(theUntil));
+		}
+
+		@Override
+		public P firstH(LayoutManager layout, Consumer<PanelPopulator<?, ?>> hPanel) {
+			SimpleHPanel<JPanel> panel = new SimpleHPanel<>(null, new JPanel(layout), theLock, theUntil);
+			hPanel.accept(panel);
+			return first(panel.getOrCreateComponent(theUntil));
+		}
+
+		@Override
+		public P first(Component component) {
+			if (hasSetFirst)
+				throw new IllegalStateException("First component has already been configured");
+			hasSetFirst = true;
+			getEditor().setLeftComponent(component);
+			return (P) this;
+		}
+
+		@Override
+		public P lastV(Consumer<PanelPopulator<?, ?>> vPanel) {
+			MigFieldPanel<JPanel> fieldPanel = new MigFieldPanel<>(null, theUntil, theLock);
+			vPanel.accept(fieldPanel);
+			return last(fieldPanel.getOrCreateComponent(theUntil));
+		}
+
+		@Override
+		public P lastH(LayoutManager layout, Consumer<PanelPopulator<?, ?>> hPanel) {
+			SimpleHPanel<JPanel> panel = new SimpleHPanel<>(null, new JPanel(layout), theLock, theUntil);
+			hPanel.accept(panel);
+			return last(panel.getOrCreateComponent(theUntil));
+		}
+
+		@Override
+		public P last(Component component) {
+			if (hasSetLast)
+				throw new IllegalStateException("Last component has already been configured");
+			hasSetLast = true;
+			getEditor().setRightComponent(component);
+			return (P) this;
+		}
+
+		@Override
+		public ObservableValue<String> getTooltip() {
+			return null;
+		}
+
+		@Override
+		protected Component createFieldNameLabel(Observable<?> until) {
+			return null;
+		}
+
+		@Override
+		protected Component createPostLabel(Observable<?> until) {
+			return null;
+		}
+	}
+
+	static class SimpleScrollEditor<P extends SimpleScrollEditor<P>> extends SimpleFieldEditor<JScrollPane, P>
+	implements ScrollPane<P> {
+		private final Observable<?> theUntil;
+
+		private boolean isContentSet;
+
+		public SimpleScrollEditor(String fieldName, Supplier<Transactable> lock, Observable<?> until) {
+			super(fieldName, new JScrollPane(), lock);
+			getEditor().getVerticalScrollBar().setUnitIncrement(10);
+			theUntil = until;
+		}
+
+		@Override
+		public P withVContent(Consumer<PanelPopulator<?, ?>> panel) {
+			MigFieldPanel<JPanel> fieldPanel = new MigFieldPanel<>(null, theUntil, theLock);
+			panel.accept(fieldPanel);
+			return withContent(fieldPanel.getOrCreateComponent(theUntil));
+		}
+
+		@Override
+		public P withHContent(LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel) {
+			SimpleHPanel<JPanel> hPanel = new SimpleHPanel<>(null, new JPanel(layout), theLock, theUntil);
+			panel.accept(hPanel);
+			return withContent(hPanel.getOrCreateComponent(theUntil));
+		}
+
+		@Override
+		public P withContent(Component component) {
+			if (isContentSet)
+				throw new IllegalStateException("Content has already been configured");
+			isContentSet = true;
+			getEditor().add(component);
+			return (P) this;
+		}
+	}
+
 	static class SimpleTableBuilder<R, P extends SimpleTableBuilder<R, P>> extends AbstractComponentEditor<JTable, P>
 	implements TableBuilder<R, P> {
 		private final ObservableCollection<R> theRows;
+		private String theItemName;
 		private ObservableCollection<? extends CategoryRenderStrategy<? super R, ?>> theColumns;
 		private SettableValue<R> theSelectionValue;
 		private ObservableCollection<R> theSelectionValues;
@@ -1540,6 +1739,25 @@ public class PanelPopulation {
 			super(new JTable(), lock);
 			theRows = rows;
 			theActions = new LinkedList<>();
+		}
+
+		@Override
+		public String getItemName() {
+			if (theItemName == null)
+				return "item";
+			else
+				return theItemName;
+		}
+
+		@Override
+		public P withItemName(String itemName) {
+			theItemName = itemName;
+			return (P) this;
+		}
+
+		@Override
+		public ObservableCollection<? extends R> getRows() {
+			return theRows;
 		}
 
 		@Override
@@ -1584,15 +1802,15 @@ public class PanelPopulation {
 		}
 
 		private Icon getAddIcon() {
-			return ObservableSwingUtils.getFixedIcon(null, "icons/add.png", 16, 16);
+			return ObservableSwingUtils.getFixedIcon(null, "/icons/add.png", 16, 16);
 		}
 
 		private Icon getRemoveIcon() {
-			return ObservableSwingUtils.getFixedIcon(null, "icons/remove.png", 16, 16);
+			return ObservableSwingUtils.getFixedIcon(null, "/icons/remove.png", 16, 16);
 		}
 
 		private Icon getCopyIcon() {
-			return ObservableSwingUtils.getFixedIcon(null, "icons/copy.png", 16, 16);
+			return ObservableSwingUtils.getFixedIcon(null, "/icons/copy.png", 16, 16);
 		}
 
 		@Override
@@ -1607,7 +1825,7 @@ public class PanelPopulation {
 				getEditor().getSelectionModel().setSelectionInterval(index, index);
 			}, action -> {
 				action.allowForMultiple(true).allowForEmpty(true).allowForAnyEnabled(true)//
-				.modifyButton(button -> button.withIcon(getAddIcon()).withTooltip("Add new item"));
+				.modifyButton(button -> button.withIcon(getAddIcon()).withTooltip("Add new " + getItemName()));
 				if (actionMod != null)
 					actionMod.accept(action);
 			});
@@ -1615,8 +1833,10 @@ public class PanelPopulation {
 
 		@Override
 		public P withRemove(Consumer<? super List<? extends R>> deletion, Consumer<TableAction<R, ?>> actionMod) {
+			String single = getItemName();
+			String plural = StringUtils.pluralize(single);
 			return withMultiAction(deletion, action -> {
-				action.allowForMultiple(true).withTooltip(items -> "Remove selected item" + (items.size() == 1 ? "" : "s"))//
+				action.allowForMultiple(true).withTooltip(items -> "Remove selected " + (items.size() == 1 ? single : plural))//
 				.modifyButton(button -> button.withIcon(getRemoveIcon()));
 				if (actionMod != null)
 					actionMod.accept(action);
@@ -1658,7 +1878,9 @@ public class PanelPopulation {
 						throw (Error) e.getTargetException();
 				} catch (InterruptedException e) {}
 			}, action -> {
-				action.allowForMultiple(true).withTooltip(items -> "Duplicate selected item" + (items.size() == 1 ? "" : "s"))//
+				String single = getItemName();
+				String plural = StringUtils.pluralize(single);
+				action.allowForMultiple(true).withTooltip(items -> "Duplicate selected " + (items.size() == 1 ? single : plural))//
 				.modifyButton(button -> button.withIcon(getCopyIcon()));
 				if (actionMod != null)
 					actionMod.accept(action);
@@ -1667,7 +1889,7 @@ public class PanelPopulation {
 
 		@Override
 		public P withMultiAction(Consumer<? super List<? extends R>> action, Consumer<TableAction<R, ?>> actionMod) {
-			SimpleTableAction<R, ?> ta = new SimpleTableAction<>(action, this::getSelection);
+			SimpleTableAction<R, ?> ta = new SimpleTableAction<>(this, action, this::getSelection);
 			actionMod.accept(ta);
 			theActions.add(ta);
 			return (P) this;
@@ -1851,6 +2073,7 @@ public class PanelPopulation {
 	}
 
 	static class SimpleTableAction<R, A extends SimpleTableAction<R, A>> implements TableAction<R, A> {
+		private final TableBuilder<R, ?> theTable;
 		final Consumer<? super List<? extends R>> theAction;
 		final Supplier<List<R>> theSelectedValues;
 		private Function<? super R, String> theEnablement;
@@ -1863,7 +2086,8 @@ public class PanelPopulation {
 		private SettableValue<String> theTooltipString;
 		private Consumer<ButtonEditor<?>> theButtonMod;
 
-		SimpleTableAction(Consumer<? super List<? extends R>> action, Supplier<List<R>> selectedValues) {
+		SimpleTableAction(TableBuilder<R, ?> table, Consumer<? super List<? extends R>> action, Supplier<List<R>> selectedValues) {
+			theTable = table;
 			theAction = action;
 			theSelectedValues = selectedValues;
 			theEnabledString = new SimpleSettableValue<>(String.class, true);
@@ -1963,7 +2187,7 @@ public class PanelPopulation {
 			if (!zeroAllowed && selectedValues.isEmpty())
 				theEnabledString.set("Nothing selected", cause);
 			else if (!multipleAllowed && selectedValues.size() > 1)
-				theEnabledString.set("Multiple items selected", cause);
+				theEnabledString.set("Multiple " + StringUtils.pluralize(theTable.getItemName()) + " selected", cause);
 			else {
 				if (theEnablement != null) {
 					Set<String> messages = null;
@@ -1988,7 +2212,7 @@ public class PanelPopulation {
 					} else if (allowedCount > 1 && !multipleAllowed) {
 						error = true;
 						if (messages.isEmpty())
-							messages.add("Multiple items selected");
+							messages.add("Multiple " + StringUtils.pluralize(theTable.getItemName()) + " selected");
 					}
 					if (!error)
 						theEnabledString.set(null, cause);
