@@ -12,6 +12,7 @@ import java.awt.event.InputEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.text.ParseException;
+import java.util.function.BiConsumer;
 import java.util.function.Function;
 
 import javax.swing.Icon;
@@ -57,6 +58,8 @@ public class ObservableTextField<E> extends JPasswordField {
 	private Insets dummyInsets;
 	private String theEmptyText;
 
+	private BiConsumer<? super E, ? super KeyEvent> theEnterAction;
+
 	/**
 	 * @param value The value for the text field to interact with
 	 * @param format The format to convert the value to text and back
@@ -80,10 +83,12 @@ public class ObservableTextField<E> extends JPasswordField {
 
 		revertOnFocusLoss = true;
 		theValue.changes().takeUntil(until).act(evt -> {
-			if (!isInternallyChanging)
+			if (!isInternallyChanging && (!hasFocus() || evt.getOldValue() != evt.getNewValue()))
 				setValue(evt.getNewValue());
 		});
 		theValue.isEnabled().changes().takeUntil(until).act(evt -> {
+			if (evt.getOldValue() == evt.getNewValue())
+				return;
 			checkEnabled();
 			setErrorState(theError, theWarningMsg);
 		});
@@ -127,8 +132,10 @@ public class ObservableTextField<E> extends JPasswordField {
 			public void keyReleased(KeyEvent e) {
 				if (e.getKeyCode() == KeyEvent.VK_ESCAPE)
 					revertEdits();
-				else if (e.getKeyCode() == KeyEvent.VK_ENTER)
-					flushEdits(e);
+				else if (e.getKeyCode() == KeyEvent.VK_ENTER) {
+					if (flushEdits(e) && theEnterAction != null)
+						theEnterAction.accept(theValue.get(), e);
+				}
 			}
 		});
 		addFocusListener(new FocusAdapter() {
@@ -231,6 +238,24 @@ public class ObservableTextField<E> extends JPasswordField {
 	 */
 	public ObservableTextField<E> setCommitOnType(boolean commit) {
 		commitOnType = commit;
+		return this;
+	}
+
+	/**
+	 * <p>
+	 * Sets an action to be performed when the user presses the ENTER key while focused on this text field (after a successful value
+	 * commit).
+	 * </p>
+	 *
+	 * <p>
+	 * The text field only contains one such listener, so this call replaces any that may have been previously set.
+	 * </p>
+	 *
+	 * @param action The action to perform when the user presses the ENTER key
+	 * @return This text field
+	 */
+	public ObservableTextField<E> onEnter(BiConsumer<? super E, ? super KeyEvent> action) {
+		theEnterAction = action;
 		return this;
 	}
 
@@ -352,10 +377,12 @@ public class ObservableTextField<E> extends JPasswordField {
 	 * Causes any edits in this field's text to take effect, parsing it and setting it in the value
 	 *
 	 * @param cause The cause of the action (e.g. a swing event)
+	 * @return Whether the edits (if any) were successfully committed to the value or were rejected. If there were no edits, this returns
+	 *         true.
 	 */
-	public void flushEdits(Object cause) {
+	public boolean flushEdits(Object cause) {
 		if (!isDirty)
-			return;
+			return true;
 		isDirty = false;
 		String text = new String(getPassword());
 		E parsed;
@@ -364,19 +391,21 @@ public class ObservableTextField<E> extends JPasswordField {
 			setErrorState(null, parsed);
 		} catch (ParseException e) {
 			setErrorState(e.getMessage() == null ? "Parsing failed" : e.getMessage(), (String) null);
-			return;
+			return false;
 		}
-		doCommit(parsed, cause, true);
+		return doCommit(parsed, cause, true);
 	}
 
-	private void doCommit(E parsed, Object cause, boolean maybeReformat) {
+	private boolean doCommit(E parsed, Object cause, boolean maybeReformat) {
 		isInternallyChanging = true;
 		try {
 			theValue.set(parsed, cause);
 			if (maybeReformat && reformatOnCommit)
 				setText(theFormat.format(parsed));
+			return true;
 		} catch (IllegalArgumentException | UnsupportedOperationException e) {
 			setErrorState(e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName(), (String) null);
+			return false;
 		} finally {
 			isInternallyChanging = false;
 		}

@@ -5428,6 +5428,7 @@ public class ObservableCollectionDataFlowImpl {
 			private final BetterTreeList<FlattenedElement> theElements;
 			private final WeakListening.Builder theChildListening = theListening.child();
 			private final boolean isFromStart;
+			private I theOldValue;
 			ElementId holderElement;
 			private CollectionDataFlow<?, ?, ? extends T> theFlow;
 			ActiveCollectionManager<?, ?, ? extends T> manager;
@@ -5453,6 +5454,9 @@ public class ObservableCollectionDataFlowImpl {
 			}
 
 			void updated(I newValue, Object cause) {
+				if (newValue == theOldValue)
+					return;
+				theOldValue = newValue;
 				try (Transaction parentT = theParent.lock(false, null); Transaction t = lockLocal()) {
 					CollectionDataFlow<?, ?, ? extends T> newFlow = theMap.apply(newValue);
 					if (newFlow == theFlow)

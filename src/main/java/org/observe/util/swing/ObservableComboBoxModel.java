@@ -22,6 +22,7 @@ import javax.swing.plaf.basic.ComboPopup;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.Subscription;
+import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
 import org.qommons.Transaction;
@@ -122,8 +123,24 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 		};
 		comboBox.addItemListener(itemListener);
 		subs.add(() -> ObservableSwingUtils.onEQ(() -> comboBox.removeItemListener(itemListener)));
+		// Pretty hacky here, but it's the only way I've found to display tooltips over expanded combo box items
+		AccessibleContext accessible = comboBox.getAccessibleContext();
+		ComboPopup popup;
+		{
+			ComboPopup tempPopup = null;
+			for (int i = 0; i < accessible.getAccessibleChildrenCount(); i++) {
+				Accessible child = accessible.getAccessibleChild(i);
+				if (child instanceof ComboPopup) {
+					tempPopup = (ComboPopup) child;
+					break;
+				}
+			}
+			popup = tempPopup;
+		}
 		subs.add(selected.changes().act(evt -> {
 			if (!callbackLock[0]) {
+				if (evt.getOldValue() == evt.getNewValue() && popup != null && popup.isVisible())
+					return; // Ignore update events when the popup is expanded
 				String enabled = selected.isEnabled().get();
 				ObservableSwingUtils.onEQ(() -> {
 					callbackLock[0] = true;
@@ -147,10 +164,13 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 				Object selectedV = selected.get();
 				if (selectedV != null && comboBox.getSelectedItem() != selectedV) {
 					for (int i = e.getIndex0(); i <= e.getIndex1(); i++) {
-						if (comboModel.getElementAt(i) == selectedV) {
+						T value = comboModel.getElementAt(i);
+						if (((Equivalence<T>) availableValues.equivalence()).elementEquals(value, selectedV)) {
 							callbackLock[0] = true;
 							try {
 								comboBox.setSelectedIndex(i);
+								if (selected.isAcceptable(value) == null)
+									selected.set(value, e);
 							} finally {
 								callbackLock[0] = false;
 							}
@@ -185,16 +205,6 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 		subs.add(() -> comboModel.removeListDataListener(comboDataListener));
 		subs.add(selected.isEnabled().changes().act(evt -> ObservableSwingUtils.onEQ(() -> checkEnabled.accept(evt.getNewValue()))));
 
-		// Pretty hacky here, but it's the only way I've found to display tooltips over expanded combo box items
-		AccessibleContext accessible = comboBox.getAccessibleContext();
-		ComboPopup popup = null;
-		for (int i = 0; i < accessible.getAccessibleChildrenCount(); i++) {
-			Accessible child = accessible.getAccessibleChild(i);
-			if (child instanceof ComboPopup) {
-				popup = (ComboPopup) child;
-				break;
-			}
-		}
 		if (popup != null) {
 			JList<T> popupList = popup.getList();
 			MouseMotionListener popupMouseListener = new MouseMotionAdapter() {

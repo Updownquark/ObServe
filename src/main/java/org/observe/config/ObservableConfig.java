@@ -1,5 +1,8 @@
 package org.observe.config;
 
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringWriter;
@@ -693,25 +696,25 @@ public class ObservableConfig implements Transactable, Stamped {
 			// If the format is simple, we can just parse the value and then forget about it.
 			// Otherwise, we need to maintain the connection to update the value when configuration changes
 			if (format instanceof ObservableConfigFormat.SimpleConfigFormat)
-				return format.parse(getDescendant(false), createDescendant(false)::get, null, null, theUntil);
+				return format.parse(ObservableConfig.this, getDescendant(false), createDescendant(false)::get, null, null, theUntil);
 			else
 				return buildValue().get();
 		}
 
 		public T parseDisconnected() throws ParseException {
 			SimpleObservable<Void> until = new SimpleObservable<>();
-			T value = getFormat().parse(getDescendant(false), createDescendant(false)::get, null, null, until);
+			T value = getFormat().parse(ObservableConfig.this, getDescendant(false), createDescendant(false)::get, null, null, until);
 			until.onNext(null);
 			return value;
 		}
 
 		public SettableValue<T> buildValue() {
-			return new ObservableConfigTransform.ObservableConfigValue<>(getDescendant(false), createDescendant(false)::get, theUntil,
-				theType, getFormat(), true);
+			return new ObservableConfigTransform.ObservableConfigValue<>(ObservableConfig.this, getDescendant(false),
+				createDescendant(false)::get, theUntil, theType, getFormat(), true);
 		}
 
 		public ObservableCollection<T> buildCollection() {
-			return new ObservableConfigTransform.ObservableConfigValues<>(//
+			return new ObservableConfigTransform.ObservableConfigValues<>(ObservableConfig.this, //
 				getDescendant(true), createDescendant(true)::get, theType, getFormat(), getChildName(), getFormatSet(), theUntil, true);
 		}
 
@@ -719,7 +722,7 @@ public class ObservableConfig implements Transactable, Stamped {
 			ObservableConfigFormat<T> entityFormat = getFormat();
 			if (!(entityFormat instanceof ObservableConfigFormat.EntityConfigFormat))
 				throw new IllegalStateException("Format for " + theType + " is not entity-enabled");
-			return new ObservableConfigTransform.ObservableConfigEntityValues<>(//
+			return new ObservableConfigTransform.ObservableConfigEntityValues<>(ObservableConfig.this, //
 				getDescendant(true), createDescendant(true)::get, (ObservableConfigFormat.EntityConfigFormat<T>) entityFormat,
 				getChildName(), theUntil, true);
 		}
@@ -1058,6 +1061,25 @@ public class ObservableConfig implements Transactable, Stamped {
 				}
 			}
 		});
+	}
+
+	public static ObservableConfigPersistence<IOException> toFile(File file, XmlEncoding encoding) {
+		return toWriter(() -> new BufferedWriter(new FileWriter(file)), encoding);
+	}
+
+	public interface WriterSupplier {
+		Writer createWriter() throws IOException;
+	}
+
+	public static ObservableConfigPersistence<IOException> toWriter(WriterSupplier writer, XmlEncoding encoding) {
+		return new ObservableConfig.ObservableConfigPersistence<IOException>() {
+			@Override
+			public void persist(ObservableConfig cfg) throws IOException {
+				try (Writer w = writer.createWriter()) {
+					ObservableConfig.writeXml(cfg, w, encoding, "\t");
+				}
+			}
+		};
 	}
 
 	public static ObservableConfig createRoot(String name) {

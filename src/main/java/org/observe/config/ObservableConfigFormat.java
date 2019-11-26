@@ -45,8 +45,8 @@ public interface ObservableConfigFormat<E> {
 	void format(E value, E previousValue, ObservableConfig config, Consumer<E> acceptedValue, Observable<?> until)
 		throws IllegalArgumentException;
 
-	E parse(ObservableValue<? extends ObservableConfig> config, Supplier<? extends ObservableConfig> create, E previousValue,
-		ObservableConfig.ObservableConfigEvent change, Observable<?> until) throws ParseException;
+	E parse(ObservableConfig root, ObservableValue<? extends ObservableConfig> config, Supplier<? extends ObservableConfig> create,
+		E previousValue, ObservableConfig.ObservableConfigEvent change, Observable<?> until) throws ParseException;
 
 	static <T> ObservableConfigFormat<T> ofQommonFormat(Format<T> format, Supplier<? extends T> defaultValue) {
 		return new SimpleConfigFormat<>(format, defaultValue);
@@ -74,8 +74,9 @@ public interface ObservableConfigFormat<E> {
 		}
 
 		@Override
-		public T parse(ObservableValue<? extends ObservableConfig> config, Supplier<? extends ObservableConfig> create, T previousValue,
-			ObservableConfig.ObservableConfigEvent change, Observable<?> until) throws ParseException {
+		public T parse(ObservableConfig root, ObservableValue<? extends ObservableConfig> config,
+			Supplier<? extends ObservableConfig> create, T previousValue, ObservableConfig.ObservableConfigEvent change,
+			Observable<?> until) throws ParseException {
 			if (config == null)
 				return defaultValue.get();
 			if (change != null && change.relativePath.size() > 1)
@@ -104,6 +105,7 @@ public interface ObservableConfigFormat<E> {
 
 	interface EntityConfigFormat<E> extends ObservableConfigFormat<E> {
 		EntityConfiguredValueType<E> getEntityType();
+
 		<E2 extends E> EntityConfigCreator<E2> create(TypeToken<E2> subType);
 	}
 
@@ -314,8 +316,9 @@ public interface ObservableConfigFormat<E> {
 		}
 
 		@Override
-		public E parse(ObservableValue<? extends ObservableConfig> config, Supplier<? extends ObservableConfig> create, E previousValue,
-			ObservableConfig.ObservableConfigEvent change, Observable<?> until) throws ParseException {
+		public E parse(ObservableConfig root, ObservableValue<? extends ObservableConfig> config,
+			Supplier<? extends ObservableConfig> create, E previousValue, ObservableConfig.ObservableConfigEvent change,
+			Observable<?> until) throws ParseException {
 			ObservableConfig c = config.get();
 			if (c != null && "true".equalsIgnoreCase(c.get("null")))
 				return null;
@@ -326,7 +329,7 @@ public interface ObservableConfigFormat<E> {
 			} else {
 				EntitySubFormat<? extends E> subFormat = formatFor(c);
 				if (subFormat != null) {
-					return ((EntitySubFormat<E>) subFormat).format.parse(config, () -> {
+					return ((EntitySubFormat<E>) subFormat).format.parse(root, config, () -> {
 						ObservableConfig newCfg = create.get();
 						subFormat.moldConfig(newCfg);
 						return newCfg;
@@ -413,14 +416,14 @@ public interface ObservableConfigFormat<E> {
 		E createInstance(ObservableConfig config, QuickMap<String, Object> fieldValues, Observable<?> until) throws ParseException {
 			for (EntitySubFormat<? extends E> subFormat : theSubFormats) {
 				if (subFormat.configFilter.matches(config))
-					return subFormat.format.parse(ObservableValue.of(config), null, null, null, until);
+					return subFormat.format.parse(config, ObservableValue.of(config), null, null, null, until);
 			}
 			for (int i = 0; i < fieldValues.keySize(); i++) {
 				int fi = i;
 				ObservableValue<? extends ObservableConfig> fieldConfig = config.observeDescendant(theFieldChildNames.get(i));
 				if (fieldValues.get(i) == null)
 					fieldValues.put(i,
-						fieldFormats[i].parse(fieldConfig, () -> config.addChild(theFieldChildNames.get(fi)), null, null, until));
+						fieldFormats[i].parse(config, fieldConfig, () -> config.addChild(theFieldChildNames.get(fi)), null, null, until));
 				else
 					formatField(entityType.getFields().get(i), fieldValues.get(i), config, f -> {}, until);
 			}
@@ -460,7 +463,7 @@ public interface ObservableConfigFormat<E> {
 			ObservableValue<? extends ObservableConfig> fieldConfig = entityConfig.observeDescendant(theFieldChildNames.get(fieldIdx));
 			if (change != null) {
 				if (change.relativePath.isEmpty() || fieldConfig != change.relativePath.get(0)) {
-					Object newValue = ((ObservableConfigFormat<Object>) fieldFormats[fieldIdx]).parse(fieldConfig,
+					Object newValue = ((ObservableConfigFormat<Object>) fieldFormats[fieldIdx]).parse(entityConfig, fieldConfig,
 						() -> entityConfig.getChild(theFieldChildNames.get(fieldIdx), true, null), oldValue, change.asFromChild(), until);
 					if (newValue != oldValue)
 						field.set(previousValue, newValue);
@@ -468,7 +471,7 @@ public interface ObservableConfigFormat<E> {
 				}
 				change = change.asFromChild();
 			}
-			Object newValue = ((ObservableConfigFormat<Object>) fieldFormats[fieldIdx]).parse(fieldConfig,
+			Object newValue = ((ObservableConfigFormat<Object>) fieldFormats[fieldIdx]).parse(entityConfig, fieldConfig,
 				() -> entityConfig.addChild(theFieldChildNames.get(fieldIdx)), oldValue, change, until);
 			if (oldValue != newValue)
 				((ConfiguredValueField<E, Object>) field).set(previousValue, newValue);
@@ -490,7 +493,7 @@ public interface ObservableConfigFormat<E> {
 					return;
 				}
 				if (previousValue == null)
-					previousValue = (C) new ObservableConfigTransform.ObservableConfigValues<>(ObservableValue.of(config), null,
+					previousValue = (C) new ObservableConfigTransform.ObservableConfigValues<>(config, ObservableValue.of(config), null,
 						elementType, elementFormat, childName, fieldParser, until, false);
 				acceptedValue.accept(previousValue);
 				if (previousValue == value)
@@ -531,10 +534,11 @@ public interface ObservableConfigFormat<E> {
 			}
 
 			@Override
-			public C parse(ObservableValue<? extends ObservableConfig> config, Supplier<? extends ObservableConfig> create, C previousValue,
-				ObservableConfigEvent change, Observable<?> until) throws ParseException {
+			public C parse(ObservableConfig root, ObservableValue<? extends ObservableConfig> config,
+				Supplier<? extends ObservableConfig> create, C previousValue, ObservableConfigEvent change, Observable<?> until)
+					throws ParseException {
 				if (previousValue == null) {
-					return (C) new ObservableConfigTransform.ObservableConfigValues<>(config, create::get, elementType, elementFormat,
+					return (C) new ObservableConfigTransform.ObservableConfigValues<>(root, config, create::get, elementType, elementFormat,
 						childName, fieldParser, until, false);
 				} else {
 					((ObservableConfigTransform.ObservableConfigValues<E>) previousValue).onChange(change);
@@ -554,11 +558,11 @@ public interface ObservableConfigFormat<E> {
 			}
 
 			@Override
-			public ObservableValueSet<E> parse(ObservableValue<? extends ObservableConfig> config,
+			public ObservableValueSet<E> parse(ObservableConfig root, ObservableValue<? extends ObservableConfig> config,
 				Supplier<? extends ObservableConfig> create, ObservableValueSet<E> previousValue, ObservableConfigEvent change,
 				Observable<?> until) throws ParseException {
 				if (previousValue == null) {
-					return new ObservableConfigTransform.ObservableConfigEntityValues<>(config, create::get, elementFormat, childName,
+					return new ObservableConfigTransform.ObservableConfigEntityValues<>(root, config, create::get, elementFormat, childName,
 						until, false);
 				} else {
 					((ObservableConfigTransform.ObservableConfigEntityValues<E>) previousValue).onChange(change);
@@ -697,15 +701,16 @@ public interface ObservableConfigFormat<E> {
 		}
 
 		@Override
-		public T parse(ObservableValue<? extends ObservableConfig> config, Supplier<? extends ObservableConfig> create, T previousValue,
-			ObservableConfigEvent change, Observable<?> until) throws ParseException {
+		public T parse(ObservableConfig root, ObservableValue<? extends ObservableConfig> config,
+			Supplier<? extends ObservableConfig> create, T previousValue, ObservableConfigEvent change, Observable<?> until)
+				throws ParseException {
 			ObservableConfig c = config.get();
 			if (c == null || "true".equals(c.get("null")))
 				return null;
 			SubFormat<? extends T> format = formatFor(c);
 			if (format == null)
 				throw new ParseException("No sub-format found matching " + c, 0);
-			return ((SubFormat<T>) format).format.parse(config, create, format.applies(previousValue) ? previousValue : null, change,
+			return ((SubFormat<T>) format).format.parse(root, config, create, format.applies(previousValue) ? previousValue : null, change,
 				until);
 		}
 	}

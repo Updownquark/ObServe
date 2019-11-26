@@ -289,10 +289,38 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 */
 	default <F> SettableValue<F> asFieldEditor(TypeToken<F> fieldType, Function<? super T, ? extends F> getter,
 		BiConsumer<? super T, ? super F> setter, Consumer<XformOptions> options) {
-		return map(fieldType, value -> value == null ? null : getter.apply(value), (v, f) -> {
-			setter.accept(v, f);
-			return v;
-		}, options).disableWith(map(v -> v == null ? "Nothing selected" : null));
+		SettableValue<T> outer = this;
+		class FieldEditorValue extends ComposedSettableValue<F> {
+			FieldEditorValue() {
+				super(fieldType, args -> args[0] == null ? null : getter.apply((T) args[0]), getter.toString(),
+					new XformDef(new SimpleXformOptions()), outer);
+			}
+
+			@Override
+			public <V extends F> F set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+				T v = outer.get();
+				F old = getter.apply(v);
+				setter.accept(v, value);
+				if (outer.isAcceptable(v) == null)
+					outer.set(v, cause);
+				return old;
+			}
+
+			@Override
+			public <V extends F> String isAcceptable(V value) {
+				T v = outer.get();
+				if (v == null)
+					return "Nothing selected";
+				else
+					return null; // No data here
+			}
+
+			@Override
+			public ObservableValue<String> isEnabled() {
+				return outer.map(v -> v == null ? "Nothing selected" : null);
+			}
+		}
+		return new FieldEditorValue();
 	}
 
 	/**

@@ -24,7 +24,6 @@ import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
-import org.qommons.Lockable;
 import org.qommons.QommonsUtils;
 import org.qommons.Stamped;
 import org.qommons.Transactable;
@@ -44,6 +43,7 @@ import org.qommons.tree.BetterTreeMap;
 import com.google.common.reflect.TypeToken;
 
 public abstract class ObservableConfigTransform implements Transactable, Stamped {
+	private final ObservableConfig theRoot;
 	private final ObservableValue<? extends ObservableConfig> theParent;
 	private final Runnable theParentCreate;
 	private final Observable<?> theUntil;
@@ -53,7 +53,9 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 	private boolean _isConnected;
 	private ObservableValue<Boolean> isConnected;
 
-	public ObservableConfigTransform(ObservableValue<? extends ObservableConfig> parent, Runnable ceCreate, Observable<?> until) {
+	public ObservableConfigTransform(ObservableConfig root, ObservableValue<? extends ObservableConfig> parent, Runnable ceCreate,
+		Observable<?> until) {
+		theRoot = root;
 		theParent = parent;
 		theParentCreate = ceCreate;
 		if (until == null) {
@@ -71,9 +73,10 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		until.take(1).act(__ -> _isConnected = false);
 		theParent.changes().takeUntil(until).act(//
 			evt -> {
-				if (evt.getNewValue() == evt.getOldValue())
+				if (evt.isInitial()) {} else if (evt.getNewValue() == evt.getOldValue()) {
 					return;
-				theStamp++;
+				} else
+					theStamp++;
 				ObservableConfig newParent = evt.getNewValue();
 				try (Transaction ceT = newParent == null ? Transaction.NONE : newParent.lock(false, null)) {
 					initConfig(evt.getNewValue(), evt);
@@ -85,6 +88,10 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 
 	public ObservableValue<Boolean> isConnected() {
 		return isConnected;
+	}
+
+	protected ObservableConfig getRoot() {
+		return theRoot;
 	}
 
 	protected void incrementStamp() {
@@ -128,12 +135,12 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 
 	@Override
 	public Transaction lock(boolean write, Object cause) {
-		return Lockable.lock(theParent, () -> Lockable.lockable(theParent.get(), write, cause));
+		return theRoot.lock(write, cause);
 	}
 
 	@Override
 	public Transaction tryLock(boolean write, Object cause) {
-		return Lockable.tryLock(theParent, () -> Lockable.lockable(theParent.get(), write, cause));
+		return theRoot.tryLock(write, cause);
 	}
 
 	@Override
@@ -157,9 +164,9 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		private Object theIdentity;
 		private Object theChangesIdentity;
 
-		public ObservableConfigValue(ObservableValue<? extends ObservableConfig> parent, Runnable ceCreate, Observable<?> until,
-			TypeToken<E> type, ObservableConfigFormat<E> format, boolean listen) {
-			super(parent, ceCreate, until);
+		public ObservableConfigValue(ObservableConfig root, ObservableValue<? extends ObservableConfig> parent, Runnable ceCreate,
+			Observable<?> until, TypeToken<E> type, ObservableConfigFormat<E> format, boolean listen) {
+			super(root, parent, ceCreate, until);
 			theType = type;
 			theFormat = format;
 
@@ -229,15 +236,17 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 			if (!isConnected().get())
 				throw new UnsupportedOperationException("Not connected");
 			Object[] oldValue = new Object[1];
-			getParent(true, parent -> {
-				try (Transaction t = parent.lock(true, cause)) {
-					E oldV = theValue;
-					oldValue[0] = oldV;
-					theFormat.format(value, oldV, parent, theModifyingValue, getUntil());
-				} finally {
-					theModifyingValue.clear();
-				}
-			});
+			try (Transaction t = lock(true, cause)) {
+				getParent(true, parent -> {
+					try (Transaction parentT = parent.lock(true, cause)) {
+						E oldV = theValue;
+						oldValue[0] = oldV;
+						theFormat.format(value, oldV, parent, theModifyingValue, getUntil());
+					} finally {
+						theModifyingValue.clear();
+					}
+				});
+			}
 			return (E) oldValue[0];
 		}
 
@@ -258,7 +267,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		@Override
 		protected void initConfig(ObservableConfig parent, Object cause) {
 			try {
-				theValue = theFormat.parse(getParent(), () -> getParent(true, null), theValue, null, getUntil());
+				theValue = theFormat.parse(parent, getParent(), () -> getParent(true, null), theValue, null, getUntil());
 			} catch (ParseException e) {
 				e.printStackTrace();
 				theValue = null;
@@ -270,7 +279,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 			E oldValue = theValue;
 			if (!theModifyingValue.isPresent()) {
 				try {
-					theValue = theFormat.parse(getParent(), () -> getParent(true, null), theValue, parentChange, getUntil());
+					theValue = theFormat.parse(getRoot(), getParent(), () -> getParent(true, null), theValue, parentChange, getUntil());
 					fire(createChangeEvent(oldValue, theValue, parentChange));
 				} catch (ParseException e) {
 					e.printStackTrace();
@@ -316,9 +325,9 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		ConfigElement theNewElement;
 		Consumer<? super ConfigElement> thePreAddAction;
 
-		public ObservableConfigBackedCollection(ObservableValue<? extends ObservableConfig> collectionElement, Runnable ceCreate,
-			TypeToken<E> type, ObservableConfigFormat<E> format, String childName, Observable<?> until, boolean listen) {
-			super(collectionElement, ceCreate, until);
+		public ObservableConfigBackedCollection(ObservableConfig root, ObservableValue<? extends ObservableConfig> collectionElement,
+			Runnable ceCreate, TypeToken<E> type, ObservableConfigFormat<E> format, String childName, Observable<?> until, boolean listen) {
+			super(root, collectionElement, ceCreate, until);
 			theType = type;
 			theFormat = format;
 			theChildName = childName;
@@ -360,7 +369,8 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 			boolean elementChange = collectionChange.relativePath.size() == 1;
 			ObservableConfig config = collectionChange.relativePath.get(0);
 			if (elementChange && collectionChange.changeType == CollectionChangeType.add) {
-				CollectionElement<ElementId> el = theElements.keySet().search(config.getParentChildRef(), BetterSortedList.SortedSearchFilter.PreferLess);
+				CollectionElement<ElementId> el = theElements.keySet().search(config.getParentChildRef(),
+					BetterSortedList.SortedSearchFilter.PreferLess);
 				ConfigElement newEl;
 				if (theNewElement != null)
 					newEl = theNewElement;
@@ -399,7 +409,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 							newValue = el.get().modifying.get();
 							el.get().modifying = null;
 						} else
-							newValue = theFormat.parse(//
+							newValue = theFormat.parse(getRoot(), //
 								ObservableValue.of(el.get().getConfig()), () -> collectionChange.eventTarget.addChild(theChildName),
 								el.get().get(), collectionChange.asFromChild(), getUntil());
 						E oldValue = el.get().get();
@@ -499,7 +509,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 				} else {
 					E val;
 					try {
-						val = theFormat.parse(//
+						val = theFormat.parse(getRoot(), //
 							ObservableValue.of(this.theConfig), () -> this.theConfig.getParent().addChild(theChildName), null, null,
 							Observable.or(getUntil(), theElementObservable));
 					} catch (ParseException e) {
@@ -759,9 +769,10 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 	static class ObservableConfigValues<E> extends ObservableCollectionWrapper<E> {
 		private final Backing<E> theBacking;
 
-		ObservableConfigValues(ObservableValue<? extends ObservableConfig> collectionElement, Runnable ceCreate, TypeToken<E> type,
-			ObservableConfigFormat<E> format, String childName, ObservableConfigFormatSet fieldParser, Observable<?> until, boolean listen) {
-			theBacking = new Backing<>(collectionElement, ceCreate, type, format, childName, until, listen);
+		ObservableConfigValues(ObservableConfig root, ObservableValue<? extends ObservableConfig> collectionElement, Runnable ceCreate,
+			TypeToken<E> type, ObservableConfigFormat<E> format, String childName, ObservableConfigFormatSet fieldParser,
+			Observable<?> until, boolean listen) {
+			theBacking = new Backing<>(root, collectionElement, ceCreate, type, format, childName, until, listen);
 
 			init(theBacking.getCollection());
 		}
@@ -771,9 +782,9 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		}
 
 		static class Backing<E> extends ObservableConfigBackedCollection<E> {
-			Backing(ObservableValue<? extends ObservableConfig> collectionElement, Runnable ceCreate, TypeToken<E> type,
-				ObservableConfigFormat<E> format, String childName, Observable<?> until, boolean listen) {
-				super(collectionElement, ceCreate, type, format, childName, until, listen);
+			Backing(ObservableConfig root, ObservableValue<? extends ObservableConfig> collectionElement, Runnable ceCreate,
+				TypeToken<E> type, ObservableConfigFormat<E> format, String childName, Observable<?> until, boolean listen) {
+				super(root, collectionElement, ceCreate, type, format, childName, until, listen);
 			}
 
 			@Override
@@ -840,9 +851,9 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 	}
 
 	static class ObservableConfigEntityValues<E> extends ObservableConfigBackedCollection<E> implements ObservableValueSet<E> {
-		ObservableConfigEntityValues(ObservableValue<? extends ObservableConfig> collectionElement, Runnable ceCreate,
-			EntityConfigFormat<E> format, String childName, Observable<?> until, boolean listen) {
-			super(collectionElement, ceCreate, format.getEntityType().getType(), format, childName, until, listen);
+		ObservableConfigEntityValues(ObservableConfig root, ObservableValue<? extends ObservableConfig> collectionElement,
+			Runnable ceCreate, EntityConfigFormat<E> format, String childName, Observable<?> until, boolean listen) {
+			super(root, collectionElement, ceCreate, format.getEntityType().getType(), format, childName, until, listen);
 		}
 
 		@Override

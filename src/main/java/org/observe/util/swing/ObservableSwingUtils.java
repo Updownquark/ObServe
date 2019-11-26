@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.IntConsumer;
 import java.util.function.Supplier;
 
 import javax.swing.ImageIcon;
@@ -645,12 +646,14 @@ public class ObservableSwingUtils {
 	 * @param equivalence The equivalence to use to test equality between values
 	 * @param selection The selection value to sync with
 	 * @param until The observable to remove all the listeners
+	 * @param update Receives an integer model index whenever the selection value is updated
 	 * @param enforceSingleSelection Whether to set the list's {@link ListSelectionModel#setSelectionMode(int) selection mode} to
 	 *        {@link ListSelectionModel#SINGLE_SELECTION single selection}
 	 * @return The selection
 	 */
 	public static <E> SettableValue<E> syncSelection(Component component, ListModel<E> model, Supplier<ListSelectionModel> selectionModel,
-		Equivalence<? super E> equivalence, SettableValue<E> selection, Observable<?> until, boolean enforceSingleSelection) {
+		Equivalence<? super E> equivalence, SettableValue<E> selection, Observable<?> until, IntConsumer update,
+		boolean enforceSingleSelection) {
 		if (enforceSingleSelection)
 			selectionModel.get().setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 		boolean[] callbackLock = new boolean[1];
@@ -677,6 +680,8 @@ public class ObservableSwingUtils {
 
 			@Override
 			public void contentsChanged(ListDataEvent e) {
+				if (callbackLock[0])
+					return;
 				ListSelectionModel selModel = selectionModel.get();
 				if (selModel.getMinSelectionIndex() < 0 || selModel.getMinSelectionIndex() != selModel.getMaxSelectionIndex())
 					return;
@@ -705,6 +710,12 @@ public class ObservableSwingUtils {
 				ListSelectionModel selModel = selectionModel.get();
 				if (evt.getNewValue() == null) {
 					selModel.clearSelection();
+					return;
+				} else if (evt.getOldValue() == evt.getNewValue()//
+					&& selModel.getMinSelectionIndex() == selModel.getMaxSelectionIndex()//
+					&& equivalence.elementEquals(model.getElementAt(selModel.getMinSelectionIndex()), evt.getNewValue())) {
+					if (update != null)
+						update.accept(selModel.getMaxSelectionIndex());
 					return;
 				}
 				for (int i = 0; i < model.getSize(); i++) {

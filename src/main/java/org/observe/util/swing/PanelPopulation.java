@@ -13,6 +13,7 @@ import java.awt.datatransfer.DataFlavor;
 import java.beans.PropertyChangeListener;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -73,8 +74,10 @@ import org.qommons.Transaction;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.FastFailLockingStrategy;
+import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.RRWLockingStrategy;
 import org.qommons.io.Format;
+import org.qommons.threading.QommonsTimer;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -289,9 +292,23 @@ public class PanelPopulation {
 
 		P modifyEditor(Consumer<? super E> modify);
 
+		Component getComponent();
+
 		Alert alert(String title, String message);
 
 		ValueCache values();
+
+		default P grabFocus() {
+			// This method is typically called when the component is declared, usually before the editor is built or installed.
+			// We'll give the Swing system the chance to finish its work and try a few times as well.
+			Duration interval = Duration.ofMillis(20);
+			QommonsTimer.getCommonInstance().build(() -> {
+				Component component = getComponent();
+				if (component != null && component.isVisible())
+					component.requestFocus();
+			}, interval, false).times(5).onEDT().runNextIn(interval);
+			return (P) this;
+		}
 	}
 
 	public interface ValueCache {
@@ -473,6 +490,10 @@ public class PanelPopulation {
 		P lastH(LayoutManager layout, Consumer<PanelPopulator<?, ?>> hPanel);
 
 		P last(Component component);
+
+		P withSplitLocation(int split);
+
+		P withSplitProportion(double split);
 	}
 
 	public interface ScrollPane<P extends ScrollPane<P>> extends ComponentEditor<JScrollPane, P> {
@@ -1136,7 +1157,8 @@ public class PanelPopulation {
 			return (Component) theEditor;
 		}
 
-		protected Component getComponent() {
+		@Override
+		public Component getComponent() {
 			// Subclasses should override this if the editor is not a component or is not the component that should be added
 			if (!(theEditor instanceof Component))
 				throw new IllegalStateException("Editor is not a component");
@@ -1550,6 +1572,8 @@ public class PanelPopulation {
 		public P withVTab(Object tabID, Consumer<PanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier) {
 			MigFieldPanel<JPanel> fieldPanel = new MigFieldPanel<>(null, theUntil, theLock);
 			panel.accept(fieldPanel);
+			if (fieldPanel.isVisible() != null)
+				fieldPanel.isVisible().changes().act(evt -> fieldPanel.getComponent().setVisible(evt.getNewValue()));
 			return withTab(tabID, fieldPanel.getContainer(), tabModifier);
 		}
 
@@ -1557,7 +1581,10 @@ public class PanelPopulation {
 		public P withHTab(Object tabID, LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier) {
 			SimpleHPanel<JPanel> hPanel = new SimpleHPanel<>(null, new JPanel(layout), theLock, theUntil);
 			panel.accept(hPanel);
-			return withTab(tabID, hPanel.getContainer(), tabModifier);
+			withTab(tabID, hPanel.getContainer(), tabModifier);
+			if (hPanel.isVisible() != null)
+				hPanel.isVisible().changes().act(evt -> hPanel.getComponent().setVisible(evt.getNewValue()));
+			return (P) this;
 		}
 
 		@Override
@@ -1629,14 +1656,26 @@ public class PanelPopulation {
 		public P firstV(Consumer<PanelPopulator<?, ?>> vPanel) {
 			MigFieldPanel<JPanel> fieldPanel = new MigFieldPanel<>(null, theUntil, theLock);
 			vPanel.accept(fieldPanel);
-			return first(fieldPanel.getOrCreateComponent(theUntil));
+			first(fieldPanel.getOrCreateComponent(theUntil));
+			if (fieldPanel.isVisible() != null)
+				fieldPanel.isVisible().changes().act(evt -> {
+					fieldPanel.getComponent().setVisible(evt.getNewValue());
+					getComponent().revalidate();
+				});
+			return (P) this;
 		}
 
 		@Override
 		public P firstH(LayoutManager layout, Consumer<PanelPopulator<?, ?>> hPanel) {
 			SimpleHPanel<JPanel> panel = new SimpleHPanel<>(null, new JPanel(layout), theLock, theUntil);
 			hPanel.accept(panel);
-			return first(panel.getOrCreateComponent(theUntil));
+			first(panel.getOrCreateComponent(theUntil));
+			if (panel.isVisible() != null)
+				panel.isVisible().changes().act(evt -> {
+					panel.getComponent().setVisible(evt.getNewValue());
+					getComponent().revalidate();
+				});
+			return (P) this;
 		}
 
 		@Override
@@ -1652,14 +1691,26 @@ public class PanelPopulation {
 		public P lastV(Consumer<PanelPopulator<?, ?>> vPanel) {
 			MigFieldPanel<JPanel> fieldPanel = new MigFieldPanel<>(null, theUntil, theLock);
 			vPanel.accept(fieldPanel);
-			return last(fieldPanel.getOrCreateComponent(theUntil));
+			last(fieldPanel.getOrCreateComponent(theUntil));
+			if (fieldPanel.isVisible() != null)
+				fieldPanel.isVisible().changes().act(evt -> {
+					fieldPanel.getComponent().setVisible(evt.getNewValue());
+					getComponent().revalidate();
+				});
+			return (P) this;
 		}
 
 		@Override
 		public P lastH(LayoutManager layout, Consumer<PanelPopulator<?, ?>> hPanel) {
 			SimpleHPanel<JPanel> panel = new SimpleHPanel<>(null, new JPanel(layout), theLock, theUntil);
 			hPanel.accept(panel);
-			return last(panel.getOrCreateComponent(theUntil));
+			last(panel.getOrCreateComponent(theUntil));
+			if (panel.isVisible() != null)
+				panel.isVisible().changes().act(evt -> {
+					panel.getComponent().setVisible(evt.getNewValue());
+					getComponent().revalidate();
+				});
+			return (P) this;
 		}
 
 		@Override
@@ -1668,6 +1719,32 @@ public class PanelPopulation {
 				throw new IllegalStateException("Last component has already been configured");
 			hasSetLast = true;
 			getEditor().setRightComponent(component);
+			return (P) this;
+		}
+
+		@Override
+		public P withSplitLocation(int split) {
+			// This method is typically called when the component is declared, usually before the editor is built or installed.
+			// We'll give the Swing system the chance to finish its work and try a few times as well.
+			Duration interval = Duration.ofMillis(40);
+			QommonsTimer.getCommonInstance().build(() -> {
+				JSplitPane component = getEditor();
+				if (component != null && component.isVisible())
+					component.setDividerLocation(split);
+			}, interval, false).times(5).onEDT().runNextIn(interval);
+			return (P) this;
+		}
+
+		@Override
+		public P withSplitProportion(double split) {
+			// This method is typically called when the component is declared, usually before the editor is built or installed.
+			// We'll give the Swing system the chance to finish its work and try a few times as well.
+			Duration interval = Duration.ofMillis(40);
+			QommonsTimer.getCommonInstance().build(() -> {
+				JSplitPane component = getEditor();
+				if (component != null && component.isVisible())
+					component.setDividerLocation(split);
+			}, interval, false).times(5).onEDT().runNextIn(interval);
 			return (P) this;
 		}
 
@@ -1703,14 +1780,20 @@ public class PanelPopulation {
 		public P withVContent(Consumer<PanelPopulator<?, ?>> panel) {
 			MigFieldPanel<JPanel> fieldPanel = new MigFieldPanel<>(null, theUntil, theLock);
 			panel.accept(fieldPanel);
-			return withContent(fieldPanel.getOrCreateComponent(theUntil));
+			withContent(fieldPanel.getOrCreateComponent(theUntil));
+			if (fieldPanel.isVisible() != null)
+				fieldPanel.isVisible().changes().act(evt -> fieldPanel.getComponent().setVisible(evt.getNewValue()));
+			return (P) this;
 		}
 
 		@Override
 		public P withHContent(LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel) {
 			SimpleHPanel<JPanel> hPanel = new SimpleHPanel<>(null, new JPanel(layout), theLock, theUntil);
 			panel.accept(hPanel);
-			return withContent(hPanel.getOrCreateComponent(theUntil));
+			withContent(hPanel.getOrCreateComponent(theUntil));
+			if (hPanel.isVisible() != null)
+				hPanel.isVisible().changes().act(evt -> hPanel.getComponent().setVisible(evt.getNewValue()));
+			return (P) this;
 		}
 
 		@Override
@@ -1817,7 +1900,28 @@ public class PanelPopulation {
 		public P withAdd(Supplier<? extends R> creator, Consumer<TableAction<R, ?>> actionMod) {
 			return withMultiAction(values -> {
 				R value = creator.get();
-				CollectionElement<R> el = theRows.addElement(value, false);
+				CollectionElement<R> el = theRows.getElement(value, false);
+				if (el != null && el.get() != value) {
+					CollectionElement<R> lastMatch = theRows.getElement(value, true);
+					if (!lastMatch.getElementId().equals(el.getElementId())) {
+						if (lastMatch.get() == value)
+							el = lastMatch;
+						else {
+							while (el.get() != value && !el.getElementId().equals(lastMatch.getElementId()))
+								el = theRows.getAdjacentElement(el.getElementId(), true);
+						}
+						if (el.get() != value)
+							el = null;
+					}
+				}
+				if (el == null) {
+					el = theRows.addElement(value, false);
+					if (el == null) {
+						// Couldn't add value? Not sure what do to here, but for now we'll tell the dev to fix it.
+						System.err.println("Could not add value " + value);
+						return;
+					}
+				}
 				// Assuming here that the action is only called on the EDT,
 				// meaning the above add operation has now been propagated to the list model and the selection model
 				// It also means that the row model is sync'd with the collection, so we can use the index from the collection here
@@ -2009,7 +2113,12 @@ public class PanelPopulation {
 			};
 			if (theSelectionValue != null)
 				ObservableSwingUtils.syncSelection(table, model.getRowModel(), table::getSelectionModel, model.getRows().equivalence(),
-					theSelectionValue, until, false);
+					theSelectionValue, until, index -> {
+						MutableCollectionElement<R> el = (MutableCollectionElement<R>) getRows()
+							.mutableElement(getRows().getElement(index).getElementId());
+						if (el.isAcceptable(el.get()) == null)
+							el.set(el.get());
+					}, false);
 			if (theSelectionValues != null)
 				ObservableSwingUtils.syncSelection(table, model.getRowModel(), table::getSelectionModel, model.getRows().equivalence(),
 					theSelectionValues, until);
@@ -2067,7 +2176,7 @@ public class PanelPopulation {
 		}
 
 		@Override
-		protected Component getComponent() {
+		public Component getComponent() {
 			return theBuildComponent;
 		}
 	}
