@@ -2,10 +2,10 @@ package org.observe.entity;
 
 import java.util.function.Function;
 
-import org.qommons.StructuredTransactable;
+import org.qommons.Transactable;
 import org.qommons.collect.QuickSet.QuickMap;
 
-public interface ObservableEntityType<E> extends StructuredTransactable {
+public interface ObservableEntityType<E> extends Transactable {
 	ObservableEntityType<? super E> getParent();
 	ObservableEntityType<? super E> getRoot();
 	String getEntityName();

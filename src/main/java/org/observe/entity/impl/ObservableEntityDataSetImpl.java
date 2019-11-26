@@ -5,6 +5,7 @@ import java.lang.reflect.Proxy;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -13,10 +14,11 @@ import java.util.function.Function;
 
 import org.observe.entity.IdentityFieldType;
 import org.observe.entity.ObservableEntity;
+import org.observe.entity.ObservableEntityDataSet;
 import org.observe.entity.ObservableEntityField;
 import org.observe.entity.ObservableEntityFieldType;
-import org.observe.entity.ObservableEntityDataSet;
 import org.observe.entity.ObservableEntityType;
+import org.observe.util.EntityReflector;
 import org.observe.util.MethodRetrievingHandler;
 import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
@@ -30,11 +32,11 @@ import com.google.common.reflect.TypeToken;
 
 public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 	private final BetterSortedSet<ObservableEntityTypeImpl<?>> theEntityTypes;
-	private final Map<Class<?>, String> theWeirdNames;
+	private final Map<Class<?>, String> theClassMapping;
 
 	private ObservableEntityDataSetImpl() {
 		theEntityTypes = new BetterTreeSet<>(true, (et1, et2) -> compareEntityTypes(et1.getEntityName(), et2.getEntityName()));
-		theWeirdNames = new HashMap<>();
+		theClassMapping = new HashMap<>();
 	}
 
 	@Override
@@ -50,9 +52,9 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 
 	@Override
 	public <E> ObservableEntityType<E> getEntityType(Class<E> type) {
-		String entityName = theWeirdNames.get(type);
+		String entityName = theClassMapping.get(type);
 		if (entityName == null)
-			entityName = type.getSimpleName();
+			return null;
 		ObservableEntityType<?> entityType = getEntityType(entityName);
 		if (entityType != null && entityType.getEntityType() == type)
 			return (ObservableEntityType<E>) entityType;
@@ -89,7 +91,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 				throw new IllegalStateException("This builder has already built its entity set");
 			if (theEntitySet.getEntityType(entityName) != null)
 				throw new IllegalArgumentException("Entity type named " + entityName + " already defined");
-			if (entity != null && theEntitySet.theWeirdNames.containsKey(entity))
+			if (entity != null && theEntitySet.theClassMapping.containsKey(entity))
 				throw new IllegalArgumentException("An ObservableEntityType mapped to " + entity.getName() + " is already defined");
 			return new ObservableEntityTypeBuilder<>(this, theEntitySet, entity, entityName);
 		}
@@ -118,11 +120,12 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		private final ObservableEntityDataSetImpl theEntitySet;
 		// private ObservableEntityTypeImpl<E> theType;
 		private final Class<E> theJavaType;
+		private final EntityReflector.Builder<E> theReflectiveBuilder;
 		private final E theProxy;
 		private final MethodRetrievingHandler theProxyHandler;
 		private final String theEntityName;
 
-		private ObservableEntityTypeImpl<? super E> theParent;
+		private final List<ObservableEntityTypeImpl<? super E>> theParents;
 		private Map<String, ObservableEntityFieldBuilder<E, ?>> theIdFields;
 		private final Map<String, ObservableEntityFieldBuilder<E, ?>> theFields;
 
@@ -133,6 +136,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 			theSetBuilder = setBuilder;
 			theEntitySet = entitySet;
 			theJavaType = entityType;
+			theReflectiveBuilder = entityType == null ? null : EntityReflector.build(TypeTokens.get().of(entityType));
 			theEntityName = entityName;
 			if (theJavaType != null) {
 				theProxyHandler = new MethodRetrievingHandler();
@@ -142,6 +146,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 				theProxy = null;
 			}
 
+			theParents = new LinkedList<>();
 			theFields = new LinkedHashMap<>();
 			isBuilding = true;
 		}
@@ -149,10 +154,8 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		public ObservableEntityTypeBuilder<E> withParent(ObservableEntityType<?> parent) {
 			if (!isBuilding)
 				throw new IllegalStateException("This builder has already built its entity type");
-			else if (theParent != null)
-				throw new IllegalStateException("Parent is already defined");
 			else if (!theFields.isEmpty())
-				throw new IllegalStateException("Parent must be defined before any fields");
+				throw new IllegalStateException("Parent(s) must be defined before any fields");
 			if (!(parent instanceof ObservableEntityTypeImpl) || theEntitySet.getEntityType(parent.getEntityName()) != parent)
 				throw new IllegalArgumentException("An entity type's parent must be present in the same entity set");
 			if (theJavaType != null) {
@@ -163,7 +166,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 					throw new IllegalArgumentException("Entity type " + parent.getEntityName() + " (" + parent.getEntityType().getName()
 						+ ") cannot be a super type of " + theEntityName + " (" + theJavaType.getName() + ")");
 			}
-			theParent = (ObservableEntityTypeImpl<? super E>) parent;
+			theParents.add((ObservableEntityTypeImpl<? super E>) parent);
 			return this;
 		}
 
@@ -188,16 +191,25 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 				throw new IllegalStateException("This builder has already built its entity type");
 			else if (theFields.containsKey(fieldName))
 				throw new IllegalArgumentException("A field named " + theEntityName + "." + fieldName + " has already been defined");
-			ObservableEntityFieldType<? super E, ?> superField = theParent.getFields().getIfPresent(fieldName);
-			if (superField != null && TypeTokens.get().unwrap(TypeTokens.getRawType(superField.getFieldType())) != void.class
-				&& !superField.getFieldType().isAssignableFrom(type))
-				throw new IllegalArgumentException("Field " + superField + " cannot be overridden with type " + type);
-			return new ObservableEntityFieldBuilder<>(this, fieldName, type);
+			for (ObservableEntityTypeImpl<? super E> parent : theParents) {
+				ObservableEntityFieldType<? super E, ?> superField = parent.getFields().getIfPresent(fieldName);
+				if (superField != null && TypeTokens.get().unwrap(TypeTokens.getRawType(superField.getFieldType())) != void.class
+					&& !superField.getFieldType().isAssignableFrom(type))
+					throw new IllegalArgumentException("Field " + superField + " cannot be overridden with type " + type);
+			}
+
+			ObservableEntityFieldBuilder<E, F> field = new ObservableEntityFieldBuilder<>(this, fieldName, type);
+			theFields.put(fieldName, field);
+			return field;
 		}
 
 		public EntitySetBuilder build() {
 			QuickMap<String, IdentityFieldType<? super E, ?>> idFields;
 			QuickMap<String, ObservableEntityFieldType<? super E, ?>> fields;
+			Set<String> allFields = new LinkedHashSet<>();
+			for (ObservableEntityTypeImpl<? super E> parent : theParents) {
+
+			}
 			if (theParent != null) {
 				idFields = (QuickMap<String, IdentityFieldType<? super E, ?>>) (QuickMap<String, ?>) theParent.getIdentityFields();
 				Set<String> otherFieldNames = new LinkedHashSet<>();
@@ -222,7 +234,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 				fields.put(i, theFields.get(fields.keySet().get(i)).buildField(entityType, i));
 			theEntitySet.theEntityTypes.add(entityType);
 			if (theJavaType != null && !theEntityName.equals(theJavaType.getSimpleName()))
-				theEntitySet.theWeirdNames.put(theJavaType, theEntityName);
+				theEntitySet.theClassMapping.put(theJavaType, theEntityName);
 			isBuilding = false;
 			return theSetBuilder;
 		}

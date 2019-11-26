@@ -17,11 +17,13 @@ import org.observe.entity.IdentityFieldType;
 import org.observe.entity.ObservableEntity;
 import org.observe.entity.ObservableEntityFieldType;
 import org.observe.entity.ObservableEntityType;
+import org.observe.entity.impl.ObservableEntityDataSetImpl.FieldTypeImpl;
 import org.observe.util.MethodRetrievingHandler;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
 import org.qommons.collect.BetterHashMap;
 import org.qommons.collect.BetterMap;
+import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.QuickSet;
 import org.qommons.collect.QuickSet.QuickMap;
 import org.qommons.collect.StampedLockingStrategy;
@@ -37,7 +39,7 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 	private final BetterMap<EntityIdentity<? super E>, WeakReference<ObservableEntityImpl<? extends E>>> theEntitiesById;
 	private final IdentityHashMap<E, WeakReference<ObservableEntityImpl<? extends E>>> theEntitiesByProxy;
 
-	private final StampedLockingStrategy theLock;
+	private final CollectionLockingStrategy theLock;
 	private final BetterMap<Method, MethodHandle> theDefaultMethods;
 	private final E theProxy;
 	private final MethodRetrievingHandler theProxyHandler;
@@ -71,7 +73,7 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 				if (((ObservableEntityDataSetImpl.FieldTypeImpl<?, ?>) field).getFieldGetter() != null)
 					getters.put(((ObservableEntityDataSetImpl.FieldTypeImpl<?, ?>) field).getFieldGetter().getName(), field);
 			}
-			QuickSet getterNames = QuickSet.of(getters.keySet());
+			QuickSet<String> getterNames = QuickSet.of(getters.keySet());
 			QuickMap<String, ObservableEntityFieldType<? super E, ?>> fieldsByGetter = getterNames.createMap();
 			for (int i = 0; i < getterNames.size(); i++)
 				fieldsByGetter.put(i, getters.get(getterNames.get(i)));
@@ -102,21 +104,21 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 	}
 
 	@Override
-	public Transaction lock(boolean write, boolean structural, Object cause) {
+	public Transaction lock(boolean write, Object cause) {
 		// It's split like this in case I ever decide that more work needs to be done on locking the root than just the lock itself
 		if (theRoot != this)
-			return theRoot.lock(write, structural, cause);
+			return theRoot.lock(write, cause);
 		else
-			return theLock.lock(write, structural, cause);
+			return theLock.lock(write, cause);
 	}
 
 	@Override
-	public Transaction tryLock(boolean write, boolean structural, Object cause) {
+	public Transaction tryLock(boolean write, Object cause) {
 		// It's split like this in case I ever decide that more work needs to be done on locking the root than just the lock itself
 		if (theRoot != this)
-			return theRoot.tryLock(write, structural, cause);
+			return theRoot.tryLock(write, cause);
 		else
-			return theLock.tryLock(write, structural, cause);
+			return theLock.tryLock(write, cause);
 	}
 
 	@Override
@@ -152,7 +154,7 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 	@Override
 	public ObservableEntity<? extends E> observableEntity(EntityIdentity<? super E> id) {
 		// First, just lock for read and see if we already have it
-		try (Transaction t = lock(false, true, null)) { // Updates to existing entities are fine
+		try (Transaction t = lock(false, null)) { // Updates to existing entities are fine
 			WeakReference<ObservableEntityImpl<? extends E>> entityRef = theEntitiesById.get(id);
 			if (entityRef != null) {
 				ObservableEntity<? extends E> entity = entityRef.get();
@@ -180,7 +182,7 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 
 	@Override
 	public ObservableEntityImpl<? extends E> observableEntity(E entity) {
-		try (Transaction t = lock(false, true, null)) {
+		try (Transaction t = lock(false, null)) {
 			// This should be pretty straightforward. If the caller has a reference to the entity,
 			// then the ObservableEntity can't have been GC'd.
 			// The only way this could fail is if the caller has synthesized the entity implementation by external means, which is illegal.
@@ -196,57 +198,64 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 
 	@Override
 	public <F> EntityValueAccess<E, F> fieldValue(ObservableEntityFieldType<? super E, F> field) {
-		// TODO Auto-generated method stub
-	}
+		if(field instanceof IdentityFieldType){
+			if(theIdFields.get(field.getFieldIndex())!=field
+				if(!(field instanceof FieldTypeImpl))
+					throw new IllegalArgumentException("Field type "+field+" is not from this entity type");
 
-	@Override
-	public <F> ObservableEntityFieldType<? super E, F> getField(Function<? super E, F> fieldGetter) {
-		if (theProxy == null)
-			throw new IllegalStateException("This entity type is not mapped to a java entity, so this method cannot be used");
-		Method invoked;
-		synchronized (this) {
-			theProxyHandler.reset();
-			fieldGetter.apply(theProxy);
-			invoked = theProxyHandler.getInvoked();
+
+			//		return new SimpleEntityValueAccess
+			// TODO Auto-generated method stub
 		}
-		if (invoked == null)
-			throw new IllegalArgumentException("The function did not invoke a field getter");
-		ObservableEntityFieldType<? super E, ?> field;
-		ObservableEntityTypeImpl<? super E> type = this;
-		while (type != null) {
-			field = theFieldsByGetter.get(invoked.getName());
-			if (field != null)
-				return (ObservableEntityFieldType<? super E, F>) field;
-			if (theIdFieldsByGetter != null) {
-				field = theIdFieldsByGetter.get(invoked.getName());
+
+		@Override
+		public <F> ObservableEntityFieldType<? super E, F> getField(Function<? super E, F> fieldGetter) {
+			if (theProxy == null)
+				throw new IllegalStateException("This entity type is not mapped to a java entity, so this method cannot be used");
+			Method invoked;
+			synchronized (this) {
+				theProxyHandler.reset();
+				fieldGetter.apply(theProxy);
+				invoked = theProxyHandler.getInvoked();
+			}
+			if (invoked == null)
+				throw new IllegalArgumentException("The function did not invoke a field getter");
+			ObservableEntityFieldType<? super E, ?> field;
+			ObservableEntityTypeImpl<? super E> type = this;
+			while (type != null) {
+				field = theFieldsByGetter.get(invoked.getName());
 				if (field != null)
 					return (ObservableEntityFieldType<? super E, F>) field;
+				if (theIdFieldsByGetter != null) {
+					field = theIdFieldsByGetter.get(invoked.getName());
+					if (field != null)
+						return (ObservableEntityFieldType<? super E, F>) field;
+				}
+				type = type.theParent;
 			}
-			type = type.theParent;
+			throw new IllegalArgumentException("The invoked method did not correspond to a field getter: " + invoked);
 		}
-		throw new IllegalArgumentException("The invoked method did not correspond to a field getter: " + invoked);
-	}
 
-	@Override
-	public EntitySelection<E> select() {
-		return new EntitySelectionImpl<>(this, QuickSet.<String> empty().createMap());
-	}
+		@Override
+		public EntitySelection<E> select() {
+			return new EntitySelectionImpl<>(this, QuickSet.<String> empty().createMap());
+		}
 
-	@Override
-	public EntityCreator<E> create() {
-		return new EntityCreatorImpl<>(this, QuickSet.<String> empty().createMap(), theIdFields.keySet().createMap(),
-			theFields.keySet().createMap());
-	}
+		@Override
+		public EntityCreator<E> create() {
+			return new EntityCreatorImpl<>(this, QuickSet.<String> empty().createMap(), theIdFields.keySet().createMap(),
+				theFields.keySet().createMap());
+		}
 
-	MethodHandle getDefaultMethod(Method method) {
-		return theDefaultMethods.computeIfAbsent(method, m -> {
-			try {
-				return MethodHandles.lookup().in(theEntityType).unreflectSpecial(method, theEntityType);
-			} catch (IllegalAccessException e) {
-				throw new IllegalStateException("Could not access method " + method, e);
-			}
-		});
-	}
+		MethodHandle getDefaultMethod(Method method) {
+			return theDefaultMethods.computeIfAbsent(method, m -> {
+				try {
+					return MethodHandles.lookup().in(theEntityType).unreflectSpecial(method, theEntityType);
+				} catch (IllegalAccessException e) {
+					throw new IllegalStateException("Could not access method " + method, e);
+				}
+			});
+		}
 
-	private ObservableEntityImpl<? extends E> pullEntity(EntityIdentity<? super E> id) {}
-}
+		private ObservableEntityImpl<? extends E> pullEntity(EntityIdentity<? super E> id) {}
+	}
