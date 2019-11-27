@@ -529,16 +529,23 @@ public class PanelPopulation {
 		default P withNameColumn(Function<? super R, String> getName, BiConsumer<? super R, String> setName, boolean unique,
 			Consumer<CategoryRenderStrategy<R, String>> column) {
 			return withColumn("Name", String.class, getName, col -> {
-				if (setName != null && unique) {
-					col.withMutation(mut -> mut.filterAccept((rowEl, name) -> {
-						if (StringUtils.isUniqueName(getRows(), getName, name, (R) rowEl.get())) {
-							return null;
-						} else {
-							String itemName = getItemName();
-							return new StringBuilder(StringUtils.getIndefiniteArticle(name)).append(' ').append(itemName).append(" named ")
-								.append(name).append(" already exists").toString();
-						}
-					}));
+				if (setName != null) {
+					col.withMutation(mut -> {
+						mut.asText(Format.TEXT).mutateAttribute((row, name) -> {
+							setName.accept(row, name);
+							return name;
+						}).withRowUpdate(true);
+						if (unique)
+							mut.filterAccept((rowEl, name) -> {
+								if (StringUtils.isUniqueName(getRows(), getName, name, (R) rowEl.get())) {
+									return null;
+								} else {
+									String itemName = getItemName();
+									return new StringBuilder(StringUtils.getIndefiniteArticle(name)).append(' ').append(itemName)
+										.append(" named \"").append(name).append("\" already exists").toString();
+								}
+							});
+					});
 				}
 				if (column != null)
 					column.accept(col);
@@ -603,6 +610,14 @@ public class PanelPopulation {
 		A withTooltip(Function<? super List<? extends R>, String> tooltip);
 
 		A modifyAction(Function<? super ObservableAction<?>, ? extends ObservableAction<?>> actionMod);
+
+		default A confirm(String alertTitle, String alertText, boolean confirmType) {
+			return confirm(alertTitle, selected -> alertText, confirmType);
+		}
+
+		A confirm(String alertTitle, Function<List<? extends R>, String> alertText, boolean confirmType);
+
+		A confirmForItems(String alertTitle, String alertPreText, String postText, boolean confirmType);
 
 		A modifyButton(Consumer<ButtonEditor<?>> buttonMod);
 	}
@@ -686,6 +701,12 @@ public class PanelPopulation {
 		Alert withIcon(String location, Consumer<ImageControl> image);
 
 		void display();
+
+		/**
+		 * @param confirmType Whether to display "Yes" and "No" (false), or "OK" and "Cancel" (true) for the confirmation
+		 * @return Whether the user clicked "Yes" or "OK"
+		 */
+		boolean confirm(boolean confirmType);
 	}
 
 	// Drag and cut/copy/paste
@@ -1773,6 +1794,7 @@ public class PanelPopulation {
 		public SimpleScrollEditor(String fieldName, Supplier<Transactable> lock, Observable<?> until) {
 			super(fieldName, new JScrollPane(), lock);
 			getEditor().getVerticalScrollBar().setUnitIncrement(10);
+			getEditor().getHorizontalScrollBar().setUnitIncrement(10);
 			theUntil = until;
 		}
 
@@ -1809,7 +1831,9 @@ public class PanelPopulation {
 	static class SimpleTableBuilder<R, P extends SimpleTableBuilder<R, P>> extends AbstractComponentEditor<JTable, P>
 	implements TableBuilder<R, P> {
 		private final ObservableCollection<R> theRows;
+		private SafeObservableCollection<R> theSafeRows;
 		private String theItemName;
+		private Function<? super R, String> theNameFunction;
 		private ObservableCollection<? extends CategoryRenderStrategy<? super R, ?>> theColumns;
 		private SettableValue<R> theSelectionValue;
 		private ObservableCollection<R> theSelectionValues;
@@ -1832,6 +1856,10 @@ public class PanelPopulation {
 				return theItemName;
 		}
 
+		Function<? super R, String> getNameFunction() {
+			return theNameFunction;
+		}
+
 		@Override
 		public P withItemName(String itemName) {
 			theItemName = itemName;
@@ -1846,6 +1874,14 @@ public class PanelPopulation {
 		@Override
 		public P withColumns(ObservableCollection<? extends CategoryRenderStrategy<? super R, ?>> columns) {
 			theColumns = columns;
+			return (P) this;
+		}
+
+		@Override
+		public P withNameColumn(Function<? super R, String> getName, BiConsumer<? super R, String> setName, boolean unique,
+			Consumer<CategoryRenderStrategy<R, String>> column) {
+			TableBuilder.super.withNameColumn(getName, setName, unique, column);
+			theNameFunction = getName;
 			return (P) this;
 		}
 
@@ -1900,20 +1936,7 @@ public class PanelPopulation {
 		public P withAdd(Supplier<? extends R> creator, Consumer<TableAction<R, ?>> actionMod) {
 			return withMultiAction(values -> {
 				R value = creator.get();
-				CollectionElement<R> el = theRows.getElement(value, false);
-				if (el != null && el.get() != value) {
-					CollectionElement<R> lastMatch = theRows.getElement(value, true);
-					if (!lastMatch.getElementId().equals(el.getElementId())) {
-						if (lastMatch.get() == value)
-							el = lastMatch;
-						else {
-							while (el.get() != value && !el.getElementId().equals(lastMatch.getElementId()))
-								el = theRows.getAdjacentElement(el.getElementId(), true);
-						}
-						if (el.get() != value)
-							el = null;
-					}
-				}
+				CollectionElement<R> el = findElement(value);
 				if (el == null) {
 					el = theRows.addElement(value, false);
 					if (el == null) {
@@ -1935,6 +1958,24 @@ public class PanelPopulation {
 			});
 		}
 
+		private CollectionElement<R> findElement(R value) {
+			CollectionElement<R> el = theRows.getElement(value, false);
+			if (el != null && el.get() != value) {
+				CollectionElement<R> lastMatch = theRows.getElement(value, true);
+				if (!lastMatch.getElementId().equals(el.getElementId())) {
+					if (lastMatch.get() == value)
+						el = lastMatch;
+					else {
+						while (el.get() != value && !el.getElementId().equals(lastMatch.getElementId()))
+							el = theRows.getAdjacentElement(el.getElementId(), true);
+					}
+					if (el.get() != value)
+						el = null;
+				}
+			}
+			return el;
+		}
+
 		@Override
 		public P withRemove(Consumer<? super List<? extends R>> deletion, Consumer<TableAction<R, ?>> actionMod) {
 			String single = getItemName();
@@ -1950,37 +1991,13 @@ public class PanelPopulation {
 		@Override
 		public P withCopy(Function<? super R, ? extends R> copier, Consumer<TableAction<R, ?>> actionMod) {
 			return withMultiAction(values -> {
-				// Ignore the given values and use the selection model so we get the indexes right in the case of duplicates
-				ListSelectionModel selModel = getEditor().getSelectionModel();
-				IntList newSelection = new IntList();
 				try (Transaction t = theRows.lock(true, null)) {
-					// Not only do we need to obtain a write lock,but we also need to allow the EDT to purge any queued actions
-					// to ensure that the model is caught up with the source collection
-					EventQueue.invokeAndWait(() -> {
-						for (int i = selModel.getMinSelectionIndex(); i >= 0 && i <= selModel.getMaxSelectionIndex(); i++) {
-							if (!selModel.isSelectedIndex(i))
-								continue;
-							CollectionElement<R> toCopy = theRows.getElement(i);
-							R copy = copier.apply(toCopy.get());
-							CollectionElement<R> copied;
-							if (theRows.canAdd(copy, toCopy.getElementId(), null) == null)
-								copied = theRows.addElement(copy, toCopy.getElementId(), null, true);
-							else
-								copied = theRows.addElement(copy, false);
-							newSelection.add(theRows.getElementsBefore(copied.getElementId()));
-						}
-					});
-					selModel.setValueIsAdjusting(true);
-					selModel.clearSelection();
-					for (int[] interval : ObservableSwingUtils.getContinuousIntervals(newSelection.toArray(), true))
-						selModel.addSelectionInterval(interval[0], interval[1]);
-					selModel.setValueIsAdjusting(false);
-				} catch (InvocationTargetException e) {
-					if (e.getTargetException() instanceof RuntimeException)
-						throw (RuntimeException) e.getTargetException();
-					else
-						throw (Error) e.getTargetException();
-				} catch (InterruptedException e) {}
+					if (theSafeRows.hasQueuedEvents()) { // If there are queued changes, we can't rely on indexes we get back from the model
+						simpleCopy(values, copier);
+					} else {// Ignore the given values and use the selection model so we get the indexes right in the case of duplicates
+						betterCopy(copier);
+					}
+				}
 			}, action -> {
 				String single = getItemName();
 				String plural = StringUtils.pluralize(single);
@@ -1989,6 +2006,36 @@ public class PanelPopulation {
 				if (actionMod != null)
 					actionMod.accept(action);
 			});
+		}
+
+		private void simpleCopy(List<? extends R> selection, Function<? super R, ? extends R> copier) {
+			for (R value : selection) {
+				R copy = copier.apply(value);
+				theRows.add(copy);
+			}
+		}
+
+		private void betterCopy(Function<? super R, ? extends R> copier) {
+			ListSelectionModel selModel = getEditor().getSelectionModel();
+			IntList newSelection = new IntList();
+			for (int i = selModel.getMinSelectionIndex(); i >= 0 && i <= selModel.getMaxSelectionIndex(); i++) {
+				if (!selModel.isSelectedIndex(i))
+					continue;
+				CollectionElement<R> toCopy = theRows.getElement(i);
+				R copy = copier.apply(toCopy.get());
+				CollectionElement<R> copied = findElement(copy);
+				if (copied != null) {} else if (theRows.canAdd(copy, toCopy.getElementId(), null) == null)
+					copied = theRows.addElement(copy, toCopy.getElementId(), null, true);
+				else
+					copied = theRows.addElement(copy, false);
+				if (copied != null)
+					newSelection.add(theRows.getElementsBefore(copied.getElementId()));
+			}
+			selModel.setValueIsAdjusting(true);
+			selModel.clearSelection();
+			for (int[] interval : ObservableSwingUtils.getContinuousIntervals(newSelection.toArray(), true))
+				selModel.addSelectionInterval(interval[0], interval[1]);
+			selModel.setValueIsAdjusting(false);
 		}
 
 		@Override
@@ -2018,11 +2065,10 @@ public class PanelPopulation {
 		public Component getOrCreateComponent(Observable<?> until) {
 			if (theBuildComponent != null)
 				return theBuildComponent;
+			theSafeRows = new SafeObservableCollection<>(theRows, EventQueue::isDispatchThread, EventQueue::invokeLater, until);
 			ObservableTableModel<R> model;
 			ObservableCollection<TableContentControl.FilteredValue<R>> filtered;
 			if (theFilter != null) {
-				ObservableCollection<R> safeRows = new SafeObservableCollection<>(theRows, EventQueue::isDispatchThread,
-					EventQueue::invokeLater, until);
 				ObservableCollection<CategoryRenderStrategy<? super R, ?>> safeColumns = new SafeObservableCollection<>(//
 					(ObservableCollection<CategoryRenderStrategy<? super R, ?>>) TableContentControl.applyColumnControl(theColumns,
 						theFilter, until),
@@ -2066,8 +2112,7 @@ public class PanelPopulation {
 						});
 					}
 				});
-				filtered = TableContentControl.applyRowControl(safeRows, () -> renderers, //
-					theFilter.refresh(safeColumns.simpleChanges()), until);
+				filtered = TableContentControl.applyRowControl(theSafeRows, () -> renderers, theFilter.refresh(columnChanges), until);
 				model = new ObservableTableModel<>(filtered.flow().map(theRows.getType(), f -> f.value, opts -> opts.withElementSetting(//
 					new ObservableCollection.ElementSetter<TableContentControl.FilteredValue<R>, R>() {
 						@Override
@@ -2079,7 +2124,7 @@ public class PanelPopulation {
 					true, safeColumns, true);
 			} else {
 				filtered = null;
-				model = new ObservableTableModel<>(theRows, theColumns);
+				model = new ObservableTableModel<>(theSafeRows, true, theColumns, true);
 			}
 			JTable table = getEditor();
 			table.setModel(model);
@@ -2182,7 +2227,7 @@ public class PanelPopulation {
 	}
 
 	static class SimpleTableAction<R, A extends SimpleTableAction<R, A>> implements TableAction<R, A> {
-		private final TableBuilder<R, ?> theTable;
+		private final SimpleTableBuilder<R, ?> theTable;
 		final Consumer<? super List<? extends R>> theAction;
 		final Supplier<List<R>> theSelectedValues;
 		private Function<? super R, String> theEnablement;
@@ -2195,7 +2240,7 @@ public class PanelPopulation {
 		private SettableValue<String> theTooltipString;
 		private Consumer<ButtonEditor<?>> theButtonMod;
 
-		SimpleTableAction(TableBuilder<R, ?> table, Consumer<? super List<? extends R>> action, Supplier<List<R>> selectedValues) {
+		SimpleTableAction(SimpleTableBuilder<R, ?> table, Consumer<? super List<? extends R>> action, Supplier<List<R>> selectedValues) {
 			theTable = table;
 			theAction = action;
 			theSelectedValues = selectedValues;
@@ -2276,6 +2321,74 @@ public class PanelPopulation {
 		public A modifyAction(Function<? super ObservableAction<?>, ? extends ObservableAction<?>> actionMod) {
 			theObservableAction = actionMod.apply(theObservableAction);
 			return (A) this;
+		}
+
+		@Override
+		public A confirm(String alertTitle, Function<List<? extends R>, String> alertText, boolean confirmType) {
+			return modifyAction(action -> {
+				return new ObservableAction<Void>() {
+					@Override
+					public TypeToken<Void> getType() {
+						return TypeTokens.get().VOID;
+					}
+
+					@Override
+					public Void act(Object cause) throws IllegalStateException {
+						List<? extends R> selected = theTable.getSelection();
+						String text = alertText.apply(selected);
+						if (!theTable.alert(alertTitle, text).confirm(confirmType))
+							return null;
+						action.act(cause);
+						return null;
+					}
+
+					@Override
+					public ObservableValue<String> isEnabled() {
+						return action.isEnabled();
+					}
+				};
+			});
+		}
+
+		@Override
+		public A confirmForItems(String alertTitle, String alertPreText, String alertPostText, boolean confirmType) {
+			return modifyAction(action -> {
+				return new ObservableAction<Void>() {
+					@Override
+					public TypeToken<Void> getType() {
+						return TypeTokens.get().VOID;
+					}
+
+					@Override
+					public Void act(Object cause) throws IllegalStateException {
+						List<? extends R> selected = theTable.getSelection();
+						StringBuilder text = new StringBuilder();
+						if (alertPreText != null && !alertPreText.isEmpty())
+							text.append(alertPreText);
+						if (selected.isEmpty())
+							text.append("no ").append(StringUtils.pluralize(theTable.getItemName()));
+						else if (selected.size() == 1) {
+							if (theTable.getNameFunction() != null)
+								text.append(theTable.getItemName()).append(" \"").append(theTable.getNameFunction().apply(selected.get(0)))
+								.append('"');
+							else
+								text.append("1 ").append(theTable.getItemName());
+						} else
+							text.append(selected.size()).append(' ').append(StringUtils.pluralize(theTable.getItemName()));
+						if (alertPostText != null && !alertPostText.isEmpty())
+							text.append(alertPostText);
+						if (!theTable.alert(alertTitle, text.toString()).confirm(confirmType))
+							return null;
+						action.act(cause);
+						return null;
+					}
+
+					@Override
+					public ObservableValue<String> isEnabled() {
+						return action.isEnabled();
+					}
+				};
+			});
 		}
 
 		@Override
@@ -2409,6 +2522,18 @@ public class PanelPopulation {
 				JOptionPane.showMessageDialog(theComponent, theMessage, theTitle, getJOptionType(), icon);
 			else
 				JOptionPane.showMessageDialog(theComponent, theMessage, theTitle, getJOptionType());
+		}
+
+		@Override
+		public boolean confirm(boolean confirmType) {
+			Icon icon = theImage == null ? null : theImage.getIcon().get();
+			int ct = confirmType ? JOptionPane.OK_CANCEL_OPTION : JOptionPane.YES_NO_OPTION;
+			int result;
+			if (icon != null)
+				result = JOptionPane.showConfirmDialog(theComponent, theMessage, theTitle, ct, getJOptionType(), icon);
+			else
+				result = JOptionPane.showConfirmDialog(theComponent, theMessage, theTitle, ct, getJOptionType());
+			return (result == JOptionPane.OK_OPTION || result == JOptionPane.YES_OPTION);
 		}
 
 		private int getJOptionType() {

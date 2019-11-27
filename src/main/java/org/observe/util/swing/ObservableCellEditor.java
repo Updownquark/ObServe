@@ -1,6 +1,7 @@
 package org.observe.util.swing;
 
 import java.awt.Component;
+import java.awt.Insets;
 import java.awt.event.ActionEvent;
 import java.awt.event.MouseEvent;
 import java.util.EventObject;
@@ -167,7 +168,8 @@ public class ObservableCellEditor<M, C> implements TableCellEditor, TreeCellEdit
 			tooltip = null;
 			valueTooltip = null;
 		}
-		theEditorValue.set((C) value, null);
+		if (theEditorValue.get() != value)
+			theEditorValue.set((C) value, null);
 		if (theDecorator != null)
 			theDecorator.decorate(theEditorComponent, modelValue, (C) value, isSelected, false, true);
 		theEditorSubscription = theInstallation.install(this, valueFilter, tooltip, valueTooltip);
@@ -227,6 +229,11 @@ public class ObservableCellEditor<M, C> implements TableCellEditor, TreeCellEdit
 		Function<C, String>[] filter = new Function[1];
 		SettableValue<C> value = createEditorValue(filter);
 		ObservableTextField<C> field = new ObservableTextField<>(value, format, Observable.empty);
+		// Default margins for the text field don't fit into the rendered cell
+		Insets margin = field.getMargin();
+		margin.top = 0;
+		margin.bottom = 0;
+		field.setMargin(margin);
 		boolean[] editing = new boolean[1];
 		ObservableCellEditor<M, C> editor = new ObservableCellEditor<>(field, value, (e, f, tt, vtt) -> {
 			filter[0] = f;
@@ -234,7 +241,10 @@ public class ObservableCellEditor<M, C> implements TableCellEditor, TreeCellEdit
 			editing[0] = true;
 			return commit -> {
 				if (commit) {
-					if (field.getEditError() != null) {
+					if (!field.isDirty()) {
+						editing[0] = false;
+						return true;
+					} else if (field.getEditError() != null) {
 						field.redisplayErrorTooltip();
 						return false;
 					} else {
@@ -245,7 +255,7 @@ public class ObservableCellEditor<M, C> implements TableCellEditor, TreeCellEdit
 				editing[0] = false;
 				return true;
 			};
-		}, editWithClicks(1));
+		}, editWithClicks(2));
 		value.noInitChanges().act(evt -> {
 			if (editing[0])
 				editor.stopCellEditing();
@@ -283,7 +293,7 @@ public class ObservableCellEditor<M, C> implements TableCellEditor, TreeCellEdit
 				}
 				return true;
 			};
-		}, editWithNotDrag());
+		}, editWithClicks(2));
 		value.noInitChanges().act(evt -> {
 			if (editSub[0] != null)
 				editor.stopCellEditing();

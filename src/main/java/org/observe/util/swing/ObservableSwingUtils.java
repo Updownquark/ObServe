@@ -33,13 +33,18 @@ import javax.swing.JPanel;
 import javax.swing.JSlider;
 import javax.swing.JSpinner;
 import javax.swing.JTable;
+import javax.swing.JTextField;
 import javax.swing.JToggleButton;
 import javax.swing.ListModel;
 import javax.swing.ListSelectionModel;
+import javax.swing.SwingConstants;
+import javax.swing.UIManager;
+import javax.swing.UnsupportedLookAndFeelException;
 import javax.swing.event.ChangeListener;
 import javax.swing.event.ListDataEvent;
 import javax.swing.event.ListDataListener;
 import javax.swing.event.ListSelectionListener;
+import javax.swing.text.JTextComponent;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
@@ -186,6 +191,41 @@ public class ObservableSwingUtils {
 		 */
 		public FontAdjuster<C> withColor(Color color) {
 			label.setForeground(color);
+			return this;
+		}
+
+		/**
+		 * Changes the horizontal alignment of the component (if supported)
+		 * 
+		 * @param align Negative for left, zero for center, positive for right
+		 * @return This holder
+		 */
+		public FontAdjuster<C> alignH(int align) {
+			int swingAlign = align < 0 ? SwingConstants.LEADING : (align > 0 ? SwingConstants.TRAILING : SwingConstants.CENTER);
+			if (label instanceof JLabel)
+				((JLabel) label).setHorizontalAlignment(swingAlign);
+			else if (label instanceof JTextField)
+				((JTextField) label).setHorizontalAlignment(//
+					align < 0 ? JTextField.LEADING : (align > 0 ? JTextField.TRAILING : JLabel.CENTER));
+			else if (label instanceof JTextComponent)
+				((JTextComponent) label).setAlignmentX(//
+					align < 0 ? 0f : (align > 0 ? 1f : 0.5f));
+			return this;
+		}
+
+		/**
+		 * Changes the horizontal alignment of the component (if supported)
+		 * 
+		 * @param align Negative for left, zero for center, positive for right
+		 * @return This holder
+		 */
+		public FontAdjuster<C> alignV(int align) {
+			int swingAlign = align < 0 ? SwingConstants.LEADING : (align > 0 ? SwingConstants.TRAILING : SwingConstants.CENTER);
+			if (label instanceof JLabel)
+				((JLabel) label).setVerticalAlignment(swingAlign);
+			else if (label instanceof JTextComponent)
+				((JTextComponent) label).setAlignmentX(//
+					align < 0 ? 0f : (align > 0 ? 1f : 0.5f));
 			return this;
 		}
 
@@ -768,6 +808,21 @@ public class ObservableSwingUtils {
 		if (icon != null && (icon.getIconWidth() != width || icon.getIconHeight() != height))
 			icon = new ImageIcon(icon.getImage().getScaledInstance(width, height, Image.SCALE_SMOOTH));
 		return icon;
+	}
+
+	/**
+	 * Installs the system-specific Swing look and feel
+	 *
+	 * @return Whether the system-specific look and feel was successfully installed
+	 */
+	public static boolean systemLandF() {
+		try {
+			UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+			return true;
+		} catch (ClassNotFoundException | InstantiationException | IllegalAccessException | UnsupportedLookAndFeelException e) {
+			e.printStackTrace();
+			return false;
+		}
 	}
 
 	/**

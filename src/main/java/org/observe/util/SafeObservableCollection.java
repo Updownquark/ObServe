@@ -87,6 +87,10 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 			.collect());
 	}
 
+	public boolean hasQueuedEvents() {
+		return !theEventQueue.isEmpty();
+	}
+
 	private boolean isFlushing;
 
 	protected void flush() {

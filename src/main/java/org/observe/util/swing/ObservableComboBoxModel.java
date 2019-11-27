@@ -147,7 +147,9 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 					try (Transaction avT = availableValues.lock(false, null)) {
 						int index = availableValues.indexOf(evt.getNewValue());
 						if (index >= 0)
-							comboBox.setSelectedItem(evt.getNewValue());
+							comboBox.setSelectedIndex(index);
+						else
+							comboBox.setSelectedIndex(-1);
 					} finally {
 						callbackLock[0] = false;
 					}

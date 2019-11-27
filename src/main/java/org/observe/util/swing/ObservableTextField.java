@@ -68,7 +68,7 @@ public class ObservableTextField<E> extends JPasswordField {
 	public ObservableTextField(SettableValue<E> value, Format<E> format, Observable<?> until) {
 		Border border = UIManager.getBorder("TextField.border");
 		dummyInsets = border.getBorderInsets(this);
-		setEchoChar((char) 0);
+		asPassword((char) 0);
 
 		theValue = value;
 		theFormat = format;
@@ -153,12 +153,10 @@ public class ObservableTextField<E> extends JPasswordField {
 				if (isDirty) {
 					isInternallyChanging = true;
 					try {
-						E parsed = theFormat.parse(new String(getPassword()));
-						theValue.set(parsed, e);
-					} catch (ParseException | UnsupportedOperationException | IllegalArgumentException ex) {
-						isInternallyChanging = false;
-						if (revertOnFocusLoss)
+						if (!flushEdits(e) && revertOnFocusLoss) {
+							isInternallyChanging = false;
 							revertEdits();
+						}
 					} finally {
 						isInternallyChanging = false;
 					}
@@ -283,6 +281,7 @@ public class ObservableTextField<E> extends JPasswordField {
 	 */
 	public ObservableTextField<E> asPassword(char echoChar) {
 		setEchoChar(echoChar);
+		putClientProperty("JPasswordField.cutCopyAllowed", echoChar == 0); // Allow cut/copy for non-password field
 		return this;
 	}
 
@@ -366,6 +365,11 @@ public class ObservableTextField<E> extends JPasswordField {
 			g.setColor(prevColor);
 		}
 
+	}
+
+	/** @return Whether the user has entered text to change this field's value */
+	public boolean isDirty() {
+		return isDirty;
 	}
 
 	/** Undoes any edits in this field's text, reverting to the formatted current value */
