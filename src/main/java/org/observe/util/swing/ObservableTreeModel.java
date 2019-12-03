@@ -121,7 +121,6 @@ public abstract class ObservableTreeModel implements TreeModel {
 					theChildNodes.add(newChild(value));
 				}
 				theChildrenSub = theChildren.changes().act(event -> {
-					System.out.println(theValue + ":" + event);
 					ObservableSwingUtils.onEQ(() -> {
 						int[] indexes = event.getIndexes();
 						switch (event.type) {

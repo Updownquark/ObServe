@@ -1,40 +1,33 @@
 package org.observe;
 
-import java.awt.BorderLayout;
-
-import javax.swing.GroupLayout;
-import javax.swing.JButton;
-import javax.swing.JComboBox;
 import javax.swing.JFrame;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
-import javax.swing.JSplitPane;
-import javax.swing.JTextField;
 import javax.swing.JTree;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.tree.TreePath;
 
 import org.observe.assoc.ObservableMultiMap;
-import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
+import org.observe.collect.ObservableSet;
 import org.observe.util.TypeTokens;
-import org.observe.util.swing.LittleList;
-import org.observe.util.swing.ObservableComboBoxModel;
-import org.observe.util.swing.ObservableListModel;
 import org.observe.util.swing.ObservableSwingUtils;
 import org.observe.util.swing.ObservableTreeModel;
+import org.observe.util.swing.PanelPopulation;
+import org.qommons.collect.CollectionElement;
+import org.qommons.io.Format;
 
 /** A simple GUI that demonstrates the power and ease of observables */
 public class ObservableDemoGui extends JPanel {
 	static class ValueCategory {
 		final String name;
 
-		final ObservableCollection<Integer> values;
+		final ObservableSet<Integer> values;
 
 		ValueCategory(String nm) {
 			name = nm;
-			values = ObservableCollection.create(TypeTokens.get().INT);
+			values = ObservableCollection.build(TypeTokens.get().INT).distinct().safe(false).build();
 		}
 
 		@Override
@@ -43,74 +36,36 @@ public class ObservableDemoGui extends JPanel {
 		}
 	}
 
+	private ObservableSet<String> theCategoryNames;
 	private ObservableCollection<ValueCategory> theCategories;
-	private SimpleSettableValue<ValueCategory> theSelectedCategory;
-	private ObservableCollection<Integer> theSelectedValues;
-
-	private SimpleObservable<String> theCategoryAddObservable;
-	private SimpleObservable<ValueCategory> theCategoryRemoveObservable;
-	private SimpleObservable<Integer> theValueAddObservable;
-	private SimpleObservable<Void> theValueRemoveObservable;
-
-	private JTextField theNewCategoryText;
-	private JButton theCategoryAddButton;
-	private JButton theCategoryRemoveButton;
-	private JComboBox<ValueCategory> theCategoryCombo;
-	// private JList<Integer> theValueList;
-	private LittleList<Integer> theValueList;
-	private JSpinner theValueSpinner;
-	private JButton theValueAddButton;
-	private JButton theValueRemoveButton;
-	private JTree theValueTree;
-	private JTree theGroupedValueTree;
 
 	/** Creates the GUI panel */
 	public ObservableDemoGui() {
 		initObservables();
 		initComponents();
-		layoutComponents();
-
-		wireUp();
 	}
 
 	private void initObservables() {
-		theCategories = ObservableCollection.create(TypeTokens.get().of(ValueCategory.class));
-		theSelectedCategory = new SimpleSettableValue<>(TypeTokens.get().of(ValueCategory.class), true);
-		theCategoryAddObservable = new SimpleObservable<>();
-		theCategoryRemoveObservable = new SimpleObservable<>();
-		theValueAddObservable = new SimpleObservable<>();
-		theValueRemoveObservable = new SimpleObservable<>();
+		theCategoryNames = ObservableCollection.build(TypeTokens.get().STRING).distinct().build();
+		theCategories = theCategoryNames.flow()
+			.map(TypeTokens.get().of(ValueCategory.class), ValueCategory::new, opts -> opts.cache(true).reEvalOnUpdate(false)).collect();
 	}
 
 	private void initComponents() {
-		theNewCategoryText = new JTextField();
-		theCategoryCombo = new JComboBox<>();
-		ObservableComboBoxModel.comboFor(theCategoryCombo, "Select a category", cat -> cat.toString(), theCategories, theSelectedCategory);
-		theCategoryAddButton = new JButton("Add Category");
-		theCategoryAddButton.addActionListener(evt -> {
-			String text = theNewCategoryText.getText();
-			if (text == null || text.length() == 0)
-				return;
-			theCategoryAddObservable.onNext(text);
-		});
-		theCategoryRemoveButton = new JButton("Remove Selected Category");
-		theCategoryRemoveButton.addActionListener(evt -> theCategoryRemoveObservable.onNext(theSelectedCategory.get()));
-		ObservableCollection<Integer> selectedValues = ObservableCollection.flattenValue(//
-			theSelectedCategory.map(cat -> cat == null ? ObservableCollection.of(TypeTokens.get().INT) : cat.values));
-		// theValueList = new JList<>(//
-		theValueList = new LittleList<>(//
-			new ObservableListModel<>(selectedValues));
-		theSelectedValues = ObservableCollection.create(TypeTokens.get().INT);
-		ObservableSwingUtils.syncSelection(theValueList, theValueList.getModel(), theValueList::getSelectionModel, Equivalence.DEFAULT,
-			theSelectedValues, Observable.empty());
-		theValueSpinner = new JSpinner(new SpinnerNumberModel(0, 0, 100000, 1));
-		theValueAddButton = new JButton("Add Value");
-		theValueAddButton.addActionListener(evt -> theValueAddObservable.onNext((Integer) theValueSpinner.getValue()));
-		theValueRemoveButton = new JButton("Remove Selected Values");
-		theValueRemoveButton.addActionListener(evt -> theValueRemoveObservable.onNext(null));
-		theValueTree = new JTree(new ObservableTreeModel("Values") {
+		SettableValue<String> newCategory = SettableValue.build(String.class).safe(false).withValue("Cat 1").build();
+		SettableValue<String> selectedCategory = SettableValue.build(String.class).safe(false).build();
+		ObservableSet<Integer> valuesOfSelectedCategory = ObservableSet.flattenValue(selectedCategory.map(cat -> {
+			CollectionElement<String> found = theCategoryNames.getElement(cat, true);
+			if (found == null)
+				return ObservableSet.of(TypeTokens.get().INT);
+			return theCategories.getElementsBySource(found.getElementId()).getFirst().get().values;
+		}));
+		ObservableCollection<Integer> selectedValues = ObservableCollection.build(int.class).safe(false).build();
+		SettableValue<Integer> newValue = SettableValue.build(Integer.class).safe(false).withValue(0).build();
+
+		JTree valueTree = new JTree(new ObservableTreeModel("Values") {
 			@Override
-			public void valueForPathChanged(TreePath path, Object newValue) {}
+			public void valueForPathChanged(TreePath path, Object newVal) {}
 
 			@Override
 			public boolean isLeaf(Object node) {
@@ -127,84 +82,60 @@ public class ObservableDemoGui extends JPanel {
 					return ObservableCollection.of(TypeTokens.get().VOID);
 			}
 		});
-		theValueTree.setEditable(false);
+		valueTree.setEditable(false);
 
-		theGroupedValueTree = new JTree(new ObservableTreeModel("Grouped Values") {
-			private ObservableMultiMap<Long, Integer> theMap;
-
-			{
-				ObservableCollection<Integer> values = ObservableCollection.flattenValue(theSelectedCategory//
-					.map(cat -> cat == null ? ObservableCollection.of(TypeTokens.get().INT) : cat.values));
-				theMap = values.flow().groupBy(TypeTokens.get().LONG, v -> Long.valueOf(v % 5), (k, v) -> v).gather();
-			}
-
+		ObservableMultiMap<Long, Integer> mapByMod5 = valuesOfSelectedCategory.flow()
+			.groupBy(TypeTokens.get().LONG, v -> Long.valueOf(v % 5), (k, v) -> v).gather();
+		JTree groupedValueTree = new JTree(new ObservableTreeModel("Grouped Values") {
 			@Override
 			public boolean isLeaf(Object node) {
 				return node instanceof Integer;
 			}
 
 			@Override
-			public void valueForPathChanged(TreePath path, Object newValue) {}
+			public void valueForPathChanged(TreePath path, Object newVal) {}
 
 			@Override
 			protected ObservableCollection<?> getChildren(Object parent) {
 				if (parent instanceof String)
-					return theMap.keySet();
+					return mapByMod5.keySet();
 				else if (parent instanceof Long)
-					return theMap.get(parent);
+					return mapByMod5.get(parent);
 				else
 					return ObservableCollection.of(TypeTokens.get().VOID);
 			}
 		});
-	}
 
-	private void layoutComponents() {
-
-		setLayout(new BorderLayout());
-		JSplitPane mainSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
-		add(mainSplit, BorderLayout.CENTER);
-		JSplitPane treeSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
-		mainSplit.setRightComponent(treeSplit);
-		JScrollPane treeScroll = new JScrollPane(theValueTree);
-		treeSplit.setTopComponent(treeScroll);
-		treeScroll = new JScrollPane(theGroupedValueTree);
-		treeSplit.setBottomComponent(treeScroll);
-		JPanel controlPanel = new JPanel();
-		GroupLayout controlLayout = new GroupLayout(controlPanel);
-		controlPanel.setLayout(controlLayout);
-
-		controlLayout.setVerticalGroup(controlLayout.createSequentialGroup()//
-			.addGroup(controlLayout.createParallelGroup().addComponent(theNewCategoryText, 30, 30, 30).addComponent(theCategoryAddButton))
-			.addGroup(controlLayout.createParallelGroup().addComponent(theCategoryCombo, 30, 30, 30).addComponent(theCategoryRemoveButton))
-			.addGroup(controlLayout.createParallelGroup().addComponent(theValueSpinner, 30, 30, 30).addComponent(theValueAddButton))
-			.addComponent(theValueList)//
-			.addComponent(theValueRemoveButton));
-		controlLayout.setHorizontalGroup(controlLayout.createParallelGroup()//
-			.addGroup(controlLayout.createSequentialGroup()
-				.addGroup(controlLayout.createParallelGroup().addComponent(theNewCategoryText).addComponent(theCategoryCombo)
-					.addComponent(theValueSpinner))
-				.addGroup(controlLayout.createParallelGroup().addComponent(theCategoryAddButton).addComponent(theCategoryRemoveButton)
-					.addComponent(theValueAddButton)))
-			.addComponent(theValueList)//
-			.addComponent(theValueRemoveButton));
-		mainSplit.setLeftComponent(controlPanel);
-	}
-
-	private void wireUp() {
-		theCategoryAddObservable.act(text -> theCategories.add(new ValueCategory(text)));
-		theCategoryRemoveObservable.act(cat -> theCategories.remove(cat));
-		theValueAddObservable.act(value -> {
-			ValueCategory cat = theSelectedCategory.get();
-			if (cat == null)
-				return;
-			if (cat.values.contains(value))
-				return;
-			theSelectedCategory.get().values.add(value);
-		});
-		theValueRemoveObservable.act(v -> {
-			if (theSelectedCategory.get() != null)
-				theSelectedCategory.get().values.removeAll(theSelectedValues);
-		});
+		PanelPopulation.populateVPanel(this, null)//
+		.addSplit(false,
+			mainSplit -> mainSplit.fill()//
+			.firstV(left -> left//
+				.addTextField("New Category:", newCategory.filterAccept(theCategoryNames::canAdd), Format.TEXT, //
+					f -> f.fill().withPostButton("Add", cause -> theCategoryNames.add(newCategory.get()), //
+						b -> b.withTooltip("Add a new category")
+						.disableWith(newCategory.refresh(theCategoryNames.simpleChanges()).map(theCategoryNames::canAdd))))//
+				.addComboField("Selected Category:", selectedCategory, theCategoryNames, //
+					f -> f.fill().withPostButton("Remove", cause -> theCategoryNames.remove(selectedCategory.get()),
+						b -> b.withTooltip("Remove the selected category")))//
+				.addSpinnerField("New Value:", new JSpinner(new SpinnerNumberModel(0, 0, 1000000, 1)),
+					newValue.refresh(valuesOfSelectedCategory.simpleChanges()).filterAccept(v -> {
+						return valuesOfSelectedCategory.canAdd(v);
+					}).disableWith(selectedCategory.map(cat -> cat == null ? "No category selected" : null)), v -> v,
+					f -> f.fill().withPostButton("Add", cause -> valuesOfSelectedCategory.add(newValue.get()), //
+						b -> b.withTooltip("Add the value to the selected category")
+						.disableWith(newValue.refresh(selectedCategory.noInitChanges())
+							.refresh(valuesOfSelectedCategory.simpleChanges()).map(valuesOfSelectedCategory::canAdd))))//
+				.addList(valuesOfSelectedCategory,
+					list -> list.fill().withFieldName("Values:").withSelection(selectedValues)//
+					.withPostButton("Remove", cause -> valuesOfSelectedCategory.removeAll(selectedValues), //
+						b -> b.withTooltip("Remove the selected values from the selected category")
+						.disableWith(selectedValues.observeSize().map(sz -> sz == 0 ? "No values selected" : null)))))//
+			.lastV(right -> right//
+				.addSplit(true,
+					rightSplit -> rightSplit.fill()//
+					.first(new JScrollPane(valueTree))//
+					.last(new JScrollPane(groupedValueTree)))//
+				));
 	}
 
 	/**
@@ -213,6 +144,7 @@ public class ObservableDemoGui extends JPanel {
 	 * @param args Command-line arguments, ignored
 	 */
 	public static void main(String... args) {
+		ObservableSwingUtils.systemLandF();
 		JFrame frame = new JFrame("Observable Demo");
 		frame.setContentPane(new ObservableDemoGui());
 		frame.pack();
