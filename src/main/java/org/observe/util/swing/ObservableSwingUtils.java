@@ -121,11 +121,20 @@ public class ObservableSwingUtils {
 	 */
 	public static class FontAdjuster<C extends Component> implements Supplier<C> {
 		/** The label */
-		public final C label;
+		public C label;
 
 		/** @param label The component to create the holder with */
 		public FontAdjuster(C label) {
 			this.label = label;
+		}
+
+		/**
+		 * @param label The label to adjust
+		 * @return This holder
+		 */
+		public FontAdjuster<C> setLabel(C label) {
+			this.label = label;
+			return this;
 		}
 
 		/**
@@ -146,6 +155,18 @@ public class ObservableSwingUtils {
 		 */
 		public FontAdjuster<C> bold() {
 			return withStyle(Font.BOLD);
+		}
+
+		/**
+		 * @param bold Whether the label should be {@link Font#BOLD bold}
+		 * @return This holder
+		 */
+		public FontAdjuster<C> bold(boolean bold) {
+			if (bold)
+				bold();
+			else
+				plain();
+			return this;
 		}
 
 		/**
@@ -196,7 +217,7 @@ public class ObservableSwingUtils {
 
 		/**
 		 * Changes the horizontal alignment of the component (if supported)
-		 * 
+		 *
 		 * @param align Negative for left, zero for center, positive for right
 		 * @return This holder
 		 */
@@ -215,7 +236,7 @@ public class ObservableSwingUtils {
 
 		/**
 		 * Changes the horizontal alignment of the component (if supported)
-		 * 
+		 *
 		 * @param align Negative for left, zero for center, positive for right
 		 * @return This holder
 		 */

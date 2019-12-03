@@ -1,7 +1,6 @@
 package org.observe.util.swing;
 
 import java.awt.Component;
-import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -17,10 +16,15 @@ import javax.swing.table.TableCellRenderer;
 import javax.swing.tree.DefaultTreeCellRenderer;
 import javax.swing.tree.TreeCellRenderer;
 
-import org.qommons.TriFunction;
-
 public interface ObservableCellRenderer<M, C> {
 	public interface CellRenderContext {
+		public static CellRenderContext DEFAULT = new CellRenderContext() {
+			@Override
+			public int[][] getEmphaticRegions() {
+				return null;
+			}
+		};
+
 		int[][] getEmphaticRegions();
 	}
 
@@ -131,9 +135,8 @@ public interface ObservableCellRenderer<M, C> {
 		private DefaultListCellRenderer theListRenderer;
 		private JLabel theLabel;
 
-		private Consumer<? super JLabel> theLabelModifier;
-		private BiConsumer<? super C, ? super JLabel> theValueLabelModifier;
-		private TriFunction<? super M, ? super C, ? super JLabel, ?> theRowValueLabelModifier;
+		private FormattedValue<M, C> theFormattedValue;
+		private Consumer<? super FormattedValue<M, C>> theLabelModifier;
 		private final BiFunction<Supplier<M>, C, String> theTextRenderer;
 
 		public DefaultObservableCellRenderer(BiFunction<Supplier<M>, C, String> textRenderer) {
@@ -168,6 +171,12 @@ public interface ObservableCellRenderer<M, C> {
 				theLabel.setText(String.valueOf(rendered));
 				c = theLabel;
 			}
+			if (theLabelModifier != null) {
+				if (theFormattedValue == null)
+					theFormattedValue = new FormattedValue<>();
+				theLabelModifier
+					.accept(theFormattedValue.forRender(c, modelValue, columnValue, selected, expanded, leaf, hasFocus, row, column, ctx));
+			}
 			return tryEmphasize(c, ctx);
 		}
 
@@ -176,7 +185,7 @@ public interface ObservableCellRenderer<M, C> {
 			return columnValue;
 		}
 
-		public DefaultObservableCellRenderer<M, C> modify(Consumer<? super JLabel> modifier) {
+		public DefaultObservableCellRenderer<M, C> modify(Consumer<? super FormattedValue<M, C>> modifier) {
 			if (theLabelModifier == null)
 				theLabelModifier = modifier;
 			else {
@@ -187,30 +196,72 @@ public interface ObservableCellRenderer<M, C> {
 			}
 			return this;
 		}
+	}
 
-		public DefaultObservableCellRenderer<M, C> modify(BiConsumer<? super C, ? super JLabel> modifier) {
-			if (theValueLabelModifier == null)
-				theValueLabelModifier = modifier;
-			else {
-				theValueLabelModifier = (cv, label) -> {
-					theValueLabelModifier.accept(cv, label);
-					modifier.accept(cv, label);
-				};
-			}
+	public static class FormattedValue<M, C> extends ObservableSwingUtils.FontAdjuster<Component> {
+		private Supplier<M> theModelValue;
+		private C theColumnValue;
+		private boolean isSelected;
+		private boolean isExpanded;
+		private boolean isLeaf;
+		private boolean hasFocus;
+		private int theRow;
+		private int theColumn;
+		private CellRenderContext theContext;
+
+		public FormattedValue() {
+			super(null);
+		}
+
+		FormattedValue<M, C> forRender(Component lbl, Supplier<M> modelValue, C columnValue, boolean selected, boolean expanded,
+			boolean leaf, boolean focused, int row, int column, CellRenderContext ctx) {
+			setLabel(lbl);
+			theModelValue = modelValue;
+			theColumnValue = columnValue;
+			isSelected = selected;
+			isExpanded = expanded;
+			isLeaf = leaf;
+			hasFocus = focused;
+			theRow = row;
+			theColumn = column;
+			theContext = ctx;
 			return this;
 		}
 
-		public DefaultObservableCellRenderer<M, C> modify(TriFunction<? super M, ? super C, ? super JLabel, ?> modifier) {
-			if (theRowValueLabelModifier == null)
-				theRowValueLabelModifier = modifier;
-			else {
-				theRowValueLabelModifier = (rv, cv, label) -> {
-					theRowValueLabelModifier.apply(rv, cv, label);
-					modifier.apply(rv, cv, label);
-					return null;
-				};
-			}
-			return this;
+		public M getModelValue() {
+			return theModelValue.get();
+		}
+
+		public C getColumnValue() {
+			return theColumnValue;
+		}
+
+		public boolean isSelected() {
+			return isSelected;
+		}
+
+		public boolean isExpanded() {
+			return isExpanded;
+		}
+
+		public boolean isLeaf() {
+			return isLeaf;
+		}
+
+		public boolean hasFocus() {
+			return hasFocus;
+		}
+
+		public int getRow() {
+			return theRow;
+		}
+
+		public int getColumn() {
+			return theColumn;
+		}
+
+		public CellRenderContext getContext() {
+			return theContext;
 		}
 	}
 

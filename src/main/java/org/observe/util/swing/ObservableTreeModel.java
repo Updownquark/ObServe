@@ -48,9 +48,8 @@ public abstract class ObservableTreeModel implements TreeModel {
 		ObservableSwingUtils.onEQ(() -> {
 			TreeModelEvent event = new TreeModelEvent(theRoot, new Object[] { theRoot }, null, null);
 
-			for (TreeModelListener listener : theListeners) {
+			for (TreeModelListener listener : theListeners)
 				listener.treeNodesChanged(event);
-			}
 		});
 	}
 
@@ -122,6 +121,7 @@ public abstract class ObservableTreeModel implements TreeModel {
 					theChildNodes.add(newChild(value));
 				}
 				theChildrenSub = theChildren.changes().act(event -> {
+					System.out.println(theValue + ":" + event);
 					ObservableSwingUtils.onEQ(() -> {
 						int[] indexes = event.getIndexes();
 						switch (event.type) {
@@ -133,12 +133,11 @@ public abstract class ObservableTreeModel implements TreeModel {
 							break;
 						case set:
 							boolean justChanges = true;
-							for (int i = 0; i < indexes.length && justChanges; i++) {
+							for (int i = 0; i < indexes.length && justChanges; i++)
 								justChanges &= event.elements.get(i).oldValue == event.elements.get(i).newValue;
-							}
-							if (justChanges) {
+							if (justChanges)
 								changed(indexes, event.getValues().toArray());
-							} else {
+							else {
 								for (int i = 0; i < indexes.length; i++) {
 									removed(new int[] { indexes[i] }, new Object[] { event.elements.get(i).oldValue });
 									added(new int[] { indexes[i] }, new Object[] { event.elements.get(i).newValue });
@@ -185,12 +184,11 @@ public abstract class ObservableTreeModel implements TreeModel {
 		}
 
 		private void dispose() {
-			if (theChildrenSub != null) {
+			theNodes.remove(new IdentityKey<>(theValue));
+			if (theChildrenSub != null)
 				theChildrenSub.unsubscribe();
-			}
-			for (TreeNode child : theChildNodes) {
+			for (TreeNode child : theChildNodes)
 				child.dispose();
-			}
 		}
 
 		TreePath getPath() {
@@ -214,9 +212,8 @@ public abstract class ObservableTreeModel implements TreeModel {
 
 			TreeModelEvent event = new TreeModelEvent(this, getPath(), indexes, values);
 
-			for (TreeModelListener listener : theListeners) {
+			for (TreeModelListener listener : theListeners)
 				listener.treeNodesInserted(event);
-			}
 		}
 
 		private void removed(int[] indexes, Object[] values) {
@@ -224,7 +221,6 @@ public abstract class ObservableTreeModel implements TreeModel {
 			sort(indexes, values);
 			for (int i = indexes.length - 1; i >= 0; i--) {
 				TreeNode node = theChildNodes.get(indexes[i]);
-				theNodes.remove(node.theValue);
 				theChildNodes.remove(indexes[i]);
 				node.dispose();
 				values[i] = node.theValue;
@@ -232,9 +228,8 @@ public abstract class ObservableTreeModel implements TreeModel {
 
 			TreeModelEvent event = new TreeModelEvent(this, getPath(), indexes, values);
 
-			for (TreeModelListener listener : theListeners) {
+			for (TreeModelListener listener : theListeners)
 				listener.treeNodesRemoved(event);
-			}
 		}
 
 		private void changed(int[] indexes, Object[] values) {
@@ -242,16 +237,14 @@ public abstract class ObservableTreeModel implements TreeModel {
 			sort(indexes, values);
 			TreeModelEvent event = new TreeModelEvent(this, getPath(), indexes, values);
 
-			for (TreeModelListener listener : theListeners) {
+			for (TreeModelListener listener : theListeners)
 				listener.treeNodesChanged(event);
-			}
 		}
 
 		private void sort(int[] indexes, Object[] values) {
 			Integer[] indexList = new Integer[indexes.length];
-			for (int i = 0; i < indexes.length; i++) {
+			for (int i = 0; i < indexes.length; i++)
 				indexList[i] = indexes[i];
-			}
 			ArrayUtils.sort(indexList, new ArrayUtils.SortListener<Integer>() {
 				@Override
 				public int compare(Integer o1, Integer o2) {
