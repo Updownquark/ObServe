@@ -2434,6 +2434,8 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public BetterList<ElementId> getSourceElements(ElementId localElement, BetterCollection<?> sourceCollection) {
+			if (sourceCollection == this)
+				return BetterList.of(localElement);
 			try (Transaction t = lock(false, null)) {
 				return theFlow.getSourceElements(((DerivedElementHolder<T>) localElement).element, sourceCollection);
 			}
