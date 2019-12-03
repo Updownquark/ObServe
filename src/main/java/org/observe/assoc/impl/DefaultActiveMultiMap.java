@@ -3,7 +3,6 @@ package org.observe.assoc.impl;
 import java.util.Collection;
 import java.util.Map;
 import java.util.NoSuchElementException;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -34,6 +33,7 @@ import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
+import org.qommons.collect.BetterMap;
 import org.qommons.collect.BetterSet;
 import org.qommons.collect.BetterSortedList.SortedSearchFilter;
 import org.qommons.collect.BetterSortedMap;
@@ -78,7 +78,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 
 	private final ListenerList<Consumer<? super ObservableMultiMapEvent<? extends K, ? extends V>>> theMapListeners;
 	private final ListenerList<Consumer<? super ObservableCollectionEvent<? extends K>>> theKeySetListeners;
-	private final ConcurrentHashMap<K, ListenerList<Consumer<? super ObservableCollectionEvent<? extends V>>>> theValueListeners;
+	private final BetterMap<K, ListenerList<Consumer<? super ObservableCollectionEvent<? extends V>>>> theValueListeners;
 
 	/**
 	 * @param source The source collection whose data the map is to be gathered from
@@ -99,7 +99,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 
 		theMapListeners = ListenerList.build().withFastSize(false).build();
 		theKeySetListeners = ListenerList.build().withFastSize(false).build();
-		theValueListeners = new ConcurrentHashMap<>();
+		theValueListeners = keyFlow.equivalence().createMap();
 
 		// Must maintain a strong reference to the event listening so it is not GC'd while the collection is still alive
 		theWeakListening = WeakListening.build().withUntil(r -> until.act(v -> r.run()));
@@ -145,7 +145,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		theKeySet = createKeySet();
 	}
 
-	private ListenerList<Consumer<? super ObservableCollectionEvent<? extends V>>> getValueListeners(K key) {
+	private synchronized ListenerList<Consumer<? super ObservableCollectionEvent<? extends V>>> getValueListeners(K key) {
 		return theValueListeners.computeIfAbsent(key, k -> ListenerList.build().withFastSize(false).withInUse(inUse -> {
 			if (!inUse)
 				theValueListeners.remove(key); // Clean up
@@ -352,11 +352,13 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 			return true;
 		}
 
-		void deactivate(K key, Object cause) {
+		void deactivate(K key, int keyIndex, Object cause) {
+			if (activeEntryId == null || !activeEntryId.isPresent())
+				return; // Already removed
 			theActiveEntries.mutableElement(activeEntryId).remove();
 			if (!theKeySetListeners.isEmpty()) {
 				ObservableCollectionEvent<K> keyEvent = new ObservableCollectionEvent<>(activeEntryId, getKeyType(),
-					theActiveEntries.getElementsBefore(activeEntryId), CollectionChangeType.remove, key, key, cause);
+					keyIndex, CollectionChangeType.remove, key, key, cause);
 				try (Transaction evtT = Causable.use(keyEvent)) {
 					theKeySetListeners.forEach(//
 						listener -> listener.accept(keyEvent));
@@ -408,15 +410,14 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 
 		void removed(Object cause) {
 			synchronized (DefaultActiveMultiMap.this) {
-				int keyIndex = -1;
-				if (activeEntryId != null && activeEntryId.isPresent())
-					keyIndex = theActiveEntries.getElementsBefore(activeEntryId);
+				if (activeEntryId != null && activeEntryId.isPresent()) {
+					K key = get();
+					int keyIndex = theActiveEntries.getElementsBefore(activeEntryId);
+					theValues.entryRemoved(get(), keyIndex, cause);
+					deactivate(key, keyIndex, cause);
+				}
 				for (Map.Entry<GroupedElementInfo, ElementId> source : theSources.entrySet())
 					source.getKey().removeKey(source.getValue());
-				if (keyIndex >= 0) {
-					theValues.entryRemoved(get(), keyIndex, cause);
-					theActiveEntries.mutableElement(activeEntryId).remove();
-				}
 				theEntries.mutableElement(entryId).remove();
 			}
 		}
@@ -586,8 +587,10 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 				while (keyEl != null) {
 					MapEntryHandle<KeyEntry, ElementId> entry = theKeys.getEntryById(keyEl.getElementId());
 					keyEl = theKeys.keySet().getAdjacentElement(keyEl.getElementId(), true);
-					entry.getKey().theValues.valueRemoved(entry.getValue(), entry.getKey().get(), value, keyType, valueType, //
-						theActiveEntries.getElementsBefore(entry.getKey().activeEntryId), cause);
+					if (entry.getKey().activeEntryId != null && entry.getKey().activeEntryId.isPresent()) {
+						entry.getKey().theValues.valueRemoved(entry.getValue(), entry.getKey().get(), value, keyType, valueType, //
+							theActiveEntries.getElementsBefore(entry.getKey().activeEntryId), cause);
+					}
 					theKeys.mutableEntry(entry.getElementId()).remove();
 				}
 				for (Map.Entry<GroupedElementInfo, ElementId> entry : theSources.entrySet())
@@ -785,7 +788,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 			}
 
 			if (theValues.isEmpty())
-				theEntry.deactivate(key, cause);
+				theEntry.deactivate(key, keyIndex, cause);
 		}
 
 		void entryRemoved(K key, int keyIndex, Object cause) {
