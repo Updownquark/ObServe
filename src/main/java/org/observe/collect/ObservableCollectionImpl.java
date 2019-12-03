@@ -2788,7 +2788,10 @@ public final class ObservableCollectionImpl {
 			ObservableCollection<? extends E> current = getWrapped().get();
 			if (current == null)
 				return BetterList.empty();
-			return current.getSourceElements(localElement, sourceCollection);
+			if (sourceCollection == this)
+				return current.getSourceElements(localElement, current);
+			else
+				return current.getSourceElements(localElement, sourceCollection);
 		}
 
 		@Override

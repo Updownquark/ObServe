@@ -3396,7 +3396,6 @@ public class ObservableCollectionDataFlowImpl {
 							ObservableCollectionDataFlowImpl.removed(theListener, val, cause);
 							theListener = null;
 							theCacheHandler.initialize(null);
-							theValue = null;
 						}
 					});
 				} else {
