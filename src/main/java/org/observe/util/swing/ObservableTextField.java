@@ -47,6 +47,7 @@ public class ObservableTextField<E> extends JPasswordField {
 	private final Color warning_bg = new Color(250, 200, 90);
 	private final Color warning_disabled_bg = new Color(235, 220, 150);
 
+	private boolean selectAllOnFocus;
 	private boolean revertOnFocusLoss;
 	private boolean commitOnType;
 	private String theError;
@@ -81,6 +82,7 @@ public class ObservableTextField<E> extends JPasswordField {
 		disabled_bg = getBackground();
 		super.setEnabled(true);
 
+		selectAllOnFocus = true;
 		revertOnFocusLoss = true;
 		theValue.changes().takeUntil(until).act(evt -> {
 			if (!isInternallyChanging && (!hasFocus() || evt.getOldValue() != evt.getNewValue()))
@@ -141,7 +143,8 @@ public class ObservableTextField<E> extends JPasswordField {
 		addFocusListener(new FocusAdapter() {
 			@Override
 			public void focusGained(FocusEvent e) {
-				selectAll();
+				if (selectAllOnFocus)
+					selectAll();
 				if (theEmptyText != null)
 					repaint();
 			}
@@ -206,6 +209,15 @@ public class ObservableTextField<E> extends JPasswordField {
 	 */
 	public ObservableTextField<E> clearWarning() {
 		theWarning = null;
+		return this;
+	}
+
+	/**
+	 * @param selectAll Whether this text field should select all its text when it gains focus
+	 * @return This text field
+	 */
+	public ObservableTextField<E> setSelectAllOnFocus(boolean selectAll) {
+		selectAllOnFocus = selectAll;
 		return this;
 	}
 
