@@ -50,7 +50,6 @@ import org.qommons.TestHelper;
 import org.qommons.TestHelper.Testable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
-import org.qommons.collect.CircularArrayList;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.TransactableList;
 import org.qommons.debug.Debug;
@@ -475,21 +474,6 @@ public class ObservableCollectionsTest {
 				}
 			}
 		}, true, true);
-	}
-
-	static class ArrayListTester implements TestHelper.Testable {
-		@Override
-		public void accept(TestHelper helper) {
-			CircularArrayList<Integer> backing = CircularArrayList.build().unsafe().build();
-			testCollection(ObservableCollection.create(TypeToken.of(Integer.class), backing), set -> backing.checkValid(), helper);
-		}
-	}
-
-	/** Runs a barrage of tests on a {@link DefaultObservableCollection} backed by a {@link CircularArrayList} */
-	@Test
-	public void testObservableArrayList() {
-		TestHelper.createTester(ArrayListTester.class).withDebug(false).withFailurePersistence(false).withRandomCases(1).execute()
-		.throwErrorIfFailed();
 	}
 
 	static class TreeListTester implements TestHelper.Testable {
