@@ -667,7 +667,7 @@ public interface Observable<T> extends Lockable, Identifiable {
 	 * @param <T> The type of the composed observable
 	 */
 	public class ComposedObservable<T> implements Observable<T> {
-		private static final Object NONE = new Object();
+		private static final Object UNSET = new Object();
 
 		private final List<Observable<?>> theComposed;
 
@@ -692,7 +692,7 @@ public interface Observable<T> extends Lockable, Identifiable {
 				private final Object[] values = new Object[theComposed.size()];
 
 				{
-					Arrays.fill(values, NONE);
+					Arrays.fill(values, UNSET);
 				}
 
 				@Override
@@ -705,7 +705,7 @@ public interface Observable<T> extends Lockable, Identifiable {
 								public <V> void onNext(V value) {
 									values[index] = value;
 									Object next = getNext();
-									if (next != NONE)
+									if (next != UNSET)
 										fireNext((T) next);
 								}
 
@@ -713,15 +713,15 @@ public interface Observable<T> extends Lockable, Identifiable {
 								public <V> void onCompleted(V value) {
 									values[index] = value;
 									Object next = getNext();
-									if (next != NONE)
+									if (next != UNSET)
 										fireCompleted((T) next);
 								}
 
 								private Object getNext() {
 									Object[] args = values.clone();
 									for (Object value : args)
-										if (value == NONE)
-											return NONE;
+										if (value == UNSET)
+											return UNSET;
 									return theFunction.apply(args);
 								}
 
@@ -740,7 +740,7 @@ public interface Observable<T> extends Lockable, Identifiable {
 						for (int i = 0; i < theComposed.size(); i++) {
 							composedSubs[i].unsubscribe();
 							composedSubs[i] = null;
-							values[i] = NONE;
+							values[i] = UNSET;
 						}
 					}
 				}

@@ -9,10 +9,11 @@ import org.qommons.collect.QuickSet.QuickMap;
 
 import com.google.common.reflect.TypeToken;
 
+/** Tests {@link EntityReflector} */
 public class EntityReflectorTest {
-	public static @interface Id {}
+	static @interface Id {}
 
-	public static interface A {
+	static interface A {
 		int getId();
 
 		void setId(int id);
@@ -26,7 +27,7 @@ public class EntityReflectorTest {
 		}
 	}
 
-	public static interface B {
+	static interface B {
 		int getId();
 
 		void setId(int id);
@@ -41,7 +42,7 @@ public class EntityReflectorTest {
 		}
 	}
 
-	public static interface C extends A, B {
+	static interface C extends A, B {
 		@Override
 		default int getB() {
 			return 0;
@@ -62,6 +63,7 @@ public class EntityReflectorTest {
 		}
 	}
 
+	/** A quick, simple test against reflectively-synthesized entities, with complex inheritance */
 	@Test
 	public void testInheritance() {
 		Map<TypeToken<?>, EntityReflector<?>> supers = new HashMap<>();

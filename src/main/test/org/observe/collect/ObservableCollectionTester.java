@@ -27,12 +27,16 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 	private final List<E> theExpected;
 	private boolean checkRemovedValues;
 
-	/** @param collect The observable collection to test */
+	/**
+	 * @param name A name for this tester (for debugging)
+	 * @param collect The observable collection to test
+	 */
 	public ObservableCollectionTester(String name, ObservableCollection<? extends E> collect) {
 		this(name, collect, new ArrayList<>());
 	}
 
 	/**
+	 * @param name A name for this tester (for debugging)
 	 * @param collect The observable collection to test
 	 * @param expected The collection to use for the expected value
 	 */

@@ -29,16 +29,24 @@ import org.xml.sax.SAXException;
 
 import com.google.common.reflect.TypeToken;
 
+/** Tests against {@link ObservableConfig} */
 public class ObservableConfigTest {
 	private ObservableConfig theConfig;
 	private XmlEncoding theEncoding;
 
+	/** Initializes for testing */
 	@Before
 	public void initConfig() {
 		theConfig = ObservableConfig.createRoot("root");
 		theEncoding = new XmlEncoding(":x", ":xx", " ", "blah", "test");
 	}
 
+	/**
+	 * Simple persistence test
+	 *
+	 * @throws IOException Should not happen
+	 * @throws SAXException Should not happen
+	 */
 	@Test
 	public void testXml1() throws IOException, SAXException {
 		readXml(getClass().getResourceAsStream("TestXml1.xml"));
@@ -58,6 +66,12 @@ public class ObservableConfigTest {
 		Assert.assertEquals("", theConfig.get("element4"));
 	}
 
+	/**
+	 * Slightly larger persistence test
+	 *
+	 * @throws IOException Should not happen
+	 * @throws SAXException Should not happen
+	 */
 	@Test
 	public void testXmlPersistence() throws IOException, SAXException {
 		readXml(getClass().getResourceAsStream("TestXml1.xml"));
@@ -75,6 +89,12 @@ public class ObservableConfigTest {
 			new ByteArrayInputStream(writer.toString().getBytes("UTF-8")));
 	}
 
+	/**
+	 * Tests {@link ObservableConfig#asValue(TypeToken)}
+	 *
+	 * @throws IOException Should not happen
+	 * @throws SAXException Should not happen
+	 */
 	@Test
 	public void testValues() throws IOException, SAXException {
 		SimpleObservable<Void> until = new SimpleObservable<>();
@@ -141,11 +161,23 @@ public class ObservableConfigTest {
 		Assert.assertEquals(9, testValues.size());
 	}
 
+	/**
+	 * Simple, read-only test against config-backed entities
+	 *
+	 * @throws IOException Should not happen
+	 * @throws SAXException Should not happen
+	 */
 	@Test
 	public void testReadOnlySimpleEntities() throws IOException, SAXException {
 		testSimpleEntities(false);
 	}
 
+	/**
+	 * Simple, test against config-backed entities, with modification
+	 *
+	 * @throws IOException Should not happen
+	 * @throws SAXException Should not happen
+	 */
 	@Test
 	public void testModifySimpleEntities() throws IOException, SAXException {
 		testSimpleEntities(true);
@@ -280,6 +312,12 @@ public class ObservableConfigTest {
 		Assert.assertEquals(20, testEntities.getValues().get(1).getA());
 	}
 
+	/**
+	 * Test against complex config-backed entities
+	 *
+	 * @throws IOException Should not happen
+	 * @throws SAXException Should not happen
+	 */
 	@Test
 	public void testComplexEntities() throws IOException, SAXException {
 		SimpleObservable<Void> until = new SimpleObservable<>();
@@ -422,6 +460,12 @@ public class ObservableConfigTest {
 		Assert.assertEquals(3, i);
 	}
 
+	/**
+	 * Barrage test against complex config-backed entities
+	 *
+	 * @throws IOException Should not happen
+	 * @throws SAXException Should not happen
+	 */
 	@Test
 	public void superTest() throws IOException, SAXException {
 		TestHelper.createTester(ObservableConfigSuperTester.class)//
@@ -662,7 +706,7 @@ public class ObservableConfigTest {
 		}
 	}
 
-	public interface TestEntity {
+	interface TestEntity {
 		int getA();
 
 		TestEntity setA(int a);
@@ -680,7 +724,7 @@ public class ObservableConfigTest {
 		}
 	}
 
-	public interface TestEntity2 {
+	interface TestEntity2 {
 		String getText();
 
 		void setText(String text);
@@ -692,13 +736,13 @@ public class ObservableConfigTest {
 		ObservableValueSet<TestEntity4> getListedEntities();
 	}
 
-	public interface TestEntity3 {
+	interface TestEntity3 {
 		int getD();
 
 		int setD(int d);
 	}
 
-	public interface TestEntity4 {
+	interface TestEntity4 {
 		int getE();
 
 		int setE(int e);
@@ -708,7 +752,7 @@ public class ObservableConfigTest {
 		double setX(double x);
 	}
 
-	public interface TestEntity5 extends TestEntity4 {
+	interface TestEntity5 extends TestEntity4 {
 		double getF();
 
 		TestEntity5 setF(double f);
