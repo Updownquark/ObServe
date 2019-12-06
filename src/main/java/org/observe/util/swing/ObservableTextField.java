@@ -6,6 +6,7 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Insets;
 import java.awt.RenderingHints;
+import java.awt.event.ActionEvent;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.awt.event.InputEvent;
@@ -15,8 +16,10 @@ import java.text.ParseException;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
+import javax.swing.AbstractAction;
 import javax.swing.Icon;
 import javax.swing.JPasswordField;
+import javax.swing.KeyStroke;
 import javax.swing.ToolTipManager;
 import javax.swing.UIManager;
 import javax.swing.border.Border;
@@ -25,7 +28,9 @@ import javax.swing.event.DocumentListener;
 
 import org.observe.Observable;
 import org.observe.SettableValue;
+import org.qommons.BiTuple;
 import org.qommons.io.Format;
+import org.qommons.io.SpinnerFormat;
 
 /**
  * A text field that interacts with a {@link SettableValue}
@@ -166,6 +171,22 @@ public class ObservableTextField<E> extends JPasswordField {
 				}
 			}
 		});
+		if (theFormat instanceof SpinnerFormat) {
+			getInputMap().put(KeyStroke.getKeyStroke("UP"), "increment");
+			getActionMap().put("increment", new AbstractAction("increment") {
+				@Override
+				public void actionPerformed(ActionEvent e) {
+					adjust(true, e);
+				}
+			});
+			getInputMap().put(KeyStroke.getKeyStroke("DOWN"), "decrement");
+			getActionMap().put("decrement", new AbstractAction("decrement") {
+				@Override
+				public void actionPerformed(ActionEvent e) {
+					adjust(false, e);
+				}
+			});
+		}
 	}
 
 	/** @return The value controlled by this text field */
@@ -547,6 +568,54 @@ public class ObservableTextField<E> extends JPasswordField {
 			KeyEvent ke = new KeyEvent(this, KeyEvent.KEY_PRESSED, System.currentTimeMillis(), InputEvent.CTRL_MASK, KeyEvent.VK_F1,
 				KeyEvent.CHAR_UNDEFINED);
 			dispatchEvent(ke);
+		}
+	}
+
+	private void adjust(boolean up, Object cause) {
+		SpinnerFormat<E> spinnerFormat = (SpinnerFormat<E>) theFormat;
+		if (theError == null && getEchoChar() == 0) {
+			String text = new String(getPassword());
+			E toAdjust;
+			if (isDirty) {
+				try {
+					toAdjust = theFormat.parse(text);
+				} catch (ParseException ex) {
+					return; // Shouldn't happen since the error is null, but we'll just abort
+				}
+			} else
+				toAdjust = theValue.get();
+			int selectionStart = getSelectionStart();
+			int selectionEnd = getSelectionEnd();
+			boolean withContext = selectionStart == selectionEnd;
+			if (spinnerFormat.supportsAdjustment(withContext)) {
+				BiTuple<E, String> adjusted = spinnerFormat.adjust(toAdjust, text, withContext ? selectionStart : -1, up);
+				if (adjusted != null && theValue.isAcceptable(adjusted.getValue1()) == null) {
+					isInternallyChanging = true;
+					try {
+						try {
+							theValue.set(adjusted.getValue1(), cause);
+						} catch (RuntimeException ex) {
+							return;// We checked above, but whatever.
+						}
+						String newText = adjusted.getValue2();
+						setText(newText);
+						selectionStart += newText.length() - text.length();
+						selectionEnd += newText.length() - text.length();
+						if (selectionEnd < 0) {
+							selectionStart = selectionEnd = 0;
+						} else if (selectionStart < 0)
+							selectionStart = 0;
+						if (selectionStart > newText.length())
+							selectionStart = selectionEnd = newText.length();
+						else if (selectionEnd > newText.length())
+							selectionEnd = newText.length();
+						setSelectionStart(selectionStart);
+						setSelectionEnd(selectionEnd);
+					} finally {
+						isInternallyChanging = false;
+					}
+				}
+			}
 		}
 	}
 }
