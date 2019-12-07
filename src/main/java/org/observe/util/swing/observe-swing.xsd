@@ -32,10 +32,25 @@ elementFormDefault="qualified">
 			</xs:extension>
 		</xs:complexContent>
 	</xs:complexType>
+	
+	<xs:complexType name="icon-type">
+		<xs:attribute name="location" type="xs:string" />
+		<xs:attribute name="opacity">
+			<xs:simpleType>
+				<xs:restriction base="xs:decimal">
+					<xs:minInclusive value="0" />
+					<xs:maxInclusive value="1" />
+				</xs:restriction>
+			</xs:simpleType>
+		</xs:attribute>
+	</xs:complexType>
 
 	<xs:complexType name="text-field-type">
 		<xs:complexContent>
 			<xs:extension base="field-type">
+				<xs:sequence>
+					<xs:element name="icon" type="icon-type" minOccurs="0" maxOccurs="1" />
+				</xs:sequence>
 				<xs:attribute name="format" type="xs:string" use="required" />
 				<xs:attribute name="columns" type="xs:positiveInteger" />
 				<xs:attribute name="warning" type="xs:string" />
@@ -61,6 +76,10 @@ elementFormDefault="qualified">
 	<xs:complexType name="spinner-type">
 		<xs:complexContent>
 			<xs:extension base="text-field-type">
+				<xs:sequence>
+					<xs:element name="up-icon" type="icon-type" minOccurs="0" maxOccurs="1" />
+					<xs:element name="down-icon" type="icon-type" minOccurs="0" maxOccurs="1" />
+				</xs:sequence>
 				<xs:attribute name="up-icon" type="xs:string" />
 				<xs:attribute name="down-icon" type="xs:string" />
 				<xs:attribute name="up-tooltip" type="xs:string" />
@@ -73,6 +92,9 @@ elementFormDefault="qualified">
 	<xs:complexType name="text-renderer">
 		<xs:complexContent>
 			<xs:extension base="cell-renderer">
+				<xs:sequence>
+					<xs:element name="icon" type="icon-type" minOccurs="0" maxOccurs="1" />
+				</xs:sequence>
 				<xs:attribute name="format" type="xs:string" use="required" />
 				<xs:attribute name="icon" type="xs:string" />
 			</xs:extension>
@@ -94,6 +116,9 @@ elementFormDefault="qualified">
 	<xs:complexType name="button-type">
 		<xs:complexContent>
 			<xs:extension base="field-type">
+				<xs:sequence>
+					<xs:element name="icon" type="icon-type" minOccurs="0" maxOccurs="1" />
+				</xs:sequence>
 				<xs:attribute name="text" type="xs:string" />
 				<xs:attribute name="icon" type="xs:string" />
 				<xs:attribute name="action" type="xs:string" use="required" />
@@ -110,6 +135,9 @@ elementFormDefault="qualified">
 							<xs:all>
 								<xs:element name="tab">
 									<xs:complexType>
+										<xs:sequence>
+											<xs:element name="icon" type="icon-type" minOccurs="0" maxOccurs="1" />
+										</xs:sequence>
 										<xs:attribute name="name" type="xs:string" />
 									</xs:complexType>
 								</xs:element>
@@ -142,27 +170,27 @@ elementFormDefault="qualified">
 			</xs:extension>
 		</xs:complexContent>
 	</xs:complexType>
+	
+	<xs:complexType name="table-on-mouse">
+		<xs:attribute name="type" use="required">
+			<xs:simpleType>
+				<xs:restriction base="xs:string">
+					<xs:enumeration value="click" />
+					<xs:enumeration value="press" />
+					<xs:enumeration value="release" />
+					<xs:enumeration value="enter" />
+					<xs:enumeration value="exit" />
+				</xs:restriction>
+			</xs:simpleType>
+		</xs:attribute>
+		<xs:attribute name="action" type="xs:string" use="required" />
+	</xs:complexType>
 
 	<xs:complexType name="table-column">
 		<xs:sequence>
 			<xs:element name="renderer" type="cell-renderer" maxOccurs="1" />
 			<xs:element name="editor" type="cell-editor" maxOccurs="1" />
-			<xs:element name="on-mouse">
-				<xs:complexType>
-					<xs:attribute name="type" use="required">
-					<xs:simpleType>
-						<xs:restriction base="xs:string">
-							<xs:enumeration value="click" />
-							<xs:enumeration value="press" />
-							<xs:enumeration value="release" />
-							<xs:enumeration value="enter" />
-							<xs:enumeration value="exit" />
-						</xs:restriction>
-					</xs:simpleType>
-					</xs:attribute>
-					<xs:attribute name="action" type="xs:string" use="required" />
-				</xs:complexType>
-			</xs:element>
+			<xs:element name="on-mouse" type="table-on-mouse" />
 		</xs:sequence>
 		<xs:attribute name="name" type="xs:string" use="required" />
 		<xs:attribute name="map" type="xs:string" use="required" />
@@ -194,6 +222,9 @@ elementFormDefault="qualified">
 	<xs:complexType name="text-editor">
 		<xs:complexContent>
 			<xs:extension base="cell-editor">
+				<xs:sequence>
+					<xs:element name="icon" type="icon-type" minOccurs="0" maxOccurs="1" />
+				</xs:sequence>
 				<xs:attribute name="format" type="xs:string" use="required" />
 				<xs:attribute name="warning" type="xs:string" />
 				<xs:attribute name="select-all-on-focus" type="xs:boolean" default="true" />
@@ -211,6 +242,9 @@ elementFormDefault="qualified">
 	<xs:complexType name="combo-editor">
 		<xs:complexContent>
 			<xs:extension base="cell-editor">
+				<xs:sequence>
+					<xs:element name="renderer" type="cell-renderer" minOccurs="0" maxOccurs="1"/>
+				</xs:sequence>
 				<xs:attribute name="available-values" type="xs:string" use="required" />
 				<xs:attribute name="value-tooltip" type="xs:string" />
 			</xs:extension>
@@ -237,19 +271,50 @@ elementFormDefault="qualified">
 				<xs:attribute name="allow-for-multiple" type="xs:boolean" default="true" />
 				<xs:attribute name="allow-for-any-enabled" type="xs:boolean" default="false" />
 				<xs:attribute name="allow-when" type="xs:boolean" />
+				<xs:attribute name="menu-path" type="xs:string" />
+			</xs:extension>
+		</xs:complexContent>
+	</xs:complexType>
+	
+	<xs:complexType name="list-widget-type" abstract="true">
+		<xs:complexContent>
+			<xs:extension base="field-type">
+				<xs:sequence>
+					<xs:element name="action" type="table-action" minOccurs="0" />
+					<xs:element name="add" type="table-action" minOccurs="0" />
+					<xs:element name="remove" type="table-action" minOccurs="0" />
+					<xs:element name="copy" type="table-action" minOccurs="0" />
+				</xs:sequence>
+				<xs:attribute name="selected" type="xs:string" />
+				<xs:attribute name="item-name" type="xs:string" />
+			</xs:extension>
+		</xs:complexContent>
+	</xs:complexType>
+	
+	<xs:complexType name="list-type">
+		<xs:complexContent>
+			<xs:extension base="list-widget-type">
+				<xs:sequence>
+					<xs:element name="renderer" type="cell-renderer" maxOccurs="1" />
+					<xs:element name="editor" type="cell-editor" maxOccurs="1" />
+					<xs:element name="on-mouse" type="table-on-mouse" />
+				</xs:sequence>
+				<xs:attribute name="set" type="xs:string" />
+				<xs:attribute name="cell-tooltip" type="xs:string" />
 			</xs:extension>
 		</xs:complexContent>
 	</xs:complexType>
 
 	<xs:complexType name="table-type">
 		<xs:complexContent>
-			<xs:extension base="component-type">
+			<xs:extension base="list-widget-type">
 				<xs:sequence>
 					<xs:element name="column" type="table-column" minOccurs="0" />
 					<xs:element name="name-column" type="table-column" minOccurs="0" maxOccurs="1" />
 				</xs:sequence>
 				<xs:attribute name="search-bar" type="xs:boolean" />
 				<xs:attribute name="search-field" type="xs:string" />
+				<xs:attribute name="columns" type="xs:string" />
 			</xs:extension>
 		</xs:complexContent>
 	</xs:complexType>
