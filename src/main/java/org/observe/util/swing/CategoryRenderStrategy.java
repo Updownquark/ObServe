@@ -1,7 +1,6 @@
 package org.observe.util.swing;
 
 import java.awt.event.MouseEvent;
-import java.util.Comparator;
 import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
 import java.util.function.Consumer;
@@ -223,7 +222,6 @@ public class CategoryRenderStrategy<R, C> {
 	private int theMaxWidth;
 	private boolean isResizable;
 
-	private Comparator<? super C> theSortability;
 	private boolean isFilterable;
 
 	public CategoryRenderStrategy(String name, TypeToken<C> type, Function<? super R, ? extends C> accessor) {
@@ -377,15 +375,6 @@ public class CategoryRenderStrategy<R, C> {
 	public CategoryRenderStrategy<R, C> setResizable(boolean resizable) {
 		isResizable = resizable;
 		return this;
-	}
-
-	public CategoryRenderStrategy<R, C> sortableWith(Comparator<? super C> sort) {
-		theSortability = sort;
-		return this;
-	}
-
-	public Comparator<? super C> getSortability() {
-		return theSortability;
 	}
 
 	public CategoryRenderStrategy<R, C> filterable(boolean filterable) {
