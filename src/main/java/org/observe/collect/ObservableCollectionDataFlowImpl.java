@@ -4625,7 +4625,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		Transaction lockRefresh(boolean exclusive) {
-			return Transactable.lock(theLock, exclusive);
+			return Lockable.lock(theLock, exclusive);
 		}
 
 		@Override
