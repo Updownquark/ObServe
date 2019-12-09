@@ -592,13 +592,9 @@ public class ObservableTextField<E> extends JPasswordField {
 				if (adjusted != null && theValue.isAcceptable(adjusted.getValue1()) == null) {
 					isInternallyChanging = true;
 					try {
-						try {
-							theValue.set(adjusted.getValue1(), cause);
-						} catch (RuntimeException ex) {
-							return;// We checked above, but whatever.
-						}
 						String newText = adjusted.getValue2();
 						setText(newText);
+						isDirty = true;
 						selectionStart += newText.length() - text.length();
 						selectionEnd += newText.length() - text.length();
 						if (selectionEnd < 0) {
