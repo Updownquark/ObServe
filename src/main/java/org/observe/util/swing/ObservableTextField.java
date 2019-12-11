@@ -63,6 +63,7 @@ public class ObservableTextField<E> extends JPasswordField {
 	private Icon theIcon;
 	private Insets dummyInsets;
 	private String theEmptyText;
+	private boolean commitAdjustmentImmediately;
 
 	private BiConsumer<? super E, ? super KeyEvent> theEnterAction;
 
@@ -269,6 +270,21 @@ public class ObservableTextField<E> extends JPasswordField {
 	 */
 	public ObservableTextField<E> setCommitOnType(boolean commit) {
 		commitOnType = commit;
+		return this;
+	}
+
+	/**
+	 * If the {@link #getFormat() format} given to this text field is an instance of {@link SpinnerFormat}, this user can adjust the text
+	 * field's value incrementally using the up or down arrow keys. The nature and magnitude of the adjustment may depend on the particular
+	 * {@link SpinnerFormat} implementation as well as the position of the cursor.
+	 *
+	 * @param commitImmediately Whether {@link SpinnerFormat#adjust(Object, String, int, boolean) adjustments} to the value should be
+	 *        committed to the model value immediately. If false, the adjustments will only be made to the text and the value will be
+	 *        committed when the user presses enter or when focus is lost.
+	 * @return This text field
+	 */
+	public ObservableTextField<E> setCommitAdjustmentImmediately(boolean commitImmediately) {
+		commitAdjustmentImmediately = commitImmediately;
 		return this;
 	}
 
@@ -592,9 +608,16 @@ public class ObservableTextField<E> extends JPasswordField {
 				if (adjusted != null && theValue.isAcceptable(adjusted.getValue1()) == null) {
 					isInternallyChanging = true;
 					try {
+						if (commitAdjustmentImmediately) {
+							try {
+								theValue.set(adjusted.getValue1(), cause);
+							} catch (RuntimeException ex) {
+								return; // We did due diligence checking above, but whatever.
+							}
+						} else
+							isDirty = true;
 						String newText = adjusted.getValue2();
 						setText(newText);
-						isDirty = true;
 						selectionStart += newText.length() - text.length();
 						selectionEnd += newText.length() - text.length();
 						if (selectionEnd < 0) {
