@@ -3,9 +3,7 @@ package org.observe;
 import javax.swing.JFrame;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
-import javax.swing.JSpinner;
 import javax.swing.JTree;
-import javax.swing.SpinnerNumberModel;
 import javax.swing.tree.TreePath;
 
 import org.observe.assoc.ObservableMultiMap;
@@ -16,7 +14,7 @@ import org.observe.util.swing.ObservableSwingUtils;
 import org.observe.util.swing.ObservableTreeModel;
 import org.observe.util.swing.PanelPopulation;
 import org.qommons.collect.CollectionElement;
-import org.qommons.io.Format;
+import org.qommons.io.SpinnerFormat;
 
 /** A simple GUI that demonstrates the power and ease of observables */
 public class ObservableDemoGui extends JPanel {
@@ -110,18 +108,22 @@ public class ObservableDemoGui extends JPanel {
 		.addSplit(false,
 			mainSplit -> mainSplit.fill()//
 			.firstV(left -> left//
-				.addTextField("New Category:", newCategory.filterAccept(theCategoryNames::canAdd), Format.TEXT, //
-					f -> f.fill().withPostButton("Add", cause -> theCategoryNames.add(newCategory.get()), //
-						b -> b.withTooltip("Add a new category")
-						.disableWith(newCategory.refresh(theCategoryNames.simpleChanges()).map(theCategoryNames::canAdd))))//
+				.addTextField("New Category:", newCategory.filterAccept(theCategoryNames::canAdd), SpinnerFormat.NUMERICAL_TEXT, //
+					f -> f.fill()
+					.modifyEditor(
+						tf -> tf.withColumns(12).setCommitOnType(true).onEnter((cat, evt) -> theCategoryNames.add(cat)))
+					.withPostButton("Add", cause -> theCategoryNames.add(newCategory.get()), //
+						b -> b.withTooltip("Add a new category").disableWith(
+							newCategory.refresh(theCategoryNames.simpleChanges()).map(theCategoryNames::canAdd))))//
 				.addComboField("Selected Category:", selectedCategory, theCategoryNames, //
 					f -> f.fill().withPostButton("Remove", cause -> theCategoryNames.remove(selectedCategory.get()),
 						b -> b.withTooltip("Remove the selected category")))//
-				.addSpinnerField("New Value:", new JSpinner(new SpinnerNumberModel(0, 0, 1000000, 1)),
-					newValue.refresh(valuesOfSelectedCategory.simpleChanges()).filterAccept(v -> {
-						return valuesOfSelectedCategory.canAdd(v);
-					}).disableWith(selectedCategory.map(cat -> cat == null ? "No category selected" : null)), v -> v,
-					f -> f.fill().withPostButton("Add", cause -> valuesOfSelectedCategory.add(newValue.get()), //
+				.addTextField("New Value:", newValue.refresh(valuesOfSelectedCategory.simpleChanges()).filterAccept(v -> {
+					return valuesOfSelectedCategory.canAdd(v);
+				}).disableWith(selectedCategory.map(cat -> cat == null ? "No category selected" : null)), SpinnerFormat.INT,
+							f -> f.fill().modifyEditor(tf -> tf.onEnter((val, evt) -> valuesOfSelectedCategory.add(val)))
+								.withPostButton(
+						"Add", cause -> valuesOfSelectedCategory.add(newValue.get()), //
 						b -> b.withTooltip("Add the value to the selected category")
 						.disableWith(newValue.refresh(selectedCategory.noInitChanges())
 							.refresh(valuesOfSelectedCategory.simpleChanges()).map(valuesOfSelectedCategory::canAdd))))//

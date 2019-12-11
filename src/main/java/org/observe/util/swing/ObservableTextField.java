@@ -587,7 +587,7 @@ public class ObservableTextField<E> extends JPasswordField {
 			int selectionStart = getSelectionStart();
 			int selectionEnd = getSelectionEnd();
 			boolean withContext = selectionStart == selectionEnd;
-			if (spinnerFormat.supportsAdjustment(withContext)) {
+			if (withContext || spinnerFormat.supportsAdjustment(withContext)) {
 				BiTuple<E, String> adjusted = spinnerFormat.adjust(toAdjust, text, withContext ? selectionStart : -1, up);
 				if (adjusted != null && theValue.isAcceptable(adjusted.getValue1()) == null) {
 					isInternallyChanging = true;
