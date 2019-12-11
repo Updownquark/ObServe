@@ -14,6 +14,7 @@ import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.List;
 
+import javax.swing.Action;
 import javax.swing.DefaultListSelectionModel;
 import javax.swing.JComponent;
 import javax.swing.ListSelectionModel;
@@ -26,14 +27,18 @@ import org.qommons.LambdaUtils;
 
 public class LittleList<E> extends JComponent {
 	private final SyntheticContainer theSyntheticContainer;
+	private final CategoryRenderStrategy<E, E> theRenderStrategy;
 	private ObservableCellRenderer<? super E, ? super E> theRenderer;
 	private ObservableCellEditor<? super E, ? super E> theEditor;
+	private Component theEditorComponent;
 	private ObservableListModel<E> theModel;
 	private ListSelectionModel theSelectionModel;
 	private int theSelectedItem;
+	private final List<Action> theItemActions;
 
 	public LittleList(ObservableListModel<E> model) {
 		theModel = model;
+		theRenderStrategy = new CategoryRenderStrategy<>("Value", model.getWrapped().getType(), v -> v);
 		setLayout(new FlowLayout(FlowLayout.LEFT));
 		theSyntheticContainer = new SyntheticContainer();
 		add(theSyntheticContainer); // So the tree lock works right
@@ -46,17 +51,23 @@ public class LittleList<E> extends JComponent {
 			@Override
 			public void intervalRemoved(ListDataEvent e) {
 				theSelectionModel.removeIndexInterval(e.getIndex0(), e.getIndex1());
+				moveEditor();
 				revalidate();
 			}
 
 			@Override
 			public void intervalAdded(ListDataEvent e) {
 				theSelectionModel.insertIndexInterval(e.getIndex0(), e.getIndex1() - e.getIndex1() + 1, true);
+				moveEditor();
 				revalidate();
 			}
 
 			@Override
 			public void contentsChanged(ListDataEvent e) {
+				int selected = theSelectionModel.getMinSelectionIndex();
+				if (selected >= 0 && theSelectionModel.getMaxSelectionIndex() == selected && e.getIndex0() <= selected
+					&& e.getIndex1() >= selected)
+					reEdit();
 				revalidate();
 			}
 		});
@@ -64,13 +75,7 @@ public class LittleList<E> extends JComponent {
 		addMouseListener(new MouseAdapter() {
 			@Override
 			public void mouseClicked(MouseEvent e) {
-				int selected = -1;
-				for (int i = 0; i < theModel.getSize(); i++) {
-					if (theSyntheticContainer.getBounds(i).contains(e.getX(), e.getY())) {
-						selected = i;
-						break;
-					}
-				}
+				int selected = getItemIndexAt(e.getX(), e.getY());
 				boolean modified = false;
 				if (selected < 0) {
 					if (e.isShiftDown() || e.isControlDown()) {} else {
@@ -91,8 +96,10 @@ public class LittleList<E> extends JComponent {
 							theSelectionModel.addSelectionInterval(selected, selected);
 					} else
 						theSelectionModel.setSelectionInterval(selected, selected);
+					selected = theSelectionModel.getMinSelectionIndex();
 				}
 				if (modified) {
+					reEdit();
 					revalidate();
 					repaint();
 				}
@@ -106,12 +113,74 @@ public class LittleList<E> extends JComponent {
 
 	public LittleList<E> setSelectionModel(ListSelectionModel selectionModel) {
 		theSelectionModel = selectionModel;
-		invalidate();
+		reEdit();
+		revalidate();
+		repaint();
 		return this;
+	}
+
+	public LittleList<E> setEditor(ObservableCellEditor<? super E, ? super E> editor) {
+		theEditor = editor;
+		reEdit();
+		return this;
+	}
+
+	public LittleList<E> addItemAction(Action action) {
+		theItemActions.add(action);
+		moveEditor();
+		revalidate();
+		return this;
+	}
+
+	public LittleList<E> removeItemAction(Action action) {
+		if (theItemActions.remove(action)) {
+			moveEditor();
+			revalidate();
+		}
+		return this;
+	}
+
+	void moveEditor() {
+		if (theEditorComponent != null) {
+			int selected = theSelectionModel.getMinSelectionIndex();
+			Rectangle bounds = getItemBounds(selected);
+			theEditorComponent.setBounds(bounds);
+		}
+	}
+
+	void reEdit() {
+		if (theEditorComponent != null) {
+			remove(theEditorComponent);
+			theEditorComponent = null;
+		}
+		int selected = theSelectionModel.getMinSelectionIndex();
+		if (selected >= 0 && selected == theSelectionModel.getMaxSelectionIndex()) {
+			theEditorComponent = theEditor.getListCellEditorComponent(this, theModel.getElementAt(selected), selected, true);
+			Rectangle bounds = getItemBounds(selected);
+			theEditorComponent.setBounds(bounds);
+			add(theEditorComponent);
+		}
 	}
 
 	public ObservableListModel<E> getModel() {
 		return theModel;
+	}
+
+	public CategoryRenderStrategy<E, E> getRenderStrategy() {
+		return theRenderStrategy;
+	}
+
+	public int getItemIndexAt(int x, int y) {
+		for (int i = 0; i < theModel.getSize(); i++)
+			if (theSyntheticContainer.getBounds(i).contains(x, y))
+				return i;
+		return -1;
+	}
+
+	public Rectangle getItemBounds(int itemIndex) {
+		if (itemIndex < 0 || itemIndex >= theModel.getSize())
+			throw new IndexOutOfBoundsException(itemIndex + " of " + theModel.getSize());
+		return new Rectangle(theSyntheticContainer.getBounds(itemIndex));
 	}
 
 	@Override
@@ -173,8 +242,8 @@ public class LittleList<E> extends JComponent {
 		public Component getComponent(int n) {
 			E row = theModel.getElementAt(n);
 			Component rendered = theRenderer.getCellRendererComponent(LittleList.this,
-				LambdaUtils.constantSupplier(row, () -> String.valueOf(row), row),
-				row, theSelectionModel.isSelectedIndex(n), false, true, theSelectedItem == n, n, 0, CellRenderContext.DEFAULT);
+				LambdaUtils.constantSupplier(row, () -> String.valueOf(row), row), row, theSelectionModel.isSelectedIndex(n), false, true,
+				theSelectedItem == n, n, 0, CellRenderContext.DEFAULT);
 			if (n >= storedBounds.size())
 				storedBounds.add(new Rectangle(rendered.getBounds()));
 			else

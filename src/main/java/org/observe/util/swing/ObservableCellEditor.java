@@ -134,6 +134,39 @@ public class ObservableCellEditor<M, C> implements TableCellEditor, TreeCellEdit
 		theListeners.remove(l);
 	}
 
+	public <E extends M> Component getListCellEditorComponent(LittleList<E> list, E modelValue, int rowIndex, boolean selected) {
+		if (theEditorSubscription != null) {
+			theEditorSubscription.uninstall(false);
+			theEditorSubscription = null;
+		}
+		ObservableListModel<E> model = list.getModel();
+		CategoryRenderStrategy<E, E> category = list.getRenderStrategy();
+		Function<C, String> valueFilter;
+		Function<C, String> valueTooltip;
+		String tooltip;
+
+		MutableCollectionElement<E> modelElement = model.getWrapped()
+			.mutableElement(model.getWrapped().getElement(rowIndex).getElementId());
+		valueFilter = v -> {
+			if (TypeTokens.get().isInstance(model.getWrapped().getType(), v))
+				return category.getMutator().isAcceptable(modelElement, (E) v);
+			else
+				return "Unacceptable value";
+		};
+		if (category.getMutator().getEditorTooltip() != null)
+			tooltip = category.getMutator().getEditorTooltip().apply(modelValue, modelValue);
+		else
+			tooltip = category.getTooltip(modelValue, modelValue);
+		valueTooltip = c -> theValueTooltip.apply(modelValue, c);
+
+		if (theEditorValue.get() != modelValue)
+			theEditorValue.set((C) modelValue, null);
+		if (theDecorator != null)
+			theDecorator.decorate(theEditorComponent, modelValue, (C) modelValue, selected, false, true);
+		theEditorSubscription = theInstallation.install(this, valueFilter, tooltip, valueTooltip);
+		return theEditorComponent;
+	}
+
 	@Override
 	public Component getTableCellEditorComponent(JTable table, Object value, boolean isSelected, int row, int column) {
 		if (theEditorSubscription != null) {
