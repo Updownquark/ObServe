@@ -78,7 +78,7 @@ public interface ObservableCellRenderer<M, C> {
 			return comp;
 		JLabel label = (JLabel) comp;
 		String text = label.getText();
-		if (text.startsWith("<hml>") || text.startsWith("<HTML>"))
+		if (text == null || text.isEmpty() || text.startsWith("<hml>") || text.startsWith("<HTML>"))
 			return comp;
 		int[][] regions = ctx.getEmphaticRegions();
 		if (regions == null || regions.length == 0)
@@ -175,7 +175,7 @@ public interface ObservableCellRenderer<M, C> {
 				if (theFormattedValue == null)
 					theFormattedValue = new FormattedValue<>();
 				theLabelModifier
-					.accept(theFormattedValue.forRender(c, modelValue, columnValue, selected, expanded, leaf, hasFocus, row, column, ctx));
+				.accept(theFormattedValue.forRender(c, modelValue, columnValue, selected, expanded, leaf, hasFocus, row, column, ctx));
 			}
 			return tryEmphasize(c, ctx);
 		}
