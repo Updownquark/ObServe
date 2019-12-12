@@ -107,7 +107,8 @@ public class ObservableDemoGui extends JPanel {
 		PanelPopulation.populateVPanel(this, null)//
 		.addSplit(false,
 			mainSplit -> mainSplit.fill()//
-			.firstV(left -> left//
+			.firstV(
+				left -> left//
 				.addTextField("New Category:", newCategory.filterAccept(theCategoryNames::canAdd), SpinnerFormat.NUMERICAL_TEXT, //
 					f -> f.fill()
 					.modifyEditor(
@@ -121,14 +122,16 @@ public class ObservableDemoGui extends JPanel {
 				.addTextField("New Value:", newValue.refresh(valuesOfSelectedCategory.simpleChanges()).filterAccept(v -> {
 					return valuesOfSelectedCategory.canAdd(v);
 				}).disableWith(selectedCategory.map(cat -> cat == null ? "No category selected" : null)), SpinnerFormat.INT,
-							f -> f.fill().modifyEditor(tf -> tf.onEnter((val, evt) -> valuesOfSelectedCategory.add(val)))
-								.withPostButton(
-						"Add", cause -> valuesOfSelectedCategory.add(newValue.get()), //
+					f -> f.fill()
+					.modifyEditor(tf -> tf.setCommitAdjustmentImmediately(true).setCommitOnType(true)
+						.onEnter((val, evt) -> valuesOfSelectedCategory.add(val)))
+					.withPostButton("Add", cause -> valuesOfSelectedCategory.add(newValue.get()), //
 						b -> b.withTooltip("Add the value to the selected category")
 						.disableWith(newValue.refresh(selectedCategory.noInitChanges())
 							.refresh(valuesOfSelectedCategory.simpleChanges()).map(valuesOfSelectedCategory::canAdd))))//
 				.addList(valuesOfSelectedCategory,
-					list -> list.fill().withFieldName("Values:").withSelection(selectedValues)//
+					list -> list.fill().withFieldName("Values:").withSelection(selectedValues)
+					.withRemove(values -> valuesOfSelectedCategory.removeAll(values), null)//
 					.withPostButton("Remove", cause -> valuesOfSelectedCategory.removeAll(selectedValues), //
 						b -> b.withTooltip("Remove the selected values from the selected category")
 						.disableWith(selectedValues.observeSize().map(sz -> sz == 0 ? "No values selected" : null)))))//

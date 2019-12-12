@@ -1938,11 +1938,24 @@ public class PanelPopulation {
 		}
 	}
 
+	static Icon getAddIcon(int size) {
+		return ObservableSwingUtils.getFixedIcon(null, "/icons/add.png", size, size);
+	}
+
+	static Icon getRemoveIcon(int size) {
+		return ObservableSwingUtils.getFixedIcon(null, "/icons/remove.png", size, size);
+	}
+
+	static Icon getCopyIcon(int size) {
+		return ObservableSwingUtils.getFixedIcon(null, "/icons/copy.png", size, size);
+	}
+
 	static class SimpleListBuilder<R, P extends SimpleListBuilder<R, P>> extends SimpleFieldEditor<LittleList<R>, P>
 	implements ListBuilder<R, P> {
 		private String theItemName;
 		private SettableValue<R> theSelectionValue;
 		private ObservableCollection<R> theSelectionValues;
+		private List<TableAction<R, ?>> theActions;
 
 		SimpleListBuilder(ObservableCollection<R> rows, Supplier<Transactable> lock) {
 			super(null, new LittleList<>(new ObservableListModel<>(rows)), lock);
@@ -1972,19 +1985,94 @@ public class PanelPopulation {
 			throw new UnsupportedOperationException("Not implemented yet");
 		}
 
+		private CollectionElement<R> findElement(R value) {
+			ObservableCollection<R> rows = getEditor().getModel().getWrapped();
+			CollectionElement<R> el = rows.getElement(value, false);
+			if (el != null && el.get() != value) {
+				CollectionElement<R> lastMatch = rows.getElement(value, true);
+				if (!lastMatch.getElementId().equals(el.getElementId())) {
+					if (lastMatch.get() == value)
+						el = lastMatch;
+					else {
+						while (el.get() != value && !el.getElementId().equals(lastMatch.getElementId()))
+							el = rows.getAdjacentElement(el.getElementId(), true);
+					}
+					if (el.get() != value)
+						el = null;
+				}
+			}
+			return el;
+		}
+
 		@Override
 		public P withRemove(Consumer<? super List<? extends R>> deletion, Consumer<TableAction<R, ?>> actionMod) {
-			throw new UnsupportedOperationException("Not implemented yet");
+			return withMultiAction(deletion, action -> {
+				action.allowForMultiple(false).withTooltip(items -> "Remove selected " + getItemName())//
+				.modifyButton(button -> button.withIcon(getRemoveIcon(8)));
+				if (actionMod != null)
+					actionMod.accept(action);
+			});
 		}
 
 		@Override
 		public P withCopy(Function<? super R, ? extends R> copier, Consumer<TableAction<R, ?>> actionMod) {
-			throw new UnsupportedOperationException("Not implemented yet");
+			return withMultiAction(values -> {
+				try (Transaction t = getEditor().getModel().getWrapped().lock(true, null)) {
+					if (getEditor().getModel().getPendingUpdates() > 0) {
+						// If there are queued changes, we can't rely on indexes we get back from the model
+						simpleCopy(values, copier);
+					} else {// Ignore the given values and use the selection model so we get the indexes right in the case of duplicates
+						betterCopy(copier);
+					}
+				}
+			}, action -> {
+				String single = getItemName();
+				String plural = StringUtils.pluralize(single);
+				action.allowForMultiple(false).withTooltip(items -> "Duplicate selected " + (items.size() == 1 ? single : plural))//
+					.modifyButton(button -> button.withIcon(getCopyIcon(16)));
+				if (actionMod != null)
+					actionMod.accept(action);
+			});
+		}
+
+		private void simpleCopy(List<? extends R> selection, Function<? super R, ? extends R> copier) {
+			for (R value : selection) {
+				R copy = copier.apply(value);
+				getEditor().getModel().getWrapped().add(copy);
+			}
+		}
+
+		private void betterCopy(Function<? super R, ? extends R> copier) {
+			ObservableCollection<R> rows = getEditor().getModel().getWrapped();
+			ListSelectionModel selModel = getEditor().getSelectionModel();
+			IntList newSelection = new IntList();
+			for (int i = selModel.getMinSelectionIndex(); i >= 0 && i <= selModel.getMaxSelectionIndex(); i++) {
+				if (!selModel.isSelectedIndex(i))
+					continue;
+				CollectionElement<R> toCopy = rows.getElement(i);
+				R copy = copier.apply(toCopy.get());
+				CollectionElement<R> copied = findElement(copy);
+				if (copied != null) {} else if (rows.canAdd(copy, toCopy.getElementId(), null) == null)
+					copied = rows.addElement(copy, toCopy.getElementId(), null, true);
+				else
+					copied = rows.addElement(copy, false);
+				if (copied != null)
+					newSelection.add(rows.getElementsBefore(copied.getElementId()));
+			}
+			selModel.setValueIsAdjusting(true);
+			selModel.clearSelection();
+			for (int[] interval : ObservableSwingUtils.getContinuousIntervals(newSelection.toArray(), true))
+				selModel.addSelectionInterval(interval[0], interval[1]);
+			selModel.setValueIsAdjusting(false);
 		}
 
 		@Override
 		public P withMultiAction(Consumer<? super List<? extends R>> action, Consumer<TableAction<R, ?>> actionMod) {
-			throw new UnsupportedOperationException("Not implemented yet");
+			if(theActions==null)
+				theActions = new ArrayList<>();
+			SimpleTableAction<R, ?> tableAction = new SimpleTableAction<>(this, action, this::getSelection);
+			theActions.add(tableAction);
+			return (P) this;
 		}
 
 		@Override
@@ -2117,18 +2205,6 @@ public class PanelPopulation {
 				getEditor().getSelectionModel(), null);
 		}
 
-		private Icon getAddIcon() {
-			return ObservableSwingUtils.getFixedIcon(null, "/icons/add.png", 16, 16);
-		}
-
-		private Icon getRemoveIcon() {
-			return ObservableSwingUtils.getFixedIcon(null, "/icons/remove.png", 16, 16);
-		}
-
-		private Icon getCopyIcon() {
-			return ObservableSwingUtils.getFixedIcon(null, "/icons/copy.png", 16, 16);
-		}
-
 		@Override
 		public P withAdd(Supplier<? extends R> creator, Consumer<TableAction<R, ?>> actionMod) {
 			return withMultiAction(values -> {
@@ -2149,7 +2225,7 @@ public class PanelPopulation {
 				getEditor().getSelectionModel().setSelectionInterval(index, index);
 			}, action -> {
 				action.allowForMultiple(true).allowForEmpty(true).allowForAnyEnabled(true)//
-				.modifyButton(button -> button.withIcon(getAddIcon()).withTooltip("Add new " + getItemName()));
+				.modifyButton(button -> button.withIcon(getAddIcon(16)).withTooltip("Add new " + getItemName()));
 				if (actionMod != null)
 					actionMod.accept(action);
 			});
@@ -2179,7 +2255,7 @@ public class PanelPopulation {
 			String plural = StringUtils.pluralize(single);
 			return withMultiAction(deletion, action -> {
 				action.allowForMultiple(true).withTooltip(items -> "Remove selected " + (items.size() == 1 ? single : plural))//
-				.modifyButton(button -> button.withIcon(getRemoveIcon()));
+				.modifyButton(button -> button.withIcon(getRemoveIcon(16)));
 				if (actionMod != null)
 					actionMod.accept(action);
 			});
@@ -2199,7 +2275,7 @@ public class PanelPopulation {
 				String single = getItemName();
 				String plural = StringUtils.pluralize(single);
 				action.allowForMultiple(true).withTooltip(items -> "Duplicate selected " + (items.size() == 1 ? single : plural))//
-				.modifyButton(button -> button.withIcon(getCopyIcon()));
+				.modifyButton(button -> button.withIcon(getCopyIcon(16)));
 				if (actionMod != null)
 					actionMod.accept(action);
 			});
@@ -2416,7 +2492,7 @@ public class PanelPopulation {
 	}
 
 	static class SimpleTableAction<R, A extends SimpleTableAction<R, A>> implements TableAction<R, A> {
-		private final SimpleTableBuilder<R, ?> theTable;
+		private final ListWidgetBuilder<R, ?, ?> theTable;
 		final Consumer<? super List<? extends R>> theAction;
 		final Supplier<List<R>> theSelectedValues;
 		private Function<? super R, String> theEnablement;
@@ -2429,7 +2505,7 @@ public class PanelPopulation {
 		private SettableValue<String> theTooltipString;
 		private Consumer<ButtonEditor<?>> theButtonMod;
 
-		SimpleTableAction(SimpleTableBuilder<R, ?> table, Consumer<? super List<? extends R>> action, Supplier<List<R>> selectedValues) {
+		SimpleTableAction(ListWidgetBuilder<R, ?, ?> table, Consumer<? super List<? extends R>> action, Supplier<List<R>> selectedValues) {
 			theTable = table;
 			theAction = action;
 			theSelectedValues = selectedValues;
@@ -2557,9 +2633,9 @@ public class PanelPopulation {
 						if (selected.isEmpty())
 							text.append("no ").append(StringUtils.pluralize(theTable.getItemName()));
 						else if (selected.size() == 1) {
-							if (theTable.getNameFunction() != null)
-								text.append(theTable.getItemName()).append(" \"").append(theTable.getNameFunction().apply(selected.get(0)))
-								.append('"');
+							if (theTable instanceof SimpleTableBuilder && ((SimpleTableBuilder<R, ?>) theTable).getNameFunction() != null)
+								text.append(theTable.getItemName()).append(" \"")
+								.append(((SimpleTableBuilder<R, ?>) theTable).getNameFunction().apply(selected.get(0))).append('"');
 							else
 								text.append("1 ").append(theTable.getItemName());
 						} else

@@ -1,5 +1,6 @@
 package org.observe.util.swing;
 
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
@@ -9,23 +10,49 @@ import java.awt.Graphics;
 import java.awt.Insets;
 import java.awt.LayoutManager2;
 import java.awt.Rectangle;
+import java.awt.event.ActionEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.BiConsumer;
 
 import javax.swing.Action;
+import javax.swing.BorderFactory;
 import javax.swing.DefaultListSelectionModel;
+import javax.swing.Icon;
 import javax.swing.JComponent;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
 import javax.swing.ListSelectionModel;
 import javax.swing.border.Border;
 import javax.swing.event.ListDataEvent;
 import javax.swing.event.ListDataListener;
 
 import org.observe.util.swing.ObservableCellRenderer.CellRenderContext;
+import org.qommons.ArrayUtils;
 import org.qommons.LambdaUtils;
 
 public class LittleList<E> extends JComponent {
+	public static class ItemActionEvent<E> extends ActionEvent {
+		private final E theItem;
+		private final int theIndex;
+
+		public ItemActionEvent(Object source, String command, E item, int index) {
+			super(source, ACTION_PERFORMED, command);
+			theItem = item;
+			theIndex = index;
+		}
+
+		public E getItem() {
+			return theItem;
+		}
+
+		public int getIndex() {
+			return theIndex;
+		}
+	}
+
 	private final SyntheticContainer theSyntheticContainer;
 	private final CategoryRenderStrategy<E, E> theRenderStrategy;
 	private ObservableCellRenderer<? super E, ? super E> theRenderer;
@@ -33,8 +60,9 @@ public class LittleList<E> extends JComponent {
 	private Component theEditorComponent;
 	private ObservableListModel<E> theModel;
 	private ListSelectionModel theSelectionModel;
-	private int theSelectedItem;
 	private final List<Action> theItemActions;
+
+	private BiConsumer<Border, ? super E> theBorderAdjuster;
 
 	public LittleList(ObservableListModel<E> model) {
 		theModel = model;
@@ -45,8 +73,8 @@ public class LittleList<E> extends JComponent {
 		theRenderer = new ObservableCellRenderer.DefaultObservableCellRenderer<>((m, c) -> String.valueOf(c))//
 			.modify(fv -> fv.bold(fv.isSelected()));
 		theSelectionModel = new DefaultListSelectionModel();
-		theSelectedItem = -1;
 
+		theItemActions = new ArrayList<>();
 		theModel.addListDataListener(new ListDataListener() {
 			@Override
 			public void intervalRemoved(ListDataEvent e) {
@@ -76,6 +104,16 @@ public class LittleList<E> extends JComponent {
 			@Override
 			public void mouseClicked(MouseEvent e) {
 				int selected = getItemIndexAt(e.getX(), e.getY());
+				if (selected >= 0) {
+					int clickCode = theSyntheticContainer.getBounds(selected).getClickCode(e.getX(), e.getY());
+					if (clickCode > 0) {
+						Action action = theItemActions.get(clickCode - 1);
+						ItemActionEvent<E> event = new ItemActionEvent<>(LittleList.this, "clicked", theModel.getElementAt(selected),
+							selected);
+						action.actionPerformed(event);
+						return;
+					}
+				}
 				boolean modified = false;
 				if (selected < 0) {
 					if (e.isShiftDown() || e.isControlDown()) {} else {
@@ -105,6 +143,7 @@ public class LittleList<E> extends JComponent {
 				}
 			}
 		});
+		setItemBorder(BorderFactory.createLineBorder(Color.black, 1, true));
 	}
 
 	public ListSelectionModel getSelectionModel() {
@@ -140,6 +179,24 @@ public class LittleList<E> extends JComponent {
 		return this;
 	}
 
+	public void setItemBorder(Border border) {
+		theSyntheticContainer.theHolder.setBorder(border);
+	}
+
+	public void adjustBorder(BiConsumer<Border, ? super E> borderAdjuster) {
+		if (theBorderAdjuster == null)
+			theBorderAdjuster = borderAdjuster;
+		else if (borderAdjuster == null)
+			theBorderAdjuster = null;
+		else {
+			BiConsumer<Border, ? super E> oldAdjuster = theBorderAdjuster;
+			theBorderAdjuster = (border, item) -> {
+				oldAdjuster.accept(border, item);
+				borderAdjuster.accept(border, item);
+			};
+		}
+	}
+
 	void moveEditor() {
 		if (theEditorComponent != null) {
 			int selected = theSelectionModel.getMinSelectionIndex();
@@ -154,7 +211,7 @@ public class LittleList<E> extends JComponent {
 			theEditorComponent = null;
 		}
 		int selected = theSelectionModel.getMinSelectionIndex();
-		if (selected >= 0 && selected == theSelectionModel.getMaxSelectionIndex()) {
+		if (theEditor != null && selected >= 0 && selected == theSelectionModel.getMaxSelectionIndex()) {
 			theEditorComponent = theEditor.getListCellEditorComponent(this, theModel.getElementAt(selected), selected, true);
 			Rectangle bounds = getItemBounds(selected);
 			theEditorComponent.setBounds(bounds);
@@ -171,66 +228,126 @@ public class LittleList<E> extends JComponent {
 	}
 
 	public int getItemIndexAt(int x, int y) {
-		for (int i = 0; i < theModel.getSize(); i++)
-			if (theSyntheticContainer.getBounds(i).contains(x, y))
-				return i;
+		for (int i = 0; i < theModel.getSize(); i++) {
+			if (theSyntheticContainer.getBounds(i).holderBounds.contains(x, y)) {
+				if (theSyntheticContainer.getBounds(i).itemContains(x, y))
+					return i;
+				else
+					return -1;
+			}
+		}
 		return -1;
 	}
 
 	public Rectangle getItemBounds(int itemIndex) {
 		if (itemIndex < 0 || itemIndex >= theModel.getSize())
 			throw new IndexOutOfBoundsException(itemIndex + " of " + theModel.getSize());
-		return new Rectangle(theSyntheticContainer.getBounds(itemIndex));
+		return theSyntheticContainer.getBounds(itemIndex).getItemBounds();
 	}
 
 	@Override
 	public Dimension getPreferredSize() {
-		return getLayout().preferredLayoutSize(theSyntheticContainer.setMode(true));
+		Dimension d = getLayout().preferredLayoutSize(theSyntheticContainer.setMode(true));
+		theSyntheticContainer.postRender();
+		return d;
 	}
 
 	@Override
 	public Dimension getMaximumSize() {
+		Dimension d;
 		if (getLayout() instanceof LayoutManager2)
-			return ((LayoutManager2) getLayout()).maximumLayoutSize(theSyntheticContainer.setMode(true));
+			d = ((LayoutManager2) getLayout()).maximumLayoutSize(theSyntheticContainer.setMode(true));
 		else
-			return getLayout().preferredLayoutSize(theSyntheticContainer.setMode(true));
+			d = getLayout().preferredLayoutSize(theSyntheticContainer.setMode(true));
+		theSyntheticContainer.postRender();
+		return d;
 	}
 
 	@Override
 	public Dimension getMinimumSize() {
-		return getLayout().minimumLayoutSize(theSyntheticContainer.setMode(true));
+		Dimension d = getLayout().minimumLayoutSize(theSyntheticContainer.setMode(true));
+		theSyntheticContainer.postRender();
+		return d;
 	}
 
 	@Override
 	public void doLayout() {
 		getLayout().layoutContainer(theSyntheticContainer.setMode(true));
+		theSyntheticContainer.postRender();
 	}
 
 	@Override
 	protected void paintChildren(Graphics g) {
 		theSyntheticContainer.setMode(false);
 		super.paintChildren(g);
+		theSyntheticContainer.postRender();
+	}
+
+	static class ItemBoundsData {
+		final Rectangle holderBounds;
+		final Rectangle itemBounds;
+		final List<Rectangle> actionBounds;
+
+		ItemBoundsData() {
+			holderBounds = new Rectangle();
+			itemBounds = new Rectangle();
+			actionBounds = new ArrayList<>(3);
+		}
+
+		boolean itemContains(int x, int y) {
+			x -= holderBounds.getX();
+			y -= holderBounds.getY();
+			return itemBounds.contains(x, y);
+		}
+
+		Rectangle getItemBounds() {
+			Rectangle r = new Rectangle(itemBounds);
+			r.add(holderBounds.getLocation());
+			return r;
+		}
+
+		int getClickCode(int x, int y) {
+			if (x < holderBounds.getX() || y < holderBounds.getY())
+				return -1;
+			x -= (int) holderBounds.getX();
+			y -= (int) holderBounds.getY();
+			if (x >= holderBounds.getWidth() || y >= holderBounds.getHeight())
+				return -1;
+			int itemX = (int) itemBounds.getX() - x;
+			int itemY = (int) itemBounds.getY() - y;
+			if (itemX >= 0 && itemX < itemBounds.getWidth() && itemY >= 0 && itemY < itemBounds.getHeight())
+				return 0;
+			for (int i = 0; i < actionBounds.size(); i++) {
+				int actionX = (int) actionBounds.get(i).getX() - x;
+				int actionY = (int) actionBounds.get(i).getY() - y;
+
+				if (actionX >= 0 && actionX < actionBounds.get(i).getWidth() && actionY >= 0 && actionY < actionBounds.get(i).getHeight())
+					return i + 1;
+			}
+			return 0;
+		}
 	}
 
 	protected class SyntheticContainer extends JComponent {
-		private final SyntheticComponent theComponent;
-		private List<Rectangle> storedBounds;
+		private final ItemHolder theHolder;
+		private List<ItemBoundsData> bounds;
 		private boolean layoutOrRender;
 
 		SyntheticContainer() {
-			theComponent = new SyntheticComponent();
-			add(theComponent);
-			storedBounds = new ArrayList<>();
+			theHolder = new ItemHolder();
+			add(theHolder);
+			bounds = new ArrayList<>();
 		}
 
 		SyntheticContainer setMode(boolean layoutOrRender) {
 			this.layoutOrRender = layoutOrRender;
+			theHolder.prepare();
 			super.setBounds(0, 0, LittleList.this.getWidth(), LittleList.this.getHeight());
 			return this;
 		}
 
-		Rectangle getBounds(int renderIndex) {
-			return storedBounds.get(renderIndex);
+		ItemBoundsData getBounds(int renderIndex) {
+			return bounds.get(renderIndex);
 		}
 
 		@Override
@@ -240,20 +357,105 @@ public class LittleList<E> extends JComponent {
 
 		@Override
 		public Component getComponent(int n) {
+			if (n > 0)
+				theHolder.postRender(n - 1);
 			E row = theModel.getElementAt(n);
 			Component rendered = theRenderer.getCellRendererComponent(LittleList.this,
 				LambdaUtils.constantSupplier(row, () -> String.valueOf(row), row), row, theSelectionModel.isSelectedIndex(n), false, true,
-				theSelectedItem == n, n, 0, CellRenderContext.DEFAULT);
-			if (n >= storedBounds.size())
-				storedBounds.add(new Rectangle(rendered.getBounds()));
-			else
-				rendered.setBounds(storedBounds.get(n));
-			if (layoutOrRender)
-				return theComponent.forRender(n, rendered);
-			else if (n == theSelectedItem && theEditor != null)
-				return theComponent.forRender(n, null);
-			else
-				return rendered;
+				theSelectionModel.isSelectedIndex(n), n, 0, CellRenderContext.DEFAULT);
+			boolean newBounds;
+			if (n >= bounds.size()) {
+				newBounds = true;
+				bounds.add(new ItemBoundsData());
+			} else
+				newBounds = false;
+			if (theEditorComponent != null && theSelectionModel.getMinSelectionIndex() == n) {
+				if (layoutOrRender)
+					theHolder.forRender(n, row, theEditorComponent, !newBounds);
+				else
+					theHolder.forRender(n, row, null, !newBounds);
+			} else
+				theHolder.forRender(n, row, rendered, !newBounds);
+			return theHolder;
+		}
+
+		void postRender() {
+			if (theModel.getSize() > 0)
+				theHolder.postRender(theModel.getSize() - 1);
+		}
+	}
+
+	protected class ItemHolder extends JPanel {
+		private final SyntheticComponent theComponent;
+		private final List<JLabel> theItemActionLabels;
+
+		ItemHolder() {
+			super(new JustifiedBoxLayout(false).mainJustified().crossCenter());
+			theComponent = new SyntheticComponent();
+			add(theComponent);
+			theItemActionLabels = new ArrayList<>();
+		}
+
+		void prepare() {
+			ArrayUtils.adjust(theItemActionLabels, theItemActions, new ArrayUtils.DifferenceListener<JLabel, Action>() {
+				@Override
+				public boolean identity(JLabel o1, Action o2) {
+					return true;
+				}
+
+				@Override
+				public JLabel added(Action o, int mIdx, int retIdx) {
+					JLabel label = new JLabel();
+					sync(label, o);
+					add(label, retIdx + 1);
+					return label;
+				}
+
+				@Override
+				public JLabel removed(JLabel o, int oIdx, int incMod, int retIdx) {
+					remove(incMod);
+					return null;
+				}
+
+				@Override
+				public JLabel set(JLabel o1, int idx1, int incMod, Action o2, int idx2, int retIdx) {
+					sync(o1, o2);
+					return o1;
+				}
+			});
+		}
+
+		void sync(JLabel actionLabel, Action action) {
+			actionLabel.setText(string(action.getValue(Action.NAME)));
+			actionLabel.setIcon((Icon) action.getValue(Action.SMALL_ICON));
+		}
+
+		private String string(Object s) {
+			return s == null ? null : s.toString();
+		}
+
+		ItemHolder forRender(int renderIndex, E item, Component rendered, boolean initBounds) {
+			if (theBorderAdjuster != null && getBorder() != null)
+				theBorderAdjuster.accept(getBorder(), item);
+			theComponent.forRender(renderIndex, rendered);
+			if (initBounds) {
+				ItemBoundsData bounds = theSyntheticContainer.getBounds(renderIndex);
+				super.setBounds(bounds.holderBounds);
+				theComponent.internalSetBounds(bounds.itemBounds);
+			}
+			return this;
+		}
+
+		void postRender(int renderIndex) {
+			ItemBoundsData bounds = theSyntheticContainer.getBounds(renderIndex);
+			bounds.holderBounds.setBounds(getBounds());
+			bounds.itemBounds.setBounds(theComponent.getBounds());
+			while (bounds.actionBounds.size() < theItemActionLabels.size())
+				bounds.actionBounds.add(new Rectangle());
+			while (bounds.actionBounds.size() > theItemActionLabels.size())
+				bounds.actionBounds.remove(bounds.actionBounds.size() - 1);
+			for (int i = 0; i < theItemActionLabels.size(); i++)
+				theItemActionLabels.get(i).getBounds(bounds.actionBounds.get(i));
 		}
 	}
 
@@ -264,8 +466,11 @@ public class LittleList<E> extends JComponent {
 		SyntheticComponent forRender(int index, Component rendered) {
 			theRenderIndex = index;
 			theRendered = rendered;
-			super.setBounds(theSyntheticContainer.getBounds(index));
 			return this;
+		}
+
+		void internalSetBounds(Rectangle bounds) {
+			super.setBounds(bounds);
 		}
 
 		@Override
@@ -369,7 +574,6 @@ public class LittleList<E> extends JComponent {
 			super.setLocation(x, y);
 			if (theRendered != null)
 				theRendered.setLocation(x, y);
-			theSyntheticContainer.getBounds(theRenderIndex).setLocation(x, y);
 		}
 
 		@Override
@@ -377,7 +581,6 @@ public class LittleList<E> extends JComponent {
 			super.setSize(width, height);
 			if (theRendered != null)
 				theRendered.setSize(width, height);
-			theSyntheticContainer.getBounds(theRenderIndex).setSize(width, height);
 		}
 
 		@Override
@@ -385,7 +588,13 @@ public class LittleList<E> extends JComponent {
 			super.setBounds(x, y, width, height);
 			if (theRendered != null)
 				theRendered.setBounds(x, y, width, height);
-			theSyntheticContainer.getBounds(theRenderIndex).setBounds(x, y, width, height);
+		}
+
+		@Override
+		protected void paintChildren(Graphics g) {
+			super.paintChildren(g);
+			if (theRendered != null)
+				theRendered.paint(g);
 		}
 	}
 }
