@@ -32,7 +32,6 @@ import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
 import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterSortedList;
-import org.qommons.collect.BetterSortedList.SortedSearchFilter;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
@@ -110,7 +109,8 @@ public class EntityReflector<E> {
 				throw new IllegalArgumentException("This class only works for public interface types");
 			theType = type;
 			theSupers = new LinkedHashMap<>();
-			theGetterFilter = new PrefixFilter("get", 0);
+			theGetterFilter = new OrFilter(//
+				new PrefixFilter("get", 0), new PrefixFilter("is", 0));
 			theSetterFilter = new PrefixFilter("set", 1);
 			theMessages = new ArrayList<>();
 		}
@@ -216,7 +216,7 @@ public class EntityReflector<E> {
 		}
 	}
 
-	private enum EntityReflectionMessageLevel {
+	public enum EntityReflectionMessageLevel {
 		FATAL, ERROR, WARNING, INFO;
 	}
 
@@ -246,6 +246,24 @@ public class EntityReflector<E> {
 		@Override
 		public String toString() {
 			return new StringBuilder().append(theLevel).append(": ").append(theMethod).append(") ").append(theMessage).toString();
+		}
+	}
+
+	public static class OrFilter implements Function<Method, String> {
+		private final Function<Method, String>[] theComponents;
+
+		public OrFilter(Function<Method, String>... components) {
+			theComponents = components;
+		}
+
+		@Override
+		public String apply(Method m) {
+			for (Function<Method, String> component : theComponents) {
+				String fieldName = component.apply(m);
+				if (fieldName != null)
+					return fieldName;
+			}
+			return null;
 		}
 	}
 
@@ -485,8 +503,8 @@ public class EntityReflector<E> {
 				if (this instanceof FieldGetter && ((FieldGetter<E, R>) this).getField().getFieldIndex() == fieldIdx)
 					return fieldGetter.apply(fieldIdx);
 				try {
-					return getReflector().theSuperFieldGetters.get(path.index).get(fieldIdx).invoke(proxy, null, NO_ARGS, fieldGetter,
-						fieldSetter);
+					return getReflector().theSuperFieldGetters.get(path.index).get(fieldIdx).invoke(proxy, null, NO_ARGS,
+						fieldGetter, fieldSetter);
 				} catch (RuntimeException | Error e) {
 					throw e;
 				} catch (Throwable e) {
@@ -895,7 +913,7 @@ public class EntityReflector<E> {
 		theSuperFieldSetters = QommonsUtils.map(theSupers, r -> new ArrayList<>(r.getFields().keySize()), true);
 		theType = type;
 		theRawType = TypeTokens.getRawType(theType);
-		theGetterFilter = getterFilter == null ? new PrefixFilter("get", 0) : getterFilter;
+		theGetterFilter = getterFilter == null ? new OrFilter(new PrefixFilter("get", 0), new PrefixFilter("is", 0)) : getterFilter;
 		theSetterFilter = setterFilter == null ? new PrefixFilter("set", 1) : setterFilter;
 
 		// First, find all the fields by their getters
@@ -987,6 +1005,8 @@ public class EntityReflector<E> {
 		if (clazz == null || clazz == Object.class)
 			return;
 		for (Method m : clazz.getDeclaredMethods()) {
+			if (m.isSynthetic())
+				continue;
 			String fieldName = getterFilter.apply(m);
 			if (fieldName != null) {
 				if (fieldOverrides.contains(fieldName))
@@ -1013,6 +1033,8 @@ public class EntityReflector<E> {
 		if (clazz == null)
 			return;
 		for (Method m : clazz.getDeclaredMethods()) {
+			if (m.isSynthetic())
+				continue;
 			if (methods.search(method -> -method.compare(m), BetterSortedList.SortedSearchFilter.OnlyMatch) != null)
 				continue; // Overridden by a subclass and handled
 			BiFunction<? super E, Object[], ?> custom = customMethods.get(m);
@@ -1060,7 +1082,7 @@ public class EntityReflector<E> {
 				continue; // Already added
 			fieldName = theSetterFilter.apply(m);
 			if (fieldName != null) {
-				ReflectedField<? super E, ?> field = fields.get(fieldName);
+				ReflectedField<? super E, ?> field = fields.getIfPresent(fieldName);
 				if (field == null) {
 					errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.ERROR, m,
 						"No getter found for setter " + m + " of field " + fieldName));
@@ -1098,19 +1120,14 @@ public class EntityReflector<E> {
 				fields, methods, customMethods, errors);
 		} else {
 			for (int i = 0; i < theSupers.size(); i++) {
-				populateSuperMethods(fields, methods, theSupers.get(i), i, errors);
-				superPaths.put(theSupers.get(i).theRawType, new SuperPath(i, null));
-				int superI = i;
-				for (Map.Entry<Class<?>, SuperPath> superSuper : theSupers.get(i).theSuperPaths.entrySet()) {
-					superPaths.computeIfAbsent(superSuper.getKey(), c -> new SuperPath(superI, superSuper.getValue()));
-				}
+				populateSuperMethods(fields, methods, theSupers.get(i), i, superPaths, errors);
 			}
 			superPaths.computeIfAbsent(Object.class, c -> new SuperPath(0, null));
 		}
 	}
 
 	private <S> void populateSuperMethods(QuickMap<String, ReflectedField<E, ?>> fields, BetterSortedSet<MethodInterpreter<E, ?>> methods,
-		EntityReflector<S> superR, int superIndex, List<EntityReflectionMessage> errors) {
+		EntityReflector<S> superR, int superIndex, Map<Class<?>, SuperPath> superPaths, List<EntityReflectionMessage> errors) {
 		for (CollectionElement<MethodInterpreter<S, ?>> superMethod : superR.getMethods().elements()) {
 			MethodInterpreter<E, ?> subMethod = methods.searchValue(superMethod.get(), BetterSortedList.SortedSearchFilter.OnlyMatch);
 			if (subMethod == null) {
@@ -1137,6 +1154,10 @@ public class EntityReflector<E> {
 			if (field.getSetter() != null)
 				theSuperFieldSetters.get(superIndex).add(theSuperMethodMappings.get(superIndex).get(field.getSetter().getMethodElement()));
 		}
+		for (int i = 0; i < superR.theSupers.size(); i++) {
+			populateSuperMethods(fields, methods, superR.theSupers.get(i), i, superPaths, errors);
+		}
+		superPaths.put(theSupers.get(superIndex).theRawType, new SuperPath(superIndex, null));
 	}
 
 	/** @return The reflectors for each of this reflector's type's super types */

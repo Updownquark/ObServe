@@ -10,6 +10,8 @@ import java.util.function.Supplier;
 import org.observe.collect.ObservableCollection;
 import org.observe.config.ObservableConfigFormat.EntityConfigFormat;
 import org.observe.util.EntityReflector;
+import org.observe.util.EntityReflector.EntityReflectionMessage;
+import org.observe.util.EntityReflector.EntityReflectionMessageLevel;
 import org.observe.util.TypeTokens;
 import org.qommons.StringUtils;
 import org.qommons.io.Format;
@@ -87,6 +89,8 @@ public class ObservableConfigFormatSet {
 			return (ObservableConfigFormat<T>) ObservableConfigFormat.LONG;
 		else if (raw == int.class)
 			return (ObservableConfigFormat<T>) ObservableConfigFormat.INT;
+		else if (raw.isEnum())
+			return (ObservableConfigFormat<T>) ObservableConfigFormat.enumFormat((Class<Enum<?>>) raw, () -> null);
 		else if (raw == Duration.class)
 			return (ObservableConfigFormat<T>) ObservableConfigFormat.DURATION;
 		else if (raw == Instant.class)
@@ -103,10 +107,23 @@ public class ObservableConfigFormatSet {
 			format = (ObservableConfigFormat<T>) ObservableConfigFormat.<Object> ofEntitySet(elementFormat, childName);
 			theFormatCache.put(type, format);
 			return format;
-		} else if (EntityReflector.isEntityType(raw)) {
+		} else {
+			EntityReflector.Builder<T> builder = EntityReflector.build(type).withSupers(theReflectors);
+			builder.buildNoPrint();
+			if (!builder.getMessages().isEmpty()) {
+				StringBuilder msgs = new StringBuilder();
+				for (EntityReflectionMessage msg : builder.getMessages()) {
+					if (msg.getLevel().compareTo(EntityReflectionMessageLevel.ERROR) >= 0) {
+						if (msgs.length() > 0)
+							msgs.append(", ");
+						msgs.append(msg.getMessage());
+					}
+				}
+				if (msgs.length() > 0)
+					throw new IllegalArgumentException("No custom or default format available for type " + raw.getName() + ": " + msgs);
+			}
 			return getEntityFormat(type);
-		} else
-			throw new IllegalArgumentException("No custom or default format available for type " + raw.getName());
+		}
 	}
 
 	public <T> ObservableConfigFormat<T> getConfigFormat(ConfiguredValueField<?, T> field) {

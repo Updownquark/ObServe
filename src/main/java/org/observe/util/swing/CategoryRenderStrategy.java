@@ -108,6 +108,13 @@ public class CategoryRenderStrategy<R, C> {
 			return withEditor(ObservableCellEditor.createButtonEditor(renderer, action));
 		}
 
+		public CategoryMutationStrategy clicks(int clicks) {
+			if (theEditor == null)
+				throw new IllegalStateException("The editor has not been configured yet");
+			theEditor.withClicks(clicks);
+			return this;
+		}
+
 		public CategoryMutationStrategy withEditorTooltip(BiFunction<? super R, ? super C, String> tooltip) {
 			theEditorTooltip = tooltip;
 			return this;

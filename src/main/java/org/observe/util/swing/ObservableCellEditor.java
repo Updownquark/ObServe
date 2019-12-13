@@ -224,6 +224,15 @@ public class ObservableCellEditor<M, C> implements TableCellEditor, TreeCellEdit
 	}
 
 	/**
+	 * @param clickCount The number of clicks to signal cell editing
+	 * @return This editor
+	 */
+	public ObservableCellEditor<M, C> withClicks(int clickCount) {
+		theEditTest = clickCount == 0 ? editWithNotDrag() : editWithClicks(clickCount);
+		return this;
+	}
+
+	/**
 	 * Creates an edit test to edit a cell with a minimum mouse click count. Follows the same behavior as {@link DefaultCellEditor}.
 	 *
 	 * @param clickCount The minimum click count needed to start cell editing

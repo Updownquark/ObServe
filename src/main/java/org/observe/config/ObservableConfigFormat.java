@@ -52,6 +52,10 @@ public interface ObservableConfigFormat<E> {
 		return new SimpleConfigFormat<>(format, defaultValue);
 	}
 
+	static <E extends Enum<?>> ObservableConfigFormat<E> enumFormat(Class<E> type, Supplier<? extends E> defaultValue) {
+		return new SimpleConfigFormat<>(Format.enumFormat(type), defaultValue);
+	}
+
 	class SimpleConfigFormat<T> implements ObservableConfigFormat<T> {
 		public final Format<T> format;
 		public final Supplier<? extends T> defaultValue;

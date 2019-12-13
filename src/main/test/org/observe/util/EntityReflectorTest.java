@@ -11,9 +11,9 @@ import com.google.common.reflect.TypeToken;
 
 /** Tests {@link EntityReflector} */
 public class EntityReflectorTest {
-	static @interface Id {}
+	public static @interface Id {}
 
-	static interface A {
+	public static interface A {
 		int getId();
 
 		void setId(int id);
@@ -27,7 +27,7 @@ public class EntityReflectorTest {
 		}
 	}
 
-	static interface B {
+	public static interface B {
 		int getId();
 
 		void setId(int id);
@@ -42,7 +42,7 @@ public class EntityReflectorTest {
 		}
 	}
 
-	static interface C extends A, B {
+	public static interface C extends A, B {
 		@Override
 		default int getB() {
 			return 0;

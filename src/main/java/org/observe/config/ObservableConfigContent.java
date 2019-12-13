@@ -205,9 +205,13 @@ public class ObservableConfigContent {
 				if (thePathElementStamps[i] == stamp) {
 					// No need to check--nothing's changed
 					child = thePathElements[i];
+					if (child == null && createIfAbsent) {
+						child = parent.getChild(thePath.getElements().get(i), createIfAbsent, null);
+						thePathElementStamps[i] = stamp;
+					}
 				} else {
-					thePathElementStamps[i] = stamp;
 					child = parent.getChild(thePath.getElements().get(i), createIfAbsent, null);
+					thePathElementStamps[i] = stamp;
 					if (thePathElements[i] != child) {
 						changed = true;
 						thePathElements[i] = child;

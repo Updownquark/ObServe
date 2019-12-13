@@ -691,12 +691,16 @@ public class ObservableConfig implements Transactable, Stamped {
 				return thePath.getLastElement().getName();
 		}
 
+		protected Observable<?> getUntil() {
+			return theUntil == null ? Observable.empty() : theUntil;
+		}
+
 		public T parse() throws ParseException {
 			ObservableConfigFormat<T> format = getFormat();
 			// If the format is simple, we can just parse the value and then forget about it.
 			// Otherwise, we need to maintain the connection to update the value when configuration changes
 			if (format instanceof ObservableConfigFormat.SimpleConfigFormat)
-				return format.parse(ObservableConfig.this, getDescendant(false), createDescendant(false)::get, null, null, theUntil);
+				return format.parse(ObservableConfig.this, getDescendant(false), createDescendant(false)::get, null, null, getUntil());
 			else
 				return buildValue().get();
 		}
@@ -710,12 +714,12 @@ public class ObservableConfig implements Transactable, Stamped {
 
 		public SettableValue<T> buildValue() {
 			return new ObservableConfigTransform.ObservableConfigValue<>(ObservableConfig.this, getDescendant(false),
-				createDescendant(false)::get, theUntil, theType, getFormat(), true);
+				createDescendant(false)::get, getUntil(), theType, getFormat(), true);
 		}
 
 		public ObservableCollection<T> buildCollection() {
 			return new ObservableConfigTransform.ObservableConfigValues<>(ObservableConfig.this, //
-				getDescendant(true), createDescendant(true)::get, theType, getFormat(), getChildName(), getFormatSet(), theUntil, true);
+				getDescendant(true), createDescendant(true)::get, theType, getFormat(), getChildName(), getFormatSet(), getUntil(), true);
 		}
 
 		public ObservableValueSet<T> buildEntitySet() {
@@ -724,7 +728,7 @@ public class ObservableConfig implements Transactable, Stamped {
 				throw new IllegalStateException("Format for " + theType + " is not entity-enabled");
 			return new ObservableConfigTransform.ObservableConfigEntityValues<>(ObservableConfig.this, //
 				getDescendant(true), createDescendant(true)::get, (ObservableConfigFormat.EntityConfigFormat<T>) entityFormat,
-				getChildName(), theUntil, true);
+				getChildName(), getUntil(), true);
 		}
 	}
 
