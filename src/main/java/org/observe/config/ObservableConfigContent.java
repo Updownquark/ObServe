@@ -611,9 +611,9 @@ public class ObservableConfigContent {
 
 	private static class MutableConfigCollectionElement<C extends ObservableConfig> extends ConfigCollectionElement<C>
 	implements MutableCollectionElement<C> {
-		private final ObservableCollection<C> theCollection;
+		private final AbstractObservableConfigContent<C> theCollection;
 
-		MutableConfigCollectionElement(ObservableConfig config, ObservableCollection<C> collection) {
+		MutableConfigCollectionElement(ObservableConfig config, AbstractObservableConfigContent<C> collection) {
 			super(config);
 			theCollection = collection;
 		}
@@ -635,7 +635,10 @@ public class ObservableConfigContent {
 
 		@Override
 		public void set(C value) throws UnsupportedOperationException, IllegalArgumentException {
-			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+			if (value == get()) {
+				value.update();
+			} else
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 		}
 
 		@Override

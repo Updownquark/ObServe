@@ -871,6 +871,11 @@ public class ObservableConfig implements Transactable, Stamped {
 		return this;
 	}
 
+	protected void update() {
+		fire(CollectionChangeType.set, //
+			Collections.emptyList(), theName, theValue);
+	}
+
 	public ObservableConfig set(String path, String value) {
 		ObservableConfig child = getChild(path, value != null, //
 			ch -> ch.setValue(value));

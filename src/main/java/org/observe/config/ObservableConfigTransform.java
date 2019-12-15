@@ -106,7 +106,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		if (!createIfAbsent && parentAction == null) {
 			return theParent.get();
 		}
-		Transaction parentLock = theParent.lock();
+		Transaction parentLock = theRoot.lock(createIfAbsent, null);
 		try {
 			ObservableConfig parent = theParent.get();
 			while (parent == null && createIfAbsent) {
@@ -928,7 +928,13 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 
 			@Override
 			public void set(E value) throws UnsupportedOperationException, IllegalArgumentException {
-				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				if (value == get()) {
+					ObservableConfig parent = getConfig().getParent();
+					if (parent != null)
+						((ObservableCollection<ObservableConfig>) parent.getAllContent().getValues())
+						.mutableElement(getConfig().getParentChildRef()).set(getConfig());
+				} else
+					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 			}
 
 			@Override

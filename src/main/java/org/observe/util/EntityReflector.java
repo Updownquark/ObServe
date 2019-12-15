@@ -28,6 +28,7 @@ import java.util.function.IntFunction;
 
 import org.observe.config.Cached;
 import org.observe.entity.impl.ObservableEntityUtils;
+import org.qommons.IntList;
 import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
 import org.qommons.collect.BetterCollections;
@@ -818,7 +819,8 @@ public class EntityReflector<E> {
 				for (int i = 0; i < p.getReflector().theFields.keySet().size(); i++) {
 					if (i > 0)
 						str.append(", ");
-					str.append(p.getReflector().theFields.keySet().get(i)).append("=").append(fieldGetter.apply(i));
+					str.append(p.getReflector().theFields.keySet().get(i)).append("=")
+						.append(((EntityReflector<Object>) p.getReflector()).getFields().get(i).get(proxy));
 				}
 				return str.toString();
 			}
@@ -903,11 +905,17 @@ public class EntityReflector<E> {
 		Function<Method, String> getterFilter, Function<Method, String> setterFilter,
 		Map<Method, ? extends BiFunction<? super E, Object[], ?>> customMethods, Set<String> idFieldNames,
 			List<EntityReflectionMessage> messages) {
-		theSupers = (List<EntityReflector<? super E>>) (List<?>) QommonsUtils.map(Arrays.asList(raw.getGenericInterfaces()),
-			intf -> supers.computeIfAbsent(type.resolveType(intf), intfT -> {
-				return new EntityReflector<>(supers, (TypeToken<E>) intfT, (Class<E>) TypeTokens.getRawType(intfT), // Generics hack
+		theSupers = (List<EntityReflector<? super E>>) (List<?>) QommonsUtils.map(Arrays.asList(raw.getGenericInterfaces()), intf -> {
+			TypeToken<? super E> intfT = (TypeToken<? super E>) type.resolveType(intf);
+			EntityReflector<?> superR = supers.get(intfT);
+			if (superR == null) {
+				superR = new EntityReflector<>(supers, (TypeToken<E>) intfT, (Class<E>) intf, // Generics hack
 					getterFilter, setterFilter, customMethods, idFieldNames, messages);
-			}), true);
+				if (supers.putIfAbsent(intfT, superR) != null)
+					superR = supers.get(intfT);
+			}
+			return superR;
+		}, true);
 		theSuperMethodMappings = QommonsUtils.map(theSupers, r -> new LinkedHashMap<>(), true);
 		theSuperFieldGetters = QommonsUtils.map(theSupers, r -> new ArrayList<>(r.getFields().keySize()), true);
 		theSuperFieldSetters = QommonsUtils.map(theSupers, r -> new ArrayList<>(r.getFields().keySize()), true);
@@ -1119,15 +1127,18 @@ public class EntityReflector<E> {
 			populateMethods((TypeToken<E>) TypeTokens.get().OBJECT, superPaths, // Generics hack
 				fields, methods, customMethods, errors);
 		} else {
+			IntList superIndexes = new IntList();
 			for (int i = 0; i < theSupers.size(); i++) {
-				populateSuperMethods(fields, methods, theSupers.get(i), i, superPaths, errors);
+				populateSuperMethods(fields, methods, theSupers.get(i), i, errors);
+				superIndexes.add(i);
+				populateSuperPaths(superPaths, theSupers.get(i), superIndexes);
+				superIndexes.clear();
 			}
-			superPaths.computeIfAbsent(Object.class, c -> new SuperPath(0, null));
 		}
 	}
 
 	private <S> void populateSuperMethods(QuickMap<String, ReflectedField<E, ?>> fields, BetterSortedSet<MethodInterpreter<E, ?>> methods,
-		EntityReflector<S> superR, int superIndex, Map<Class<?>, SuperPath> superPaths, List<EntityReflectionMessage> errors) {
+		EntityReflector<S> superR, int superIndex, List<EntityReflectionMessage> errors) {
 		for (CollectionElement<MethodInterpreter<S, ?>> superMethod : superR.getMethods().elements()) {
 			MethodInterpreter<E, ?> subMethod = methods.searchValue(superMethod.get(), BetterSortedList.SortedSearchFilter.OnlyMatch);
 			if (subMethod == null) {
@@ -1154,10 +1165,20 @@ public class EntityReflector<E> {
 			if (field.getSetter() != null)
 				theSuperFieldSetters.get(superIndex).add(theSuperMethodMappings.get(superIndex).get(field.getSetter().getMethodElement()));
 		}
+	}
+
+	private static void populateSuperPaths(Map<Class<?>, SuperPath> superPaths, EntityReflector<?> superR, IntList path) {
+		SuperPath superPath = new SuperPath(path.getLast(), null);
+		for (int i = path.size() - 2; i >= 0; i--)
+			superPath = new SuperPath(path.get(i), superPath);
+		superPaths.putIfAbsent(superR.theRawType, superPath);
+		if (!superPaths.containsKey(Object.class) && superR.theSupers.isEmpty())
+			superPaths.put(Object.class, superPath);
 		for (int i = 0; i < superR.theSupers.size(); i++) {
-			populateSuperMethods(fields, methods, superR.theSupers.get(i), i, superPaths, errors);
+			path.add(i);
+			populateSuperPaths(superPaths, superR.theSupers.get(i), path);
+			path.removeLast();
 		}
-		superPaths.put(theSupers.get(superIndex).theRawType, new SuperPath(superIndex, null));
 	}
 
 	/** @return The reflectors for each of this reflector's type's super types */

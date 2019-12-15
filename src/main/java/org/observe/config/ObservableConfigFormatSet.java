@@ -54,9 +54,12 @@ public class ObservableConfigFormatSet {
 	public <E> EntityConfigFormat<E> getEntityFormat(TypeToken<E> type) {
 		ObservableConfigFormat<?> format = theFormatCache.get(type);
 		if (format == null) {
-			EntityReflector<E> reflector = (EntityReflector<E>) theReflectors.computeIfAbsent(type, t2 -> {
-				return EntityReflector.build(type).withSupers(theReflectors).build();
-			});
+			EntityReflector<E> reflector = (EntityReflector<E>) theReflectors.get(type);
+			if (reflector == null) {
+				reflector = EntityReflector.build(type).withSupers(theReflectors).build();
+				if (theReflectors.putIfAbsent(type, reflector) != null)
+					reflector = (EntityReflector<E>) theReflectors.get(type);
+			}
 			format = ObservableConfigFormat.ofEntity(new EntityConfiguredValueType<>(reflector, theReflectors), this);
 			ObservableConfigFormat<?> fFormat = format;
 			theFormatCache.computeIfAbsent(type, __ -> fFormat);
