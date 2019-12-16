@@ -281,6 +281,8 @@ public class ObservableCellEditor<M, C> implements TableCellEditor, TreeCellEdit
 			filter[0] = f;
 			field.setToolTipText(tt);
 			editing[0] = true;
+			if (field.isSelectAllOnFocus())
+				field.selectAll();
 			return commit -> {
 				if (commit) {
 					if (!field.isDirty()) {

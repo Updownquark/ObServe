@@ -24,6 +24,7 @@ import org.observe.config.ObservableConfig.ObservableConfigEvent;
 import org.observe.config.ObservableConfig.ObservableConfigPathElement;
 import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
+import org.qommons.Causable;
 import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
 import org.qommons.Transaction;
@@ -348,8 +349,12 @@ public interface ObservableConfigFormat<E> {
 					ObservableConfig child = change.relativePath.get(0);
 					int fieldIdx = theFieldsByChildName.keyIndexTolerant(child.getName());
 					if (change.relativePath.size() == 1 && !change.oldName.equals(child.getName())) {
-						if (fieldIdx >= 0)
-							parseUpdatedField(c, fieldIdx, previousValue, change.asFromChild(), until);
+						if (fieldIdx >= 0) {
+							ObservableConfigEvent childChange = change.asFromChild();
+							try (Transaction ct = Causable.use(childChange)) {
+								parseUpdatedField(c, fieldIdx, previousValue, childChange, until);
+							}
+						}
 						fieldIdx = theFieldsByChildName.keyIndexTolerant(change.oldName);
 						if (fieldIdx >= 0)
 							parseUpdatedField(c, fieldIdx, previousValue, null, until);
@@ -467,8 +472,12 @@ public interface ObservableConfigFormat<E> {
 			ObservableValue<? extends ObservableConfig> fieldConfig = entityConfig.observeDescendant(theFieldChildNames.get(fieldIdx));
 			if (change != null) {
 				if (change.relativePath.isEmpty() || fieldConfig != change.relativePath.get(0)) {
-					Object newValue = ((ObservableConfigFormat<Object>) fieldFormats[fieldIdx]).parse(entityConfig, fieldConfig,
-						() -> entityConfig.getChild(theFieldChildNames.get(fieldIdx), true, null), oldValue, change.asFromChild(), until);
+					ObservableConfigEvent childChange = change.asFromChild();
+					Object newValue;
+					try (Transaction ct = Causable.use(childChange)) {
+						newValue = ((ObservableConfigFormat<Object>) fieldFormats[fieldIdx]).parse(entityConfig, fieldConfig,
+							() -> entityConfig.getChild(theFieldChildNames.get(fieldIdx), true, null), oldValue, childChange, until);
+					}
 					if (newValue != oldValue)
 						field.set(previousValue, newValue);
 					return; // The update does not actually affect the field value

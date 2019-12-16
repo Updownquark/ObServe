@@ -1,6 +1,7 @@
 package org.observe.util.swing;
 
 import java.awt.event.MouseEvent;
+import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
 import java.util.function.Consumer;
@@ -42,6 +43,13 @@ public class CategoryRenderStrategy<R, C> {
 		public CategoryMutationStrategy mutateAttribute(BiFunction<? super R, ? super C, ? extends C> mutator) {
 			theAttributeMutator = mutator;
 			return this;
+		}
+
+		public CategoryMutationStrategy mutateAttribute(BiConsumer<? super R, ? super C> mutator) {
+			return mutateAttribute((row, col) -> {
+				mutator.accept(row, col);
+				return theAccessor.apply(row);
+			});
 		}
 
 		public CategoryMutationStrategy withRowValueSwitch(BiFunction<? super R, ? super C, ? extends R> rowMutator) {

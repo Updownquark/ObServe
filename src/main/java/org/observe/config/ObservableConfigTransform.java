@@ -408,10 +408,14 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 						if (el.get().modifying != null) {
 							newValue = el.get().modifying.get();
 							el.get().modifying = null;
-						} else
-							newValue = theFormat.parse(getRoot(), //
-								ObservableValue.of(el.get().getConfig()), () -> collectionChange.eventTarget.addChild(theChildName),
-								el.get().get(), collectionChange.asFromChild(), getUntil());
+						} else {
+							ObservableConfigEvent childChange = collectionChange.asFromChild();
+							try (Transaction ct = Causable.use(childChange)) {
+								newValue = theFormat.parse(getRoot(), //
+									ObservableValue.of(el.get().getConfig()), () -> collectionChange.eventTarget.addChild(theChildName),
+									el.get().get(), childChange, getUntil());
+							}
+						}
 						E oldValue = el.get().get();
 						incrementStamp();
 						if (newValue != oldValue)

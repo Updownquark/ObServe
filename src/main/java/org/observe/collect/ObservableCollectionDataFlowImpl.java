@@ -3465,11 +3465,16 @@ public class ObservableCollectionDataFlowImpl {
 					if (theOptions.getElementReverse().setElement(theParentEl.get(), value, true) == null)
 						return;
 				}
-				if (theOptions.getReverse() == null)
+				I reversed;
+				if (theOptions.isCached() && value == theValue)
+					reversed = theCacheHandler.getSourceCache();
+				else if (theOptions.getReverse() == null)
 					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-				I reversed = theOptions.getReverse().apply(value);
-				if (!theEquivalence.elementEquals(theMap.apply(reversed, value), value))
-					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+				else {
+					reversed = theOptions.getReverse().apply(value);
+					if (!theEquivalence.elementEquals(theMap.apply(reversed, value), value))
+						throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+				}
 				theParentEl.set(reversed);
 			}
 

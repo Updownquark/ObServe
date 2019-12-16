@@ -90,14 +90,18 @@ public class ObservableConfigContent {
 							return;
 						int pathIndex = 0;
 						ObservableConfigEvent pathChange = evt;
+						boolean childChange = false;
 						while (pathIndex < thePathElements.length && pathIndex < evt.relativePath.size()) {
 							if (evt.relativePath.get(pathIndex) != thePathElements[pathIndex])
 								break;
+							childChange = true;
 							pathChange = pathChange.asFromChild();
 							thePathElementStamps[pathIndex] = thePathElements[pathIndex].getStamp();
 							pathIndex++;
 						}
-						handleChange(pathIndex, pathChange, evt);
+						try (Transaction ct = childChange ? Causable.use(pathChange) : Transaction.NONE) {
+							handleChange(pathIndex, pathChange, evt);
+						}
 					});
 				} else {
 					thePathSubscription.unsubscribe();

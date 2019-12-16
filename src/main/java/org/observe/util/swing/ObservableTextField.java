@@ -234,6 +234,11 @@ public class ObservableTextField<E> extends JPasswordField {
 		return this;
 	}
 
+	/** @return Whether this text field selects all its text when it gains focus */
+	public boolean isSelectAllOnFocus() {
+		return selectAllOnFocus;
+	}
+
 	/**
 	 * @param selectAll Whether this text field should select all its text when it gains focus
 	 * @return This text field
