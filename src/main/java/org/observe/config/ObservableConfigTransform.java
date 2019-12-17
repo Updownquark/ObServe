@@ -893,6 +893,23 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		}
 
 		@Override
+		public <E2 extends E> ValueCreator<E, E2> copy(E2 template) {
+			if (!isConnected().get())
+				throw new UnsupportedOperationException("Not connected");
+			return new SimpleValueCreator<E, E2>(getFormat().create(template)) {
+				@Override
+				public CollectionElement<E> create(Consumer<? super E2> preAddAction) {
+					return add(cfg -> {
+						return createValue(cfg, getUntil());
+					}, getAfter(), getBefore(), isTowardBeginning(), element -> {
+						if (preAddAction != null)
+							preAddAction.accept((E2) element.get());
+					});
+				}
+			};
+		}
+
+		@Override
 		protected OCBCCollection createCollection() {
 			return new ConfigValueCollection();
 		}

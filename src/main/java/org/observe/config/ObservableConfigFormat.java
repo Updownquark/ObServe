@@ -112,6 +112,8 @@ public interface ObservableConfigFormat<E> {
 		EntityConfiguredValueType<E> getEntityType();
 
 		<E2 extends E> EntityConfigCreator<E2> create(TypeToken<E2> subType);
+
+		<E2 extends E> EntityConfigCreator<E2> create(E2 template);
 	}
 
 	class EntitySubFormat<E> {
@@ -420,6 +422,12 @@ public interface ObservableConfigFormat<E> {
 					}
 				}
 			};
+		}
+
+		@Override
+		public <E2 extends E> EntityConfigCreator<E2> create(E2 template) {
+			// TODO Auto-generated method stub
+			throw new UnsupportedOperationException("This method has not been implemented yet");
 		}
 
 		E createInstance(ObservableConfig config, QuickMap<String, Object> fieldValues, Observable<?> until) throws ParseException {

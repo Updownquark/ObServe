@@ -11,12 +11,13 @@ import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JTable;
 import javax.swing.JTree;
+import javax.swing.ListCellRenderer;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableCellRenderer;
 import javax.swing.tree.DefaultTreeCellRenderer;
 import javax.swing.tree.TreeCellRenderer;
 
-public interface ObservableCellRenderer<M, C> {
+public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 	public interface CellRenderContext {
 		public static CellRenderContext DEFAULT = new CellRenderContext() {
 			@Override
@@ -32,6 +33,12 @@ public interface ObservableCellRenderer<M, C> {
 
 	Component getCellRendererComponent(Component parent, Supplier<M> modelValue, C columnValue, boolean selected, boolean expanded,
 		boolean leaf, boolean hasFocus, int row, int column, CellRenderContext ctx);
+
+	@Override
+	default Component getListCellRendererComponent(JList<? extends C> list, C value, int index, boolean isSelected, boolean cellHasFocus) {
+		return getCellRendererComponent(list, () -> (M) value, value, isSelected, true, true, cellHasFocus, index, 0,
+			CellRenderContext.DEFAULT);
+	}
 
 	public static <M, C> ObservableCellRenderer<M, C> fromTableRenderer(TableCellRenderer renderer,
 		BiFunction<Supplier<M>, C, String> asText) {
@@ -78,7 +85,7 @@ public interface ObservableCellRenderer<M, C> {
 			return comp;
 		JLabel label = (JLabel) comp;
 		String text = label.getText();
-		if (text == null || text.isEmpty() || text.startsWith("<hml>") || text.startsWith("<HTML>"))
+		if (text == null || text.isEmpty() || text.startsWith("<html>") || text.startsWith("<HTML>"))
 			return comp;
 		int[][] regions = ctx.getEmphaticRegions();
 		if (regions == null || regions.length == 0)

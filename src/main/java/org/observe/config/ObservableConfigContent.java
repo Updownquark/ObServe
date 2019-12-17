@@ -1021,5 +1021,15 @@ public class ObservableConfigContent {
 				}
 			};
 		}
+
+		@Override
+		public <E2 extends C> ValueCreator<C, E2> copy(E2 template) {
+			ValueCreator<C, C> creator = create();
+			for (ObservableConfig child : template._getContent()) {
+				if (child.getValue() != null)
+					creator.with(child.getName(), child.getValue());
+			}
+			return (ValueCreator<C, E2>) creator;
+		}
 	}
 }

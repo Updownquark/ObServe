@@ -54,6 +54,7 @@ import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
 import org.observe.config.ObservableConfig;
+import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
 import org.qommons.Causable;
 import org.qommons.Causable.CausableKey;
@@ -271,7 +272,7 @@ public class ObservableSwingUtils {
 	 * @return The subscription to {@link Subscription#unsubscribe() unsubscribe} to terminate the link
 	 */
 	public static Subscription checkFor(JCheckBox checkBox, String descrip, SettableValue<Boolean> selected) {
-		return checkFor(checkBox, ObservableValue.of(descrip), selected);
+		return checkFor(checkBox, ObservableValue.of(TypeTokens.get().STRING, descrip), selected);
 	}
 
 	/**
@@ -302,7 +303,7 @@ public class ObservableSwingUtils {
 		});
 		Subscription valueSub = selected.changes().act(evt -> {
 			if (!callbackLock[0])
-				checkBox.setSelected(evt.getNewValue());
+				checkBox.setSelected(evt.getNewValue() == null ? false : evt.getNewValue());
 			checkEnabled.accept(selected.isEnabled().get());
 		});
 		Subscription enabledSub = selected.isEnabled().changes().act(evt -> checkEnabled.accept(evt.getNewValue()));
@@ -773,7 +774,7 @@ public class ObservableSwingUtils {
 					selModel.clearSelection();
 					return;
 				} else if (evt.getOldValue() == evt.getNewValue()//
-					&& selModel.getMinSelectionIndex() == selModel.getMaxSelectionIndex()//
+					&& !selModel.isSelectionEmpty() && selModel.getMinSelectionIndex() == selModel.getMaxSelectionIndex()//
 					&& equivalence.elementEquals(model.getElementAt(selModel.getMinSelectionIndex()), evt.getNewValue())) {
 					if (update != null)
 						update.accept(selModel.getMaxSelectionIndex());

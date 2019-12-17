@@ -465,6 +465,12 @@ public class PanelPopulation {
 	}
 
 	public interface ComboEditor<F, P extends ComboEditor<F, P>> extends FieldEditor<JComboBox<F>, P> {
+		default P renderAs(Function<? super F, String> renderer) {
+			return renderWith(ObservableCellRenderer.formatted(renderer));
+		}
+
+		P renderWith(ObservableCellRenderer<F, F> renderer);
+
 		P withValueTooltip(Function<? super F, String> tooltip);
 
 		String getTooltip(F value);
@@ -1294,16 +1300,21 @@ public class PanelPopulation {
 				constraints.append("span, wrap");
 			}
 			Component component = field.getOrCreateComponent(getUntil());
+			if (component == null)
+				throw new IllegalStateException();
 			getContainer().add(component, constraints.toString());
 			if (postLabel != null)
 				getContainer().add(postLabel, "wrap");
 			if (field.isVisible() != null) {
 				field.isVisible().changes().takeUntil(getUntil()).act(evt -> {
+					if (evt.getNewValue() == component.isVisible())
+						return;
 					if (fieldLabel != null)
 						fieldLabel.setVisible(evt.getNewValue());
 					component.setVisible(evt.getNewValue());
 					if (postLabel != null)
 						postLabel.setVisible(evt.getNewValue());
+					getContainer().revalidate();
 				});
 			}
 		}
@@ -1480,6 +1491,8 @@ public class PanelPopulation {
 				getContainer().add(postLabel);
 			if (field.isVisible() != null) {
 				field.isVisible().changes().takeUntil(getUntil()).act(evt -> {
+					if (evt.getNewValue() == component.isVisible())
+						return;
 					if (fieldLabel != null)
 						fieldLabel.setVisible(evt.getNewValue());
 					component.setVisible(evt.getNewValue());
@@ -1672,10 +1685,17 @@ public class PanelPopulation {
 
 	static class SimpleComboEditor<F, P extends SimpleComboEditor<F, P>> extends SimpleFieldEditor<JComboBox<F>, P>
 	implements ComboEditor<F, P> {
+		private ObservableCellRenderer<F, F> theRenderer;
 		private Function<? super F, String> theValueTooltip;
 
 		SimpleComboEditor(String fieldName, JComboBox<F> editor, Supplier<Transactable> lock) {
 			super(fieldName, editor, lock);
+		}
+
+		@Override
+		public P renderWith(ObservableCellRenderer<F, F> renderer) {
+			theRenderer = renderer;
+			return (P) this;
 		}
 
 		@Override
@@ -1687,6 +1707,14 @@ public class PanelPopulation {
 		@Override
 		public String getTooltip(F value) {
 			return theValueTooltip == null ? null : theValueTooltip.apply(value);
+		}
+
+		@Override
+		protected Component getOrCreateComponent(Observable<?> until) {
+			super.getOrCreateComponent(until);
+			if (theRenderer != null)
+				getEditor().setRenderer(theRenderer);
+			return getEditor();
 		}
 	}
 
@@ -1704,7 +1732,11 @@ public class PanelPopulation {
 			MigFieldPanel<JPanel> fieldPanel = new MigFieldPanel<>(null, theUntil, theLock);
 			panel.accept(fieldPanel);
 			if (fieldPanel.isVisible() != null)
-				fieldPanel.isVisible().changes().act(evt -> fieldPanel.getComponent().setVisible(evt.getNewValue()));
+				fieldPanel.isVisible().changes().act(evt -> {
+					if (evt.getNewValue() == fieldPanel.getComponent().isVisible())
+						return;
+					fieldPanel.getComponent().setVisible(evt.getNewValue());
+				});
 			return withTab(tabID, fieldPanel.getContainer(), tabModifier);
 		}
 
@@ -1714,7 +1746,11 @@ public class PanelPopulation {
 			panel.accept(hPanel);
 			withTab(tabID, hPanel.getContainer(), tabModifier);
 			if (hPanel.isVisible() != null)
-				hPanel.isVisible().changes().act(evt -> hPanel.getComponent().setVisible(evt.getNewValue()));
+				hPanel.isVisible().changes().act(evt -> {
+					if (evt.getNewValue() == hPanel.getComponent().isVisible())
+						return;
+					hPanel.getComponent().setVisible(evt.getNewValue());
+				});
 			return (P) this;
 		}
 
@@ -1790,6 +1826,8 @@ public class PanelPopulation {
 			first(fieldPanel.getOrCreateComponent(theUntil));
 			if (fieldPanel.isVisible() != null)
 				fieldPanel.isVisible().changes().act(evt -> {
+					if (evt.getNewValue() == fieldPanel.getComponent().isVisible())
+						return;
 					fieldPanel.getComponent().setVisible(evt.getNewValue());
 					getComponent().revalidate();
 				});
@@ -1803,6 +1841,8 @@ public class PanelPopulation {
 			first(panel.getOrCreateComponent(theUntil));
 			if (panel.isVisible() != null)
 				panel.isVisible().changes().act(evt -> {
+					if (evt.getNewValue() == panel.getComponent().isVisible())
+						return;
 					panel.getComponent().setVisible(evt.getNewValue());
 					getComponent().revalidate();
 				});
@@ -1825,6 +1865,8 @@ public class PanelPopulation {
 			last(fieldPanel.getOrCreateComponent(theUntil));
 			if (fieldPanel.isVisible() != null)
 				fieldPanel.isVisible().changes().act(evt -> {
+					if (evt.getNewValue() == fieldPanel.getComponent().isVisible())
+						return;
 					fieldPanel.getComponent().setVisible(evt.getNewValue());
 					getComponent().revalidate();
 				});
@@ -1838,6 +1880,8 @@ public class PanelPopulation {
 			last(panel.getOrCreateComponent(theUntil));
 			if (panel.isVisible() != null)
 				panel.isVisible().changes().act(evt -> {
+					if (evt.getNewValue() == panel.getComponent().isVisible())
+						return;
 					panel.getComponent().setVisible(evt.getNewValue());
 					getComponent().revalidate();
 				});
@@ -1914,7 +1958,11 @@ public class PanelPopulation {
 			panel.accept(fieldPanel);
 			withContent(fieldPanel.getOrCreateComponent(theUntil));
 			if (fieldPanel.isVisible() != null)
-				fieldPanel.isVisible().changes().act(evt -> fieldPanel.getComponent().setVisible(evt.getNewValue()));
+				fieldPanel.isVisible().changes().act(evt -> {
+					if (evt.getNewValue() == fieldPanel.getComponent().isVisible())
+						return;
+					fieldPanel.getComponent().setVisible(evt.getNewValue());
+				});
 			return (P) this;
 		}
 
@@ -1924,7 +1972,11 @@ public class PanelPopulation {
 			panel.accept(hPanel);
 			withContent(hPanel.getOrCreateComponent(theUntil));
 			if (hPanel.isVisible() != null)
-				hPanel.isVisible().changes().act(evt -> hPanel.getComponent().setVisible(evt.getNewValue()));
+				hPanel.isVisible().changes().act(evt -> {
+					if (evt.getNewValue() == hPanel.getComponent().isVisible())
+						return;
+					hPanel.getComponent().setVisible(evt.getNewValue());
+				});
 			return (P) this;
 		}
 
@@ -2029,7 +2081,7 @@ public class PanelPopulation {
 				String single = getItemName();
 				String plural = StringUtils.pluralize(single);
 				action.allowForMultiple(false).withTooltip(items -> "Duplicate selected " + (items.size() == 1 ? single : plural))//
-					.modifyButton(button -> button.withIcon(getCopyIcon(16)));
+				.modifyButton(button -> button.withIcon(getCopyIcon(16)));
 				if (actionMod != null)
 					actionMod.accept(action);
 			});

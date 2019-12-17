@@ -14,4 +14,6 @@ public interface ObservableValueSet<E> {
 	}
 
 	<E2 extends E> ValueCreator<E, E2> create(TypeToken<E2> subType);
+
+	<E2 extends E> ValueCreator<E, E2> copy(E2 template);
 }

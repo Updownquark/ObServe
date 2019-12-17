@@ -787,7 +787,9 @@ public class EntityReflector<E> {
 				else if (p.getReflector().getIdFields().isEmpty())
 					return false;
 				for (int id : p.getReflector().getIdFields()) {
-					if (!Objects.equals(fieldGetter.apply(id), other.theFieldGetter.apply(id)))
+					Object f1 = ((EntityReflector<Object>) p.getReflector()).getFields().get(id).get(proxy);
+					Object f2 = ((EntityReflector<Object>) p.getReflector()).getFields().get(id).get(args[0]);
+					if (!Objects.equals(f1, f2))
 						return false;
 				}
 				return true;
@@ -803,9 +805,8 @@ public class EntityReflector<E> {
 					return System.identityHashCode(proxy);
 				Object[] idValues = new Object[p.getReflector().getIdFields().size()];
 				int i = 0;
-				for (int id : p.getReflector().getIdFields()) {
-					idValues[i++] = fieldGetter.apply(id);
-				}
+				for (int id : p.getReflector().getIdFields())
+					idValues[i++] = ((EntityReflector<Object>) p.getReflector()).getFields().get(id).get(args[0]);
 				return Objects.hash(idValues);
 			}
 		};
@@ -820,7 +821,7 @@ public class EntityReflector<E> {
 					if (i > 0)
 						str.append(", ");
 					str.append(p.getReflector().theFields.keySet().get(i)).append("=")
-						.append(((EntityReflector<Object>) p.getReflector()).getFields().get(i).get(proxy));
+					.append(((EntityReflector<Object>) p.getReflector()).getFields().get(i).get(proxy));
 				}
 				return str.toString();
 			}
