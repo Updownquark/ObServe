@@ -1023,13 +1023,19 @@ public class ObservableConfigContent {
 		}
 
 		@Override
-		public <E2 extends C> ValueCreator<C, E2> copy(E2 template) {
-			ValueCreator<C, C> creator = create();
-			for (ObservableConfig child : template._getContent()) {
-				if (child.getValue() != null)
-					creator.with(child.getName(), child.getValue());
+		public <E2 extends C> CollectionElement<C> copy(E2 template) {
+			return create().create(c -> {
+				copy(template, c);
+			});
+		}
+
+		static void copy(ObservableConfig source, ObservableConfig dest) {
+			dest.setValue(source.getValue());
+			for (int i = 0; i < source._getContent().size(); i++) {
+				ObservableConfig srcChild = source._getContent().get(i);
+				ObservableConfig destChild = dest.addChild(srcChild.getName());
+				copy(srcChild, destChild);
 			}
-			return (ValueCreator<C, E2>) creator;
 		}
 	}
 }

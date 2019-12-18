@@ -27,6 +27,7 @@ import org.qommons.ArrayUtils;
 import org.qommons.Causable;
 import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
+import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.QuickSet.QuickMap;
 import org.qommons.io.Format;
@@ -48,6 +49,8 @@ public interface ObservableConfigFormat<E> {
 
 	E parse(ObservableConfig root, ObservableValue<? extends ObservableConfig> config, Supplier<? extends ObservableConfig> create,
 		E previousValue, ObservableConfig.ObservableConfigEvent change, Observable<?> until) throws ParseException;
+
+	E copy(E source, E copy, ObservableValue<? extends ObservableConfig> config, Supplier<? extends ObservableConfig> create,Observable<?> until);
 
 	static <T> ObservableConfigFormat<T> ofQommonFormat(Format<T> format, Supplier<? extends T> defaultValue) {
 		return new SimpleConfigFormat<>(format, defaultValue);
@@ -92,6 +95,11 @@ public interface ObservableConfigFormat<E> {
 				return defaultValue.get();
 			return format.parse(value);
 		}
+
+		@Override
+		public T copy(T source, T copy, ObservableValue<? extends ObservableConfig> config, Supplier<? extends ObservableConfig> create,Observable<?> until) {
+			return source;
+		}
 	}
 
 	interface EntityConfigCreator<E> {
@@ -112,8 +120,6 @@ public interface ObservableConfigFormat<E> {
 		EntityConfiguredValueType<E> getEntityType();
 
 		<E2 extends E> EntityConfigCreator<E2> create(TypeToken<E2> subType);
-
-		<E2 extends E> EntityConfigCreator<E2> create(E2 template);
 	}
 
 	class EntitySubFormat<E> {
@@ -368,13 +374,39 @@ public interface ObservableConfigFormat<E> {
 		}
 
 		@Override
+		public E copy(E source, E copy, ObservableValue<? extends ObservableConfig> config, Supplier<? extends ObservableConfig> create,Observable<?> until){
+			for(EntitySubFormat<? extends E> sub : theSubFormats){
+				if(sub.rawType.isInstance(source) && ((Predicate<E>) sub.valueFilter).test(source)//
+					&& (copy==null || (sub.rawType.isInstance(copy) && ((Predicate<E>) sub.valueFilter).test(copy)))){
+					return ((ObservableConfigFormat<E>)sub.format).copy(source, copy, config, create, until);
+				}
+			}
+			if(copy==null)
+				throw new IllegalArgumentException("Cannot create copies in this format");
+			for(int i=0;i<fieldFormats.length;i++){
+				copyField(source, copy, i, config, create, until);
+			}
+			return copy;
+		}
+
+		private <F> void copyField(E source, E copy, int fieldIndex,
+			ObservableValue<? extends ObservableConfig> config, Supplier<? extends ObservableConfig> create, Observable<?> until) {
+			ConfiguredValueField<? super E, F> field = (ConfiguredValueField<? super E, F>) entityType.getFields().get(fieldIndex);
+			F sourceField=field.get(source);
+			F copyField=field.get(copy);
+			F newCopy = ((ObservableConfigFormat<F>) fieldFormats[fieldIndex]).copy(sourceField, copyField,
+				asChild(config, theFieldChildNames.get(fieldIndex)), asChild(config, create, theFieldChildNames.get(fieldIndex)), until);
+			if(newCopy!=copyField)
+				field.set(copy, copyField);
+		}
+
+		@Override
 		public <E2 extends E> EntityConfigCreator<E2> create(TypeToken<E2> subType) {
 			if (subType != null && !subType.equals(entityType.getType())) {
 				for (EntitySubFormat<? extends E> subFormat : theSubFormats) {
 					if (subFormat.type.isAssignableFrom(subType))
 						return ((EntitySubFormat<? super E2>) subFormat).format.create(subType);
 				}
-				throw new IllegalArgumentException("Unrecognized sub-type " + subType);
 			}
 			return (EntityConfigCreator<E2>) new EntityConfigCreator<E>() {
 				private final QuickMap<String, Object> theFieldValues = entityType.getFields().keySet().createMap();
@@ -422,12 +454,6 @@ public interface ObservableConfigFormat<E> {
 					}
 				}
 			};
-		}
-
-		@Override
-		public <E2 extends E> EntityConfigCreator<E2> create(E2 template) {
-			// TODO Auto-generated method stub
-			throw new UnsupportedOperationException("This method has not been implemented yet");
 		}
 
 		E createInstance(ObservableConfig config, QuickMap<String, Object> fieldValues, Observable<?> until) throws ParseException {
@@ -566,6 +592,32 @@ public interface ObservableConfigFormat<E> {
 					return previousValue;
 				}
 			}
+
+			@Override
+			public C copy(C source, C copy, ObservableValue<? extends ObservableConfig> config, Supplier<? extends ObservableConfig> create,
+				Observable<?> until) {
+				try(Transaction t2=Transactable.lock(copy, true, null); Transaction t1=Transactable.lock(source, false, null)){
+					for (E value : source) {
+						((Collection<E>) copy)
+						.add(elementFormat.copy(value, null, asChild(config, childName), asChild(config, create, childName), until));
+					}
+				}
+				return copy;
+			}
+		};
+	}
+
+	static ObservableValue<? extends ObservableConfig> asChild(ObservableValue<? extends ObservableConfig> config, String child) {
+		return config.map(c -> c == null ? null : c.getChild(child));
+	}
+
+	static Supplier<ObservableConfig> asChild(ObservableValue<? extends ObservableConfig> config,
+		Supplier<? extends ObservableConfig> create, String child) {
+		return () -> {
+			ObservableConfig c = config.get();
+			if (c == null)
+				c = create.get();
+			return c.getChild(child, true, null);
 		};
 	}
 
@@ -589,6 +641,14 @@ public interface ObservableConfigFormat<E> {
 					((ObservableConfigTransform.ObservableConfigEntityValues<E>) previousValue).onChange(change);
 					return previousValue;
 				}
+			}
+
+			@Override
+			public ObservableValueSet<E> copy(ObservableValueSet<E> source, ObservableValueSet<E> copy,
+				ObservableValue<? extends ObservableConfig> config, Supplier<? extends ObservableConfig> create, Observable<?> until) {
+				for (E value : source.getValues())
+					copy.copy(value);
+				return copy;
 			}
 		};
 	}
@@ -733,6 +793,18 @@ public interface ObservableConfigFormat<E> {
 				throw new ParseException("No sub-format found matching " + c, 0);
 			return ((SubFormat<T>) format).format.parse(root, config, create, format.applies(previousValue) ? previousValue : null, change,
 				until);
+		}
+
+		@Override
+		public T copy(T source, T copy, ObservableValue<? extends ObservableConfig> config, Supplier<? extends ObservableConfig> create,
+			Observable<?> until) {
+			SubFormat<? extends T> sub = null;
+			for (SubFormat<? extends T> subFormat : theSubFormats)
+				if (subFormat.applies(source) && (copy == null || subFormat.applies(copy))) {
+					sub = subFormat;
+					break;
+				}
+			return ((ObservableConfigFormat<T>) sub.format).copy(source, copy, config, create, until);
 		}
 	}
 }
