@@ -71,7 +71,7 @@ public class LittleList<E> extends JComponent {
 		theSyntheticContainer = new SyntheticContainer();
 		add(theSyntheticContainer); // So the tree lock works right
 		theRenderer = new ObservableCellRenderer.DefaultObservableCellRenderer<>((m, c) -> String.valueOf(c))//
-			.modify(fv -> fv.bold(fv.isSelected()));
+			.decorate((cell, cd) -> cd.bold(cell.isSelected()));
 		theSelectionModel = new DefaultListSelectionModel();
 
 		theItemActions = new ArrayList<>();
@@ -361,8 +361,9 @@ public class LittleList<E> extends JComponent {
 				theHolder.postRender(n - 1);
 			E row = theModel.getElementAt(n);
 			Component rendered = theRenderer.getCellRendererComponent(LittleList.this,
-				LambdaUtils.constantSupplier(row, () -> String.valueOf(row), row), row, theSelectionModel.isSelectedIndex(n), false, true,
-				theSelectionModel.isSelectedIndex(n), n, 0, CellRenderContext.DEFAULT);
+				new ModelCell.Default<>(LambdaUtils.constantSupplier(row, () -> String.valueOf(row), row), row, n, 0, //
+					theSelectionModel.isSelectedIndex(n), theSelectionModel.isSelectedIndex(n), true, true),
+				CellRenderContext.DEFAULT);
 			boolean newBounds;
 			if (n >= bounds.size()) {
 				newBounds = true;

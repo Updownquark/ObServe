@@ -397,7 +397,7 @@ public interface ObservableConfigFormat<E> {
 			F newCopy = ((ObservableConfigFormat<F>) fieldFormats[fieldIndex]).copy(sourceField, copyField,
 				asChild(config, theFieldChildNames.get(fieldIndex)), asChild(config, create, theFieldChildNames.get(fieldIndex)), until);
 			if(newCopy!=copyField)
-				field.set(copy, copyField);
+				field.set(copy, newCopy);
 		}
 
 		@Override

@@ -6,6 +6,7 @@ import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
@@ -232,6 +233,7 @@ public class CategoryRenderStrategy<R, C> {
 	private String theHeaderTooltip;
 	private BiFunction<? super R, ? super C, String> theTooltip;
 	private ObservableCellRenderer<? super R, ? super C> theRenderer;
+	private CellDecorator<R, C> theDecorator;
 	private int theMinWidth;
 	private int thePrefWidth;
 	private int theMaxWidth;
@@ -320,6 +322,15 @@ public class CategoryRenderStrategy<R, C> {
 	public CategoryRenderStrategy<R, C> withRenderer(ObservableCellRenderer<? super R, ? super C> renderer) {
 		theRenderer = renderer;
 		return this;
+	}
+
+	public CategoryRenderStrategy<R, C> decorate(CellDecorator<R, C> decorator) {
+		theDecorator = decorator;
+		return this;
+	}
+
+	public CellDecorator<R, C> getDecorator() {
+		return theDecorator;
 	}
 
 	public CategoryRenderStrategy<R, C> formatText(BiFunction<? super R, ? super C, String> format) {

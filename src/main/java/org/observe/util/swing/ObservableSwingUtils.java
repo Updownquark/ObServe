@@ -6,7 +6,11 @@ import java.awt.Container;
 import java.awt.EventQueue;
 import java.awt.Font;
 import java.awt.Frame;
+import java.awt.GraphicsConfiguration;
+import java.awt.GraphicsDevice;
+import java.awt.GraphicsEnvironment;
 import java.awt.Image;
+import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.event.ActionListener;
 import java.awt.event.ComponentEvent;
@@ -855,14 +859,13 @@ public class ObservableSwingUtils {
 	 * @return A subscription that will stop persisting the frame's location and size to the config
 	 */
 	public static Subscription configureFrameBounds(Frame frame, ObservableConfig config) {
-		// TODO At some point, maybe dynamically listen to the configuration to control the frame
 		if (config.get("x") != null) {
 			try {
-				frame.setBounds(config.getChild("x").asValue(int.class).parse(), //
-					config.getChild("y").asValue(int.class).parse(), //
-					config.getChild("width").asValue(int.class).parse(), //
-					config.getChild("height").asValue(int.class).parse()//
-					);
+				int x = config.getChild("x").asValue(int.class).parse();
+				int y = config.getChild("y").asValue(int.class).parse();
+				int w = config.getChild("width").asValue(int.class).parse();
+				int h = config.getChild("height").asValue(int.class).parse();
+				configureFrameBounds(frame, x, y, w, h);
 			} catch (ParseException e) {
 				frame.pack();
 				frame.setLocationRelativeTo(null);
@@ -890,6 +893,78 @@ public class ObservableSwingUtils {
 		};
 		frame.addComponentListener(listener);
 		return () -> frame.removeComponentListener(listener);
+	}
+
+	/**
+	 * Initializes a frame's location and size from configuration, moving the frame to display in the current graphics environment
+	 *
+	 * @param frame The frame whose location to configure
+	 * @param x The leftmost X-component for the frame's bounds
+	 * @param y The topmost Y-component for the frame's bounds
+	 * @param width The width for the frame
+	 * @param height The height for the frame
+	 */
+	public static void configureFrameBounds(Frame frame, int x, int y, int width, int height) {
+		Point bestTopLeft = null;
+		Point bestBottomRight = null;
+		int minX = Integer.MAX_VALUE, maxX = Integer.MIN_VALUE, minY = Integer.MAX_VALUE, maxY = Integer.MIN_VALUE;
+		for (GraphicsDevice device : GraphicsEnvironment.getLocalGraphicsEnvironment().getScreenDevices()) {
+			for (GraphicsConfiguration config : device.getConfigurations()) {
+				Rectangle devB = config.getBounds();
+
+				if (devB.x < minX)
+					minX = devB.x;
+				if (devB.x + devB.width > maxX)
+					maxX = devB.x + devB.width;
+				if (devB.y < minY)
+					minY = devB.y;
+				if (devB.y + devB.height > maxY)
+					maxY = devB.y + devB.height;
+
+				Point closest;
+				closest = getClosest(devB, x, y);
+				if (bestTopLeft == null
+					|| (Math.abs(x - closest.x) + Math.abs(y - closest.y)) < (Math.abs(x - bestTopLeft.x) + Math.abs(y - bestTopLeft.y)))
+					bestTopLeft = closest;
+
+				closest = getClosest(devB, x + width, y + height);
+				if (bestBottomRight == null
+					|| (Math.abs(x + width - closest.x) + Math.abs(y + height - closest.y)) < (Math.abs(x + width - bestBottomRight.x)
+						+ Math.abs(y + height - bestBottomRight.y)))
+					bestBottomRight = closest;
+			}
+		}
+
+		if (bestBottomRight.x - bestTopLeft.x < 100) {
+			if (bestTopLeft.x > x)
+				bestBottomRight.x = Math.min(bestTopLeft.x + width, maxX);
+			else
+				bestTopLeft.x = Math.max(bestBottomRight.x - width, minX);
+		}
+		if (bestBottomRight.y - bestTopLeft.y < 100) {
+			if (bestTopLeft.y > y)
+				bestBottomRight.y = Math.min(bestTopLeft.y + height, maxY);
+			else
+				bestTopLeft.y = Math.max(bestBottomRight.y - height, minY);
+		}
+		frame.setBounds(bestTopLeft.x, bestTopLeft.y, bestBottomRight.x - bestTopLeft.x, bestBottomRight.y - bestTopLeft.y);
+	}
+
+	private static Point getClosest(Rectangle bounds, int x, int y) {
+		int devX, devY;
+		if (x < bounds.x)
+			devX = bounds.x;
+		else if (x >= bounds.x + bounds.width)
+			devX = bounds.x + bounds.width - 1;
+		else
+			devX = x;
+		if (y < bounds.y)
+			devY = bounds.y;
+		else if (y >= bounds.y + bounds.height)
+			devY = bounds.y + bounds.height - 1;
+		else
+			devY = y;
+		return new Point(devX, devY);
 	}
 
 	/**

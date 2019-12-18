@@ -369,28 +369,12 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 			boolean elementChange = collectionChange.relativePath.size() == 1;
 			ObservableConfig config = collectionChange.relativePath.get(0);
 			if (elementChange && collectionChange.changeType == CollectionChangeType.add) {
-				CollectionElement<ElementId> el = theElements.keySet().search(config.getParentChildRef(),
-					BetterSortedList.SortedSearchFilter.PreferLess);
 				ConfigElement newEl;
 				if (theNewElement != null)
 					newEl = theNewElement;
 				else
 					newEl = createElement(config, null);
-				if (thePreAddAction != null) {
-					thePreAddAction.accept(newEl);
-					thePreAddAction = null;
-				}
-				ElementId newElId;
-				if (el == null)// Must be empty
-					newElId = theElements.putEntry(config.getParentChildRef(), newEl, false).getElementId();
-				else if (el.get().compareTo(config.getParentChildRef()) < 0)
-					newElId = theElements.putEntry(config.getParentChildRef(), newEl, el.getElementId(), null, true).getElementId();
-				else
-					newElId = theElements.putEntry(config.getParentChildRef(), newEl, null, el.getElementId(), false).getElementId();
-				newEl.theElement = newElId;
-				incrementStamp();
-				fire(new ObservableCollectionEvent<>(newElId, theType, theElements.keySet().getElementsBefore(newElId),
-					CollectionChangeType.add, null, newEl.get(), collectionChange));
+				initialize(newEl, thePreAddAction, collectionChange);
 			} else {
 				CollectionElement<ConfigElement> el = theElements.getEntry(config.getParentChildRef());
 				if (el == null) // Must be a different child
@@ -428,6 +412,27 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 					}
 				}
 			}
+		}
+
+		private void initialize(ConfigElement newEl, Consumer<? super ConfigElement> preAddAction, Object cause) {
+			if (thePreAddAction != null) {
+				thePreAddAction.accept(newEl);
+				thePreAddAction = null;
+			}
+			ElementId newElId;
+			ObservableConfig config = newEl.getConfig();
+			CollectionElement<ElementId> el = theElements.keySet().search(config.getParentChildRef(),
+				BetterSortedList.SortedSearchFilter.PreferLess);
+			if (el == null)// Must be empty
+				newElId = theElements.putEntry(config.getParentChildRef(), newEl, false).getElementId();
+			else if (el.get().compareTo(config.getParentChildRef()) < 0)
+				newElId = theElements.putEntry(config.getParentChildRef(), newEl, el.getElementId(), null, true).getElementId();
+			else
+				newElId = theElements.putEntry(config.getParentChildRef(), newEl, null, el.getElementId(), false).getElementId();
+			newEl.theElement = newElId;
+			incrementStamp();
+			fire(new ObservableCollectionEvent<>(newElId, theType, theElements.keySet().getElementsBefore(newElId),
+				CollectionChangeType.add, null, newEl.get(), cause));
 		}
 
 		private void fire(ObservableCollectionEvent<E> event) {
@@ -468,6 +473,15 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 					});
 					cve[0] = theNewElement;
 					theNewElement = null;
+					if (!cve[0].isInitialized()) {
+						// This can happen when using pre-add actions,
+						// i.e. this add invocation itself is happening inside a pre-add action from an add operation
+						// higher up in the config hierarchy.
+						// Value sets that are a field in an entity rely on the parent to pass change events to it
+						// and in such a case, the parent config isn't yet accounted for in the config value hierarchy,
+						// so the event can't be handled by the onChange method
+						initialize(cve[0], preAddAction, null);
+					}
 				}
 			});
 			return cve[0];
@@ -523,6 +537,10 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 					}
 					theValue = val;
 				}
+			}
+
+			boolean isInitialized() {
+				return theElement != null;
 			}
 
 			protected ObservableConfig getConfig() {

@@ -2,7 +2,6 @@ package org.observe.util.swing;
 
 import java.awt.Component;
 import java.util.function.BiFunction;
-import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -31,13 +30,12 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 
 	String renderAsText(Supplier<M> modelValue, C columnValue);
 
-	Component getCellRendererComponent(Component parent, Supplier<M> modelValue, C columnValue, boolean selected, boolean expanded,
-		boolean leaf, boolean hasFocus, int row, int column, CellRenderContext ctx);
+	Component getCellRendererComponent(Component parent, ModelCell<M, C> cell, CellRenderContext ctx);
 
 	@Override
 	default Component getListCellRendererComponent(JList<? extends C> list, C value, int index, boolean isSelected, boolean cellHasFocus) {
-		return getCellRendererComponent(list, () -> (M) value, value, isSelected, true, true, cellHasFocus, index, 0,
-			CellRenderContext.DEFAULT);
+		return getCellRendererComponent(list,
+			new ModelCell.Default<>(() -> (M) value, value, index, 0, isSelected, cellHasFocus, true, true), CellRenderContext.DEFAULT);
 	}
 
 	public static <M, C> ObservableCellRenderer<M, C> fromTableRenderer(TableCellRenderer renderer,
@@ -49,11 +47,10 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 			}
 
 			@Override
-			public Component getCellRendererComponent(Component parent, Supplier<M> modelValue, C columnValue, boolean selected,
-				boolean expanded, boolean leaf, boolean hasFocus, int row, int column, CellRenderContext ctx) {
+			public Component getCellRendererComponent(Component parent, ModelCell<M, C> cell, CellRenderContext ctx) {
 				return tryEmphasize(//
-					renderer.getTableCellRendererComponent(parent instanceof JTable ? (JTable) parent : null, columnValue, selected,
-						hasFocus, row, column),
+					renderer.getTableCellRendererComponent(parent instanceof JTable ? (JTable) parent : null, cell.getCellValue(),
+						cell.isSelected(), cell.hasFocus(), cell.getRowIndex(), cell.getColumnIndex()),
 					ctx);
 			}
 		}
@@ -69,11 +66,10 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 			}
 
 			@Override
-			public Component getCellRendererComponent(Component parent, Supplier<M> modelValue, C columnValue, boolean selected,
-				boolean expanded, boolean leaf, boolean hasFocus, int row, int column, CellRenderContext ctx) {
+			public Component getCellRendererComponent(Component parent, ModelCell<M, C> cell, CellRenderContext ctx) {
 				return tryEmphasize(//
-					renderer.getTreeCellRendererComponent(parent instanceof JTree ? (JTree) parent : null, columnValue, selected, expanded,
-						leaf, row, hasFocus),
+					renderer.getTreeCellRendererComponent(parent instanceof JTree ? (JTree) parent : null, cell.getCellValue(),
+						cell.isSelected(), cell.isExpanded(), cell.isLeaf(), cell.getRowIndex(), cell.hasFocus()),
 					ctx);
 			}
 		}
@@ -126,14 +122,12 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 		}
 
 		@Override
-		public Component getCellRendererComponent(Component parent, Supplier<M> modelValue, C columnValue, boolean selected,
-			boolean expanded, boolean leaf, boolean hasFocus, int row, int column, CellRenderContext ctx) {
-			render(theComponent, parent, modelValue, columnValue, selected, expanded, leaf, hasFocus, row, column, ctx);
+		public Component getCellRendererComponent(Component parent, ModelCell<M, C> cell, CellRenderContext ctx) {
+			render(theComponent, parent, cell, ctx);
 			return theComponent;
 		}
 
-		protected abstract void render(R component, Component parent, Supplier<M> modelValue, C columnValue, boolean selected,
-			boolean expanded, boolean leaf, boolean hasFocus, int row, int column, CellRenderContext ctx);
+		protected abstract void render(R component, Component parent, ModelCell<M, C> cell, CellRenderContext ctx);
 	}
 
 	public static class DefaultObservableCellRenderer<M, C> implements ObservableCellRenderer<M, C> {
@@ -142,8 +136,8 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 		private DefaultListCellRenderer theListRenderer;
 		private JLabel theLabel;
 
-		private FormattedValue<M, C> theFormattedValue;
-		private Consumer<? super FormattedValue<M, C>> theLabelModifier;
+		private CellDecorator<M, C> theDecorator;
+		private ComponentDecorator theComponentDecorator;
 		private final BiFunction<Supplier<M>, C, String> theTextRenderer;
 
 		public DefaultObservableCellRenderer(BiFunction<Supplier<M>, C, String> textRenderer) {
@@ -156,119 +150,51 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 		}
 
 		@Override
-		public Component getCellRendererComponent(Component parent, Supplier<M> modelValue, C columnValue, boolean selected,
-			boolean expanded, boolean leaf, boolean hasFocus, int row, int column, CellRenderContext ctx) {
-			Object rendered = getRenderValue(modelValue, columnValue, selected, expanded, leaf, hasFocus, row, column);
+		public Component getCellRendererComponent(Component parent, ModelCell<M, C> cell, CellRenderContext ctx) {
+			Object rendered = getRenderValue(cell);
 			Component c;
 			if (parent instanceof JTable) {
 				if (theTableRenderer == null)
 					theTableRenderer = new DefaultTableCellRenderer();
-				c = theTableRenderer.getTableCellRendererComponent((JTable) parent, rendered, selected, hasFocus, row, column);
+				c = theTableRenderer.getTableCellRendererComponent((JTable) parent, rendered, cell.isSelected(), cell.hasFocus(),
+					cell.getRowIndex(), cell.getColumnIndex());
 			} else if (parent instanceof JTree) {
 				if (theTreeRenderer == null)
 					theTreeRenderer = new DefaultTreeCellRenderer();
-				c = theTreeRenderer.getTreeCellRendererComponent((JTree) parent, rendered, selected, expanded, leaf, row, hasFocus);
+				c = theTreeRenderer.getTreeCellRendererComponent((JTree) parent, rendered, cell.isSelected(), cell.isExpanded(),
+					cell.isLeaf(), cell.getRowIndex(), cell.hasFocus());
 			} else if (parent instanceof JList) {
 				if (theListRenderer == null)
 					theListRenderer = new DefaultListCellRenderer();
-				c = theListRenderer.getListCellRendererComponent((JList<? extends C>) parent, rendered, row, selected, hasFocus);
+				c = theListRenderer.getListCellRendererComponent((JList<? extends C>) parent, rendered, cell.getRowIndex(),
+					cell.isSelected(), cell.hasFocus());
 			} else {
 				if (theLabel == null)
 					theLabel = new JLabel();
 				theLabel.setText(String.valueOf(rendered));
 				c = theLabel;
 			}
-			if (theLabelModifier != null) {
-				if (theFormattedValue == null)
-					theFormattedValue = new FormattedValue<>();
-				theLabelModifier
-				.accept(theFormattedValue.forRender(c, modelValue, columnValue, selected, expanded, leaf, hasFocus, row, column, ctx));
+			if (theDecorator != null) {
+				if (theComponentDecorator == null)
+					theComponentDecorator = new ComponentDecorator();
+				else
+					theComponentDecorator.reset();
+				theDecorator.decorate(cell, theComponentDecorator);
+				c = theComponentDecorator.decorate(c);
 			}
 			return tryEmphasize(c, ctx);
 		}
 
-		protected Object getRenderValue(Supplier<M> modelValue, C columnValue, boolean selected, boolean expanded, boolean leaf,
-			boolean hasFocus, int row, int column) {
-			return columnValue;
+		protected Object getRenderValue(ModelCell<M, C> cell) {
+			return cell.getCellValue();
 		}
 
-		public DefaultObservableCellRenderer<M, C> modify(Consumer<? super FormattedValue<M, C>> modifier) {
-			if (theLabelModifier == null)
-				theLabelModifier = modifier;
-			else {
-				theLabelModifier = label -> {
-					theLabelModifier.accept(label);
-					modifier.accept(label);
-				};
-			}
+		public DefaultObservableCellRenderer<M, C> decorate(CellDecorator<M, C> decorator) {
+			if (theDecorator == null)
+				theDecorator = decorator;
+			else
+				theDecorator = theDecorator.modify(decorator);
 			return this;
-		}
-	}
-
-	public static class FormattedValue<M, C> extends ObservableSwingUtils.FontAdjuster<Component> {
-		private Supplier<M> theModelValue;
-		private C theColumnValue;
-		private boolean isSelected;
-		private boolean isExpanded;
-		private boolean isLeaf;
-		private boolean hasFocus;
-		private int theRow;
-		private int theColumn;
-		private CellRenderContext theContext;
-
-		public FormattedValue() {
-			super(null);
-		}
-
-		FormattedValue<M, C> forRender(Component lbl, Supplier<M> modelValue, C columnValue, boolean selected, boolean expanded,
-			boolean leaf, boolean focused, int row, int column, CellRenderContext ctx) {
-			setLabel(lbl);
-			theModelValue = modelValue;
-			theColumnValue = columnValue;
-			isSelected = selected;
-			isExpanded = expanded;
-			isLeaf = leaf;
-			hasFocus = focused;
-			theRow = row;
-			theColumn = column;
-			theContext = ctx;
-			return this;
-		}
-
-		public M getModelValue() {
-			return theModelValue.get();
-		}
-
-		public C getColumnValue() {
-			return theColumnValue;
-		}
-
-		public boolean isSelected() {
-			return isSelected;
-		}
-
-		public boolean isExpanded() {
-			return isExpanded;
-		}
-
-		public boolean isLeaf() {
-			return isLeaf;
-		}
-
-		public boolean hasFocus() {
-			return hasFocus;
-		}
-
-		public int getRow() {
-			return theRow;
-		}
-
-		public int getColumn() {
-			return theColumn;
-		}
-
-		public CellRenderContext getContext() {
-			return theContext;
 		}
 	}
 
@@ -279,9 +205,8 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 			}
 
 			@Override
-			protected Object getRenderValue(Supplier<M> modelValue, C columnValue, boolean selected, boolean expanded, boolean leaf,
-				boolean hasFocus, int row, int column) {
-				return format.apply(modelValue.get(), columnValue);
+			protected Object getRenderValue(ModelCell<M, C> cell) {
+				return format.apply(cell.getModelValue(), cell.getCellValue());
 			}
 		}
 		return new BiFormattedCellRenderer();
@@ -294,9 +219,8 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 			}
 
 			@Override
-			protected Object getRenderValue(Supplier<M> modelValue, C columnValue, boolean selected, boolean expanded, boolean leaf,
-				boolean hasFocus, int row, int column) {
-				return format.apply(columnValue);
+			protected Object getRenderValue(ModelCell<M, C> cell) {
+				return format.apply(cell.getCellValue());
 			}
 		}
 		return new BiFormattedCellRenderer();

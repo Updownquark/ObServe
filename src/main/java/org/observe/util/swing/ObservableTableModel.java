@@ -470,8 +470,7 @@ public class ObservableTableModel<R> implements TableModel {
 			tblColumn.setIdentifier(column.getIdentifier());
 		else
 			tblColumn.setIdentifier(column);
-		tblColumn.setCellRenderer(new ObservableTableCellRenderer<>(model, column.getRenderer() != null ? column.getRenderer()
-			: new ObservableCellRenderer.DefaultObservableCellRenderer<>((r, c) -> String.valueOf(c)), ctx));
+		tblColumn.setCellRenderer(new ObservableTableCellRenderer<>(model, (CategoryRenderStrategy<R, C>) column, ctx));
 		if (column.getMutator().getEditor() != null)
 			tblColumn.setCellEditor(column.getMutator().getEditor()//
 				.withValueTooltip((row, col) -> ((CategoryRenderStrategy<R, Object>) column).getTooltip((R) row, col)));
@@ -487,23 +486,46 @@ public class ObservableTableModel<R> implements TableModel {
 
 	private static class ObservableTableCellRenderer<R, C> implements TableCellRenderer {
 		private final ObservableTableModel<R> theModel;
-		private final ObservableCellRenderer<? super R, C> theRenderer;
+		private final CategoryRenderStrategy<R, C> theColumn;
 		private final TableRenderContext theContext;
+		private ComponentDecorator theDecorator;
 
-		ObservableTableCellRenderer(ObservableTableModel<R> model, ObservableCellRenderer<? super R, C> renderer, TableRenderContext ctx) {
+		private Component theLastRender;
+
+		ObservableTableCellRenderer(ObservableTableModel<R> model, CategoryRenderStrategy<R, C> column, TableRenderContext ctx) {
 			theModel = model;
-			theRenderer = renderer;
+			theColumn = column;
 			theContext = ctx;
 		}
 
 		@Override
 		public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row,
 			int column) {
+			if (theLastRender != null) {
+				theLastRender.setBackground(null);
+				theLastRender.setForeground(null);
+				theLastRender = null;
+			}
+			ObservableCellRenderer<R, C> renderer = theColumn.getRenderer() != null ? (ObservableCellRenderer<R, C>) theColumn.getRenderer()
+				: new ObservableCellRenderer.DefaultObservableCellRenderer<>((r, c) -> String.valueOf(c));
 			int modelRow = table.convertRowIndexToModel(row);
 			int modelColumn = table.convertColumnIndexToModel(column);
-			return theRenderer.getCellRendererComponent(table, //
-				() -> theModel.getRow(modelRow), (C) value, isSelected, false, true, hasFocus, row, column,
+			ModelCell<R, C> cell = new ModelCell.Default<>(() -> theModel.getRow(modelRow), (C) value, //
+				row, column, isSelected, hasFocus, true, true);
+			Component c = renderer.getCellRendererComponent(table, cell,
 				() -> theContext == null ? null : theContext.getEmphaticRegions(modelRow, modelColumn));
+			theLastRender = c;
+
+			if (theColumn.getDecorator() != null) {
+				if (theDecorator == null)
+					theDecorator = new ComponentDecorator();
+				else
+					theDecorator.reset();
+				theColumn.getDecorator().decorate(cell, theDecorator);
+				theDecorator.decorate(c);
+				theDecorator.reset();
+			}
+			return c;
 		}
 	}
 
