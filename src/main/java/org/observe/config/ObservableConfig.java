@@ -630,9 +630,8 @@ public class ObservableConfig implements Transactable, Stamped {
 			return this;
 		}
 
-		public ObservableConfigValueBuilder<T> withHierarchicalEntityFormat(
-			Function<ObservableConfigFormat.EntityFormatBuilder<T>, ObservableConfigFormat.EntityConfigFormat<T>> format) {
-			theFormat = format.apply(ObservableConfigFormat.buildEntities(theType, getFormatSet()));
+		public ObservableConfigValueBuilder<T> asEntity(Consumer<ObservableConfigFormat.EntityFormatBuilder<T>> format) {
+			theFormat = getFormatSet().buildEntityFormat(theType, format);
 			return this;
 		}
 
@@ -696,19 +695,24 @@ public class ObservableConfig implements Transactable, Stamped {
 			return theUntil == null ? Observable.empty() : theUntil;
 		}
 
+		protected ObservableConfigFormat.ObservableConfigParseContext<T> getParseContext(Observable<?> until) {
+			return ObservableConfigFormat.ctxFor(ObservableConfig.this, getDescendant(false), createDescendant(false)::get, null, until,
+				null);
+		}
+
 		public T parse() throws ParseException {
 			ObservableConfigFormat<T> format = getFormat();
 			// If the format is simple, we can just parse the value and then forget about it.
 			// Otherwise, we need to maintain the connection to update the value when configuration changes
 			if (format instanceof ObservableConfigFormat.SimpleConfigFormat)
-				return format.parse(ObservableConfig.this, getDescendant(false), createDescendant(false)::get, null, null, getUntil());
+				return format.parse(getParseContext(getUntil()));
 			else
 				return buildValue().get();
 		}
 
 		public T parseDisconnected() throws ParseException {
 			SimpleObservable<Void> until = new SimpleObservable<>();
-			T value = getFormat().parse(ObservableConfig.this, getDescendant(false), createDescendant(false)::get, null, null, until);
+			T value = getFormat().parse(getParseContext(until));
 			until.onNext(null);
 			return value;
 		}

@@ -5,13 +5,13 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -22,6 +22,7 @@ import org.observe.ObservableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.config.ObservableConfig.ObservableConfigEvent;
 import org.observe.config.ObservableConfig.ObservableConfigPathElement;
+import org.observe.config.ObservableConfigFormat.ReferenceFormat.FormattedField;
 import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
 import org.qommons.Causable;
@@ -47,10 +48,96 @@ public interface ObservableConfigFormat<E> {
 	void format(E value, E previousValue, ObservableConfig config, Consumer<E> acceptedValue, Observable<?> until)
 		throws IllegalArgumentException;
 
-	E parse(ObservableConfig root, ObservableValue<? extends ObservableConfig> config, Supplier<? extends ObservableConfig> create,
-		E previousValue, ObservableConfig.ObservableConfigEvent change, Observable<?> until) throws ParseException;
+	E parse(ObservableConfigParseContext<E> ctx) throws ParseException;
 
-	E copy(E source, E copy, ObservableValue<? extends ObservableConfig> config, Supplier<? extends ObservableConfig> create,Observable<?> until);
+	E copy(E source, E copy, ObservableValue<? extends ObservableConfig> config, Supplier<? extends ObservableConfig> create,
+		Observable<?> until);
+
+	interface ObservableConfigParseContext<E> {
+		ObservableConfig getRoot();
+		ObservableValue<? extends ObservableConfig> getConfig();
+		ObservableConfig getConfig(boolean createIfAbsent);
+		ObservableConfigEvent getChange();
+		Observable<?> getUntil();
+		E getPreviousValue();
+
+		<V> ObservableConfigParseContext<V> forChild(BiFunction<ObservableConfig, Boolean, ObservableConfig> child,
+			ObservableConfigEvent childChange, V previousValue);
+
+		default <V> ObservableConfigParseContext<V> forChild(String childName, V previousValue) {
+			ObservableConfigEvent childChange;
+			if (getChange() == null || getChange().relativePath.isEmpty() || !getChange().relativePath.get(0).getName().equals(childName))
+				childChange = null;
+			else
+				childChange = getChange().asFromChild();
+			return forChild((config, create) -> config.getChild(childName, create, null), childChange, previousValue);
+		}
+	}
+
+	static <E> ObservableConfigParseContext<E> ctxFor(ObservableConfig root, ObservableValue<? extends ObservableConfig> config,
+		Supplier<? extends ObservableConfig> create, ObservableConfigEvent change, Observable<?> until, E previousValue) {
+		return new DefaultOCParseContext<>(root, config, create, change, until, null);
+	}
+
+	static class DefaultOCParseContext<E> implements ObservableConfigParseContext<E> {
+		private final ObservableConfig theRoot;
+		private final ObservableValue<? extends ObservableConfig> theConfig;
+		private final Supplier<? extends ObservableConfig> theCreate;
+		private final ObservableConfigEvent theChange;
+		private final Observable<?> theUntil;
+		private final E thePreviousValue;
+
+		public DefaultOCParseContext(ObservableConfig root, ObservableValue<? extends ObservableConfig> config,
+			Supplier<? extends ObservableConfig> create, ObservableConfigEvent change, Observable<?> until, E previousValue) {
+			theRoot = root;
+			theConfig = config;
+			theCreate = create;
+			theChange = change;
+			theUntil = until;
+			thePreviousValue = previousValue;
+		}
+
+		@Override
+		public ObservableConfig getRoot() {
+			return theRoot;
+		}
+
+		@Override
+		public ObservableValue<? extends ObservableConfig> getConfig() {
+			return theConfig;
+		}
+
+		@Override
+		public ObservableConfig getConfig(boolean createIfAbsent) {
+			ObservableConfig c = theConfig.get();
+			if (c == null && createIfAbsent)
+				c = theCreate.get();
+			return c;
+		}
+
+		@Override
+		public ObservableConfigEvent getChange() {
+			return theChange;
+		}
+
+		@Override
+		public Observable<?> getUntil() {
+			return theUntil;
+		}
+
+		@Override
+		public E getPreviousValue() {
+			return thePreviousValue;
+		}
+
+		@Override
+		public <V> ObservableConfigParseContext<V> forChild(BiFunction<ObservableConfig, Boolean, ObservableConfig> child,
+			ObservableConfigEvent childChange, V previousValue) {
+			ObservableValue<? extends ObservableConfig> childConfig = theConfig.map(c -> child.apply(c, false));
+			Supplier<? extends ObservableConfig> childCreate = () -> child.apply(getConfig(true), true);
+			return ctxFor(theRoot, childConfig, childCreate, childChange, theUntil, previousValue);
+		}
+	}
 
 	static <T> ObservableConfigFormat<T> ofQommonFormat(Format<T> format, Supplier<? extends T> defaultValue) {
 		return new SimpleConfigFormat<>(format, defaultValue);
@@ -82,24 +169,173 @@ public interface ObservableConfigFormat<E> {
 		}
 
 		@Override
-		public T parse(ObservableConfig root, ObservableValue<? extends ObservableConfig> config,
-			Supplier<? extends ObservableConfig> create, T previousValue, ObservableConfig.ObservableConfigEvent change,
-			Observable<?> until) throws ParseException {
+		public T parse(ObservableConfigParseContext<T> ctx) throws ParseException {
+			ObservableConfig config = ctx.getConfig(false);
 			if (config == null)
 				return defaultValue.get();
-			if (change != null && change.relativePath.size() > 1)
-				return previousValue; // Changing a sub-config doesn't affect this value
-			ObservableConfig c = config.get();
-			String value = c == null ? null : c.getValue();
+			String value = config == null ? null : config.getValue();
 			if (value == null)
 				return defaultValue.get();
+			if (ctx.getChange() != null && ctx.getChange().relativePath.size() > 1)
+				return ctx.getPreviousValue(); // Changing a sub-config doesn't affect this value
 			return format.parse(value);
 		}
 
 		@Override
-		public T copy(T source, T copy, ObservableValue<? extends ObservableConfig> config, Supplier<? extends ObservableConfig> create,Observable<?> until) {
+		public T copy(T source, T copy, ObservableValue<? extends ObservableConfig> config, Supplier<? extends ObservableConfig> create,
+			Observable<?> until) {
 			return source;
 		}
+	}
+
+	class ReferenceFormat<T> implements ObservableConfigFormat<T> {
+		static class FormattedField<T, F> {
+			public final Function<? super T, F> field;
+			public final ObservableConfigFormat<F> format;
+
+			public FormattedField(Function<? super T, F> field, ObservableConfigFormat<F> format) {
+				this.field = field;
+				this.format = format;
+			}
+		}
+
+		private final QuickMap<String, FormattedField<? super T, ?>> theFields;
+		private final Function<QuickMap<String, Object>, ? extends T> theRetriever;
+
+		ReferenceFormat(QuickMap<String, FormattedField<? super T, ?>> fields, Function<QuickMap<String, Object>, ? extends T> retriever) {
+			theFields = fields;
+			theRetriever = retriever;
+		}
+
+		@Override
+		public void format(T value, T previousValue, ObservableConfig config, Consumer<T> acceptedValue, Observable<?> until)
+			throws IllegalArgumentException {
+			if (value == null) {
+				for (ObservableConfig child : config._getContent()) {
+					if (child.getName().equals("null")) {
+						child.setValue("true");
+						child.getAllContent().getValues().clear();
+					} else
+						child.remove();
+				}
+				acceptedValue.accept(value);
+				return;
+			}
+			ObservableConfig nullConfig = config.getChild("null");
+			if (nullConfig != null)
+				nullConfig.remove();
+			boolean[] added = new boolean[1];
+			for (int f = 0; f < theFields.keySize(); f++) {
+				FormattedField<? super T, Object> field = (FormattedField<? super T, Object>) theFields.get(f);
+				Object fieldValue = field.field.apply(value);
+				Object preFieldValue = previousValue == null ? null : field.field.apply(previousValue);
+				ObservableConfig fieldConfig = config.getChild(theFields.keySet().get(f), true, //
+					child -> {
+						added[0] = true;
+						formatField(child, fieldValue, preFieldValue, field.format, until);
+					});
+				if (!added[0])
+					formatField(fieldConfig, fieldValue, preFieldValue, field.format, until);
+			}
+		}
+
+		private <F> void formatField(ObservableConfig child, F fieldValue, F preFieldValue, ObservableConfigFormat<F> format,
+			Observable<?> until) {
+			format.format(fieldValue, preFieldValue, child, f -> {}, until);
+		}
+
+		@Override
+		public T parse(ObservableConfigParseContext<T> ctx)
+			throws ParseException {
+			ObservableConfig c = ctx.getConfig(false);
+			if (c == null || "true".equals(c.get("null")))
+				return null;
+			QuickMap<String, Object> fieldValues = theFields.keySet().createMap();
+			T previousValue = ctx.getPreviousValue();
+			QuickMap<String, Object> preFieldValues = previousValue == null ? null : theFields.keySet().createMap();
+			boolean usePreValue = previousValue != null;
+			for (int f = 0; f < theFields.keySize(); f++) {
+				Object preValue;
+				if (previousValue != null)
+					preFieldValues.put(f, preValue = theFields.get(f).field.apply(previousValue));
+				else
+					preValue = null;
+				Object value = ((ObservableConfigFormat<Object>) theFields.get(f).format)
+					.parse(ctx.forChild(theFields.keySet().get(f), preValue));
+				fieldValues.put(f, value);
+				if (usePreValue && !Objects.equals(preValue, value))
+					usePreValue = false;
+			}
+			if (usePreValue)
+				return previousValue;
+			return theRetriever.apply(fieldValues.unmodifiable());
+		}
+
+		@Override
+		public T copy(T source, T copy, ObservableValue<? extends ObservableConfig> config, Supplier<? extends ObservableConfig> create,
+			Observable<?> until) {
+			return source;
+		}
+	}
+
+	public static class ReferenceFormatBuilder<T> {
+		private final Function<QuickMap<String, Object>, ? extends T> theRetriever;
+		private final Function<QuickMap<String, Object>, ? extends Iterable<? extends T>> theMultiRetriever;
+		private final Supplier<? extends T> theRetreiverDefault;
+		private final Map<String, FormattedField<? super T, ?>> theFields;
+
+		ReferenceFormatBuilder(Function<QuickMap<String, Object>, ? extends T> retriever) {
+			theRetriever = retriever;
+			theMultiRetriever = null;
+			theRetreiverDefault = null;
+			theFields = new LinkedHashMap<>();
+		}
+
+		public ReferenceFormatBuilder(Function<QuickMap<String, Object>, ? extends Iterable<? extends T>> multiRetriever,
+			Supplier<? extends T> defaultValue) {
+			theRetriever = null;
+			theMultiRetriever = multiRetriever;
+			theRetreiverDefault = defaultValue == null ? () -> null : defaultValue;
+			theFields = new LinkedHashMap<>();
+		}
+
+		public <F> ReferenceFormatBuilder<T> withField(String childName, Function<? super T, F> field, ObservableConfigFormat<F> format) {
+			if (theFields.put(childName, new FormattedField<T, F>(field, format)) != null)
+				throw new IllegalArgumentException("Multiple fields named " + childName + " are not supported");
+			return this;
+		}
+
+		public ReferenceFormat<T> build() {
+			QuickMap<String, FormattedField<? super T, ?>> fields = QuickMap.of(theFields, StringUtils.DISTINCT_NUMBER_TOLERANT)
+				.unmodifiable();
+			Function<QuickMap<String, Object>, ? extends T> retriever;
+			if (theRetriever != null)
+				retriever = theRetriever;
+			else
+				retriever = fieldValues -> {
+					Iterable<? extends T> retrieved = theMultiRetriever.apply(fieldValues);
+					for (T value : retrieved) {
+						boolean matches = true;
+						for (int f = 0; matches && f < fields.keySize(); f++) {
+							Object valueF = fields.get(f).field.apply(value);
+							matches = Objects.equals(fieldValues.get(f), valueF);
+						}
+						if (matches)
+							return value;
+					}
+					return theRetreiverDefault.get();
+				};
+				return new ReferenceFormat<>(fields, retriever);
+		}
+	}
+
+	static <T> ReferenceFormatBuilder<T> buildReferenceFormat(Function<QuickMap<String, Object>, ? extends T> retriever) {
+		return new ReferenceFormatBuilder<>(retriever);
+	}
+
+	static <T> ReferenceFormatBuilder<T> buildReferenceFormat(Function<QuickMap<String, Object>, ? extends Iterable<? extends T>> retriever,
+		Supplier<? extends T> defaultValue) {
+		return new ReferenceFormatBuilder<>(retriever, defaultValue);
 	}
 
 	interface EntityConfigCreator<E> {
@@ -120,6 +356,111 @@ public interface ObservableConfigFormat<E> {
 		EntityConfiguredValueType<E> getEntityType();
 
 		<E2 extends E> EntityConfigCreator<E2> create(TypeToken<E2> subType);
+	}
+
+	public static class EntityFormatBuilder<E> {
+		private final EntityConfiguredValueType<E> theEntityType;
+		private final ObservableConfigFormatSet theFormatSet;
+		private final List<EntitySubFormat<? extends E>> theSubFormats;
+		private final QuickMap<String, ObservableConfigFormat<?>> theFieldFormats;
+		private final QuickMap<String, String> theFieldChildNames;
+
+		EntityFormatBuilder(EntityConfiguredValueType<E> entityType, ObservableConfigFormatSet formatSet) {
+			theEntityType = entityType;
+			theFormatSet = formatSet;
+			theSubFormats = new LinkedList<>();
+			theFieldFormats = entityType.getFields().keySet().createMap();
+			theFieldChildNames = entityType.getFields().keySet().createMap();
+		}
+
+		public EntityFormatBuilder<E> withSubFormat(EntitySubFormat<? extends E> subFormat) {
+			if (!theSubFormats.contains(subFormat))
+				theSubFormats.add(subFormat);
+			return this;
+		}
+
+		public <E2 extends E> EntityFormatBuilder<E> withSubType(TypeToken<E2> type,
+			Function<EntitySubFormatBuilder<E2>, EntitySubFormat<E2>> subFormat) {
+			if (!theEntityType.getType().isAssignableFrom(type))
+				throw new IllegalArgumentException(type + " is not a sub-type of " + theEntityType);
+			theSubFormats.add(subFormat.apply(new EntitySubFormatBuilder<>(type, theFormatSet)));
+			return this;
+		}
+
+		public EntityFormatBuilder<E> withFieldFormat(int fieldIndex, ObservableConfigFormat<?> format) {
+			theFieldFormats.put(fieldIndex, format);
+			return this;
+		}
+
+		public EntityFormatBuilder<E> withFieldFormat(String fieldName, ObservableConfigFormat<?> format) {
+			return withFieldFormat(theFieldFormats.keyIndex(fieldName), format);
+		}
+
+		public <F> EntityFormatBuilder<E> withFieldFormat(Function<? super E, F> field, ObservableConfigFormat<F> format) {
+			return withFieldFormat(theEntityType.getField(field).getIndex(), format);
+		}
+
+		public EntityFormatBuilder<E> withFieldChildName(int fieldIndex, String childName) {
+			theFieldChildNames.put(fieldIndex, childName);
+			return this;
+		}
+
+		public EntityFormatBuilder<E> withFieldChildName(String fieldName, String childName) {
+			return withFieldChildName(theFieldChildNames.keyIndex(fieldName), childName);
+		}
+
+		public EntityFormatBuilder<E> withFieldChildName(Function<? super E, ?> field, String childName) {
+			return withFieldChildName(theEntityType.getField(field).getIndex(), childName);
+		}
+
+		public EntityConfigFormat<E> build() {
+			QuickMap<String, ObservableConfigFormat<?>> formats = theFieldFormats.copy();
+			for (int i = 0; i < formats.keySize(); i++) {
+				if (formats.get(i) == null)
+					formats.put(i, theFormatSet.getConfigFormat(theEntityType.getFields().get(i)));
+			}
+			QuickMap<String, String> childNames = theFieldChildNames.copy();
+			for (int i = 0; i < childNames.keySize(); i++) {
+				if (childNames.get(i) == null)
+					childNames.put(i, StringUtils.parseByCase(theEntityType.getFields().keySet().get(i), true).toKebabCase());
+			}
+			return new EntityConfigFormatImpl<>(theEntityType, theFormatSet, QommonsUtils.unmodifiableCopy(theSubFormats),
+				formats.unmodifiable(), childNames.unmodifiable());
+		}
+	}
+
+	public static class EntitySubFormatBuilder<T> {
+		private final TypeToken<T> theType;
+		private final ObservableConfigFormatSet theFormats;
+		private Predicate<? super T> theValueFilter;
+		private EntityConfigFormat<T> theFormat;
+
+		EntitySubFormatBuilder(TypeToken<T> type, ObservableConfigFormatSet formats) {
+			theType = type;
+			theFormats = formats;
+		}
+
+		public EntitySubFormatBuilder<T> withValueFilter(Predicate<? super T> valueFilter) {
+			theValueFilter = valueFilter;
+			return this;
+		}
+
+		public EntitySubFormatBuilder<T> withFormat(EntityConfigFormat<T> format) {
+			theFormat = format;
+			return this;
+		}
+
+		public EntitySubFormat<T> build(String config) {
+			if (theFormat == null)
+				theFormat = theFormats.getEntityFormat(theType);
+			return new EntitySubFormat<>(ObservableConfig.parsePathElement(config), theFormat, theType, theValueFilter);
+		}
+
+		public EntitySubFormat<T> build(String configName, Function<PathElementBuilder, ObservableConfigPathElement> path) {
+			if (theFormat == null)
+				theFormat = theFormats.getEntityFormat(theType);
+			return new EntitySubFormat<>(path.apply(new PathElementBuilder(configName)), theFormat, theType, theValueFilter);
+		}
 	}
 
 	class EntitySubFormat<E> {
@@ -174,64 +515,6 @@ public interface ObservableConfigFormat<E> {
 		}
 	}
 
-	class EntityFormatBuilder<E> {
-		public static class EntitySubFormatBuilder<T> {
-			private final TypeToken<T> theType;
-			private final ObservableConfigFormatSet theFormats;
-			private Predicate<? super T> theValueFilter;
-			private EntityConfigFormat<T> theFormat;
-
-			EntitySubFormatBuilder(TypeToken<T> type, ObservableConfigFormatSet formats) {
-				theType = type;
-				theFormats = formats;
-			}
-
-			public EntitySubFormatBuilder<T> withValueFilter(Predicate<? super T> valueFilter) {
-				theValueFilter = valueFilter;
-				return this;
-			}
-
-			public EntitySubFormatBuilder<T> withFormat(EntityConfigFormat<T> format) {
-				theFormat = format;
-				return this;
-			}
-
-			public EntitySubFormat<T> build(String config) {
-				if (theFormat == null)
-					theFormat = theFormats.getEntityFormat(theType);
-				return new EntitySubFormat<>(ObservableConfig.parsePathElement(config), theFormat, theType, theValueFilter);
-			}
-
-			public EntitySubFormat<T> build(String configName, Function<PathElementBuilder, ObservableConfigPathElement> path) {
-				if (theFormat == null)
-					theFormat = theFormats.getEntityFormat(theType);
-				return new EntitySubFormat<>(path.apply(new PathElementBuilder(configName)), theFormat, theType, theValueFilter);
-			}
-		}
-
-		private final EntityConfiguredValueType<E> theType;
-		private final ObservableConfigFormatSet theFormats;
-		private final List<EntitySubFormat<? extends E>> theSubFormats;
-
-		EntityFormatBuilder(EntityConfiguredValueType<E> type, ObservableConfigFormatSet formats) {
-			theType = type;
-			theFormats = formats;
-			theSubFormats = new LinkedList<>();
-		}
-
-		public <E2 extends E> EntityFormatBuilder<E> withSubType(TypeToken<E2> type,
-			Function<EntitySubFormatBuilder<E2>, EntitySubFormat<E2>> subFormat) {
-			if (!theType.getType().isAssignableFrom(type))
-				throw new IllegalArgumentException(type + " is not a sub-type of " + theType);
-			theSubFormats.add(subFormat.apply(new EntitySubFormatBuilder<>(type, theFormats)));
-			return this;
-		}
-
-		public EntityConfigFormat<E> build() {
-			return new EntityConfigFormatImpl<>(theType, theFormats, QommonsUtils.unmodifiableCopy(theSubFormats));
-		}
-	}
-
 	static <E> EntityFormatBuilder<E> buildEntities(TypeToken<E> entityType, ObservableConfigFormatSet formats) {
 		return buildEntities(formats.getEntityType(entityType), formats);
 	}
@@ -240,29 +523,22 @@ public interface ObservableConfigFormat<E> {
 		return new EntityFormatBuilder<>(entityType, formats);
 	}
 
-	static <E> EntityConfigFormat<E> ofEntity(EntityConfiguredValueType<E> entityType, ObservableConfigFormatSet formats) {
-		return new EntityConfigFormatImpl<>(entityType, formats, Collections.emptyList());
-	}
-
 	class EntityConfigFormatImpl<E> implements EntityConfigFormat<E> {
 		public final EntityConfiguredValueType<E> entityType;
 		public final ObservableConfigFormatSet formats;
 		private final List<EntitySubFormat<? extends E>> theSubFormats;
-		private final ObservableConfigFormat<?>[] fieldFormats;
+		private final QuickMap<String, ObservableConfigFormat<?>> theFieldFormats;
 		private QuickMap<String, String> theFieldChildNames;
 		private QuickMap<String, String> theFieldsByChildName;
 
-		public EntityConfigFormatImpl(EntityConfiguredValueType<E> entityType, ObservableConfigFormatSet formats,
-			List<EntitySubFormat<? extends E>> subFormats) {
+		private EntityConfigFormatImpl(EntityConfiguredValueType<E> entityType, ObservableConfigFormatSet formats,
+			List<EntitySubFormat<? extends E>> subFormats, QuickMap<String, ObservableConfigFormat<?>> fieldFormats,
+			QuickMap<String, String> childNames) {
 			this.entityType = entityType;
 			this.formats = formats;
 			theSubFormats = subFormats;
-			fieldFormats = new ObservableConfigFormat[entityType.getFields().keySet().size()];
-			for (int i = 0; i < fieldFormats.length; i++)
-				fieldFormats[i] = formats.getConfigFormat(entityType.getFields().get(i));
-			theFieldChildNames = entityType.getFields().keySet().createMap(//
-				fieldIndex -> StringUtils.parseByCase(entityType.getFields().keySet().get(fieldIndex), true).toKebabCase())
-				.unmodifiable();
+			theFieldFormats = fieldFormats;
+			theFieldChildNames = childNames;
 			Map<String, String> fcnReverse = new LinkedHashMap<>();
 			for (int i = 0; i < theFieldChildNames.keySize(); i++)
 				fcnReverse.put(theFieldChildNames.get(i), theFieldChildNames.keySet().get(i));
@@ -329,74 +605,74 @@ public interface ObservableConfigFormat<E> {
 		}
 
 		@Override
-		public E parse(ObservableConfig root, ObservableValue<? extends ObservableConfig> config,
-			Supplier<? extends ObservableConfig> create, E previousValue, ObservableConfig.ObservableConfigEvent change,
-			Observable<?> until) throws ParseException {
-			ObservableConfig c = config.get();
+		public E parse(ObservableConfigParseContext<E> ctx) throws ParseException {
+			ObservableConfig c = ctx.getConfig(false);
 			if (c != null && "true".equalsIgnoreCase(c.get("null")))
 				return null;
-			else if (previousValue == null) {
+			else if (ctx.getPreviousValue() == null) {
 				if (c == null)
-					c = create.get();
-				return createInstance(c, entityType.getFields().keySet().createMap(), until);
+					c = ctx.getConfig(true);
+				return createInstance(c, entityType.getFields().keySet().createMap(), ctx.getUntil());
 			} else {
 				EntitySubFormat<? extends E> subFormat = formatFor(c);
 				if (subFormat != null) {
-					return ((EntitySubFormat<E>) subFormat).format.parse(root, config, () -> {
-						ObservableConfig newCfg = create.get();
-						subFormat.moldConfig(newCfg);
-						return newCfg;
-					}, subFormat.applies(previousValue) ? previousValue : null, change, until);
+					return ((EntitySubFormat<E>) subFormat).format.parse(ctx.forChild((config, create) -> {
+						if (create)
+							subFormat.moldConfig(config);
+						return config;
+					}, ctx.getChange(), subFormat.applies(ctx.getPreviousValue()) ? ctx.getPreviousValue() : null));
 				}
-				if (change == null) {
+				if (ctx.getChange() == null) {
 					for (int i = 0; i < entityType.getFields().keySize(); i++)
-						parseUpdatedField(c, i, previousValue, null, until);
-				} else if (change.relativePath.isEmpty()) {
+						parseUpdatedField(c, i, ctx.getPreviousValue(), null, ctx.getUntil());
+				} else if (ctx.getChange().relativePath.isEmpty()) {
 					// Change to the value doesn't change any fields
 				} else {
+					ObservableConfigEvent change = ctx.getChange();
 					ObservableConfig child = change.relativePath.get(0);
 					int fieldIdx = theFieldsByChildName.keyIndexTolerant(child.getName());
 					if (change.relativePath.size() == 1 && !change.oldName.equals(child.getName())) {
 						if (fieldIdx >= 0) {
 							ObservableConfigEvent childChange = change.asFromChild();
 							try (Transaction ct = Causable.use(childChange)) {
-								parseUpdatedField(c, fieldIdx, previousValue, childChange, until);
+								parseUpdatedField(c, fieldIdx, ctx.getPreviousValue(), childChange, ctx.getUntil());
 							}
 						}
 						fieldIdx = theFieldsByChildName.keyIndexTolerant(change.oldName);
 						if (fieldIdx >= 0)
-							parseUpdatedField(c, fieldIdx, previousValue, null, until);
+							parseUpdatedField(c, fieldIdx, ctx.getPreviousValue(), null, ctx.getUntil());
 					} else if (fieldIdx >= 0)
-						parseUpdatedField(c, fieldIdx, previousValue, change, until);
+						parseUpdatedField(c, fieldIdx, ctx.getPreviousValue(), change, ctx.getUntil());
 				}
-				return previousValue;
+				return ctx.getPreviousValue();
 			}
 		}
 
 		@Override
-		public E copy(E source, E copy, ObservableValue<? extends ObservableConfig> config, Supplier<? extends ObservableConfig> create,Observable<?> until){
-			for(EntitySubFormat<? extends E> sub : theSubFormats){
-				if(sub.rawType.isInstance(source) && ((Predicate<E>) sub.valueFilter).test(source)//
-					&& (copy==null || (sub.rawType.isInstance(copy) && ((Predicate<E>) sub.valueFilter).test(copy)))){
-					return ((ObservableConfigFormat<E>)sub.format).copy(source, copy, config, create, until);
+		public E copy(E source, E copy, ObservableValue<? extends ObservableConfig> config, Supplier<? extends ObservableConfig> create,
+			Observable<?> until) {
+			for (EntitySubFormat<? extends E> sub : theSubFormats) {
+				if (sub.rawType.isInstance(source) && ((Predicate<E>) sub.valueFilter).test(source)//
+					&& (copy == null || (sub.rawType.isInstance(copy) && ((Predicate<E>) sub.valueFilter).test(copy)))) {
+					return ((ObservableConfigFormat<E>) sub.format).copy(source, copy, config, create, until);
 				}
 			}
-			if(copy==null)
+			if (copy == null)
 				throw new IllegalArgumentException("Cannot create copies in this format");
-			for(int i=0;i<fieldFormats.length;i++){
+			for (int i = 0; i < theFieldFormats.keySize(); i++) {
 				copyField(source, copy, i, config, create, until);
 			}
 			return copy;
 		}
 
-		private <F> void copyField(E source, E copy, int fieldIndex,
-			ObservableValue<? extends ObservableConfig> config, Supplier<? extends ObservableConfig> create, Observable<?> until) {
+		private <F> void copyField(E source, E copy, int fieldIndex, ObservableValue<? extends ObservableConfig> config,
+			Supplier<? extends ObservableConfig> create, Observable<?> until) {
 			ConfiguredValueField<? super E, F> field = (ConfiguredValueField<? super E, F>) entityType.getFields().get(fieldIndex);
-			F sourceField=field.get(source);
-			F copyField=field.get(copy);
-			F newCopy = ((ObservableConfigFormat<F>) fieldFormats[fieldIndex]).copy(sourceField, copyField,
+			F sourceField = field.get(source);
+			F copyField = field.get(copy);
+			F newCopy = ((ObservableConfigFormat<F>) theFieldFormats.get(fieldIndex)).copy(sourceField, copyField,
 				asChild(config, theFieldChildNames.get(fieldIndex)), asChild(config, create, theFieldChildNames.get(fieldIndex)), until);
-			if(newCopy!=copyField)
+			if (newCopy != copyField)
 				field.set(copy, newCopy);
 		}
 
@@ -459,14 +735,14 @@ public interface ObservableConfigFormat<E> {
 		E createInstance(ObservableConfig config, QuickMap<String, Object> fieldValues, Observable<?> until) throws ParseException {
 			for (EntitySubFormat<? extends E> subFormat : theSubFormats) {
 				if (subFormat.configFilter.matches(config))
-					return subFormat.format.parse(config, ObservableValue.of(config), null, null, null, until);
+					return subFormat.format.parse(ctxFor(config, ObservableValue.of(config), null, null, until, null));
 			}
 			for (int i = 0; i < fieldValues.keySize(); i++) {
 				int fi = i;
 				ObservableValue<? extends ObservableConfig> fieldConfig = config.observeDescendant(theFieldChildNames.get(i));
 				if (fieldValues.get(i) == null)
-					fieldValues.put(i,
-						fieldFormats[i].parse(config, fieldConfig, () -> config.addChild(theFieldChildNames.get(fi)), null, null, until));
+					fieldValues.put(i, theFieldFormats.get(i)
+						.parse(ctxFor(config, fieldConfig, () -> config.addChild(theFieldChildNames.get(fi)), null, until, null)));
 				else
 					formatField(entityType.getFields().get(i), fieldValues.get(i), config, f -> {}, until);
 			}
@@ -486,11 +762,11 @@ public interface ObservableConfigFormat<E> {
 			if (fieldValue != null) {
 				ObservableConfig fieldConfig = entityConfig.getChild(theFieldChildNames.get(field.getIndex()), true, fc -> {
 					added[0] = true;
-					((ObservableConfigFormat<Object>) fieldFormats[field.getIndex()]).format(fieldValue, fieldValue, fc, onFieldValue,
-						until);
+					((ObservableConfigFormat<Object>) theFieldFormats.get(field.getIndex())).format(fieldValue, fieldValue, fc,
+						onFieldValue, until);
 				});
 				if (!added[0])
-					((ObservableConfigFormat<Object>) fieldFormats[field.getIndex()]).format(fieldValue, fieldValue, fieldConfig,
+					((ObservableConfigFormat<Object>) theFieldFormats.get(field.getIndex())).format(fieldValue, fieldValue, fieldConfig,
 						onFieldValue, until);
 			} else {
 				ObservableConfig fieldConfig = entityConfig.getChild(theFieldChildNames.get(field.getIndex()));
@@ -509,8 +785,8 @@ public interface ObservableConfigFormat<E> {
 					ObservableConfigEvent childChange = change.asFromChild();
 					Object newValue;
 					try (Transaction ct = Causable.use(childChange)) {
-						newValue = ((ObservableConfigFormat<Object>) fieldFormats[fieldIdx]).parse(entityConfig, fieldConfig,
-							() -> entityConfig.getChild(theFieldChildNames.get(fieldIdx), true, null), oldValue, childChange, until);
+						newValue = ((ObservableConfigFormat<Object>) theFieldFormats.get(fieldIdx)).parse(ctxFor(entityConfig, fieldConfig,
+							() -> entityConfig.getChild(theFieldChildNames.get(fieldIdx), true, null), childChange, until, oldValue));
 					}
 					if (newValue != oldValue)
 						field.set(previousValue, newValue);
@@ -518,8 +794,8 @@ public interface ObservableConfigFormat<E> {
 				}
 				change = change.asFromChild();
 			}
-			Object newValue = ((ObservableConfigFormat<Object>) fieldFormats[fieldIdx]).parse(entityConfig, fieldConfig,
-				() -> entityConfig.addChild(theFieldChildNames.get(fieldIdx)), oldValue, change, until);
+			Object newValue = ((ObservableConfigFormat<Object>) theFieldFormats.get(fieldIdx)).parse(
+				ctxFor(entityConfig, fieldConfig, () -> entityConfig.addChild(theFieldChildNames.get(fieldIdx)), change, until, oldValue));
 			if (oldValue != newValue)
 				((ConfiguredValueField<E, Object>) field).set(previousValue, newValue);
 		}
@@ -581,22 +857,21 @@ public interface ObservableConfigFormat<E> {
 			}
 
 			@Override
-			public C parse(ObservableConfig root, ObservableValue<? extends ObservableConfig> config,
-				Supplier<? extends ObservableConfig> create, C previousValue, ObservableConfigEvent change, Observable<?> until)
-					throws ParseException {
-				if (previousValue == null) {
-					return (C) new ObservableConfigTransform.ObservableConfigValues<>(root, config, create::get, elementType, elementFormat,
-						childName, fieldParser, until, false);
+			public C parse(ObservableConfigParseContext<C> ctx)
+				throws ParseException {
+				if (ctx.getPreviousValue() == null) {
+					return (C) new ObservableConfigTransform.ObservableConfigValues<>(ctx.getRoot(), ctx.getConfig(),
+						() -> ctx.getConfig(true), elementType, elementFormat, childName, fieldParser, ctx.getUntil(), false);
 				} else {
-					((ObservableConfigTransform.ObservableConfigValues<E>) previousValue).onChange(change);
-					return previousValue;
+					((ObservableConfigTransform.ObservableConfigValues<E>) ctx.getPreviousValue()).onChange(ctx.getChange());
+					return ctx.getPreviousValue();
 				}
 			}
 
 			@Override
 			public C copy(C source, C copy, ObservableValue<? extends ObservableConfig> config, Supplier<? extends ObservableConfig> create,
 				Observable<?> until) {
-				try(Transaction t2=Transactable.lock(copy, true, null); Transaction t1=Transactable.lock(source, false, null)){
+				try (Transaction t2 = Transactable.lock(copy, true, null); Transaction t1 = Transactable.lock(source, false, null)) {
 					for (E value : source) {
 						((Collection<E>) copy)
 						.add(elementFormat.copy(value, null, asChild(config, childName), asChild(config, create, childName), until));
@@ -631,15 +906,13 @@ public interface ObservableConfigFormat<E> {
 			}
 
 			@Override
-			public ObservableValueSet<E> parse(ObservableConfig root, ObservableValue<? extends ObservableConfig> config,
-				Supplier<? extends ObservableConfig> create, ObservableValueSet<E> previousValue, ObservableConfigEvent change,
-				Observable<?> until) throws ParseException {
-				if (previousValue == null) {
-					return new ObservableConfigTransform.ObservableConfigEntityValues<>(root, config, create::get, elementFormat, childName,
-						until, false);
+			public ObservableValueSet<E> parse(ObservableConfigParseContext<ObservableValueSet<E>> ctx) throws ParseException {
+				if (ctx.getPreviousValue() == null) {
+					return new ObservableConfigTransform.ObservableConfigEntityValues<>(ctx.getRoot(), ctx.getConfig(),
+						() -> ctx.getConfig(true), elementFormat, childName, ctx.getUntil(), false);
 				} else {
-					((ObservableConfigTransform.ObservableConfigEntityValues<E>) previousValue).onChange(change);
-					return previousValue;
+					((ObservableConfigTransform.ObservableConfigEntityValues<E>) ctx.getPreviousValue()).onChange(ctx.getChange());
+					return ctx.getPreviousValue();
 				}
 			}
 
@@ -782,17 +1055,18 @@ public interface ObservableConfigFormat<E> {
 		}
 
 		@Override
-		public T parse(ObservableConfig root, ObservableValue<? extends ObservableConfig> config,
-			Supplier<? extends ObservableConfig> create, T previousValue, ObservableConfigEvent change, Observable<?> until)
-				throws ParseException {
-			ObservableConfig c = config.get();
+		public T parse(ObservableConfigParseContext<T> ctx) throws ParseException {
+			ObservableConfig c = ctx.getConfig(false);
 			if (c == null || "true".equals(c.get("null")))
 				return null;
 			SubFormat<? extends T> format = formatFor(c);
 			if (format == null)
 				throw new ParseException("No sub-format found matching " + c, 0);
-			return ((SubFormat<T>) format).format.parse(root, config, create, format.applies(previousValue) ? previousValue : null, change,
-				until);
+			return ((SubFormat<T>) format).format.parse(ctx.forChild((config, create) -> {
+				if (create)
+					format.moldConfig(config);
+				return config;
+			}, ctx.getChange(), format.applies(ctx.getPreviousValue()) ? ctx.getPreviousValue() : null));
 		}
 
 		@Override

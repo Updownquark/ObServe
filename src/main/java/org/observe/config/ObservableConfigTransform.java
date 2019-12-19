@@ -267,7 +267,8 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		@Override
 		protected void initConfig(ObservableConfig parent, Object cause) {
 			try {
-				theValue = theFormat.parse(parent, getParent(), () -> getParent(true, null), theValue, null, getUntil());
+				theValue = theFormat
+					.parse(ObservableConfigFormat.ctxFor(parent, getParent(), () -> getParent(true, null), null, getUntil(), theValue));
 			} catch (ParseException e) {
 				e.printStackTrace();
 				theValue = null;
@@ -279,7 +280,8 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 			E oldValue = theValue;
 			if (!theModifyingValue.isPresent()) {
 				try {
-					theValue = theFormat.parse(getRoot(), getParent(), () -> getParent(true, null), theValue, parentChange, getUntil());
+					theValue = theFormat.parse(ObservableConfigFormat.ctxFor(getRoot(), getParent(), () -> getParent(true, null),
+						parentChange, getUntil(), theValue));
 					fire(createChangeEvent(oldValue, theValue, parentChange));
 				} catch (ParseException e) {
 					e.printStackTrace();
@@ -395,9 +397,9 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 						} else {
 							ObservableConfigEvent childChange = collectionChange.asFromChild();
 							try (Transaction ct = Causable.use(childChange)) {
-								newValue = theFormat.parse(getRoot(), //
+								newValue = theFormat.parse(ObservableConfigFormat.ctxFor(getRoot(), //
 									ObservableValue.of(el.get().getConfig()), () -> collectionChange.eventTarget.addChild(theChildName),
-									el.get().get(), childChange, getUntil());
+									childChange, getUntil(), el.get().get()));
 							}
 						}
 						E oldValue = el.get().get();
@@ -527,9 +529,9 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 				} else {
 					E val;
 					try {
-						val = theFormat.parse(getRoot(), //
-							ObservableValue.of(this.theConfig), () -> this.theConfig.getParent().addChild(theChildName), null, null,
-							Observable.or(getUntil(), theElementObservable));
+						val = theFormat.parse(ObservableConfigFormat.ctxFor(getRoot(), //
+							ObservableValue.of(this.theConfig), () -> this.theConfig.getParent().addChild(theChildName), null,
+							Observable.or(getUntil(), theElementObservable), null));
 					} catch (ParseException e) {
 						System.err.println("Could not parse instance for " + this.theConfig);
 						e.printStackTrace();

@@ -5,10 +5,12 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import org.observe.collect.ObservableCollection;
 import org.observe.config.ObservableConfigFormat.EntityConfigFormat;
+import org.observe.config.ObservableConfigFormat.EntityFormatBuilder;
 import org.observe.util.EntityReflector;
 import org.observe.util.EntityReflector.EntityReflectionMessage;
 import org.observe.util.EntityReflector.EntityReflectionMessageLevel;
@@ -60,13 +62,28 @@ public class ObservableConfigFormatSet {
 				if (theReflectors.putIfAbsent(type, reflector) != null)
 					reflector = (EntityReflector<E>) theReflectors.get(type);
 			}
-			format = ObservableConfigFormat.ofEntity(new EntityConfiguredValueType<>(reflector, theReflectors), this);
-			ObservableConfigFormat<?> fFormat = format;
-			theFormatCache.computeIfAbsent(type, __ -> fFormat);
+			format = ObservableConfigFormat.buildEntities(new EntityConfiguredValueType<>(reflector, theReflectors), this).build();
+			theFormatCache.putIfAbsent(type, format);
 		}
 		if (!(format instanceof EntityConfigFormat))
 			throw new IllegalArgumentException(type + " is not formatted as an entity");
 		return (EntityConfigFormat<E>) format;
+	}
+
+	public <E> EntityConfigFormat<E> buildEntityFormat(TypeToken<E> type, Consumer<EntityFormatBuilder<E>> build) {
+		EntityReflector<E> reflector = (EntityReflector<E>) theReflectors.get(type);
+		if (reflector == null) {
+			reflector = EntityReflector.build(type).withSupers(theReflectors).build();
+			if (theReflectors.putIfAbsent(type, reflector) != null)
+				reflector = (EntityReflector<E>) theReflectors.get(type);
+		}
+		EntityFormatBuilder<E> builder = ObservableConfigFormat.buildEntities(new EntityConfiguredValueType<>(reflector, theReflectors),
+			this);
+		if (build != null)
+			build.accept(builder);
+		EntityConfigFormat<E> format = builder.build();
+		theFormatCache.putIfAbsent(type, format);
+		return format;
 	}
 
 	public <T> ObservableConfigFormat<T> getConfigFormat(TypeToken<T> type, String configName) {
