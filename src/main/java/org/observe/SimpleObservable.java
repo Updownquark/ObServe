@@ -114,6 +114,7 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 		try (Transaction lock = theLock == null ? Transaction.NONE : theLock.lock(true, value)) {
 			if (!isAlive)
 				return;
+			isAlive = false;
 			theListeners.forEach(//
 				observer -> observer.onCompleted(value));
 			theListeners.clear();
@@ -128,7 +129,7 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 	/**
 	 * Locks this observable exclusively, allowing {@link #onNext(Object)} or {@link #onCompleted(Object)} to be called on the current
 	 * thread while the lock is held.
-	 * 
+	 *
 	 * @return The transaction to close to release the lock
 	 */
 	public Transaction lockWrite() {

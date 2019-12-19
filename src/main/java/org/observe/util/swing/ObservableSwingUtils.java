@@ -861,10 +861,10 @@ public class ObservableSwingUtils {
 	public static Subscription configureFrameBounds(Frame frame, ObservableConfig config) {
 		if (config.get("x") != null) {
 			try {
-				int x = config.getChild("x").asValue(int.class).parse();
-				int y = config.getChild("y").asValue(int.class).parse();
-				int w = config.getChild("width").asValue(int.class).parse();
-				int h = config.getChild("height").asValue(int.class).parse();
+				int x = config.getChild("x").asValue(int.class).parse(null);
+				int y = config.getChild("y").asValue(int.class).parse(null);
+				int w = config.getChild("width").asValue(int.class).parse(null);
+				int h = config.getChild("height").asValue(int.class).parse(null);
 				configureFrameBounds(frame, x, y, w, h);
 			} catch (ParseException e) {
 				frame.pack();

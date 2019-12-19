@@ -59,6 +59,7 @@ import org.qommons.collect.ListenerList;
 import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.RRWLockingStrategy;
 import org.qommons.collect.UpgradableReadWriteLock;
+import org.qommons.ex.ExFunction;
 import org.qommons.io.Format;
 import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BetterTreeMap;
@@ -695,45 +696,61 @@ public class ObservableConfig implements Transactable, Stamped {
 			return theUntil == null ? Observable.empty() : theUntil;
 		}
 
-		protected ObservableConfigFormat.ObservableConfigParseContext<T> getParseContext(Observable<?> until) {
+		protected ObservableConfigFormat.ObservableConfigParseContext<T> getParseContext(Observable<?> until, Observable<?> findRefs) {
 			return ObservableConfigFormat.ctxFor(ObservableConfig.this, getDescendant(false), createDescendant(false)::get, null, until,
-				null);
+				null, findRefs, null);
 		}
 
-		public T parse() throws ParseException {
+		protected <T, E extends Exception> T build(ExFunction<Observable<?>, T, E> build, Consumer<T> preRefs) throws E {
+			SimpleObservable<Void> findRefs = new SimpleObservable<>();
+			T built = build.apply(findRefs);
+			if (preRefs != null)
+				preRefs.accept(built);
+			findRefs.onNext(null);
+			return built;
+		}
+
+		public T parse(Consumer<T> preReturnGet) throws ParseException {
 			ObservableConfigFormat<T> format = getFormat();
 			// If the format is simple, we can just parse the value and then forget about it.
 			// Otherwise, we need to maintain the connection to update the value when configuration changes
 			if (format instanceof ObservableConfigFormat.SimpleConfigFormat)
-				return format.parse(getParseContext(getUntil()));
-			else
-				return buildValue().get();
+				return build(findRefs -> format.parse(getParseContext(getUntil(), findRefs)), preReturnGet);
+			else {
+				T built = buildValue(null).get();
+				if (preReturnGet != null)
+					preReturnGet.accept(built);
+				return built;
+			}
 		}
 
 		public T parseDisconnected() throws ParseException {
 			SimpleObservable<Void> until = new SimpleObservable<>();
-			T value = getFormat().parse(getParseContext(until));
+			SimpleObservable<Void> findRefs = new SimpleObservable<>();
+			T value = getFormat().parse(getParseContext(until, findRefs));
+			findRefs.onCompleted(null);
 			until.onNext(null);
 			return value;
 		}
 
-		public SettableValue<T> buildValue() {
-			return new ObservableConfigTransform.ObservableConfigValue<>(ObservableConfig.this, getDescendant(false),
-				createDescendant(false)::get, getUntil(), theType, getFormat(), true);
+		public SettableValue<T> buildValue(Consumer<SettableValue<T>> preReturnGet) {
+			return build(findRefs -> new ObservableConfigTransform.ObservableConfigValue<>(ObservableConfig.this, getDescendant(false),
+				createDescendant(false)::get, getUntil(), theType, getFormat(), true, findRefs), preReturnGet);
 		}
 
-		public ObservableCollection<T> buildCollection() {
-			return new ObservableConfigTransform.ObservableConfigValues<>(ObservableConfig.this, //
-				getDescendant(true), createDescendant(true)::get, theType, getFormat(), getChildName(), getFormatSet(), getUntil(), true);
+		public ObservableCollection<T> buildCollection(Consumer<ObservableCollection<T>> preReturnGet) {
+			return build(findRefs -> new ObservableConfigTransform.ObservableConfigValues<>(ObservableConfig.this, //
+				getDescendant(true), createDescendant(true)::get, theType, getFormat(), getChildName(), getFormatSet(), getUntil(), true,
+				findRefs), preReturnGet);
 		}
 
-		public ObservableValueSet<T> buildEntitySet() {
+		public ObservableValueSet<T> buildEntitySet(Consumer<ObservableValueSet<T>> preReturnGet) {
 			ObservableConfigFormat<T> entityFormat = getFormat();
 			if (!(entityFormat instanceof ObservableConfigFormat.EntityConfigFormat))
 				throw new IllegalStateException("Format for " + theType + " is not entity-enabled");
-			return new ObservableConfigTransform.ObservableConfigEntityValues<>(ObservableConfig.this, //
+			return build(findRefs -> new ObservableConfigTransform.ObservableConfigEntityValues<>(ObservableConfig.this, //
 				getDescendant(true), createDescendant(true)::get, (ObservableConfigFormat.EntityConfigFormat<T>) entityFormat,
-				getChildName(), getUntil(), true);
+				getChildName(), getUntil(), true, findRefs), preReturnGet);
 		}
 	}
 

@@ -22,6 +22,7 @@ import org.qommons.BreakpointHere;
 import org.qommons.QommonsTestUtils;
 import org.qommons.TestHelper;
 import org.qommons.Transaction;
+import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.FastFailLockingStrategy;
 import org.qommons.tree.BetterTreeList;
@@ -101,7 +102,7 @@ public class ObservableConfigTest {
 		readXml(getClass().getResourceAsStream("TestValues.xml"));
 
 		ObservableCollection<Integer> testValues = theConfig.asValue(Integer.class).at("test-values/test-value").until(until)
-			.buildCollection();
+			.buildCollection(null);
 		int i = 0;
 		for (Integer value : testValues) {
 			Assert.assertEquals(i, value.intValue());
@@ -187,7 +188,7 @@ public class ObservableConfigTest {
 		SimpleObservable<Void> until = new SimpleObservable<>();
 		readXml(getClass().getResourceAsStream("TestValues.xml"));
 		ObservableValueSet<TestEntity> testEntities = theConfig.asValue(TestEntity.class).at("test-entities/test-entity").until(until)
-			.buildEntitySet();
+			.buildEntitySet(null);
 
 		int i = 0;
 		for (TestEntity entity : testEntities.getValues()) {
@@ -323,7 +324,7 @@ public class ObservableConfigTest {
 		SimpleObservable<Void> until = new SimpleObservable<>();
 		readXml(getClass().getResourceAsStream("TestValues.xml"));
 		ObservableValueSet<TestEntity2> testEntities = theConfig.asValue(TestEntity2.class).at("test-entities2/test-entity2").until(until)
-			.buildEntitySet();
+			.buildEntitySet(null);
 
 		int i = 0;
 		for (TestEntity2 entity : testEntities.getValues()) {
@@ -502,10 +503,10 @@ public class ObservableConfigTest {
 					sb -> sb.build("*", b -> b.withAttribute("type", "5").build()))//
 				.build());
 			testEntities1 = theConfig.asValue(TestEntity2.class).withFormatSet(formats).at("test-entities2/test-entity2").until(until)
-				.buildEntitySet();
+				.buildEntitySet(null);
 			tester1 = new ObservableCollectionTester<>("testEntities1", testEntities1.getValues());
 			testEntities2 = theConfig.asValue(TestEntity2.class).withFormatSet(formats).at("test-entities2/test-entity2").until(until)
-				.buildEntitySet();
+				.buildEntitySet(null);
 			tester2 = new ObservableCollectionTester<>("testEntities2", testEntities2.getValues());
 			expected = new ArrayList<>();
 			for (int i = 0; i < testEntities1.getValues().size(); i++)
@@ -833,6 +834,11 @@ public class ObservableConfigTest {
 				@Override
 				public <T extends TestEntity4> ValueCreator<TestEntity4, T> create(TypeToken<T> subType) {
 					return null;
+				}
+
+				@Override
+				public <E2 extends TestEntity4> CollectionElement<TestEntity4> copy(E2 template) {
+					throw new UnsupportedOperationException();
 				}
 
 				@Override
