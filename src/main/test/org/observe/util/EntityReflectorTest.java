@@ -5,6 +5,7 @@ import java.util.Map;
 
 import org.junit.Assert;
 import org.junit.Test;
+import org.observe.util.ObjectMethodOverride.ObjectMethod;
 import org.qommons.collect.QuickSet.QuickMap;
 
 import com.google.common.reflect.TypeToken;
@@ -83,5 +84,22 @@ public class EntityReflectorTest {
 		Assert.assertEquals(c1.print(), //
 			c1.toString());
 		// TODO
+	}
+
+	public static interface D {
+		@ObjectMethodOverride(ObjectMethod.toString)
+		String getString();
+
+		void setString(String s);
+	}
+
+	@Test
+	public void testObjectOverride() {
+		EntityReflector<D> dRef = EntityReflector.build(TypeTokens.get().of(D.class)).build();
+
+		QuickMap<String, Object> d1Fields = dRef.getFields().keySet().createMap();
+		D d1 = dRef.newInstance(d1Fields::get, d1Fields::put);
+		d1.setString("blah");
+		Assert.assertEquals("blah", d1.toString());
 	}
 }

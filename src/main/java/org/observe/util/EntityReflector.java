@@ -26,7 +26,6 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.IntFunction;
 
-import org.observe.config.Cached;
 import org.observe.entity.impl.ObservableEntityUtils;
 import org.qommons.IntList;
 import org.qommons.QommonsUtils;
@@ -730,6 +729,21 @@ public class EntityReflector<E> {
 		}
 	}
 
+	public static class OverrideMethod<E, R> extends MethodInterpreter<E, R> {
+		private final MethodInterpreter<E, R> theOverride;
+
+		OverrideMethod(EntityReflector<E> reflector, Method method, MethodInterpreter<E, R> override) {
+			super(reflector, method);
+			theOverride = override;
+		}
+
+		@Override
+		protected R invokeLocal(E proxy, Object[] args, IntFunction<Object> fieldGetter, BiConsumer<Integer, Object> fieldSetter)
+			throws Throwable {
+			return theOverride.invokeLocal(proxy, args, fieldGetter, fieldSetter);
+		}
+	}
+
 	public static class SuperDelegateMethod<E, R> extends MethodInterpreter<E, R> {
 		public SuperDelegateMethod(EntityReflector<E> reflector, Method method) {
 			super(reflector, method);
@@ -747,21 +761,25 @@ public class EntityReflector<E> {
 	public static MethodInterpreter<Object, String> DEFAULT_TO_STRING;
 	public static MethodInterpreter<Object, Void> DEFAULT_NOTIFY;
 	public static MethodInterpreter<Object, Void> DEFAULT_NOTIFY_ALL;
-	public static MethodInterpreter<Object, Void> DEFAULT_WAIT;
+	public static MethodInterpreter<Object, Void> DEFAULT_WAIT0;
+	public static MethodInterpreter<Object, Void> DEFAULT_WAIT1;
+	public static MethodInterpreter<Object, Void> DEFAULT_WAIT2;
 	public static MethodInterpreter<Object, Void> DEFAULT_FINALIZE;
 	public static MethodInterpreter<Object, Object> DEFAULT_CLONE;
 	public static MethodInterpreter<Object, Class<?>> DEFAULT_GET_CLASS; // Does this get delegated to here?
 	public static final Map<Method, MethodInterpreter<Object, ?>> DEFAULT_OBJECT_METHODS;
 
 	static {
-		Method equals, hashCode, toString, notify, notifyAll, wait, finalize, clone, getClass;
+		Method equals, hashCode, toString, notify, notifyAll, wait0, wait1, wait2, finalize, clone, getClass;
 		try {
 			equals = Object.class.getMethod("equals", Object.class);
 			hashCode = Object.class.getMethod("hashCode");
 			toString = Object.class.getMethod("toString");
 			notify = Object.class.getMethod("notify");
 			notifyAll = Object.class.getMethod("notifyAll");
-			wait = Object.class.getMethod("wait");
+			wait0 = Object.class.getMethod("wait");
+			wait1 = Object.class.getMethod("wait", long.class);
+			wait2 = Object.class.getMethod("wait", long.class, int.class);
 			finalize = Object.class.getDeclaredMethod("finalize");
 			clone = Object.class.getDeclaredMethod("clone");
 			getClass = Object.class.getMethod("getClass");
@@ -845,21 +863,36 @@ public class EntityReflector<E> {
 			}
 		};
 		defaultObjectMethods.put(notifyAll, DEFAULT_NOTIFY_ALL);
-		DEFAULT_WAIT = new MethodInterpreter<Object, Void>(null, wait) {
+		DEFAULT_WAIT0 = new MethodInterpreter<Object, Void>(null, wait0) {
 			@Override
 			protected Void invokeLocal(Object proxy, Object[] args, IntFunction<Object> fieldGetter,
 				BiConsumer<Integer, Object> fieldSetter) throws InterruptedException {
 				InvocationHandler handler = Proxy.getInvocationHandler(proxy);
-				if (args.length == 0)
-					handler.wait();
-				else if (args.length == 1)
-					handler.wait((Long) args[0]);
-				else
-					handler.wait((Long) args[0], (Integer) args[1]);
+				handler.wait();
 				return null;
 			}
 		};
-		defaultObjectMethods.put(wait, DEFAULT_WAIT);
+		defaultObjectMethods.put(wait0, DEFAULT_WAIT0);
+		DEFAULT_WAIT1 = new MethodInterpreter<Object, Void>(null, wait1) {
+			@Override
+			protected Void invokeLocal(Object proxy, Object[] args, IntFunction<Object> fieldGetter,
+				BiConsumer<Integer, Object> fieldSetter) throws InterruptedException {
+				InvocationHandler handler = Proxy.getInvocationHandler(proxy);
+				handler.wait((Long) args[0]);
+				return null;
+			}
+		};
+		defaultObjectMethods.put(wait1, DEFAULT_WAIT1);
+		DEFAULT_WAIT2 = new MethodInterpreter<Object, Void>(null, wait2) {
+			@Override
+			protected Void invokeLocal(Object proxy, Object[] args, IntFunction<Object> fieldGetter,
+				BiConsumer<Integer, Object> fieldSetter) throws InterruptedException {
+				InvocationHandler handler = Proxy.getInvocationHandler(proxy);
+				handler.wait((Long) args[0], (Integer) args[1]);
+				return null;
+			}
+		};
+		defaultObjectMethods.put(wait2, DEFAULT_WAIT2);
 		DEFAULT_FINALIZE = new MethodInterpreter<Object, Void>(null, finalize) {
 			@Override
 			protected Void invokeLocal(Object proxy, Object[] args, IntFunction<Object> fieldGetter,
@@ -1044,84 +1077,126 @@ public class EntityReflector<E> {
 		for (Method m : clazz.getDeclaredMethods()) {
 			if (m.isSynthetic())
 				continue;
-			if (methods.search(method -> -method.compare(m), BetterSortedList.SortedSearchFilter.OnlyMatch) != null)
-				continue; // Overridden by a subclass and handled
-			BiFunction<? super E, Object[], ?> custom = customMethods.get(m);
-			if (custom != null) {
-				CustomMethod<E, ?> method = new CustomMethod<>(this, m, custom);
-				method.setElement(methods.addElement(method, false).getElementId());
-				continue;
-			} else if (m.isDefault()) {
-				MethodHandle handle;
-				if (LOOKUP_CONSTRUCTOR == null) {
-					handle = null;
+
+			MethodInterpreter<E, ?> method = null; // Shouldn't have to initialize this, but the continues seem to be confusing the compiler
+			method = methods.searchValue(m2 -> -m2.compare(m), BetterSortedList.SortedSearchFilter.OnlyMatch);
+			if (method != null) { // Overridden by a subclass and handled
+			} else {
+				BiFunction<? super E, Object[], ?> custom = customMethods.get(m);
+				if (custom != null) {
+					method = new CustomMethod<>(this, m, custom);
+				} else if (m.isDefault()) {
+					MethodHandle handle;
+					if (LOOKUP_CONSTRUCTOR == null) {
+						handle = null;
+					} else {
+						try {
+							handle = LOOKUP_CONSTRUCTOR.newInstance(clazz).in(clazz).unreflectSpecial(m, clazz);
+						} catch (IllegalArgumentException | InstantiationException | InvocationTargetException e) {
+							throw new IllegalStateException("Bad method? " + m + ": " + e);
+						} catch (SecurityException | IllegalAccessException e) {
+							errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.ERROR, m, "No access to " + m + ": " + e));
+							continue;
+						}
+					}
+					if (m.getAnnotation(Cached.class) != null) {
+						String fieldName = theGetterFilter.apply(m);
+						ReflectedField<? super E, ?> field = fieldName == null ? null : fields.get(fieldName);
+						if (field != null) {
+							method = new CachedFieldGetter<>(this, m, (ReflectedField<E, ?>) field, handle);
+						} else {
+							errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.WARNING, m,
+								"Default method is marked as Cached, but is not a field"));
+							method = new DefaultMethod<>(this, m, handle);
+						}
+					} else
+						method = new DefaultMethod<>(this, m, handle);
 				} else {
-					try {
-						handle = LOOKUP_CONSTRUCTOR.newInstance(clazz).in(clazz).unreflectSpecial(m, clazz);
-					} catch (IllegalArgumentException | InstantiationException | InvocationTargetException e) {
-						throw new IllegalStateException("Bad method? " + m + ": " + e);
-					} catch (SecurityException | IllegalAccessException e) {
-						errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.ERROR, m, "No access to " + m + ": " + e));
-						continue;
+					MethodInterpreter<Object, ?> objectMethod = DEFAULT_OBJECT_METHODS.get(m);
+					if (objectMethod != null) {
+						method = new ObjectMethodWrapper<>(this, objectMethod);
+					} else if (m.getDeclaringClass() == Object.class) {
+						continue; // e.g. private void Object.registerNatives()
+					} else {
+						String fieldName = theGetterFilter.apply(m);
+						if (fieldName != null) {
+							method = getInterpreter(m); // Already added
+							if (method == null)
+								throw new IllegalStateException(m + " should have been a field");
+						} else {
+							fieldName = theSetterFilter.apply(m);
+							if (fieldName != null) {
+								ReflectedField<? super E, ?> field = fields.getIfPresent(fieldName);
+								if (field == null) {
+									errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.ERROR, m,
+										"No getter found for setter " + m + " of field " + fieldName));
+									continue;
+								}
+								if (!m.getParameterTypes()[0].isAssignableFrom(TypeTokens.getRawType(field.getGetter().getReturnType()))) {
+									errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.ERROR, m,
+										"Setter " + m + " for field " + field + " must accept a " + field.getGetter().getReturnType()));
+									continue;
+								}
+								SetterReturnType setterReturnType = null;
+								Class<?> setterRT = m.getReturnType();
+								if (setterRT == void.class || setterRT == Void.class)
+									setterReturnType = SetterReturnType.VOID;
+								else if (setterRT.isAssignableFrom(clazz))
+									setterReturnType = SetterReturnType.SELF;
+								else if (setterRT.isAssignableFrom(TypeTokens.getRawType(field.getGetter().getReturnType())))
+									setterReturnType = SetterReturnType.OLD_VALUE;
+								else {
+									errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.ERROR, m,
+										"Return type of setter " + m + " cannot be satisfied for this class"));
+									continue;
+								}
+								method = new FieldSetter<>(this, m, (ReflectedField<E, ?>) field, setterReturnType);
+							} else if (clazz != Object.class) {
+								errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.ERROR, m, "Method " + m
+									+ " is not default or a recognized getter or setter, and its implementation is not provided"));
+								continue;
+							}
+						}
 					}
 				}
-				if (m.getAnnotation(Cached.class) != null) {
-					String fieldName = theGetterFilter.apply(m);
-					ReflectedField<? super E, ?> field = fieldName == null ? null : fields.get(fieldName);
-					if (field != null) {
-						CachedFieldGetter<E, ?> method = new CachedFieldGetter<>(this, m, (ReflectedField<E, ?>) field, handle);
-						method.setElement(methods.addElement(method, false).getElementId());
-						continue;
-					} else
-						errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.WARNING, m,
-							"Default method is marked as Cached, but is not a field"));
-				}
-				DefaultMethod<E, ?> method = new DefaultMethod<>(this, m, handle);
 				method.setElement(methods.addElement(method, false).getElementId());
-				continue;
 			}
-			MethodInterpreter<Object, ?> objectMethod = DEFAULT_OBJECT_METHODS.get(m);
-			if (objectMethod != null) {
-				MethodInterpreter<E, ?> method = new ObjectMethodWrapper<>(this, objectMethod);
-				method.setElement(methods.addElement(method, false).getElementId());
-				continue;
-			}
-			String fieldName = theGetterFilter.apply(m);
-			if (fieldName != null)
-				continue; // Already added
-			fieldName = theSetterFilter.apply(m);
-			if (fieldName != null) {
-				ReflectedField<? super E, ?> field = fields.getIfPresent(fieldName);
-				if (field == null) {
-					errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.ERROR, m,
-						"No getter found for setter " + m + " of field " + fieldName));
-					continue;
+			ObjectMethodOverride override = m.getAnnotation(ObjectMethodOverride.class);
+			if (override != null) {
+				OverrideMethod<E, ?> overrideMethod = null;
+				try {
+					switch (override.value()) {
+					case equals:
+						if (boolean.class != m.getReturnType() || m.getParameterCount() != 1 || m.getParameterTypes()[0] != Object.class) {
+							errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.ERROR, m,
+								"Method is tagged override for boolean Object.equals(Object), but the signature does not match"));
+							continue;
+						}
+						overrideMethod = new OverrideMethod<>(this, Object.class.getDeclaredMethod("equals", Object.class), method);
+						break;
+					case hashCode:
+						if (int.class != m.getReturnType() || m.getParameterCount() != 0) {
+							errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.ERROR, m,
+								"Method is tagged override for int Object.hashCode(), but the signature does not match"));
+							continue;
+						}
+						overrideMethod = new OverrideMethod<>(this, Object.class.getDeclaredMethod("hashCode"), method);
+						break;
+					case toString:
+						if (String.class != m.getReturnType() || m.getParameterCount() != 0) {
+							errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.ERROR, m,
+								"Method is tagged override for String Object.toString(), but the signature does not match"));
+							continue;
+						}
+						overrideMethod = new OverrideMethod<>(this, Object.class.getDeclaredMethod("toString"), method);
+						break;
+					}
+					if (overrideMethod == null)
+						throw new IllegalStateException("Unrecognized or mishandled Object method override: " + override.value());
+				} catch (NoSuchMethodException e) {
+					throw new IllegalStateException(e);
 				}
-				if (!m.getParameterTypes()[0].isAssignableFrom(TypeTokens.getRawType(field.getGetter().getReturnType()))) {
-					errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.ERROR, m,
-						"Setter " + m + " for field " + field + " must accept a " + field.getGetter().getReturnType()));
-					continue;
-				}
-				SetterReturnType setterReturnType = null;
-				Class<?> setterRT = m.getReturnType();
-				if (setterRT == void.class || setterRT == Void.class)
-					setterReturnType = SetterReturnType.VOID;
-				else if (setterRT.isAssignableFrom(clazz))
-					setterReturnType = SetterReturnType.SELF;
-				else if (setterRT.isAssignableFrom(TypeTokens.getRawType(field.getGetter().getReturnType())))
-					setterReturnType = SetterReturnType.OLD_VALUE;
-				else {
-					errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.ERROR, m,
-						"Return type of setter " + m + " cannot be satisfied for this class"));
-					continue;
-				}
-				FieldSetter<E, ?> method = new FieldSetter<>(this, m, (ReflectedField<E, ?>) field, setterReturnType);
-				method.setElement(methods.addElement(method, false).getElementId());
-				continue;
-			}
-			if (clazz != Object.class) {
-				errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.ERROR, m,
-					"Method " + m + " is not default or a recognized getter or setter, and its implementation is not provided"));
+				overrideMethod.setElement(methods.addElement(overrideMethod, false).getElementId());
 			}
 		}
 		if (clazz == Object.class) {} else if (theSupers.isEmpty()) {
