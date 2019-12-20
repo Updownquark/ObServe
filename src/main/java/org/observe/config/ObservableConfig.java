@@ -374,10 +374,10 @@ public class ObservableConfig implements Transactable, Stamped {
 			StringBuilder str = new StringBuilder(eventTarget.getName());
 			switch (changeType) {
 			case add:
-				str.append('+').append(relativePath.isEmpty() ? "this" : getRelativePathString());
+				str.append(":+").append(relativePath.isEmpty() ? "this" : getRelativePathString());
 				break;
 			case remove:
-				str.append('-').append(relativePath.isEmpty() ? "this" : getRelativePathString());
+				str.append(":-").append(relativePath.isEmpty() ? "this" : getRelativePathString());
 				break;
 			case set:
 				str.append(PATH_SEPARATOR).append(relativePath.isEmpty() ? "this" : getRelativePathString());

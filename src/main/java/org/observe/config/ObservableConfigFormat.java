@@ -62,7 +62,6 @@ public interface ObservableConfigFormat<E> {
 		E getPreviousValue();
 
 		Observable<?> findReferences();
-
 		void linkedReference(E value);
 
 		<V> ObservableConfigParseContext<V> map(ObservableValue<? extends ObservableConfig> config,
@@ -90,7 +89,7 @@ public interface ObservableConfigFormat<E> {
 	static <E> ObservableConfigParseContext<E> ctxFor(ObservableConfig root, ObservableValue<? extends ObservableConfig> config,
 		Supplier<? extends ObservableConfig> create, ObservableConfigEvent change, Observable<?> until, E previousValue,
 		Observable<?> findReferences, Consumer<E> delayedAccept) {
-		return new DefaultOCParseContext<>(root, config, create, change, until, null, findReferences, delayedAccept);
+		return new DefaultOCParseContext<>(root, config, create, change, until, previousValue, findReferences, delayedAccept);
 	}
 
 	static class DefaultOCParseContext<E> implements ObservableConfigParseContext<E> {
@@ -219,6 +218,22 @@ public interface ObservableConfigFormat<E> {
 		public T copy(T source, T copy, ObservableValue<? extends ObservableConfig> config, Supplier<? extends ObservableConfig> create,
 			Observable<?> until) {
 			return source;
+		}
+
+		@Override
+		public int hashCode() {
+			return format.hashCode() * 7 + defaultValue.hashCode();
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return obj instanceof SimpleConfigFormat && format.equals(((SimpleConfigFormat<?>) obj).format)
+				&& defaultValue.equals(((SimpleConfigFormat<?>) obj).defaultValue);
+		}
+
+		@Override
+		public String toString() {
+			return format.toString();
 		}
 	}
 
@@ -368,7 +383,7 @@ public interface ObservableConfigFormat<E> {
 			Function<QuickMap<String, Object>, ? extends T> retriever;
 			if (theRetriever != null)
 				retriever = theRetriever;
-			else
+			else {
 				retriever = fieldValues -> {
 					Iterable<? extends T> retrieved = theMultiRetriever.apply(fieldValues);
 					for (T value : retrieved) {
@@ -382,7 +397,8 @@ public interface ObservableConfigFormat<E> {
 					}
 					return theRetreiverDefault.get();
 				};
-				return new ReferenceFormat<>(fields, retriever);
+			}
+			return new ReferenceFormat<>(fields, retriever);
 		}
 	}
 
@@ -643,15 +659,7 @@ public interface ObservableConfigFormat<E> {
 						acceptedValue, until);
 					return;
 				}
-				if (previousValue == null) {
-					QuickMap<String, Object> fields = entityType.getFields().keySet().createMap();
-					try {
-						previousValue = createInstance(config, fields, until, Observable.constant(null));
-					} catch (ParseException e) {
-						e.printStackTrace();
-					}
-				}
-				acceptedValue.accept(previousValue);
+				acceptedValue.accept(value);
 				config.set("null", null);
 				for (int i = 0; i < entityType.getFields().keySize(); i++) {
 					ConfiguredValueField<? super E, ?> field = entityType.getFields().get(i);

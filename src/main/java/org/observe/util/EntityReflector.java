@@ -31,6 +31,8 @@ import org.qommons.IntList;
 import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
 import org.qommons.collect.BetterCollections;
+import org.qommons.collect.BetterHashSet;
+import org.qommons.collect.BetterSet;
 import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.CollectionElement;
@@ -696,7 +698,70 @@ public class EntityReflector<E> {
 		}
 	}
 
-	public static class CustomMethod<E, R> extends MethodInterpreter<E, R> {
+	public static abstract class SyntheticMethodOverride<E, R> extends MethodInterpreter<E, R> {
+		static class MethodInvocation {
+			private static final Object[] NO_ARGS = new Object[0];
+			final SyntheticMethodOverride<?, ?> method;
+			final Object proxy;
+			final Object[] args;
+
+			MethodInvocation(SyntheticMethodOverride<?, ?> method, Object proxy, Object[] args) {
+				this.method = method;
+				this.proxy = proxy;
+				this.args = args == null ? NO_ARGS : args;
+			}
+
+			@Override
+			public int hashCode() {
+				int hash = method.hashCode();
+				hash = hash * 19 + System.identityHashCode(proxy);
+				for (Object arg : args)
+					hash = hash * 7 + System.identityHashCode(arg);
+				return hash;
+			}
+
+			@Override
+			public boolean equals(Object o) {
+				if (!(o instanceof MethodInvocation))
+					return false;
+				MethodInvocation other = (MethodInvocation) o;
+				if (method != other.method || proxy != other.proxy || args.length != other.args.length)
+					return false;
+				for (int i = 0; i < args.length; i++)
+					if (args[i] != other.args[i])
+						return false;
+				return true;
+			}
+		}
+		static final ThreadLocal<BetterSet<MethodInvocation>> INVOCATIONS = ThreadLocal
+			.withInitial(() -> BetterHashSet.build().unsafe().buildSet());
+
+		SyntheticMethodOverride(EntityReflector<E> reflector, Method method) {
+			super(reflector, method);
+		}
+
+		@Override
+		protected R invoke(E proxy, SuperPath path, Object[] args, IntFunction<Object> fieldGetter, BiConsumer<Integer, Object> fieldSetter)
+			throws Throwable {
+			BetterSet<MethodInvocation> invocations = null;
+			ElementId invocation = null;
+			if (path != null) {
+				invocations = INVOCATIONS.get();
+				invocation = CollectionElement.getElementId(invocations.addElement(new MethodInvocation(this, proxy, args), false));
+			}
+			if (path == null || invocation != null) {
+				try {
+					return invokeLocal(proxy, args, fieldGetter, fieldSetter);
+				} finally {
+					if (invocation != null)
+						invocations.mutableElement(invocation).remove();
+				}
+			} else
+				return super.invoke(proxy, path, args, fieldGetter, fieldSetter);
+		}
+	}
+
+	public static class CustomMethod<E, R> extends SyntheticMethodOverride<E, R> {
 		private BiFunction<? super E, Object[], R> theInterpreter;
 
 		CustomMethod(EntityReflector<E> reflector, Method method, BiFunction<? super E, Object[], R> interpreter) {
@@ -729,7 +794,7 @@ public class EntityReflector<E> {
 		}
 	}
 
-	public static class OverrideMethod<E, R> extends MethodInterpreter<E, R> {
+	public static class OverrideMethod<E, R> extends SyntheticMethodOverride<E, R> {
 		private final MethodInterpreter<E, R> theOverride;
 
 		OverrideMethod(EntityReflector<E> reflector, Method method, MethodInterpreter<E, R> override) {

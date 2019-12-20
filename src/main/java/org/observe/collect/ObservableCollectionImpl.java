@@ -2969,10 +2969,14 @@ public final class ObservableCollectionImpl {
 					boolean clearAndAdd;
 					if (!populate && collEvt.isInitial())
 						clearAndAdd = false;
+					else if (collection == collEvt.getNewValue())
+						clearAndAdd = false;
 					else if (collection == null || collEvt.getNewValue() == null//
 						|| !collection.getIdentity().equals(collEvt.getNewValue().getIdentity()))
 						clearAndAdd = true;
-					else if ((collection.isEmpty() && collEvt.getNewValue().isEmpty())//
+					else if (collection.size() != collEvt.getNewValue().size())
+						clearAndAdd = true;
+					else if (collection.isEmpty()//
 						|| collection.getTerminalElement(true).getElementId()
 						.equals(collEvt.getNewValue().getTerminalElement(true).getElementId()))
 						clearAndAdd = false;

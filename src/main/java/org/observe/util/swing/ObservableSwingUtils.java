@@ -730,7 +730,8 @@ public class ObservableSwingUtils {
 			callbackLock[0] = true;
 			try {
 				if (selModel.getMinSelectionIndex() >= 0 && selModel.getMinSelectionIndex() == selModel.getMaxSelectionIndex()) {
-					selection.set(model.getElementAt(selModel.getMinSelectionIndex()), e);
+					E selectedValue = model.getElementAt(selModel.getMinSelectionIndex());
+					selection.set(selectedValue, e);
 				} else if (selection.get() != null)
 					selection.set(null, e);
 			} finally {
