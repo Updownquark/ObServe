@@ -121,19 +121,6 @@ public class ObservableTextField<E> extends JPasswordField {
 					checkText(e);
 				}
 			}
-
-			private void checkText(Object cause) {
-				isDirty = true;
-				try {
-					E parsed = theFormat.parse(new String(getPassword()));
-					String err = theValue.isAcceptable(parsed);
-					setErrorState(err, parsed);
-					if (err == null && commitOnType)
-						doCommit(parsed, cause, false);
-				} catch (ParseException e) {
-					setErrorState(e.getMessage() == null ? "Invalid text" : e.getMessage(), (String) null);
-				}
-			}
 		});
 		addKeyListener(new KeyAdapter() {
 			@Override
@@ -497,6 +484,19 @@ public class ObservableTextField<E> extends JPasswordField {
 		}
 	}
 
+	private void checkText(Object cause) {
+		isDirty = true;
+		try {
+			E parsed = theFormat.parse(new String(getPassword()));
+			String err = theValue.isAcceptable(parsed);
+			setErrorState(err, parsed);
+			if (err == null && commitOnType)
+				doCommit(parsed, cause, false);
+		} catch (ParseException e) {
+			setErrorState(e.getMessage() == null ? "Invalid text" : e.getMessage(), (String) null);
+		}
+	}
+
 	private void setValue(E value) {
 		String formatted;
 		try {
@@ -594,14 +594,14 @@ public class ObservableTextField<E> extends JPasswordField {
 
 	private void adjust(boolean up, Object cause) {
 		SpinnerFormat<E> spinnerFormat = (SpinnerFormat<E>) theFormat;
-		if (theError == null && getEchoChar() == 0) {
+		if (getEchoChar() == 0) {
 			String text = new String(getPassword());
 			E toAdjust;
 			if (isDirty) {
 				try {
 					toAdjust = theFormat.parse(text);
 				} catch (ParseException ex) {
-					return; // Shouldn't happen since the error is null, but we'll just abort
+					return;
 				}
 			} else
 				toAdjust = theValue.get();
@@ -610,10 +610,11 @@ public class ObservableTextField<E> extends JPasswordField {
 			boolean withContext = selectionStart == selectionEnd;
 			if (withContext || spinnerFormat.supportsAdjustment(withContext)) {
 				BiTuple<E, String> adjusted = spinnerFormat.adjust(toAdjust, text, withContext ? selectionStart : -1, up);
-				if (adjusted != null && theValue.isAcceptable(adjusted.getValue1()) == null) {
+				if (adjusted == null) {//
+				} else {
 					isInternallyChanging = true;
 					try {
-						if (commitAdjustmentImmediately) {
+						if (commitAdjustmentImmediately && theValue.isAcceptable(adjusted.getValue1()) == null) {
 							try {
 								theValue.set(adjusted.getValue1(), cause);
 							} catch (RuntimeException ex) {
@@ -635,6 +636,7 @@ public class ObservableTextField<E> extends JPasswordField {
 							selectionEnd = newText.length();
 						setSelectionStart(selectionStart);
 						setSelectionEnd(selectionEnd);
+						checkText(cause);
 					} finally {
 						isInternallyChanging = false;
 					}

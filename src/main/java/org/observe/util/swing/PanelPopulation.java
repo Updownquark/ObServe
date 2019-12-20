@@ -30,6 +30,7 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
+import javax.swing.Action;
 import javax.swing.Box;
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
@@ -620,6 +621,8 @@ public class PanelPopulation {
 	}
 
 	public interface TableAction<R, A extends TableAction<R, A>> {
+		List<R> getActionItems();
+
 		/**
 		 * @param allowed Whether this action should be enabled when multiple values are selected
 		 * @return This action
@@ -639,6 +642,10 @@ public class PanelPopulation {
 		 * @return This action
 		 */
 		A allowForAnyEnabled(boolean allowed);
+
+		boolean isAllowedForMultiple();
+
+		boolean isAllowedForEmpty();
 
 		A allowWhen(Function<? super R, String> filter, Consumer<ActionEnablement<R>> operation);
 
@@ -2004,10 +2011,25 @@ public class PanelPopulation {
 
 	static class SimpleListBuilder<R, P extends SimpleListBuilder<R, P>> extends SimpleFieldEditor<LittleList<R>, P>
 	implements ListBuilder<R, P> {
+		class ListItemAction<A extends SimpleTableAction<R, A>> extends SimpleTableAction<R, A> {
+			private final List<R> theActionItems;
+
+			ListItemAction(Consumer<? super List<? extends R>> action, Supplier<List<R>> selectedValues) {
+				super(SimpleListBuilder.this, action, selectedValues);
+				theActionItems = new ArrayList<>();
+			}
+
+			@Override
+			void updateSelection(List<R> selectedValues, Object cause) {
+				theActionItems.clear();
+				theActionItems.addAll(selectedValues);
+				super.updateSelection(selectedValues, cause);
+			}
+		}
 		private String theItemName;
 		private SettableValue<R> theSelectionValue;
 		private ObservableCollection<R> theSelectionValues;
-		private List<TableAction<R, ?>> theActions;
+		private List<ListItemAction<?>> theActions;
 
 		SimpleListBuilder(ObservableCollection<R> rows, Supplier<Transactable> lock) {
 			super(null, new LittleList<>(new ObservableListModel<>(rows)), lock);
@@ -2122,8 +2144,11 @@ public class PanelPopulation {
 		public P withMultiAction(Consumer<? super List<? extends R>> action, Consumer<TableAction<R, ?>> actionMod) {
 			if(theActions==null)
 				theActions = new ArrayList<>();
-			SimpleTableAction<R, ?> tableAction = new SimpleTableAction<>(this, action, this::getSelection);
-			theActions.add(tableAction);
+			ListItemAction<?>[] tableAction = new ListItemAction[1];
+			tableAction[0] = new ListItemAction(action, () -> tableAction[0].theActionItems);
+			if (actionMod != null)
+				actionMod.accept(tableAction[0]);
+			theActions.add(tableAction[0]);
 			return (P) this;
 		}
 
@@ -2161,7 +2186,165 @@ public class PanelPopulation {
 				ObservableSwingUtils.syncSelection(getEditor(), model, getEditor()::getSelectionModel, model.getWrapped().equivalence(),
 					theSelectionValues, until);
 
+			for (ListItemAction<?> action : theActions) {
+				if (action.isAllowedForEmpty() || action.isAllowedForMultiple()) {
+					System.err.println("Multi actions not supported yet");
+				} else
+					getEditor().addItemAction(itemActionFor(action, until));
+			}
+
 			return getEditor();
+		}
+
+		private LittleList.ItemAction<R> itemActionFor(ListItemAction<?> tableAction, Observable<?> until) {
+			class ItemAction<P extends ItemAction<P>> implements LittleList.ItemAction<R>, ButtonEditor<P> {
+				private Action theAction;
+				private boolean isEnabled;
+
+				@Override
+				public void configureAction(Action action, R item, int index) {
+					theAction = action;
+					action.setEnabled(true);
+					tableAction.updateSelection(Arrays.asList(item), null);
+					if (tableAction.theButtonMod != null)
+						tableAction.theButtonMod.accept(this);
+
+					String s;
+					if (tableAction.theTooltipString != null) {
+						s = tableAction.theTooltipString.get();
+						if (s != null)
+							action.putValue(Action.LONG_DESCRIPTION, s);
+					}
+					if (tableAction.theEnabledString != null) {
+						s = tableAction.theEnabledString.get();
+						if (s != null) {
+							action.setEnabled(false);
+							action.putValue(Action.LONG_DESCRIPTION, s);
+						}
+					}
+				}
+
+				@Override
+				public void actionPerformed(R item, int index, Object cause) {
+					theAction = null;
+					isEnabled = true;
+					tableAction.updateSelection(Arrays.asList(item), null);
+					if (tableAction.theButtonMod != null)
+						tableAction.theButtonMod.accept(this);
+					if (tableAction.theEnabledString != null) {
+						String s = tableAction.theEnabledString.get();
+						if (s != null)
+							isEnabled = false;
+					}
+					if (isEnabled)
+						tableAction.theObservableAction.act(cause);
+				}
+
+				@Override
+				public P withFieldName(ObservableValue<String> fieldName) {
+					return (P) this;
+				}
+
+				@Override
+				public P withPostLabel(ObservableValue<String> postLabel) {
+					return (P) this;
+				}
+
+				@Override
+				public P withPostButton(String buttonText, ObservableAction<?> action, Consumer<ButtonEditor<?>> modify) {
+					return (P) this;
+				}
+
+				@Override
+				public P withTooltip(ObservableValue<String> tooltip) {
+					if (theAction != null && theAction.isEnabled())
+						theAction.putValue(Action.LONG_DESCRIPTION, tooltip.get());
+					return (P) this;
+				}
+
+				@Override
+				public P modifyFieldLabel(Consumer<FontAdjuster<?>> font) {
+					return (P) this;
+				}
+
+				@Override
+				public P withFont(Consumer<FontAdjuster<?>> font) {
+					if (theAction != null)
+						theAction.putValue("font", font);
+					return (P) this;
+				}
+
+				@Override
+				public JButton getEditor() {
+					throw new UnsupportedOperationException();
+				}
+
+				@Override
+				public P visibleWhen(ObservableValue<Boolean> visible) {
+					boolean vis = visible == null || visible.get();
+					isEnabled &= vis;
+					if (theAction != null)
+						theAction.putValue("visible", vis);
+					return (P) this;
+				}
+
+				@Override
+				public P fill() {
+					return (P) this;
+				}
+
+				@Override
+				public P fillV() {
+					return (P) this;
+				}
+
+				@Override
+				public P modifyEditor(Consumer<? super JButton> modify) {
+					return (P) this;
+				}
+
+				@Override
+				public Component getComponent() {
+					throw new UnsupportedOperationException();
+				}
+
+				@Override
+				public Alert alert(String title, String message) {
+					return SimpleListBuilder.this.alert(title, message);
+				}
+
+				@Override
+				public ValueCache values() {
+					throw new UnsupportedOperationException();
+				}
+
+				@Override
+				public P withText(ObservableValue<String> text) {
+					if (theAction != null)
+						theAction.putValue(Action.NAME, text.get());
+					return (P) this;
+				}
+
+				@Override
+				public P withIcon(ObservableValue<? extends Icon> icon) {
+					if (theAction != null)
+						theAction.putValue(Action.SMALL_ICON, icon == null ? null : icon.get());
+					return (P) this;
+				}
+
+				@Override
+				public P disableWith(ObservableValue<String> disabled) {
+					String msg = disabled.get();
+					isEnabled &= (msg != null);
+					if (theAction != null) {
+						theAction.setEnabled(msg == null);
+						if (msg != null)
+							theAction.putValue(Action.LONG_DESCRIPTION, msg);
+					}
+					return (P) this;
+				}
+			}
+			return new ItemAction();
 		}
 	}
 
@@ -2552,10 +2735,10 @@ public class PanelPopulation {
 		private boolean zeroAllowed;
 		private boolean multipleAllowed;
 		private boolean actWhenAnyEnabled;
-		private ObservableAction<?> theObservableAction;
-		private SettableValue<String> theEnabledString;
-		private SettableValue<String> theTooltipString;
-		private Consumer<ButtonEditor<?>> theButtonMod;
+		ObservableAction<?> theObservableAction;
+		SettableValue<String> theEnabledString;
+		SettableValue<String> theTooltipString;
+		Consumer<ButtonEditor<?>> theButtonMod;
 
 		SimpleTableAction(ListWidgetBuilder<R, ?, ?> table, Consumer<? super List<? extends R>> action, Supplier<List<R>> selectedValues) {
 			theTable = table;
@@ -2583,6 +2766,16 @@ public class PanelPopulation {
 				}
 			};
 			multipleAllowed = true;
+		}
+
+		@Override
+		public boolean isAllowedForMultiple() {
+			return zeroAllowed;
+		}
+
+		@Override
+		public boolean isAllowedForEmpty() {
+			return multipleAllowed;
 		}
 
 		@Override
@@ -2720,6 +2913,11 @@ public class PanelPopulation {
 				};
 			}
 			return (A) this;
+		}
+
+		@Override
+		public List<R> getActionItems() {
+			return theSelectedValues.get();
 		}
 
 		void updateSelection(List<R> selectedValues, Object cause) {

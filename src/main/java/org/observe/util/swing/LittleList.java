@@ -9,6 +9,7 @@ import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Insets;
 import java.awt.LayoutManager2;
+import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
 import java.awt.event.MouseAdapter;
@@ -16,7 +17,9 @@ import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
+import javax.swing.AbstractAction;
 import javax.swing.Action;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultListSelectionModel;
@@ -34,23 +37,12 @@ import org.qommons.ArrayUtils;
 import org.qommons.LambdaUtils;
 
 public class LittleList<E> extends JComponent {
-	public static class ItemActionEvent<E> extends ActionEvent {
-		private final E theItem;
-		private final int theIndex;
+	private static final int CLICK_TOLERANCE = 4;
 
-		public ItemActionEvent(Object source, String command, E item, int index) {
-			super(source, ACTION_PERFORMED, command);
-			theItem = item;
-			theIndex = index;
-		}
+	interface ItemAction<E> {
+		void configureAction(Action action, E item, int index);
 
-		public E getItem() {
-			return theItem;
-		}
-
-		public int getIndex() {
-			return theIndex;
-		}
+		void actionPerformed(E item, int index, Object cause);
 	}
 
 	private final SyntheticContainer theSyntheticContainer;
@@ -60,9 +52,11 @@ public class LittleList<E> extends JComponent {
 	private Component theEditorComponent;
 	private ObservableListModel<E> theModel;
 	private ListSelectionModel theSelectionModel;
-	private final List<Action> theItemActions;
+	private final List<ItemAction<? super E>> theItemActions;
 
 	private BiConsumer<Border, ? super E> theBorderAdjuster;
+	private boolean isTooltipOverridden;
+	private String theTooltip;
 
 	public LittleList(ObservableListModel<E> model) {
 		theModel = model;
@@ -100,17 +94,86 @@ public class LittleList<E> extends JComponent {
 			}
 		});
 
-		addMouseListener(new MouseAdapter() {
+		MouseAdapter mouseListener = new MouseAdapter() {
+			private Point pressLocation;
+
 			@Override
-			public void mouseClicked(MouseEvent e) {
+			public void mousePressed(MouseEvent e) {
+				pressLocation = e.getPoint();
+			}
+
+			private boolean testReleaseForClick(MouseEvent e) {
+				return Math.abs(e.getX() - pressLocation.x) <= CLICK_TOLERANCE//
+					&& Math.abs(e.getY() - pressLocation.y) <= CLICK_TOLERANCE;
+			}
+
+			@Override
+			public void mouseReleased(MouseEvent e) {
+				if (pressLocation != null && testReleaseForClick(e))//
+					clicked(e);
+			}
+
+			@Override
+			public void mouseMoved(MouseEvent e) {
+				if (pressLocation != null && !testReleaseForClick(e))
+					pressLocation = null;
+				int selected = getItemIndexAt(e.getX(), e.getY());
+				String tooltip;
+				if (selected >= 0) {
+					int clickCode = theSyntheticContainer.getBounds(selected).getClickCode(e.getX(), e.getY());
+					if (clickCode > 0) {
+						ItemAction<? super E> action = theItemActions.get(clickCode - 1);
+						tooltip = theSyntheticContainer.getActionTooltip(selected, action);
+						if (tooltip != null) {
+							isTooltipOverridden = true;
+							LittleList.super.setToolTipText(tooltip);
+						} else {
+							tooltip = theSyntheticContainer.getItemTooltip(selected);
+							if (tooltip != null) {
+								isTooltipOverridden = true;
+								LittleList.super.setToolTipText(tooltip);
+							} else if (isTooltipOverridden) {
+								isTooltipOverridden = false;
+								LittleList.super.setToolTipText(theTooltip);
+							}
+						}
+					} else {
+						tooltip = theSyntheticContainer.getItemTooltip(selected);
+						if (tooltip != null) {
+							isTooltipOverridden = true;
+							LittleList.super.setToolTipText(tooltip);
+						} else if (isTooltipOverridden) {
+							isTooltipOverridden = false;
+							LittleList.super.setToolTipText(theTooltip);
+						}
+					}
+				} else if (isTooltipOverridden) {
+					isTooltipOverridden = false;
+					LittleList.super.setToolTipText(theTooltip);
+				}
+			}
+
+			@Override
+			public void mouseDragged(MouseEvent e) {
+				if (pressLocation != null)
+					pressLocation = null;
+			}
+
+			@Override
+			public void mouseExited(MouseEvent e) {
+				if (pressLocation != null)
+					pressLocation = null;
+				isTooltipOverridden = false;
+				setToolTipText(theTooltip);
+			}
+
+			private void clicked(MouseEvent e) {
 				int selected = getItemIndexAt(e.getX(), e.getY());
 				if (selected >= 0) {
 					int clickCode = theSyntheticContainer.getBounds(selected).getClickCode(e.getX(), e.getY());
 					if (clickCode > 0) {
-						Action action = theItemActions.get(clickCode - 1);
-						ItemActionEvent<E> event = new ItemActionEvent<>(LittleList.this, "clicked", theModel.getElementAt(selected),
-							selected);
-						action.actionPerformed(event);
+						ItemAction<? super E> action = theItemActions.get(clickCode - 1);
+						theSyntheticContainer.performAction(action, selected, e);
 						return;
 					}
 				}
@@ -142,7 +205,10 @@ public class LittleList<E> extends JComponent {
 					repaint();
 				}
 			}
-		});
+		};
+
+		addMouseListener(mouseListener);
+		addMouseMotionListener(mouseListener);
 		setItemBorder(BorderFactory.createLineBorder(Color.black, 1, true));
 	}
 
@@ -164,14 +230,14 @@ public class LittleList<E> extends JComponent {
 		return this;
 	}
 
-	public LittleList<E> addItemAction(Action action) {
+	public LittleList<E> addItemAction(ItemAction<? super E> action) {
 		theItemActions.add(action);
 		moveEditor();
 		revalidate();
 		return this;
 	}
 
-	public LittleList<E> removeItemAction(Action action) {
+	public LittleList<E> removeItemAction(ItemAction<? super E> action) {
 		if (theItemActions.remove(action)) {
 			moveEditor();
 			revalidate();
@@ -195,6 +261,13 @@ public class LittleList<E> extends JComponent {
 				borderAdjuster.accept(border, item);
 			};
 		}
+	}
+
+	@Override
+	public void setToolTipText(String text) {
+		theTooltip = text;
+		if (!isTooltipOverridden)
+			super.setToolTipText(text);
 	}
 
 	void moveEditor() {
@@ -229,12 +302,8 @@ public class LittleList<E> extends JComponent {
 
 	public int getItemIndexAt(int x, int y) {
 		for (int i = 0; i < theModel.getSize(); i++) {
-			if (theSyntheticContainer.getBounds(i).holderBounds.contains(x, y)) {
-				if (theSyntheticContainer.getBounds(i).itemContains(x, y))
-					return i;
-				else
-					return -1;
-			}
+			if (theSyntheticContainer.getBounds(i).holderBounds.contains(x, y))
+				return i;
 		}
 		return -1;
 	}
@@ -248,7 +317,6 @@ public class LittleList<E> extends JComponent {
 	@Override
 	public Dimension getPreferredSize() {
 		Dimension d = getLayout().preferredLayoutSize(theSyntheticContainer.setMode(true));
-		theSyntheticContainer.postRender();
 		return d;
 	}
 
@@ -259,28 +327,24 @@ public class LittleList<E> extends JComponent {
 			d = ((LayoutManager2) getLayout()).maximumLayoutSize(theSyntheticContainer.setMode(true));
 		else
 			d = getLayout().preferredLayoutSize(theSyntheticContainer.setMode(true));
-		theSyntheticContainer.postRender();
 		return d;
 	}
 
 	@Override
 	public Dimension getMinimumSize() {
 		Dimension d = getLayout().minimumLayoutSize(theSyntheticContainer.setMode(true));
-		theSyntheticContainer.postRender();
 		return d;
 	}
 
 	@Override
 	public void doLayout() {
 		getLayout().layoutContainer(theSyntheticContainer.setMode(true));
-		theSyntheticContainer.postRender();
 	}
 
 	@Override
 	protected void paintChildren(Graphics g) {
 		theSyntheticContainer.setMode(false);
 		super.paintChildren(g);
-		theSyntheticContainer.postRender();
 	}
 
 	static class ItemBoundsData {
@@ -318,14 +382,35 @@ public class LittleList<E> extends JComponent {
 			if (itemX >= 0 && itemX < itemBounds.getWidth() && itemY >= 0 && itemY < itemBounds.getHeight())
 				return 0;
 			for (int i = 0; i < actionBounds.size(); i++) {
-				int actionX = (int) actionBounds.get(i).getX() - x;
-				int actionY = (int) actionBounds.get(i).getY() - y;
+				int actionX = x - (int) actionBounds.get(i).getX();
+				int actionY = y - (int) actionBounds.get(i).getY();
 
 				if (actionX >= 0 && actionX < actionBounds.get(i).getWidth() && actionY >= 0 && actionY < actionBounds.get(i).getHeight())
 					return i + 1;
 			}
 			return 0;
 		}
+
+		StringBuilder print(StringBuilder str) {
+			printPoint(str, holderBounds.getLocation());
+			printSize(str, holderBounds.getSize());
+			printPoint(str, itemBounds.getLocation());
+			printSize(str, itemBounds.getSize());
+			return str;
+		}
+
+		@Override
+		public String toString() {
+			return print(new StringBuilder()).toString();
+		}
+	}
+
+	private static void printPoint(StringBuilder str, Point location) {
+		str.append('(').append(location.x).append(", ").append(location.y).append(')');
+	}
+
+	private static void printSize(StringBuilder str, Dimension size) {
+		str.append('[').append(size.width).append(", ").append(size.height).append(']');
 	}
 
 	protected class SyntheticContainer extends JComponent {
@@ -341,7 +426,6 @@ public class LittleList<E> extends JComponent {
 
 		SyntheticContainer setMode(boolean layoutOrRender) {
 			this.layoutOrRender = layoutOrRender;
-			theHolder.prepare();
 			super.setBounds(0, 0, LittleList.this.getWidth(), LittleList.this.getHeight());
 			return this;
 		}
@@ -357,8 +441,6 @@ public class LittleList<E> extends JComponent {
 
 		@Override
 		public Component getComponent(int n) {
-			if (n > 0)
-				theHolder.postRender(n - 1);
 			E row = theModel.getElementAt(n);
 			Component rendered = theRenderer.getCellRendererComponent(LittleList.this,
 				new ModelCell.Default<>(LambdaUtils.constantSupplier(row, () -> String.valueOf(row), row), row, n, 0, //
@@ -380,34 +462,73 @@ public class LittleList<E> extends JComponent {
 			return theHolder;
 		}
 
-		void postRender() {
-			if (theModel.getSize() > 0)
-				theHolder.postRender(theModel.getSize() - 1);
+		String getItemTooltip(int selected) {
+			E row = theModel.getElementAt(selected);
+			Component rendered = theRenderer.getCellRendererComponent(LittleList.this,
+				new ModelCell.Default<>(LambdaUtils.constantSupplier(row, () -> String.valueOf(row), row), row, selected, 0, //
+					theSelectionModel.isSelectedIndex(selected), theSelectionModel.isSelectedIndex(selected), true, true),
+				CellRenderContext.DEFAULT);
+			return rendered instanceof JComponent ? ((JComponent) rendered).getToolTipText() : null;
+		}
+
+		String getActionTooltip(int itemIndex, ItemAction<? super E> action) {
+			E row = theModel.getElementAt(itemIndex);
+			return theHolder.getActionTooltip(row, itemIndex, action);
+		}
+
+		boolean performAction(ItemAction<? super E> action, int itemIndex, Object cause) {
+			E item = theModel.getElementAt(itemIndex);
+			return theHolder.performAction(item, itemIndex, action, cause);
+		}
+
+		void printSizes() {
+			StringBuilder str = new StringBuilder();
+			printSize(str, getSize());
+			for (ItemBoundsData b : bounds) {
+				str.append("\n\t");
+				b.print(str);
+			}
+			System.out.println(str);
 		}
 	}
 
 	protected class ItemHolder extends JPanel {
 		private final SyntheticComponent theComponent;
 		private final List<JLabel> theItemActionLabels;
+		private final Action theAction;
+		private ItemBoundsData theBounds;
 
 		ItemHolder() {
-			super(new JustifiedBoxLayout(false).mainJustified().crossCenter());
+			super(new JustifiedBoxLayout(false).setMargin(2, 2, 0, 2).mainJustified().crossCenter());
 			theComponent = new SyntheticComponent();
 			add(theComponent);
+			theAction = new AbstractAction() {
+				@Override
+				public void actionPerformed(ActionEvent e) {}
+			};
 			theItemActionLabels = new ArrayList<>();
 		}
 
-		void prepare() {
-			ArrayUtils.adjust(theItemActionLabels, theItemActions, new ArrayUtils.DifferenceListener<JLabel, Action>() {
+		ItemHolder forRender(int renderIndex, E item, Component rendered, boolean initBounds) {
+			if (theBorderAdjuster != null && getBorder() != null)
+				theBorderAdjuster.accept(getBorder(), item);
+			theBounds = theSyntheticContainer.getBounds(renderIndex);
+			theComponent.forRender(renderIndex, rendered);
+			if (initBounds) {
+				super.setBounds(theBounds.holderBounds.x, theBounds.holderBounds.y, theBounds.holderBounds.width,
+					theBounds.holderBounds.height);
+				theComponent.internalSetBounds(theBounds.itemBounds);
+			}
+			ArrayUtils.adjust(theItemActionLabels, theItemActions, new ArrayUtils.DifferenceListener<JLabel, ItemAction<? super E>>() {
 				@Override
-				public boolean identity(JLabel o1, Action o2) {
+				public boolean identity(JLabel o1, ItemAction<? super E> o2) {
 					return true;
 				}
 
 				@Override
-				public JLabel added(Action o, int mIdx, int retIdx) {
+				public JLabel added(ItemAction<? super E> o, int mIdx, int retIdx) {
 					JLabel label = new JLabel();
-					sync(label, o);
+					sync(label, o, renderIndex);
 					add(label, retIdx + 1);
 					return label;
 				}
@@ -419,44 +540,61 @@ public class LittleList<E> extends JComponent {
 				}
 
 				@Override
-				public JLabel set(JLabel o1, int idx1, int incMod, Action o2, int idx2, int retIdx) {
-					sync(o1, o2);
+				public JLabel set(JLabel o1, int idx1, int incMod, ItemAction<? super E> o2, int idx2, int retIdx) {
+					sync(o1, o2, renderIndex);
 					return o1;
 				}
 			});
+			invalidate();
+			return this;
 		}
 
-		void sync(JLabel actionLabel, Action action) {
-			actionLabel.setText(string(action.getValue(Action.NAME)));
-			actionLabel.setIcon((Icon) action.getValue(Action.SMALL_ICON));
+		void sync(JLabel actionLabel, ItemAction<? super E> action, int index) {
+			action.configureAction(theAction, null, index);
+			actionLabel.setText(string(theAction.getValue(Action.NAME)));
+			actionLabel.setIcon((Icon) theAction.getValue(Action.SMALL_ICON));
+			Object font = theAction.getValue("font");
+			if (font instanceof Consumer) {
+				try {
+					((Consumer<Object>) font).accept(ObservableSwingUtils.label(actionLabel));
+				} catch (ClassCastException e) {}
+			} else if (font instanceof Font)
+				actionLabel.setFont((Font) font);
+			Object visible = theAction.getValue("visible");
+			actionLabel.setVisible(!Boolean.FALSE.equals(visible));
+			actionLabel.setEnabled(theAction.isEnabled());
+			actionLabel.invalidate();
 		}
 
 		private String string(Object s) {
 			return s == null ? null : s.toString();
 		}
 
-		ItemHolder forRender(int renderIndex, E item, Component rendered, boolean initBounds) {
-			if (theBorderAdjuster != null && getBorder() != null)
-				theBorderAdjuster.accept(getBorder(), item);
-			theComponent.forRender(renderIndex, rendered);
-			if (initBounds) {
-				ItemBoundsData bounds = theSyntheticContainer.getBounds(renderIndex);
-				super.setBounds(bounds.holderBounds);
-				theComponent.internalSetBounds(bounds.itemBounds);
-			}
-			return this;
+		@Override
+		public void setBounds(int x, int y, int width, int height) {
+			super.setBounds(x, y, width, height);
+			theBounds.holderBounds.setBounds(x, y, width, height);
+			getLayout().layoutContainer(this);
+			theBounds.itemBounds.setBounds(theComponent.getBounds());
+			while (theBounds.actionBounds.size() < theItemActionLabels.size())
+				theBounds.actionBounds.add(new Rectangle());
+			while (theBounds.actionBounds.size() > theItemActionLabels.size())
+				theBounds.actionBounds.remove(theBounds.actionBounds.size() - 1);
+			for (int i = 0; i < theItemActionLabels.size(); i++)
+				theItemActionLabels.get(i).getBounds(theBounds.actionBounds.get(i));
 		}
 
-		void postRender(int renderIndex) {
-			ItemBoundsData bounds = theSyntheticContainer.getBounds(renderIndex);
-			bounds.holderBounds.setBounds(getBounds());
-			bounds.itemBounds.setBounds(theComponent.getBounds());
-			while (bounds.actionBounds.size() < theItemActionLabels.size())
-				bounds.actionBounds.add(new Rectangle());
-			while (bounds.actionBounds.size() > theItemActionLabels.size())
-				bounds.actionBounds.remove(bounds.actionBounds.size() - 1);
-			for (int i = 0; i < theItemActionLabels.size(); i++)
-				theItemActionLabels.get(i).getBounds(bounds.actionBounds.get(i));
+		String getActionTooltip(E item, int itemIndex, ItemAction<? super E> action) {
+			action.configureAction(theAction, item, itemIndex);
+			return string(theAction.getValue(Action.LONG_DESCRIPTION));
+		}
+
+		boolean performAction(E item, int itemIndex, ItemAction<? super E> action, Object cause) {
+			action.configureAction(theAction, item, itemIndex);
+			if (!theAction.isEnabled())
+				return false;
+			action.actionPerformed(item, itemIndex, cause);
+			return true;
 		}
 	}
 
