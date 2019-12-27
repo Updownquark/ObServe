@@ -185,7 +185,7 @@ public class ObservableCellEditor<M, C> implements TableCellEditor, TreeCellEdit
 				.mutableElement(obsModel.getRows().getElement(row).getElementId());
 			CategoryRenderStrategy<M, C> category = (CategoryRenderStrategy<M, C>) obsModel.getColumn(column);
 			valueFilter = v -> {
-				if (TypeTokens.get().isInstance(category.getType(), v))
+				if (v == null || TypeTokens.get().isInstance(category.getType(), v))
 					return category.getMutator().isAcceptable(modelElement, v);
 				else
 					return "Unacceptable value";
