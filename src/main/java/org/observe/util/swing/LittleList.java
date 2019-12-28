@@ -435,6 +435,9 @@ public class LittleList<E> extends JComponent {
 		}
 
 		@Override
+		public void invalidate() {}
+
+		@Override
 		public int getComponentCount() {
 			return theModel.getSize();
 		}
