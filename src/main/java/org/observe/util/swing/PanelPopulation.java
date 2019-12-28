@@ -2193,7 +2193,7 @@ public class PanelPopulation {
 					getEditor().addItemAction(itemActionFor(action, until));
 			}
 
-			return getEditor();
+			return new ScrollPaneLite(getEditor());
 		}
 
 		private LittleList.ItemAction<R> itemActionFor(ListItemAction<?> tableAction, Observable<?> until) {
