@@ -11,20 +11,25 @@ import javax.swing.plaf.ScrollBarUI;
 import javax.swing.plaf.basic.BasicScrollBarUI;
 
 public class ScrollPaneLite extends JScrollPane {
-	public ScrollPaneLite() {
-		super();
-	}
+	private int theScrollBarThickness;
 
 	public ScrollPaneLite(Component view, int vsbPolicy, int hsbPolicy) {
 		super(view, vsbPolicy, hsbPolicy);
+		theScrollBarThickness = 5;
+		getVerticalScrollBar().setUnitIncrement(10);
+		getHorizontalScrollBar().setUnitIncrement(10);
+	}
+
+	public ScrollPaneLite() {
+		this(null, VERTICAL_SCROLLBAR_AS_NEEDED, HORIZONTAL_SCROLLBAR_AS_NEEDED);
 	}
 
 	public ScrollPaneLite(Component view) {
-		super(view);
+		this(view, VERTICAL_SCROLLBAR_AS_NEEDED, HORIZONTAL_SCROLLBAR_AS_NEEDED);
 	}
 
 	public ScrollPaneLite(int vsbPolicy, int hsbPolicy) {
-		super(vsbPolicy, hsbPolicy);
+		this(null, vsbPolicy, hsbPolicy);
 	}
 
 	@Override
@@ -37,7 +42,7 @@ public class ScrollPaneLite extends JScrollPane {
 		return new ScrollBarLite(JScrollBar.VERTICAL);
 	}
 
-	static class ScrollBarLite extends JScrollBar {
+	class ScrollBarLite extends JScrollBar {
 		public ScrollBarLite(int orientation) {
 			super(orientation);
 		}
@@ -69,10 +74,10 @@ public class ScrollPaneLite extends JScrollPane {
 		protected Dimension adjust(Dimension d) {
 			switch (getOrientation()) {
 			case HORIZONTAL:
-				d.height = Math.min(d.height, 2);
+				d.height = Math.min(d.height, theScrollBarThickness);
 				break;
 			case VERTICAL:
-				d.width = Math.min(d.width, 2);
+				d.width = Math.min(d.width, theScrollBarThickness);
 				break;
 			}
 			return d;

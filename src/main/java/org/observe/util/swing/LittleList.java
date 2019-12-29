@@ -16,6 +16,7 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
@@ -27,7 +28,9 @@ import javax.swing.Icon;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JViewport;
 import javax.swing.ListSelectionModel;
+import javax.swing.Scrollable;
 import javax.swing.border.Border;
 import javax.swing.event.ListDataEvent;
 import javax.swing.event.ListDataListener;
@@ -36,7 +39,7 @@ import org.observe.util.swing.ObservableCellRenderer.CellRenderContext;
 import org.qommons.ArrayUtils;
 import org.qommons.LambdaUtils;
 
-public class LittleList<E> extends JComponent {
+public class LittleList<E> extends JComponent implements Scrollable {
 	private static final int CLICK_TOLERANCE = 4;
 
 	interface ItemAction<E> {
@@ -47,6 +50,7 @@ public class LittleList<E> extends JComponent {
 
 	private final SyntheticContainer theSyntheticContainer;
 	private final CategoryRenderStrategy<E, E> theRenderStrategy;
+	private boolean isVerticalScrolling;
 	private ObservableCellRenderer<? super E, ? super E> theRenderer;
 	private ObservableCellEditor<? super E, ? super E> theEditor;
 	private Component theEditorComponent;
@@ -61,6 +65,7 @@ public class LittleList<E> extends JComponent {
 	public LittleList(ObservableListModel<E> model) {
 		theModel = model;
 		theRenderStrategy = new CategoryRenderStrategy<>("Value", model.getWrapped().getType(), v -> v);
+		isVerticalScrolling = true;
 		setLayout(new FlowLayout(FlowLayout.LEFT));
 		theSyntheticContainer = new SyntheticContainer();
 		add(theSyntheticContainer); // So the tree lock works right
@@ -75,6 +80,7 @@ public class LittleList<E> extends JComponent {
 				theSelectionModel.removeIndexInterval(e.getIndex0(), e.getIndex1());
 				moveEditor();
 				revalidate();
+				repaint();
 			}
 
 			@Override
@@ -82,6 +88,11 @@ public class LittleList<E> extends JComponent {
 				theSelectionModel.insertIndexInterval(e.getIndex0(), e.getIndex1() - e.getIndex1() + 1, true);
 				moveEditor();
 				revalidate();
+				repaint();
+				if (getModel().getSize() == e.getIndex1() - e.getIndex0() + 1 && getParent() instanceof JViewport
+					&& getParent().getParent().getParent() != null) {
+					getParent().getParent().getParent().revalidate();
+				}
 			}
 
 			@Override
@@ -91,6 +102,7 @@ public class LittleList<E> extends JComponent {
 					&& e.getIndex1() >= selected)
 					reEdit();
 				revalidate();
+				repaint();
 			}
 		});
 
@@ -263,6 +275,11 @@ public class LittleList<E> extends JComponent {
 		}
 	}
 
+	public LittleList<E> scrollAxis(boolean vertical) {
+		isVerticalScrolling = vertical;
+		return this;
+	}
+
 	@Override
 	public void setToolTipText(String text) {
 		theTooltip = text;
@@ -316,7 +333,49 @@ public class LittleList<E> extends JComponent {
 
 	@Override
 	public Dimension getPreferredSize() {
-		Dimension d = getLayout().preferredLayoutSize(theSyntheticContainer.setMode(true));
+		int mainLimit, mainPadding, crossPadding;
+		FlowLayout layout = (FlowLayout) getLayout();
+		if (isVerticalScrolling) {
+			mainLimit = getWidth();
+			mainPadding = layout.getHgap();
+			crossPadding = layout.getVgap();
+		} else {
+			mainLimit = getHeight();
+			mainPadding = layout.getVgap();
+			crossPadding = layout.getHgap();
+		}
+		theSyntheticContainer.setMode(true);
+		int cross = 0;
+		int main = 0;
+		int maxRowLength = 0;
+		int maxRowThickness = 0;
+		for (int i = 0; i < theModel.getSize(); i++) {
+			Dimension ps = theSyntheticContainer.getComponent(i).getPreferredSize();
+			int psMain = isVerticalScrolling ? ps.width : ps.height;
+			int psCross = isVerticalScrolling ? ps.height : ps.width;
+			if (main == 0 || main + mainPadding + psMain <= mainLimit) {
+				main += mainPadding + psMain;
+				maxRowLength = Math.max(maxRowLength, main);
+				maxRowThickness = Math.max(maxRowThickness, psCross);
+			} else {
+				if (cross > 0)
+					cross += crossPadding;
+				cross += maxRowThickness;
+				main = psMain;
+				maxRowThickness = psCross;
+			}
+		}
+		if (cross > 0)
+			cross += crossPadding;
+		cross += maxRowThickness;
+		Dimension d;
+		if (isVerticalScrolling)
+			d = new Dimension(maxRowLength, cross);
+		else
+			d = new Dimension(cross, maxRowLength);
+		Insets ins = getInsets();
+		d.width += ins.left + ins.right + layout.getHgap() * 2;
+		d.height += ins.top + ins.bottom + layout.getVgap() * 2;
 		return d;
 	}
 
@@ -339,6 +398,34 @@ public class LittleList<E> extends JComponent {
 	@Override
 	public void doLayout() {
 		getLayout().layoutContainer(theSyntheticContainer.setMode(true));
+	}
+
+	@Override
+	public Dimension getPreferredScrollableViewportSize() {
+		Dimension d = getLayout().preferredLayoutSize(theSyntheticContainer.setMode(true));
+		return d;
+	}
+
+	@Override
+	public int getScrollableUnitIncrement(Rectangle visibleRect, int orientation, int direction) {
+		// TODO Auto-generated method stub
+		return 10;
+	}
+
+	@Override
+	public int getScrollableBlockIncrement(Rectangle visibleRect, int orientation, int direction) {
+		// TODO Auto-generated method stub
+		return 100;
+	}
+
+	@Override
+	public boolean getScrollableTracksViewportWidth() {
+		return isVerticalScrolling;
+	}
+
+	@Override
+	public boolean getScrollableTracksViewportHeight() {
+		return !isVerticalScrolling;
 	}
 
 	@Override
@@ -438,6 +525,9 @@ public class LittleList<E> extends JComponent {
 		public void invalidate() {}
 
 		@Override
+		public void repaint(long tm, int x, int y, int width, int height) {}
+
+		@Override
 		public int getComponentCount() {
 			return theModel.getSize();
 		}
@@ -463,6 +553,16 @@ public class LittleList<E> extends JComponent {
 			} else
 				theHolder.forRender(n, row, rendered, !newBounds);
 			return theHolder;
+		}
+
+		void addAction(int actionIndex){
+			for(ItemBoundsData bd : bounds)
+				bd.actionBounds.add(actionIndex, new Rectangle());
+		}
+
+		void removeAction(int actionIndex){
+			for (ItemBoundsData bd : bounds)
+				bd.actionBounds.remove(actionIndex);
 		}
 
 		String getItemTooltip(int selected) {
@@ -516,6 +616,8 @@ public class LittleList<E> extends JComponent {
 			if (theBorderAdjuster != null && getBorder() != null)
 				theBorderAdjuster.accept(getBorder(), item);
 			theBounds = theSyntheticContainer.getBounds(renderIndex);
+			while (theBounds.actionBounds.size() < theItemActionLabels.size())
+				theBounds.actionBounds.add(new Rectangle());
 			theComponent.forRender(renderIndex, rendered);
 			if (initBounds) {
 				super.setBounds(theBounds.holderBounds.x, theBounds.holderBounds.y, theBounds.holderBounds.width,
@@ -531,20 +633,22 @@ public class LittleList<E> extends JComponent {
 				@Override
 				public JLabel added(ItemAction<? super E> o, int mIdx, int retIdx) {
 					JLabel label = new JLabel();
-					sync(label, o, renderIndex);
+					((SyntheticContainer) getParent()).addAction(retIdx);
+					sync(label, o, renderIndex, retIdx);
 					add(label, retIdx + 1);
 					return label;
 				}
 
 				@Override
 				public JLabel removed(JLabel o, int oIdx, int incMod, int retIdx) {
+					((SyntheticContainer) getParent()).removeAction(incMod);
 					remove(incMod);
 					return null;
 				}
 
 				@Override
 				public JLabel set(JLabel o1, int idx1, int incMod, ItemAction<? super E> o2, int idx2, int retIdx) {
-					sync(o1, o2, renderIndex);
+					sync(o1, o2, renderIndex, incMod);
 					return o1;
 				}
 			});
@@ -552,21 +656,40 @@ public class LittleList<E> extends JComponent {
 			return this;
 		}
 
-		void sync(JLabel actionLabel, ItemAction<? super E> action, int index) {
-			action.configureAction(theAction, null, index);
-			actionLabel.setText(string(theAction.getValue(Action.NAME)));
-			actionLabel.setIcon((Icon) theAction.getValue(Action.SMALL_ICON));
+		void sync(JLabel actionLabel, ItemAction<? super E> action, int modelIndex, int actionIndex) {
+			action.configureAction(theAction, null, modelIndex);
+			String text = string(theAction.getValue(Action.NAME));
+			boolean diff = false;
+			if (!Objects.equals(text, actionLabel.getText())) {
+				diff = true;
+				actionLabel.setText(text);
+			}
+			Icon icon = (Icon) theAction.getValue(Action.SMALL_ICON);
+			if (!Objects.equals(icon, actionLabel.getIcon())) {
+				diff = true;
+				actionLabel.setIcon(icon);
+			}
 			Object font = theAction.getValue("font");
 			if (font instanceof Consumer) {
 				try {
 					((Consumer<Object>) font).accept(ObservableSwingUtils.label(actionLabel));
 				} catch (ClassCastException e) {}
-			} else if (font instanceof Font)
-				actionLabel.setFont((Font) font);
-			Object visible = theAction.getValue("visible");
-			actionLabel.setVisible(!Boolean.FALSE.equals(visible));
-			actionLabel.setEnabled(theAction.isEnabled());
-			actionLabel.invalidate();
+			} else if (font instanceof Font) {
+				if (!font.equals(actionLabel.getFont()))
+					actionLabel.setFont((Font) font);
+			}
+			boolean visible = !Boolean.FALSE.equals(theAction.getValue("visible"));
+			if (actionLabel.isVisible() != visible) {
+				diff = true;
+				actionLabel.setVisible(visible);
+			}
+			if (actionLabel.isEnabled() != theAction.isEnabled()) {
+				diff = true;
+				actionLabel.setEnabled(theAction.isEnabled());
+			}
+			if (diff)
+				actionLabel.invalidate();
+			actionLabel.setBounds(theBounds.actionBounds.get(actionIndex));
 		}
 
 		private String string(Object s) {
@@ -579,12 +702,13 @@ public class LittleList<E> extends JComponent {
 			theBounds.holderBounds.setBounds(x, y, width, height);
 			getLayout().layoutContainer(this);
 			theBounds.itemBounds.setBounds(theComponent.getBounds());
-			while (theBounds.actionBounds.size() < theItemActionLabels.size())
-				theBounds.actionBounds.add(new Rectangle());
-			while (theBounds.actionBounds.size() > theItemActionLabels.size())
-				theBounds.actionBounds.remove(theBounds.actionBounds.size() - 1);
 			for (int i = 0; i < theItemActionLabels.size(); i++)
 				theItemActionLabels.get(i).getBounds(theBounds.actionBounds.get(i));
+		}
+
+		@Override
+		public boolean isValidateRoot() {
+			return true;
 		}
 
 		String getActionTooltip(E item, int itemIndex, ItemAction<? super E> action) {
