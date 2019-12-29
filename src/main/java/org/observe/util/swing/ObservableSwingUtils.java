@@ -16,12 +16,15 @@ import java.awt.event.ActionListener;
 import java.awt.event.ComponentEvent;
 import java.awt.event.ComponentListener;
 import java.beans.PropertyChangeListener;
+import java.lang.ref.WeakReference;
 import java.net.URL;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.IntConsumer;
@@ -188,7 +191,9 @@ public class ObservableSwingUtils {
 		 * @return This holder
 		 */
 		public FontAdjuster<C> withFontSize(float fontSize) {
-			label.setFont(label.getFont().deriveFont(fontSize));
+			Font newFont = label.getFont().deriveFont(fontSize);
+			if (!Objects.equals(newFont, label.getFont()))
+				label.setFont(newFont);
 			return this;
 		}
 
@@ -197,7 +202,9 @@ public class ObservableSwingUtils {
 		 * @return This holder
 		 */
 		public FontAdjuster<C> withStyle(int style) {
-			label.setFont(label.getFont().deriveFont(style));
+			Font newFont = label.getFont().deriveFont(style);
+			if (!Objects.equals(newFont, label.getFont()))
+				label.setFont(newFont);
 			return this;
 		}
 
@@ -207,7 +214,9 @@ public class ObservableSwingUtils {
 		 * @return This holder
 		 */
 		public FontAdjuster<C> withSizeAndStyle(int style, float fontSize) {
-			label.setFont(label.getFont().deriveFont(style, fontSize));
+			Font newFont = label.getFont().deriveFont(style, fontSize);
+			if (!Objects.equals(newFont, label.getFont()))
+				label.setFont(newFont);
 			return this;
 		}
 
@@ -216,7 +225,8 @@ public class ObservableSwingUtils {
 		 * @return This holder
 		 */
 		public FontAdjuster<C> withColor(Color color) {
-			label.setForeground(color);
+			if (!label.isForegroundSet() || Objects.equals(label.getForeground(), color))
+				label.setForeground(color);
 			return this;
 		}
 
@@ -813,14 +823,61 @@ public class ObservableSwingUtils {
 		return selection;
 	}
 
+	private static class IconKey {
+		final Class<?> clazz;
+		final String location;
+		final int width;
+		final int height;
+
+		public IconKey(Class<?> clazz, String location, int width, int height) {
+			this.clazz = clazz;
+			this.location = location;
+			this.width = width;
+			this.height = height;
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(clazz, location);
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (this == obj)
+				return true;
+			else if (!(obj instanceof IconKey))
+				return false;
+			IconKey other = (IconKey) obj;
+			return Objects.equals(clazz, other.clazz) && location.equals(other.location);
+		}
+
+		@Override
+		public String toString() {
+			StringBuilder str = new StringBuilder();
+			if (clazz != null)
+				str.append(clazz.getName()).append(':');
+			str.append(location);
+			return str.toString();
+		}
+	}
+	private static final Map<IconKey, WeakReference<ImageIcon>> CACHED_ICONS = new ConcurrentHashMap<>();
+
 	/**
 	 * @param clazz The class with which to get the resource, or null to use this class
 	 * @param location The resource location of the image file
 	 * @return The icon, or null if the resource could not be found
 	 */
 	public static ImageIcon getIcon(Class<?> clazz, String location) {
-		URL searchUrl = (clazz != null ? clazz : ObservableSwingUtils.class).getResource(location);
-		return searchUrl != null ? new ImageIcon(searchUrl) : null;
+		IconKey key = new IconKey(clazz, location, 0, 0);
+		WeakReference<ImageIcon> iconRef = CACHED_ICONS.get(key);
+		ImageIcon icon = iconRef == null ? null : iconRef.get();
+		if (icon == null) {
+			URL searchUrl = (clazz != null ? clazz : ObservableSwingUtils.class).getResource(location);
+			icon = searchUrl != null ? new ImageIcon(searchUrl) : null;
+			iconRef = new WeakReference<>(icon);
+			CACHED_ICONS.put(key, iconRef);
+		}
+		return icon;
 	}
 
 	/**
@@ -831,9 +888,16 @@ public class ObservableSwingUtils {
 	 * @return The icon, or null if the resource could not be found
 	 */
 	public static ImageIcon getFixedIcon(Class<?> clazz, String location, int width, int height) {
-		ImageIcon icon = getIcon(clazz, location);
-		if (icon != null && (icon.getIconWidth() != width || icon.getIconHeight() != height))
-			icon = new ImageIcon(icon.getImage().getScaledInstance(width, height, Image.SCALE_SMOOTH));
+		IconKey key = new IconKey(clazz, location, width, height);
+		WeakReference<ImageIcon> iconRef = CACHED_ICONS.get(key);
+		ImageIcon icon = iconRef == null ? null : iconRef.get();
+		if (icon == null) {
+			icon = getIcon(clazz, location);
+			if (icon != null && (icon.getIconWidth() != width || icon.getIconHeight() != height)) {
+				icon = new ImageIcon(icon.getImage().getScaledInstance(width, height, Image.SCALE_SMOOTH));
+				CACHED_ICONS.put(key, new WeakReference<>(icon));
+			}
+		}
 		return icon;
 	}
 
