@@ -224,6 +224,29 @@ public class CategoryRenderStrategy<R, C> {
 		public final void mouseExited(CollectionElement<? extends R> row, C category, MouseEvent e) {}
 	}
 
+	public class AddRowRenderer extends CategoryRenderStrategy<R, C> {
+		private final Supplier<? extends R> theEditSeedRow;
+
+		public AddRowRenderer(Supplier<? extends R> editSeedRow, Function<? super R, ? extends C> accessor) {
+			super("Add", theType, accessor);
+			theEditSeedRow = editSeedRow;
+		}
+
+		@Override
+		protected String printDefault(Supplier<? extends R> row, C column) {
+			return "Add...";
+		}
+
+		public Supplier<? extends R> getEditSeedRow() {
+			return theEditSeedRow;
+		}
+
+		public AddRowRenderer withText(Supplier<String> text) {
+			formatText((r, c) -> text.get());
+			return this;
+		}
+	}
+
 	private String theName;
 	private Object theIdentifier;
 	private final TypeToken<C> theType;
@@ -234,6 +257,7 @@ public class CategoryRenderStrategy<R, C> {
 	private BiFunction<? super R, ? super C, String> theTooltip;
 	private ObservableCellRenderer<? super R, ? super C> theRenderer;
 	private CellDecorator<R, C> theDecorator;
+	private AddRowRenderer theAddRow;
 	private int theMinWidth;
 	private int thePrefWidth;
 	private int theMaxWidth;
@@ -246,9 +270,14 @@ public class CategoryRenderStrategy<R, C> {
 		theType = type;
 		theAccessor = accessor;
 		theMutator = new CategoryMutationStrategy();
+		theRenderer = new ObservableCellRenderer.DefaultObservableCellRenderer<>(this::printDefault);
 		theMinWidth = thePrefWidth = theMaxWidth = -1;
 		isResizable = true;
 		isFilterable = true;
+	}
+
+	protected String printDefault(Supplier<? extends R> row, C column) {
+		return column == null ? "" : column.toString();
 	}
 
 	public String getName() {
@@ -352,7 +381,7 @@ public class CategoryRenderStrategy<R, C> {
 		if (theRenderer != null)
 			return theRenderer.renderAsText(() -> rowValue, colValue);
 		else
-			return String.valueOf(colValue);
+			return printDefault(() -> rowValue, colValue);
 	}
 
 	public CategoryRenderStrategy<R, C> withWidth(String type, int width) {
@@ -412,19 +441,18 @@ public class CategoryRenderStrategy<R, C> {
 		return isFilterable;
 	}
 
-	// public CategoryRenderStrategy<R, C> filterableWith(CategoryFilterStrategy<C> filtering) {
-	// theFilterability = filtering;
-	// return this;
-	// }
-	//
-	// public CategoryRenderStrategy<R, C> filterableWith(Function<CategoryRenderStrategy<?, C>, CategoryFilterStrategy<C>> filtering) {
-	// theFilterability = filtering.apply(this);
-	// return this;
-	// }
-	//
-	// public CategoryFilterStrategy<C> getFilterability() {
-	// return theFilterability;
-	// }
+	public CategoryRenderStrategy<R, C> withAddRow(Supplier<? extends R> rowSeed, Function<? super R, ? extends C> cat,
+		Consumer<AddRowRenderer> addRow) {
+		theAddRow = new AddRowRenderer(rowSeed, cat);
+		addRow.accept(theAddRow);
+		if (theAddRow.getMutator().getEditor() == null)
+			throw new IllegalStateException("Add row configured with no editor");
+		return this;
+	}
+
+	public AddRowRenderer getAddRow() {
+		return theAddRow;
+	}
 
 	@Override
 	public String toString() {

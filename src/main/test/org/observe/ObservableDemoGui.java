@@ -1,5 +1,7 @@
 package org.observe;
 
+import java.util.List;
+
 import javax.swing.JFrame;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
@@ -131,6 +133,9 @@ public class ObservableDemoGui extends JPanel {
 							.refresh(valuesOfSelectedCategory.simpleChanges()).map(valuesOfSelectedCategory::canAdd))))//
 				.addList(valuesOfSelectedCategory,
 					list -> list.fill().withFieldName("Values:").withSelection(selectedValues)
+					.render(rs -> rs.withAddRow(() -> getNextAdd(valuesOfSelectedCategory), v -> v, addRow -> {
+						addRow.withMutation(arm -> arm.asText(SpinnerFormat.INT).clicks(1));
+					}))//
 					.withRemove(values -> valuesOfSelectedCategory.removeAll(values), null)//
 					.withPostButton("Remove", cause -> valuesOfSelectedCategory.removeAll(selectedValues), //
 						b -> b.withTooltip("Remove the selected values from the selected category")
@@ -141,6 +146,10 @@ public class ObservableDemoGui extends JPanel {
 					.first(new JScrollPane(valueTree))//
 					.last(new JScrollPane(groupedValueTree)))//
 				));
+	}
+
+	private static Integer getNextAdd(List<Integer> values) {
+		return values.stream().max(Integer::compareTo).orElse(-1) + 1;
 	}
 
 	/**

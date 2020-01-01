@@ -171,7 +171,7 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 			} else {
 				if (theLabel == null)
 					theLabel = new JLabel();
-				theLabel.setText(String.valueOf(rendered));
+				theLabel.setText(renderAsText(cell::getModelValue, cell.getCellValue()));
 				c = theLabel;
 			}
 			if (theDecorator != null) {

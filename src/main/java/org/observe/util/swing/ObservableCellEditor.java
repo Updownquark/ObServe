@@ -145,14 +145,26 @@ public class ObservableCellEditor<M, C> implements TableCellEditor, TreeCellEdit
 		Function<C, String> valueTooltip;
 		String tooltip;
 
-		MutableCollectionElement<E> modelElement = model.getWrapped()
-			.mutableElement(model.getWrapped().getElement(rowIndex).getElementId());
-		valueFilter = v -> {
-			if (TypeTokens.get().isInstance(model.getWrapped().getType(), v))
-				return category.getMutator().isAcceptable(modelElement, (E) v);
-			else
-				return "Unacceptable value";
-		};
+		if (rowIndex < model.getSize()) {
+			MutableCollectionElement<E> modelElement = model.getWrapped()
+				.mutableElement(model.getWrapped().getElement(rowIndex).getElementId());
+			valueFilter = v -> {
+				if (TypeTokens.get().isInstance(model.getWrapped().getType(), v))
+					return category.getMutator().isAcceptable(modelElement, (E) v);
+				else
+					return "Unacceptable value";
+			};
+		} else {
+			valueFilter = v -> {
+				if (TypeTokens.get().isInstance(model.getWrapped().getType(), v)) {
+					String msg = category.getMutator().isAcceptable(null, (E) v);
+					if (msg == null)
+						msg = model.getWrapped().canAdd((E) v);
+					return msg;
+				} else
+					return "Unacceptable value";
+			};
+		}
 		if (category.getMutator().getEditorTooltip() != null)
 			tooltip = category.getMutator().getEditorTooltip().apply(modelValue, modelValue);
 		else

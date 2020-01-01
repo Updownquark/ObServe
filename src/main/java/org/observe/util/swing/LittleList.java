@@ -3,6 +3,7 @@ package org.observe.util.swing;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.EventQueue;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.FontMetrics;
@@ -12,9 +13,13 @@ import java.awt.LayoutManager2;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
+import java.awt.event.KeyListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
+import java.util.EventObject;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.BiConsumer;
@@ -32,9 +37,12 @@ import javax.swing.JViewport;
 import javax.swing.ListSelectionModel;
 import javax.swing.Scrollable;
 import javax.swing.border.Border;
+import javax.swing.event.CellEditorListener;
+import javax.swing.event.ChangeEvent;
 import javax.swing.event.ListDataEvent;
 import javax.swing.event.ListDataListener;
 
+import org.observe.Subscription;
 import org.observe.util.swing.ObservableCellRenderer.CellRenderContext;
 import org.qommons.ArrayUtils;
 import org.qommons.LambdaUtils;
@@ -51,9 +59,8 @@ public class LittleList<E> extends JComponent implements Scrollable {
 	private final SyntheticContainer theSyntheticContainer;
 	private final CategoryRenderStrategy<E, E> theRenderStrategy;
 	private boolean isVerticalScrolling;
-	private ObservableCellRenderer<? super E, ? super E> theRenderer;
-	private ObservableCellEditor<? super E, ? super E> theEditor;
 	private Component theEditorComponent;
+	private Subscription theEditing;
 	private ObservableListModel<E> theModel;
 	private ListSelectionModel theSelectionModel;
 	private final List<ItemAction<? super E>> theItemActions;
@@ -69,8 +76,8 @@ public class LittleList<E> extends JComponent implements Scrollable {
 		setLayout(new FlowLayout(FlowLayout.LEFT));
 		theSyntheticContainer = new SyntheticContainer();
 		add(theSyntheticContainer); // So the tree lock works right
-		theRenderer = new ObservableCellRenderer.DefaultObservableCellRenderer<>((m, c) -> String.valueOf(c))//
-			.decorate((cell, cd) -> cd.bold(cell.isSelected()));
+		theRenderStrategy.withRenderer(new ObservableCellRenderer.DefaultObservableCellRenderer<>((m, c) -> String.valueOf(c))//
+			.decorate((cell, cd) -> cd.bold(cell.isSelected())));
 		theSelectionModel = new DefaultListSelectionModel();
 
 		theItemActions = new ArrayList<>();
@@ -100,7 +107,7 @@ public class LittleList<E> extends JComponent implements Scrollable {
 				int selected = theSelectionModel.getMinSelectionIndex();
 				if (selected >= 0 && theSelectionModel.getMaxSelectionIndex() == selected && e.getIndex0() <= selected
 					&& e.getIndex1() >= selected)
-					reEdit();
+					reEdit(e);
 				revalidate();
 				repaint();
 			}
@@ -183,7 +190,7 @@ public class LittleList<E> extends JComponent implements Scrollable {
 				int selected = getItemIndexAt(e.getX(), e.getY());
 				if (selected >= 0) {
 					int clickCode = theSyntheticContainer.getBounds(selected).getClickCode(e.getX(), e.getY());
-					if (clickCode > 0) {
+					if (clickCode > 0 && selected < theModel.getSize()) {
 						ItemAction<? super E> action = theItemActions.get(clickCode - 1);
 						theSyntheticContainer.performAction(action, selected, e);
 						return;
@@ -212,7 +219,7 @@ public class LittleList<E> extends JComponent implements Scrollable {
 					selected = theSelectionModel.getMinSelectionIndex();
 				}
 				if (modified) {
-					reEdit();
+					reEdit(e);
 					revalidate();
 					repaint();
 				}
@@ -230,15 +237,9 @@ public class LittleList<E> extends JComponent implements Scrollable {
 
 	public LittleList<E> setSelectionModel(ListSelectionModel selectionModel) {
 		theSelectionModel = selectionModel;
-		reEdit();
+		reEdit(null);
 		revalidate();
 		repaint();
-		return this;
-	}
-
-	public LittleList<E> setEditor(ObservableCellEditor<? super E, ? super E> editor) {
-		theEditor = editor;
-		reEdit();
 		return this;
 	}
 
@@ -295,17 +296,91 @@ public class LittleList<E> extends JComponent implements Scrollable {
 		}
 	}
 
-	void reEdit() {
-		if (theEditorComponent != null) {
+	void reEdit(EventObject cause) {
+		if (theEditing != null) {
+			theEditing.unsubscribe();
+			theEditing = null;
 			remove(theEditorComponent);
 			theEditorComponent = null;
 		}
+		if (cause == null)
+			return;
 		int selected = theSelectionModel.getMinSelectionIndex();
-		if (theEditor != null && selected >= 0 && selected == theSelectionModel.getMaxSelectionIndex()) {
-			theEditorComponent = theEditor.getListCellEditorComponent(this, theModel.getElementAt(selected), selected, true);
-			Rectangle bounds = getItemBounds(selected);
-			theEditorComponent.setBounds(bounds);
-			add(theEditorComponent);
+		ObservableCellEditor<E, E> editor;
+		E row = null;
+		boolean add;
+		if (selected < 0 || selected != theSelectionModel.getMaxSelectionIndex()) {
+			editor = null;
+			add = false;
+		} else if (selected < theModel.getSize()) {
+			editor = (ObservableCellEditor<E, E>) theRenderStrategy.getMutator().getEditor();
+			row = theModel.getElementAt(selected);
+			add = false;
+		} else if (theRenderStrategy.getAddRow() != null) {
+			editor = (ObservableCellEditor<E, E>) theRenderStrategy.getAddRow().getMutator().getEditor();
+			row = theRenderStrategy.getAddRow().getEditSeedRow().get();
+			add = true;
+		} else {
+			editor = null;
+			add = false;
+		}
+		if (editor != null) {
+			boolean edit;
+			if (add)
+				edit = theModel.getWrapped().canAdd(row) == null && editor.isCellEditable(cause);
+			else
+				edit = theModel.getWrapped().mutableElement(theModel.getWrapped().getElement(selected).getElementId()).isEnabled() == null
+				&& editor.isCellEditable(cause);
+			if (edit) {
+				theEditorComponent = editor.getListCellEditorComponent(this, row, selected, true);
+				CellEditorListener editListener = new CellEditorListener() {
+					private boolean isEditing = true;
+
+					@Override
+					public void editingStopped(ChangeEvent e) {
+						if (!isEditing)
+							return;
+						if (add) {
+							theModel.getWrapped().add((E) editor.getCellEditorValue());
+						} else {
+							theModel.getWrapped().set(selected, (E) editor.getCellEditorValue());
+						}
+						editingCanceled(e);
+					}
+
+					@Override
+					public void editingCanceled(ChangeEvent e) {
+						if (!isEditing)
+							return;
+						theEditing.unsubscribe();
+						theEditing = null;
+						remove(theEditorComponent);
+						theEditorComponent = null;
+						revalidate();
+						repaint();
+					}
+				};
+				editor.addCellEditorListener(editListener);
+				KeyListener keyListener = new KeyAdapter() {
+					@Override
+					public void keyPressed(KeyEvent e) {
+						if (e.getKeyCode() == KeyEvent.VK_ESCAPE)
+							editor.cancelCellEditing();
+						else if (e.getKeyCode() == KeyEvent.VK_ENTER)
+							editor.stopCellEditing();
+					}
+				};
+				theEditorComponent.addKeyListener(keyListener);
+				theEditing = () -> {
+					editor.removeCellEditorListener(editListener);
+					theEditorComponent.removeKeyListener(keyListener);
+				};
+				add(theEditorComponent);
+				EventQueue.invokeLater(() -> {
+					theEditorComponent.requestFocus();
+					repaint();
+				});
+			}
 		}
 	}
 
@@ -318,7 +393,7 @@ public class LittleList<E> extends JComponent implements Scrollable {
 	}
 
 	public int getItemIndexAt(int x, int y) {
-		for (int i = 0; i < theModel.getSize(); i++) {
+		for (int i = 0; i < theSyntheticContainer.getComponentCount(); i++) {
 			if (theSyntheticContainer.getBounds(i).holderBounds.contains(x, y))
 				return i;
 		}
@@ -326,8 +401,8 @@ public class LittleList<E> extends JComponent implements Scrollable {
 	}
 
 	public Rectangle getItemBounds(int itemIndex) {
-		if (itemIndex < 0 || itemIndex >= theModel.getSize())
-			throw new IndexOutOfBoundsException(itemIndex + " of " + theModel.getSize());
+		if (itemIndex < 0 || itemIndex >= theSyntheticContainer.getComponentCount())
+			throw new IndexOutOfBoundsException(itemIndex + " of " + theSyntheticContainer.getComponentCount());
 		return theSyntheticContainer.getBounds(itemIndex).getItemBounds();
 	}
 
@@ -349,7 +424,7 @@ public class LittleList<E> extends JComponent implements Scrollable {
 		int main = 0;
 		int maxRowLength = 0;
 		int maxRowThickness = 0;
-		for (int i = 0; i < theModel.getSize(); i++) {
+		for (int i = 0; i < theSyntheticContainer.getComponentCount(); i++) {
 			Dimension ps = theSyntheticContainer.getComponent(i).getPreferredSize();
 			int psMain = isVerticalScrolling ? ps.width : ps.height;
 			int psCross = isVerticalScrolling ? ps.height : ps.width;
@@ -453,7 +528,8 @@ public class LittleList<E> extends JComponent implements Scrollable {
 
 		Rectangle getItemBounds() {
 			Rectangle r = new Rectangle(itemBounds);
-			r.add(holderBounds.getLocation());
+			r.x += holderBounds.x;
+			r.y += holderBounds.y;
 			return r;
 		}
 
@@ -529,13 +605,25 @@ public class LittleList<E> extends JComponent implements Scrollable {
 
 		@Override
 		public int getComponentCount() {
-			return theModel.getSize();
+			int count = theModel.getSize();
+			if (theRenderStrategy.getAddRow() != null)
+				count++;
+			return count;
 		}
 
 		@Override
 		public Component getComponent(int n) {
-			E row = theModel.getElementAt(n);
-			Component rendered = theRenderer.getCellRendererComponent(LittleList.this,
+			E row;
+			ObservableCellRenderer<E, E> renderer;
+			if (n < theModel.getSize()) {
+				row = theModel.getElementAt(n);
+				renderer = (ObservableCellRenderer<E, E>) theRenderStrategy.getRenderer();
+			} else if (n == theModel.getSize() && theRenderStrategy.getAddRow() != null) {
+				row = theRenderStrategy.getAddRow().getEditSeedRow().get();
+				renderer = (ObservableCellRenderer<E, E>) theRenderStrategy.getAddRow().getRenderer();
+			} else
+				throw new IndexOutOfBoundsException(n + " of " + getComponentCount());
+			Component rendered = renderer.getCellRendererComponent(LittleList.this,
 				new ModelCell.Default<>(LambdaUtils.constantSupplier(row, () -> String.valueOf(row), row), row, n, 0, //
 					theSelectionModel.isSelectedIndex(n), theSelectionModel.isSelectedIndex(n), true, true),
 				CellRenderContext.DEFAULT);
@@ -566,8 +654,17 @@ public class LittleList<E> extends JComponent implements Scrollable {
 		}
 
 		String getItemTooltip(int selected) {
-			E row = theModel.getElementAt(selected);
-			Component rendered = theRenderer.getCellRendererComponent(LittleList.this,
+			E row;
+			ObservableCellRenderer<E, E> renderer;
+			if (selected < theModel.getSize()) {
+				row = theModel.getElementAt(selected);
+				renderer = (ObservableCellRenderer<E, E>) theRenderStrategy.getRenderer();
+			} else if (selected == theModel.getSize() && theRenderStrategy.getAddRow() != null) {
+				row = theRenderStrategy.getAddRow().getEditSeedRow().get();
+				renderer = (ObservableCellRenderer<E, E>) theRenderStrategy.getAddRow().getRenderer();
+			} else
+				throw new IndexOutOfBoundsException(selected + " of " + getComponentCount());
+			Component rendered = renderer.getCellRendererComponent(LittleList.this,
 				new ModelCell.Default<>(LambdaUtils.constantSupplier(row, () -> String.valueOf(row), row), row, selected, 0, //
 					theSelectionModel.isSelectedIndex(selected), theSelectionModel.isSelectedIndex(selected), true, true),
 				CellRenderContext.DEFAULT);
@@ -575,13 +672,19 @@ public class LittleList<E> extends JComponent implements Scrollable {
 		}
 
 		String getActionTooltip(int itemIndex, ItemAction<? super E> action) {
-			E row = theModel.getElementAt(itemIndex);
-			return theHolder.getActionTooltip(row, itemIndex, action);
+			if (itemIndex < theModel.getSize()) {
+				E row = theModel.getElementAt(itemIndex);
+				return theHolder.getActionTooltip(row, itemIndex, action);
+			} else
+				return null;
 		}
 
 		boolean performAction(ItemAction<? super E> action, int itemIndex, Object cause) {
-			E item = theModel.getElementAt(itemIndex);
-			return theHolder.performAction(item, itemIndex, action, cause);
+			if (itemIndex < theModel.getSize()) {
+				E item = theModel.getElementAt(itemIndex);
+				return theHolder.performAction(item, itemIndex, action, cause);
+			} else
+				return false;
 		}
 
 		void printSizes() {
@@ -624,34 +727,39 @@ public class LittleList<E> extends JComponent implements Scrollable {
 					theBounds.holderBounds.height);
 				theComponent.internalSetBounds(theBounds.itemBounds);
 			}
-			ArrayUtils.adjust(theItemActionLabels, theItemActions, new ArrayUtils.DifferenceListener<JLabel, ItemAction<? super E>>() {
-				@Override
-				public boolean identity(JLabel o1, ItemAction<? super E> o2) {
-					return true;
-				}
+			if (renderIndex < theModel.getSize()) {
+				ArrayUtils.adjust(theItemActionLabels, theItemActions, new ArrayUtils.DifferenceListener<JLabel, ItemAction<? super E>>() {
+					@Override
+					public boolean identity(JLabel o1, ItemAction<? super E> o2) {
+						return true;
+					}
 
-				@Override
-				public JLabel added(ItemAction<? super E> o, int mIdx, int retIdx) {
-					JLabel label = new JLabel();
-					((SyntheticContainer) getParent()).addAction(retIdx);
-					sync(label, o, renderIndex, retIdx);
-					add(label, retIdx + 1);
-					return label;
-				}
+					@Override
+					public JLabel added(ItemAction<? super E> o, int mIdx, int retIdx) {
+						JLabel label = new JLabel();
+						((SyntheticContainer) getParent()).addAction(retIdx);
+						sync(label, o, renderIndex, retIdx);
+						add(label, retIdx + 1);
+						return label;
+					}
 
-				@Override
-				public JLabel removed(JLabel o, int oIdx, int incMod, int retIdx) {
-					((SyntheticContainer) getParent()).removeAction(incMod);
-					remove(incMod);
-					return null;
-				}
+					@Override
+					public JLabel removed(JLabel o, int oIdx, int incMod, int retIdx) {
+						((SyntheticContainer) getParent()).removeAction(incMod);
+						remove(incMod);
+						return null;
+					}
 
-				@Override
-				public JLabel set(JLabel o1, int idx1, int incMod, ItemAction<? super E> o2, int idx2, int retIdx) {
-					sync(o1, o2, renderIndex, incMod);
-					return o1;
-				}
-			});
+					@Override
+					public JLabel set(JLabel o1, int idx1, int incMod, ItemAction<? super E> o2, int idx2, int retIdx) {
+						sync(o1, o2, renderIndex, incMod);
+						return o1;
+					}
+				});
+			} else {
+				for (JLabel actionLabel : theItemActionLabels)
+					actionLabel.setVisible(false);
+			}
 			invalidate();
 			return this;
 		}
@@ -701,7 +809,13 @@ public class LittleList<E> extends JComponent implements Scrollable {
 			super.setBounds(x, y, width, height);
 			theBounds.holderBounds.setBounds(x, y, width, height);
 			getLayout().layoutContainer(this);
-			theBounds.itemBounds.setBounds(theComponent.getBounds());
+			if (theComponent.theRendered.getParent() == LittleList.this) {
+				// The editor component belongs to the root List component, not this holder, so apply the offset
+				theComponent.theRendered.setLocation(//
+					theComponent.theRendered.getX() + x, //
+					theComponent.theRendered.getY() + y);
+			} else
+				theBounds.itemBounds.setBounds(theComponent.getBounds());
 			for (int i = 0; i < theItemActionLabels.size(); i++)
 				theItemActionLabels.get(i).getBounds(theBounds.actionBounds.get(i));
 		}

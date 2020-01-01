@@ -571,7 +571,9 @@ public class PanelPopulation {
 	}
 
 	public interface ListBuilder<R, P extends ListBuilder<R, P>>
-	extends ListWidgetBuilder<R, LittleList<R>, P>, FieldEditor<LittleList<R>, P> {}
+		extends ListWidgetBuilder<R, LittleList<R>, P>, FieldEditor<LittleList<R>, P> {
+		P render(Consumer<CategoryRenderStrategy<R, R>> render);
+	}
 
 	public interface TableBuilder<R, P extends TableBuilder<R, P>> extends ListWidgetBuilder<R, JTable, P> {
 		P withColumns(ObservableCollection<? extends CategoryRenderStrategy<? super R, ?>> columns);
@@ -2033,6 +2035,12 @@ public class PanelPopulation {
 
 		SimpleListBuilder(ObservableCollection<R> rows, Supplier<Transactable> lock) {
 			super(null, new LittleList<>(new ObservableListModel<>(rows)), lock);
+		}
+
+		@Override
+		public P render(Consumer<CategoryRenderStrategy<R, R>> render) {
+			render.accept(getEditor().getRenderStrategy());
+			return (P) this;
 		}
 
 		@Override

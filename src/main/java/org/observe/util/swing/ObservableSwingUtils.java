@@ -706,7 +706,7 @@ public class ObservableSwingUtils {
 			return Collections.emptyList();
 		List<V> selValues = new ArrayList<>(selectionModel.getMaxSelectionIndex() - selectionModel.getMinSelectionIndex() + 1);
 		for (int i = selectionModel.getMinSelectionIndex(); i <= selectionModel.getMaxSelectionIndex(); i++) {
-			if (selectionModel.isSelectedIndex(i))
+			if (selectionModel.isSelectedIndex(i) && i < model.getSize())
 				selValues.add(map == null ? (V) model.getElementAt(i) : map.apply(model.getElementAt(i)));
 		}
 		return selValues;
