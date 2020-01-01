@@ -8,6 +8,7 @@ import java.util.EventObject;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -47,7 +48,7 @@ public class ObservableCellEditor<M, C> implements TableCellEditor, TreeCellEdit
 	}
 
 	public interface EditorInstallation<C> {
-		EditorSubscription install(ObservableCellEditor<?, C> editor, Function<C, String> valueFilter, String tooltip,
+		EditorSubscription install(ObservableCellEditor<?, C> editor, Component component, Function<C, String> valueFilter, String tooltip,
 			Function<? super C, String> valueToolTip);
 	}
 
@@ -175,7 +176,7 @@ public class ObservableCellEditor<M, C> implements TableCellEditor, TreeCellEdit
 			theEditorValue.set((C) modelValue, null);
 		if (theDecorator != null)
 			theDecorator.decorate(theEditorComponent, modelValue, (C) modelValue, selected, false, true);
-		theEditorSubscription = theInstallation.install(this, valueFilter, tooltip, valueTooltip);
+		theEditorSubscription = theInstallation.install(this, list, valueFilter, tooltip, valueTooltip);
 		return theEditorComponent;
 	}
 
@@ -217,7 +218,7 @@ public class ObservableCellEditor<M, C> implements TableCellEditor, TreeCellEdit
 			theEditorValue.set((C) value, null);
 		if (theDecorator != null)
 			theDecorator.decorate(theEditorComponent, modelValue, (C) value, isSelected, false, true);
-		theEditorSubscription = theInstallation.install(this, valueFilter, tooltip, valueTooltip);
+		theEditorSubscription = theInstallation.install(this, table, valueFilter, tooltip, valueTooltip);
 		return theEditorComponent;
 	}
 
@@ -231,7 +232,7 @@ public class ObservableCellEditor<M, C> implements TableCellEditor, TreeCellEdit
 		theEditorValue.set((C) value, null);
 		if (theDecorator != null)
 			theDecorator.decorate(theEditorComponent, (M) value, (C) value, isSelected, false, true);
-		theEditorSubscription = theInstallation.install(this, null, null, null);
+		theEditorSubscription = theInstallation.install(this, tree, null, null, null);
 		return theEditorComponent;
 	}
 
@@ -280,16 +281,28 @@ public class ObservableCellEditor<M, C> implements TableCellEditor, TreeCellEdit
 	}
 
 	public static <M, C> ObservableCellEditor<M, C> createTextEditor(Format<C> format) {
+		return createTextEditor(format, null);
+	}
+
+	public static <M, C> ObservableCellEditor<M, C> createTextEditor(Format<C> format, Consumer<ObservableTextField<C>> textField) {
 		Function<C, String>[] filter = new Function[1];
 		SettableValue<C> value = createEditorValue(filter);
 		ObservableTextField<C> field = new ObservableTextField<>(value, format, Observable.empty);
+		if (textField != null)
+			textField.accept(field);
 		// Default margins for the text field don't fit into the rendered cell
-		Insets margin = field.getMargin();
-		margin.top = 0;
-		margin.bottom = 0;
-		field.setMargin(margin);
+		Insets defMargin = field.getMargin();
 		boolean[] editing = new boolean[1];
-		ObservableCellEditor<M, C> editor = new ObservableCellEditor<>(field, value, (e, f, tt, vtt) -> {
+		ObservableCellEditor<M, C> editor = new ObservableCellEditor<>(field, value, (e, c, f, tt, vtt) -> {
+			if (c instanceof JTable) {
+				Insets margin = field.getMargin();
+				if (margin.top != 0 || margin.bottom != 0) {
+					margin.top = 0;
+					margin.bottom = 0;
+					field.setMargin(margin);
+				}
+			} else
+				field.setMargin(defMargin);
 			filter[0] = f;
 			field.setToolTipText(tt);
 			editing[0] = true;
@@ -335,7 +348,7 @@ public class ObservableCellEditor<M, C> implements TableCellEditor, TreeCellEdit
 			}
 		});
 		Subscription[] editSub = new Subscription[1];
-		ObservableCellEditor<M, C> editor = new ObservableCellEditor<>(combo, value, (e, f, tt, vtt) -> {
+		ObservableCellEditor<M, C> editor = new ObservableCellEditor<>(combo, value, (e, c, f, tt, vtt) -> {
 			filter[0] = f;
 			tooltip[0] = tt;
 			valueToolTip[0] = vtt;
@@ -362,7 +375,7 @@ public class ObservableCellEditor<M, C> implements TableCellEditor, TreeCellEdit
 		SettableValue<Boolean> value = createEditorValue(filter);
 		JCheckBox check = new JCheckBox();
 		Subscription[] editSub = new Subscription[1];
-		ObservableCellEditor<M, Boolean> editor = new ObservableCellEditor<>(check, value, (e, f, tt, vtt) -> {
+		ObservableCellEditor<M, Boolean> editor = new ObservableCellEditor<>(check, value, (e, c, f, tt, vtt) -> {
 			filter[0] = f;
 			editSub[0] = ObservableSwingUtils.checkFor(check, tt, value);
 			return commit -> {
@@ -385,7 +398,7 @@ public class ObservableCellEditor<M, C> implements TableCellEditor, TreeCellEdit
 		SettableValue<Integer> value = createEditorValue(filter);
 		JSlider slider = new JSlider(minValue, maxValue);
 		Subscription[] editSub = new Subscription[1];
-		ObservableCellEditor<M, Integer> editor = new ObservableCellEditor<>(slider, value, (e, f, tt, vtt) -> {
+		ObservableCellEditor<M, Integer> editor = new ObservableCellEditor<>(slider, value, (e, c, f, tt, vtt) -> {
 			filter[0] = f;
 			editSub[0] = ObservableSwingUtils.sliderFor(slider, tt, value);
 			return commit -> {
@@ -411,7 +424,7 @@ public class ObservableCellEditor<M, C> implements TableCellEditor, TreeCellEdit
 		SettableValue<Double> value = sliderValue.map(tick -> minValue + tick * tickSize, v -> (int) Math.round((v - minValue) / tickSize));
 		JSlider slider = new JSlider(0, ticks);
 		Subscription[] editSub = new Subscription[1];
-		ObservableCellEditor<M, Double> editor = new ObservableCellEditor<>(slider, value, (e, f, tt, vtt) -> {
+		ObservableCellEditor<M, Double> editor = new ObservableCellEditor<>(slider, value, (e, c, f, tt, vtt) -> {
 			filter[0] = f;
 			editSub[0] = ObservableSwingUtils.sliderFor(slider, tt, sliderValue);
 			return commit -> {
@@ -435,7 +448,7 @@ public class ObservableCellEditor<M, C> implements TableCellEditor, TreeCellEdit
 		SettableValue<C> value = createEditorValue(filter);
 		JButton button = new JButton();
 		boolean[] editing = new boolean[1];
-		ObservableCellEditor<M, C> editor = new ObservableCellEditor<>(button, value, (e, f, tt, vtt) -> {
+		ObservableCellEditor<M, C> editor = new ObservableCellEditor<>(button, value, (e, c, f, tt, vtt) -> {
 			filter[0] = f;
 			button.setText(renderer.apply(value.get()));
 			button.setToolTipText(tt);

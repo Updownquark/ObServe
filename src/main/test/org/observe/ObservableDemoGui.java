@@ -134,7 +134,7 @@ public class ObservableDemoGui extends JPanel {
 				.addList(valuesOfSelectedCategory,
 					list -> list.fill().withFieldName("Values:").withSelection(selectedValues)
 					.render(rs -> rs.withAddRow(() -> getNextAdd(valuesOfSelectedCategory), v -> v, addRow -> {
-						addRow.withMutation(arm -> arm.asText(SpinnerFormat.INT).clicks(1));
+										addRow.withMutation(arm -> arm.asText(SpinnerFormat.INT, tf -> tf.withColumns(5)).clicks(1));
 					}))//
 					.withRemove(values -> valuesOfSelectedCategory.removeAll(values), null)//
 					.withPostButton("Remove", cause -> valuesOfSelectedCategory.removeAll(selectedValues), //

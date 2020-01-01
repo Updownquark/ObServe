@@ -13,6 +13,8 @@ import java.awt.LayoutManager2;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
+import java.awt.event.FocusAdapter;
+import java.awt.event.FocusEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
@@ -228,6 +230,12 @@ public class LittleList<E> extends JComponent implements Scrollable {
 
 		addMouseListener(mouseListener);
 		addMouseMotionListener(mouseListener);
+		addFocusListener(new FocusAdapter() {
+			@Override
+			public void focusLost(FocusEvent e) {
+				reEdit(null);// stop editing
+			}
+		});
 		setItemBorder(BorderFactory.createLineBorder(Color.black, 1, true));
 	}
 
@@ -375,7 +383,7 @@ public class LittleList<E> extends JComponent implements Scrollable {
 					editor.removeCellEditorListener(editListener);
 					theEditorComponent.removeKeyListener(keyListener);
 				};
-				add(theEditorComponent);
+				add(theEditorComponent, 0);
 				EventQueue.invokeLater(() -> {
 					theEditorComponent.requestFocus();
 					repaint();
@@ -806,18 +814,24 @@ public class LittleList<E> extends JComponent implements Scrollable {
 
 		@Override
 		public void setBounds(int x, int y, int width, int height) {
+			boolean layout = x != getX() || y != getY() || width != getWidth() || height != getHeight();
 			super.setBounds(x, y, width, height);
 			theBounds.holderBounds.setBounds(x, y, width, height);
-			getLayout().layoutContainer(this);
-			if (theComponent.theRendered.getParent() == LittleList.this) {
-				// The editor component belongs to the root List component, not this holder, so apply the offset
-				theComponent.theRendered.setLocation(//
-					theComponent.theRendered.getX() + x, //
-					theComponent.theRendered.getY() + y);
-			} else
-				theBounds.itemBounds.setBounds(theComponent.getBounds());
-			for (int i = 0; i < theItemActionLabels.size(); i++)
-				theItemActionLabels.get(i).getBounds(theBounds.actionBounds.get(i));
+			if (layout) {
+				System.out.println("layout");
+				getLayout().layoutContainer(this);
+				for (int i = 0; i < theItemActionLabels.size(); i++)
+					theItemActionLabels.get(i).getBounds(theBounds.actionBounds.get(i));
+				if (theComponent.theRendered.getParent() == LittleList.this) {
+					// The editor component belongs to the root, not this holder, so apply the offset
+					System.out.println("adding " + x + "," + y + " to " + theComponent.theRendered.getBounds());
+					theComponent.theRendered.setLocation(//
+						theComponent.getX() + x, //
+						theComponent.getY() + y);
+					theBounds.itemBounds.setBounds(theComponent.theRendered.getBounds());
+				} else if (layout)
+					theBounds.itemBounds.setBounds(theComponent.getBounds());
+			}
 		}
 
 		@Override

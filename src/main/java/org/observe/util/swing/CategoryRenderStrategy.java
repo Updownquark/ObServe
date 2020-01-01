@@ -83,6 +83,10 @@ public class CategoryRenderStrategy<R, C> {
 			return withEditor(ObservableCellEditor.createTextEditor(format));
 		}
 
+		public CategoryMutationStrategy asText(Format<C> format, Consumer<ObservableTextField<C>> textField) {
+			return withEditor(ObservableCellEditor.createTextEditor(format, textField));
+		}
+
 		public CategoryMutationStrategy asCombo(Function<? super C, String> renderer, ObservableCollection<? extends C> options) {
 			return withEditor(ObservableCellEditor.createComboEditor(renderer, options));
 		}

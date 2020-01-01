@@ -249,7 +249,7 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 		Insets insets = parent.getInsets();
 		int totalLength = isVertical//
 			? insets.top + insets.bottom + theMargin.top + theMargin.bottom//
-			: insets.left + insets.right + theMargin.left + theMargin.right;
+				: insets.left + insets.right + theMargin.left + theMargin.right;
 		boolean first = true;
 		List<Component> components = new ArrayList<>(parent.getComponentCount());
 		for (Component comp : parent.getComponents()) {
@@ -303,7 +303,7 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 		Rectangle bounds = new Rectangle();
 		int parentCross = getCross(parent.getSize()) - (isVertical//
 			? insets.left + insets.right + theMargin.left + theMargin.right//
-			: insets.top + insets.bottom + theMargin.top + theMargin.bottom);
+				: insets.top + insets.bottom + theMargin.top + theMargin.bottom);
 		int crossMargin = isVertical ? insets.left + theMargin.left : insets.top + theMargin.top;
 		for (int i = 0; i < components.size(); i++) {
 			int main = preferredMainSizes[i];
@@ -315,7 +315,7 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 				setBound(false, bounds, crossMargin, cross);
 				break;
 			case CENTER:
-				setBound(false, bounds, (parentCross - cross) / 2, cross);
+				setBound(false, bounds, crossMargin + (parentCross - cross) / 2, cross);
 				break;
 			case TRAILING:
 				setBound(false, bounds, parentCross - cross - crossMargin, cross);
@@ -386,7 +386,7 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 		Rectangle bounds = new Rectangle();
 		int parentCross = getCross(parent.getSize()) - (isVertical//
 			? insets.left + insets.right + theMargin.left + theMargin.right//
-			: insets.top + insets.bottom + theMargin.top + theMargin.bottom);
+				: insets.top + insets.bottom + theMargin.top + theMargin.bottom);
 		int crossMargin = isVertical ? insets.left + theMargin.left : insets.top + theMargin.top;
 		int pos = margin;
 		for (int i = 0; i < components.size(); i++) {
@@ -422,14 +422,14 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 		int margin = isVertical ? insets.top + theMargin.top : insets.left + theMargin.left;
 		int extraLenth = (isVertical//
 			? insets.top + insets.bottom + theMargin.top + theMargin.bottom//
-			: insets.left + insets.right + theMargin.left + theMargin.right)//
+				: insets.left + insets.right + theMargin.left + theMargin.right)//
 			+ thePadding * (components.size() - 1);
 		int pos = margin;
 		float stretch = (parentLength - extraLenth) * 1.0f / (preferredLength - extraLenth);
 		Rectangle bounds = new Rectangle();
 		int parentCross = getCross(parent.getSize()) - (isVertical//
 			? insets.left + insets.right + theMargin.left + theMargin.right//
-			: insets.top + insets.bottom + theMargin.top + theMargin.bottom);
+				: insets.top + insets.bottom + theMargin.top + theMargin.bottom);
 		int crossMargin = isVertical ? insets.left + theMargin.left : insets.top + theMargin.top;
 		for (int i = 0; i < components.size(); i++) {
 			int main = Math.round(preferredMainSizes[i] * stretch);
