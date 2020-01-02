@@ -20,6 +20,7 @@ import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.EventObject;
 import java.util.List;
@@ -48,6 +49,7 @@ import org.observe.Subscription;
 import org.observe.util.swing.ObservableCellRenderer.CellRenderContext;
 import org.qommons.ArrayUtils;
 import org.qommons.LambdaUtils;
+import org.qommons.threading.QommonsTimer;
 
 public class LittleList<E> extends JComponent implements Scrollable {
 	private static final int CLICK_TOLERANCE = 4;
@@ -824,11 +826,15 @@ public class LittleList<E> extends JComponent implements Scrollable {
 					theItemActionLabels.get(i).getBounds(theBounds.actionBounds.get(i));
 				if (theComponent.theRendered.getParent() == LittleList.this) {
 					// The editor component belongs to the root, not this holder, so apply the offset
-					System.out.println("adding " + x + "," + y + " to " + theComponent.theRendered.getBounds());
+					System.out.println("adding " + x + "," + y + " to " + theComponent.getBounds());
 					theComponent.theRendered.setLocation(//
 						theComponent.getX() + x, //
 						theComponent.getY() + y);
 					theBounds.itemBounds.setBounds(theComponent.theRendered.getBounds());
+					Component c = theComponent.theRendered;
+					QommonsTimer.getCommonInstance().execute(() -> {
+						System.out.println(c.getBounds());
+					}, Duration.ofSeconds(1), Duration.ofDays(1), false);
 				} else if (layout)
 					theBounds.itemBounds.setBounds(theComponent.getBounds());
 			}
