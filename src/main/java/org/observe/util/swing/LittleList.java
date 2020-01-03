@@ -9,7 +9,7 @@ import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Insets;
-import java.awt.LayoutManager2;
+import java.awt.LayoutManager;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
@@ -20,7 +20,6 @@ import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.EventObject;
 import java.util.List;
@@ -49,7 +48,6 @@ import org.observe.Subscription;
 import org.observe.util.swing.ObservableCellRenderer.CellRenderContext;
 import org.qommons.ArrayUtils;
 import org.qommons.LambdaUtils;
-import org.qommons.threading.QommonsTimer;
 
 public class LittleList<E> extends JComponent implements Scrollable {
 	private static final int CLICK_TOLERANCE = 4;
@@ -62,7 +60,6 @@ public class LittleList<E> extends JComponent implements Scrollable {
 
 	private final SyntheticContainer theSyntheticContainer;
 	private final CategoryRenderStrategy<E, E> theRenderStrategy;
-	private boolean isVerticalScrolling;
 	private Component theEditorComponent;
 	private Subscription theEditing;
 	private ObservableListModel<E> theModel;
@@ -76,8 +73,7 @@ public class LittleList<E> extends JComponent implements Scrollable {
 	public LittleList(ObservableListModel<E> model) {
 		theModel = model;
 		theRenderStrategy = new CategoryRenderStrategy<>("Value", model.getWrapped().getType(), v -> v);
-		isVerticalScrolling = true;
-		setLayout(new FlowLayout(FlowLayout.LEFT));
+		setLayout(new ScrollableFlowLayout(FlowLayout.LEFT));
 		theSyntheticContainer = new SyntheticContainer();
 		add(theSyntheticContainer); // So the tree lock works right
 		theRenderStrategy.withRenderer(new ObservableCellRenderer.DefaultObservableCellRenderer<>((m, c) -> String.valueOf(c))//
@@ -241,6 +237,14 @@ public class LittleList<E> extends JComponent implements Scrollable {
 		setItemBorder(BorderFactory.createLineBorder(Color.black, 1, true));
 	}
 
+	@Override
+	public void setLayout(LayoutManager mgr) {
+		if (!(mgr instanceof ScrollableSwingLayout))
+			throw new IllegalArgumentException(
+				"The layout for a " + getClass().getSimpleName() + " must implement " + ScrollableSwingLayout.class.getName());
+		super.setLayout(mgr);
+	}
+
 	public ListSelectionModel getSelectionModel() {
 		return theSelectionModel;
 	}
@@ -284,11 +288,6 @@ public class LittleList<E> extends JComponent implements Scrollable {
 				borderAdjuster.accept(border, item);
 			};
 		}
-	}
-
-	public LittleList<E> scrollAxis(boolean vertical) {
-		isVerticalScrolling = vertical;
-		return this;
 	}
 
 	@Override
@@ -417,67 +416,18 @@ public class LittleList<E> extends JComponent implements Scrollable {
 	}
 
 	@Override
+	public Dimension getMinimumSize() {
+		return getLayout().minimumLayoutSize(theSyntheticContainer.setMode(true));
+	}
+
+	@Override
 	public Dimension getPreferredSize() {
-		int mainLimit, mainPadding, crossPadding;
-		FlowLayout layout = (FlowLayout) getLayout();
-		if (isVerticalScrolling) {
-			mainLimit = getWidth();
-			mainPadding = layout.getHgap();
-			crossPadding = layout.getVgap();
-		} else {
-			mainLimit = getHeight();
-			mainPadding = layout.getVgap();
-			crossPadding = layout.getHgap();
-		}
-		theSyntheticContainer.setMode(true);
-		int cross = 0;
-		int main = 0;
-		int maxRowLength = 0;
-		int maxRowThickness = 0;
-		for (int i = 0; i < theSyntheticContainer.getComponentCount(); i++) {
-			Dimension ps = theSyntheticContainer.getComponent(i).getPreferredSize();
-			int psMain = isVerticalScrolling ? ps.width : ps.height;
-			int psCross = isVerticalScrolling ? ps.height : ps.width;
-			if (main == 0 || main + mainPadding + psMain <= mainLimit) {
-				main += mainPadding + psMain;
-				maxRowLength = Math.max(maxRowLength, main);
-				maxRowThickness = Math.max(maxRowThickness, psCross);
-			} else {
-				if (cross > 0)
-					cross += crossPadding;
-				cross += maxRowThickness;
-				main = psMain;
-				maxRowThickness = psCross;
-			}
-		}
-		if (cross > 0)
-			cross += crossPadding;
-		cross += maxRowThickness;
-		Dimension d;
-		if (isVerticalScrolling)
-			d = new Dimension(maxRowLength, cross);
-		else
-			d = new Dimension(cross, maxRowLength);
-		Insets ins = getInsets();
-		d.width += ins.left + ins.right + layout.getHgap() * 2;
-		d.height += ins.top + ins.bottom + layout.getVgap() * 2;
-		return d;
+		return getLayout().preferredLayoutSize(theSyntheticContainer.setMode(true));
 	}
 
 	@Override
 	public Dimension getMaximumSize() {
-		Dimension d;
-		if (getLayout() instanceof LayoutManager2)
-			d = ((LayoutManager2) getLayout()).maximumLayoutSize(theSyntheticContainer.setMode(true));
-		else
-			d = getLayout().preferredLayoutSize(theSyntheticContainer.setMode(true));
-		return d;
-	}
-
-	@Override
-	public Dimension getMinimumSize() {
-		Dimension d = getLayout().minimumLayoutSize(theSyntheticContainer.setMode(true));
-		return d;
+		return ((ScrollableSwingLayout) getLayout()).maximumLayoutSize(theSyntheticContainer.setMode(true));
 	}
 
 	@Override
@@ -487,30 +437,29 @@ public class LittleList<E> extends JComponent implements Scrollable {
 
 	@Override
 	public Dimension getPreferredScrollableViewportSize() {
-		Dimension d = getLayout().preferredLayoutSize(theSyntheticContainer.setMode(true));
-		return d;
+		return ((ScrollableSwingLayout) getLayout()).getPreferredScrollableViewportSize(theSyntheticContainer.setMode(true));
 	}
 
 	@Override
 	public int getScrollableUnitIncrement(Rectangle visibleRect, int orientation, int direction) {
-		// TODO Auto-generated method stub
-		return 10;
+		return ((ScrollableSwingLayout) getLayout()).getScrollableUnitIncrement(theSyntheticContainer.setMode(true), visibleRect,
+			orientation, direction);
 	}
 
 	@Override
 	public int getScrollableBlockIncrement(Rectangle visibleRect, int orientation, int direction) {
-		// TODO Auto-generated method stub
-		return 100;
+		return ((ScrollableSwingLayout) getLayout()).getScrollableBlockIncrement(theSyntheticContainer.setMode(true), visibleRect,
+			orientation, direction);
 	}
 
 	@Override
 	public boolean getScrollableTracksViewportWidth() {
-		return isVerticalScrolling;
+		return ((ScrollableSwingLayout) getLayout()).getScrollableTracksViewportWidth(theSyntheticContainer.setMode(true));
 	}
 
 	@Override
 	public boolean getScrollableTracksViewportHeight() {
-		return !isVerticalScrolling;
+		return ((ScrollableSwingLayout) getLayout()).getScrollableTracksViewportHeight(theSyntheticContainer.setMode(true));
 	}
 
 	@Override
@@ -820,23 +769,10 @@ public class LittleList<E> extends JComponent implements Scrollable {
 			super.setBounds(x, y, width, height);
 			theBounds.holderBounds.setBounds(x, y, width, height);
 			if (layout) {
-				System.out.println("layout");
 				getLayout().layoutContainer(this);
 				for (int i = 0; i < theItemActionLabels.size(); i++)
 					theItemActionLabels.get(i).getBounds(theBounds.actionBounds.get(i));
-				if (theComponent.theRendered.getParent() == LittleList.this) {
-					// The editor component belongs to the root, not this holder, so apply the offset
-					System.out.println("adding " + x + "," + y + " to " + theComponent.getBounds());
-					theComponent.theRendered.setLocation(//
-						theComponent.getX() + x, //
-						theComponent.getY() + y);
-					theBounds.itemBounds.setBounds(theComponent.theRendered.getBounds());
-					Component c = theComponent.theRendered;
-					QommonsTimer.getCommonInstance().execute(() -> {
-						System.out.println(c.getBounds());
-					}, Duration.ofSeconds(1), Duration.ofDays(1), false);
-				} else if (layout)
-					theBounds.itemBounds.setBounds(theComponent.getBounds());
+				theBounds.itemBounds.setBounds(theComponent.getBounds());
 			}
 		}
 
@@ -986,8 +922,14 @@ public class LittleList<E> extends JComponent implements Scrollable {
 		@Override
 		public void setBounds(int x, int y, int width, int height) {
 			super.setBounds(x, y, width, height);
-			if (theRendered != null)
+			if (theRendered != null) {
+				if (theRendered.getParent() == LittleList.this) {
+					// The editor component belongs to the root, not this holder, so apply the offset
+					x += getParent().getX();
+					y += getParent().getY();
+				}
 				theRendered.setBounds(x, y, width, height);
+			}
 		}
 
 		@Override
