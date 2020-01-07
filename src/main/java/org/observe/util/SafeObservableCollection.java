@@ -1,5 +1,6 @@
 package org.observe.util;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -19,6 +20,7 @@ import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement;
+import org.qommons.threading.QommonsTimer;
 import org.qommons.tree.BetterTreeList;
 
 import com.google.common.reflect.TypeToken;
@@ -102,8 +104,11 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 
 	private void _flush(boolean retryIfEmpty) {
 		ListenerList.Element<ObservableCollectionEvent<E>> evt = theEventQueue.poll(0);
-		if (retryIfEmpty && evt == null)
-			theEventThreadExecutor.accept(() -> _flush(true));
+		if (retryIfEmpty && evt == null) {
+			// Don't spin the CPU checking for events over and over
+			QommonsTimer.getCommonInstance().execute(() -> _flush(true), Duration.ofMillis(10), Duration.ofDays(1), false).times(1).onEDT();
+			// theEventThreadExecutor.accept(() -> _flush(true));
+		}
 		while (evt != null) {
 			eventOccurred(evt.get());
 			evt = theEventQueue.poll(0);
