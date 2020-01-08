@@ -8,8 +8,10 @@ import java.util.EventObject;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.function.BiFunction;
+import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.IntFunction;
 import java.util.function.Predicate;
 
 import javax.swing.DefaultCellEditor;
@@ -38,7 +40,7 @@ import org.qommons.io.Format;
 
 import com.google.common.reflect.TypeToken;
 
-public class ObservableCellEditor<M, C> implements TableCellEditor, TreeCellEditor {
+public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEditor {
 	public interface CellDecorator<M, C> {
 		void decorate(Component editorComponent, M modelValue, C cellValue, boolean selected, boolean expanded, boolean leaf);
 	}
@@ -52,198 +54,17 @@ public class ObservableCellEditor<M, C> implements TableCellEditor, TreeCellEdit
 			Function<? super C, String> valueToolTip);
 	}
 
-	private final Component theEditorComponent;
-	private final SettableValue<C> theEditorValue;
-	private final EditorInstallation<C> theInstallation;
-	private Predicate<EventObject> theEditTest;
-	private CellDecorator<M, C> theDecorator;
-	private BiFunction<? super M, ? super C, String> theValueTooltip;
+	ObservableCellEditor<M, C> decorate(CellDecorator<M, C> decorator);
 
-	private final List<CellEditorListener> theListeners;
-	private EditorSubscription theEditorSubscription;
-
-	public ObservableCellEditor(Component editorComponent, SettableValue<C> editorValue, EditorInstallation installation,
-		Predicate<EventObject> editTest) {
-		theEditorComponent = editorComponent;
-		theEditorValue = editorValue;
-		theInstallation = installation;
-		theEditTest = editTest;
-
-		theListeners = new LinkedList<>();
-	}
-
-	public ObservableCellEditor<M, C> decorate(CellDecorator<M, C> decorator) {
-		theDecorator = decorator;
-		return this;
-	}
-
-	public ObservableCellEditor<M, C> withValueTooltip(BiFunction<? super M, ? super C, String> tooltip) {
-		theValueTooltip = tooltip;
-		return this;
-	}
-
-	public Component getEditorComponent() {
-		return theEditorComponent;
-	}
-
-	@Override
-	public Object getCellEditorValue() {
-		return theEditorValue.get();
-	}
-
-	@Override
-	public boolean isCellEditable(EventObject anEvent) {
-		return theEditTest.test(anEvent);
-	}
-
-	@Override
-	public boolean shouldSelectCell(EventObject anEvent) {
-		return true;
-	}
-
-	@Override
-	public boolean stopCellEditing() {
-		if (theEditorSubscription != null) {
-			if (!theEditorSubscription.uninstall(true))
-				return false;
-			theEditorSubscription = null;
-		}
-		ChangeEvent changeEvent = new ChangeEvent(this);
-		for (CellEditorListener listener : theListeners)
-			listener.editingStopped(changeEvent);
-		return true;
-	}
-
-	@Override
-	public void cancelCellEditing() {
-		if (theEditorSubscription != null) {
-			theEditorSubscription.uninstall(false);
-			theEditorSubscription = null;
-		}
-		ChangeEvent changeEvent = new ChangeEvent(this);
-		for (CellEditorListener listener : theListeners)
-			listener.editingCanceled(changeEvent);
-	}
-
-	@Override
-	public void addCellEditorListener(CellEditorListener l) {
-		theListeners.add(l);
-	}
-
-	@Override
-	public void removeCellEditorListener(CellEditorListener l) {
-		theListeners.remove(l);
-	}
-
-	public <E extends M> Component getListCellEditorComponent(LittleList<E> list, E modelValue, int rowIndex, boolean selected) {
-		if (theEditorSubscription != null) {
-			theEditorSubscription.uninstall(false);
-			theEditorSubscription = null;
-		}
-		ObservableListModel<E> model = list.getModel();
-		CategoryRenderStrategy<E, E> category = list.getRenderStrategy();
-		Function<C, String> valueFilter;
-		Function<C, String> valueTooltip;
-		String tooltip;
-
-		if (rowIndex < model.getSize()) {
-			MutableCollectionElement<E> modelElement = model.getWrapped()
-				.mutableElement(model.getWrapped().getElement(rowIndex).getElementId());
-			valueFilter = v -> {
-				if (TypeTokens.get().isInstance(model.getWrapped().getType(), v))
-					return category.getMutator().isAcceptable(modelElement, (E) v);
-				else
-					return "Unacceptable value";
-			};
-		} else {
-			valueFilter = v -> {
-				if (TypeTokens.get().isInstance(model.getWrapped().getType(), v)) {
-					String msg = category.getMutator().isAcceptable(null, (E) v);
-					if (msg == null)
-						msg = model.getWrapped().canAdd((E) v);
-					return msg;
-				} else
-					return "Unacceptable value";
-			};
-		}
-		if (category.getMutator().getEditorTooltip() != null)
-			tooltip = category.getMutator().getEditorTooltip().apply(modelValue, modelValue);
-		else
-			tooltip = category.getTooltip(modelValue, modelValue);
-		valueTooltip = c -> theValueTooltip.apply(modelValue, c);
-
-		if (theEditorValue.get() != modelValue)
-			theEditorValue.set((C) modelValue, null);
-		if (theDecorator != null)
-			theDecorator.decorate(theEditorComponent, modelValue, (C) modelValue, selected, false, true);
-		theEditorSubscription = theInstallation.install(this, list, valueFilter, tooltip, valueTooltip);
-		return theEditorComponent;
-	}
-
-	@Override
-	public Component getTableCellEditorComponent(JTable table, Object value, boolean isSelected, int row, int column) {
-		if (theEditorSubscription != null) {
-			theEditorSubscription.uninstall(false);
-			theEditorSubscription = null;
-		}
-		TableModel model = table.getModel();
-		M modelValue;
-		Function<C, String> valueFilter;
-		Function<C, String> valueTooltip;
-		String tooltip;
-		if (model instanceof ObservableTableModel) {
-			ObservableTableModel<? extends M> obsModel = (ObservableTableModel<? extends M>) model;
-			modelValue = obsModel.getRow(row); // This is more reliable and thread-safe
-			MutableCollectionElement<M> modelElement = (MutableCollectionElement<M>) obsModel.getRows()
-				.mutableElement(obsModel.getRows().getElement(row).getElementId());
-			CategoryRenderStrategy<M, C> category = (CategoryRenderStrategy<M, C>) obsModel.getColumn(column);
-			valueFilter = v -> {
-				if (v == null || TypeTokens.get().isInstance(category.getType(), v))
-					return category.getMutator().isAcceptable(modelElement, v);
-				else
-					return "Unacceptable value";
-			};
-			if (category.getMutator().getEditorTooltip() != null)
-				tooltip = category.getMutator().getEditorTooltip().apply(modelValue, (C) value);
-			else
-				tooltip = category.getTooltip(modelValue, (C) value);
-			valueTooltip = c -> theValueTooltip.apply(modelValue, c);
-		} else {
-			modelValue = null;
-			valueFilter = null;
-			tooltip = null;
-			valueTooltip = null;
-		}
-		if (theEditorValue.get() != value)
-			theEditorValue.set((C) value, null);
-		if (theDecorator != null)
-			theDecorator.decorate(theEditorComponent, modelValue, (C) value, isSelected, false, true);
-		theEditorSubscription = theInstallation.install(this, table, valueFilter, tooltip, valueTooltip);
-		return theEditorComponent;
-	}
-
-	@Override
-	public Component getTreeCellEditorComponent(JTree tree, Object value, boolean isSelected, boolean expanded, boolean leaf, int row) {
-		if (theEditorSubscription != null) {
-			theEditorSubscription.uninstall(false);
-			theEditorSubscription = null;
-		}
-		// TODO See if there's a way to get the information needed for the value filter and tooltip somewhere
-		theEditorValue.set((C) value, null);
-		if (theDecorator != null)
-			theDecorator.decorate(theEditorComponent, (M) value, (C) value, isSelected, false, true);
-		theEditorSubscription = theInstallation.install(this, tree, null, null, null);
-		return theEditorComponent;
-	}
+	ObservableCellEditor<M, C> withValueTooltip(BiFunction<? super M, ? super C, String> tooltip);
 
 	/**
 	 * @param clickCount The number of clicks to signal cell editing
 	 * @return This editor
 	 */
-	public ObservableCellEditor<M, C> withClicks(int clickCount) {
-		theEditTest = clickCount == 0 ? editWithNotDrag() : editWithClicks(clickCount);
-		return this;
-	}
+	ObservableCellEditor<M, C> withClicks(int clickCount);
+
+	<E extends M> Component getListCellEditorComponent(LittleList<E> list, E modelValue, int rowIndex, boolean selected);
 
 	/**
 	 * Creates an edit test to edit a cell with a minimum mouse click count. Follows the same behavior as {@link DefaultCellEditor}.
@@ -270,30 +91,20 @@ public class ObservableCellEditor<M, C> implements TableCellEditor, TreeCellEdit
 		};
 	}
 
-	private static <C> SettableValue<C> createEditorValue(Function<C, String>[] filter) {
-		return new SimpleSettableValue<>((TypeToken<C>) TypeTokens.get().OBJECT, true, null,
-			opts -> opts.forEachSafe(false).allowReentrant()).filterAccept(v -> {
-				if (filter[0] != null)
-					return filter[0].apply(v);
-				else
-					return null;
-			});
-	}
-
 	public static <M, C> ObservableCellEditor<M, C> createTextEditor(Format<C> format) {
 		return createTextEditor(format, null);
 	}
 
 	public static <M, C> ObservableCellEditor<M, C> createTextEditor(Format<C> format, Consumer<ObservableTextField<C>> textField) {
 		Function<C, String>[] filter = new Function[1];
-		SettableValue<C> value = createEditorValue(filter);
+		SettableValue<C> value = DefaultObservableCellEditor.createEditorValue(filter);
 		ObservableTextField<C> field = new ObservableTextField<>(value, format, Observable.empty);
 		if (textField != null)
 			textField.accept(field);
 		// Default margins for the text field don't fit into the rendered cell
 		Insets defMargin = field.getMargin();
 		boolean[] editing = new boolean[1];
-		ObservableCellEditor<M, C> editor = new ObservableCellEditor<>(field, value, (e, c, f, tt, vtt) -> {
+		ObservableCellEditor<M, C> editor = new DefaultObservableCellEditor<M, C>(field, value, (e, c, f, tt, vtt) -> {
 			if (c instanceof JTable) {
 				Insets margin = field.getMargin();
 				if (margin.top != 0 || margin.bottom != 0) {
@@ -337,7 +148,7 @@ public class ObservableCellEditor<M, C> implements TableCellEditor, TreeCellEdit
 		Function<C, String>[] filter = new Function[1];
 		String[] tooltip = new String[1];
 		Function<? super C, String>[] valueToolTip = new Function[1];
-		SettableValue<C> value = createEditorValue(filter);
+		SettableValue<C> value = DefaultObservableCellEditor.createEditorValue(filter);
 		JComboBox<C> combo = new JComboBox<>();
 		combo.setRenderer(new DefaultListCellRenderer() {
 			@Override
@@ -348,7 +159,7 @@ public class ObservableCellEditor<M, C> implements TableCellEditor, TreeCellEdit
 			}
 		});
 		Subscription[] editSub = new Subscription[1];
-		ObservableCellEditor<M, C> editor = new ObservableCellEditor<>(combo, value, (e, c, f, tt, vtt) -> {
+		ObservableCellEditor<M, C> editor = new DefaultObservableCellEditor<>(combo, value, (e, c, f, tt, vtt) -> {
 			filter[0] = f;
 			tooltip[0] = tt;
 			valueToolTip[0] = vtt;
@@ -372,10 +183,10 @@ public class ObservableCellEditor<M, C> implements TableCellEditor, TreeCellEdit
 
 	public static <M> ObservableCellEditor<M, Boolean> createCheckBoxEditor() {
 		Function<Boolean, String>[] filter = new Function[1];
-		SettableValue<Boolean> value = createEditorValue(filter);
+		SettableValue<Boolean> value = DefaultObservableCellEditor.createEditorValue(filter);
 		JCheckBox check = new JCheckBox();
 		Subscription[] editSub = new Subscription[1];
-		ObservableCellEditor<M, Boolean> editor = new ObservableCellEditor<>(check, value, (e, c, f, tt, vtt) -> {
+		ObservableCellEditor<M, Boolean> editor = new DefaultObservableCellEditor<>(check, value, (e, c, f, tt, vtt) -> {
 			filter[0] = f;
 			editSub[0] = ObservableSwingUtils.checkFor(check, tt, value);
 			return commit -> {
@@ -395,10 +206,10 @@ public class ObservableCellEditor<M, C> implements TableCellEditor, TreeCellEdit
 
 	public static <M> ObservableCellEditor<M, Integer> createIntSliderEditor(int minValue, int maxValue) {
 		Function<Integer, String>[] filter = new Function[1];
-		SettableValue<Integer> value = createEditorValue(filter);
+		SettableValue<Integer> value = DefaultObservableCellEditor.createEditorValue(filter);
 		JSlider slider = new JSlider(minValue, maxValue);
 		Subscription[] editSub = new Subscription[1];
-		ObservableCellEditor<M, Integer> editor = new ObservableCellEditor<>(slider, value, (e, c, f, tt, vtt) -> {
+		ObservableCellEditor<M, Integer> editor = new DefaultObservableCellEditor<>(slider, value, (e, c, f, tt, vtt) -> {
 			filter[0] = f;
 			editSub[0] = ObservableSwingUtils.sliderFor(slider, tt, value);
 			return commit -> {
@@ -420,12 +231,17 @@ public class ObservableCellEditor<M, C> implements TableCellEditor, TreeCellEdit
 		int ticks = 500;
 		double tickSize = (maxValue - minValue) / 500;
 		Function<Integer, String>[] filter = new Function[1];
-		SettableValue<Integer> sliderValue = createEditorValue(filter);
+		SettableValue<Integer> sliderValue = DefaultObservableCellEditor.createEditorValue(filter);
 		SettableValue<Double> value = sliderValue.map(tick -> minValue + tick * tickSize, v -> (int) Math.round((v - minValue) / tickSize));
 		JSlider slider = new JSlider(0, ticks);
 		Subscription[] editSub = new Subscription[1];
-		ObservableCellEditor<M, Double> editor = new ObservableCellEditor<>(slider, value, (e, c, f, tt, vtt) -> {
-			filter[0] = f;
+		ObservableCellEditor<M, Double> editor = new DefaultObservableCellEditor<>(slider, value, (e, c, f, tt, vtt) -> {
+			filter[0] = iv -> {
+				if (f == null)
+					return null;
+				double d = minValue + iv * tickSize;
+				return f.apply(d);
+			};
 			editSub[0] = ObservableSwingUtils.sliderFor(slider, tt, sliderValue);
 			return commit -> {
 				if (editSub[0] != null) {
@@ -445,10 +261,10 @@ public class ObservableCellEditor<M, C> implements TableCellEditor, TreeCellEdit
 	public static <M, C> ObservableCellEditor<M, C> createButtonEditor(Function<? super C, String> renderer,
 		Function<? super C, ? extends C> action) {
 		Function<C, String>[] filter = new Function[1];
-		SettableValue<C> value = createEditorValue(filter);
+		SettableValue<C> value = DefaultObservableCellEditor.createEditorValue(filter);
 		JButton button = new JButton();
 		boolean[] editing = new boolean[1];
-		ObservableCellEditor<M, C> editor = new ObservableCellEditor<>(button, value, (e, c, f, tt, vtt) -> {
+		ObservableCellEditor<M, C> editor = new DefaultObservableCellEditor<>(button, value, (e, c, f, tt, vtt) -> {
 			filter[0] = f;
 			button.setText(renderer.apply(value.get()));
 			button.setToolTipText(tt);
@@ -463,5 +279,338 @@ public class ObservableCellEditor<M, C> implements TableCellEditor, TreeCellEdit
 			editor.stopCellEditing();
 		});
 		return editor;
+	}
+
+	public static <M, C> CompositeCellEditor<M, C> composite(IntFunction<M> model, ObservableCellEditor<M, C> defaultEditor) {
+		return new CompositeCellEditor<>(model, defaultEditor);
+	}
+
+	class DefaultObservableCellEditor<M, C> implements ObservableCellEditor<M, C> {
+		private final Component theEditorComponent;
+		private final SettableValue<C> theEditorValue;
+		private final EditorInstallation<C> theInstallation;
+		private Predicate<EventObject> theEditTest;
+		private CellDecorator<M, C> theDecorator;
+		private BiFunction<? super M, ? super C, String> theValueTooltip;
+
+		private final List<CellEditorListener> theListeners;
+		private EditorSubscription theEditorSubscription;
+
+		DefaultObservableCellEditor(Component editorComponent, SettableValue<C> editorValue, EditorInstallation<C> installation,
+			Predicate<EventObject> editTest) {
+			theEditorComponent = editorComponent;
+			theEditorValue = editorValue;
+			theInstallation = installation;
+			theEditTest = editTest;
+
+			theListeners = new LinkedList<>();
+		}
+
+		@Override
+		public ObservableCellEditor<M, C> decorate(CellDecorator<M, C> decorator) {
+			theDecorator = decorator;
+			return this;
+		}
+
+		@Override
+		public ObservableCellEditor<M, C> withValueTooltip(BiFunction<? super M, ? super C, String> tooltip) {
+			theValueTooltip = tooltip;
+			return this;
+		}
+
+		@Override
+		public ObservableCellEditor<M, C> withClicks(int clickCount) {
+			theEditTest = clickCount == 0 ? editWithNotDrag() : editWithClicks(clickCount);
+			return this;
+		}
+
+		public Component getEditorComponent() {
+			return theEditorComponent;
+		}
+
+		@Override
+		public Object getCellEditorValue() {
+			return theEditorValue.get();
+		}
+
+		@Override
+		public boolean isCellEditable(EventObject anEvent) {
+			return theEditTest.test(anEvent);
+		}
+
+		@Override
+		public boolean shouldSelectCell(EventObject anEvent) {
+			return true;
+		}
+
+		@Override
+		public boolean stopCellEditing() {
+			if (theEditorSubscription != null) {
+				if (!theEditorSubscription.uninstall(true))
+					return false;
+				theEditorSubscription = null;
+			}
+			ChangeEvent changeEvent = new ChangeEvent(this);
+			for (CellEditorListener listener : theListeners)
+				listener.editingStopped(changeEvent);
+			return true;
+		}
+
+		@Override
+		public void cancelCellEditing() {
+			if (theEditorSubscription != null) {
+				theEditorSubscription.uninstall(false);
+				theEditorSubscription = null;
+			}
+			ChangeEvent changeEvent = new ChangeEvent(this);
+			for (CellEditorListener listener : theListeners)
+				listener.editingCanceled(changeEvent);
+		}
+
+		@Override
+		public void addCellEditorListener(CellEditorListener l) {
+			theListeners.add(l);
+		}
+
+		@Override
+		public void removeCellEditorListener(CellEditorListener l) {
+			theListeners.remove(l);
+		}
+
+		@Override
+		public <E extends M> Component getListCellEditorComponent(LittleList<E> list, E modelValue, int rowIndex, boolean selected) {
+			if (theEditorSubscription != null) {
+				theEditorSubscription.uninstall(false);
+				theEditorSubscription = null;
+			}
+			ObservableListModel<E> model = list.getModel();
+			CategoryRenderStrategy<E, E> category = list.getRenderStrategy();
+			Function<C, String> valueFilter;
+			Function<C, String> valueTooltip;
+			String tooltip;
+
+			if (rowIndex < model.getSize()) {
+				MutableCollectionElement<E> modelElement = model.getWrapped()
+					.mutableElement(model.getWrapped().getElement(rowIndex).getElementId());
+				valueFilter = v -> {
+					if (TypeTokens.get().isInstance(model.getWrapped().getType(), v))
+						return category.getMutator().isAcceptable(modelElement, (E) v);
+					else
+						return "Unacceptable value";
+				};
+			} else {
+				valueFilter = v -> {
+					if (TypeTokens.get().isInstance(model.getWrapped().getType(), v)) {
+						String msg = category.getMutator().isAcceptable(null, (E) v);
+						if (msg == null)
+							msg = model.getWrapped().canAdd((E) v);
+						return msg;
+					} else
+						return "Unacceptable value";
+				};
+			}
+			if (category.getMutator().getEditorTooltip() != null)
+				tooltip = category.getMutator().getEditorTooltip().apply(modelValue, modelValue);
+			else
+				tooltip = category.getTooltip(modelValue, modelValue);
+			valueTooltip = c -> theValueTooltip.apply(modelValue, c);
+
+			if (theEditorValue.get() != modelValue)
+				theEditorValue.set((C) modelValue, null);
+			if (theDecorator != null)
+				theDecorator.decorate(theEditorComponent, modelValue, (C) modelValue, selected, false, true);
+			theEditorSubscription = theInstallation.install(this, list, valueFilter, tooltip, valueTooltip);
+			return theEditorComponent;
+		}
+
+		@Override
+		public Component getTableCellEditorComponent(JTable table, Object value, boolean isSelected, int row, int column) {
+			if (theEditorSubscription != null) {
+				theEditorSubscription.uninstall(false);
+				theEditorSubscription = null;
+			}
+			TableModel model = table.getModel();
+			M modelValue;
+			Function<C, String> valueFilter;
+			Function<C, String> valueTooltip;
+			String tooltip;
+			if (model instanceof ObservableTableModel) {
+				ObservableTableModel<? extends M> obsModel = (ObservableTableModel<? extends M>) model;
+				modelValue = obsModel.getRow(row); // This is more reliable and thread-safe
+				MutableCollectionElement<M> modelElement = (MutableCollectionElement<M>) obsModel.getRows()
+					.mutableElement(obsModel.getRows().getElement(row).getElementId());
+				CategoryRenderStrategy<M, C> category = (CategoryRenderStrategy<M, C>) obsModel.getColumn(column);
+				valueFilter = v -> {
+					if (v == null || TypeTokens.get().isInstance(category.getType(), v))
+						return category.getMutator().isAcceptable(modelElement, v);
+					else
+						return "Unacceptable value";
+				};
+				if (category.getMutator().getEditorTooltip() != null)
+					tooltip = category.getMutator().getEditorTooltip().apply(modelValue, (C) value);
+				else
+					tooltip = category.getTooltip(modelValue, (C) value);
+				valueTooltip = c -> theValueTooltip.apply(modelValue, c);
+			} else {
+				modelValue = null;
+				valueFilter = null;
+				tooltip = null;
+				valueTooltip = null;
+			}
+			if (theEditorValue.get() != value)
+				theEditorValue.set((C) value, null);
+			if (theDecorator != null)
+				theDecorator.decorate(theEditorComponent, modelValue, (C) value, isSelected, false, true);
+			theEditorSubscription = theInstallation.install(this, table, valueFilter, tooltip, valueTooltip);
+			return theEditorComponent;
+		}
+
+		@Override
+		public Component getTreeCellEditorComponent(JTree tree, Object value, boolean isSelected, boolean expanded, boolean leaf, int row) {
+			if (theEditorSubscription != null) {
+				theEditorSubscription.uninstall(false);
+				theEditorSubscription = null;
+			}
+			// TODO See if there's a way to get the information needed for the value filter and tooltip somewhere
+			theEditorValue.set((C) value, null);
+			if (theDecorator != null)
+				theDecorator.decorate(theEditorComponent, (M) value, (C) value, isSelected, false, true);
+			theEditorSubscription = theInstallation.install(this, tree, null, null, null);
+			return theEditorComponent;
+		}
+
+		public static <C> SettableValue<C> createEditorValue(Function<C, String>[] filter) {
+			return new SimpleSettableValue<>((TypeToken<C>) TypeTokens.get().OBJECT, true, null,
+				opts -> opts.forEachSafe(false).allowReentrant()).filterAccept(v -> {
+					if (filter[0] != null)
+						return filter[0].apply(v);
+					else
+						return null;
+				});
+		}
+	}
+
+	public static class CompositeCellEditor<M, C> implements ObservableCellEditor<M, C> {
+		class ComponentEditor {
+			final ObservableCellEditor<M, C> editor;
+			final BiPredicate<M, C> filter;
+
+			ComponentEditor(ObservableCellEditor<M, C> editor, BiPredicate<M, C> filter) {
+				this.editor = editor;
+				this.filter = filter;
+			}
+		}
+		private final IntFunction<M> theModel;
+		private ObservableCellEditor<M, C> theDefaultEditor;
+		private List<ComponentEditor> theComponents;
+
+		private ObservableCellEditor<M, C> theCurrentEditor;
+
+		CompositeCellEditor(IntFunction<M> model, ObservableCellEditor<M, C> defaultEditor) {
+			theModel = model;
+			theDefaultEditor = defaultEditor;
+			theComponents = new LinkedList<>();
+		}
+
+		public CompositeCellEditor<M, C> withComponent(ObservableCellEditor<M, C> editor, BiPredicate<M, C> filter) {
+			theComponents.add(new ComponentEditor(editor, filter));
+			return this;
+		}
+
+		@Override
+		public CompositeCellEditor<M, C> decorate(CellDecorator<M, C> decorator) {
+			theDefaultEditor.decorate(decorator);
+			for (ComponentEditor component : theComponents)
+				component.editor.decorate(decorator);
+			return this;
+		}
+
+		@Override
+		public CompositeCellEditor<M, C> withValueTooltip(BiFunction<? super M, ? super C, String> tooltip) {
+			theDefaultEditor.withValueTooltip(tooltip);
+			for (ComponentEditor component : theComponents)
+				component.editor.withValueTooltip(tooltip);
+			return this;
+		}
+
+		@Override
+		public CompositeCellEditor<M, C> withClicks(int clickCount) {
+			theDefaultEditor.withClicks(clickCount);
+			for (ComponentEditor component : theComponents)
+				component.editor.withClicks(clickCount);
+			return this;
+		}
+
+		@Override
+		public boolean isCellEditable(EventObject anEvent) {
+			return theDefaultEditor.isCellEditable(anEvent);
+		}
+
+		@Override
+		public boolean shouldSelectCell(EventObject anEvent) {
+			return theDefaultEditor.shouldSelectCell(anEvent);
+		}
+
+		@Override
+		public Object getCellEditorValue() {
+			return theCurrentEditor.getCellEditorValue();
+		}
+
+		@Override
+		public boolean stopCellEditing() {
+			return theCurrentEditor.stopCellEditing();
+		}
+
+		@Override
+		public void cancelCellEditing() {
+			theCurrentEditor.cancelCellEditing();
+		}
+
+		@Override
+		public void addCellEditorListener(CellEditorListener l) {
+			theDefaultEditor.addCellEditorListener(l);
+			for (ComponentEditor component : theComponents)
+				component.editor.addCellEditorListener(l);
+		}
+
+		@Override
+		public void removeCellEditorListener(CellEditorListener l) {
+			theDefaultEditor.removeCellEditorListener(l);
+			for (ComponentEditor component : theComponents)
+				component.editor.removeCellEditorListener(l);
+		}
+
+		protected ObservableCellEditor<M, C> selectComponent(M modelValue, C cellValue) {
+			ObservableCellEditor<M, C> selected = null;
+			for (ComponentEditor component : theComponents) {
+				if (component.filter.test(modelValue, cellValue)) {
+					selected = component.editor;
+					break;
+				}
+			}
+			if (selected == null)
+				selected = theDefaultEditor;
+			return selected;
+		}
+
+		@Override
+		public <E extends M> Component getListCellEditorComponent(LittleList<E> list, E modelValue, int rowIndex, boolean selected) {
+			theCurrentEditor = selectComponent(modelValue, (C) modelValue);
+			return theCurrentEditor.getListCellEditorComponent(list, modelValue, rowIndex, selected);
+		}
+
+		@Override
+		public Component getTableCellEditorComponent(JTable table, Object value, boolean isSelected, int row, int column) {
+			M modelValue = theModel.apply(row);
+			theCurrentEditor = selectComponent(modelValue, (C) value);
+			return theCurrentEditor.getTableCellEditorComponent(table, value, isSelected, row, column);
+		}
+
+		@Override
+		public Component getTreeCellEditorComponent(JTree tree, Object value, boolean isSelected, boolean expanded, boolean leaf, int row) {
+			M modelValue = theModel.apply(row);
+			theCurrentEditor = selectComponent(modelValue, (C) value);
+			return theCurrentEditor.getTreeCellEditorComponent(tree, value, isSelected, expanded, leaf, row);
+		}
 	}
 }
