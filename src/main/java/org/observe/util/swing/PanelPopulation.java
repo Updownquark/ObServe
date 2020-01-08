@@ -598,7 +598,7 @@ public class PanelPopulation {
 			return withColumn("Name", String.class, getName, col -> {
 				if (setName != null) {
 					col.withMutation(mut -> {
-						mut.asText(Format.TEXT).mutateAttribute((row, name) -> {
+						mut.asText(Format.TEXT).mutateAttribute2((row, name) -> {
 							setName.accept(row, name);
 							return name;
 						}).withRowUpdate(true);
