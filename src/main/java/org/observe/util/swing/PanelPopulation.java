@@ -31,6 +31,7 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import javax.swing.Action;
+import javax.swing.BoundedRangeModel;
 import javax.swing.Box;
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
@@ -47,6 +48,8 @@ import javax.swing.JTabbedPane;
 import javax.swing.JTable;
 import javax.swing.ListSelectionModel;
 import javax.swing.SpinnerNumberModel;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
 import javax.swing.event.ListDataEvent;
 import javax.swing.event.ListDataListener;
 import javax.swing.event.ListSelectionListener;
@@ -292,6 +295,8 @@ public class PanelPopulation {
 		 * @return This editor
 		 */
 		P fillV();
+
+		P decorate(Consumer<ComponentDecorator> decoration);
 
 		P modifyEditor(Consumer<? super E> modify);
 
@@ -571,7 +576,7 @@ public class PanelPopulation {
 	}
 
 	public interface ListBuilder<R, P extends ListBuilder<R, P>>
-		extends ListWidgetBuilder<R, LittleList<R>, P>, FieldEditor<LittleList<R>, P> {
+	extends ListWidgetBuilder<R, LittleList<R>, P>, FieldEditor<LittleList<R>, P> {
 		P render(Consumer<CategoryRenderStrategy<R, R>> render);
 	}
 
@@ -620,6 +625,8 @@ public class PanelPopulation {
 		}
 
 		P withFiltering(ObservableValue<? extends TableContentControl> filter);
+
+		P withAdaptiveHeight(int minRows, int prefRows, int maxRows);
 	}
 
 	public interface TableAction<R, A extends TableAction<R, A>> {
@@ -1166,6 +1173,7 @@ public class PanelPopulation {
 		private final E theEditor;
 		private boolean isFillH;
 		private boolean isFillV;
+		private ComponentDecorator theDecorator;
 
 		private ObservableValue<Boolean> isVisible;
 
@@ -1203,6 +1211,14 @@ public class PanelPopulation {
 		}
 
 		@Override
+		public P decorate(Consumer<ComponentDecorator> decoration) {
+			if (theDecorator == null)
+				theDecorator = new ComponentDecorator();
+			decoration.accept(theDecorator);
+			return (P) this;
+		}
+
+		@Override
 		public P modifyEditor(Consumer<? super E> modify) {
 			modify.accept(getEditor());
 			return (P) this;
@@ -1218,11 +1234,17 @@ public class PanelPopulation {
 			return new SimpleAlert(getComponent(), title, message);
 		}
 
+		protected Component decorate(Component c) {
+			if (theDecorator != null)
+				theDecorator.decorate(c);
+			return c;
+		}
+
 		protected Component getOrCreateComponent(Observable<?> until) {
 			// Subclasses should override this if the editor is not a component or is not the component that should be added
 			if (!(theEditor instanceof Component))
 				throw new IllegalStateException("Editor is not a component");
-			return (Component) theEditor;
+			return decorate((Component) theEditor);
 		}
 
 		@Override
@@ -1723,7 +1745,7 @@ public class PanelPopulation {
 			super.getOrCreateComponent(until);
 			if (theRenderer != null)
 				getEditor().setRenderer(theRenderer);
-			return getEditor();
+			return super.getOrCreateComponent(until);
 		}
 	}
 
@@ -2178,8 +2200,6 @@ public class PanelPopulation {
 
 		@Override
 		protected Component getOrCreateComponent(Observable<?> until) {
-			super.getOrCreateComponent(until);
-
 			Supplier<List<R>> selectionGetter = () -> getSelection();
 			ObservableListModel<R> model = getEditor().getModel();
 			if (theSelectionValue != null)
@@ -2201,13 +2221,14 @@ public class PanelPopulation {
 					getEditor().addItemAction(itemActionFor(action, until));
 			}
 
-			return new ScrollPaneLite(getEditor());
+			return decorate(new ScrollPaneLite(getEditor()));
 		}
 
 		private LittleList.ItemAction<R> itemActionFor(ListItemAction<?> tableAction, Observable<?> until) {
 			class ItemAction<P extends ItemAction<P>> implements LittleList.ItemAction<R>, ButtonEditor<P> {
 				private Action theAction;
 				private boolean isEnabled;
+				private ComponentDecorator theDecorator;
 
 				@Override
 				public void configureAction(Action action, R item, int index) {
@@ -2230,6 +2251,8 @@ public class PanelPopulation {
 							action.putValue(Action.LONG_DESCRIPTION, s);
 						}
 					}
+					if (theDecorator != null)
+						action.putValue("decorator", theDecorator);
 				}
 
 				@Override
@@ -2307,6 +2330,14 @@ public class PanelPopulation {
 				}
 
 				@Override
+				public P decorate(Consumer<ComponentDecorator> decoration) {
+					if (theDecorator != null)
+						theDecorator = new ComponentDecorator();
+					decoration.accept(theDecorator);
+					return (P) this;
+				}
+
+				@Override
 				public P modifyEditor(Consumer<? super JButton> modify) {
 					return (P) this;
 				}
@@ -2367,6 +2398,9 @@ public class PanelPopulation {
 		private ObservableCollection<R> theSelectionValues;
 		private List<SimpleTableAction<R, ?>> theActions;
 		private ObservableValue<? extends TableContentControl> theFilter;
+		private int theAdaptiveMinRowHeight;
+		private int theAdaptivePrefRowHeight;
+		private int theAdaptiveMaxRowHeight;
 
 		private Component theBuiltComponent;
 
@@ -2439,6 +2473,16 @@ public class PanelPopulation {
 		@Override
 		public P withFiltering(ObservableValue<? extends TableContentControl> filter) {
 			theFilter = filter;
+			return (P) this;
+		}
+
+		@Override
+		public P withAdaptiveHeight(int minRows, int prefRows, int maxRows) {
+			if (minRows < 0 || minRows > prefRows || prefRows > maxRows)
+				throw new IllegalArgumentException("Required: 0<=min<=pref<=max: " + minRows + ", " + prefRows + ", " + maxRows);
+			theAdaptiveMinRowHeight = minRows;
+			theAdaptivePrefRowHeight = prefRows;
+			theAdaptiveMaxRowHeight = maxRows;
 			return (P) this;
 		}
 
@@ -2725,7 +2769,80 @@ public class PanelPopulation {
 				theBuiltComponent = tablePanel;
 			} else
 				theBuiltComponent = scroll;
-			return theBuiltComponent;
+			if (theAdaptivePrefRowHeight > 0) {
+				class HeightAdjustmentListener implements ListDataListener, ChangeListener {
+					private boolean isHSBVisible;
+
+					@Override
+					public void intervalRemoved(ListDataEvent e) {
+						if (e.getIndex0() < theAdaptiveMaxRowHeight)
+							adjustHeight();
+					}
+
+					@Override
+					public void intervalAdded(ListDataEvent e) {
+						if (e.getIndex0() < theAdaptiveMaxRowHeight)
+							adjustHeight();
+					}
+
+					@Override
+					public void contentsChanged(ListDataEvent e) {
+						if (e.getIndex0() < theAdaptiveMaxRowHeight)
+							adjustHeight();
+					}
+
+					@Override
+					public void stateChanged(ChangeEvent e) {
+						BoundedRangeModel hbm = scroll.getHorizontalScrollBar().getModel();
+						if (hbm.getValueIsAdjusting())
+							return;
+						if (isHSBVisible != (hbm.getExtent() > hbm.getMaximum()))
+							adjustHeight();
+					}
+
+					void adjustHeight() {
+						int minHeight = 0, prefHeight = 0, maxHeight = 0;
+						// if (table.getTableHeader() != null && table.getTableHeader().isVisible())
+						// height += table.getTableHeader().getPreferredSize().height;
+						int rowCount = model.getRowCount();
+						for (int i = 0; i < theAdaptiveMaxRowHeight && i < rowCount; i++) {
+							int rowHeight = table.getRowHeight(i);
+							if (i < theAdaptiveMinRowHeight)
+								minHeight += rowHeight;
+							if (i < theAdaptivePrefRowHeight)
+								prefHeight += rowHeight;
+							if (i < theAdaptiveMaxRowHeight)
+								maxHeight += rowHeight;
+						}
+						BoundedRangeModel hbm = scroll.getHorizontalScrollBar().getModel();
+						isHSBVisible = hbm.getExtent() > hbm.getMaximum();
+						if (isHSBVisible) {
+							int sbh = scroll.getHorizontalScrollBar().getHeight();
+							minHeight += sbh;
+							prefHeight += sbh;
+							maxHeight += sbh;
+						}
+						Dimension psvs = table.getPreferredScrollableViewportSize();
+						if (psvs.height != prefHeight) {
+							table.setPreferredScrollableViewportSize(new Dimension(psvs.width, prefHeight));
+							if (scroll.getParent() != null)
+								scroll.getParent().revalidate();
+						}
+						Dimension min = scroll.getMinimumSize();
+						if (min.height != minHeight)
+							scroll.getViewport().setMinimumSize(new Dimension(min.width, minHeight));
+						Dimension max = scroll.getMaximumSize();
+						if (max.height != maxHeight)
+							scroll.getViewport().setMaximumSize(new Dimension(max.width, maxHeight));
+					}
+				}
+				HeightAdjustmentListener hal = new HeightAdjustmentListener();
+				model.getRowModel().addListDataListener(hal);
+				scroll.getHorizontalScrollBar().getModel().addChangeListener(hal);
+				hal.adjustHeight();
+			}
+			table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+			return decorate(theBuiltComponent);
 		}
 
 		@Override

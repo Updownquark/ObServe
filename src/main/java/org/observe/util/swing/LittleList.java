@@ -745,6 +745,8 @@ public class LittleList<E> extends JComponent implements Scrollable {
 				if (!font.equals(actionLabel.getFont()))
 					actionLabel.setFont((Font) font);
 			}
+			if (theAction.getValue("decorator") instanceof ComponentDecorator)
+				((ComponentDecorator) theAction.getValue("decorator")).decorate(actionLabel);
 			boolean visible = !Boolean.FALSE.equals(theAction.getValue("visible"));
 			if (actionLabel.isVisible() != visible) {
 				diff = true;
