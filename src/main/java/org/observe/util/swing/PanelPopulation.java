@@ -2772,6 +2772,7 @@ public class PanelPopulation {
 			if (theAdaptivePrefRowHeight > 0) {
 				class HeightAdjustmentListener implements ListDataListener, ChangeListener {
 					private boolean isHSBVisible;
+					private boolean isVSBVisible;
 
 					@Override
 					public void intervalRemoved(ListDataEvent e) {
@@ -2796,14 +2797,23 @@ public class PanelPopulation {
 						BoundedRangeModel hbm = scroll.getHorizontalScrollBar().getModel();
 						if (hbm.getValueIsAdjusting())
 							return;
-						if (isHSBVisible != (hbm.getExtent() > hbm.getMaximum()))
+						if (isHSBVisible != (hbm.getExtent() > hbm.getMaximum())) {
 							adjustHeight();
+						} else {
+							BoundedRangeModel vbm = scroll.getVerticalScrollBar().getModel();
+							if (vbm.getValueIsAdjusting())
+								return;
+							if (isVSBVisible != (vbm.getExtent() > vbm.getMaximum()))
+								adjustHeight();
+						}
 					}
 
 					void adjustHeight() {
 						int minHeight = 0, prefHeight = 0, maxHeight = 0;
-						// if (table.getTableHeader() != null && table.getTableHeader().isVisible())
-						// height += table.getTableHeader().getPreferredSize().height;
+						if (table.getTableHeader() != null && table.getTableHeader().isVisible()) {
+							minHeight += table.getTableHeader().getPreferredSize().height;
+							maxHeight += table.getTableHeader().getPreferredSize().height;
+						}
 						int rowCount = model.getRowCount();
 						for (int i = 0; i < theAdaptiveMaxRowHeight && i < rowCount; i++) {
 							int rowHeight = table.getRowHeight(i);
@@ -2819,26 +2829,43 @@ public class PanelPopulation {
 						if (isHSBVisible) {
 							int sbh = scroll.getHorizontalScrollBar().getHeight();
 							minHeight += sbh;
-							prefHeight += sbh;
 							maxHeight += sbh;
 						}
+						BoundedRangeModel vbm = scroll.getVerticalScrollBar().getModel();
+						isVSBVisible = vbm.getExtent() > vbm.getMaximum();
 						Dimension psvs = table.getPreferredScrollableViewportSize();
 						if (psvs.height != prefHeight) {
+							int w = 0;
+							for (int c = 0; c < table.getColumnModel().getColumnCount(); c++)
+								w += table.getColumnModel().getColumn(c).getWidth();
 							table.setPreferredScrollableViewportSize(new Dimension(psvs.width, prefHeight));
-							if (scroll.getParent() != null)
-								scroll.getParent().revalidate();
 						}
 						Dimension min = scroll.getMinimumSize();
 						if (min.height != minHeight)
-							scroll.getViewport().setMinimumSize(new Dimension(min.width, minHeight));
+							scroll.getViewport().setMinimumSize(new Dimension(10, minHeight));
 						Dimension max = scroll.getMaximumSize();
-						if (max.height != maxHeight)
-							scroll.getViewport().setMaximumSize(new Dimension(max.width, maxHeight));
+						if (max.height != maxHeight) {
+							int w = 0;
+							if (isVSBVisible)
+								w += scroll.getVerticalScrollBar().getWidth();
+							for (int c = 0; c < model.getColumnCount(); c++) {
+								w += table.getColumnModel().getColumn(c).getMaxWidth();
+								if (w < 0) {
+									w = Integer.MAX_VALUE;
+									break;
+								}
+							}
+							scroll.getViewport().setMaximumSize(new Dimension(w, maxHeight));
+						}
+						if (scroll.getParent() != null)
+							scroll.getParent().revalidate();
 					}
 				}
 				HeightAdjustmentListener hal = new HeightAdjustmentListener();
 				model.getRowModel().addListDataListener(hal);
+				model.getColumnModel().addListDataListener(hal);
 				scroll.getHorizontalScrollBar().getModel().addChangeListener(hal);
+				scroll.getVerticalScrollBar().getModel().addChangeListener(hal);
 				hal.adjustHeight();
 			}
 			table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
