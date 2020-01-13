@@ -2841,8 +2841,12 @@ public class PanelPopulation {
 							table.setPreferredScrollableViewportSize(new Dimension(psvs.width, prefHeight));
 						}
 						Dimension min = scroll.getMinimumSize();
-						if (min.height != minHeight)
-							scroll.getViewport().setMinimumSize(new Dimension(10, minHeight));
+						if (min.height != minHeight) {
+							int w = 10;
+							if (isVSBVisible)
+								w += scroll.getVerticalScrollBar().getWidth();
+							scroll.getViewport().setMinimumSize(new Dimension(w, minHeight));
+						}
 						Dimension max = scroll.getMaximumSize();
 						if (max.height != maxHeight) {
 							int w = 0;
