@@ -358,7 +358,10 @@ public class CategoryRenderStrategy<R, C> {
 	}
 
 	public CategoryRenderStrategy<R, C> decorate(CellDecorator<R, C> decorator) {
-		theDecorator = decorator;
+		if (theDecorator == null)
+			theDecorator = decorator;
+		else
+			theDecorator = theDecorator.modify(decorator);
 		return this;
 	}
 
