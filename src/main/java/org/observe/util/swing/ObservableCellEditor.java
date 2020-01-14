@@ -120,6 +120,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			if (field.isSelectAllOnFocus())
 				field.selectAll();
 			return commit -> {
+				filter[0] = null;
 				if (commit) {
 					if (!field.isDirty()) {
 						editing[0] = false;
@@ -165,6 +166,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			valueToolTip[0] = vtt;
 			editSub[0] = ObservableComboBoxModel.comboFor(combo, tt, vtt, options, value);
 			return commit -> {
+				filter[0] = null;
 				if (combo.isEditable()) // Just copying from DefaultCellEditor, not currently editable here, so just for posterity
 					combo.actionPerformed(new ActionEvent(e, 0, ""));
 				if (editSub[0] != null) {
@@ -190,6 +192,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			filter[0] = f;
 			editSub[0] = ObservableSwingUtils.checkFor(check, tt, value);
 			return commit -> {
+				filter[0] = null;
 				if (editSub[0] != null) {
 					editSub[0].unsubscribe();
 					editSub[0] = null;
@@ -213,6 +216,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			filter[0] = f;
 			editSub[0] = ObservableSwingUtils.sliderFor(slider, tt, value);
 			return commit -> {
+				filter[0] = null;
 				if (editSub[0] != null) {
 					editSub[0].unsubscribe();
 					editSub[0] = null;
@@ -244,6 +248,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			};
 			editSub[0] = ObservableSwingUtils.sliderFor(slider, tt, sliderValue);
 			return commit -> {
+				filter[0] = null;
 				if (editSub[0] != null) {
 					editSub[0].unsubscribe();
 					editSub[0] = null;
@@ -270,6 +275,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			button.setToolTipText(tt);
 			editing[0] = true;
 			return commit -> {
+				filter[0] = null;
 				editing[0] = false;
 				return true;
 			};
