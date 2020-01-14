@@ -57,8 +57,7 @@ import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MapEntryHandle;
-import org.qommons.collect.RRWLockingStrategy;
-import org.qommons.collect.UpgradableReadWriteLock;
+import org.qommons.collect.StampedLockingStrategy;
 import org.qommons.ex.ExFunction;
 import org.qommons.io.Format;
 import org.qommons.tree.BetterTreeList;
@@ -1114,7 +1113,7 @@ public class ObservableConfig implements Transactable, Stamped {
 	}
 
 	public static ObservableConfig createRoot(String name) {
-		return createRoot(name, null, new RRWLockingStrategy(new UpgradableReadWriteLock()));
+		return createRoot(name, null, new StampedLockingStrategy());
 	}
 
 	public static ObservableConfig createRoot(String name, String value, CollectionLockingStrategy locking) {
