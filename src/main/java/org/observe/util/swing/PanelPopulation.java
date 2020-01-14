@@ -18,10 +18,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.BiConsumer;
@@ -70,6 +73,8 @@ import org.observe.util.TypeTokens;
 import org.observe.util.swing.ObservableSwingUtils.FontAdjuster;
 import org.observe.util.swing.TableContentControl.FilteredValue;
 import org.observe.util.swing.TableContentControl.ValueRenderer;
+import org.qommons.BiTuple;
+import org.qommons.Identifiable;
 import org.qommons.IntList;
 import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
@@ -78,6 +83,7 @@ import org.qommons.Transaction;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.FastFailLockingStrategy;
+import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.RRWLockingStrategy;
 import org.qommons.io.Format;
@@ -496,6 +502,10 @@ public class PanelPopulation {
 		P withHTab(Object tabID, LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier);
 
 		P withTab(Object tabID, Component tabComponent, Consumer<TabEditor<?>> tabModifier);
+
+		P withSelectedTab(SettableValue<?> tabID);
+
+		P onSelectedTab(Consumer<ObservableValue<Object>> tabID);
 	}
 
 	public interface TabEditor<P extends TabEditor<P>> {
@@ -506,6 +516,10 @@ public class PanelPopulation {
 		P setName(ObservableValue<String> name);
 
 		ObservableValue<String> getName();
+
+		P selectOn(Observable<?> select);
+
+		P onSelect(Consumer<ObservableValue<Boolean>> onSelect);
 	}
 
 	public interface SplitPane<P extends SplitPane<P>> extends ComponentEditor<JSplitPane, P> {
@@ -1751,45 +1765,123 @@ public class PanelPopulation {
 
 	static class SimpleTabPaneEditor<P extends SimpleTabPaneEditor<P>> extends AbstractComponentEditor<JTabbedPane, P>
 	implements TabPaneEditor<JTabbedPane, P> {
+		static class Tab {
+			final Object id;
+			final SimpleTabEditor<?> tab;
+			Component component;
+			boolean visible;
+			SimpleObservable<Void> tabEnd;
+
+			Tab(Object id, SimpleTabEditor<?> tab) {
+				this.id = id;
+				this.tab = tab;
+				visible = true;
+			}
+		}
+
 		private final Observable<?> theUntil;
+		private final Map<Object, Tab> theTabs;
+		private final Map<Component, Tab> theTabsByComponent;
+		private final SettableValue<Object> theSelectedTabId;
+		private List<Runnable> thePostCreateActions;
+		private Tab theSelectedTab;
 
 		SimpleTabPaneEditor(Supplier<Transactable> lock, Observable<?> until) {
 			super(new JTabbedPane(), lock);
 			theUntil = until;
+			theTabs = new LinkedHashMap<>();
+			theTabsByComponent = new IdentityHashMap<>();
+			theSelectedTabId = SettableValue.build(Object.class).safe(false).build();
+			thePostCreateActions = new LinkedList<>();
 		}
 
 		@Override
 		public P withVTab(Object tabID, Consumer<PanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier) {
 			MigFieldPanel<JPanel> fieldPanel = new MigFieldPanel<>(null, theUntil, theLock);
 			panel.accept(fieldPanel);
-			if (fieldPanel.isVisible() != null)
-				fieldPanel.isVisible().changes().act(evt -> {
-					if (evt.getNewValue() == fieldPanel.getComponent().isVisible())
-						return;
-					fieldPanel.getComponent().setVisible(evt.getNewValue());
-				});
-			return withTab(tabID, fieldPanel.getContainer(), tabModifier);
+			return withTabImpl(tabID, fieldPanel.getContainer(), tabModifier, fieldPanel);
 		}
 
 		@Override
 		public P withHTab(Object tabID, LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier) {
 			SimpleHPanel<JPanel> hPanel = new SimpleHPanel<>(null, new JPanel(layout), theLock, theUntil);
 			panel.accept(hPanel);
-			withTab(tabID, hPanel.getContainer(), tabModifier);
-			if (hPanel.isVisible() != null)
-				hPanel.isVisible().changes().act(evt -> {
-					if (evt.getNewValue() == hPanel.getComponent().isVisible())
-						return;
-					hPanel.getComponent().setVisible(evt.getNewValue());
-				});
-			return (P) this;
+			return withTabImpl(tabID, hPanel.getContainer(), tabModifier, hPanel);
 		}
 
 		@Override
 		public P withTab(Object tabID, Component tabComponent, Consumer<TabEditor<?>> tabModifier) {
+			return withTabImpl(tabID, tabComponent, tabModifier, null);
+		}
+
+		P withTabImpl(Object tabID, Component tabComponent, Consumer<TabEditor<?>> tabModifier, AbstractComponentEditor<?, ?> panel) {
+			if (tabID == null)
+				throw new NullPointerException();
 			SimpleTabEditor<?> t = new SimpleTabEditor<>(tabID, tabComponent);
 			tabModifier.accept(t);
-			getEditor().add(t.getComponent(theUntil));
+			Tab tab = new Tab(tabID, t);
+			Tab oldTab = theTabs.put(tabID, tab);
+			if (oldTab != null) {
+				oldTab.tabEnd.onNext(null);
+				tab.tabEnd = oldTab.tabEnd;
+				theTabsByComponent.remove(oldTab.component);
+			} else
+				tab.tabEnd = new SimpleObservable<>(null, Identifiable.baseId("tab " + tabID, new BiTuple<>(this, tabID)), false, null,
+					ListenerList.build().unsafe());
+			Observable<?> tabUntil = Observable.or(tab.tabEnd, theUntil);
+			tab.component = t.getComponent(tabUntil);
+			if (theTabsByComponent.put(tab.component, tab) != null)
+				throw new IllegalStateException("Duplicate tab components (" + tabID + ")");
+			if (panel != null && panel.isVisible() != null)
+				panel.isVisible().takeUntil(tabUntil).changes().act(evt -> ObservableSwingUtils.onEQ(() -> {
+					if (evt.getNewValue() == tab.visible)
+						return;
+					tab.visible = evt.getNewValue();
+					tab.component.setVisible(evt.getNewValue());
+				}));
+			if (oldTab != null) {
+				for (int i = 0; i < getEditor().getTabCount(); i++) {
+					if (getEditor().getComponentAt(i) == oldTab.component) {
+						if (getEditor().getSelectedIndex() == i && tab.tab.getOnSelect() != null)
+							tab.tab.getOnSelect().set(true, null);
+						getEditor().setComponentAt(i, tab.component);
+						break;
+					}
+				}
+			} else
+				getEditor().add(tab.component);
+			if (t.getSelection() != null) {
+				t.getSelection().takeUntil(tabUntil).act(__ -> ObservableSwingUtils.onEQ(() -> {
+					getEditor().setSelectedComponent(tab.component);
+				}));
+			}
+			return (P) this;
+		}
+
+		@Override
+		public P withSelectedTab(SettableValue<?> tabID) {
+			Runnable action = () -> {
+				tabID.changes().takeUntil(theUntil).act(evt -> ObservableSwingUtils.onEQ(() -> {
+					if ((evt.getNewValue() == null || theTabs.containsKey(evt.getNewValue()))//
+						&& !Objects.equals(theSelectedTabId.get(), evt.getNewValue())) {
+						theSelectedTabId.set(evt.getNewValue(), evt.isTerminated() ? null : evt);
+					}
+				}));
+				theSelectedTabId.noInitChanges().takeUntil(theUntil).act(evt -> {
+					if (!Objects.equals(evt.getNewValue(), tabID.get()))
+						((SettableValue<Object>) tabID).set(evt.getNewValue(), evt);
+				});
+			};
+			if (thePostCreateActions != null)
+				thePostCreateActions.add(action);
+			else
+				action.run();
+			return (P) this;
+		}
+
+		@Override
+		public P onSelectedTab(Consumer<ObservableValue<Object>> tabID) {
+			tabID.accept(theSelectedTabId.unsettable());
 			return (P) this;
 		}
 
@@ -1807,6 +1899,55 @@ public class PanelPopulation {
 		protected Component createPostLabel(Observable<?> until) {
 			return null;
 		}
+
+		@Override
+		protected Component getOrCreateComponent(Observable<?> until) {
+			Component c = super.getOrCreateComponent(until);
+
+			ObservableSwingUtils.onEQ(() -> {
+				boolean[] initialized = new boolean[1];
+				ChangeListener tabListener = evt -> {
+					if (!initialized[0])
+						return;
+					Component selected = getEditor().getSelectedComponent();
+					Tab selectedTab = selected == null ? null : theTabsByComponent.get(selected);
+					if (selectedTab != theSelectedTab) {
+						if (theSelectedTab != null && theSelectedTab.tab.getOnSelect() != null)
+							theSelectedTab.tab.getOnSelect().set(false, evt);
+						theSelectedTab = selectedTab;
+						Object selectedTabId = selectedTab == null ? null : selectedTab.id;
+						if (!Objects.equals(theSelectedTabId.get(), selectedTabId))
+							theSelectedTabId.set(selectedTabId, evt);
+						if (selectedTab != null && selectedTab.tab.getOnSelect() != null)
+							selectedTab.tab.getOnSelect().set(true, evt);
+					}
+				};
+				getEditor().setSelectedIndex(-1);
+				initialized[0] = true;
+				theSelectedTabId.changes().takeUntil(until).act(evt -> {
+					Object tabID = evt.getNewValue();
+					if (evt.getNewValue() == null) {
+						if (theSelectedTab == null)
+							return;
+						getEditor().setSelectedIndex(-1);
+					} else {
+						Tab tab = theTabs.get(evt.getNewValue());
+						if (theSelectedTab == tab || !tab.visible)
+							return;
+						getEditor().setSelectedComponent(tab.component);
+					}
+				});
+				Component selected = getEditor().getSelectedComponent();
+				theSelectedTab = selected == null ? null : theTabsByComponent.get(selected);
+				getEditor().addChangeListener(tabListener);
+				until.take(1).act(__ -> getEditor().removeChangeListener(tabListener));
+				List<Runnable> pcas = thePostCreateActions;
+				thePostCreateActions = null;
+				for (Runnable action : pcas)
+					action.run();
+			});
+			return c;
+		}
 	}
 
 	static class SimpleTabEditor<P extends SimpleTabEditor<P>> implements TabEditor<P> {
@@ -1814,6 +1955,8 @@ public class PanelPopulation {
 		private final Object theID;
 		private final Component theComponent;
 		private ObservableValue<String> theName;
+		private Observable<?> theSelection;
+		private SettableValue<Boolean> theOnSelect;
 
 		public SimpleTabEditor(Object id, Component component) {
 			theID = id;
@@ -1831,11 +1974,36 @@ public class PanelPopulation {
 			return theName;
 		}
 
+		@Override
+		public P selectOn(Observable<?> select) {
+			if (theSelection == null)
+				theSelection = select;
+			else
+				theSelection = Observable.or(theSelection, select);
+			return (P) this;
+		}
+
+		@Override
+		public P onSelect(Consumer<ObservableValue<Boolean>> onSelect) {
+			if (theOnSelect == null)
+				theOnSelect = SettableValue.build(boolean.class).safe(false).nullable(false).withValue(false).build();
+			onSelect.accept(theOnSelect);
+			return (P) this;
+		}
+
 		protected Component getComponent(Observable<?> until) {
 			if (theName == null)
 				throw new IllegalArgumentException("Failed to set name on tab for " + theComponent);
 			theName.changes().takeUntil(until).act(evt -> theComponent.setName(evt.getNewValue()));
 			return theComponent;
+		}
+
+		Observable<?> getSelection() {
+			return theSelection;
+		}
+
+		SettableValue<Boolean> getOnSelect() {
+			return theOnSelect;
 		}
 	}
 
