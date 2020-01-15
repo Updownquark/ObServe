@@ -12,14 +12,14 @@ import org.qommons.collect.QuickSet.QuickMap;
 
 public abstract class AbstractEntityOperation<E> implements EntityOperation<E> {
 	private final ObservableEntityType<E> theType;
-	private final QuickMap<String, EntityOperationVariable<E, ?>> theVariables;
+	private final QuickMap<String, EntityOperationVariable<? super E, ?>> theVariables;
 
-	public AbstractEntityOperation(ObservableEntityType<E> type, QuickMap<String, EntityOperationVariable<E, ?>> variables) {
+	public AbstractEntityOperation(ObservableEntityType<E> type, QuickMap<String, EntityOperationVariable<? super E, ?>> variables) {
 		theType = type;
 		theVariables = variables;
 	}
 
-	protected abstract AbstractEntityOperation<E> copy(QuickMap<String, EntityOperationVariable<E, ?>> variables);
+	protected abstract AbstractEntityOperation<E> copy(QuickMap<String, EntityOperationVariable<? super E, ?>> variables);
 
 	@Override
 	public ObservableEntityType<E> getEntityType() {
@@ -27,17 +27,17 @@ public abstract class AbstractEntityOperation<E> implements EntityOperation<E> {
 	}
 
 	@Override
-	public QuickMap<String, EntityOperationVariable<E, ?>> getVariables() {
+	public QuickMap<String, EntityOperationVariable<? super E, ?>> getVariables() {
 		return theVariables;
 	}
 
-	protected AbstractEntityOperation<E> addVariable(String variable, EntityValueAccess<E, ?> value) {
+	protected AbstractEntityOperation<E> addVariable(String variable, EntityValueAccess<? super E, ?> value) {
 		if (theVariables.keySet().contains(variable))
 			throw new IllegalArgumentException("A variable named " + variable + " is already present in this operation");
 		List<String> vars = new ArrayList<>(theVariables.keySet().size() + 1);
 		vars.addAll(theVariables.keySet());
 		vars.add(variable);
-		QuickMap<String, EntityOperationVariable<E, ?>> newVars = QuickSet.of(vars).createMap();
+		QuickMap<String, EntityOperationVariable<? super E, ?>> newVars = QuickSet.of(vars).createMap();
 		for (int i = 0; i < theVariables.keySet().size(); i++)
 			newVars.put(theVariables.keySet().get(i), theVariables.get(i));
 		newVars.put(variable, new EntityOperationVariable<>(this, variable, value));

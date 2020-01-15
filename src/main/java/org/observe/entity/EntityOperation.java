@@ -7,5 +7,5 @@ public interface EntityOperation<E> {
 
 	PreparedOperation<E> prepare() throws IllegalStateException, EntityOperationException;
 
-	QuickMap<String, EntityOperationVariable<E, ?>> getVariables();
+	QuickMap<String, EntityOperationVariable<? super E, ?>> getVariables();
 }

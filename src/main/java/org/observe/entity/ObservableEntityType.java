@@ -1,13 +1,12 @@
 package org.observe.entity;
 
+import java.util.List;
 import java.util.function.Function;
 
-import org.qommons.Transactable;
 import org.qommons.collect.QuickSet.QuickMap;
 
-public interface ObservableEntityType<E> extends Transactable {
-	ObservableEntityType<? super E> getParent();
-	ObservableEntityType<? super E> getRoot();
+public interface ObservableEntityType<E> {
+	List<? extends ObservableEntityType<? super E>> getSupers();
 	String getEntityName();
 	Class<E> getEntityType();
 
@@ -20,9 +19,5 @@ public interface ObservableEntityType<E> extends Transactable {
 	EntitySelection<E> select();
 	EntityCreator<E> create();
 
-	<F> EntityValueAccess<E, F> fieldValue(ObservableEntityFieldType<? super E, F> field);
 	<F> ObservableEntityFieldType<? super E, F> getField(Function<? super E, F> fieldGetter);
-	default <F> EntityValueAccess<E, F> fieldAccess(Function<? super E, F> fieldGetter) {
-		return fieldValue(getField(fieldGetter));
-	}
 }

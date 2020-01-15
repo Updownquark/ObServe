@@ -11,9 +11,11 @@ import com.google.common.reflect.TypeToken;
  * @param <F> The type of the information to access
  */
 public interface EntityValueAccess<E, F> {
-	TypeToken<F> getType();
+	TypeToken<F> getValueType();
 
 	String canAccept(F value);
 
 	<T> EntityValueAccess<E, T> dot(Function<? super F, T> attr);
+
+	F getValue(E entity);
 }

@@ -16,7 +16,7 @@ public interface PreparedOperation<E> extends EntityOperation<E> {
 	}
 
 	@Override
-	default QuickMap<String, EntityOperationVariable<E, ?>> getVariables() {
+	default QuickMap<String, EntityOperationVariable<? super E, ?>> getVariables() {
 		return getDefinition().getVariables();
 	}
 

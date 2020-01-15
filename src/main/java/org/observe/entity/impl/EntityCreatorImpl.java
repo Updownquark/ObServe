@@ -15,7 +15,7 @@ public class EntityCreatorImpl<E> extends AbstractEntityOperation<E> implements 
 	private final QuickMap<String, Object> theIdFieldValues;
 	private final QuickMap<String, Object> theFieldValues;
 
-	public EntityCreatorImpl(ObservableEntityType<E> entityType, QuickMap<String, EntityOperationVariable<E, ?>> variables,
+	public EntityCreatorImpl(ObservableEntityType<E> entityType, QuickMap<String, EntityOperationVariable<? super E, ?>> variables,
 		QuickMap<String, Object> idFieldValues, QuickMap<String, Object> fieldValues) {
 		super(entityType, variables);
 		theIdFieldValues = idFieldValues;
@@ -23,12 +23,12 @@ public class EntityCreatorImpl<E> extends AbstractEntityOperation<E> implements 
 	}
 
 	@Override
-	protected EntityCreatorImpl<E> copy(QuickMap<String, EntityOperationVariable<E, ?>> variables) {
+	protected EntityCreatorImpl<E> copy(QuickMap<String, EntityOperationVariable<? super E, ?>> variables) {
 		return new EntityCreatorImpl<>(getEntityType(), variables, theIdFieldValues, theFieldValues);
 	}
 
 	@Override
-	protected EntityCreatorImpl<E> addVariable(String variable, EntityValueAccess<E, ?> value) {
+	protected EntityCreatorImpl<E> addVariable(String variable, EntityValueAccess<? super E, ?> value) {
 		return (EntityCreatorImpl<E>) super.addVariable(variable, value);
 	}
 
@@ -55,7 +55,7 @@ public class EntityCreatorImpl<E> extends AbstractEntityOperation<E> implements 
 
 	@Override
 	public EntityCreator<E> withVariable(ObservableEntityFieldType<? super E, ?> field, String variableName) {
-		return addVariable(variableName, getEntityType().fieldValue(field));
+		return addVariable(variableName, field);
 	}
 
 	@Override
