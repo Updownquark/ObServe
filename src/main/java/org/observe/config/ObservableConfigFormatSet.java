@@ -58,7 +58,7 @@ public class ObservableConfigFormatSet {
 		if (format == null) {
 			EntityReflector<E> reflector = (EntityReflector<E>) theReflectors.get(type);
 			if (reflector == null) {
-				reflector = EntityReflector.build(type).withSupers(theReflectors).build();
+				reflector = EntityReflector.build(type, true).withSupers(theReflectors).build();
 				if (theReflectors.putIfAbsent(type, reflector) != null)
 					reflector = (EntityReflector<E>) theReflectors.get(type);
 			}
@@ -73,7 +73,7 @@ public class ObservableConfigFormatSet {
 	public <E> EntityConfigFormat<E> buildEntityFormat(TypeToken<E> type, Consumer<EntityFormatBuilder<E>> build) {
 		EntityReflector<E> reflector = (EntityReflector<E>) theReflectors.get(type);
 		if (reflector == null) {
-			reflector = EntityReflector.build(type).withSupers(theReflectors).build();
+			reflector = EntityReflector.build(type, true).withSupers(theReflectors).build();
 			if (theReflectors.putIfAbsent(type, reflector) != null)
 				reflector = (EntityReflector<E>) theReflectors.get(type);
 		}
@@ -128,7 +128,7 @@ public class ObservableConfigFormatSet {
 			theFormatCache.put(type, format);
 			return format;
 		} else {
-			EntityReflector.Builder<T> builder = EntityReflector.build(type).withSupers(theReflectors);
+			EntityReflector.Builder<T> builder = EntityReflector.build(type, true).withSupers(theReflectors);
 			builder.buildNoPrint();
 			if (!builder.getMessages().isEmpty()) {
 				StringBuilder msgs = new StringBuilder();

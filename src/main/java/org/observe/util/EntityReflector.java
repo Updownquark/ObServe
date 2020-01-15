@@ -17,6 +17,7 @@ import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -79,10 +80,11 @@ public class EntityReflector<E> {
 
 	/**
 	 * @param type The interface type to reflect on
+	 * @param useDirectly Whether the caller intends to use the built type directly or just as a super-type
 	 * @return A builder to create a reflector
 	 */
-	public static <E> Builder<E> build(TypeToken<E> type) {
-		return new Builder<>(type);
+	public static <E> Builder<E> build(TypeToken<E> type, boolean useDirectly) {
+		return new Builder<>(type, useDirectly);
 	}
 
 	/**
@@ -92,6 +94,7 @@ public class EntityReflector<E> {
 	 */
 	public static class Builder<E> {
 		private final TypeToken<E> theType;
+		private final boolean isUsingDirectly;
 		private final Class<E> theRawType;
 		private Map<TypeToken<?>, EntityReflector<?>> theSupers;
 		private Function<Method, String> theGetterFilter;
@@ -103,8 +106,9 @@ public class EntityReflector<E> {
 		private MethodRetrievingHandler theProxyHandler;
 		private E theProxy;
 
-		private Builder(TypeToken<E> type) {
+		private Builder(TypeToken<E> type, boolean useDirectly) {
 			theRawType = TypeTokens.getRawType(type);
+			isUsingDirectly = useDirectly;
 			if (theRawType == null || !theRawType.isInterface())
 				throw new IllegalArgumentException("This class only works for interface types");
 			else if ((theRawType.getModifiers() & Modifier.PUBLIC) == 0)
@@ -193,8 +197,19 @@ public class EntityReflector<E> {
 		/** @return The new reflector */
 		public EntityReflector<E> build() {
 			EntityReflector<E> reflector = buildNoPrint();
-			for (EntityReflectionMessage message : theMessages)
-				System.err.println(message);
+			for (EntityReflectionMessage message : theMessages) {
+				switch (message.getLevel()) {
+				case WARNING:
+				case ERROR:
+				case FATAL:
+					System.err.println(message);
+					break;
+				case INFO:
+					System.out.println(message);
+					break;
+				}
+			}
+
 			return reflector;
 		}
 
@@ -205,8 +220,11 @@ public class EntityReflector<E> {
 		 * @return The new reflector
 		 */
 		public EntityReflector<E> buildNoPrint() {
-			return new EntityReflector<E>(theSupers, theType, theRawType, theGetterFilter, theSetterFilter, //
+			EntityReflector<E> reflector = new EntityReflector<E>(theSupers, theType, theRawType, theGetterFilter, theSetterFilter, //
 				theCustomMethods == null ? Collections.emptyMap() : theCustomMethods, theIdFields, theMessages);
+			if (isUsingDirectly)
+				theMessages.addAll(reflector.getDirectUseErrors());
+			return reflector;
 		}
 
 		/**
@@ -999,11 +1017,13 @@ public class EntityReflector<E> {
 	private final Set<Integer> theIdFields;
 	private final E theProxy;
 	private final MethodRetrievingHandler theProxyHandler;
+	private final List<EntityReflectionMessage> theDirectUseErrors;
 
 	private EntityReflector(Map<TypeToken<?>, EntityReflector<?>> supers, TypeToken<E> type, Class<E> raw,
 		Function<Method, String> getterFilter, Function<Method, String> setterFilter,
 		Map<Method, ? extends BiFunction<? super E, Object[], ?>> customMethods, Set<String> idFieldNames,
 			List<EntityReflectionMessage> messages) {
+		theDirectUseErrors = new LinkedList<>();
 		theSupers = (List<EntityReflector<? super E>>) (List<?>) QommonsUtils.map(Arrays.asList(raw.getGenericInterfaces()), intf -> {
 			TypeToken<? super E> intfT = (TypeToken<? super E>) type.resolveType(intf);
 			EntityReflector<?> superR = supers.get(intfT);
@@ -1217,7 +1237,7 @@ public class EntityReflector<E> {
 								}
 								method = new FieldSetter<>(this, m, (ReflectedField<E, ?>) field, setterReturnType);
 							} else if (clazz != Object.class) {
-								errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.ERROR, m, "Method " + m
+								theDirectUseErrors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.ERROR, m, "Method " + m
 									+ " is not default or a recognized getter or setter, and its implementation is not provided"));
 								continue;
 							}
@@ -1330,6 +1350,11 @@ public class EntityReflector<E> {
 	/** @return The interface entity type */
 	public TypeToken<E> getType() {
 		return theType;
+	}
+
+	/** @return Errors that only matter if this type is used directly, not as a super type for another entity */
+	public List<EntityReflectionMessage> getDirectUseErrors() {
+		return Collections.unmodifiableList(theDirectUseErrors);
 	}
 
 	/** @return This entity's fields */

@@ -7,6 +7,7 @@ import java.util.function.Function;
 import java.util.function.IntFunction;
 
 import org.observe.util.EntityReflector;
+import org.observe.util.EntityReflector.EntityReflectionMessage;
 import org.observe.util.EntityReflector.ReflectedField;
 import org.qommons.collect.QuickSet.QuickMap;
 
@@ -57,11 +58,12 @@ public class EntityConfiguredValueType<E> implements ConfiguredValueType<E> {
 			return (EntityConfiguredValueType<E2>) this;
 		EntityReflector<E2> reflector = (EntityReflector<E2>) theSubTypes.get(subType);
 		if (reflector == null)
-			reflector = EntityReflector.build(subType).withSupers(theSubTypes).build();
+			reflector = EntityReflector.build(subType, false).withSupers(theSubTypes).build();
 		return new EntityConfiguredValueType<>(reflector, theSubTypes);
 	}
 
 	public E create(IntFunction<Object> fieldGetter, BiConsumer<Integer, Object> fieldSetter) {
+		assertUsableDirectly();
 		return theReflector.newInstance(fieldGetter, fieldSetter);
 	}
 
@@ -71,6 +73,26 @@ public class EntityConfiguredValueType<E> implements ConfiguredValueType<E> {
 
 	public Object getAssociated(E entity, Object key) {
 		return theReflector.getAssociated(entity, key);
+	}
+
+	private void assertUsableDirectly() {
+		if (!theReflector.getDirectUseErrors().isEmpty()) {
+			StringBuilder str = new StringBuilder();
+			for (EntityReflectionMessage err : theReflector.getDirectUseErrors()) {
+				switch (err.getLevel()) {
+				case ERROR:
+				case FATAL:
+					if (str.length() > 0)
+						str.append('\n');
+					str.append(err);
+					break;
+				default:
+					break;
+				}
+			}
+			if (str.length() > 0)
+				throw new IllegalArgumentException(theReflector.getType() + " cannot be used directly:\n" + str.toString());
+		}
 	}
 
 	@Override
