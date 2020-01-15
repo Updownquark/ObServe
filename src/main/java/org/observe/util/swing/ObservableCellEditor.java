@@ -399,14 +399,14 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 				MutableCollectionElement<E> modelElement = model.getWrapped()
 					.mutableElement(model.getWrapped().getElement(rowIndex).getElementId());
 				valueFilter = v -> {
-					if (TypeTokens.get().isInstance(model.getWrapped().getType(), v))
+					if (v == null || TypeTokens.get().isInstance(model.getWrapped().getType(), v))
 						return category.getMutator().isAcceptable(modelElement, (E) v);
 					else
 						return "Unacceptable value";
 				};
 			} else {
 				valueFilter = v -> {
-					if (TypeTokens.get().isInstance(model.getWrapped().getType(), v)) {
+					if (v == null || TypeTokens.get().isInstance(model.getWrapped().getType(), v)) {
 						String msg = category.getMutator().isAcceptable(null, (E) v);
 						if (msg == null)
 							msg = model.getWrapped().canAdd((E) v);
