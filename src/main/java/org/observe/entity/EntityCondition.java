@@ -12,20 +12,20 @@ import java.util.function.Function;
 import org.qommons.StringUtils;
 
 public class EntityCondition<E> {
-	private final EntitySelection<E> theSelection;
+	private final ObservableEntityType<E> theEntitType;
 	private final Map<String, EntityOperationVariable<E, ?>> theVariables;
 
-	public EntityCondition(EntitySelection<E> selection, Map<String, EntityOperationVariable<E, ?>> vars) {
-		theSelection = selection;
+	public EntityCondition(ObservableEntityType<E> entityType, Map<String, EntityOperationVariable<E, ?>> vars) {
+		theEntitType = entityType;
 		theVariables = vars;
 	}
 
-	public EntitySelection<E> getSelection() {
-		return theSelection;
+	public ObservableEntityType<E> getEntityType() {
+		return theEntitType;
 	}
 
 	public <F> EntityCondition<E> compare(EntityValueAccess<? super E, F> field, F value, int ltEqGt, boolean withEqual) {
-		DefiniteCondition<E, F> condition = new DefiniteCondition<>(theSelection, field, value, ltEqGt, withEqual);
+		DefiniteCondition<E, F> condition = new DefiniteCondition<>(theEntitType, field, value, ltEqGt, withEqual);
 		if (this instanceof None)
 			return condition;
 		else
@@ -36,7 +36,7 @@ public class EntityCondition<E> {
 		boolean withEqual) {
 		if (theVariables.containsKey(variableName))
 			throw new IllegalArgumentException("This condition already contains a variable named " + variableName);
-		VariableCondition<E, F> condition = new VariableCondition(theSelection, field, variableName, ltEqGt, withEqual);
+		VariableCondition<E, F> condition = new VariableCondition<>(theEntitType, field, variableName, ltEqGt, withEqual);
 		if (this instanceof None)
 			return condition;
 		else
@@ -44,23 +44,23 @@ public class EntityCondition<E> {
 	}
 
 	public EntityCondition<E> or(Function<EntityCondition<E>, EntityCondition<E>> condition) {
-		EntityCondition<E> c = condition.apply(new None<>(theSelection, theVariables));
+		EntityCondition<E> c = condition.apply(getNone());
 		if (c instanceof None)
 			return this;
 		else if (this instanceof OrCondition)
-			return new OrCondition<>(theSelection, (OrCondition<E>) this, c);
+			return new OrCondition<>(theEntitType, (OrCondition<E>) this, c);
 		else
-			return new OrCondition<>(theSelection, this, c);
+			return new OrCondition<>(theEntitType, this, c);
 	}
 
 	public EntityCondition<E> and(Function<EntityCondition<E>, EntityCondition<E>> condition) {
-		EntityCondition<E> c = condition.apply(new None<>(theSelection, theVariables));
+		EntityCondition<E> c = condition.apply(getNone());
 		if (c instanceof None)
 			return this;
 		else if (this instanceof AndCondition)
-			return new AndCondition<>(theSelection, (AndCondition<E>) this, c);
+			return new AndCondition<>(theEntitType, (AndCondition<E>) this, c);
 		else
-			return new AndCondition<>(theSelection, this, c);
+			return new AndCondition<>(theEntitType, this, c);
 	}
 
 	public <F> EntityCondition<E> equal(EntityValueAccess<? super E, F> field, F value) {
@@ -112,24 +112,24 @@ public class EntityCondition<E> {
 	}
 
 	public <F> EntityValueAccess<E, F> valueFor(Function<? super E, F> fieldGetter) {
-		return getSelection().getEntityType().fieldAccess(fieldGetter);
-	}
-
-	public <F> EntityValueAccess<E, F> valueFor(ObservableEntityFieldType<? super E, F> field) {
-		return getSelection().getEntityType().fieldValue(field);
+		return getEntityType().getField(fieldGetter);
 	}
 
 	public Map<String, EntityOperationVariable<E, ?>> getVariables() {
 		return theVariables;
 	}
 
+	protected EntityCondition<E> getNone() {
+		return new None<>(theEntitType, theVariables);
+	}
+
 	public static class None<E> extends EntityCondition<E> {
-		public None(EntitySelection<E> selection) {
-			this(selection, Collections.emptyMap());
+		public None(ObservableEntityType<E> entityType) {
+			this(entityType, Collections.emptyMap());
 		}
 
-		public None(EntitySelection<E> selection, Map<String, EntityOperationVariable<E, ?>> vars) {
-			super(selection, vars);
+		public None(ObservableEntityType<E> entityType, Map<String, EntityOperationVariable<E, ?>> vars) {
+			super(entityType, vars);
 		}
 
 		@Override
@@ -153,9 +153,9 @@ public class EntityCondition<E> {
 		private final int theComparison;
 		private final boolean isWithEqual;
 
-		public ValueCondition(EntitySelection<E> selection, EntityValueAccess<? super E, F> field, int comparison, boolean isWithEqual,
-			Map<String, EntityOperationVariable<E, ?>> vars) {
-			super(selection, vars);
+		public ValueCondition(ObservableEntityType<E> entityType, EntityValueAccess<? super E, F> field, int comparison,
+			boolean isWithEqual, Map<String, EntityOperationVariable<E, ?>> vars) {
+			super(entityType, vars);
 			theField = field;
 			theComparison = comparison;
 			this.isWithEqual = isWithEqual;
@@ -201,9 +201,9 @@ public class EntityCondition<E> {
 	public static class DefiniteCondition<E, F> extends ValueCondition<E, F> {
 		private final F theValue;
 
-		public DefiniteCondition(EntitySelection<E> selection, EntityValueAccess<? super E, F> field, F value, int comparison,
+		public DefiniteCondition(ObservableEntityType<E> entityType, EntityValueAccess<? super E, F> field, F value, int comparison,
 			boolean isWithEqual) {
-			super(selection, field, comparison, isWithEqual, Collections.emptyMap());
+			super(entityType, field, comparison, isWithEqual, Collections.emptyMap());
 			theValue = value;
 		}
 
@@ -237,10 +237,10 @@ public class EntityCondition<E> {
 		private final int theComparison;
 		private final boolean isWithEqual;
 
-		public VariableCondition(EntitySelection<E> selection, EntityValueAccess<? super E, F> field, String variableName, int comparison,
-			boolean isWithEqual) {
-			super(selection, singleVar(new EntityOperationVariable<>(selection, variableName, field)));
-			theVariable = new EntityOperationVariable<>(selection, variableName, field);
+		public VariableCondition(ObservableEntityType<E> entityType, EntityValueAccess<? super E, F> field, String variableName,
+			int comparison, boolean isWithEqual) {
+			super(entityType, singleVar(new EntityOperationVariable<>(entityType, variableName, field)));
+			theVariable = new EntityOperationVariable<>(entityType, variableName, field);
 			theComparison = comparison;
 			this.isWithEqual = isWithEqual;
 		}
@@ -307,13 +307,13 @@ public class EntityCondition<E> {
 	public static abstract class CompositeCondition<E> extends EntityCondition<E> {
 		private final List<EntityCondition<E>> theConditions;
 
-		public CompositeCondition(EntitySelection<E> selection, EntityCondition<E>... conditions) {
-			super(selection, joinVars(conditions));
+		public CompositeCondition(ObservableEntityType<E> entityType, EntityCondition<E>... conditions) {
+			super(entityType, joinVars(conditions));
 			theConditions = Collections.unmodifiableList(Arrays.asList(conditions));
 		}
 
-		protected CompositeCondition(EntitySelection<E> selection, CompositeCondition other, EntityCondition<E> addedCondition) {
-			super(selection, joinVars(other, addedCondition));
+		protected CompositeCondition(ObservableEntityType<E> entityType, CompositeCondition other, EntityCondition<E> addedCondition) {
+			super(entityType, joinVars(other, addedCondition));
 			List<EntityCondition<E>> conditions = new ArrayList<>(other.theConditions.size() + 1);
 			conditions.addAll(other.theConditions);
 			conditions.add(addedCondition);
@@ -373,12 +373,12 @@ public class EntityCondition<E> {
 	}
 
 	public static class OrCondition<E> extends CompositeCondition<E> {
-		public OrCondition(EntitySelection<E> selection, EntityCondition<E>... conditions) {
-			super(selection, conditions);
+		public OrCondition(ObservableEntityType<E> entityType, EntityCondition<E>... conditions) {
+			super(entityType, conditions);
 		}
 
-		protected OrCondition(EntitySelection<E> selection, OrCondition other, EntityCondition<E> addedCondition) {
-			super(selection, other, addedCondition);
+		protected OrCondition(ObservableEntityType<E> entityType, OrCondition other, EntityCondition<E> addedCondition) {
+			super(entityType, other, addedCondition);
 		}
 
 		@Override
@@ -388,12 +388,12 @@ public class EntityCondition<E> {
 	}
 
 	public static class AndCondition<E> extends CompositeCondition<E> {
-		public AndCondition(EntitySelection<E> selection, EntityCondition<E>... conditions) {
-			super(selection, conditions);
+		public AndCondition(ObservableEntityType<E> entityType, EntityCondition<E>... conditions) {
+			super(entityType, conditions);
 		}
 
-		protected AndCondition(EntitySelection<E> selection, AndCondition other, EntityCondition<E> addedCondition) {
-			super(selection, other, addedCondition);
+		protected AndCondition(ObservableEntityType<E> entityType, AndCondition other, EntityCondition<E> addedCondition) {
+			super(entityType, other, addedCondition);
 		}
 
 		@Override

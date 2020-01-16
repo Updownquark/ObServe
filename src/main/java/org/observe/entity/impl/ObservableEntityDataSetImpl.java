@@ -2,6 +2,7 @@ package org.observe.entity.impl;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -13,6 +14,10 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 
+import org.observe.entity.EntityCondition;
+import org.observe.entity.EntityConstraint;
+import org.observe.entity.EntityValueAccess;
+import org.observe.entity.FieldConstraint;
 import org.observe.entity.IdentityFieldType;
 import org.observe.entity.ObservableEntity;
 import org.observe.entity.ObservableEntityDataSet;
@@ -149,6 +154,10 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 
 		private boolean isBuilding;
 
+		/* TODO
+		 * Defaulted overridden methods (e.g. one of multiple ID fields from a super type is constant for a particular sub-type)
+		 */
+
 		ObservableEntityTypeBuilder(EntitySetBuilder setBuilder, ObservableEntityDataSetImpl entitySet, String entityName,
 			Class<E> entityType, EntityReflector<E> reflector) {
 			theSetBuilder = setBuilder;
@@ -281,21 +290,44 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 				throw new IllegalStateException("This builder has already built its entity type");
 			else if (theFields.containsKey(fieldName))
 				throw new IllegalArgumentException("A field named " + theEntityName + "." + fieldName + " has already been defined");
-			for (ObservableEntityTypeImpl<? super E> parent : theParents) {
-				ObservableEntityFieldType<? super E, ?> superField = parent.getFields().getIfPresent(fieldName);
-				if (superField != null && TypeTokens.get().unwrap(TypeTokens.getRawType(superField.getFieldType())) != void.class
-					&& !superField.getFieldType().isAssignableFrom(type))
-					throw new IllegalArgumentException("Field " + superField + " cannot be overridden with type " + type);
-			}
 
 			ObservableEntityFieldBuilder<E, F> field = new ObservableEntityFieldBuilder<>(this, fieldName, type);
+			for (ObservableEntityTypeImpl<? super E> parent : theParents) {
+				ObservableEntityFieldType<? super E, ?> superField = parent.getFields().getIfPresent(fieldName);
+				if (superField != null) {
+					if (TypeTokens.get().unwrap(TypeTokens.getRawType(superField.getFieldType())) != void.class
+						&& !superField.getFieldType().isAssignableFrom(type))
+						throw new IllegalArgumentException("Field " + superField + " cannot be overridden with type " + type);
+					field.withOverride((ObservableEntityFieldType<? super E, F>) superField);
+				}
+			}
+			if (theReflector != null && theReflector.getFields().keyIndexTolerant(fieldName) >= 0)
+				field.mapTo(theReflector.getFields().get(fieldName).getGetter().getMethod());
+
 			theFields.put(fieldName, field);
 			return field;
 		}
 
 		public EntitySetBuilder build() {
-			QuickMap<String, IdentityFieldType<? super E, ?>> idFields;
-			QuickMap<String, ObservableEntityFieldType<? super E, ?>> fields;
+			Map<String, ObservableEntityFieldBuilder<E, ?>> fieldBuilders = new LinkedHashMap<>(theFields);
+			Set<String> idFieldNames = new LinkedHashSet<>();
+			for (ObservableEntityFieldBuilder<E, ?> field : fieldBuilders.values()) {
+				if (field.isId)
+					idFieldNames.add(field.getName());
+			}
+			if (theParents.isEmpty() && idFieldNames.isEmpty())
+				throw new IllegalStateException("No identity fields defined for root-level entity type " + theEntityName);
+			for (ObservableEntityTypeImpl<? super E> parent : theParents) {
+				for (ObservableEntityFieldType<? super E, ?> field : parent.getFields().allValues()) {
+					ObservableEntityFieldBuilder<E, ?> builder = fieldBuilders.get(field.getName());
+					if (builder == null) {
+						builder = new ObservableEntityFieldBuilder<>(this, field.getName(), field.getFieldType());
+						fieldBuilders.put(field.getName(), builder);
+					}
+					// TODO
+				}
+			}
+
 			Map<String, ObservableEntityFieldType<? super E, ?>> tempFields = new LinkedHashMap<>();
 			Map<String, IdentityFieldType<? super E, ?>> tempIdFields = new LinkedHashMap<>();
 			if (theParents.isEmpty())
@@ -307,13 +339,20 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 						tempIdFields.putIfAbsent(field.getName(), (IdentityFieldType<? super E, ?>) field);
 				}
 			}
-			for(ObservableEntityFieldBuilder<E, ?> fieldBuilder : theFields.values()){
-				field=fieldBuilder.buildField(
-			}
-			idFields = QuickMap.of(tempIdFields, StringUtils.DISTINCT_NUMBER_TOLERANT).unmodifiable();
-			fields = QuickMap.of(tempFields, StringUtils.DISTINCT_NUMBER_TOLERANT).unmodifiable();
+			QuickSet<String> fieldNames = QuickSet.of(StringUtils.DISTINCT_NUMBER_TOLERANT, tempFields.keySet());
+			QuickSet<String> idFieldNames = QuickSet.of(StringUtils.DISTINCT_NUMBER_TOLERANT, tempIdFields.keySet());
+			QuickMap<String, ObservableEntityFieldType<? super E, ?>> fields = fieldNames.createMap();
+			QuickMap<String, IdentityFieldType<? super E, ?>> idFields = idFieldNames.createMap();
 			ObservableEntityTypeImpl<E> entityType = new ObservableEntityTypeImpl<>(theEntitySet, theEntityName,
 				Collections.unmodifiableList(theParents), idFields.unmodifiable(), fields.unmodifiable(), theReflector);
+			for (ObservableEntityFieldBuilder<E, ?> fieldBuilder : theFields.values()) {
+				int fieldIndex = fieldNames.indexOf(fieldBuilder.getName());
+				int idIndex = idFieldNames.indexOfTolerant(fieldBuilder.getName());
+				ObservableEntityFieldType<E, ?> field = fieldBuilder.buildField(entityType, fieldIndex, idIndex);
+				fields.put(fieldIndex, field);
+				if (idIndex >= 0)
+					idFields.put(idIndex, (IdentityFieldType<E, ?>) field);
+			}
 			theEntitySet.theEntityTypes.add(entityType);
 			if (theJavaType != null && !theEntityName.equals(theJavaType.getSimpleName()))
 				theEntitySet.theClassMapping.put(theJavaType, theEntityName);
@@ -323,11 +362,13 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 	}
 
 	public static class ObservableEntityFieldBuilder<E, F> {
-		private final ObservableEntityTypeBuilder<E> theTypeBuilder;
-		private final String theName;
-		private final TypeToken<F> theType;
-		private Method theFieldGetter;
-		private boolean isId;
+		final ObservableEntityTypeBuilder<E> theTypeBuilder;
+		final String theName;
+		final TypeToken<F> theType;
+		List<ObservableEntityFieldType<? super E, F>> theOverrides;
+		List<FieldConstraintBuilder<E, F>> theConstraints;
+		Method theFieldGetter;
+		boolean isId;
 
 		ObservableEntityFieldBuilder(ObservableEntityTypeBuilder<E> typeBuilder, String name, TypeToken<F> type) {
 			theTypeBuilder = typeBuilder;
@@ -335,10 +376,36 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 			theType = type;
 		}
 
+		String getName() {
+			return theName;
+		}
+
+		void withOverride(ObservableEntityFieldType<? super E, F> override) {
+			if (theOverrides == null)
+				theOverrides = new LinkedList<>();
+			theOverrides.add(override);
+		}
+
 		public ObservableEntityFieldBuilder<E, F> id() {
 			if (!theTypeBuilder.theParents.isEmpty())
 				throw new IllegalStateException("ID fields may not be defined on entity types with parents");
 			isId = true;
+			return this;
+		}
+
+		public ObservableEntityFieldBuilder<E, F> withConstraint(String type, String name) {
+			if (theConstraints == null)
+				theConstraints = new LinkedList<>();
+			theConstraints.add(new FieldConstraintBuilder<>(type, name, field -> new SimpleFieldConstraint<>(field, name, type)));
+			return this;
+		}
+
+		public ObservableEntityFieldBuilder<E, F> withConstraint(String name, Function<EntityCondition<E>, EntityCondition<E>> condition) {
+			if (theConstraints == null)
+				theConstraints = new LinkedList<>();
+			theConstraints.add(new FieldConstraintBuilder<>(EntityConstraint.CHECK, name, field -> {
+				return new ConditionalFieldConstraint<>(field, name, condition.apply(new SingleFieldCondition<>(field)));
+			}));
 			return this;
 		}
 
@@ -362,13 +429,54 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 
 		ObservableEntityFieldType<E, F> buildField(ObservableEntityTypeImpl<E> entityType, int fieldIndex, int idIndex) {
 			if (isId)
-				return new IdFieldTypeImpl<>(entityType, theType, theName, theFieldGetter, fieldIndex, idIndex);
+				return new IdFieldTypeImpl<>(this, entityType, fieldIndex, idIndex);
 			else
-				return new FieldTypeImpl<>(entityType, theType, theName, theFieldGetter, fieldIndex);
+				return new FieldTypeImpl<>(this, entityType, fieldIndex);
 		}
 
 		public ObservableEntityTypeBuilder<E> build() {
 			return theTypeBuilder;
+		}
+	}
+
+	static class FieldConstraintBuilder<E, F> {
+		final String constraintType;
+		final String name;
+		final Function<ObservableEntityFieldType<E, F>, FieldConstraint<E, F>> constraints;
+
+		FieldConstraintBuilder(String constraintType, String name,
+			Function<ObservableEntityFieldType<E, F>, FieldConstraint<E, F>> constraints) {
+			this.constraintType = constraintType;
+			this.name = name;
+			this.constraints = constraints;
+		}
+	}
+
+	static class SingleFieldCondition<E, F> extends EntityCondition<E> {
+		private final ObservableEntityFieldType<E, F> theField;
+
+		public SingleFieldCondition(ObservableEntityFieldType<E, F> field) {
+			super(field.getEntityType(), Collections.emptyMap());
+			theField = field;
+		}
+
+		@Override
+		public <F2> EntityCondition<E> compare(EntityValueAccess<? super E, F2> field, F2 value, int ltEqGt, boolean withEqual) {
+			if (field != theField)
+				throw new IllegalArgumentException(
+					"Field constraints may only test the target field (" + theField + ") directly: " + field);
+			return super.compare(field, value, ltEqGt, withEqual);
+		}
+
+		@Override
+		public <F2> EntityCondition<E> compareVariable(EntityValueAccess<? super E, F2> field, String variableName, int ltEqGt,
+			boolean withEqual) {
+			throw new UnsupportedOperationException("Variables are not supported within a field constraint");
+		}
+
+		@Override
+		protected EntityCondition<E> getNone() {
+			return new SingleFieldCondition<>(theField);
 		}
 	}
 
@@ -378,13 +486,22 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		private final String theName;
 		private final Method theFieldGetter;
 		private final int theFieldIndex;
+		private final List<ObservableEntityFieldType<? super E, F>> theOverrides;
+		private final List<FieldConstraint<E, F>> theConstraints;
 
-		FieldTypeImpl(ObservableEntityTypeImpl<E> entityType, TypeToken<F> fieldType, String name, Method fieldGetter, int fieldIndex) {
-			theEntityType = entityType;
-			theFieldType = fieldType;
-			theName = name;
-			theFieldGetter = fieldGetter;
+		FieldTypeImpl(ObservableEntityFieldBuilder<E, F> builder, ObservableEntityTypeImpl<E> entity, int fieldIndex) {
+			theEntityType = entity;
+			theFieldType = builder.theType;
+			theName = builder.theName;
+			theFieldGetter = builder.theFieldGetter;
 			theFieldIndex = fieldIndex;
+			if (builder.theOverrides == null)
+				theOverrides = Collections.emptyList();
+			else {
+				List<ObservableEntityFieldType<? super E, F>> newOverrides = new ArrayList<>(builder.theOverrides.size());
+				newOverrides.addAll(builder.theOverrides);
+				theOverrides = Collections.unmodifiableList(newOverrides);
+			}
 		}
 
 		@Override
@@ -407,14 +524,25 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 			return theFieldIndex;
 		}
 
+		@Override
+		public List<? extends ObservableEntityFieldType<? super E, F>> getOverrides() {
+			return theOverrides;
+		}
+
 		Method getFieldGetter() {
 			return theFieldGetter;
 		}
 
 		@Override
-		public ObservableEntityField<E, F> getField(ObservableEntity<? extends E> entity) {
+		public ObservableEntityField<E, F> getValue(ObservableEntity<? extends E> entity) {
 			return (ObservableEntityField<E, F>) entity.getField(this);
 		}
+
+		@Override
+		public String canAccept(F value) {}
+
+		@Override
+		public <T> EntityValueAccess<E, T> dot(Function<? super F, T> attr) {}
 
 		@Override
 		public int hashCode() {
@@ -440,15 +568,19 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 	static class IdFieldTypeImpl<E, F> extends FieldTypeImpl<E, F> implements IdentityFieldType<E, F> {
 		private final int theIdIndex;
 
-		IdFieldTypeImpl(ObservableEntityTypeImpl<E> entityType, TypeToken<F> fieldType, String name, Method fieldGetter, int fieldIndex,
-			int idIndex) {
-			super(entityType, fieldType, name, fieldGetter, fieldIndex);
+		IdFieldTypeImpl(ObservableEntityFieldBuilder<E, F> builder, ObservableEntityTypeImpl<E> entityType, int fieldIndex, int idIndex) {
+			super(builder, entityType, fieldIndex);
 			theIdIndex = idIndex;
 		}
 
 		@Override
 		public int getIdIndex() {
 			return theIdIndex;
+		}
+
+		@Override
+		public List<? extends IdentityFieldType<? super E, F>> getOverrides() {
+			return (List<? extends IdentityFieldType<? super E, F>>) super.getOverrides();
 		}
 	}
 }

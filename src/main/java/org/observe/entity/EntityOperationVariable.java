@@ -1,18 +1,18 @@
 package org.observe.entity;
 
 public class EntityOperationVariable<E, T> {
-	private final EntityOperation<E> theOperation;
+	private final ObservableEntityType<E> theEntityType;
 	private final String theName;
 	private final EntityValueAccess<? super E, T> theValue;
 
-	public EntityOperationVariable(EntityOperation<E> operation, String name, EntityValueAccess<? super E, T> value) {
-		theOperation = operation;
+	public EntityOperationVariable(ObservableEntityType<E> entityType, String name, EntityValueAccess<? super E, T> value) {
+		theEntityType = entityType;
 		theName = name;
 		theValue = value;
 	}
 
-	public EntityOperation<E> getOperation() {
-		return theOperation;
+	public ObservableEntityType<E> getEntityType() {
+		return theEntityType;
 	}
 
 	public String getName() {

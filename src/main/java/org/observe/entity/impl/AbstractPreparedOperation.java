@@ -36,7 +36,7 @@ public abstract class AbstractPreparedOperation<E, O extends PreparedOperation<E
 		int idx = theDefinition.getVariables().keySet().indexOf(variableName);
 		if (idx < 0)
 			throw new IllegalArgumentException("No such variable " + variableName);
-		EntityOperationVariable<E, ?> vbl = theDefinition.getVariables().get(idx);
+		EntityOperationVariable<? super E, ?> vbl = theDefinition.getVariables().get(idx);
 		if (value != null && !TypeTokens.get().isInstance(vbl.getValue().getValueType(), value))
 			throw new IllegalArgumentException(
 				value.getClass().getName() + " cannot be assigned to variable " + variableName + ", type " + vbl.getValue().getValueType());

@@ -10,8 +10,8 @@ public interface ObservableEntityType<E> {
 	String getEntityName();
 	Class<E> getEntityType();
 
-	QuickMap<String, ObservableEntityFieldType<? super E, ?>> getFields();
-	QuickMap<String, IdentityFieldType<? super E, ?>> getIdentityFields();
+	QuickMap<String, ObservableEntityFieldType<E, ?>> getFields();
+	QuickMap<String, IdentityFieldType<E, ?>> getIdentityFields();
 
 	ObservableEntity<? extends E> observableEntity(EntityIdentity<? super E> id);
 	ObservableEntity<? extends E> observableEntity(E entity);
@@ -19,5 +19,7 @@ public interface ObservableEntityType<E> {
 	EntitySelection<E> select();
 	EntityCreator<E> create();
 
-	<F> ObservableEntityFieldType<? super E, F> getField(Function<? super E, F> fieldGetter);
+	<F> ObservableEntityFieldType<E, F> getField(Function<? super E, F> fieldGetter);
+
+	List<EntityConstraint<E>> getConstraints();
 }

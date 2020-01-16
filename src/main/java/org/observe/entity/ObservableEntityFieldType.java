@@ -1,22 +1,27 @@
 package org.observe.entity;
 
+import java.util.List;
+
 import com.google.common.reflect.TypeToken;
 
-public interface ObservableEntityFieldType<E, T> extends EntityValueAccess<E, T> {
+public interface ObservableEntityFieldType<E, F> extends EntityValueAccess<E, F> {
 	ObservableEntityType<E> getEntityType();
-	TypeToken<T> getFieldType();
+	TypeToken<F> getFieldType();
 	String getName();
 	int getFieldIndex();
 
-	ObservableEntityField<E, T> getField(ObservableEntity<? extends E> entity);
+	List<? extends ObservableEntityFieldType<? super E, F>> getOverrides();
+	List<FieldConstraint<E, F>> getConstraints();
+
+	ObservableEntityField<E, F> getValue(ObservableEntity<? extends E> entity);
 
 	@Override
-	default TypeToken<T> getValueType() {
+	default TypeToken<F> getValueType() {
 		return getFieldType();
 	}
 
 	@Override
-	default T getValue(E entity) {
-		return getField(getEntityType().observableEntity(entity)).get();
+	default F getValue(E entity) {
+		return getValue(getEntityType().observableEntity(entity)).get();
 	}
 }

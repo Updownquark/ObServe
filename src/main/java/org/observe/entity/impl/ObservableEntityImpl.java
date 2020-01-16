@@ -40,7 +40,7 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 
 	@Override
 	public <F> ObservableEntityField<? super E, F> getField(ObservableEntityFieldType<? super E, F> fieldType) {
-		ObservableEntityField<? super E, ?> field = theFields.get(fieldType.getName());
+		ObservableEntityField<? super E, ?> field = theFields.getIfPresent(fieldType.getName());
 		if (field == null)
 			throw new IllegalArgumentException("Field type " + fieldType + " does not apply to entity of type " + theType);
 		return (ObservableEntityField<? super E, F>) field;
