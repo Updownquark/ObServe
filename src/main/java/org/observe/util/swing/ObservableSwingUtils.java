@@ -16,6 +16,11 @@ import java.awt.event.ActionListener;
 import java.awt.event.ComponentEvent;
 import java.awt.event.ComponentListener;
 import java.beans.PropertyChangeListener;
+import java.io.BufferedInputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.lang.ref.WeakReference;
 import java.net.URL;
 import java.text.ParseException;
@@ -33,6 +38,7 @@ import java.util.function.Supplier;
 import javax.swing.ImageIcon;
 import javax.swing.JCheckBox;
 import javax.swing.JComponent;
+import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JOptionPane;
@@ -67,6 +73,7 @@ import org.qommons.Causable;
 import org.qommons.Causable.CausableKey;
 import org.qommons.Transaction;
 import org.qommons.collect.ListenerList;
+import org.xml.sax.SAXException;
 
 /** Utilities for the org.observe.util.swing package */
 public class ObservableSwingUtils {
@@ -914,6 +921,48 @@ public class ObservableSwingUtils {
 			e.printStackTrace();
 			return false;
 		}
+	}
+
+	/**
+	 * Starts an application configured by an ObservableConfig
+	 * 
+	 * @param configName The name of the application
+	 * @param defaultConfigLocation The default location of the config file
+	 * @param app Builds a component from the ObservableConfig
+	 * @return The application frame
+	 */
+	public static JFrame startApplication(String configName, String defaultConfigLocation, Function<ObservableConfig, Component> app) {
+		String configFileLoc = System.getProperty(configName + ".config");
+		if (configFileLoc == null) {
+			configFileLoc = defaultConfigLocation;
+		}
+		ObservableConfig config = ObservableConfig.createRoot("configName");
+		ObservableConfig.XmlEncoding encoding = ObservableConfig.XmlEncoding.DEFAULT;
+		File configFile = new File(configFileLoc);
+		if (configFile.exists()) {
+			try {
+				try (InputStream configStream = new BufferedInputStream(new FileInputStream(configFile))) {
+					ObservableConfig.readXml(config, configStream, encoding);
+				}
+			} catch (IOException | SAXException e) {
+				System.err.println("Could not read config file " + configFileLoc);
+				e.printStackTrace();
+			}
+		}
+		config.persistOnShutdown(ObservableConfig.toFile(configFile, encoding), ex -> {
+			System.err.println("Could not persist UI config");
+			ex.printStackTrace();
+		});
+		ObservableSwingUtils.systemLandF();
+		Component ui = app.apply(config);
+		JFrame frame = new JFrame("Baqery");
+		// frame.setContentPane(ui);
+		frame.getContentPane().add(ui);
+		frame.setVisible(true);
+		frame.pack();
+		ObservableSwingUtils.configureFrameBounds(frame, config);
+		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		return frame;
 	}
 
 	/**
