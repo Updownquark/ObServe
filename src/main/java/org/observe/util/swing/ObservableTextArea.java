@@ -4,7 +4,6 @@ import java.awt.Color;
 import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
-import java.awt.Insets;
 import java.awt.RenderingHints;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
@@ -13,27 +12,17 @@ import java.text.ParseException;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
-import javax.swing.Icon;
-import javax.swing.JPasswordField;
+import javax.swing.JTextArea;
 import javax.swing.UIManager;
-import javax.swing.border.Border;
 
 import org.observe.Observable;
 import org.observe.SettableValue;
 import org.qommons.io.Format;
 import org.qommons.io.SpinnerFormat;
 
-/**
- * A text field that interacts with a {@link SettableValue}
- *
- * @param <E> The type of the value
- */
-public class ObservableTextField<E> extends JPasswordField {
+public class ObservableTextArea<E> extends JTextArea {
 	private final ObservableTextEditor<E> theEditor;
 
-	// Some of this is lifted and modified from https://gmigdos.wordpress.com/2010/03/30/java-a-custom-jtextfield-for-searching/
-	private Icon theIcon;
-	private Insets dummyInsets;
 	private String theEmptyText;
 
 	/**
@@ -41,20 +30,10 @@ public class ObservableTextField<E> extends JPasswordField {
 	 * @param format The format to convert the value to text and back
 	 * @param until An observable that, when fired will release this text field's resources
 	 */
-	public ObservableTextField(SettableValue<E> value, Format<E> format, Observable<?> until) {
-		theEditor = new ObservableTextEditor<E>(this, value, format, until, //
+	public ObservableTextArea(SettableValue<E> value, Format<E> format, Observable<?> until) {
+		theEditor = new ObservableTextEditor<>(this, value, format, until, //
 			e -> super.setEnabled(e), //
-			tt -> super.setToolTipText(tt)) {
-			@Override
-			protected void adjust(boolean up, Object cause) {
-				if (getEchoChar() == 0)
-					super.adjust(up, cause);
-			}
-		};
-		Border border = UIManager.getBorder("TextField.border");
-		dummyInsets = border.getBorderInsets(this);
-		asPassword((char) 0);
-
+			tt -> super.setToolTipText(tt));
 		addFocusListener(new FocusAdapter() {
 			@Override
 			public void focusGained(FocusEvent e) {
@@ -87,7 +66,7 @@ public class ObservableTextField<E> extends JPasswordField {
 	 * @param warning The function to provide a warning message or null for no warning
 	 * @return This text field
 	 */
-	public ObservableTextField<E> withWarning(Function<? super E, String> warning) {
+	public ObservableTextArea<E> withWarning(Function<? super E, String> warning) {
 		theEditor.withWarning(warning);
 		return this;
 	}
@@ -97,7 +76,7 @@ public class ObservableTextField<E> extends JPasswordField {
 	 *
 	 * @return This text field
 	 */
-	public ObservableTextField<E> clearWarning() {
+	public ObservableTextArea<E> clearWarning() {
 		theEditor.clearWarning();
 		return this;
 	}
@@ -111,7 +90,7 @@ public class ObservableTextField<E> extends JPasswordField {
 	 * @param selectAll Whether this text field should select all its text when it gains focus
 	 * @return This text field
 	 */
-	public ObservableTextField<E> setSelectAllOnFocus(boolean selectAll) {
+	public ObservableTextArea<E> setSelectAllOnFocus(boolean selectAll) {
 		theEditor.setSelectAllOnFocus(selectAll);
 		return this;
 	}
@@ -120,7 +99,7 @@ public class ObservableTextField<E> extends JPasswordField {
 	 * @param format Whether this text field should, after successful editing, replace the user-entered text with the formatted value
 	 * @return This text field
 	 */
-	public ObservableTextField<E> setReformatOnCommit(boolean format) {
+	public ObservableTextArea<E> setReformatOnCommit(boolean format) {
 		theEditor.setReformatOnCommit(format);
 		return this;
 	}
@@ -131,7 +110,7 @@ public class ObservableTextField<E> extends JPasswordField {
 	 *        false, the text field will remain in an error state on focus lost.
 	 * @return This text field
 	 */
-	public ObservableTextField<E> setRevertOnFocusLoss(boolean revert) {
+	public ObservableTextArea<E> setRevertOnFocusLoss(boolean revert) {
 		theEditor.setRevertOnFocusLoss(revert);
 		return this;
 	}
@@ -141,7 +120,7 @@ public class ObservableTextField<E> extends JPasswordField {
 	 *        types a key (assuming the text parses correctly and the value is {@link SettableValue#isAcceptable(Object) acceptable}.
 	 * @return This text field
 	 */
-	public ObservableTextField<E> setCommitOnType(boolean commit) {
+	public ObservableTextArea<E> setCommitOnType(boolean commit) {
 		theEditor.setCommitOnType(commit);
 		return this;
 	}
@@ -156,7 +135,7 @@ public class ObservableTextField<E> extends JPasswordField {
 	 *        committed when the user presses enter or when focus is lost.
 	 * @return This text field
 	 */
-	public ObservableTextField<E> setCommitAdjustmentImmediately(boolean commitImmediately) {
+	public ObservableTextArea<E> setCommitAdjustmentImmediately(boolean commitImmediately) {
 		theEditor.setCommitAdjustmentImmediately(commitImmediately);
 		return this;
 	}
@@ -174,7 +153,7 @@ public class ObservableTextField<E> extends JPasswordField {
 	 * @param action The action to perform when the user presses the ENTER key
 	 * @return This text field
 	 */
-	public ObservableTextField<E> onEnter(BiConsumer<? super E, ? super KeyEvent> action) {
+	public ObservableTextArea<E> onEnter(BiConsumer<? super E, ? super KeyEvent> action) {
 		theEditor.onEnter(action);
 		return this;
 	}
@@ -183,7 +162,7 @@ public class ObservableTextField<E> extends JPasswordField {
 	 * @param tooltip The tooltip for this text field (when enabled)
 	 * @return This text field
 	 */
-	public ObservableTextField<E> withToolTip(String tooltip) {
+	public ObservableTextArea<E> withToolTip(String tooltip) {
 		theEditor.withToolTip(tooltip);
 		return this;
 	}
@@ -192,42 +171,8 @@ public class ObservableTextField<E> extends JPasswordField {
 	 * @param cols The minimum number of columns of text to display
 	 * @return This text field
 	 */
-	public ObservableTextField<E> withColumns(int cols) {
+	public ObservableTextArea<E> withColumns(int cols) {
 		setColumns(cols);
-		return this;
-	}
-
-	/**
-	 * @param echoChar The echo character to show for each typed character of the password, or <code>(char) 0</code> to show the text
-	 * @return This text field
-	 */
-	public ObservableTextField<E> asPassword(char echoChar) {
-		setEchoChar(echoChar);
-		putClientProperty("JPasswordField.cutCopyAllowed", echoChar == 0); // Allow cut/copy for non-password field
-		return this;
-	}
-
-	/** @return This text field's icon */
-	public Icon getIcon() {
-		return theIcon;
-	}
-
-	/**
-	 * @param icon The icon to display on the left side of the text field
-	 * @return This text field
-	 */
-	public ObservableTextField<E> setIcon(Icon icon) {
-		theIcon = icon;
-		if (theIcon != null) {
-			int textX = 2;
-
-			int iconWidth = theIcon.getIconWidth();
-			int x = dummyInsets.left + 5;// this is our icon's x
-			textX = x + iconWidth + 2; // this is the x where text should start
-
-			setMargin(new Insets(2, textX, 2, 2));
-		} else
-			setMargin(dummyInsets);
 		return this;
 	}
 
@@ -240,7 +185,7 @@ public class ObservableTextField<E> extends JPasswordField {
 	 * @param emptyText The text to display (grayed) when the text field's text is empty
 	 * @return This text field
 	 */
-	public ObservableTextField<E> setEmptyText(String emptyText) {
+	public ObservableTextArea<E> setEmptyText(String emptyText) {
 		theEmptyText = emptyText;
 		return this;
 	}
@@ -259,14 +204,7 @@ public class ObservableTextField<E> extends JPasswordField {
 	protected void paintComponent(Graphics g) {
 		super.paintComponent(g);
 
-		if (theIcon != null) {
-			int iconHeight = theIcon.getIconHeight();
-			int x = dummyInsets.left + 5;// this is our icon's x
-			int y = (this.getHeight() - iconHeight) / 2;
-			theIcon.paintIcon(this, g, x, y);
-		}
-
-		if (!this.hasFocus() && this.getPassword().length == 0 && theEmptyText != null) {
+		if (!this.hasFocus() && getText().length() == 0 && theEmptyText != null) {
 			int height = getHeight();
 			Font prev = g.getFont();
 			Font italic = prev.deriveFont(Font.ITALIC);

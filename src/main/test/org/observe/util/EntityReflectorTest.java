@@ -68,7 +68,7 @@ public class EntityReflectorTest {
 	@Test
 	public void testInheritance() {
 		Map<TypeToken<?>, EntityReflector<?>> supers = new HashMap<>();
-		EntityReflector<C> cRef = EntityReflector.build(TypeTokens.get().of(C.class)).withSupers(supers)
+		EntityReflector<C> cRef = EntityReflector.build(TypeTokens.get().of(C.class), true).withSupers(supers)
 			.<String> withCustomMethod(C::toString, (c, args) -> c.print()).build();
 		QuickMap<String, Object> c1Fields = cRef.getFields().keySet().createMap();
 		C c1 = cRef.newInstance(c1Fields::get, c1Fields::put);
@@ -95,7 +95,7 @@ public class EntityReflectorTest {
 
 	@Test
 	public void testObjectOverride() {
-		EntityReflector<D> dRef = EntityReflector.build(TypeTokens.get().of(D.class)).build();
+		EntityReflector<D> dRef = EntityReflector.build(TypeTokens.get().of(D.class), true).build();
 
 		QuickMap<String, Object> d1Fields = dRef.getFields().keySet().createMap();
 		D d1 = dRef.newInstance(d1Fields::get, d1Fields::put);

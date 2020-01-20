@@ -29,10 +29,10 @@ public class CategoryRenderStrategy<R, C> {
 		private BiFunction<? super R, ? super C, ? extends R> theRowMutator;
 		private boolean updateRowIfUnchanged;
 
-		private ObservableCellEditor<? super R, ? super C> theEditor;
+		private ObservableCellEditor<R, ? super C> theEditor;
 		private BiFunction<? super R, ? super C, String> theEditorTooltip;
 
-		private BiFunction<MutableCollectionElement<? super R>, ? super C, String> theValueFilter;
+		private BiFunction<MutableCollectionElement<R>, ? super C, String> theValueFilter;
 
 		CategoryMutationStrategy() {}
 
@@ -69,12 +69,12 @@ public class CategoryRenderStrategy<R, C> {
 			return this;
 		}
 
-		public CategoryMutationStrategy filterAccept(BiFunction<MutableCollectionElement<? super R>, ? super C, String> filter) {
+		public CategoryMutationStrategy filterAccept(BiFunction<MutableCollectionElement<R>, ? super C, String> filter) {
 			theValueFilter = filter;
 			return this;
 		}
 
-		public CategoryMutationStrategy withEditor(ObservableCellEditor<? super R, ? super C> editor) {
+		public CategoryMutationStrategy withEditor(ObservableCellEditor<R, ? super C> editor) {
 			theEditor = editor;
 			return this;
 		}
@@ -139,7 +139,7 @@ public class CategoryRenderStrategy<R, C> {
 			return theEditability == null || theEditability.test(row, category);
 		}
 
-		public String isAcceptable(MutableCollectionElement<? super R> row, C category) {
+		public String isAcceptable(MutableCollectionElement<R> row, C category) {
 			return theValueFilter == null ? null : theValueFilter.apply(row, category);
 		}
 

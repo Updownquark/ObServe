@@ -164,6 +164,9 @@ public class PanelPopulation {
 		<F> P addTextField(String fieldName, SettableValue<F> field, Format<F> format,
 			Consumer<FieldEditor<ObservableTextField<F>, ?>> modify);
 
+		<F> P addTextArea(String fieldName, SettableValue<F> field, Format<F> format,
+			Consumer<FieldEditor<ObservableTextArea<F>, ?>> modify);
+
 		<F> P addLabel(String fieldName, ObservableValue<F> field, Format<F> format, Consumer<FieldEditor<JLabel, ?>> modify);
 
 		P addCheckField(String fieldName, SettableValue<Boolean> field, Consumer<FieldEditor<JCheckBox, ?>> modify);
@@ -623,7 +626,7 @@ public class PanelPopulation {
 						}).withRowUpdate(true);
 						if (unique)
 							mut.filterAccept((rowEl, name) -> {
-								if (StringUtils.isUniqueName(getRows(), getName, name, (R) rowEl.get())) {
+								if (StringUtils.isUniqueName(getRows(), getName, name, rowEl.get())) {
 									return null;
 								} else {
 									String itemName = getItemName();
@@ -1002,6 +1005,18 @@ public class PanelPopulation {
 			Consumer<FieldEditor<ObservableTextField<F>, ?>> modify) {
 			SimpleFieldEditor<ObservableTextField<F>, ?> fieldPanel = new SimpleFieldEditor<>(fieldName,
 				new ObservableTextField<>(field, format, getUntil()), getLock());
+			fieldPanel.getTooltip().changes().takeUntil(getUntil()).act(evt -> fieldPanel.getEditor().setToolTipText(evt.getNewValue()));
+			if (modify != null)
+				modify.accept(fieldPanel);
+			doAdd(fieldPanel);
+			return (P) this;
+		}
+
+		@Override
+		default <F> P addTextArea(String fieldName, SettableValue<F> field, Format<F> format,
+			Consumer<FieldEditor<ObservableTextArea<F>, ?>> modify) {
+			SimpleFieldEditor<ObservableTextArea<F>, ?> fieldPanel = new SimpleFieldEditor<>(fieldName,
+				new ObservableTextArea<>(field, format, getUntil()), getLock());
 			fieldPanel.getTooltip().changes().takeUntil(getUntil()).act(evt -> fieldPanel.getEditor().setToolTipText(evt.getNewValue()));
 			if (modify != null)
 				modify.accept(fieldPanel);
