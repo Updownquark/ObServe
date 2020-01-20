@@ -110,9 +110,9 @@ public class EntityReflector<E> {
 			theRawType = TypeTokens.getRawType(type);
 			isUsingDirectly = useDirectly;
 			if (theRawType == null || !theRawType.isInterface())
-				throw new IllegalArgumentException("This class only works for interface types");
+				throw new IllegalArgumentException("This class only works for interface types: " + type);
 			else if ((theRawType.getModifiers() & Modifier.PUBLIC) == 0)
-				throw new IllegalArgumentException("This class only works for public interface types");
+				throw new IllegalArgumentException("This class only works for public interface types: " + type);
 			theType = type;
 			theSupers = new LinkedHashMap<>();
 			theGetterFilter = new OrFilter(//
