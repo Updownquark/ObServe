@@ -1,8 +1,24 @@
 package org.observe.entity;
 
-public interface PreparedUpdate<E> extends PreparedSetOperation<E>, EntityUpdate<E> {
+import org.qommons.collect.QuickSet.QuickMap;
+
+public interface PreparedUpdate<E> extends PreparedOperation<E>, EntityUpdate<E> {
 	@Override
-	default PreparedUpdate<E> prepare() throws IllegalStateException, EntityOperationException {
-		return (PreparedUpdate<E>) PreparedSetOperation.super.prepare();
+	default ObservableEntityType<E> getEntityType() {
+		return PreparedOperation.super.getEntityType();
+	}
+
+	@Override
+	ConfigurableUpdate<E> getDefinition();
+
+	@Override
+	default QuickMap<String, Object> getUpdateValues() {
+		QuickMap<String, Object> updateValues = getDefinition().getUpdateValues().copy();
+		for (int i = 0; i < updateValues.keySize(); i++) {
+			EntityOperationVariable<E> vbl = getDefinition().getUpdateFieldVariables().get(i);
+			if (vbl != null)
+				updateValues.put(i, getVariableValues().get(vbl.getName()));
+		}
+		return updateValues.unmodifiable();
 	}
 }

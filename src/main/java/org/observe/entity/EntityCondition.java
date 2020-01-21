@@ -14,10 +14,14 @@ import org.qommons.StringUtils;
 import org.qommons.collect.QuickSet.QuickMap;
 
 public abstract class EntityCondition<E> {
-	private final ObservableEntityType<E> theEntityType;
-	private final Map<String, EntityOperationVariable<E, ?>> theVariables;
+	public static <E> EntityCondition<E> none(ObservableEntityType<E> type) {
+		return new None<>(type);
+	}
 
-	public EntityCondition(ObservableEntityType<E> entityType, Map<String, EntityOperationVariable<E, ?>> vars) {
+	private final ObservableEntityType<E> theEntityType;
+	private final Map<String, EntityOperationVariable<E>> theVariables;
+
+	private EntityCondition(ObservableEntityType<E> entityType, Map<String, EntityOperationVariable<E>> vars) {
 		theEntityType = entityType;
 		theVariables = vars;
 	}
@@ -117,7 +121,7 @@ public abstract class EntityCondition<E> {
 		return getEntityType().getField(fieldGetter);
 	}
 
-	public Map<String, EntityOperationVariable<E, ?>> getVariables() {
+	public Map<String, EntityOperationVariable<E>> getVariables() {
 		return theVariables;
 	}
 
@@ -132,7 +136,7 @@ public abstract class EntityCondition<E> {
 			this(entityType, Collections.emptyMap());
 		}
 
-		public None(ObservableEntityType<E> entityType, Map<String, EntityOperationVariable<E, ?>> vars) {
+		public None(ObservableEntityType<E> entityType, Map<String, EntityOperationVariable<E>> vars) {
 			super(entityType, vars);
 		}
 
@@ -163,7 +167,7 @@ public abstract class EntityCondition<E> {
 		private final boolean isWithEqual;
 
 		public ValueCondition(ObservableEntityType<E> entityType, EntityValueAccess<? super E, F> field, int comparison,
-			boolean isWithEqual, Map<String, EntityOperationVariable<E, ?>> vars) {
+			boolean isWithEqual, Map<String, EntityOperationVariable<E>> vars) {
 			super(entityType, vars);
 			theField = field;
 			theComparison = comparison;
@@ -278,21 +282,21 @@ public abstract class EntityCondition<E> {
 	}
 
 	public static class VariableCondition<E, F> extends ValueCondition<E, F> {
-		private final EntityOperationVariable<E, F> theVariable;
+		private final EntityOperationVariable<E> theVariable;
 
 		public VariableCondition(ObservableEntityType<E> entityType, EntityValueAccess<? super E, F> field, String variableName,
 			int comparison, boolean isWithEqual) {
-			super(entityType, field, comparison, isWithEqual, singleVar(new EntityOperationVariable<>(entityType, variableName, field)));
-			theVariable = new EntityOperationVariable<>(entityType, variableName, field);
+			super(entityType, field, comparison, isWithEqual, singleVar(new EntityOperationVariable<>(entityType, variableName)));
+			theVariable = new EntityOperationVariable<>(entityType, variableName);
 		}
 
-		private static <E> Map<String, EntityOperationVariable<E, ?>> singleVar(EntityOperationVariable<E, ?> var) {
-			Map<String, EntityOperationVariable<E, ?>> newMap = new LinkedHashMap<>(1);
+		private static <E> Map<String, EntityOperationVariable<E>> singleVar(EntityOperationVariable<E> var) {
+			Map<String, EntityOperationVariable<E>> newMap = new LinkedHashMap<>(1);
 			newMap.put(var.getName(), var);
 			return Collections.unmodifiableMap(newMap);
 		}
 
-		public EntityOperationVariable<E, F> getVariable() {
+		public EntityOperationVariable<E> getVariable() {
 			return theVariable;
 		}
 
@@ -339,21 +343,21 @@ public abstract class EntityCondition<E> {
 			theConditions = Collections.unmodifiableList(conditions);
 		}
 
-		private static <E> Map<String, EntityOperationVariable<E, ?>> joinVars(EntityCondition<E>... conditions) {
+		private static <E> Map<String, EntityOperationVariable<E>> joinVars(EntityCondition<E>... conditions) {
 			int count = 0;
 			for (EntityCondition<E> cond : conditions) {
 				count += cond.getVariables().size();
 				if (count > 3)
 					break;
 			}
-			Map<String, EntityOperationVariable<E, ?>> vars = new LinkedHashMap<>(count * 4 / 3);
+			Map<String, EntityOperationVariable<E>> vars = new LinkedHashMap<>(count * 4 / 3);
 			boolean first = true;
 			for (EntityCondition<E> cond : conditions) {
 				if (first)
 					first = false;
 				else {
-					for (Map.Entry<String, EntityOperationVariable<E, ?>> var : cond.getVariables().entrySet()) {
-						EntityOperationVariable<E, ?> pre = vars.get(var.getKey());
+					for (Map.Entry<String, EntityOperationVariable<E>> var : cond.getVariables().entrySet()) {
+						EntityOperationVariable<E> pre = vars.get(var.getKey());
 						if (pre != null && pre != var.getValue())
 							throw new IllegalArgumentException(
 								"The composite condition would contain more than one variable named " + var.getKey());

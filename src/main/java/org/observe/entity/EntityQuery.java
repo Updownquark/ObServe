@@ -1,24 +1,17 @@
 package org.observe.entity;
 
+import java.util.List;
+
 import org.observe.ObservableValue;
 import org.observe.collect.ObservableSortedSet;
+import org.qommons.collect.QuickSet.QuickMap;
 
 public interface EntityQuery<E> extends EntitySetOperation<E> {
-	/**
-	 * Affects the order of entities returned by the query. The last order operation takes priority.
-	 *
-	 * @param value The valueto order by
-	 * @param ascending Whether to order entities by the ascending or descending order of the given value
-	 * @return A copy of this query whose results will be ordered as specified
-	 */
-	EntityQuery<E> orderBy(EntityValueAccess<? super E, ?> value, boolean ascending);
+	QuickMap<String, FieldLoadType> getFieldLoadTypes();
+	List<QueryOrder<E, ?>> getOrder();
 
-	EntityQuery<E> withPreLoaded(ObservableEntityFieldType<E, ?> field, boolean preLoaded);
-
-	EntityQuery<E> withAllPreLoaded(boolean preLoaded, boolean deep);
-
-	@Override
-	PreparedQuery<E> prepare() throws IllegalStateException, EntityOperationException;
+	EntityQuery<E> loadField(ObservableEntityFieldType<E, ?> field, FieldLoadType type);
+	EntityQuery<E> loadAllFields(FieldLoadType type);
 
 	ObservableValue<Long> count() throws IllegalStateException, EntityOperationException;
 	ObservableSortedSet<E> collect() throws IllegalStateException, EntityOperationException;

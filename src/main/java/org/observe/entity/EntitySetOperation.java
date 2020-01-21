@@ -4,5 +4,7 @@ public interface EntitySetOperation<E> extends EntityOperation<E> {
 	EntitySelection<E> getSelection();
 
 	@Override
-	PreparedSetOperation<E> prepare() throws IllegalStateException, EntityOperationException;
+	default ObservableEntityType<E> getEntityType() {
+		return getSelection().getEntityType();
+	}
 }

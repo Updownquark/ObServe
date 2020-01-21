@@ -5,7 +5,5 @@ import org.qommons.collect.QuickSet.QuickMap;
 public interface EntityOperation<E> {
 	ObservableEntityType<E> getEntityType();
 
-	PreparedOperation<E> prepare() throws IllegalStateException, EntityOperationException;
-
-	QuickMap<String, EntityOperationVariable<? super E, ?>> getVariables();
+	QuickMap<String, EntityOperationVariable<E>> getVariables();
 }

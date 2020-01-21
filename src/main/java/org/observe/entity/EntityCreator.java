@@ -1,13 +1,6 @@
 package org.observe.entity;
 
 public interface EntityCreator<E> extends EntityOperation<E> {
-	<F> EntityCreator<E> with(ObservableEntityFieldType<? super E, F> field, F value);
-
-	EntityCreator<E> withVariable(ObservableEntityFieldType<? super E, ?> field, String variableName);
-
-	@Override
-	PreparedCreator<E> prepare() throws IllegalStateException, EntityOperationException;
-
 	/**
 	 * Creates a new entity with this creator's configured field values
 	 *

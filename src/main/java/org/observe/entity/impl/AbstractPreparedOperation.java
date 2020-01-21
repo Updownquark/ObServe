@@ -1,17 +1,16 @@
 package org.observe.entity.impl;
 
-import org.observe.entity.EntityOperation;
-import org.observe.entity.EntityOperationVariable;
+import org.observe.entity.ConfigurableOperation;
 import org.observe.entity.PreparedOperation;
-import org.observe.util.TypeTokens;
 import org.qommons.collect.QuickSet.QuickMap;
 
 public abstract class AbstractPreparedOperation<E, O extends PreparedOperation<E>> implements PreparedOperation<E> {
-	private final EntityOperation<E> theDefinition;
+	private final ConfigurableOperation<E> theDefinition;
 	private final Object thePreparedObject;
 	private final QuickMap<String, Object> theVariableValues;
 
-	public AbstractPreparedOperation(EntityOperation<E> definition, Object preparedObject, QuickMap<String, Object> variableValues) {
+	public AbstractPreparedOperation(ConfigurableOperation<E> definition, Object preparedObject,
+		QuickMap<String, Object> variableValues) {
 		theDefinition = definition;
 		thePreparedObject = preparedObject;
 		theVariableValues = variableValues;
@@ -22,7 +21,7 @@ public abstract class AbstractPreparedOperation<E, O extends PreparedOperation<E
 	}
 
 	@Override
-	public EntityOperation<E> getDefinition() {
+	public ConfigurableOperation<E> getDefinition() {
 		return theDefinition;
 	}
 
@@ -36,13 +35,6 @@ public abstract class AbstractPreparedOperation<E, O extends PreparedOperation<E
 		int idx = theDefinition.getVariables().keySet().indexOf(variableName);
 		if (idx < 0)
 			throw new IllegalArgumentException("No such variable " + variableName);
-		EntityOperationVariable<? super E, ?> vbl = theDefinition.getVariables().get(idx);
-		if (value != null && !TypeTokens.get().isInstance(vbl.getValue().getValueType(), value))
-			throw new IllegalArgumentException(
-				value.getClass().getName() + " cannot be assigned to variable " + variableName + ", type " + vbl.getValue().getValueType());
-		String msg = ((EntityOperationVariable<E, Object>) vbl).getValue().canAccept(value);
-		if (msg != null)
-			throw new IllegalArgumentException(variableName + ": " + msg);
 		QuickMap<String, Object> vvCopy = theVariableValues.keySet().createMap();
 		for (int i = 0; i < theVariableValues.keySet().size(); i++) {
 			if (i != idx)

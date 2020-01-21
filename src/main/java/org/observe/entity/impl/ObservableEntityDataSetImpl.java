@@ -43,11 +43,17 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 	private final BetterSortedSet<ObservableEntityTypeImpl<?>> theEntityTypes;
 	private final Transactable theLock;
 	private final Map<Class<?>, String> theClassMapping;
+	private final EntitySetImplementation theImplementation;
 
-	private ObservableEntityDataSetImpl(Transactable lock) {
+	private ObservableEntityDataSetImpl(Transactable lock, EntitySetImplementation implementation) {
 		theEntityTypes = new BetterTreeSet<>(true, (et1, et2) -> compareEntityTypes(et1.getEntityName(), et2.getEntityName()));
 		theLock = lock;
 		theClassMapping = new HashMap<>();
+		theImplementation = implementation;
+	}
+
+	public EntitySetImplementation getImplementation() {
+		return theImplementation;
 	}
 
 	@Override
@@ -86,20 +92,20 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		return QommonsUtils.compareNumberTolerant(type1, type2, true, true);
 	}
 
-	public static EntitySetBuilder build() {
-		return build(new StampedLockingStrategy());
+	public static EntitySetBuilder build(EntitySetImplementation implementation) {
+		return build(new StampedLockingStrategy(), implementation);
 	}
 
-	public static EntitySetBuilder build(Transactable lock) {
-		return new EntitySetBuilder(lock);
+	public static EntitySetBuilder build(Transactable lock, EntitySetImplementation implementation) {
+		return new EntitySetBuilder(lock, implementation);
 	}
 
 	public static class EntitySetBuilder {
 		private final ObservableEntityDataSetImpl theEntitySet;
 		private boolean isBuilding;
 
-		EntitySetBuilder(Transactable lock) {
-			theEntitySet = new ObservableEntityDataSetImpl(lock);
+		EntitySetBuilder(Transactable lock, EntitySetImplementation implementation) {
+			theEntitySet = new ObservableEntityDataSetImpl(lock, implementation);
 			isBuilding = true;
 		}
 

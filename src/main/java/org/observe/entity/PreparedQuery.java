@@ -1,8 +1,18 @@
 package org.observe.entity;
 
-public interface PreparedQuery<E> extends PreparedSetOperation<E>, EntityQuery<E> {
+import java.util.List;
+
+public interface PreparedQuery<E> extends PreparedOperation<E>, EntityQuery<E> {
 	@Override
-	default PreparedQuery<E> prepare() throws IllegalStateException, EntityOperationException {
-		return (PreparedQuery<E>) PreparedSetOperation.super.prepare();
+	default ObservableEntityType<E> getEntityType() {
+		return PreparedOperation.super.getEntityType();
+	}
+
+	@Override
+	ConfigurableQuery<E> getDefinition();
+
+	@Override
+	default List<QueryOrder<E, ?>> getOrder() {
+		return getDefinition().getOrder();
 	}
 }

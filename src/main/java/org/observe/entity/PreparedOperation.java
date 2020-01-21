@@ -3,7 +3,7 @@ package org.observe.entity;
 import org.qommons.collect.QuickSet.QuickMap;
 
 public interface PreparedOperation<E> extends EntityOperation<E> {
-	EntityOperation<E> getDefinition();
+	ConfigurableOperation<E> getDefinition();
 
 	@Override
 	default ObservableEntityType<E> getEntityType() {
@@ -11,12 +11,7 @@ public interface PreparedOperation<E> extends EntityOperation<E> {
 	}
 
 	@Override
-	default PreparedOperation<E> prepare() throws IllegalStateException, EntityOperationException {
-		throw new IllegalStateException("This is a prepared operation");
-	}
-
-	@Override
-	default QuickMap<String, EntityOperationVariable<? super E, ?>> getVariables() {
+	default QuickMap<String, EntityOperationVariable<E>> getVariables() {
 		return getDefinition().getVariables();
 	}
 
@@ -27,7 +22,7 @@ public interface PreparedOperation<E> extends EntityOperation<E> {
 	 * @throws IllegalArgumentException If the given name does not match a recognized variable in this operation, or if the given value is
 	 *         incompatible with the specified variable
 	 */
-	EntityOperation<E> satisfy(String variableName, Object value) throws IllegalArgumentException;
+	PreparedOperation<E> satisfy(String variableName, Object value) throws IllegalArgumentException;
 
 	QuickMap<String, Object> getVariableValues();
 }

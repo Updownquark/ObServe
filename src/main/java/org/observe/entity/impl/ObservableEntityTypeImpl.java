@@ -5,10 +5,17 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.function.Function;
 
+import org.observe.ObservableValue;
+import org.observe.collect.ObservableSortedSet;
+import org.observe.entity.EntityCondition;
 import org.observe.entity.EntityConstraint;
 import org.observe.entity.EntityCreator;
+import org.observe.entity.EntityDeletion;
 import org.observe.entity.EntityIdentity;
+import org.observe.entity.EntityOperationVariable;
+import org.observe.entity.EntityQuery;
 import org.observe.entity.EntitySelection;
+import org.observe.entity.EntityUpdate;
 import org.observe.entity.ObservableEntity;
 import org.observe.entity.ObservableEntityDataSet;
 import org.observe.entity.ObservableEntityFieldType;
@@ -21,7 +28,6 @@ import org.qommons.Transaction;
 import org.qommons.ValueHolder;
 import org.qommons.collect.BetterHashMap;
 import org.qommons.collect.BetterMap;
-import org.qommons.collect.QuickSet;
 import org.qommons.collect.QuickSet.QuickMap;
 
 class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
@@ -137,21 +143,54 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 		return (ObservableEntityFieldType<E, F>) theFields.get(reflectorField.getFieldIndex());
 	}
 
+	void check() {
+		for (ObservableEntityFieldType<E, ?> field : theFields.allValues())
+			((FieldTypeImpl<E, ?>) field).check();
+	}
+
 	@Override
 	public EntitySelection<E> select() {
-		return new EntitySelectionImpl<>(this, QuickSet.<String> empty().createMap());
+		return new EntitySelectionImpl<>(EntityCondition.none(this));
 	}
 
 	@Override
 	public EntityCreator<E> create() {
-		return new EntityCreatorImpl<>(this, QuickSet.<String> empty().createMap(), theIdFields.keySet().createMap(),
-			theFields.keySet().createMap());
+		return new ConfigurableCreatorImpl<>(this, QuickMap.empty(),
+			theFields.keySet().<Object> createMap().fill(EntityUpdate.NOT_SET).unmodifiable(), //
+			theFields.keySet().<EntityOperationVariable<E>> createMap().unmodifiable());
 	}
 
 	private ObservableEntityImpl<? extends E> pullEntity(EntityIdentity<? super E> id) {}
 
-	void check() {
-		for (ObservableEntityFieldType<E, ?> field : theFields.allValues())
-			((FieldTypeImpl<E, ?>) field).check();
+	EntityIdentity<E> create(EntityCreator<E> configurableEntityCreatorImpl, Object prepared) {
+		// TODO Auto-generated method stub
+	}
+
+	ObservableEntity<E> createAndGet(EntityCreator<E> configurableEntityCreatorImpl, Object prepared) {
+		// TODO Auto-generated method stub
+	}
+
+	ObservableValue<Long> count(EntityQuery<E> query, Object prepared) {
+		// TODO Auto-generated method stub
+	}
+
+	ObservableSortedSet<E> collect(EntityQuery<E> query, Object prepared) {
+		// TODO Auto-generated method stub
+	}
+
+	ObservableSortedSet<ObservableEntity<? extends E>> collectObservable(EntityQuery<E> query, Object prepared) {
+		// TODO Auto-generated method stub
+	}
+
+	ObservableSortedSet<EntityIdentity<? super E>> collectIdentities(EntityQuery<E> query, Object prepared) {
+		// TODO Auto-generated method stub
+	}
+
+	long update(EntityUpdate<E> update, Object prepared) {
+		// TODO Auto-generated method stub
+	}
+
+	long delete(EntityDeletion<E> deletion, Object prepared) {
+		// TODO Auto-generated method stub
 	}
 }
