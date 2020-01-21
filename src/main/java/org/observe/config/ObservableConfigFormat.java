@@ -439,18 +439,18 @@ public interface ObservableConfigFormat<E> {
 		@Override
 		EntityConfigCreator<E> with(String fieldName, Object value) throws IllegalArgumentException;
 
+		@Override
+		EntityConfigCreator<E> with(int fieldIndex, Object value) throws IllegalArgumentException;
+
 		<F> EntityConfigCreator<E> with(ConfiguredValueField<? super E, F> field, F value) throws IllegalArgumentException;
 
 		<F> EntityConfigCreator<E> with(Function<? super E, F> fieldGetter, F value) throws IllegalArgumentException;
-
-		@Override
-		E create(ObservableConfig config, Observable<?> until);
 	}
 
 	interface EntityConfigFormat<E> extends ObservableConfigFormat<E> {
 		EntityConfiguredValueType<E> getEntityType();
 
-		<E2 extends E> ConfigCreator<E2> create(TypeToken<E2> subType);
+		<E2 extends E> EntityConfigCreator<E2> create(TypeToken<E2> subType);
 	}
 
 	// TODO
@@ -963,6 +963,55 @@ public interface ObservableConfigFormat<E> {
 		@Override
 		public EntityConfiguredValueType<E> getEntityType() {
 			return entityType;
+		}
+
+		@Override
+		public <E2 extends E> EntityConfigCreator<E2> create(TypeToken<E2> subType) {
+			ConfigCreator<E2> creator = super.create(subType);
+			if (creator instanceof EntityConfigCreator)
+				return (EntityConfigCreator<E2>) creator;
+			return new EntityConfigCreator<E2>() {
+				@Override
+				public EntityConfiguredValueType<E2> getEntityType() {
+					return (EntityConfiguredValueType<E2>) entityType;
+				}
+
+				@Override
+				public EntityConfigCreator<E2> with(int fieldIndex, Object value) throws IllegalArgumentException {
+					creator.with(fieldIndex, value);
+					return this;
+				}
+
+				@Override
+				public Set<Integer> getRequiredFields() {
+					return creator.getRequiredFields();
+				}
+
+				@Override
+				public EntityConfigCreator<E2> with(String fieldName, Object value) throws IllegalArgumentException {
+					creator.with(fieldName, value);
+					return this;
+				}
+
+				@Override
+				public <F> EntityConfigCreator<E2> with(ConfiguredValueField<? super E2, F> field, F value)
+					throws IllegalArgumentException {
+					creator.with(field.getIndex(), value);
+					return this;
+				}
+
+				@Override
+				public <F> EntityConfigCreator<E2> with(Function<? super E2, F> fieldGetter, F value) throws IllegalArgumentException {
+					ConfiguredValueField<? super E, F> field = entityType.getField((Function<E, F>) fieldGetter);
+					creator.with(field.getIndex(), value);
+					return this;
+				}
+
+				@Override
+				public E2 create(ObservableConfig config, Observable<?> until) {
+					return creator.create(config, until);
+				}
+			};
 		}
 
 		@Override
