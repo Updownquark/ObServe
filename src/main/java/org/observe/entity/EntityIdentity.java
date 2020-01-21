@@ -6,13 +6,14 @@ import org.qommons.collect.QuickSet.QuickMap;
 
 public class EntityIdentity<E> {
 	private final ObservableEntityType<E> theEntityType;
-	final QuickMap<String, IdentityField<E, ?>> theFields;
+	final QuickMap<String, ObservableEntityField<E, ?>> theFields;
 
 	private EntityIdentity(ObservableEntityType<E> entityType, Object[] fieldValues) {
 		theEntityType = entityType;
-		QuickMap<String, IdentityField<E, ?>> fieldMap = entityType.getIdentityFields().keySet().createMap();
+		QuickMap<String, ObservableEntityField<E, ?>> fieldMap = entityType.getIdentityFields().keySet().createMap();
 		for (int i = 0; i < fieldValues.length; i++)
-			fieldMap.put(i, new IdentityField<>((IdentityFieldType<E, Object>) entityType.getIdentityFields().get(i), fieldValues[i]));
+			fieldMap.put(i,
+				new IdentityField<>((ObservableEntityFieldType<E, Object>) entityType.getIdentityFields().get(i), fieldValues[i]));
 		theFields = fieldMap.unmodifiable();
 	}
 
@@ -20,7 +21,7 @@ public class EntityIdentity<E> {
 		return theEntityType;
 	}
 
-	public QuickMap<String, IdentityField<E, ?>> getFields() {
+	public QuickMap<String, ObservableEntityField<E, ?>> getFields() {
 		return theFields;
 	}
 

@@ -22,7 +22,7 @@ public class EntitySelectionImpl<E> extends AbstractEntityOperation<E> implement
 	public EntitySelectionImpl(ObservableEntityType<E> type, QuickMap<String, EntityOperationVariable<? super E, ?>> variables,
 		EntityCondition<E> condition) {
 		super(type, variables);
-		theCondition = condition == null ? new EntityCondition.None<>(this) : condition;
+		theCondition = condition == null ? new EntityCondition.None<>(type) : condition;
 	}
 
 	@Override

@@ -13,6 +13,8 @@ import com.google.common.reflect.TypeToken;
 public interface EntityValueAccess<E, F> {
 	TypeToken<F> getValueType();
 
+	ObservableEntityType<F> getTargetEntity();
+
 	String canAccept(F value);
 
 	<T> EntityValueAccess<E, T> dot(Function<? super F, T> attr);

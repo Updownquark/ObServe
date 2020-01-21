@@ -6,15 +6,15 @@ public class IdentityField<E, T> extends ObservableValue.ConstantObservableValue
 	public static final String IDENTITY_UNSETTABLE = "Identity fields are immutable";
 	public static final ObservableValue<String> IDENTITY_UNSETTABLE_VALUE = ObservableValue.of(IDENTITY_UNSETTABLE);
 
-	private final IdentityFieldType<E, T> theFieldType;
+	private final ObservableEntityFieldType<E, T> theFieldType;
 
-	IdentityField(IdentityFieldType<E, T> type, T value) {
+	IdentityField(ObservableEntityFieldType<E, T> type, T value) {
 		super(type.getFieldType(), value);
 		theFieldType = type;
 	}
 
 	@Override
-	public IdentityFieldType<E, T> getFieldType() {
+	public ObservableEntityFieldType<E, T> getFieldType() {
 		return theFieldType;
 	}
 

@@ -7,4 +7,6 @@ public interface FieldConstraint<E, F> extends EntityConstraint<E> {
 	default ObservableEntityType<E> getEntityType() {
 		return getField().getEntityType();
 	}
+
+	String canAccept(F value);
 }

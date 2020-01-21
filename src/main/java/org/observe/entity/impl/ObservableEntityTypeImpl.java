@@ -1,103 +1,67 @@
 package org.observe.entity.impl;
 
-import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodHandles;
 import java.lang.ref.WeakReference;
-import java.lang.reflect.Method;
-import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.function.Function;
 
+import org.observe.entity.EntityConstraint;
 import org.observe.entity.EntityCreator;
 import org.observe.entity.EntityIdentity;
 import org.observe.entity.EntitySelection;
-import org.observe.entity.IdentityFieldType;
 import org.observe.entity.ObservableEntity;
+import org.observe.entity.ObservableEntityDataSet;
 import org.observe.entity.ObservableEntityFieldType;
 import org.observe.entity.ObservableEntityType;
+import org.observe.entity.impl.ObservableEntityDataSetImpl.FieldTypeImpl;
 import org.observe.util.EntityReflector;
-import org.observe.util.MethodRetrievingHandler;
+import org.observe.util.EntityReflector.ReflectedField;
+import org.observe.util.TypeTokens;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
 import org.qommons.collect.BetterHashMap;
 import org.qommons.collect.BetterMap;
-import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.QuickSet;
 import org.qommons.collect.QuickSet.QuickMap;
-import org.qommons.collect.StampedLockingStrategy;
 
 class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 	private final ObservableEntityDataSetImpl theEntitySet;
 	private final String theName;
-	private final Class<E> theEntityType;
 	private final List<ObservableEntityTypeImpl<? super E>> theSupers;
-	private final ObservableEntityTypeImpl<? super E> theRoot;
-	private final QuickMap<String, IdentityFieldType<? super E, ?>> theIdFields;
-	private final QuickMap<String, ObservableEntityFieldType<? super E, ?>> theFields;
+	private final QuickMap<String, ObservableEntityFieldType<E, ?>> theFields;
+	private final QuickMap<String, ObservableEntityFieldType<E, ?>> theIdFields;
 	private final BetterMap<EntityIdentity<? super E>, WeakReference<ObservableEntityImpl<? extends E>>> theEntitiesById;
 	private final IdentityHashMap<E, WeakReference<ObservableEntityImpl<? extends E>>> theEntitiesByProxy;
+	private final EntityReflector<E> theReflector;
+	private final List<EntityConstraint<E>> theConstraints;
 
-	private final BetterMap<Method, MethodHandle> theDefaultMethods;
-	private final E theProxy;
-	private final MethodRetrievingHandler theProxyHandler;
-	private final QuickMap<String, IdentityFieldType<? super E, ?>> theIdFieldsByGetter;
-	private final QuickMap<String, ObservableEntityFieldType<? super E, ?>> theFieldsByGetter;
-
-	ObservableEntityTypeImpl(ObservableEntityDataSetImpl entitySet, String name,
-		List<ObservableEntityTypeImpl<? super E>> supers, QuickMap<String, IdentityFieldType<? super E, ?>> idFields,
-		QuickMap<String, ObservableEntityFieldType<? super E, ?>> fields, EntityReflector<E> reflector) {
+	ObservableEntityTypeImpl(ObservableEntityDataSetImpl entitySet, String name, List<ObservableEntityTypeImpl<? super E>> supers,
+		QuickMap<String, ObservableEntityFieldType<E, ?>> fields, QuickMap<String, ObservableEntityFieldType<E, ?>> idFields,
+		EntityReflector<E> reflector, List<EntityConstraint<E>> constraints) {
 		theEntitySet = entitySet;
 		theName = name;
-		theEntityType = entityType;
 		theSupers = supers;
 		theIdFields = idFields;
 		theFields = fields;
+		theReflector = reflector;
+		theConstraints = constraints;
 		theEntitiesById = BetterHashMap.build().unsafe().buildMap();
 		theEntitiesByProxy = new IdentityHashMap<>();
-		theDefaultMethods = BetterHashMap.build().buildMap();
-		theProxy = proxy;
-		theProxyHandler = handler;
-		if (theProxy != null) {
-			Map<String, ObservableEntityFieldType<? super E, ?>> getters = new HashMap<>();
-			for (ObservableEntityFieldType<? super E, ?> field : fields.allValues()) {
-				if (((ObservableEntityDataSetImpl.FieldTypeImpl<?, ?>) field).getFieldGetter() != null)
-					getters.put(((ObservableEntityDataSetImpl.FieldTypeImpl<?, ?>) field).getFieldGetter().getName(), field);
-			}
-			QuickSet<String> getterNames = QuickSet.of(getters.keySet());
-			QuickMap<String, ObservableEntityFieldType<? super E, ?>> fieldsByGetter = getterNames.createMap();
-			for (int i = 0; i < getterNames.size(); i++)
-				fieldsByGetter.put(i, getters.get(getterNames.get(i)));
-			theFieldsByGetter = fieldsByGetter.unmodifiable();
-			if (supers != null)
-				theIdFieldsByGetter = null;
-			else {
-				getters.clear();
-				for (IdentityFieldType<? super E, ?> field : theIdFields.allValues()) {
-					if (((ObservableEntityDataSetImpl.FieldTypeImpl<?, ?>) field).getFieldGetter() != null)
-						getters.put(((ObservableEntityDataSetImpl.FieldTypeImpl<?, ?>) field).getFieldGetter().getName(), field);
-				}
-				getterNames = QuickSet.of(getters.keySet());
-				QuickMap<String, IdentityFieldType<? super E, ?>> idFieldsByGetter = getterNames.createMap();
-				for (int i = 0; i < getterNames.size(); i++)
-					idFieldsByGetter.put(i, (IdentityFieldType<? super E, ?>) getters.get(getterNames.get(i)));
-				theIdFieldsByGetter = idFieldsByGetter.unmodifiable();
-			}
-		} else {
-			theIdFieldsByGetter = null;
-			theFieldsByGetter = null;
-		}
 	}
 
 	@Override
-	public List<ObservableEntityTypeImpl<? super E>> getParent() {
+	public ObservableEntityDataSet getEntitySet() {
+		return theEntitySet;
+	}
+
+	@Override
+	public List<? extends ObservableEntityType<? super E>> getSupers() {
 		return theSupers;
 	}
 
 	@Override
-	public ObservableEntityTypeImpl<? super E> getRoot() {
-		return theRoot;
+	public List<EntityConstraint<E>> getConstraints() {
+		return theConstraints;
 	}
 
 	@Override
@@ -107,23 +71,23 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 
 	@Override
 	public Class<E> getEntityType() {
-		return theEntityType;
+		return theReflector == null ? null : TypeTokens.getRawType(theReflector.getType());
 	}
 
 	@Override
-	public QuickMap<String, ObservableEntityFieldType<? super E, ?>> getFields() {
+	public QuickMap<String, ObservableEntityFieldType<E, ?>> getFields() {
 		return theFields;
 	}
 
 	@Override
-	public QuickMap<String, IdentityFieldType<? super E, ?>> getIdentityFields() {
+	public QuickMap<String, ObservableEntityFieldType<E, ?>> getIdentityFields() {
 		return theIdFields;
 	}
 
 	@Override
 	public ObservableEntity<? extends E> observableEntity(EntityIdentity<? super E> id) {
 		// First, just lock for read and see if we already have it
-		try (Transaction t = lock(false, null)) { // Updates to existing entities are fine
+		try (Transaction t = theEntitySet.lock(false, null)) { // Updates to existing entities are fine
 			WeakReference<ObservableEntityImpl<? extends E>> entityRef = theEntitiesById.get(id);
 			if (entityRef != null) {
 				ObservableEntity<? extends E> entity = entityRef.get();
@@ -131,7 +95,7 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 					return entity;
 			}
 		}
-		try (Transaction t = lock(true, null)) {
+		try (Transaction t = theEntitySet.lock(true, null)) {
 			ValueHolder<ObservableEntity<? extends E>> result = new ValueHolder<>();
 			theEntitiesById.compute(id, (_id, entityRef) -> {
 				ObservableEntityImpl<? extends E> entity;
@@ -151,7 +115,7 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 
 	@Override
 	public ObservableEntityImpl<? extends E> observableEntity(E entity) {
-		try (Transaction t = lock(false, null)) {
+		try (Transaction t = theEntitySet.lock(false, null)) {
 			// This should be pretty straightforward. If the caller has a reference to the entity,
 			// then the ObservableEntity can't have been GC'd.
 			// The only way this could fail is if the caller has synthesized the entity implementation by external means, which is illegal.
@@ -166,33 +130,11 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 	}
 
 	@Override
-	public <F> ObservableEntityFieldType<? super E, F> getField(Function<? super E, F> fieldGetter) {
-		if (theProxy == null)
+	public <F> ObservableEntityFieldType<E, F> getField(Function<? super E, F> fieldGetter) {
+		if (theReflector == null)
 			throw new IllegalStateException("This entity type is not mapped to a java entity, so this method cannot be used");
-		Method invoked;
-		synchronized (this) {
-			theProxyHandler.reset(m->{
-				the
-			}, true);
-			fieldGetter.apply(theProxy);
-			invoked = theProxyHandler.getInvoked();
-		}
-		if (invoked == null)
-			throw new IllegalArgumentException("The function did not invoke a field getter");
-		ObservableEntityFieldType<? super E, ?> field;
-		ObservableEntityTypeImpl<? super E> type = this;
-		while (type != null) {
-			field = theFieldsByGetter.get(invoked.getName());
-			if (field != null)
-				return (ObservableEntityFieldType<? super E, F>) field;
-			if (theIdFieldsByGetter != null) {
-				field = theIdFieldsByGetter.get(invoked.getName());
-				if (field != null)
-					return (ObservableEntityFieldType<? super E, F>) field;
-			}
-			type = type.theSupers;
-		}
-		throw new IllegalArgumentException("The invoked method did not correspond to a field getter: " + invoked);
+		ReflectedField<E, F> reflectorField = theReflector.getField(fieldGetter);
+		return (ObservableEntityFieldType<E, F>) theFields.get(reflectorField.getFieldIndex());
 	}
 
 	@Override
@@ -206,15 +148,10 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 			theFields.keySet().createMap());
 	}
 
-	MethodHandle getDefaultMethod(Method method) {
-		return theDefaultMethods.computeIfAbsent(method, m -> {
-			try {
-				return MethodHandles.lookup().in(theEntityType).unreflectSpecial(method, theEntityType);
-			} catch (IllegalAccessException e) {
-				throw new IllegalStateException("Could not access method " + method, e);
-			}
-		});
-	}
-
 	private ObservableEntityImpl<? extends E> pullEntity(EntityIdentity<? super E> id) {}
+
+	void check() {
+		for (ObservableEntityFieldType<E, ?> field : theFields.allValues())
+			((FieldTypeImpl<E, ?>) field).check();
+	}
 }

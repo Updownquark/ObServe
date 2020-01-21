@@ -3,6 +3,7 @@ package org.observe.entity;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -10,22 +11,23 @@ import java.util.Objects;
 import java.util.function.Function;
 
 import org.qommons.StringUtils;
+import org.qommons.collect.QuickSet.QuickMap;
 
-public class EntityCondition<E> {
-	private final ObservableEntityType<E> theEntitType;
+public abstract class EntityCondition<E> {
+	private final ObservableEntityType<E> theEntityType;
 	private final Map<String, EntityOperationVariable<E, ?>> theVariables;
 
 	public EntityCondition(ObservableEntityType<E> entityType, Map<String, EntityOperationVariable<E, ?>> vars) {
-		theEntitType = entityType;
+		theEntityType = entityType;
 		theVariables = vars;
 	}
 
 	public ObservableEntityType<E> getEntityType() {
-		return theEntitType;
+		return theEntityType;
 	}
 
 	public <F> EntityCondition<E> compare(EntityValueAccess<? super E, F> field, F value, int ltEqGt, boolean withEqual) {
-		DefiniteCondition<E, F> condition = new DefiniteCondition<>(theEntitType, field, value, ltEqGt, withEqual);
+		LiteralCondition<E, F> condition = new LiteralCondition<>(theEntityType, field, value, ltEqGt, withEqual);
 		if (this instanceof None)
 			return condition;
 		else
@@ -36,7 +38,7 @@ public class EntityCondition<E> {
 		boolean withEqual) {
 		if (theVariables.containsKey(variableName))
 			throw new IllegalArgumentException("This condition already contains a variable named " + variableName);
-		VariableCondition<E, F> condition = new VariableCondition<>(theEntitType, field, variableName, ltEqGt, withEqual);
+		VariableCondition<E, F> condition = new VariableCondition<>(theEntityType, field, variableName, ltEqGt, withEqual);
 		if (this instanceof None)
 			return condition;
 		else
@@ -48,9 +50,9 @@ public class EntityCondition<E> {
 		if (c instanceof None)
 			return this;
 		else if (this instanceof OrCondition)
-			return new OrCondition<>(theEntitType, (OrCondition<E>) this, c);
+			return new OrCondition<>(theEntityType, (OrCondition<E>) this, c);
 		else
-			return new OrCondition<>(theEntitType, this, c);
+			return new OrCondition<>(theEntityType, this, c);
 	}
 
 	public EntityCondition<E> and(Function<EntityCondition<E>, EntityCondition<E>> condition) {
@@ -58,9 +60,9 @@ public class EntityCondition<E> {
 		if (c instanceof None)
 			return this;
 		else if (this instanceof AndCondition)
-			return new AndCondition<>(theEntitType, (AndCondition<E>) this, c);
+			return new AndCondition<>(theEntityType, (AndCondition<E>) this, c);
 		else
-			return new AndCondition<>(theEntitType, this, c);
+			return new AndCondition<>(theEntityType, this, c);
 	}
 
 	public <F> EntityCondition<E> equal(EntityValueAccess<? super E, F> field, F value) {
@@ -119,8 +121,10 @@ public class EntityCondition<E> {
 		return theVariables;
 	}
 
+	public abstract boolean test(E entity, QuickMap<String, Object> varValues);
+
 	protected EntityCondition<E> getNone() {
-		return new None<>(theEntitType, theVariables);
+		return new None<>(theEntityType, theVariables);
 	}
 
 	public static class None<E> extends EntityCondition<E> {
@@ -130,6 +134,11 @@ public class EntityCondition<E> {
 
 		public None(ObservableEntityType<E> entityType, Map<String, EntityOperationVariable<E, ?>> vars) {
 			super(entityType, vars);
+		}
+
+		@Override
+		public boolean test(E entity, QuickMap<String, Object> varValues) {
+			return true;
 		}
 
 		@Override
@@ -148,7 +157,7 @@ public class EntityCondition<E> {
 		}
 	}
 
-	public static abstract class ValueCondition<E, F> extends EntityCondition<E> {
+	public static abstract class ValueCondition<E, F> extends EntityCondition<E> implements Comparator<F> {
 		private final EntityValueAccess<? super E, F> theField;
 		private final int theComparison;
 		private final boolean isWithEqual;
@@ -192,16 +201,43 @@ public class EntityCondition<E> {
 			}
 		}
 
+		public abstract F getConditionValue(E entity, QuickMap<String, Object> varValues);
+
+		@Override
+		public int compare(F value1, F value2) {
+			return ((Comparable<F>) value1).compareTo(value2);
+		}
+
+		@Override
+		public boolean test(E entity, QuickMap<String, Object> varValues) {
+			F value1 = theField.getValue(entity);
+			F value2 = getConditionValue(entity, varValues);
+			return test(value1, value2);
+		}
+
+		protected boolean test(F value1, F value2) {
+			int comp = compare(value1, value2);
+			if (isWithEqual && comp == 0)
+				return true;
+			if (theComparison < 0) {
+				return comp < 0;
+			} else if (theComparison == 0) {
+				return !isWithEqual && comp != 0;
+			} else {
+				return comp > 0;
+			}
+		}
+
 		@Override
 		public String toString() {
-			return new StringBuilder().append(theField).append(getSymbol()).append(':').toString();
+			return new StringBuilder().append(theField).append(getSymbol()).toString();
 		}
 	}
 
-	public static class DefiniteCondition<E, F> extends ValueCondition<E, F> {
+	public static class LiteralCondition<E, F> extends ValueCondition<E, F> {
 		private final F theValue;
 
-		public DefiniteCondition(ObservableEntityType<E> entityType, EntityValueAccess<? super E, F> field, F value, int comparison,
+		public LiteralCondition(ObservableEntityType<E> entityType, EntityValueAccess<? super E, F> field, F value, int comparison,
 			boolean isWithEqual) {
 			super(entityType, field, comparison, isWithEqual, Collections.emptyMap());
 			theValue = value;
@@ -209,6 +245,15 @@ public class EntityCondition<E> {
 
 		public F getValue() {
 			return theValue;
+		}
+
+		@Override
+		public F getConditionValue(E entity, QuickMap<String, Object> varValues) {
+			return getValue();
+		}
+
+		public boolean test(F fieldValue) {
+			return test(fieldValue, theValue);
 		}
 
 		@Override
@@ -220,9 +265,9 @@ public class EntityCondition<E> {
 		public boolean equals(Object obj) {
 			if (obj == this)
 				return true;
-			else if (!(obj instanceof DefiniteCondition))
+			else if (!(obj instanceof LiteralCondition))
 				return false;
-			DefiniteCondition<?, ?> other = (DefiniteCondition<?, ?>) obj;
+			LiteralCondition<?, ?> other = (LiteralCondition<?, ?>) obj;
 			return getField().equals(other.getField()) && getComparison() == other.getComparison() && isWithEqual() == other.isWithEqual();
 		}
 
@@ -232,17 +277,13 @@ public class EntityCondition<E> {
 		}
 	}
 
-	public static class VariableCondition<E, F> extends EntityCondition<E> {
+	public static class VariableCondition<E, F> extends ValueCondition<E, F> {
 		private final EntityOperationVariable<E, F> theVariable;
-		private final int theComparison;
-		private final boolean isWithEqual;
 
 		public VariableCondition(ObservableEntityType<E> entityType, EntityValueAccess<? super E, F> field, String variableName,
 			int comparison, boolean isWithEqual) {
-			super(entityType, singleVar(new EntityOperationVariable<>(entityType, variableName, field)));
+			super(entityType, field, comparison, isWithEqual, singleVar(new EntityOperationVariable<>(entityType, variableName, field)));
 			theVariable = new EntityOperationVariable<>(entityType, variableName, field);
-			theComparison = comparison;
-			this.isWithEqual = isWithEqual;
 		}
 
 		private static <E> Map<String, EntityOperationVariable<E, ?>> singleVar(EntityOperationVariable<E, ?> var) {
@@ -255,36 +296,14 @@ public class EntityCondition<E> {
 			return theVariable;
 		}
 
-		public int getComparison() {
-			return theComparison;
-		}
-
-		public boolean isWithEqual() {
-			return isWithEqual;
-		}
-
-		public char getSymbol() {
-			if (theComparison < 0) {
-				if (isWithEqual)
-					return '\u2264';
-				else
-					return '<';
-			} else if (theComparison == 0) {
-				if (isWithEqual)
-					return '=';
-				else
-					return '\u2260';
-			} else {
-				if (isWithEqual)
-					return '\u2265';
-				else
-					return '>';
-			}
+		@Override
+		public F getConditionValue(E entity, QuickMap<String, Object> varValues) {
+			return (F) varValues.get(theVariable.getName());
 		}
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(theVariable, theComparison, isWithEqual);
+			return Objects.hash(theVariable, getComparison(), isWithEqual());
 		}
 
 		@Override
@@ -294,13 +313,13 @@ public class EntityCondition<E> {
 			else if (!(obj instanceof VariableCondition))
 				return false;
 			VariableCondition<?, ?> other = (VariableCondition<?, ?>) obj;
-			return theVariable.equals(other.theVariable) && theComparison == other.theComparison && isWithEqual == other.isWithEqual;
+			return theVariable.equals(other.theVariable) && getComparison() == other.getComparison()
+				&& isWithEqual() == other.isWithEqual();
 		}
 
 		@Override
 		public String toString() {
-			return new StringBuilder().append(theVariable.getValue()).append(getSymbol()).append(':').append(theVariable.getName())
-				.toString();
+			return super.toString() + ':' + theVariable.getName();
 		}
 	}
 
@@ -382,6 +401,14 @@ public class EntityCondition<E> {
 		}
 
 		@Override
+		public boolean test(E entity, QuickMap<String, Object> varValues) {
+			for (EntityCondition<E> condition : getConditions())
+				if (condition.test(entity, varValues))
+					return true;
+			return false;
+		}
+
+		@Override
 		public String toString() {
 			return "OR" + super.toString();
 		}
@@ -394,6 +421,14 @@ public class EntityCondition<E> {
 
 		protected AndCondition(ObservableEntityType<E> entityType, AndCondition other, EntityCondition<E> addedCondition) {
 			super(entityType, other, addedCondition);
+		}
+
+		@Override
+		public boolean test(E entity, QuickMap<String, Object> varValues) {
+			for (EntityCondition<E> condition : getConditions())
+				if (!condition.test(entity, varValues))
+					return false;
+			return true;
 		}
 
 		@Override

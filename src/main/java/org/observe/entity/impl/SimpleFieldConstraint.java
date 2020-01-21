@@ -28,4 +28,16 @@ public class SimpleFieldConstraint<E, F> implements FieldConstraint<E, F> {
 	public String getConstraintType() {
 		return theConstraintType;
 	}
+
+	@Override
+	public String canAccept(F value) {
+		switch (theConstraintType) {
+		case NOT_NULL:
+			return value != null ? null : ("CONSTRAINT VIOLATION: " + theField + " NOT NULL");
+		case UNIQUE:
+			return null; // Can't determine this in isolation
+		default:
+			throw new IllegalStateException("Unrecognized constraint type: " + theConstraintType);
+		}
+	}
 }

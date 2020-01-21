@@ -2,7 +2,9 @@ package org.observe.entity;
 
 import java.util.List;
 
-public interface ObservableEntityDataSet {
+import org.qommons.Transactable;
+
+public interface ObservableEntityDataSet extends Transactable {
 	List<ObservableEntityType<?>> getEntityTypes();
 	ObservableEntityType<?> getEntityType(String entityName);
 	<E> ObservableEntityType<E> getEntityType(Class<E> type);

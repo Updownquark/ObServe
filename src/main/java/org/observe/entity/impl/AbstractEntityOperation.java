@@ -40,7 +40,7 @@ public abstract class AbstractEntityOperation<E> implements EntityOperation<E> {
 		QuickMap<String, EntityOperationVariable<? super E, ?>> newVars = QuickSet.of(vars).createMap();
 		for (int i = 0; i < theVariables.keySet().size(); i++)
 			newVars.put(theVariables.keySet().get(i), theVariables.get(i));
-		newVars.put(variable, new EntityOperationVariable<>(this, variable, value));
+		newVars.put(variable, new EntityOperationVariable<>(theType, variable, value));
 		return copy(newVars.unmodifiable());
 	}
 }
