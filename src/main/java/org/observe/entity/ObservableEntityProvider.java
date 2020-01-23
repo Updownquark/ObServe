@@ -2,6 +2,7 @@ package org.observe.entity;
 
 import org.observe.Observable;
 import org.qommons.Transactable;
+import org.qommons.collect.QuickSet.QuickMap;
 
 /**
  * <p>
@@ -15,13 +16,14 @@ import org.qommons.Transactable;
  * </p>
  */
 public interface ObservableEntityProvider extends Transactable {
-	Object prepare(EntityOperation<?> operation) throws EntityOperationException;
+	Object prepare(ConfigurableOperation<?> operation) throws EntityOperationException;
 
 	<E> EntityIdentity<E> create(EntityCreator<E> creator, Object prepared) throws EntityOperationException;
-	<E> GenericPersistedEntity<E> createAndGet(EntityCreator<E> creator, Object prepared) throws EntityOperationException;
+	<E> QuickMap<String, Object> createAndGet(EntityCreator<E> creator, Object prepared) throws EntityOperationException;
 
 	long count(EntityQuery<?> query, Object prepared) throws EntityOperationException;
-	<E> Iterable<GenericPersistedEntity<E>> query(EntityQuery<E> query, Object prepared) throws EntityOperationException;
+
+	<E> Iterable<QuickMap<String, Object>> query(EntityQuery<E> query, Object prepared) throws EntityOperationException;
 
 	long update(EntityUpdate<?> update, Object prepared) throws EntityOperationException;
 
