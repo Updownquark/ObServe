@@ -26,6 +26,7 @@ import org.observe.entity.SimpleFieldConstraint;
 import org.observe.util.EntityReflector;
 import org.observe.util.EntityReflector.ReflectedField;
 import org.observe.util.MethodRetrievingHandler;
+import org.observe.util.ObservableEntityUtils;
 import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
