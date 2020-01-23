@@ -1,10 +1,20 @@
 package org.observe.entity;
 
+/**
+ * A {@link EntityConstraint#CHECK check-}type constraint on an entity
+ * 
+ * @param <E> The type of the entity the constraint applies to
+ */
 public class ConditionConstraint<E> implements EntityConstraint<E> {
 	private final ObservableEntityType<E> theEntityType;
 	private final String theName;
 	private final EntityCondition<E> theCondition;
 
+	/**
+	 * @param entityType The entity type the constraint applies to
+	 * @param name The name of the constraint
+	 * @param condition The condition that must be obeyed by all entities of the given type in the entity set
+	 */
 	public ConditionConstraint(ObservableEntityType<E> entityType, String name, EntityCondition<E> condition) {
 		theEntityType = entityType;
 		theName = name;
@@ -21,6 +31,7 @@ public class ConditionConstraint<E> implements EntityConstraint<E> {
 		return theEntityType;
 	}
 
+	/** @return The condition that must be obeyed by all entities of the constraint's type in the entity set */
 	public EntityCondition<E> getCondition() {
 		return theCondition;
 	}
