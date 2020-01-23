@@ -29,13 +29,11 @@ import org.observe.util.MethodRetrievingHandler;
 import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
-import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.QuickSet;
 import org.qommons.collect.QuickSet.QuickMap;
-import org.qommons.collect.StampedLockingStrategy;
 import org.qommons.tree.BetterTreeSet;
 
 import com.google.common.reflect.TypeToken;
@@ -43,13 +41,11 @@ import com.google.common.reflect.TypeToken;
 /** Implementation of an {@link ObservableEntityDataSet entity set} reliant on an {@link ObservableEntityProvider} for its data */
 public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 	private final BetterSortedSet<ObservableEntityTypeImpl<?>> theEntityTypes;
-	private final Transactable theLock;
 	private final Map<Class<?>, String> theClassMapping;
 	private final ObservableEntityProvider theImplementation;
 
-	private ObservableEntityDataSetImpl(Transactable lock, ObservableEntityProvider implementation) {
+	private ObservableEntityDataSetImpl(ObservableEntityProvider implementation) {
 		theEntityTypes = new BetterTreeSet<>(true, (et1, et2) -> compareEntityTypes(et1.getName(), et2.getName()));
-		theLock = lock;
 		theClassMapping = new HashMap<>();
 		theImplementation = implementation;
 	}
@@ -60,12 +56,12 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 
 	@Override
 	public Transaction lock(boolean write, Object cause) {
-		return theLock.lock(write, cause);
+		return theImplementation.lock(write, cause);
 	}
 
 	@Override
 	public Transaction tryLock(boolean write, Object cause) {
-		return theLock.tryLock(write, cause);
+		return theImplementation.tryLock(write, cause);
 	}
 
 	@Override
@@ -94,31 +90,44 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		return QommonsUtils.compareNumberTolerant(type1, type2, true, true);
 	}
 
+	/**
+	 * @param implementation The data set implementation to power the entity set
+	 * @return A builder for an entity set
+	 */
 	public static EntitySetBuilder build(ObservableEntityProvider implementation) {
-		return build(new StampedLockingStrategy(), implementation);
+		return build(implementation);
 	}
 
-	public static EntitySetBuilder build(Transactable lock, ObservableEntityProvider implementation) {
-		return new EntitySetBuilder(lock, implementation);
-	}
-
+	/** Builds an entity set */
 	public static class EntitySetBuilder {
 		private final ObservableEntityDataSetImpl theEntitySet;
 		private boolean isBuilding;
 
-		EntitySetBuilder(Transactable lock, ObservableEntityProvider implementation) {
-			theEntitySet = new ObservableEntityDataSetImpl(lock, implementation);
+		EntitySetBuilder(ObservableEntityProvider implementation) {
+			theEntitySet = new ObservableEntityDataSetImpl(implementation);
 			isBuilding = true;
 		}
 
+		/**
+		 * @param entityName The name for the entity type
+		 * @return A builder for the new entity type
+		 */
 		public <E> ObservableEntityTypeBuilder<E> withEntityType(String entityName) {
 			return withEntityType(entityName, null);
 		}
 
+		/**
+		 * @param entity The java type to build an entity for
+		 * @return A builder to build the entity type
+		 */
 		public <E> ObservableEntityTypeBuilder<E> withEntityType(Class<E> entity) {
 			return withEntityType(null, EntityReflector.build(TypeTokens.get().of(entity), false).build());
 		}
 
+		/**
+		 * @param entity The reflector for a java type to build an entity type for
+		 * @return A builder to build the entity type
+		 */
 		public <E> ObservableEntityTypeBuilder<E> withEntityType(EntityReflector<E> entity) {
 			Class<E> javaType = TypeTokens.getRawType(entity.getType());
 			if (javaType.getTypeParameters().length > 0)
@@ -145,6 +154,11 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 			return new ObservableEntityTypeBuilder<>(this, theEntitySet, entityName, javaType, reflector);
 		}
 
+		/**
+		 * @param entity The java type of the entity to get
+		 * @return The entity type representing the given java type in this builder
+		 * @throws IllegalArgumentException If no such entity has been built yet
+		 */
 		public <E> ObservableEntityType<E> getEntityType(Class<E> entity) {
 			ObservableEntityType<E> type = theEntitySet.getEntityType(entity);
 			if (type == null)
@@ -152,6 +166,11 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 			return type;
 		}
 
+		/**
+		 * @param name The name of the entity type to get
+		 * @return The entity type with the given name
+		 * @throws IllegalArgumentException If no such entity has been built yet
+		 */
 		public ObservableEntityType<?> getEntityType(String name) {
 			ObservableEntityType<?> type = theEntitySet.getEntityType(name);
 			if (type == null)
@@ -159,6 +178,11 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 			return type;
 		}
 
+		/**
+		 * Builds the entity set
+		 *
+		 * @return The new entity set
+		 */
 		public ObservableEntityDataSet build() {
 			if (!isBuilding)
 				throw new IllegalStateException("This builder has already built its entity set");
@@ -169,6 +193,11 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		}
 	}
 
+	/**
+	 * Builds an entity type
+	 *
+	 * @param <E> The java type of the entity
+	 */
 	public static class ObservableEntityTypeBuilder<E> {
 		private final EntitySetBuilder theSetBuilder;
 		private final ObservableEntityDataSetImpl theEntitySet;
@@ -207,11 +236,22 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 			isBuilding = true;
 		}
 
+		/**
+		 * @param name The name for the entity
+		 * @return This builder
+		 */
 		public ObservableEntityTypeBuilder<E> withName(String name) {
+			if (!isBuilding)
+				throw new IllegalStateException("This builder has already built its entity type");
 			theEntityName = name;
 			return this;
 		}
 
+		/**
+		 * If this builder was initialized with a java type, fills out the super types by reflection
+		 *
+		 * @return This builder
+		 */
 		public ObservableEntityTypeBuilder<E> fillSupersFromClass() {
 			if (!isBuilding)
 				throw new IllegalStateException("This builder has already built its entity type");
@@ -232,6 +272,11 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 			return this;
 		}
 
+		/**
+		 * If this builder was initialized with a java type, fills out the fields by reflection
+		 *
+		 * @return This builder
+		 */
 		public ObservableEntityTypeBuilder<E> fillFieldsFromClass() {
 			if (!isBuilding)
 				throw new IllegalStateException("This builder has already built its entity type");
@@ -260,10 +305,18 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 			fieldBuilder.build();
 		}
 
+		/**
+		 * @param parent The java super type for this type
+		 * @return This builder
+		 */
 		public ObservableEntityTypeBuilder<E> withSuper(Class<? super E> parent) {
 			return withSuper(EntityReflector.build(TypeTokens.get().of(parent), false).build());
 		}
 
+		/**
+		 * @param parent The reflector of the super type for this type
+		 * @return This builder
+		 */
 		public ObservableEntityTypeBuilder<E> withSuper(EntityReflector<? super E> parent) {
 			Class<? super E> superType = TypeTokens.getRawType(parent.getType());
 			ObservableEntityType<? super E> superEntity = theSetBuilder.getEntityType(superType);
@@ -274,6 +327,10 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 			return withSuper(superEntity);
 		}
 
+		/**
+		 * @param parent The super type for this type
+		 * @return This builder
+		 */
 		public ObservableEntityTypeBuilder<E> withSuper(ObservableEntityType<?> parent) {
 			if (!isBuilding)
 				throw new IllegalStateException("This builder has already built its entity type");
@@ -298,6 +355,10 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 				checkSuperType(parentParent);
 		}
 
+		/**
+		 * @param fieldGetter The java getter for the new field
+		 * @return A builder for the new field
+		 */
 		public <F> ObservableEntityFieldBuilder<E, F> withField(Function<? super E, F> fieldGetter) {
 			if (theJavaType == null)
 				throw new IllegalStateException("This method can only be used with a java-typed entity");
@@ -314,6 +375,11 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 			return (ObservableEntityFieldBuilder<E, F>) withField(name, TypeToken.of(method.getGenericReturnType())).mapTo(method);
 		}
 
+		/**
+		 * @param fieldName The name for the new field
+		 * @param type The type for the new field
+		 * @return A builder for the new field
+		 */
 		public <F> ObservableEntityFieldBuilder<E, F> withField(String fieldName, TypeToken<F> type) {
 			if (!isBuilding)
 				throw new IllegalStateException("This builder has already built its entity type");
@@ -337,6 +403,11 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 			return field;
 		}
 
+		/**
+		 * Builds the entity type
+		 *
+		 * @return The builder for the entity set
+		 */
 		public EntitySetBuilder build() {
 			Map<String, ObservableEntityFieldBuilder<E, ?>> fieldBuilders = new LinkedHashMap<>(theFields);
 			for (ObservableEntityTypeImpl<? super E> parent : theParents) {
@@ -389,6 +460,12 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		}
 	}
 
+	/**
+	 * Builds a field of an entity type
+	 *
+	 * @param <E> The type of the entity
+	 * @param <F> The type of the field
+	 */
 	public static class ObservableEntityFieldBuilder<E, F> {
 		final ObservableEntityTypeBuilder<E> theTypeBuilder;
 		final String theName;
@@ -415,11 +492,22 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 			theOverrides.add(override);
 		}
 
+		/**
+		 * Specifies that this field is an ID field
+		 *
+		 * @return This builder
+		 */
 		public ObservableEntityFieldBuilder<E, F> id() {
 			isId = true;
 			return this;
 		}
 
+		/**
+		 * Specifies that the value of this field is another entity in the entity set
+		 *
+		 * @param entityName The name of the entity type (that may not yet have been built) in the entity set
+		 * @return This builder
+		 */
 		public ObservableEntityFieldBuilder<E, F> withTarget(String entityName) {
 			if (TypeTokens.get().unwrap(theType).isPrimitive()) // TODO Other things can't be entities either, e.g. Strings
 				throw new UnsupportedOperationException("Field of type " + theType + " cannot target an entity");
@@ -428,6 +516,15 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 			return this;
 		}
 
+		/**
+		 * Adds a simple constraint to the field
+		 *
+		 * @param type The type of the constraint
+		 * @param name The name for the constraint
+		 * @return This builder
+		 * @see EntityConstraint#NOT_NULL
+		 * @see EntityConstraint#UNIQUE
+		 */
 		public ObservableEntityFieldBuilder<E, F> withConstraint(String type, String name) {
 			if (theConstraints == null)
 				theConstraints = new LinkedList<>();
@@ -435,6 +532,17 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 			return this;
 		}
 
+		/**
+		 * Adds a {@link EntityConstraint#CHECK check}-type constraint to this field
+		 *
+		 * @param name The name for the constraint
+		 * @param value The value to compare the field values to
+		 * @param ltEqGt Whether field comparison for the field values will be of type less than (&lt;0), greater than (&gt;0), or equal to
+		 *        (0)
+		 * @param withEqual Modifier for the previous parameter. True means a value equal to the given value will be acceptable for the
+		 *        field, false means an equivalent value is unacceptable.
+		 * @return This builder
+		 */
 		public ObservableEntityFieldBuilder<E, F> withCheckConstraint(String name, F value, int ltEqGt, boolean withEqual) {
 			if (theConstraints == null)
 				theConstraints = new LinkedList<>();
@@ -445,6 +553,10 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 			return this;
 		}
 
+		/**
+		 * @param fieldGetter The java getter to map to this field
+		 * @return This builder
+		 */
 		public ObservableEntityFieldBuilder<E, F> mapTo(Function<? super E, ? extends F> fieldGetter) {
 			Class<E> type = theTypeBuilder.theJavaType;
 			if (type == null)
@@ -469,6 +581,11 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 			return new FieldTypeImpl<>(this, entityType, fieldIndex, idIndex);
 		}
 
+		/**
+		 * Builds the field
+		 *
+		 * @return The builder for the entity type of the field
+		 */
 		public ObservableEntityTypeBuilder<E> build() {
 			return theTypeBuilder;
 		}
