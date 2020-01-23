@@ -8,7 +8,7 @@ import org.observe.entity.ObservableEntityFieldType;
 import org.observe.entity.PreparedUpdate;
 import org.qommons.collect.QuickSet.QuickMap;
 
-public class ConfigurableUpdateImpl<E> extends AbstractConfigurableOperation<E> implements ConfigurableUpdate<E> {
+class ConfigurableUpdateImpl<E> extends AbstractConfigurableOperation<E> implements ConfigurableUpdate<E> {
 	private final EntitySelection<E> theSelection;
 	private final QuickMap<String, Object> theUpdateValues;
 	private final QuickMap<String, EntityOperationVariable<E>> theUpdateVariables;

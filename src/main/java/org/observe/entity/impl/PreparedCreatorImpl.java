@@ -6,7 +6,7 @@ import org.observe.entity.ObservableEntity;
 import org.observe.entity.PreparedCreator;
 import org.qommons.collect.QuickSet.QuickMap;
 
-public class PreparedCreatorImpl<E> extends AbstractPreparedOperation<E, PreparedCreatorImpl<E>> implements PreparedCreator<E> {
+class PreparedCreatorImpl<E> extends AbstractPreparedOperation<E, PreparedCreatorImpl<E>> implements PreparedCreator<E> {
 	PreparedCreatorImpl(ConfigurableCreatorImpl<E> definition, Object preparedObject, QuickMap<String, Object> variableValues) {
 		super(definition, preparedObject, variableValues);
 	}

@@ -1,5 +1,10 @@
 package org.observe.entity;
 
+/**
+ * A prepared {@link EntityDeletion}
+ * 
+ * @param <E> The type of entity to delete
+ */
 public interface PreparedDeletion<E> extends PreparedOperation<E>, EntityDeletion<E> {
 	@Override
 	default ObservableEntityType<E> getEntityType() {

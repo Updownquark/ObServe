@@ -6,8 +6,8 @@ import java.util.function.Function;
 
 import org.observe.util.MethodRetrievingHandler;
 
-public class ObservableEntityUtils {
-	public static <E> Method getField(Class<E> entityType, Function<? super E, ?> fieldGetter) {
+class ObservableEntityUtils {
+	static <E> Method getField(Class<E> entityType, Function<? super E, ?> fieldGetter) {
 		MethodRetrievingHandler handler = new MethodRetrievingHandler();
 		E proxy = (E) Proxy.newProxyInstance(ObservableEntityUtils.class.getClassLoader(), new Class[] { entityType }, handler);
 		fieldGetter.apply(proxy);

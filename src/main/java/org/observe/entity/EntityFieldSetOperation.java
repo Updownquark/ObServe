@@ -2,9 +2,16 @@ package org.observe.entity;
 
 import org.qommons.collect.QuickSet.QuickMap;
 
+/**
+ * A configurable entity operation that requires or allows setting field values ({@link ConfigurableCreator} or {@link ConfigurableUpdate})
+ *
+ * @param <E> The type of the entity to set fields for
+ */
 public interface EntityFieldSetOperation<E> extends ConfigurableOperation<E> {
+	/** @return All fields whose values have been set directly in this operation */
 	QuickMap<String, Object> getFieldValues();
 
+	/** @return All fields whose values have been set to variables in this operation */
 	QuickMap<String, EntityOperationVariable<E>> getFieldVariables();
 
 	/**

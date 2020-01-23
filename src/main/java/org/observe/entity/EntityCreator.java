@@ -1,5 +1,10 @@
 package org.observe.entity;
 
+/**
+ * An operation to create a new instance of an entity type
+ * 
+ * @param <E> The entity type to create an instance for
+ */
 public interface EntityCreator<E> extends EntityOperation<E> {
 	/**
 	 * Creates a new entity with this creator's configured field values

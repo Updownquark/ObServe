@@ -6,8 +6,8 @@ import org.qommons.collect.QuickSet.QuickMap;
 
 /**
  * <p>
- * An implementation data source to provide an ObservableEntityDataSet with entity data and possibly the power to execute changes to the data
- * set.
+ * An implementation data source to provide an ObservableEntityDataSet with entity data and possibly the power to execute changes to the
+ * data set.
  * </p>
  * <p>
  * The Transactable interface does not necessarily allow the locking of the data source to the exclusion of other users of it. It only means

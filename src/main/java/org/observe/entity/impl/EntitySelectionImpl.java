@@ -10,11 +10,11 @@ import org.observe.entity.EntitySelection;
 import org.observe.entity.EntityUpdate;
 import org.qommons.collect.QuickSet.QuickMap;
 
-public class EntitySelectionImpl<E> implements EntitySelection<E> {
+class EntitySelectionImpl<E> implements EntitySelection<E> {
 	private final EntityCondition<E> theCondition;
 	private final QuickMap<String, EntityOperationVariable<E>> theVariables;
 
-	public EntitySelectionImpl(EntityCondition<E> condition) {
+	EntitySelectionImpl(EntityCondition<E> condition) {
 		theCondition = condition;
 		theVariables = QuickMap.of(theCondition.getVariables(), String::compareTo);
 	}

@@ -13,9 +13,14 @@ import java.util.function.Function;
 import org.qommons.StringUtils;
 import org.qommons.collect.QuickSet.QuickMap;
 
+/**
+ * A condition to select which entities an {@link EntitySetOperation} will operate on based on the fields of the entity
+ *
+ * @param <E> The entity type that the condition is for
+ */
 public abstract class EntityCondition<E> {
-	public static <E> EntityCondition<E> none(ObservableEntityType<E> type) {
-		return new None<>(type);
+	public static <E> EntityCondition<E> all(ObservableEntityType<E> type) {
+		return new All<>(type);
 	}
 
 	private final ObservableEntityType<E> theEntityType;
@@ -32,7 +37,7 @@ public abstract class EntityCondition<E> {
 
 	public <F> EntityCondition<E> compare(EntityValueAccess<? super E, F> field, F value, int ltEqGt, boolean withEqual) {
 		LiteralCondition<E, F> condition = new LiteralCondition<>(theEntityType, field, value, ltEqGt, withEqual);
-		if (this instanceof None)
+		if (this instanceof All)
 			return condition;
 		else
 			return and(none -> condition);
@@ -43,15 +48,15 @@ public abstract class EntityCondition<E> {
 		if (theVariables.containsKey(variableName))
 			throw new IllegalArgumentException("This condition already contains a variable named " + variableName);
 		VariableCondition<E, F> condition = new VariableCondition<>(theEntityType, field, variableName, ltEqGt, withEqual);
-		if (this instanceof None)
+		if (this instanceof All)
 			return condition;
 		else
 			return and(none -> condition);
 	}
 
 	public EntityCondition<E> or(Function<EntityCondition<E>, EntityCondition<E>> condition) {
-		EntityCondition<E> c = condition.apply(getNone());
-		if (c instanceof None)
+		EntityCondition<E> c = condition.apply(getAll());
+		if (c instanceof All)
 			return this;
 		else if (this instanceof OrCondition)
 			return new OrCondition<>(theEntityType, (OrCondition<E>) this, c);
@@ -60,8 +65,8 @@ public abstract class EntityCondition<E> {
 	}
 
 	public EntityCondition<E> and(Function<EntityCondition<E>, EntityCondition<E>> condition) {
-		EntityCondition<E> c = condition.apply(getNone());
-		if (c instanceof None)
+		EntityCondition<E> c = condition.apply(getAll());
+		if (c instanceof All)
 			return this;
 		else if (this instanceof AndCondition)
 			return new AndCondition<>(theEntityType, (AndCondition<E>) this, c);
@@ -127,16 +132,16 @@ public abstract class EntityCondition<E> {
 
 	public abstract boolean test(E entity, QuickMap<String, Object> varValues);
 
-	protected EntityCondition<E> getNone() {
-		return new None<>(theEntityType, theVariables);
+	protected EntityCondition<E> getAll() {
+		return new All<>(theEntityType, theVariables);
 	}
 
-	public static class None<E> extends EntityCondition<E> {
-		public None(ObservableEntityType<E> entityType) {
+	public static class All<E> extends EntityCondition<E> {
+		public All(ObservableEntityType<E> entityType) {
 			this(entityType, Collections.emptyMap());
 		}
 
-		public None(ObservableEntityType<E> entityType, Map<String, EntityOperationVariable<E>> vars) {
+		public All(ObservableEntityType<E> entityType, Map<String, EntityOperationVariable<E>> vars) {
 			super(entityType, vars);
 		}
 
@@ -152,12 +157,12 @@ public abstract class EntityCondition<E> {
 
 		@Override
 		public boolean equals(Object obj) {
-			return obj instanceof None;
+			return obj instanceof All;
 		}
 
 		@Override
 		public String toString() {
-			return "none";
+			return "all";
 		}
 	}
 

@@ -1,5 +1,10 @@
 package org.observe.entity;
 
+/**
+ * An un-prepared {@link EntityUpdate}
+ * 
+ * @param <E> The type of entity to update fields in
+ */
 public interface ConfigurableUpdate<E> extends EntityFieldSetOperation<E>, EntityUpdate<E> {
 	@Override
 	<F> ConfigurableUpdate<E> setField(ObservableEntityFieldType<? super E, F> field, F value)

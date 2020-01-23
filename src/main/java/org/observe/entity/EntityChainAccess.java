@@ -6,14 +6,20 @@ import org.qommons.collect.BetterList;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * A compound {@link EntityValueAccess}
+ * 
+ * @param <E> The entity type
+ * @param <T> The information type
+ */
 public class EntityChainAccess<E, T> implements EntityValueAccess<E, T> {
 	private final BetterList<ObservableEntityFieldType<?, ?>> theFieldSequence;
 
-	public <F> EntityChainAccess(ObservableEntityFieldType<E, F> firstField, ObservableEntityFieldType<F, T> secondField) {
+	<F> EntityChainAccess(ObservableEntityFieldType<E, F> firstField, ObservableEntityFieldType<F, T> secondField) {
 		this(new ObservableEntityFieldType[] { firstField, secondField });
 	}
 
-	protected EntityChainAccess(ObservableEntityFieldType<?, ?>[] fields) {
+	EntityChainAccess(ObservableEntityFieldType<?, ?>[] fields) {
 		ObservableEntityType<?> entity = null;
 		for (int f = 0; f < fields.length; f++) {
 			if (f > 0) {
@@ -27,6 +33,7 @@ public class EntityChainAccess<E, T> implements EntityValueAccess<E, T> {
 		theFieldSequence = BetterList.of(fields);
 	}
 
+	/** @return The sequence of fields that this value access obtains information through */
 	public BetterList<ObservableEntityFieldType<?, ?>> getFieldSequence() {
 		return theFieldSequence;
 	}
@@ -82,7 +89,7 @@ public class EntityChainAccess<E, T> implements EntityValueAccess<E, T> {
 
 	@Override
 	public String toString() {
-		StringBuilder str = new StringBuilder(theFieldSequence.getFirst().getEntityType().getEntityName());
+		StringBuilder str = new StringBuilder(theFieldSequence.getFirst().getEntityType().getName());
 		for (ObservableEntityFieldType<?, ?> field : theFieldSequence)
 			str.append('.').append(field.getName());
 		return str.toString();

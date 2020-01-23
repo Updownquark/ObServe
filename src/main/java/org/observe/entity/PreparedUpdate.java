@@ -2,6 +2,11 @@ package org.observe.entity;
 
 import org.qommons.collect.QuickSet.QuickMap;
 
+/**
+ * A prepared {@link EntityUpdate}
+ * 
+ * @param <E> The type of entity to change the fields of
+ */
 public interface PreparedUpdate<E> extends PreparedOperation<E>, EntityUpdate<E> {
 	@Override
 	default ObservableEntityType<E> getEntityType() {

@@ -10,11 +10,11 @@ import org.observe.entity.ObservableEntityType;
 import org.observe.entity.PreparedCreator;
 import org.qommons.collect.QuickSet.QuickMap;
 
-public class ConfigurableCreatorImpl<E> extends AbstractConfigurableOperation<E> implements ConfigurableCreator<E> {
+class ConfigurableCreatorImpl<E> extends AbstractConfigurableOperation<E> implements ConfigurableCreator<E> {
 	private final QuickMap<String, Object> theFieldValues;
 	private final QuickMap<String, EntityOperationVariable<E>> theFieldVariables;
 
-	public ConfigurableCreatorImpl(ObservableEntityType<E> entityType, QuickMap<String, EntityOperationVariable<E>> variables,
+	ConfigurableCreatorImpl(ObservableEntityType<E> entityType, QuickMap<String, EntityOperationVariable<E>> variables,
 		QuickMap<String, Object> fieldValues, QuickMap<String, EntityOperationVariable<E>> fieldVariables) {
 		super(entityType, variables);
 		theFieldValues = fieldValues;

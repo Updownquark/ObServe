@@ -2,7 +2,13 @@ package org.observe.entity;
 
 import org.qommons.collect.QuickSet.QuickMap;
 
+/**
+ * A prepared entity operation. Prepared operations may be faster than un-prepared ones.
+ *
+ * @param <E> The type of entity to operate on
+ */
 public interface PreparedOperation<E> extends EntityOperation<E> {
+	/** @return The configured operation that this is a preparation of */
 	ConfigurableOperation<E> getDefinition();
 
 	@Override
@@ -24,5 +30,6 @@ public interface PreparedOperation<E> extends EntityOperation<E> {
 	 */
 	PreparedOperation<E> satisfy(String variableName, Object value) throws IllegalArgumentException;
 
+	/** @return The values of all variables in this operation */
 	QuickMap<String, Object> getVariableValues();
 }

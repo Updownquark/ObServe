@@ -7,7 +7,7 @@ import org.observe.entity.EntitySelection;
 import org.observe.entity.PreparedDeletion;
 import org.qommons.collect.QuickSet.QuickMap;
 
-public class ConfigurableDeletionImpl<E> extends AbstractConfigurableOperation<E> implements ConfigurableDeletion<E> {
+class ConfigurableDeletionImpl<E> extends AbstractConfigurableOperation<E> implements ConfigurableDeletion<E> {
 	private final EntitySelection<E> theSelection;
 
 	ConfigurableDeletionImpl(EntitySelection<E> selection, QuickMap<String, EntityOperationVariable<E>> variables) {

@@ -3,16 +3,35 @@ package org.observe.entity;
 import java.util.List;
 import java.util.function.Function;
 
+import org.qommons.Named;
+
 import com.google.common.reflect.TypeToken;
 
-public interface ObservableEntityFieldType<E, F> extends EntityValueAccess<E, F> {
+/**
+ * Represents a field in an entity type
+ *
+ * @param <E> The type of the entity
+ * @param <F> The type of the field
+ */
+public interface ObservableEntityFieldType<E, F> extends EntityValueAccess<E, F>, Named {
+	/** @return The entity type that this field is a member of */
 	ObservableEntityType<E> getEntityType();
+	/** @return The types of values that belong in the field */
 	TypeToken<F> getFieldType();
+	/** return The name of the field */
+	@Override
 	String getName();
+	/** @return The index of this field in the entity type's {@link ObservableEntityType#getFields() field map} */
 	int getFieldIndex();
+	/**
+	 * @return The index of this field in the entity type's {@link ObservableEntityType#getIdentityFields() identity field map}, or -1 if
+	 *         this is not an identity field
+	 */
 	int getIdIndex();
 
+	/** @return The fields in the entity's super types that this field overrides */
 	List<? extends ObservableEntityFieldType<? super E, F>> getOverrides();
+	/** @return Any {@link EntityConstraint}s applying specifically to this field */
 	List<FieldConstraint<E, F>> getConstraints();
 
 	@Override

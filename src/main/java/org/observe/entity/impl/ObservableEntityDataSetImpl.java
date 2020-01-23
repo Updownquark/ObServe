@@ -14,6 +14,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 
+import org.observe.entity.ConditionalFieldConstraint;
 import org.observe.entity.EntityCondition.LiteralCondition;
 import org.observe.entity.EntityConstraint;
 import org.observe.entity.FieldConstraint;
@@ -21,6 +22,7 @@ import org.observe.entity.ObservableEntityDataSet;
 import org.observe.entity.ObservableEntityFieldType;
 import org.observe.entity.ObservableEntityProvider;
 import org.observe.entity.ObservableEntityType;
+import org.observe.entity.SimpleFieldConstraint;
 import org.observe.util.EntityReflector;
 import org.observe.util.EntityReflector.ReflectedField;
 import org.observe.util.MethodRetrievingHandler;
@@ -38,6 +40,7 @@ import org.qommons.tree.BetterTreeSet;
 
 import com.google.common.reflect.TypeToken;
 
+/** Implementation of an {@link ObservableEntityDataSet entity set} reliant on an {@link ObservableEntityProvider} for its data */
 public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 	private final BetterSortedSet<ObservableEntityTypeImpl<?>> theEntityTypes;
 	private final Transactable theLock;
@@ -45,13 +48,13 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 	private final ObservableEntityProvider theImplementation;
 
 	private ObservableEntityDataSetImpl(Transactable lock, ObservableEntityProvider implementation) {
-		theEntityTypes = new BetterTreeSet<>(true, (et1, et2) -> compareEntityTypes(et1.getEntityName(), et2.getEntityName()));
+		theEntityTypes = new BetterTreeSet<>(true, (et1, et2) -> compareEntityTypes(et1.getName(), et2.getName()));
 		theLock = lock;
 		theClassMapping = new HashMap<>();
 		theImplementation = implementation;
 	}
 
-	public ObservableEntityProvider getImplementation() {
+	ObservableEntityProvider getImplementation() {
 		return theImplementation;
 	}
 
@@ -72,7 +75,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 
 	@Override
 	public ObservableEntityType<?> getEntityType(String entityName) {
-		return theEntityTypes.searchValue(et -> compareEntityTypes(entityName, et.getEntityName()),
+		return theEntityTypes.searchValue(et -> compareEntityTypes(entityName, et.getName()),
 			BetterSortedList.SortedSearchFilter.OnlyMatch);
 	}
 
@@ -276,7 +279,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 				throw new IllegalStateException("This builder has already built its entity type");
 			else if (!theFields.isEmpty())
 				throw new IllegalStateException("Parent(s) must be defined before any fields");
-			if (!(parent instanceof ObservableEntityTypeImpl) || theEntitySet.getEntityType(parent.getEntityName()) != parent)
+			if (!(parent instanceof ObservableEntityTypeImpl) || theEntitySet.getEntityType(parent.getName()) != parent)
 				throw new IllegalArgumentException("An entity type's parent must be present in the same entity set");
 			if (theJavaType != null)
 				checkSuperType(parent);
@@ -287,7 +290,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		private void checkSuperType(ObservableEntityType<?> parent) {
 			if (parent.getEntityType() != null) {
 				if (!parent.getEntityType().isAssignableFrom(theJavaType))
-					throw new IllegalArgumentException("Entity type " + parent.getEntityName() + " (" + parent.getEntityType().getName()
+					throw new IllegalArgumentException("Entity type " + parent.getName() + " (" + parent.getEntityType().getName()
 						+ ") cannot be a super type of " + theEntityName + " (" + theJavaType.getName() + ")");
 				return;
 			}
@@ -574,7 +577,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 					throw new IllegalArgumentException(
 						"Target " + theTargetEntityName + " of field " + this + " is not defined in the data set");
 				else if (target.getEntityType() != null && !TypeTokens.getRawType(theFieldType).isAssignableFrom(target.getEntityType()))
-					throw new IllegalArgumentException("Entity " + target.getEntityName() + "(" + target.getEntityType().getName()
+					throw new IllegalArgumentException("Entity " + target.getName() + "(" + target.getEntityType().getName()
 						+ ") cannot be a target of field " + this + "(" + theFieldType + ")");
 				theTargetEntity = (ObservableEntityTypeImpl<F>) target;
 			} else {
@@ -603,7 +606,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 
 		@Override
 		public String toString() {
-			return theEntityType.getEntityName() + "." + theName;
+			return theEntityType.getName() + "." + theName;
 		}
 	}
 }

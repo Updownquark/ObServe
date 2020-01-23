@@ -19,7 +19,7 @@ import org.observe.entity.PreparedQuery;
 import org.observe.entity.QueryOrder;
 import org.qommons.collect.QuickSet.QuickMap;
 
-public class ConfigurableQueryImpl<E> extends AbstractConfigurableOperation<E> implements ConfigurableQuery<E> {
+class ConfigurableQueryImpl<E> extends AbstractConfigurableOperation<E> implements ConfigurableQuery<E> {
 	private final EntitySelection<E> theSelection;
 	private final QuickMap<String, FieldLoadType> theFieldLoadTypes;
 	private final List<QueryOrder<E, ?>> theOrder;
@@ -99,10 +99,10 @@ public class ConfigurableQueryImpl<E> extends AbstractConfigurableOperation<E> i
 	}
 
 	@Override
-	public ObservableSortedSet<E> collect() throws IllegalStateException, EntityOperationException {
+	public ObservableSortedSet<E> collect(boolean withUpdates) throws IllegalStateException, EntityOperationException {
 		if (getVariables().keySize() > 0)
 			throw new IllegalStateException("This query has variables and must be prepared");
-		return ((ObservableEntityTypeImpl<E>) getEntityType()).collect(this, null);
+		return ((ObservableEntityTypeImpl<E>) getEntityType()).collect(this, withUpdates, null);
 	}
 
 	@Override
@@ -110,7 +110,7 @@ public class ConfigurableQueryImpl<E> extends AbstractConfigurableOperation<E> i
 		throws IllegalStateException, EntityOperationException {
 		if (getVariables().keySize() > 0)
 			throw new IllegalStateException("This query has variables and must be prepared");
-		return ((ObservableEntityTypeImpl<E>) getEntityType()).collectObservable(this, null);
+		return ((ObservableEntityTypeImpl<E>) getEntityType()).collectObservable(this, withUpdates, null);
 	}
 
 	@Override

@@ -6,12 +6,12 @@ import org.observe.entity.EntitySetOperation;
 import org.observe.entity.ObservableEntityType;
 import org.qommons.collect.QuickSet.QuickMap;
 
-public abstract class AbstractPreparedSetOperation<E, O extends AbstractPreparedSetOperation<E, O>> extends AbstractPreparedOperation<E, O>
+abstract class AbstractPreparedSetOperation<E, O extends AbstractPreparedSetOperation<E, O>> extends AbstractPreparedOperation<E, O>
 implements EntitySetOperation<E> {
 	private final EntitySelection<E> theSelection;
 
-	public AbstractPreparedSetOperation(ConfigurableOperation<E> definition, Object preparedObject,
-		QuickMap<String, Object> variableValues, EntitySelection<E> selection) {
+	AbstractPreparedSetOperation(ConfigurableOperation<E> definition, Object preparedObject, QuickMap<String, Object> variableValues,
+		EntitySelection<E> selection) {
 		super(definition, preparedObject, variableValues);
 		theSelection = selection;
 	}

@@ -9,11 +9,11 @@ import org.observe.entity.ObservableEntityType;
 import org.qommons.collect.QuickSet;
 import org.qommons.collect.QuickSet.QuickMap;
 
-public abstract class AbstractConfigurableOperation<E> implements EntityOperation<E> {
+abstract class AbstractConfigurableOperation<E> implements EntityOperation<E> {
 	private final ObservableEntityType<E> theType;
 	private final QuickMap<String, EntityOperationVariable<E>> theVariables;
 
-	public AbstractConfigurableOperation(ObservableEntityType<E> type, QuickMap<String, EntityOperationVariable<E>> variables) {
+	AbstractConfigurableOperation(ObservableEntityType<E> type, QuickMap<String, EntityOperationVariable<E>> variables) {
 		theType = type;
 		theVariables = variables;
 	}

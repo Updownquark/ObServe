@@ -13,7 +13,7 @@ import org.observe.entity.ObservableEntityFieldType;
 import org.observe.entity.PreparedQuery;
 import org.qommons.collect.QuickSet.QuickMap;
 
-public class PreparedQueryImpl<E> extends AbstractPreparedSetOperation<E, PreparedQueryImpl<E>> implements PreparedQuery<E> {
+class PreparedQueryImpl<E> extends AbstractPreparedSetOperation<E, PreparedQueryImpl<E>> implements PreparedQuery<E> {
 	private final QuickMap<String, FieldLoadType> theFieldLoadTypes;
 
 	PreparedQueryImpl(ConfigurableQuery<E> definition, Object preparedObject, EntitySelection<E> selection,
@@ -57,10 +57,10 @@ public class PreparedQueryImpl<E> extends AbstractPreparedSetOperation<E, Prepar
 	}
 
 	@Override
-	public ObservableSortedSet<E> collect() throws IllegalStateException, EntityOperationException {
+	public ObservableSortedSet<E> collect(boolean withUpdates) throws IllegalStateException, EntityOperationException {
 		if (getVariables().keySize() > 0)
 			throw new IllegalStateException("This query has variables and must be prepared");
-		return ((ObservableEntityTypeImpl<E>) getEntityType()).collect(this, null);
+		return ((ObservableEntityTypeImpl<E>) getEntityType()).collect(this, withUpdates, null);
 	}
 
 	@Override
@@ -68,7 +68,7 @@ public class PreparedQueryImpl<E> extends AbstractPreparedSetOperation<E, Prepar
 		throws IllegalStateException, EntityOperationException {
 		if (getVariables().keySize() > 0)
 			throw new IllegalStateException("This query has variables and must be prepared");
-		return ((ObservableEntityTypeImpl<E>) getEntityType()).collectObservable(this, null);
+		return ((ObservableEntityTypeImpl<E>) getEntityType()).collectObservable(this, withUpdates, null);
 	}
 
 	@Override

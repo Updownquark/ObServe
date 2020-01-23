@@ -1,13 +1,21 @@
-package org.observe.entity.impl;
+package org.observe.entity;
 
-import org.observe.entity.FieldConstraint;
-import org.observe.entity.ObservableEntityFieldType;
-
+/**
+ * A {@link FieldConstraint} that needs no extra information
+ *
+ * @param <E> The entity type the constraint applies to
+ * @param <F> The type of the field the constraint applies to
+ */
 public class SimpleFieldConstraint<E, F> implements FieldConstraint<E, F> {
 	private final ObservableEntityFieldType<E, F> theField;
 	private final String theName;
 	private final String theConstraintType;
 
+	/**
+	 * @param field The field that the constraint applies to
+	 * @param name The name of the constraint
+	 * @param constraintType The type of the constraint
+	 */
 	public SimpleFieldConstraint(ObservableEntityFieldType<E, F> field, String name, String constraintType) {
 		theField = field;
 		theName = name;

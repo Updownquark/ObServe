@@ -1,5 +1,10 @@
 package org.observe.entity;
 
+/**
+ * An un-prepared {@link EntityQuery}
+ * 
+ * @param <E> The type of entity to query
+ */
 public interface ConfigurableQuery<E> extends ConfigurableOperation<E>, EntityQuery<E> {
 	@Override
 	ConfigurableQuery<E> loadField(ObservableEntityFieldType<E, ?> field, FieldLoadType type);

@@ -71,7 +71,7 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 	}
 
 	@Override
-	public String getEntityName() {
+	public String getName() {
 		return theName;
 	}
 
@@ -150,7 +150,7 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 
 	@Override
 	public EntitySelection<E> select() {
-		return new EntitySelectionImpl<>(EntityCondition.none(this));
+		return new EntitySelectionImpl<>(EntityCondition.all(this));
 	}
 
 	@Override
@@ -176,11 +176,11 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 		return theEntitySet.getImplementation().count(query, prepared);
 	}
 
-	ObservableSortedSet<E> collect(EntityQuery<E> query, Object prepared) {
+	ObservableSortedSet<E> collect(EntityQuery<E> query, boolean withUpdates, Object prepared) {
 		// TODO Auto-generated method stub
 	}
 
-	ObservableSortedSet<ObservableEntity<? extends E>> collectObservable(EntityQuery<E> query, Object prepared) {
+	ObservableSortedSet<ObservableEntity<? extends E>> collectObservable(EntityQuery<E> query, boolean withUpdates, Object prepared) {
 		// TODO Auto-generated method stub
 	}
 
