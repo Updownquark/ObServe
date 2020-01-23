@@ -39,7 +39,7 @@ import com.google.common.reflect.TypeToken;
 
 /**
  * It turns out that {@link TypeToken} is quite slow for many basic operations, like creation and {@link TypeToken#getRawType()
- * getRawType()}. This class provides some optimizations.
+ * getRawType()}. This class provides some optimizations as well as boilerplate-reducing utilities.
  */
 public class TypeTokens {
 	private static final TypeTokens instance = new TypeTokens();
@@ -230,6 +230,7 @@ public class TypeTokens {
 		});
 	}
 
+	/** @return The common instanceof this class */
 	public static final TypeTokens get() {
 		return instance;
 	}
@@ -446,6 +447,7 @@ public class TypeTokens {
 	public final TypeToken<Void> VOID;
 	public final TypeToken<?> WILDCARD;
 
+	/** Creates a new instance */
 	protected TypeTokens() {
 		TYPES = new ConcurrentHashMap<>();
 

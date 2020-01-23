@@ -25,6 +25,11 @@ import org.qommons.tree.BetterTreeList;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * An {@link ObservableCollection} that only fires updates on a particular thread
+ *
+ * @param <E> The type of elements in the collection
+ */
 public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> {
 	static class ElementRef<E> {
 		ElementId sourceId;
@@ -45,8 +50,14 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 
 	private final ListenerList<ObservableCollectionEvent<E>> theEventQueue;
 
-	public SafeObservableCollection(ObservableCollection<E> collection, BooleanSupplier onEventThread,
-		Consumer<Runnable> eventThreadExec, Observable<?> until) {
+	/**
+	 * @param collection The backing collection
+	 * @param onEventThread A test that returns true only if the thread it is invoked from is acceptable for firing events directly
+	 * @param eventThreadExec An executor to invoke events on an acceptable event thread
+	 * @param until An observable which, when fired, will stop the eventing on this collection and release its resources and listeners
+	 */
+	public SafeObservableCollection(ObservableCollection<E> collection, BooleanSupplier onEventThread, Consumer<Runnable> eventThreadExec,
+		Observable<?> until) {
 		theCollection = collection;
 		isOnEventThread = onEventThread;
 		theEventThreadExecutor = eventThreadExec;
@@ -89,12 +100,20 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 			.collect());
 	}
 
+	/**
+	 * @return Whether changes have happened in the backing collection that have not yet been represented in this collection's state or
+	 *         reported to this collection's listeners
+	 */
 	public boolean hasQueuedEvents() {
 		return !theEventQueue.isEmpty();
 	}
 
 	private boolean isFlushing;
 
+	/**
+	 * Attempts to flush changes from the backing collection to this collection's state and listeners. May only be called on an acceptable
+	 * event thread
+	 */
 	protected void flush() {
 		if (!isOnEventThread.getAsBoolean())
 			throw new IllegalStateException("Operations on this collection may only occur on the event thread");
@@ -136,7 +155,8 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 		if (!els.isEmpty()) {
 			flush();
 			ElementId id = els.getFirst().getElementId();
-			ElementRef<E> ref = theSyntheticBacking.search(r -> id.compareTo(r.sourceId), BetterSortedList.SortedSearchFilter.OnlyMatch).get();
+			ElementRef<E> ref = theSyntheticBacking.search(r -> id.compareTo(r.sourceId), BetterSortedList.SortedSearchFilter.OnlyMatch)
+				.get();
 			return ref.synthId;
 		}
 		return null;
@@ -217,8 +237,8 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 			CollectionElement<E> srcEl = theCollection.addElement(value, srcAfter, srcBefore, first);
 			if (srcEl == null)
 				return null;
-			ElementRef<E> ref = theSyntheticBacking.search(r -> srcEl.getElementId().compareTo(r.sourceId), BetterSortedList.SortedSearchFilter.OnlyMatch)
-				.get();
+			ElementRef<E> ref = theSyntheticBacking
+				.search(r -> srcEl.getElementId().compareTo(r.sourceId), BetterSortedList.SortedSearchFilter.OnlyMatch).get();
 			return getElement(ref.synthId);
 		}
 	}

@@ -4,9 +4,10 @@ import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.util.function.Predicate;
 
+/** Enables retrieval of a {@link Method} object from a getter function by calling it on a proxy */
 public class MethodRetrievingHandler implements InvocationHandler {
 	private Predicate<Method> theFilter;
-	private boolean useFirst;
+	private boolean useFirstMethod;
 	private Method theFirstNoFilter;
 	private Method theInvoked;
 
@@ -15,7 +16,7 @@ public class MethodRetrievingHandler implements InvocationHandler {
 		if (theFirstNoFilter == null)
 			theFirstNoFilter = method;
 		if (theFilter == null || theFilter.test(method)) {
-			if (!useFirst || theInvoked == null)
+			if (!useFirstMethod || theInvoked == null)
 				theInvoked = method;
 		}
 		Class<?> retType = method.getReturnType();
@@ -41,16 +42,22 @@ public class MethodRetrievingHandler implements InvocationHandler {
 			return null; // ?
 	}
 
+	/**
+	 * @param filter The method filter to use to exclude some method invocations
+	 * @param useFirst Whether to use the first method invoked (typical) or the last one
+	 */
 	public void reset(Predicate<Method> filter, boolean useFirst) {
 		theFilter = filter;
-		this.useFirst = useFirst;
+		this.useFirstMethod = useFirst;
 		theFirstNoFilter = theInvoked = null;
 	}
 
+	/** @return The method retrieved from the proxy invocation */
 	public Method getInvoked() {
 		return theInvoked;
 	}
 
+	/** @return The first method called from the proxy invocation */
 	public Method getFirstNoFilter() {
 		return theFirstNoFilter;
 	}
