@@ -32,11 +32,13 @@ public class ObservableConfigFormatSet {
 	private final Map<Class<?>, ConfigFormatGenerator<?>> theFormats;
 	private final Map<TypeToken<?>, ObservableConfigFormat<?>> theFormatCache;
 	private final Map<TypeToken<?>, EntityReflector<?>> theReflectors;
+	private final Map<TypeToken<?>, EntityConfiguredValueType<?>> theEntityTypes;
 
 	public ObservableConfigFormatSet() {
 		theFormats = new ConcurrentHashMap<>();
 		theFormatCache = new ConcurrentHashMap<>();
 		theReflectors = new ConcurrentHashMap<>();
+		theEntityTypes = new ConcurrentHashMap<>();
 	}
 
 	public <T> ObservableConfigFormatSet forSimpleType(Class<T> type, Format<T> format, Supplier<? extends T> defaultValue) {
