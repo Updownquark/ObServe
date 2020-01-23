@@ -10,5 +10,5 @@ public interface EntityUpdate<E> extends EntityModification<E> {
 		}
 	};
 
-	QuickMap<String, Object> getUpdateValues();
+	QuickMap<String, Object> getFieldValues();
 }

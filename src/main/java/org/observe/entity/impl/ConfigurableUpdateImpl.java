@@ -27,17 +27,17 @@ public class ConfigurableUpdateImpl<E> extends AbstractConfigurableOperation<E> 
 	}
 
 	@Override
-	public QuickMap<String, Object> getUpdateValues() {
+	public QuickMap<String, Object> getFieldValues() {
 		return theUpdateValues;
 	}
 
 	@Override
-	public QuickMap<String, EntityOperationVariable<E>> getUpdateFieldVariables() {
+	public QuickMap<String, EntityOperationVariable<E>> getFieldVariables() {
 		return theUpdateVariables;
 	}
 
 	@Override
-	public <F> ConfigurableUpdate<E> set(ObservableEntityFieldType<? super E, F> field, F value)
+	public <F> ConfigurableUpdate<E> setField(ObservableEntityFieldType<? super E, F> field, F value)
 		throws IllegalStateException, IllegalArgumentException {
 		if (getEntityType().getFields().get(field.getFieldIndex()) != field)
 			throw new IllegalArgumentException("Unrecognized field " + field);
@@ -48,7 +48,7 @@ public class ConfigurableUpdateImpl<E> extends AbstractConfigurableOperation<E> 
 	}
 
 	@Override
-	public ConfigurableUpdate<E> setVariable(ObservableEntityFieldType<? super E, ?> field, String variableName)
+	public ConfigurableUpdate<E> setFieldVariable(ObservableEntityFieldType<? super E, ?> field, String variableName)
 		throws IllegalStateException, IllegalArgumentException {
 		if (getEntityType().getFields().get(field.getFieldIndex()) != field)
 			throw new IllegalArgumentException("Unrecognized field " + field);
