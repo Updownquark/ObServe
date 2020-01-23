@@ -19,6 +19,7 @@ import org.observe.entity.EntityConstraint;
 import org.observe.entity.FieldConstraint;
 import org.observe.entity.ObservableEntityDataSet;
 import org.observe.entity.ObservableEntityFieldType;
+import org.observe.entity.ObservableEntityProvider;
 import org.observe.entity.ObservableEntityType;
 import org.observe.util.EntityReflector;
 import org.observe.util.EntityReflector.ReflectedField;
@@ -41,16 +42,16 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 	private final BetterSortedSet<ObservableEntityTypeImpl<?>> theEntityTypes;
 	private final Transactable theLock;
 	private final Map<Class<?>, String> theClassMapping;
-	private final EntitySetImplementation theImplementation;
+	private final ObservableEntityProvider theImplementation;
 
-	private ObservableEntityDataSetImpl(Transactable lock, EntitySetImplementation implementation) {
+	private ObservableEntityDataSetImpl(Transactable lock, ObservableEntityProvider implementation) {
 		theEntityTypes = new BetterTreeSet<>(true, (et1, et2) -> compareEntityTypes(et1.getEntityName(), et2.getEntityName()));
 		theLock = lock;
 		theClassMapping = new HashMap<>();
 		theImplementation = implementation;
 	}
 
-	public EntitySetImplementation getImplementation() {
+	public ObservableEntityProvider getImplementation() {
 		return theImplementation;
 	}
 
@@ -90,11 +91,11 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		return QommonsUtils.compareNumberTolerant(type1, type2, true, true);
 	}
 
-	public static EntitySetBuilder build(EntitySetImplementation implementation) {
+	public static EntitySetBuilder build(ObservableEntityProvider implementation) {
 		return build(new StampedLockingStrategy(), implementation);
 	}
 
-	public static EntitySetBuilder build(Transactable lock, EntitySetImplementation implementation) {
+	public static EntitySetBuilder build(Transactable lock, ObservableEntityProvider implementation) {
 		return new EntitySetBuilder(lock, implementation);
 	}
 
@@ -102,7 +103,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		private final ObservableEntityDataSetImpl theEntitySet;
 		private boolean isBuilding;
 
-		EntitySetBuilder(Transactable lock, EntitySetImplementation implementation) {
+		EntitySetBuilder(Transactable lock, ObservableEntityProvider implementation) {
 			theEntitySet = new ObservableEntityDataSetImpl(lock, implementation);
 			isBuilding = true;
 		}
