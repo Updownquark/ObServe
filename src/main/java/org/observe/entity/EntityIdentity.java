@@ -6,14 +6,13 @@ import org.qommons.collect.QuickSet.QuickMap;
 
 public class EntityIdentity<E> {
 	private final ObservableEntityType<E> theEntityType;
-	final QuickMap<String, ObservableEntityField<E, ?>> theFields;
+	final QuickMap<String, Object> theFields;
 
 	private EntityIdentity(ObservableEntityType<E> entityType, Object[] fieldValues) {
 		theEntityType = entityType;
-		QuickMap<String, ObservableEntityField<E, ?>> fieldMap = entityType.getIdentityFields().keySet().createMap();
+		QuickMap<String, Object> fieldMap = entityType.getIdentityFields().keySet().createMap();
 		for (int i = 0; i < fieldValues.length; i++)
-			fieldMap.put(i,
-				new IdentityField<>((ObservableEntityFieldType<E, Object>) entityType.getIdentityFields().get(i), fieldValues[i]));
+			fieldMap.put(i, fieldValues[i]);
 		theFields = fieldMap.unmodifiable();
 	}
 
@@ -21,7 +20,7 @@ public class EntityIdentity<E> {
 		return theEntityType;
 	}
 
-	public QuickMap<String, ObservableEntityField<E, ?>> getFields() {
+	public QuickMap<String, Object> getFields() {
 		return theFields;
 	}
 
@@ -31,7 +30,7 @@ public class EntityIdentity<E> {
 		for (int i = 0; i < theFields.keySet().size(); i++) {
 			if (i != 0)
 				hash = hash * 31;
-			hash += Objects.hashCode(theFields.get(i).get());
+			hash += Objects.hashCode(theFields.get(i));
 		}
 		return hash;
 	}
@@ -46,7 +45,7 @@ public class EntityIdentity<E> {
 		if (!theEntityType.equals(theEntityType))
 			return false;
 		for (int i = 0; i < theFields.keySet().size(); i++)
-			if (!Objects.equals(theFields.get(i).get(), other.theFields.get(i).get()))
+			if (!Objects.equals(theFields.get(i), other.theFields.get(i)))
 				return false;
 		return true;
 	}
@@ -58,7 +57,7 @@ public class EntityIdentity<E> {
 		for (int i = 0; i < theFields.keySet().size(); i++) {
 			if (i > 0)
 				str.append(',');
-			str.append(theFields.get(i).getFieldType().getName()).append('=').append(theFields.get(i).get());
+			str.append(theEntityType.getFields().get(i).getName()).append('=').append(theFields.get(i));
 		}
 		str.append(')');
 		return str.toString();

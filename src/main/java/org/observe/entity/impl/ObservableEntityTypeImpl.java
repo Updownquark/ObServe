@@ -160,7 +160,9 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 			theFields.keySet().<EntityOperationVariable<E>> createMap().unmodifiable());
 	}
 
-	private ObservableEntityImpl<? extends E> pullEntity(EntityIdentity<? super E> id) {}
+	ObservableEntityImpl<? extends E> pullEntity(EntityIdentity<? super E> id) {
+		QuickMap<String, Object> fieldValues = theEntitySet.getImplementation().getFields(id.getFields());
+	}
 
 	EntityIdentity<E> create(EntityCreator<E> configurableEntityCreatorImpl, Object prepared) {
 		// TODO Auto-generated method stub
@@ -171,7 +173,7 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 	}
 
 	ObservableValue<Long> count(EntityQuery<E> query, Object prepared) {
-		// TODO Auto-generated method stub
+		return theEntitySet.getImplementation().count(query, prepared);
 	}
 
 	ObservableSortedSet<E> collect(EntityQuery<E> query, Object prepared) {
@@ -192,5 +194,17 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 
 	long delete(EntityDeletion<E> deletion, Object prepared) {
 		// TODO Auto-generated method stub
+	}
+
+	String isAcceptable(ObservableEntityImpl<E> observableEntityImpl, int fieldIndex, Object value) {
+		// TODO Auto-generated method stub
+	}
+
+	String canDelete(ObservableEntityImpl<E> observableEntityImpl) {
+		// TODO Auto-generated method stub
+	}
+
+	void delete(ObservableEntityImpl<E> observableEntityImpl) {
+		int todo = todo; // TODO Auto-generated method stub
 	}
 }

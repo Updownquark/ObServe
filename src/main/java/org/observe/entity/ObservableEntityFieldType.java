@@ -15,8 +15,6 @@ public interface ObservableEntityFieldType<E, F> extends EntityValueAccess<E, F>
 	List<? extends ObservableEntityFieldType<? super E, F>> getOverrides();
 	List<FieldConstraint<E, F>> getConstraints();
 
-	ObservableEntityField<E, F> getValue(ObservableEntity<? extends E> entity);
-
 	@Override
 	default String canAccept(F value) {
 		StringBuilder str = null;
@@ -49,6 +47,6 @@ public interface ObservableEntityFieldType<E, F> extends EntityValueAccess<E, F>
 
 	@Override
 	default F getValue(E entity) {
-		return getValue(getEntityType().observableEntity(entity)).get();
+		return (F) getEntityType().observableEntity(entity).get(getFieldIndex());
 	}
 }

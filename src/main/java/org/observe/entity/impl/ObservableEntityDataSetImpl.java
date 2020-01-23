@@ -17,9 +17,7 @@ import java.util.function.Function;
 import org.observe.entity.EntityCondition.LiteralCondition;
 import org.observe.entity.EntityConstraint;
 import org.observe.entity.FieldConstraint;
-import org.observe.entity.ObservableEntity;
 import org.observe.entity.ObservableEntityDataSet;
-import org.observe.entity.ObservableEntityField;
 import org.observe.entity.ObservableEntityFieldType;
 import org.observe.entity.ObservableEntityType;
 import org.observe.util.EntityReflector;
@@ -561,11 +559,6 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 
 		Method getFieldGetter() {
 			return theFieldGetter;
-		}
-
-		@Override
-		public ObservableEntityField<E, F> getValue(ObservableEntity<? extends E> entity) {
-			return (ObservableEntityField<E, F>) entity.getField(this);
 		}
 
 		@Override
