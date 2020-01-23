@@ -13,9 +13,16 @@ import java.lang.annotation.Target;
 @Retention(RUNTIME)
 @Target(METHOD)
 public @interface ObjectMethodOverride {
+	/** An enumeration of object methods that may be overridden using this tag */
 	public static enum ObjectMethod {
-		hashCode, equals, toString;
+		/** {@link Object#hashCode()} */
+		hashCode,
+		/** {@link Object#equals(Object)} */
+		equals,
+		/** {@link Object#toString()} */
+		toString;
 	}
 
+	/** @return The object method to override */
 	ObjectMethod value();
 }
