@@ -1027,7 +1027,7 @@ public class EntityReflector<E> {
 			TypeToken<? super E> intfT = (TypeToken<? super E>) type.resolveType(intf);
 			EntityReflector<?> superR = supers.get(intfT);
 			if (superR == null) {
-				superR = new EntityReflector<>(supers, (TypeToken<E>) intfT, (Class<E>) intf, // Generics hack
+				superR = new EntityReflector<>(supers, (TypeToken<E>) intfT, (Class<E>) TypeTokens.getRawType(intfT), // Generics hack
 					getterFilter, setterFilter, customMethods, idFieldNames, messages);
 				if (supers.putIfAbsent(intfT, superR) != null)
 					superR = supers.get(intfT);
