@@ -1,5 +1,6 @@
 package org.observe.entity;
 
+import java.util.Comparator;
 import java.util.function.Function;
 
 import com.google.common.reflect.TypeToken;
@@ -10,7 +11,7 @@ import com.google.common.reflect.TypeToken;
  * @param <E> The type of the entity
  * @param <F> The type of the information to access
  */
-public interface EntityValueAccess<E, F> {
+public interface EntityValueAccess<E, F> extends Comparator<F> {
 	/** @return The type of information */
 	TypeToken<F> getValueType();
 
@@ -35,4 +36,10 @@ public interface EntityValueAccess<E, F> {
 	 * @return The information specified by this access
 	 */
 	F getValue(E entity);
+
+	/**
+	 * @param entity The entity to get the information from
+	 * @return The information specified by this access
+	 */
+	F getValue(ObservableEntity<E> entity);
 }

@@ -55,6 +55,8 @@ public interface ObservableEntityType<E> extends Named {
 	/** @return A list of constraints that must be obeyed by all instances of this type in the entity set */
 	List<EntityConstraint<E>> getConstraints();
 
+	default boolean isAssignableFrom(ObservableEntityType<?> entityType) {}
+
 	/** @return A builder to build an {@link EntityIdentity} of this type */
 	default EntityIdentity.Builder<E> buildId() {
 		return EntityIdentity.build(this);

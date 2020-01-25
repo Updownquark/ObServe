@@ -8,7 +8,7 @@ import com.google.common.reflect.TypeToken;
 
 /**
  * A compound {@link EntityValueAccess}
- * 
+ *
  * @param <E> The entity type
  * @param <T> The information type
  */
@@ -69,8 +69,32 @@ public class EntityChainAccess<E, T> implements EntityValueAccess<E, T> {
 	public T getValue(E entity) {
 		Object value = entity;
 		for (ObservableEntityFieldType<?, ?> field : theFieldSequence)
-			value = ((ObservableEntityFieldType<Object, Object>) field).getValue(entity);
+			value = ((ObservableEntityFieldType<Object, Object>) field).getValue(value);
 		return (T) value;
+	}
+
+	@Override
+	public T getValue(ObservableEntity<E> entity) {
+		Object value = entity;
+		for (ObservableEntityFieldType<?, ?> field : theFieldSequence)
+			value = ((ObservableEntityFieldType<Object, Object>) field).getValue(value);
+		return (T) value;
+	}
+
+	@Override
+	public int compare(T o1, T o2) {
+		if (o1 == o2)
+			return 0;
+		Object v1 = o1;
+		Object v2 = o2;
+		for (ObservableEntityFieldType<?, ?> field : theFieldSequence) {
+			ObservableEntityFieldType<Object, Object> f = (ObservableEntityFieldType<Object, Object>) field;
+			v1 = f.getValue(v1);
+			v2 = f.getValue(v2);
+			if (f.compare(v1, v2) == 0)
+				return 0;
+		}
+		return 0;
 	}
 
 	@Override

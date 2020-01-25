@@ -74,6 +74,8 @@ public class EntityChange<E> {
 	 * @param <F> The type of the field
 	 */
 	public static class EntityFieldValueChange<E, F> extends EntityFieldChange<E, F> {
+		/** The previous value in the entity's field */
+		public final F oldValue;
 		/** The new value in the entity's field */
 		public final F newValue;
 
@@ -81,10 +83,13 @@ public class EntityChange<E> {
 		 * @param time The time that the change was made
 		 * @param entity The identity of the entity that changed
 		 * @param field The field whose value changed in the entity
+		 * @param oldValue The previous value of the field
 		 * @param newValue The new value of the field
 		 */
-		public EntityFieldValueChange(Instant time, EntityIdentity<E> entity, ObservableEntityFieldType<E, F> field, F newValue) {
+		public EntityFieldValueChange(Instant time, EntityIdentity<E> entity, ObservableEntityFieldType<E, F> field, F oldValue,
+			F newValue) {
 			super(time, entity, EntityChangeType.setField, field);
+			this.oldValue = oldValue;
 			this.newValue = newValue;
 		}
 	}

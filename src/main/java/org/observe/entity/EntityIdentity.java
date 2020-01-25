@@ -14,7 +14,7 @@ import org.qommons.collect.QuickSet.QuickMap;
  *
  * @param <E> The type of the entity represented
  */
-public class EntityIdentity<E> {
+public class EntityIdentity<E> implements Comparable<EntityIdentity<?>> {
 	private final ObservableEntityType<E> theEntityType;
 	final QuickMap<String, Object> theFields;
 
@@ -31,6 +31,36 @@ public class EntityIdentity<E> {
 	/** @return The identity fields of this identity */
 	public QuickMap<String, Object> getFields() {
 		return theFields;
+	}
+
+	public <F> F getValue(ObservableEntityFieldType<? super E, F> fieldType) {
+	}
+
+	@Override
+	public int compareTo(EntityIdentity<?> other) {
+		if (this == other)
+			return 0;
+		if (theEntityType.equals(other.theEntityType)) {
+			for (int f = 0; f < theFields.keySize(); f++) {
+				int comp = ((ObservableEntityFieldType<E, Object>) theEntityType.getIdentityFields().get(f)).compare(theFields.get(f),
+					other.theFields.get(f));
+				if (comp != 0)
+					return comp;
+			}
+			return 0;
+		} else if (theEntityType.isAssignableFrom(other.theEntityType)) {
+			for (int f = 0; f < theFields.keySize(); f++) {
+				ObservableEntityFieldType<E, Object> field = (ObservableEntityFieldType<E, Object>) theEntityType.getIdentityFields()
+					.get(f);
+				int comp = field.compare(theFields.get(f), ((EntityIdentity<? extends E>) other).getValue(field));
+				if (comp != 0)
+					return comp;
+			}
+			return 0;
+		} else if (other.theEntityType.isAssignableFrom(theEntityType))
+			return other.compareTo(this);
+		else
+			throw new IllegalArgumentException(theEntityType + " and " + other.theEntityType + " are not related");
 	}
 
 	@Override
@@ -183,4 +213,5 @@ public class EntityIdentity<E> {
 			return new EntityIdentity<>(theEntityType, fields.unmodifiable());
 		}
 	}
+
 }

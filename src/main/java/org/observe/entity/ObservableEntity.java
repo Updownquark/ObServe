@@ -3,8 +3,12 @@ package org.observe.entity;
 import java.util.function.Function;
 
 import org.observe.Observable;
+import org.observe.util.TypeTokens;
 import org.qommons.Identifiable;
 import org.qommons.Stamped;
+
+import com.google.common.reflect.TypeParameter;
+import com.google.common.reflect.TypeToken;
 
 /**
  * A managed entity in a data set
@@ -12,6 +16,17 @@ import org.qommons.Stamped;
  * @param <E> The java-type of the entity
  */
 public interface ObservableEntity<E> extends Stamped, Identifiable {
+	/** The type key for ObservableEntity that can be used to create {@link TypeToken}s efficiently */
+	@SuppressWarnings("rawtypes")
+	public static final TypeTokens.TypeKey<ObservableEntity> TYPE_KEY = TypeTokens.get().keyFor(ObservableEntity.class)
+	.enableCompoundTypes(new TypeTokens.UnaryCompoundTypeCreator<ObservableEntity>() {
+		@Override
+		public <P> TypeToken<ObservableEntity<P>> createCompoundType(TypeToken<P> param) {
+			return new TypeToken<ObservableEntity<P>>() {}.where(new TypeParameter<P>() {}, param);
+		}
+	});
+	/** TypeToken<ObservableEntity<?>> */
+	public static final TypeToken<ObservableEntity<?>> TYPE = TYPE_KEY.parameterized();
 	/** The message returned from {@link #isAcceptable(int, Object)} or {@link #canDelete()} if the entity has already been removed */
 	public static final String ENTITY_REMOVED = "This entity has been removed";
 
