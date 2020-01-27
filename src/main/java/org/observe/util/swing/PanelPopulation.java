@@ -41,6 +41,7 @@ import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -51,6 +52,7 @@ import javax.swing.JTabbedPane;
 import javax.swing.JTable;
 import javax.swing.ListSelectionModel;
 import javax.swing.SpinnerNumberModel;
+import javax.swing.SwingConstants;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 import javax.swing.event.ListDataEvent;
@@ -1479,17 +1481,23 @@ public class PanelPopulation {
 			return theTooltip;
 		}
 
+		protected <C extends JComponent> C onFieldName(C fieldNameComponent, Consumer<String> fieldName, Observable<?> until) {
+			if (theFieldName == null)
+				return null;
+			theFieldName.changes().takeUntil(until).act(evt -> fieldName.accept(evt.getNewValue()));
+			if (fieldNameComponent != null && theFieldLabelModifier != null)
+				theFieldLabelModifier.accept(new FontAdjuster<>(fieldNameComponent));
+			if (fieldNameComponent != null && theFont != null)
+				theFont.accept(new FontAdjuster<>(fieldNameComponent));
+			return fieldNameComponent;
+		}
+
 		@Override
 		protected Component createFieldNameLabel(Observable<?> until) {
 			if (theFieldName == null)
 				return null;
 			JLabel fieldNameLabel = new JLabel(theFieldName.get());
-			theFieldName.changes().takeUntil(until).act(evt -> fieldNameLabel.setText(evt.getNewValue()));
-			if (theFieldLabelModifier != null)
-				theFieldLabelModifier.accept(new FontAdjuster<>(fieldNameLabel));
-			if (theFont != null)
-				theFont.accept(new FontAdjuster<>(fieldNameLabel));
-			return fieldNameLabel;
+			return onFieldName(fieldNameLabel, fieldNameLabel::setText, until);
 		}
 
 		@Override
@@ -1560,6 +1568,19 @@ public class PanelPopulation {
 						postLabel.setVisible(evt.getNewValue());
 				});
 			}
+		}
+
+		@Override
+		public SimpleHPanel<C> addCheckField(String fieldName, SettableValue<Boolean> field, Consumer<FieldEditor<JCheckBox, ?>> modify) {
+			SimpleFieldEditor<JCheckBox, ?> fieldPanel = new SimpleFieldEditor<>(fieldName, new JCheckBox(), getLock());
+			fieldPanel.getEditor().setHorizontalTextPosition(SwingConstants.LEADING);
+			Subscription sub = ObservableSwingUtils.checkFor(fieldPanel.getEditor(), fieldPanel.getTooltip(), field);
+			getUntil().take(1).act(__ -> sub.unsubscribe());
+			if (modify != null)
+				modify.accept(fieldPanel);
+			fieldPanel.onFieldName(fieldPanel.getEditor(), name -> fieldPanel.getEditor().setText(name), getUntil());
+			doAdd(fieldPanel, null, fieldPanel.createPostLabel(theUntil));
+			return this;
 		}
 	}
 
