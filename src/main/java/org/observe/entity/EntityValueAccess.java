@@ -11,11 +11,17 @@ import com.google.common.reflect.TypeToken;
  * @param <E> The type of the entity
  * @param <F> The type of the information to access
  */
-public interface EntityValueAccess<E, F> extends Comparator<F> {
+public interface EntityValueAccess<E, F> extends Comparator<F>, Comparable<EntityValueAccess<E, ?>> {
 	/** @return The type of information */
 	TypeToken<F> getValueType();
 
 	/** @return The type of entity that this object can access information for */
+	ObservableEntityType<E> getSourceEntity();
+
+	/**
+	 * @return The value type of this information, as an entity type. May be null if this information does not describe an entity-mapped
+	 *         field.
+	 */
 	ObservableEntityType<F> getTargetEntity();
 
 	/**
@@ -41,5 +47,7 @@ public interface EntityValueAccess<E, F> extends Comparator<F> {
 	 * @param entity The entity to get the information from
 	 * @return The information specified by this access
 	 */
-	F getValue(ObservableEntity<E> entity);
+	F getValue(ObservableEntity<? extends E> entity);
+
+	boolean isOverride(EntityValueAccess<? extends E, ?> field);
 }

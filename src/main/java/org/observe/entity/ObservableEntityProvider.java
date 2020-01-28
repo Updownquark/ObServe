@@ -1,5 +1,8 @@
 package org.observe.entity;
 
+import java.util.List;
+import java.util.concurrent.Future;
+
 import org.observe.Observable;
 import org.qommons.Transactable;
 import org.qommons.collect.QuickSet.QuickMap;
@@ -19,16 +22,17 @@ public interface ObservableEntityProvider extends Transactable {
 	Object prepare(ConfigurableOperation<?> operation) throws EntityOperationException;
 
 	<E> EntityIdentity<E> create(EntityCreator<E> creator, Object prepared) throws EntityOperationException;
-	<E> QuickMap<String, Object> createAndGet(EntityCreator<E> creator, Object prepared) throws EntityOperationException;
 
-	long count(EntityQuery<?> query, Object prepared) throws EntityOperationException;
+	long count(EntitySelection<?> query, Object prepared) throws EntityOperationException;
 
-	<E> Iterable<QuickMap<String, Object>> query(EntityQuery<E> query, Object prepared) throws EntityOperationException;
+	<E> Iterable<QuickMap<String, Object>> query(EntitySelection<E> query, Object prepared) throws EntityOperationException;
 
 	long update(EntityUpdate<?> update, Object prepared) throws EntityOperationException;
 
 	long delete(EntityDeletion<?> delete, Object prepared) throws EntityOperationException;
 
 	/** @return An observable that fires a change whenever the entity data is changed externally */
-	Observable<EntityChange<?>> changes();
+	Observable<List<EntityChange<?>>> changes();
+
+	Future<List<EntityLoadRequest.Fulfillment<?>>> loadEntityData(List<EntityLoadRequest<?>> loadRequests);
 }

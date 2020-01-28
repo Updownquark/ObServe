@@ -16,6 +16,10 @@ import com.google.common.reflect.TypeToken;
 public interface ObservableEntityFieldType<E, F> extends EntityValueAccess<E, F>, Named {
 	/** @return The entity type that this field is a member of */
 	ObservableEntityType<E> getEntityType();
+	@Override
+	default ObservableEntityType<E> getSourceEntity() {
+		return getEntityType();
+	}
 	/** @return The types of values that belong in the field */
 	TypeToken<F> getFieldType();
 	/** return The name of the field */
@@ -67,5 +71,31 @@ public interface ObservableEntityFieldType<E, F> extends EntityValueAccess<E, F>
 	@Override
 	default F getValue(E entity) {
 		return (F) getEntityType().observableEntity(entity).get(getFieldIndex());
+	}
+
+	@Override
+	default F getValue(ObservableEntity<? extends E> entity) {
+		if (getEntityType() == entity.getType())
+			return (F) entity.get(getFieldIndex());
+		else if (getEntityType().isAssignableFrom(entity.getType()))
+			return (F) entity.getField(getName()).get();
+		else
+			throw new IllegalArgumentException(this + " cannot be applied to an instance of " + entity.getType());
+	}
+
+	@Override
+	default int compareTo(EntityValueAccess<E, ?> o) {
+		if (!(o instanceof ObservableEntityFieldType))
+			return -1;
+		if (getEntityType() != ((ObservableEntityFieldType<?, ?>) o).getEntityType())
+			throw new IllegalArgumentException("Cannot compare fields of different entity types");
+		return Integer.compare(getFieldIndex(), ((ObservableEntityFieldType<E, ?>) o).getFieldIndex());
+	}
+
+	@Override
+	default boolean isOverride(EntityValueAccess<? extends E, ?> field) {
+		if (!(field instanceof ObservableEntityFieldType))
+			return false;
+		return ObservableEntityUtil.isOverride(this, (ObservableEntityFieldType<?, ?>) field);
 	}
 }

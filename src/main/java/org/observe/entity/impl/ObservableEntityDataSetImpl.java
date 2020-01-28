@@ -4,6 +4,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -15,8 +16,9 @@ import java.util.Set;
 import java.util.function.Function;
 
 import org.observe.entity.ConditionalFieldConstraint;
-import org.observe.entity.EntityCondition.LiteralCondition;
 import org.observe.entity.EntityConstraint;
+import org.observe.entity.EntitySelection;
+import org.observe.entity.EntitySelection.LiteralCondition;
 import org.observe.entity.FieldConstraint;
 import org.observe.entity.ObservableEntityDataSet;
 import org.observe.entity.ObservableEntityFieldType;
@@ -45,10 +47,14 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 	private final Map<Class<?>, String> theClassMapping;
 	private final ObservableEntityProvider theImplementation;
 
+	private final QueryResultsTree theResults;
+
 	private ObservableEntityDataSetImpl(ObservableEntityProvider implementation) {
 		theEntityTypes = new BetterTreeSet<>(true, (et1, et2) -> compareEntityTypes(et1.getName(), et2.getName()));
 		theClassMapping = new HashMap<>();
 		theImplementation = implementation;
+
+		theResults = new QueryResultsTree();
 	}
 
 	ObservableEntityProvider getImplementation() {
@@ -86,6 +92,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 			return (ObservableEntityType<E>) entityType;
 		return null;
 	}
+
 
 	private static int compareEntityTypes(String type1, String type2) {
 		return QommonsUtils.compareNumberTolerant(type1, type2, true, true);
@@ -476,6 +483,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		Method theFieldGetter;
 		boolean isId;
 		String targetEntity;
+		Comparator<? super F> theCompare;
 
 		ObservableEntityFieldBuilder(ObservableEntityTypeBuilder<E> typeBuilder, String name, TypeToken<F> type) {
 			theTypeBuilder = typeBuilder;
@@ -500,6 +508,17 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		 */
 		public ObservableEntityFieldBuilder<E, F> id() {
 			isId = true;
+			return this;
+		}
+
+		/**
+		 * @param compare The comparator for values of this field's type
+		 * @return This builder
+		 */
+		public ObservableEntityFieldBuilder<E, F> compareWith(Comparator<? super F> compare) {
+			if (!theOverrides.isEmpty())
+				throw new IllegalStateException("Cannot override field sorting from " + theOverrides);
+			theCompare = compare;
 			return this;
 		}
 
@@ -537,19 +556,15 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		 * Adds a {@link EntityConstraint#CHECK check}-type constraint to this field
 		 *
 		 * @param name The name for the constraint
-		 * @param value The value to compare the field values to
-		 * @param ltEqGt Whether field comparison for the field values will be of type less than (&lt;0), greater than (&gt;0), or equal to
-		 *        (0)
-		 * @param withEqual Modifier for the previous parameter. True means a value equal to the given value will be acceptable for the
-		 *        field, false means an equivalent value is unacceptable.
+		 * @param condition Produces a literal (constant-based) condition to check values of this field against
 		 * @return This builder
 		 */
-		public ObservableEntityFieldBuilder<E, F> withCheckConstraint(String name, F value, int ltEqGt, boolean withEqual) {
+		public ObservableEntityFieldBuilder<E, F> withCheckConstraint(String name,
+			Function<EntitySelection.EntityConditionIntermediate1<E, F>, LiteralCondition<E, F>> condition) {
 			if (theConstraints == null)
 				theConstraints = new LinkedList<>();
 			theConstraints.add(new FieldConstraintBuilder<>(EntityConstraint.CHECK, name, field -> {
-				return new ConditionalFieldConstraint<>(field, name,
-					new LiteralCondition<>(field.getEntityType(), field, value, ltEqGt, withEqual));
+				return new ConditionalFieldConstraint<>(field, name, condition.apply(field.getEntityType().select().where(field)));
 			}));
 			return this;
 		}
@@ -616,6 +631,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		private final int theIdIndex;
 		private final List<ObservableEntityFieldType<? super E, F>> theOverrides;
 		private final List<FieldConstraint<E, F>> theConstraints;
+		private final Comparator<? super F> theCompare;
 
 		FieldTypeImpl(ObservableEntityFieldBuilder<E, F> builder, ObservableEntityTypeImpl<E> entity, int fieldIndex, int idIndex) {
 			theEntityType = entity;
@@ -642,6 +658,14 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 					newConstraints.add(c.constraint.apply(this));
 				theConstraints = Collections.unmodifiableList(newConstraints);
 			}
+			if (builder.theCompare != null)
+				theCompare = builder.theCompare;
+			else if (!theOverrides.isEmpty())
+				theCompare = ((FieldTypeImpl<? super E, ? super F>) theOverrides.get(0)).theCompare;
+			else if (TypeTokens.get().isComparable(theFieldType))
+				theCompare = (v1, v2) -> ((Comparable<F>) v1).compareTo(v2);
+				else
+					throw new IllegalStateException("Comparator must be set for field " + this + " (type " + theFieldType + ")");
 		}
 
 		@Override
@@ -725,6 +749,11 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		@Override
 		public String toString() {
 			return theEntityType.getName() + "." + theName;
+		}
+
+		@Override
+		public int compare(F o1, F o2) {
+			return theCompare.compare(o1, o2);
 		}
 	}
 }

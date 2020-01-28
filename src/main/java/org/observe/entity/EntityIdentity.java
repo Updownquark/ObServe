@@ -33,7 +33,19 @@ public class EntityIdentity<E> implements Comparable<EntityIdentity<?>> {
 		return theFields;
 	}
 
+	/**
+	 * @param fieldType The field type of this ID's type (or a super-type) to get the value for
+	 * @return The identity value of the given field in this identity
+	 */
 	public <F> F getValue(ObservableEntityFieldType<? super E, F> fieldType) {
+		if (fieldType.getIdIndex() < 0)
+			throw new IllegalArgumentException("Field " + fieldType + " is not an identity field");
+		else if (fieldType.getEntityType() == theEntityType)
+			return (F) theFields.get(fieldType.getIdIndex());
+		else if (fieldType.getEntityType().isAssignableFrom(theEntityType))
+			return (F) theFields.get(fieldType.getName());
+		else
+			throw new IllegalArgumentException("Field " + fieldType + " cannot be applied to an identity of " + theEntityType);
 	}
 
 	@Override

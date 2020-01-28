@@ -25,15 +25,17 @@ import com.google.common.reflect.TypeToken;
  * @param <E> The type of element in the set
  */
 public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSet<E> {
-	/** This class's wildcard {@link TypeToken} */
+	/** This class's type key */
 	@SuppressWarnings("rawtypes")
-	static TypeToken<ObservableSortedSet<?>> TYPE = TypeTokens.get().keyFor(ObservableSortedSet.class)
+	static TypeTokens.TypeKey<ObservableSortedSet> TYPE_KEY = TypeTokens.get().keyFor(ObservableSortedSet.class)
 	.enableCompoundTypes(new TypeTokens.UnaryCompoundTypeCreator<ObservableSortedSet>() {
 		@Override
 		public <P> TypeToken<? extends ObservableSortedSet> createCompoundType(TypeToken<P> param) {
 			return new TypeToken<ObservableSortedSet<P>>() {}.where(new TypeParameter<P>() {}, param);
 		}
-	}).parameterized();
+		});
+	/** This class's wildcard {@link TypeToken} */
+	static TypeToken<ObservableSortedSet<?>> TYPE = TYPE_KEY.parameterized();
 
 	@Override
 	default Iterator<E> iterator() {

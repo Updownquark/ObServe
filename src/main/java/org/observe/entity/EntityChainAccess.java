@@ -39,6 +39,11 @@ public class EntityChainAccess<E, T> implements EntityValueAccess<E, T> {
 	}
 
 	@Override
+	public ObservableEntityType<E> getSourceEntity() {
+		return ((ObservableEntityFieldType<E, ?>) theFieldSequence.getFirst()).getEntityType();
+	}
+
+	@Override
 	public TypeToken<T> getValueType() {
 		return (TypeToken<T>) theFieldSequence.getLast().getValueType();
 	}
@@ -51,6 +56,20 @@ public class EntityChainAccess<E, T> implements EntityValueAccess<E, T> {
 	@Override
 	public String canAccept(T value) {
 		return ((ObservableEntityFieldType<?, T>) theFieldSequence.getLast()).canAccept(value);
+	}
+
+	@Override
+	public boolean isOverride(EntityValueAccess<? extends E, ?> field) {
+		if (!(field instanceof EntityChainAccess))
+			return false;
+		EntityChainAccess<?, ?> other = (EntityChainAccess<?, ?>) field;
+		if (theFieldSequence.size() != other.theFieldSequence.size())
+			return false;
+		for (int f = 0; f < theFieldSequence.size(); f++)
+			if (!((ObservableEntityFieldType<E, ?>) theFieldSequence.get(f)).isOverride(//
+				(ObservableEntityFieldType<E, ?>) other.theFieldSequence.get(f)))
+				return false;
+		return true;
 	}
 
 	@Override
@@ -74,7 +93,7 @@ public class EntityChainAccess<E, T> implements EntityValueAccess<E, T> {
 	}
 
 	@Override
-	public T getValue(ObservableEntity<E> entity) {
+	public T getValue(ObservableEntity<? extends E> entity) {
 		Object value = entity;
 		for (ObservableEntityFieldType<?, ?> field : theFieldSequence)
 			value = ((ObservableEntityFieldType<Object, Object>) field).getValue(value);
@@ -95,6 +114,20 @@ public class EntityChainAccess<E, T> implements EntityValueAccess<E, T> {
 				return 0;
 		}
 		return 0;
+	}
+
+	@Override
+	public int compareTo(EntityValueAccess<E, ?> o) {
+		if (!(o instanceof EntityChainAccess))
+			return 1;
+		EntityChainAccess<E, ?> other = (EntityChainAccess<E, ?>) o;
+		for (int f = 0; f < theFieldSequence.size() && f < other.theFieldSequence.size(); f++) {
+			int comp = ((ObservableEntityFieldType<E, ?>) theFieldSequence.get(f)).compareTo(//
+				(ObservableEntityFieldType<E, ?>) other.theFieldSequence.get(f));
+			if (comp != 0)
+				return comp;
+		}
+		return Integer.compare(theFieldSequence.size(), other.theFieldSequence.size());
 	}
 
 	@Override

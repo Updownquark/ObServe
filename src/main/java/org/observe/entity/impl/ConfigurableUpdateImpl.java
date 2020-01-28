@@ -13,6 +13,11 @@ class ConfigurableUpdateImpl<E> extends AbstractConfigurableOperation<E> impleme
 	private final QuickMap<String, Object> theUpdateValues;
 	private final QuickMap<String, EntityOperationVariable<E>> theUpdateVariables;
 
+	ConfigurableUpdateImpl(EntitySelection<E> selection) {
+		this(selection, QuickMap.of(selection.getVariables(), String::compareTo),
+			selection.getEntityType().getFields().keySet().createMap(), QuickMap.empty());
+	}
+
 	ConfigurableUpdateImpl(EntitySelection<E> selection, QuickMap<String, EntityOperationVariable<E>> variables,
 		QuickMap<String, Object> updateValues, QuickMap<String, EntityOperationVariable<E>> updateVariables) {
 		super(selection.getEntityType(), variables);

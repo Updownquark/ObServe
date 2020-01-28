@@ -15,7 +15,7 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <E> The java-type of the entity
  */
-public interface ObservableEntity<E> extends Stamped, Identifiable {
+public interface ObservableEntity<E> extends Stamped, Identifiable, Comparable<ObservableEntity<?>> {
 	/** The type key for ObservableEntity that can be used to create {@link TypeToken}s efficiently */
 	@SuppressWarnings("rawtypes")
 	public static final TypeTokens.TypeKey<ObservableEntity> TYPE_KEY = TypeTokens.get().keyFor(ObservableEntity.class)
@@ -116,6 +116,11 @@ public interface ObservableEntity<E> extends Stamped, Identifiable {
 				throw new IllegalArgumentException("No such field " + getType().getName() + "." + fieldType.getName());
 		}
 		return new ObservableEntityField<>(this, myFieldType);
+	}
+
+	@Override
+	default int compareTo(ObservableEntity<?> o) {
+		return getId().compareTo(o.getId());
 	}
 
 	/** @return Whether this entity is still present in the entity set */

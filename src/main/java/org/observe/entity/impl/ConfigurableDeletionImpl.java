@@ -2,7 +2,6 @@ package org.observe.entity.impl;
 
 import org.observe.entity.ConfigurableDeletion;
 import org.observe.entity.EntityOperationException;
-import org.observe.entity.EntityOperationVariable;
 import org.observe.entity.EntitySelection;
 import org.observe.entity.PreparedDeletion;
 import org.qommons.collect.QuickSet.QuickMap;
@@ -10,8 +9,8 @@ import org.qommons.collect.QuickSet.QuickMap;
 class ConfigurableDeletionImpl<E> extends AbstractConfigurableOperation<E> implements ConfigurableDeletion<E> {
 	private final EntitySelection<E> theSelection;
 
-	ConfigurableDeletionImpl(EntitySelection<E> selection, QuickMap<String, EntityOperationVariable<E>> variables) {
-		super(selection.getEntityType(), variables);
+	ConfigurableDeletionImpl(EntitySelection<E> selection) {
+		super(selection.getEntityType(), QuickMap.of(selection.getVariables(), String::compareTo));
 		theSelection = selection;
 	}
 

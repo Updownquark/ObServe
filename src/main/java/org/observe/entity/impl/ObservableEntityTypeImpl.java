@@ -1,13 +1,19 @@
 package org.observe.entity.impl;
 
+import java.lang.ref.Reference;
+import java.lang.ref.ReferenceQueue;
 import java.lang.ref.WeakReference;
-import java.util.IdentityHashMap;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
 
 import org.observe.ObservableValue;
 import org.observe.collect.ObservableSortedSet;
-import org.observe.entity.EntityCondition;
+import org.observe.entity.ConfigurableDeletion;
+import org.observe.entity.ConfigurableQuery;
+import org.observe.entity.ConfigurableUpdate;
 import org.observe.entity.EntityConstraint;
 import org.observe.entity.EntityCreator;
 import org.observe.entity.EntityDeletion;
@@ -25,10 +31,11 @@ import org.observe.util.EntityReflector;
 import org.observe.util.EntityReflector.ReflectedField;
 import org.observe.util.TypeTokens;
 import org.qommons.Transaction;
-import org.qommons.ValueHolder;
-import org.qommons.collect.BetterHashMap;
 import org.qommons.collect.BetterMap;
+import org.qommons.collect.ElementId;
+import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.QuickSet.QuickMap;
+import org.qommons.tree.BetterTreeMap;
 
 class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 	private final ObservableEntityDataSetImpl theEntitySet;
@@ -36,12 +43,15 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 	private final List<ObservableEntityTypeImpl<? super E>> theSupers;
 	private final QuickMap<String, ObservableEntityFieldType<E, ?>> theFields;
 	private final QuickMap<String, ObservableEntityFieldType<E, ?>> theIdFields;
-	private final BetterMap<EntityIdentity<? super E>, WeakReference<ObservableEntityImpl<? extends E>>> theEntitiesById;
-	private final IdentityHashMap<E, WeakReference<ObservableEntityImpl<? extends E>>> theEntitiesByProxy;
 	private final EntityReflector<E> theReflector;
 	private final List<EntityConstraint<E>> theConstraints;
 
-	ObservableEntityTypeImpl(ObservableEntityDataSetImpl entitySet, String name, List<ObservableEntityTypeImpl<? super E>> supers,
+	private final BetterMap<EntityIdentity<E>, WeakReference<ObservableEntityImpl<? extends E>>> theEntitiesById;
+	private final ReferenceQueue<Object> theCollectedEntities;
+	private final Map<Reference<?>, ElementId> theEntitiesByRef;
+
+	ObservableEntityTypeImpl(ObservableEntityDataSetImpl entitySet, String name, //
+		List<ObservableEntityTypeImpl<? super E>> supers,
 		QuickMap<String, ObservableEntityFieldType<E, ?>> fields, QuickMap<String, ObservableEntityFieldType<E, ?>> idFields,
 		EntityReflector<E> reflector, List<EntityConstraint<E>> constraints) {
 		theEntitySet = entitySet;
@@ -51,8 +61,9 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 		theFields = fields;
 		theReflector = reflector;
 		theConstraints = constraints;
-		theEntitiesById = BetterHashMap.build().unsafe().buildMap();
-		theEntitiesByProxy = new IdentityHashMap<>();
+		theEntitiesById = BetterTreeMap.<EntityIdentity<E>> build(EntityIdentity::compareTo).safe(false).buildMap();
+		theCollectedEntities = new ReferenceQueue<>();
+		theEntitiesByRef = new HashMap<>();
 	}
 
 	@Override
@@ -91,7 +102,7 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 	}
 
 	@Override
-	public ObservableEntity<? extends E> observableEntity(EntityIdentity<? super E> id) {
+	public ObservableEntity<? extends E> observableEntity(EntityIdentity<E> id) {
 		// First, just lock for read and see if we already have it
 		try (Transaction t = theEntitySet.lock(false, null)) { // Updates to existing entities are fine
 			WeakReference<ObservableEntityImpl<? extends E>> entityRef = theEntitiesById.get(id);
@@ -102,37 +113,23 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 			}
 		}
 		try (Transaction t = theEntitySet.lock(true, null)) {
-			ValueHolder<ObservableEntity<? extends E>> result = new ValueHolder<>();
-			theEntitiesById.compute(id, (_id, entityRef) -> {
-				ObservableEntityImpl<? extends E> entity;
-				if (entityRef != null) {
-					entity = entityRef.get();
-					if (entity != null) {
-						result.accept(entity);
-						return entityRef;
-					}
-				}
-				entity = pullEntity(_id);
-				return entity == null ? null : new WeakReference<>(entity);
-			});
-			return result.get();
+			clearCollectedEntities();
+			MapEntryHandle<EntityIdentity<E>, WeakReference<ObservableEntityImpl<? extends E>>> entityEntry = theEntitiesById.getEntry(id);
+			WeakReference<ObservableEntityImpl<? extends E>> entityRef = entityEntry == null ? null : entityEntry.get();
+			if (entityRef != null) {
+				ObservableEntity<? extends E> entity = entityRef.get();
+				if (entity != null)
+					return entity;
+			}
+			return theEntitySet.pullEntity(id);
 		}
 	}
 
 	@Override
 	public ObservableEntityImpl<? extends E> observableEntity(E entity) {
-		try (Transaction t = theEntitySet.lock(false, null)) {
-			// This should be pretty straightforward. If the caller has a reference to the entity,
-			// then the ObservableEntity can't have been GC'd.
-			// The only way this could fail is if the caller has synthesized the entity implementation by external means, which is illegal.
-			WeakReference<ObservableEntityImpl<? extends E>> entityRef = theEntitiesByProxy.get(entity);
-			if (entityRef == null)
-				throw new IllegalArgumentException("Entity " + entity + " has been synthesized by exernal means, which is illegal!");
-			ObservableEntityImpl<? extends E> obsEntity = entityRef.get();
-			if (obsEntity == null)
-				throw new IllegalArgumentException("Entity " + entity + " has been synthesized by exernal means, which is illegal!");
-			return obsEntity;
-		}
+		if (theReflector == null)
+			throw new IllegalStateException("This entity is not represented by a java type");
+		return (ObservableEntityImpl<? extends E>) theReflector.getAssociated(entity, this);
 	}
 
 	@Override
@@ -149,8 +146,23 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 	}
 
 	@Override
-	public EntitySelection<E> select() {
-		return new EntitySelectionImpl<>(EntityCondition.all(this));
+	public EntitySelection.All<E> select() {
+		return new EntitySelection.All<>(this, new EntitySelection.SelectionMechanism<E>() {
+			@Override
+			public ConfigurableQuery<E> query(EntitySelection<E> selection) {
+				return new ConfigurableQueryImpl<>(selection);
+			}
+
+			@Override
+			public ConfigurableUpdate<E> update(EntitySelection<E> selection) {
+				return new ConfigurableUpdateImpl<>(selection);
+			}
+
+			@Override
+			public ConfigurableDeletion<E> delete(EntitySelection<E> selection) {
+				return new ConfigurableDeletionImpl<>(selection);
+			}
+		}, Collections.emptyMap());
 	}
 
 	@Override
@@ -160,8 +172,21 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 			theFields.keySet().<EntityOperationVariable<E>> createMap().unmodifiable());
 	}
 
-	ObservableEntityImpl<? extends E> pullEntity(EntityIdentity<? super E> id) {
-		QuickMap<String, Object> fieldValues = theEntitySet.getImplementation().getFields(id.getFields());
+	void trackEntity(ObservableEntityImpl<? extends E> entity) {
+		WeakReference<ObservableEntityImpl<? extends E>> entityRef = new WeakReference<>(entity, theCollectedEntities);
+		theEntitiesById.put(fromSubId(entity.getId()), entityRef);
+		for (ObservableEntityTypeImpl<? super E> superType : theSupers)
+			superType.trackEntity(entity);
+	}
+
+	private void clearCollectedEntities() {
+		Reference<?> ref = theCollectedEntities.poll();
+		while (ref != null) {
+			ElementId entity = theEntitiesByRef.remove(ref);
+			if (entity != null)
+				theEntitiesById.mutableEntry(entity).remove();
+			ref = theCollectedEntities.poll();
+		}
 	}
 
 	EntityIdentity<E> create(EntityCreator<E> configurableEntityCreatorImpl, Object prepared) {

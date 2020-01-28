@@ -25,7 +25,7 @@ class ConfigurableQueryImpl<E> extends AbstractConfigurableOperation<E> implemen
 	private final List<QueryOrder<E, ?>> theOrder;
 
 	ConfigurableQueryImpl(EntitySelection<E> selection) {
-		this(selection, QuickMap.of(selection.getCondition().getVariables(), String::compareTo),
+		this(selection, QuickMap.of(selection.getVariables(), String::compareTo),
 			selection.getEntityType().getFields().keySet().createMap(), Collections.emptyList());
 	}
 

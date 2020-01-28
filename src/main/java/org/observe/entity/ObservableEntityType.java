@@ -3,6 +3,7 @@ package org.observe.entity;
 import java.util.List;
 import java.util.function.Function;
 
+import org.observe.entity.EntityIdentity.Builder;
 import org.qommons.Named;
 import org.qommons.collect.QuickSet.QuickMap;
 
@@ -30,7 +31,7 @@ public interface ObservableEntityType<E> extends Named {
 	 * @param id The identity of the entity to get
 	 * @return The entity of this type (or one of its sub-types) with the given identity, or null if there is none such in the entity set
 	 */
-	ObservableEntity<? extends E> observableEntity(EntityIdentity<? super E> id);
+	ObservableEntity<? extends E> observableEntity(EntityIdentity<E> id);
 	/**
 	 * @param entity The entity object queried from this type
 	 * @return The observable entity represented by the given entity object
@@ -41,7 +42,7 @@ public interface ObservableEntityType<E> extends Named {
 	 * @return A selection object (defaulted to ALL) which may be used to query, update, or delete existing entities of this type from the
 	 *         entity set
 	 */
-	EntitySelection<E> select();
+	EntitySelection.All<E> select();
 	/** @return An entity creator which may be used to create new instances of this type in the entity set */
 	EntityCreator<E> create();
 
@@ -55,10 +56,27 @@ public interface ObservableEntityType<E> extends Named {
 	/** @return A list of constraints that must be obeyed by all instances of this type in the entity set */
 	List<EntityConstraint<E>> getConstraints();
 
-	default boolean isAssignableFrom(ObservableEntityType<?> entityType) {}
+	/**
+	 * @param entityType The entity type to test
+	 * @return Whether this entity type is a super-type of <code>entityType</code>
+	 */
+	default boolean isAssignableFrom(ObservableEntityType<?> entityType) {
+		return ObservableEntityUtil.isAssignableFrom(this, entityType);
+	}
 
 	/** @return A builder to build an {@link EntityIdentity} of this type */
 	default EntityIdentity.Builder<E> buildId() {
 		return EntityIdentity.build(this);
+	}
+
+	default EntityIdentity<E> fromSubId(EntityIdentity<? extends E> subId) {
+		if (subId.getEntityType() == this)
+			return (EntityIdentity<E>) subId;
+		Builder<E> builder = buildId();
+		for (int f = 0; f < getIdentityFields().keySize(); f++) {
+			ObservableEntityFieldType<E, Object> field = (ObservableEntityFieldType<E, Object>) getIdentityFields().get(f);
+			builder.with(field, subId.getValue(field));
+		}
+		return builder.build();
 	}
 }

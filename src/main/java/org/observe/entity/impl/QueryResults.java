@@ -1,6 +1,9 @@
 package org.observe.entity.impl;
 
+import java.util.Collection;
 import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -13,7 +16,11 @@ import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollectionEvent;
 import org.observe.collect.ObservableSortedSet;
+import org.observe.entity.EntityChange;
+import org.observe.entity.EntityIdentity;
+import org.observe.entity.EntityLoadRequest;
 import org.observe.entity.EntityQuery;
+import org.observe.entity.EntitySelection;
 import org.observe.entity.ObservableEntity;
 import org.observe.entity.QueryOrder;
 import org.observe.util.ObservableCollectionWrapper;
@@ -28,33 +35,31 @@ import org.qommons.collect.RRWLockingStrategy;
 import com.google.common.reflect.TypeToken;
 
 public class QueryResults<E> {
-	private final EntityQuery<E> theQuery;
-	private final ObservableSortedSet<ObservableEntity<E>> theRawResults;
-	private final ObservableSortedSet<ObservableEntity<E>> theExposedResults;
+	private final EntitySelection<E> theSelection;
+	private final ObservableSortedSet<ObservableEntity<? extends E>> theRawResults;
+	private final ObservableSortedSet<ObservableEntity<? extends E>> theExposedResults;
 	private final SettableValue<Long> theRawCountResult;
 	private final ObservableValue<Long> theExposedCountResult;
 
 	private final AtomicInteger theListening;
 	private boolean isAdjusting;
 
-	public QueryResults(EntityQuery<E> query, boolean count) {
-		theQuery = query;
+	public QueryResults(EntitySelection<E> selection, boolean count) {
+		theSelection = selection;
 		theListening = new AtomicInteger();
 		if (count) {
-			theRawCountResult = SettableValue.build(long.class).withLock(query.getEntityType().getEntitySet()).withValue(0L).build();
+			theRawCountResult = SettableValue.build(long.class).withLock(selection.getEntityType().getEntitySet()).withValue(0L).build();
 			theExposedCountResult = new CountResultWrapper(theRawCountResult);
 			theExposedResults = theRawResults = null;
 		} else {
 			theExposedCountResult = theRawCountResult = null;
-			CollectionLockingStrategy locker = new RRWLockingStrategy(query.getEntityType().getEntitySet());
-			Comparator<ObservableEntity<E>> sorting = createComparator(theQuery);
-			if (query.getEntityType().getEntityType() != null) {
-				TypeToken<ObservableEntity<E>> type = ObservableEntity.TYPE_KEY.getCompoundType(query.getEntityType().getEntityType());
-				theRawResults = ObservableSortedSet.build(type, sorting).withLocker(locker).build();
-			} else {
-				TypeToken<ObservableEntity<E>> type = (TypeToken<ObservableEntity<E>>) (TypeToken<?>) ObservableEntity.TYPE;
-				theRawResults = ObservableSortedSet.build(type, sorting).withLocker(locker).build();
-			}
+			CollectionLockingStrategy locker = new RRWLockingStrategy(selection.getEntityType().getEntitySet());
+			TypeToken<ObservableEntity<? extends E>> type;
+			if (selection.getEntityType().getEntityType() != null)
+				type = ObservableEntity.TYPE_KEY.getCompoundType(selection.getEntityType().getEntityType());
+			else
+				type = (TypeToken<ObservableEntity<? extends E>>) (TypeToken<?>) ObservableEntity.TYPE;
+			theRawResults = ObservableSortedSet.build(type, ObservableEntity::compareTo).withLocker(locker).build();
 			theExposedResults = new ResultWrapper(theRawResults.flow().filterMod(fm -> {
 				fm.noAdd("Results cannot be added to query results directly");
 				fm.filterRemove(ObservableEntity::canDelete);
@@ -62,6 +67,46 @@ public class QueryResults<E> {
 		}
 	}
 
+	public EntitySelection<E> getSelection() {
+		return theSelection;
+	}
+
+	public void init(Iterable<ObservableEntity<?>> entities, boolean needsFilter) {
+		if (theRawResults != null) {
+			theRawResults.clear();
+			for (ObservableEntity<?> entity : entities) {
+				if (needsFilter && theSelection.getEntityType().isAssignableFrom(entity.getType())
+					&& !theSelection.test((ObservableEntity<? extends E>) entity, null))
+					continue;
+				theRawResults.add((ObservableEntity<? extends E>) entity);
+			}
+		} else if (!needsFilter && entities instanceof Collection) {
+			init(((Collection<?>) entities).size());
+		} else {
+			long count = 0;
+			for (ObservableEntity<?> entity : entities) {
+				if (needsFilter && theSelection.getEntityType().isAssignableFrom(entity.getType())
+					&& !theSelection.test((ObservableEntity<? extends E>) entity, null))
+					continue;
+				count++;
+			}
+			init(count);
+		}
+	}
+
+	public void init(long count) {
+		theRawCountResult.set(count, null);
+	}
+
+	public void addDataRequests(Collection<EntityIdentity<?>> changes, List<EntityLoadRequest<?>> loadRequests) {
+		int todo = todo; // TODO Auto-generated method stub
+	}
+
+	public void handleChange(EntityChange<?> change, Map<EntityIdentity<?>, ObservableEntityImpl<?>> entities) {}
+
+	public ObservableSortedSet<ObservableEntity<? extends E>> getResults(EntityQuery<E> query) {}
+
+	// Don't delete--may need this later
 	private static <E> Comparator<ObservableEntity<E>> createComparator(EntityQuery<E> query) {
 		return new Comparator<ObservableEntity<E>>() {
 			@Override
@@ -83,7 +128,7 @@ public class QueryResults<E> {
 		};
 	}
 
-	public ObservableSortedSet<ObservableEntity<E>> getResults() {
+	public ObservableSortedSet<ObservableEntity<? extends E>> getResults() {
 		return theExposedResults;
 	}
 
@@ -108,32 +153,39 @@ public class QueryResults<E> {
 		};
 	}
 
-	class ResultWrapper extends ObservableCollectionWrapper<ObservableEntity<E>> implements ObservableSortedSet<ObservableEntity<E>> {
-		public ResultWrapper(ObservableSortedSet<ObservableEntity<E>> wrapped) {
+	@Override
+	protected void finalize() throws Throwable {
+		super.finalize();
+		// TODO
+	}
+
+	class ResultWrapper extends ObservableCollectionWrapper<ObservableEntity<? extends E>>
+	implements ObservableSortedSet<ObservableEntity<? extends E>> {
+		public ResultWrapper(ObservableSortedSet<ObservableEntity<? extends E>> wrapped) {
 			init(wrapped);
 		}
 
 		@Override
-		protected ObservableSortedSet<ObservableEntity<E>> getWrapped() throws IllegalStateException {
-			return (ObservableSortedSet<ObservableEntity<E>>) super.getWrapped();
+		protected ObservableSortedSet<ObservableEntity<? extends E>> getWrapped() throws IllegalStateException {
+			return (ObservableSortedSet<ObservableEntity<? extends E>>) super.getWrapped();
 		}
 
 		@Override
-		public MutableCollectionElement<ObservableEntity<E>> mutableElement(ElementId id) {
-			MutableCollectionElement<ObservableEntity<E>> superMCE = super.mutableElement(id);
-			return new MutableCollectionElement<ObservableEntity<E>>() {
+		public MutableCollectionElement<ObservableEntity<? extends E>> mutableElement(ElementId id) {
+			MutableCollectionElement<ObservableEntity<? extends E>> superMCE = super.mutableElement(id);
+			return new MutableCollectionElement<ObservableEntity<? extends E>>() {
 				@Override
 				public ElementId getElementId() {
 					return superMCE.getElementId();
 				}
 
 				@Override
-				public ObservableEntity<E> get() {
+				public ObservableEntity<? extends E> get() {
 					return superMCE.get();
 				}
 
 				@Override
-				public BetterCollection<ObservableEntity<E>> getCollection() {
+				public BetterCollection<ObservableEntity<? extends E>> getCollection() {
 					return superMCE.getCollection();
 				}
 
@@ -143,12 +195,12 @@ public class QueryResults<E> {
 				}
 
 				@Override
-				public String isAcceptable(ObservableEntity<E> value) {
+				public String isAcceptable(ObservableEntity<? extends E> value) {
 					return superMCE.isAcceptable(value); // Let the filter report the error
 				}
 
 				@Override
-				public void set(ObservableEntity<E> value) throws UnsupportedOperationException, IllegalArgumentException {
+				public void set(ObservableEntity<? extends E> value) throws UnsupportedOperationException, IllegalArgumentException {
 					superMCE.set(value); // Let the filter throw the exception
 				}
 
@@ -165,27 +217,29 @@ public class QueryResults<E> {
 		}
 
 		@Override
-		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends ObservableEntity<E>>> observer) {
+		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends ObservableEntity<? extends E>>> observer) {
 			return wrap(() -> super.onChange(observer));
 		}
 
 		@Override
-		public int indexFor(Comparable<? super ObservableEntity<E>> search) {
+		public int indexFor(Comparable<? super ObservableEntity<? extends E>> search) {
 			return getWrapped().indexFor(search);
 		}
 
 		@Override
-		public Comparator<? super ObservableEntity<E>> comparator() {
+		public Comparator<? super ObservableEntity<? extends E>> comparator() {
 			return getWrapped().comparator();
 		}
 
 		@Override
-		public CollectionElement<ObservableEntity<E>> search(Comparable<? super ObservableEntity<E>> search, SortedSearchFilter filter) {
+		public CollectionElement<ObservableEntity<? extends E>> search(Comparable<? super ObservableEntity<? extends E>> search,
+			SortedSearchFilter filter) {
 			return getWrapped().search(search, filter);
 		}
 
 		@Override
-		public CollectionElement<ObservableEntity<E>> getOrAdd(ObservableEntity<E> value, ElementId after, ElementId before, boolean first,
+		public CollectionElement<ObservableEntity<? extends E>> getOrAdd(ObservableEntity<? extends E> value, ElementId after,
+			ElementId before, boolean first,
 			Runnable added) {
 			// The wrapped set will throw the exception if add is invoked
 			return getWrapped().getOrAdd(value, after, before, first, added);
@@ -202,12 +256,12 @@ public class QueryResults<E> {
 		}
 
 		@Override
-		public <X> boolean repair(ElementId element, RepairListener<ObservableEntity<E>, X> listener) {
+		public <X> boolean repair(ElementId element, RepairListener<ObservableEntity<? extends E>, X> listener) {
 			return false; // Shouldn't be any way for the set to become inconsistent
 		}
 
 		@Override
-		public <X> boolean repair(RepairListener<ObservableEntity<E>, X> listener) {
+		public <X> boolean repair(RepairListener<ObservableEntity<? extends E>, X> listener) {
 			return false; // Shouldn't be any way for the set to become inconsistent
 		}
 	}
@@ -270,4 +324,5 @@ public class QueryResults<E> {
 			};
 		}
 	}
+
 }

@@ -8,6 +8,7 @@ import java.lang.reflect.WildcardType;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -66,6 +67,18 @@ public class TypeTokens {
 			@Override
 			public <P> TypeToken<? extends Class> createCompoundType(TypeToken<P> param) {
 				return new TypeToken<Class<P>>() {}.where(new TypeParameter<P>() {}, param);
+			}
+		});
+		unaryTypes.put(Class.class, new UnaryCompoundTypeCreator<Comparable>() {
+			@Override
+			public <P> TypeToken<? extends Comparable> createCompoundType(TypeToken<P> param) {
+				return new TypeToken<Comparable<P>>() {}.where(new TypeParameter<P>() {}, param);
+			}
+		});
+		unaryTypes.put(Class.class, new UnaryCompoundTypeCreator<Comparator>() {
+			@Override
+			public <P> TypeToken<? extends Comparator> createCompoundType(TypeToken<P> param) {
+				return new TypeToken<Comparator<P>>() {}.where(new TypeParameter<P>() {}, param);
 			}
 		});
 		unaryTypes.put(Class.class, new UnaryCompoundTypeCreator<Iterable>() {

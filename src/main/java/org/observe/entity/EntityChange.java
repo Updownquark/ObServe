@@ -2,7 +2,9 @@ package org.observe.entity;
 
 import java.time.Instant;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Map;
+import java.util.Set;
 
 import org.observe.collect.CollectionChangeType;
 
@@ -11,7 +13,7 @@ import org.observe.collect.CollectionChangeType;
  *
  * @param <E> The type of the entity whose value changed
  */
-public class EntityChange<E> {
+public abstract class EntityChange<E> {
 	/** Types of entity change */
 	public enum EntityChangeType {
 		/** Represents the addition of a new entity to the data set */
@@ -28,8 +30,6 @@ public class EntityChange<E> {
 
 	/** The time that the change was made */
 	public final Instant time;
-	/** The identity of the entity that changed */
-	public final EntityIdentity<E> entity;
 	/** The type of the change */
 	public final EntityChangeType changeType;
 
@@ -38,10 +38,25 @@ public class EntityChange<E> {
 	 * @param entity The identity of the entity that changed
 	 * @param changeType The type of the change
 	 */
-	public EntityChange(Instant time, EntityIdentity<E> entity, EntityChangeType changeType) {
+	public EntityChange(Instant time, EntityChangeType changeType) {
 		this.time = time;
-		this.entity = entity;
 		this.changeType = changeType;
+	}
+
+	public abstract Set<EntityIdentity<? extends E>> getEntities();
+
+	public static class EntityExistenceChange<E> extends EntityChange<E> {
+		public final Set<EntityIdentity<? extends E>> entities;
+
+		public EntityExistenceChange(Instant time, boolean added, Set<EntityIdentity<? extends E>> entities) {
+			super(time, added ? EntityChangeType.add : EntityChangeType.remove);
+			this.entities = entities;
+		}
+
+		@Override
+		public Set<EntityIdentity<? extends E>> getEntities() {
+			return entities;
+		}
 	}
 
 	/**
@@ -56,13 +71,12 @@ public class EntityChange<E> {
 
 		/**
 		 * @param time The time that the change was made
-		 * @param entity The identity of the entity that changed
 		 * @param changeType The type of the change
 		 * @param field The field whose value changed in the entity
 		 */
-		public EntityFieldChange(Instant time, EntityIdentity<E> entity, EntityChangeType changeType,
+		public EntityFieldChange(Instant time, EntityChangeType changeType,
 			ObservableEntityFieldType<E, F> field) {
-			super(time, entity, changeType);
+			super(time, changeType);
 			this.field = field;
 		}
 	}
@@ -74,6 +88,7 @@ public class EntityChange<E> {
 	 * @param <F> The type of the field
 	 */
 	public static class EntityFieldValueChange<E, F> extends EntityFieldChange<E, F> {
+		public final Set<EntityIdentity<? extends E>> entities;
 		/** The previous value in the entity's field */
 		public final F oldValue;
 		/** The new value in the entity's field */
@@ -81,16 +96,22 @@ public class EntityChange<E> {
 
 		/**
 		 * @param time The time that the change was made
-		 * @param entity The identity of the entity that changed
+		 * @param entities The identities of the entities that changed
 		 * @param field The field whose value changed in the entity
 		 * @param oldValue The previous value of the field
 		 * @param newValue The new value of the field
 		 */
-		public EntityFieldValueChange(Instant time, EntityIdentity<E> entity, ObservableEntityFieldType<E, F> field, F oldValue,
-			F newValue) {
-			super(time, entity, EntityChangeType.setField, field);
+		public EntityFieldValueChange(Instant time, Set<EntityIdentity<? extends E>> entities, ObservableEntityFieldType<E, F> field,
+			F oldValue, F newValue) {
+			super(time, EntityChangeType.setField, field);
+			this.entities = entities;
 			this.oldValue = oldValue;
 			this.newValue = newValue;
+		}
+
+		@Override
+		public Set<EntityIdentity<? extends E>> getEntities() {
+			return entities;
 		}
 	}
 
@@ -102,6 +123,8 @@ public class EntityChange<E> {
 	 * @param <C> The collection sub-type of the field
 	 */
 	public static class EntityCollectionFieldChange<E, F, C extends Collection<F>> extends EntityFieldChange<E, C> {
+		/** The identity of the entity that changed */
+		public final EntityIdentity<E> entity;
 		/** The type of the collection change */
 		public final CollectionChangeType collectionChangeType;
 		/** The index of the element added, removed, or changed, or -1 if unknown */
@@ -119,10 +142,16 @@ public class EntityChange<E> {
 		 */
 		public EntityCollectionFieldChange(Instant time, EntityIdentity<E> entity, ObservableEntityFieldType<E, C> field,
 			CollectionChangeType collectionChangeType, int index, F value) {
-			super(time, entity, EntityChangeType.updateCollectionField, field);
+			super(time, EntityChangeType.updateCollectionField, field);
+			this.entity = entity;
 			this.collectionChangeType = collectionChangeType;
 			this.index = index;
 			this.value = value;
+		}
+
+		@Override
+		public Set<EntityIdentity<? extends E>> getEntities() {
+			return Collections.singleton(entity);
 		}
 	}
 
@@ -135,6 +164,8 @@ public class EntityChange<E> {
 	 * @param <M> The map sub-type of the field
 	 */
 	public static class EntityMapFieldChange<E, K, V, M extends Map<K, V>> extends EntityFieldChange<E, M> {
+		/** The identity of the entity that changed */
+		public final EntityIdentity<E> entity;
 		/** The type of the map change */
 		public final CollectionChangeType collectionChangeType;
 		/** The key that was added, removed, or updated */
@@ -152,10 +183,16 @@ public class EntityChange<E> {
 		 */
 		public EntityMapFieldChange(Instant time, EntityIdentity<E> entity, ObservableEntityFieldType<E, M> field,
 			CollectionChangeType collectionChangeType, K key, V value) {
-			super(time, entity, EntityChangeType.updateMapField, field);
+			super(time, EntityChangeType.updateMapField, field);
+			this.entity = entity;
 			this.collectionChangeType = collectionChangeType;
 			this.key = key;
 			this.value = value;
+		}
+
+		@Override
+		public Set<EntityIdentity<? extends E>> getEntities() {
+			return Collections.singleton(entity);
 		}
 	}
 }
