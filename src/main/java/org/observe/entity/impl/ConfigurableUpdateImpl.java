@@ -1,9 +1,10 @@
 package org.observe.entity.impl;
 
 import org.observe.entity.ConfigurableUpdate;
+import org.observe.entity.EntityCondition;
+import org.observe.entity.EntityModificationResult;
 import org.observe.entity.EntityOperationException;
 import org.observe.entity.EntityOperationVariable;
-import org.observe.entity.EntityCondition;
 import org.observe.entity.ObservableEntityFieldType;
 import org.observe.entity.PreparedUpdate;
 import org.qommons.collect.QuickSet.QuickMap;
@@ -71,9 +72,9 @@ class ConfigurableUpdateImpl<E> extends AbstractConfigurableOperation<E> impleme
 	}
 
 	@Override
-	public long execute() throws IllegalStateException, EntityOperationException {
+	public EntityModificationResult<E> execute(boolean sync, Object cause) throws IllegalStateException, EntityOperationException {
 		if (getVariables().keySize() > 0)
 			throw new IllegalStateException("This update has variables and must be prepared");
-		return ((ObservableEntityTypeImpl<E>) getEntityType()).update(this, null);
+		return ((ObservableEntityTypeImpl<E>) getEntityType()).getEntitySet().update(this, sync, cause);
 	}
 }

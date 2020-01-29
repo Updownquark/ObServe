@@ -5,25 +5,23 @@ import java.lang.ref.ReferenceQueue;
 import java.lang.ref.WeakReference;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
-import org.observe.ObservableValue;
-import org.observe.collect.ObservableSortedSet;
 import org.observe.entity.ConfigurableDeletion;
 import org.observe.entity.ConfigurableQuery;
 import org.observe.entity.ConfigurableUpdate;
+import org.observe.entity.EntityChange;
+import org.observe.entity.EntityCondition;
 import org.observe.entity.EntityConstraint;
 import org.observe.entity.EntityCreator;
-import org.observe.entity.EntityDeletion;
 import org.observe.entity.EntityIdentity;
+import org.observe.entity.EntityOperationException;
 import org.observe.entity.EntityOperationVariable;
-import org.observe.entity.EntityQuery;
-import org.observe.entity.EntityCondition;
 import org.observe.entity.EntityUpdate;
 import org.observe.entity.ObservableEntity;
-import org.observe.entity.ObservableEntityDataSet;
 import org.observe.entity.ObservableEntityFieldType;
 import org.observe.entity.ObservableEntityType;
 import org.observe.entity.impl.ObservableEntityDataSetImpl.FieldTypeImpl;
@@ -41,6 +39,7 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 	private final ObservableEntityDataSetImpl theEntitySet;
 	private final String theName;
 	private final List<ObservableEntityTypeImpl<? super E>> theSupers;
+	private final List<ObservableEntityTypeImpl<? extends E>> theSubs;
 	private final QuickMap<String, ObservableEntityFieldType<E, ?>> theFields;
 	private final QuickMap<String, ObservableEntityFieldType<E, ?>> theIdFields;
 	private final EntityReflector<E> theReflector;
@@ -57,6 +56,7 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 		theEntitySet = entitySet;
 		theName = name;
 		theSupers = supers;
+		theSubs = new LinkedList<>();
 		theIdFields = idFields;
 		theFields = fields;
 		theReflector = reflector;
@@ -67,13 +67,17 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 	}
 
 	@Override
-	public ObservableEntityDataSet getEntitySet() {
+	public ObservableEntityDataSetImpl getEntitySet() {
 		return theEntitySet;
 	}
 
 	@Override
 	public List<? extends ObservableEntityType<? super E>> getSupers() {
 		return theSupers;
+	}
+
+	void addSub(ObservableEntityTypeImpl<? extends E> sub) {
+		theSubs.add(sub);
 	}
 
 	@Override
@@ -102,7 +106,7 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 	}
 
 	@Override
-	public ObservableEntity<? extends E> observableEntity(EntityIdentity<E> id) {
+	public ObservableEntity<? extends E> observableEntity(EntityIdentity<E> id) throws EntityOperationException {
 		// First, just lock for read and see if we already have it
 		try (Transaction t = theEntitySet.lock(false, null)) { // Updates to existing entities are fine
 			WeakReference<ObservableEntityImpl<? extends E>> entityRef = theEntitiesById.get(id);
@@ -121,7 +125,7 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 				if (entity != null)
 					return entity;
 			}
-			return theEntitySet.pullEntity(id);
+			return select().entity(id).query().collect(false).dispose().peekFirst();
 		}
 	}
 
@@ -172,6 +176,42 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 			theFields.keySet().<EntityOperationVariable<E>> createMap().unmodifiable());
 	}
 
+	void handleChange(EntityChange<?> change, Map<EntityIdentity<?>, ObservableEntityImpl<?>> entities) {
+		boolean propagate = false;
+		switch (change.changeType) {
+		case add:
+			break; // Don't care
+		case remove:
+			propagate = true;
+			for (EntityIdentity<?> id : change.getEntities()) {
+				if (isAssignableFrom(id.getEntityType())) {
+					WeakReference<ObservableEntityImpl<? extends E>> entityRef = theEntitiesById.remove(id);
+					if (entityRef != null)
+						theEntitiesByRef.remove(entityRef);
+				}
+			}
+			break;
+		case setField:
+			EntityChange.EntityFieldValueChange<E, Object> fieldValueChange = (EntityChange.EntityFieldValueChange<E, Object>) change;
+			for (EntityIdentity<?> id : change.getEntities()) {
+				if (isAssignableFrom(id.getEntityType())) {
+					WeakReference<ObservableEntityImpl<? extends E>> entityRef = theEntitiesById.remove(id);
+					ObservableEntityImpl<? extends E> entity = entityRef == null ? null : entityRef.get();
+					if (entity != null)
+						entity._set(fieldValueChange.field, fieldValueChange.oldValue, fieldValueChange.newValue);
+				}
+			}
+			break;
+		case updateCollectionField:
+		case updateMapField:
+			// TODO
+		}
+		if (propagate) {
+			for (ObservableEntityTypeImpl<? extends E> sub : theSubs)
+				sub.handleChange(change, entities);
+		}
+	}
+
 	void trackEntity(ObservableEntityImpl<? extends E> entity) {
 		WeakReference<ObservableEntityImpl<? extends E>> entityRef = new WeakReference<>(entity, theCollectedEntities);
 		theEntitiesById.put(fromSubId(entity.getId()), entityRef);
@@ -187,49 +227,5 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 				theEntitiesById.mutableEntry(entity).remove();
 			ref = theCollectedEntities.poll();
 		}
-	}
-
-	EntityIdentity<E> create(EntityCreator<E> configurableEntityCreatorImpl, Object prepared) {
-		// TODO Auto-generated method stub
-	}
-
-	ObservableEntity<E> createAndGet(EntityCreator<E> configurableEntityCreatorImpl, Object prepared) {
-		// TODO Auto-generated method stub
-	}
-
-	ObservableValue<Long> count(EntityQuery<E> query, Object prepared) {
-		return theEntitySet.getImplementation().count(query, prepared);
-	}
-
-	ObservableSortedSet<E> collect(EntityQuery<E> query, boolean withUpdates, Object prepared) {
-		// TODO Auto-generated method stub
-	}
-
-	ObservableSortedSet<ObservableEntity<? extends E>> collectObservable(EntityQuery<E> query, boolean withUpdates, Object prepared) {
-		// TODO Auto-generated method stub
-	}
-
-	ObservableSortedSet<EntityIdentity<? super E>> collectIdentities(EntityQuery<E> query, Object prepared) {
-		// TODO Auto-generated method stub
-	}
-
-	long update(EntityUpdate<E> update, Object prepared) {
-		// TODO Auto-generated method stub
-	}
-
-	long delete(EntityDeletion<E> deletion, Object prepared) {
-		// TODO Auto-generated method stub
-	}
-
-	String isAcceptable(ObservableEntityImpl<E> observableEntityImpl, int fieldIndex, Object value) {
-		// TODO Auto-generated method stub
-	}
-
-	String canDelete(ObservableEntityImpl<E> observableEntityImpl) {
-		// TODO Auto-generated method stub
-	}
-
-	void delete(ObservableEntityImpl<E> observableEntityImpl) {
-		int todo = todo; // TODO Auto-generated method stub
 	}
 }

@@ -49,5 +49,9 @@ public interface EntityValueAccess<E, F> extends Comparator<F>, Comparable<Entit
 	 */
 	F getValue(ObservableEntity<? extends E> entity);
 
+	/**
+	 * @param field Another field
+	 * @return Whether the given field is the same as or an override of this field
+	 */
 	boolean isOverride(EntityValueAccess<? extends E, ?> field);
 }

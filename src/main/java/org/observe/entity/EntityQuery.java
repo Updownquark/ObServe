@@ -2,8 +2,6 @@ package org.observe.entity;
 
 import java.util.List;
 
-import org.observe.ObservableValue;
-import org.observe.collect.ObservableSortedSet;
 import org.qommons.collect.QuickSet.QuickMap;
 
 /**
@@ -30,32 +28,16 @@ public interface EntityQuery<E> extends EntitySetOperation<E> {
 	EntityQuery<E> loadAllFields(FieldLoadType type);
 
 	/**
-	 * @return A value representing the number of entities in the entity set matching this query's {@link #getSelection() selection}
+	 * @return A result containing the number of entities in the entity set matching this query's {@link #getSelection() selection}
 	 * @throws IllegalStateException If this operation contains variables that are not fulfilled
-	 * @throws EntityOperationException If the query cannot be performed
+	 * @throws EntityOperationException If the query fails immediately
 	 */
-	ObservableValue<Long> count() throws IllegalStateException, EntityOperationException;
+	EntityCountResult<E> count() throws IllegalStateException, EntityOperationException;
 	/**
 	 * @param withUpdates Whether field changes to entities in the results should cause update events in the collection
 	 * @return An observable set containing all entities matching this query's {@link #getSelection() selection}
 	 * @throws IllegalStateException If this operation contains variables that are not fulfilled
 	 * @throws EntityOperationException If the query cannot be performed
 	 */
-	ObservableSortedSet<E> collect(boolean withUpdates) throws IllegalStateException, EntityOperationException;
-	/**
-	 * Same as {@link #collect(boolean)}, but returns the values as {@link ObservableEntity} instances.
-	 *
-	 * @param withUpdates Whether field changes to entities in the results should cause update events in the collection
-	 * @return An observable set containing all entities matching this query's {@link #getSelection() selection}
-	 * @throws IllegalStateException If this operation contains variables that are not fulfilled
-	 * @throws EntityOperationException If the query cannot be performed
-	 */
-	ObservableSortedSet<ObservableEntity<? extends E>> collectObservable(boolean withUpdates)
-		throws IllegalStateException, EntityOperationException;
-	/**
-	 * @return An observable set containing the identieis of all entities matching this query's {@link #getSelection() selection}
-	 * @throws IllegalStateException If this operation contains variables that are not fulfilled
-	 * @throws EntityOperationException If the query cannot be performed
-	 */
-	ObservableSortedSet<EntityIdentity<? super E>> collectIdentities() throws IllegalStateException, EntityOperationException;
+	EntityCollectionResult<E> collect(boolean withUpdates) throws IllegalStateException, EntityOperationException;
 }

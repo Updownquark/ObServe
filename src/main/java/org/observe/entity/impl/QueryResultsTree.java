@@ -9,11 +9,14 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 
 import org.observe.entity.EntityChange;
+import org.observe.entity.EntityCondition;
 import org.observe.entity.EntityIdentity;
 import org.observe.entity.EntityLoadRequest;
+import org.observe.entity.EntityOperationException;
 import org.observe.entity.EntityQuery;
-import org.observe.entity.EntityCondition;
+import org.observe.entity.ObservableEntity;
 import org.observe.entity.ObservableEntityType;
+import org.observe.entity.PreparedQuery;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
@@ -29,16 +32,24 @@ public class QueryResultsTree {
 		theRoot = new QueryResultNode(null, null, false);
 	}
 
-	public QueryResultNode addQuery(EntityCondition<?> selection, boolean count) {
-		return theRoot.addQuery(selection, count);
+	public <E> QueryResults<E> addQuery(EntityQuery<E> query, boolean count) throws EntityOperationException {
+		EntityCondition<E> selection = query.getSelection();
+		if (query instanceof PreparedQuery)
+			selection = selection.satisfy(((PreparedQuery<E>) query).getVariableValues());
+		return theRoot.addQuery(selection, count).getResults(query);
 	}
 
-	public void addDataRequests(List<EntityIdentity<?>> changes, List<EntityLoadRequest<?>> loadRequests) {
-		theRoot.addDataRequests(changes, loadRequests);
+	public void addDataRequests(List<EntityChange<?>> changes, List<EntityLoadRequest<?>> loadRequests,
+		Map<EntityIdentity<?>, ObservableEntityImpl<?>> entities) {
+		theRoot.addDataRequests(changes, loadRequests, entities);
 	}
 
 	public void handleChange(EntityChange<?> change, Map<EntityIdentity<?>, ObservableEntityImpl<?>> entities) {
 		theRoot.handleChange(change, entities);
+	}
+
+	public void dispose() {
+		theRoot.dispose();
 	}
 
 	public class QueryResultNode {
@@ -54,6 +65,49 @@ public class QueryResultsTree {
 			isCount = count;
 			this.parent = parent;
 			children = BetterTreeList.<QueryResultNode> build().safe(false).build();
+		}
+
+		<E> QueryResults<E> getResults(EntityQuery<E> query) throws EntityOperationException {
+			QueryResults<E> results = null;
+			if (theResults != null)
+				results = (QueryResults<E>) theResults.get();
+			if (results == null) {
+				results = new QueryResults<>(this, (EntityCondition<E>) theSelection, isCount);
+				theResults = new WeakReference<>(results);
+				QueryResults<?> parentResults = null;
+				QueryResultNode p = parent;
+				while ((parentResults == null || !parentResults.isActive()) && p.theSelection != null) {
+					parentResults = p.theResults.get();
+					p = p.parent;
+				}
+				if (parentResults != null)
+					results.init(parentResults.getResults(), true);
+				else {
+					try {
+						theEntitySet.executeQuery(query, results);
+					} catch (EntityOperationException e) {
+						results.failed(e);
+						throw e;
+					}
+				}
+			}
+			return results;
+		}
+
+		void fulfill(Iterable<? extends ObservableEntity<?>> entities) {
+			_fulfill(entities, false);
+		}
+
+		private void _fulfill(Iterable<? extends ObservableEntity<?>> entities, boolean needsFilter) {
+			QueryResults<?> results = theResults.get();
+			if (results != null) {
+				results.init(entities, needsFilter);
+				entities = results.getResults();
+			}
+			for (QueryResultNode child : children)
+				child._fulfill(entities, true);
+			if (results == null)
+				remove();
 		}
 
 		QueryResultNode addQuery(EntityCondition<?> selection, boolean count) {
@@ -75,20 +129,20 @@ public class QueryResultsTree {
 					child.remove();
 				}
 			}
-			if (theSelection != null && results == null)
-				remove();
 			return newNode;
 		}
 
-		void addDataRequests(List<EntityIdentity<?>> changes, List<EntityLoadRequest<?>> loadRequests) {
+		void addDataRequests(List<EntityChange<?>> changes, List<EntityLoadRequest<?>> loadRequests,
+			Map<EntityIdentity<?>, ObservableEntityImpl<?>> entities) {
 			QueryResults<?> results = null;
 			if (theResults != null)
 				results = theResults.get();
-			if (results != null)
-				results.addDataRequests(changes, loadRequests);
+			boolean validResults = results != null && results.isActive();
+			if (validResults)
+				results.addDataRequests(changes, loadRequests, entities);
 			for (QueryResultNode child : children)
-				child.addDataRequests(changes, loadRequests);
-			if (theSelection != null && results == null)
+				child.addDataRequests(changes, loadRequests, entities);
+			if (theSelection != null && !validResults)
 				remove();
 		}
 
@@ -96,27 +150,21 @@ public class QueryResultsTree {
 			QueryResults<?> results = null;
 			if (theResults != null)
 				results = theResults.get();
-			if (results != null)
+			boolean validResults = results != null && results.isActive();
+			if (validResults)
 				results.handleChange(change, entities);
 			for (QueryResultNode child : children)
 				child.handleChange(change, entities);
-			if (theSelection != null && results == null)
+			if (theSelection != null && !validResults)
 				remove();
 		}
 
-		<E> QueryResults<E> getResults(EntityQuery<E> query) {
-			QueryResults<E> results = null;
-			if (theResults != null)
-				results = (QueryResults<E>) theResults.get();
-			if (results == null) {
-				results = new QueryResults<>((EntityCondition<E>) theSelection, isCount);
-				theResults = new WeakReference<>(results);
-				if (parentResults != null)
-					results.init(parentResults.getResults(), true);
-				else
-					results.init(theEntitySet.query(query), false);
+		void dispose() {
+			QueryResults<?> results = theResults == null ? null : theResults.get();
+			if (results != null) {
+				results.cancel(true);
+				results.dispose();
 			}
-			return results;
 		}
 
 		private void addChild(QueryResultNode child) {

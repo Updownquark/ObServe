@@ -14,15 +14,22 @@ import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.SettableValue;
 import org.observe.Subscription;
+import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionEvent;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.entity.EntityChange;
+import org.observe.entity.EntityCollectionResult;
+import org.observe.entity.EntityCondition;
+import org.observe.entity.EntityCountResult;
 import org.observe.entity.EntityIdentity;
 import org.observe.entity.EntityLoadRequest;
+import org.observe.entity.EntityOperation;
+import org.observe.entity.EntityOperationException;
 import org.observe.entity.EntityQuery;
-import org.observe.entity.EntityCondition;
 import org.observe.entity.ObservableEntity;
+import org.observe.entity.ObservableEntityResult;
 import org.observe.entity.QueryOrder;
+import org.observe.entity.impl.QueryResultsTree.QueryResultNode;
 import org.observe.util.ObservableCollectionWrapper;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
@@ -34,25 +41,26 @@ import org.qommons.collect.RRWLockingStrategy;
 
 import com.google.common.reflect.TypeToken;
 
-public class QueryResults<E> {
+public class QueryResults<E> extends AbstractOperationResult<E> {
+	private final QueryResultNode theNode;
 	private final EntityCondition<E> theSelection;
 	private final ObservableSortedSet<ObservableEntity<? extends E>> theRawResults;
 	private final ObservableSortedSet<ObservableEntity<? extends E>> theExposedResults;
 	private final SettableValue<Long> theRawCountResult;
-	private final ObservableValue<Long> theExposedCountResult;
 
 	private final AtomicInteger theListening;
-	private boolean isAdjusting;
+	private volatile boolean isAdjusting;
 
-	public QueryResults(EntityCondition<E> selection, boolean count) {
+	public QueryResults(QueryResultNode node, EntityCondition<E> selection, boolean count) {
+		super(true);
+		theNode = node;
 		theSelection = selection;
 		theListening = new AtomicInteger();
 		if (count) {
-			theRawCountResult = SettableValue.build(long.class).withLock(selection.getEntityType().getEntitySet()).withValue(0L).build();
-			theExposedCountResult = new CountResultWrapper(theRawCountResult);
 			theExposedResults = theRawResults = null;
+			theRawCountResult = SettableValue.build(long.class).withLock(selection.getEntityType().getEntitySet()).withValue(0L).build();
 		} else {
-			theExposedCountResult = theRawCountResult = null;
+			theRawCountResult = null;
 			CollectionLockingStrategy locker = new RRWLockingStrategy(selection.getEntityType().getEntitySet());
 			TypeToken<ObservableEntity<? extends E>> type;
 			if (selection.getEntityType().getEntityType() != null)
@@ -60,18 +68,46 @@ public class QueryResults<E> {
 			else
 				type = (TypeToken<ObservableEntity<? extends E>>) (TypeToken<?>) ObservableEntity.TYPE;
 			theRawResults = ObservableSortedSet.build(type, ObservableEntity::compareTo).withLocker(locker).build();
-			theExposedResults = new ResultWrapper(theRawResults.flow().filterMod(fm -> {
+			theExposedResults = theRawResults.flow().filterMod(fm -> {
 				fm.noAdd("Results cannot be added to query results directly");
 				fm.filterRemove(ObservableEntity::canDelete);
-			}).collectPassive());
+			}).collectPassive();
 		}
+	}
+
+	boolean isCount() {
+		return theRawCountResult != null;
+	}
+
+	@Override
+	public EntityOperation<E> getOperation() {
+		throw new UnsupportedOperationException();
+	}
+
+	@Override
+	public Subscription onStatusChange(Consumer<ObservableEntityResult<E>> onChange) {
+		return onStatusChange(() -> onChange.accept(this));
 	}
 
 	public EntityCondition<E> getSelection() {
 		return theSelection;
 	}
 
-	public void init(Iterable<ObservableEntity<?>> entities, boolean needsFilter) {
+	public boolean isActive() {
+		switch (getStatus()) {
+		case WAITING:
+		case EXECUTING:
+			return true;
+		default:
+			return false;
+		}
+	}
+
+	public void fulfill(Iterable<? extends ObservableEntity<?>> entities) {
+		theNode.fulfill(entities);
+	}
+
+	public void init(Iterable<? extends ObservableEntity<?>> entities, boolean needsFilter) {
 		if (theRawResults != null) {
 			theRawResults.clear();
 			for (ObservableEntity<?> entity : entities) {
@@ -98,19 +134,33 @@ public class QueryResults<E> {
 		theRawCountResult.set(count, null);
 	}
 
-	public void addDataRequests(Collection<EntityIdentity<?>> changes, List<EntityLoadRequest<?>> loadRequests) {
+	public void addDataRequests(List<EntityChange<?>> changes, List<EntityLoadRequest<?>> loadRequests,
+		Map<EntityIdentity<?>, ObservableEntityImpl<?>> entities) {
 		int todo = todo; // TODO Auto-generated method stub
 	}
 
-	public void handleChange(EntityChange<?> change, Map<EntityIdentity<?>, ObservableEntityImpl<?>> entities) {}
+	public void handleChange(EntityChange<?> change, Map<EntityIdentity<?>, ObservableEntityImpl<?>> entities) {
+		int todo = todo; // TODO
+	}
 
-	public ObservableSortedSet<ObservableEntity<? extends E>> getResults(EntityQuery<E> query) {}
+	public EntityCollectionResult<E> getResults(EntityQuery<E> query, boolean withUpdates) {
+		return new ResultWrapper(query, theExposedResults, withUpdates);
+	}
+
+	public EntityCountResult<E> getCountResults(EntityQuery<E> query) {
+		ObservableValue<Long> count;
+		if (theRawCountResult != null)
+			count = theRawCountResult;
+		else
+			count = theRawResults.observeSize().map(i -> (long) i);
+		return new CountResultWrapper(query, count);
+	}
 
 	// Don't delete--may need this later
-	private static <E> Comparator<ObservableEntity<E>> createComparator(EntityQuery<E> query) {
-		return new Comparator<ObservableEntity<E>>() {
+	private static <E> Comparator<ObservableEntity<? extends E>> createComparator(EntityQuery<E> query) {
+		return new Comparator<ObservableEntity<? extends E>>() {
 			@Override
-			public int compare(ObservableEntity<E> o1, ObservableEntity<E> o2) {
+			public int compare(ObservableEntity<? extends E> o1, ObservableEntity<? extends E> o2) {
 				int idCompare = o1.getId().compareTo(o2.getId());
 				if (idCompare == 0)
 					return 0;
@@ -122,18 +172,14 @@ public class QueryResults<E> {
 				return idCompare;
 			}
 
-			private <F> int compare(ObservableEntity<E> o1, ObservableEntity<E> o2, QueryOrder<E, F> order) {
+			private <F> int compare(ObservableEntity<? extends E> o1, ObservableEntity<? extends E> o2, QueryOrder<E, F> order) {
 				return order.getValue().compare(order.getValue().getValue(o1), order.getValue().getValue(o2));
 			}
 		};
 	}
 
 	public ObservableSortedSet<ObservableEntity<? extends E>> getResults() {
-		return theExposedResults;
-	}
-
-	public ObservableValue<Long> getCount() {
-		return theExposedCountResult;
+		return theRawResults;
 	}
 
 	Subscription wrap(Supplier<Subscription> listen) {
@@ -153,21 +199,54 @@ public class QueryResults<E> {
 		};
 	}
 
-	@Override
-	protected void finalize() throws Throwable {
-		super.finalize();
-		// TODO
-	}
+	class ResultWrapper extends ObservableCollectionWrapper<ObservableEntity<? extends E>> implements EntityCollectionResult<E> {
+		private final EntityQuery<E> theQuery;
 
-	class ResultWrapper extends ObservableCollectionWrapper<ObservableEntity<? extends E>>
-	implements ObservableSortedSet<ObservableEntity<? extends E>> {
-		public ResultWrapper(ObservableSortedSet<ObservableEntity<? extends E>> wrapped) {
-			init(wrapped);
+		ResultWrapper(EntityQuery<E> query, ObservableSortedSet<ObservableEntity<? extends E>> results, boolean withUpdates) {
+			theQuery = query;
+			ObservableCollection.DistinctSortedDataFlow<//
+			ObservableEntity<? extends E>, ObservableEntity<? extends E>, ObservableEntity<? extends E>> flow = results.flow();
+			if (!theQuery.getOrder().isEmpty())
+				flow = flow.distinctSorted(createComparator(query), false);
+			if (!withUpdates)
+				flow = flow.mapEquivalent(flow.getTargetType(), e -> e, e -> e, opts -> opts.cache(false).fireIfUnchanged(false));
+			init(flow.collect());
 		}
 
 		@Override
 		protected ObservableSortedSet<ObservableEntity<? extends E>> getWrapped() throws IllegalStateException {
 			return (ObservableSortedSet<ObservableEntity<? extends E>>) super.getWrapped();
+		}
+
+		@Override
+		public EntityQuery<E> getOperation() {
+			return theQuery;
+		}
+
+		@Override
+		public boolean cancel(boolean mayInterruptIfRunning) {
+			return QueryResults.this.cancel(mayInterruptIfRunning);
+		}
+
+		@Override
+		public ResultStatus getStatus() {
+			return QueryResults.this.getStatus();
+		}
+
+		@Override
+		public EntityOperationException getFailure() {
+			return QueryResults.this.getFailure();
+		}
+
+		@Override
+		public Subscription onStatusChange(Consumer<ObservableEntityResult<E>> onChange) {
+			return QueryResults.this.onStatusChange(() -> onChange.accept(this));
+		}
+
+		@Override
+		public EntityCollectionResult<E> dispose() {
+			QueryResults.this.dispose();
+			return this;
 		}
 
 		@Override
@@ -211,7 +290,7 @@ public class QueryResults<E> {
 
 				@Override
 				public void remove() throws UnsupportedOperationException {
-					get().delete();
+					get().delete(null);
 				}
 			};
 		}
@@ -266,16 +345,49 @@ public class QueryResults<E> {
 		}
 	}
 
-	class CountResultWrapper implements ObservableValue<Long> {
+	class CountResultWrapper implements EntityCountResult<E> {
+		private final EntityQuery<E> theQuery;
 		private final ObservableValue<Long> theWrapped;
 
-		CountResultWrapper(ObservableValue<Long> wrapped) {
+		CountResultWrapper(EntityQuery<E> query, ObservableValue<Long> wrapped) {
+			theQuery = query;
 			theWrapped = wrapped;
 		}
 
 		@Override
+		public EntityQuery<E> getOperation() {
+			return theQuery;
+		}
+
+		@Override
+		public boolean cancel(boolean mayInterruptIfRunning) {
+			return QueryResults.this.cancel(mayInterruptIfRunning);
+		}
+
+		@Override
+		public ResultStatus getStatus() {
+			return QueryResults.this.getStatus();
+		}
+
+		@Override
+		public EntityOperationException getFailure() {
+			return QueryResults.this.getFailure();
+		}
+
+		@Override
+		public Subscription onStatusChange(Consumer<ObservableEntityResult<E>> onChange) {
+			return QueryResults.this.onStatusChange(() -> onChange.accept(this));
+		}
+
+		@Override
+		public EntityCountResult<E> dispose() {
+			QueryResults.this.dispose();
+			return this;
+		}
+
+		@Override
 		public Object getIdentity() {
-			return theWrapped.getIdentity();
+			return theWrapped.getIdentity(); // TODO Can do better than this
 		}
 
 		@Override

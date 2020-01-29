@@ -1,8 +1,7 @@
 package org.observe.entity.impl;
 
-import org.observe.entity.EntityIdentity;
+import org.observe.entity.EntityCreationResult;
 import org.observe.entity.EntityOperationException;
-import org.observe.entity.ObservableEntity;
 import org.observe.entity.PreparedCreator;
 import org.qommons.collect.QuickSet.QuickMap;
 
@@ -17,13 +16,8 @@ class PreparedCreatorImpl<E> extends AbstractPreparedOperation<E, PreparedCreato
 	}
 
 	@Override
-	public EntityIdentity<E> create() throws IllegalStateException, EntityOperationException {
-		return ((ObservableEntityTypeImpl<E>) getEntityType()).create(this, getPreparedObject());
-	}
-
-	@Override
-	public ObservableEntity<E> createAndGet() throws IllegalStateException, EntityOperationException {
-		return ((ObservableEntityTypeImpl<E>) getEntityType()).createAndGet(this, getPreparedObject());
+	public EntityCreationResult<E> create(boolean sync, Object cause) throws IllegalStateException, EntityOperationException {
+		return ((ObservableEntityTypeImpl<E>) getEntityType()).getEntitySet().create(this, sync, cause);
 	}
 
 	@Override

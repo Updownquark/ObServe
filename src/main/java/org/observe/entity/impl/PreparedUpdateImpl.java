@@ -1,8 +1,9 @@
 package org.observe.entity.impl;
 
 import org.observe.entity.ConfigurableUpdate;
-import org.observe.entity.EntityOperationException;
 import org.observe.entity.EntityCondition;
+import org.observe.entity.EntityModificationResult;
+import org.observe.entity.EntityOperationException;
 import org.observe.entity.PreparedUpdate;
 import org.qommons.collect.QuickSet.QuickMap;
 
@@ -18,7 +19,7 @@ class PreparedUpdateImpl<E> extends AbstractPreparedSetOperation<E, PreparedUpda
 	}
 
 	@Override
-	public long execute() throws IllegalStateException, EntityOperationException {
-		return ((ObservableEntityTypeImpl<E>) getEntityType()).update(this, getPreparedObject());
+	public EntityModificationResult<E> execute(boolean sync, Object cause) throws IllegalStateException, EntityOperationException {
+		return ((ObservableEntityTypeImpl<E>) getEntityType()).getEntitySet().update(this, sync, cause);
 	}
 }

@@ -28,28 +28,47 @@ public abstract class EntityChange<E> {
 		updateMapField
 	}
 
+	private final ObservableEntityType<E> theType;
 	/** The time that the change was made */
 	public final Instant time;
 	/** The type of the change */
 	public final EntityChangeType changeType;
 
 	/**
+	 * @param type The super type of all entities affected by this change
 	 * @param time The time that the change was made
-	 * @param entity The identity of the entity that changed
 	 * @param changeType The type of the change
 	 */
-	public EntityChange(Instant time, EntityChangeType changeType) {
+	public EntityChange(ObservableEntityType<E> type, Instant time, EntityChangeType changeType) {
+		theType = type;
 		this.time = time;
 		this.changeType = changeType;
 	}
 
+	/** @return The super type of all entities affected by this change */
+	public ObservableEntityType<E> getEntityType() {
+		return theType;
+	}
+
+	/** @return The identities of all entities affected by the change */
 	public abstract Set<EntityIdentity<? extends E>> getEntities();
 
+	/**
+	 * Represents the addition or deletion of entities from the entity set
+	 *
+	 * @param <E> The type of the entities that were deleted
+	 */
 	public static class EntityExistenceChange<E> extends EntityChange<E> {
-		public final Set<EntityIdentity<? extends E>> entities;
+		private final Set<EntityIdentity<? extends E>> entities;
 
-		public EntityExistenceChange(Instant time, boolean added, Set<EntityIdentity<? extends E>> entities) {
-			super(time, added ? EntityChangeType.add : EntityChangeType.remove);
+		/**
+		 * @param type The super type of all entities affected by this change
+		 * @param time The time that the change was made
+		 * @param added Whether this is an addition or deletion change
+		 * @param entities The entities that were added or deleted from the entity set
+		 */
+		public EntityExistenceChange(ObservableEntityType<E> type, Instant time, boolean added, Set<EntityIdentity<? extends E>> entities) {
+			super(type, time, added ? EntityChangeType.add : EntityChangeType.remove);
 			this.entities = entities;
 		}
 
@@ -70,13 +89,14 @@ public abstract class EntityChange<E> {
 		public final ObservableEntityFieldType<E, F> field;
 
 		/**
+		 * @param type The super type of all entities affected by this change
 		 * @param time The time that the change was made
 		 * @param changeType The type of the change
 		 * @param field The field whose value changed in the entity
 		 */
-		public EntityFieldChange(Instant time, EntityChangeType changeType,
+		public EntityFieldChange(ObservableEntityType<E> type, Instant time, EntityChangeType changeType,
 			ObservableEntityFieldType<E, F> field) {
-			super(time, changeType);
+			super(type, time, changeType);
 			this.field = field;
 		}
 	}
@@ -88,22 +108,24 @@ public abstract class EntityChange<E> {
 	 * @param <F> The type of the field
 	 */
 	public static class EntityFieldValueChange<E, F> extends EntityFieldChange<E, F> {
-		public final Set<EntityIdentity<? extends E>> entities;
+		private final Set<EntityIdentity<? extends E>> entities;
 		/** The previous value in the entity's field */
 		public final F oldValue;
 		/** The new value in the entity's field */
 		public final F newValue;
 
 		/**
+		 * @param type The super type of all entities affected by this change
 		 * @param time The time that the change was made
 		 * @param entities The identities of the entities that changed
 		 * @param field The field whose value changed in the entity
 		 * @param oldValue The previous value of the field
 		 * @param newValue The new value of the field
 		 */
-		public EntityFieldValueChange(Instant time, Set<EntityIdentity<? extends E>> entities, ObservableEntityFieldType<E, F> field,
+		public EntityFieldValueChange(ObservableEntityType<E> type, Instant time, Set<EntityIdentity<? extends E>> entities,
+			ObservableEntityFieldType<E, F> field,
 			F oldValue, F newValue) {
-			super(time, EntityChangeType.setField, field);
+			super(type, time, EntityChangeType.setField, field);
 			this.entities = entities;
 			this.oldValue = oldValue;
 			this.newValue = newValue;
@@ -142,7 +164,7 @@ public abstract class EntityChange<E> {
 		 */
 		public EntityCollectionFieldChange(Instant time, EntityIdentity<E> entity, ObservableEntityFieldType<E, C> field,
 			CollectionChangeType collectionChangeType, int index, F value) {
-			super(time, EntityChangeType.updateCollectionField, field);
+			super(entity.getEntityType(), time, EntityChangeType.updateCollectionField, field);
 			this.entity = entity;
 			this.collectionChangeType = collectionChangeType;
 			this.index = index;
@@ -183,7 +205,7 @@ public abstract class EntityChange<E> {
 		 */
 		public EntityMapFieldChange(Instant time, EntityIdentity<E> entity, ObservableEntityFieldType<E, M> field,
 			CollectionChangeType collectionChangeType, K key, V value) {
-			super(time, EntityChangeType.updateMapField, field);
+			super(entity.getEntityType(), time, EntityChangeType.updateMapField, field);
 			this.entity = entity;
 			this.collectionChangeType = collectionChangeType;
 			this.key = key;

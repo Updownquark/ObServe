@@ -1,14 +1,12 @@
 package org.observe.entity.impl;
 
-import org.observe.ObservableValue;
-import org.observe.collect.ObservableSortedSet;
 import org.observe.entity.ConfigurableQuery;
-import org.observe.entity.EntityIdentity;
+import org.observe.entity.EntityCollectionResult;
+import org.observe.entity.EntityCondition;
+import org.observe.entity.EntityCountResult;
 import org.observe.entity.EntityOperationException;
 import org.observe.entity.EntityQuery;
-import org.observe.entity.EntityCondition;
 import org.observe.entity.FieldLoadType;
-import org.observe.entity.ObservableEntity;
 import org.observe.entity.ObservableEntityFieldType;
 import org.observe.entity.PreparedQuery;
 import org.qommons.collect.QuickSet.QuickMap;
@@ -50,31 +48,16 @@ class PreparedQueryImpl<E> extends AbstractPreparedSetOperation<E, PreparedQuery
 	}
 
 	@Override
-	public ObservableValue<Long> count() throws IllegalStateException, EntityOperationException {
+	public EntityCountResult<E> count() throws IllegalStateException, EntityOperationException {
 		if (getVariables().keySize() > 0)
 			throw new IllegalStateException("This query has variables and must be prepared");
-		return ((ObservableEntityTypeImpl<E>) getEntityType()).count(this, null);
+		return ((ObservableEntityTypeImpl<E>) getEntityType()).getEntitySet().count(this);
 	}
 
 	@Override
-	public ObservableSortedSet<E> collect(boolean withUpdates) throws IllegalStateException, EntityOperationException {
+	public EntityCollectionResult<E> collect(boolean withUpdates) throws IllegalStateException, EntityOperationException {
 		if (getVariables().keySize() > 0)
 			throw new IllegalStateException("This query has variables and must be prepared");
-		return ((ObservableEntityTypeImpl<E>) getEntityType()).collect(this, withUpdates, null);
-	}
-
-	@Override
-	public ObservableSortedSet<ObservableEntity<? extends E>> collectObservable(boolean withUpdates)
-		throws IllegalStateException, EntityOperationException {
-		if (getVariables().keySize() > 0)
-			throw new IllegalStateException("This query has variables and must be prepared");
-		return ((ObservableEntityTypeImpl<E>) getEntityType()).collectObservable(this, withUpdates, null);
-	}
-
-	@Override
-	public ObservableSortedSet<EntityIdentity<? super E>> collectIdentities() throws IllegalStateException, EntityOperationException {
-		if (getVariables().keySize() > 0)
-			throw new IllegalStateException("This query has variables and must be prepared");
-		return ((ObservableEntityTypeImpl<E>) getEntityType()).collectIdentities(this, null);
+		return ((ObservableEntityTypeImpl<E>) getEntityType()).getEntitySet().collect(this, withUpdates);
 	}
 }

@@ -1,10 +1,9 @@
 package org.observe.entity.impl;
 
 import org.observe.entity.ConfigurableCreator;
-import org.observe.entity.EntityIdentity;
+import org.observe.entity.EntityCreationResult;
 import org.observe.entity.EntityOperationException;
 import org.observe.entity.EntityOperationVariable;
-import org.observe.entity.ObservableEntity;
 import org.observe.entity.ObservableEntityFieldType;
 import org.observe.entity.ObservableEntityType;
 import org.observe.entity.PreparedCreator;
@@ -59,12 +58,7 @@ class ConfigurableCreatorImpl<E> extends AbstractConfigurableOperation<E> implem
 	}
 
 	@Override
-	public EntityIdentity<E> create() throws IllegalStateException, EntityOperationException {
-		return ((ObservableEntityTypeImpl<E>) getEntityType()).create(this, null);
-	}
-
-	@Override
-	public ObservableEntity<E> createAndGet() throws IllegalStateException, EntityOperationException {
-		return ((ObservableEntityTypeImpl<E>) getEntityType()).createAndGet(this, null);
+	public EntityCreationResult<E> create(boolean sync, Object cause) throws IllegalStateException, EntityOperationException {
+		return ((ObservableEntityTypeImpl<E>) getEntityType()).getEntitySet().create(this, sync, cause);
 	}
 }

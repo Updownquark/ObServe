@@ -82,6 +82,21 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 
 	public abstract boolean contains(EntityCondition<?> other);
 
+	public abstract EntityCondition<E> transform(Function<EntityCondition<E>, EntityCondition<E>> transform);
+
+	public EntityCondition<E> satisfy(QuickMap<String, Object> variables) {
+		return transform(condition -> {
+			if (condition instanceof VariableCondition) {
+				VariableCondition<E, Object> vblCondition = (VariableCondition<E, Object>) condition;
+				Object value = variables.get(vblCondition.getVariable().getName());
+				// TODO Check constraints
+				return new LiteralCondition<>(condition.getEntityType(), condition.theMechanism, vblCondition.getField(), value,
+					vblCondition.getComparison(), vblCondition.isWithEqual(), Collections.emptyMap());
+			} else
+				return condition;
+		});
+	}
+
 	/** @return A configurable query for entities matching this selection */
 	public ConfigurableQuery<E> query() {
 		return theMechanism.query(this);
@@ -119,6 +134,21 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 			super(entityType, mechanism, globalVars, Collections.emptyMap());
 		}
 
+		@Override
+		protected int getConditionType() {
+			return 0;
+		}
+
+		@Override
+		public EntityCondition<E> or(Function<All<E>, EntityCondition<E>> condition) {
+			return this;
+		}
+
+		@Override
+		public EntityCondition<E> and(Function<All<E>, EntityCondition<E>> condition) {
+			return condition.apply(this);
+		}
+
 		public <F> EntityConditionIntermediate1<E, F> where(EntityValueAccess<E, F> field) {
 			return new EntityConditionIntermediate1<>(this, field);
 		}
@@ -134,6 +164,16 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 					getEntityType().getField(init)));
 		}
 
+		public EntityCondition<E> entity(EntityIdentity<E> id) {
+			EntityCondition<E> c = this;
+			for (int i = 0; i < id.getFields().keySize(); i++) {
+				int idIndex = i;
+				c = c.and(all -> all.where((ObservableEntityFieldType<E, Object>) id.getEntityType().getIdentityFields().get(idIndex))
+					.equal().value(id.getFields().get(idIndex)));
+			}
+			return c;
+		}
+
 		@Override
 		public boolean test(ObservableEntity<? extends E> entity, QuickMap<String, Object> varValues) {
 			return true;
@@ -145,8 +185,8 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 		}
 
 		@Override
-		protected int getConditionType() {
-			return 0;
+		public EntityCondition<E> transform(Function<EntityCondition<E>, EntityCondition<E>> transform) {
+			return transform.apply(this);
 		}
 
 		@Override
@@ -357,54 +397,8 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 		}
 
 		@Override
-		public boolean contains(EntityCondition<?> other) {
-			if(other==this)
-				return true;
-			else if(!getEntityType().isAssignableFrom(other.getEntityType()))
-				return false;
-			else if(other instanceof AndCondition){
-				for(EntityCondition<?> c : ((AndCondition<?>) other).getConditions())
-					if(c.contains(this))
-						return true;
-				return false;
-			} else if(!(other instanceof ValueCondition))
-				return false;
-			else if(!getField().isOverride(((ValueCondition<? extends E, ?>) other).getField()))
-				return false;
-			ValueCondition<? super E, ? super F> otherV=(ValueCondition<? super E, ? super F>) other;
-			if(getComparison()<0){
-				if(otherV.getComparison()>0)
-					return false;
-				else if(otherV.getComparison()<0){
-					int comp=compareValue(otherV);
-					if(comp>0)
-						return true;
-					else if(comp==0)
-						return isWithEqual || !otherV.isWithEqual;
-					else
-						return false;
-				} else if (!isWithEqual() || !otherV.isWithEqual)
-					return false;
-				else
-					return compareValue(otherV) == 0;
-			} else if (getComparison() > 0) {
-				if(otherV.getComparison()<0)
-					return false;
-				else if (otherV.getComparison() > 0) {
-					int comp = compareValue(otherV);
-					if (comp < 0)
-						return true;
-					else if (comp == 0)
-						return isWithEqual || !otherV.isWithEqual;
-					else
-						return false;
-				} else if (!isWithEqual() || !otherV.isWithEqual)
-					return false;
-				else
-					return compareValue(otherV) == 0;
-			} else {
-				return otherV.getComparison() == 0 && isWithEqual == otherV.isWithEqual && compareValue(otherV) == 0;
-			}
+		public EntityCondition<E> transform(Function<EntityCondition<E>, EntityCondition<E>> transform) {
+			return transform.apply(this);
 		}
 
 		@Override
@@ -791,6 +785,21 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 		}
 
 		@Override
+		public EntityCondition<E> transform(Function<EntityCondition<E>, EntityCondition<E>> transform) {
+			List<EntityCondition<E>> conditions = new ArrayList<>();
+			boolean different = false;
+			for (EntityCondition<E> c : getConditions()) {
+				EntityCondition<E> transformed = c.transform(transform);
+				conditions.add(transformed);
+				different |= transformed != c;
+			}
+			if (!different)
+				return this;
+			else
+				return new OrCondition<>(getEntityType(), conditions.toArray(new EntityCondition[conditions.size()]));
+		}
+
+		@Override
 		public String toString() {
 			return "OR" + super.toString();
 		}
@@ -839,6 +848,21 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 				return true;
 			} else
 				return false;
+		}
+
+		@Override
+		public EntityCondition<E> transform(Function<EntityCondition<E>, EntityCondition<E>> transform) {
+			List<EntityCondition<E>> conditions = new ArrayList<>();
+			boolean different = false;
+			for (EntityCondition<E> c : getConditions()) {
+				EntityCondition<E> transformed = c.transform(transform);
+				conditions.add(transformed);
+				different |= transformed != c;
+			}
+			if (!different)
+				return this;
+			else
+				return new AndCondition<>(getEntityType(), conditions.toArray(new EntityCondition[conditions.size()]));
 		}
 
 		@Override

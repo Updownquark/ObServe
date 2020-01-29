@@ -30,8 +30,9 @@ public interface ObservableEntityType<E> extends Named {
 	/**
 	 * @param id The identity of the entity to get
 	 * @return The entity of this type (or one of its sub-types) with the given identity, or null if there is none such in the entity set
+	 * @throws EntityOperationException If the operation cannot be performed
 	 */
-	ObservableEntity<? extends E> observableEntity(EntityIdentity<E> id);
+	ObservableEntity<? extends E> observableEntity(EntityIdentity<E> id) throws EntityOperationException;
 	/**
 	 * @param entity The entity object queried from this type
 	 * @return The observable entity represented by the given entity object
@@ -69,6 +70,10 @@ public interface ObservableEntityType<E> extends Named {
 		return EntityIdentity.build(this);
 	}
 
+	/**
+	 * @param subId An ID for an entity of this type or a sub-types
+	 * @return An ID of this type for the same entity
+	 */
 	default EntityIdentity<E> fromSubId(EntityIdentity<? extends E> subId) {
 		if (subId.getEntityType() == this)
 			return (EntityIdentity<E>) subId;

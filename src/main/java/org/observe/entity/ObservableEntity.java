@@ -1,5 +1,6 @@
 package org.observe.entity;
 
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.observe.Observable;
@@ -77,6 +78,22 @@ public interface ObservableEntity<E> extends Stamped, Identifiable, Comparable<O
 	Observable<ObservableEntityFieldEvent<E, ?>> allFieldChanges();
 
 	/**
+	 * @param field The field to check
+	 * @return Whether the value of the given field is already loaded in this entity for immediate access
+	 */
+	boolean isLoaded(ObservableEntityFieldType<E, ?> field);
+
+	/**
+	 * @param field The field to load
+	 * @param onLoad Called when the load succeeds (or null to do the call synchronously, blocking until success or failure)
+	 * @param onFail Called when the load fails
+	 * @return This entity
+	 * @throws EntityOperationException If the operation fails synchronously
+	 */
+	<F> ObservableEntity<E> load(ObservableEntityFieldType<E, F> field, Consumer<? super F> onLoad,
+		Consumer<EntityOperationException> onFail) throws EntityOperationException;
+
+	/**
 	 * @param fieldName The name of the field to get
 	 * @return An entity field value for the given field
 	 */
@@ -125,17 +142,19 @@ public interface ObservableEntity<E> extends Stamped, Identifiable, Comparable<O
 
 	/** @return Whether this entity is still present in the entity set */
 	boolean isPresent();
-	/** @return A message detailing why this entity cannot be {@link #delete() deleted} from the entity set, or null if it can */
+
+	/** @return A message detailing why this entity cannot be {@link #delete(Object) deleted} from the entity set, or null if it can */
 	String canDelete();
 	/**
 	 * Deletes this entity from the entity set
 	 *
+	 * @param cause The cause of the change, if any
 	 * @throws UnsupportedOperationException if this entity cannot be deleted for any reason
 	 */
-	void delete() throws UnsupportedOperationException;
+	void delete(Object cause) throws UnsupportedOperationException;
 	/**
-	 * @return An observable that will fire once when this entity is deleted from the entity set, either by the {@link #delete()} method, as
-	 *         a result of a {@link EntityDeletion delete operation}, or externally
+	 * @return An observable that will fire once when this entity is deleted from the entity set, either by the {@link #delete(Object)}
+	 *         method, as a result of a {@link EntityDeletion delete operation}, or externally
 	 */
 	default Observable<ObservableEntity<?>> onDelete() {
 		// Use ID field if we can, since those only fire completed events

@@ -41,5 +41,13 @@ public class EntityLoadRequest<E> {
 			theRequest = request;
 			theResults = results;
 		}
+
+		public EntityLoadRequest<E> getRequest() {
+			return theRequest;
+		}
+
+		public List<QuickMap<String, ?>> getResults() {
+			return theResults;
+		}
 	}
 }

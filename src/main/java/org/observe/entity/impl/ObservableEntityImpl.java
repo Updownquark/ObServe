@@ -1,9 +1,13 @@
 package org.observe.entity.impl;
 
+import java.util.function.Consumer;
+
 import org.observe.Observable;
 import org.observe.Observer;
 import org.observe.Subscription;
 import org.observe.entity.EntityIdentity;
+import org.observe.entity.EntityOperationException;
+import org.observe.entity.EntityUpdate;
 import org.observe.entity.ObservableEntity;
 import org.observe.entity.ObservableEntityField;
 import org.observe.entity.ObservableEntityFieldEvent;
@@ -59,14 +63,23 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 
 	@Override
 	public Object get(int fieldIndex) {
-		return theFields.get(fieldIndex);
+		Object value = theFields.get(fieldIndex);
+		if (value == EntityUpdate.NOT_SET) {
+			try {
+				load(theType.getFields().get(fieldIndex), null, null);
+			} catch (EntityOperationException e) {
+				throw new IllegalStateException("Could not load field " + theId + "." + theType.getFields().get(fieldIndex), e);
+			}
+			return theFields.get(fieldIndex);
+		} else
+			return value;
 	}
 
 	@Override
 	public String isAcceptable(int fieldIndex, Object value) {
 		if (!isPresent)
 			return ENTITY_REMOVED;
-		return theType.isAcceptable(this, fieldIndex, value);
+		return theType.getEntitySet().isAcceptable(this, fieldIndex, value);
 	}
 
 	@Override
@@ -81,12 +94,30 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 				throw new IllegalArgumentException(msg);
 			F oldValue = (F) theFields.get(fieldIndex);
 			ObservableEntityFieldType<E, F> field = (ObservableEntityFieldType<E, F>) theType.getFields().get(fieldIndex);
-			ObservableEntityFieldEvent<E, F> event = new ObservableEntityFieldEvent<>(this, field, oldValue, value, cause);
-			try (Transaction evtT = Causable.use(event)) {
-				_set(fieldIndex, value, event);
+			try {
+				theType.select().entity(theId).update().setField(field, value).execute(true, cause);
+			} catch (IllegalStateException | EntityOperationException e) {
+				throw new IllegalArgumentException("Update failed", e);
 			}
 			return oldValue;
 		}
+	}
+
+	@Override
+	public boolean isLoaded(ObservableEntityFieldType<E, ?> field) {
+		return theFields.get(field.getFieldIndex()) != EntityUpdate.NOT_SET;
+	}
+
+	@Override
+	public <F> ObservableEntity<E> load(ObservableEntityFieldType<E, F> field, Consumer<? super F> onLoad,
+		Consumer<EntityOperationException> onFail) throws EntityOperationException {
+		Object value = theFields.get(field.getFieldIndex());
+		if (value != EntityUpdate.NOT_SET) {
+			if (onLoad != null)
+				onLoad.accept((F) value);
+		} else
+			theType.getEntitySet().loadField(this, field, onLoad, onFail);
+		return this;
 	}
 
 	@Override
@@ -98,20 +129,35 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 	public String canDelete() {
 		if (!isPresent)
 			return ENTITY_REMOVED;
-		return theType.canDelete(this);
+		return theType.getEntitySet().canDelete(this);
 	}
 
 	@Override
-	public void delete() throws UnsupportedOperationException {
+	public void delete(Object cause) throws UnsupportedOperationException {
 		if (!isPresent)
 			throw new UnsupportedOperationException(ENTITY_REMOVED);
-		theType.delete(this);
+		try {
+			theType.select().entity(theId).delete().execute(true, cause);
+		} catch (IllegalStateException | EntityOperationException e) {
+			throw new UnsupportedOperationException("Delete failed", e);
+		}
 	}
 
-	<F> void _set(int fieldIndex, F value, ObservableEntityFieldEvent<E, F> event) {
-		theFields.put(fieldIndex, value);
-		theFieldObservers.forEach(//
-			listener -> listener.onNext(event));
+	<F> void _set(ObservableEntityFieldType<? super E, F> field, F oldValue, F newValue) {
+		if (field.getEntityType() != theType)
+			field = (ObservableEntityFieldType<E, F>) theType.getFields().get(field.getName());
+		theStamp++;
+		Object myOldValue = theFields.put(field.getFieldIndex(), newValue);
+		if (myOldValue != EntityUpdate.NOT_SET) {
+			if (oldValue == EntityUpdate.NOT_SET)
+				oldValue = (F) myOldValue;
+			ObservableEntityFieldEvent<E, F> event = new ObservableEntityFieldEvent<>(this, (ObservableEntityFieldType<E, F>) field,
+				oldValue, newValue, null);
+			try (Transaction evtT = Causable.use(event)) {
+				theFieldObservers.forEach(//
+					listener -> listener.onNext(event));
+			}
+		}
 	}
 
 	void removed(Object cause) {
