@@ -23,9 +23,9 @@ public interface ObservableEntityProvider extends Transactable {
 
 	<E> EntityIdentity<E> create(EntityCreator<E> creator, Object prepared) throws EntityOperationException;
 
-	long count(EntitySelection<?> query, Object prepared) throws EntityOperationException;
+	long count(EntityCondition<?> query, Object prepared) throws EntityOperationException;
 
-	<E> Iterable<QuickMap<String, Object>> query(EntitySelection<E> query, Object prepared) throws EntityOperationException;
+	<E> Iterable<QuickMap<String, Object>> query(EntityCondition<E> query, Object prepared) throws EntityOperationException;
 
 	long update(EntityUpdate<?> update, Object prepared) throws EntityOperationException;
 

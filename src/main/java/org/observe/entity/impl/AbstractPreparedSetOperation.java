@@ -1,17 +1,17 @@
 package org.observe.entity.impl;
 
 import org.observe.entity.ConfigurableOperation;
-import org.observe.entity.EntitySelection;
+import org.observe.entity.EntityCondition;
 import org.observe.entity.EntitySetOperation;
 import org.observe.entity.ObservableEntityType;
 import org.qommons.collect.QuickSet.QuickMap;
 
 abstract class AbstractPreparedSetOperation<E, O extends AbstractPreparedSetOperation<E, O>> extends AbstractPreparedOperation<E, O>
 implements EntitySetOperation<E> {
-	private final EntitySelection<E> theSelection;
+	private final EntityCondition<E> theSelection;
 
 	AbstractPreparedSetOperation(ConfigurableOperation<E> definition, Object preparedObject, QuickMap<String, Object> variableValues,
-		EntitySelection<E> selection) {
+		EntityCondition<E> selection) {
 		super(definition, preparedObject, variableValues);
 		theSelection = selection;
 	}
@@ -22,7 +22,7 @@ implements EntitySetOperation<E> {
 	}
 
 	@Override
-	public EntitySelection<E> getSelection() {
+	public EntityCondition<E> getSelection() {
 		return theSelection;
 	}
 

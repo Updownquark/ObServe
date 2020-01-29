@@ -18,11 +18,11 @@ import org.qommons.collect.QuickSet.QuickMap;
  *
  * @param <E> The entity type that the condition is for
  */
-public abstract class EntitySelection<E> implements Comparable<EntitySelection<E>> {
+public abstract class EntityCondition<E> implements Comparable<EntityCondition<E>> {
 	public interface SelectionMechanism<E> {
-		ConfigurableQuery<E> query(EntitySelection<E> selection);
-		ConfigurableUpdate<E> update(EntitySelection<E> selection);
-		ConfigurableDeletion<E> delete(EntitySelection<E> selection);
+		ConfigurableQuery<E> query(EntityCondition<E> selection);
+		ConfigurableUpdate<E> update(EntityCondition<E> selection);
+		ConfigurableDeletion<E> delete(EntityCondition<E> selection);
 	}
 
 	private final ObservableEntityType<E> theEntityType;
@@ -30,12 +30,12 @@ public abstract class EntitySelection<E> implements Comparable<EntitySelection<E
 	private final Map<String, EntityOperationVariable<E>> theGlobalVariables;
 	private final Map<String, EntityOperationVariable<E>> theVariables;
 
-	private EntitySelection(ObservableEntityType<E> entityType, SelectionMechanism<E> mechanism,
+	private EntityCondition(ObservableEntityType<E> entityType, SelectionMechanism<E> mechanism,
 		Map<String, EntityOperationVariable<E>> vars) {
 		this(entityType, mechanism, vars, vars);
 	}
 
-	private EntitySelection(ObservableEntityType<E> entityType, SelectionMechanism<E> mechanism,
+	private EntityCondition(ObservableEntityType<E> entityType, SelectionMechanism<E> mechanism,
 		Map<String, EntityOperationVariable<E>> globalVars,
 		Map<String, EntityOperationVariable<E>> vars) {
 		theEntityType = entityType;
@@ -50,8 +50,8 @@ public abstract class EntitySelection<E> implements Comparable<EntitySelection<E
 
 	protected abstract int getConditionType();
 
-	public EntitySelection<E> or(Function<All<E>, EntitySelection<E>> condition) {
-		EntitySelection<E> c = condition.apply(getAll());
+	public EntityCondition<E> or(Function<All<E>, EntityCondition<E>> condition) {
+		EntityCondition<E> c = condition.apply(getAll());
 		if (c instanceof All)
 			return this;
 		else if (this instanceof OrCondition)
@@ -60,8 +60,8 @@ public abstract class EntitySelection<E> implements Comparable<EntitySelection<E
 			return new OrCondition<>(theEntityType, this, c);
 	}
 
-	public EntitySelection<E> and(Function<All<E>, EntitySelection<E>> condition) {
-		EntitySelection<E> c = condition.apply(getAll());
+	public EntityCondition<E> and(Function<All<E>, EntityCondition<E>> condition) {
+		EntityCondition<E> c = condition.apply(getAll());
 		if (c instanceof All)
 			return this;
 		else if (this instanceof AndCondition)
@@ -80,7 +80,7 @@ public abstract class EntitySelection<E> implements Comparable<EntitySelection<E
 
 	public abstract boolean test(ObservableEntity<? extends E> entity, QuickMap<String, Object> varValues);
 
-	public abstract boolean contains(EntitySelection<?> other);
+	public abstract boolean contains(EntityCondition<?> other);
 
 	/** @return A configurable query for entities matching this selection */
 	public ConfigurableQuery<E> query() {
@@ -113,7 +113,7 @@ public abstract class EntitySelection<E> implements Comparable<EntitySelection<E
 	 *
 	 * @param <E> The java type of the entity
 	 */
-	public static class All<E> extends EntitySelection<E> {
+	public static class All<E> extends EntityCondition<E> {
 		public All(ObservableEntityType<E> entityType, SelectionMechanism<E> mechanism,
 			Map<String, EntityOperationVariable<E>> globalVars) {
 			super(entityType, mechanism, globalVars, Collections.emptyMap());
@@ -140,7 +140,7 @@ public abstract class EntitySelection<E> implements Comparable<EntitySelection<E
 		}
 
 		@Override
-		public boolean contains(EntitySelection<?> other) {
+		public boolean contains(EntityCondition<?> other) {
 			return getEntityType().isAssignableFrom(other.getEntityType());
 		}
 
@@ -150,7 +150,7 @@ public abstract class EntitySelection<E> implements Comparable<EntitySelection<E
 		}
 
 		@Override
-		public int compareTo(EntitySelection<E> o) {
+		public int compareTo(EntityCondition<E> o) {
 			return Integer.compare(getConditionType(), o.getConditionType());
 		}
 
@@ -288,7 +288,7 @@ public abstract class EntitySelection<E> implements Comparable<EntitySelection<E
 		}
 	}
 
-	public static abstract class ValueCondition<E, F> extends EntitySelection<E> {
+	public static abstract class ValueCondition<E, F> extends EntityCondition<E> {
 		private final EntityValueAccess<E, F> theField;
 		private final int theComparison;
 		private final boolean isWithEqual;
@@ -357,13 +357,13 @@ public abstract class EntitySelection<E> implements Comparable<EntitySelection<E
 		}
 
 		@Override
-		public boolean contains(EntitySelection<?> other) {
+		public boolean contains(EntityCondition<?> other) {
 			if(other==this)
 				return true;
 			else if(!getEntityType().isAssignableFrom(other.getEntityType()))
 				return false;
 			else if(other instanceof AndCondition){
-				for(EntitySelection<?> c : ((AndCondition<?>) other).getConditions())
+				for(EntityCondition<?> c : ((AndCondition<?>) other).getConditions())
 					if(c.contains(this))
 						return true;
 				return false;
@@ -408,7 +408,7 @@ public abstract class EntitySelection<E> implements Comparable<EntitySelection<E
 		}
 
 		@Override
-		public int compareTo(EntitySelection<E> o) {
+		public int compareTo(EntityCondition<E> o) {
 			int comp = Integer.compare(getConditionType(), o.getConditionType());
 			ValueCondition<E, ?> other = (ValueCondition<E, ?>) o;
 			if (comp == 0)
@@ -471,13 +471,13 @@ public abstract class EntitySelection<E> implements Comparable<EntitySelection<E
 		}
 
 		@Override
-		public boolean contains(EntitySelection<?> other) {
+		public boolean contains(EntityCondition<?> other) {
 			if (other == this)
 				return true;
 			else if (!getEntityType().isAssignableFrom(other.getEntityType()))
 				return false;
 			else if (other instanceof AndCondition) {
-				for (EntitySelection<?> c : ((AndCondition<?>) other).getConditions())
+				for (EntityCondition<?> c : ((AndCondition<?>) other).getConditions())
 					if (c.contains(this))
 						return true;
 				return false;
@@ -578,7 +578,7 @@ public abstract class EntitySelection<E> implements Comparable<EntitySelection<E
 		}
 
 		@Override
-		public int compareTo(EntitySelection<E> o) {
+		public int compareTo(EntityCondition<E> o) {
 			int comp = Integer.compare(getConditionType(), o.getConditionType());
 			if (comp == 0)
 				comp = getField().compareTo(((VariableCondition<E, ?>) o).getField());
@@ -589,13 +589,13 @@ public abstract class EntitySelection<E> implements Comparable<EntitySelection<E
 		}
 
 		@Override
-		public boolean contains(EntitySelection<?> other) {
+		public boolean contains(EntityCondition<?> other) {
 			if (other == this)
 				return true;
 			else if (!getEntityType().isAssignableFrom(other.getEntityType()))
 				return false;
 			else if (other instanceof AndCondition) {
-				for (EntitySelection<?> c : ((AndCondition<?>) other).getConditions())
+				for (EntityCondition<?> c : ((AndCondition<?>) other).getConditions())
 					if (c.contains(this))
 						return true;
 				return false;
@@ -652,32 +652,32 @@ public abstract class EntitySelection<E> implements Comparable<EntitySelection<E
 		}
 	}
 
-	public static abstract class CompositeCondition<E> extends EntitySelection<E> {
-		private final List<EntitySelection<E>> theConditions;
+	public static abstract class CompositeCondition<E> extends EntityCondition<E> {
+		private final List<EntityCondition<E>> theConditions;
 
-		public CompositeCondition(ObservableEntityType<E> entityType, EntitySelection<E>... conditions) {
+		public CompositeCondition(ObservableEntityType<E> entityType, EntityCondition<E>... conditions) {
 			super(entityType, conditions[0].theMechanism, joinVars(conditions));
 			theConditions = Collections.unmodifiableList(Arrays.asList(conditions));
 		}
 
-		protected CompositeCondition(ObservableEntityType<E> entityType, CompositeCondition other, EntitySelection<E> addedCondition) {
+		protected CompositeCondition(ObservableEntityType<E> entityType, CompositeCondition other, EntityCondition<E> addedCondition) {
 			super(entityType, addedCondition.theMechanism, joinVars(other, addedCondition));
-			List<EntitySelection<E>> conditions = new ArrayList<>(other.theConditions.size() + 1);
+			List<EntityCondition<E>> conditions = new ArrayList<>(other.theConditions.size() + 1);
 			conditions.addAll(other.theConditions);
 			conditions.add(addedCondition);
 			theConditions = Collections.unmodifiableList(conditions);
 		}
 
-		private static <E> Map<String, EntityOperationVariable<E>> joinVars(EntitySelection<E>... conditions) {
+		private static <E> Map<String, EntityOperationVariable<E>> joinVars(EntityCondition<E>... conditions) {
 			int count = 0;
-			for (EntitySelection<E> cond : conditions) {
+			for (EntityCondition<E> cond : conditions) {
 				count += cond.getVariables().size();
 				if (count > 3)
 					break;
 			}
 			Map<String, EntityOperationVariable<E>> vars = new LinkedHashMap<>(count * 4 / 3);
 			boolean first = true;
-			for (EntitySelection<E> cond : conditions) {
+			for (EntityCondition<E> cond : conditions) {
 				if (first)
 					first = false;
 				else {
@@ -693,12 +693,12 @@ public abstract class EntitySelection<E> implements Comparable<EntitySelection<E
 			return Collections.unmodifiableMap(vars);
 		}
 
-		public List<EntitySelection<E>> getConditions() {
+		public List<EntityCondition<E>> getConditions() {
 			return theConditions;
 		}
 
 		@Override
-		public int compareTo(EntitySelection<E> o) {
+		public int compareTo(EntityCondition<E> o) {
 			if (this == o)
 				return 0;
 			int comp = Integer.compare(getConditionType(), o.getConditionType());
@@ -729,7 +729,7 @@ public abstract class EntitySelection<E> implements Comparable<EntitySelection<E
 			CompositeCondition<E> other = (CompositeCondition<E>) obj;
 			if (getEntityType() != other.getEntityType() || theConditions.size() != other.theConditions.size())
 				return false;
-			for (EntitySelection<E> c : getConditions()) {
+			for (EntityCondition<E> c : getConditions()) {
 				if (!other.getConditions().contains(c))
 					return false;
 			}
@@ -743,11 +743,11 @@ public abstract class EntitySelection<E> implements Comparable<EntitySelection<E
 	}
 
 	public static class OrCondition<E> extends CompositeCondition<E> {
-		public OrCondition(ObservableEntityType<E> entityType, EntitySelection<E>... conditions) {
+		public OrCondition(ObservableEntityType<E> entityType, EntityCondition<E>... conditions) {
 			super(entityType, conditions);
 		}
 
-		protected OrCondition(ObservableEntityType<E> entityType, OrCondition other, EntitySelection<E> addedCondition) {
+		protected OrCondition(ObservableEntityType<E> entityType, OrCondition other, EntityCondition<E> addedCondition) {
 			super(entityType, other, addedCondition);
 		}
 
@@ -757,8 +757,8 @@ public abstract class EntitySelection<E> implements Comparable<EntitySelection<E
 		}
 
 		@Override
-		public EntitySelection<E> or(Function<All<E>, EntitySelection<E>> condition) {
-			EntitySelection<E> other = condition.apply(getAll());
+		public EntityCondition<E> or(Function<All<E>, EntityCondition<E>> condition) {
+			EntityCondition<E> other = condition.apply(getAll());
 			if (getConditions().contains(other))
 				return this;
 			return new OrCondition<>(getEntityType(), this, other);
@@ -766,7 +766,7 @@ public abstract class EntitySelection<E> implements Comparable<EntitySelection<E
 
 		@Override
 		public boolean test(ObservableEntity<? extends E> entity, QuickMap<String, Object> varValues) {
-			for (EntitySelection<E> condition : getConditions()) {
+			for (EntityCondition<E> condition : getConditions()) {
 				if (condition.test(entity, varValues))
 					return true;
 			}
@@ -774,14 +774,14 @@ public abstract class EntitySelection<E> implements Comparable<EntitySelection<E
 		}
 
 		@Override
-		public boolean contains(EntitySelection<?> other) {
+		public boolean contains(EntityCondition<?> other) {
 			if (!getEntityType().isAssignableFrom(other.getEntityType()))
 				return false;
-			for (EntitySelection<E> c : getConditions())
+			for (EntityCondition<E> c : getConditions())
 				if (c.contains(other))
 					return true;
 			if (other instanceof OrCondition) {
-				for (EntitySelection<E> c : ((OrCondition<E>) other).getConditions()) {
+				for (EntityCondition<E> c : ((OrCondition<E>) other).getConditions()) {
 					if (!contains(c))
 						return false;
 				}
@@ -797,11 +797,11 @@ public abstract class EntitySelection<E> implements Comparable<EntitySelection<E
 	}
 
 	public static class AndCondition<E> extends CompositeCondition<E> {
-		public AndCondition(ObservableEntityType<E> entityType, EntitySelection<E>... conditions) {
+		public AndCondition(ObservableEntityType<E> entityType, EntityCondition<E>... conditions) {
 			super(entityType, conditions);
 		}
 
-		protected AndCondition(ObservableEntityType<E> entityType, AndCondition other, EntitySelection<E> addedCondition) {
+		protected AndCondition(ObservableEntityType<E> entityType, AndCondition other, EntityCondition<E> addedCondition) {
 			super(entityType, other, addedCondition);
 		}
 
@@ -812,18 +812,18 @@ public abstract class EntitySelection<E> implements Comparable<EntitySelection<E
 
 		@Override
 		public boolean test(ObservableEntity<? extends E> entity, QuickMap<String, Object> varValues) {
-			for (EntitySelection<E> condition : getConditions())
+			for (EntityCondition<E> condition : getConditions())
 				if (!condition.test(entity, varValues))
 					return false;
 			return true;
 		}
 
 		@Override
-		public boolean contains(EntitySelection<?> other) {
+		public boolean contains(EntityCondition<?> other) {
 			if (!getEntityType().isAssignableFrom(other.getEntityType()))
 				return false;
 			boolean allContain = true;
-			for (EntitySelection<E> condition : getConditions()) {
+			for (EntityCondition<E> condition : getConditions()) {
 				if (!condition.contains(other)) {
 					allContain = false;
 					break;
@@ -832,7 +832,7 @@ public abstract class EntitySelection<E> implements Comparable<EntitySelection<E
 			if (allContain)
 				return true;
 			if (other instanceof AndCondition) {
-				for (EntitySelection<E> condition : ((AndCondition<E>) other).getConditions()) {
+				for (EntityCondition<E> condition : ((AndCondition<E>) other).getConditions()) {
 					if (!condition.contains(this))
 						return false;
 				}

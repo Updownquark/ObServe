@@ -17,8 +17,8 @@ import java.util.function.Function;
 
 import org.observe.entity.ConditionalFieldConstraint;
 import org.observe.entity.EntityConstraint;
-import org.observe.entity.EntitySelection;
-import org.observe.entity.EntitySelection.LiteralCondition;
+import org.observe.entity.EntityCondition;
+import org.observe.entity.EntityCondition.LiteralCondition;
 import org.observe.entity.FieldConstraint;
 import org.observe.entity.ObservableEntityDataSet;
 import org.observe.entity.ObservableEntityFieldType;
@@ -560,7 +560,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		 * @return This builder
 		 */
 		public ObservableEntityFieldBuilder<E, F> withCheckConstraint(String name,
-			Function<EntitySelection.EntityConditionIntermediate1<E, F>, LiteralCondition<E, F>> condition) {
+			Function<EntityCondition.EntityConditionIntermediate1<E, F>, LiteralCondition<E, F>> condition) {
 			if (theConstraints == null)
 				theConstraints = new LinkedList<>();
 			theConstraints.add(new FieldConstraintBuilder<>(EntityConstraint.CHECK, name, field -> {

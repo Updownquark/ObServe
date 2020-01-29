@@ -42,7 +42,7 @@ public interface ObservableEntityType<E> extends Named {
 	 * @return A selection object (defaulted to ALL) which may be used to query, update, or delete existing entities of this type from the
 	 *         entity set
 	 */
-	EntitySelection.All<E> select();
+	EntityCondition.All<E> select();
 	/** @return An entity creator which may be used to create new instances of this type in the entity set */
 	EntityCreator<E> create();
 

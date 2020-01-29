@@ -15,7 +15,7 @@ public class ConditionalFieldConstraint<E, F> extends ConditionConstraint<E> imp
 	 * @param condition The condition that values of the field must pass
 	 */
 	public ConditionalFieldConstraint(ObservableEntityFieldType<E, F> field, String name,
-		EntitySelection.LiteralCondition<E, F> condition) {
+		EntityCondition.LiteralCondition<E, F> condition) {
 		super(field.getEntityType(), name, condition);
 		theField = field;
 	}
@@ -26,8 +26,8 @@ public class ConditionalFieldConstraint<E, F> extends ConditionConstraint<E> imp
 	}
 
 	@Override
-	public EntitySelection.LiteralCondition<E, F> getCondition() {
-		return (EntitySelection.LiteralCondition<E, F>) super.getCondition();
+	public EntityCondition.LiteralCondition<E, F> getCondition() {
+		return (EntityCondition.LiteralCondition<E, F>) super.getCondition();
 	}
 
 	@Override

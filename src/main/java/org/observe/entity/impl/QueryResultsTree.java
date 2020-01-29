@@ -12,7 +12,7 @@ import org.observe.entity.EntityChange;
 import org.observe.entity.EntityIdentity;
 import org.observe.entity.EntityLoadRequest;
 import org.observe.entity.EntityQuery;
-import org.observe.entity.EntitySelection;
+import org.observe.entity.EntityCondition;
 import org.observe.entity.ObservableEntityType;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
@@ -29,7 +29,7 @@ public class QueryResultsTree {
 		theRoot = new QueryResultNode(null, null, false);
 	}
 
-	public QueryResultNode addQuery(EntitySelection<?> selection, boolean count) {
+	public QueryResultNode addQuery(EntityCondition<?> selection, boolean count) {
 		return theRoot.addQuery(selection, count);
 	}
 
@@ -42,21 +42,21 @@ public class QueryResultsTree {
 	}
 
 	public class QueryResultNode {
-		final EntitySelection<?> theSelection;
+		final EntityCondition<?> theSelection;
 		final boolean isCount;
 		WeakReference<? extends QueryResults<?>> theResults;
 		QueryResultNode parent;
 		ElementId parentChildEl;
 		final BetterList<QueryResultNode> children;
 
-		QueryResultNode(EntitySelection<?> selection, QueryResultNode parent, boolean count) {
+		QueryResultNode(EntityCondition<?> selection, QueryResultNode parent, boolean count) {
 			theSelection = selection;
 			isCount = count;
 			this.parent = parent;
 			children = BetterTreeList.<QueryResultNode> build().safe(false).build();
 		}
 
-		QueryResultNode addQuery(EntitySelection<?> selection, boolean count) {
+		QueryResultNode addQuery(EntityCondition<?> selection, boolean count) {
 			List<ElementId> contained = null;
 			for (CollectionElement<QueryResultNode> child : children.elements()) {
 				if (!child.get().isCount && child.get().theSelection.contains(selection))
@@ -109,7 +109,7 @@ public class QueryResultsTree {
 			if (theResults != null)
 				results = (QueryResults<E>) theResults.get();
 			if (results == null) {
-				results = new QueryResults<>((EntitySelection<E>) theSelection, isCount);
+				results = new QueryResults<>((EntityCondition<E>) theSelection, isCount);
 				theResults = new WeakReference<>(results);
 				if (parentResults != null)
 					results.init(parentResults.getResults(), true);

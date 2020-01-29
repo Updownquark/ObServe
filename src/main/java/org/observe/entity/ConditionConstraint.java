@@ -8,14 +8,14 @@ package org.observe.entity;
 public class ConditionConstraint<E> implements EntityConstraint<E> {
 	private final ObservableEntityType<E> theEntityType;
 	private final String theName;
-	private final EntitySelection<E> theCondition;
+	private final EntityCondition<E> theCondition;
 
 	/**
 	 * @param entityType The entity type the constraint applies to
 	 * @param name The name of the constraint
 	 * @param condition The condition that must be obeyed by all entities of the given type in the entity set
 	 */
-	public ConditionConstraint(ObservableEntityType<E> entityType, String name, EntitySelection<E> condition) {
+	public ConditionConstraint(ObservableEntityType<E> entityType, String name, EntityCondition<E> condition) {
 		theEntityType = entityType;
 		theName = name;
 		theCondition = condition;
@@ -32,7 +32,7 @@ public class ConditionConstraint<E> implements EntityConstraint<E> {
 	}
 
 	/** @return The condition that must be obeyed by all entities of the constraint's type in the entity set */
-	public EntitySelection<E> getCondition() {
+	public EntityCondition<E> getCondition() {
 		return theCondition;
 	}
 

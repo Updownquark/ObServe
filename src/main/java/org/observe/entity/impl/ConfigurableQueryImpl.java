@@ -10,7 +10,7 @@ import org.observe.entity.ConfigurableQuery;
 import org.observe.entity.EntityIdentity;
 import org.observe.entity.EntityOperationException;
 import org.observe.entity.EntityOperationVariable;
-import org.observe.entity.EntitySelection;
+import org.observe.entity.EntityCondition;
 import org.observe.entity.EntityValueAccess;
 import org.observe.entity.FieldLoadType;
 import org.observe.entity.ObservableEntity;
@@ -20,16 +20,16 @@ import org.observe.entity.QueryOrder;
 import org.qommons.collect.QuickSet.QuickMap;
 
 class ConfigurableQueryImpl<E> extends AbstractConfigurableOperation<E> implements ConfigurableQuery<E> {
-	private final EntitySelection<E> theSelection;
+	private final EntityCondition<E> theSelection;
 	private final QuickMap<String, FieldLoadType> theFieldLoadTypes;
 	private final List<QueryOrder<E, ?>> theOrder;
 
-	ConfigurableQueryImpl(EntitySelection<E> selection) {
+	ConfigurableQueryImpl(EntityCondition<E> selection) {
 		this(selection, QuickMap.of(selection.getVariables(), String::compareTo),
 			selection.getEntityType().getFields().keySet().createMap(), Collections.emptyList());
 	}
 
-	private ConfigurableQueryImpl(EntitySelection<E> selection, QuickMap<String, EntityOperationVariable<E>> variables,
+	private ConfigurableQueryImpl(EntityCondition<E> selection, QuickMap<String, EntityOperationVariable<E>> variables,
 		QuickMap<String, FieldLoadType> fieldLoadTypes, List<QueryOrder<E, ?>> order) {
 		super(selection.getEntityType(), variables);
 		theSelection = selection;
@@ -38,7 +38,7 @@ class ConfigurableQueryImpl<E> extends AbstractConfigurableOperation<E> implemen
 	}
 
 	@Override
-	public EntitySelection<E> getSelection() {
+	public EntityCondition<E> getSelection() {
 		return theSelection;
 	}
 

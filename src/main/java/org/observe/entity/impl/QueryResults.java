@@ -20,7 +20,7 @@ import org.observe.entity.EntityChange;
 import org.observe.entity.EntityIdentity;
 import org.observe.entity.EntityLoadRequest;
 import org.observe.entity.EntityQuery;
-import org.observe.entity.EntitySelection;
+import org.observe.entity.EntityCondition;
 import org.observe.entity.ObservableEntity;
 import org.observe.entity.QueryOrder;
 import org.observe.util.ObservableCollectionWrapper;
@@ -35,7 +35,7 @@ import org.qommons.collect.RRWLockingStrategy;
 import com.google.common.reflect.TypeToken;
 
 public class QueryResults<E> {
-	private final EntitySelection<E> theSelection;
+	private final EntityCondition<E> theSelection;
 	private final ObservableSortedSet<ObservableEntity<? extends E>> theRawResults;
 	private final ObservableSortedSet<ObservableEntity<? extends E>> theExposedResults;
 	private final SettableValue<Long> theRawCountResult;
@@ -44,7 +44,7 @@ public class QueryResults<E> {
 	private final AtomicInteger theListening;
 	private boolean isAdjusting;
 
-	public QueryResults(EntitySelection<E> selection, boolean count) {
+	public QueryResults(EntityCondition<E> selection, boolean count) {
 		theSelection = selection;
 		theListening = new AtomicInteger();
 		if (count) {
@@ -67,7 +67,7 @@ public class QueryResults<E> {
 		}
 	}
 
-	public EntitySelection<E> getSelection() {
+	public EntityCondition<E> getSelection() {
 		return theSelection;
 	}
 

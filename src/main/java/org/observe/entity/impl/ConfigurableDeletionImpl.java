@@ -2,20 +2,20 @@ package org.observe.entity.impl;
 
 import org.observe.entity.ConfigurableDeletion;
 import org.observe.entity.EntityOperationException;
-import org.observe.entity.EntitySelection;
+import org.observe.entity.EntityCondition;
 import org.observe.entity.PreparedDeletion;
 import org.qommons.collect.QuickSet.QuickMap;
 
 class ConfigurableDeletionImpl<E> extends AbstractConfigurableOperation<E> implements ConfigurableDeletion<E> {
-	private final EntitySelection<E> theSelection;
+	private final EntityCondition<E> theSelection;
 
-	ConfigurableDeletionImpl(EntitySelection<E> selection) {
+	ConfigurableDeletionImpl(EntityCondition<E> selection) {
 		super(selection.getEntityType(), QuickMap.of(selection.getVariables(), String::compareTo));
 		theSelection = selection;
 	}
 
 	@Override
-	public EntitySelection<E> getSelection() {
+	public EntityCondition<E> getSelection() {
 		return theSelection;
 	}
 

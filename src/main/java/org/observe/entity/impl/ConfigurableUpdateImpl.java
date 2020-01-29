@@ -3,22 +3,22 @@ package org.observe.entity.impl;
 import org.observe.entity.ConfigurableUpdate;
 import org.observe.entity.EntityOperationException;
 import org.observe.entity.EntityOperationVariable;
-import org.observe.entity.EntitySelection;
+import org.observe.entity.EntityCondition;
 import org.observe.entity.ObservableEntityFieldType;
 import org.observe.entity.PreparedUpdate;
 import org.qommons.collect.QuickSet.QuickMap;
 
 class ConfigurableUpdateImpl<E> extends AbstractConfigurableOperation<E> implements ConfigurableUpdate<E> {
-	private final EntitySelection<E> theSelection;
+	private final EntityCondition<E> theSelection;
 	private final QuickMap<String, Object> theUpdateValues;
 	private final QuickMap<String, EntityOperationVariable<E>> theUpdateVariables;
 
-	ConfigurableUpdateImpl(EntitySelection<E> selection) {
+	ConfigurableUpdateImpl(EntityCondition<E> selection) {
 		this(selection, QuickMap.of(selection.getVariables(), String::compareTo),
 			selection.getEntityType().getFields().keySet().createMap(), QuickMap.empty());
 	}
 
-	ConfigurableUpdateImpl(EntitySelection<E> selection, QuickMap<String, EntityOperationVariable<E>> variables,
+	ConfigurableUpdateImpl(EntityCondition<E> selection, QuickMap<String, EntityOperationVariable<E>> variables,
 		QuickMap<String, Object> updateValues, QuickMap<String, EntityOperationVariable<E>> updateVariables) {
 		super(selection.getEntityType(), variables);
 		theSelection = selection;
@@ -27,7 +27,7 @@ class ConfigurableUpdateImpl<E> extends AbstractConfigurableOperation<E> impleme
 	}
 
 	@Override
-	public EntitySelection<E> getSelection() {
+	public EntityCondition<E> getSelection() {
 		return theSelection;
 	}
 

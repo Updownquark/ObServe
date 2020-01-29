@@ -7,7 +7,7 @@ package org.observe.entity;
  */
 public interface EntitySetOperation<E> extends EntityOperation<E> {
 	/** @return The selection determining what entities in the set to operate on */
-	EntitySelection<E> getSelection();
+	EntityCondition<E> getSelection();
 
 	@Override
 	default ObservableEntityType<E> getEntityType() {

@@ -6,7 +6,7 @@ import org.observe.entity.ConfigurableQuery;
 import org.observe.entity.EntityIdentity;
 import org.observe.entity.EntityOperationException;
 import org.observe.entity.EntityQuery;
-import org.observe.entity.EntitySelection;
+import org.observe.entity.EntityCondition;
 import org.observe.entity.FieldLoadType;
 import org.observe.entity.ObservableEntity;
 import org.observe.entity.ObservableEntityFieldType;
@@ -16,7 +16,7 @@ import org.qommons.collect.QuickSet.QuickMap;
 class PreparedQueryImpl<E> extends AbstractPreparedSetOperation<E, PreparedQueryImpl<E>> implements PreparedQuery<E> {
 	private final QuickMap<String, FieldLoadType> theFieldLoadTypes;
 
-	PreparedQueryImpl(ConfigurableQuery<E> definition, Object preparedObject, EntitySelection<E> selection,
+	PreparedQueryImpl(ConfigurableQuery<E> definition, Object preparedObject, EntityCondition<E> selection,
 		QuickMap<String, FieldLoadType> loadTypes, QuickMap<String, Object> variables) {
 		super(definition, preparedObject, variables, selection);
 		theFieldLoadTypes = loadTypes;

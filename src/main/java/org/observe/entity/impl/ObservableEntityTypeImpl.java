@@ -20,7 +20,7 @@ import org.observe.entity.EntityDeletion;
 import org.observe.entity.EntityIdentity;
 import org.observe.entity.EntityOperationVariable;
 import org.observe.entity.EntityQuery;
-import org.observe.entity.EntitySelection;
+import org.observe.entity.EntityCondition;
 import org.observe.entity.EntityUpdate;
 import org.observe.entity.ObservableEntity;
 import org.observe.entity.ObservableEntityDataSet;
@@ -146,20 +146,20 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 	}
 
 	@Override
-	public EntitySelection.All<E> select() {
-		return new EntitySelection.All<>(this, new EntitySelection.SelectionMechanism<E>() {
+	public EntityCondition.All<E> select() {
+		return new EntityCondition.All<>(this, new EntityCondition.SelectionMechanism<E>() {
 			@Override
-			public ConfigurableQuery<E> query(EntitySelection<E> selection) {
+			public ConfigurableQuery<E> query(EntityCondition<E> selection) {
 				return new ConfigurableQueryImpl<>(selection);
 			}
 
 			@Override
-			public ConfigurableUpdate<E> update(EntitySelection<E> selection) {
+			public ConfigurableUpdate<E> update(EntityCondition<E> selection) {
 				return new ConfigurableUpdateImpl<>(selection);
 			}
 
 			@Override
-			public ConfigurableDeletion<E> delete(EntitySelection<E> selection) {
+			public ConfigurableDeletion<E> delete(EntityCondition<E> selection) {
 				return new ConfigurableDeletionImpl<>(selection);
 			}
 		}, Collections.emptyMap());
