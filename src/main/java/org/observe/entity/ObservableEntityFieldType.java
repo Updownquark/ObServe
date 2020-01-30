@@ -70,7 +70,7 @@ public interface ObservableEntityFieldType<E, F> extends EntityValueAccess<E, F>
 
 	@Override
 	default F getValue(E entity) {
-		return (F) getEntityType().observableEntity(entity).get(getFieldIndex());
+		return getValue(getEntityType().observableEntity(entity));
 	}
 
 	@Override

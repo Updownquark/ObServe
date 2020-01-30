@@ -51,6 +51,16 @@ public interface ObservableEntity<E> extends Stamped, Identifiable, Comparable<O
 	Object get(int fieldIndex);
 
 	/**
+	 * @param field The field to get
+	 * @return The value for the given field in this entity
+	 */
+	default <F> F get(ObservableEntityFieldType<? super E, F> field) {
+		if (!getType().equals(field.getEntityType()))
+			field = (ObservableEntityFieldType<E, F>) getType().getFields().get(field.getName());
+		return (F) get(field.getFieldIndex());
+	}
+
+	/**
 	 * @param fieldIndex The index of the given field to check
 	 * @param value The value to check for the field
 	 * @return A message detailing why the operation is unsupported or the given value is not acceptable for the given field in this entity,
@@ -81,7 +91,7 @@ public interface ObservableEntity<E> extends Stamped, Identifiable, Comparable<O
 	 * @param field The field to check
 	 * @return Whether the value of the given field is already loaded in this entity for immediate access
 	 */
-	boolean isLoaded(ObservableEntityFieldType<E, ?> field);
+	boolean isLoaded(ObservableEntityFieldType<? super E, ?> field);
 
 	/**
 	 * @param field The field to load

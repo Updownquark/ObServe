@@ -14,7 +14,6 @@ import org.observe.entity.ObservableEntityFieldEvent;
 import org.observe.entity.ObservableEntityFieldType;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
-import org.qommons.Stamped;
 import org.qommons.Transaction;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
@@ -29,15 +28,22 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 	private ListenerList<Observer<? super ObservableEntityFieldEvent<E, ?>>> theFieldObservers;
 	private volatile boolean isPresent;
 
-	ObservableEntityImpl(ObservableEntityTypeImpl<E> type, EntityIdentity<E> id, QuickMap<String, Object> fields, E entity) {
+	ObservableEntityImpl(ObservableEntityTypeImpl<E> type, EntityIdentity<E> id) {
 		theType = type;
 		theId = id;
-		theFields = fields;
-		theEntity = entity;
-		if (entity instanceof Stamped)
-			theStamp = ((Stamped) entity).getStamp();
-		else
-			theStamp = Double.doubleToLongBits(Math.random());
+		theFields = type.getFields().keySet().createMap();
+		for (int f = 0; f < theFields.keySize(); f++) {
+			if (type.getFields().get(f).getIdIndex() >= 0)
+				theFields.put(f, id.getFields().get(theType.getFields().get(f).getIdIndex()));
+			// TODO Populate default values
+		}
+		if (type.getReflector() == null)
+			theEntity = null;
+		else {
+			theEntity = type.getReflector().newInstance(this::get, (fieldIndex, value) -> set(fieldIndex, value, null));
+			type.getReflector().associate(theEntity, type, this);
+		}
+		theStamp = Double.doubleToLongBits(Math.random());
 		isPresent = true;
 	}
 
@@ -104,7 +110,9 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 	}
 
 	@Override
-	public boolean isLoaded(ObservableEntityFieldType<E, ?> field) {
+	public boolean isLoaded(ObservableEntityFieldType<? super E, ?> field) {
+		if (!field.getEntityType().equals(theType))
+			field = theType.getFields().get(field.getName());
 		return theFields.get(field.getFieldIndex()) != EntityUpdate.NOT_SET;
 	}
 

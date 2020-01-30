@@ -95,6 +95,10 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 		return theReflector == null ? null : TypeTokens.getRawType(theReflector.getType());
 	}
 
+	EntityReflector<E> getReflector() {
+		return theReflector;
+	}
+
 	@Override
 	public QuickMap<String, ObservableEntityFieldType<E, ?>> getFields() {
 		return theFields;
@@ -176,7 +180,24 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 			theFields.keySet().<EntityOperationVariable<E>> createMap().unmodifiable());
 	}
 
-	void handleChange(EntityChange<?> change, Map<EntityIdentity<?>, ObservableEntityImpl<?>> entities) {
+	ObservableEntityImpl<? extends E> getIfPresent(EntityIdentity<? extends E> id) {
+		WeakReference<ObservableEntityImpl<? extends E>> entityRef = theEntitiesById.get(id);
+		return entityRef == null ? null : entityRef.get();
+	}
+
+	ObservableEntityImpl<E> getOrCreate(EntityIdentity<E> id) {
+		WeakReference<ObservableEntityImpl<? extends E>> entityRef = theEntitiesById.get(id);
+		ObservableEntityImpl<E> entity = (ObservableEntityImpl<E>) (entityRef == null ? null : entityRef.get());
+		if (entity == null) {
+			entity = new ObservableEntityImpl<>(this, id);
+			entityRef = new WeakReference<>(entity, theCollectedEntities);
+			theEntitiesByRef.put(entityRef, theEntitiesById.putEntry(id, entityRef, false).getElementId());
+		}
+		return entity;
+	}
+
+	void handleChange(EntityChange<?> change, Map<EntityIdentity<?>, ObservableEntity<?>> entities) {
+		clearCollectedEntities();
 		boolean propagate = false;
 		switch (change.changeType) {
 		case add:
@@ -203,6 +224,7 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 			}
 			break;
 		case updateCollectionField:
+			// TODO
 		case updateMapField:
 			// TODO
 		}

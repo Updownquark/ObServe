@@ -2311,14 +2311,26 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends T>> observer) {
+			return onChange(observer, true);
+		}
+
+		/**
+		 * Allows adding a listener to this collection without creating a persistent strong reference to keep it alive
+		 * 
+		 * @param observer The listener for changes to this collection
+		 * @param withStrongRef Whether to install a strong reference to this collection to keep it alive while the listener is active, in
+		 *        case no strong reference to the actual collection (or the subscription returned from this method) is kept
+		 * @return A subscription to uninstall the listener
+		 */
+		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends T>> observer, boolean withStrongRef) {
 			Runnable remove = theListeners.add(observer, true);
 			// Add a strong reference to this collection while we have listeners.
 			// Otherwise, this collection could be GC'd and listeners (which may not reference this collection) would just be left hanging
-			if (theListenerCount.getAndIncrement() == 0)
+			if (withStrongRef && theListenerCount.getAndIncrement() == 0)
 				STRONG_REFS.add(new IdentityKey<>(this));
 			return () -> {
 				remove.run();
-				if (theListenerCount.decrementAndGet() == 0)
+				if (withStrongRef && theListenerCount.decrementAndGet() == 0)
 					STRONG_REFS.remove(new IdentityKey<>(this));
 			};
 		}

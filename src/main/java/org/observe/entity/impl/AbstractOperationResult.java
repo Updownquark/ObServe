@@ -5,9 +5,15 @@ import java.util.function.UnaryOperator;
 
 import org.observe.Subscription;
 import org.observe.entity.EntityOperationException;
+import org.observe.entity.EntityQueryResult;
 import org.observe.entity.ObservableEntityResult;
 import org.qommons.collect.ListenerList;
 
+/**
+ * Abstract {@link ObservableEntityResult} implementation that handles status changes and {@link EntityQueryResult#dispose() disposal}
+ *
+ * @param <E> The entity type of the operation
+ */
 public abstract class AbstractOperationResult<E> implements ObservableEntityResult<E> {
 	private final boolean isQuery;
 	private final AtomicReference<ResultStatus> theStatus;
@@ -73,6 +79,7 @@ public abstract class AbstractOperationResult<E> implements ObservableEntityResu
 		return cancelled[0];
 	}
 
+	/** Marks this operation as disposed (for {@link EntityQueryResult}s) */
 	protected void dispose() {
 		isDisposed = true;
 		updateStatus(status -> {
@@ -90,16 +97,31 @@ public abstract class AbstractOperationResult<E> implements ObservableEntityResu
 		return theFailure;
 	}
 
+	/**
+	 * @param action The action to perform when the status changes
+	 * @return A subscription to cancel listening
+	 */
 	protected Subscription onStatusChange(Runnable action) {
 		return theStatusChangeListeners.add(action, true)::run;
 	}
 
+	/**
+	 * Marks this operation as {@link org.observe.entity.ObservableEntityResult.ResultStatus#FAILED failed})
+	 *
+	 * @param failure The failure exception
+	 * @return This operation
+	 */
 	public AbstractOperationResult<E> failed(EntityOperationException failure) {
 		theFailure = failure;
 		updateStatus(status -> ResultStatus.FAILED);
 		return this;
 	}
 
+	/**
+	 * Marks this operation as {@link org.observe.entity.ObservableEntityResult.ResultStatus#FULFILLED fulfilled})
+	 *
+	 * @return This operation
+	 */
 	protected AbstractOperationResult<E> fulfilled() {
 		updateStatus(status -> isDisposed ? ResultStatus.DISPOSED : ResultStatus.FULFILLED);
 		return this;

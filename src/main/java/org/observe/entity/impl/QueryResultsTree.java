@@ -3,17 +3,19 @@ package org.observe.entity.impl;
 import java.lang.ref.WeakReference;
 import java.util.AbstractCollection;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Set;
 
 import org.observe.entity.EntityChange;
 import org.observe.entity.EntityCondition;
 import org.observe.entity.EntityIdentity;
-import org.observe.entity.EntityLoadRequest;
 import org.observe.entity.EntityOperationException;
 import org.observe.entity.EntityQuery;
+import org.observe.entity.EntityValueAccess;
 import org.observe.entity.ObservableEntity;
 import org.observe.entity.ObservableEntityType;
 import org.observe.entity.PreparedQuery;
@@ -23,15 +25,43 @@ import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.tree.BetterTreeList;
 
+/**
+ * Hierarchical query results structure that allow more specific queries to be populated with the results from more general queries that
+ * have already been made.
+ */
 public class QueryResultsTree {
+	/**
+	 * Used to produce valid members of the entity set from (possibly) shell entity wrappers for query results
+	 *
+	 * @see QueryResults#handleChange(EntityChange, Map, EntityUsage)
+	 */
+	public interface EntityUsage {
+		/**
+		 * @param <E> The entity type
+		 * @param entity The entity (possibly a shell) to insert into query results
+		 * @return The bona-fide member entity to insert
+		 */
+		<E> ObservableEntity<E> use(ObservableEntity<E> entity);
+	}
+
 	private final ObservableEntityDataSetImpl theEntitySet;
 	private final QueryResultNode theRoot;
 
+	/** @param entitySet The entity set that this results tree is for */
 	public QueryResultsTree(ObservableEntityDataSetImpl entitySet) {
 		theEntitySet = entitySet;
 		theRoot = new QueryResultNode(null, null, false);
 	}
 
+	/**
+	 * Adds or gets results for a query
+	 *
+	 * @param query The query
+	 * @param count Whether the results are to be in the form of a {@link EntityQuery#count() count} or a
+	 *        {@link EntityQuery#collect(boolean) collection}
+	 * @return The query results
+	 * @throws EntityOperationException If the query execution fails immediately
+	 */
 	public <E> QueryResults<E> addQuery(EntityQuery<E> query, boolean count) throws EntityOperationException {
 		EntityCondition<E> selection = query.getSelection();
 		if (query instanceof PreparedQuery)
@@ -39,19 +69,40 @@ public class QueryResultsTree {
 		return theRoot.addQuery(selection, count).getResults(query);
 	}
 
-	public void addDataRequests(List<EntityChange<?>> changes, List<EntityLoadRequest<?>> loadRequests,
-		Map<EntityIdentity<?>, ObservableEntityImpl<?>> entities) {
-		theRoot.addDataRequests(changes, loadRequests, entities);
+	/**
+	 * This method allows query results to specify what information they need to correctly account for a change to the entity set.
+	 *
+	 * @param change The change from the data source
+	 * @param entities All entities in the change, mapped by ID. The entities here may
+	 * @return Any fields needed to account for the change that are not already loaded
+	 * @see QueryResults#specifyDataRequirements(EntityChange, Map, Set)
+	 */
+	public Set<EntityValueAccess<?, ?>> specifyDataRequirements(EntityChange<?> change,
+		Map<EntityIdentity<?>, ObservableEntity<?>> entities) {
+		Set<EntityValueAccess<?, ?>> fields = new LinkedHashSet<>();
+		theRoot.specifyDataRequirements(change, entities, fields);
+		return fields;
 	}
 
-	public void handleChange(EntityChange<?> change, Map<EntityIdentity<?>, ObservableEntityImpl<?>> entities) {
-		theRoot.handleChange(change, entities);
+	/**
+	 * Handles a change from the data source, using entities populated with all data specified by
+	 * {@link #specifyDataRequirements(EntityChange, Map)}.
+	 *
+	 * @param change The change to handle
+	 * @param entities All entities referenced by the change, by ID
+	 * @param usage The usage function to obtain insertable entities
+	 * @see QueryResults#handleChange(EntityChange, Map, EntityUsage)
+	 */
+	public void handleChange(EntityChange<?> change, Map<EntityIdentity<?>, ObservableEntity<?>> entities, EntityUsage usage) {
+		theRoot.handleChange(change, entities, usage);
 	}
 
+	/** Disposes of all results in this tree */
 	public void dispose() {
 		theRoot.dispose();
 	}
 
+	/** A tree node in a {@link QueryResultsTree} */
 	public class QueryResultNode {
 		final EntityCondition<?> theSelection;
 		final boolean isCount;
@@ -132,29 +183,29 @@ public class QueryResultsTree {
 			return newNode;
 		}
 
-		void addDataRequests(List<EntityChange<?>> changes, List<EntityLoadRequest<?>> loadRequests,
-			Map<EntityIdentity<?>, ObservableEntityImpl<?>> entities) {
+		void specifyDataRequirements(EntityChange<?> change, Map<EntityIdentity<?>, ObservableEntity<?>> entities,
+			Set<EntityValueAccess<?, ?>> fields) {
 			QueryResults<?> results = null;
 			if (theResults != null)
 				results = theResults.get();
 			boolean validResults = results != null && results.isActive();
 			if (validResults)
-				results.addDataRequests(changes, loadRequests, entities);
+				results.specifyDataRequirements(change, entities, fields);
 			for (QueryResultNode child : children)
-				child.addDataRequests(changes, loadRequests, entities);
+				child.specifyDataRequirements(change, entities, fields);
 			if (theSelection != null && !validResults)
 				remove();
 		}
 
-		void handleChange(EntityChange<?> change, Map<EntityIdentity<?>, ObservableEntityImpl<?>> entities) {
+		void handleChange(EntityChange<?> change, Map<EntityIdentity<?>, ObservableEntity<?>> entities, EntityUsage usage) {
 			QueryResults<?> results = null;
 			if (theResults != null)
 				results = theResults.get();
 			boolean validResults = results != null && results.isActive();
 			if (validResults)
-				results.handleChange(change, entities);
+				results.handleChange(change, entities, usage);
 			for (QueryResultNode child : children)
-				child.handleChange(change, entities);
+				child.handleChange(change, entities, usage);
 			if (theSelection != null && !validResults)
 				remove();
 		}

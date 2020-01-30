@@ -37,9 +37,11 @@ import org.observe.entity.EntityModificationResult;
 import org.observe.entity.EntityOperationException;
 import org.observe.entity.EntityQuery;
 import org.observe.entity.EntityUpdate;
+import org.observe.entity.EntityValueAccess;
 import org.observe.entity.FieldConstraint;
 import org.observe.entity.ObservableEntity;
 import org.observe.entity.ObservableEntityDataSet;
+import org.observe.entity.ObservableEntityFieldEvent;
 import org.observe.entity.ObservableEntityFieldType;
 import org.observe.entity.ObservableEntityProvider;
 import org.observe.entity.ObservableEntityProvider.SimpleEntity;
@@ -88,17 +90,43 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		isActive = true;
 		theImplementation.install(this);
 		Subscription sub = theImplementation.changes().act(changes -> {
-			List<EntityLoadRequest<?>> loadRequests = new ArrayList<>();
-			Map<EntityIdentity<?>, ObservableEntityImpl<?>> entities = new HashMap<>();
-			loadEntities(changes, null, entities);
-			theResults.addDataRequests(changes, loadRequests, entities);
+			List<EntityLoadRequest<?>> loadRequests = new LinkedList<>();
+			List<EntityChange<?>> noLoadNeeded = new LinkedList<>();
+			Map<EntityIdentity<?>, ObservableEntity<?>> entities = new HashMap<>();
+			loadEntities(changes, entities);
+			for (EntityChange<?> change : changes) {
+				if (change.changeType == EntityChange.EntityChangeType.remove)
+					noLoadNeeded.add(change);
+				else {
+					Set<? extends EntityValueAccess<?, ?>> requiredFields = theResults.specifyDataRequirements(change, entities);
+					if (requiredFields != null && !requiredFields.isEmpty())
+						loadRequests
+							.add(new EntityLoadRequest<>((EntityChange<Object>) change, (Set<EntityValueAccess<?, ?>>) requiredFields));
+					else
+						noLoadNeeded.add(change);
+				}
+			}
+			QueryResultsTree.EntityUsage usage = new QueryResultsTree.EntityUsage() {
+				@Override
+				public <E> ObservableEntity<E> use(ObservableEntity<E> entity) {
+					return ObservableEntityDataSetImpl.this.use(entity, entities);
+				}
+			};
+			if (!noLoadNeeded.isEmpty()) {
+				fulfillNoLoadEntities(noLoadNeeded, entities);
+				for (EntityChange<?> change : noLoadNeeded) {
+					((ObservableEntityTypeImpl<?>) change.getEntityType()).handleChange(change, entities);
+					theResults.handleChange(change, entities, usage);
+				}
+			}
 			if (!loadRequests.isEmpty()) {
 				try {
 					theImplementation.loadEntityData(loadRequests, fulfilled -> {
-						loadEntities(changes, fulfilled, entities);
-						for (EntityChange<?> change : changes) {
+						fulfillEntities(fulfilled, entities);
+						for (EntityLoadRequest.Fulfillment<?> f : fulfilled) {
+							EntityChange<?> change = f.getRequest().getChange();
 							((ObservableEntityTypeImpl<?>) change.getEntityType()).handleChange(change, entities);
-							theResults.handleChange(change, entities);
+							theResults.handleChange(change, entities, usage);
 						}
 					}, err -> {
 						// TODO Logging
@@ -109,11 +137,6 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 					// TODO Logging
 					System.err.println("Unable to load field data for new entities");
 					e.printStackTrace();
-				}
-			} else {
-				for (EntityChange<?> change : changes) {
-					((ObservableEntityTypeImpl<?>) change.getEntityType()).handleChange(change, entities);
-					theResults.handleChange(change, entities);
 				}
 			}
 		});
@@ -188,11 +211,13 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		if (!isActive)
 			throw new IllegalStateException("This entity set is no longer connected to a data source");
 		Object prepared = creator instanceof PreparedCreator ? ((PreparedCreatorImpl<E>) creator).getPreparedObject() : null;
-		if (sync)
-			return new SyncCreateResult<>(creator, getOrCreateEntity(theImplementation.create(creator, prepared, null, null)));
-		else {
+		if (sync) {
+			SimpleEntity<E> simple = theImplementation.create(creator, prepared, null, null);
+			return new SyncCreateResult<>(creator, getOrCreateEntity(simple.getIdentity(), simple.getFields()));
+		} else {
 			AsyncCreateResult<E> result = new AsyncCreateResult<>(creator);
-			theImplementation.create(creator, prepared, fields -> result.fulfill(getOrCreateEntity(fields)),
+			theImplementation.create(creator, prepared,
+				simple -> result.fulfill(getOrCreateEntity(simple.getIdentity(), simple.getFields())),
 				result::failed);
 			return result;
 		}
@@ -244,13 +269,71 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		}
 	}
 
-	private <E> ObservableEntity<E> getOrCreateEntity(SimpleEntity<E> simple) {
-		int todo = todo; // TODO
+	private <E> ObservableEntity<E> getOrCreateEntity(EntityIdentity<E> id, QuickMap<String, Object> fields) {
+		ObservableEntityImpl<E> entity = ((ObservableEntityTypeImpl<E>) id.getEntityType()).getOrCreate(id);
+		if (fields != null) {
+			for (int f = 0; f < fields.keySize(); f++) {
+				ObservableEntityFieldType<E, Object> field = (ObservableEntityFieldType<E, Object>) entity.getType().getFields().get(f);
+				if (!entity.isLoaded(field) && fields.get(f) != EntityUpdate.NOT_SET)
+					entity._set(field, EntityUpdate.NOT_SET, fields.get(f));
+			}
+		}
+		return entity;
 	}
 
-	private void loadEntities(List<EntityChange<?>> changes, List<Fulfillment<?>> fulfilled,
-		Map<EntityIdentity<?>, ObservableEntityImpl<?>> entities) {
-		int todo = todo; // TODO
+	private void loadEntities(List<EntityChange<?>> changes, Map<EntityIdentity<?>, ObservableEntity<?>> entities) {
+		for (EntityChange<?> change : changes)
+			loadEntities(change, entities);
+	}
+
+	private <E> void loadEntities(EntityChange<E> change, Map<EntityIdentity<?>, ObservableEntity<?>> entities) {
+		for (EntityIdentity<? extends E> id : change.getEntities()) {
+			entities.computeIfAbsent(id, __ -> {
+				ObservableEntity<? extends E> entity = ((ObservableEntityTypeImpl<E>) change.getEntityType()).getIfPresent(id);
+				if (entity == null)
+					entity = new PartialEntity<>(id);
+				return entity;
+			});
+		}
+	}
+
+	private void fulfillEntities(List<Fulfillment<?>> fulfilled, Map<EntityIdentity<?>, ObservableEntity<?>> entities) {
+		for (Fulfillment<?> f : fulfilled)
+			fulfillEntities(f.getRequest().getChange(), f.getResults(), entities);
+	}
+
+	private void fulfillNoLoadEntities(List<EntityChange<?>> changes, Map<EntityIdentity<?>, ObservableEntity<?>> entities) {
+		for (EntityChange<?> change : changes)
+			fulfillEntities(change, null, entities);
+	}
+
+	private <E> void fulfillEntities(EntityChange<E> change, List<QuickMap<String, Object>> fields,
+		Map<EntityIdentity<?>, ObservableEntity<?>> entities) {
+		int index = 0;
+		for (EntityIdentity<? extends E> id : change.getEntities()) {
+			ObservableEntity<E> entity = (ObservableEntity<E>) entities.get(id);
+			QuickMap<String, Object> entityFields = fields == null ? null : fields.get(index);
+			if (entity instanceof PartialEntity) {
+				((PartialEntity<E>) entity).theFields = entityFields;
+				entity = getOrCreateEntity(entity.getId(), entityFields);
+				entities.put(id, entity);
+			} else if (entityFields != null) {
+				for (int f = 0; f < entityFields.keySize(); f++) {
+					ObservableEntityFieldType<E, Object> field = (ObservableEntityFieldType<E, Object>) entity.getType().getFields().get(f);
+					if (entityFields.get(f) != EntityUpdate.NOT_SET && !entity.isLoaded(field))
+						((ObservableEntityImpl<E>) entity)._set(field, EntityUpdate.NOT_SET, entityFields.get(f));
+				}
+			}
+			index++;
+		}
+	}
+
+	private <E> ObservableEntity<E> use(ObservableEntity<E> entity, Map<EntityIdentity<?>, ObservableEntity<?>> entities) {
+		if (entity instanceof PartialEntity) {
+			entity = getOrCreateEntity(entity.getId(), ((PartialEntity<E>) entity).theFields);
+			entities.put(entity.getId(), entity);
+		}
+		return entity;
 	}
 
 	private <E> Iterable<ObservableEntity<? extends E>> entitiesFor(Iterable<SimpleEntity<? extends E>> fields) {
@@ -264,16 +347,15 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 
 			@Override
 			public ObservableEntity<? extends E> next() {
-				return getOrCreateEntity(theFieldIterator.next());
+				SimpleEntity<? extends E> simple = theFieldIterator.next();
+				return getOrCreateEntity(simple.getIdentity(), simple.getFields());
 			}
 		};
 	}
 
 	<E, F> void loadField(ObservableEntityImpl<E> entity, ObservableEntityFieldType<E, F> field, Consumer<? super F> onLoad,
 		Consumer<EntityOperationException> onFail) throws EntityOperationException {
-		QuickMap<String, Object> fields = entity.getType().getFields().keySet().createMap();
-		fields.put(field.getFieldIndex(), EntityLoadRequest.LOAD);
-		EntityLoadRequest<E> request = new EntityLoadRequest<>(field.getEntityType(), Collections.singletonList(entity.getId()), fields);
+		EntityLoadRequest<E> request = new EntityLoadRequest<>(entity.getId(), Collections.singleton(field));
 		if (onLoad == null) {
 			List<Fulfillment<?>> fulfilled = theImplementation.loadEntityData(Collections.singletonList(request), null, null);
 			entity._set(field, (F) EntityUpdate.NOT_SET, (F) fulfilled.get(0).getResults().get(0));
@@ -723,7 +805,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		 * @return This builder
 		 */
 		public ObservableEntityFieldBuilder<E, F> withTarget(String entityName) {
-			if (TypeTokens.get().unwrap(theType).isPrimitive()) // TODO Other things can't be entities either, e.g. Strings
+			if (TypeTokens.get().unwrap(theType).isPrimitive()) // TODO Other things can't be entities either, e.g. Strings, Dates, etc.
 				throw new UnsupportedOperationException("Field of type " + theType + " cannot target an entity");
 			// Can't check the name or retrieve the entity now, because it may not have been defined yet, which is legal
 			targetEntity = entityName;
@@ -948,6 +1030,90 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		@Override
 		public int compare(F o1, F o2) {
 			return theCompare.compare(o1, o2);
+		}
+	}
+
+	static class PartialEntity<E> implements ObservableEntity<E> {
+		private final EntityIdentity<E> theId;
+		QuickMap<String, Object> theFields;
+
+		PartialEntity(EntityIdentity<E> id) {
+			theId = id;
+		}
+
+		@Override
+		public long getStamp() {
+			throw new UnsupportedOperationException("Partial internal implementation");
+		}
+
+		@Override
+		public ObservableEntityType<E> getType() {
+			return theId.getEntityType();
+		}
+
+		@Override
+		public E getEntity() {
+			throw new UnsupportedOperationException("Partial internal implementation");
+		}
+
+		@Override
+		public EntityIdentity<E> getId() {
+			return theId;
+		}
+
+		@Override
+		public Object get(int fieldIndex) {
+			int idIndex = getType().getFields().get(fieldIndex).getIdIndex();
+			if (idIndex >= 0)
+				return theId.getFields().get(idIndex);
+			else if (theFields != null)
+				return theFields.get(fieldIndex);
+			else
+				return EntityUpdate.NOT_SET;
+		}
+
+		@Override
+		public String isAcceptable(int fieldIndex, Object value) {
+			throw new UnsupportedOperationException("Partial internal implementation");
+		}
+
+		@Override
+		public <F> F set(int fieldIndex, F value, Object cause) throws UnsupportedOperationException, IllegalArgumentException {
+			throw new UnsupportedOperationException("Partial internal implementation");
+		}
+
+		@Override
+		public Observable<ObservableEntityFieldEvent<E, ?>> allFieldChanges() {
+			throw new UnsupportedOperationException("Partial internal implementation");
+		}
+
+		@Override
+		public boolean isLoaded(ObservableEntityFieldType<? super E, ?> field) {
+			if (!theId.getEntityType().equals(field.getEntityType()))
+				field = theId.getEntityType().getFields().get(field.getName());
+			int idIndex = getType().getFields().get(field.getFieldIndex()).getIdIndex();
+			return idIndex >= 0 || (theFields != null && theFields.get(field.getFieldIndex()) != EntityUpdate.NOT_SET);
+		}
+
+		@Override
+		public <F> ObservableEntity<E> load(ObservableEntityFieldType<E, F> field, Consumer<? super F> onLoad,
+			Consumer<EntityOperationException> onFail) throws EntityOperationException {
+			throw new UnsupportedOperationException("Partial internal implementation");
+		}
+
+		@Override
+		public boolean isPresent() {
+			return false;
+		}
+
+		@Override
+		public String canDelete() {
+			throw new UnsupportedOperationException("Partial internal implementation");
+		}
+
+		@Override
+		public void delete(Object cause) throws UnsupportedOperationException {
+			throw new UnsupportedOperationException("Partial internal implementation");
 		}
 	}
 

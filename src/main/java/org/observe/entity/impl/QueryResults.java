@@ -2,8 +2,8 @@ package org.observe.entity.impl;
 
 import java.util.Collection;
 import java.util.Comparator;
-import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -17,26 +17,30 @@ import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionEvent;
 import org.observe.collect.ObservableSortedSet;
+import org.observe.entity.EntityChainAccess;
 import org.observe.entity.EntityChange;
 import org.observe.entity.EntityCollectionResult;
 import org.observe.entity.EntityCondition;
 import org.observe.entity.EntityCountResult;
 import org.observe.entity.EntityIdentity;
-import org.observe.entity.EntityLoadRequest;
 import org.observe.entity.EntityOperation;
 import org.observe.entity.EntityOperationException;
 import org.observe.entity.EntityQuery;
+import org.observe.entity.EntityValueAccess;
 import org.observe.entity.ObservableEntity;
+import org.observe.entity.ObservableEntityFieldType;
 import org.observe.entity.ObservableEntityResult;
 import org.observe.entity.QueryOrder;
 import org.observe.entity.impl.QueryResultsTree.QueryResultNode;
 import org.observe.util.ObservableCollectionWrapper;
+import org.qommons.Ternian;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
+import org.qommons.collect.QuickSet.QuickMap;
 import org.qommons.collect.RRWLockingStrategy;
 
 import com.google.common.reflect.TypeToken;
@@ -134,13 +138,196 @@ public class QueryResults<E> extends AbstractOperationResult<E> {
 		theRawCountResult.set(count, null);
 	}
 
-	public void addDataRequests(List<EntityChange<?>> changes, List<EntityLoadRequest<?>> loadRequests,
-		Map<EntityIdentity<?>, ObservableEntityImpl<?>> entities) {
-		int todo = todo; // TODO Auto-generated method stub
+	/**
+	 * <p>
+	 * This method allows query results to specify what information they need to correctly account for a change to the entity set.
+	 * </p>
+	 * <p>
+	 * If a query requires the value of a particular field, that field should be populated with a non-null value. If a query requires the
+	 * value of a secondary field (e.g. a.b.c), the value of the primary field should be populated with a field map of the secondary type,
+	 * itself populated with non-null values for each field required. Tertiary fields (e.g. a.b.c.d) may also be specified this way, and so
+	 * on.
+	 * </p>
+	 * <p>
+	 * This method should not make any change to the query results, i.e. adding entities from the <code>entities</code> map into the query.
+	 * The entities in the map may be shells here.
+	 * </p>
+	 *
+	 * @param change The change from the data source
+	 * @param entities All entities in the change, mapped by ID. The entities here may
+	 * @param fields The set to add required fields to
+	 */
+	public void specifyDataRequirements(EntityChange<?> change, Map<EntityIdentity<?>, ObservableEntity<?>> entities,
+		Set<EntityValueAccess<?, ?>> fields) {
+		boolean changeSuper, changeSub;
+		if (theSelection.getEntityType().equals(change.getEntityType()))
+			changeSub = changeSuper = false;
+		else if (theSelection.getEntityType().isAssignableFrom(change.getEntityType())) {
+			changeSub = true;
+			changeSuper = false;
+		} else if (change.getEntityType().isAssignableFrom(theSelection.getEntityType())) {
+			boolean hasMember = false;
+			for (EntityIdentity<?> id : change.getEntities()) {
+				if (theSelection.getEntityType().isAssignableFrom(id.getEntityType())) {
+					hasMember = true;
+					break;
+				}
+			}
+			if (!hasMember)
+				return; // No entities of this type
+			changeSuper = true;
+			changeSub = false;
+		} else
+			return; // Irrelevant
+		addRequirements(change, entities, fields, theSelection, changeSuper, changeSub);
 	}
 
-	public void handleChange(EntityChange<?> change, Map<EntityIdentity<?>, ObservableEntityImpl<?>> entities) {
-		int todo = todo; // TODO
+	private Ternian addRequirements(EntityChange<?> change, Map<EntityIdentity<?>, ObservableEntity<?>> entities,
+		Set<EntityValueAccess<?, ?>> fields, EntityCondition<E> condition, boolean changeSuper, boolean changeSub) {
+		if (condition instanceof EntityCondition.ValueCondition) {
+			EntityValueAccess<E, ?> field = ((EntityCondition.ValueCondition<E, ?>) condition).getField();
+			if (!isIdentity(field) && !isLoadedInAll(field, change.getEntities(), entities, changeSuper, changeSub)) {
+				fields.add(field);
+				return Ternian.NONE;
+			} else {
+				boolean hasTrue = false, hasFalse = false;
+				for (EntityIdentity<?> id : change.getEntities()) {
+					if (changeSuper && !condition.getEntityType().isAssignableFrom(id.getEntityType()))
+						continue;
+					boolean test = condition.test((ObservableEntity<? extends E>) entities.get(id), QuickMap.empty());
+					if (test) {
+						if (hasFalse)
+							break;
+						hasTrue = true;
+					} else {
+						if (hasTrue)
+							break;
+						hasFalse = true;
+					}
+				}
+				if (hasTrue && !hasFalse)
+					return Ternian.TRUE;
+				else if (hasFalse && !hasTrue)
+					return Ternian.FALSE;
+				else
+					return Ternian.NONE;
+			}
+		} else if (condition instanceof EntityCondition.OrCondition) {
+			boolean unknown = false;
+			for (EntityCondition<E> child : ((EntityCondition.OrCondition<E>) condition).getConditions()) {
+				Ternian test = addRequirements(change, entities, fields, child, changeSuper, changeSub);
+				switch (test) {
+				case TRUE:
+					return Ternian.TRUE; // If one child condition is true, then the condition is true without needing to test further
+				case NONE:
+					unknown = true;
+					break;
+				default:
+				}
+			}
+			return unknown ? Ternian.NONE : Ternian.FALSE;
+		} else if (condition instanceof EntityCondition.AndCondition) {
+			boolean unknown = false;
+			for (EntityCondition<E> child : ((EntityCondition.AndCondition<E>) condition).getConditions()) {
+				Ternian test = addRequirements(change, entities, fields, child, changeSuper, changeSub);
+				switch (test) {
+				case FALSE:
+					return Ternian.FALSE; // If one child condition is false, then the condition is false without needing to test further
+				case NONE:
+					unknown = true;
+					break;
+				default:
+				}
+			}
+			return unknown ? Ternian.NONE : Ternian.TRUE;
+		} else if (condition instanceof EntityCondition.All)
+			return Ternian.TRUE;
+		else
+			throw new IllegalStateException("Unrecognized entity condition type: " + condition.getClass().getName());
+	}
+
+	private boolean isIdentity(EntityValueAccess<E, ?> field) {
+		if(field instanceof ObservableEntityFieldType)
+			return ((ObservableEntityFieldType<E, ?>) field).getIdIndex() >= 0;
+			else {
+				for (ObservableEntityFieldType<?, ?> f : ((EntityChainAccess<E, ?>) field).getFieldSequence()) {
+					if (f.getIdIndex() < 0)
+						return false;
+				}
+				return true;
+			}
+	}
+
+	private boolean isLoadedInAll(EntityValueAccess<E, ?> field, Set<? extends EntityIdentity<?>> ids,
+		Map<EntityIdentity<?>, ObservableEntity<?>> entities, boolean changeSuper, boolean changeSub) {
+		for (EntityIdentity<?> id : ids) {
+			if (changeSuper && !theSelection.getEntityType().isAssignableFrom(id.getEntityType()))
+				continue;
+			if (field instanceof ObservableEntityFieldType) {
+				if (!((ObservableEntity<? extends E>) entities.get(id)).isLoaded((ObservableEntityFieldType<E, ?>) field))
+					return false;
+			} else {
+				Object entity = entities.get(id);
+				for (ObservableEntityFieldType<?, ?> f : ((EntityChainAccess<E, ?>) field).getFieldSequence()) {
+					if (!((ObservableEntity<Object>) entity).isLoaded((ObservableEntityFieldType<Object, ?>) f))
+						return false;
+					entity = ((ObservableEntity<Object>) entity).get((ObservableEntityFieldType<Object, ?>) f);
+				}
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Handles a change from the data source, using entities populated with all data specified by
+	 * {@link #specifyDataRequirements(EntityChange, Map, Set)}.
+	 *
+	 * This method may add, remove, or update query results to account for the change. Any entities inserted into query results must be
+	 * obtained from the <code>usage</code>, however. Entities may not be modified by this method and this method should never ask for field
+	 * values other than those requested by {@link #specifyDataRequirements(EntityChange, Map, Set)}.
+	 *
+	 * @param change The change to handle
+	 * @param entities All entities referenced by the change, by ID
+	 * @param usage The usage function to obtain insertable entities
+	 */
+	public void handleChange(EntityChange<?> change, Map<EntityIdentity<?>, ObservableEntity<?>> entities,
+		QueryResultsTree.EntityUsage usage) {
+		boolean changeSuper;
+		if (theSelection.getEntityType().equals(change.getEntityType()))
+			changeSuper = false;
+		else if (theSelection.getEntityType().isAssignableFrom(change.getEntityType())) {
+			changeSuper = false;
+		} else if (change.getEntityType().isAssignableFrom(theSelection.getEntityType())) {
+			changeSuper = true;
+		} else
+			return; // Irrelevant
+
+		if (theRawResults != null) {
+			for (EntityIdentity<?> id : change.getEntities()) {
+				if (changeSuper && !theSelection.getEntityType().isAssignableFrom(id.getEntityType()))
+					continue;
+				ObservableEntity<? extends E> entity = (ObservableEntity<? extends E>) entities.get(id);
+				boolean included = theSelection.test(entity, QuickMap.empty());
+				switch (change.changeType) {
+				case add:
+					if (included)
+						theRawResults.add(usage.use(entity));
+					break;
+				case remove:
+					if (included)
+						theRawResults.remove(entity);
+					break;
+				default:
+					if (included)
+						theRawResults.add(usage.use(entity)); // No effect if already present
+					else
+						theRawResults.remove(entity); // No effect if already removed
+					break;
+				}
+			}
+		} else {
+			throw new UnsupportedOperationException("TODO Not implemented yet"); // TODO
+		}
 	}
 
 	public EntityCollectionResult<E> getResults(EntityQuery<E> query, boolean withUpdates) {
@@ -156,8 +343,7 @@ public class QueryResults<E> extends AbstractOperationResult<E> {
 		return new CountResultWrapper(query, count);
 	}
 
-	// Don't delete--may need this later
-	private static <E> Comparator<ObservableEntity<? extends E>> createComparator(EntityQuery<E> query) {
+	static <E> Comparator<ObservableEntity<? extends E>> createComparator(EntityQuery<E> query) {
 		return new Comparator<ObservableEntity<? extends E>>() {
 			@Override
 			public int compare(ObservableEntity<? extends E> o1, ObservableEntity<? extends E> o2) {
