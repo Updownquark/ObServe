@@ -101,7 +101,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 					Set<? extends EntityValueAccess<?, ?>> requiredFields = theResults.specifyDataRequirements(change, entities);
 					if (requiredFields != null && !requiredFields.isEmpty())
 						loadRequests
-							.add(new EntityLoadRequest<>((EntityChange<Object>) change, (Set<EntityValueAccess<?, ?>>) requiredFields));
+						.add(new EntityLoadRequest<>((EntityChange<Object>) change, (Set<EntityValueAccess<?, ?>>) requiredFields));
 					else
 						noLoadNeeded.add(change);
 				}
@@ -115,7 +115,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 			if (!noLoadNeeded.isEmpty()) {
 				fulfillNoLoadEntities(noLoadNeeded, entities);
 				for (EntityChange<?> change : noLoadNeeded) {
-					((ObservableEntityTypeImpl<?>) change.getEntityType()).handleChange(change, entities);
+					((ObservableEntityTypeImpl<?>) change.getEntityType()).handleChange(change, entities, false, false);
 					theResults.handleChange(change, entities, usage);
 				}
 			}
@@ -125,7 +125,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 						fulfillEntities(fulfilled, entities);
 						for (EntityLoadRequest.Fulfillment<?> f : fulfilled) {
 							EntityChange<?> change = f.getRequest().getChange();
-							((ObservableEntityTypeImpl<?>) change.getEntityType()).handleChange(change, entities);
+							((ObservableEntityTypeImpl<?>) change.getEntityType()).handleChange(change, entities, false, false);
 							theResults.handleChange(change, entities, usage);
 						}
 					}, err -> {

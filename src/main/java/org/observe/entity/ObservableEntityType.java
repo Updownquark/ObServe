@@ -45,7 +45,7 @@ public interface ObservableEntityType<E> extends Named {
 	 */
 	EntityCondition.All<E> select();
 	/** @return An entity creator which may be used to create new instances of this type in the entity set */
-	EntityCreator<E> create();
+	ConfigurableCreator<E> create();
 
 	/**
 	 * @param fieldGetter The getter for the field in the java type

@@ -55,7 +55,14 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 		this(onSubscribe, identity, internalState, Transactable.transactable(lock), listening);
 	}
 
-	SimpleObservable(Consumer<? super Observer<? super T>> onSubscribe, Object identity, boolean internalState, Transactable lock,
+	/**
+	 * @param onSubscribe The function to notify when a subscription is added to this observable
+	 * @param identity The identity for this observable
+	 * @param internalState Whether this observable is firing changes for some valued state
+	 * @param lock The lock for this observable
+	 * @param listening Listening options for this observable
+	 */
+	public SimpleObservable(Consumer<? super Observer<? super T>> onSubscribe, Object identity, boolean internalState, Transactable lock,
 		ListenerList.Builder listening) {
 		theIdentity = identity != null ? identity : Identifiable.baseId("observable", this);
 		/* Java's ConcurrentLinkedQueue has a problem (for me) that makes the class unusable here.  As documented in fireNext() below, the

@@ -1,20 +1,20 @@
 package org.observe.entity;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
+import org.qommons.collect.BetterList;
 import org.qommons.collect.QuickSet.QuickMap;
 
 /**
  * A request for information about an entity
- * 
+ *
  * @param <E> The super type of all entities about which information is being requested
  */
 public class EntityLoadRequest<E> {
 	private final EntityChange<E> theChange;
 	private final ObservableEntityType<E> theType;
-	private final Set<EntityIdentity<? extends E>> theEntities;
+	private final BetterList<EntityIdentity<? extends E>> theEntities;
 	private final Set<EntityValueAccess<? extends E, ?>> theFields;
 
 	/**
@@ -39,7 +39,7 @@ public class EntityLoadRequest<E> {
 	public EntityLoadRequest(EntityIdentity<E> entity, Set<EntityValueAccess<? extends E, ?>> fields) {
 		theChange = null;
 		theType = entity.getEntityType();
-		theEntities = Collections.singleton(entity);
+		theEntities = BetterList.of(entity);
 		theFields = fields;
 	}
 
@@ -54,7 +54,7 @@ public class EntityLoadRequest<E> {
 	}
 
 	/** @return The identities of all entities for which data is requested */
-	public Set<EntityIdentity<? extends E>> getEntities() {
+	public BetterList<EntityIdentity<? extends E>> getEntities() {
 		return theEntities;
 	}
 
@@ -65,7 +65,7 @@ public class EntityLoadRequest<E> {
 
 	/**
 	 * A response to a {@link EntityLoadRequest}
-	 * 
+	 *
 	 * @param <E> The super type of all entities about which information was requested
 	 */
 	public static class Fulfillment<E> {

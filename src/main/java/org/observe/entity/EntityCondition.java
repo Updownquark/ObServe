@@ -139,6 +139,15 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 			return 0;
 		}
 
+		/**
+		 * Just an explicit way of selecting all entities
+		 * 
+		 * @return This all condition
+		 */
+		public All<E> all() {
+			return this;
+		}
+
 		@Override
 		public EntityCondition<E> or(Function<All<E>, EntityCondition<E>> condition) {
 			return this;

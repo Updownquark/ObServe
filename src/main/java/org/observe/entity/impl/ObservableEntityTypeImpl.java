@@ -14,6 +14,7 @@ import org.observe.entity.ConfigurableDeletion;
 import org.observe.entity.ConfigurableQuery;
 import org.observe.entity.ConfigurableUpdate;
 import org.observe.entity.EntityChange;
+import org.observe.entity.EntityChange.FieldChange;
 import org.observe.entity.EntityCondition;
 import org.observe.entity.EntityConstraint;
 import org.observe.entity.EntityCreator;
@@ -196,14 +197,14 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 		return entity;
 	}
 
-	void handleChange(EntityChange<?> change, Map<EntityIdentity<?>, ObservableEntity<?>> entities) {
+	void handleChange(EntityChange<?> change, Map<EntityIdentity<?>, ObservableEntity<?>> entities, boolean fromSuper, boolean fromSub) {
 		clearCollectedEntities();
-		boolean propagate = false;
+		boolean propagateUp = false, propagateDown = false;
 		switch (change.changeType) {
 		case add:
 			break; // Don't care
 		case remove:
-			propagate = true;
+			propagateUp = propagateDown = true;
 			for (EntityIdentity<?> id : change.getEntities()) {
 				if (isAssignableFrom(id.getEntityType())) {
 					WeakReference<ObservableEntityImpl<? extends E>> entityRef = theEntitiesById.remove(id);
@@ -213,14 +214,20 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 			}
 			break;
 		case setField:
-			EntityChange.EntityFieldValueChange<E, Object> fieldValueChange = (EntityChange.EntityFieldValueChange<E, Object>) change;
+			EntityChange.EntityFieldValueChange<E> fieldValueChange = (EntityChange.EntityFieldValueChange<E>) change;
+			int entityIdx = 0;
 			for (EntityIdentity<?> id : change.getEntities()) {
 				if (isAssignableFrom(id.getEntityType())) {
 					WeakReference<ObservableEntityImpl<? extends E>> entityRef = theEntitiesById.remove(id);
 					ObservableEntityImpl<? extends E> entity = entityRef == null ? null : entityRef.get();
-					if (entity != null)
-						entity._set(fieldValueChange.field, fieldValueChange.oldValue, fieldValueChange.newValue);
+					if (entity != null) {
+						for (FieldChange<E, ?> fieldChange : fieldValueChange.getFieldChanges()) {
+							FieldChange<E, Object> fc = (FieldChange<E, Object>) fieldChange;
+							entity._set(fc.getField(), fc.getOldValues().get(entityIdx), fc.getNewValue());
+						}
+					}
 				}
+				entityIdx++;
 			}
 			break;
 		case updateCollectionField:
@@ -228,9 +235,13 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 		case updateMapField:
 			// TODO
 		}
-		if (propagate) {
+		if (propagateDown && !fromSub) {
 			for (ObservableEntityTypeImpl<? extends E> sub : theSubs)
-				sub.handleChange(change, entities);
+				sub.handleChange(change, entities, true, false);
+		}
+		if (propagateUp && !fromSuper) {
+			for (ObservableEntityTypeImpl<? super E> sup : theSupers)
+				sup.handleChange(change, entities, false, true);
 		}
 	}
 

@@ -2,6 +2,7 @@ package org.observe.entity;
 
 import java.util.List;
 
+import org.observe.entity.impl.ObservableEntityDataSetImpl;
 import org.qommons.Transactable;
 
 /** A set of entities */
@@ -31,5 +32,13 @@ public interface ObservableEntityDataSet extends Transactable {
 		if (type == null)
 			throw new IllegalArgumentException("Entity type " + entity.getClass().getName() + " not supported");
 		return type.observableEntity((X) entity);
+	}
+
+	/**
+	 * @param implementation The data set implementation to power the entity set
+	 * @return A builder for an entity set
+	 */
+	static ObservableEntityDataSetImpl.EntitySetBuilder build(ObservableEntityProvider implementation) {
+		return ObservableEntityDataSetImpl.build(implementation);
 	}
 }

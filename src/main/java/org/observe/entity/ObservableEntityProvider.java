@@ -53,10 +53,10 @@ public interface ObservableEntityProvider extends Transactable {
 		Consumer<Iterable<SimpleEntity<? extends E>>> onAsyncComplete, Consumer<EntityOperationException> onError)
 			throws EntityOperationException;
 
-	long update(EntityUpdate<?> update, Object prepared, //
+	<E> long update(EntityUpdate<E> update, Object prepared, //
 		LongConsumer onAsyncComplete, Consumer<EntityOperationException> onError) throws EntityOperationException;
 
-	long delete(EntityDeletion<?> delete, Object prepared, //
+	<E> long delete(EntityDeletion<E> delete, Object prepared, //
 		LongConsumer onAsyncComplete, Consumer<EntityOperationException> onError) throws EntityOperationException;
 
 	/** @return An observable that fires a change whenever the entity data is changed externally */
