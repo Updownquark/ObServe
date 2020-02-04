@@ -15,11 +15,16 @@ package org.observe.entity;
  *
  * @param <E> The entity type of the result
  */
-public interface EntityQueryResult<E> extends ObservableEntityResult<E> {
+public interface EntityQueryResult<E> extends ObservableEntityResult<E>, AutoCloseable {
 	/**
 	 * Terminates the updating of this result as the entity set changes
-	 * 
+	 *
 	 * @return This result
 	 */
 	EntityQueryResult<E> dispose();
+
+	@Override
+	default void close() {
+		dispose();
+	}
 }

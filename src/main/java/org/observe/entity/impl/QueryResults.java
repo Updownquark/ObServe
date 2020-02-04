@@ -36,6 +36,7 @@ import org.observe.util.ObservableCollectionWrapper;
 import org.qommons.Ternian;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
+import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.ElementId;
@@ -258,7 +259,7 @@ public class QueryResults<E> extends AbstractOperationResult<E> {
 			}
 	}
 
-	private boolean isLoadedInAll(EntityValueAccess<E, ?> field, Set<? extends EntityIdentity<?>> ids,
+	private boolean isLoadedInAll(EntityValueAccess<E, ?> field, BetterList<? extends EntityIdentity<?>> ids,
 		Map<EntityIdentity<?>, ObservableEntity<?>> entities, boolean changeSuper, boolean changeSub) {
 		for (EntityIdentity<?> id : ids) {
 			if (changeSuper && !theSelection.getEntityType().isAssignableFrom(id.getEntityType()))

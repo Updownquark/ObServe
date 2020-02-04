@@ -58,6 +58,7 @@ import org.observe.util.MethodRetrievingHandler;
 import org.observe.util.ObservableEntityUtils;
 import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
+import org.qommons.Stamped;
 import org.qommons.StringUtils;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterSortedList;
@@ -375,7 +376,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 	 * @return A builder for an entity set
 	 */
 	public static EntitySetBuilder build(ObservableEntityProvider implementation) {
-		return build(implementation);
+		return new EntitySetBuilder(implementation);
 	}
 
 	/** Builds an entity set */
@@ -401,6 +402,15 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		 * @return A builder to build the entity type
 		 */
 		public <E> ObservableEntityTypeBuilder<E> withEntityType(Class<E> entity) {
+			ObservableEntityType<E>[] builtType = new ObservableEntityType[1];
+			EntityReflector.Builder<E> refBuilder = EntityReflector.build(TypeTokens.get().of(entity), false);
+			if (Stamped.class.isAssignableFrom(entity)) {
+				refBuilder.withCustomMethod(e -> ((Stamped) e).getStamp(), (e, args) -> {
+					if (builtType[0] == null)
+						builtType[0] = theEntitySet.getEntityType(entity);
+					return builtType[0].observableEntity(e).getStamp();
+				});
+			}
 			return withEntityType(null, EntityReflector.build(TypeTokens.get().of(entity), false).build());
 		}
 
@@ -508,6 +518,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 			if (theJavaType != null) {
 				theProxyHandler = new MethodRetrievingHandler();
 				theProxy = (E) Proxy.newProxyInstance(getClass().getClassLoader(), new Class[] { theJavaType }, theProxyHandler);
+
 			} else {
 				theProxyHandler = null;
 				theProxy = null;
@@ -705,11 +716,6 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 				}
 			}
 
-			Map<String, ObservableEntityFieldType<? super E, ?>> tempFields = new LinkedHashMap<>();
-			for (ObservableEntityTypeImpl<? super E> parent : theParents) {
-				for (ObservableEntityFieldType<? super E, ?> field : parent.getFields().allValues())
-					tempFields.putIfAbsent(field.getName(), field);
-			}
 			Set<String> tempIdFieldNames = new LinkedHashSet<>();
 			for (ObservableEntityFieldBuilder<E, ?> field : fieldBuilders.values()) {
 				if (field.isId)
@@ -717,7 +723,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 			}
 			if (tempIdFieldNames.isEmpty())
 				throw new IllegalStateException("No identity fields defined for root-level entity type " + theEntityName);
-			QuickSet<String> fieldNames = QuickSet.of(StringUtils.DISTINCT_NUMBER_TOLERANT, tempFields.keySet());
+			QuickSet<String> fieldNames = QuickSet.of(StringUtils.DISTINCT_NUMBER_TOLERANT, fieldBuilders.keySet());
 			QuickSet<String> idFieldNames = QuickSet.of(StringUtils.DISTINCT_NUMBER_TOLERANT, tempIdFieldNames);
 			QuickMap<String, ObservableEntityFieldType<E, ?>> fields = fieldNames.createMap();
 			QuickMap<String, ObservableEntityFieldType<E, ?>> idFields = idFieldNames.createMap();
@@ -737,7 +743,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 				constraints.addAll(field.getConstraints());
 			}
 			theEntitySet.theEntityTypes.add(entityType);
-			if (theJavaType != null && !theEntityName.equals(theJavaType.getSimpleName()))
+			if (theJavaType != null)
 				theEntitySet.theClassMapping.put(theJavaType, theEntityName);
 			isBuilding = false;
 			return theSetBuilder;
@@ -868,7 +874,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		}
 
 		ObservableEntityFieldType<E, F> buildField(ObservableEntityTypeImpl<E> entityType, int fieldIndex, int idIndex) {
-			if (isId && theOverrides == null)
+			if (isId && theOverrides != null)
 				throw new IllegalArgumentException("Id fields cannot be added to a sub-entity");
 			return new FieldTypeImpl<>(this, entityType, fieldIndex, idIndex);
 		}
@@ -940,8 +946,16 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 				theCompare = ((FieldTypeImpl<? super E, ? super F>) theOverrides.get(0)).theCompare;
 			else if (TypeTokens.get().isComparable(theFieldType))
 				theCompare = (v1, v2) -> ((Comparable<F>) v1).compareTo(v2);
-				else
-					throw new IllegalStateException("Comparator must be set for field " + this + " (type " + theFieldType + ")");
+				else{
+					if (theIdIndex >= 0)
+						throw new IllegalStateException("ID fields must be comparable");
+					for (FieldConstraint<E, F> c : theConstraints) {
+						if (c instanceof ConditionalFieldConstraint
+							&& ((ConditionalFieldConstraint<E, F>) c).getCondition().getComparison() != 0)
+							throw new IllegalStateException("Comparison constraints can only apply to comparable fields");
+					}
+					theCompare = null;
+				}
 		}
 
 		@Override

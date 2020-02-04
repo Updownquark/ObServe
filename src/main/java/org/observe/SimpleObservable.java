@@ -2,6 +2,7 @@ package org.observe;
 
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 import org.qommons.Identifiable;
 import org.qommons.Transactable;
@@ -14,6 +15,89 @@ import org.qommons.collect.ListenerList;
  * @param <T> The type of values from this observable
  */
 public class SimpleObservable<T> implements Observable<T>, Observer<T> {
+	/** @return A builder for a {@link SimpleObservable} */
+	public static Builder build() {
+		return new Builder();
+	}
+
+	/** Builds {@link SimpleObservable}s */
+	public static class Builder {
+		private Object theIdentity;
+		private ListenerList.Builder theListening;
+		private boolean isInternalState;
+		private Transactable theLock;
+
+		Builder() {
+			theListening = ListenerList.build();
+		}
+
+		/**
+		 * @param safe Whether the observable should be thread-safe or not
+		 * @return This builder
+		 */
+		public Builder safe(boolean safe) {
+			if (safe) {
+				theLock = Transactable.transactable(new ReentrantReadWriteLock());
+				theListening = theListening.forEachSafe(true).reentrancyError("Reentrancy not allowed").withFastSize(true)
+					.withSyncType(ListenerList.SynchronizationType.ELEMENT);
+			} else {
+				theLock = Transactable.NONE;
+				theListening = theListening.unsafe();
+			}
+			return this;
+		}
+
+		/**
+		 * @param listening The listening configuration for the observable
+		 * @return This builder
+		 */
+		public Builder withListening(ListenerList.Builder listening) {
+			theListening = listening;
+			return this;
+		}
+
+		/**
+		 * @param listening Adjusts the listening configuration for the observable
+		 * @return This builder
+		 */
+		public Builder withListening(Function<ListenerList.Builder, ListenerList.Builder> listening) {
+			theListening = listening.apply(theListening);
+			return this;
+		}
+
+		/**
+		 * @param lock The lock to (potentially) ensure thread safety for the observable's firing
+		 * @return This builder
+		 */
+		public Builder withLock(Transactable lock) {
+			theLock = lock;
+			return this;
+		}
+
+		/**
+		 * @param lock The lock to ensure thread safety for the observable's firing (may be null to configure a non-thread safe observable)
+		 * @return This builder
+		 */
+		public Builder withLock(ReentrantReadWriteLock lock) {
+			theLock = Transactable.transactable(lock);
+			return this;
+		}
+
+		/** @return The observable */
+		public <T> SimpleObservable<T> build() {
+			return build(null);
+		}
+
+		/**
+		 * @param onSubscribe The consumer for each new subscriber to the observable
+		 * @return The observable
+		 */
+		public <T> SimpleObservable<T> build(Consumer<? super Observer<? super T>> onSubscribe) {
+			return new SimpleObservable<>(onSubscribe, theIdentity, isInternalState, //
+				theLock != null ? theLock : Transactable.transactable(new ReentrantReadWriteLock()), theListening);
+		}
+	}
+
 	private final Consumer<? super Observer<? super T>> theOnSubscribe;
 	private final Object theIdentity;
 	private boolean isAlive = true;
@@ -62,7 +146,7 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 	 * @param lock The lock for this observable
 	 * @param listening Listening options for this observable
 	 */
-	public SimpleObservable(Consumer<? super Observer<? super T>> onSubscribe, Object identity, boolean internalState, Transactable lock,
+	SimpleObservable(Consumer<? super Observer<? super T>> onSubscribe, Object identity, boolean internalState, Transactable lock,
 		ListenerList.Builder listening) {
 		theIdentity = identity != null ? identity : Identifiable.baseId("observable", this);
 		/* Java's ConcurrentLinkedQueue has a problem (for me) that makes the class unusable here.  As documented in fireNext() below, the

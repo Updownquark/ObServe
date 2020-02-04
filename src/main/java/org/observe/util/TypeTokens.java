@@ -69,85 +69,85 @@ public class TypeTokens {
 				return new TypeToken<Class<P>>() {}.where(new TypeParameter<P>() {}, param);
 			}
 		});
-		unaryTypes.put(Class.class, new UnaryCompoundTypeCreator<Comparable>() {
+		unaryTypes.put(Comparable.class, new UnaryCompoundTypeCreator<Comparable>() {
 			@Override
 			public <P> TypeToken<? extends Comparable> createCompoundType(TypeToken<P> param) {
 				return new TypeToken<Comparable<P>>() {}.where(new TypeParameter<P>() {}, param);
 			}
 		});
-		unaryTypes.put(Class.class, new UnaryCompoundTypeCreator<Comparator>() {
+		unaryTypes.put(Comparator.class, new UnaryCompoundTypeCreator<Comparator>() {
 			@Override
 			public <P> TypeToken<? extends Comparator> createCompoundType(TypeToken<P> param) {
 				return new TypeToken<Comparator<P>>() {}.where(new TypeParameter<P>() {}, param);
 			}
 		});
-		unaryTypes.put(Class.class, new UnaryCompoundTypeCreator<Iterable>() {
+		unaryTypes.put(Iterable.class, new UnaryCompoundTypeCreator<Iterable>() {
 			@Override
 			public <P> TypeToken<? extends Iterable> createCompoundType(TypeToken<P> param) {
 				return new TypeToken<Iterable<P>>() {}.where(new TypeParameter<P>() {}, param);
 			}
 		});
-		unaryTypes.put(Class.class, new UnaryCompoundTypeCreator<Collection>() {
+		unaryTypes.put(Collection.class, new UnaryCompoundTypeCreator<Collection>() {
 			@Override
 			public <P> TypeToken<? extends Collection> createCompoundType(TypeToken<P> param) {
 				return new TypeToken<Collection<P>>() {}.where(new TypeParameter<P>() {}, param);
 			}
 		});
-		unaryTypes.put(Class.class, new UnaryCompoundTypeCreator<Set>() {
+		unaryTypes.put(Set.class, new UnaryCompoundTypeCreator<Set>() {
 			@Override
 			public <P> TypeToken<? extends Set> createCompoundType(TypeToken<P> param) {
 				return new TypeToken<Set<P>>() {}.where(new TypeParameter<P>() {}, param);
 			}
 		});
-		unaryTypes.put(Class.class, new UnaryCompoundTypeCreator<List>() {
+		unaryTypes.put(List.class, new UnaryCompoundTypeCreator<List>() {
 			@Override
 			public <P> TypeToken<? extends List> createCompoundType(TypeToken<P> param) {
 				return new TypeToken<List<P>>() {}.where(new TypeParameter<P>() {}, param);
 			}
 		});
-		unaryTypes.put(Class.class, new UnaryCompoundTypeCreator<SortedSet>() {
+		unaryTypes.put(SortedSet.class, new UnaryCompoundTypeCreator<SortedSet>() {
 			@Override
 			public <P> TypeToken<? extends SortedSet> createCompoundType(TypeToken<P> param) {
 				return new TypeToken<SortedSet<P>>() {}.where(new TypeParameter<P>() {}, param);
 			}
 		});
-		unaryTypes.put(Class.class, new UnaryCompoundTypeCreator<NavigableSet>() {
+		unaryTypes.put(NavigableSet.class, new UnaryCompoundTypeCreator<NavigableSet>() {
 			@Override
 			public <P> TypeToken<? extends NavigableSet> createCompoundType(TypeToken<P> param) {
 				return new TypeToken<NavigableSet<P>>() {}.where(new TypeParameter<P>() {}, param);
 			}
 		});
-		unaryTypes.put(Class.class, new UnaryCompoundTypeCreator<BetterCollection>() {
+		unaryTypes.put(BetterCollection.class, new UnaryCompoundTypeCreator<BetterCollection>() {
 			@Override
 			public <P> TypeToken<? extends BetterCollection> createCompoundType(TypeToken<P> param) {
 				return new TypeToken<BetterCollection<P>>() {}.where(new TypeParameter<P>() {}, param);
 			}
 		});
-		unaryTypes.put(Class.class, new UnaryCompoundTypeCreator<CollectionElement>() {
+		unaryTypes.put(CollectionElement.class, new UnaryCompoundTypeCreator<CollectionElement>() {
 			@Override
 			public <P> TypeToken<? extends CollectionElement> createCompoundType(TypeToken<P> param) {
 				return new TypeToken<CollectionElement<P>>() {}.where(new TypeParameter<P>() {}, param);
 			}
 		});
-		unaryTypes.put(Class.class, new UnaryCompoundTypeCreator<MutableCollectionElement>() {
+		unaryTypes.put(MutableCollectionElement.class, new UnaryCompoundTypeCreator<MutableCollectionElement>() {
 			@Override
 			public <P> TypeToken<? extends MutableCollectionElement> createCompoundType(TypeToken<P> param) {
 				return new TypeToken<MutableCollectionElement<P>>() {}.where(new TypeParameter<P>() {}, param);
 			}
 		});
-		unaryTypes.put(Class.class, new UnaryCompoundTypeCreator<BetterList>() {
+		unaryTypes.put(BetterList.class, new UnaryCompoundTypeCreator<BetterList>() {
 			@Override
 			public <P> TypeToken<? extends BetterList> createCompoundType(TypeToken<P> param) {
 				return new TypeToken<BetterList<P>>() {}.where(new TypeParameter<P>() {}, param);
 			}
 		});
-		unaryTypes.put(Class.class, new UnaryCompoundTypeCreator<BetterSet>() {
+		unaryTypes.put(BetterSet.class, new UnaryCompoundTypeCreator<BetterSet>() {
 			@Override
 			public <P> TypeToken<? extends BetterSet> createCompoundType(TypeToken<P> param) {
 				return new TypeToken<BetterSet<P>>() {}.where(new TypeParameter<P>() {}, param);
 			}
 		});
-		unaryTypes.put(Class.class, new UnaryCompoundTypeCreator<BetterSortedSet>() {
+		unaryTypes.put(BetterSortedSet.class, new UnaryCompoundTypeCreator<BetterSortedSet>() {
 			@Override
 			public <P> TypeToken<? extends BetterSortedSet> createCompoundType(TypeToken<P> param) {
 				return new TypeToken<BetterSortedSet<P>>() {}.where(new TypeParameter<P>() {}, param);
@@ -161,63 +161,63 @@ public class TypeTokens {
 					.where(new TypeParameter<P2>() {}, param2);
 			}
 		});
-		binaryTypes.put(Map.class, new BinaryCompoundTypeCreator<SortedMap>() {
+		binaryTypes.put(SortedMap.class, new BinaryCompoundTypeCreator<SortedMap>() {
 			@Override
 			public <P1, P2> TypeToken<? extends SortedMap> createCompoundType(TypeToken<P1> param1, TypeToken<P2> param2) {
 				return new TypeToken<SortedMap<P1, P2>>() {}.where(new TypeParameter<P1>() {}, param1)
 					.where(new TypeParameter<P2>() {}, param2);
 			}
 		});
-		binaryTypes.put(Map.class, new BinaryCompoundTypeCreator<NavigableMap>() {
+		binaryTypes.put(NavigableMap.class, new BinaryCompoundTypeCreator<NavigableMap>() {
 			@Override
 			public <P1, P2> TypeToken<? extends NavigableMap> createCompoundType(TypeToken<P1> param1, TypeToken<P2> param2) {
 				return new TypeToken<NavigableMap<P1, P2>>() {}.where(new TypeParameter<P1>() {}, param1)
 					.where(new TypeParameter<P2>() {}, param2);
 			}
 		});
-		binaryTypes.put(Map.class, new BinaryCompoundTypeCreator<BetterMap>() {
+		binaryTypes.put(BetterMap.class, new BinaryCompoundTypeCreator<BetterMap>() {
 			@Override
 			public <P1, P2> TypeToken<? extends BetterMap> createCompoundType(TypeToken<P1> param1, TypeToken<P2> param2) {
 				return new TypeToken<BetterMap<P1, P2>>() {}.where(new TypeParameter<P1>() {}, param1)
 					.where(new TypeParameter<P2>() {}, param2);
 			}
 		});
-		binaryTypes.put(Map.class, new BinaryCompoundTypeCreator<BetterSortedMap>() {
+		binaryTypes.put(BetterSortedMap.class, new BinaryCompoundTypeCreator<BetterSortedMap>() {
 			@Override
 			public <P1, P2> TypeToken<? extends BetterSortedMap> createCompoundType(TypeToken<P1> param1, TypeToken<P2> param2) {
 				return new TypeToken<BetterSortedMap<P1, P2>>() {}.where(new TypeParameter<P1>() {}, param1)
 					.where(new TypeParameter<P2>() {}, param2);
 			}
 		});
-		binaryTypes.put(Map.class, new BinaryCompoundTypeCreator<MultiMap>() {
+		binaryTypes.put(MultiMap.class, new BinaryCompoundTypeCreator<MultiMap>() {
 			@Override
 			public <P1, P2> TypeToken<? extends MultiMap> createCompoundType(TypeToken<P1> param1, TypeToken<P2> param2) {
 				return new TypeToken<MultiMap<P1, P2>>() {}.where(new TypeParameter<P1>() {}, param1)
 					.where(new TypeParameter<P2>() {}, param2);
 			}
 		});
-		binaryTypes.put(Map.class, new BinaryCompoundTypeCreator<BetterMultiMap>() {
+		binaryTypes.put(BetterMultiMap.class, new BinaryCompoundTypeCreator<BetterMultiMap>() {
 			@Override
 			public <P1, P2> TypeToken<? extends BetterMultiMap> createCompoundType(TypeToken<P1> param1, TypeToken<P2> param2) {
 				return new TypeToken<BetterMultiMap<P1, P2>>() {}.where(new TypeParameter<P1>() {}, param1)
 					.where(new TypeParameter<P2>() {}, param2);
 			}
 		});
-		binaryTypes.put(Map.class, new BinaryCompoundTypeCreator<BetterSortedMultiMap>() {
+		binaryTypes.put(BetterSortedMultiMap.class, new BinaryCompoundTypeCreator<BetterSortedMultiMap>() {
 			@Override
 			public <P1, P2> TypeToken<? extends BetterSortedMultiMap> createCompoundType(TypeToken<P1> param1, TypeToken<P2> param2) {
 				return new TypeToken<BetterSortedMultiMap<P1, P2>>() {}.where(new TypeParameter<P1>() {}, param1)
 					.where(new TypeParameter<P2>() {}, param2);
 			}
 		});
-		binaryTypes.put(Map.class, new BinaryCompoundTypeCreator<BiTuple>() {
+		binaryTypes.put(BiTuple.class, new BinaryCompoundTypeCreator<BiTuple>() {
 			@Override
 			public <P1, P2> TypeToken<? extends BiTuple> createCompoundType(TypeToken<P1> param1, TypeToken<P2> param2) {
 				return new TypeToken<BiTuple<P1, P2>>() {}.where(new TypeParameter<P1>() {}, param1)
 					.where(new TypeParameter<P2>() {}, param2);
 			}
 		});
-		binaryTypes.put(Map.class, new BinaryCompoundTypeCreator<Function>() {
+		binaryTypes.put(Function.class, new BinaryCompoundTypeCreator<Function>() {
 			@Override
 			public <P1, P2> TypeToken<? extends Function> createCompoundType(TypeToken<P1> param1, TypeToken<P2> param2) {
 				return new TypeToken<Function<P1, P2>>() {}.where(new TypeParameter<P1>() {}, param1)
@@ -225,7 +225,7 @@ public class TypeTokens {
 			}
 		});
 
-		ternaryTypes.put(Map.class, new TernaryCompoundTypeCreator<TriTuple>() {
+		ternaryTypes.put(TriTuple.class, new TernaryCompoundTypeCreator<TriTuple>() {
 			@Override
 			public <P1, P2, P3> TypeToken<? extends TriTuple> createCompoundType(TypeToken<P1> param1, TypeToken<P2> param2,
 				TypeToken<P3> param3) {
@@ -233,7 +233,7 @@ public class TypeTokens {
 					.where(new TypeParameter<P2>() {}, param2);
 			}
 		});
-		ternaryTypes.put(Map.class, new TernaryCompoundTypeCreator<BiFunction>() {
+		ternaryTypes.put(BiFunction.class, new TernaryCompoundTypeCreator<BiFunction>() {
 			@Override
 			public <P1, P2, P3> TypeToken<? extends BiFunction> createCompoundType(TypeToken<P1> param1, TypeToken<P2> param2,
 				TypeToken<P3> param3) {
@@ -498,7 +498,8 @@ public class TypeTokens {
 		CHAR = of(Character.class);
 		OBJECT = of(Object.class);
 		VOID = of(Void.class);
-		WILDCARD = new TypeToken<Class<?>>() {}.resolveType(Class.class.getTypeParameters()[0]);
+		WILDCARD = TypeToken.of(new WildcardTypeImpl());
+		// WILDCARD = new TypeToken<Class<?>>() {}.resolveType(Class.class.getTypeParameters()[0]);
 	}
 
 	protected <T> TypeKey<T> createKey(Class<T> type) {
@@ -671,5 +672,17 @@ public class TypeTokens {
 
 	public boolean isComparable(Class<?> type) {
 		return keyFor(type).comparable;
+	}
+
+	private static class WildcardTypeImpl implements WildcardType {
+		@Override
+		public Type[] getUpperBounds() {
+			return new Type[0];
+		}
+
+		@Override
+		public Type[] getLowerBounds() {
+			return new Type[0];
+		}
 	}
 }

@@ -3,34 +3,43 @@ package org.observe.entity.jdbc;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.text.DecimalFormat;
+import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.Date;
 import java.util.List;
+import java.util.function.BiConsumer;
+import java.util.function.Function;
 
 import org.observe.entity.ObservableEntityFieldType;
 import org.observe.entity.jdbc.JdbcEntitySupport.JdbcColumn.BooleanColumnType;
 import org.observe.util.TypeTokens;
 import org.qommons.StringUtils;
+import org.qommons.io.Format;
 
 import com.google.common.reflect.TypeToken;
 
 public class JdbcEntitySupport {
 	public interface JdbcTypeSupport<T> {
-		<T2 extends T> JdbcColumn<T2> columnFor(ObservableEntityFieldType<?, T2> type, String columnTypeName);
+		<T2 extends T> JdbcColumn<T2> columnFor(ObservableEntityFieldType<?, ?> field, TypeToken<T2> type, String columnTypeName,
+			JdbcEntitySupport support);
 
 		String getDefaultColumnType(ObservableEntityFieldType<?, ? extends T> fieldType);
 
 		public static final JdbcTypeSupport<Integer> INT = new JdbcTypeSupport<Integer>() {
 			@Override
-			public <T2 extends Integer> JdbcColumn<T2> columnFor(ObservableEntityFieldType<?, T2> field, String columnTypeName) {
+			public <T2 extends Integer> JdbcColumn<T2> columnFor(ObservableEntityFieldType<?, ?> field, TypeToken<T2> type,
+				String columnTypeName, JdbcEntitySupport support) {
 				switch (columnTypeName.toUpperCase()) {
 				case "INT":
 				case "INTEGER":
 				case "BIGINT":
-					return (JdbcColumn<T2>) (field.getFieldType().isPrimitive() ? JdbcColumn.INT : JdbcColumn.INTEGER);
+					return (JdbcColumn<T2>) (type.isPrimitive() ? JdbcColumn.INT : JdbcColumn.INTEGER);
 				default:
 					return null;
 				}
@@ -44,12 +53,13 @@ public class JdbcEntitySupport {
 
 		public static final JdbcTypeSupport<Long> LONG = new JdbcTypeSupport<Long>() {
 			@Override
-			public <T2 extends Long> JdbcColumn<T2> columnFor(ObservableEntityFieldType<?, T2> field, String columnTypeName) {
+			public <T2 extends Long> JdbcColumn<T2> columnFor(ObservableEntityFieldType<?, ?> field, TypeToken<T2> type,
+				String columnTypeName, JdbcEntitySupport support) {
 				switch (columnTypeName.toUpperCase()) {
 				case "INT":
 				case "INTEGER":
 				case "BIGINT":
-					return (JdbcColumn<T2>) (field.getFieldType().isPrimitive() ? JdbcColumn.LONG_PRIM : JdbcColumn.LONG_WRAP);
+					return (JdbcColumn<T2>) (type.isPrimitive() ? JdbcColumn.LONG_PRIM : JdbcColumn.LONG_WRAP);
 				default:
 					return null;
 				}
@@ -63,7 +73,8 @@ public class JdbcEntitySupport {
 
 		public static final JdbcTypeSupport<String> STRING = new JdbcTypeSupport<String>() {
 			@Override
-			public <T2 extends String> JdbcColumn<T2> columnFor(ObservableEntityFieldType<?, T2> field, String columnTypeName) {
+			public <T2 extends String> JdbcColumn<T2> columnFor(ObservableEntityFieldType<?, ?> field, TypeToken<T2> type,
+				String columnTypeName, JdbcEntitySupport support) {
 				switch (columnTypeName.toUpperCase()) {
 				case "CHAR":
 				case "VARCHAR":
@@ -87,11 +98,12 @@ public class JdbcEntitySupport {
 
 		public static final JdbcTypeSupport<Boolean> BOOLEAN = new JdbcTypeSupport<Boolean>() {
 			@Override
-			public <T2 extends Boolean> JdbcColumn<T2> columnFor(ObservableEntityFieldType<?, T2> field, String columnTypeName) {
+			public <T2 extends Boolean> JdbcColumn<T2> columnFor(ObservableEntityFieldType<?, ?> field, TypeToken<T2> type,
+				String columnTypeName, JdbcEntitySupport support) {
 				switch (columnTypeName.toUpperCase()) {
 				case "BOOL":
 				case "BOOLEAN":
-					return (JdbcColumn<T2>) new JdbcColumn.BooleanColumn(!field.getFieldType().isPrimitive(), BooleanColumnType.BOOLEAN);
+					return (JdbcColumn<T2>) new JdbcColumn.BooleanColumn(!type.isPrimitive(), BooleanColumnType.BOOLEAN);
 				case "CHAR":
 				case "NCHAR":
 				case "VARCHAR":
@@ -105,14 +117,14 @@ public class JdbcEntitySupport {
 				case "MEDIUMTEXT":
 				case "LONGTEXT":
 				case "CLOB":
-					return (JdbcColumn<T2>) new JdbcColumn.BooleanColumn(!field.getFieldType().isPrimitive(), BooleanColumnType.CHAR);
+					return (JdbcColumn<T2>) new JdbcColumn.BooleanColumn(!type.isPrimitive(), BooleanColumnType.CHAR);
 				case "BIT":
 				case "INT":
 				case "INTEGER":
 				case "TINYINT":
 				case "MEDINUMINT":
 				case "BIGINT":
-					return (JdbcColumn<T2>) new JdbcColumn.BooleanColumn(!field.getFieldType().isPrimitive(), BooleanColumnType.NUMBER);
+					return (JdbcColumn<T2>) new JdbcColumn.BooleanColumn(!type.isPrimitive(), BooleanColumnType.NUMBER);
 				default:
 					return null;
 				}
@@ -126,7 +138,8 @@ public class JdbcEntitySupport {
 
 		public static final JdbcTypeSupport<Instant> INSTANT = new JdbcTypeSupport<Instant>() {
 			@Override
-			public <T2 extends Instant> JdbcColumn<T2> columnFor(ObservableEntityFieldType<?, T2> type, String columnTypeName) {
+			public <T2 extends Instant> JdbcColumn<T2> columnFor(ObservableEntityFieldType<?, ?> field, TypeToken<T2> type,
+				String columnTypeName, JdbcEntitySupport support) {
 				switch (columnTypeName.toUpperCase()) {
 				case "TIMESTAMP":
 				case "DATETIME":
@@ -144,7 +157,8 @@ public class JdbcEntitySupport {
 
 		public static final JdbcTypeSupport<Duration> DURATION = new JdbcTypeSupport<Duration>() {
 			@Override
-			public <T2 extends Duration> JdbcColumn<T2> columnFor(ObservableEntityFieldType<?, T2> type, String columnTypeName) {
+			public <T2 extends Duration> JdbcColumn<T2> columnFor(ObservableEntityFieldType<?, ?> field, TypeToken<T2> type,
+				String columnTypeName, JdbcEntitySupport support) {
 				switch (columnTypeName.toUpperCase()) {
 				case "INT":
 				case "INTEGER":
@@ -167,6 +181,114 @@ public class JdbcEntitySupport {
 				return "DOUBLE";
 			}
 		};
+
+		public static final JdbcTypeSupport<Collection<?>> COLLECTION = new JdbcTypeSupport<Collection<?>>() {
+			@Override
+			public <T2 extends Collection<?>> JdbcColumn<T2> columnFor(ObservableEntityFieldType<?, ?> field, TypeToken<T2> type,
+				String columnTypeName, JdbcEntitySupport support) {
+				if (!isStringType(columnTypeName))
+					return null;
+				Class<?> valueType = TypeTokens.get()
+					.unwrap(TypeTokens.getRawType(type.resolveType(Collection.class.getTypeParameters()[0])));
+				BiConsumer<StringBuilder, Object> format;
+				Function<String, Object> parser;
+				if (valueType == String.class) {
+					format = StringBuilder::append;
+					parser = v -> v;
+				} else if (valueType == int.class) {
+					format = StringBuilder::append;
+					parser = Integer::parseInt;
+				} else if (valueType == long.class) {
+					format = StringBuilder::append;
+					parser = Long::parseLong;
+				} else if (valueType == double.class) {
+					format = StringBuilder::append;
+					DecimalFormat df = new DecimalFormat("0.#");
+					parser = s -> {
+						try {
+							return Format.parseDouble(s, df);
+						} catch (ParseException e) {
+							throw new IllegalArgumentException(e);
+						}
+					};
+				} else if (valueType == float.class) {
+					format = StringBuilder::append;
+					DecimalFormat df = new DecimalFormat("0.#");
+					parser = s -> {
+						try {
+							return (float) Format.parseDouble(s, df);
+						} catch (ParseException e) {
+							throw new IllegalArgumentException(e);
+						}
+					};
+				} else if (valueType == boolean.class) {
+					format = StringBuilder::append;
+					parser = Boolean::valueOf;
+				} else if (valueType == Duration.class) {
+					format = (str, d) -> Format.DURATION.append(str, (Duration) d);
+					parser = s -> {
+						try {
+							return Format.DURATION.parse(s);
+						} catch (ParseException e) {
+							throw new IllegalArgumentException(e);
+						}
+					};
+				} else
+					return null;
+				return new JdbcColumn<T2>() {
+					@Override
+					public void serialize(T2 value, StringBuilder str) {
+						format.accept(str, value);
+					}
+
+					@Override
+					public T2 deserialize(ResultSet rs, int column) throws SQLException {
+						String str = rs.getString(column);
+						List<Object> values = new ArrayList<>();
+						int start = 0;
+						boolean escaped = false;
+						for (int c = 0; c < str.length(); c++) {
+							if (escaped) {//
+							} else if (str.charAt(c) == '\\')
+								escaped = true;
+							else if (str.charAt(c) == ',') {
+								values.add(parser.apply(str.substring(0, c)));
+								start = c + 1;
+							}
+						}
+						if (start < str.length())
+							values.add(parser.apply(str.substring(0, str.length())));
+						return (T2) values;
+					}
+				};
+			}
+
+			@Override
+			public String getDefaultColumnType(ObservableEntityFieldType<?, ? extends Collection<?>> fieldType) {
+				return "VARCHAR";
+			}
+		};
+	}
+
+	static boolean isStringType(String columnTypeName) {
+		switch (columnTypeName) {
+		case "CHAR":
+		case "NCHAR":
+		case "VARCHAR":
+		case "VARCHAR2":
+		case "NVARCHAR":
+		case "BINARY":
+		case "VARBINARY":
+		case "TEXT":
+		case "NTEXT":
+		case "TINYTEXT":
+		case "MEDIUMTEXT":
+		case "LONGTEXT":
+		case "CLOB":
+			return true;
+		default:
+			return false;
+		}
 	}
 
 	public interface JdbcColumn<T> {
@@ -309,7 +431,7 @@ public class JdbcEntitySupport {
 					str.append("NULL");
 					return;
 				}
-				str.append(FORMAT.format(value));
+				str.append('\'').append(FORMAT.format(new Date(value.toEpochMilli()))).append('\'');
 				if (value.getNano() > 0) {
 					str.append('.');
 					StringUtils.printInt(value.getNano(), 9, str);
@@ -388,23 +510,26 @@ public class JdbcEntitySupport {
 		builder.supportColumnType(TypeTokens.get().BOOLEAN, JdbcTypeSupport.BOOLEAN);
 		builder.supportColumnType(TypeTokens.get().of(Instant.class), JdbcTypeSupport.INSTANT);
 		builder.supportColumnType(TypeTokens.get().of(Duration.class), JdbcTypeSupport.DURATION);
+		builder.supportColumnType(TypeTokens.get().keyFor(Collection.class).parameterized(), JdbcTypeSupport.COLLECTION);
 
 		DEFAULT = builder.build();
 	}
 
 	private static class ColumnSupportHolder<T> {
-		final TypeToken<T> type;
+		final TypeToken<T> theType;
 		final JdbcTypeSupport<T> support;
 
 		ColumnSupportHolder(TypeToken<T> type, JdbcTypeSupport<T> support) {
-			this.type = type;
+			this.theType = TypeTokens.get().wrap(type);
 			this.support = support;
 		}
 
-		<F, F2 extends T> JdbcColumn<F> getColumn(ObservableEntityFieldType<?, F> field, String columnTypeName) {
-			if (type.isAssignableFrom(field.getFieldType())) {
+		<F, F2 extends T> JdbcColumn<F> getColumn(ObservableEntityFieldType<?, ?> field, TypeToken<F> type, String columnTypeName,
+			JdbcEntitySupport allSupport) {
+			if (theType.isAssignableFrom(TypeTokens.get().wrap(type))) {
 				ObservableEntityFieldType<?, F2> f = (ObservableEntityFieldType<?, F2>) field;
-				return (JdbcColumn<F>) support.columnFor(f, columnTypeName != null ? columnTypeName : support.getDefaultColumnType(f));
+				return (JdbcColumn<F>) support.columnFor(f, (TypeToken<F2>) type,
+					columnTypeName != null ? columnTypeName : support.getDefaultColumnType(f), allSupport);
 			} else
 				return null;
 		}
@@ -444,12 +569,19 @@ public class JdbcEntitySupport {
 		return theColumnSupport;
 	}
 
-	public <F> JdbcColumn<F> getColumnSupport(ObservableEntityFieldType<?, F> field, String columnTypeName) {
-		for(ColumnSupportHolder<?> holder : theColumnSupport){
-			JdbcColumn<F> column = holder.getColumn(field, columnTypeName);
+	protected <F> JdbcColumn<F> getColumnSupport(ObservableEntityFieldType<?, ?> field, TypeToken<F> type, String columnTypeName) {
+		for (ColumnSupportHolder<?> holder : theColumnSupport) {
+			JdbcColumn<F> column = holder.getColumn(field, type, columnTypeName, this);
 			if (column != null)
 				return column;
 		}
-		throw new IllegalArgumentException("Field " + field + ", type " + field.getFieldType() + " not supported");
+		return null;
+	}
+
+	public <F> JdbcColumn<F> getColumnSupport(ObservableEntityFieldType<?, F> field, String columnTypeName) {
+		JdbcColumn<F> column = getColumnSupport(field, field.getFieldType(), columnTypeName);
+		if (column == null)
+			throw new IllegalArgumentException("Field " + field + ", type " + field.getFieldType() + " not supported");
+		return column;
 	}
 }

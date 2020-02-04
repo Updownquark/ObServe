@@ -141,7 +141,7 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 
 		/**
 		 * Just an explicit way of selecting all entities
-		 * 
+		 *
 		 * @return This all condition
 		 */
 		public All<E> all() {
@@ -173,14 +173,19 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 					getEntityType().getField(init)));
 		}
 
-		public EntityCondition<E> entity(EntityIdentity<E> id) {
+		public EntityCondition<E> entity(EntityIdentity<? extends E> id) {
+			EntityIdentity<E> id2 = getEntityType().fromSubId(id);
 			EntityCondition<E> c = this;
-			for (int i = 0; i < id.getFields().keySize(); i++) {
+			for (int i = 0; i < id2.getFields().keySize(); i++) {
 				int idIndex = i;
-				c = c.and(all -> all.where((ObservableEntityFieldType<E, Object>) id.getEntityType().getIdentityFields().get(idIndex))
-					.equal().value(id.getFields().get(idIndex)));
+				c = c.and(all -> all.where((ObservableEntityFieldType<E, Object>) id2.getEntityType().getIdentityFields().get(idIndex))
+					.equal().value(id2.getFields().get(idIndex)));
 			}
 			return c;
+		}
+
+		public EntityCondition<E> entity(E entity) {
+			return entity(getEntityType().observableEntity(entity).getId());
 		}
 
 		@Override

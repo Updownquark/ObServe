@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
+import org.observe.entity.ConfigurableCreator;
 import org.observe.entity.ConfigurableDeletion;
 import org.observe.entity.ConfigurableQuery;
 import org.observe.entity.ConfigurableUpdate;
@@ -17,7 +18,6 @@ import org.observe.entity.EntityChange;
 import org.observe.entity.EntityChange.FieldChange;
 import org.observe.entity.EntityCondition;
 import org.observe.entity.EntityConstraint;
-import org.observe.entity.EntityCreator;
 import org.observe.entity.EntityIdentity;
 import org.observe.entity.EntityOperationException;
 import org.observe.entity.EntityOperationVariable;
@@ -175,10 +175,39 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 	}
 
 	@Override
-	public EntityCreator<E> create() {
-		return new ConfigurableCreatorImpl<>(this, QuickMap.empty(),
-			theFields.keySet().<Object> createMap().fill(EntityUpdate.NOT_SET).unmodifiable(), //
+	public ConfigurableCreator<E> create() {
+		QuickMap<String, Object> values = theFields.keySet().<Object> createMap().fill(EntityUpdate.NOT_SET);
+		for (int f = 0; f < values.keySize(); f++) {
+			Object defaultValue = getDefault(theFields.get(f));
+			if (defaultValue != EntityUpdate.NOT_SET)
+				values.put(f, defaultValue);
+		}
+		return new ConfigurableCreatorImpl<>(this, QuickMap.empty(), values.unmodifiable(), //
 			theFields.keySet().<EntityOperationVariable<E>> createMap().unmodifiable());
+	}
+
+	private Object getDefault(ObservableEntityFieldType<E, ?> field) {
+		if (!field.getFieldType().isPrimitive())
+			return EntityUpdate.NOT_SET;
+		Class<?> prim = TypeTokens.getRawType(TypeTokens.get().unwrap(field.getFieldType()));
+		if (prim == boolean.class)
+			return Boolean.FALSE;
+		else if (prim == char.class)
+			return Character.valueOf((char) 0);
+		else if (prim == byte.class)
+			return Byte.valueOf((byte) 0);
+		else if (prim == short.class)
+			return Short.valueOf((short) 0);
+		else if (prim == int.class)
+			return Integer.valueOf(0);
+		else if (prim == long.class)
+			return Long.valueOf(0);
+		else if (prim == float.class)
+			return Float.valueOf(0);
+		else if (prim == double.class)
+			return Double.valueOf(0);
+		else
+			throw new IllegalStateException("Unrecognized primitive type: " + field.getFieldType());
 	}
 
 	ObservableEntityImpl<? extends E> getIfPresent(EntityIdentity<? extends E> id) {
