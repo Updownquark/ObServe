@@ -36,6 +36,25 @@ public interface ObservableEntityProvider extends Transactable {
 		public QuickMap<String, Object> getFields() {
 			return theFields;
 		}
+
+		@Override
+		public String toString() {
+			StringBuilder str = new StringBuilder(theIdentity.toString());
+			boolean firstField = true;
+			for (int f = 0; f < theFields.keySize(); f++) {
+				if (theFields.get(f) == EntityUpdate.NOT_SET || theIdentity.getEntityType().getFields().get(f).getIdIndex() >= 0)
+					continue;
+				if (firstField) {
+					firstField = false;
+					str.append('{');
+				} else
+					str.append(", ");
+				str.append(theIdentity.getEntityType().getFields().get(f).getName()).append('=').append(theFields.get(f));
+			}
+			if (!firstField)
+				str.append('}');
+			return str.toString();
+		}
 	}
 
 	void install(ObservableEntityDataSet entitySet) throws IllegalStateException;
@@ -47,7 +66,7 @@ public interface ObservableEntityProvider extends Transactable {
 			throws EntityOperationException;
 
 	long count(EntityQuery<?> query, Object prepared, //
-		LongConsumer onAsycnComplete, Consumer<EntityOperationException> onError) throws EntityOperationException;
+		LongConsumer onAsyncComplete, Consumer<EntityOperationException> onError) throws EntityOperationException;
 
 	<E> Iterable<SimpleEntity<? extends E>> query(EntityQuery<E> query, Object prepared,
 		Consumer<Iterable<SimpleEntity<? extends E>>> onAsyncComplete, Consumer<EntityOperationException> onError)
@@ -59,7 +78,7 @@ public interface ObservableEntityProvider extends Transactable {
 	<E> long delete(EntityDeletion<E> delete, Object prepared, //
 		LongConsumer onAsyncComplete, Consumer<EntityOperationException> onError) throws EntityOperationException;
 
-	/** @return An observable that fires a change whenever the entity data is changed externally */
+	/** @return An observable that fires a change whenever the entity data is changed */
 	Observable<List<EntityChange<?>>> changes();
 
 	List<EntityLoadRequest.Fulfillment<?>> loadEntityData(List<EntityLoadRequest<?>> loadRequests, //

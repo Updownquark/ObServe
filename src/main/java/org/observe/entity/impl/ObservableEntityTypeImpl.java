@@ -186,9 +186,16 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 			theFields.keySet().<EntityOperationVariable<E>> createMap().unmodifiable());
 	}
 
+	@Override
+	public String toString() {
+		return theName;
+	}
+
 	private Object getDefault(ObservableEntityFieldType<E, ?> field) {
 		if (!field.getFieldType().isPrimitive())
 			return EntityUpdate.NOT_SET;
+		else if (field.getIdIndex() >= 0)
+			return EntityUpdate.NOT_SET; // Identity fields should be generated, not defaulted
 		Class<?> prim = TypeTokens.getRawType(TypeTokens.get().unwrap(field.getFieldType()));
 		if (prim == boolean.class)
 			return Boolean.FALSE;

@@ -97,6 +97,11 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 		public <F> Column<F> getColumn(ObservableEntityFieldType<E, F> field) {
 			return (Column<F>) theColumns[field.getFieldIndex()];
 		}
+
+		@Override
+		public String toString() {
+			return theType.toString();
+		}
 	}
 
 	protected static class Column<T> {
@@ -120,6 +125,11 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 
 		public int getFieldIndex() {
 			return fieldIndex;
+		}
+
+		@Override
+		public String toString() {
+			return theName;
 		}
 	}
 
@@ -186,6 +196,8 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 		TableNaming<E> naming = (TableNaming<E>) theTableNaming.get(creator.getEntityType().getName());
 		StringBuilder sql = new StringBuilder();
 		sql.append("INSERT INTO ");
+		if (theSchemaName != null)
+			sql.append(theSchemaName).append('.');
 		sql.append(naming.getTableName());
 		boolean firstValue = true;
 		QuickMap<String, Object> values = ((ConfigurableCreator<E>) creator).getFieldValues();
@@ -232,12 +244,12 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 				onError.accept(new EntityOperationException("Could not create " + creator.getEntityType(), sqle));
 			});
 		} catch (SQLException e) {
-			throw new EntityOperationException("Could not create " + creator.getEntityType(), e);
+			throw new EntityOperationException("Could not create new " + creator.getEntityType(), e);
 		}
 	}
 
 	@Override
-	public long count(EntityQuery<?> query, Object prepared, LongConsumer onAsycnComplete, Consumer<EntityOperationException> onError)
+	public long count(EntityQuery<?> query, Object prepared, LongConsumer onAsyncComplete, Consumer<EntityOperationException> onError)
 		throws EntityOperationException {
 		throw new UnsupportedOperationException("TODO Not implemented yet");
 	}
@@ -249,6 +261,8 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 		TableNaming<E> naming = (TableNaming<E>) theTableNaming.get(query.getEntityType().getName());
 		StringBuilder sql = new StringBuilder();
 		sql.append("SELECT * FROM ");
+		if (theSchemaName != null)
+			sql.append(theSchemaName).append('.');
 		sql.append(naming.getTableName());
 		Map<String, Join<?, ?, ?>> joins = new HashMap<>();
 		if (query.getSelection() instanceof EntityCondition.All) {//
@@ -281,6 +295,10 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 		StringBuilder querySql = new StringBuilder();
 		updateSql.append("UPDATE ");
 		querySql.append("SELECT * FROM ");
+		if (theSchemaName != null) {
+			updateSql.append(theSchemaName).append('.');
+			querySql.append(theSchemaName).append('.');
+		}
 		querySql.append(naming.getTableName());
 		updateSql.append(naming.getTableName());
 		updateSql.append(" SET ");
@@ -358,6 +376,10 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 		StringBuilder querySql = new StringBuilder();
 		deleteSql.append("DELETE FROM ");
 		querySql.append("SELECT * FROM ");
+		if (theSchemaName != null) {
+			deleteSql.append(theSchemaName).append('.');
+			querySql.append(theSchemaName).append('.');
+		}
 		querySql.append(naming.getTableName());
 		deleteSql.append(naming.getTableName());
 		Map<String, Join<?, ?, ?>> joins = new HashMap<>();
@@ -436,7 +458,10 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 			addFieldRef(field, naming, sql, joins);
 		}
 		// TODO Also need to join with subclass tables if any identities are sub-typed
-		sql.append(" FROM ").append(naming.getTableName()).append(" WHERE ");
+		sql.append(" FROM ");
+		if (theSchemaName != null)
+			sql.append(theSchemaName).append('.');
+		sql.append(naming.getTableName()).append(" WHERE ");
 		if (loadRequest.getChange() != null && loadRequest.getChange().getCustomData() instanceof EntityCondition)
 			appendCondition(sql, (EntityCondition<E>) loadRequest.getChange().getCustomData(), naming, QuickMap.empty(), null, joins);
 		else {
@@ -486,7 +511,7 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 		Column<?>[] columns = new Column[type.getFields().keySize()];
 		for (int c = 0; c < columns.length; c++)
 			columns[c] = generateColumn(type.getFields().get(c));
-		return new TableNaming<>(type, theSchemaName + "." + sqlIfyName(type.getName()), columns);
+		return new TableNaming<>(type, sqlIfyName(type.getName()), columns);
 	}
 
 	protected Column<?> generateColumn(ObservableEntityFieldType<?, ?> field) {
@@ -512,7 +537,7 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 
 	private <E, F> F deserialize(ObservableEntityFieldType<E, F> field, TableNaming<E> naming, ResultSet rs, int column)
 		throws SQLException {
-		return naming.getColumn(field).getType().deserialize(rs, column);
+		return naming.getColumn(field).getType().deserialize(rs, column + 1);
 	}
 
 	private <E> SimpleEntity<? extends E> buildEntity(ObservableEntityType<E> type, ResultSet results, TableNaming<E> naming,
@@ -533,8 +558,8 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 	}
 
 	private EntityValueAccess<?, ?> getField(ResultSetMetaData rsmd, int column, TableNaming<?> naming) throws SQLException {
-		if (rsmd.getTableName(column).equals(naming.getTableName())) {
-			return naming.getType().getFields().get(naming.getField(rsmd.getColumnName(column)));
+		if (rsmd.getTableName(column + 1).equals(naming.getTableName())) {
+			return naming.getType().getFields().get(naming.getField(rsmd.getColumnName(column + 1)));
 		} else
 			throw new UnsupportedOperationException("TODO Chain selection is not supported yet"); // TODO
 	}

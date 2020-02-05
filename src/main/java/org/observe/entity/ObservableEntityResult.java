@@ -80,7 +80,11 @@ public interface ObservableEntityResult<E> {
 		Subscription interruptSub = null;
 		while (!getStatus().isDone()) {
 			if (interruptSub == null)
-				interruptSub = onStatusChange(__ -> this.notify());
+				interruptSub = onStatusChange(__ -> {
+					synchronized (this) {
+						this.notify();
+					}
+				});
 			synchronized (this) {
 				wait();
 			}
@@ -107,7 +111,11 @@ public interface ObservableEntityResult<E> {
 		Subscription interruptSub = null;
 		while (!getStatus().isDone()) {
 			if (interruptSub == null)
-				interruptSub = onStatusChange(__ -> this.notify());
+				interruptSub = onStatusChange(__ -> {
+					synchronized (this) {
+						this.notify();
+					}
+				});
 			synchronized (this) {
 				wait(timeout, nanos);
 			}

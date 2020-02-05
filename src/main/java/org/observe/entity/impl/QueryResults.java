@@ -121,6 +121,7 @@ public class QueryResults<E> extends AbstractOperationResult<E> {
 					continue;
 				theRawResults.add((ObservableEntity<? extends E>) entity);
 			}
+			fulfilled();
 		} else if (!needsFilter && entities instanceof Collection) {
 			init(((Collection<?>) entities).size());
 		} else {
@@ -137,6 +138,7 @@ public class QueryResults<E> extends AbstractOperationResult<E> {
 
 	public void init(long count) {
 		theRawCountResult.set(count, null);
+		fulfilled();
 	}
 
 	/**

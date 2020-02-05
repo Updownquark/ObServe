@@ -195,7 +195,9 @@ public class EntityIdentity<E> implements Comparable<EntityIdentity<?>> {
 				throw new IllegalArgumentException(field + " is not an ID field");
 			else if (theEntityType.getIdentityFields().get(field.getIdIndex()) != field)
 				throw new IllegalArgumentException(field + " is not a field of " + theEntityType);
-			else if (value != null && !TypeTokens.getRawType(field.getFieldType()).isInstance(value))
+			else if (value == null && field.getFieldType().isPrimitive())
+				throw new IllegalArgumentException("Null is not valid for field " + field + " (" + field.getFieldType() + ")");
+			else if (value != null && !TypeTokens.getRawType(TypeTokens.get().wrap(field.getFieldType())).isInstance(value))
 				throw new IllegalArgumentException("Value " + value + ", type " + value.getClass().getName() + " is not valid for field "
 					+ field + " (" + field.getFieldType() + ")");
 			String msg = field.canAccept(value);

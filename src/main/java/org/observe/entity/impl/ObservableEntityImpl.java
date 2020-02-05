@@ -35,7 +35,8 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 		for (int f = 0; f < theFields.keySize(); f++) {
 			if (type.getFields().get(f).getIdIndex() >= 0)
 				theFields.put(f, id.getFields().get(theType.getFields().get(f).getIdIndex()));
-			// TODO Populate default values
+			else
+				theFields.put(f, EntityUpdate.NOT_SET);
 		}
 		if (type.getReflector() == null)
 			theEntity = null;
