@@ -2,6 +2,7 @@ package org.observe.entity;
 
 import java.util.List;
 
+import org.observe.Observable;
 import org.observe.entity.impl.ObservableEntityDataSetImpl;
 import org.qommons.Transactable;
 
@@ -33,6 +34,9 @@ public interface ObservableEntityDataSet extends Transactable {
 			throw new IllegalArgumentException("Entity type " + entity.getClass().getName() + " not supported");
 		return type.observableEntity((X) entity);
 	}
+
+	/** @return An observable that fires a change whenever the entity data is changed */
+	Observable<List<EntityChange<?>>> changes();
 
 	/**
 	 * @param implementation The data set implementation to power the entity set

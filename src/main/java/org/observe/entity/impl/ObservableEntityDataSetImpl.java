@@ -185,6 +185,11 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		return null;
 	}
 
+	@Override
+	public Observable<List<EntityChange<?>>> changes() {
+		return theImplementation.changes();
+	}
+
 	<E, F> String isAcceptable(ObservableEntityImpl<E> entity, int fieldIndex, F value) {
 		ObservableEntityFieldType<E, F> field = (ObservableEntityFieldType<E, F>) entity.getField(fieldIndex);
 		if (value != null && !TypeTokens.get().isInstance(field.getFieldType(), value))

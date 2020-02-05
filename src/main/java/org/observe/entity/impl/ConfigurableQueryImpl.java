@@ -102,4 +102,9 @@ class ConfigurableQueryImpl<E> extends AbstractConfigurableOperation<E> implemen
 			throw new IllegalStateException("This query has variables and must be prepared");
 		return ((ObservableEntityTypeImpl<E>) getEntityType()).getEntitySet().collect(this, withUpdates);
 	}
+
+	@Override
+	public String toString() {
+		return new StringBuilder("QUERY ").append(theSelection.getEntityType()).append(' ').append(theSelection).toString();
+	}
 }

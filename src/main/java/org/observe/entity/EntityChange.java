@@ -88,11 +88,23 @@ public abstract class EntityChange<E> {
 		}
 	}
 
+	/**
+	 * Represents a change to a field of one or more entities of a common type
+	 *
+	 * @param <E> The super type of the entities changed
+	 * @param <F> The type of the field
+	 */
 	public static class FieldChange<E, F> {
 		private final ObservableEntityFieldType<E, F> theField;
 		private final List<F> theOldValues;
 		private final F theNewValue;
 
+		/**
+		 * @param field The field that was changed
+		 * @param oldValues The list of previous values of the field for each entity affected (in the same order as
+		 *        {@link EntityChange#getEntities()})
+		 * @param newValue The new value of the field in all the entities
+		 */
 		public FieldChange(ObservableEntityFieldType<E, F> field, List<F> oldValues, F newValue) {
 			theField = field;
 			theOldValues = oldValues;
