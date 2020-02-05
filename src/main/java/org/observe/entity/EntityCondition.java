@@ -19,9 +19,27 @@ import org.qommons.collect.QuickSet.QuickMap;
  * @param <E> The entity type that the condition is for
  */
 public abstract class EntityCondition<E> implements Comparable<EntityCondition<E>> {
+	/**
+	 * Allows {@link EntityCondition} to implement {@link EntityCondition#query() query()}, {@link EntityCondition#update() update()}, and
+	 * {@link EntityCondition#delete() delete()}
+	 *
+	 * @param <E> The type of entity the condition applies to
+	 */
 	public interface SelectionMechanism<E> {
+		/**
+		 * @param selection The selection to query with
+		 * @return The configurable query
+		 */
 		ConfigurableQuery<E> query(EntityCondition<E> selection);
+		/**
+		 * @param selection The selection to update with
+		 * @return The configurable update
+		 */
 		ConfigurableUpdate<E> update(EntityCondition<E> selection);
+		/**
+		 * @param selection The selection to delete with
+		 * @return The configurable deletion
+		 */
 		ConfigurableDeletion<E> delete(EntityCondition<E> selection);
 	}
 
@@ -44,12 +62,18 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 		theVariables = vars;
 	}
 
+	/** @return The type of entities that this condition selects from */
 	public ObservableEntityType<E> getEntityType() {
 		return theEntityType;
 	}
 
+	/** @return An integer uniquely identifying this condition class */
 	protected abstract int getConditionType();
 
+	/**
+	 * @param condition Produces a condition to OR with this condition
+	 * @return A condition that is true when either this condition or the new condition matches an entity
+	 */
 	public EntityCondition<E> or(Function<All<E>, EntityCondition<E>> condition) {
 		EntityCondition<E> c = condition.apply(getAll());
 		if (c instanceof All)
@@ -60,6 +84,10 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 			return new OrCondition<>(theEntityType, this, c);
 	}
 
+	/**
+	 * @param condition Produces a condition to AND with this condition
+	 * @return A condition that is true when both this condition and the new condition matches an entity
+	 */
 	public EntityCondition<E> and(Function<All<E>, EntityCondition<E>> condition) {
 		EntityCondition<E> c = condition.apply(getAll());
 		if (c instanceof All)
@@ -70,20 +98,40 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 			return new AndCondition<>(theEntityType, this, c);
 	}
 
+	/** @return All variables used by this condition and any that produced it */
 	protected Map<String, EntityOperationVariable<E>> getGlobalVariables() {
 		return theGlobalVariables;
 	}
 
+	/** @return All variables used by this condition */
 	public Map<String, EntityOperationVariable<E>> getVariables() {
 		return theVariables;
 	}
 
+	/**
+	 * @param entity The entity to test
+	 * @param varValues The values of all variables in this condition
+	 * @return Whether this condition matches the given entity with the given variable values
+	 */
 	public abstract boolean test(ObservableEntity<? extends E> entity, QuickMap<String, Object> varValues);
 
+	/**
+	 * @param other The other condition to test
+	 * @return Whether this condition is always true when the other condition is true
+	 */
 	public abstract boolean contains(EntityCondition<?> other);
 
+	/**
+	 * @param transform A transform function to apply to this condition
+	 * @return The transformed condition
+	 */
 	public abstract EntityCondition<E> transform(Function<EntityCondition<E>, EntityCondition<E>> transform);
 
+	/**
+	 * @param variables The values of all variables used by this condition
+	 * @return A condition identical to this one, but with all {@link VariableCondition variable} conditions replaced with
+	 *         {@link LiteralCondition literal} ones with values corresponding to that in the given map
+	 */
 	public EntityCondition<E> satisfy(QuickMap<String, Object> variables) {
 		return transform(condition -> {
 			if (condition instanceof VariableCondition) {
@@ -110,14 +158,29 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 		return theMechanism.delete(this);
 	}
 
+	/** @return An {@link All} condition */
 	protected All<E> getAll() {
 		return new All<>(theEntityType, theMechanism, theVariables);
 	}
 
+	/**
+	 * @param field The field to compare
+	 * @param value The field value to compare against
+	 * @param compare Whether to compare as less than (&lt;0), greater than (&gt;0), or equal (0)
+	 * @param withEqual Modifies the condition to be either &lt;=, &gt;=, or == (when true); or &lt;, &gt;, or != (when false)
+	 * @return The new literal condition
+	 */
 	protected <F> LiteralCondition<E, F> createLiteral(EntityValueAccess<E, F> field, F value, int compare, boolean withEqual) {
 		return new LiteralCondition<>(theEntityType, theMechanism, field, value, compare, withEqual, theGlobalVariables);
 	}
 
+	/**
+	 * @param field The field to compare
+	 * @param variable The variable to compare against
+	 * @param compare Whether to compare as less than (&lt;0), greater than (&gt;0), or equal (0)
+	 * @param withEqual Modifies the condition to be either &lt;=, &gt;=, or == (when true); or &lt;, &gt;, or != (when false)
+	 * @return The new variable condition
+	 */
 	protected <F> VariableCondition<E, F> createVariable(EntityValueAccess<E, F> field, EntityOperationVariable<E> variable, int compare,
 		boolean withEqual) {
 		return new VariableCondition<>(theEntityType, theMechanism, field, variable, compare, withEqual, theGlobalVariables);
@@ -342,12 +405,28 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 		}
 	}
 
+	/**
+	 * A condition that tests the value of an entity's field against a {@link EntityCondition.LiteralCondition literal} or
+	 * {@link EntityCondition.VariableCondition variable} value.
+	 *
+	 * @param <E> The entity type of the condition
+	 * @param <F> The type of the field
+	 */
 	public static abstract class ValueCondition<E, F> extends EntityCondition<E> {
 		private final EntityValueAccess<E, F> theField;
 		private final int theComparison;
 		private final boolean isWithEqual;
 
-		public ValueCondition(ObservableEntityType<E> entityType, SelectionMechanism<E> mechanism, EntityValueAccess<E, F> field,
+		/**
+		 * @param entityType The entity type for the condition
+		 * @param mechanism The selection mechanism to enable operations off of the condition
+		 * @param field The field value to compare against
+		 * @param comparison Whether to compare as less than (&lt;0), greater than (&gt;0), or equal (0)
+		 * @param isWithEqual Modifies the condition to be either &lt;=, &gt;=, or == (when true); or &lt;, &gt;, or != (when false)
+		 * @param globalVars Global variables
+		 * @param vars The variables for this condition specifically
+		 */
+		protected ValueCondition(ObservableEntityType<E> entityType, SelectionMechanism<E> mechanism, EntityValueAccess<E, F> field,
 			int comparison, boolean isWithEqual, Map<String, EntityOperationVariable<E>> globalVars,
 			Map<String, EntityOperationVariable<E>> vars) {
 			super(entityType, mechanism, globalVars, vars);
@@ -356,18 +435,22 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 			this.isWithEqual = isWithEqual;
 		}
 
+		/** @return The field to compare values of */
 		public EntityValueAccess<E, F> getField() {
 			return theField;
 		}
 
+		/** @return Whether to compare as less than (&lt;0), greater than (&gt;0), or equal (0) */
 		public int getComparison() {
 			return theComparison;
 		}
 
+		/** @return Modifies the condition to be either &lt;=, &gt;=, or == (when true); or &lt;, &gt;, or != (when false) */
 		public boolean isWithEqual() {
 			return isWithEqual;
 		}
 
+		/** @return ≤(\u2264), &lt;, =, ≠(\u2260), ≥(\u2265), or &gt; */
 		public char getSymbol() {
 			if (theComparison < 0) {
 				if (isWithEqual)
@@ -448,6 +531,12 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 		}
 	}
 
+	/**
+	 * A condition that tests the value of an entity's field against a constant value
+	 *
+	 * @param <E> The entity type of the condition
+	 * @param <F> The type of the field
+	 */
 	public static class LiteralCondition<E, F> extends ValueCondition<E, F> {
 		private final F theValue;
 
@@ -465,6 +554,7 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 			return 1;
 		}
 
+		/** @return The value to compare against */
 		public F getValue() {
 			return theValue;
 		}
@@ -546,6 +636,12 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 		}
 	}
 
+	/**
+	 * A condition that tests the value of an entity's field against a variable value
+	 *
+	 * @param <E> The entity type of the condition
+	 * @param <F> The type of the field
+	 */
 	public static class VariableCondition<E, F> extends ValueCondition<E, F> {
 		private final EntityOperationVariable<E> theVariable;
 
@@ -576,6 +672,7 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 			return 2;
 		}
 
+		/** @return The variable to test against */
 		public EntityOperationVariable<E> getVariable() {
 			return theVariable;
 		}
@@ -660,6 +757,11 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 		}
 	}
 
+	/**
+	 * Either an {@link EntityCondition.OrCondition OR} or an {@link EntityCondition.AndCondition AND} condition
+	 * 
+	 * @param <E> The entity type of the condition
+	 */
 	public static abstract class CompositeCondition<E> extends EntityCondition<E> {
 		private final List<EntityCondition<E>> theConditions;
 
@@ -701,6 +803,7 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 			return Collections.unmodifiableMap(vars);
 		}
 
+		/** @return The component conditions of this composite */
 		public List<EntityCondition<E>> getConditions() {
 			return theConditions;
 		}
