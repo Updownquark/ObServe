@@ -5458,8 +5458,6 @@ public class ObservableCollectionDataFlowImpl {
 			}
 
 			void updated(I newValue, Object cause) {
-				if (newValue == theOldValue)
-					return;
 				theOldValue = newValue;
 				try (Transaction parentT = theParent.lock(false, null); Transaction t = lockLocal()) {
 					CollectionDataFlow<?, ?, ? extends T> newFlow = theMap.apply(newValue);
