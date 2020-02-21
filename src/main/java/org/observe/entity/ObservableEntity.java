@@ -77,6 +77,20 @@ public interface ObservableEntity<E> extends Stamped, Identifiable, Comparable<O
 	 * @throws IllegalArgumentException If the value may not be set for the given field
 	 */
 	<F> F set(int fieldIndex, F value, Object cause) throws UnsupportedOperationException, IllegalArgumentException;
+
+	/**
+	 * @param fieldIndex The index of the field to set
+	 * @param value The value to set for the field
+	 * @param sync Whether to execute the update synchronously (blocking until complete) or asynchronously
+	 * @param cause The cause of the change, if any
+	 * @return The modification result
+	 * @throws IllegalArgumentException If the value is unacceptable for the field
+	 * @throws UnsupportedOperationException If the entity has been deleted or the field is not settable
+	 * @throws EntityOperationException If the operation fails synchronously
+	 */
+	EntityModificationResult<E> update(int fieldIndex, Object value, boolean sync, Object cause)
+		throws IllegalArgumentException, UnsupportedOperationException, EntityOperationException;
+
 	/**
 	 * @param fieldIndex The index of the field to watch
 	 * @return An observable that fires an event whenever the value of the given field in this entity changes

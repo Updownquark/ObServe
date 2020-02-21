@@ -7,6 +7,7 @@ import java.util.Map;
 
 import org.observe.collect.CollectionChangeType;
 import org.qommons.collect.BetterList;
+import org.qommons.collect.ElementId;
 
 /**
  * Represents a change to an external entity in an entity source, as reported by a {@link ObservableEntityProvider}
@@ -175,9 +176,9 @@ public abstract class EntityChange<E> {
 		public final EntityIdentity<E> entity;
 		/** The type of the collection change */
 		public final CollectionChangeType collectionChangeType;
-		/** The index of the element added, removed, or changed, or -1 if unknown */
-		public final int index;
-		/** The new value of the collection element. May be null for a removal if {@link #index} is not -1. */
+		/** The location of the element added, removed, or changed */
+		public final ElementId element;
+		/** The new value of the collection element. May be null for a removal. */
 		public final F value;
 
 		/**
@@ -185,17 +186,17 @@ public abstract class EntityChange<E> {
 		 * @param entity The identity of the entity that changed
 		 * @param field The collection field that was updated
 		 * @param collectionChangeType The type of the collection change
-		 * @param index The index of the element added, removed, or changed, or -1 if unknown
-		 * @param value The new value of the collection element. May be null for a removal if {@link #index} is not -1.
+		 * @param element The location of the element added, removed, or changed
+		 * @param value The new value of the collection element. May be null for a removal.
 		 * @param customData Data from the source that may be used to optimize {@link EntityLoadRequest load requests} due to this change
 		 */
 		public EntityCollectionFieldChange(Instant time, EntityIdentity<E> entity, ObservableEntityFieldType<E, C> field,
-			CollectionChangeType collectionChangeType, int index, F value, Object customData) {
+			CollectionChangeType collectionChangeType, ElementId element, F value, Object customData) {
 			super(entity.getEntityType(), time, EntityChangeType.updateCollectionField, customData);
 			this.field = field;
 			this.entity = entity;
 			this.collectionChangeType = collectionChangeType;
-			this.index = index;
+			this.element = element;
 			this.value = value;
 		}
 
@@ -220,6 +221,8 @@ public abstract class EntityChange<E> {
 		public final EntityIdentity<E> entity;
 		/** The type of the map change */
 		public final CollectionChangeType collectionChangeType;
+		/** The location of the entry added, removed, or changed. May be null except for an added event. */
+		public final ElementId element;
 		/** The key that was added, removed, or updated */
 		public final K key;
 		/** The new value for the key in the map (null for removal) */
@@ -230,16 +233,18 @@ public abstract class EntityChange<E> {
 		 * @param entity The identity of the entity that changed
 		 * @param field The map field that was updated
 		 * @param collectionChangeType The type of the map change
+		 * @param element The location of the entry added, removed, or changed
 		 * @param key The key that was added, removed, or updated
 		 * @param value The new value for the key in the map (null for removal)
 		 * @param customData Data from the source that may be used to optimize {@link EntityLoadRequest load requests} due to this change
 		 */
 		public EntityMapFieldChange(Instant time, EntityIdentity<E> entity, ObservableEntityFieldType<E, M> field,
-			CollectionChangeType collectionChangeType, K key, V value, Object customData) {
+			CollectionChangeType collectionChangeType, ElementId element, K key, V value, Object customData) {
 			super(entity.getEntityType(), time, EntityChangeType.updateMapField, customData);
 			this.field = field;
 			this.entity = entity;
 			this.collectionChangeType = collectionChangeType;
+			this.element = element;
 			this.key = key;
 			this.value = value;
 		}

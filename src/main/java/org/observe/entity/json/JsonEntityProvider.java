@@ -25,11 +25,13 @@ import org.observe.entity.EntityChange.FieldChange;
 import org.observe.entity.EntityCondition;
 import org.observe.entity.EntityCreator;
 import org.observe.entity.EntityDeletion;
+import org.observe.entity.EntityFieldSetOperation;
 import org.observe.entity.EntityIdentity;
 import org.observe.entity.EntityLoadRequest;
 import org.observe.entity.EntityLoadRequest.Fulfillment;
 import org.observe.entity.EntityOperationException;
 import org.observe.entity.EntityQuery;
+import org.observe.entity.EntitySetOperation;
 import org.observe.entity.EntityUpdate;
 import org.observe.entity.EntityValueAccess;
 import org.observe.entity.ObservableEntityDataSet;
@@ -90,7 +92,62 @@ public class JsonEntityProvider implements ObservableEntityProvider {
 
 	@Override
 	public Object prepare(ConfigurableOperation<?> operation) throws EntityOperationException {
-		throw new UnsupportedOperationException("Prepared operations not yet supported");
+		StringWriter sw = new StringWriter();
+		long requestId = theRequestIdGenerator.getAndIncrement();
+		JsonSerialWriter jsw = new JsonStreamWriter(sw);
+		try {
+			jsw.startObject();
+			jsw.startProperty("id").writeNumber(requestId);
+			jsw.startProperty("sync").writeBoolean(true);
+			jsw.startProperty("action").writeString("prepare");
+			jsw.startProperty("type").writeString(operation.getEntityType().getName());
+			if (operation instanceof ConfigurableCreator) {
+				jsw.startProperty("operation").writeString("create");
+			} else if (operation instanceof ConfigurableQuery) {
+				jsw.startProperty("operation").writeString("query");
+			} else if (operation instanceof ConfigurableUpdate) {
+				jsw.startProperty("operation").writeString("update");
+			} else if (operation instanceof ConfigurableDeletion) {
+				jsw.startProperty("operation").writeString("delete");
+			} else
+				throw new UnsupportedOperationException("Unrecognized operation type: " + operation.getClass().getName());
+			if (operation instanceof EntitySetOperation) {
+				jsw.startProperty("selection");
+				serializeCondition(jsw, ((EntitySetOperation<?>) operation).getSelection());
+			}
+			if (operation instanceof EntityFieldSetOperation) {
+				jsw.startProperty("fields").startObject();
+				ConfigurableCreator<?> cc = (ConfigurableCreator<?>) operation;
+				for (int f = 0; f < cc.getEntityType().getFields().keySize(); f++) {
+					Object value = cc.getFieldValues().get(f);
+					if (value != EntityUpdate.NOT_SET) {
+						jsw.startProperty(cc.getEntityType().getFields().get(f).getName());
+						serialize(jsw, value);
+					}
+				}
+				jsw.endObject(); // End fields
+			}
+			if (operation instanceof ConfigurableQuery) {
+				ConfigurableQuery<?> cq = (ConfigurableQuery<?>) operation;
+				jsw.startProperty("load").startObject();
+				for (int f = 0; f < cq.getFieldLoadTypes().keySize(); f++) {
+					if (cq.getFieldLoadTypes().get(f) != null)
+						jsw.startProperty(cq.getFieldLoadTypes().keySet().get(f)).writeString(cq.getFieldLoadTypes().get(f).name());
+				}
+			}
+			jsw.endObject(); // End request
+		} catch (IOException e) {
+			// Should not happen--writing to a String
+		}
+
+		String[] prepared = new String[1];
+		sendRequest(sw.toString(), requestId, jsr -> {
+			String propName = jsr.getNextProperty();
+			if (!propName.equals("prepared"))
+				throw new EntityOperationException("Could not decode response--prepared property expected but found " + propName);
+			prepared[0] = jsr.parseString();
+		}, null, true);
+		return prepared;
 	}
 
 	@Override

@@ -14,10 +14,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.observe.Observable;
+import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.entity.ConditionalFieldConstraint;
 import org.observe.entity.EntityChange;
@@ -60,6 +62,7 @@ import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
 import org.qommons.Stamped;
 import org.qommons.StringUtils;
+import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.BetterSortedSet;
@@ -72,79 +75,44 @@ import com.google.common.reflect.TypeToken;
 
 /** Implementation of an {@link ObservableEntityDataSet entity set} reliant on an {@link ObservableEntityProvider} for its data */
 public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
+	interface EntityAction {
+		ObservableEntityResult<?> apply(boolean synchronous) throws EntityOperationException;
+	}
+
+	private final Transactable theLock;
 	private final BetterSortedSet<ObservableEntityTypeImpl<?>> theEntityTypes;
 	private final Map<Class<?>, String> theClassMapping;
 	private final ObservableEntityProvider theImplementation;
+	private final List<EntityAction> theQueuedActions;
+	private int theWriteLockDepth;
 	private volatile boolean isActive;
 
 	private final QueryResultsTree theResults;
+	private final SimpleObservable<List<EntityChange<?>>> theChanges;
 
-	private ObservableEntityDataSetImpl(ObservableEntityProvider implementation) {
+	private ObservableEntityDataSetImpl(Transactable lock, ObservableEntityProvider implementation) {
+		theLock = lock;
 		theEntityTypes = new BetterTreeSet<>(true, (et1, et2) -> compareEntityTypes(et1.getName(), et2.getName()));
 		theClassMapping = new HashMap<>();
 		theImplementation = implementation;
+		theQueuedActions = new ArrayList<>();
 
 		theResults = new QueryResultsTree(this);
+		theChanges = new SimpleObservable<>();
 	}
 
-	void startup(Observable<?> until) {
+	void startup(Observable<?> refresh, Observable<?> until) {
 		isActive = true;
 		theImplementation.install(this);
-		Subscription sub = theImplementation.changes().act(changes -> {
-			List<EntityLoadRequest<?>> loadRequests = new LinkedList<>();
-			List<EntityChange<?>> noLoadNeeded = new LinkedList<>();
-			Map<EntityIdentity<?>, ObservableEntity<?>> entities = new HashMap<>();
-			loadEntities(changes, entities);
-			for (EntityChange<?> change : changes) {
-				if (change.changeType == EntityChange.EntityChangeType.remove)
-					noLoadNeeded.add(change);
-				else {
-					Set<? extends EntityValueAccess<?, ?>> requiredFields = theResults.specifyDataRequirements(change, entities);
-					if (requiredFields != null && !requiredFields.isEmpty())
-						loadRequests
-						.add(new EntityLoadRequest<>((EntityChange<Object>) change, (Set<EntityValueAccess<?, ?>>) requiredFields));
-					else
-						noLoadNeeded.add(change);
-				}
-			}
-			QueryResultsTree.EntityUsage usage = new QueryResultsTree.EntityUsage() {
-				@Override
-				public <E> ObservableEntity<E> use(ObservableEntity<E> entity) {
-					return ObservableEntityDataSetImpl.this.use(entity, entities);
-				}
-			};
-			if (!noLoadNeeded.isEmpty()) {
-				fulfillNoLoadEntities(noLoadNeeded, entities);
-				for (EntityChange<?> change : noLoadNeeded) {
-					((ObservableEntityTypeImpl<?>) change.getEntityType()).handleChange(change, entities, false, false);
-					theResults.handleChange(change, entities, usage);
-				}
-			}
-			if (!loadRequests.isEmpty()) {
-				try {
-					theImplementation.loadEntityData(loadRequests, fulfilled -> {
-						fulfillEntities(fulfilled, entities);
-						for (EntityLoadRequest.Fulfillment<?> f : fulfilled) {
-							EntityChange<?> change = f.getRequest().getChange();
-							((ObservableEntityTypeImpl<?>) change.getEntityType()).handleChange(change, entities, false, false);
-							theResults.handleChange(change, entities, usage);
-						}
-					}, err -> {
-						// TODO Logging
-						System.err.println("Unable to load field data for new entities");
-						err.printStackTrace();
-					});
-				} catch (EntityOperationException e) {
-					// TODO Logging
-					System.err.println("Unable to load field data for new entities");
-					e.printStackTrace();
-				}
+		refresh.takeUntil(until).act(__ -> {
+			try (Transaction t = theLock.lock(true, null)) {
+				processChanges();
 			}
 		});
 		if (until != null)
 			until.take(1).act(__ -> {
 				isActive = false;
-				sub.unsubscribe();
+				theChanges.onCompleted(Collections.emptyList());
 				theResults.dispose();
 			});
 	}
@@ -155,12 +123,124 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 
 	@Override
 	public Transaction lock(boolean write, Object cause) {
-		return theImplementation.lock(write, cause);
+		return wrapTransaction(theLock.lock(write, cause), write);
 	}
 
 	@Override
 	public Transaction tryLock(boolean write, Object cause) {
-		return theImplementation.tryLock(write, cause);
+		Transaction t = theLock.tryLock(write, cause);
+		return t == null ? null : wrapTransaction(t, write);
+	}
+
+	boolean queueAction(EntityAction action) throws EntityOperationException {
+		if (!isActive)
+			throw new IllegalStateException("This entity set is no longer active");
+		if (theWriteLockDepth == 1) {
+			action.apply(true);
+			processChanges();
+			return false;
+		} else {
+			theQueuedActions.add(action);
+			return true;
+		}
+	}
+
+	private Transaction wrapTransaction(Transaction t, boolean write) {
+		if (!isActive)
+			throw new IllegalStateException("This entity set is no longer active");
+		if (!write)
+			return t;
+		int preWLD = theWriteLockDepth;
+		theWriteLockDepth++;
+		return () -> {
+			theWriteLockDepth = preWLD;
+			if (preWLD == 0)
+				flushQueuedActions();
+			t.close();
+		};
+	}
+
+	private void flushQueuedActions() {
+		AtomicInteger completed = new AtomicInteger();
+		int actionCount = theQueuedActions.size();
+		for (EntityAction action : theQueuedActions) {
+			ObservableEntityResult<?> result;
+			try{
+				result=action.apply(false);
+			} catch(EntityOperationException e){
+				System.err.println("Should not happen for async call");
+				continue;
+			}
+			result.onStatusChange(res -> {
+				if (res.getStatus().isDone() && completed.incrementAndGet() == actionCount) {
+					synchronized (completed) {
+						completed.notify();
+					}
+				}
+			});
+		}
+		theQueuedActions.clear();
+		synchronized (completed) {
+			processChanges();
+			while (completed.get() < actionCount) {
+				try {
+					completed.wait(1);
+				} catch (InterruptedException e) {}
+			}
+		}
+	}
+
+	private void processChanges() {
+		List<EntityChange<?>> changes = theImplementation.changes();
+		List<EntityLoadRequest<?>> loadRequests = new LinkedList<>();
+		List<EntityChange<?>> noLoadNeeded = new LinkedList<>();
+		Map<EntityIdentity<?>, ObservableEntity<?>> entities = new HashMap<>();
+		loadEntities(changes, entities);
+		for (EntityChange<?> change : changes) {
+			if (change.changeType == EntityChange.EntityChangeType.remove)
+				noLoadNeeded.add(change);
+			else {
+				Set<? extends EntityValueAccess<?, ?>> requiredFields = theResults.specifyDataRequirements(change, entities);
+				if (requiredFields != null && !requiredFields.isEmpty())
+					loadRequests.add(new EntityLoadRequest<>((EntityChange<Object>) change, (Set<EntityValueAccess<?, ?>>) requiredFields));
+				else
+					noLoadNeeded.add(change);
+			}
+		}
+		QueryResultsTree.EntityUsage usage = new QueryResultsTree.EntityUsage() {
+			@Override
+			public <E> ObservableEntity<E> use(ObservableEntity<E> entity) {
+				return ObservableEntityDataSetImpl.this.use(entity, entities);
+			}
+		};
+		if (!noLoadNeeded.isEmpty()) {
+			fulfillNoLoadEntities(noLoadNeeded, entities);
+			for (EntityChange<?> change : noLoadNeeded) {
+				((ObservableEntityTypeImpl<?>) change.getEntityType()).handleChange(change, entities, false, false);
+				theResults.handleChange(change, entities, usage);
+			}
+		}
+		if (!loadRequests.isEmpty()) {
+			try {
+				theImplementation.loadEntityData(loadRequests, fulfilled -> {
+					fulfillEntities(fulfilled, entities);
+					for (EntityLoadRequest.Fulfillment<?> f : fulfilled) {
+						EntityChange<?> change = f.getRequest().getChange();
+						((ObservableEntityTypeImpl<?>) change.getEntityType()).handleChange(change, entities, false, false);
+						theResults.handleChange(change, entities, usage);
+					}
+				}, err -> {
+					// TODO Logging
+					System.err.println("Unable to load field data for new entities");
+					err.printStackTrace();
+				});
+			} catch (EntityOperationException e) {
+				// TODO Logging
+				System.err.println("Unable to load field data for new entities");
+				e.printStackTrace();
+			}
+		}
+		theChanges.onNext(changes);
 	}
 
 	@Override
@@ -187,7 +267,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 
 	@Override
 	public Observable<List<EntityChange<?>>> changes() {
-		return theImplementation.changes();
+		return theChanges.readOnly();
 	}
 
 	<E, F> String isAcceptable(ObservableEntityImpl<E> entity, int fieldIndex, F value) {
@@ -378,19 +458,23 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 
 	/**
 	 * @param implementation The data set implementation to power the entity set
+	 * @param lock The lock to govern thread safety of the entity data
+	 * @param refresh An observable to query the data source for changes
 	 * @return A builder for an entity set
 	 */
-	public static EntitySetBuilder build(ObservableEntityProvider implementation) {
-		return new EntitySetBuilder(implementation);
+	public static EntitySetBuilder build(ObservableEntityProvider implementation, Transactable lock, Observable<?> refresh) {
+		return new EntitySetBuilder(implementation, lock, refresh);
 	}
 
 	/** Builds an entity set */
 	public static class EntitySetBuilder {
 		private final ObservableEntityDataSetImpl theEntitySet;
+		private final Observable<?> theRefresh;
 		private boolean isBuilding;
 
-		EntitySetBuilder(ObservableEntityProvider implementation) {
-			theEntitySet = new ObservableEntityDataSetImpl(implementation);
+		EntitySetBuilder(ObservableEntityProvider implementation, Transactable lock, Observable<?> refresh) {
+			theEntitySet = new ObservableEntityDataSetImpl(lock, implementation);
+			theRefresh = refresh;
 			isBuilding = true;
 		}
 
@@ -485,7 +569,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 			isBuilding = false;
 			for (ObservableEntityType<?> entity : theEntitySet.getEntityTypes())
 				((ObservableEntityTypeImpl<?>) entity).check();
-			theEntitySet.startup(until);
+			theEntitySet.startup(theRefresh, until);
 			return theEntitySet;
 		}
 	}
@@ -1098,6 +1182,12 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 
 		@Override
 		public <F> F set(int fieldIndex, F value, Object cause) throws UnsupportedOperationException, IllegalArgumentException {
+			throw new UnsupportedOperationException("Partial internal implementation");
+		}
+
+		@Override
+		public EntityModificationResult<E> update(int fieldIndex, Object value, boolean sync, Object cause)
+			throws IllegalArgumentException, UnsupportedOperationException, EntityOperationException {
 			throw new UnsupportedOperationException("Partial internal implementation");
 		}
 
