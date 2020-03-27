@@ -117,6 +117,11 @@ public class CategoryRenderStrategy<R, C> {
 				throw new IllegalStateException("Can only use slider editing with an int- or double-typed category, not " + getType());
 		}
 
+		public CategoryMutationStrategy asButtonCell(Function<? super C, String> renderer,
+			Function<? super ModelCell<R, ? extends C>, ? extends C> action) {
+			return withEditor(ObservableCellEditor.createButtonCellEditor(renderer, action));
+		}
+
 		public CategoryMutationStrategy asButton(Function<? super C, String> renderer, Function<? super C, ? extends C> action) {
 			return withEditor(ObservableCellEditor.createButtonEditor(renderer, action));
 		}
@@ -134,8 +139,11 @@ public class CategoryRenderStrategy<R, C> {
 		}
 
 		public boolean isEditable(R row, C category) {
-			if (theAttributeMutator == null && theRowMutator == null)
+			if (theAttributeMutator == null && theRowMutator == null) {
+				if (theEditor != null)
+					System.err.println("Warning: Editor configured for column " + theName + ", but no mutation function");
 				return false;
+			}
 			return theEditability == null || theEditability.test(row, category);
 		}
 
@@ -363,6 +371,10 @@ public class CategoryRenderStrategy<R, C> {
 		else
 			theDecorator = theDecorator.modify(decorator);
 		return this;
+	}
+
+	public CategoryRenderStrategy<R, C> decorateAll(Consumer<ComponentDecorator> decorator) {
+		return decorate(CellDecorator.constant(decorator));
 	}
 
 	public CellDecorator<R, C> getDecorator() {

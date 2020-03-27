@@ -41,10 +41,6 @@ import org.qommons.io.Format;
 import com.google.common.reflect.TypeToken;
 
 public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEditor {
-	public interface CellDecorator<M, C> {
-		void decorate(Component editorComponent, M modelValue, C cellValue, boolean selected, boolean expanded, boolean leaf);
-	}
-
 	public interface EditorSubscription {
 		boolean uninstall(boolean commit);
 	}
@@ -54,7 +50,13 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			Function<? super C, String> valueToolTip);
 	}
 
+	ModelCell<M, C> getEditingCell();
+
 	ObservableCellEditor<M, C> decorate(CellDecorator<M, C> decorator);
+
+	default ObservableCellEditor<M, C> decorateAll(Consumer<ComponentDecorator> decorator) {
+		return decorate(CellDecorator.constant(decorator));
+	}
 
 	ObservableCellEditor<M, C> withValueTooltip(BiFunction<? super M, ? super C, String> tooltip);
 
@@ -281,7 +283,35 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			};
 		}, editWithClicks(1));
 		button.addActionListener(evt -> {
-			value.set(action.apply(value.get()), evt);
+			C newVal = action.apply(value.get());
+			if (editor.getEditingCell() != null)
+				value.set(newVal, evt);
+			editor.stopCellEditing();
+		});
+		return editor;
+	}
+
+	public static <M, C> ObservableCellEditor<M, ? super C> createButtonCellEditor(Function<? super C, String> renderer,
+		Function<? super ModelCell<M, ? extends C>, ? extends C> action) {
+		Function<C, String>[] filter = new Function[1];
+		SettableValue<C> value = DefaultObservableCellEditor.createEditorValue(filter);
+		JButton button = new JButton();
+		boolean[] editing = new boolean[1];
+		ObservableCellEditor<M, C> editor = new DefaultObservableCellEditor<>(button, value, (e, c, f, tt, vtt) -> {
+			filter[0] = f;
+			button.setText(renderer.apply(value.get()));
+			button.setToolTipText(tt);
+			editing[0] = true;
+			return commit -> {
+				filter[0] = null;
+				editing[0] = false;
+				return true;
+			};
+		}, editWithClicks(1));
+		button.addActionListener(evt -> {
+			C newVal = action.apply(editor.getEditingCell());
+			if (editor.getEditingCell() != null)
+				value.set(newVal, evt);
 			editor.stopCellEditing();
 		});
 		return editor;
@@ -299,6 +329,8 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 		private CellDecorator<M, C> theDecorator;
 		private BiFunction<? super M, ? super C, String> theValueTooltip;
 
+		private ModelCell<M, C> theEditingCell;
+
 		private final List<CellEditorListener> theListeners;
 		private EditorSubscription theEditorSubscription;
 
@@ -313,8 +345,15 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 		}
 
 		@Override
+		public ModelCell<M, C> getEditingCell() {
+			return theEditingCell;
+		}
+
+		@Override
 		public ObservableCellEditor<M, C> decorate(CellDecorator<M, C> decorator) {
-			theDecorator = decorator;
+			if (theDecorator == null)
+				theDecorator = decorator;
+
 			return this;
 		}
 
@@ -359,6 +398,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			ChangeEvent changeEvent = new ChangeEvent(this);
 			for (CellEditorListener listener : theListeners)
 				listener.editingStopped(changeEvent);
+			theEditingCell = null;
 			return true;
 		}
 
@@ -371,6 +411,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			ChangeEvent changeEvent = new ChangeEvent(this);
 			for (CellEditorListener listener : theListeners)
 				listener.editingCanceled(changeEvent);
+			theEditingCell = null;
 		}
 
 		@Override
@@ -421,10 +462,14 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 				tooltip = category.getTooltip(modelValue, modelValue);
 			valueTooltip = c -> theValueTooltip.apply(modelValue, c);
 
+			theEditingCell = new ModelCell.Default<>(() -> modelValue, (C) modelValue, rowIndex, 0, selected, selected, true, true);
 			if (theEditorValue.get() != modelValue)
 				theEditorValue.set((C) modelValue, null);
-			if (theDecorator != null)
-				theDecorator.decorate(theEditorComponent, modelValue, (C) modelValue, selected, false, true);
+			if (theDecorator != null) {
+				ComponentDecorator cd = new ComponentDecorator();
+				theDecorator.decorate(theEditingCell, cd);
+				cd.decorate(theEditorComponent);
+			}
 			theEditorSubscription = theInstallation.install(this, list, valueFilter, tooltip, valueTooltip);
 			return theEditorComponent;
 		}
@@ -463,10 +508,14 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 				tooltip = null;
 				valueTooltip = null;
 			}
+			theEditingCell = new ModelCell.Default<>(() -> modelValue, (C) value, row, column, isSelected, isSelected, true, true);
 			if (theEditorValue.get() != value)
 				theEditorValue.set((C) value, null);
-			if (theDecorator != null)
-				theDecorator.decorate(theEditorComponent, modelValue, (C) value, isSelected, false, true);
+			if (theDecorator != null) {
+				ComponentDecorator cd = new ComponentDecorator();
+				theDecorator.decorate(theEditingCell, cd);
+				cd.decorate(theEditorComponent);
+			}
 			theEditorSubscription = theInstallation.install(this, table, valueFilter, tooltip, valueTooltip);
 			return theEditorComponent;
 		}
@@ -478,9 +527,13 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 				theEditorSubscription = null;
 			}
 			// TODO See if there's a way to get the information needed for the value filter and tooltip somewhere
+			theEditingCell = new ModelCell.Default<>(() -> (M) value, (C) value, row, 0, isSelected, isSelected, expanded, leaf);
 			theEditorValue.set((C) value, null);
-			if (theDecorator != null)
-				theDecorator.decorate(theEditorComponent, (M) value, (C) value, isSelected, false, true);
+			if (theDecorator != null) {
+				ComponentDecorator cd = new ComponentDecorator();
+				theDecorator.decorate(theEditingCell, cd);
+				cd.decorate(theEditorComponent);
+			}
 			theEditorSubscription = theInstallation.install(this, tree, null, null, null);
 			return theEditorComponent;
 		}
@@ -516,6 +569,11 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			theModel = model;
 			theDefaultEditor = defaultEditor;
 			theComponents = new LinkedList<>();
+		}
+
+		@Override
+		public ModelCell<M, C> getEditingCell() {
+			return theCurrentEditor == null ? null : theCurrentEditor.getEditingCell();
 		}
 
 		public CompositeCellEditor<M, C> withComponent(ObservableCellEditor<M, C> editor, BiPredicate<M, C> filter) {
@@ -619,4 +677,5 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			return theCurrentEditor.getTreeCellEditorComponent(tree, value, isSelected, expanded, leaf, row);
 		}
 	}
+
 }

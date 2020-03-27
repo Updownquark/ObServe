@@ -5,7 +5,10 @@ import java.awt.Component;
 import java.awt.Font;
 import java.util.function.Function;
 
+import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
+import javax.swing.Icon;
+import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JTextField;
@@ -21,6 +24,8 @@ public class ComponentDecorator {
 	private Function<Font, Font> theFont;
 	private Integer theHAlign;
 	private Integer theVAlign;
+	private Icon theIcon;
+	private Boolean isEnabled;
 
 	public Border getBorder() {
 		return theBorder;
@@ -43,6 +48,8 @@ public class ComponentDecorator {
 		theBackground = theForeground = null;
 		theFont = null;
 		theHAlign = theVAlign = null;
+		theIcon = null;
+		isEnabled = null;
 		return this;
 	}
 
@@ -120,18 +127,36 @@ public class ComponentDecorator {
 		return this;
 	}
 
+	public ComponentDecorator withIcon(Icon icon) {
+		theIcon = icon;
+		return this;
+	}
+
+	public ComponentDecorator withIcon(String iconRef, int width, int height) {
+		return withIcon(null, iconRef, width, height);
+	}
+
+	public ComponentDecorator withIcon(Class<?> clazz, String iconRef, int width, int height) {
+		return withIcon(ObservableSwingUtils.getFixedIcon(clazz, iconRef, width, height));
+	}
+
+	public ComponentDecorator enabled(Boolean enabled) {
+		isEnabled = enabled;
+		return this;
+	}
+
 	public <C extends Component> C decorate(C c) {
-		if(c instanceof JComponent && theBorder!=null)
+		if (c instanceof JComponent && theBorder != null)
 			((JComponent) c).setBorder(theBorder);
 		if (theBackground != null)
 			c.setBackground(theBackground);
-		if(theForeground!=null)
+		if (theForeground != null)
 			c.setForeground(theForeground);
-		if(theFont!=null)
+		if (theFont != null)
 			c.setFont(theFont.apply(c.getFont()));
 
-		if(theHAlign!=null){
-			int align=theHAlign;
+		if (theHAlign != null) {
+			int align = theHAlign;
 			int swingAlign = align < 0 ? SwingConstants.LEADING : (align > 0 ? SwingConstants.TRAILING : SwingConstants.CENTER);
 			if (c instanceof JLabel)
 				((JLabel) c).setHorizontalAlignment(swingAlign);
@@ -141,16 +166,27 @@ public class ComponentDecorator {
 			else if (c instanceof JTextComponent)
 				((JTextComponent) c).setAlignmentX(//
 					align < 0 ? 0f : (align > 0 ? 1f : 0.5f));
+			else if (c instanceof AbstractButton)
+				((AbstractButton) c).setAlignmentY(//
+					align < 0 ? 0f : (align > 0 ? 1f : 0.5f));
 		}
-		if(theVAlign!=null){
-			int align=theVAlign;
+		if (theVAlign != null) {
+			int align = theVAlign;
 			int swingAlign = align < 0 ? SwingConstants.LEADING : (align > 0 ? SwingConstants.TRAILING : SwingConstants.CENTER);
 			if (c instanceof JLabel)
 				((JLabel) c).setVerticalAlignment(swingAlign);
 			else if (c instanceof JTextComponent)
 				((JTextComponent) c).setAlignmentX(//
 					align < 0 ? 0f : (align > 0 ? 1f : 0.5f));
+			else if (c instanceof AbstractButton)
+				((AbstractButton) c).setAlignmentX(//
+					align < 0 ? 0f : (align > 0 ? 1f : 0.5f));
 		}
+
+		if (c instanceof JLabel)
+			((JLabel) c).setIcon(theIcon);
+		else if (c instanceof AbstractButton)
+			((JButton) c).setIcon(theIcon);
 
 		return c;
 	}
