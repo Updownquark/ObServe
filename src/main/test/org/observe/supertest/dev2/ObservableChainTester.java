@@ -71,7 +71,7 @@ public class ObservableChainTester implements Testable {
 		TestHelper.TestSummary summary = TestHelper.createTester(getClass())//
 			/**/.withRandomCases(-1).withMaxTotalDuration(testDuration)//
 			/**/.withMaxFailures(maxFailures)//
-			/**/.withPersistenceDir(new File("src/main/test/org/observe/supertest/dev"), false)//
+			/**/.withPersistenceDir(new File("src/main/test/org/observe/supertest/dev2"), false)//
 			/**/.withPlacemarks("Transaction", "Modification")
 			/**/.withDebug(true)//
 			/**/.execute();
