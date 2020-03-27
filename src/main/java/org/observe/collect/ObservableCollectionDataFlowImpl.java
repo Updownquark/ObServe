@@ -363,8 +363,23 @@ public class ObservableCollectionDataFlowImpl {
 		DerivedCollectionElement<T> addElement(T value, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before,
 			boolean first) throws UnsupportedOperationException, IllegalArgumentException;
 
+		/**
+		 * @param valueEl The element to move
+		 * @param after The lower bound of the range to move the element to (or null to leave the range lower-unbounded)
+		 * @param before The upper bound of the range to move the element to (or null to leave the range upper-unbounded)
+		 * @return null If the move can be made, or a reason otherwise
+		 */
 		String canMove(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before);
 
+		/**
+		 * @param valueEl The element to move
+		 * @param after The lower bound of the range to move the element to (or null to leave the range lower-unbounded)
+		 * @param before The upper bound of the range to move the element to (or null to leave the range upper-unbounded)
+		 * @param first Whether to try to move the element toward the beginning (true) or end (false) of the range
+		 * @param afterRemove A callback to call after the element is removed from its original place and before it is added in its new
+		 *        position
+		 * @return The moved element
+		 */
 		DerivedCollectionElement<T> move(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after,
 			DerivedCollectionElement<T> before, boolean first, Runnable afterRemove);
 
@@ -943,6 +958,7 @@ public class ObservableCollectionDataFlowImpl {
 				throw new UnsupportedOperationException(msg);
 		}
 
+		/** @return null if this filter may allow some movement operations, or a reason code otherwise */
 		public String canMove() {
 			String msg = null;
 			if (theMoveMessage != null)
@@ -952,6 +968,7 @@ public class ObservableCollectionDataFlowImpl {
 			return msg;
 		}
 
+		/** @throws UnsupportedOperationException If this filter does not allow movement operations */
 		public void assertMovable() throws UnsupportedOperationException {
 			String msg = null;
 			if (theMoveMessage != null)
