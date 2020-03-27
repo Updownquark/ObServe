@@ -84,6 +84,7 @@ import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.CollectionLockingStrategy;
+import org.qommons.collect.ElementId;
 import org.qommons.collect.FastFailLockingStrategy;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement;
@@ -642,6 +643,10 @@ public class PanelPopulation {
 					column.accept(col);
 			});
 		}
+
+		P withMove(boolean up, Consumer<TableAction<R, ?>> actionMod);
+
+		P withMoveToEnd(boolean up, Consumer<TableAction<R, ?>> actionMod);
 
 		P withFiltering(ObservableValue<? extends TableContentControl> filter);
 
@@ -2237,6 +2242,14 @@ public class PanelPopulation {
 		return ObservableSwingUtils.getFixedIcon(null, "/icons/copy.png", size, size);
 	}
 
+	static Icon getMoveIcon(boolean up, int size) {
+		return ObservableSwingUtils.getFixedIcon(null, "/icons/move" + (up ? "Up" : "Down") + ".png", size, size);
+	}
+
+	static Icon getMoveEndIcon(boolean up, int size) {
+		return ObservableSwingUtils.getFixedIcon(null, "/icons/move" + (up ? "Top" : "Bottom") + ".png", size, size);
+	}
+
 	static class SimpleListBuilder<R, P extends SimpleListBuilder<R, P>> extends SimpleFieldEditor<LittleList<R>, P>
 	implements ListBuilder<R, P> {
 		class ListItemAction<A extends SimpleTableAction<R, A>> extends SimpleTableAction<R, A> {
@@ -2788,7 +2801,8 @@ public class PanelPopulation {
 				CollectionElement<R> toCopy = theRows.getElement(i);
 				R copy = copier.apply(toCopy.get());
 				CollectionElement<R> copied = findElement(copy);
-				if (copied != null) {} else if (theRows.canAdd(copy, toCopy.getElementId(), null) == null)
+				if (copied != null) {//
+				} else if (theRows.canAdd(copy, toCopy.getElementId(), null) == null)
 					copied = theRows.addElement(copy, toCopy.getElementId(), null, true);
 				else
 					copied = theRows.addElement(copy, false);
@@ -2800,6 +2814,106 @@ public class PanelPopulation {
 			for (int[] interval : ObservableSwingUtils.getContinuousIntervals(newSelection.toArray(), true))
 				selModel.addSelectionInterval(interval[0], interval[1]);
 			selModel.setValueIsAdjusting(false);
+		}
+
+		@Override
+		public P withMove(boolean up, Consumer<TableAction<R, ?>> actionMod) {
+			((ObservableCollection<CategoryRenderStrategy<? super R, ?>>) theColumns)
+			.add(new CategoryRenderStrategy<>(up ? "\u2191" : "\u2193", TypeTokens.get().OBJECT, v -> null)
+				.withHeaderTooltip("Move row " + (up ? "up" : "down")).decorateAll(deco -> deco.withIcon(getMoveIcon(up, 16)))//
+				.withWidths(15, 20, 20)//
+					.withMutation(
+						m -> m.mutateAttribute2((r, c) -> c).withEditor(ObservableCellEditor.createButtonCellEditor(__ -> null, cell -> {
+					if (up && cell.getRowIndex() == 0)
+						return cell.getCellValue();
+					else if (!up && cell.getRowIndex() == theSafeRows.size() - 1)
+						return cell.getCellValue();
+					try (Transaction t = theRows.lock(true, null)) {
+						if (!theSafeRows.hasQueuedEvents()) {
+							CollectionElement<R> row = theRows.getElement(cell.getRowIndex());
+							CollectionElement<R> adj = theRows.getAdjacentElement(row.getElementId(), !up);
+							if (adj != null) {
+								CollectionElement<R> adj2 = theRows.getAdjacentElement(adj.getElementId(), !up);
+								theRows.move(row.getElementId(), up ? CollectionElement.getElementId(adj2) : adj.getElementId(),
+									up ? adj.getElementId() : CollectionElement.getElementId(adj2), up, null);
+								ListSelectionModel selModel = getEditor().getSelectionModel();
+								int newIdx = up ? cell.getRowIndex() - 1 : cell.getRowIndex() + 1;
+								selModel.addSelectionInterval(newIdx, newIdx);
+							}
+						}
+					}
+					return cell.getCellValue();
+				}).decorate((cell, deco) -> {
+					deco.withIcon(getMoveIcon(up, 16));
+					if (up)
+						deco.enabled(cell.getRowIndex() > 0);
+					else
+						deco.enabled(cell.getRowIndex() < theSafeRows.size() - 1);
+				}))));
+			return (P) this;
+		}
+
+		@Override
+		public P withMoveToEnd(boolean up, Consumer<TableAction<R, ?>> actionMod) {
+			return withMultiAction(values -> {
+				try (Transaction t = theRows.lock(true, null)) {
+					if (theSafeRows.hasQueuedEvents()) { // If there are queued changes, we can't rely on indexes we get back from the model
+					} else {// Ignore the given values and use the selection model so we get the indexes right in the case of duplicates
+						ListSelectionModel selModel = getEditor().getSelectionModel();
+						int selectionCount = 0;
+						ElementId varBound = null;
+						ElementId fixedBound = CollectionElement.getElementId(theRows.getTerminalElement(up));
+						int start = up ? selModel.getMinSelectionIndex() : selModel.getMaxSelectionIndex();
+						int end = up ? selModel.getMaxSelectionIndex() : selModel.getMinSelectionIndex();
+						int inc = up ? 1 : -1;
+						for (int i = start; i >= 0 && i != end; i += inc) {
+							if (!selModel.isSelectedIndex(i))
+								continue;
+							selectionCount++;
+							CollectionElement<R> move = theRows.getElement(i);
+							move = theRows.move(move.getElementId(), up ? varBound : fixedBound, up ? fixedBound : varBound, up, null);
+							varBound = move.getElementId();
+						}
+						if (selectionCount != 0)
+							selModel.setSelectionInterval(0, selectionCount - 1);
+					}
+				}
+			}, action -> {
+				ObservableValue<String> enabled;
+				Supplier<String> enabledGet = () -> {
+					try (Transaction t = theRows.lock(false, null)) {
+						if (theSafeRows.hasQueuedEvents())
+							return "Data set updating";
+						ListSelectionModel selModel = getEditor().getSelectionModel();
+						if (selModel.isSelectionEmpty())
+							return "Nothing selected";
+						int start = up ? selModel.getMinSelectionIndex() : selModel.getMaxSelectionIndex();
+						int end = up ? selModel.getMaxSelectionIndex() : selModel.getMinSelectionIndex();
+						int inc = up ? 1 : -1;
+						ElementId varBound = null;
+						ElementId fixedBound = CollectionElement.getElementId(theRows.getTerminalElement(up));
+						for (int i = start; i >= 0 && i != end; i += inc) {
+							if (!selModel.isSelectedIndex(i))
+								continue;
+							CollectionElement<R> move = theRows.getElement(i);
+							String msg = theRows.canMove(move.getElementId(), up ? varBound : fixedBound, up ? fixedBound : varBound);
+							if (msg != null)
+								return msg;
+							varBound = move.getElementId();
+						}
+						return null;
+					}
+				};
+				if (theSelectionValues != null)
+					enabled = ObservableValue.of(TypeTokens.get().STRING, enabledGet, () -> theSelectionValues.getStamp(),
+						theSelectionValues.simpleChanges());
+				else
+					enabled = theSelectionValue.map(__ -> enabledGet.get());
+				action.allowForMultiple(true)
+				.withTooltip(items -> "Move selected row" + (items.size() == 1 ? "" : "s") + " to the " + (up ? "top" : "bottom"))
+				.modifyButton(button -> button.withIcon(getMoveEndIcon(up, 16)))//
+				.allowForEmpty(false).allowForAnyEnabled(false).modifyAction(a -> a.disableWith(enabled));
+			});
 		}
 
 		@Override
