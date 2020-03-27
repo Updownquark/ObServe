@@ -125,6 +125,17 @@ public abstract class ObservableCollectionWrapper<E> implements ObservableCollec
 	}
 
 	@Override
+	public String canMove(ElementId valueEl, ElementId after, ElementId before) {
+		return getWrapped().canMove(valueEl, after, before);
+	}
+
+	@Override
+	public CollectionElement<E> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
+		throws UnsupportedOperationException, IllegalArgumentException {
+		return getWrapped().move(valueEl, after, before, first, afterRemove);
+	}
+
+	@Override
 	public int size() {
 		return getWrapped().size();
 	}

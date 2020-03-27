@@ -5,8 +5,10 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -361,6 +363,11 @@ public class ObservableCollectionDataFlowImpl {
 		DerivedCollectionElement<T> addElement(T value, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before,
 			boolean first) throws UnsupportedOperationException, IllegalArgumentException;
 
+		String canMove(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before);
+
+		DerivedCollectionElement<T> move(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after,
+			DerivedCollectionElement<T> before, boolean first, Runnable afterRemove);
+
 		/**
 		 * Removes all elements in this manager, if possible
 		 *
@@ -702,6 +709,7 @@ public class ObservableCollectionDataFlowImpl {
 		private final boolean areUpdatesAllowed;
 		private final String theAddMessage;
 		private final String theRemoveMessage;
+		private final String theMoveMessage;
 		private final Function<? super T, String> theAddFilter;
 		private final Function<? super T, String> theRemoveFilter;
 
@@ -711,6 +719,7 @@ public class ObservableCollectionDataFlowImpl {
 			this.areUpdatesAllowed = options.areUpdatesAllowed();
 			theAddMessage = options.getAddMsg();
 			theRemoveMessage = options.getRemoveMsg();
+			theMoveMessage = options.getMoveMsg();
 			theAddFilter = options.getAddMsgFn();
 			theRemoveFilter = options.getRemoveMsgFn();
 		}
@@ -932,6 +941,24 @@ public class ObservableCollectionDataFlowImpl {
 				msg = theUnmodifiableMessage;
 			if (msg != null)
 				throw new UnsupportedOperationException(msg);
+		}
+
+		public String canMove() {
+			String msg = null;
+			if (theMoveMessage != null)
+				msg = theMoveMessage;
+			if (msg == null && theUnmodifiableMessage != null)
+				msg = theUnmodifiableMessage;
+			return msg;
+		}
+
+		public void assertMovable() throws UnsupportedOperationException {
+			String msg = null;
+			if (theMoveMessage != null)
+				msg = theMoveMessage;
+			if (msg == null && theUnmodifiableMessage != null)
+				msg = theUnmodifiableMessage;
+			throw new UnsupportedOperationException(msg);
 		}
 
 		/** @return True if this filter does not prevent any operations */
@@ -1689,6 +1716,18 @@ public class ObservableCollectionDataFlowImpl {
 			return srcEl == null ? null : new BaseDerivedElement(theSource.mutableElement(srcEl.getElementId()));
 		}
 
+		@Override
+		public String canMove(DerivedCollectionElement<E> valueEl, DerivedCollectionElement<E> after, DerivedCollectionElement<E> before) {
+			return theSource.canMove(strip(valueEl), strip(after), strip(before));
+		}
+
+		@Override
+		public DerivedCollectionElement<E> move(DerivedCollectionElement<E> valueEl, DerivedCollectionElement<E> after,
+			DerivedCollectionElement<E> before, boolean first, Runnable afterRemove) {
+			return new BaseDerivedElement(
+				theSource.mutableElement(theSource.move(strip(valueEl), strip(after), strip(before), first, afterRemove).getElementId()));
+		}
+
 		private ElementId strip(DerivedCollectionElement<E> el) {
 			return el == null ? null : ((BaseDerivedElement) el).source.getElementId();
 		}
@@ -1946,6 +1985,19 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public String canMove(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
+			return theParent.canMove(DerivedCollectionElement.reverse(valueEl), DerivedCollectionElement.reverse(before),
+				DerivedCollectionElement.reverse(after));
+		}
+
+		@Override
+		public DerivedCollectionElement<T> move(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after,
+			DerivedCollectionElement<T> before, boolean first, Runnable afterRemove) {
+			return theParent.move(DerivedCollectionElement.reverse(valueEl), DerivedCollectionElement.reverse(before),
+				DerivedCollectionElement.reverse(after), !first, afterRemove).reverse();
+		}
+
+		@Override
 		public boolean clear() {
 			return theParent.clear();
 		}
@@ -2058,6 +2110,33 @@ public class ObservableCollectionDataFlowImpl {
 			if (before != null && theCompare.compare(before.get(), toAdd) < 0)
 				return StdMsg.ILLEGAL_ELEMENT_POSITION;
 			return theParent.canAdd(toAdd, null, null);
+		}
+
+		@Override
+		public String canMove(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
+			BiTuple<T, DerivedCollectionElement<T>> sortValue = ((SortedElement) valueEl).theValueNode.get();
+			BiTuple<T, DerivedCollectionElement<T>> sortAfter = after == null ? null : ((SortedElement) after).theValueNode.get();
+			BiTuple<T, DerivedCollectionElement<T>> sortBefore = before == null ? null : ((SortedElement) before).theValueNode.get();
+			if (sortAfter != null && theCompare.compare(sortValue.getValue1(), sortAfter.getValue1()) < 0)
+				return StdMsg.ILLEGAL_ELEMENT_POSITION;
+			if (sortBefore != null && theCompare.compare(sortValue.getValue1(), sortBefore.getValue1()) > 0)
+				return StdMsg.ILLEGAL_ELEMENT_POSITION;
+			return theParent.canMove(sortValue.getValue2(), sortAfter == null ? null : sortAfter.getValue2(),
+				sortBefore == null ? null : sortBefore.getValue2());
+		}
+
+		@Override
+		public DerivedCollectionElement<T> move(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after,
+			DerivedCollectionElement<T> before, boolean first, Runnable afterRemove) {
+			BiTuple<T, DerivedCollectionElement<T>> sortValue = ((SortedElement) valueEl).theValueNode.get();
+			BiTuple<T, DerivedCollectionElement<T>> sortAfter = after == null ? null : ((SortedElement) after).theValueNode.get();
+			BiTuple<T, DerivedCollectionElement<T>> sortBefore = before == null ? null : ((SortedElement) before).theValueNode.get();
+			if (sortAfter != null && theCompare.compare(sortValue.getValue1(), sortAfter.getValue1()) < 0)
+				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT_POSITION);
+			if (sortBefore != null && theCompare.compare(sortValue.getValue1(), sortBefore.getValue1()) > 0)
+				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT_POSITION);
+			return new SortedElement(theParent.move(sortValue.getValue2(), sortAfter == null ? null : sortAfter.getValue2(),
+				sortBefore == null ? null : sortBefore.getValue2(), first, afterRemove), true);
 		}
 
 		@Override
@@ -2321,6 +2400,17 @@ public class ObservableCollectionDataFlowImpl {
 			if (parentEl == null)
 				return null;
 			return new FilteredElement(parentEl, true, true);
+		}
+
+		@Override
+		public String canMove(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
+			return theParent.canMove(strip(valueEl), strip(after), strip(before));
+		}
+
+		@Override
+		public DerivedCollectionElement<T> move(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after,
+			DerivedCollectionElement<T> before, boolean first, Runnable afterRemove) {
+			return new FilteredElement(theParent.move(strip(valueEl), strip(after), strip(before), first, afterRemove), true, true);
 		}
 
 		private DerivedCollectionElement<T> strip(DerivedCollectionElement<T> el) {
@@ -2722,6 +2812,18 @@ public class ObservableCollectionDataFlowImpl {
 			return parentEl == null ? null : new IntersectedCollectionElement(parentEl, null, true);
 		}
 
+		@Override
+		public String canMove(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
+			return theParent.canMove(strip(valueEl), strip(after), strip(before));
+		}
+
+		@Override
+		public DerivedCollectionElement<T> move(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after,
+			DerivedCollectionElement<T> before, boolean first, Runnable afterRemove) {
+			return new IntersectedCollectionElement(theParent.move(strip(valueEl), strip(after), strip(before), first, afterRemove), null,
+				true);
+		}
+
 		private DerivedCollectionElement<T> strip(DerivedCollectionElement<T> el) {
 			return el == null ? null : ((IntersectedCollectionElement) el).theParentEl;
 		}
@@ -2949,6 +3051,17 @@ public class ObservableCollectionDataFlowImpl {
 		public DerivedCollectionElement<T> addElement(T value, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before,
 			boolean first) {
 			return theParent.addElement(value, after, before, first);
+		}
+
+		@Override
+		public String canMove(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
+			return theParent.canMove(valueEl, after, before);
+		}
+
+		@Override
+		public DerivedCollectionElement<T> move(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after,
+			DerivedCollectionElement<T> before, boolean first, Runnable afterRemove) {
+			return theParent.move(valueEl, after, before, first, afterRemove);
 		}
 
 		@Override
@@ -3308,6 +3421,17 @@ public class ObservableCollectionDataFlowImpl {
 				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 			DerivedCollectionElement<I> parentEl = theParent.addElement(reversed, strip(after), strip(before), first);
 			return parentEl == null ? null : new MappedElement(parentEl, true);
+		}
+
+		@Override
+		public String canMove(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
+			return theParent.canMove(strip(valueEl), strip(after), strip(before));
+		}
+
+		@Override
+		public DerivedCollectionElement<T> move(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after,
+			DerivedCollectionElement<T> before, boolean first, Runnable afterRemove) {
+			return new MappedElement(theParent.move(strip(valueEl), strip(after), strip(before), first, afterRemove), true);
 		}
 
 		private DerivedCollectionElement<I> strip(DerivedCollectionElement<T> el) {
@@ -4031,6 +4155,17 @@ public class ObservableCollectionDataFlowImpl {
 			return parentEl == null ? null : new CombinedElement(parentEl, true);
 		}
 
+		@Override
+		public String canMove(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
+			return theParent.canMove(strip(valueEl), strip(after), strip(before));
+		}
+
+		@Override
+		public DerivedCollectionElement<T> move(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after,
+			DerivedCollectionElement<T> before, boolean first, Runnable afterRemove) {
+			return new CombinedElement(theParent.move(strip(valueEl), strip(after), strip(before), first, afterRemove), true);
+		}
+
 		private DerivedCollectionElement<I> strip(DerivedCollectionElement<T> el) {
 			return el == null ? null : ((CombinedElement) el).theParentEl;
 		}
@@ -4424,6 +4559,17 @@ public class ObservableCollectionDataFlowImpl {
 			return parentEl == null ? null : new RefreshingElement(parentEl, true);
 		}
 
+		@Override
+		public String canMove(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
+			return theParent.canMove(strip(valueEl), strip(after), strip(before));
+		}
+
+		@Override
+		public DerivedCollectionElement<T> move(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after,
+			DerivedCollectionElement<T> before, boolean first, Runnable afterRemove) {
+			return new RefreshingElement(theParent.move(strip(valueEl), strip(after), strip(before), first, afterRemove), true);
+		}
+
 		private DerivedCollectionElement<T> strip(DerivedCollectionElement<T> el) {
 			return el == null ? null : ((RefreshingElement) el).theParentEl;
 		}
@@ -4671,6 +4817,17 @@ public class ObservableCollectionDataFlowImpl {
 			boolean first) {
 			DerivedCollectionElement<T> parentEl = theParent.addElement(value, strip(after), strip(before), first);
 			return parentEl == null ? null : new RefreshingElement(parentEl);
+		}
+
+		@Override
+		public String canMove(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
+			return theParent.canMove(strip(valueEl), strip(after), strip(before));
+		}
+
+		@Override
+		public DerivedCollectionElement<T> move(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after,
+			DerivedCollectionElement<T> before, boolean first, Runnable afterRemove) {
+			return new RefreshingElement(theParent.move(strip(valueEl), strip(after), strip(before), first, afterRemove));
 		}
 
 		private DerivedCollectionElement<T> strip(DerivedCollectionElement<T> el) {
@@ -5081,6 +5238,21 @@ public class ObservableCollectionDataFlowImpl {
 			return parentEl == null ? null : new ModFilteredElement(parentEl);
 		}
 
+		@Override
+		public String canMove(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
+			String msg = theFilter.canMove();
+			if (msg == null)
+				return theParent.canMove(strip(valueEl), strip(after), strip(before));
+			return msg;
+		}
+
+		@Override
+		public DerivedCollectionElement<T> move(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after,
+			DerivedCollectionElement<T> before, boolean first, Runnable afterRemove) {
+			theFilter.assertMovable();
+			return new ModFilteredElement(theParent.move(strip(valueEl), strip(after), strip(before), first, afterRemove));
+		}
+
 		private DerivedCollectionElement<T> strip(DerivedCollectionElement<T> el) {
 			return el == null ? null : ((ModFilteredElement) el).theParentEl;
 		}
@@ -5302,102 +5474,207 @@ public class ObservableCollectionDataFlowImpl {
 			}
 		}
 
+		class FlattenedHolderIter {
+			FlattenedHolder holder;
+			DerivedCollectionElement<T> lowBound;
+			DerivedCollectionElement<T> highBound;
+		}
+
+		class InterElementIterable implements Iterable<FlattenedHolderIter> {
+			private final FlattenedElement start;
+			private final FlattenedElement end;
+			private final boolean ascending;
+
+			InterElementIterable(DerivedCollectionElement<T> start, DerivedCollectionElement<T> end, boolean ascending) {
+				this.start = (FlattenedManager<E, I, T>.FlattenedElement) start;
+				this.end = (FlattenedManager<E, I, T>.FlattenedElement) end;
+				this.ascending = ascending;
+			}
+
+			@Override
+			public Iterator<FlattenedHolderIter> iterator() {
+				return new Iterator<FlattenedHolderIter>() {
+					private FlattenedHolder theHolder;
+					private FlattenedHolderIter theIterStruct;
+
+					{
+						if (start == null)
+							theHolder = CollectionElement.get(theOuterElements.getTerminalElement(ascending));
+						else
+							theHolder = start.theHolder;
+						theIterStruct = new FlattenedHolderIter();
+					}
+
+					@Override
+					public boolean hasNext() {
+						if (theHolder == null)
+							return false;
+						else if (end == null)
+							return true;
+						int comp = theHolder.holderElement.compareTo(end.theHolder.holderElement);
+						if (comp == 0)
+							return true;
+						else
+							return (comp < 0) == ascending;
+					}
+
+					@Override
+					public FlattenedHolderIter next() {
+						if (!hasNext())
+							throw new NoSuchElementException();
+						theIterStruct.holder = theHolder;
+						if (ascending) {
+							if (start == null || !theHolder.equals(start.theHolder))
+								theIterStruct.lowBound = null;
+							else
+								theIterStruct.lowBound = (DerivedCollectionElement<T>) start.theParentEl;
+							if (end == null || !theHolder.equals(end.theHolder))
+								theIterStruct.highBound = null;
+							else
+								theIterStruct.highBound = (DerivedCollectionElement<T>) end.theParentEl;
+						} else {
+							if (end == null || !theHolder.equals(end.theHolder))
+								theIterStruct.lowBound = null;
+							else
+								theIterStruct.lowBound = (DerivedCollectionElement<T>) end.theParentEl;
+							if (start == null || !theHolder.equals(start.theHolder))
+								theIterStruct.highBound = null;
+							else
+								theIterStruct.highBound = (DerivedCollectionElement<T>) start.theParentEl;
+						}
+						do {
+							theHolder = CollectionElement.get(theOuterElements.getAdjacentElement(theHolder.holderElement, ascending));
+						} while (theHolder.manager == null);
+						return theIterStruct;
+					}
+				};
+			}
+		}
+
 		@Override
 		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
-			String msg = null;
+			String firstMsg = null;
 			try (Transaction t = theParent.lock(false, null)) {
-				boolean addable = false, firstOuter = false, lastOuter = false;
-				CollectionElement<FlattenedHolder> holderEl = after == null ? theOuterElements.getTerminalElement(true)
-					: theOuterElements.getElement(((FlattenedElement) after).theHolder.holderElement);
-				while (holderEl != null && !addable && !lastOuter) {
-					FlattenedHolder holder = holderEl.get();
-					lastOuter = before != null && ((FlattenedElement) before).theHolder.holderElement.equals(holderEl.getElementId());
-					if (holder.manager == null)
-						continue;
-					if (!TypeTokens.get().isInstance(holder.manager.getTargetType(), toAdd)
-						|| !holder.manager.equivalence().isElement(toAdd)) {
+				for (FlattenedHolderIter holder : new InterElementIterable(after, before, true)) {
+					String msg;
+					if (!TypeTokens.get().isInstance(holder.holder.manager.getTargetType(), toAdd)
+						|| !holder.holder.manager.equivalence().isElement(toAdd)) {
 						msg = StdMsg.ILLEGAL_ELEMENT;
-						continue;
-					}
-					DerivedCollectionElement<T> innerAfter, innerBefore;
-					if (after != null && firstOuter)
-						innerAfter = (DerivedCollectionElement<T>) ((FlattenedElement) after).theParentEl;
-					else
-						innerAfter = null;
-					if (before != null && lastOuter)
-						innerBefore = (DerivedCollectionElement<T>) ((FlattenedElement) before).theParentEl;
-					else
-						innerBefore = null;
-					msg = ((ActiveCollectionManager<?, ?, T>) holder.manager).canAdd(toAdd, innerAfter, innerBefore);
-					addable = msg == null;
-					firstOuter = false;
+					} else
+						msg = ((ActiveCollectionManager<?, ?, T>) holder.holder.manager).canAdd(toAdd, holder.lowBound, holder.highBound);
+					if (msg == null)
+						return null;
+					else if (firstMsg == null)
+						firstMsg = msg;
 				}
-				if (addable)
-					return null;
 			}
-			if (msg == null)
-				msg = StdMsg.UNSUPPORTED_OPERATION;
-			return msg;
+			if (firstMsg == null)
+				firstMsg = StdMsg.UNSUPPORTED_OPERATION;
+			return firstMsg;
 		}
 
 		@Override
 		public DerivedCollectionElement<T> addElement(T value, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before,
 			boolean first) {
-			String msg = null;
-			DerivedCollectionElement<T> added = null;
 			try (Transaction t = theParent.lock(false, null)) {
-				CollectionElement<FlattenedHolder> holderEl;
-				if (first) {
-					if (after != null)
-						holderEl = theOuterElements.getElement(((FlattenedElement) after).theHolder.holderElement);
-					else
-						holderEl = theOuterElements.getTerminalElement(true);
-				} else {
-					if (before != null)
-						holderEl = theOuterElements.getElement(((FlattenedElement) before).theHolder.holderElement);
-					else
-						holderEl = theOuterElements.getTerminalElement(false);
-				}
-				boolean firstOuter = first;
-				boolean lastOuter = !first;
-				while (holderEl != null) {
-					FlattenedHolder holder = holderEl.get();
-					if (!lastOuter && first)
-						lastOuter = before != null
-						&& ((FlattenedElement) before).theHolder.holderElement.equals(holderEl.getElementId());
-					if (!firstOuter && !first)
-						firstOuter = after != null && ((FlattenedElement) after).theHolder.holderElement.equals(holderEl.getElementId());
-					if (holder.manager == null)
-						continue;
-					if (!TypeTokens.get().isInstance(holder.manager.getTargetType(), value)
-						|| !holder.manager.equivalence().isElement(value)) {
+				String firstMsg = null;
+				for (FlattenedHolderIter holder : new InterElementIterable(after, before, first)) {
+					String msg;
+					if (!TypeTokens.get().isInstance(holder.holder.manager.getTargetType(), value)
+						|| !holder.holder.manager.equivalence().isElement(value)) {
 						msg = StdMsg.ILLEGAL_ELEMENT;
-						continue;
+					} else
+						msg = ((ActiveCollectionManager<?, ?, T>) holder.holder.manager).canAdd(value, holder.lowBound, holder.highBound);
+					if (msg == null) {
+						DerivedCollectionElement<T> added = ((ActiveCollectionManager<?, ?, T>) holder.holder.manager).addElement(value,
+							holder.lowBound, holder.highBound, first);
+						if (added != null)
+							return new FlattenedElement(holder.holder, added, true);
 					}
-					DerivedCollectionElement<T> innerAfter, innerBefore;
-					if (after != null && firstOuter)
-						innerAfter = (DerivedCollectionElement<T>) ((FlattenedElement) after).theParentEl;
-					else
-						innerAfter = null;
-					if (before != null && lastOuter)
-						innerBefore = (DerivedCollectionElement<T>) ((FlattenedElement) before).theParentEl;
-					else
-						innerBefore = null;
-					msg = ((ActiveCollectionManager<?, ?, T>) holder.manager).canAdd(value, innerAfter, innerBefore);
-					if (msg == null)
-						added = ((ActiveCollectionManager<?, ?, T>) holder.manager).addElement(value, innerAfter, innerBefore, first);
+					else if (firstMsg == null)
+						firstMsg = msg;
+				}
+				if (firstMsg == null || firstMsg.equals(StdMsg.UNSUPPORTED_OPERATION))
+					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				else
+					throw new IllegalArgumentException(firstMsg);
+			}
+		}
 
-					firstOuter = false;
-					if (first ? lastOuter : firstOuter)
-						break;
+		@Override
+		public String canMove(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
+			FlattenedElement flatV = (FlattenedManager<E, I, T>.FlattenedElement) valueEl;
+			String firstMsg = null;
+			try (Transaction t = theParent.lock(false, null)) {
+				String removable = flatV.theParentEl.canRemove();
+				T value = flatV.theParentEl.get();
+				for (FlattenedHolderIter holder : new InterElementIterable(after, before, true)) {
+					String msg;
+					if (holder.holder.equals(flatV.theHolder))
+						msg = ((ActiveCollectionManager<?, ?, T>) holder.holder.manager)
+						.canMove((DerivedCollectionElement<T>) flatV.theParentEl, holder.lowBound, holder.highBound);
+					else if (!TypeTokens.get().isInstance(holder.holder.manager.getTargetType(), value)
+						|| !holder.holder.manager.equivalence().isElement(value)) {
+						msg = StdMsg.ILLEGAL_ELEMENT;
+					} else if (removable != null)
+						msg = removable;
+					else
+						msg = ((ActiveCollectionManager<?, ?, T>) holder.holder.manager).canAdd(value, holder.lowBound, holder.highBound);
+					if (msg == null)
+						return null;
+					else if (firstMsg == null)
+						firstMsg = msg;
 				}
 			}
-			if (added != null)
-				return added;
-			if (msg == null || msg.equals(StdMsg.UNSUPPORTED_OPERATION))
-				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-			else
-				throw new IllegalArgumentException(msg);
+			if (firstMsg == null)
+				firstMsg = StdMsg.UNSUPPORTED_OPERATION;
+			return firstMsg;
+		}
+
+		@Override
+		public DerivedCollectionElement<T> move(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after,
+			DerivedCollectionElement<T> before, boolean first, Runnable afterRemove) {
+			FlattenedElement flatV = (FlattenedManager<E, I, T>.FlattenedElement) valueEl;
+			String firstMsg = null;
+			try (Transaction t = theParent.lock(false, null)) {
+				String removable = flatV.theParentEl.canRemove();
+				T value = flatV.theParentEl.get();
+				DerivedCollectionElement<T> moved = null;
+				for (FlattenedHolderIter holder : new InterElementIterable(after, before, true)) {
+					String msg;
+					if (holder.holder.equals(flatV.theHolder)) {
+						msg = ((ActiveCollectionManager<?, ?, T>) holder.holder.manager)
+							.canMove((DerivedCollectionElement<T>) flatV.theParentEl, holder.lowBound, holder.highBound);
+						if (msg == null)
+							moved = ((ActiveCollectionManager<?, ?, T>) holder.holder.manager).move(
+								(DerivedCollectionElement<T>) flatV.theParentEl, holder.lowBound, holder.highBound, first, afterRemove);
+					} else if (!TypeTokens.get().isInstance(holder.holder.manager.getTargetType(), value)
+						|| !holder.holder.manager.equivalence().isElement(value)) {
+						msg = StdMsg.ILLEGAL_ELEMENT;
+					} else if (removable != null)
+						msg = removable;
+					else {
+						msg = ((ActiveCollectionManager<?, ?, T>) holder.holder.manager).canAdd(value, holder.lowBound, holder.highBound);
+						if (msg == null) {
+							flatV.theParentEl.remove();
+							if (afterRemove != null)
+								afterRemove.run();
+							moved = ((ActiveCollectionManager<?, ?, T>) holder.holder.manager).addElement(value, holder.lowBound,
+								holder.highBound, first);
+							if (moved == null)
+								throw new IllegalStateException("Removed, but unable to re-add");
+						}
+					}
+					if (moved != null)
+						return new FlattenedElement(holder.holder, moved, true);
+					else if (firstMsg == null)
+						firstMsg = msg;
+				}
+				if (firstMsg == null || firstMsg.equals(StdMsg.UNSUPPORTED_OPERATION))
+					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				else
+					throw new IllegalArgumentException(firstMsg);
+			}
 		}
 
 		@Override

@@ -244,6 +244,32 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	}
 
 	@Override
+	public String canMove(ElementId valueEl, ElementId after, ElementId before) {
+		try (Transaction t = theCollection.lock(false, null)) {
+			flush();
+			ElementId srcValue = theSyntheticBacking.getElement(valueEl).get().sourceId;
+			ElementId srcAfter = after == null ? null : theSyntheticBacking.getElement(after).get().sourceId;
+			ElementId srcBefore = before == null ? null : theSyntheticBacking.getElement(before).get().sourceId;
+			return theCollection.canMove(srcValue, srcAfter, srcBefore);
+		}
+	}
+
+	@Override
+	public CollectionElement<E> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
+		throws UnsupportedOperationException, IllegalArgumentException {
+		try (Transaction t = theCollection.lock(true, null)) {
+			flush();
+			ElementId srcValue = theSyntheticBacking.getElement(valueEl).get().sourceId;
+			ElementId srcAfter = after == null ? null : theSyntheticBacking.getElement(after).get().sourceId;
+			ElementId srcBefore = before == null ? null : theSyntheticBacking.getElement(before).get().sourceId;
+			CollectionElement<E> srcEl = theCollection.move(srcValue, srcAfter, srcBefore, first, afterRemove);
+			ElementRef<E> ref = theSyntheticBacking
+				.search(r -> srcEl.getElementId().compareTo(r.sourceId), BetterSortedList.SortedSearchFilter.OnlyMatch).get();
+			return getElement(ref.synthId);
+		}
+	}
+
+	@Override
 	public Transaction lock(boolean write, Object cause) {
 		return theCollection.lock(write, cause);
 	}

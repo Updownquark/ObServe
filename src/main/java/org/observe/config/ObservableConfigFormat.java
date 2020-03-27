@@ -904,7 +904,7 @@ public interface ObservableConfigFormat<E> {
 			F newValue = field.format.parse(ctxFor(entityConfig, fieldConfig, () -> entityConfig.addChild(field.childName), change,
 				ctx.getUntil(), oldValue, ctx.findReferences(), fv -> field.setter.accept(ctx.getPreviousValue(), fv)));
 			if (oldValue != newValue)
-				((ConfiguredValueField<E, Object>) field).set(ctx.getPreviousValue(), newValue);
+				field.setter.accept(ctx.getPreviousValue(), newValue);
 		}
 	}
 

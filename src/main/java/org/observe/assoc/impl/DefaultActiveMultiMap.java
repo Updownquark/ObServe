@@ -958,6 +958,30 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		}
 
 		@Override
+		public String canMove(ElementId valueEl, ElementId after, ElementId before) {
+			DerivedCollectionElement<V> valueEl2 = theValues.getElement(valueEl).get().theValueElement;
+			DerivedCollectionElement<V> afterEl = after == null ? null : theValues.getElement(after).get().theValueElement;
+			DerivedCollectionElement<V> beforeEl = before == null ? null : theValues.getElement(before).get().theValueElement;
+			try (Transaction t = getAddKey().lock()) {
+				getAddKey().accept(theEntry.getKey());
+				return getValueManager().canMove(valueEl2, afterEl, beforeEl);
+			}
+		}
+
+		@Override
+		public CollectionElement<V> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			DerivedCollectionElement<V> valueEl2 = theValues.getElement(valueEl).get().theValueElement;
+			DerivedCollectionElement<V> afterEl = after == null ? null : theValues.getElement(after).get().theValueElement;
+			DerivedCollectionElement<V> beforeEl = before == null ? null : theValues.getElement(before).get().theValueElement;
+			try (Transaction t = Lockable.lockAll(//
+				Lockable.lockable(DefaultActiveMultiMap.this, true, null), getAddKey())) {
+				getAddKey().accept(theEntry.getKey());
+				return elementFor(getValueManager().move(valueEl2, afterEl, beforeEl, first, afterRemove));
+			}
+		}
+
+		@Override
 		public void clear() {
 			try (Transaction t = DefaultActiveMultiMap.this.lock(true, null)) {
 				for (ValueRef value : theValues.reverse()) {
@@ -1159,6 +1183,24 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 			if (getElement(value, first) != null)
 				return null; // Signifying it wasn't added
 			throw new IllegalArgumentException(StdMsg.UNSUPPORTED_OPERATION);
+		}
+
+		@Override
+		public String canMove(ElementId valueEl, ElementId after, ElementId before) {
+			DerivedCollectionElement<K> valueEl2 = theActiveEntries.getElement(valueEl).get().theKeyElement;
+			DerivedCollectionElement<K> afterEl = after == null ? null : theActiveEntries.getElement(after).get().theKeyElement;
+			DerivedCollectionElement<K> beforeEl = before == null ? null : theActiveEntries.getElement(before).get().theKeyElement;
+			return theKeyManager.canMove(valueEl2, afterEl, beforeEl);
+		}
+
+		@Override
+		public CollectionElement<K> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			DerivedCollectionElement<K> valueEl2 = theActiveEntries.getElement(valueEl).get().theKeyElement;
+			DerivedCollectionElement<K> afterEl = after == null ? null : theActiveEntries.getElement(after).get().theKeyElement;
+			DerivedCollectionElement<K> beforeEl = before == null ? null : theActiveEntries.getElement(before).get().theKeyElement;
+			DerivedCollectionElement<K> newKeyEl = theKeyManager.move(valueEl2, afterEl, beforeEl, first, afterRemove);
+			return theActiveEntries.searchValue(entry -> newKeyEl.compareTo(entry.theKeyElement), SortedSearchFilter.OnlyMatch);
 		}
 
 		@Override
@@ -1475,6 +1517,17 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 			} finally {
 				getAddKey().clear();
 			}
+		}
+
+		@Override
+		public String canMove(ElementId valueEl, ElementId after, ElementId before) {
+			return "Not Implemented"; // TODO
+		}
+
+		@Override
+		public CollectionElement<V> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			throw new UnsupportedOperationException("Not Implemented"); // TODO
 		}
 
 		@Override

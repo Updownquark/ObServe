@@ -19,6 +19,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -867,6 +868,21 @@ public class ObservableConfig implements Transactable, Stamped {
 					first).getElementId();
 		child.initialize(this, el);
 		fire(CollectionChangeType.add, Arrays.asList(child), child.getName(), null);
+	}
+
+	public ObservableConfig moveChild(ObservableConfig child, ObservableConfig after, ObservableConfig before, boolean first,
+		Runnable afterRemove) {
+		try (Transaction t = lock(true, null)) {
+			if (child.getParent() != this)
+				throw new NoSuchElementException("Config is not a child of this config");
+			if (!child.theParentContentRef.isPresent())
+				throw new NoSuchElementException("Config has already been removed");
+
+			child.remove();
+			if (afterRemove != null)
+				afterRemove.run();
+			return addChild(after, before, first, child.getName(), newChild -> newChild.copyFrom(child, true));
+		}
 	}
 
 	public ObservableConfig setName(String name) {

@@ -369,6 +369,25 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 		}
 
 		@Override
+		public String canMove(ElementId valueEl, ElementId after, ElementId before) {
+			boolean reversed = theKeyManager.isReversed();
+			return theSourceValues.canMove(//
+				reversed ? valueEl.reverse() : valueEl, //
+					reversed ? ElementId.reverse(before) : after, //
+				reversed ? ElementId.reverse(after) : before);
+		}
+
+		@Override
+		public CollectionElement<V> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			boolean reversed = theKeyManager.isReversed();
+			return elementFor(theSourceValues.move(//
+				reversed ? valueEl.reverse() : valueEl, //
+					reversed ? ElementId.reverse(before) : after, //
+				reversed ? ElementId.reverse(after) : before, first, afterRemove));
+		}
+
+		@Override
 		public void clear() {
 			theSourceValues.clear();
 		}

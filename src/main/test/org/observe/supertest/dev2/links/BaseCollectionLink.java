@@ -13,7 +13,6 @@ import org.qommons.Ternian;
 import org.qommons.TestHelper;
 import org.qommons.ValueHolder;
 import org.qommons.collect.BetterList;
-import org.qommons.collect.CircularArrayList;
 import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BinaryTreeNode;
 
@@ -78,13 +77,6 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 				DefaultObservableCollection<E> base = new DefaultObservableCollection<>((TypeToken<E>) fType.getType(), backing);
 				holder.accept(new BaseCollectionLink<>(new ObservableCollectionTestDef<>(fType, base.flow(), true, true), helper));
 			});
-			if (CircularArrayList.class.getAnnotation(Deprecated.class) == null) {
-				action.or(1, () -> {
-					BetterList<E> backing = new CircularArrayList<>();
-					DefaultObservableCollection<E> base = new DefaultObservableCollection<>((TypeToken<E>) fType.getType(), backing);
-					holder.accept(new BaseCollectionLink<>(new ObservableCollectionTestDef<>(fType, base.flow(), true, true), helper));
-				});
-			}
 		}
 		/*TODO
 		 if (withSorted != Ternian.FALSE) {

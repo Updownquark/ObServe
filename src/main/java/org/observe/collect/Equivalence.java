@@ -472,6 +472,17 @@ public interface Equivalence<E> {
 		}
 
 		@Override
+		public String canMove(ElementId valueEl, ElementId after, ElementId before) {
+			return theWrapped.canMove(valueEl, after, before);
+		}
+
+		@Override
+		public CollectionElement<T2> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			return handleFor(theWrapped.move(valueEl, after, before, first, afterRemove));
+		}
+
+		@Override
 		public boolean addAll(Collection<? extends T2> c) {
 			try (Transaction t = lock(true, null); Transaction ct = Transactable.lock(c, false, null)) {
 				for (T2 e : c)

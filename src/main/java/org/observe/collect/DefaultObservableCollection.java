@@ -478,6 +478,30 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	}
 
 	@Override
+	public String canMove(ElementId valueEl, ElementId after, ElementId before) {
+		return theValues.canMove(valueEl, after, before);
+	}
+
+	@Override
+	public CollectionElement<E> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
+		throws UnsupportedOperationException, IllegalArgumentException {
+		try (Transaction t = lock(true, null)) {
+			E value = theValues.getElement(valueEl).get();
+			CollectionElement<E> el = theValues.move(valueEl, after, before, first, () -> {
+				ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(valueEl, getType(),
+					theValues.getElementsBefore(valueEl), CollectionChangeType.remove, value, value, getCurrentCause());
+				fire(event);
+				if (afterRemove != null)
+					afterRemove.run();
+			});
+			ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), getType(),
+				theValues.getElementsBefore(el.getElementId()), CollectionChangeType.add, null, value, getCurrentCause());
+			fire(event);
+			return el;
+		}
+	}
+
+	@Override
 	public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
 		return theObservers.add(observer, true)::run;
 	}

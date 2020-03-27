@@ -1364,6 +1364,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		private boolean areUpdatesAllowed;
 		private String theAddMsg;
 		private String theRemoveMsg;
+		private String theMoveMsg;
 		private Function<? super T, String> theAddMsgFn;
 		private Function<? super T, String> theRemoveMsgFn;
 
@@ -1394,6 +1395,10 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 			return theRemoveMsgFn;
 		}
 
+		public String getMoveMsg() {
+			return theMoveMsg;
+		}
+
 		public ModFilterBuilder<T> unmodifiable(String modMsg, boolean allowUpdates) {
 			theUnmodifiableMsg = modMsg;
 			areUpdatesAllowed = allowUpdates;
@@ -1407,6 +1412,11 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 
 		public ModFilterBuilder<T> noRemove(String modMsg) {
 			theRemoveMsg = modMsg;
+			return this;
+		}
+
+		public ModFilterBuilder<T> noMove(String modMsg) {
+			theMoveMsg = modMsg;
 			return this;
 		}
 

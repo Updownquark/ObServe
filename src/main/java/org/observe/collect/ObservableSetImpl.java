@@ -248,6 +248,17 @@ public class ObservableSetImpl {
 		}
 
 		@Override
+		public String canMove(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
+			return theWrapped.canMove(valueEl, after, before);
+		}
+
+		@Override
+		public DerivedCollectionElement<T> move(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after,
+			DerivedCollectionElement<T> before, boolean first, Runnable afterRemove) {
+			return theWrapped.move(valueEl, after, before, first, afterRemove);
+		}
+
+		@Override
 		public boolean clear() {
 			return theWrapped.clear();
 		}
@@ -712,6 +723,28 @@ public class ObservableSetImpl {
 			}
 		}
 
+		@Override
+		public String canMove(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
+			/*if (isPreservingSourceOrder) {
+				String msg = null;
+				for (DerivedCollectionElement<T> parentEl : ((UniqueElement) valueEl).getParentElements().keySet()) {
+					msg = theParent.canMove(parentEl, parent(after), parent(before));
+					if (msg != null)
+						break;
+				}
+				return msg;
+			} else
+				return theElementsByValue.keySet().canMove(valueElement(valueEl), valueElement(after), valueElement(before));
+			 */
+			return "Not Implemented";
+		}
+
+		@Override
+		public DerivedCollectionElement<T> move(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after,
+			DerivedCollectionElement<T> before, boolean first, Runnable afterRemove) {
+			throw new UnsupportedOperationException("Not Implemented");
+		}
+
 		private ElementId valueElement(DerivedCollectionElement<T> el) {
 			return el == null ? null : ((UniqueElement) el).theValueId;
 		}
@@ -956,7 +989,10 @@ public class ObservableSetImpl {
 					@Override
 					public void removed(T value, Object innerCause) {
 						theDebug.act("remove").param("@", theValue).exec();
-						theParentElements.mutableEntry(node.getElementId()).remove();
+						theParentElements
+						.mutableEntry(//
+							node.getElementId())//
+						.remove();
 						if (theParentElements.isEmpty()) {
 							theDebug.act("remove:remove").param("value", theValue).exec();
 							// This element is no longer represented

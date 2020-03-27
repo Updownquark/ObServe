@@ -329,6 +329,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 
 		ConfigElement theNewElement;
 		Consumer<? super ConfigElement> thePreAddAction;
+		E theMovingValue;
 
 		public ObservableConfigBackedCollection(ObservableConfig root, ObservableValue<? extends ObservableConfig> collectionElement,
 			Runnable ceCreate, TypeToken<E> type, ObservableConfigFormat<E> format, String childName, Observable<?> until, boolean listen,
@@ -532,10 +533,12 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 					theFormat.format(value.get(), null, config, v -> theValue = v, Observable.or(getUntil(), theElementObservable));
 				} else {
 					E val;
+
 					try {
 						val = theFormat.parse(ObservableConfigFormat.ctxFor(getRoot(), //
 							ObservableValue.of(this.theConfig), () -> this.theConfig.getParent().addChild(theChildName), null,
-							Observable.or(getUntil(), theElementObservable), null, findRefs, this::_set));
+							Observable.or(getUntil(), theElementObservable), theMovingValue, findRefs, this::_set));
+						theMovingValue = null;
 					} catch (ParseException e) {
 						System.err.println("Could not parse instance for " + this.theConfig);
 						e.printStackTrace();
@@ -747,6 +750,24 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 				if (sourceCollection == this)
 					return values.getSourceElements(localElement, values);
 				return values.getSourceElements(localElement, sourceCollection);
+			}
+
+			@Override
+			public String canMove(ElementId valueEl, ElementId after, ElementId before) {
+				return null;
+			}
+
+			@Override
+			public CollectionElement<E> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
+				throws UnsupportedOperationException, IllegalArgumentException {
+				try (Transaction t = lock(true, null)) {
+					ObservableConfig valueConfig = theElements.getEntryById(valueEl).get().theConfig;
+					ObservableConfig afterConfig = after == null ? null : theElements.getEntryById(after).get().theConfig;
+					ObservableConfig beforeConfig = before == null ? null : theElements.getEntryById(before).get().theConfig;
+					theMovingValue = getElement(valueEl).get();
+					ObservableConfig newConfig = getParent().get().moveChild(valueConfig, afterConfig, beforeConfig, first, afterRemove);
+					return theElements.get(newConfig.getParentChildRef()).immutable();
+				}
 			}
 
 			@Override

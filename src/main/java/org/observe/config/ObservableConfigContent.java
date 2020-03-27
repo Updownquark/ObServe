@@ -564,6 +564,21 @@ public class ObservableConfigContent {
 		}
 
 		@Override
+		public String canMove(ElementId valueEl, ElementId after, ElementId before) {
+			return null;
+		}
+
+		@Override
+		public CollectionElement<C> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			ObservableConfig valueConfig = getConfig()._getContent().getElement(valueEl).get();
+			ObservableConfig afterConfig = after == null ? null : getConfig()._getContent().getElement(after).get();
+			ObservableConfig beforeConfig = before == null ? null : getConfig()._getContent().getElement(before).get();
+			return new ConfigCollectionElement<>(getConfig()//
+				.moveChild(valueConfig, afterConfig, beforeConfig, first, afterRemove));
+		}
+
+		@Override
 		public void setValue(Collection<ElementId> elements, C value) {
 			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 		}
@@ -818,6 +833,21 @@ public class ObservableConfigContent {
 		public CollectionElement<C> addElement(C value, ElementId after, ElementId before, boolean first)
 			throws UnsupportedOperationException, IllegalArgumentException {
 			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+		}
+
+		@Override
+		public String canMove(ElementId valueEl, ElementId after, ElementId before) {
+			return null;
+		}
+
+		@Override
+		public CollectionElement<C> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			ObservableConfig valueConfig = getConfig()._getContent().getElement(valueEl).get();
+			ObservableConfig afterConfig = after == null ? null : getConfig()._getContent().getElement(after).get();
+			ObservableConfig beforeConfig = before == null ? null : getConfig()._getContent().getElement(before).get();
+			return new ConfigCollectionElement<>(getConfig()//
+				.moveChild(valueConfig, afterConfig, beforeConfig, first, afterRemove));
 		}
 
 		@Override

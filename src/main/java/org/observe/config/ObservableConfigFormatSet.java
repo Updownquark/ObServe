@@ -130,7 +130,7 @@ public class ObservableConfigFormatSet {
 			theFormatCache.put(type, format);
 			return format;
 		} else {
-			EntityReflector.Builder<T> builder = EntityReflector.build(type, true).withSupers(theReflectors);
+			EntityReflector.Builder<T> builder = EntityReflector.build(type, false).withSupers(theReflectors);
 			builder.buildNoPrint();
 			if (!builder.getMessages().isEmpty()) {
 				StringBuilder msgs = new StringBuilder();
