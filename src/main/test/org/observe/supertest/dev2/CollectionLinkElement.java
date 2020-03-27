@@ -98,6 +98,10 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 		return theCollectionLink.getElements().getElementsBefore(theElementAddress);
 	}
 
+	public int getExpectedIndex() {
+		return theCollectionLink.getExpected().getElementsBefore(theExpectedAddress);
+	}
+
 	@Override
 	public int compareTo(CollectionLinkElement<S, T> o) {
 		return theExpectedAddress.compareTo(o.theExpectedAddress);
