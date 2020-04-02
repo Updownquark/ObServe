@@ -166,7 +166,7 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 				if (sourceLink.getElementAddress().isPresent())
 					sourceLink.theDerivedElements.remove(this);
 			}
-		} else if (!collection.equivalence().elementEquals(collection.getElement(theCollectionAddress).get(), theValue)) {
+		} else if (!collection.equivalence().elementEquals(getCollectionValue(), theValue)) {
 			if (wasUpdated)
 				error(err -> err.append("Unexpected update from ").append(theValue));
 			else
@@ -177,16 +177,15 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 				error.append(err).append('\n');
 			theErrors.clear();
 		}
-		if (theElementAddress.isPresent())
+		if (theElementAddress.isPresent()) {
 			theLastKnownIndex = theCollectionLink.getElements().getElementsBefore(theElementAddress);
+			theValue = getCollectionValue();
+		}
 		wasUpdated = false;
 	}
 
 	@Override
 	public String toString() {
-		if (theCollectionAddress != null)
-			return theValue + "@" + getIndex();
-		else
-			return String.valueOf(theValue);
+		return theValue + "@" + getIndex();
 	}
 }

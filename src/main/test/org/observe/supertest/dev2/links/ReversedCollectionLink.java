@@ -27,6 +27,11 @@ public class ReversedCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 	}
 
 	@Override
+	public T getUpdateValue(T value) {
+		return getSourceLink().getUpdateValue(value);
+	}
+
+	@Override
 	public CollectionLinkElement<T, T> expectAdd(T value, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before,
 		boolean first, OperationRejection rejection) {
 		CollectionLinkElement<T, T> newElement;

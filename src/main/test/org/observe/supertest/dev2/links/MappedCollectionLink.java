@@ -59,6 +59,14 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 	}
 
 	@Override
+	public T getUpdateValue(T value) {
+		if (theOptions.isCached())
+			return value;
+		else
+			return map(getSourceLink().getUpdateValue(reverse(value)));
+	}
+
+	@Override
 	public CollectionLinkElement<S, T> expectAdd(T value, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before,
 		boolean first, OperationRejection rejection) {
 		if (theOptions.getReverse() == null) {
@@ -79,11 +87,14 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 		case remove:
 			break;
 		case set:
-			if (theOptions.isCached() && derivedOp.getValue() == derivedOp.getElement().getValue()) {
+			if (theOptions.isCached()
+				&& getCollection().equivalence().elementEquals(derivedOp.getElement().getValue(), derivedOp.getValue())) {
 				// Update, re-use the previous source value
 				CollectionLinkElement<?, S> sourceEl = (CollectionLinkElement<?, S>) derivedOp.getElement().getSourceElements().getFirst();
 				getSourceLink().expect(
 					new ExpectedCollectionOperation<>(sourceEl, derivedOp.getType(), sourceEl.getValue(), sourceEl.getValue()), rejection);
+				if (!rejection.isRejected())
+					derivedOp.getElement().setValue(derivedOp.getValue());
 				return;
 			}
 			if (theOptions.getReverse() == null) {
