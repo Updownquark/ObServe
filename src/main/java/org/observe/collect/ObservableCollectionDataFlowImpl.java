@@ -201,6 +201,9 @@ public class ObservableCollectionDataFlowImpl {
 
 		/** @return The equivalence of the collection that this operation would produce */
 		Equivalence<? super T> equivalence();
+
+		/** @return Whether this manager will prevent its collection from being able to manage elements arbitrarily */
+		boolean isContentControlled();
 	}
 
 	/**
@@ -242,6 +245,11 @@ public class ObservableCollectionDataFlowImpl {
 
 		/** @return Whether this manager may disallow some remove operations */
 		boolean isRemoveFiltered();
+
+		/** @return null if this manager allows derived collections to move elements around, or a reason otherwise */
+		default String canMove() {
+			return null;
+		}
 
 		/**
 		 * @param element The source element to map
@@ -320,9 +328,6 @@ public class ObservableCollectionDataFlowImpl {
 	 * @param <T> The type of the derived collection that this manager can power
 	 */
 	public static interface ActiveCollectionManager<E, I, T> extends CollectionOperation<E, I, T> {
-		/** @return Whether this manager's collection should be able to insert values at arbitrary positions */
-		boolean isContentControlled();
-
 		/**
 		 * @param value The value to find
 		 * @return A finder that can navigate a sorted set of elements by collection order to find an element with the given value, or null
@@ -1606,6 +1611,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public boolean isContentControlled() {
+			return theSource.isContentControlled();
+		}
+
+		@Override
 		public boolean isReversed() {
 			return false;
 		}
@@ -1878,6 +1888,11 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return theParent.tryLock(write, cause);
+		}
+
+		@Override
+		public boolean isContentControlled() {
+			return theParent.isContentControlled();
 		}
 
 		@Override
@@ -2951,6 +2966,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public boolean isContentControlled() {
+			return theParent.isContentControlled();
+		}
+
+		@Override
 		public boolean isReversed() {
 			return theParent.isReversed();
 		}
@@ -3138,6 +3158,11 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return theParent.tryLock(write, cause);
+		}
+
+		@Override
+		public boolean isContentControlled() {
+			return theOptions.getReverse() == null || theOptions.isOneToMany() || theParent.isContentControlled();
 		}
 
 		@Override
@@ -3393,7 +3418,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public boolean isContentControlled() {
-			return theOptions.getReverse() == null || theParent.isContentControlled();
+			return theOptions.getReverse() == null || theOptions.isOneToMany() || theParent.isContentControlled();
 		}
 
 		@Override
@@ -3683,6 +3708,11 @@ public class ObservableCollectionDataFlowImpl {
 
 		private Transaction lockArgs() {
 			return Lockable.lockAll(theDef.getArgs());
+		}
+
+		@Override
+		public boolean isContentControlled() {
+			return theDef.getReverse() == null || theParent.isContentControlled();
 		}
 
 		@Override
@@ -4451,6 +4481,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public boolean isContentControlled() {
+			return theParent.isContentControlled();
+		}
+
+		@Override
 		public boolean isReversed() {
 			return theParent.isReversed();
 		}
@@ -5036,6 +5071,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public boolean isContentControlled() {
+			return !theFilter.isEmpty() || theParent.isContentControlled();
+		}
+
+		@Override
 		public boolean isReversed() {
 			return theParent.isReversed();
 		}
@@ -5066,6 +5106,11 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public boolean isRemoveFiltered() {
 			return theFilter.isRemoveFiltered() || theFilter.getUnmodifiableMessage() != null || theParent.isRemoveFiltered();
+		}
+
+		@Override
+		public String canMove() {
+			return theFilter.canMove();
 		}
 
 		@Override

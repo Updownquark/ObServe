@@ -1721,7 +1721,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public boolean isContentControlled() {
-			return theSource.isContentControlled();
+			return theFlow.isContentControlled();
 		}
 
 		@Override
@@ -1799,6 +1799,7 @@ public final class ObservableCollectionImpl {
 					ElementId temp = mapId(after);
 					after = mapId(before);
 					before = temp;
+					first = !first;
 				}
 				CollectionElement<E> srcEl = theSource.addElement(reversed.result, after, before, first);
 				return srcEl == null ? null : elementFor(srcEl, null);
@@ -1807,6 +1808,9 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public String canMove(ElementId valueEl, ElementId after, ElementId before) {
+			String msg = theFlow.canMove();
+			if (msg != null)
+				return msg;
 			if (isReversed) {
 				ElementId temp = mapId(after);
 				after = mapId(before);
@@ -1818,10 +1822,16 @@ public final class ObservableCollectionImpl {
 		@Override
 		public CollectionElement<T> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
 			throws UnsupportedOperationException, IllegalArgumentException {
+			String msg = theFlow.canMove();
+			if (StdMsg.UNSUPPORTED_OPERATION.equals(msg))
+				throw new UnsupportedOperationException(msg);
+			else if (msg != null)
+				throw new IllegalArgumentException(msg);
 			if (isReversed) {
 				ElementId temp = mapId(after);
 				after = mapId(before);
 				before = temp;
+				first = !first;
 			}
 			return elementFor(theSource.move(mapId(valueEl), after, before, isReversed ^ first, afterRemove), null);
 		}
@@ -1833,10 +1843,11 @@ public final class ObservableCollectionImpl {
 			else {
 				boolean reverse = isReversed;
 				try (Transaction t = lock(true, null)) {
+					Function<? super E, ? extends T> map = theFlow.map().get();
 					CollectionElement<E> el = theSource.getTerminalElement(reverse);
 					while (el != null) {
 						MutableCollectionElement<E> mutable = theSource.mutableElement(el.getElementId());
-						if (mutable.canRemove() == null)
+						if (theFlow.map(mutable, map).canRemove() == null)
 							mutable.remove();
 						el = theSource.getAdjacentElement(el.getElementId(), reverse);
 					}
@@ -1882,15 +1893,15 @@ public final class ObservableCollectionImpl {
 				return null;
 			try (Transaction t = lock(false, null)) {
 				Function<? super E, ? extends T> map = theFlow.map().get();
+				boolean forward = first ^ isReversed;
 				if (!theFlow.isManyToOne()) {
 					// If the flow is one-to-one, we can use any search optimizations the source collection may be capable of
 					FilterMapResult<T, E> reversed = theFlow.reverse(value, false);
 					if (!reversed.isError() && equivalence().elementEquals(map.apply(reversed.result), value)) {
-						CollectionElement<E> srcEl = theSource.getElement(reversed.result, first);
+						CollectionElement<E> srcEl = theSource.getElement(reversed.result, forward);
 						return srcEl == null ? null : elementFor(srcEl, null);
 					}
 				}
-				boolean forward = first ^ isReversed;
 				CollectionElement<E> el = theSource.getTerminalElement(forward);
 				while (el != null) {
 					if (equivalence().elementEquals(map.apply(el.get()), value))
