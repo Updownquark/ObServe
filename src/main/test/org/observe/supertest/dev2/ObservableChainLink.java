@@ -1,5 +1,7 @@
 package org.observe.supertest.dev2;
 
+import java.util.List;
+
 import org.qommons.TestHelper;
 import org.qommons.Transactable;
 
@@ -8,7 +10,7 @@ public interface ObservableChainLink<S, T> extends Transactable {
 
 	ObservableChainLink<?, S> getSourceLink();
 
-	ObservableChainLink<T, ?> getDerivedLink();
+	List<? extends ObservableChainLink<T, ?>> getDerivedLinks();
 
 	void initialize(TestHelper helper);
 
@@ -18,5 +20,5 @@ public interface ObservableChainLink<S, T> extends Transactable {
 
 	String printValue();
 
-	<X> ObservableChainLink<T, X> derive(TestHelper helper);
+	<X> void derive(TestHelper helper);
 }

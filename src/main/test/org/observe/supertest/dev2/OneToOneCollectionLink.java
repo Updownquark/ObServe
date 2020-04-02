@@ -93,8 +93,8 @@ public abstract class OneToOneCollectionLink<S, T> extends ObservableCollectionL
 		CollectionLinkElement<S, T> newElement = addFromSource(sourceEl, map(sourceEl.get()));
 		ExpectedCollectionOperation<S, T> result = new ExpectedCollectionOperation<>(newElement, CollectionChangeType.add, null,
 			newElement.get());
-		if (getDerivedLink() != null)
-			getDerivedLink().expectFromSource(result);
+		for (ObservableCollectionLink<T, ?> derivedLink : getDerivedLinks())
+			derivedLink.expectFromSource(result);
 		return BetterList.of(result);
 	}
 
@@ -102,8 +102,8 @@ public abstract class OneToOneCollectionLink<S, T> extends ObservableCollectionL
 		CollectionLinkElement<S, T> element = (CollectionLinkElement<S, T>) sourceEl.getDerivedElements().getFirst().expectRemoval();
 		ExpectedCollectionOperation<S, T> result = new ExpectedCollectionOperation<>(element, CollectionChangeType.remove, element.get(),
 			element.get());
-		if (getDerivedLink() != null)
-			getDerivedLink().expectFromSource(result);
+		for (ObservableCollectionLink<T, ?> derivedLink : getDerivedLinks())
+			derivedLink.expectFromSource(result);
 		return BetterList.of(result);
 	}
 
@@ -116,8 +116,8 @@ public abstract class OneToOneCollectionLink<S, T> extends ObservableCollectionL
 		element.setValue(map(sourceEl.get()));
 		ExpectedCollectionOperation<S, T> result = new ExpectedCollectionOperation<>(element, CollectionChangeType.set, oldValue,
 			element.get());
-		if (getDerivedLink() != null)
-			getDerivedLink().expectFromSource(result);
+		for (ObservableCollectionLink<T, ?> derivedLink : getDerivedLinks())
+			derivedLink.expectFromSource(result);
 		return BetterList.of(result);
 	}
 }

@@ -5,7 +5,9 @@ import static org.observe.collect.CollectionChangeType.remove;
 import static org.observe.collect.CollectionChangeType.set;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
@@ -54,7 +56,7 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 	private final ObservableCollection<T> theMultiStepCollection;
 	private final ObservableCollectionTester<T> theMultiStepTester;
 	private final ObservableCollectionLink<?, S> theSourceLink;
-	private ObservableCollectionLink<T, ?> theDerivedLink;
+	private List<ObservableCollectionLink<T, ?>> theDerivedLinks;
 	private final Function<TestHelper, T> theSupplier;
 
 	private final BetterTreeList<CollectionLinkElement<S, T>> theElements;
@@ -63,6 +65,7 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 	public ObservableCollectionLink(ObservableCollectionLink<?, S> sourceLink, ObservableCollectionTestDef<T> def, TestHelper helper) {
 		theDef = def;
 		theSourceLink = sourceLink;
+		theDerivedLinks = Collections.emptyList();
 		theSupplier = (Function<TestHelper, T>) ObservableChainTester.SUPPLIERS.get(def.type);
 		theElements = new BetterTreeList<>(false);
 		theElementsForCollection = new BetterTreeList<>(false);
@@ -133,8 +136,8 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 	}
 
 	@Override
-	public ObservableCollectionLink<T, ?> getDerivedLink() {
-		return theDerivedLink;
+	public List<ObservableCollectionLink<T, ?>> getDerivedLinks() {
+		return theDerivedLinks;
 	}
 
 	@Override
@@ -375,7 +378,7 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 	}
 
 	@Override
-	public <X> ObservableChainLink<T, X> derive(TestHelper helper) {
+	public <X> void derive(TestHelper helper) {
 		TestHelper.RandomSupplier<ObservableCollectionLink<T, X>> action = helper//
 			.<ObservableCollectionLink<T, X>> supply(1, () -> { // map
 				TestValueType nextType = TestValueType.nextType(helper);
@@ -553,8 +556,7 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 		// TODO groupBy(Sorted)
 		;
 		ObservableCollectionLink<T, X> derived = action.get(null);
-		theDerivedLink = derived;
-		return derived;
+		theDerivedLinks = Arrays.asList(derived);
 	}
 
 	protected ObservableCollectionLink<T, T> deriveDistinct(TestHelper helper, boolean asRoot) {
@@ -811,8 +813,8 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 					if (op.minIndex >= 0
 						&& (index < op.context.subListStart + op.minIndex || index > op.context.subListStart + op.maxIndex + added))
 						throw new AssertionError("Added in wrong location");
-					if (theDerivedLink != null)
-						theDerivedLink.expectFromSource(//
+					for (ObservableCollectionLink<T, ?> derivedLink : theDerivedLinks)
+						derivedLink.expectFromSource(//
 							new ExpectedCollectionOperation<>(el.element, op.type, null, el.element.getCollectionValue()));
 				}
 			}
@@ -826,8 +828,8 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 				expect(//
 					new ExpectedCollectionOperation<>(exEl, op.type, exEl.get(), exEl.get()), el);
 				if (!el.isRejected()) {
-					if (theDerivedLink != null)
-						theDerivedLink.expectFromSource(//
+					for (ObservableCollectionLink<T, ?> derivedLink : theDerivedLinks)
+						derivedLink.expectFromSource(//
 							new ExpectedCollectionOperation<>(exEl, op.type, el.element.getValue(), el.element.getValue()));
 				}
 			}
@@ -839,8 +841,8 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 				expect(//
 					new ExpectedCollectionOperation<>(exEl, op.type, oldValue, op.value), el);
 				if (!el.isRejected()) {
-					if (theDerivedLink != null)
-						theDerivedLink.expectFromSource(//
+					for (ObservableCollectionLink<T, ?> derivedLink : theDerivedLinks)
+						derivedLink.expectFromSource(//
 							new ExpectedCollectionOperation<>(exEl, op.type, oldValue, op.value));
 				}
 			}
@@ -1013,6 +1015,8 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 
 		for (i = 0; i < op.elements.size(); i++)
 			Assert.assertEquals(op.elements.get(i).getMessage() != null, msgs[i] != null);
+		if (!getCollection().isContentControlled() && addable < op.elements.size())
+			throw new AssertionError("Uncontrolled collection failed to add some values");
 		Assert.assertEquals(modified, addable > 0);
 		Assert.assertEquals(preModSize + addable, modify.size());
 		Assert.assertEquals(preSize + addable, getCollection().size());
@@ -1060,6 +1064,8 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 		expectModification(op, helper);
 
 		CollectionOpElement el = op.elements.get(0);
+		if (!getCollection().isContentControlled() && el.element != null && msg != null)
+			throw new AssertionError("Uncontrolled collection failed to remove element");
 		Assert.assertEquals(el.getMessage() != null, msg != null);
 		Assert.assertEquals(el.isError(), error);
 		if (error)
@@ -1103,6 +1109,8 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 		for (int i = 0; i < msgs.length; i++)
 			Assert.assertEquals(op.elements.get(i).getMessage() != null, msgs[i] != null);
 
+		if (!getCollection().isContentControlled() && removable < op.elements.size())
+			throw new AssertionError("Uncontrolled collection failed to remove element(s)");
 		Assert.assertEquals(expectError, error);
 		if (error) {
 			Assert.assertTrue(modify.size() > preModSize - (op.maxIndex - op.minIndex));
@@ -1130,6 +1138,8 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 			if (getCollection() instanceof Set)
 				Assert.assertNull(getCollection().getElement(el.element.getValue(), true));
 		}
+		if (!getCollection().isContentControlled() && removable < op.elements.size())
+			throw new AssertionError("Uncontrolled collection failed to remove element(s)");
 		Assert.assertEquals(removable > 0, modified);
 		Assert.assertEquals(preModSize - removable, modify.size());
 		Assert.assertEquals(preSize - removable, getCollection().size());
@@ -1152,6 +1162,8 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 			if (getCollection() instanceof Set)
 				Assert.assertNull(getCollection().getElement(el.element.getValue(), true));
 		}
+		if (!getCollection().isContentControlled() && removable < op.elements.size())
+			throw new AssertionError("Uncontrolled collection failed to remove element(s)");
 		Assert.assertEquals(removable > 0, modified);
 		Assert.assertEquals(preModSize - removable, modify.size());
 		Assert.assertEquals(preSize - removable, getCollection().size());
@@ -1184,6 +1196,8 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 
 		boolean shouldBeSettable = el.getMessage() == null;
 		boolean wasSettable = msg == null;
+		if (!getCollection().isContentControlled() && !wasSettable)
+			throw new AssertionError("Uncontrolled collection failed to set element");
 		Assert.assertEquals(shouldBeSettable, wasSettable);
 		Assert.assertEquals(el.isError(), error);
 		if (error)
@@ -1213,6 +1227,8 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 			if (getCollection() instanceof Set)
 				Assert.assertNull(getCollection().getElement(el.element.getValue(), true));
 		}
+		if (!getCollection().isContentControlled() && removed < op.elements.size())
+			throw new AssertionError("Uncontrolled collection failed to remove element(s)");
 		Assert.assertEquals(preModSize - removed, op.context.modify.size());
 		Assert.assertEquals(preSize - removed, getCollection().size());
 	}

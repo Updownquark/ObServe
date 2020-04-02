@@ -86,7 +86,9 @@ public class ObservableChainTester implements Testable {
 		theChain.add(initLink);
 		initLink.initialize(helper);
 		while (theChain.size() < chainLength) {
-			ObservableChainLink<?, ?> nextLink = theChain.get(theChain.size() - 1).derive(helper);
+			ObservableChainLink<?, ?> link = theChain.get(theChain.size() - 1);
+			link.derive(helper);
+			ObservableChainLink<?, ?> nextLink = link.getDerivedLinks().get(0);
 			theChain.add(nextLink);
 			nextLink.initialize(helper);
 		}
