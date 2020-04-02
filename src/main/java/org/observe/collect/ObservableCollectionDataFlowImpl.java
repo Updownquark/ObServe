@@ -807,7 +807,7 @@ public class ObservableCollectionDataFlowImpl {
 			String msg = null;
 			if (isAddFiltered() || isRemoveFiltered() || (theUnmodifiableMessage != null && areUpdatesAllowed)) {
 				T old = oldValue.get();
-				if (old == value) {
+				if (old == value && areUpdatesAllowed) {
 					// An update. These are treated differently. These can only be prevented explicitly.
 				} else {
 					// Non-updates are treated
@@ -5165,7 +5165,8 @@ public class ObservableCollectionDataFlowImpl {
 
 			@Override
 			public String isAcceptable(T value) {
-				String msg = theFilter.isAcceptable(value, this::get);
+				String msg = theFilter.isAcceptable(value, //
+					this::get);
 				if (msg == null)
 					msg = theParentMapped.isAcceptable(value);
 				return msg;
@@ -5173,13 +5174,15 @@ public class ObservableCollectionDataFlowImpl {
 
 			@Override
 			public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
-				theFilter.assertSet(value, this::get);
+				theFilter.assertSet(value, //
+					this::get);
 				theParentMapped.set(value);
 			}
 
 			@Override
 			public String canRemove() {
-				String msg = theFilter.canRemove(this::get);
+				String msg = theFilter.canRemove(//
+					this::get);
 				if (msg == null)
 					msg = theParentMapped.canRemove();
 				return msg;
@@ -5187,7 +5190,8 @@ public class ObservableCollectionDataFlowImpl {
 
 			@Override
 			public void remove() throws UnsupportedOperationException {
-				theFilter.assertRemove(this::get);
+				theFilter.assertRemove(//
+					this::get);
 				theParentMapped.remove();
 			}
 
