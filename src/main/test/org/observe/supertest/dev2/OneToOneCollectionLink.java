@@ -2,6 +2,7 @@ package org.observe.supertest.dev2;
 
 import java.util.List;
 
+import org.junit.Assert;
 import org.observe.collect.CollectionChangeType;
 import org.qommons.TestHelper;
 import org.qommons.collect.BetterList;
@@ -98,8 +99,10 @@ public abstract class OneToOneCollectionLink<S, T> extends ObservableCollectionL
 
 	@Override
 	protected void validate(CollectionLinkElement<S, T> element) {
-		if (element.isPresent())
+		if (element.isPresent()) {
+			Assert.assertEquals(1, element.getSourceElements().size());
 			checkOrder(element);
+		}
 	}
 
 	protected CollectionLinkElement<S, T> addFromSource(CollectionLinkElement<?, S> sourceEl, T value) {
