@@ -320,11 +320,6 @@ public class ObservableSortedSetImpl {
 		public CollectionElement<E> search(Comparable<? super E> search, BetterSortedList.SortedSearchFilter filter) {
 			return CollectionElement.reverse(getWrapped().search(v -> -search.compareTo(v), filter.opposite()));
 		}
-
-		@Override
-		public ObservableSortedSet<E> reverse() {
-			return (ObservableSortedSet<E>) super.reverse();
-		}
 	}
 
 	/**

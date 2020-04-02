@@ -1629,11 +1629,6 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public ObservableCollection<E> reverse() {
-			return getWrapped();
-		}
-
-		@Override
 		public E[] toArray() {
 			return ObservableCollection.super.toArray();
 		}

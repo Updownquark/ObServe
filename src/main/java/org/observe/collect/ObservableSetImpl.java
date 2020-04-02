@@ -102,11 +102,6 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public ObservableSet<E> reverse() {
-			return getWrapped();
-		}
-
-		@Override
 		public String toString() {
 			return BetterSet.toString(this);
 		}
