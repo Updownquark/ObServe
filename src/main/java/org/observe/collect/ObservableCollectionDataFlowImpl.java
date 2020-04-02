@@ -3601,7 +3601,8 @@ public class ObservableCollectionDataFlowImpl {
 			public String isEnabled() {
 				if (theOptions.getElementReverse() != null)
 					return null;
-				if (theOptions.getReverse() == null)
+				// If we're caching, updates are enabled even without a reverse map
+				if (theOptions.getReverse() == null && !theOptions.isCached())
 					return StdMsg.UNSUPPORTED_OPERATION;
 				return theParentEl.isEnabled();
 			}
@@ -3614,11 +3615,16 @@ public class ObservableCollectionDataFlowImpl {
 					if (msg == null)
 						return null;
 				}
-				if (theOptions.getReverse() == null)
-					return StdMsg.UNSUPPORTED_OPERATION;
-				I reversed = theOptions.getReverse().apply(value);
-				if (!theEquivalence.elementEquals(theMap.apply(reversed, value), value))
-					return StdMsg.ILLEGAL_ELEMENT;
+				I reversed;
+				if (theOptions.isCached() && equivalence().elementEquals(theValue, value)) {
+					reversed = theCacheHandler.getSourceCache();
+				} else {
+					if (theOptions.getReverse() == null)
+						return StdMsg.UNSUPPORTED_OPERATION;
+					reversed = theOptions.getReverse().apply(value);
+					if (!theEquivalence.elementEquals(theMap.apply(reversed, value), value))
+						return StdMsg.ILLEGAL_ELEMENT;
+				}
 				String setMsg = theParentEl.isAcceptable(reversed);
 				// If the element reverse is set, it should get the final word on the error message if
 				if (setMsg == null || msg == null)
@@ -3633,7 +3639,7 @@ public class ObservableCollectionDataFlowImpl {
 						return;
 				}
 				I reversed;
-				if (theOptions.isCached() && value == theValue)
+				if (theOptions.isCached() && equivalence().elementEquals(theValue, value))
 					reversed = theCacheHandler.getSourceCache();
 				else if (theOptions.getReverse() == null)
 					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
@@ -5375,7 +5381,8 @@ public class ObservableCollectionDataFlowImpl {
 
 			@Override
 			public String isAcceptable(T value) {
-				String msg = theFilter.isAcceptable(value, this::get);
+				String msg = theFilter.isAcceptable(value, //
+					this::get);
 				if (msg == null)
 					msg = theParentEl.isAcceptable(value);
 				return msg;
@@ -5383,7 +5390,8 @@ public class ObservableCollectionDataFlowImpl {
 
 			@Override
 			public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
-				theFilter.assertSet(value, this::get);
+				theFilter.assertSet(value, //
+					this::get);
 				theParentEl.set(value);
 			}
 
@@ -5398,7 +5406,8 @@ public class ObservableCollectionDataFlowImpl {
 
 			@Override
 			public void remove() throws UnsupportedOperationException {
-				theFilter.assertRemove(this::get);
+				theFilter.assertRemove(//
+					this::get);
 				theParentEl.remove();
 			}
 
