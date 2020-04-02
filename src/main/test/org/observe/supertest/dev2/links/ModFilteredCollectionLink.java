@@ -38,7 +38,7 @@ public class ModFilteredCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 	}
 
 	@Override
-	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection) {
+	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection, int derivedIndex) {
 		String msg = null;
 		switch (derivedOp.getType()) {
 		case add:
@@ -63,18 +63,18 @@ public class ModFilteredCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 		if (msg != null)
 			rejection.reject(msg, true);
 		else
-			super.expect(derivedOp, rejection);
+			super.expect(derivedOp, rejection, derivedIndex);
 	}
 
 	@Override
 	public CollectionLinkElement<T, T> expectAdd(T value, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before,
-		boolean first, OperationRejection rejection) {
+		boolean first, OperationRejection rejection, int derivedIndex) {
 		String msg = theFilter.canAdd(value);
 		if (msg != null) {
 			rejection.reject(msg, true);
 			return null;
 		}
-		return super.expectAdd(value, after, before, first, rejection);
+		return super.expectAdd(value, after, before, first, rejection, derivedIndex);
 	}
 
 	@Override

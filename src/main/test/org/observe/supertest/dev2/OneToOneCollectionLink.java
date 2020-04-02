@@ -35,38 +35,64 @@ public abstract class OneToOneCollectionLink<S, T> extends ObservableCollectionL
 	}
 
 	@Override
-	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection) {
+	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection, int derivedIndex) {
 		switch (derivedOp.getType()) {
 		case add:
 			throw new IllegalStateException("Should be using expectAdd");
 		case remove:
 			getSourceLink().expect(new ExpectedCollectionOperation<>(//
 				(CollectionLinkElement<Object, S>) derivedOp.getElement().getSourceElements().getFirst(), CollectionChangeType.remove,
-				reverse(derivedOp.getElement().get()), reverse(derivedOp.getElement().get())), rejection);
-			if (!rejection.isRejected())
+				reverse(derivedOp.getElement().get()), reverse(derivedOp.getElement().get())), rejection, getSiblingIndex());
+			if (!rejection.isRejected()) {
 				derivedOp.getElement().expectRemoval();
+				int d = 0;
+				for (CollectionSourcedLink<T, ?> derivedLink : getDerivedLinks()) {
+					if (d != derivedIndex)
+						derivedLink.expectFromSource(//
+							new ExpectedCollectionOperation<>(derivedOp.getElement(), CollectionChangeType.remove,
+								derivedOp.getElement().getValue(), derivedOp.getElement().getValue()));
+					d++;
+				}
+			}
 			break;
 		case set:
+			T oldValue = derivedOp.getElement().get();
 			getSourceLink().expect(new ExpectedCollectionOperation<>(//
 				(CollectionLinkElement<Object, S>) derivedOp.getElement().getSourceElements().getFirst(), CollectionChangeType.set,
-				reverse(derivedOp.getElement().get()), reverse(derivedOp.getValue())), rejection);
-			if (!rejection.isRejected())
+				reverse(derivedOp.getElement().get()), reverse(derivedOp.getValue())), rejection, getSiblingIndex());
+			if (!rejection.isRejected()) {
 				derivedOp.getElement().setValue(derivedOp.getValue());
+				int d = 0;
+				for (CollectionSourcedLink<T, ?> derivedLink : getDerivedLinks()) {
+					if (d != derivedIndex)
+						derivedLink.expectFromSource(//
+							new ExpectedCollectionOperation<>(derivedOp.getElement(), CollectionChangeType.set, oldValue,
+								derivedOp.getValue()));
+					d++;
+				}
+			}
 			break;
 		}
 	}
 
 	@Override
 	public CollectionLinkElement<S, T> expectAdd(T value, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before,
-		boolean first, OperationRejection rejection) {
+		boolean first, OperationRejection rejection, int derivedIndex) {
 		CollectionLinkElement<S, T> newElement;
 		CollectionLinkElement<?, S> sourceEl = getSourceLink().expectAdd(reverse(value), //
 			after == null ? null : ((CollectionLinkElement<S, T>) after).getSourceElements().getFirst(), //
 				before == null ? null : ((CollectionLinkElement<S, T>) before).getSourceElements().getFirst(), //
-					first, rejection);
+					first, rejection, getSiblingIndex());
 		if (rejection.isRejected())
 			return null;
 		newElement = addFromSource(sourceEl, value);
+		int d = 0;
+		for (CollectionSourcedLink<T, ?> derivedLink : getDerivedLinks()) {
+			if (d != derivedIndex)
+				derivedLink.expectFromSource(//
+					new ExpectedCollectionOperation<>(newElement, CollectionChangeType.add, null, newElement.getCollectionValue()));
+			d++;
+		}
 		return newElement;
 	}
 
@@ -77,7 +103,7 @@ public abstract class OneToOneCollectionLink<S, T> extends ObservableCollectionL
 	}
 
 	protected CollectionLinkElement<S, T> addFromSource(CollectionLinkElement<?, S> sourceEl, T value) {
-		CollectionLinkElement<S, T> element = (CollectionLinkElement<S, T>) sourceEl.getDerivedElements().getFirst();
+		CollectionLinkElement<S, T> element = (CollectionLinkElement<S, T>) sourceEl.getDerivedElements(getSiblingIndex()).getFirst();
 		element.expectAdded(value);
 		return element;
 	}
@@ -93,22 +119,23 @@ public abstract class OneToOneCollectionLink<S, T> extends ObservableCollectionL
 		CollectionLinkElement<S, T> newElement = addFromSource(sourceEl, map(sourceEl.get()));
 		ExpectedCollectionOperation<S, T> result = new ExpectedCollectionOperation<>(newElement, CollectionChangeType.add, null,
 			newElement.get());
-		for (ObservableCollectionLink<T, ?> derivedLink : getDerivedLinks())
+		for (CollectionSourcedLink<T, ?> derivedLink : getDerivedLinks())
 			derivedLink.expectFromSource(result);
 		return BetterList.of(result);
 	}
 
 	private List<ExpectedCollectionOperation<S, T>> expectRemoveFromSource(CollectionLinkElement<?, S> sourceEl, S oldSrcValue) {
-		CollectionLinkElement<S, T> element = (CollectionLinkElement<S, T>) sourceEl.getDerivedElements().getFirst().expectRemoval();
+		CollectionLinkElement<S, T> element = (CollectionLinkElement<S, T>) sourceEl.getDerivedElements(getSiblingIndex()).getFirst()
+			.expectRemoval();
 		ExpectedCollectionOperation<S, T> result = new ExpectedCollectionOperation<>(element, CollectionChangeType.remove, element.get(),
 			element.get());
-		for (ObservableCollectionLink<T, ?> derivedLink : getDerivedLinks())
+		for (CollectionSourcedLink<T, ?> derivedLink : getDerivedLinks())
 			derivedLink.expectFromSource(result);
 		return BetterList.of(result);
 	}
 
 	private List<ExpectedCollectionOperation<S, T>> expectChangeFromSource(CollectionLinkElement<?, S> sourceEl, S oldSrcValue) {
-		CollectionLinkElement<S, T> element = (CollectionLinkElement<S, T>) sourceEl.getDerivedElements().getFirst();
+		CollectionLinkElement<S, T> element = (CollectionLinkElement<S, T>) sourceEl.getDerivedElements(getSiblingIndex()).getFirst();
 		T oldValue = element.get();
 		T oldMapped = map(oldSrcValue);
 		if (!getCollection().equivalence().elementEquals(oldValue, oldMapped))
@@ -116,7 +143,7 @@ public abstract class OneToOneCollectionLink<S, T> extends ObservableCollectionL
 		element.setValue(map(sourceEl.get()));
 		ExpectedCollectionOperation<S, T> result = new ExpectedCollectionOperation<>(element, CollectionChangeType.set, oldValue,
 			element.get());
-		for (ObservableCollectionLink<T, ?> derivedLink : getDerivedLinks())
+		for (CollectionSourcedLink<T, ?> derivedLink : getDerivedLinks())
 			derivedLink.expectFromSource(result);
 		return BetterList.of(result);
 	}

@@ -12,6 +12,8 @@ public interface ObservableChainLink<S, T> extends Transactable {
 
 	List<? extends ObservableChainLink<T, ?>> getDerivedLinks();
 
+	int getSiblingIndex();
+
 	void initialize(TestHelper helper);
 
 	void tryModify(TestHelper helper) throws AssertionError;
@@ -20,5 +22,13 @@ public interface ObservableChainLink<S, T> extends Transactable {
 
 	String printValue();
 
-	<X> void derive(TestHelper helper);
+	<X> void derive(TestHelper helper, int maxLinkCount);
+
+	default int getLinkCount() {
+		int count = 1;
+		for (ObservableChainLink<T, ?> link : getDerivedLinks()) {
+			count += link.getLinkCount();
+		}
+		return count;
+	}
 }

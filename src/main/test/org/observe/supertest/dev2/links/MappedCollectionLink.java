@@ -9,9 +9,11 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.observe.SimpleSettableValue;
+import org.observe.collect.CollectionChangeType;
 import org.observe.collect.FlowOptions;
 import org.observe.collect.FlowOptions.MapDef;
 import org.observe.supertest.dev2.CollectionLinkElement;
+import org.observe.supertest.dev2.CollectionSourcedLink;
 import org.observe.supertest.dev2.ExpectedCollectionOperation;
 import org.observe.supertest.dev2.ObservableCollectionLink;
 import org.observe.supertest.dev2.ObservableCollectionTestDef;
@@ -68,7 +70,7 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 
 	@Override
 	public CollectionLinkElement<S, T> expectAdd(T value, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before,
-		boolean first, OperationRejection rejection) {
+		boolean first, OperationRejection rejection, int derivedIndex) {
 		if (theOptions.getReverse() == null) {
 			rejection.reject(StdMsg.UNSUPPORTED_OPERATION, true);
 			return null;
@@ -76,11 +78,11 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 			rejection.reject(StdMsg.ILLEGAL_ELEMENT, true);
 			return null;
 		}
-		return super.expectAdd(value, after, before, first, rejection);
+		return super.expectAdd(value, after, before, first, rejection, derivedIndex);
 	}
 
 	@Override
-	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection) {
+	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection, int derivedIndex) {
 		switch (derivedOp.getType()) {
 		case add:
 			throw new IllegalStateException();
@@ -90,11 +92,22 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 			if (theOptions.isCached()
 				&& getCollection().equivalence().elementEquals(derivedOp.getElement().getValue(), derivedOp.getValue())) {
 				// Update, re-use the previous source value
+				T oldValue = derivedOp.getElement().get();
 				CollectionLinkElement<?, S> sourceEl = (CollectionLinkElement<?, S>) derivedOp.getElement().getSourceElements().getFirst();
 				getSourceLink().expect(
-					new ExpectedCollectionOperation<>(sourceEl, derivedOp.getType(), sourceEl.getValue(), sourceEl.getValue()), rejection);
-				if (!rejection.isRejected())
+					new ExpectedCollectionOperation<>(sourceEl, derivedOp.getType(), sourceEl.getValue(), sourceEl.getValue()), rejection,
+					getSiblingIndex());
+				if (!rejection.isRejected()) {
 					derivedOp.getElement().setValue(derivedOp.getValue());
+					int d = 0;
+					for (CollectionSourcedLink<T, ?> derivedLink : getDerivedLinks()) {
+						if (d != derivedIndex)
+							derivedLink.expectFromSource(//
+								new ExpectedCollectionOperation<>(derivedOp.getElement(), CollectionChangeType.set, oldValue,
+									derivedOp.getValue()));
+						d++;
+					}
+				}
 				return;
 			}
 			if (theOptions.getReverse() == null) {
@@ -109,7 +122,7 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 			}
 			break;
 		}
-		super.expect(derivedOp, rejection);
+		super.expect(derivedOp, rejection, derivedIndex);
 	}
 
 	public static <E, T> TypeTransformation<E, T> transform(TestValueType type1, TestValueType type2, TestHelper helper) {

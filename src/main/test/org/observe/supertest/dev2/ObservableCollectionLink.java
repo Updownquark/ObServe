@@ -5,7 +5,6 @@ import static org.observe.collect.CollectionChangeType.remove;
 import static org.observe.collect.CollectionChangeType.set;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -44,7 +43,7 @@ import org.qommons.tree.BetterTreeList;
 
 import com.google.common.reflect.TypeToken;
 
-public abstract class ObservableCollectionLink<S, T> implements ObservableChainLink<S, T> {
+public abstract class ObservableCollectionLink<S, T> implements CollectionSourcedLink<S, T> {
 	public interface OperationRejection {
 		boolean isRejected();
 
@@ -56,7 +55,8 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 	private final ObservableCollection<T> theMultiStepCollection;
 	private final ObservableCollectionTester<T> theMultiStepTester;
 	private final ObservableCollectionLink<?, S> theSourceLink;
-	private List<ObservableCollectionLink<T, ?>> theDerivedLinks;
+	private List<CollectionSourcedLink<T, ?>> theDerivedLinks;
+	private int theSiblingIndex;
 	private final Function<TestHelper, T> theSupplier;
 
 	private final BetterTreeList<CollectionLinkElement<S, T>> theElements;
@@ -69,6 +69,7 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 		theSupplier = (Function<TestHelper, T>) ObservableChainTester.SUPPLIERS.get(def.type);
 		theElements = new BetterTreeList<>(false);
 		theElementsForCollection = new BetterTreeList<>(false);
+		theSiblingIndex = -1;
 		boolean passive;
 		if (def.allowPassive.value != null)
 			passive = def.allowPassive.value;
@@ -116,13 +117,6 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 	@Override
 	public abstract void initialize(TestHelper helper);
 
-	public abstract List<ExpectedCollectionOperation<S, T>> expectFromSource(ExpectedCollectionOperation<?, S> sourceOp);
-
-	public abstract void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection);
-
-	public abstract CollectionLinkElement<S, T> expectAdd(T value, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before,
-		boolean first, OperationRejection rejection);
-
 	protected abstract void validate(CollectionLinkElement<S, T> element);
 
 	@Override
@@ -136,7 +130,7 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 	}
 
 	@Override
-	public List<ObservableCollectionLink<T, ?>> getDerivedLinks() {
+	public List<CollectionSourcedLink<T, ?>> getDerivedLinks() {
 		return theDerivedLinks;
 	}
 
@@ -172,11 +166,27 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 			.get(theElementsForCollection.search(el -> collectionEl.compareTo(el.getCollectionAddress()), SortedSearchFilter.OnlyMatch));
 	}
 
+	public abstract void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection, int derivedIndex);
+
+	public abstract CollectionLinkElement<S, T> expectAdd(T value, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before,
+		boolean first, OperationRejection rejection, int derivedIndex);
+
 	public int getDepth() {
 		if (theSourceLink == null)
 			return 0;
 		else
 			return theSourceLink.getDepth() + 1;
+	}
+
+	@Override
+	public int getSiblingIndex() {
+		if (theSiblingIndex < 0) {
+			if (theSourceLink == null)
+				theSiblingIndex = 0;
+			else
+				theSiblingIndex = theSourceLink.getDerivedLinks().indexOf(this);
+		}
+		return theSiblingIndex;
 	}
 
 	public abstract boolean isAcceptable(T value);
@@ -378,9 +388,9 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 	}
 
 	@Override
-	public <X> void derive(TestHelper helper) {
-		TestHelper.RandomSupplier<ObservableCollectionLink<T, X>> action = helper//
-			.<ObservableCollectionLink<T, X>> supply(1, () -> { // map
+	public <X> void derive(TestHelper helper, int maxCount) {
+		TestHelper.RandomSupplier<CollectionSourcedLink<T, X>> action = helper//
+			.<CollectionSourcedLink<T, X>> supply(1, () -> { // map
 				TestValueType nextType = TestValueType.nextType(helper);
 				SimpleSettableValue<TypeTransformation<T, X>> txValue = new SimpleSettableValue<>(
 					(TypeToken<TypeTransformation<T, X>>) (TypeToken<?>) new TypeToken<Object>() {}, false);
@@ -555,8 +565,26 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 		// TODO groupBy
 		// TODO groupBy(Sorted)
 		;
-		ObservableCollectionLink<T, X> derived = action.get(null);
-		theDerivedLinks = Arrays.asList(derived);
+		// Go for length, not breadth
+		if (helper.getBoolean(.25)) {
+			theDerivedLinks = Collections.emptyList();
+			return;
+		}
+		int derivedCount;
+		if (maxCount == 1)
+			derivedCount = 1;
+		else
+			derivedCount = (int) Math.round(helper.getDouble(1, 1 + maxCount / 5.0, maxCount));
+		theDerivedLinks = new ArrayList<>(derivedCount);
+		maxCount -= derivedCount;
+		for (int i = 0; i < derivedCount; i++) {
+			CollectionSourcedLink<T, X> derived = action.get(null);
+			theDerivedLinks.add(derived);
+			derived.initialize(helper);
+			if (maxCount > 0)
+				derived.derive(helper, maxCount);
+			maxCount -= derived.getLinkCount() - 1;
+		}
 	}
 
 	protected ObservableCollectionLink<T, T> deriveDistinct(TestHelper helper, boolean asRoot) {
@@ -793,7 +821,7 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 			if (op.values != null) {
 				for (T value : op.values) {
 					CollectionOpElement opEl = op.add(null);
-					CollectionLinkElement<S, T> newElement = expectAdd(value, op.after, op.before, op.towardBeginning, opEl);
+					CollectionLinkElement<S, T> newElement = expectAdd(value, op.after, op.before, op.towardBeginning, opEl, -1);
 					if (!opEl.isRejected()) {
 						opEl.element = newElement;
 						added++;
@@ -801,7 +829,7 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 				}
 			} else {
 				CollectionOpElement opEl = op.add(null);
-				CollectionLinkElement<S, T> newElement = expectAdd(op.value, op.after, op.before, op.towardBeginning, opEl);
+				CollectionLinkElement<S, T> newElement = expectAdd(op.value, op.after, op.before, op.towardBeginning, opEl, -1);
 				if (!opEl.isRejected()) {
 					opEl.element = newElement;
 					added++;
@@ -813,9 +841,6 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 					if (op.minIndex >= 0
 						&& (index < op.context.subListStart + op.minIndex || index > op.context.subListStart + op.maxIndex + added))
 						throw new AssertionError("Added in wrong location");
-					for (ObservableCollectionLink<T, ?> derivedLink : theDerivedLinks)
-						derivedLink.expectFromSource(//
-							new ExpectedCollectionOperation<>(el.element, op.type, null, el.element.getCollectionValue()));
 				}
 			}
 			break;
@@ -826,12 +851,7 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 				if (exEl == null)
 					continue; // A hack, putting the value to remove in the initial element
 				expect(//
-					new ExpectedCollectionOperation<>(exEl, op.type, exEl.get(), exEl.get()), el);
-				if (!el.isRejected()) {
-					for (ObservableCollectionLink<T, ?> derivedLink : theDerivedLinks)
-						derivedLink.expectFromSource(//
-							new ExpectedCollectionOperation<>(exEl, op.type, el.element.getValue(), el.element.getValue()));
-				}
+					new ExpectedCollectionOperation<>(exEl, op.type, exEl.get(), exEl.get()), el, -1);
 			}
 			break;
 		case set:
@@ -839,12 +859,7 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 				CollectionLinkElement<S, T> exEl = el.element;
 				T oldValue = exEl.get();
 				expect(//
-					new ExpectedCollectionOperation<>(exEl, op.type, oldValue, op.value), el);
-				if (!el.isRejected()) {
-					for (ObservableCollectionLink<T, ?> derivedLink : theDerivedLinks)
-						derivedLink.expectFromSource(//
-							new ExpectedCollectionOperation<>(exEl, op.type, oldValue, op.value));
-				}
+					new ExpectedCollectionOperation<>(exEl, op.type, oldValue, op.value), el, -1);
 			}
 			break;
 		}

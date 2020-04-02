@@ -3,8 +3,10 @@ package org.observe.supertest.dev2.links;
 import java.util.Comparator;
 import java.util.List;
 
+import org.observe.collect.CollectionChangeType;
 import org.observe.collect.DefaultObservableCollection;
 import org.observe.supertest.dev2.CollectionLinkElement;
+import org.observe.supertest.dev2.CollectionSourcedLink;
 import org.observe.supertest.dev2.ExpectedCollectionOperation;
 import org.observe.supertest.dev2.ObservableCollectionLink;
 import org.observe.supertest.dev2.ObservableCollectionTestDef;
@@ -43,27 +45,51 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	}
 
 	@Override
-	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection) {
+	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection, int derivedIndex) {
 		switch (derivedOp.getType()) {
 		case add:
 			throw new IllegalStateException("Should be using expectAdd");
 		case remove:
 			derivedOp.getElement().expectRemoval();
+			int d = 0;
+			for (CollectionSourcedLink<T, ?> derivedLink : getDerivedLinks()) {
+				if (d != derivedIndex)
+					derivedLink.expectFromSource(//
+						new ExpectedCollectionOperation<>(derivedOp.getElement(), CollectionChangeType.remove,
+							derivedOp.getElement().getValue(), derivedOp.getElement().getValue()));
+				d++;
+			}
 			break;
 		case set:
+			T oldValue = derivedOp.getElement().get();
 			derivedOp.getElement().setValue(derivedOp.getValue());
+			d = 0;
+			for (CollectionSourcedLink<T, ?> derivedLink : getDerivedLinks()) {
+				if (d != derivedIndex)
+					derivedLink.expectFromSource(//
+						new ExpectedCollectionOperation<>(derivedOp.getElement(), CollectionChangeType.set, oldValue,
+							derivedOp.getValue()));
+				d++;
+			}
 			break;
 		}
 	}
 
 	@Override
 	public CollectionLinkElement<T, T> expectAdd(T value, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before,
-		boolean first, OperationRejection rejection) {
+		boolean first, OperationRejection rejection, int derivedIndex) {
 		for (CollectionElement<CollectionLinkElement<T, T>> el : getElements().elementsBetween(
 			after == null ? null : after.getElementAddress(), false, //
 				before == null ? null : before.getElementAddress(), false)) {
 			if (el.get().wasAdded() && getCollection().equivalence().elementEquals(el.get().getCollectionValue(), value)) {
 				el.get().expectAdded(value);
+				int d = 0;
+				for (CollectionSourcedLink<T, ?> derivedLink : getDerivedLinks()) {
+					if (d != derivedIndex)
+						derivedLink.expectFromSource(//
+							new ExpectedCollectionOperation<>(el.get(), CollectionChangeType.add, null, el.get().getCollectionValue()));
+					d++;
+				}
 				return el.get();
 			}
 		}
