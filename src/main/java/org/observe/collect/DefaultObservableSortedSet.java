@@ -2,7 +2,6 @@ package org.observe.collect;
 
 import java.util.Comparator;
 import java.util.function.BiFunction;
-import java.util.function.Function;
 
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
@@ -101,10 +100,11 @@ public class DefaultObservableSortedSet<E> extends DefaultObservableCollection<E
 	 * @param sortedSet The backing sorted set to hold this observable set's values
 	 * @param elementSource The function to provide element sources for this collection
 	 * @param sourceElements The function to provide source elements for elements in this collection
-	 * @see #getElementsBySource(ElementId)
+	 * @see #getElementsBySource(ElementId, BetterCollection)
 	 * @see #getSourceElements(ElementId, BetterCollection)
 	 */
-	public DefaultObservableSortedSet(TypeToken<E> type, BetterSortedSet<E> sortedSet, Function<ElementId, ElementId> elementSource,
+	public DefaultObservableSortedSet(TypeToken<E> type, BetterSortedSet<E> sortedSet,
+		BiFunction<ElementId, BetterCollection<?>, ElementId> elementSource,
 		BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> sourceElements) {
 		super(type, sortedSet, elementSource, sourceElements, Equivalence.of(TypeTokens.getRawType(type), sortedSet.comparator(), false));
 	}

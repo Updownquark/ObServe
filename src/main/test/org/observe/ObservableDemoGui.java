@@ -58,7 +58,7 @@ public class ObservableDemoGui extends JPanel {
 			CollectionElement<String> found = theCategoryNames.getElement(cat, true);
 			if (found == null)
 				return ObservableSet.of(TypeTokens.get().INT);
-			return theCategories.getElementsBySource(found.getElementId()).getFirst().get().values;
+			return theCategories.getElementsBySource(found.getElementId(), theCategoryNames).getFirst().get().values;
 		}));
 		ObservableCollection<Integer> selectedValues = ObservableCollection.build(int.class).safe(false).build();
 		SettableValue<Integer> newValue = SettableValue.build(Integer.class).safe(false).withValue(0).build();
@@ -134,7 +134,7 @@ public class ObservableDemoGui extends JPanel {
 				.addList(valuesOfSelectedCategory,
 					list -> list.fill().withFieldName("Values:").withSelection(selectedValues)
 					.render(rs -> rs.withAddRow(() -> getNextAdd(valuesOfSelectedCategory), v -> v, addRow -> {
-										addRow.withMutation(arm -> arm.asText(SpinnerFormat.INT, tf -> tf.withColumns(5)).clicks(1));
+						addRow.withMutation(arm -> arm.asText(SpinnerFormat.INT, tf -> tf.withColumns(5)).clicks(1));
 					}))//
 					.withRemove(values -> valuesOfSelectedCategory.removeAll(values), null)//
 					.withPostButton("Remove", cause -> valuesOfSelectedCategory.removeAll(selectedValues), //

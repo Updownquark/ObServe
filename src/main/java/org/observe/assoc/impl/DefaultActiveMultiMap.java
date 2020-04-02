@@ -635,7 +635,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		void checkKeys() {
 			BetterSortedSet<DerivedCollectionElement<K>> keyElements = BetterTreeSet
 				.<DerivedCollectionElement<K>> buildTreeSet(DerivedCollectionElement::compareTo)//
-				.safe(false).build(getKeyManager().getElementsBySource(sourceElement));
+				.safe(false).build(getKeyManager().getElementsBySource(sourceElement, getSourceCollection()));
 			for (CollectionElement<KeyEntry> key : theKeys.elements()) {
 				CollectionElement<DerivedCollectionElement<K>> keyEl = keyElements.search(key.get().theKeyElement,
 					SortedSearchFilter.OnlyMatch);
@@ -920,12 +920,14 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		}
 
 		@Override
-		public BetterList<CollectionElement<V>> getElementsBySource(ElementId sourceEl) {
-			BetterList<CollectionElement<ValueRef>> els = theValues.getElementsBySource(sourceEl);
+		public BetterList<CollectionElement<V>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
+			if (sourceCollection == this)
+				return BetterList.of(getElement(sourceEl));
+			BetterList<CollectionElement<ValueRef>> els = theValues.getElementsBySource(sourceEl, sourceCollection);
 			if (!els.isEmpty())
 				return QommonsUtils.map2(els, this::elementFor);
-			return BetterList
-				.of(getValueManager().getElementsBySource(sourceEl).stream().map(el -> elementFor(el)).filter(el -> el != null));
+			return BetterList.of(getValueManager().getElementsBySource(sourceEl, sourceCollection).stream().map(el -> elementFor(el))
+				.filter(el -> el != null));
 		}
 
 		@Override
@@ -1152,11 +1154,14 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		}
 
 		@Override
-		public BetterList<CollectionElement<K>> getElementsBySource(ElementId sourceEl) {
-			BetterList<CollectionElement<KeyEntry>> entryEls = theActiveEntries.getElementsBySource(sourceEl);
+		public BetterList<CollectionElement<K>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
+			if (sourceCollection == this)
+				return BetterList.of(getElement(sourceEl));
+			BetterList<CollectionElement<KeyEntry>> entryEls = theActiveEntries.getElementsBySource(sourceEl, sourceCollection);
 			if (!entryEls.isEmpty())
 				return QommonsUtils.map2(entryEls, el -> el.get());
-			return BetterList.of(theKeyManager.getElementsBySource(sourceEl).stream().map(this::elementFor).filter(el -> el != null));
+			return BetterList
+				.of(theKeyManager.getElementsBySource(sourceEl, sourceCollection).stream().map(this::elementFor).filter(el -> el != null));
 		}
 
 		@Override
@@ -1465,10 +1470,12 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		}
 
 		@Override
-		public BetterList<CollectionElement<V>> getElementsBySource(ElementId sourceEl) {
+		public BetterList<CollectionElement<V>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
 			try (Transaction t = lock(false, null)) {
+				if (sourceCollection == this)
+					return BetterList.of(getElement(sourceEl));
 				KeyEntry entry = getCurrentEntry(true);
-				return entry.getValues().getElementsBySource(sourceEl);
+				return entry.getValues().getElementsBySource(sourceEl, sourceCollection);
 			}
 		}
 

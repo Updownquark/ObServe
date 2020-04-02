@@ -1935,18 +1935,21 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public BetterList<CollectionElement<T>> getElementsBySource(ElementId sourceEl) throws NoSuchElementException {
-			if (isReversed && sourceEl instanceof ElementId.ReversedElementId)
+		public BetterList<CollectionElement<T>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection)
+			throws NoSuchElementException {
+			if (isReversed)
 				sourceEl = sourceEl.reverse();
-			return QommonsUtils.map2(theSource.getElementsBySource(sourceEl), el -> elementFor(el, null));
+			if (sourceCollection == this)
+				sourceCollection = theSource;
+			return QommonsUtils.map2(theSource.getElementsBySource(sourceEl, sourceCollection), el -> elementFor(el, null));
 		}
 
 		@Override
 		public BetterList<ElementId> getSourceElements(ElementId localElement, BetterCollection<?> sourceCollection) {
-			if (isReversed && localElement instanceof ElementId.ReversedElementId)
+			if (isReversed)
 				localElement = localElement.reverse();
 			if (sourceCollection == this)
-				return theSource.getSourceElements(localElement, theSource);
+				return QommonsUtils.map2(theSource.getSourceElements(localElement, theSource), this::mapId);
 			return theSource.getSourceElements(localElement, sourceCollection);
 		}
 
@@ -2452,13 +2455,13 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public BetterList<CollectionElement<T>> getElementsBySource(ElementId sourceEl) throws NoSuchElementException {
+		public BetterList<CollectionElement<T>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection)
+			throws NoSuchElementException {
 			try (Transaction t = lock(false, null)) {
-				if (sourceEl instanceof DerivedElementHolder
-					&& ((DerivedElementHolder<?>) sourceEl).treeNode.getRoot().equals(theDerivedElements.getRoot()))
+				if (sourceCollection == this)
 					return BetterList.of(getElement(sourceEl));
 
-				return QommonsUtils.map2(theFlow.getElementsBySource(sourceEl), el -> {
+				return QommonsUtils.map2(theFlow.getElementsBySource(sourceEl, sourceCollection), el -> {
 					return elementFor(//
 						theDerivedElements.searchValue(de -> el.compareTo(de.element), BetterSortedList.SortedSearchFilter.OnlyMatch));
 				});
@@ -2468,7 +2471,7 @@ public final class ObservableCollectionImpl {
 		@Override
 		public BetterList<ElementId> getSourceElements(ElementId localElement, BetterCollection<?> sourceCollection) {
 			if (sourceCollection == this)
-				return BetterList.of(localElement);
+				return BetterList.of(getElement(localElement).getElementId()); // Verify that it's actually our element
 			try (Transaction t = lock(false, null)) {
 				return theFlow.getSourceElements(((DerivedElementHolder<T>) localElement).element, sourceCollection);
 			}
@@ -2823,11 +2826,13 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public BetterList<CollectionElement<E>> getElementsBySource(ElementId sourceEl) {
+		public BetterList<CollectionElement<E>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
+			if (sourceCollection == this)
+				return BetterList.of(getElement(sourceEl));
 			ObservableCollection<? extends E> current = getWrapped().get();
 			if (current == null)
 				return BetterList.empty();
-			return ((ObservableCollection<E>) current).getElementsBySource(sourceEl);
+			return ((ObservableCollection<E>) current).getElementsBySource(sourceEl, sourceCollection);
 		}
 
 		@Override

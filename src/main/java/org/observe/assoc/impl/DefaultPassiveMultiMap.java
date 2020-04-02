@@ -333,8 +333,10 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 		}
 
 		@Override
-		public BetterList<CollectionElement<V>> getElementsBySource(ElementId sourceEl) {
-			return QommonsUtils.map2(theSourceValues.getElementsBySource(sourceEl), this::elementFor);
+		public BetterList<CollectionElement<V>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
+			if (sourceCollection == this)
+				return BetterList.of(getElement(sourceEl));
+			return QommonsUtils.map2(theSourceValues.getElementsBySource(sourceEl, sourceCollection), this::elementFor);
 		}
 
 		@Override
@@ -374,7 +376,7 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 			return theSourceValues.canMove(//
 				reversed ? valueEl.reverse() : valueEl, //
 					reversed ? ElementId.reverse(before) : after, //
-				reversed ? ElementId.reverse(after) : before);
+						reversed ? ElementId.reverse(after) : before);
 		}
 
 		@Override
@@ -384,7 +386,7 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 			return elementFor(theSourceValues.move(//
 				reversed ? valueEl.reverse() : valueEl, //
 					reversed ? ElementId.reverse(before) : after, //
-				reversed ? ElementId.reverse(after) : before, first, afterRemove));
+						reversed ? ElementId.reverse(after) : before, first, afterRemove));
 		}
 
 		@Override

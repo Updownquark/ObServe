@@ -540,8 +540,10 @@ public class ObservableConfigContent {
 		}
 
 		@Override
-		public BetterList<CollectionElement<C>> getElementsBySource(ElementId sourceEl) {
-			return QommonsUtils.map2(getConfig()._getContent().getElementsBySource(sourceEl),
+		public BetterList<CollectionElement<C>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
+			if (sourceCollection == this)
+				return BetterList.of(getElement(sourceEl));
+			return QommonsUtils.map2(getConfig()._getContent().getElementsBySource(sourceEl, sourceCollection),
 				el -> new ConfigCollectionElement<>(el.get()));
 		}
 
@@ -782,9 +784,11 @@ public class ObservableConfigContent {
 		}
 
 		@Override
-		public BetterList<CollectionElement<C>> getElementsBySource(ElementId sourceEl) {
-			return QommonsUtils.filterMap(getConfig()._getContent().getElementsBySource(sourceEl), el -> thePathElement.matches(el.get()),
-				el -> new ConfigCollectionElement<>(el.get()));
+		public BetterList<CollectionElement<C>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
+			if (sourceCollection == this)
+				return BetterList.of(getElement(sourceEl));
+			return QommonsUtils.filterMap(getConfig()._getContent().getElementsBySource(sourceEl, sourceCollection),
+				el -> thePathElement.matches(el.get()), el -> new ConfigCollectionElement<>(el.get()));
 		}
 
 		@Override
@@ -1045,7 +1049,8 @@ public class ObservableConfigContent {
 								if (preAddAction != null)
 									preAddAction.accept((C) cfg);
 							});
-						newChildId = theChildren.getElementsBySource(newChild.getParentChildRef()).getFirst().getElementId();
+						newChildId = theChildren.getElementsBySource(newChild.getParentChildRef(), parent._getContent()).getFirst()
+							.getElementId();
 					}
 					return theChildren.getElement(newChildId);
 				}

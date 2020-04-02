@@ -150,8 +150,10 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 		}
 	}
 
-	private ElementId _getElementSource(ElementId el) {
-		BetterList<? extends CollectionElement<? extends E>> els = theCollection.getElementsBySource(el);
+	private ElementId _getElementSource(ElementId el, BetterCollection<?> sourceCollection) {
+		if (sourceCollection == this)
+			return el;
+		BetterList<? extends CollectionElement<? extends E>> els = theCollection.getElementsBySource(el, sourceCollection);
 		if (!els.isEmpty()) {
 			flush();
 			ElementId id = els.getFirst().getElementId();

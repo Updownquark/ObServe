@@ -736,8 +736,10 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 			}
 
 			@Override
-			public BetterList<CollectionElement<E>> getElementsBySource(ElementId sourceEl) {
-				BetterList<CollectionElement<ConfigElement>> els = theElements.values().getElementsBySource(sourceEl);
+			public BetterList<CollectionElement<E>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
+				if (sourceCollection == this)
+					return BetterList.of(getElement(sourceEl));
+				BetterList<CollectionElement<ConfigElement>> els = theElements.values().getElementsBySource(sourceEl, sourceCollection);
 				if (!els.isEmpty())
 					return QommonsUtils.map2(els, el -> el.get().immutable());
 				ConfigElement el = theElements.get(sourceEl);

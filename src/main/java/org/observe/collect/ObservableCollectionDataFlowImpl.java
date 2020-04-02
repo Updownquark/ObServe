@@ -332,9 +332,11 @@ public class ObservableCollectionDataFlowImpl {
 
 		/**
 		 * @param sourceEl The source element to find
+		 * @param sourceCollection The collection, potentially a source parent or ancestor of this collection, that the given source element
+		 *        is from
 		 * @return The elements in this flow influenced by the given element from a source
 		 */
-		BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl);
+		BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection);
 
 		/**
 		 * @param localElement The element in this flow
@@ -1705,8 +1707,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public BetterList<DerivedCollectionElement<E>> getElementsBySource(ElementId sourceEl) {
-			return QommonsUtils.map2(theSource.getElementsBySource(sourceEl),
+		public BetterList<DerivedCollectionElement<E>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
+			return QommonsUtils.map2(theSource.getElementsBySource(sourceEl, sourceCollection),
 				el -> new BaseDerivedElement(theSource.mutableElement(el.getElementId())));
 		}
 
@@ -1977,10 +1979,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl) {
-			if (sourceEl instanceof ElementId.ReversedElementId)
-				sourceEl = sourceEl.reverse();
-			return QommonsUtils.map2(theParent.getElementsBySource(sourceEl), el -> el.reverse());
+		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
+			return QommonsUtils.map2(theParent.getElementsBySource(sourceEl.reverse(), sourceCollection), el -> el.reverse());
 		}
 
 		@Override
@@ -2111,8 +2111,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl) {
-			return QommonsUtils.map2(theParent.getElementsBySource(sourceEl), el -> new SortedElement(el, true));
+		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
+			return QommonsUtils.map2(theParent.getElementsBySource(sourceEl, sourceCollection), el -> new SortedElement(el, true));
 		}
 
 		@Override
@@ -2390,8 +2390,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl) {
-			return QommonsUtils.map2(theParent.getElementsBySource(sourceEl), el -> new FilteredElement(el, true, true));
+		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
+			return QommonsUtils.map2(theParent.getElementsBySource(sourceEl, sourceCollection), el -> new FilteredElement(el, true, true));
 		}
 
 		@Override
@@ -2791,10 +2791,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl) {
+		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
 			return BetterList.of(Stream.concat(//
-				theParent.getElementsBySource(sourceEl).stream().map(el -> new IntersectedCollectionElement(el, null, true)), //
-				theFilter.getElementsBySource(sourceEl).stream().flatMap(el -> {
+				theParent.getElementsBySource(sourceEl, sourceCollection).stream()
+				.map(el -> new IntersectedCollectionElement(el, null, true)), //
+				theFilter.getElementsBySource(sourceEl, sourceCollection).stream().flatMap(el -> {
 					IntersectionElement intEl = theRightElementValues.get(el.getElementId());
 					return intEl == null ? Stream.empty() : intEl.leftElements.stream();
 				}).distinct()));
@@ -3050,8 +3051,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl) {
-			return theParent.getElementsBySource(sourceEl);
+		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
+			return theParent.getElementsBySource(sourceEl, sourceCollection);
 		}
 
 		@Override
@@ -3409,8 +3410,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl) {
-			return QommonsUtils.map2(theParent.getElementsBySource(sourceEl), el -> new MappedElement(el, true));
+		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
+			return QommonsUtils.map2(theParent.getElementsBySource(sourceEl, sourceCollection), el -> new MappedElement(el, true));
 		}
 
 		@Override
@@ -4151,8 +4152,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl) {
-			return QommonsUtils.map2(theParent.getElementsBySource(sourceEl), el -> new CombinedElement(el, true));
+		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
+			return QommonsUtils.map2(theParent.getElementsBySource(sourceEl, sourceCollection), el -> new CombinedElement(el, true));
 		}
 
 		@Override
@@ -4545,8 +4546,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl) {
-			return QommonsUtils.map2(theParent.getElementsBySource(sourceEl), el -> new RefreshingElement(el, true));
+		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
+			return QommonsUtils.map2(theParent.getElementsBySource(sourceEl, sourceCollection), el -> new RefreshingElement(el, true));
 		}
 
 		@Override
@@ -4810,8 +4811,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl) {
-			return QommonsUtils.map2(theParent.getElementsBySource(sourceEl), el -> new RefreshingElement(el));
+		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
+			return QommonsUtils.map2(theParent.getElementsBySource(sourceEl, sourceCollection), el -> new RefreshingElement(el));
 		}
 
 		@Override
@@ -5230,8 +5231,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl) {
-			return QommonsUtils.map2(theParent.getElementsBySource(sourceEl), el -> new ModFilteredElement(el));
+		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
+			return QommonsUtils.map2(theParent.getElementsBySource(sourceEl, sourceCollection), el -> new ModFilteredElement(el));
 		}
 
 		@Override
@@ -5438,9 +5439,9 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl) {
+		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
 			try (Transaction t = lock(false, null)) {
-				BetterList<DerivedCollectionElement<I>> parentEBS = theParent.getElementsBySource(sourceEl);
+				BetterList<DerivedCollectionElement<I>> parentEBS = theParent.getElementsBySource(sourceEl, sourceCollection);
 				return BetterList.of(Stream.concat(//
 					parentEBS.stream().flatMap(outerEl -> {
 						BinaryTreeNode<FlattenedHolder> fh = theOuterElements.getRoot()
@@ -5452,7 +5453,7 @@ public class ObservableCollectionDataFlowImpl {
 						for (DerivedCollectionElement<I> fromParent : parentEBS)
 							if (fromParent.compareTo(holder.theParentEl) == 0)
 								return Stream.empty();
-						return holder.manager.getElementsBySource(sourceEl).stream().flatMap(innerEl -> {
+						return holder.manager.getElementsBySource(sourceEl, sourceCollection).stream().flatMap(innerEl -> {
 							BinaryTreeNode<FlattenedElement> fe = holder.theElements.getRoot()
 								.findClosest(
 									feEl -> ((DerivedCollectionElement<T>) innerEl)

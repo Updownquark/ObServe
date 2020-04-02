@@ -5,7 +5,6 @@ import java.util.Comparator;
 import java.util.LinkedList;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
-import java.util.function.Function;
 
 import org.observe.Subscription;
 import org.observe.util.TypeTokens;
@@ -41,7 +40,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 		private BetterList<E> theBacking;
 		private CollectionLockingStrategy theLocker;
 		private Comparator<? super E> theSorting;
-		private Function<ElementId, ElementId> theElementSource;
+		private BiFunction<ElementId, BetterCollection<?>, ElementId> theElementSource;
 		private BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> theSourceElements;
 		private Equivalence<? super E> theEquivalence;
 		private String theDescription;
@@ -132,7 +131,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 		 *        ID
 		 * @return This builder
 		 */
-		public B withElementSource(Function<ElementId, ElementId> elementSource) {
+		public B withElementSource(BiFunction<ElementId, BetterCollection<?>, ElementId> elementSource) {
 			theElementSource = elementSource;
 			return (B) this;
 		}
@@ -181,7 +180,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 		}
 
 		/** @return The element source for the collection */
-		protected Function<ElementId, ElementId> getElementSource() {
+		protected BiFunction<ElementId, BetterCollection<?>, ElementId> getElementSource() {
 			return theElementSource;
 		}
 
@@ -267,7 +266,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	private final LinkedList<Causable> theTransactionCauses;
 	private final BetterList<E> theValues;
 	private final org.qommons.collect.ListenerList<Consumer<? super ObservableCollectionEvent<? extends E>>> theObservers;
-	private final Function<ElementId, ElementId> theElementSource;
+	private final BiFunction<ElementId, BetterCollection<?>, ElementId> theElementSource;
 	private final BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> theSourceElements;
 	private final Equivalence<? super E> theEquivalence;
 
@@ -285,11 +284,12 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	 * @param elementSource The function to provide element sources for this collection
 	 * @param sourceElements The function to provide source elements for elements in this collection
 	 * @param equivalence The equivalence for the collection
-	 * @see #getElementsBySource(ElementId)
+	 * @see #getElementsBySource(ElementId, BetterCollection)
 	 * @see #getSourceElements(ElementId, BetterCollection)
 	 */
 	public DefaultObservableCollection(TypeToken<E> type, BetterList<E> list, //
-		Function<ElementId, ElementId> elementSource, BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> sourceElements, //
+		BiFunction<ElementId, BetterCollection<?>, ElementId> elementSource,
+		BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> sourceElements, //
 		Equivalence<? super E> equivalence) {
 		theType = type;
 		if (list instanceof ObservableCollection)
@@ -436,12 +436,14 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	}
 
 	@Override
-	public BetterList<CollectionElement<E>> getElementsBySource(ElementId sourceEl) {
-		BetterList<CollectionElement<E>> els = theValues.getElementsBySource(sourceEl);
+	public BetterList<CollectionElement<E>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
+		if (sourceCollection == this)
+			return BetterList.of(getElement(sourceEl));
+		BetterList<CollectionElement<E>> els = theValues.getElementsBySource(sourceEl, sourceCollection);
 		if (!els.isEmpty())
 			return els;
 		if (theElementSource != null) {
-			ElementId el = theElementSource.apply(sourceEl);
+			ElementId el = theElementSource.apply(sourceEl, sourceCollection);
 			if (el == null)
 				return BetterList.empty();
 			return BetterList.of(getElement(el));

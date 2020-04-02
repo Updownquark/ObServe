@@ -439,8 +439,10 @@ public interface Equivalence<E> {
 		}
 
 		@Override
-		public BetterList<CollectionElement<T2>> getElementsBySource(ElementId sourceEl) {
-			return QommonsUtils.map2(theWrapped.getElementsBySource(sourceEl), this::handleFor);
+		public BetterList<CollectionElement<T2>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
+			if (sourceCollection == this)
+				return BetterList.of(getElement(sourceEl));
+			return QommonsUtils.map2(theWrapped.getElementsBySource(sourceEl, sourceCollection), this::handleFor);
 		}
 
 		@Override

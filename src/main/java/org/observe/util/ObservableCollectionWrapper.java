@@ -102,8 +102,10 @@ public abstract class ObservableCollectionWrapper<E> implements ObservableCollec
 	}
 
 	@Override
-	public BetterList<CollectionElement<E>> getElementsBySource(ElementId sourceEl) {
-		return getWrapped().getElementsBySource(sourceEl);
+	public BetterList<CollectionElement<E>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
+		if (sourceCollection == this)
+			return BetterList.of(getElement(sourceEl));
+		return getWrapped().getElementsBySource(sourceEl, sourceCollection);
 	}
 
 	@Override

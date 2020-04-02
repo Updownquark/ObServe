@@ -227,8 +227,8 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl) {
-			return theWrapped.getElementsBySource(sourceEl);
+		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
+			return theWrapped.getElementsBySource(sourceEl, sourceCollection);
 		}
 
 		@Override
@@ -640,8 +640,9 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl) {
-			return QommonsUtils.map2(theParent.getElementsBySource(sourceEl), parentEl -> theElementsByValue.get(parentEl.get()));
+		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
+			return QommonsUtils.map2(theParent.getElementsBySource(sourceEl, sourceCollection),
+				parentEl -> theElementsByValue.get(parentEl.get()));
 		}
 
 		@Override
