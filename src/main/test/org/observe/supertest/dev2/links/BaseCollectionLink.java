@@ -28,6 +28,11 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	}
 
 	@Override
+	public boolean isAcceptable(T value) {
+		return true;
+	}
+
+	@Override
 	public List<ExpectedCollectionOperation<T, T>> expectFromSource(ExpectedCollectionOperation<?, T> sourceOp) {
 		throw new IllegalStateException("Unexpected source");
 	}

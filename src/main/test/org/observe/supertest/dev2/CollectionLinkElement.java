@@ -122,7 +122,7 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 	public CollectionLinkElement<S, T> error(Consumer<StringBuilder> err) {
 		StringBuilder str = new StringBuilder().append('[').append(theLastKnownIndex).append(']');
 		if (theCollectionAddress.isPresent())
-			str.append(theCollectionLink.getCollection().getElement(theCollectionAddress).get());
+			str.append(getCollectionValue());
 		else
 			str.append(theValue);
 		str.append(": ");

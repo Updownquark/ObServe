@@ -80,7 +80,7 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 			theMultiStepCollection = def.multiStepFlow.collectPassive();
 		else
 			theMultiStepCollection = def.multiStepFlow.collectActive(Observable.empty);
-		theMultiStepTester = new ObservableCollectionTester<>(toString() + " Multi-step", theMultiStepCollection);
+		theMultiStepTester = new ObservableCollectionTester<>("[" + getDepth() + "] Multi-step", theMultiStepCollection);
 
 		// Listen to the collection to populate and maintain theElements
 		getCollection().subscribe(new Consumer<ObservableCollectionEvent<? extends T>>() {
@@ -170,6 +170,15 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 			.get(theElementsForCollection.search(el -> collectionEl.compareTo(el.getCollectionAddress()), SortedSearchFilter.OnlyMatch));
 	}
 
+	public int getDepth() {
+		if (theSourceLink == null)
+			return 0;
+		else
+			return theSourceLink.getDepth() + 1;
+	}
+
+	public abstract boolean isAcceptable(T value);
+
 	@Override
 	public void tryModify(TestHelper helper) {
 		int subListStart, subListEnd;
@@ -187,148 +196,149 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 			modify = getCollection();
 		}
 		CollectionOpContext opCtx = new CollectionOpContext(modify, subList, subListStart, subListEnd);
-		TestHelper.RandomAction action = helper.doAction(5, () -> { // More position-less adds than other ops
-			CollectionOp op = new CollectionOp(opCtx, add, false, -1, -1, helper.getBoolean()).add(theSupplier.apply(helper), null);
-			if (helper.isReproducing())
-				System.out.println(op);
-			helper.placemark();
-			addSingle(op, helper);
-		}).or(1, () -> { // Add in position range
-			int minIndex = (int) helper.getDouble(0, modify.size() / 3, modify.size());
-			int maxIndex = helper.getInt(minIndex, modify.size());
-			CollectionOp op = new CollectionOp(opCtx, add, false, minIndex, maxIndex, helper.getBoolean()).add(theSupplier.apply(helper),
-				null);
-			if (helper.isReproducing())
-				System.out.println(op);
-			helper.placemark();
-			addSingle(op, helper);
-		}).or(1, () -> { // addAll
-			int length = (int) helper.getDouble(0, 100, 1000); // Aggressively tend smaller
-			int index = helper.getInt(0, modify.size());
-			boolean first = helper.getBoolean();
-			CollectionOp op = new CollectionOp(opCtx, add, true, index, index, first);
-			for (int i = 0; i < length; i++)
-				op.add(theSupplier.apply(helper), null);
-			if (helper.isReproducing())
-				System.out.println(op);
-			helper.placemark();
-			addAll(index, first, op, helper);
-		}).or(2, () -> { // Set
-			if (modify.isEmpty()) {
+		TestHelper.RandomAction action = helper.createAction()//
+			.or(5, () -> { // More position-less adds than other ops
+				CollectionOp op = new CollectionOp(opCtx, add, false, -1, -1, helper.getBoolean()).add(theSupplier.apply(helper), null);
 				if (helper.isReproducing())
-					System.out.println("Set, but empty");
-				return;
-			}
-			CollectionOp op = createIndexOp(opCtx, set, helper.getInt(0, modify.size()));
-			op.add(theSupplier.apply(helper), theElements.get(opCtx.subListStart + op.minIndex));
-			if (helper.isReproducing())
-				System.out.println(op);
-			helper.placemark();
-			set(op, helper);
-		}).or(1, () -> {// Remove by value
-			T value = theSupplier.apply(helper);
-			if (helper.isReproducing())
-				System.out.println("Remove " + value);
-			CollectionOp op = new CollectionOp(opCtx, remove, false, -1, -1, true);
-			boolean found = false;
-			for (int i = 0; i < modify.size(); i++) {
-				if (getCollection().equivalence().elementEquals(modify.get(i), value)) {
-					op.add(value, theElements.get(opCtx.subListStart + i));
-					found = true;
-					break;
+					System.out.println(op);
+				helper.placemark();
+				addSingle(op, helper);
+			}).or(1, () -> { // Add in position range
+				int minIndex = (int) helper.getDouble(0, modify.size() / 3, modify.size());
+				int maxIndex = helper.getInt(minIndex, modify.size());
+				CollectionOp op = new CollectionOp(opCtx, add, false, minIndex, maxIndex, helper.getBoolean()).add(theSupplier.apply(helper),
+					null);
+				if (helper.isReproducing())
+					System.out.println(op);
+				helper.placemark();
+				addSingle(op, helper);
+			}).or(1, () -> { // addAll
+				int length = (int) helper.getDouble(0, 5, 100); // Aggressively tend smaller
+				int index = helper.getInt(0, modify.size());
+				boolean first = helper.getBoolean();
+				CollectionOp op = new CollectionOp(opCtx, add, true, index, index, first);
+				for (int i = 0; i < length; i++)
+					op.add(theSupplier.apply(helper), null);
+				if (helper.isReproducing())
+					System.out.println(op);
+				helper.placemark();
+				addAll(index, first, op, helper);
+			}).or(2, () -> { // Set
+				if (modify.isEmpty()) {
+					if (helper.isReproducing())
+						System.out.println("Set, but empty");
+					return;
 				}
-			}
-			if (!found)
-				op.add(value, null);
-			if (helper.isReproducing())
-				System.out.println("\tShould " + op);
-			helper.placemark();
-			removeSingle(op, helper);
-		}).or(1, () -> {// Remove by index
-			if (modify.isEmpty()) {
+				CollectionOp op = createIndexOp(opCtx, set, helper.getInt(0, modify.size()));
+				op.add(theSupplier.apply(helper), theElements.get(opCtx.subListStart + op.minIndex));
 				if (helper.isReproducing())
-					System.out.println("Remove, but empty");
-				return;
-			}
-			int index = helper.getInt(0, modify.size());
-			CollectionOp op = new CollectionOp(opCtx, remove, false, index, index, true).add(modify.get(index),
-				theElements.get(opCtx.subListStart + index));
-			if (helper.isReproducing())
-				System.out.println(op);
-			helper.placemark();
-			removeSingle(op, helper);
-		}).or(1, () -> { // removeAll
-			int length = (int) helper.getDouble(0, 250, 1000); // Tend smaller
-			List<T> values = new ArrayList<>(length);
-			BetterSet<T> valueSet = getCollection().equivalence().createSet();
-			for (int i = 0; i < length; i++) {
+					System.out.println(op);
+				helper.placemark();
+				set(op, helper);
+			}).or(1, () -> {// Remove by value
 				T value = theSupplier.apply(helper);
-				values.add(value);
-				valueSet.add(value);
-			}
-			if (helper.isReproducing())
-				System.out.println("Remove all " + values.size() + values);
+				if (helper.isReproducing())
+					System.out.println("Remove " + value);
+				CollectionOp op = new CollectionOp(opCtx, remove, false, -1, -1, true);
+				boolean found = false;
+				for (int i = 0; i < modify.size(); i++) {
+					if (getCollection().equivalence().elementEquals(modify.get(i), value)) {
+						op.add(value, theElements.get(opCtx.subListStart + i));
+						found = true;
+						break;
+					}
+				}
+				if (!found)
+					op.add(value, null);
+				if (helper.isReproducing())
+					System.out.println("\tShould " + op);
+				helper.placemark();
+				removeSingle(op, helper);
+			}).or(1, () -> {// Remove by index
+				if (modify.isEmpty()) {
+					if (helper.isReproducing())
+						System.out.println("Remove, but empty");
+					return;
+				}
+				int index = helper.getInt(0, modify.size());
+				CollectionOp op = new CollectionOp(opCtx, remove, false, index, index, true).add(modify.get(index),
+					theElements.get(opCtx.subListStart + index));
+				if (helper.isReproducing())
+					System.out.println(op);
+				helper.placemark();
+				removeSingle(op, helper);
+			}).or(1, () -> { // removeAll
+				int length = (int) helper.getDouble(0, 25, 100); // Tend smaller
+				List<T> values = new ArrayList<>(length);
+				BetterSet<T> valueSet = getCollection().equivalence().createSet();
+				for (int i = 0; i < length; i++) {
+					T value = theSupplier.apply(helper);
+					values.add(value);
+					valueSet.add(value);
+				}
+				if (helper.isReproducing())
+					System.out.println("Remove all " + values.size() + values);
 
-			CollectionOp op = new CollectionOp(opCtx, remove, true, -1, -1, true);
-			for (int i = 0; i < modify.size(); i++) {
-				T value = modify.get(i);
-				if (valueSet.contains(value))
-					op.add(value, theElements.get(opCtx.subListStart + i));
-			}
-			if (helper.isReproducing())
-				System.out.println("\tShould " + op);
-			helper.placemark();
-			removeAll(values, op, helper);
-		}).or(1, () -> { // retainAll
-			// Allow for larger, because the smaller the generated collection,
-			// the more elements will be removed from the collection
-			int length = helper.getInt(0, 5000);
-			List<T> values = new ArrayList<>(length);
-			Set<T> valueSet = getCollection().equivalence().createSet();
-			for (int i = 0; i < length; i++) {
-				T value = theSupplier.apply(helper);
-				values.add(value);
-				valueSet.add(value);
-			}
-			if (helper.isReproducing())
-				System.out.println("Retain all " + values.size() + values);
-			CollectionOp op = new CollectionOp(opCtx, remove, true, -1, -1, true);
-			for (int i = 0; i < modify.size(); i++) {
-				T value = modify.get(i);
-				if (!valueSet.contains(value))
-					op.add(value, theElements.get(opCtx.subListStart + i));
-			}
-			if (helper.isReproducing())
-				System.out.println("\tShould remove " + op);
-			helper.placemark();
-			retainAll(values, op, helper);
-		}).or(.1, () -> { // Remove range
-			if (modify.isEmpty()) {
+				CollectionOp op = new CollectionOp(opCtx, remove, true, -1, -1, true);
+				for (int i = 0; i < modify.size(); i++) {
+					T value = modify.get(i);
+					if (valueSet.contains(value))
+						op.add(value, theElements.get(opCtx.subListStart + i));
+				}
 				if (helper.isReproducing())
-					System.out.println("Remove range, but empty");
-				return;
-			}
-			CollectionOp op = createIndexRangeOp(opCtx, remove, modify.size(), helper);
-			if (helper.isReproducing())
-				System.out.println(op);
-			for (int i = op.minIndex; i < op.maxIndex; i++)
-				op.add(modify.get(i), theElements.get(opCtx.subListStart + i));
-			helper.placemark();
-			removeRange(op, helper);
-		}).or(.1, () -> { // clear
-			if (helper.isReproducing())
-				System.out.println("clear()");
-			CollectionOp op = new CollectionOp(opCtx, remove, true, 0, modify.size(), true);
-			for (int i = 0; i < modify.size(); i++)
-				op.add(modify.get(i), theElements.get(opCtx.subListStart + i));
-			helper.placemark();
-			clearCollection(op, helper);
-		}).or(1, () -> {
-			if (helper.isReproducing())
-				System.out.println("Check bounds");
-			helper.placemark();
-			testBounds(helper);
-		});
+					System.out.println("\tShould " + op);
+				helper.placemark();
+				removeAll(values, op, helper);
+			}).or(.1, () -> { // retainAll
+				// Allow for larger, because the smaller the generated collection,
+				// the more elements will be removed from the collection
+				int length = helper.getInt(0, 5000);
+				List<T> values = new ArrayList<>(length);
+				Set<T> valueSet = getCollection().equivalence().createSet();
+				for (int i = 0; i < length; i++) {
+					T value = theSupplier.apply(helper);
+					values.add(value);
+					valueSet.add(value);
+				}
+				if (helper.isReproducing())
+					System.out.println("Retain all " + values.size() + values);
+				CollectionOp op = new CollectionOp(opCtx, remove, true, -1, -1, true);
+				for (int i = 0; i < modify.size(); i++) {
+					T value = modify.get(i);
+					if (!valueSet.contains(value))
+						op.add(value, theElements.get(opCtx.subListStart + i));
+				}
+				if (helper.isReproducing())
+					System.out.println("\tShould remove " + op);
+				helper.placemark();
+				retainAll(values, op, helper);
+			}).or(.1, () -> { // Remove range
+				if (modify.isEmpty()) {
+					if (helper.isReproducing())
+						System.out.println("Remove range, but empty");
+					return;
+				}
+				CollectionOp op = createIndexRangeOp(opCtx, remove, modify.size(), helper);
+				if (helper.isReproducing())
+					System.out.println(op);
+				for (int i = op.minIndex; i < op.maxIndex; i++)
+					op.add(modify.get(i), theElements.get(opCtx.subListStart + i));
+				helper.placemark();
+				removeRange(op, helper);
+			}).or(.1, () -> { // clear
+				if (helper.isReproducing())
+					System.out.println("clear()");
+				CollectionOp op = new CollectionOp(opCtx, remove, true, 0, modify.size(), true);
+				for (int i = 0; i < modify.size(); i++)
+					op.add(modify.get(i), theElements.get(opCtx.subListStart + i));
+				helper.placemark();
+				clearCollection(op, helper);
+			}).or(1, () -> {
+				if (helper.isReproducing())
+					System.out.println("Check bounds");
+				helper.placemark();
+				testBounds(helper);
+			});
 		addExtraActions(action);
 		action.execute("Modification");
 	}
@@ -906,7 +916,7 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 		}
 
 		expectModification(op, helper);
-		if (!getCollection().isContentControlled()) {
+		if (!getCollection().isContentControlled() && isAcceptable(op.elements.get(0).value)) {
 			if (element == null) {
 				throw new AssertionError("Uncontrolled list should have added but didn't");
 			} else {
@@ -1132,6 +1142,7 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 		CollectionOpElement el = op.elements.get(0);
 		int preModSize = modify.size();
 		int preSize = getCollection().size();
+		boolean setByIndex = helper.getBoolean();
 		MutableCollectionElement<T> element = modify.mutableElement(modify.getElement(op.minIndex).getElementId());
 		T oldValue = element.get();
 		String msg = element.isAcceptable(el.value);
@@ -1139,7 +1150,7 @@ public abstract class ObservableCollectionLink<S, T> implements ObservableChainL
 		if (element.isEnabled() != null)
 			Assert.assertNotNull(msg);
 		try {
-			if (helper.getBoolean())
+			if (setByIndex)
 				modify.set(op.minIndex, el.value);
 			else
 				element.set(el.value);

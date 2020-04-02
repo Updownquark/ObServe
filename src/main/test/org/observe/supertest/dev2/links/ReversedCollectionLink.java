@@ -22,13 +22,18 @@ public class ReversedCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 	}
 
 	@Override
+	public boolean isAcceptable(T value) {
+		return getSourceLink().isAcceptable(value);
+	}
+
+	@Override
 	public CollectionLinkElement<T, T> expectAdd(T value, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before,
 		boolean first, OperationRejection rejection) {
 		CollectionLinkElement<T, T> newElement;
 		CollectionLinkElement<?, T> sourceEl = getSourceLink().expectAdd(reverse(value), //
 			before == null ? null : ((CollectionLinkElement<T, T>) before).getSourceElements().getFirst(), //
-			after == null ? null : ((CollectionLinkElement<T, T>) after).getSourceElements().getFirst(), //
-			!first, rejection);
+				after == null ? null : ((CollectionLinkElement<T, T>) after).getSourceElements().getFirst(), //
+					!first, rejection);
 		if (rejection.isRejected())
 			return null;
 		newElement = addFromSource(sourceEl, value);

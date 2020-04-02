@@ -28,6 +28,11 @@ public class ModFilteredCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 	}
 
 	@Override
+	public boolean isAcceptable(T value) {
+		return getSourceLink().isAcceptable(value);
+	}
+
+	@Override
 	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection) {
 		String msg = null;
 		switch (derivedOp.getType()) {
@@ -39,8 +44,8 @@ public class ModFilteredCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 				() -> derivedOp.getElement().getValue());
 			break;
 		case set:
-			if (derivedOp.getValue() == derivedOp.getElement().getValue())
-				msg = theFilter.areUpdatesAllowed() ? null : theFilter.getUnmodifiableMessage();
+			if (derivedOp.getValue() == derivedOp.getElement().getValue() && theFilter.areUpdatesAllowed())
+				msg = null;
 			else {
 				msg = theFilter.canRemove(//
 					() -> derivedOp.getElement().getValue());

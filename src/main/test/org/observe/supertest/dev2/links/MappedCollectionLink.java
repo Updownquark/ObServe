@@ -2,6 +2,7 @@ package org.observe.supertest.dev2.links;
 
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -47,6 +48,17 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 	}
 
 	@Override
+	public boolean isAcceptable(T value) {
+		S reversed;
+		try {
+			reversed = theCurrentMap.reverse(value);
+		} catch (RuntimeException e) {
+			return false;
+		}
+		return getSourceLink().isAcceptable(reversed);
+	}
+
+	@Override
 	public CollectionLinkElement<S, T> expectAdd(T value, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before,
 		boolean first, OperationRejection rejection) {
 		if (theOptions.getReverse() == null) {
@@ -67,11 +79,20 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 		case remove:
 			break;
 		case set:
+			if (theOptions.isCached() && derivedOp.getValue() == derivedOp.getElement().getValue()) {
+				// Update, re-use the previous source value
+				CollectionLinkElement<?, S> sourceEl = (CollectionLinkElement<?, S>) derivedOp.getElement().getSourceElements().getFirst();
+				getSourceLink().expect(
+					new ExpectedCollectionOperation<>(sourceEl, derivedOp.getType(), sourceEl.getValue(), sourceEl.getValue()), rejection);
+				return;
+			}
 			if (theOptions.getReverse() == null) {
 				rejection.reject(StdMsg.UNSUPPORTED_OPERATION, true);
 				return;
-			} else if (!getCollection().equivalence().elementEquals(theCurrentMap.map(theOptions.getReverse().apply(derivedOp.getValue())),
-				derivedOp.getValue())) {
+			}
+			S reversed = theOptions.getReverse().apply(derivedOp.getValue());
+			T reMapped = theCurrentMap.map(reversed);
+			if (!getCollection().equivalence().elementEquals(reMapped, derivedOp.getValue())) {
 				rejection.reject(StdMsg.ILLEGAL_ELEMENT, true);
 				return;
 			}
@@ -98,6 +119,8 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 		String str = "map(" + theCurrentMap;
 		if (isMapVariable)
 			str += " variable";
+		if (theOptions.getReverse() == null)
+			str += " irreversible";
 		return str + ")";
 	}
 
@@ -197,16 +220,15 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 				case INT:
 					switch (type2) {
 					case INT: {
-						List<TypeTransformation<Integer, Integer>> transforms = asList(//
+						MappedCollectionLink.<Integer, Integer> supportTransforms(type1, type2, //
 							identity(), //
 							transform(i -> i + 5, i -> i - 5, false, false, "+5", "-5"), //
-							transform(i -> i - 5, i -> i + 5, false, false, "-5", "+5"), //
+							transform(i -> i * 5, i -> i / 5, false, true, "*5", "/5"), //
 							transform(i -> -i, i -> -i, false, false, "-", "-"));
-						TYPE_TRANSFORMATIONS.put(new BiTuple<>(type1, type2), transforms);
 						break;
 					}
 					case DOUBLE: {
-						List<TypeTransformation<Integer, Double>> transforms = asList(//
+						MappedCollectionLink.<Integer, Double> supportTransforms(type1, type2, //
 							transform(//
 								i -> i * 1.0, //
 								d -> (int) Math.round(d), //
@@ -219,18 +241,15 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 								i -> i / 5.0, //
 								d -> (int) Math.round(d * 5), //
 								false, true, "/5.0", "*5,round"));
-						TYPE_TRANSFORMATIONS.put(new BiTuple<>(type1, type2), transforms);
-						TYPE_TRANSFORMATIONS.put(new BiTuple<>(type2, type1),
-							transforms.stream().map(t -> t.reverse()).collect(Collectors.toList()));
 						break;
 					}
 					case STRING: {
-						List<TypeTransformation<Integer, String>> transforms = asList(//
-							transform(i -> String.valueOf(i), s -> (int) Math.round(Double.parseDouble(s)), false, false, "toString()",
+						// Although a single integer will map to a single string, there are many double strings
+						// that map to the same integer, hence oneToMany=true
+						MappedCollectionLink.<Integer, String> supportTransforms(type1, type2, //
+							transform(i -> String.valueOf(i), s -> (int) Math.round(Double.parseDouble(s)), false, true, "toString()",
 								"parseInt"));
-						TYPE_TRANSFORMATIONS.put(new BiTuple<>(type1, type2), transforms);
-						TYPE_TRANSFORMATIONS.put(new BiTuple<>(type2, type1),
-							transforms.stream().map(t -> t.reverse()).collect(Collectors.toList()));
+						break;
 					}
 					}
 					break;
@@ -239,22 +258,18 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 					case INT: // Already done above
 						break;
 					case DOUBLE: {
-						List<TypeTransformation<Double, Double>> transforms = asList(//
+						MappedCollectionLink.<Double, Double> supportTransforms(type1, type2, //
 							identity(), //
 							transform(d -> d + 5, d -> d - 5, false, false, "+5", "-5"), //
-							transform(d -> d - 5, d -> d + 5, false, false, "-5", "+5"), //
-							transform(d -> d * 5, d -> d / 5, false, false, "*5", "/5"), //
-							transform(d -> d / 5, d -> d * 5, false, false, "/5", "*5"), //
+							transform(d -> d * 5, d -> d / 5, false, true, "*5", "/5"), //
 							transform(d -> -d, d -> -d, false, false, "-", "-"));
-						TYPE_TRANSFORMATIONS.put(new BiTuple<>(type1, type2), transforms);
 						break;
 					}
 					case STRING: {
-						List<TypeTransformation<Double, String>> transforms = asList(//
-							transform(d -> stringValueOf(d), s -> Double.valueOf(s), false, false, "toString()", "parseDouble"));
-						TYPE_TRANSFORMATIONS.put(new BiTuple<>(type1, type2), transforms);
-						TYPE_TRANSFORMATIONS.put(new BiTuple<>(type2, type1),
-							transforms.stream().map(t -> t.reverse()).collect(Collectors.toList()));
+						// Although a single double will map to a single string, leading zeros mean there are many strings
+						// that map to the same double, hence oneToMany=true
+						MappedCollectionLink.<Double, String> supportTransforms(type1, type2, //
+							transform(d -> stringValueOf(d), s -> Double.valueOf(s), false, true, "toString()", "parseDouble"));
 						break;
 					}
 					}
@@ -265,14 +280,27 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 					case DOUBLE:
 						break;
 					case STRING: {
-						List<TypeTransformation<String, String>> transforms = asList(//
+						MappedCollectionLink.<String, String> supportTransforms(type1, type2, //
 							identity(), transform(s -> reverse(s), s -> reverse(s), false, false, "reverse", "reverse"));
-						TYPE_TRANSFORMATIONS.put(new BiTuple<>(type1, type2), transforms);
 						break;
 					}
 					}
 				}
 			}
+		}
+	}
+
+	private static <S, T> void supportTransforms(TestValueType type1, TestValueType type2, TypeTransformation<S, T>... transforms) {
+		BiTuple<TestValueType, TestValueType> key = new BiTuple<>(type1, type2);
+		BiTuple<TestValueType, TestValueType> reverseKey = new BiTuple<>(type2, type1);
+		List<TypeTransformation<S, T>> forward = ((List<TypeTransformation<S, T>>) TYPE_TRANSFORMATIONS.computeIfAbsent(key,
+			k -> new LinkedList<>()));
+		List<TypeTransformation<T, S>> backward = key.equals(reverseKey) ? null
+			: ((List<TypeTransformation<T, S>>) TYPE_TRANSFORMATIONS.computeIfAbsent(reverseKey, k -> new LinkedList<>()));
+		for (TypeTransformation<S, T> transform : transforms) {
+			forward.add(transform);
+			if (backward != null)
+				backward.add(transform.reverse());
 		}
 	}
 
