@@ -35,12 +35,18 @@ public class ModFilteredCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 			msg = theFilter.canAdd(derivedOp.getValue());
 			break;
 		case remove:
-			msg = theFilter.canRemove(derivedOp::getOldValue);
+			msg = theFilter.canRemove(//
+				() -> derivedOp.getElement().getValue());
 			break;
 		case set:
-			msg = theFilter.canRemove(derivedOp::getOldValue);
-			if (msg == null)
-				msg = theFilter.canAdd(derivedOp.getValue());
+			if (derivedOp.getValue() == derivedOp.getElement().getValue())
+				msg = theFilter.areUpdatesAllowed() ? null : theFilter.getUnmodifiableMessage();
+			else {
+				msg = theFilter.canRemove(//
+					() -> derivedOp.getElement().getValue());
+				if (msg == null)
+					msg = theFilter.canAdd(derivedOp.getValue());
+			}
 			break;
 		}
 		if (msg != null)

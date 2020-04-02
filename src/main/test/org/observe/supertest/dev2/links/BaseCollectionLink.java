@@ -13,8 +13,8 @@ import org.qommons.Ternian;
 import org.qommons.TestHelper;
 import org.qommons.ValueHolder;
 import org.qommons.collect.BetterList;
+import org.qommons.collect.CollectionElement;
 import org.qommons.tree.BetterTreeList;
-import org.qommons.tree.BinaryTreeNode;
 
 import com.google.common.reflect.TypeToken;
 
@@ -25,7 +25,6 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 
 	@Override
 	public void initialize(TestHelper helper) {
-		theExpectedElements.addAll(getElements());
 	}
 
 	@Override
@@ -39,7 +38,7 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		case add:
 			throw new IllegalStateException("Should be using expectAdd");
 		case remove:
-			theExpectedElements.mutableElement(derivedOp.getElement().getExpectedAddress()).remove();
+			derivedOp.getElement().expectRemoval();
 			break;
 		case set:
 			derivedOp.getElement().setValue(derivedOp.getValue());
@@ -50,18 +49,19 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	@Override
 	public CollectionLinkElement<T, T> expectAdd(T value, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before,
 		boolean first, OperationRejection rejection) {
-		BinaryTreeNode<CollectionLinkElement<T, T>> newNode = theExpectedElements.addElement(null, //
-			after == null ? null : after.getExpectedAddress(), //
-				before == null ? null : before.getExpectedAddress(), //
-					first);
-		CollectionLinkElement<T, T> newElement = new CollectionLinkElement<>(this, value).setExpectedAddress(newNode.getElementId());
-		theExpectedElements.mutableElement(newNode.getElementId()).set(newElement);
-		if (after != null && newElement.getExpectedAddress().compareTo(after.getExpectedAddress()) < 0)
-			throw new IllegalStateException("Added in wrong order");
-		if (before != null && newElement.getExpectedAddress().compareTo(before.getExpectedAddress()) > 0)
-			throw new IllegalStateException("Added in wrong order");
-		return newElement;
+		for (CollectionElement<CollectionLinkElement<T, T>> el : getElements().elementsBetween(
+			after == null ? null : after.getElementAddress(), false, //
+				before == null ? null : before.getElementAddress(), false)) {
+			if (el.get().wasAdded() && getCollection().equivalence().elementEquals(el.get().getCollectionValue(), value)) {
+				el.get().expectAdded(value);
+				return el.get();
+			}
+		}
+		throw new AssertionError("No new elements found to expect between " + after + " and " + before);
 	}
+
+	@Override
+	protected void validate(CollectionLinkElement<T, T> element) {}
 
 	@SuppressWarnings("deprecation")
 	public static <E> BaseCollectionLink<E> createInitialLink(TestValueType type, TestHelper helper, int depth, Ternian withSorted,
@@ -75,7 +75,8 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 				// Simple tree-backed list
 				BetterList<E> backing = new BetterTreeList<>(true);
 				DefaultObservableCollection<E> base = new DefaultObservableCollection<>((TypeToken<E>) fType.getType(), backing);
-				holder.accept(new BaseCollectionLink<>(new ObservableCollectionTestDef<>(fType, base.flow(), true, true), helper));
+				holder.accept(
+					new BaseCollectionLink<>(new ObservableCollectionTestDef<>(fType, base.flow(), base.flow(), true, true), helper));
 			});
 		}
 		/*TODO

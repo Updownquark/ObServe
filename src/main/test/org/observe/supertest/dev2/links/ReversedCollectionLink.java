@@ -8,7 +8,7 @@ import org.qommons.TestHelper;
 
 public class ReversedCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 	public ReversedCollectionLink(ObservableCollectionLink<?, T> sourceLink, ObservableCollectionTestDef<T> def, TestHelper helper) {
-		super(sourceLink, def, helper, SOURCE_ORDERED.andThen(comp -> (node -> -comp.compareTo(node))));
+		super(sourceLink, def, helper);
 	}
 
 	@Override
@@ -25,18 +25,22 @@ public class ReversedCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 	public CollectionLinkElement<T, T> expectAdd(T value, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before,
 		boolean first, OperationRejection rejection) {
 		CollectionLinkElement<T, T> newElement;
-		CollectionLinkElement<?, T> sourceEl = theSourceLink.expectAdd(reverse(value), //
+		CollectionLinkElement<?, T> sourceEl = getSourceLink().expectAdd(reverse(value), //
 			before == null ? null : ((CollectionLinkElement<T, T>) before).getSourceElements().getFirst(), //
-				after == null ? null : ((CollectionLinkElement<T, T>) after).getSourceElements().getFirst(), //
-					first, rejection);
+			after == null ? null : ((CollectionLinkElement<T, T>) after).getSourceElements().getFirst(), //
+			!first, rejection);
 		if (rejection.isRejected())
 			return null;
-		newElement = addFromSource(sourceEl);
-		if (after != null && newElement.getExpectedAddress().compareTo(after.getExpectedAddress()) < 0)
-			throw new IllegalStateException("Added in wrong order");
-		if (before != null && newElement.getExpectedAddress().compareTo(before.getExpectedAddress()) > 0)
-			throw new IllegalStateException("Added in wrong order");
+		newElement = addFromSource(sourceEl, value);
 		return newElement;
+	}
+
+	@Override
+	protected void checkOrder(CollectionLinkElement<T, T> element) {
+		int elIndex = element.getIndex();
+		int sourceIndex = getSourceLink().getElements().getElementsAfter(element.getSourceElements().getFirst().getElementAddress());
+		if (elIndex != sourceIndex)
+			element.error(err -> err.append("Expected at [").append(sourceIndex).append("] but found at [").append(elIndex).append(']'));
 	}
 
 	@Override

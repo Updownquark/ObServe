@@ -1,7 +1,11 @@
 package org.observe.supertest.dev2;
 
+import java.util.LinkedList;
 import java.util.List;
+import java.util.function.Consumer;
 
+import org.junit.Assert;
+import org.observe.collect.ObservableCollection;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.ElementId;
@@ -11,18 +15,54 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 	private final ObservableCollectionLink<S, T> theCollectionLink;
 	private final BetterSortedSet<CollectionLinkElement<?, S>> theSourceElements;
 	private final BetterSortedSet<CollectionLinkElement<T, ?>> theDerivedElements;
-	private ElementId theElementAddress;
-	private ElementId theExpectedAddress;
-	private ElementId theCollectionAddress;
+	private final ElementId theCollectionAddress;
+	private final ElementId theElementAddress;
 
+	private int theLastKnownIndex;
+
+	private boolean wasAdded;
+	private boolean wasRemoved;
+	private boolean wasUpdated;
 	private T theValue;
+	private boolean isRemoveExpected;
 
-	public CollectionLinkElement(ObservableCollectionLink<S, T> collectionLink, T value) {
+	private List<String> theErrors;
+
+	public CollectionLinkElement(ObservableCollectionLink<S, T> collectionLink, ElementId collectionAddress, ElementId elementAddress) {
 		theCollectionLink = collectionLink;
-		theValue = value;
+		theCollectionAddress = collectionAddress;
+		theElementAddress = elementAddress;
 
 		theSourceElements = new BetterTreeSet<>(false, CollectionLinkElement::compareTo);
 		theDerivedElements = new BetterTreeSet<>(false, CollectionLinkElement::compareTo);
+
+		theErrors = new LinkedList<>();
+		theLastKnownIndex = theCollectionLink.getElements().getElementsBefore(elementAddress);
+
+		if (theCollectionLink.getSourceLink() != null) {
+			BetterList<ElementId> sourceElements = theCollectionLink.getCollection().getSourceElements(theCollectionAddress,
+				theCollectionLink.getSourceLink().getCollection());
+			if (sourceElements.isEmpty()) {
+				sourceElements = theCollectionLink.getCollection().getSourceElements(theCollectionAddress,
+					theCollectionLink.getSourceLink().getCollection());
+				Assert.assertFalse("No source elements", sourceElements.isEmpty());
+			}
+			for (ElementId sourceEl : sourceElements) {
+				CollectionLinkElement<?, S> sourceLinkEl = theCollectionLink.getSourceLink().getElement(sourceEl);
+				theSourceElements.add(sourceLinkEl);
+				sourceLinkEl.theDerivedElements.add(this);
+			}
+		}
+
+		wasAdded = true;
+	}
+
+	public void removed() {
+		wasRemoved = true;
+	}
+
+	public void updated() {
+		wasUpdated = true;
 	}
 
 	public T getValue() {
@@ -37,48 +77,12 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 		return theElementAddress;
 	}
 
-	public ElementId getExpectedAddress() {
-		return theExpectedAddress;
-	}
-
 	public ElementId getCollectionAddress() {
 		return theCollectionAddress;
 	}
 
-	public CollectionLinkElement<S, T> setElementAddress(ElementId address) {
-		theElementAddress = address;
-		return this;
-	}
-
-	public CollectionLinkElement<S, T> setExpectedAddress(ElementId address) {
-		theExpectedAddress = address;
-		return this;
-	}
-
-	public CollectionLinkElement<S, T> setCollectionAddress(ElementId address) {
-		theCollectionAddress = address;
-		return this;
-	}
-
 	public CollectionLinkElement<S, T> withSourceElement(CollectionLinkElement<?, S> source) {
 		theSourceElements.add(source);
-		return this;
-	}
-
-	public CollectionLinkElement<S, T> applyDerivedChanges(List<? extends ExpectedCollectionOperation<T, ?>> derivedChanges) {
-		for (ExpectedCollectionOperation<T, ?> change : derivedChanges) {
-			switch (change.getType()) {
-			case add:
-				if (!theDerivedElements.add(change.getElement()))
-					throw new IllegalStateException("Derived element already registered: " + change.getElement());
-				break;
-			case remove:
-				if (!theDerivedElements.remove(change.getElement()))
-					throw new IllegalStateException("Derived element not found: " + change.getElement());
-				break;
-			case set:
-			}
-		}
 		return this;
 	}
 
@@ -94,34 +98,88 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 		return theValue;
 	}
 
+	public T getCollectionValue() {
+		return theCollectionLink.getCollection().getElement(theCollectionAddress).get();
+	}
+
+	public boolean isPresent() {
+		return theCollectionAddress.isPresent();
+	}
+
 	public int getIndex() {
 		return theCollectionLink.getElements().getElementsBefore(theElementAddress);
 	}
 
-	public int getExpectedIndex() {
-		return theCollectionLink.getExpected().getElementsBefore(theExpectedAddress);
+	public boolean wasAdded() {
+		return wasAdded;
 	}
 
 	@Override
 	public int compareTo(CollectionLinkElement<S, T> o) {
-		return theExpectedAddress.compareTo(o.theExpectedAddress);
+		return theElementAddress.compareTo(o.theElementAddress);
 	}
 
-	public void fix(boolean fixSourceElements, boolean fixDerivedElements) {
-		if (fixSourceElements)
-			theSourceElements.repair(null);
-		if (fixDerivedElements)
-			theDerivedElements.repair(null);
+	public CollectionLinkElement<S, T> error(Consumer<StringBuilder> err) {
+		StringBuilder str = new StringBuilder().append('[').append(theLastKnownIndex).append(']');
+		if (theCollectionAddress.isPresent())
+			str.append(theCollectionLink.getCollection().getElement(theCollectionAddress).get());
+		else
+			str.append(theValue);
+		str.append(": ");
+		err.accept(str);
+		theErrors.add(str.toString());
+		return this;
 	}
 
-	public void validateAgainst(CollectionLinkElement<S, T> fromCollection, StringBuilder error) {
-		if (!theCollectionLink.getCollection().equivalence().elementEquals(theValue, fromCollection.theValue)) {
-			error.append("At [").append(getIndex()).append(", expected ").append(theValue).append(", but was " + fromCollection.theValue)
-			.append('\n');
+	public CollectionLinkElement<S, T> error(String err) {
+		return error(e -> e.append(err));
+	}
+
+	public CollectionLinkElement<S, T> expectAdded(T value) {
+		if (isRemoveExpected)
+			isRemoveExpected = false;
+		else if (wasAdded)
+			wasAdded = false;
+		else
+			error("Mistakenly expected re-addition");
+		theValue = value;
+		return this;
+	}
+
+	public CollectionLinkElement<S, T> expectRemoval() {
+		isRemoveExpected = true;
+		return this;
+	}
+
+	public void validate(StringBuilder error) {
+		ObservableCollection<T> collection = theCollectionLink.getCollection();
+		if (wasAdded)
+			error("Unexpected addition");
+		else if (wasRemoved != isRemoveExpected) {
+			if (isRemoveExpected)
+				error("Expected removal");
+			else
+				error("Unexpected removal");
+		} else if (isRemoveExpected) { // Removed as expected
+			theCollectionLink.getUnprotectedElements().mutableElement(theElementAddress).remove();
+			for (CollectionLinkElement<?, S> sourceLink : theSourceElements) {
+				if (sourceLink.getElementAddress().isPresent())
+					sourceLink.theDerivedElements.remove(this);
+			}
+		} else if (!collection.equivalence().elementEquals(collection.getElement(theCollectionAddress).get(), theValue)) {
+			if (wasUpdated)
+				error(err -> err.append("Unexpected update from ").append(theValue));
+			else
+				error(err -> err.append("Expected update to ").append(theValue));
 		}
-		theValue = fromCollection.theValue;
-		theElementAddress = fromCollection.theElementAddress;
-		theCollectionAddress = fromCollection.theCollectionAddress;
+		if (!theErrors.isEmpty()) {
+			for (String err : theErrors)
+				error.append(err).append('\n');
+			theErrors.clear();
+		}
+		if (theElementAddress.isPresent())
+			theLastKnownIndex = theCollectionLink.getElements().getElementsBefore(theElementAddress);
+		wasUpdated = false;
 	}
 
 	@Override

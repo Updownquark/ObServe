@@ -183,8 +183,17 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 
 	@Override
 	public void checkValue(Collection<E> expected) {
+		checkValue(expected, true);
+	}
+
+	/**
+	 * @param expected The expected collection values
+	 * @param transactionComplete Whether all transactions have completed
+	 */
+	public void checkValue(Collection<E> expected, boolean transactionComplete) {
 		assertThat(theSyncedCopy, QommonsTestUtils.collectionsEqual(expected, true));
-		assertThat(theBatchSyncedCopy, QommonsTestUtils.collectionsEqual(expected, true));
+		if (transactionComplete)
+			assertThat(theBatchSyncedCopy, QommonsTestUtils.collectionsEqual(expected, true));
 	}
 
 	@Override

@@ -10,6 +10,8 @@ import java.util.stream.Collectors;
 import org.observe.SimpleSettableValue;
 import org.observe.collect.FlowOptions;
 import org.observe.collect.FlowOptions.MapDef;
+import org.observe.supertest.dev2.CollectionLinkElement;
+import org.observe.supertest.dev2.ExpectedCollectionOperation;
 import org.observe.supertest.dev2.ObservableCollectionLink;
 import org.observe.supertest.dev2.ObservableCollectionTestDef;
 import org.observe.supertest.dev2.OneToOneCollectionLink;
@@ -17,6 +19,7 @@ import org.observe.supertest.dev2.TestValueType;
 import org.observe.supertest.dev2.TypeTransformation;
 import org.qommons.BiTuple;
 import org.qommons.TestHelper;
+import org.qommons.collect.MutableCollectionElement.StdMsg;
 
 public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 	private final SimpleSettableValue<TypeTransformation<S, T>> theMapValue;
@@ -41,6 +44,40 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 	@Override
 	protected S reverse(T value) {
 		return theCurrentMap.reverse(value);
+	}
+
+	@Override
+	public CollectionLinkElement<S, T> expectAdd(T value, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before,
+		boolean first, OperationRejection rejection) {
+		if (theOptions.getReverse() == null) {
+			rejection.reject(StdMsg.UNSUPPORTED_OPERATION, true);
+			return null;
+		} else if (!getCollection().equivalence().elementEquals(theCurrentMap.map(theOptions.getReverse().apply(value)), value)) {
+			rejection.reject(StdMsg.ILLEGAL_ELEMENT, true);
+			return null;
+		}
+		return super.expectAdd(value, after, before, first, rejection);
+	}
+
+	@Override
+	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection) {
+		switch (derivedOp.getType()) {
+		case add:
+			throw new IllegalStateException();
+		case remove:
+			break;
+		case set:
+			if (theOptions.getReverse() == null) {
+				rejection.reject(StdMsg.UNSUPPORTED_OPERATION, true);
+				return;
+			} else if (!getCollection().equivalence().elementEquals(theCurrentMap.map(theOptions.getReverse().apply(derivedOp.getValue())),
+				derivedOp.getValue())) {
+				rejection.reject(StdMsg.ILLEGAL_ELEMENT, true);
+				return;
+			}
+			break;
+		}
+		super.expect(derivedOp, rejection);
 	}
 
 	public static <E, T> TypeTransformation<E, T> transform(TestValueType type1, TestValueType type2, TestHelper helper) {
