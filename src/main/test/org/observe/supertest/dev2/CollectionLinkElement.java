@@ -14,7 +14,7 @@ import org.qommons.tree.BetterTreeSet;
 public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkElement<S, T>> {
 	private final ObservableCollectionLink<S, T> theCollectionLink;
 	private final BetterSortedSet<CollectionLinkElement<?, S>> theSourceElements;
-	private final BetterSortedSet<CollectionLinkElement<T, ?>>[] theDerivedElements;
+	private BetterSortedSet<CollectionLinkElement<T, ?>>[] theDerivedElements;
 	private final ElementId theCollectionAddress;
 	private final ElementId theElementAddress;
 
@@ -34,9 +34,6 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 		theElementAddress = elementAddress;
 
 		theSourceElements = new BetterTreeSet<>(false, CollectionLinkElement::compareTo);
-		theDerivedElements = new BetterSortedSet[collectionLink.getDerivedLinks().size()];
-		for (int i = 0; i < theDerivedElements.length; i++)
-			theDerivedElements[i] = new BetterTreeSet<>(false, CollectionLinkElement::compareTo);
 
 		theErrors = new LinkedList<>();
 		theLastKnownIndex = theCollectionLink.getElements().getElementsBefore(elementAddress);
@@ -53,7 +50,7 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 			for (ElementId sourceEl : sourceElements) {
 				CollectionLinkElement<?, S> sourceLinkEl = theCollectionLink.getSourceLink().getElement(sourceEl);
 				theSourceElements.add(sourceLinkEl);
-				sourceLinkEl.theDerivedElements[siblingIndex].add(this);
+				sourceLinkEl.addDerived(siblingIndex, this);
 			}
 		}
 
@@ -95,6 +92,21 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 
 	public BetterList<CollectionLinkElement<T, ?>> getDerivedElements(int siblingIndex) {
 		return theDerivedElements[siblingIndex];
+	}
+
+	void addDerived(int siblingIndex, CollectionLinkElement<T, ?> derived) {
+		// Due to initialization order and various things, the derived elements must be lazily initialized and maintained
+		if (theDerivedElements == null) {
+			theDerivedElements = new BetterSortedSet[Math.max(siblingIndex + 1, theCollectionLink.getDerivedLinks().size())];
+		} else if (siblingIndex >= theDerivedElements.length) {
+			BetterSortedSet<CollectionLinkElement<T, ?>>[] newDerived = new BetterSortedSet[Math.max(siblingIndex + 1,
+				theCollectionLink.getDerivedLinks().size())];
+			System.arraycopy(theDerivedElements, 0, newDerived, 0, theDerivedElements.length);
+			theDerivedElements = newDerived;
+		}
+		if (theDerivedElements[siblingIndex] == null)
+			theDerivedElements[siblingIndex] = new BetterTreeSet<>(false, CollectionLinkElement::compareTo);
+		theDerivedElements[siblingIndex].add(derived);
 	}
 
 	public T get() {

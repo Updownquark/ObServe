@@ -84,6 +84,12 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			theMultiStepCollection = def.multiStepFlow.collectActive(Observable.empty);
 		theMultiStepTester = new ObservableCollectionTester<>("[" + getDepth() + "] Multi-step", theMultiStepCollection);
 
+		if (getSourceLink() == null && theSupplier != null && helper.getBoolean(.25)) {
+			int size = helper.getInt(0, 10);
+			for (int i = 0; i < size; i++)
+				getCollection().add(theSupplier.apply(helper));
+		}
+
 		// Listen to the collection to populate and maintain theElements
 		getCollection().subscribe(new Consumer<ObservableCollectionEvent<? extends T>>() {
 			@Override
@@ -111,6 +117,11 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 				}
 			}
 		}, true);
+	}
+
+	@Override
+	public void initialize(TestHelper helper) {
+		super.initialize(helper);
 	}
 
 	protected abstract void validate(CollectionLinkElement<S, T> element);
@@ -186,7 +197,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			subListEnd = subListStart + helper.getInt(0, getCollection().size() - subListStart);
 			modify = getCollection().subList(subListStart, subListEnd);
 			if (helper.isReproducing())
-				System.out.print("subList");
+				System.out.print("subList(" + subListStart + ".." + subListEnd + ") ");
 		} else {
 			subListStart = 0;
 			subListEnd = getCollection().size();
@@ -278,7 +289,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 						op.add(theElements.get(opCtx.subListStart + i));
 				}
 				if (helper.isReproducing())
-					System.out.println("\tShould remove " + op.printElements());
+					System.out.println("\t\tShould remove " + op.printElements());
 				helper.placemark();
 				removeAll(op, helper);
 			}).or(.1, () -> { // retainAll
@@ -301,7 +312,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 						op.add(theElements.get(opCtx.subListStart + i));
 				}
 				if (helper.isReproducing())
-					System.out.println("\tShould remove " + op.printElements());
+					System.out.println("\t\tShould remove " + op.printElements());
 				helper.placemark();
 				retainAll(values, op, helper);
 			});
@@ -317,7 +328,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			op.add(theElements.get(opCtx.subListStart + index));
 			if (helper.isReproducing()) {
 				System.out.println(op);
-				System.out.println("\tShould remove " + op.printElements());
+				System.out.println("\t\tShould remove " + op.printElements());
 			}
 			helper.placemark();
 			removeSingle(op, helper);
@@ -1043,9 +1054,6 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		@Override
 		public String toString() {
 			StringBuilder str = new StringBuilder();
-			if (context.subList) {
-				str.append('(').append(context.subListStart).append("..").append(context.subListEnd).append(')');
-			}
 			str.append(type);
 			if (minIndex >= 0) {
 				str.append('@').append(minIndex);

@@ -16,13 +16,6 @@ public abstract class OneToOneCollectionLink<S, T> extends ObservableCollectionL
 	protected abstract boolean isReversible();
 
 	@Override
-	public void initialize(TestHelper helper) {
-		super.initialize(helper);
-		for (CollectionLinkElement<?, S> sourceEl : getSourceLink().getElements())
-			expectAddFromSource(sourceEl);
-	}
-
-	@Override
 	public void expectFromSource(ExpectedCollectionOperation<?, S> sourceOp) {
 		switch (sourceOp.getType()) {
 		case add:

@@ -26,6 +26,19 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 
 	@Override
 	public void initialize(TestHelper helper) {
+		CollectionElement<T> el = getCollection().getTerminalElement(true);
+		CollectionLinkElement<T, T> linkEl = getElements().peekFirst();
+		while (el != null) {
+			linkEl.expectAdded(el.get());
+			ExpectedCollectionOperation<T, T> result = new ExpectedCollectionOperation<>(linkEl, CollectionChangeType.add, null,
+				linkEl.get());
+			for (CollectionSourcedLink<T, ?> derivedLink : getDerivedLinks())
+				derivedLink.expectFromSource(result);
+
+			el = getCollection().getAdjacentElement(el.getElementId(), true);
+			linkEl = CollectionElement.get(getElements().getAdjacentElement(linkEl.getElementAddress(), true));
+		}
+		super.initialize(helper);
 	}
 
 	@Override

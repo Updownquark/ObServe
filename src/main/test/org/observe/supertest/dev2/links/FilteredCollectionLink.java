@@ -8,11 +8,55 @@ import java.util.TreeMap;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
+import org.observe.supertest.dev2.CollectionLinkElement;
+import org.observe.supertest.dev2.ExpectedCollectionOperation;
 import org.observe.supertest.dev2.ObservableCollectionLink;
+import org.observe.supertest.dev2.ObservableCollectionTestDef;
 import org.observe.supertest.dev2.TestValueType;
 import org.qommons.TestHelper;
 
-public class FilteredCollectionLink<S, T> extends ObservableCollectionLink<S, T> {
+public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
+	public FilteredCollectionLink(ObservableCollectionLink<?, T> sourceLink, ObservableCollectionTestDef<T> def, TestHelper helper) {
+		super(sourceLink, def, helper);
+		// TODO Auto-generated constructor stub
+	}
+
+	@Override
+	public void expectFromSource(ExpectedCollectionOperation<?, T> sourceOp) {
+		// TODO Auto-generated method stub
+
+	}
+
+	@Override
+	protected void validate(CollectionLinkElement<T, T> element) {
+		// TODO Auto-generated method stub
+
+	}
+
+	@Override
+	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection, int derivedIndex) {
+		// TODO Auto-generated method stub
+
+	}
+
+	@Override
+	public CollectionLinkElement<T, T> expectAdd(T value, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before,
+		boolean first, OperationRejection rejection, int derivedIndex) {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public boolean isAcceptable(T value) {
+		// TODO Filter
+		return getSourceLink().isAcceptable(value);
+	}
+
+	@Override
+	public T getUpdateValue(T value) {
+		return getSourceLink().getUpdateValue(value);
+	}
+
 	public static <T> Function<T, String> filterFor(TestValueType type, TestHelper helper) {
 		List<Function<?, String>> typeFilters = FILTERS.get(type);
 		return (Function<T, String>) typeFilters.get(helper.getInt(0, typeFilters.size()));

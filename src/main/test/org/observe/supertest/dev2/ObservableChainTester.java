@@ -86,8 +86,8 @@ public class ObservableChainTester implements Testable {
 		//Tend toward smaller chain lengths, but allow longer ones occasionally
 		int linkCount = helper.getInt(2, helper.getInt(2, MAX_LINK_COUNT));
 		theRoot = BaseCollectionLink.createInitialLink(null, helper, 0, Ternian.NONE, null);
-		theRoot.initialize(helper);
 		theRoot.derive(helper, linkCount);
+		theRoot.initialize(helper);
 		theLinks = new ArrayList<>(theRoot.getLinkCount());
 		return fillLinks(theLinks, theRoot, 0, "root");
 	}
@@ -104,16 +104,15 @@ public class ObservableChainTester implements Testable {
 	}
 
 	private void test(TestHelper helper) {
-		System.out.println("Assembled:" + toString());
 		if (helper.isReproducing()) {
-			System.out.println("Initial Values:");
-			System.out.println(this);
-		}
+			System.out.println("Initial Values:" + print(true));
+		} else
+			System.out.println("Assembled:" + toString());
 		try{
 			validate(theRoot, true, "root");
 		} catch(Error e){
 			System.err.println("Integrity check failure on initial values");
-			return;
+			throw e;
 		}
 
 		int tries = 50;
@@ -231,10 +230,6 @@ public class ObservableChainTester implements Testable {
 			str.append(link.path).append(": ").append(names[i]);
 			if (withValues) {
 				int j = nameLengths[i];
-				while (j + TAB_LENGTH <= maxNameLength) {
-					str.append('\t');
-					j += TAB_LENGTH;
-				}
 				while (j < maxNameLength) {
 					str.append(' ');
 					j++;
