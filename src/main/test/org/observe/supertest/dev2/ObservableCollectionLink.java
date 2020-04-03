@@ -187,7 +187,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			subListEnd = subListStart + helper.getInt(0, getCollection().size() - subListStart);
 			modify = getCollection().subList(subListStart, subListEnd);
 			if (helper.isReproducing())
-				System.out.println("subList(" + subListStart + ", " + subListEnd + ")");
+				System.out.print("subList");
 		} else {
 			subListStart = 0;
 			subListEnd = getCollection().size();
@@ -451,46 +451,48 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			};
 			return (CollectionDerivedValue<T, X>) value;
 		});
-		action.or(.05, () -> { // Contains
-			SettableValue<T> value = SettableValue.build((TypeToken<T>) getType().getType()).safe(false).build();
-			value.set(theSupplier.apply(helper), null);
-			CollectionDerivedValue<T, Boolean> contains = new CollectionDerivedValue<T, Boolean>(this, TestValueType.BOOLEAN) {
-				@Override
-				protected ObservableValue<Boolean> createValue(TestHelper __) {
-					return getCollection().observeContains(value);
-				}
+		if (theSupplier != null) {
+			action.or(.05, () -> { // Contains
+				SettableValue<T> value = SettableValue.build((TypeToken<T>) getType().getType()).safe(false).build();
+				value.set(theSupplier.apply(helper), null);
+				CollectionDerivedValue<T, Boolean> contains = new CollectionDerivedValue<T, Boolean>(this, TestValueType.BOOLEAN) {
+					@Override
+					protected ObservableValue<Boolean> createValue(TestHelper __) {
+						return getCollection().observeContains(value);
+					}
 
-				@Override
-				public boolean isModifiable() {
-					return true;
-				}
+					@Override
+					public boolean isModifiable() {
+						return true;
+					}
 
-				@Override
-				public void tryModify(TestHelper h) throws AssertionError {
-					T newValue = theSupplier.apply(h);
-					if (h.isReproducing())
-						System.out.println("Value " + value.get() + " -> " + newValue);
-					value.set(theSupplier.apply(h), null);
-				}
+					@Override
+					public void tryModify(TestHelper h) throws AssertionError {
+						T newValue = theSupplier.apply(h);
+						if (h.isReproducing())
+							System.out.println("Value " + value.get() + " -> " + newValue);
+						value.set(theSupplier.apply(h), null);
+					}
 
-				@Override
-				public void expectFromSource(ExpectedCollectionOperation<?, T> sourceOp) {}
+					@Override
+					public void expectFromSource(ExpectedCollectionOperation<?, T> sourceOp) {}
 
-				@Override
-				public void validate(boolean transactionEnd) throws AssertionError {
-					CollectionElement<T> found = getCollection().getElement(value.get(), true);
-					Assert.assertEquals(found != null, getValue().get().booleanValue());
-					if (found != null)
-						Assert.assertTrue(getCollection().equivalence().elementEquals(found.get(), value.get()));
-				}
+					@Override
+					public void validate(boolean transactionEnd) throws AssertionError {
+						CollectionElement<T> found = getCollection().getElement(value.get(), true);
+						Assert.assertEquals(found != null, getValue().get().booleanValue());
+						if (found != null)
+							Assert.assertTrue(getCollection().equivalence().elementEquals(found.get(), value.get()));
+					}
 
-				@Override
-				public String toString() {
-					return "contains(" + value.get() + ")";
-				}
-			};
-			return (CollectionDerivedValue<T, X>) contains;
-		});
+					@Override
+					public String toString() {
+						return "contains(" + value.get() + ")";
+					}
+				};
+				return (CollectionDerivedValue<T, X>) contains;
+			});
+		}
 		action.or(.1, () -> {// Find condition
 			SettableValue<Function<T, String>> conditionValue = SettableValue
 				.build((TypeToken<Function<T, String>>) (TypeToken<?>) TypeTokens.get().OBJECT).safe(false).build();

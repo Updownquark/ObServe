@@ -335,7 +335,7 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 							transform(type1, type2, //
 								i -> i / 5.0, //
 								d -> (int) Math.round(d * 5), //
-								false, true, "/5.0", "*5,round"));
+								true, true, "/5.0", "*5,round"));
 						break;
 					}
 					case STRING: {

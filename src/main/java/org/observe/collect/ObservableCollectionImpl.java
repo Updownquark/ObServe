@@ -520,8 +520,10 @@ public final class ObservableCollectionImpl {
 							@Override
 							public void accept(ObservableCollectionEvent<? extends E> evt) {
 								Map<Object, Object> causeData = theCollectionCauseKey.getData();
-								if (isRefreshNeeded || causeData.containsKey("re-search"))
+								if (isRefreshNeeded || causeData.containsKey("re-search")) {
+									theLastMatch = null;
 									return; // We've lost track of the current best and will need to find it again later
+								}
 								SimpleElement current = (SimpleElement) causeData.getOrDefault("replacement", theCurrentElement);
 								boolean mayReplace;
 								boolean sameElement;
@@ -557,13 +559,16 @@ public final class ObservableCollectionImpl {
 								} else
 									refresh = false;
 								causeData = evt.getRootCausable().onFinish(theCollectionCauseKey);
-								if (refresh)
+								if (refresh) {
+									theLastMatch = null;
 									return;
+								}
 								if (!matches) {
 									// The current element's value no longer matches
 									// We need to search for the new value if we don't already know of a better match.
 									causeData.remove("replacement");
 									causeData.put("re-search", true);
+									theLastMatch = null;
 								} else {
 									if (evt.isFinal()) {
 										// The current element has been removed
@@ -571,6 +576,7 @@ public final class ObservableCollectionImpl {
 										// The signal for this is a null replacement
 										causeData.remove("replacement");
 										causeData.put("re-search", true);
+										theLastMatch = null;
 									} else {
 										// Either:
 										// * There is no current element and the new element matches
@@ -581,10 +587,12 @@ public final class ObservableCollectionImpl {
 										if (current == null || better) {
 											causeData.put("replacement", new SimpleElement(evt.getElementId(), evt.getNewValue()));
 											causeData.remove("re-search");
+											theLastMatch = evt.getElementId();
 										} else if (sameElement) {
 											// The current best element is removed or replaced with an inferior value. Need to re-search.
 											causeData.remove("replacement");
 											causeData.put("re-search", true);
+											theLastMatch = null;
 										}
 									}
 								}
@@ -595,9 +603,11 @@ public final class ObservableCollectionImpl {
 									return; // We already know
 								else if (isChanging) {
 									// If the collection is also changing, just do the refresh after all the other changes
+									theLastMatch = null;
 									isRefreshNeeded = true;
 								} else if (cause instanceof Causable) {
 									isRefreshNeeded = true;
+									theLastMatch = null;
 									((Causable) cause).getRootCausable().onFinish(theRefreshCauseKey);
 								} else {
 									doRefresh(cause);
