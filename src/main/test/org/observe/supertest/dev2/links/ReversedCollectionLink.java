@@ -25,6 +25,11 @@ public class ReversedCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 	}
 
 	@Override
+	protected boolean isReversible() {
+		return true;
+	}
+
+	@Override
 	public boolean isAcceptable(T value) {
 		return getSourceLink().isAcceptable(value);
 	}
@@ -41,7 +46,7 @@ public class ReversedCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 		CollectionLinkElement<?, T> sourceEl = getSourceLink().expectAdd(reverse(value), //
 			before == null ? null : ((CollectionLinkElement<T, T>) before).getSourceElements().getFirst(), //
 				after == null ? null : ((CollectionLinkElement<T, T>) after).getSourceElements().getFirst(), //
-			!first, rejection, getSiblingIndex());
+					!first, rejection, getSiblingIndex());
 		if (rejection.isRejected())
 			return null;
 		newElement = addFromSource(sourceEl, value);

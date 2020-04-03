@@ -18,7 +18,7 @@ public class FilteredCollectionLink<S, T> extends ObservableCollectionLink<S, T>
 		return (Function<T, String>) typeFilters.get(helper.getInt(0, typeFilters.size()));
 	}
 
-	private static final Map<TestValueType, List<Function<?, String>>> FILTERS;
+	static final Map<TestValueType, List<Function<?, String>>> FILTERS;
 	static {
 		Map<TestValueType, List<Function<?, String>>> filters = new TreeMap<>();
 		for (TestValueType type : TestValueType.values()) {
@@ -38,6 +38,10 @@ public class FilteredCollectionLink<S, T> extends ObservableCollectionLink<S, T>
 			case STRING:
 				typeFilters.add(filter((String s) -> s.length() <= 4, "length<=4 only"));
 				typeFilters.add(filter((String s) -> s.length() == 0 ? false : s.charAt(0) % 2 == 0, "even first char only"));
+				break;
+			case BOOLEAN:
+				typeFilters.add(filter((Boolean b) -> b, "true"));
+				typeFilters.add(filter((Boolean b) -> b, "false"));
 				break;
 			}
 		}

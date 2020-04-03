@@ -8,7 +8,7 @@ import org.qommons.collect.ElementId;
 
 /**
  * Tests an {@link ObservableElement}
- * 
+ *
  * @param <T> The type of value in the element
  */
 public class ObservableElementTester<T> extends ObservableValueTester<T> {

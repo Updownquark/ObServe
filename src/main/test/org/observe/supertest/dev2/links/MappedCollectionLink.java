@@ -6,7 +6,6 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
 import org.observe.SimpleSettableValue;
 import org.observe.collect.CollectionChangeType;
@@ -20,7 +19,6 @@ import org.observe.supertest.dev2.ObservableCollectionTestDef;
 import org.observe.supertest.dev2.OneToOneCollectionLink;
 import org.observe.supertest.dev2.TestValueType;
 import org.observe.supertest.dev2.TypeTransformation;
-import org.qommons.BiTuple;
 import org.qommons.TestHelper;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 
@@ -47,6 +45,11 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 	@Override
 	protected S reverse(T value) {
 		return theCurrentMap.reverse(value);
+	}
+
+	@Override
+	protected boolean isReversible() {
+		return theCurrentMap.supportsReverse();
 	}
 
 	@Override
@@ -125,17 +128,42 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 		super.expect(derivedOp, rejection, derivedIndex);
 	}
 
-	public static <E, T> TypeTransformation<E, T> transform(TestValueType type1, TestValueType type2, TestHelper helper) {
-		List<? extends TypeTransformation<?, ?>> transforms = TYPE_TRANSFORMATIONS.get(new BiTuple<>(type1, type2));
-		return (TypeTransformation<E, T>) transforms.get(helper.getInt(0, transforms.size()));
+	public static boolean supportsTransform(TestValueType sourceType, boolean allowManyToOne, boolean requireReversible) {
+		List<? extends TypeTransformation<?, ?>> transforms = TYPE_TRANSFORMATIONS.get(sourceType);
+		if (transforms == null || transforms.isEmpty())
+			return false;
+		if (!allowManyToOne || requireReversible) {
+			boolean supported = false;
+			for (TypeTransformation<?, ?> transform : transforms) {
+				if (!allowManyToOne && transform.isManyToOne()) {} else if (requireReversible && !transform.supportsReverse()) {} else {
+					supported = true;
+					break;
+				}
+			}
+			return supported;
+		}
+		return true;
 	}
 
-	public static <E, T> TypeTransformation<E, T> transform(TestValueType type1, TestValueType type2, TestHelper helper,
-		boolean allowManyToOne) {
-		List<? extends TypeTransformation<?, ?>> transforms = TYPE_TRANSFORMATIONS.get(new BiTuple<>(type1, type2));
-		if (!allowManyToOne)
-			transforms = transforms.stream().filter(t -> !t.isManyToOne()).collect(Collectors.toList());
-		return (TypeTransformation<E, T>) transforms.get(helper.getInt(0, transforms.size()));
+	public static <E, T> TypeTransformation<E, T> transform(TestValueType type, TestHelper helper, boolean allowManyToOne,
+		boolean requireReversible) {
+		List<? extends TypeTransformation<E, ?>> transforms = (List<? extends TypeTransformation<E, ?>>) TYPE_TRANSFORMATIONS.get(type);
+		if ((!allowManyToOne || requireReversible) && !supportsTransform(type, allowManyToOne, requireReversible))
+			throw new UnsupportedOperationException();
+		TypeTransformation<E, ?> transform;
+		while (true) {
+			if (transforms.size() == 1)
+				transform = transforms.get(0);
+			else
+				transform = transforms.get(helper.getInt(0, transforms.size()));
+			if (!allowManyToOne && transform.isManyToOne())
+				continue;
+			else if (requireReversible && !transform.supportsReverse())
+				continue;
+			else
+				break;
+		}
+		return (TypeTransformation<E, T>) transform;
 	}
 
 	@Override
@@ -148,11 +176,26 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 		return str + ")";
 	}
 
-	private static <E> TypeTransformation<E, E> identity() {
+	private static <E> TypeTransformation<E, E> identity(TestValueType type) {
 		return new TypeTransformation<E, E>() {
+			@Override
+			public TestValueType getSourceType() {
+				return type;
+			}
+
+			@Override
+			public TestValueType getType() {
+				return type;
+			}
+
 			@Override
 			public E map(E source) {
 				return source;
+			}
+
+			@Override
+			public boolean supportsReverse() {
+				return true;
 			}
 
 			@Override
@@ -182,16 +225,33 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 		};
 	}
 
-	private static <E, T> TypeTransformation<E, T> transform(Function<E, T> map, Function<T, E> reverse, boolean manyToOne,
-		boolean oneToMany, String name, String reverseName) {
+	private static <E, T> TypeTransformation<E, T> transform(TestValueType sourceType, TestValueType type, Function<E, T> map,
+		Function<T, E> reverse, boolean manyToOne, boolean oneToMany, String name, String reverseName) {
 		return new TypeTransformation<E, T>() {
+			@Override
+			public TestValueType getSourceType() {
+				return sourceType;
+			}
+
+			@Override
+			public TestValueType getType() {
+				return type;
+			}
+
 			@Override
 			public T map(E source) {
 				return map.apply(source);
 			}
 
 			@Override
+			public boolean supportsReverse() {
+				return reverse != null;
+			}
+
+			@Override
 			public E reverse(T mapped) {
+				if (reverse == null)
+					throw new UnsupportedOperationException();
 				return reverse.apply(mapped);
 			}
 
@@ -235,33 +295,44 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 		return new String(c);
 	}
 
-	private static final Map<BiTuple<TestValueType, TestValueType>, List<? extends TypeTransformation<?, ?>>> TYPE_TRANSFORMATIONS;
+	private static final Map<TestValueType, List<? extends TypeTransformation<?, ?>>> TYPE_TRANSFORMATIONS;
 	static {
 		TYPE_TRANSFORMATIONS = new HashMap<>();
 		for (TestValueType type1 : TestValueType.values()) {
 			for (TestValueType type2 : TestValueType.values()) {
+				if (type1 == type2)
+					supportTransforms(type1, type2, identity(type1));
+				if (type2 == TestValueType.BOOLEAN) {
+					List<Function<?, String>> filters = FilteredCollectionLink.FILTERS.get(type1);
+					if (filters != null) {
+						for (Function<?, String> filter : filters) {
+							MappedCollectionLink.<Object, Boolean> supportTransforms(type1, type2, //
+								transform(type1, type2, obj -> ((Function<Object, String>) filter).apply(obj) == null, null, true, false,
+								filter.toString(), null));
+						}
+					}
+				}
 				switch (type1) {
 				case INT:
 					switch (type2) {
 					case INT: {
 						MappedCollectionLink.<Integer, Integer> supportTransforms(type1, type2, //
-							identity(), //
-							transform(i -> i + 5, i -> i - 5, false, false, "+5", "-5"), //
-							transform(i -> i * 5, i -> i / 5, false, true, "*5", "/5"), //
-							transform(i -> -i, i -> -i, false, false, "-", "-"));
+							transform(type1, type2, i -> i + 5, i -> i - 5, false, false, "+5", "-5"), //
+							transform(type1, type2, i -> i * 5, i -> i / 5, false, true, "*5", "/5"), //
+							transform(type1, type2, i -> -i, i -> -i, false, false, "-", "-"));
 						break;
 					}
 					case DOUBLE: {
 						MappedCollectionLink.<Integer, Double> supportTransforms(type1, type2, //
-							transform(//
+							transform(type1, type2, //
 								i -> i * 1.0, //
 								d -> (int) Math.round(d), //
 								false, true, "*1.0", "round()"), //
-							transform(//
+							transform(type1, type2, //
 								i -> i * 5.0, //
 								d -> (int) Math.round(d / 5), //
 								false, true, "*5.0", "/5,round"),
-							transform(//
+							transform(type1, type2, //
 								i -> i / 5.0, //
 								d -> (int) Math.round(d * 5), //
 								false, true, "/5.0", "*5,round"));
@@ -271,10 +342,12 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 						// Although a single integer will map to a single string, there are many double strings
 						// that map to the same integer, hence oneToMany=true
 						MappedCollectionLink.<Integer, String> supportTransforms(type1, type2, //
-							transform(i -> String.valueOf(i), s -> (int) Math.round(Double.parseDouble(s)), false, true, "toString()",
-								"parseInt"));
+							transform(type1, type2, i -> String.valueOf(i), s -> (int) Math.round(Double.parseDouble(s)), false, true,
+								"toString()", "parseInt"));
 						break;
 					}
+					case BOOLEAN:
+						break;
 					}
 					break;
 				case DOUBLE:
@@ -283,19 +356,21 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 						break;
 					case DOUBLE: {
 						MappedCollectionLink.<Double, Double> supportTransforms(type1, type2, //
-							identity(), //
-							transform(d -> d + 5, d -> d - 5, false, false, "+5", "-5"), //
-							transform(d -> d * 5, d -> d / 5, false, true, "*5", "/5"), //
-							transform(d -> -d, d -> -d, false, false, "-", "-"));
+							transform(type1, type2, d -> d + 5, d -> d - 5, false, false, "+5", "-5"), //
+							transform(type1, type2, d -> d * 5, d -> d / 5, false, true, "*5", "/5"), //
+							transform(type1, type2, d -> -d, d -> -d, false, false, "-", "-"));
 						break;
 					}
 					case STRING: {
 						// Although a single double will map to a single string, leading zeros mean there are many strings
 						// that map to the same double, hence oneToMany=true
 						MappedCollectionLink.<Double, String> supportTransforms(type1, type2, //
-							transform(d -> stringValueOf(d), s -> Double.valueOf(s), false, true, "toString()", "parseDouble"));
+							transform(type1, type2, d -> stringValueOf(d), s -> Double.valueOf(s), false, true, "toString()",
+								"parseDouble"));
 						break;
 					}
+					case BOOLEAN:
+						break;
 					}
 					break;
 				case STRING:
@@ -305,25 +380,28 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 						break;
 					case STRING: {
 						MappedCollectionLink.<String, String> supportTransforms(type1, type2, //
-							identity(), transform(s -> reverse(s), s -> reverse(s), false, false, "reverse", "reverse"));
+							transform(type1, type2, s -> reverse(s), s -> reverse(s), false, false, "reverse", "reverse"));
 						break;
 					}
+					case BOOLEAN:
+						break;
 					}
+					break;
+				case BOOLEAN:
+					break;
 				}
 			}
 		}
 	}
 
 	private static <S, T> void supportTransforms(TestValueType type1, TestValueType type2, TypeTransformation<S, T>... transforms) {
-		BiTuple<TestValueType, TestValueType> key = new BiTuple<>(type1, type2);
-		BiTuple<TestValueType, TestValueType> reverseKey = new BiTuple<>(type2, type1);
-		List<TypeTransformation<S, T>> forward = ((List<TypeTransformation<S, T>>) TYPE_TRANSFORMATIONS.computeIfAbsent(key,
-			k -> new LinkedList<>()));
-		List<TypeTransformation<T, S>> backward = key.equals(reverseKey) ? null
-			: ((List<TypeTransformation<T, S>>) TYPE_TRANSFORMATIONS.computeIfAbsent(reverseKey, k -> new LinkedList<>()));
+		List<TypeTransformation<S, T>> forward = (List<TypeTransformation<S, T>>) TYPE_TRANSFORMATIONS.computeIfAbsent(type1,
+			t -> new LinkedList<>());
+		List<TypeTransformation<T, S>> backward = type1 == type2 ? null
+			: (List<TypeTransformation<T, S>>) TYPE_TRANSFORMATIONS.computeIfAbsent(type2, t -> new LinkedList<>());
 		for (TypeTransformation<S, T> transform : transforms) {
 			forward.add(transform);
-			if (backward != null)
+			if (backward != null && transform.supportsReverse())
 				backward.add(transform.reverse());
 		}
 	}

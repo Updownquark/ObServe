@@ -53,8 +53,10 @@ public class ObservableChainTester implements Testable {
 		boolean debugging = helper.isReproducing();
 		if (debugging)
 			Debug.d().start();// .watchFor(new Debugging());
-		assemble(helper);
-		test(helper);
+		if (!assemble(helper))
+			System.out.println("No modifiable links created");
+		else
+			test(helper);
 		if (debugging)
 			Debug.d().end();
 	}
@@ -80,32 +82,39 @@ public class ObservableChainTester implements Testable {
 		summary.throwErrorIfFailed();
 	}
 
-	private <E> void assemble(TestHelper helper) {
+	private <E> boolean assemble(TestHelper helper) {
 		//Tend toward smaller chain lengths, but allow longer ones occasionally
 		int linkCount = helper.getInt(2, helper.getInt(2, MAX_LINK_COUNT));
 		theRoot = BaseCollectionLink.createInitialLink(null, helper, 0, Ternian.NONE, null);
 		theRoot.initialize(helper);
 		theRoot.derive(helper, linkCount);
 		theLinks = new ArrayList<>(theRoot.getLinkCount());
-		fillLinks(theLinks, theRoot, 0, "root");
+		return fillLinks(theLinks, theRoot, 0, "root");
 	}
 
-	private static void fillLinks(List<LinkStruct> links, ObservableChainLink<?, ?> link, int depth, String path) {
+	private static boolean fillLinks(List<LinkStruct> links, ObservableChainLink<?, ?> link, int depth, String path) {
+		boolean modifiable = link.isModifiable();
 		links.add(new LinkStruct(link, depth, path));
 		int d = 0;
 		for (ObservableChainLink<?, ?> derived : link.getDerivedLinks()) {
-			fillLinks(links, derived, depth + 1, path + "[" + d + "]");
+			modifiable |= fillLinks(links, derived, depth + 1, path + "[" + d + "]");
 			d++;
 		}
+		return modifiable;
 	}
 
 	private void test(TestHelper helper) {
-		System.out.println("Assembled:\n" + toString());
+		System.out.println("Assembled:" + toString());
 		if (helper.isReproducing()) {
 			System.out.println("Initial Values:");
 			System.out.println(this);
 		}
-		validate(theRoot, true, "root");
+		try{
+			validate(theRoot, true, "root");
+		} catch(Error e){
+			System.err.println("Integrity check failure on initial values");
+			return;
+		}
 
 		int tries = 50;
 		long modifications = 0;
@@ -113,24 +122,27 @@ public class ObservableChainTester implements Testable {
 		for (int tri = 0; tri < tries; tri++) {
 			path.setLength("root".length());
 			int linkIndex = helper.getInt(0, theLinks.size());
-			ObservableChainLink<?, ?> targetLink = theLinks.get(linkIndex).link;
+			while (!theLinks.get(linkIndex).link.isModifiable())
+				linkIndex = helper.getInt(0, theLinks.size());
+			LinkStruct targetLink = theLinks.get(linkIndex);
 			boolean finished = false;
 			boolean useTransaction = helper.getBoolean(.75);
-			try (Transaction t = useTransaction ? targetLink.lock(true, null) : Transaction.NONE) {
+			try (Transaction t = useTransaction ? targetLink.link.lock(true, null) : Transaction.NONE) {
 				int transactionMods = (int) helper.getDouble(1, 10, 26);
 				if (transactionMods == 25)
 					transactionMods = 0; // Want the probability of no-op transactions to be small but present
 				if (helper.isReproducing())
-					System.out.println("Modification set " + (tri + 1) + ": " + transactionMods + " modifications on link " + path);
+					System.out
+					.println("Modification set " + (tri + 1) + ": " + transactionMods + " modifications on link " + targetLink.path);
 				helper.placemark("Transaction");
 				for (int transactionTri = 0; transactionTri < transactionMods; transactionTri++) {
 					String preValue = printValues();
 					if (helper.isReproducing())
 						System.out.print("\tMod " + (transactionTri + 1) + ": ");
 					try {
-						targetLink.tryModify(helper);
+						targetLink.link.tryModify(helper);
 					} catch (RuntimeException | Error e) {
-						System.err.println("Chain is:\n" + toString());
+						System.err.println("Chain is:" + toString());
 						System.err.println("Link " + path);
 						System.err.println("Error on transaction " + (tri + 1) + ", mod " + (transactionTri + 1) + " after "
 							+ (modifications + transactionTri) + " successful modifications");
@@ -141,7 +153,7 @@ public class ObservableChainTester implements Testable {
 					try {
 						validate(theRoot, !useTransaction, "root");
 					} catch (Error e) {
-						System.err.println("Chain is:\n" + toString());
+						System.err.println("Chain is:" + toString());
 						System.err.println("Link " + path);
 						System.err.println("Integrity check failure after "
 							+ (modifications + transactionTri + 1) + " modifications in " + (tri + 1) + " transactions");
@@ -161,14 +173,14 @@ public class ObservableChainTester implements Testable {
 				finished = true;
 			} catch (RuntimeException | Error e) {
 				if (finished) {
-					System.err.println("Chain is:\n" + toString());
+					System.err.println("Chain is:" + toString());
 					System.err.println("Link " + path);
 					System.err.println("Error closing transaction " + tri + " after " + modifications + " successful modifications");
 				}
 				throw e;
 			}
 			if (helper.isReproducing())
-				System.out.println("Values:\n" + this);
+				System.out.println("Values:" + print(true));
 			try {
 				validate(theRoot, true, "root");
 			} catch (Error e) {
@@ -185,12 +197,13 @@ public class ObservableChainTester implements Testable {
 		try {
 			link.validate(transactionEnd);
 		} catch (Error e) {
-			System.err.println("Integrity check failure on initial values on link " + path);
+			System.err.println("Integrity check failure on link " + path);
 			throw e;
 		}
 		int i = 0;
 		for (ObservableChainLink<?, ?> derived : link.getDerivedLinks()) {
-			validate(derived, transactionEnd, path + "[" + i + "]");
+			validate(derived, transactionEnd, //
+				path + "[" + i + "]");
 			i++;
 		}
 	}
@@ -218,7 +231,7 @@ public class ObservableChainTester implements Testable {
 			str.append(link.path).append(": ").append(names[i]);
 			if (withValues) {
 				int j = nameLengths[i];
-				while (j <= maxNameLength - TAB_LENGTH) {
+				while (j + TAB_LENGTH <= maxNameLength) {
 					str.append('\t');
 					j += TAB_LENGTH;
 				}

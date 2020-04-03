@@ -1,7 +1,13 @@
 package org.observe.supertest.dev2;
 
 public interface TypeTransformation<E, T> {
+	TestValueType getSourceType();
+
+	TestValueType getType();
+
 	T map(E source);
+
+	boolean supportsReverse();
 
 	E reverse(T mapped);
 
@@ -12,11 +18,28 @@ public interface TypeTransformation<E, T> {
 	String reverseName();
 
 	default TypeTransformation<T, E> reverse() {
+		if (!supportsReverse())
+			throw new UnsupportedOperationException();
 		TypeTransformation<E, T> outer = this;
 		return new TypeTransformation<T, E>() {
 			@Override
+			public TestValueType getSourceType() {
+				return outer.getType();
+			}
+
+			@Override
+			public TestValueType getType() {
+				return outer.getSourceType();
+			}
+
+			@Override
 			public E map(T source) {
 				return outer.reverse(source);
+			}
+
+			@Override
+			public boolean supportsReverse() {
+				return true;
 			}
 
 			@Override

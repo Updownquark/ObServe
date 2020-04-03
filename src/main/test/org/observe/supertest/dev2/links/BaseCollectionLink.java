@@ -1,7 +1,6 @@
 package org.observe.supertest.dev2.links;
 
 import java.util.Comparator;
-import java.util.List;
 
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.DefaultObservableCollection;
@@ -40,7 +39,7 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	}
 
 	@Override
-	public List<ExpectedCollectionOperation<T, T>> expectFromSource(ExpectedCollectionOperation<?, T> sourceOp) {
+	public void expectFromSource(ExpectedCollectionOperation<?, T> sourceOp) {
 		throw new IllegalStateException("Unexpected source");
 	}
 
@@ -99,10 +98,23 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	@Override
 	protected void validate(CollectionLinkElement<T, T> element) {}
 
+
+	static TestValueType nextType(TestHelper helper) {
+		// The DOUBLE type is much less performant. There may be some value, but we'll use it less often.
+		ValueHolder<TestValueType> result = new ValueHolder<>();
+		TestHelper.RandomAction action = helper.createAction();
+		action.or(10, () -> result.accept(TestValueType.INT));
+		action.or(5, () -> result.accept(TestValueType.STRING));
+		action.or(2, () -> result.accept(TestValueType.DOUBLE));
+		action.execute(null);
+		return result.get();
+		// return TestValueType.values()[helper.getInt(0, TestValueType.values().length)];
+	}
+
 	@SuppressWarnings("deprecation")
 	public static <E> BaseCollectionLink<E> createInitialLink(TestValueType type, TestHelper helper, int depth, Ternian withSorted,
 		Comparator<? super E> compare) {
-		TestValueType fType = type != null ? type : TestValueType.nextType(helper);
+		TestValueType fType = type != null ? type : nextType(helper);
 
 		ValueHolder<BaseCollectionLink<E>> holder = new ValueHolder<>();
 		TestHelper.RandomAction action = helper.createAction();

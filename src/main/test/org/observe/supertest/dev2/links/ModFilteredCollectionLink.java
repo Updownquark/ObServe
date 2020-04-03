@@ -28,6 +28,11 @@ public class ModFilteredCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 	}
 
 	@Override
+	protected boolean isReversible() {
+		return true;
+	}
+
+	@Override
 	public boolean isAcceptable(T value) {
 		return getSourceLink().isAcceptable(value);
 	}

@@ -6,7 +6,6 @@ import static org.observe.collect.CollectionChangeType.set;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
@@ -15,6 +14,8 @@ import java.util.function.Function;
 
 import org.junit.Assert;
 import org.observe.Observable;
+import org.observe.ObservableValue;
+import org.observe.SettableValue;
 import org.observe.SimpleSettableValue;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.Equivalence;
@@ -24,10 +25,14 @@ import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl;
 import org.observe.collect.ObservableCollectionEvent;
 import org.observe.collect.ObservableCollectionTester;
+import org.observe.collect.ObservableElement;
+import org.observe.collect.ObservableElementTester;
 import org.observe.supertest.dev2.links.FilteredCollectionLink;
 import org.observe.supertest.dev2.links.MappedCollectionLink;
 import org.observe.supertest.dev2.links.ModFilteredCollectionLink;
 import org.observe.supertest.dev2.links.ReversedCollectionLink;
+import org.observe.util.TypeTokens;
+import org.qommons.Ternian;
 import org.qommons.TestHelper;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
@@ -43,7 +48,7 @@ import org.qommons.tree.BetterTreeList;
 
 import com.google.common.reflect.TypeToken;
 
-public abstract class ObservableCollectionLink<S, T> implements CollectionSourcedLink<S, T> {
+public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S, T> implements CollectionSourcedLink<S, T> {
 	public interface OperationRejection {
 		boolean isRejected();
 
@@ -54,22 +59,17 @@ public abstract class ObservableCollectionLink<S, T> implements CollectionSource
 	private final ObservableCollection<T> theOneStepCollection;
 	private final ObservableCollection<T> theMultiStepCollection;
 	private final ObservableCollectionTester<T> theMultiStepTester;
-	private final ObservableCollectionLink<?, S> theSourceLink;
-	private List<CollectionSourcedLink<T, ?>> theDerivedLinks;
-	private int theSiblingIndex;
 	private final Function<TestHelper, T> theSupplier;
 
 	private final BetterTreeList<CollectionLinkElement<S, T>> theElements;
 	private final BetterTreeList<CollectionLinkElement<S, T>> theElementsForCollection;
 
 	public ObservableCollectionLink(ObservableCollectionLink<?, S> sourceLink, ObservableCollectionTestDef<T> def, TestHelper helper) {
+		super(sourceLink);
 		theDef = def;
-		theSourceLink = sourceLink;
-		theDerivedLinks = Collections.emptyList();
 		theSupplier = (Function<TestHelper, T>) ObservableChainTester.SUPPLIERS.get(def.type);
 		theElements = new BetterTreeList<>(false);
 		theElementsForCollection = new BetterTreeList<>(false);
-		theSiblingIndex = -1;
 		boolean passive;
 		if (def.allowPassive.value != null)
 			passive = def.allowPassive.value;
@@ -114,24 +114,11 @@ public abstract class ObservableCollectionLink<S, T> implements CollectionSource
 		}, true);
 	}
 
-	@Override
-	public abstract void initialize(TestHelper helper);
-
 	protected abstract void validate(CollectionLinkElement<S, T> element);
 
 	@Override
 	public TestValueType getType() {
 		return theDef.type;
-	}
-
-	@Override
-	public ObservableCollectionLink<?, S> getSourceLink() {
-		return theSourceLink;
-	}
-
-	@Override
-	public List<CollectionSourcedLink<T, ?>> getDerivedLinks() {
-		return theDerivedLinks;
 	}
 
 	@Override
@@ -147,6 +134,16 @@ public abstract class ObservableCollectionLink<S, T> implements CollectionSource
 	@Override
 	public Transaction tryLock(boolean write, Object cause) {
 		return getCollection().tryLock(write, cause);
+	}
+
+	@Override
+	public ObservableCollectionLink<?, S> getSourceLink() {
+		return (ObservableCollectionLink<?, S>) super.getSourceLink();
+	}
+
+	@Override
+	public List<CollectionSourcedLink<T, ?>> getDerivedLinks() {
+		return (List<CollectionSourcedLink<T, ?>>) super.getDerivedLinks();
 	}
 
 	public ObservableCollection<T> getCollection() {
@@ -171,27 +168,14 @@ public abstract class ObservableCollectionLink<S, T> implements CollectionSource
 	public abstract CollectionLinkElement<S, T> expectAdd(T value, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before,
 		boolean first, OperationRejection rejection, int derivedIndex);
 
-	public int getDepth() {
-		if (theSourceLink == null)
-			return 0;
-		else
-			return theSourceLink.getDepth() + 1;
-	}
-
-	@Override
-	public int getSiblingIndex() {
-		if (theSiblingIndex < 0) {
-			if (theSourceLink == null)
-				theSiblingIndex = 0;
-			else
-				theSiblingIndex = theSourceLink.getDerivedLinks().indexOf(this);
-		}
-		return theSiblingIndex;
-	}
-
 	public abstract boolean isAcceptable(T value);
 
 	public abstract T getUpdateValue(T value);
+
+	@Override
+	public boolean isModifiable() {
+		return true;
+	}
 
 	@Override
 	public void tryModify(TestHelper helper) {
@@ -210,8 +194,9 @@ public abstract class ObservableCollectionLink<S, T> implements CollectionSource
 			modify = getCollection();
 		}
 		CollectionOpContext opCtx = new CollectionOpContext(modify, subList, subListStart, subListEnd);
-		TestHelper.RandomAction action = helper.createAction()//
-			.or(5, () -> { // More position-less adds than other ops
+		TestHelper.RandomAction action = helper.createAction();
+		if (theSupplier != null) {
+			action.or(5, () -> { // More position-less adds than other ops
 				T value = theSupplier.apply(helper);
 				CollectionOp op = new CollectionOp(opCtx, add, -1, -1, value, helper.getBoolean());
 				if (helper.isReproducing())
@@ -275,19 +260,6 @@ public abstract class ObservableCollectionLink<S, T> implements CollectionSource
 					System.out.println("Remove " + value + ": " + op.elements.get(0));
 				helper.placemark();
 				removeSingle(op, helper);
-			}).or(1, () -> {// Remove by index
-				if (modify.isEmpty()) {
-					if (helper.isReproducing())
-						System.out.println("Remove, but empty");
-					return;
-				}
-				int index = helper.getInt(0, modify.size());
-				CollectionOp op = new CollectionOp(opCtx, remove, index, index, null, true);
-				op.add(theElements.get(opCtx.subListStart + index));
-				if (helper.isReproducing())
-					System.out.println(op);
-				helper.placemark();
-				removeSingle(op, helper);
 			}).or(1, () -> { // removeAll
 				int length = (int) helper.getDouble(0, 25, 100); // Tend smaller
 				List<T> values = new ArrayList<>(length);
@@ -307,7 +279,7 @@ public abstract class ObservableCollectionLink<S, T> implements CollectionSource
 						op.add(theElements.get(opCtx.subListStart + i));
 				}
 				if (helper.isReproducing())
-					System.out.println("\tShould " + op);
+					System.out.println("\tShould remove " + op.printElements());
 				helper.placemark();
 				removeAll(op, helper);
 			}).or(.1, () -> { // retainAll
@@ -330,39 +302,56 @@ public abstract class ObservableCollectionLink<S, T> implements CollectionSource
 						op.add(theElements.get(opCtx.subListStart + i));
 				}
 				if (helper.isReproducing())
-					System.out.println("\tShould remove " + op);
+					System.out.println("\tShould remove " + op.printElements());
 				helper.placemark();
 				retainAll(values, op, helper);
-			}).or(.1, () -> { // Remove range
-				if (modify.isEmpty()) {
-					if (helper.isReproducing())
-						System.out.println("Remove range, but empty");
-					return;
-				}
-				int max = modify.size();
-				int minIndex = (int) helper.getDouble(0, max / 3.0, max);
-				int maxIndex = helper.getInt(minIndex, max);
-				CollectionOp op = new CollectionOp(opCtx, remove, minIndex, maxIndex, null, false);
-				if (helper.isReproducing())
-					System.out.println(op);
-				for (int i = op.minIndex; i < op.maxIndex; i++)
-					op.add(theElements.get(opCtx.subListStart + i));
-				helper.placemark();
-				removeRange(op, helper);
-			}).or(.1, () -> { // clear
-				if (helper.isReproducing())
-					System.out.println("clear()");
-				CollectionOp op = new CollectionOp(opCtx, remove, 0, modify.size(), null, false);
-				for (int i = 0; i < modify.size(); i++)
-					op.add(theElements.get(opCtx.subListStart + i));
-				helper.placemark();
-				clearCollection(op, helper);
-			}).or(1, () -> {
-				if (helper.isReproducing())
-					System.out.println("Check bounds");
-				helper.placemark();
-				testBounds(helper);
 			});
+		}
+		action.or(1, () -> {// Remove by index
+			if (modify.isEmpty()) {
+				if (helper.isReproducing())
+					System.out.println("Remove, but empty");
+				return;
+			}
+			int index = helper.getInt(0, modify.size());
+			CollectionOp op = new CollectionOp(opCtx, remove, index, index, null, true);
+			op.add(theElements.get(opCtx.subListStart + index));
+			if (helper.isReproducing()) {
+				System.out.println(op);
+				System.out.println("\tShould remove " + op.printElements());
+			}
+			helper.placemark();
+			removeSingle(op, helper);
+		}).or(.1, () -> { // Remove range
+			if (modify.isEmpty()) {
+				if (helper.isReproducing())
+					System.out.println("Remove range, but empty");
+				return;
+			}
+			int max = modify.size();
+			int minIndex = (int) helper.getDouble(0, max / 3.0, max);
+			int maxIndex = helper.getInt(minIndex, max);
+			CollectionOp op = new CollectionOp(opCtx, remove, minIndex, maxIndex, null, false);
+			if (helper.isReproducing())
+				System.out.println(op);
+			for (int i = op.minIndex; i < op.maxIndex; i++)
+				op.add(theElements.get(opCtx.subListStart + i));
+			helper.placemark();
+			removeRange(op, helper);
+		}).or(.1, () -> { // clear
+			if (helper.isReproducing())
+				System.out.println("clear()");
+			CollectionOp op = new CollectionOp(opCtx, remove, 0, modify.size(), null, false);
+			for (int i = 0; i < modify.size(); i++)
+				op.add(theElements.get(opCtx.subListStart + i));
+			helper.placemark();
+			clearCollection(op, helper);
+		}).or(1, () -> {
+			if (helper.isReproducing())
+				System.out.println("Check bounds");
+			helper.placemark();
+			testBounds(helper);
+		});
 		addExtraActions(action);
 		action.execute("Modification");
 	}
@@ -388,13 +377,14 @@ public abstract class ObservableCollectionLink<S, T> implements CollectionSource
 	}
 
 	@Override
-	public <X> void derive(TestHelper helper, int maxCount) {
-		TestHelper.RandomSupplier<CollectionSourcedLink<T, X>> action = helper//
-			.<CollectionSourcedLink<T, X>> supply(1, () -> { // map
-				TestValueType nextType = TestValueType.nextType(helper);
+	protected <X> CollectionSourcedLink<T, X> deriveOne(TestHelper helper) {
+		TestHelper.RandomSupplier<CollectionSourcedLink<T, X>> action = helper.createSupplier();
+		if (MappedCollectionLink.supportsTransform(theDef.type, true, false)) {
+			action.or(1, () -> { // map
+				TypeTransformation<T, X> transform = MappedCollectionLink.transform(theDef.type, helper, true, false);
 				SimpleSettableValue<TypeTransformation<T, X>> txValue = new SimpleSettableValue<>(
 					(TypeToken<TypeTransformation<T, X>>) (TypeToken<?>) new TypeToken<Object>() {}, false);
-				txValue.set(MappedCollectionLink.transform(theDef.type, nextType, helper), null);
+				txValue.set(transform, null);
 				boolean variableMap = helper.getBoolean();
 				CollectionDataFlow<?, ?, T> oneStepFlow = getCollection().flow();
 				CollectionDataFlow<?, ?, T> multiStepFlow = theDef.multiStepFlow;
@@ -406,46 +396,197 @@ public abstract class ObservableCollectionLink<S, T> implements CollectionSource
 				boolean needsUpdateReeval = !theDef.checkOldValues || variableMap;
 				ValueHolder<FlowOptions.MapOptions<T, X>> options = new ValueHolder<>();
 				boolean cache = helper.getBoolean();
-				boolean withReverse = helper.getBoolean(.95);
+				boolean withReverse = transform.supportsReverse() && helper.getBoolean(.95);
 				boolean fireIfUnchanged = needsUpdateReeval || helper.getBoolean();
 				boolean reEvalOnUpdate = needsUpdateReeval || helper.getBoolean();
-				CollectionDataFlow<?, ?, X> derivedOneStepFlow = oneStepFlow.map((TypeToken<X>) nextType.getType(),
+				CollectionDataFlow<?, ?, X> derivedOneStepFlow = oneStepFlow.map((TypeToken<X>) transform.getType().getType(),
 					src -> txValue.get().map(src), o -> {
 						o.manyToOne(txValue.get().isManyToOne()).oneToMany(txValue.get().isOneToMany());
 						if (withReverse)
 							o.withReverse(x -> txValue.get().reverse(x));
 						options.accept(o.cache(cache).fireIfUnchanged(fireIfUnchanged).reEvalOnUpdate(reEvalOnUpdate));
 					});
-				CollectionDataFlow<?, ?, X> derivedMultiStepFlow = multiStepFlow.map((TypeToken<X>) nextType.getType(),
+				CollectionDataFlow<?, ?, X> derivedMultiStepFlow = multiStepFlow.map((TypeToken<X>) transform.getType().getType(),
 					src -> txValue.get().map(src), o -> {
 						o.manyToOne(txValue.get().isManyToOne()).oneToMany(txValue.get().isOneToMany());
 						if (withReverse)
 							o.withReverse(x -> txValue.get().reverse(x));
 						options.accept(o.cache(cache).fireIfUnchanged(fireIfUnchanged).reEvalOnUpdate(reEvalOnUpdate));
 					});
-				ObservableCollectionTestDef<X> newDef = new ObservableCollectionTestDef<>(nextType, derivedOneStepFlow,
+				ObservableCollectionTestDef<X> newDef = new ObservableCollectionTestDef<>(transform.getType(), derivedOneStepFlow,
 					derivedMultiStepFlow, variableMap, !needsUpdateReeval);
 				return new MappedCollectionLink<>(this, newDef, helper, txValue, variableMap, new FlowOptions.MapDef<>(options.get()));
-				// TODO mapEquivalent
-			})//
-			.or(1, () -> { // reverse
-				CollectionDataFlow<?, ?, T> oneStepFlow;
-				if (helper.getBoolean())
-					oneStepFlow = getCollection().reverse().flow();
-				else
-					oneStepFlow = getCollection().flow().reverse();
-				CollectionDataFlow<?, ?, T> multiStepFlow = theDef.multiStepFlow.reverse();
-				return (ObservableCollectionLink<T, X>) new ReversedCollectionLink<>(this,
-					new ObservableCollectionTestDef<>(theDef.type, oneStepFlow, multiStepFlow, true, theDef.checkOldValues), helper);
-			})//
-			// TODO size
-			// TODO contains
-			// TODO containsAny
-			// TODO containsAll
-			// TODO only
-			// TODO reduce
-			// TODO flow reverse
-			/*.or(1, () -> { // filter/refresh
+			});
+		}
+		action.or(1, () -> { // reverse
+			CollectionDataFlow<?, ?, T> oneStepFlow;
+			if (helper.getBoolean())
+				oneStepFlow = getCollection().reverse().flow();
+			else
+				oneStepFlow = getCollection().flow().reverse();
+			CollectionDataFlow<?, ?, T> multiStepFlow = theDef.multiStepFlow.reverse();
+			return (ObservableCollectionLink<T, X>) new ReversedCollectionLink<>(this,
+				new ObservableCollectionTestDef<>(theDef.type, oneStepFlow, multiStepFlow, true, theDef.checkOldValues), helper);
+		});
+		action.or(.05, () -> { // size
+			CollectionDerivedValue<T, Integer> value = new CollectionDerivedValue<T, Integer>(this,
+				TestValueType.INT) {
+				@Override
+				protected ObservableValue<Integer> createValue(TestHelper __) {
+					return getCollection().observeSize();
+				}
+
+				@Override
+				public void expectFromSource(ExpectedCollectionOperation<?, T> sourceOp) {}
+
+				@Override
+				public void validate(boolean transactionEnd) throws AssertionError {
+					Assert.assertEquals(getCollection().size(), getValue().get().intValue());
+				}
+
+				@Override
+				public String toString() {
+					return "size()";
+				}
+			};
+			return (CollectionDerivedValue<T, X>) value;
+		});
+		action.or(.05, () -> { // Contains
+			SettableValue<T> value = SettableValue.build((TypeToken<T>) getType().getType()).safe(false).build();
+			value.set(theSupplier.apply(helper), null);
+			CollectionDerivedValue<T, Boolean> contains = new CollectionDerivedValue<T, Boolean>(this, TestValueType.BOOLEAN) {
+				@Override
+				protected ObservableValue<Boolean> createValue(TestHelper __) {
+					return getCollection().observeContains(value);
+				}
+
+				@Override
+				public boolean isModifiable() {
+					return true;
+				}
+
+				@Override
+				public void tryModify(TestHelper h) throws AssertionError {
+					T newValue = theSupplier.apply(h);
+					if (h.isReproducing())
+						System.out.println("Value " + value.get() + " -> " + newValue);
+					value.set(theSupplier.apply(h), null);
+				}
+
+				@Override
+				public void expectFromSource(ExpectedCollectionOperation<?, T> sourceOp) {}
+
+				@Override
+				public void validate(boolean transactionEnd) throws AssertionError {
+					CollectionElement<T> found = getCollection().getElement(value.get(), true);
+					Assert.assertEquals(found != null, getValue().get().booleanValue());
+					if (found != null)
+						Assert.assertTrue(getCollection().equivalence().elementEquals(found.get(), value.get()));
+				}
+
+				@Override
+				public String toString() {
+					return "contains(" + value.get() + ")";
+				}
+			};
+			return (CollectionDerivedValue<T, X>) contains;
+		});
+		action.or(.1, () -> {// Find condition
+			SettableValue<Function<T, String>> conditionValue = SettableValue
+				.build((TypeToken<Function<T, String>>) (TypeToken<?>) TypeTokens.get().OBJECT).safe(false).build();
+			conditionValue.set(FilteredCollectionLink.filterFor(getType(), helper), null);
+			Ternian location = Ternian.values()[helper.getInt(0, 3)];
+			CollectionDerivedValue<T, T> find = new CollectionDerivedValue<T, T>(this, getType()) {
+				@Override
+				public ObservableElement<T> getValue() {
+					return (ObservableElement<T>) super.getValue();
+				}
+
+				@Override
+				public ObservableElementTester<T> getTester() {
+					return (ObservableElementTester<T>) super.getTester();
+				}
+
+				@Override
+				protected ObservableValue<T> createValue(TestHelper h) {
+					return getCollection().observeFind(v -> conditionValue.get().apply(v) == null).at(location)
+						.refresh(conditionValue.noInitChanges())//
+						.find();
+				}
+
+				@Override
+				public boolean isModifiable() {
+					return true;
+				}
+
+				@Override
+				public void tryModify(TestHelper h) throws AssertionError {
+					Function<T, String> newFilter = FilteredCollectionLink.filterFor(getType(), helper);
+					if (h.isReproducing())
+						System.out.println("Condition " + conditionValue.get() + " -> " + newFilter);
+					conditionValue.set(newFilter, null);
+				}
+
+				@Override
+				public void expectFromSource(ExpectedCollectionOperation<?, T> sourceOp) {}
+
+				@Override
+				public void validate(boolean transactionEnd) throws AssertionError {
+					if (transactionEnd)
+						getTester().checkSynced();
+					CollectionElement<T> found;
+					switch (location) {
+					case TRUE:
+						found = null;
+						for (CollectionElement<T> el : getCollection().elements()) {
+							if (conditionValue.get().apply(el.get()) == null) {
+								found = el;
+								break;
+							}
+						}
+						if (found == null)
+							Assert.assertNull(getValue().getElementId());
+						else
+							Assert.assertEquals(found.getElementId(), getValue().getElementId());
+						break;
+					case FALSE:
+						found = null;
+						for (CollectionElement<T> el : getCollection().elements().reverse()) {
+							if (conditionValue.get().apply(el.get()) == null) {
+								found = el;
+								break;
+							}
+						}
+						if (found == null)
+							Assert.assertNull(getValue().getElementId());
+						else
+							Assert.assertEquals(found.getElementId(), getValue().getElementId());
+						break;
+					case NONE:
+						if (getValue().getElementId() == null) {
+							for (T v : getCollection())
+								Assert.assertNotNull(conditionValue.get().apply(v));
+						} else {
+							Assert.assertNull(conditionValue.get().apply(getCollection().getElement(getValue().getElementId()).get()));
+							Assert.assertNull(conditionValue.get().apply(getValue().get()));
+						}
+						break;
+					}
+				}
+
+				@Override
+				public String toString() {
+					return "find(" + conditionValue.get() + ")";
+				}
+			};
+			return (CollectionDerivedValue<T, X>) find;
+		});
+		// TODO containsAny
+		// TODO containsAll
+		// TODO only
+		// TODO reduce
+		// TODO flow reverse
+		/*.or(1, () -> { // filter/refresh
 		// Getting a java.lang.InternalError: Enclosing method not found when I try to do the TypeToken right.
 		// It doesn't matter here anyway
 		SimpleSettableValue<Function<T, String>> filterValue = new SimpleSettableValue<>(
@@ -460,26 +601,30 @@ public abstract class ObservableCollectionLink<S, T> implements CollectionSource
 		variableFilter);
 		derived.accept((ObservableCollectionLink<T, X>) theDerivedLink);
 		})//*/
-			// TODO whereContained
-			// TODO refreshEach
-			// TODO combine
-			/*.or(1, () -> { // flattenValues
+		// TODO whereContained
+		// TODO refreshEach
+		// TODO combine
+		/*.or(1, () -> { // flattenValues
 		theDerivedLink = FlattenedValuesLink.createFlattenedValuesLink(this, theDef.flow, helper);
 		derived.accept((ObservableCollectionLink<T, X>) theDerivedLink);
 		})//*/
-			// TODO flatMap
-			/*.or(1, () -> { // sorted
+		// TODO flatMap
+		/*.or(1, () -> { // sorted
 		Comparator<T> compare = SortedCollectionLink.compare(theType, helper);
 		CollectionDataFlow<?, ?, T> derivedFlow = theFlow.sorted(compare);
 		theDerivedLink = new SortedCollectionLink<>(this, theType, derivedFlow, helper, isCheckingRemovedValues, compare);
 		derived.accept((ObservableCollectionLink<T, X>) theDerivedLink);
 		})//*/
-			/*.or(1, () -> { // distinct
+		/*.or(1, () -> { // distinct
 		derived.accept((ObservableCollectionLink<T, X>) deriveDistinct(helper, false));
 		})//
 		.or(1, () -> { // distinct sorted
 		derived.accept((ObservableCollectionLink<T, X>) deriveDistinctSorted(helper, false));
 		})*/;//
+		/*if(theCollection instanceof ObservableSet){
+			// TODO mapEquivalent
+		 }
+		 */
 		/*if (theCollection instanceof ObservableSortedSet) {
 			ObservableSortedSet<T> sortedSet = (ObservableSortedSet<T>) theCollection;
 			action.or(1, () -> { // subSet
@@ -561,30 +706,10 @@ public abstract class ObservableCollectionLink<S, T> implements CollectionSource
 			return (ObservableCollectionLink<T, X>) new ModFilteredCollectionLink<>(this,
 				new ObservableCollectionTestDef<>(theDef.type, derivedOneStepFlow, derivedMultiStepFlow, true, theDef.checkOldValues),
 				helper, new ObservableCollectionDataFlowImpl.ModFilterer<>(filter.get()));
-		})//
+		});
 		// TODO groupBy
 		// TODO groupBy(Sorted)
-		;
-		// Go for length, not breadth
-		if (helper.getBoolean(.25)) {
-			theDerivedLinks = Collections.emptyList();
-			return;
-		}
-		int derivedCount;
-		if (maxCount == 1)
-			derivedCount = 1;
-		else
-			derivedCount = (int) Math.round(helper.getDouble(1, 1 + maxCount / 5.0, maxCount));
-		theDerivedLinks = new ArrayList<>(derivedCount);
-		maxCount -= derivedCount;
-		for (int i = 0; i < derivedCount; i++) {
-			CollectionSourcedLink<T, X> derived = action.get(null);
-			theDerivedLinks.add(derived);
-			derived.initialize(helper);
-			if (maxCount > 0)
-				derived.derive(helper, maxCount);
-			maxCount -= derived.getLinkCount() - 1;
-		}
+		return action.get(null);
 	}
 
 	protected ObservableCollectionLink<T, T> deriveDistinct(TestHelper helper, boolean asRoot) {
@@ -694,6 +819,10 @@ public abstract class ObservableCollectionLink<S, T> implements CollectionSource
 			else if (value != null || minIndex < 0)
 				str.append(value);
 			return str.toString();
+		}
+
+		public String printElements() {
+			return elements.toString();
 		}
 	}
 
@@ -1265,25 +1394,27 @@ public abstract class ObservableCollectionLink<S, T> implements CollectionSource
 			getCollection().remove(getCollection().size());
 			Assert.assertFalse("Should have errored", true);
 		} catch (IndexOutOfBoundsException e) {}
-		try {
-			getCollection().add(-1, theSupplier.apply(helper));
-			Assert.assertFalse("Should have errored", true);
-		} catch (IndexOutOfBoundsException | IllegalArgumentException e) { // We'll allow either exception
-		}
-		try {
-			getCollection().add(getCollection().size() + 1, theSupplier.apply(helper));
-			Assert.assertFalse("Should have errored", true);
-		} catch (IndexOutOfBoundsException | IllegalArgumentException e) { // We'll allow either exception
-		}
-		try {
-			getCollection().set(-1, theSupplier.apply(helper));
-			Assert.assertFalse("Should have errored", true);
-		} catch (IndexOutOfBoundsException | IllegalArgumentException e) { // We'll allow either exception
-		}
-		try {
-			getCollection().set(getCollection().size(), theSupplier.apply(helper));
-			Assert.assertFalse("Should have errored", true);
-		} catch (IndexOutOfBoundsException | IllegalArgumentException e) { // We'll allow either exception
+		if (theSupplier != null) {
+			try {
+				getCollection().add(-1, theSupplier.apply(helper));
+				Assert.assertFalse("Should have errored", true);
+			} catch (IndexOutOfBoundsException | IllegalArgumentException e) { // We'll allow either exception
+			}
+			try {
+				getCollection().add(getCollection().size() + 1, theSupplier.apply(helper));
+				Assert.assertFalse("Should have errored", true);
+			} catch (IndexOutOfBoundsException | IllegalArgumentException e) { // We'll allow either exception
+			}
+			try {
+				getCollection().set(-1, theSupplier.apply(helper));
+				Assert.assertFalse("Should have errored", true);
+			} catch (IndexOutOfBoundsException | IllegalArgumentException e) { // We'll allow either exception
+			}
+			try {
+				getCollection().set(getCollection().size(), theSupplier.apply(helper));
+				Assert.assertFalse("Should have errored", true);
+			} catch (IndexOutOfBoundsException | IllegalArgumentException e) { // We'll allow either exception
+			}
 		}
 	}
 }

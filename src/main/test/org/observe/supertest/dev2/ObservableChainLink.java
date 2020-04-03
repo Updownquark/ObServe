@@ -16,6 +16,8 @@ public interface ObservableChainLink<S, T> extends Transactable {
 
 	void initialize(TestHelper helper);
 
+	boolean isModifiable();
+
 	void tryModify(TestHelper helper) throws AssertionError;
 
 	void validate(boolean transactionEnd) throws AssertionError;
@@ -30,5 +32,12 @@ public interface ObservableChainLink<S, T> extends Transactable {
 			count += link.getLinkCount();
 		}
 		return count;
+	}
+
+	default int getDepth() {
+		if (getSourceLink() == null)
+			return 0;
+		else
+			return getSourceLink().getDepth() + 1;
 	}
 }

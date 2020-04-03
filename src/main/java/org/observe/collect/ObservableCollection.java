@@ -1509,7 +1509,8 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		 * @return This builder
 		 */
 		public ObservableFinderBuilder<E> refresh(Observable<?> refresh) {
-			if (refresh == null) {} else if (theRefresh != null)
+			if (refresh == null) {//
+			} else if (theRefresh != null)
 				theRefresh = Observable.or(theRefresh, refresh);
 			else
 				theRefresh = refresh;
