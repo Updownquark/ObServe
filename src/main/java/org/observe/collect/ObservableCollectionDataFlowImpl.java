@@ -611,6 +611,11 @@ public class ObservableCollectionDataFlowImpl {
 				public DerivedCollectionElement<E> reverse() {
 					return outer;
 				}
+
+				@Override
+				public String toString() {
+					return outer.toString();
+				}
 			};
 		}
 

@@ -18,7 +18,6 @@ import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.SimpleSettableValue;
 import org.observe.collect.CollectionChangeType;
-import org.observe.collect.Equivalence;
 import org.observe.collect.FlowOptions;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
@@ -428,181 +427,25 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			return (ObservableCollectionLink<T, X>) new ReversedCollectionLink<>(this,
 				new ObservableCollectionTestDef<>(theDef.type, oneStepFlow, multiStepFlow, true, theDef.checkOldValues), helper);
 		});
-		action.or(.05, () -> { // size
-			CollectionDerivedValue<T, Integer> value = new CollectionDerivedValue<T, Integer>(this,
-				TestValueType.INT) {
-				@Override
-				protected ObservableValue<Integer> createValue(TestHelper __) {
-					return getCollection().observeSize();
-				}
-
-				@Override
-				public void expectFromSource(ExpectedCollectionOperation<?, T> sourceOp) {}
-
-				@Override
-				public void validate(boolean transactionEnd) throws AssertionError {
-					Assert.assertEquals(getCollection().size(), getValue().get().intValue());
-				}
-
-				@Override
-				public String toString() {
-					return "size()";
-				}
-			};
-			return (CollectionDerivedValue<T, X>) value;
-		});
-		if (theSupplier != null) {
-			action.or(.05, () -> { // Contains
-				SettableValue<T> value = SettableValue.build((TypeToken<T>) getType().getType()).safe(false).build();
-				value.set(theSupplier.apply(helper), null);
-				CollectionDerivedValue<T, Boolean> contains = new CollectionDerivedValue<T, Boolean>(this, TestValueType.BOOLEAN) {
-					@Override
-					protected ObservableValue<Boolean> createValue(TestHelper __) {
-						return getCollection().observeContains(value);
-					}
-
-					@Override
-					public boolean isModifiable() {
-						return true;
-					}
-
-					@Override
-					public void tryModify(TestHelper h) throws AssertionError {
-						T newValue = theSupplier.apply(h);
-						if (h.isReproducing())
-							System.out.println("Value " + value.get() + " -> " + newValue);
-						value.set(theSupplier.apply(h), null);
-					}
-
-					@Override
-					public void expectFromSource(ExpectedCollectionOperation<?, T> sourceOp) {}
-
-					@Override
-					public void validate(boolean transactionEnd) throws AssertionError {
-						CollectionElement<T> found = getCollection().getElement(value.get(), true);
-						Assert.assertEquals(found != null, getValue().get().booleanValue());
-						if (found != null)
-							Assert.assertTrue(getCollection().equivalence().elementEquals(found.get(), value.get()));
-					}
-
-					@Override
-					public String toString() {
-						return "contains(" + value.get() + ")";
-					}
-				};
-				return (CollectionDerivedValue<T, X>) contains;
-			});
-		}
-		action.or(.1, () -> {// Find condition
-			SettableValue<Function<T, String>> conditionValue = SettableValue
-				.build((TypeToken<Function<T, String>>) (TypeToken<?>) TypeTokens.get().OBJECT).safe(false).build();
-			conditionValue.set(FilteredCollectionLink.filterFor(getType(), helper), null);
-			Ternian location = Ternian.values()[helper.getInt(0, 3)];
-			CollectionDerivedValue<T, T> find = new CollectionDerivedValue<T, T>(this, getType()) {
-				@Override
-				public ObservableElement<T> getValue() {
-					return (ObservableElement<T>) super.getValue();
-				}
-
-				@Override
-				public ObservableElementTester<T> getTester() {
-					return (ObservableElementTester<T>) super.getTester();
-				}
-
-				@Override
-				protected ObservableValue<T> createValue(TestHelper h) {
-					return getCollection().observeFind(v -> conditionValue.get().apply(v) == null).at(location)
-						.refresh(conditionValue.noInitChanges())//
-						.find();
-				}
-
-				@Override
-				public boolean isModifiable() {
-					return true;
-				}
-
-				@Override
-				public void tryModify(TestHelper h) throws AssertionError {
-					Function<T, String> newFilter = FilteredCollectionLink.filterFor(getType(), helper);
-					if (h.isReproducing())
-						System.out.println("Condition " + conditionValue.get() + " -> " + newFilter);
-					conditionValue.set(newFilter, null);
-				}
-
-				@Override
-				public void expectFromSource(ExpectedCollectionOperation<?, T> sourceOp) {}
-
-				@Override
-				public void validate(boolean transactionEnd) throws AssertionError {
-					if (transactionEnd)
-						getTester().checkSynced();
-					CollectionElement<T> found;
-					switch (location) {
-					case TRUE:
-						found = null;
-						for (CollectionElement<T> el : getCollection().elements()) {
-							if (conditionValue.get().apply(el.get()) == null) {
-								found = el;
-								break;
-							}
-						}
-						if (found == null)
-							Assert.assertNull(getValue().getElementId());
-						else
-							Assert.assertEquals(found.getElementId(), getValue().getElementId());
-						break;
-					case FALSE:
-						found = null;
-						for (CollectionElement<T> el : getCollection().elements().reverse()) {
-							if (conditionValue.get().apply(el.get()) == null) {
-								found = el;
-								break;
-							}
-						}
-						if (found == null)
-							Assert.assertNull(getValue().getElementId());
-						else
-							Assert.assertEquals(found.getElementId(), getValue().getElementId());
-						break;
-					case NONE:
-						if (getValue().getElementId() == null) {
-							for (T v : getCollection())
-								Assert.assertNotNull(conditionValue.get().apply(v));
-						} else {
-							Assert.assertNull(conditionValue.get().apply(getCollection().getElement(getValue().getElementId()).get()));
-							Assert.assertNull(conditionValue.get().apply(getValue().get()));
-						}
-						break;
-					}
-				}
-
-				@Override
-				public String toString() {
-					return "find(" + conditionValue.get() + ")";
-				}
-			};
-			return (CollectionDerivedValue<T, X>) find;
-		});
-		// TODO containsAny
-		// TODO containsAll
-		// TODO only
-		// TODO reduce
-		// TODO flow reverse
-		/*.or(1, () -> { // filter/refresh
-		// Getting a java.lang.InternalError: Enclosing method not found when I try to do the TypeToken right.
-		// It doesn't matter here anyway
-		SimpleSettableValue<Function<T, String>> filterValue = new SimpleSettableValue<>(
-		(TypeToken<Function<T, String>>) (TypeToken<?>) new TypeToken<Object>() {}, false);
-		filterValue.set(FilteredCollectionLink.filterFor(theDef.type, helper), null);
-		boolean variableFilter = helper.getBoolean();
-		CollectionDataFlow<?, ?, T> flow = theDef.flow;
-		if (variableFilter)
-		flow = flow.refresh(filterValue.changes().noInit()); // The refresh has to be UNDER the filter
-		CollectionDataFlow<?, ?, T> derivedFlow = flow.filter(v -> filterValue.get().apply(v));
-		theDerivedLink = new FilteredCollectionLink<>(this, theType, derivedFlow, helper, isCheckingRemovedValues, filterValue,
-		variableFilter);
-		derived.accept((ObservableCollectionLink<T, X>) theDerivedLink);
-		})//*/
+		/*action.or(1, () -> { // filter/refresh
+			// Getting a java.lang.InternalError: Enclosing method not found when I try to do the TypeToken right.
+			// It doesn't matter here anyway
+			SimpleSettableValue<Function<T, String>> filterValue = new SimpleSettableValue<>(
+				(TypeToken<Function<T, String>>) (TypeToken<?>) new TypeToken<Object>() {}, false);
+			filterValue.set(FilteredCollectionLink.filterFor(theDef.type, helper), null);
+			boolean variableFilter = helper.getBoolean();
+			CollectionDataFlow<?, ?, T> derivedOneStepFlow = theDef.oneStepFlow;
+			CollectionDataFlow<?, ?, T> derivedMultiStepFlow = theDef.multiStepFlow;
+			if (variableFilter) { // The refresh has to be UNDER the filter
+				derivedOneStepFlow = derivedOneStepFlow.refresh(filterValue.changes().noInit());
+				derivedMultiStepFlow = derivedMultiStepFlow.refresh(filterValue.changes().noInit());
+			}
+			derivedOneStepFlow = derivedOneStepFlow.filter(v -> filterValue.get().apply(v));
+			derivedMultiStepFlow = derivedMultiStepFlow.filter(v -> filterValue.get().apply(v));
+			ObservableCollectionTestDef<T> def = new ObservableCollectionTestDef<>(getType(), derivedOneStepFlow, derivedMultiStepFlow,
+				true, true);
+			return (ObservableCollectionLink<T, X>) new FilteredCollectionLink<>(this, def, helper);
+		});*/
 		// TODO whereContained
 		// TODO refreshEach
 		// TODO combine
@@ -709,12 +552,404 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 				new ObservableCollectionTestDef<>(theDef.type, derivedOneStepFlow, derivedMultiStepFlow, true, theDef.checkOldValues),
 				helper, new ObservableCollectionDataFlowImpl.ModFilterer<>(filter.get()));
 		});
+
+		// Derived values
+		action.or(.05, () -> { // size
+			CollectionDerivedValue<T, Integer> value = new CollectionDerivedValue<T, Integer>(this,
+				TestValueType.INT) {
+				@Override
+				protected ObservableValue<Integer> createValue(TestHelper __) {
+					return getCollection().observeSize();
+				}
+
+				@Override
+				public void expectFromSource(ExpectedCollectionOperation<?, T> sourceOp) {}
+
+				@Override
+				public void validate(boolean transactionEnd) throws AssertionError {
+					Assert.assertEquals(getCollection().size(), getValue().get().intValue());
+				}
+
+				@Override
+				public String toString() {
+					return "size()";
+				}
+			};
+			return (CollectionDerivedValue<T, X>) value;
+		});
+		if (theSupplier != null) {
+			action.or(.05, () -> { // Contains
+				SettableValue<T> value = SettableValue.build((TypeToken<T>) getType().getType()).safe(false).build();
+				value.set(theSupplier.apply(helper), null);
+				CollectionDerivedValue<T, Boolean> contains = new CollectionDerivedValue<T, Boolean>(this, TestValueType.BOOLEAN) {
+					@Override
+					protected ObservableValue<Boolean> createValue(TestHelper __) {
+						return getCollection().observeContains(value);
+					}
+
+					@Override
+					public boolean isModifiable() {
+						return true;
+					}
+
+					@Override
+					public void tryModify(TestHelper h) throws AssertionError {
+						T newValue = theSupplier.apply(h);
+						if (h.isReproducing())
+							System.out.println("Value " + value.get() + " -> " + newValue);
+						value.set(theSupplier.apply(h), null);
+					}
+
+					@Override
+					public void expectFromSource(ExpectedCollectionOperation<?, T> sourceOp) {}
+
+					@Override
+					public void validate(boolean transactionEnd) throws AssertionError {
+						CollectionElement<T> found = getCollection().getElement(value.get(), true);
+						Assert.assertEquals(found != null, getValue().get().booleanValue());
+						if (found != null)
+							Assert.assertTrue(getCollection().equivalence().elementEquals(found.get(), value.get()));
+					}
+
+					@Override
+					public String toString() {
+						return "contains(" + value.get() + ")";
+					}
+				};
+				return (CollectionDerivedValue<T, X>) contains;
+			});
+			action.or(.1, () -> { // observeElement
+				T value = theSupplier.apply(helper);
+				boolean first = helper.getBoolean();
+				CollectionDerivedValue<T, T> find = new CollectionDerivedValue<T, T>(this, getType()) {
+					@Override
+					public ObservableElement<T> getValue() {
+						return (ObservableElement<T>) super.getValue();
+					}
+
+					@Override
+					public ObservableElementTester<T> getTester() {
+						return (ObservableElementTester<T>) super.getTester();
+					}
+
+					@Override
+					protected ObservableValue<T> createValue(TestHelper h) {
+						return getCollection().observeElement(value, first);
+					}
+
+					@Override
+					public void expectFromSource(ExpectedCollectionOperation<?, T> sourceOp) {}
+
+					@Override
+					public void validate(boolean transactionEnd) throws AssertionError {
+						// This derived value is only consistent when the transaction ends
+						if (transactionEnd)
+							getTester().checkSynced();
+
+						CollectionElement<T> found;
+						if (first) {
+							found = null;
+							for (CollectionElement<T> el : getCollection().elements()) {
+								if (getCollection().equivalence().elementEquals(el.get(), value)) {
+									found = el;
+									break;
+								}
+							}
+							if (found == null)
+								Assert.assertNull(getValue().getElementId());
+							else
+								Assert.assertEquals(found.getElementId(), getValue().getElementId());
+						} else {
+							found = null;
+							for (CollectionElement<T> el : getCollection().elements().reverse()) {
+								if (getCollection().equivalence().elementEquals(el.get(), value)) {
+									found = el;
+									break;
+								}
+							}
+							if (found == null)
+								Assert.assertNull(getValue().getElementId());
+							else
+								Assert.assertEquals(found.getElementId(), getValue().getElementId());
+						}
+					}
+
+					@Override
+					public String toString() {
+						return "observeElement(" + value + ")";
+					}
+				};
+				return (CollectionDerivedValue<T, X>) find;
+			});
+		}
+		action.or(.1, () -> {// Find by condition
+			SettableValue<Function<T, String>> conditionValue = SettableValue
+				.build((TypeToken<Function<T, String>>) (TypeToken<?>) TypeTokens.get().OBJECT).safe(false).build();
+			conditionValue.set(FilteredCollectionLink.filterFor(getType(), helper), null);
+			Ternian location = Ternian.values()[helper.getInt(0, 3)];
+			CollectionDerivedValue<T, T> find = new CollectionDerivedValue<T, T>(this, getType()) {
+				@Override
+				public ObservableElement<T> getValue() {
+					return (ObservableElement<T>) super.getValue();
+				}
+
+				@Override
+				public ObservableElementTester<T> getTester() {
+					return (ObservableElementTester<T>) super.getTester();
+				}
+
+				@Override
+				protected ObservableValue<T> createValue(TestHelper h) {
+					return getCollection().observeFind(v -> conditionValue.get().apply(v) == null).at(location)
+						.refresh(conditionValue.noInitChanges())//
+						.find();
+				}
+
+				@Override
+				public boolean isModifiable() {
+					return true;
+				}
+
+				@Override
+				public void tryModify(TestHelper h) throws AssertionError {
+					Function<T, String> newFilter = FilteredCollectionLink.filterFor(getType(), helper);
+					if (h.isReproducing())
+						System.out.println("Condition " + conditionValue.get() + " -> " + newFilter);
+					conditionValue.set(newFilter, null);
+					// TODO Test the set(value) method
+				}
+
+				@Override
+				public void expectFromSource(ExpectedCollectionOperation<?, T> sourceOp) {}
+
+				@Override
+				public void validate(boolean transactionEnd) throws AssertionError {
+					// This derived value is only consistent when the transaction ends, and if there are multiple passing values,
+					// the specific result found is not consistent with a Ternian.NONE location
+					if (transactionEnd && location != Ternian.NONE)
+						getTester().checkSynced();
+					CollectionElement<T> found;
+					switch (location) {
+					case TRUE:
+						found = null;
+						for (CollectionElement<T> el : getCollection().elements()) {
+							if (conditionValue.get().apply(el.get()) == null) {
+								found = el;
+								break;
+							}
+						}
+						if (found == null)
+							Assert.assertNull(getValue().getElementId());
+						else
+							Assert.assertEquals(found.getElementId(), getValue().getElementId());
+						break;
+					case FALSE:
+						found = null;
+						for (CollectionElement<T> el : getCollection().elements().reverse()) {
+							if (conditionValue.get().apply(el.get()) == null) {
+								found = el;
+								break;
+							}
+						}
+						if (found == null)
+							Assert.assertNull(getValue().getElementId());
+						else
+							Assert.assertEquals(found.getElementId(), getValue().getElementId());
+						break;
+					case NONE:
+						if (getValue().getElementId() == null) {
+							for (T v : getCollection())
+								Assert.assertNotNull(conditionValue.get().apply(v));
+						} else {
+							Assert.assertNull(conditionValue.get().apply(getCollection().getElement(getValue().getElementId()).get()));
+							Assert.assertNull(conditionValue.get().apply(getValue().get()));
+						}
+						break;
+					}
+				}
+
+				@Override
+				public String toString() {
+					return "find(" + conditionValue.get() + ")";
+				}
+			};
+			return (CollectionDerivedValue<T, X>) find;
+		});
+		action.or(.05, () -> { // Only
+			CollectionDerivedValue<T, T> value = new CollectionDerivedValue<T, T>(this, TestValueType.INT) {
+				@Override
+				protected ObservableValue<T> createValue(TestHelper __) {
+					return getCollection().only();
+				}
+
+				@Override
+				public void expectFromSource(ExpectedCollectionOperation<?, T> sourceOp) {}
+
+				@Override
+				public void validate(boolean transactionEnd) throws AssertionError {
+					if (!transactionEnd)
+						return; // Only is only consistent after the transaction ends
+					boolean only = getCollection().size() == 1;
+					Assert.assertEquals(only, getValue().get() != null);
+					if (only)
+						Assert.assertTrue(getCollection().equivalence().elementEquals(getCollection().get(0), getValue().get()));
+				}
+
+				@Override
+				public String toString() {
+					return "only()";
+				}
+			};
+			return (CollectionDerivedValue<T, X>) value;
+		});
+		action.or(.1, () -> { // Min/max
+			boolean min = helper.getBoolean();
+			Ternian location = Ternian.values()[helper.getInt(0, 3)];
+			Comparator<T> compare;
+			switch (getType()) { // Reductions
+			case INT:
+				compare = (Comparator<T>) (Comparator<Integer>) Integer::compare;
+				break;
+			case DOUBLE:
+				compare = (Comparator<T>) (Comparator<Double>) Double::compare;
+				break;
+			case STRING:
+				compare = (Comparator<T>) (Comparator<String>) String::compareTo;
+				break;
+			case BOOLEAN:
+				compare = (Comparator<T>) (Comparator<Boolean>) Boolean::compare;
+				break;
+			default:
+				throw new IllegalStateException();
+			}
+			CollectionDerivedValue<T, T> value = new CollectionDerivedValue<T, T>(this, TestValueType.INT) {
+				@Override
+				public ObservableElement<T> getValue() {
+					return (ObservableElement<T>) super.getValue();
+				}
+
+				@Override
+				public ObservableElementTester<T> getTester() {
+					return (ObservableElementTester<T>) super.getTester();
+				}
+
+				@Override
+				protected ObservableValue<T> createValue(TestHelper __) {
+					if (min)
+						return getCollection().minBy(compare, null, location);
+					else
+						return getCollection().maxBy(compare, null, location);
+				}
+
+				@Override
+				public void expectFromSource(ExpectedCollectionOperation<?, T> sourceOp) {}
+
+				@Override
+				public void validate(boolean transactionEnd) throws AssertionError {
+					// This derived value is only consistent when the transaction ends, and if there are multiple equivalent max/min values,
+					// the specific result found is not consistent with a Ternian.NONE location
+					if (transactionEnd && location != Ternian.NONE)
+						getTester().checkSynced();
+					CollectionElement<T> element = null;
+					switch (location) {
+					case TRUE:
+						for (CollectionElement<T> el : getCollection().elements()) {
+							if (element == null)
+								element = el;
+							else {
+								int comp = compare.compare(el.get(), element.get());
+								if (comp != 0 && (comp < 0) == min)
+									element = el;
+							}
+						}
+						if (element == null)
+							Assert.assertNull(getValue().getElementId());
+						else
+							Assert.assertEquals(element.getElementId(), getValue().getElementId());
+						break;
+					case FALSE:
+						for (CollectionElement<T> el : getCollection().elements().reverse()) {
+							if (element == null)
+								element = el;
+							else {
+								int comp = compare.compare(el.get(), element.get());
+								if (comp != 0 && (comp < 0) == min)
+									element = el;
+							}
+						}
+						if (element == null)
+							Assert.assertNull(getValue().getElementId());
+						else
+							Assert.assertEquals(element.getElementId(), getValue().getElementId());
+						break;
+					case NONE:
+						ElementId el = getValue().getElementId();
+						if (el == null)
+							Assert.assertTrue(getCollection().isEmpty());
+						else {
+							T v = getValue().get();
+							Assert.assertTrue(getCollection().equivalence().elementEquals(getCollection().getElement(el).get(), v));
+							for (CollectionElement<T> e : getCollection().elements()) {
+								int comp = compare.compare(v, e.get());
+								if (comp == 0) {//
+								} else if (min != (comp < 0))
+									throw new AssertionError(e + " " + (comp < 0 ? ">" : "<") + v);
+							}
+						}
+						break;
+					}
+				}
+
+				@Override
+				public String toString() {
+					return (min ? "min" : "max") + "()";
+				}
+			};
+			return (CollectionDerivedValue<T, X>) value;
+		});
+		switch (getType()) {
+		case INT:
+			action.or(.1, () -> {// Sum
+				CollectionDerivedValue<Integer, Long> value = new CollectionDerivedValue<Integer, Long>(
+					(ObservableCollectionLink<?, Integer>) this, TestValueType.INT) {
+					@Override
+					protected ObservableValue<Long> createValue(TestHelper h) {
+						return ((ObservableCollection<Integer>) getCollection()).reduce(0L, (sum, v) -> sum + v, (sum, v) -> sum - v);
+					}
+
+					@Override
+					public void expectFromSource(ExpectedCollectionOperation<?, Integer> sourceOp) {}
+
+					@Override
+					public void validate(boolean transactionEnd) throws AssertionError {
+						long sum = 0;
+						for (Integer v : (ObservableCollection<Integer>) getCollection())
+							sum += v;
+						if (transactionEnd)
+							getTester().check(sum);
+						else
+							Assert.assertEquals(sum, getValue().get().longValue());
+					}
+
+					@Override
+					public String toString() {
+						return "sum()";
+					}
+				};
+				return (CollectionDerivedValue<T, X>) value;
+			});
+			break;
+			// We can't really do double because the rounding errors would catch up with us
+		default:
+		}
+		// TODO containsAny
+		// TODO containsAll
 		// TODO groupBy
 		// TODO groupBy(Sorted)
 		return action.get(null);
 	}
 
-	protected ObservableCollectionLink<T, T> deriveDistinct(TestHelper helper, boolean asRoot) {
+	/*protected ObservableCollectionLink<T, T> deriveDistinct(TestHelper helper, boolean asRoot) {
 		ValueHolder<FlowOptions.UniqueOptions> options = new ValueHolder<>();
 		CollectionDataFlow<?, ?, T> flow = theDef.flow;
 		// distinct() is a no-op for a distinct flow, so unless we change the equivalence, this is pointless
@@ -736,12 +971,14 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		FlowOptions.UniqueOptions options = new FlowOptions.SimpleUniqueOptions(true);
 		CollectionDataFlow<?, ?, T> flow = theDef.flow;
 		Comparator<T> compare = SortedCollectionLink.compare(theDef.type, helper);
-		options.useFirst(/*TODO helper.getBoolean()*/ false);
+		options.useFirst(//
+			//TODO helper.getBoolean()
+			false);
 		CollectionDataFlow<?, ?, T> derivedFlow = flow.distinctSorted(compare, options.isUseFirst());
 		theDerivedLink = new DistinctCollectionLink<>(this, theType, derivedFlow, theFlow, helper, isCheckingRemovedValues, options,
 			asRoot);
 		return (ObservableCollectionLink<T, T>) theDerivedLink;
-	}
+	}*/
 
 	private class CollectionOpContext {
 		final BetterList<T> modify;

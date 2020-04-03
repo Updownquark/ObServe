@@ -390,8 +390,11 @@ public final class ObservableCollectionImpl {
 			Comparator<CollectionElement<? extends E>> elementCompare, Supplier<? extends E> def, Observable<?> refresh) {
 			theCollection = collection;
 			theElementCompare = elementCompare;
-			theDefault = def;
-			theRefresh = refresh;
+			if (def != null)
+				theDefault = def;
+			else
+				theDefault = () -> null;
+				theRefresh = refresh;
 		}
 
 		/** @return The collection that this finder searches elements in */
