@@ -31,6 +31,7 @@ import org.observe.util.ObservableUtils;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
+import org.qommons.LambdaUtils;
 import org.qommons.Lockable;
 import org.qommons.Ternian;
 import org.qommons.Transactable;
@@ -424,15 +425,55 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		return new ObservableCollectionDataFlowImpl.BaseCollectionDataFlow<>(this);
 	}
 
-	/** @return An observable value containing the only value in this collection while its size==1, otherwise null TODO TEST ME! */
+	/** @return An observable value containing the only value in this collection while its size==1, otherwise null */
 	default ObservableValue<E> only() {
-		return reduce(new int[1], (sz, v) -> {
-			sz[0]++;
-			return sz;
-		}, (sz, v) -> {
-			sz[0]--;
-			return sz;
-		}).map(getType(), sz -> sz[0] == 1 ? getFirst() : null);
+		return new ObservableCollectionImpl.ReducedValue<E, Integer, E>(this, getType()) {
+			@Override
+			protected Object createIdentity() {
+				return Identifiable.wrap(getCollection().getIdentity(), "only");
+			}
+
+			@Override
+			public long getStamp() {
+				return getCollection().getStamp();
+			}
+
+			@Override
+			public E get() {
+				try (Transaction t = getCollection().lock(false, null)) {
+					if (getCollection().size() == 1)
+						return getCollection().getFirst();
+					else
+						return null;
+				}
+			}
+
+			@Override
+			protected Integer init() {
+				return getCollection().size();
+			}
+
+			@Override
+			protected Integer update(Integer oldValue, ObservableCollectionEvent<? extends E> change) {
+				switch (change.getType()) {
+				case add:
+					return oldValue + 1;
+				case remove:
+					return oldValue - 1;
+				case set:
+					break;
+				}
+				return oldValue;
+			}
+
+			@Override
+			protected E getValue(Integer updated) {
+				if (updated == 1)
+					return getCollection().getFirst();
+				else
+					return null;
+			}
+		};
 	}
 
 	/**
@@ -775,12 +816,12 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		 *         the given class
 		 */
 		default <X> CollectionDataFlow<E, ?, X> filter(Class<X> type) {
-			return filter(value -> {
+			return filter(LambdaUtils.printableFn(value -> {
 				if (type == null || type.isInstance(value))
 					return null;
 				else
 					return MutableCollectionElement.StdMsg.BAD_TYPE;
-			}).map(TypeTokens.get().of(type), v -> (X) v, opts -> opts.cache(false));
+			}, type.getName(), type)).map(TypeTokens.get().of(type), v -> (X) v, opts -> opts.cache(false));
 		}
 
 		/**
@@ -841,7 +882,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		 */
 		default <X> CollectionDataFlow<E, T, X> map(TypeToken<X> target, Function<? super T, ? extends X> map,
 			Consumer<MapOptions<T, X>> options) {
-			return map(target, (src, oldResult) -> map.apply(src), options);
+			return map(target, LambdaUtils.printableBiFn((src, oldResult) -> map.apply(src), map::toString), options);
 		}
 
 		/**
@@ -880,7 +921,8 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 			Function<? super T, ? extends ObservableValue<? extends X>> map) {
 			TypeToken<ObservableValue<? extends X>> valueType = new TypeToken<ObservableValue<? extends X>>() {}
 			.where(new TypeParameter<X>() {}, target.wrap());
-			return map(valueType, map).refreshEach(v -> v.changes().noInit()).map(target, obs -> obs == null ? null : obs.get(),
+			return map(valueType, map).refreshEach(v -> v.changes().noInit()).map(target, //
+				LambdaUtils.printableFn(obs -> obs == null ? null : obs.get(), () -> "flatten"), //
 				options -> options//
 				.withElementSetting((ov, newValue, doSet) -> {
 					// Allow setting elements via the wrapped settable value

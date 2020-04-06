@@ -1763,14 +1763,14 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		private ElementId strip(DerivedCollectionElement<E> el) {
-			return el == null ? null : ((BaseDerivedElement) el).source.getElementId();
+			return el == null ? null : ((BaseDerivedElement) el).getElementId();
 		}
 
 		@Override
 		public void setValues(Collection<DerivedCollectionElement<E>> elements, E newValue)
 			throws UnsupportedOperationException, IllegalArgumentException {
 			theSource.setValue(//
-				elements.stream().map(el -> ((BaseDerivedElement) el).source.getElementId()).collect(Collectors.toList()), newValue);
+				elements.stream().map(el -> ((BaseDerivedElement) el).getElementId()).collect(Collectors.toList()), newValue);
 		}
 
 		@Override
@@ -3517,7 +3517,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		/** A {@link DerivedCollectionElement} implementation for {@link ActiveMappedCollectionManager} */
 		public class MappedElement implements DerivedCollectionElement<T> {
-			private final DerivedCollectionElement<I> theParentEl;
+			final DerivedCollectionElement<I> theParentEl;
 			CollectionElementListener<T> theListener;
 			T theValue;
 			final XformOptions.XformCacheHandler<I, T> theCacheHandler;
@@ -4670,7 +4670,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		private class RefreshingElement implements DerivedCollectionElement<T> {
-			private final DerivedCollectionElement<T> theParentEl;
+			final DerivedCollectionElement<T> theParentEl;
 			private ElementId theElementId;
 			private CollectionElementListener<T> theListener;
 

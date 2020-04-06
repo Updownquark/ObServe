@@ -1497,7 +1497,8 @@ public final class ObservableCollectionImpl {
 						}
 					};
 					return counts.init(theLeft, theRight, null, false, c -> {
-						ObservableValueEvent<Boolean> evt = createInitialEvent(theSatisfiedCheck.test(counts), null);
+						satisfied[0] = theSatisfiedCheck.test(counts);
+						ObservableValueEvent<Boolean> evt = createInitialEvent(satisfied[0], null);
 						try (Transaction t = ObservableValueEvent.use(evt)) {
 							observer.onNext(evt);
 						}
