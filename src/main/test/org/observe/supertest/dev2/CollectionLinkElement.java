@@ -9,12 +9,13 @@ import org.observe.collect.ObservableCollection;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.ElementId;
+import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BetterTreeSet;
 
 public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkElement<S, T>> {
 	private final ObservableCollectionLink<S, T> theCollectionLink;
 	private final BetterSortedSet<CollectionLinkElement<?, S>> theSourceElements;
-	private BetterSortedSet<CollectionLinkElement<T, ?>>[] theDerivedElements;
+	private BetterList<CollectionLinkElement<T, ?>>[] theDerivedElements;
 	private final ElementId theCollectionAddress;
 	private final ElementId theElementAddress;
 
@@ -97,15 +98,15 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 	void addDerived(int siblingIndex, CollectionLinkElement<T, ?> derived) {
 		// Due to initialization order and various things, the derived elements must be lazily initialized and maintained
 		if (theDerivedElements == null) {
-			theDerivedElements = new BetterSortedSet[Math.max(siblingIndex + 1, theCollectionLink.getDerivedLinks().size())];
+			theDerivedElements = new BetterList[Math.max(siblingIndex + 1, theCollectionLink.getDerivedLinks().size())];
 		} else if (siblingIndex >= theDerivedElements.length) {
-			BetterSortedSet<CollectionLinkElement<T, ?>>[] newDerived = new BetterSortedSet[Math.max(siblingIndex + 1,
+			BetterList<CollectionLinkElement<T, ?>>[] newDerived = new BetterList[Math.max(siblingIndex + 1,
 				theCollectionLink.getDerivedLinks().size())];
 			System.arraycopy(theDerivedElements, 0, newDerived, 0, theDerivedElements.length);
 			theDerivedElements = newDerived;
 		}
 		if (theDerivedElements[siblingIndex] == null)
-			theDerivedElements[siblingIndex] = new BetterTreeSet<>(false, CollectionLinkElement::compareTo);
+			theDerivedElements[siblingIndex] = new BetterTreeList<>(false);
 		theDerivedElements[siblingIndex].add(derived);
 	}
 

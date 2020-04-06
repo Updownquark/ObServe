@@ -2471,33 +2471,6 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public MutableCollectionElement<T> mutableElement(ElementId id) {
-			return mutableElement(id, null);
-		}
-
-		@Override
-		public BetterList<CollectionElement<T>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection)
-			throws NoSuchElementException {
-			try (Transaction t = lock(false, null)) {
-				if (sourceCollection == this)
-					return BetterList.of(getElement(sourceEl));
-
-				return QommonsUtils.map2(theFlow.getElementsBySource(sourceEl, sourceCollection), el -> {
-					return elementFor(//
-						theDerivedElements.searchValue(de -> el.compareTo(de.element), BetterSortedList.SortedSearchFilter.OnlyMatch));
-				});
-			}
-		}
-
-		@Override
-		public BetterList<ElementId> getSourceElements(ElementId localElement, BetterCollection<?> sourceCollection) {
-			if (sourceCollection == this)
-				return BetterList.of(getElement(localElement).getElementId()); // Verify that it's actually our element
-			try (Transaction t = lock(false, null)) {
-				return theFlow.getSourceElements(((DerivedElementHolder<T>) localElement).element, sourceCollection);
-			}
-		}
-
-		private MutableCollectionElement<T> mutableElement(ElementId id, MutableCollectionElement<DerivedElementHolder<T>> spliterElement) {
 			DerivedElementHolder<T> el = (DerivedElementHolder<T>) id;
 			class DerivedMutableCollectionElement implements MutableCollectionElement<T> {
 				@Override
@@ -2537,12 +2510,6 @@ public final class ObservableCollectionImpl {
 
 				@Override
 				public void remove() throws UnsupportedOperationException {
-					if (spliterElement != null) { // Don't remove the spliterator element if the removal is not allowed
-						String msg = el.element.canRemove();
-						if (msg != null)
-							throw new UnsupportedOperationException(msg);
-						spliterElement.remove();
-					}
 					el.element.remove();
 				}
 
@@ -2552,6 +2519,29 @@ public final class ObservableCollectionImpl {
 				}
 			}
 			return new DerivedMutableCollectionElement();
+		}
+
+		@Override
+		public BetterList<CollectionElement<T>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection)
+			throws NoSuchElementException {
+			try (Transaction t = lock(false, null)) {
+				if (sourceCollection == this)
+					return BetterList.of(getElement(sourceEl));
+
+				return QommonsUtils.map2(theFlow.getElementsBySource(sourceEl, sourceCollection), el -> {
+					return elementFor(//
+						theDerivedElements.searchValue(de -> el.compareTo(de.element), BetterSortedList.SortedSearchFilter.OnlyMatch));
+				});
+			}
+		}
+
+		@Override
+		public BetterList<ElementId> getSourceElements(ElementId localElement, BetterCollection<?> sourceCollection) {
+			if (sourceCollection == this)
+				return BetterList.of(getElement(localElement).getElementId()); // Verify that it's actually our element
+			try (Transaction t = lock(false, null)) {
+				return theFlow.getSourceElements(((DerivedElementHolder<T>) localElement).element, sourceCollection);
+			}
 		}
 
 		/**

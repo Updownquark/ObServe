@@ -229,9 +229,9 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 	public String toString() {
 		String str = "map(" + theCurrentMap;
 		if (isMapVariable)
-			str += " variable";
+			str += ", variable";
 		if (theOptions.getReverse() == null)
-			str += " irreversible";
+			str += ", irreversible";
 		return str + ")";
 	}
 
@@ -384,15 +384,15 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 					case DOUBLE: {
 						MappedCollectionLink.<Integer, Double> supportTransforms(type1, type2, //
 							transform(type1, type2, //
-								i -> i * 1.0, //
+								i -> noNeg0(i * 1.0), //
 								d -> (int) Math.round(d), //
 								false, true, "*1.0", "round()"), //
 							transform(type1, type2, //
-								i -> i * 5.0, //
+								i -> noNeg0(i * 5.0), //
 								d -> (int) Math.round(d / 5), //
 								false, true, "*5.0", "/5,round"),
 							transform(type1, type2, //
-								i -> i / 5.0, //
+								i -> noNeg0(i / 5.0), //
 								d -> (int) Math.round(d * 5), //
 								true, true, "/5.0", "*5,round"));
 						break;
@@ -415,7 +415,8 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 						break;
 					case DOUBLE: {
 						MappedCollectionLink.<Double, Double> supportTransforms(type1, type2, //
-							transform(type1, type2, d -> noNeg0(d + 5), d -> noNeg0(d - 5), false, false, "+5", "-5"), //
+							// The a + b - b is not always equal to a due to precision losses
+							transform(type1, type2, d -> noNeg0(d + 5), d -> noNeg0(d - 5), true, true, "+5", "-5"), //
 							transform(type1, type2, d -> noNeg0(d * 5), d -> noNeg0(d / 5), false, true, "*5", "/5"), //
 							transform(type1, type2, d -> noNeg0(-d), d -> noNeg0(-d), false, false, "-", "-"));
 						break;

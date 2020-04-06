@@ -8,53 +8,215 @@ import java.util.TreeMap;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
+import org.observe.SettableValue;
+import org.observe.SimpleSettableValue;
+import org.observe.collect.CollectionChangeType;
+import org.observe.collect.ObservableCollection.CollectionDataFlow;
+import org.observe.supertest.dev2.ChainLinkGenerator;
 import org.observe.supertest.dev2.CollectionLinkElement;
+import org.observe.supertest.dev2.CollectionSourcedLink;
 import org.observe.supertest.dev2.ExpectedCollectionOperation;
+import org.observe.supertest.dev2.ObservableChainLink;
 import org.observe.supertest.dev2.ObservableCollectionLink;
 import org.observe.supertest.dev2.ObservableCollectionTestDef;
 import org.observe.supertest.dev2.TestValueType;
 import org.qommons.TestHelper;
+import org.qommons.collect.CollectionElement;
+
+import com.google.common.reflect.TypeToken;
 
 public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
-	public FilteredCollectionLink(ObservableCollectionLink<?, T> sourceLink, ObservableCollectionTestDef<T> def, TestHelper helper) {
+	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator() {
+		@Override
+		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
+			if (!(sourceLink instanceof ObservableCollectionLink))
+				return 0;
+			return 1;
+		}
+
+		@Override
+		public <T, X> ObservableChainLink<T, X> deriveLink(ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
+			SettableValue<Function<T, String>> filterValue = new SimpleSettableValue<>(
+				(TypeToken<Function<T, String>>) (TypeToken<?>) new TypeToken<Object>() {}, false);
+			filterValue.set(FilteredCollectionLink.filterFor(sourceCL.getDef().type, helper), null);
+			boolean variableFilter = helper.getBoolean();
+			CollectionDataFlow<?, ?, T> derivedOneStepFlow = sourceCL.getCollection().flow();
+			CollectionDataFlow<?, ?, T> derivedMultiStepFlow = sourceCL.getDef().multiStepFlow;
+			if (variableFilter) { // The refresh has to be UNDER the filter
+				derivedOneStepFlow = derivedOneStepFlow.refresh(filterValue.changes().noInit());
+				derivedMultiStepFlow = derivedMultiStepFlow.refresh(filterValue.changes().noInit());
+			}
+			derivedOneStepFlow = derivedOneStepFlow.filter(v -> filterValue.get().apply(v));
+			derivedMultiStepFlow = derivedMultiStepFlow.filter(v -> filterValue.get().apply(v));
+			ObservableCollectionTestDef<T> def = new ObservableCollectionTestDef<>(sourceCL.getType(), derivedOneStepFlow,
+				derivedMultiStepFlow, true, true);
+			return (ObservableCollectionLink<T, X>) new FilteredCollectionLink<>(sourceCL, def, filterValue, variableFilter, helper);
+		}
+	};
+
+	private final SettableValue<Function<T, String>> theFilterValue;
+	private final boolean isVariableFilter;
+
+	public FilteredCollectionLink(ObservableCollectionLink<?, T> sourceLink, ObservableCollectionTestDef<T> def,
+		SettableValue<Function<T, String>> filter, boolean variable, TestHelper helper) {
 		super(sourceLink, def, helper);
-		// TODO Auto-generated constructor stub
-	}
-
-	@Override
-	public void expectFromSource(ExpectedCollectionOperation<?, T> sourceOp) {
-		// TODO Auto-generated method stub
-
-	}
-
-	@Override
-	protected void validate(CollectionLinkElement<T, T> element) {
-		// TODO Auto-generated method stub
-
-	}
-
-	@Override
-	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection, int derivedIndex) {
-		// TODO Auto-generated method stub
-
-	}
-
-	@Override
-	public CollectionLinkElement<T, T> expectAdd(T value, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before,
-		boolean first, OperationRejection rejection, int derivedIndex) {
-		// TODO Auto-generated method stub
-		return null;
+		theFilterValue = filter;
+		isVariableFilter = variable;
 	}
 
 	@Override
 	public boolean isAcceptable(T value) {
-		// TODO Filter
+		String msg = theFilterValue.get().apply(value);
+		if (msg != null)
+			return false;
 		return getSourceLink().isAcceptable(value);
 	}
 
 	@Override
 	public T getUpdateValue(T value) {
 		return getSourceLink().getUpdateValue(value);
+	}
+
+	@Override
+	public CollectionLinkElement<T, T> expectAdd(T value, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before,
+		boolean first, OperationRejection rejection, int derivedIndex) {
+		String msg = theFilterValue.get().apply(value);
+		if (msg != null) {
+			rejection.reject(msg, true);
+			return null;
+		}
+		CollectionLinkElement<?, T> sourceAdded = getSourceLink().expectAdd(value, //
+			after == null ? null : (CollectionLinkElement<?, T>) after.getSourceElements().getFirst(), //
+				before == null ? null : (CollectionLinkElement<?, T>) before.getSourceElements().getFirst(), //
+					first, rejection, getSiblingIndex());
+		if (rejection.isRejected())
+			return null;
+		CollectionLinkElement<T, T> added = (CollectionLinkElement<T, T>) sourceAdded.getDerivedElements(getSiblingIndex()).getFirst();
+		added.expectAdded(value);
+
+		int d = 0;
+		for (CollectionSourcedLink<T, ?> derivedLink : getDerivedLinks()) {
+			if (d != derivedIndex)
+				derivedLink.expectFromSource(//
+					new ExpectedCollectionOperation<>(added, CollectionChangeType.add, null, added.getCollectionValue()));
+			d++;
+		}
+		return added;
+	}
+
+	@Override
+	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection, int derivedIndex) {
+		switch (derivedOp.getType()) {
+		case add:
+			throw new IllegalStateException();
+		case remove:
+			break;
+		case set:
+			String msg = theFilterValue.get().apply(derivedOp.getValue());
+			if (msg != null) {
+				rejection.reject(msg, true);
+				return;
+			}
+			break;
+		}
+		getSourceLink()
+		.expect(new ExpectedCollectionOperation<>((CollectionLinkElement<?, T>) derivedOp.getElement().getSourceElements().getFirst(),
+			derivedOp.getType(), derivedOp.getOldValue(), derivedOp.getValue()), rejection, getSiblingIndex());
+		if (rejection.isRejected())
+			return;
+
+		switch (derivedOp.getType()) {
+		case add:
+			throw new IllegalStateException();
+		case remove:
+			derivedOp.getElement().expectRemoval();
+			break;
+		case set:
+			derivedOp.getElement().setValue(derivedOp.getValue());
+			break;
+		}
+		int d = 0;
+		for (CollectionSourcedLink<T, ?> derivedLink : getDerivedLinks()) {
+			if (d != derivedIndex)
+				derivedLink.expectFromSource(derivedOp);
+			d++;
+		}
+	}
+
+	@Override
+	public void expectFromSource(ExpectedCollectionOperation<?, T> sourceOp) {
+		CollectionLinkElement<T, T> element;
+		ExpectedCollectionOperation<?, T> op;
+		switch (sourceOp.getType()) {
+		case add:
+			String msg = theFilterValue.get().apply(sourceOp.getValue());
+			if (msg != null)
+				return;
+			element = (CollectionLinkElement<T, T>) sourceOp.getElement().getDerivedElements(getSiblingIndex()).getFirst();
+			element.expectAdded(sourceOp.getValue());
+			op = new ExpectedCollectionOperation<>(element, sourceOp.getType(), sourceOp.getOldValue(), sourceOp.getValue());
+			break;
+		case remove:
+			msg = theFilterValue.get().apply(sourceOp.getOldValue());
+			if (msg != null)
+				return;
+			element = (CollectionLinkElement<T, T>) sourceOp.getElement().getDerivedElements(getSiblingIndex()).getFirst();
+			element.expectRemoval();
+			op = new ExpectedCollectionOperation<>(element, sourceOp.getType(), sourceOp.getOldValue(), sourceOp.getValue());
+			break;
+		case set:
+			String preMsg = theFilterValue.get().apply(sourceOp.getOldValue());
+			String postMsg = theFilterValue.get().apply(sourceOp.getValue());
+			if (preMsg != null) {
+				if (postMsg != null)
+					return; // Filtered out both before and after
+				// Filtered out before, but now included
+				element = (CollectionLinkElement<T, T>) sourceOp.getElement().getDerivedElements(getSiblingIndex()).getFirst();
+				element.expectAdded(sourceOp.getValue());
+				op = new ExpectedCollectionOperation<>(element, CollectionChangeType.add, null, sourceOp.getValue());
+			} else if (postMsg != null) {
+				// Included before, but now filtered out
+				element = (CollectionLinkElement<T, T>) sourceOp.getElement().getDerivedElements(getSiblingIndex()).getFirst();
+				element.expectRemoval();
+				op = new ExpectedCollectionOperation<>(element, CollectionChangeType.remove, sourceOp.getOldValue(),
+					sourceOp.getOldValue());
+			} else {
+				// Included before and after
+				element = (CollectionLinkElement<T, T>) sourceOp.getElement().getDerivedElements(getSiblingIndex()).getFirst();
+				element.setValue(sourceOp.getValue());
+				op = new ExpectedCollectionOperation<>(element, sourceOp.getType(), sourceOp.getOldValue(), sourceOp.getValue());
+			}
+			break;
+		default:
+			throw new IllegalStateException();
+		}
+
+		for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
+			derived.expectFromSource(op);
+	}
+
+	@Override
+	protected void validate(CollectionLinkElement<T, T> element) {
+		if (element.isPresent()) {
+			CollectionElement<CollectionLinkElement<T, T>> adj = getElements().getAdjacentElement(element.getElementAddress(), false);
+			while (adj != null && !adj.get().isPresent())
+				adj = getElements().getAdjacentElement(adj.getElementId(), false);
+			if (adj != null) {
+				int comp = adj.get().getSourceElements().getFirst().getElementAddress().compareTo(//
+					element.getSourceElements().getFirst().getElementAddress());
+				if (comp >= 0)
+					throw new AssertionError("Filtered elements not in source order");
+			}
+		}
+	}
+
+	@Override
+	public String toString() {
+		String str = "filter(" + theFilterValue.get();
+		if (isVariableFilter)
+			str += ", variable";
+		return str + ")";
 	}
 
 	public static <T> Function<T, String> filterFor(TestValueType type, TestHelper helper) {

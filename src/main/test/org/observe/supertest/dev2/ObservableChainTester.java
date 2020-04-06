@@ -3,6 +3,7 @@ package org.observe.supertest.dev2;
 import java.io.File;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -13,9 +14,11 @@ import java.util.function.Supplier;
 import org.junit.Test;
 import org.observe.supertest.dev2.links.BaseCollectionLink;
 import org.observe.supertest.dev2.links.CollectionDerivedValues;
+import org.observe.supertest.dev2.links.FilteredCollectionLink;
 import org.observe.supertest.dev2.links.MappedCollectionLink;
 import org.observe.supertest.dev2.links.ModFilteredCollectionLink;
 import org.observe.supertest.dev2.links.ReversedCollectionLink;
+import org.observe.supertest.dev2.links.SortedCollectionLink;
 import org.qommons.QommonsUtils;
 import org.qommons.TestHelper;
 import org.qommons.TestHelper.Testable;
@@ -55,9 +58,13 @@ public class ObservableChainTester implements Testable {
 		generators.add(BaseCollectionLink.SIMPLE_GENERATOR);
 
 		// Derived collection generators
-		generators.add(MappedCollectionLink.GENERATE);
-		generators.add(ReversedCollectionLink.GENERATE);
-		generators.add(ModFilteredCollectionLink.GENERATE);
+		generators.addAll(Arrays.asList(//
+			MappedCollectionLink.GENERATE, //
+			ReversedCollectionLink.GENERATE, //
+			ModFilteredCollectionLink.GENERATE, //
+			FilteredCollectionLink.GENERATE, //
+			SortedCollectionLink.GENERATE//
+			));
 
 		// Derived collection value generators
 		generators.addAll(CollectionDerivedValues.GENERATORS);
@@ -180,7 +187,7 @@ public class ObservableChainTester implements Testable {
 			System.out.println("Assembled:" + toString());
 		try{
 			validate(theRoot, true, "root");
-		} catch(Error e){
+		} catch (RuntimeException | Error e) {
 			System.err.println("Integrity check failure on initial values");
 			throw e;
 		}
@@ -218,18 +225,18 @@ public class ObservableChainTester implements Testable {
 						System.err.println("Link " + targetLink.path);
 						System.err.println("Error on transaction " + (tri + 1) + ", mod " + (transactionTri + 1) + " after "
 							+ (modifications + transactionTri) + " successful modifications");
-						System.err.println("Pre-failure values:\n" + preValue);
-						System.err.println("Post-failure values:\n" + printValues());
+						System.err.println("Pre-failure values:" + preValue);
+						System.err.println("Post-failure values:" + printValues());
 						throw e;
 					}
 					try {
 						validate(theRoot, !useTransaction, "root");
-					} catch (Error e) {
+					} catch (RuntimeException | Error e) {
 						System.err.println("Link " + targetLink.path);
 						System.err.println("Integrity check failure after "
 							+ (modifications + transactionTri + 1) + " modifications in " + (tri + 1) + " transactions");
-						System.err.println("Pre-failure values:\n" + preValue);
-						System.err.println("Post-failure values:\n" + printValues());
+						System.err.println("Pre-failure values:" + preValue);
+						System.err.println("Post-failure values:" + printValues());
 						throw e;
 					}
 				}
@@ -252,7 +259,7 @@ public class ObservableChainTester implements Testable {
 			}
 			try {
 				validate(theRoot, true, "root");
-			} catch (Error e) {
+			} catch (RuntimeException | Error e) {
 				System.out.println("Values:" + print(true));
 				System.err.println("Link " + targetLink.path);
 				System.err.println("Integrity check failure after transaction " + (tri + 1) + " close after "
@@ -313,27 +320,12 @@ public class ObservableChainTester implements Testable {
 	}
 
 	String printValues() {
-		StringBuilder s = new StringBuilder();
-		print(theRoot, s, "root", 0, true);
-		return s.toString();
+		return print(true);
 	}
 
 	@Override
 	public String toString() {
 		return print(false);
-	}
-
-	private void print(ObservableChainLink<?, ?> link, StringBuilder str, String path, int depth, boolean withValues) {
-		str.append(path).append(": ").append(link);
-		if (withValues)
-			str.append('=').append(link.printValue());
-		depth++;
-		for (int i = 0; i < link.getDerivedLinks().size(); i++) {
-			str.append('\n');
-			for (int d = 0; d < depth; d++)
-				str.append('\t');
-			print(link.getDerivedLinks().get(i), str, path + "[" + i + "]", depth, withValues);
-		}
 	}
 
 	static class LinkStruct {

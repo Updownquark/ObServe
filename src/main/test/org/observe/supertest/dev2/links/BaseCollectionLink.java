@@ -130,7 +130,6 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	@Override
 	protected void validate(CollectionLinkElement<T, T> element) {}
 
-
 	static TestValueType nextType(TestHelper helper) {
 		// The DOUBLE type is much less performant. There may be some value, but we'll use it less often.
 		ValueHolder<TestValueType> result = new ValueHolder<>();

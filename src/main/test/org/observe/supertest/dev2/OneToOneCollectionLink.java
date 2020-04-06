@@ -133,10 +133,7 @@ public abstract class OneToOneCollectionLink<S, T> extends ObservableCollectionL
 
 	private void expectChangeFromSource(CollectionLinkElement<?, S> sourceEl, S oldSrcValue) {
 		CollectionLinkElement<S, T> element = (CollectionLinkElement<S, T>) sourceEl.getDerivedElements(getSiblingIndex()).getFirst();
-		T oldValue = element.get();
-		T oldMapped = map(oldSrcValue);
-		if (!getCollection().equivalence().elementEquals(oldValue, oldMapped))
-			element.error(err -> err.append("Wrong value updated: Expected ").append(oldMapped).append(" but was ").append(oldValue));
+		T oldValue = getUpdateValue(element.get());
 		element.setValue(map(sourceEl.get()));
 		ExpectedCollectionOperation<S, T> result = new ExpectedCollectionOperation<>(element, CollectionChangeType.set, oldValue,
 			element.get());

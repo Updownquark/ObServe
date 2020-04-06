@@ -91,11 +91,16 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 					break;
 				case remove:
 					CollectionElement<CollectionLinkElement<S, T>> removed = theElementsForCollection.getElement(evt.getIndex());
+					if (theDef.checkOldValues && !getCollection().equivalence().elementEquals(removed.get().get(), evt.getOldValue()))
+						throw new AssertionError("Old values do not match: Expected " + removed.get() + " but was " + evt.getOldValue());
 					removed.get().removed();
 					theElementsForCollection.mutableElement(removed.getElementId()).remove();
 					break;
 				case set:
-					theElementsForCollection.get(evt.getIndex()).updated();
+					CollectionLinkElement<S, T> element = theElementsForCollection.get(evt.getIndex());
+					if (theDef.checkOldValues && !getCollection().equivalence().elementEquals(element.get(), evt.getOldValue()))
+						throw new AssertionError("Old values do not match: Expected " + element.get() + " but was " + evt.getOldValue());
+					element.updated();
 					break;
 				}
 			}
@@ -381,25 +386,6 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 	@Override
 	protected <X> CollectionSourcedLink<T, X> deriveOne(TestHelper helper) {
 		TestHelper.RandomSupplier<CollectionSourcedLink<T, X>> action = helper.createSupplier();
-		/*action.or(1, () -> { // filter/refresh
-			// Getting a java.lang.InternalError: Enclosing method not found when I try to do the TypeToken right.
-			// It doesn't matter here anyway
-			SimpleSettableValue<Function<T, String>> filterValue = new SimpleSettableValue<>(
-				(TypeToken<Function<T, String>>) (TypeToken<?>) new TypeToken<Object>() {}, false);
-			filterValue.set(FilteredCollectionLink.filterFor(theDef.type, helper), null);
-			boolean variableFilter = helper.getBoolean();
-			CollectionDataFlow<?, ?, T> derivedOneStepFlow = theDef.oneStepFlow;
-			CollectionDataFlow<?, ?, T> derivedMultiStepFlow = theDef.multiStepFlow;
-			if (variableFilter) { // The refresh has to be UNDER the filter
-				derivedOneStepFlow = derivedOneStepFlow.refresh(filterValue.changes().noInit());
-				derivedMultiStepFlow = derivedMultiStepFlow.refresh(filterValue.changes().noInit());
-			}
-			derivedOneStepFlow = derivedOneStepFlow.filter(v -> filterValue.get().apply(v));
-			derivedMultiStepFlow = derivedMultiStepFlow.filter(v -> filterValue.get().apply(v));
-			ObservableCollectionTestDef<T> def = new ObservableCollectionTestDef<>(getType(), derivedOneStepFlow, derivedMultiStepFlow,
-				true, true);
-			return (ObservableCollectionLink<T, X>) new FilteredCollectionLink<>(this, def, helper);
-		});*/
 		// TODO whereContained
 		// TODO refreshEach
 		// TODO combine
@@ -677,9 +663,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 	}
 
 	private void prepareOp(CollectionOp op) {
-		if (op.elements.isEmpty())
-			return;
-		else if (op.minIndex >= 0) {
+		if (op.minIndex >= 0) {
 			if (op.context.subListStart + op.minIndex == theElements.size()) {
 				op.after = theElements.peekLast();
 				op.before = null;
