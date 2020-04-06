@@ -4,7 +4,6 @@ import java.util.List;
 
 import org.observe.ObservableValue;
 import org.observe.ObservableValueTester;
-import org.observe.SettableValue;
 import org.observe.collect.ObservableElement;
 import org.observe.collect.ObservableElementTester;
 import org.qommons.TestHelper;
@@ -75,17 +74,13 @@ public abstract class ObservableValueLink<S, T> extends AbstractChainLink<S, T> 
 	}
 
 	@Override
-	protected <X> ObservableChainLink<T, X> deriveOne(TestHelper helper) {
-		return null; // TODO
+	public double getModificationAffinity() {
+		// TODO If the value it settable, set the value
+		return 0;
 	}
 
 	@Override
-	public boolean isModifiable() {
-		return theValue instanceof SettableValue;
-	}
-
-	@Override
-	public void tryModify(TestHelper helper) throws AssertionError {
+	public void tryModify(TestHelper.RandomAction action, TestHelper helper) {
 		// TODO
 	}
 }

@@ -10,21 +10,19 @@ public interface ObservableChainLink<S, T> extends Transactable {
 
 	ObservableChainLink<?, S> getSourceLink();
 
+	void initialize(TestHelper helper);
+
 	List<? extends ObservableChainLink<T, ?>> getDerivedLinks();
 
 	int getSiblingIndex();
 
-	void initialize(TestHelper helper);
+	double getModificationAffinity();
 
-	boolean isModifiable();
-
-	void tryModify(TestHelper helper) throws AssertionError;
+	void tryModify(TestHelper.RandomAction action, TestHelper helper);
 
 	void validate(boolean transactionEnd) throws AssertionError;
 
 	String printValue();
-
-	<X> void derive(TestHelper helper, int maxLinkCount);
 
 	default int getLinkCount() {
 		int count = 1;

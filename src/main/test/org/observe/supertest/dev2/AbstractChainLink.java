@@ -36,28 +36,4 @@ public abstract class AbstractChainLink<S, T> implements ObservableChainLink<S, 
 		for (ObservableChainLink<T, ?> derived : theDerivedLinks)
 			derived.initialize(helper);
 	}
-
-	@Override
-	public <X> void derive(TestHelper helper, int maxLinkCount) {
-		// Go for length, not breadth
-		if (helper.getBoolean(.25)) {
-			return;
-		}
-		int derivedCount;
-		if (maxLinkCount == 1)
-			derivedCount = 1;
-		else
-			derivedCount = (int) Math.round(helper.getDouble(1, 1 + maxLinkCount / 5.0, maxLinkCount));
-		for (int i = 0; i < derivedCount; i++) {
-			ObservableChainLink<T, X> derived = deriveOne(helper);
-			if (derived == null)
-				break; // The link can choose not to derive
-			((List<ObservableChainLink<T, X>>) theDerivedLinks).add(derived);
-			if (maxLinkCount > 0)
-				derived.derive(helper, maxLinkCount);
-			maxLinkCount -= derived.getLinkCount() - 1;
-		}
-	}
-
-	protected abstract <X> ObservableChainLink<T, X> deriveOne(TestHelper helper);
 }

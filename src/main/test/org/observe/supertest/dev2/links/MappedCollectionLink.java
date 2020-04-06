@@ -11,18 +11,77 @@ import org.observe.SimpleSettableValue;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.FlowOptions;
 import org.observe.collect.FlowOptions.MapDef;
+import org.observe.collect.ObservableCollection.CollectionDataFlow;
+import org.observe.supertest.dev2.ChainLinkGenerator;
 import org.observe.supertest.dev2.CollectionLinkElement;
 import org.observe.supertest.dev2.CollectionSourcedLink;
 import org.observe.supertest.dev2.ExpectedCollectionOperation;
+import org.observe.supertest.dev2.ObservableChainLink;
 import org.observe.supertest.dev2.ObservableCollectionLink;
 import org.observe.supertest.dev2.ObservableCollectionTestDef;
 import org.observe.supertest.dev2.OneToOneCollectionLink;
 import org.observe.supertest.dev2.TestValueType;
 import org.observe.supertest.dev2.TypeTransformation;
+import org.qommons.LambdaUtils;
 import org.qommons.TestHelper;
+import org.qommons.ValueHolder;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 
+import com.google.common.reflect.TypeToken;
+
 public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
+	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator() {
+		@Override
+		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
+			if (!(sourceLink instanceof ObservableCollectionLink))
+				return 0;
+			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
+			if (!MappedCollectionLink.supportsTransform(sourceCL.getDef().type, true, false))
+				return 0;
+			return 1;
+		}
+
+		@Override
+		public <T, X> ObservableChainLink<T, X> deriveLink(ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
+			TypeTransformation<T, X> transform = MappedCollectionLink.transform(sourceCL.getDef().type, helper, true, false);
+			SimpleSettableValue<TypeTransformation<T, X>> txValue = new SimpleSettableValue<>(
+				(TypeToken<TypeTransformation<T, X>>) (TypeToken<?>) new TypeToken<Object>() {}, false);
+			txValue.set(transform, null);
+			boolean variableMap = helper.getBoolean();
+			CollectionDataFlow<?, ?, T> oneStepFlow = sourceCL.getCollection().flow();
+			CollectionDataFlow<?, ?, T> multiStepFlow = sourceCL.getDef().multiStepFlow;
+			if (variableMap) {
+				// The refresh has to be UNDER the map
+				oneStepFlow = oneStepFlow.refresh(txValue.changes().noInit());
+				multiStepFlow = multiStepFlow.refresh(txValue.changes().noInit());
+			}
+			boolean needsUpdateReeval = !sourceCL.getDef().checkOldValues || variableMap;
+			ValueHolder<FlowOptions.MapOptions<T, X>> options = new ValueHolder<>();
+			boolean cache = helper.getBoolean();
+			boolean withReverse = transform.supportsReverse() && helper.getBoolean(.95);
+			boolean fireIfUnchanged = needsUpdateReeval || helper.getBoolean();
+			boolean reEvalOnUpdate = needsUpdateReeval || helper.getBoolean();
+			CollectionDataFlow<?, ?, X> derivedOneStepFlow = oneStepFlow.map((TypeToken<X>) transform.getType().getType(),
+				LambdaUtils.printableFn(src -> txValue.get().map(src), () -> txValue.get().toString()), o -> {
+					o.manyToOne(txValue.get().isManyToOne()).oneToMany(txValue.get().isOneToMany());
+					if (withReverse)
+						o.withReverse(x -> txValue.get().reverse(x));
+					options.accept(o.cache(cache).fireIfUnchanged(fireIfUnchanged).reEvalOnUpdate(reEvalOnUpdate));
+				});
+			CollectionDataFlow<?, ?, X> derivedMultiStepFlow = multiStepFlow.map((TypeToken<X>) transform.getType().getType(),
+				LambdaUtils.printableFn(src -> txValue.get().map(src), () -> txValue.get().toString()), o -> {
+					o.manyToOne(txValue.get().isManyToOne()).oneToMany(txValue.get().isOneToMany());
+					if (withReverse)
+						o.withReverse(x -> txValue.get().reverse(x));
+					options.accept(o.cache(cache).fireIfUnchanged(fireIfUnchanged).reEvalOnUpdate(reEvalOnUpdate));
+				});
+			ObservableCollectionTestDef<X> newDef = new ObservableCollectionTestDef<>(transform.getType(), derivedOneStepFlow,
+				derivedMultiStepFlow, variableMap, !needsUpdateReeval);
+			return new MappedCollectionLink<>(sourceCL, newDef, helper, txValue, variableMap, new FlowOptions.MapDef<>(options.get()));
+		}
+	};
+
 	private final SimpleSettableValue<TypeTransformation<S, T>> theMapValue;
 	private TypeTransformation<S, T> theCurrentMap;
 	private final boolean isMapVariable;
@@ -65,7 +124,7 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 
 	@Override
 	public T getUpdateValue(T value) {
-		if (theOptions.isCached())
+		if (theOptions.isCached() || !isReversible())
 			return value;
 		else
 			return map(getSourceLink().getUpdateValue(reverse(value)));
@@ -356,9 +415,9 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 						break;
 					case DOUBLE: {
 						MappedCollectionLink.<Double, Double> supportTransforms(type1, type2, //
-							transform(type1, type2, d -> d + 5, d -> d - 5, false, false, "+5", "-5"), //
-							transform(type1, type2, d -> d * 5, d -> d / 5, false, true, "*5", "/5"), //
-							transform(type1, type2, d -> -d, d -> -d, false, false, "-", "-"));
+							transform(type1, type2, d -> noNeg0(d + 5), d -> noNeg0(d - 5), false, false, "+5", "-5"), //
+							transform(type1, type2, d -> noNeg0(d * 5), d -> noNeg0(d / 5), false, true, "*5", "/5"), //
+							transform(type1, type2, d -> noNeg0(-d), d -> noNeg0(-d), false, false, "-", "-"));
 						break;
 					}
 					case STRING: {
@@ -392,6 +451,14 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 				}
 			}
 		}
+	}
+
+	// Some double->double arithmetic operations whose result is zero are somewhat indeterminate which zero they return.
+	// Since -0.0 != 0.0, this can cause problems, for example, when the result of a + b - b is expected to be a.
+	static double noNeg0(double d) {
+		if (d == -0.0)
+			return 0.0;
+		return d;
 	}
 
 	private static <S, T> void supportTransforms(TestValueType type1, TestValueType type2, TypeTransformation<S, T>... transforms) {

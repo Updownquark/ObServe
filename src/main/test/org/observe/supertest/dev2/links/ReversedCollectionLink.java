@@ -1,15 +1,40 @@
 package org.observe.supertest.dev2.links;
 
 import org.observe.collect.CollectionChangeType;
+import org.observe.collect.ObservableCollection.CollectionDataFlow;
+import org.observe.supertest.dev2.ChainLinkGenerator;
 import org.observe.supertest.dev2.CollectionLinkElement;
 import org.observe.supertest.dev2.CollectionSourcedLink;
 import org.observe.supertest.dev2.ExpectedCollectionOperation;
+import org.observe.supertest.dev2.ObservableChainLink;
 import org.observe.supertest.dev2.ObservableCollectionLink;
 import org.observe.supertest.dev2.ObservableCollectionTestDef;
 import org.observe.supertest.dev2.OneToOneCollectionLink;
 import org.qommons.TestHelper;
 
 public class ReversedCollectionLink<T> extends OneToOneCollectionLink<T, T> {
+	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator() {
+		@Override
+		public <T> double getAffinity(ObservableChainLink<?, T> link) {
+			if (!(link instanceof ObservableCollectionLink))
+				return 0;
+			return 1;
+		}
+
+		@Override
+		public <T, X> ObservableChainLink<T, X> deriveLink(ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
+			CollectionDataFlow<?, ?, T> oneStepFlow;
+			if (helper.getBoolean())
+				oneStepFlow = sourceCL.getCollection().reverse().flow();
+			else
+				oneStepFlow = sourceCL.getCollection().flow().reverse();
+			CollectionDataFlow<?, ?, T> multiStepFlow = sourceCL.getDef().multiStepFlow.reverse();
+			return (ObservableCollectionLink<T, X>) new ReversedCollectionLink<>(sourceCL, new ObservableCollectionTestDef<>(
+				sourceCL.getDef().type, oneStepFlow, multiStepFlow, true, sourceCL.getDef().checkOldValues), helper);
+		}
+	};
+
 	public ReversedCollectionLink(ObservableCollectionLink<?, T> sourceLink, ObservableCollectionTestDef<T> def, TestHelper helper) {
 		super(sourceLink, def, helper);
 	}

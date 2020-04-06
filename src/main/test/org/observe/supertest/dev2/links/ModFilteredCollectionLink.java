@@ -1,14 +1,78 @@
 package org.observe.supertest.dev2.links;
 
+import java.util.function.Function;
+
+import org.observe.collect.ObservableCollection;
+import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl;
+import org.observe.supertest.dev2.ChainLinkGenerator;
 import org.observe.supertest.dev2.CollectionLinkElement;
 import org.observe.supertest.dev2.ExpectedCollectionOperation;
+import org.observe.supertest.dev2.ObservableChainLink;
 import org.observe.supertest.dev2.ObservableCollectionLink;
 import org.observe.supertest.dev2.ObservableCollectionTestDef;
 import org.observe.supertest.dev2.OneToOneCollectionLink;
 import org.qommons.TestHelper;
+import org.qommons.ValueHolder;
 
 public class ModFilteredCollectionLink<T> extends OneToOneCollectionLink<T, T> {
+	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator() {
+		@Override
+		public <T> double getAffinity(ObservableChainLink<?, T> link) {
+			if (!(link instanceof ObservableCollectionLink))
+				return 0;
+			return 1;
+		}
+
+		@Override
+		public <T, X> ObservableChainLink<T, X> deriveLink(ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
+			ValueHolder<ObservableCollection.ModFilterBuilder<T>> filter = new ValueHolder<>();
+			boolean unmodifiable = helper.getBoolean(.1);
+			boolean updatable = !unmodifiable || helper.getBoolean(.75);
+			boolean noAdd = unmodifiable || helper.getBoolean(.25);
+			Function<T, String> addFilter = (noAdd || helper.getBoolean(.85)) ? null
+				: FilteredCollectionLink.filterFor(sourceCL.getDef().type, helper);
+			boolean noRemove = unmodifiable || helper.getBoolean(.25);
+			Function<T, String> removeFilter = (noRemove || helper.getBoolean(.85)) ? null
+				: FilteredCollectionLink.filterFor(sourceCL.getDef().type, helper);
+			CollectionDataFlow<?, ?, T> derivedOneStepFlow = sourceCL.getCollection().flow().filterMod(f -> {
+				if (unmodifiable)
+					f.unmodifiable("Unmodifiable", updatable);
+				else {
+					if (noAdd)
+						f.noAdd("No adds");
+					else if (addFilter != null)
+						f.filterAdd(addFilter);
+					if (noRemove)
+						f.noRemove("No removes");
+					else if (removeFilter != null)
+						f.filterRemove(removeFilter);
+				}
+				filter.accept(f);
+			});
+			CollectionDataFlow<?, ?, T> derivedMultiStepFlow = sourceCL.getDef().multiStepFlow.filterMod(f -> {
+				if (unmodifiable)
+					f.unmodifiable("Unmodifiable", updatable);
+				else {
+					if (noAdd)
+						f.noAdd("No adds");
+					else if (addFilter != null)
+						f.filterAdd(addFilter);
+					if (noRemove)
+						f.noRemove("No removes");
+					else if (removeFilter != null)
+						f.filterRemove(removeFilter);
+				}
+				filter.accept(f);
+			});
+			return (ObservableCollectionLink<T, X>) new ModFilteredCollectionLink<>(sourceCL,
+				new ObservableCollectionTestDef<>(sourceCL.getDef().type, derivedOneStepFlow, derivedMultiStepFlow, true,
+					sourceCL.getDef().checkOldValues),
+				helper, new ObservableCollectionDataFlowImpl.ModFilterer<>(filter.get()));
+		}
+	};
+
 	private final ObservableCollectionDataFlowImpl.ModFilterer<T> theFilter;
 
 	public ModFilteredCollectionLink(ObservableCollectionLink<?, T> sourceLink, ObservableCollectionTestDef<T> def, TestHelper helper,

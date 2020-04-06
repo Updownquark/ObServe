@@ -2,7 +2,8 @@ package org.observe;
 
 import static org.junit.Assert.assertEquals;
 
-import org.junit.Assert;
+import java.util.Objects;
+
 import org.observe.util.TypeTokens;
 
 /**
@@ -63,7 +64,8 @@ public class ObservableValueTester<T> extends AbstractObservableTester<T> {
 	/** @param evt The event that occurred */
 	protected void event(ObservableValueEvent<? extends T> evt) {
 		op();
-		Assert.assertEquals(theSynced, evt.getOldValue());
+		if (!Objects.equals(theSynced, evt.getOldValue()))
+			throw new AssertionError("Expected " + theSynced + " but was " + evt.getNewValue());
 		theSynced = evt.getNewValue();
 	}
 }

@@ -1,16 +1,15 @@
 package org.observe.supertest.dev2.links;
 
-import java.util.Comparator;
-
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.DefaultObservableCollection;
+import org.observe.supertest.dev2.ChainLinkGenerator;
 import org.observe.supertest.dev2.CollectionLinkElement;
 import org.observe.supertest.dev2.CollectionSourcedLink;
 import org.observe.supertest.dev2.ExpectedCollectionOperation;
+import org.observe.supertest.dev2.ObservableChainLink;
 import org.observe.supertest.dev2.ObservableCollectionLink;
 import org.observe.supertest.dev2.ObservableCollectionTestDef;
 import org.observe.supertest.dev2.TestValueType;
-import org.qommons.Ternian;
 import org.qommons.TestHelper;
 import org.qommons.ValueHolder;
 import org.qommons.collect.BetterList;
@@ -20,6 +19,26 @@ import org.qommons.tree.BetterTreeList;
 import com.google.common.reflect.TypeToken;
 
 public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
+	public static ChainLinkGenerator SIMPLE_GENERATOR = new ChainLinkGenerator() {
+		@Override
+		public <T> double getAffinity(ObservableChainLink<?, T> link) {
+			if (link != null)
+				return 0;
+			return 1;
+		}
+
+		@Override
+		public <T, X> ObservableChainLink<T, X> deriveLink(ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+			TestValueType type = nextType(helper);
+
+			// Simple tree-backed list
+			BetterList<X> backing = new BetterTreeList<>(true);
+			DefaultObservableCollection<X> base = new DefaultObservableCollection<>((TypeToken<X>) type.getType(), backing);
+			return (ObservableChainLink<T, X>) new BaseCollectionLink<>(
+				new ObservableCollectionTestDef<>(type, base.flow(), base.flow(), true, true), helper);
+		}
+	};
+
 	public BaseCollectionLink(ObservableCollectionTestDef<T> def, TestHelper helper) {
 		super(null, def, helper);
 	}
@@ -125,21 +144,20 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	}
 
 	@SuppressWarnings("deprecation")
-	public static <E> BaseCollectionLink<E> createInitialLink(TestValueType type, TestHelper helper, int depth, Ternian withSorted,
-		Comparator<? super E> compare) {
-		TestValueType fType = type != null ? type : nextType(helper);
+	private static <E> BaseCollectionLink<E> createInitialLink(TestHelper helper) {
+		TestValueType type = nextType(helper);
 
 		ValueHolder<BaseCollectionLink<E>> holder = new ValueHolder<>();
 		TestHelper.RandomAction action = helper.createAction();
-		if (withSorted != Ternian.TRUE) {
-			action.or(1, () -> {
-				// Simple tree-backed list
-				BetterList<E> backing = new BetterTreeList<>(true);
-				DefaultObservableCollection<E> base = new DefaultObservableCollection<>((TypeToken<E>) fType.getType(), backing);
-				holder.accept(
-					new BaseCollectionLink<>(new ObservableCollectionTestDef<>(fType, base.flow(), base.flow(), true, true), helper));
-			});
-		}
+		// if (withSorted != Ternian.TRUE) {
+		action.or(1, () -> {
+			// Simple tree-backed list
+			BetterList<E> backing = new BetterTreeList<>(true);
+			DefaultObservableCollection<E> base = new DefaultObservableCollection<>((TypeToken<E>) type.getType(), backing);
+			holder.accept(
+				new BaseCollectionLink<>(new ObservableCollectionTestDef<>(type, base.flow(), base.flow(), true, true), helper));
+		});
+		// }
 		/*TODO
 		 if (withSorted != Ternian.FALSE) {
 			action.or(.5, () -> {
