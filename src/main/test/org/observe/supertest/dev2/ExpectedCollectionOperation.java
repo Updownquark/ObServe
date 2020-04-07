@@ -1,16 +1,16 @@
 package org.observe.supertest.dev2;
 
-import org.observe.collect.CollectionChangeType;
+import org.observe.supertest.dev2.ObservableCollectionLink.CollectionOpType;
 
 public class ExpectedCollectionOperation<S, T> {
 	private final CollectionLinkElement<S, T> theElement;
-	private final CollectionChangeType theType;
+	private final CollectionOpType theType;
 	private final T theOldValue;
 	private final T theValue;
 
 	private String isRejected;
 
-	public ExpectedCollectionOperation(CollectionLinkElement<S, T> element, CollectionChangeType type, T oldValue, T value) {
+	public ExpectedCollectionOperation(CollectionLinkElement<S, T> element, CollectionOpType type, T oldValue, T value) {
 		theElement = element;
 		theType = type;
 		theOldValue = oldValue;
@@ -21,7 +21,7 @@ public class ExpectedCollectionOperation<S, T> {
 		return theElement;
 	}
 
-	public CollectionChangeType getType() {
+	public CollectionOpType getType() {
 		return theType;
 	}
 
@@ -53,6 +53,9 @@ public class ExpectedCollectionOperation<S, T> {
 			break;
 		case set:
 			str.append(theOldValue).append("->").append(theValue);
+			break;
+		case move:
+			str.append("move:").append(theValue);
 			break;
 		}
 		return str.toString();

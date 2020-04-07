@@ -6,7 +6,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.dev2.ChainLinkGenerator;
 import org.observe.supertest.dev2.CollectionLinkElement;
@@ -16,9 +15,9 @@ import org.observe.supertest.dev2.ObservableChainLink;
 import org.observe.supertest.dev2.ObservableCollectionLink;
 import org.observe.supertest.dev2.ObservableCollectionTestDef;
 import org.observe.supertest.dev2.TestValueType;
+import org.qommons.BiTuple;
+import org.qommons.LambdaUtils;
 import org.qommons.TestHelper;
-import org.qommons.collect.CollectionElement;
-import org.qommons.collect.MutableCollectionElement.StdMsg;
 
 public class SortedCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator() {
@@ -30,7 +29,7 @@ public class SortedCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		}
 
 		@Override
-		public <T, X> ObservableChainLink<T, X> deriveLink(ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
 			Comparator<T> compare = compare(sourceLink.getType(), helper);
 			CollectionDataFlow<?, ?, T> derivedOneStepFlow = sourceCL.getCollection().flow();
@@ -39,16 +38,16 @@ public class SortedCollectionLink<T> extends ObservableCollectionLink<T, T> {
 			derivedMultiStepFlow = derivedMultiStepFlow.sorted(compare);
 			ObservableCollectionTestDef<T> def = new ObservableCollectionTestDef<>(sourceCL.getType(), derivedOneStepFlow,
 				derivedMultiStepFlow, false, sourceCL.getDef().checkOldValues);
-			return (ObservableCollectionLink<T, X>) new SortedCollectionLink<>(sourceCL, def, compare, helper);
+			return (ObservableCollectionLink<T, X>) new SortedCollectionLink<>(path, sourceCL, def, compare, helper);
 		}
 	};
 
-	private final Comparator<? super T> theCompare;
+	private final SortedLinkHelper<T> theHelper;
 
-	public SortedCollectionLink(ObservableCollectionLink<?, T> sourceLink, ObservableCollectionTestDef<T> def,
+	public SortedCollectionLink(String path, ObservableCollectionLink<?, T> sourceLink, ObservableCollectionTestDef<T> def,
 		Comparator<? super T> compare, TestHelper helper) {
-		super(sourceLink, def, helper);
-		theCompare = compare;
+		super(path, sourceLink, def, helper);
+		theHelper = new SortedLinkHelper<>(compare);
 	}
 
 	@Override
@@ -63,79 +62,50 @@ public class SortedCollectionLink<T> extends ObservableCollectionLink<T, T> {
 
 	@Override
 	public CollectionLinkElement<T, T> expectAdd(T value, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before,
-		boolean first, OperationRejection rejection, int derivedIndex) {
-		if (after != null && theCompare.compare(value, after.get()) < 0) {
-			rejection.reject(StdMsg.ILLEGAL_ELEMENT_POSITION, true);
+		boolean first, OperationRejection rejection) {
+		BiTuple<CollectionLinkElement<?, T>, CollectionLinkElement<?, T>> afterBefore = theHelper.expectAdd(value, after, before, first,
+			rejection);
+		if (afterBefore == null)
 			return null;
-		} else if (before != null && theCompare.compare(value, before.get()) > 0) {
-			rejection.reject(StdMsg.ILLEGAL_ELEMENT_POSITION, true);
-			return null;
-		}
+		after = afterBefore.getValue1();
+		before = afterBefore.getValue2();
+
 		CollectionLinkElement<?, T> sourceEl = getSourceLink().expectAdd(value, //
 			after == null ? null : (CollectionLinkElement<?, T>) after.getSourceElements().getFirst(),
 				before == null ? null : (CollectionLinkElement<?, T>) before.getSourceElements().getFirst(), //
-					first, rejection, getSiblingIndex());
+					first, rejection);
 		if (rejection.isRejected())
 			return null;
 		CollectionLinkElement<T, T> element = (CollectionLinkElement<T, T>) sourceEl.getDerivedElements(getSiblingIndex()).getFirst();
-		element.expectAdded(value);
 		checkOrder(element);
-		ExpectedCollectionOperation<T, T> op = new ExpectedCollectionOperation<>(element, CollectionChangeType.add, null, value);
-		int d = 0;
-		for (CollectionSourcedLink<T, ?> derived : getDerivedLinks()) {
-			if (d != derivedIndex)
-				derived.expectFromSource(op);
-			d++;
-		}
 		return element;
 	}
 
 	@Override
-	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection, int derivedIndex) {
+	public CollectionLinkElement<T, T> expectMove(CollectionLinkElement<?, T> source, CollectionLinkElement<?, T> after,
+		CollectionLinkElement<?, T> before, boolean first, OperationRejection rejection) {
+		BiTuple<CollectionLinkElement<?, T>, CollectionLinkElement<?, T>> afterBefore = theHelper.expectMove(source, after, before, first,
+			rejection);
+		if (afterBefore == null)
+			return null;
+		after = afterBefore.getValue1();
+		before = afterBefore.getValue2();
+		CollectionLinkElement<?, T> sourceEl = getSourceLink().expectMove(//
+			(CollectionLinkElement<?, T>) source.getFirstSource(), //
+			after == null ? null : (CollectionLinkElement<?, T>) after.getSourceElements().getFirst(),
+				before == null ? null : (CollectionLinkElement<?, T>) before.getSourceElements().getFirst(), //
+					first, rejection);
+		return sourceEl == null ? null : (CollectionLinkElement<T, T>) sourceEl.getDerivedElements(getSiblingIndex()).getFirst();
+	}
+
+	@Override
+	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection) {
+		if (!theHelper.expectSet(derivedOp, rejection, getElements()))
+			return;
 		CollectionLinkElement<T, T> element = (CollectionLinkElement<T, T>) derivedOp.getElement();
-		switch (derivedOp.getType()) {
-		case add:
-		case remove:
-			break;
-		case set:
-			CollectionElement<CollectionLinkElement<T, T>> adj = getElements().getAdjacentElement(element.getElementAddress(), false);
-			while (adj != null && !adj.get().isPresent())
-				adj = getElements().getAdjacentElement(adj.getElementId(), false);
-			if (adj != null && theCompare.compare(derivedOp.getValue(), adj.get().get()) < 0) {
-				rejection.reject(StdMsg.ILLEGAL_ELEMENT_POSITION, true);
-				return;
-			}
-			adj = getElements().getAdjacentElement(element.getElementAddress(), true);
-			while (adj != null && !adj.get().isPresent())
-				adj = getElements().getAdjacentElement(adj.getElementId(), true);
-			if (adj != null && theCompare.compare(derivedOp.getValue(), adj.get().get()) > 0) {
-				rejection.reject(StdMsg.ILLEGAL_ELEMENT_POSITION, true);
-				return;
-			}
-		}
 		CollectionLinkElement<?, T> sourceEl = element.getSourceElements().getFirst();
 		getSourceLink().expect(new ExpectedCollectionOperation<>(//
-			sourceEl, derivedOp.getType(), derivedOp.getOldValue(), derivedOp.getValue()), rejection, getSiblingIndex());
-		if (rejection.isRejected())
-			return;
-		switch (derivedOp.getType()) {
-		case add:
-			throw new IllegalStateException();
-		case remove:
-			element.expectRemoval();
-			break;
-		case set:
-			element.setValue(derivedOp.getValue());
-			break;
-		}
-		ExpectedCollectionOperation<T, T> op = new ExpectedCollectionOperation<>(element, derivedOp.getType(), derivedOp.getOldValue(),
-			derivedOp.getValue());
-		int d = 0;
-		for (CollectionSourcedLink<T, ?> derived : getDerivedLinks()) {
-			if (d != derivedIndex)
-				derived.expectFromSource(op);
-			d++;
-		}
+			sourceEl, derivedOp.getType(), derivedOp.getOldValue(), derivedOp.getValue()), rejection);
 	}
 
 	@Override
@@ -151,59 +121,24 @@ public class SortedCollectionLink<T> extends ObservableCollectionLink<T, T> {
 			element.expectRemoval();
 			break;
 		case set:
-			boolean expectMove;
-			int comp = theCompare.compare(sourceOp.getValue(), element.getValue());
-			if (comp < 0) {
-				CollectionElement<CollectionLinkElement<T, T>> adj = getElements().getAdjacentElement(element.getElementAddress(), false);
-				while (adj != null && !adj.get().isPresent())
-					adj = getElements().getAdjacentElement(adj.getElementId(), false);
-				if (adj == null)
-					expectMove = false;
-				else {
-					comp = theCompare.compare(sourceOp.getValue(), adj.get().get());
-					if (comp < 0)
-						expectMove = true;
-					else if (comp == 0) {
-						comp = adj.get().getSourceElements().getFirst().getElementAddress().compareTo(//
-							element.getSourceElements().getFirst().getElementAddress());
-						expectMove = comp < 0;
-					} else
-						expectMove = false;
-				}
-			} else if (comp == 0) {
-				expectMove = false;
-			} else {
-				CollectionElement<CollectionLinkElement<T, T>> adj = getElements().getAdjacentElement(element.getElementAddress(), true);
-				while (adj != null && !adj.get().isPresent())
-					adj = getElements().getAdjacentElement(adj.getElementId(), true);
-				if (adj == null)
-					expectMove = false;
-				else {
-					comp = theCompare.compare(sourceOp.getValue(), adj.get().get());
-					if (comp > 0)
-						expectMove = true;
-					else if (comp == 0) {
-						comp = adj.get().getSourceElements().getFirst().getElementAddress().compareTo(//
-							element.getSourceElements().getFirst().getElementAddress());
-						expectMove = comp > 0;
-					} else
-						expectMove = false;
-				}
-			}
+			boolean expectMove = theHelper.expectMoveFromSource(sourceOp, getSiblingIndex(), getElements());
 			if (expectMove) {
 				element.expectRemoval();
-				ExpectedCollectionOperation<T, T> op = new ExpectedCollectionOperation<>(element, CollectionChangeType.remove,
+				ExpectedCollectionOperation<T, T> op = new ExpectedCollectionOperation<>(element, CollectionOpType.remove,
 					sourceOp.getOldValue(), sourceOp.getOldValue());
 				for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
 					derived.expectFromSource(op);
 				element = (CollectionLinkElement<T, T>) sourceOp.getElement().getDerivedElements(getSiblingIndex()).get(1);
 				element.expectAdded(sourceOp.getValue());
-				op = new ExpectedCollectionOperation<>(element, CollectionChangeType.add, null, sourceOp.getValue());
+				op = new ExpectedCollectionOperation<>(element, CollectionOpType.add, null, sourceOp.getValue());
 				for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
 					derived.expectFromSource(op);
 				return;
 			} else
 				element.setValue(sourceOp.getValue());
+			break;
+		case move:
+			throw new IllegalStateException();
 		}
 		ExpectedCollectionOperation<T, T> op = new ExpectedCollectionOperation<>(element, sourceOp.getType(), sourceOp.getOldValue(),
 			sourceOp.getValue());
@@ -217,22 +152,7 @@ public class SortedCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	}
 
 	private void checkOrder(CollectionLinkElement<T, T> element) {
-		if (element.isPresent()) {
-			CollectionElement<CollectionLinkElement<T, T>> adj = getElements().getAdjacentElement(element.getElementAddress(), false);
-			while (adj != null && (!adj.get().isPresent() || adj.get().wasAdded()))
-				adj = getElements().getAdjacentElement(adj.getElementId(), false);
-			if (adj != null) {
-				int comp = theCompare.compare(adj.get().get(), element.get());
-				if (comp > 0)
-					throw new AssertionError("Sorted elements not in value order");
-				else if (comp == 0) {
-					comp = adj.get().getSourceElements().getFirst().getElementAddress().compareTo(//
-						element.getSourceElements().getFirst().getElementAddress());
-					if (comp >= 0)
-						throw new AssertionError("Equivalent sorted elements not in source order");
-				}
-			}
-		}
+		theHelper.checkOrder(getElements(), element);
 	}
 
 	@Override
@@ -247,16 +167,16 @@ public class SortedCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		for (TestValueType type : TestValueType.values()) {
 			switch (type) {
 			case INT:
-				COMPARATORS.put(type, Arrays.asList((Comparator<Integer>) Integer::compareTo));
+				COMPARATORS.put(type, Arrays.asList(LambdaUtils.printableComparator(Integer::compareTo, () -> "int asc")));
 				break;
 			case DOUBLE:
-				COMPARATORS.put(type, Arrays.asList((Comparator<Double>) Double::compareTo));
+				COMPARATORS.put(type, Arrays.asList(LambdaUtils.printableComparator(Double::compareTo, () -> "double asc")));
 				break;
 			case STRING:
-				COMPARATORS.put(type, Arrays.asList((Comparator<String>) String::compareTo));
+				COMPARATORS.put(type, Arrays.asList(LambdaUtils.printableComparator(String::compareTo, () -> "string asc")));
 				break;
 			case BOOLEAN:
-				COMPARATORS.put(type, Arrays.asList((Comparator<Boolean>) Boolean::compareTo));
+				COMPARATORS.put(type, Arrays.asList(LambdaUtils.printableComparator(Boolean::compareTo, () -> "boolean asc")));
 				break;
 			}
 		}

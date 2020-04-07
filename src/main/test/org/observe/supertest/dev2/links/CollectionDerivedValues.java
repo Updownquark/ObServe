@@ -35,8 +35,8 @@ public class CollectionDerivedValues {
 		}
 
 		@Override
-		public <T, X> ObservableChainLink<T, X> deriveLink(ObservableChainLink<?, T> sourceLink, TestHelper helper) {
-			return (ObservableChainLink<T, X>) new CollectionSize<>((ObservableCollectionLink<?, T>) sourceLink);
+		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+			return (ObservableChainLink<T, X>) new CollectionSize<>(path, (ObservableCollectionLink<?, T>) sourceLink);
 		}
 	};
 
@@ -52,8 +52,8 @@ public class CollectionDerivedValues {
 		}
 
 		@Override
-		public <T, X> ObservableChainLink<T, X> deriveLink(ObservableChainLink<?, T> sourceLink, TestHelper helper) {
-			return (ObservableChainLink<T, X>) new CollectionContainsValue<>((ObservableCollectionLink<?, T>) sourceLink, helper);
+		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+			return (ObservableChainLink<T, X>) new CollectionContainsValue<>(path, (ObservableCollectionLink<?, T>) sourceLink, helper);
 		}
 	};
 
@@ -69,8 +69,8 @@ public class CollectionDerivedValues {
 		}
 
 		@Override
-		public <T, X> ObservableChainLink<T, X> deriveLink(ObservableChainLink<?, T> sourceLink, TestHelper helper) {
-			return (ObservableChainLink<T, X>) new CollectionObserveElement<>((ObservableCollectionLink<?, T>) sourceLink, helper);
+		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+			return (ObservableChainLink<T, X>) new CollectionObserveElement<>(path, (ObservableCollectionLink<?, T>) sourceLink, helper);
 		}
 	};
 
@@ -83,8 +83,8 @@ public class CollectionDerivedValues {
 		}
 
 		@Override
-		public <T, X> ObservableChainLink<T, X> deriveLink(ObservableChainLink<?, T> sourceLink, TestHelper helper) {
-			return (ObservableChainLink<T, X>) new CollectionConditionFinder<>((ObservableCollectionLink<?, T>) sourceLink, helper);
+		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+			return (ObservableChainLink<T, X>) new CollectionConditionFinder<>(path, (ObservableCollectionLink<?, T>) sourceLink, helper);
 		}
 	};
 
@@ -97,8 +97,8 @@ public class CollectionDerivedValues {
 		}
 
 		@Override
-		public <T, X> ObservableChainLink<T, X> deriveLink(ObservableChainLink<?, T> sourceLink, TestHelper helper) {
-			return (ObservableChainLink<T, X>) new CollectionOnlyValue<>((ObservableCollectionLink<?, T>) sourceLink);
+		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+			return (ObservableChainLink<T, X>) new CollectionOnlyValue<>(path, (ObservableCollectionLink<?, T>) sourceLink);
 		}
 	};
 
@@ -111,8 +111,8 @@ public class CollectionDerivedValues {
 		}
 
 		@Override
-		public <T, X> ObservableChainLink<T, X> deriveLink(ObservableChainLink<?, T> sourceLink, TestHelper helper) {
-			return (ObservableChainLink<T, X>) new CollectionMinMaxValue<>((ObservableCollectionLink<?, T>) sourceLink, helper);
+		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+			return (ObservableChainLink<T, X>) new CollectionMinMaxValue<>(path, (ObservableCollectionLink<?, T>) sourceLink, helper);
 		}
 	};
 
@@ -128,8 +128,8 @@ public class CollectionDerivedValues {
 		}
 
 		@Override
-		public <T, X> ObservableChainLink<T, X> deriveLink(ObservableChainLink<?, T> sourceLink, TestHelper helper) {
-			return (ObservableChainLink<T, X>) new CollectionSum((ObservableCollectionLink<?, Integer>) sourceLink);
+		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+			return (ObservableChainLink<T, X>) new CollectionSum(path, (ObservableCollectionLink<?, Integer>) sourceLink);
 		}
 	};
 
@@ -138,8 +138,8 @@ public class CollectionDerivedValues {
 		ONLY_GENERATOR, MIN_MAX_GENERATOR, SUM_GENERATOR));
 
 	public static class CollectionSize<T> extends CollectionDerivedValue<T, Integer> {
-		CollectionSize(ObservableCollectionLink<?, T> sourceLink) {
-			super(sourceLink, TestValueType.INT);
+		CollectionSize(String path, ObservableCollectionLink<?, T> sourceLink) {
+			super(path, sourceLink, TestValueType.INT);
 		}
 
 		@Override
@@ -164,8 +164,8 @@ public class CollectionDerivedValues {
 	public static class CollectionContainsValue<T> extends CollectionDerivedValue<T, Boolean> {
 		private final SettableValue<T> theValue;
 
-		CollectionContainsValue(ObservableCollectionLink<?, T> sourceLink, TestHelper helper) {
-			super(sourceLink, TestValueType.BOOLEAN);
+		CollectionContainsValue(String path, ObservableCollectionLink<?, T> sourceLink, TestHelper helper) {
+			super(path, sourceLink, TestValueType.BOOLEAN);
 			theValue = SettableValue.build((TypeToken<T>) getSourceLink().getType().getType()).safe(false).build();
 			theValue.set(sourceLink.getValueSupplier().apply(helper), null);
 		}
@@ -212,8 +212,8 @@ public class CollectionDerivedValues {
 		private final T theValue;
 		private final boolean isFirst;
 
-		CollectionObserveElement(ObservableCollectionLink<?, T> sourceLink, TestHelper helper) {
-			super(sourceLink, sourceLink.getType());
+		CollectionObserveElement(String path, ObservableCollectionLink<?, T> sourceLink, TestHelper helper) {
+			super(path, sourceLink, sourceLink.getType());
 			theValue = sourceLink.getValueSupplier().apply(helper);
 			isFirst = helper.getBoolean();
 		}
@@ -280,8 +280,8 @@ public class CollectionDerivedValues {
 		private final SettableValue<Function<T, String>> theConditionValue;
 		private final Ternian theLocation;
 
-		CollectionConditionFinder(ObservableCollectionLink<?, T> sourceLink, TestHelper helper) {
-			super(sourceLink, sourceLink.getType());
+		CollectionConditionFinder(String path, ObservableCollectionLink<?, T> sourceLink, TestHelper helper) {
+			super(path, sourceLink, sourceLink.getType());
 			theConditionValue = SettableValue.build((TypeToken<Function<T, String>>) (TypeToken<?>) TypeTokens.get().OBJECT).safe(false)
 				.build();
 			theConditionValue.set(FilteredCollectionLink.filterFor(getType(), helper), null);
@@ -378,8 +378,8 @@ public class CollectionDerivedValues {
 	}
 
 	public static class CollectionOnlyValue<T> extends CollectionDerivedValue<T, T> {
-		CollectionOnlyValue(ObservableCollectionLink<?, T> sourceLink) {
-			super(sourceLink, TestValueType.INT);
+		CollectionOnlyValue(String path, ObservableCollectionLink<?, T> sourceLink) {
+			super(path, sourceLink, TestValueType.INT);
 		}
 
 		@Override
@@ -412,8 +412,8 @@ public class CollectionDerivedValues {
 		private final Ternian theLocation;
 		private final Comparator<T> theCompare;
 
-		CollectionMinMaxValue(ObservableCollectionLink<?, T> sourceLink, TestHelper helper) {
-			super(sourceLink, TestValueType.INT);
+		CollectionMinMaxValue(String path, ObservableCollectionLink<?, T> sourceLink, TestHelper helper) {
+			super(path, sourceLink, TestValueType.INT);
 			isMin = helper.getBoolean();
 			theLocation = Ternian.values()[helper.getInt(0, 3)];
 			switch (getSourceLink().getType()) { // Reductions
@@ -519,8 +519,8 @@ public class CollectionDerivedValues {
 	}
 
 	public static class CollectionSum extends CollectionDerivedValue<Integer, Long> {
-		CollectionSum(ObservableCollectionLink<?, Integer> sourceLink){
-			super(sourceLink, TestValueType.INT);
+		CollectionSum(String path, ObservableCollectionLink<?, Integer> sourceLink) {
+			super(path, sourceLink, TestValueType.INT);
 		}
 
 		@Override

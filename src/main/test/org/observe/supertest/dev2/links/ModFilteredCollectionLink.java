@@ -25,12 +25,13 @@ public class ModFilteredCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 		}
 
 		@Override
-		public <T, X> ObservableChainLink<T, X> deriveLink(ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
 			ValueHolder<ObservableCollection.ModFilterBuilder<T>> filter = new ValueHolder<>();
 			boolean unmodifiable = helper.getBoolean(.1);
 			boolean updatable = !unmodifiable || helper.getBoolean(.75);
 			boolean noAdd = unmodifiable || helper.getBoolean(.25);
+			boolean noMove = unmodifiable || helper.getBoolean();
 			Function<T, String> addFilter = (noAdd || helper.getBoolean(.85)) ? null
 				: FilteredCollectionLink.filterFor(sourceCL.getDef().type, helper);
 			boolean noRemove = unmodifiable || helper.getBoolean(.25);
@@ -48,6 +49,8 @@ public class ModFilteredCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 						f.noRemove("No removes");
 					else if (removeFilter != null)
 						f.filterRemove(removeFilter);
+					if (noMove)
+						f.noMove("No moves");
 				}
 				filter.accept(f);
 			});
@@ -63,10 +66,12 @@ public class ModFilteredCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 						f.noRemove("No removes");
 					else if (removeFilter != null)
 						f.filterRemove(removeFilter);
+					if (noMove)
+						f.noMove("No moves");
 				}
 				filter.accept(f);
 			});
-			return (ObservableCollectionLink<T, X>) new ModFilteredCollectionLink<>(sourceCL,
+			return (ObservableCollectionLink<T, X>) new ModFilteredCollectionLink<>(path, sourceCL,
 				new ObservableCollectionTestDef<>(sourceCL.getDef().type, derivedOneStepFlow, derivedMultiStepFlow, true,
 					sourceCL.getDef().checkOldValues),
 				helper, new ObservableCollectionDataFlowImpl.ModFilterer<>(filter.get()));
@@ -75,9 +80,9 @@ public class ModFilteredCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 
 	private final ObservableCollectionDataFlowImpl.ModFilterer<T> theFilter;
 
-	public ModFilteredCollectionLink(ObservableCollectionLink<?, T> sourceLink, ObservableCollectionTestDef<T> def, TestHelper helper,
-		ObservableCollectionDataFlowImpl.ModFilterer<T> filter) {
-		super(sourceLink, def, helper);
+	public ModFilteredCollectionLink(String path, ObservableCollectionLink<?, T> sourceLink, ObservableCollectionTestDef<T> def,
+		TestHelper helper, ObservableCollectionDataFlowImpl.ModFilterer<T> filter) {
+		super(path, sourceLink, def, helper);
 		theFilter = filter;
 	}
 
@@ -107,21 +112,23 @@ public class ModFilteredCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 	}
 
 	@Override
-	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection, int derivedIndex) {
+	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection) {
 		String msg = null;
 		switch (derivedOp.getType()) {
 		case add:
-			msg = theFilter.canAdd(derivedOp.getValue());
-			break;
+		case move:
+			throw new IllegalStateException();
 		case remove:
 			msg = theFilter.canRemove(//
 				() -> derivedOp.getElement().getValue());
 			break;
 		case set:
-			T oldValue = getUpdateValue(derivedOp.getElement().getValue());
-			if (derivedOp.getValue() == oldValue && theFilter.areUpdatesAllowed())
-				msg = null;
-			else {
+			T updateValue = getUpdateValue(derivedOp.getElement().getValue());
+			if (theFilter.areUpdatesAllowed() && getCollection().equivalence().elementEquals(updateValue, derivedOp.getValue())) {
+				// Things get complicated when the elements are equivalent.
+				// Lower level caching and operations can affect whether the operation is actually detected as an update
+				msg = rejection.getActualRejection();
+			} else {
 				msg = theFilter.canRemove(//
 					() -> derivedOp.getElement().getValue());
 				if (msg == null)
@@ -132,22 +139,36 @@ public class ModFilteredCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 		if (msg != null)
 			rejection.reject(msg, true);
 		else
-			super.expect(derivedOp, rejection, derivedIndex);
+			super.expect(derivedOp, rejection);
 	}
 
 	@Override
 	public CollectionLinkElement<T, T> expectAdd(T value, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before,
-		boolean first, OperationRejection rejection, int derivedIndex) {
+		boolean first, OperationRejection rejection) {
 		String msg = theFilter.canAdd(value);
 		if (msg != null) {
 			rejection.reject(msg, true);
 			return null;
 		}
-		return super.expectAdd(value, after, before, first, rejection, derivedIndex);
+		return super.expectAdd(value, after, before, first, rejection);
 	}
 
 	@Override
-	public String toString(){
+	public CollectionLinkElement<T, T> expectMove(CollectionLinkElement<?, T> source, CollectionLinkElement<?, T> after,
+		CollectionLinkElement<?, T> before, boolean first, OperationRejection rejection) {
+		if ((after != null && source.getElementAddress().compareTo(after.getElementAddress()) < 0)//
+			|| (before != null && source.getElementAddress().compareTo(before.getElementAddress()) > 0)) {
+			String msg = theFilter.canMove();
+			if (msg != null) {
+				rejection.reject(msg, true);
+				return null;
+			}
+		}
+		return super.expectMove(source, after, before, first, rejection);
+	}
+
+	@Override
+	public String toString() {
 		return "modFilter(" + theFilter + ")";
 	}
 }

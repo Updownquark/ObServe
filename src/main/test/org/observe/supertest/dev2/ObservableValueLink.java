@@ -15,8 +15,8 @@ public abstract class ObservableValueLink<S, T> extends AbstractChainLink<S, T> 
 	private ObservableValue<T> theValue;
 	private ObservableValueTester<T> theTester;
 
-	public ObservableValueLink(ObservableChainLink<?, S> sourceLink, TestValueType type) {
-		super(sourceLink);
+	public ObservableValueLink(String path, ObservableChainLink<?, S> sourceLink, TestValueType type) {
+		super(path, sourceLink);
 		theType = type;
 	}
 

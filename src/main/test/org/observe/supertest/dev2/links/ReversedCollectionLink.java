@@ -1,11 +1,8 @@
 package org.observe.supertest.dev2.links;
 
-import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.dev2.ChainLinkGenerator;
 import org.observe.supertest.dev2.CollectionLinkElement;
-import org.observe.supertest.dev2.CollectionSourcedLink;
-import org.observe.supertest.dev2.ExpectedCollectionOperation;
 import org.observe.supertest.dev2.ObservableChainLink;
 import org.observe.supertest.dev2.ObservableCollectionLink;
 import org.observe.supertest.dev2.ObservableCollectionTestDef;
@@ -22,7 +19,7 @@ public class ReversedCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 		}
 
 		@Override
-		public <T, X> ObservableChainLink<T, X> deriveLink(ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
 			CollectionDataFlow<?, ?, T> oneStepFlow;
 			if (helper.getBoolean())
@@ -30,13 +27,14 @@ public class ReversedCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 			else
 				oneStepFlow = sourceCL.getCollection().flow().reverse();
 			CollectionDataFlow<?, ?, T> multiStepFlow = sourceCL.getDef().multiStepFlow.reverse();
-			return (ObservableCollectionLink<T, X>) new ReversedCollectionLink<>(sourceCL, new ObservableCollectionTestDef<>(
+			return (ObservableCollectionLink<T, X>) new ReversedCollectionLink<>(path, sourceCL, new ObservableCollectionTestDef<>(
 				sourceCL.getDef().type, oneStepFlow, multiStepFlow, true, sourceCL.getDef().checkOldValues), helper);
 		}
 	};
 
-	public ReversedCollectionLink(ObservableCollectionLink<?, T> sourceLink, ObservableCollectionTestDef<T> def, TestHelper helper) {
-		super(sourceLink, def, helper);
+	public ReversedCollectionLink(String path, ObservableCollectionLink<?, T> sourceLink, ObservableCollectionTestDef<T> def,
+		TestHelper helper) {
+		super(path, sourceLink, def, helper);
 	}
 
 	@Override
@@ -66,23 +64,14 @@ public class ReversedCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 
 	@Override
 	public CollectionLinkElement<T, T> expectAdd(T value, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before,
-		boolean first, OperationRejection rejection, int derivedIndex) {
-		CollectionLinkElement<T, T> newElement;
-		CollectionLinkElement<?, T> sourceEl = getSourceLink().expectAdd(reverse(value), //
-			before == null ? null : ((CollectionLinkElement<T, T>) before).getSourceElements().getFirst(), //
-				after == null ? null : ((CollectionLinkElement<T, T>) after).getSourceElements().getFirst(), //
-					!first, rejection, getSiblingIndex());
-		if (rejection.isRejected())
-			return null;
-		newElement = addFromSource(sourceEl, value);
-		int d = 0;
-		for (CollectionSourcedLink<T, ?> derivedLink : getDerivedLinks()) {
-			if (d != derivedIndex)
-				derivedLink.expectFromSource(//
-					new ExpectedCollectionOperation<>(newElement, CollectionChangeType.add, null, newElement.getCollectionValue()));
-			d++;
-		}
-		return newElement;
+		boolean first, OperationRejection rejection) {
+		return super.expectAdd(value, before, after, !first, rejection);
+	}
+
+	@Override
+	public CollectionLinkElement<T, T> expectMove(CollectionLinkElement<?, T> source, CollectionLinkElement<?, T> after,
+		CollectionLinkElement<?, T> before, boolean first, OperationRejection rejection) {
+		return super.expectMove(source, before, after, !first, rejection);
 	}
 
 	@Override

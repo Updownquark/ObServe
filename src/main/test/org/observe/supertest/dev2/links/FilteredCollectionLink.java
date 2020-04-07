@@ -10,7 +10,6 @@ import java.util.function.Predicate;
 
 import org.observe.SettableValue;
 import org.observe.SimpleSettableValue;
-import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.dev2.ChainLinkGenerator;
 import org.observe.supertest.dev2.CollectionLinkElement;
@@ -35,7 +34,7 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		}
 
 		@Override
-		public <T, X> ObservableChainLink<T, X> deriveLink(ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
 			SettableValue<Function<T, String>> filterValue = new SimpleSettableValue<>(
 				(TypeToken<Function<T, String>>) (TypeToken<?>) new TypeToken<Object>() {}, false);
@@ -51,16 +50,16 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
 			derivedMultiStepFlow = derivedMultiStepFlow.filter(v -> filterValue.get().apply(v));
 			ObservableCollectionTestDef<T> def = new ObservableCollectionTestDef<>(sourceCL.getType(), derivedOneStepFlow,
 				derivedMultiStepFlow, true, true);
-			return (ObservableCollectionLink<T, X>) new FilteredCollectionLink<>(sourceCL, def, filterValue, variableFilter, helper);
+			return (ObservableCollectionLink<T, X>) new FilteredCollectionLink<>(path, sourceCL, def, filterValue, variableFilter, helper);
 		}
 	};
 
 	private final SettableValue<Function<T, String>> theFilterValue;
 	private final boolean isVariableFilter;
 
-	public FilteredCollectionLink(ObservableCollectionLink<?, T> sourceLink, ObservableCollectionTestDef<T> def,
+	public FilteredCollectionLink(String path, ObservableCollectionLink<?, T> sourceLink, ObservableCollectionTestDef<T> def,
 		SettableValue<Function<T, String>> filter, boolean variable, TestHelper helper) {
-		super(sourceLink, def, helper);
+		super(path, sourceLink, def, helper);
 		theFilterValue = filter;
 		isVariableFilter = variable;
 	}
@@ -80,7 +79,7 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
 
 	@Override
 	public CollectionLinkElement<T, T> expectAdd(T value, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before,
-		boolean first, OperationRejection rejection, int derivedIndex) {
+		boolean first, OperationRejection rejection) {
 		String msg = theFilterValue.get().apply(value);
 		if (msg != null) {
 			rejection.reject(msg, true);
@@ -89,26 +88,28 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		CollectionLinkElement<?, T> sourceAdded = getSourceLink().expectAdd(value, //
 			after == null ? null : (CollectionLinkElement<?, T>) after.getSourceElements().getFirst(), //
 				before == null ? null : (CollectionLinkElement<?, T>) before.getSourceElements().getFirst(), //
-					first, rejection, getSiblingIndex());
+					first, rejection);
 		if (rejection.isRejected())
 			return null;
-		CollectionLinkElement<T, T> added = (CollectionLinkElement<T, T>) sourceAdded.getDerivedElements(getSiblingIndex()).getFirst();
-		added.expectAdded(value);
-
-		int d = 0;
-		for (CollectionSourcedLink<T, ?> derivedLink : getDerivedLinks()) {
-			if (d != derivedIndex)
-				derivedLink.expectFromSource(//
-					new ExpectedCollectionOperation<>(added, CollectionChangeType.add, null, added.getCollectionValue()));
-			d++;
-		}
-		return added;
+		return (CollectionLinkElement<T, T>) sourceAdded.getDerivedElements(getSiblingIndex()).getFirst();
 	}
 
 	@Override
-	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection, int derivedIndex) {
+	public CollectionLinkElement<T, T> expectMove(CollectionLinkElement<?, T> source, CollectionLinkElement<?, T> after,
+		CollectionLinkElement<?, T> before, boolean first, OperationRejection rejection) {
+		CollectionLinkElement<?, T> sourceEl = getSourceLink().expectMove(//
+			(CollectionLinkElement<?, T>) source.getFirstSource(), //
+			after == null ? null : (CollectionLinkElement<?, T>) after.getFirstSource(), //
+				before == null ? null : (CollectionLinkElement<?, T>) before.getFirstSource(), //
+					first, rejection);
+		return sourceEl == null ? null : (CollectionLinkElement<T, T>) sourceEl.getDerivedElements(getSiblingIndex()).getFirst();
+	}
+
+	@Override
+	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection) {
 		switch (derivedOp.getType()) {
 		case add:
+		case move:
 			throw new IllegalStateException();
 		case remove:
 			break;
@@ -122,26 +123,7 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		}
 		getSourceLink()
 		.expect(new ExpectedCollectionOperation<>((CollectionLinkElement<?, T>) derivedOp.getElement().getSourceElements().getFirst(),
-			derivedOp.getType(), derivedOp.getOldValue(), derivedOp.getValue()), rejection, getSiblingIndex());
-		if (rejection.isRejected())
-			return;
-
-		switch (derivedOp.getType()) {
-		case add:
-			throw new IllegalStateException();
-		case remove:
-			derivedOp.getElement().expectRemoval();
-			break;
-		case set:
-			derivedOp.getElement().setValue(derivedOp.getValue());
-			break;
-		}
-		int d = 0;
-		for (CollectionSourcedLink<T, ?> derivedLink : getDerivedLinks()) {
-			if (d != derivedIndex)
-				derivedLink.expectFromSource(derivedOp);
-			d++;
-		}
+			derivedOp.getType(), derivedOp.getOldValue(), derivedOp.getValue()), rejection);
 	}
 
 	@Override
@@ -174,12 +156,12 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
 				// Filtered out before, but now included
 				element = (CollectionLinkElement<T, T>) sourceOp.getElement().getDerivedElements(getSiblingIndex()).getFirst();
 				element.expectAdded(sourceOp.getValue());
-				op = new ExpectedCollectionOperation<>(element, CollectionChangeType.add, null, sourceOp.getValue());
+				op = new ExpectedCollectionOperation<>(element, CollectionOpType.add, null, sourceOp.getValue());
 			} else if (postMsg != null) {
 				// Included before, but now filtered out
 				element = (CollectionLinkElement<T, T>) sourceOp.getElement().getDerivedElements(getSiblingIndex()).getFirst();
 				element.expectRemoval();
-				op = new ExpectedCollectionOperation<>(element, CollectionChangeType.remove, sourceOp.getOldValue(),
+				op = new ExpectedCollectionOperation<>(element, CollectionOpType.remove, sourceOp.getOldValue(),
 					sourceOp.getOldValue());
 			} else {
 				// Included before and after

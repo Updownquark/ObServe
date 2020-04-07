@@ -1,12 +1,12 @@
 package org.observe.supertest.dev2;
 
 import org.junit.Assert;
-import org.observe.collect.CollectionChangeType;
 import org.qommons.TestHelper;
 
 public abstract class OneToOneCollectionLink<S, T> extends ObservableCollectionLink<S, T> {
-	public OneToOneCollectionLink(ObservableCollectionLink<?, S> sourceLink, ObservableCollectionTestDef<T> def, TestHelper helper) {
-		super(sourceLink, def, helper);
+	public OneToOneCollectionLink(String path, ObservableCollectionLink<?, S> sourceLink, ObservableCollectionTestDef<T> def,
+		TestHelper helper) {
+		super(path, sourceLink, def, helper);
 	}
 
 	protected abstract T map(S sourceValue);
@@ -27,70 +27,54 @@ public abstract class OneToOneCollectionLink<S, T> extends ObservableCollectionL
 		case set:
 			expectChangeFromSource(sourceOp.getElement(), sourceOp.getOldValue());
 			break;
+		case move:
+			throw new IllegalStateException();
 		}
 	}
 
 	@Override
-	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection, int derivedIndex) {
+	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection) {
 		switch (derivedOp.getType()) {
 		case add:
+		case move:
 			throw new IllegalStateException("Should be using expectAdd");
 		case remove:
 			CollectionLinkElement<?, S> sourceEl = (CollectionLinkElement<?, S>) derivedOp.getElement().getSourceElements().getFirst();
-			S reversed = isReversible() ? reverse(derivedOp.getElement().get()) : sourceEl.getValue();
+			S reversed = isReversible() ? reverse(derivedOp.getElement().getValue()) : sourceEl.getValue();
 			getSourceLink().expect(new ExpectedCollectionOperation<>(//
-				sourceEl, CollectionChangeType.remove, reversed, reversed), rejection, getSiblingIndex());
-			if (!rejection.isRejected()) {
-				derivedOp.getElement().expectRemoval();
-				int d = 0;
-				for (CollectionSourcedLink<T, ?> derivedLink : getDerivedLinks()) {
-					if (d != derivedIndex)
-						derivedLink.expectFromSource(//
-							new ExpectedCollectionOperation<>(derivedOp.getElement(), CollectionChangeType.remove,
-								derivedOp.getElement().getValue(), derivedOp.getElement().getValue()));
-					d++;
-				}
-			}
+				sourceEl, CollectionOpType.remove, reversed, reversed), rejection);
 			break;
 		case set:
-			T oldValue = derivedOp.getElement().get();
 			getSourceLink().expect(new ExpectedCollectionOperation<>(//
-				(CollectionLinkElement<Object, S>) derivedOp.getElement().getSourceElements().getFirst(), CollectionChangeType.set,
-				reverse(derivedOp.getElement().get()), reverse(derivedOp.getValue())), rejection, getSiblingIndex());
-			if (!rejection.isRejected()) {
-				derivedOp.getElement().setValue(derivedOp.getValue());
-				int d = 0;
-				for (CollectionSourcedLink<T, ?> derivedLink : getDerivedLinks()) {
-					if (d != derivedIndex)
-						derivedLink.expectFromSource(//
-							new ExpectedCollectionOperation<>(derivedOp.getElement(), CollectionChangeType.set, oldValue,
-								derivedOp.getValue()));
-					d++;
-				}
-			}
+				(CollectionLinkElement<Object, S>) derivedOp.getElement().getSourceElements().getFirst(), CollectionOpType.set,
+				reverse(derivedOp.getElement().getValue()), reverse(derivedOp.getValue())), rejection);
 			break;
 		}
 	}
 
 	@Override
 	public CollectionLinkElement<S, T> expectAdd(T value, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before,
-		boolean first, OperationRejection rejection, int derivedIndex) {
-		CollectionLinkElement<S, T> newElement;
+		boolean first, OperationRejection rejection) {
 		CollectionLinkElement<?, S> sourceEl = getSourceLink().expectAdd(reverse(value), //
 			after == null ? null : ((CollectionLinkElement<S, T>) after).getSourceElements().getFirst(), //
 				before == null ? null : ((CollectionLinkElement<S, T>) before).getSourceElements().getFirst(), //
-					first, rejection, getSiblingIndex());
+					first, rejection);
 		if (rejection.isRejected())
 			return null;
-		newElement = addFromSource(sourceEl, value);
-		int d = 0;
-		for (CollectionSourcedLink<T, ?> derivedLink : getDerivedLinks()) {
-			if (d != derivedIndex)
-				derivedLink.expectFromSource(//
-					new ExpectedCollectionOperation<>(newElement, CollectionChangeType.add, null, newElement.getCollectionValue()));
-			d++;
-		}
-		return newElement;
+		return (CollectionLinkElement<S, T>) sourceEl.getDerivedElements(getSiblingIndex()).getFirst();
+	}
+
+	@Override
+	public CollectionLinkElement<S, T> expectMove(CollectionLinkElement<?, T> source, CollectionLinkElement<?, T> after,
+		CollectionLinkElement<?, T> before, boolean first, OperationRejection rejection) {
+		CollectionLinkElement<?, S> oldSource = (CollectionLinkElement<?, S>) source.getFirstSource();
+		CollectionLinkElement<?, S> sourceEl = getSourceLink().expectMove(oldSource, //
+			after == null ? null : ((CollectionLinkElement<S, T>) after).getSourceElements().getFirst(), //
+				before == null ? null : ((CollectionLinkElement<S, T>) before).getSourceElements().getFirst(), //
+					first, rejection);
+		if (rejection.isRejected())
+			return null;
+		return (CollectionLinkElement<S, T>) sourceEl.getDerivedElements(getSiblingIndex()).getFirst();
 	}
 
 	@Override
@@ -115,9 +99,9 @@ public abstract class OneToOneCollectionLink<S, T> extends ObservableCollectionL
 	}
 
 	private void expectAddFromSource(CollectionLinkElement<?, S> sourceEl) {
-		CollectionLinkElement<S, T> newElement = addFromSource(sourceEl, map(sourceEl.get()));
-		ExpectedCollectionOperation<S, T> result = new ExpectedCollectionOperation<>(newElement, CollectionChangeType.add, null,
-			newElement.get());
+		CollectionLinkElement<S, T> newElement = addFromSource(sourceEl, map(sourceEl.getValue()));
+		ExpectedCollectionOperation<S, T> result = new ExpectedCollectionOperation<>(newElement, CollectionOpType.add, null,
+			newElement.getValue());
 		for (CollectionSourcedLink<T, ?> derivedLink : getDerivedLinks())
 			derivedLink.expectFromSource(result);
 	}
@@ -125,18 +109,18 @@ public abstract class OneToOneCollectionLink<S, T> extends ObservableCollectionL
 	private void expectRemoveFromSource(CollectionLinkElement<?, S> sourceEl, S oldSrcValue) {
 		CollectionLinkElement<S, T> element = (CollectionLinkElement<S, T>) sourceEl.getDerivedElements(getSiblingIndex()).getFirst()
 			.expectRemoval();
-		ExpectedCollectionOperation<S, T> result = new ExpectedCollectionOperation<>(element, CollectionChangeType.remove, element.get(),
-			element.get());
+		ExpectedCollectionOperation<S, T> result = new ExpectedCollectionOperation<>(element, CollectionOpType.remove,
+			element.getValue(), element.getValue());
 		for (CollectionSourcedLink<T, ?> derivedLink : getDerivedLinks())
 			derivedLink.expectFromSource(result);
 	}
 
 	private void expectChangeFromSource(CollectionLinkElement<?, S> sourceEl, S oldSrcValue) {
 		CollectionLinkElement<S, T> element = (CollectionLinkElement<S, T>) sourceEl.getDerivedElements(getSiblingIndex()).getFirst();
-		T oldValue = getUpdateValue(element.get());
-		element.setValue(map(sourceEl.get()));
-		ExpectedCollectionOperation<S, T> result = new ExpectedCollectionOperation<>(element, CollectionChangeType.set, oldValue,
-			element.get());
+		T oldValue = getUpdateValue(element.getValue());
+		element.setValue(map(sourceEl.getValue()));
+		ExpectedCollectionOperation<S, T> result = new ExpectedCollectionOperation<>(element, CollectionOpType.set, oldValue,
+			element.getValue());
 		for (CollectionSourcedLink<T, ?> derivedLink : getDerivedLinks())
 			derivedLink.expectFromSource(result);
 	}

@@ -6,6 +6,8 @@ import org.qommons.TestHelper;
 import org.qommons.Transactable;
 
 public interface ObservableChainLink<S, T> extends Transactable {
+	String getPath();
+
 	TestValueType getType();
 
 	ObservableChainLink<?, S> getSourceLink();

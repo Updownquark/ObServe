@@ -18,6 +18,7 @@ import org.observe.supertest.dev2.links.FilteredCollectionLink;
 import org.observe.supertest.dev2.links.MappedCollectionLink;
 import org.observe.supertest.dev2.links.ModFilteredCollectionLink;
 import org.observe.supertest.dev2.links.ReversedCollectionLink;
+import org.observe.supertest.dev2.links.SortedBaseCollectionLink;
 import org.observe.supertest.dev2.links.SortedCollectionLink;
 import org.qommons.QommonsUtils;
 import org.qommons.TestHelper;
@@ -55,7 +56,8 @@ public class ObservableChainTester implements Testable {
 	static {
 		List<ChainLinkGenerator> generators = new ArrayList<>();
 		// Initial link generators
-		generators.add(BaseCollectionLink.SIMPLE_GENERATOR);
+		generators.add(BaseCollectionLink.GENERATE);
+		generators.add(SortedBaseCollectionLink.GENERATE);
 
 		// Derived collection generators
 		generators.addAll(Arrays.asList(//
@@ -118,7 +120,7 @@ public class ObservableChainTester implements Testable {
 			if (weight > 0)
 				firstLink.or(weight, () -> gen);
 		}
-		theRoot = firstLink.get(null).deriveLink(null, helper);
+		theRoot = firstLink.get(null).deriveLink("root", null, helper);
 
 		class LinkDerivation<T> {
 			final ObservableChainLink<?, T> link;
@@ -134,7 +136,7 @@ public class ObservableChainTester implements Testable {
 					if (weight > 0) {
 						totalWeight += weight;
 						ChainLinkGenerator fGen = gen;
-						deriver.or(weight, () -> fGen.deriveLink(link, helper));
+						deriver.or(weight, () -> fGen.deriveLink(link.getPath() + "[" + link.getDerivedLinks().size() + "]", link, helper));
 					}
 				}
 				this.linkDeriver = () -> deriver.get(null);
@@ -222,7 +224,7 @@ public class ObservableChainTester implements Testable {
 						targetLink.link.tryModify(action, helper);
 						action.execute("Modification");
 					} catch (RuntimeException | Error e) {
-						System.err.println("Link " + targetLink.path);
+						System.err.println("Modifying link " + targetLink.path);
 						System.err.println("Error on transaction " + (tri + 1) + ", mod " + (transactionTri + 1) + " after "
 							+ (modifications + transactionTri) + " successful modifications");
 						System.err.println("Pre-failure values:" + preValue);
@@ -232,7 +234,7 @@ public class ObservableChainTester implements Testable {
 					try {
 						validate(theRoot, !useTransaction, "root");
 					} catch (RuntimeException | Error e) {
-						System.err.println("Link " + targetLink.path);
+						System.err.println("Modifying link " + targetLink.path);
 						System.err.println("Integrity check failure after "
 							+ (modifications + transactionTri + 1) + " modifications in " + (tri + 1) + " transactions");
 						System.err.println("Pre-failure values:" + preValue);
@@ -252,7 +254,7 @@ public class ObservableChainTester implements Testable {
 			} catch (RuntimeException | Error e) {
 				if (finished) {
 					System.out.println("Values:" + print(true));
-					System.err.println("Link " + targetLink.path);
+					System.err.println("Modifying link " + targetLink.path);
 					System.err.println("Error closing transaction " + tri + " after " + modifications + " successful modifications");
 				}
 				throw e;
@@ -261,7 +263,7 @@ public class ObservableChainTester implements Testable {
 				validate(theRoot, true, "root");
 			} catch (RuntimeException | Error e) {
 				System.out.println("Values:" + print(true));
-				System.err.println("Link " + targetLink.path);
+				System.err.println("Modifying link " + targetLink.path);
 				System.err.println("Integrity check failure after transaction " + (tri + 1) + " close after "
 					+ modifications + " modifications");
 				throw e;
@@ -274,7 +276,7 @@ public class ObservableChainTester implements Testable {
 	private void validate(ObservableChainLink<?, ?> link, boolean transactionEnd, String path) {
 		try {
 			link.validate(transactionEnd);
-		} catch (Error e) {
+		} catch (RuntimeException | Error e) {
 			System.err.println("Integrity check failure on link " + path);
 			throw e;
 		}

@@ -43,7 +43,7 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 			BetterList<ElementId> sourceElements = theCollectionLink.getCollection().getSourceElements(theCollectionAddress,
 				theCollectionLink.getSourceLink().getCollection());
 			if (sourceElements.isEmpty()) {
-				sourceElements = theCollectionLink.getCollection().getSourceElements(theCollectionAddress,
+				sourceElements = theCollectionLink.getCollection().getSourceElements(theCollectionAddress, // DEBUGGING
 					theCollectionLink.getSourceLink().getCollection());
 				Assert.assertFalse("No source elements", sourceElements.isEmpty());
 			}
@@ -91,6 +91,10 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 		return theSourceElements;
 	}
 
+	public CollectionLinkElement<?, S> getFirstSource() {
+		return theSourceElements.getFirst();
+	}
+
 	public BetterList<CollectionLinkElement<T, ?>> getDerivedElements(int siblingIndex) {
 		return theDerivedElements[siblingIndex];
 	}
@@ -108,10 +112,6 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 		if (theDerivedElements[siblingIndex] == null)
 			theDerivedElements[siblingIndex] = new BetterTreeList<>(false);
 		theDerivedElements[siblingIndex].add(derived);
-	}
-
-	public T get() {
-		return theValue;
 	}
 
 	public T getCollectionValue() {
@@ -196,13 +196,23 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 		}
 		if (theElementAddress.isPresent()) {
 			theLastKnownIndex = theCollectionLink.getElements().getElementsBefore(theElementAddress);
-			theValue = getCollectionValue();
+			if (theCollectionAddress.isPresent())
+				theValue = getCollectionValue();
 		}
 		wasUpdated = false;
 	}
 
 	@Override
 	public String toString() {
-		return theValue + "@" + getIndex();
+		StringBuilder str = new StringBuilder();
+		if (wasAdded)
+			str.append("new");
+		else {
+			if (wasRemoved)
+				str.append("(-)");
+			str.append(theValue);
+		}
+		str.append('@').append(getIndex());
+		return str.toString();
 	}
 }
