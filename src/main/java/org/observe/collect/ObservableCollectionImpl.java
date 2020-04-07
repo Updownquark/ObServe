@@ -1823,8 +1823,11 @@ public final class ObservableCollectionImpl {
 		@Override
 		public String canMove(ElementId valueEl, ElementId after, ElementId before) {
 			String msg = theFlow.canMove();
-			if (msg != null)
+			if (msg != null) {
+				if ((after == null || valueEl.compareTo(after) >= 0) && (before == null || valueEl.compareTo(before) <= 0))
+					return null;
 				return msg;
+			}
 			if (isReversed) {
 				ElementId temp = mapId(after);
 				after = mapId(before);
@@ -1837,6 +1840,8 @@ public final class ObservableCollectionImpl {
 		public CollectionElement<T> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
 			throws UnsupportedOperationException, IllegalArgumentException {
 			String msg = theFlow.canMove();
+			if (msg != null && (after == null || valueEl.compareTo(after) >= 0) && (before == null || valueEl.compareTo(before) <= 0))
+				return getElement(valueEl);
 			if (StdMsg.UNSUPPORTED_OPERATION.equals(msg))
 				throw new UnsupportedOperationException(msg);
 			else if (msg != null)
@@ -1847,7 +1852,7 @@ public final class ObservableCollectionImpl {
 				before = temp;
 				first = !first;
 			}
-			return elementFor(theSource.move(mapId(valueEl), after, before, isReversed ^ first, afterRemove), null);
+			return elementFor(theSource.move(mapId(valueEl), after, before, first, afterRemove), null);
 		}
 
 		@Override
@@ -2266,6 +2271,8 @@ public final class ObservableCollectionImpl {
 				theModCount.incrementAndGet();
 				DerivedElementHolder<T>[] holder = new DerivedElementHolder[] { createHolder(el) };
 				holder[0].treeNode = theDerivedElements.addElement(holder[0], false);
+				if (holder[0].treeNode == null)
+					throw new IllegalStateException("Element already exists: " + holder[0]);
 				fireListeners(new ObservableCollectionEvent<>(holder[0], theFlow.getTargetType(), holder[0].treeNode.getNodesBefore(),
 					CollectionChangeType.add, null, el.get(), cause));
 				el.setListener(new CollectionElementListener<T>() {
@@ -2570,25 +2577,29 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public String canAdd(T value, ElementId after, ElementId before) {
-			return theFlow.canAdd(value, strip(after), strip(before));
+			return theFlow.canAdd(value, //
+				strip(after), strip(before));
 		}
 
 		@Override
 		public CollectionElement<T> addElement(T value, ElementId after, ElementId before, boolean first)
 			throws UnsupportedOperationException, IllegalArgumentException {
-			DerivedCollectionElement<T> derived = theFlow.addElement(value, strip(after), strip(before), first);
+			DerivedCollectionElement<T> derived = theFlow.addElement(value, //
+				strip(after), strip(before), first);
 			return derived == null ? null : elementFor(idFromSynthetic(derived));
 		}
 
 		@Override
 		public String canMove(ElementId valueEl, ElementId after, ElementId before) {
-			return theFlow.canMove(strip(valueEl), strip(after), strip(before));
+			return theFlow.canMove(//
+				strip(valueEl), strip(after), strip(before));
 		}
 
 		@Override
 		public CollectionElement<T> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
 			throws UnsupportedOperationException, IllegalArgumentException {
-			DerivedCollectionElement<T> derived = theFlow.move(strip(valueEl), strip(after), strip(before), first, afterRemove);
+			DerivedCollectionElement<T> derived = theFlow.move(//
+				strip(valueEl), strip(after), strip(before), first, afterRemove);
 			return elementFor(idFromSynthetic(derived));
 		}
 

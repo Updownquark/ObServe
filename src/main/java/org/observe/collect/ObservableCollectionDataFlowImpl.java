@@ -987,13 +987,14 @@ public class ObservableCollectionDataFlowImpl {
 				msg = theMoveMessage;
 			if (msg == null && theUnmodifiableMessage != null)
 				msg = theUnmodifiableMessage;
-			throw new UnsupportedOperationException(msg);
+			if (msg != null)
+				throw new UnsupportedOperationException(msg);
 		}
 
 		/** @return True if this filter does not prevent any operations */
 		public boolean isEmpty() {
 			return theUnmodifiableMessage == null && theAddMessage == null && theRemoveMessage == null && theAddFilter == null
-				&& theRemoveFilter == null;
+				&& theRemoveFilter == null && theMoveMessage==null;
 		}
 
 		@Override
@@ -1007,6 +1008,8 @@ public class ObservableCollectionDataFlowImpl {
 				s.append("removeFilter:").append(theRemoveFilter).append(',');
 			if (theRemoveMessage != null)
 				s.append("noRemove:").append(theRemoveMessage).append(',');
+			if (theMoveMessage != null)
+				s.append("noMove:").append(theMoveMessage).append(',');
 			if (theUnmodifiableMessage != null)
 				s.append("unmodifiable:").append(theUnmodifiableMessage).append('(').append(areUpdatesAllowed ? "" : "not ")
 				.append("updatable)").append(',');
@@ -1740,26 +1743,30 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public String canAdd(E toAdd, DerivedCollectionElement<E> after, DerivedCollectionElement<E> before) {
-			return theSource.canAdd(toAdd, strip(after), strip(before));
+			return theSource.canAdd(toAdd, //
+				strip(after), strip(before));
 		}
 
 		@Override
 		public DerivedCollectionElement<E> addElement(E value, DerivedCollectionElement<E> after, DerivedCollectionElement<E> before,
 			boolean first) {
-			CollectionElement<E> srcEl = theSource.addElement(value, strip(after), strip(before), first);
+			CollectionElement<E> srcEl = theSource.addElement(value, //
+				strip(after), strip(before), first);
 			return srcEl == null ? null : new BaseDerivedElement(theSource.mutableElement(srcEl.getElementId()));
 		}
 
 		@Override
 		public String canMove(DerivedCollectionElement<E> valueEl, DerivedCollectionElement<E> after, DerivedCollectionElement<E> before) {
-			return theSource.canMove(strip(valueEl), strip(after), strip(before));
+			return theSource.canMove(//
+				strip(valueEl), strip(after), strip(before));
 		}
 
 		@Override
 		public DerivedCollectionElement<E> move(DerivedCollectionElement<E> valueEl, DerivedCollectionElement<E> after,
 			DerivedCollectionElement<E> before, boolean first, Runnable afterRemove) {
 			return new BaseDerivedElement(
-				theSource.mutableElement(theSource.move(strip(valueEl), strip(after), strip(before), first, afterRemove).getElementId()));
+				theSource.mutableElement(theSource.move(//
+					strip(valueEl), strip(after), strip(before), first, afterRemove).getElementId()));
 		}
 
 		private ElementId strip(DerivedCollectionElement<E> el) {
@@ -2142,38 +2149,15 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
-			if (after != null && theCompare.compare(after.get(), toAdd) > 0)
+			int afterComp = after == null ? 0 : theCompare.compare(after.get(), toAdd);
+			if (afterComp > 0)
 				return StdMsg.ILLEGAL_ELEMENT_POSITION;
-			if (before != null && theCompare.compare(before.get(), toAdd) < 0)
+			int beforeComp = before == null ? 0 : theCompare.compare(before.get(), toAdd);
+			if (beforeComp < 0)
 				return StdMsg.ILLEGAL_ELEMENT_POSITION;
-			return theParent.canAdd(toAdd, null, null);
-		}
-
-		@Override
-		public String canMove(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
-			BiTuple<T, DerivedCollectionElement<T>> sortValue = ((SortedElement) valueEl).theValueNode.get();
-			BiTuple<T, DerivedCollectionElement<T>> sortAfter = after == null ? null : ((SortedElement) after).theValueNode.get();
-			BiTuple<T, DerivedCollectionElement<T>> sortBefore = before == null ? null : ((SortedElement) before).theValueNode.get();
-			if (sortAfter != null && theCompare.compare(sortValue.getValue1(), sortAfter.getValue1()) < 0)
-				return StdMsg.ILLEGAL_ELEMENT_POSITION;
-			if (sortBefore != null && theCompare.compare(sortValue.getValue1(), sortBefore.getValue1()) > 0)
-				return StdMsg.ILLEGAL_ELEMENT_POSITION;
-			return theParent.canMove(sortValue.getValue2(), sortAfter == null ? null : sortAfter.getValue2(),
-				sortBefore == null ? null : sortBefore.getValue2());
-		}
-
-		@Override
-		public DerivedCollectionElement<T> move(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after,
-			DerivedCollectionElement<T> before, boolean first, Runnable afterRemove) {
-			BiTuple<T, DerivedCollectionElement<T>> sortValue = ((SortedElement) valueEl).theValueNode.get();
-			BiTuple<T, DerivedCollectionElement<T>> sortAfter = after == null ? null : ((SortedElement) after).theValueNode.get();
-			BiTuple<T, DerivedCollectionElement<T>> sortBefore = before == null ? null : ((SortedElement) before).theValueNode.get();
-			if (sortAfter != null && theCompare.compare(sortValue.getValue1(), sortAfter.getValue1()) < 0)
-				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT_POSITION);
-			if (sortBefore != null && theCompare.compare(sortValue.getValue1(), sortBefore.getValue1()) > 0)
-				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT_POSITION);
-			return new SortedElement(theParent.move(sortValue.getValue2(), sortAfter == null ? null : sortAfter.getValue2(),
-				sortBefore == null ? null : sortBefore.getValue2(), first, afterRemove), true);
+			DerivedCollectionElement<T> requiredAfter = (after != null && afterComp == 0) ? ((SortedElement) after).theParentEl : null;
+			DerivedCollectionElement<T> requiredBefore = (before != null && beforeComp == 0) ? ((SortedElement) before).theParentEl : null;
+			return theParent.canAdd(toAdd, requiredAfter, requiredBefore);
 		}
 
 		@Override
@@ -2185,21 +2169,49 @@ public class ObservableCollectionDataFlowImpl {
 			int beforeComp = before == null ? 0 : theCompare.compare(before.get(), value);
 			if (beforeComp < 0)
 				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT_POSITION);
-			// Try to add relative to the specified elements if possible
+			DerivedCollectionElement<T> requiredAfter = (after != null && afterComp == 0) ? ((SortedElement) after).theParentEl : null;
+			DerivedCollectionElement<T> requiredBefore = (before != null && beforeComp == 0) ? ((SortedElement) before).theParentEl : null;
+			// Try to add relative to the specified elements if possible,
+			// but if such a positional add is unsupported by the parent, we need to ensure
+			// that a position-less add will insert the new element in the right spot
 			DerivedCollectionElement<T> parentEl;
-			if (first && after != null && theParent.canAdd(value, ((SortedElement) after).theParentEl, null) == null)
+			if (requiredAfter != null || requiredBefore != null)
+				parentEl = theParent.addElement(value, requiredAfter, requiredBefore, first);
+			else if (first && after != null && theParent.canAdd(value, ((SortedElement) after).theParentEl, null) == null)
 				parentEl = theParent.addElement(value, ((SortedElement) after).theParentEl, null, true);
 			else if (!first && before != null && theParent.canAdd(value, null, ((SortedElement) before).theParentEl) == null)
 				parentEl = theParent.addElement(value, null, ((SortedElement) before).theParentEl, false);
-			else {
-				// If such a positional add is unsupported by the parent, we need to ensure
-				// that a position-less add will insert the new element in the right spot
-				DerivedCollectionElement<T> afterParent = (after != null && afterComp == 0) ? ((SortedElement) after).theParentEl : null;
-				DerivedCollectionElement<T> beforeParent = (before != null && beforeComp == 0) ? ((SortedElement) before).theParentEl
-					: null;
-				parentEl = theParent.addElement(value, afterParent, beforeParent, first);
-			}
+			else
+				parentEl = theParent.addElement(value, null, null, first);
 			return parentEl == null ? null : new SortedElement(parentEl, true);
+		}
+
+		@Override
+		public String canMove(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
+			int afterComp = after == null ? 0 : theCompare.compare(after.get(), valueEl.get());
+			if (afterComp > 0)
+				return StdMsg.ILLEGAL_ELEMENT_POSITION;
+			int beforeComp = before == null ? 0 : theCompare.compare(before.get(), valueEl.get());
+			if (beforeComp < 0)
+				return StdMsg.ILLEGAL_ELEMENT_POSITION;
+			DerivedCollectionElement<T> requiredAfter = (after != null && afterComp == 0) ? ((SortedElement) after).theParentEl : null;
+			DerivedCollectionElement<T> requiredBefore = (before != null && beforeComp == 0) ? ((SortedElement) before).theParentEl : null;
+			return theParent.canMove(((SortedElement) valueEl).theParentEl, requiredAfter, requiredBefore);
+		}
+
+		@Override
+		public DerivedCollectionElement<T> move(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after,
+			DerivedCollectionElement<T> before, boolean first, Runnable afterRemove) {
+			int afterComp = after == null ? 0 : theCompare.compare(after.get(), valueEl.get());
+			if (afterComp > 0)
+				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT_POSITION);
+			int beforeComp = before == null ? 0 : theCompare.compare(before.get(), valueEl.get());
+			if (beforeComp < 0)
+				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT_POSITION);
+			DerivedCollectionElement<T> requiredAfter = (after != null && afterComp == 0) ? ((SortedElement) after).theParentEl : null;
+			DerivedCollectionElement<T> requiredBefore = (before != null && beforeComp == 0) ? ((SortedElement) before).theParentEl : null;
+			return new SortedElement(theParent.move(//
+				((SortedElement) valueEl).theParentEl, requiredAfter, requiredBefore, first, afterRemove), true);
 		}
 
 		@Override
@@ -2226,7 +2238,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		class SortedElement implements DerivedCollectionElement<T> {
-			private final DerivedCollectionElement<T> theParentEl;
+			final DerivedCollectionElement<T> theParentEl;
 			private BinaryTreeNode<BiTuple<T, DerivedCollectionElement<T>>> theValueNode;
 			private CollectionElementListener<T> theListener;
 
@@ -2271,7 +2283,7 @@ public class ObservableCollectionDataFlowImpl {
 				}
 			}
 
-			private boolean isInCorrectOrder(T newValue, DerivedCollectionElement<T> parentEl) {
+			boolean isInCorrectOrder(T newValue, DerivedCollectionElement<T> parentEl) {
 				BiTuple<T, DerivedCollectionElement<T>> tuple = new BiTuple<>(newValue, parentEl);
 				BinaryTreeNode<BiTuple<T, DerivedCollectionElement<T>>> left = theValueNode.getClosest(true);
 				BinaryTreeNode<BiTuple<T, DerivedCollectionElement<T>>> right = theValueNode.getClosest(false);
@@ -2447,7 +2459,8 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public DerivedCollectionElement<T> move(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after,
 			DerivedCollectionElement<T> before, boolean first, Runnable afterRemove) {
-			return new FilteredElement(theParent.move(strip(valueEl), strip(after), strip(before), first, afterRemove), true, true);
+			return new FilteredElement(theParent.move(//
+				strip(valueEl), strip(after), strip(before), first, afterRemove), true, true);
 		}
 
 		private DerivedCollectionElement<T> strip(DerivedCollectionElement<T> el) {
@@ -5321,12 +5334,17 @@ public class ObservableCollectionDataFlowImpl {
 			String msg = theFilter.canMove();
 			if (msg == null)
 				return theParent.canMove(strip(valueEl), strip(after), strip(before));
+			else if ((after == null || valueEl.compareTo(after) >= 0) && (before == null || valueEl.compareTo(before) <= 0))
+				return null;
 			return msg;
 		}
 
 		@Override
 		public DerivedCollectionElement<T> move(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after,
 			DerivedCollectionElement<T> before, boolean first, Runnable afterRemove) {
+			if (theFilter.canMove() != null && (after == null || valueEl.compareTo(after) >= 0)
+				&& (before == null || valueEl.compareTo(before) <= 0))
+				return valueEl;
 			theFilter.assertMovable();
 			return new ModFilteredElement(theParent.move(strip(valueEl), strip(after), strip(before), first, afterRemove));
 		}

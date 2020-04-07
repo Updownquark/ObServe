@@ -496,6 +496,8 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 				if (afterRemove != null)
 					afterRemove.run();
 			});
+			if (el.getElementId().equals(valueEl))
+				return getElement(valueEl);
 			ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), getType(),
 				theValues.getElementsBefore(el.getElementId()), CollectionChangeType.add, null, value, getCurrentCause());
 			fire(event);
