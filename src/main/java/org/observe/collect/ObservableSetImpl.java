@@ -51,6 +51,7 @@ import org.qommons.collect.OptimisticContext;
 import org.qommons.collect.ValueStoredCollection;
 import org.qommons.debug.Debug;
 import org.qommons.debug.Debug.DebugData;
+import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BetterTreeMap;
 import org.qommons.tree.BinaryTreeEntry;
 
@@ -642,8 +643,14 @@ public class ObservableSetImpl {
 
 		@Override
 		public BetterList<ElementId> getSourceElements(DerivedCollectionElement<T> localElement, BetterCollection<?> sourceCollection) {
-			return BetterList.of(((UniqueElement) localElement).theParentElements.keySet().stream()//
-				.flatMap(el -> theParent.getSourceElements(el, sourceCollection).stream()));
+			BetterList<ElementId> sourceEls = new BetterTreeList<>(false);
+			DerivedCollectionElement<T> activeEl = ((UniqueElement) localElement).theActiveElement;
+			sourceEls.addAll(theParent.getSourceElements(activeEl, sourceCollection));
+			for (DerivedCollectionElement<T> parentEl : ((UniqueElement) localElement).theParentElements.keySet()) {
+				if (parentEl != activeEl)
+					sourceEls.addAll(theParent.getSourceElements(parentEl, sourceCollection));
+			}
+			return sourceEls.isEmpty() ? BetterList.empty() : sourceEls;
 		}
 
 		/**
@@ -680,8 +687,13 @@ public class ObservableSetImpl {
 		public DerivedCollectionElement<T> addElement(T value, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before,
 			boolean first) {
 			try (Transaction t = lock(true, null)) {
-				if (theElementsByValue.containsKey(value))
+				String msg = theElementsByValue.keySet().canAdd(value, valueElement(after), valueElement(before));
+				if (StdMsg.ELEMENT_EXISTS.equals(msg))
 					return null;
+				else if (StdMsg.UNSUPPORTED_OPERATION.equals(msg))
+					throw new UnsupportedOperationException(msg);
+				else if (msg != null)
+					throw new IllegalArgumentException(msg);
 				UniqueElement element = null;
 				DerivedCollectionElement<T> parentAfter, parentBefore;
 				if (isPreservingSourceOrder) {
@@ -721,7 +733,8 @@ public class ObservableSetImpl {
 
 		@Override
 		public String canMove(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
-			/*if (isPreservingSourceOrder) {
+			if (isPreservingSourceOrder) {
+				/*
 				String msg = null;
 				for (DerivedCollectionElement<T> parentEl : ((UniqueElement) valueEl).getParentElements().keySet()) {
 					msg = theParent.canMove(parentEl, parent(after), parent(before));
@@ -729,16 +742,40 @@ public class ObservableSetImpl {
 						break;
 				}
 				return msg;
-			} else
-				return theElementsByValue.keySet().canMove(valueElement(valueEl), valueElement(after), valueElement(before));
-			 */
-			return "Not Implemented";
+				 */
+				return "Not Implemented";
+			} else {
+				return theElementsByValue.keySet().canMove(((UniqueElement) valueEl).theValueId,
+					after == null ? null : ((UniqueElement) after).theValueId, before == null ? null : ((UniqueElement) before).theValueId);
+			}
 		}
 
 		@Override
 		public DerivedCollectionElement<T> move(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after,
 			DerivedCollectionElement<T> before, boolean first, Runnable afterRemove) {
-			throw new UnsupportedOperationException("Not Implemented");
+			if (isPreservingSourceOrder) {
+				throw new UnsupportedOperationException("Not Implemented");
+			} else {
+				try (Transaction t = lock(true, null)) {
+					UniqueElement ue = (UniqueElement) valueEl;
+					CollectionElement<T> newValueId = theElementsByValue.keySet().move(ue.theValueId, //
+						after == null ? null : ((UniqueElement) after).theValueId,
+							before == null ? null : ((UniqueElement) before).theValueId, first, () -> {
+								ObservableCollectionDataFlowImpl.removed(ue.theListener, ue.theValue, null);
+							});
+					if (newValueId.getElementId().equals(ue.theValueId))
+						return ue;
+					else {
+						UniqueElement newEl = new UniqueElement(ue.theValue);
+						newEl.theValueId = newValueId.getElementId();
+						for (DerivedCollectionElement<T> parentEl : ue.theParentElements.keySet())
+							newEl.addParent(parentEl, null);
+						newEl.theActiveElement = ue.theActiveElement;
+						theAccepter.accept(ue, null);
+						return newEl;
+					}
+				}
+			}
 		}
 
 		private ElementId valueElement(DerivedCollectionElement<T> el) {
@@ -935,7 +972,8 @@ public class ObservableSetImpl {
 								theParentElements.mutableEntry(node.getElementId()).setValue(newValue);
 								parentUpdated(node, realOldValue, newValue, innerCause);
 							}
-						} else if (ue == null && theElementsByValue.keySet().mutableElement(theValueId).isAcceptable(newValue) == null
+						} else if (ue == null && theParentElements.size() == 1
+							&& theElementsByValue.keySet().mutableElement(theValueId).isAcceptable(newValue) == null
 							&& consistent.getAsBoolean()) {
 							// If we can just fire an update instead of an add/remove, let's do that
 							theDebug.act("update:move").exec();
@@ -1135,7 +1173,7 @@ public class ObservableSetImpl {
 					// Make the active element the first element that gets updated. This will ensure a set operation instead of a remove/add
 					List<DerivedCollectionElement<T>> parentEls = new ArrayList<>(theParentElements.size());
 					parentEls.add(theActiveElement);
-					theParentElements.keySet().stream().filter(pe -> pe != theActiveElement).forEach(parentEls::add);
+					theParentElements.keySet().stream().filter(pe -> pe != theActiveElement).sorted().forEach(parentEls::add);
 					try {
 						theParent.setValues(parentEls, value);
 						isInternallySetting = false;

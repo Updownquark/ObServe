@@ -23,6 +23,7 @@ import org.observe.collect.ObservableSetImpl.DistinctBaseFlow;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
+import org.qommons.LambdaUtils;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterSet;
 import org.qommons.collect.BetterSortedList;
@@ -284,28 +285,13 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public Comparator<? super E> comparator() {
-			return getWrapped().comparator().reversed();
-		}
-
-		private <X> Comparable<X> reverse(Comparable<X> search) {
-			class ReversedSearch implements Comparable<X> {
-				@Override
-				public int compareTo(X v) {
-					return -search.compareTo(v);
-				}
-
-				@Override
-				public String toString() {
-					return "reverse(" + search + ")";
-				}
-			}
-			return new ReversedSearch();
+			return BetterSortedSet.ReversedSortedSet.reverse(getWrapped().comparator());
 		}
 
 		@Override
 		public int indexFor(Comparable<? super E> search) {
 			try (Transaction t = lock(false, null)) {
-				int index = getWrapped().indexFor(reverse(search));
+				int index = getWrapped().indexFor(BetterSortedSet.ReversedSortedSet.reverse(search));
 				if (index >= 0)
 					return size() - index - 1;
 				else {
@@ -356,7 +342,7 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public DistinctSortedDataFlow<E, T, T> reverse() {
-			return new DistinctSortedDataFlowWrapper<>(getSource(), super.reverse(), theCompare.reversed());
+			return new DistinctSortedDataFlowWrapper<>(getSource(), super.reverse(), BetterSortedSet.ReversedSortedSet.reverse(theCompare));
 		}
 
 		@Override
@@ -493,7 +479,7 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public DistinctSortedDataFlow<E, T, T> reverse() {
-			return new DistinctSortedDataFlowWrapper<>(getSource(), super.reverse(), theCompare.reversed());
+			return new DistinctSortedDataFlowWrapper<>(getSource(), super.reverse(), BetterSortedSet.ReversedSortedSet.reverse(theCompare));
 		}
 
 		@Override
@@ -579,7 +565,8 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public DistinctSortedDataFlow<E, E, E> reverse() {
-			return new DistinctSortedDataFlowWrapper<>(getSource(), super.reverse(), comparator().reversed());
+			return new DistinctSortedDataFlowWrapper<>(getSource(), super.reverse(),
+				BetterSortedSet.ReversedSortedSet.reverse(comparator()));
 		}
 
 		@Override
@@ -682,17 +669,29 @@ public class ObservableSortedSetImpl {
 		 * @return The search comparable to use on the source set
 		 */
 		protected Comparable<? super E> mappedSearch(Comparable<? super T> search) {
+			Comparable<? super T> fSearch = isReversed() ? BetterSortedSet.ReversedSortedSet.reverse(search) : search;
 			Function<? super E, ? extends T> map = getFlow().map().get();
-			return v -> search.compareTo(map.apply(v));
+			if (LambdaUtils.getIdentifier(map) == LambdaUtils.IDENTITY)
+				return (Comparable<? super E>) fSearch;
+			return LambdaUtils.printableComparable(v -> fSearch.compareTo(map.apply(v)), () -> fSearch + ".mapFrom(" + map + ")");
 		}
 
 		@Override
 		public int indexFor(Comparable<? super T> search) {
-			return getSource().indexFor(mappedSearch(search));
+			int sourceIndex = getSource().indexFor(mappedSearch(search));
+			if (isReversed()) {
+				if (sourceIndex < 0)
+					sourceIndex = -(size() + sourceIndex) - 2;
+				else
+					sourceIndex = size() - 1 - sourceIndex;
+			}
+			return sourceIndex;
 		}
 
 		@Override
 		public CollectionElement<T> search(Comparable<? super T> search, BetterSortedList.SortedSearchFilter filter) {
+			if (isReversed())
+				filter = filter.opposite();
 			CollectionElement<E> srcEl = getSource().search(mappedSearch(search), filter);
 			return srcEl == null ? null : elementFor(srcEl, null);
 		}

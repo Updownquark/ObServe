@@ -47,6 +47,7 @@ import org.observe.util.WeakListening;
 import org.qommons.BiTuple;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
+import org.qommons.LambdaUtils;
 import org.qommons.Lockable;
 import org.qommons.QommonsUtils;
 import org.qommons.Stamped;
@@ -1585,7 +1586,7 @@ public class ObservableCollectionDataFlowImpl {
 			TypeToken<E> srcType = theSource.getType();
 			TypeToken<Function<? super E, E>> functionType = (TypeToken<Function<? super E, E>>) thePassThroughFunctionTypes
 				.computeIfAbsent(srcType, st -> functionType(st, st));
-			theFunctionValue = ObservableValue.of(functionType, v -> v);
+			theFunctionValue = ObservableValue.of(functionType, LambdaUtils.identity());
 		}
 
 		@Override
@@ -2435,7 +2436,8 @@ public class ObservableCollectionDataFlowImpl {
 		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
 			String msg = theFilter.apply(toAdd);
 			if (msg == null)
-				msg = theParent.canAdd(toAdd, strip(after), strip(before));
+				msg = theParent.canAdd(toAdd, //
+					strip(after), strip(before));
 			return msg;
 		}
 
@@ -2445,7 +2447,8 @@ public class ObservableCollectionDataFlowImpl {
 			String msg = theFilter.apply(value);
 			if (msg != null)
 				throw new IllegalArgumentException(msg);
-			DerivedCollectionElement<T> parentEl = theParent.addElement(value, strip(after), strip(before), first);
+			DerivedCollectionElement<T> parentEl = theParent.addElement(value, //
+				strip(after), strip(before), first);
 			if (parentEl == null)
 				return null;
 			return new FilteredElement(parentEl, true, true);
@@ -3502,23 +3505,53 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public void setValues(Collection<DerivedCollectionElement<T>> elements, T newValue)
 			throws UnsupportedOperationException, IllegalArgumentException {
-			Collection<DerivedCollectionElement<I>> remaining;
+			Collection<MappedElement> remaining;
 			if (theOptions.getElementReverse() != null) {
 				remaining = new ArrayList<>();
 				for (DerivedCollectionElement<T> el : elements) {
 					if (theOptions.getElementReverse().setElement(((MappedElement) el).theParentEl.get(), newValue, true) == null)
-						remaining.add(((MappedElement) el).theParentEl);
+						remaining.add((MappedElement) el);
 				}
 			} else
-				remaining = elements.stream().map(el -> ((MappedElement) el).theParentEl).collect(Collectors.toList());
+				remaining = (Collection<MappedElement>) (Collection<?>) elements;
 			if (remaining.isEmpty())
 				return;
-			if (theOptions.getReverse() == null)
+			if (theOptions.isCached()) {
+				I oldValue = null;
+				boolean first = true, allIdenticalUpdates = true;
+				for (MappedElement el : remaining) {
+					allIdenticalUpdates &= equivalence().elementEquals(el.theValue, newValue);
+					I elOldValue = el.theCacheHandler.getSourceCache();
+					if (first) {
+						oldValue = elOldValue;
+						first = false;
+					} else
+						allIdenticalUpdates &= theParent.equivalence().elementEquals(oldValue, elOldValue);
+					if (!allIdenticalUpdates)
+						break;
+				}
+				if (allIdenticalUpdates)
+					theParent.setValues(//
+						remaining.stream().map(el -> el.theParentEl).collect(Collectors.toList()), oldValue);
+				else if (theOptions.getReverse() != null) {
+					I reversed = theOptions.getReverse().apply(newValue);
+					if (!theEquivalence.elementEquals(theMap.apply(reversed, newValue), newValue))
+						throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+					theParent.setValues(//
+						remaining.stream().map(el -> el.theParentEl).collect(Collectors.toList()), reversed);
+				} else {
+					for (MappedElement el : remaining)
+						el.theParentEl.set(el.theCacheHandler.getSourceCache());
+				}
+			} else if (theOptions.getReverse() != null) {
+				I reversed = theOptions.getReverse().apply(newValue);
+				if (!theEquivalence.elementEquals(theMap.apply(reversed, newValue), newValue))
+					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+				theParent.setValues(//
+					remaining.stream().map(el -> el.theParentEl).collect(Collectors.toList()), reversed);
+			} else {
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-			I reversed = theOptions.getReverse().apply(newValue);
-			if (!theEquivalence.elementEquals(theMap.apply(reversed, newValue), newValue))
-				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
-			theParent.setValues(remaining, reversed);
+			}
 		}
 
 		@Override
@@ -5333,7 +5366,8 @@ public class ObservableCollectionDataFlowImpl {
 		public String canMove(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
 			String msg = theFilter.canMove();
 			if (msg == null)
-				return theParent.canMove(strip(valueEl), strip(after), strip(before));
+				return theParent.canMove(//
+					strip(valueEl), strip(after), strip(before));
 			else if ((after == null || valueEl.compareTo(after) >= 0) && (before == null || valueEl.compareTo(before) <= 0))
 				return null;
 			return msg;
@@ -5346,7 +5380,8 @@ public class ObservableCollectionDataFlowImpl {
 				&& (before == null || valueEl.compareTo(before) <= 0))
 				return valueEl;
 			theFilter.assertMovable();
-			return new ModFilteredElement(theParent.move(strip(valueEl), strip(after), strip(before), first, afterRemove));
+			return new ModFilteredElement(theParent.move(//
+				strip(valueEl), strip(after), strip(before), first, afterRemove));
 		}
 
 		private DerivedCollectionElement<T> strip(DerivedCollectionElement<T> el) {
@@ -5368,7 +5403,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		private class ModFilteredElement implements DerivedCollectionElement<T> {
-			private final DerivedCollectionElement<T> theParentEl;
+			final DerivedCollectionElement<T> theParentEl;
 
 			ModFilteredElement(DerivedCollectionElement<T> parentEl) {
 				theParentEl = parentEl;

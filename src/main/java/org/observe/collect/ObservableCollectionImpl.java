@@ -1728,6 +1728,11 @@ public final class ObservableCollectionImpl {
 			return theFlow;
 		}
 
+		/** @return Whether this collection's element order is the reverse of its source */
+		protected boolean isReversed() {
+			return isReversed;
+		}
+
 		@Override
 		protected Object createIdentity() {
 			return theFlow.getIdentity();
@@ -2535,10 +2540,16 @@ public final class ObservableCollectionImpl {
 				if (sourceCollection == this)
 					return BetterList.of(getElement(sourceEl));
 
-				return QommonsUtils.map2(theFlow.getElementsBySource(sourceEl, sourceCollection), el -> {
-					return elementFor(//
-						theDerivedElements.searchValue(de -> el.compareTo(de.element), BetterSortedList.SortedSearchFilter.OnlyMatch));
-				});
+				return BetterList.of(theFlow.getElementsBySource(sourceEl, sourceCollection).stream().map(el -> {
+					DerivedElementHolder<T> found = theDerivedElements.searchValue(de -> el.compareTo(de.element),
+						BetterSortedList.SortedSearchFilter.OnlyMatch);
+					if (found == null) {
+						// This may happen if a listener for the source collection calls this method
+						// before the element has been added to this collection
+						return null;
+					}
+					return elementFor(found);
+				}).filter(el -> el != null));
 			}
 		}
 
@@ -2557,24 +2568,41 @@ public final class ObservableCollectionImpl {
 		 */
 		protected CollectionElement<T> elementFor(DerivedElementHolder<T> el) {
 			el.check();
-			return new CollectionElement<T>() {
-				@Override
-				public T get() {
-					return el.get();
-				}
-
-				@Override
-				public ElementId getElementId() {
-					return el;
-				}
-
-				@Override
-				public String toString() {
-					return el.element.toString();
-				}
-			};
+			return new ActiveDerivedElement<>(el);
 		}
 
+		static class ActiveDerivedElement<T> implements CollectionElement<T> {
+			private final DerivedElementHolder<T> element;
+
+			ActiveDerivedElement(DerivedElementHolder<T> element) {
+				this.element = element;
+			}
+
+			@Override
+			public T get() {
+				return element.get();
+			}
+
+			@Override
+			public ElementId getElementId() {
+				return element;
+			}
+
+			@Override
+			public int hashCode() {
+				return element.treeNode.hashCode();
+			}
+
+			@Override
+			public boolean equals(Object o) {
+				return o instanceof ActiveDerivedElement && element.treeNode.equals(((ActiveDerivedElement<?>) o).element.treeNode);
+			}
+
+			@Override
+			public String toString() {
+				return element.element.toString();
+			}
+		};
 		@Override
 		public String canAdd(T value, ElementId after, ElementId before) {
 			return theFlow.canAdd(value, //

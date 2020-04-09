@@ -17,6 +17,7 @@ import org.qommons.collect.BetterHashSet;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterMap;
 import org.qommons.collect.BetterSet;
+import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MapEntryHandle;
@@ -192,7 +193,7 @@ public interface Equivalence<E> {
 		}
 
 		public ComparatorEquivalence<E> reverse() {
-			return new ComparatorEquivalence<>(type, nullable, compare.reversed());
+			return new ComparatorEquivalence<>(type, nullable, BetterSortedSet.ReversedSortedSet.reverse(compare));
 		}
 	}
 
