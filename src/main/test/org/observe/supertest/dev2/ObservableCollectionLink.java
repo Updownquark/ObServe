@@ -34,7 +34,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 	public interface OperationRejection {
 		boolean isRejected();
 
-		void reject(String message, boolean error);
+		void reject(String message);
 
 		String getActualRejection();
 	}
@@ -68,7 +68,26 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			theMultiStepCollection = def.multiStepFlow.collectPassive();
 		else
 			theMultiStepCollection = def.multiStepFlow.collectActive(Observable.empty);
+
 		theMultiStepTester = new ObservableCollectionTester<>("[" + getDepth() + "] Multi-step", theMultiStepCollection);
+		init(helper);
+	}
+
+	public ObservableCollectionLink(String path, ObservableCollectionLink<?, S> sourceLink, ObservableCollectionTestDef<T> def,
+		ObservableCollection<T> oneStepCollection, ObservableCollection<T> multiStepCollection, TestHelper helper) {
+		super(path, sourceLink);
+		theDef = def;
+		theSupplier = (Function<TestHelper, T>) ObservableChainTester.SUPPLIERS.get(def.type);
+		theElements = new BetterTreeList<>(false);
+		theElementsForCollection = new BetterTreeList<>(false);
+		theOneStepCollection = oneStepCollection;
+		theMultiStepCollection = multiStepCollection;
+
+		theMultiStepTester = new ObservableCollectionTester<>("[" + getDepth() + "] Multi-step", theMultiStepCollection);
+		init(helper);
+	}
+
+	private void init(TestHelper helper) {
 
 		if (getSourceLink() == null && theSupplier != null && helper.getBoolean(.25)) {
 			int size = helper.getInt(0, 10);
@@ -160,6 +179,10 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		return theOneStepCollection;
 	}
 
+	public ObservableCollection<T> getMultiStepCollection() {
+		return theMultiStepCollection;
+	}
+
 	BetterList<CollectionLinkElement<S, T>> getUnprotectedElements() {
 		return theElements;
 	}
@@ -173,7 +196,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			.get(theElementsForCollection.search(el -> collectionEl.compareTo(el.getCollectionAddress()), SortedSearchFilter.OnlyMatch));
 	}
 
-	public abstract void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection);
+	public abstract void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection, boolean execute);
 
 	public abstract CollectionLinkElement<S, T> expectAdd(T value, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before,
 		boolean first, OperationRejection rejection);
@@ -204,6 +227,13 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			modify = getCollection().subList(subListStart, subListEnd);
 			if (helper.isReproducing())
 				System.out.print("subList(" + subListStart + ".." + subListEnd + ") ");
+			Assert.assertEquals(subListEnd - subListStart, modify.size());
+			if (subListEnd > subListStart) {
+				Assert.assertEquals(getCollection().getElement(subListStart), modify.getTerminalElement(true));
+				if (subListEnd > subListStart + 1)
+					Assert.assertEquals(getCollection().getElement(subListEnd - 1), modify.getTerminalElement(false));
+			} else
+				Assert.assertTrue(modify.isEmpty());
 		} else {
 			subListStart = 0;
 			subListEnd = getCollection().size();
@@ -239,26 +269,30 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 					System.out.println(op);
 				helper.placemark();
 				addAll(index, first, op, helper);
-			}).or(2, () -> { // Set
-				if (modify.isEmpty()) {
+			});
+			if (!modify.isEmpty()) {
+				action.or(2, () -> { // Set
+					if (modify.isEmpty()) {
+						if (helper.isReproducing())
+							System.out.println("Set, but empty");
+						return;
+					}
+					int index = helper.getInt(0, modify.size());
+					T value;
+					CollectionLinkElement<S, T> element = theElements.get(opCtx.subListStart + index);
+					if (helper.getBoolean(0.1)) // More updates
+						value = element.getValue();
+					else
+						value = theSupplier.apply(helper);
+					CollectionOp op = new CollectionOp(opCtx, set, index, index, value, false);
+					op.add(element);
 					if (helper.isReproducing())
-						System.out.println("Set, but empty");
-					return;
-				}
-				int index = helper.getInt(0, modify.size());
-				T value;
-				CollectionLinkElement<S, T> element = theElements.get(opCtx.subListStart + index);
-				if (helper.getBoolean(0.1)) // More updates
-					value = element.getValue();
-				else
-					value = theSupplier.apply(helper);
-				CollectionOp op = new CollectionOp(opCtx, set, index, index, value, false);
-				op.add(element);
-				if (helper.isReproducing())
-					System.out.println(op + " from " + element.getValue());
-				helper.placemark();
-				set(op, helper);
-			}).or(1, () -> {// Remove by value
+						System.out.println(op + " from " + element.getValue());
+					helper.placemark();
+					set(op, helper);
+				});
+			}
+			action.or(1, () -> {// Remove by value
 				T value = theSupplier.apply(helper);
 				CollectionOp op = new CollectionOp(opCtx, remove, -1, -1, value, true);
 				boolean found = false;
@@ -348,7 +382,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 				int source = helper.getInt(0, modify.size());
 				int target = helper.getInt(0, modify.size());
 				CollectionOp op = new CollectionOp(opCtx, move, target, target, null, false);
-				op.add(theElements.get(source));
+				op.add(theElements.get(opCtx.subListStart + source));
 				if (helper.isReproducing())
 					System.out.println(op);
 				helper.placemark();
@@ -359,7 +393,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 				int minIndex = (int) helper.getDouble(0, max / 3.0, max);
 				int maxIndex = helper.getInt(minIndex, max);
 				CollectionOp op = new CollectionOp(opCtx, move, minIndex, maxIndex, null, false);
-				op.add(theElements.get(source));
+				op.add(theElements.get(opCtx.subListStart + source));
 				if (helper.isReproducing())
 					System.out.println(op);
 				helper.placemark();
@@ -381,6 +415,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			testBounds(helper);
 		});
 		addExtraActions(action);
+		incrementModification();
 	}
 
 	protected void addExtraActions(TestHelper.RandomAction action) {}
@@ -560,9 +595,9 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			return opEl;
 		}
 
-		void rejectAll(String message, boolean error) {
+		void rejectAll(String message) {
 			for (CollectionOpElement el : elements)
-				el.reject(message, error);
+				el.reject(message);
 		}
 
 		@Override
@@ -594,16 +629,14 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 
 		String actualRejection;
 		private String theMessage;
-		private boolean isError;
 
 		CollectionOpElement(CollectionLinkElement<S, T> element) {
 			this.element = element;
 		}
 
 		@Override
-		public void reject(String message, boolean error) {
+		public void reject(String message) {
 			theMessage = message;
-			isError = message != null && error;
 		}
 
 		@Override
@@ -613,10 +646,6 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 
 		public String getMessage() {
 			return theMessage;
-		}
-
-		public boolean isError() {
-			return isError;
 		}
 
 		@Override
@@ -629,63 +658,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			if (element == null)
 				return "none";
 			return element.toString();
-			// StringBuilder str = new StringBuilder(type.name()).append(' ');
-			// if (value != null)
-			// str.append(value);
-			// if (minIndex >= 0)
-			// str.append('@').append(minIndex).append('-').append(maxIndex);
-			// return str.toString();
 		}
-
-		// public static boolean isSameIndex(List<? extends CollectionOpElement<?>> ops) {
-		// int minIdx = ops.get(0).minIndex;
-		// int maxIdx = ops.get(0).maxIndex;
-		// for (int i = 1; i < ops.size(); i++)
-		// if (ops.get(i).minIndex != minIdx && ops.get(i).maxIndex == maxIdx)
-		// return false;
-		// return true;
-		// }
-		//
-		// public static boolean isSameType(List<? extends CollectionOpElement<?>> ops) {
-		// CollectionChangeType type = ops.get(0).type;
-		// for (int i = 1; i < ops.size(); i++)
-		// if (ops.get(i).type != type)
-		// return false;
-		// return true;
-		// }
-		//
-		// public static String print(List<? extends CollectionOpElement<?>> ops) {
-		// if (ops.isEmpty())
-		// return "[]";
-		// StringBuilder str = new StringBuilder();
-		// boolean separateTypes = !isSameType(ops);
-		// if (!separateTypes)
-		// str.append(ops.get(0).type);
-		// boolean sameIndexes = isSameIndex(ops);
-		// if (ops.get(0).minIndex >= 0 && sameIndexes) {
-		// str.append('@').append(ops.get(0).minIndex);
-		// if (ops.get(0).minIndex != ops.get(0).maxIndex)
-		// str.append('-').append(ops.get(0).maxIndex);
-		// }
-		// str.append('[');
-		// boolean first = true;
-		// for (CollectionOpElement<?> op : ops) {
-		// if (!first)
-		// str.append(", ");
-		// first = false;
-		// if (separateTypes)
-		// str.append(op.type);
-		// if (op.value != null)
-		// str.append(op.value);
-		// if (!sameIndexes && op.minIndex >= 0) {
-		// str.append('@').append(op.minIndex);
-		// if (op.minIndex != op.maxIndex)
-		// str.append('-').append(op.maxIndex);
-		// }
-		// }
-		// str.append(']');
-		// return str.toString();
-		// }
 	}
 
 	private void prepareOp(CollectionOp op) {
@@ -712,7 +685,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 	private void expectModification(CollectionOp op, TestHelper helper) {
 		int sz = Math.min(theElements.size(), op.context.subListEnd) - op.context.subListStart;
 		if (op.maxIndex > sz) {
-			op.rejectAll(op.maxIndex + " of " + sz, true);
+			op.rejectAll(op.maxIndex + " of " + sz);
 			return;
 		}
 		switch (op.type) {
@@ -752,7 +725,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 				if (exEl == null)
 					continue; // A hack, putting the value to remove in the initial element
 				expect(//
-					new ExpectedCollectionOperation<>(exEl, op.type, exEl.getValue(), exEl.getValue()), el);
+					new ExpectedCollectionOperation<>(exEl, op.type, exEl.getValue(), exEl.getValue()), el, true);
 			}
 			break;
 		case set:
@@ -760,7 +733,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 				CollectionLinkElement<S, T> exEl = el.element;
 				T oldValue = exEl.getValue();
 				expect(//
-					new ExpectedCollectionOperation<>(exEl, op.type, oldValue, op.value), el);
+					new ExpectedCollectionOperation<>(exEl, op.type, oldValue, op.value), el, true);
 			}
 			break;
 		case move:
@@ -789,7 +762,9 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			} else
 				targetIndex = op.before.getIndex() - op.context.subListStart;
 		}
+		boolean addByElement;
 		if (op.minIndex < 0 || modify.isEmpty()) {
+			addByElement = false;
 			msg = modify.canAdd(op.value);
 			// Test simple add value
 			try {
@@ -812,18 +787,8 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			MutableCollectionElement<T> adjacent = modify
 				.mutableElement(modify.getElement(addLeft ? op.minIndex : op.minIndex - 1).getElementId());
 			msg = adjacent.canAdd(op.value, addLeft);
-			if (helper.getBoolean()) {
-				// Test simple add by index
-				try {
-					element = modify.addElement(op.minIndex, op.value);
-					error = false;
-				} catch (UnsupportedOperationException | IllegalArgumentException e) {
-					if (msg == null)
-						throw new AssertionError("Unexpected operation exception", e);
-					error = true;
-					element = null;
-				}
-			} else {
+			addByElement = helper.getBoolean();
+			if (addByElement) {
 				// Test add by element
 				try {
 					ElementId elementId = adjacent.add(op.value, addLeft);
@@ -835,10 +800,22 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 					error = true;
 					element = null;
 				}
+			} else {
+				// Test simple add by index
+				try {
+					element = modify.addElement(op.minIndex, op.value);
+					error = false;
+				} catch (UnsupportedOperationException | IllegalArgumentException e) {
+					if (msg == null)
+						throw new AssertionError("Unexpected operation exception", e);
+					error = true;
+					element = null;
+				}
 			}
 			if (element != null)
 				Assert.assertEquals(op.minIndex, modify.getElementsBefore(element.getElementId()));
 		} else {
+			addByElement = false;
 			ElementId after, before;
 			if (op.maxIndex == 0) {
 				after = null;
@@ -884,8 +861,19 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		}
 
 		CollectionOpElement el = op.elements.get(0);
+		if (msg == null && el.getMessage() != null)
+			throw new AssertionError("Expected rejection with " + el.getMessage());
+		else if (msg != null && el.getMessage() == null)
+			throw new AssertionError("Unexpected rejection with " + msg);
 		Assert.assertEquals(el.getMessage() == null, msg == null);
-		Assert.assertEquals(el.isError(), error);
+		if (addByElement) {
+			if (msg != null && !error)
+				throw new AssertionError("Rejection with " + msg + " was expected to generate an error");
+		} else if (msg != null && !error) {
+			Assert.assertEquals(StdMsg.ELEMENT_EXISTS, msg);
+			if (!modify.contains(op.value))
+				throw new AssertionError("Rejection with " + msg + " was expected to generate an error");
+		}
 		if (error)
 			Assert.assertNotNull(msg);
 		if (element == null) {
@@ -922,14 +910,11 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			before = modify.getElement(index).getElementId();
 			after = CollectionElement.getElementId(modify.getAdjacentElement(before, false));
 		}
-		int addable = 0;
 		String[] msgs = new String[op.values.size()];
 		int i = 0;
 		for (T value : op.values) {
 			msgs[i] = modify.canAdd(value, after, before);
 			op.add(null).actualRejection = msgs[i];
-			if (msgs[i] == null)
-				addable++;
 			i++;
 		}
 		boolean modified;
@@ -940,13 +925,18 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 
 		expectModification(op, helper);
 
+		int addable = 0;
 		for (i = 0; i < op.elements.size(); i++) {
 			String expectMsg = op.elements.get(i).getMessage();
 			String msg = msgs[i];
-			if (expectMsg != null && msg == null)
-				throw new AssertionError("Expected rejection of add[" + i + "]=" + op.values.get(i) + " with " + expectMsg);
-			else if (expectMsg == null && msg != null)
+			if (msg != null && expectMsg == null)
 				throw new AssertionError("Unexpected rejection of add[" + i + "]=" + op.values.get(i) + " with " + msg);
+			// If the collection is distinct and there are duplicates in the values to add,
+			// duplicates won't be added, but this can't be detected with the canAdd() call above
+			if (msg == null && expectMsg != null && !StdMsg.ELEMENT_EXISTS.equals(expectMsg))
+				throw new AssertionError("Expected rejection of add[" + i + "]=" + op.values.get(i) + " with " + expectMsg);
+			if (expectMsg == null)
+				addable++;
 		}
 		if (!getCollection().isContentControlled() && addable < op.elements.size())
 			throw new AssertionError("Uncontrolled collection failed to add some values");
@@ -969,7 +959,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 
 			if (element == null) {
 				msg = StdMsg.NOT_FOUND;
-				op.rejectAll(msg, false);
+				op.rejectAll(msg);
 			} else
 				msg = modify.mutableElement(element.getElementId()).canRemove();
 			element = null;
@@ -1004,8 +994,10 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		CollectionOpElement el = op.elements.get(0);
 		if (!getCollection().isContentControlled() && el.element != null && msg != null)
 			throw new AssertionError("Uncontrolled collection failed to remove element");
-		Assert.assertEquals(el.getMessage() != null, msg != null);
-		Assert.assertEquals(el.isError(), error);
+		if (msg == null && el.getMessage() != null)
+			throw new AssertionError("Expected rejection with " + el.getMessage());
+		else if (msg != null && el.getMessage() == null)
+			throw new AssertionError("Unexpected rejection with " + msg);
 		if (error)
 			Assert.assertNotNull(msg);
 		if (msg == null) {
@@ -1024,15 +1016,12 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		int preSize = getCollection().size();
 		CollectionElement<T> element = op.minIndex == op.maxIndex ? null : modify.getElement(op.minIndex);
 		int removable = 0;
-		boolean expectError = false;
 		String[] msgs = new String[op.maxIndex - op.minIndex];
 		for (int i = 0; i < msgs.length; i++) {
 			msgs[i] = modify.mutableElement(element.getElementId()).canRemove();
 			op.elements.get(i).actualRejection = msgs[i];
 			if (msgs[i] == null)
 				removable++;
-			else if (op.elements.get(i).isError())
-				expectError = true;
 
 			element = modify.getAdjacentElement(element.getElementId(), true);
 		}
@@ -1045,12 +1034,13 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		}
 
 		expectModification(op, helper);
-		for (int i = 0; i < msgs.length; i++)
-			Assert.assertEquals(op.elements.get(i).getMessage() != null, msgs[i] != null);
+		for (int i = 0; i < msgs.length; i++) {
+			String msg = op.elements.get(i).getMessage();
+			Assert.assertEquals(msg != null, msgs[i] != null);
+		}
 
 		if (!getCollection().isContentControlled() && removable < op.elements.size())
 			throw new AssertionError("Uncontrolled collection failed to remove element(s)");
-		Assert.assertEquals(expectError, error);
 		if (error) {
 			Assert.assertTrue(modify.size() > preModSize - (op.maxIndex - op.minIndex));
 			Assert.assertTrue(getCollection().size() > preSize - (op.maxIndex - op.minIndex));
@@ -1157,8 +1147,6 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			throw new AssertionError("Expected rejection with " + el.getMessage());
 		else if (el.getMessage() == null && msg != null)
 			throw new AssertionError("Unexpected rejection with " + msg);
-		Assert.assertEquals(el.getMessage() != null, msg != null);
-		Assert.assertEquals(el.isError(), error);
 		if (error)
 			Assert.assertNotNull(msg);
 		Assert.assertEquals(preSize, getCollection().size());
@@ -1196,11 +1184,10 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		if (el.getMessage() == null && msg != null)
 			throw new AssertionError("Unexpected rejection with " + msg);
 		else if (el.getMessage() != null && msg == null)
-			throw new AssertionError("Unexpected rejection with " + el.getMessage());
+			throw new AssertionError("Expected rejection with " + el.getMessage());
 		boolean wasSettable = msg == null;
 		if (!getCollection().isContentControlled() && !wasSettable)
 			throw new AssertionError("Uncontrolled collection failed to set element");
-		Assert.assertEquals(el.isError(), error);
 		if (error)
 			Assert.assertNotNull(msg);
 		Assert.assertTrue(element.getElementId().isPresent());

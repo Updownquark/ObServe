@@ -13,18 +13,27 @@ import org.qommons.collect.MutableCollectionElement.StdMsg;
 
 public class SortedLinkHelper<T> {
 	private final Comparator<? super T> theCompare;
+	private final boolean isUsingFirstSource;
 
-	public SortedLinkHelper(Comparator<? super T> compare) {
+	public SortedLinkHelper(Comparator<? super T> compare, boolean useFirstSource) {
 		theCompare = compare;
+		isUsingFirstSource = useFirstSource;
+	}
+
+	public Comparator<? super T> getCompare() {
+		return theCompare;
+	}
+
+	public boolean isUsingFirstSource() {
+		return isUsingFirstSource;
 	}
 
 	public BiTuple<CollectionLinkElement<?, T>, CollectionLinkElement<?, T>> expectAdd(T value, CollectionLinkElement<?, T> after,
-		CollectionLinkElement<?, T> before, boolean first,
-		OperationRejection rejection) {
+		CollectionLinkElement<?, T> before, boolean first, OperationRejection rejection) {
 		if (after != null) {
 			int comp = theCompare.compare(value, after.getValue());
 			if (comp < 0) {
-				rejection.reject(StdMsg.ILLEGAL_ELEMENT_POSITION, true);
+				rejection.reject(StdMsg.ILLEGAL_ELEMENT_POSITION);
 				return null;
 			} else if (comp != 0)
 				after = null; // The source order won't matter
@@ -32,7 +41,7 @@ public class SortedLinkHelper<T> {
 		if (before != null) {
 			int comp = theCompare.compare(value, before.getValue());
 			if (comp > 0) {
-				rejection.reject(StdMsg.ILLEGAL_ELEMENT_POSITION, true);
+				rejection.reject(StdMsg.ILLEGAL_ELEMENT_POSITION);
 				return null;
 			} else if (comp != 0)
 				before = null; // The source order won't matter
@@ -46,7 +55,7 @@ public class SortedLinkHelper<T> {
 		if (after != null) {
 			int comp = theCompare.compare(value, after.getValue());
 			if (comp < 0) {
-				rejection.reject(StdMsg.ILLEGAL_ELEMENT_POSITION, true);
+				rejection.reject(StdMsg.ILLEGAL_ELEMENT_POSITION);
 				return null;
 			} else if (comp != 0)
 				after = null; // The source order won't matter
@@ -54,7 +63,7 @@ public class SortedLinkHelper<T> {
 		if (before != null) {
 			int comp = theCompare.compare(value, before.getValue());
 			if (comp > 0) {
-				rejection.reject(StdMsg.ILLEGAL_ELEMENT_POSITION, true);
+				rejection.reject(StdMsg.ILLEGAL_ELEMENT_POSITION);
 				return null;
 			} else if (comp != 0)
 				before = null; // The source order won't matter
@@ -68,24 +77,24 @@ public class SortedLinkHelper<T> {
 			return true;
 		CollectionLinkElement<T, T> element = (CollectionLinkElement<T, T>) derivedOp.getElement();
 		CollectionElement<CollectionLinkElement<T, T>> adj = elements.getAdjacentElement(element.getElementAddress(), false);
-		while (adj != null && !adj.get().isPresent())
+		while (adj != null && (adj.get().isRemoveExpected() || adj.get().wasAdded()))
 			adj = elements.getAdjacentElement(adj.getElementId(), false);
 		if (adj != null) {
 			int comp = theCompare.compare(derivedOp.getValue(), adj.get().getValue());
-			if (comp < 0 || (comp == 0
+			if (comp < 0 || (comp == 0 && isUsingFirstSource
 				&& element.getFirstSource().getElementAddress().compareTo(adj.get().getFirstSource().getElementAddress()) < 0)) {
-				rejection.reject(StdMsg.ILLEGAL_ELEMENT_POSITION, true);
+				rejection.reject(StdMsg.ILLEGAL_ELEMENT_POSITION);
 				return false;
 			}
 		}
 		adj = elements.getAdjacentElement(element.getElementAddress(), true);
-		while (adj != null && !adj.get().isPresent())
+		while (adj != null && (adj.get().isRemoveExpected() || adj.get().wasAdded()))
 			adj = elements.getAdjacentElement(adj.getElementId(), true);
 		if (adj != null) {
 			int comp = theCompare.compare(derivedOp.getValue(), adj.get().getValue());
-			if (comp > 0 || (comp == 0 && !element.getSourceElements().isEmpty()
+			if (comp > 0 || (comp == 0 && isUsingFirstSource
 				&& element.getFirstSource().getElementAddress().compareTo(adj.get().getFirstSource().getElementAddress()) > 0)) {
-				rejection.reject(StdMsg.ILLEGAL_ELEMENT_POSITION, true);
+				rejection.reject(StdMsg.ILLEGAL_ELEMENT_POSITION);
 				return false;
 			}
 		}
@@ -100,7 +109,7 @@ public class SortedLinkHelper<T> {
 		int comp = theCompare.compare(sourceOp.getValue(), element.getValue());
 		if (comp < 0) {
 			CollectionElement<CollectionLinkElement<T, T>> adj = elements.getAdjacentElement(element.getElementAddress(), false);
-			while (adj != null && !adj.get().isPresent())
+			while (adj != null && (adj.get().isRemoveExpected() || adj.get().wasAdded()))
 				adj = elements.getAdjacentElement(adj.getElementId(), false);
 			if (adj == null)
 				expectMove = false;
@@ -108,7 +117,7 @@ public class SortedLinkHelper<T> {
 				comp = theCompare.compare(sourceOp.getValue(), adj.get().getValue());
 				if (comp < 0)
 					expectMove = true;
-				else if (comp == 0) {
+				else if (comp == 0 && isUsingFirstSource) {
 					comp = element.getSourceElements().getFirst().getElementAddress().compareTo(//
 						adj.get().getSourceElements().getFirst().getElementAddress());
 					expectMove = comp < 0;
@@ -119,7 +128,7 @@ public class SortedLinkHelper<T> {
 			expectMove = false;
 		} else {
 			CollectionElement<CollectionLinkElement<T, T>> adj = elements.getAdjacentElement(element.getElementAddress(), true);
-			while (adj != null && !adj.get().isPresent())
+			while (adj != null && (adj.get().isRemoveExpected() || adj.get().wasAdded()))
 				adj = elements.getAdjacentElement(adj.getElementId(), true);
 			if (adj == null)
 				expectMove = false;
@@ -127,7 +136,7 @@ public class SortedLinkHelper<T> {
 				comp = theCompare.compare(sourceOp.getValue(), adj.get().getValue());
 				if (comp > 0)
 					expectMove = true;
-				else if (comp == 0 && !element.getSourceElements().isEmpty()) {
+				else if (comp == 0 && isUsingFirstSource) {
 					comp = element.getSourceElements().getFirst().getElementAddress().compareTo(//
 						adj.get().getSourceElements().getFirst().getElementAddress());
 					expectMove = comp > 0;
@@ -139,19 +148,25 @@ public class SortedLinkHelper<T> {
 	}
 
 	public void checkOrder(BetterList<CollectionLinkElement<T, T>> elements, CollectionLinkElement<T, T> element) {
-		if (element.isPresent()) {
+		if (!element.isRemoveExpected() && !element.wasAdded()) {
+			if (element.getValue() == null) {
+				element.error("Null value");
+				return;
+			}
 			CollectionElement<CollectionLinkElement<T, T>> adj = elements.getAdjacentElement(element.getElementAddress(), false);
-			while (adj != null && (!adj.get().isPresent() || adj.get().wasAdded()))
+			while (adj != null && (adj.get().isRemoveExpected() || adj.get().wasAdded()))
 				adj = elements.getAdjacentElement(adj.getElementId(), false);
 			if (adj != null) {
 				int comp = theCompare.compare(adj.get().getValue(), element.getValue());
-				if (comp > 0)
-					throw new AssertionError("Sorted elements not in value order");
-				else if (comp == 0 && !element.getSourceElements().isEmpty()) {
+				if (comp > 0) {
+					element.error("Sorted elements not in value order");
+					return;
+				}
+				else if (comp == 0 && isUsingFirstSource) {
 					comp = adj.get().getSourceElements().getFirst().getElementAddress().compareTo(//
 						element.getSourceElements().getFirst().getElementAddress());
 					if (comp >= 0)
-						throw new AssertionError("Equivalent sorted elements not in source order");
+						element.error("Equivalent sorted elements not in source order");
 				}
 			}
 		}

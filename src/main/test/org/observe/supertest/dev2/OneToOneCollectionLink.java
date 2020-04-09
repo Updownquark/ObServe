@@ -33,7 +33,7 @@ public abstract class OneToOneCollectionLink<S, T> extends ObservableCollectionL
 	}
 
 	@Override
-	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection) {
+	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection, boolean execute) {
 		switch (derivedOp.getType()) {
 		case add:
 		case move:
@@ -42,12 +42,12 @@ public abstract class OneToOneCollectionLink<S, T> extends ObservableCollectionL
 			CollectionLinkElement<?, S> sourceEl = (CollectionLinkElement<?, S>) derivedOp.getElement().getSourceElements().getFirst();
 			S reversed = isReversible() ? reverse(derivedOp.getElement().getValue()) : sourceEl.getValue();
 			getSourceLink().expect(new ExpectedCollectionOperation<>(//
-				sourceEl, CollectionOpType.remove, reversed, reversed), rejection);
+				sourceEl, CollectionOpType.remove, reversed, reversed), rejection, execute);
 			break;
 		case set:
 			getSourceLink().expect(new ExpectedCollectionOperation<>(//
 				(CollectionLinkElement<Object, S>) derivedOp.getElement().getSourceElements().getFirst(), CollectionOpType.set,
-				reverse(derivedOp.getElement().getValue()), reverse(derivedOp.getValue())), rejection);
+				reverse(derivedOp.getElement().getValue()), reverse(derivedOp.getValue())), rejection, execute);
 			break;
 		}
 	}

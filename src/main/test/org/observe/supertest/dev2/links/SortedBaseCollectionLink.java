@@ -57,7 +57,7 @@ public class SortedBaseCollectionLink<T> extends BaseCollectionLink<T> {
 	public SortedBaseCollectionLink(String path, ObservableCollectionTestDef<T> def, Comparator<? super T> compare, boolean distinct,
 		TestHelper helper) {
 		super(path, def, helper);
-		theHelper = new SortedLinkHelper<>(compare);
+		theHelper = new SortedLinkHelper<>(compare, false);
 		if (distinct)
 			theDistinctValues = getCollection().equivalence().createSet();
 		else
@@ -84,7 +84,7 @@ public class SortedBaseCollectionLink<T> extends BaseCollectionLink<T> {
 		if (afterBefore == null)
 			return null;
 		if (theDistinctValues != null && !theDistinctValues.add(value)) {
-			rejection.reject(StdMsg.ELEMENT_EXISTS, false);
+			rejection.reject(StdMsg.ELEMENT_EXISTS);
 			return null;
 		}
 		after = afterBefore.getValue1();
@@ -105,17 +105,23 @@ public class SortedBaseCollectionLink<T> extends BaseCollectionLink<T> {
 	}
 
 	@Override
-	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection) {
+	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection, boolean execute) {
 		if (!theHelper.expectSet(derivedOp, rejection, getElements()))
 			return;
-		else if (derivedOp.getType() == CollectionOpType.set && theDistinctValues != null && !theDistinctValues.add(derivedOp.getValue()))
+		boolean newValue = derivedOp.getType() == CollectionOpType.set //
+			&& theHelper.getCompare().compare(derivedOp.getElement().getValue(), derivedOp.getValue()) != 0//
+			&& theDistinctValues != null;
+		if (newValue && theDistinctValues.contains(derivedOp.getValue())) {
+			rejection.reject(StdMsg.ELEMENT_EXISTS);
 			return;
-		else {
+		} else {
 			T oldValue = derivedOp.getElement().getValue();
-			super.expect(derivedOp, rejection);
+			if (newValue && execute)
+				theDistinctValues.add(derivedOp.getValue());
+			super.expect(derivedOp, rejection, execute);
 			if (theDistinctValues != null) {
 				if (rejection.isRejected()) {
-					if (derivedOp.getType() == CollectionOpType.set)
+					if (newValue)
 						theDistinctValues.remove(derivedOp.getValue());
 				} else {
 					switch (derivedOp.getType()) {
@@ -123,8 +129,11 @@ public class SortedBaseCollectionLink<T> extends BaseCollectionLink<T> {
 					case move:
 						throw new IllegalStateException();
 					case remove:
-					case set:
 						theDistinctValues.remove(oldValue);
+						break;
+					case set:
+						if (newValue)
+							theDistinctValues.remove(oldValue);
 						break;
 					}
 				}

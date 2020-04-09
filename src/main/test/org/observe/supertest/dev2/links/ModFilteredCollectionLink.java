@@ -112,7 +112,7 @@ public class ModFilteredCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 	}
 
 	@Override
-	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection) {
+	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection, boolean execute) {
 		String msg = null;
 		switch (derivedOp.getType()) {
 		case add:
@@ -137,9 +137,9 @@ public class ModFilteredCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 			break;
 		}
 		if (msg != null)
-			rejection.reject(msg, true);
+			rejection.reject(msg);
 		else
-			super.expect(derivedOp, rejection);
+			super.expect(derivedOp, rejection, execute);
 	}
 
 	@Override
@@ -147,7 +147,7 @@ public class ModFilteredCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 		boolean first, OperationRejection rejection) {
 		String msg = theFilter.canAdd(value);
 		if (msg != null) {
-			rejection.reject(msg, true);
+			rejection.reject(msg);
 			return null;
 		}
 		return super.expectAdd(value, after, before, first, rejection);
@@ -160,7 +160,7 @@ public class ModFilteredCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 			|| (before != null && source.getElementAddress().compareTo(before.getElementAddress()) > 0)) {
 			String msg = theFilter.canMove();
 			if (msg != null) {
-				rejection.reject(msg, true);
+				rejection.reject(msg);
 				return null;
 			}
 		}

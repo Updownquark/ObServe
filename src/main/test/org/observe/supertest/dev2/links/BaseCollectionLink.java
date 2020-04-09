@@ -37,8 +37,20 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		}
 	};
 
+	private int theModificationNumber;
+
 	public BaseCollectionLink(String path, ObservableCollectionTestDef<T> def, TestHelper helper) {
 		super(path, null, def, helper);
+	}
+
+	@Override
+	public int getModification() {
+		return theModificationNumber;
+	}
+
+	@Override
+	public void incrementModification() {
+		theModificationNumber++;
 	}
 
 	@Override
@@ -74,7 +86,9 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	}
 
 	@Override
-	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection) {
+	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection, boolean execute) {
+		if (!execute)
+			return;
 		switch (derivedOp.getType()) {
 		case add:
 		case move:
@@ -121,7 +135,7 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		if (source.isPresent())
 			return (CollectionLinkElement<T, T>) source;
 		expect(//
-			new ExpectedCollectionOperation<>(source, CollectionOpType.remove, source.getValue(), source.getValue()), rejection);
+			new ExpectedCollectionOperation<>(source, CollectionOpType.remove, source.getValue(), source.getValue()), rejection, true);
 		while (after != null && (after == source || !after.isPresent() || after.wasAdded()))
 			after = CollectionElement.get(getElements().getAdjacentElement(after.getElementAddress(), false));
 		while (before != null && (before == source || !before.isPresent() || before.wasAdded()))

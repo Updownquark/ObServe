@@ -3,7 +3,6 @@ package org.observe.supertest.dev2;
 import java.io.File;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -14,12 +13,14 @@ import java.util.function.Supplier;
 import org.junit.Test;
 import org.observe.supertest.dev2.links.BaseCollectionLink;
 import org.observe.supertest.dev2.links.CollectionDerivedValues;
+import org.observe.supertest.dev2.links.DistinctSortedCollectionLink;
 import org.observe.supertest.dev2.links.FilteredCollectionLink;
 import org.observe.supertest.dev2.links.MappedCollectionLink;
 import org.observe.supertest.dev2.links.ModFilteredCollectionLink;
 import org.observe.supertest.dev2.links.ReversedCollectionLink;
 import org.observe.supertest.dev2.links.SortedBaseCollectionLink;
 import org.observe.supertest.dev2.links.SortedCollectionLink;
+import org.observe.supertest.dev2.links.SubSetLink;
 import org.qommons.QommonsUtils;
 import org.qommons.TestHelper;
 import org.qommons.TestHelper.Testable;
@@ -60,13 +61,13 @@ public class ObservableChainTester implements Testable {
 		generators.add(SortedBaseCollectionLink.GENERATE);
 
 		// Derived collection generators
-		generators.addAll(Arrays.asList(//
-			MappedCollectionLink.GENERATE, //
-			ReversedCollectionLink.GENERATE, //
-			ModFilteredCollectionLink.GENERATE, //
-			FilteredCollectionLink.GENERATE, //
-			SortedCollectionLink.GENERATE//
-			));
+		generators.add(MappedCollectionLink.GENERATE);
+		generators.add(ReversedCollectionLink.GENERATE);
+		generators.add(ModFilteredCollectionLink.GENERATE);
+		generators.add(FilteredCollectionLink.GENERATE);
+		generators.add(SortedCollectionLink.GENERATE);
+		generators.add(DistinctSortedCollectionLink.GENERATE);
+		generators.add(SubSetLink.GENERATE);
 
 		// Derived collection value generators
 		generators.addAll(CollectionDerivedValues.GENERATORS);
@@ -184,7 +185,7 @@ public class ObservableChainTester implements Testable {
 
 	private void test(TestHelper helper) {
 		if (helper.isReproducing()) {
-			System.out.println("Initial Values:" + print(true));
+			System.out.println("Initial Values:" + print(true, null));
 		} else
 			System.out.println("Assembled:" + toString());
 		try{
@@ -216,7 +217,7 @@ public class ObservableChainTester implements Testable {
 					.println("Modification set " + (tri + 1) + ": " + transactionMods + " modifications on link " + targetLink.path);
 				helper.placemark("Transaction");
 				for (int transactionTri = 0; transactionTri < transactionMods; transactionTri++) {
-					String preValue = printValues();
+					String preValue = printValues(targetLink.path);
 					if (helper.isReproducing())
 						System.out.print("\tMod " + (transactionTri + 1) + ": ");
 					TestHelper.RandomAction action = helper.createAction();
@@ -228,7 +229,7 @@ public class ObservableChainTester implements Testable {
 						System.err.println("Error on transaction " + (tri + 1) + ", mod " + (transactionTri + 1) + " after "
 							+ (modifications + transactionTri) + " successful modifications");
 						System.err.println("Pre-failure values:" + preValue);
-						System.err.println("Post-failure values:" + printValues());
+						System.err.println("Post-failure values:" + printValues(targetLink.path));
 						throw e;
 					}
 					try {
@@ -238,7 +239,7 @@ public class ObservableChainTester implements Testable {
 						System.err.println("Integrity check failure after "
 							+ (modifications + transactionTri + 1) + " modifications in " + (tri + 1) + " transactions");
 						System.err.println("Pre-failure values:" + preValue);
-						System.err.println("Post-failure values:" + printValues());
+						System.err.println("Post-failure values:" + printValues(targetLink.path));
 						throw e;
 					}
 				}
@@ -253,7 +254,7 @@ public class ObservableChainTester implements Testable {
 				finished = true;
 			} catch (RuntimeException | Error e) {
 				if (finished) {
-					System.out.println("Values:" + print(true));
+					System.out.println("Values:" + print(true, targetLink.path));
 					System.err.println("Modifying link " + targetLink.path);
 					System.err.println("Error closing transaction " + tri + " after " + modifications + " successful modifications");
 				}
@@ -262,14 +263,14 @@ public class ObservableChainTester implements Testable {
 			try {
 				validate(theRoot, true, "root");
 			} catch (RuntimeException | Error e) {
-				System.out.println("Values:" + print(true));
+				System.out.println("Values:" + print(true, targetLink.path));
 				System.err.println("Modifying link " + targetLink.path);
 				System.err.println("Integrity check failure after transaction " + (tri + 1) + " close after "
 					+ modifications + " modifications");
 				throw e;
 			}
 			if (helper.isReproducing())
-				System.out.println("Values:" + print(true));
+				System.out.println("Values:" + print(true, null));
 		}
 	}
 
@@ -290,7 +291,7 @@ public class ObservableChainTester implements Testable {
 
 	private static int TAB_LENGTH = 3;
 
-	String print(boolean withValues) {
+	String print(boolean withValues, String highlightPath) {
 		String[] names = new String[theLinks.size()];
 		int[] nameLengths = new int[names.length];
 		int maxNameLength = 0;
@@ -298,6 +299,10 @@ public class ObservableChainTester implements Testable {
 			LinkStruct link = theLinks.get(i);
 			names[i] = link.link.toString();
 			int nameLength = link.depth * TAB_LENGTH + link.path.length() + 2 + names[i].length();
+			if (link.path.equals(highlightPath))
+				nameLength += 2;
+			else if (highlightPath != null && highlightPath.startsWith(link.path))
+				nameLength++;
 			nameLengths[i] = nameLength;
 			if (nameLength > maxNameLength)
 				maxNameLength = nameLength;
@@ -308,6 +313,10 @@ public class ObservableChainTester implements Testable {
 			str.append('\n');
 			for (int d = 0; d < link.depth; d++)
 				str.append('\t');
+			if (link.path.equals(highlightPath))
+				str.append("**");
+			else if (highlightPath != null && highlightPath.startsWith(link.path))
+				str.append('*');
 			str.append(link.path).append(": ").append(names[i]);
 			if (withValues) {
 				int j = nameLengths[i];
@@ -321,13 +330,13 @@ public class ObservableChainTester implements Testable {
 		return str.toString();
 	}
 
-	String printValues() {
-		return print(true);
+	String printValues(String highlightPath) {
+		return print(true, highlightPath);
 	}
 
 	@Override
 	public String toString() {
-		return print(false);
+		return print(false, null);
 	}
 
 	static class LinkStruct {

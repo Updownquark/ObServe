@@ -6,8 +6,10 @@ import java.util.function.Consumer;
 
 import org.junit.Assert;
 import org.observe.collect.ObservableCollection;
+import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedSet;
+import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.ElementId;
 import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BetterTreeSet;
@@ -38,6 +40,7 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 
 		theErrors = new LinkedList<>();
 		theLastKnownIndex = theCollectionLink.getElements().getElementsBefore(elementAddress);
+		wasAdded = true;
 
 		if (theCollectionLink.getSourceLink() != null) {
 			BetterList<ElementId> sourceElements = theCollectionLink.getCollection().getSourceElements(theCollectionAddress,
@@ -47,15 +50,13 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 					theCollectionLink.getSourceLink().getCollection());
 				Assert.assertFalse("No source elements", sourceElements.isEmpty());
 			}
-			int siblingIndex = collectionLink.getSiblingIndex();
+			int siblingIndex = theCollectionLink.getSiblingIndex();
 			for (ElementId sourceEl : sourceElements) {
 				CollectionLinkElement<?, S> sourceLinkEl = theCollectionLink.getSourceLink().getElement(sourceEl);
 				theSourceElements.add(sourceLinkEl);
 				sourceLinkEl.addDerived(siblingIndex, this);
 			}
 		}
-
-		wasAdded = true;
 	}
 
 	public void removed() {
@@ -88,7 +89,7 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 	}
 
 	public BetterList<CollectionLinkElement<?, S>> getSourceElements() {
-		return theSourceElements;
+		return BetterCollections.unmodifiableList(theSourceElements);
 	}
 
 	public CollectionLinkElement<?, S> getFirstSource() {
@@ -96,7 +97,7 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 	}
 
 	public BetterList<CollectionLinkElement<T, ?>> getDerivedElements(int siblingIndex) {
-		return theDerivedElements[siblingIndex];
+		return BetterCollections.unmodifiableList(theDerivedElements[siblingIndex]);
 	}
 
 	void addDerived(int siblingIndex, CollectionLinkElement<T, ?> derived) {
@@ -128,6 +129,10 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 
 	public boolean wasAdded() {
 		return wasAdded;
+	}
+
+	public boolean isRemoveExpected() {
+		return isRemoveExpected;
 	}
 
 	@Override
@@ -167,6 +172,39 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 		return this;
 	}
 
+	public void updateSourceLinks(boolean withRemove) {
+		if (!wasRemoved && theCollectionLink.getSourceLink() != null) {
+			BetterList<ElementId> sourceElements = theCollectionLink.getCollection().getSourceElements(theCollectionAddress,
+				theCollectionLink.getSourceLink().getCollection());
+			if (sourceElements.isEmpty()) {
+				sourceElements = theCollectionLink.getCollection().getSourceElements(theCollectionAddress, // DEBUGGING
+					theCollectionLink.getSourceLink().getCollection());
+				Assert.assertFalse("No source elements", sourceElements.isEmpty());
+			}
+			int siblingIndex = theCollectionLink.getSiblingIndex();
+			CollectionUtils.synchronize(theSourceElements, sourceElements, (e1, e2) -> e1.getCollectionAddress().equals(e2))//
+			.simple(sourceEl -> {
+				CollectionLinkElement<?, S> sourceLinkEl = theCollectionLink.getSourceLink().getElement(sourceEl);
+				if (sourceLinkEl == null)
+					throw new IllegalStateException("No such link found: " + sourceEl);
+				return sourceLinkEl;
+			}).withRemove(withRemove).commonUses(true, false).addLast()//
+			.onLeft(sourceEl -> {
+				if (withRemove)
+					sourceEl.getLeftValue().theDerivedElements[siblingIndex].remove(CollectionLinkElement.this);
+			}).onRight(sourceEl -> {
+				CollectionLinkElement<?, S> sourceLinkEl = theCollectionLink.getSourceLink().getElement(sourceEl.getRightValue());
+				if (sourceLinkEl == null)
+					throw new IllegalStateException("No such link found: " + sourceEl);
+				sourceLinkEl.addDerived(siblingIndex, CollectionLinkElement.this);
+			})//
+			.adjust();
+
+			if (theCollectionLink.getSourceLink() != null && getSourceElements().isEmpty())
+				error("No source elements--should have been removed");
+		}
+	}
+
 	public void validate(StringBuilder error) {
 		ObservableCollection<T> collection = theCollectionLink.getCollection();
 		if (wasAdded)
@@ -200,6 +238,7 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 				theValue = getCollectionValue();
 		}
 		wasUpdated = false;
+		updateSourceLinks(true);
 	}
 
 	@Override

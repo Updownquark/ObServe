@@ -19,6 +19,7 @@ import org.observe.supertest.dev2.ObservableChainLink;
 import org.observe.supertest.dev2.ObservableCollectionLink;
 import org.observe.supertest.dev2.ObservableCollectionTestDef;
 import org.observe.supertest.dev2.TestValueType;
+import org.qommons.LambdaUtils;
 import org.qommons.TestHelper;
 import org.qommons.collect.CollectionElement;
 
@@ -46,8 +47,9 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
 				derivedOneStepFlow = derivedOneStepFlow.refresh(filterValue.changes().noInit());
 				derivedMultiStepFlow = derivedMultiStepFlow.refresh(filterValue.changes().noInit());
 			}
-			derivedOneStepFlow = derivedOneStepFlow.filter(v -> filterValue.get().apply(v));
-			derivedMultiStepFlow = derivedMultiStepFlow.filter(v -> filterValue.get().apply(v));
+			Function<T, String> filter = LambdaUtils.printableFn(v -> filterValue.get().apply(v), () -> filterValue.get().toString());
+			derivedOneStepFlow = derivedOneStepFlow.filter(filter);
+			derivedMultiStepFlow = derivedMultiStepFlow.filter(filter);
 			ObservableCollectionTestDef<T> def = new ObservableCollectionTestDef<>(sourceCL.getType(), derivedOneStepFlow,
 				derivedMultiStepFlow, true, true);
 			return (ObservableCollectionLink<T, X>) new FilteredCollectionLink<>(path, sourceCL, def, filterValue, variableFilter, helper);
@@ -82,7 +84,7 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		boolean first, OperationRejection rejection) {
 		String msg = theFilterValue.get().apply(value);
 		if (msg != null) {
-			rejection.reject(msg, true);
+			rejection.reject(msg);
 			return null;
 		}
 		CollectionLinkElement<?, T> sourceAdded = getSourceLink().expectAdd(value, //
@@ -106,7 +108,7 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	}
 
 	@Override
-	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection) {
+	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection, boolean execute) {
 		switch (derivedOp.getType()) {
 		case add:
 		case move:
@@ -116,14 +118,15 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		case set:
 			String msg = theFilterValue.get().apply(derivedOp.getValue());
 			if (msg != null) {
-				rejection.reject(msg, true);
+				rejection.reject(msg);
 				return;
 			}
 			break;
 		}
-		getSourceLink()
-		.expect(new ExpectedCollectionOperation<>((CollectionLinkElement<?, T>) derivedOp.getElement().getSourceElements().getFirst(),
-			derivedOp.getType(), derivedOp.getOldValue(), derivedOp.getValue()), rejection);
+		getSourceLink().expect(//
+			new ExpectedCollectionOperation<>((CollectionLinkElement<?, T>) derivedOp.getElement().getSourceElements().getFirst(),
+				derivedOp.getType(), derivedOp.getOldValue(), derivedOp.getValue()),
+			rejection, execute);
 	}
 
 	@Override

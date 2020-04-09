@@ -11,6 +11,7 @@ import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableElement;
 import org.observe.collect.ObservableElementTester;
+import org.observe.collect.ObservableSortedSet;
 import org.observe.supertest.dev2.ChainLinkGenerator;
 import org.observe.supertest.dev2.CollectionDerivedValue;
 import org.observe.supertest.dev2.ExpectedCollectionOperation;
@@ -20,6 +21,7 @@ import org.observe.supertest.dev2.TestValueType;
 import org.observe.util.TypeTokens;
 import org.qommons.Ternian;
 import org.qommons.TestHelper;
+import org.qommons.collect.BetterSortedList.SortedSearchFilter;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 
@@ -133,9 +135,38 @@ public class CollectionDerivedValues {
 		}
 	};
 
+	public static final ChainLinkGenerator OBSERVE_RELATIVE_GENERATOR = new ChainLinkGenerator() {
+		@Override
+		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
+			if (!(sourceLink instanceof ObservableCollectionLink))
+				return 0;
+			else if (((ObservableCollectionLink<?, ?>) sourceLink).getValueSupplier() == null)
+				return 0;
+			else if (((ObservableCollectionLink<?, ?>) sourceLink).getCollection() instanceof ObservableSortedSet)
+				return .25;
+			else
+				return 0;
+		}
+
+		@Override
+		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
+			T value = sourceCL.getValueSupplier().apply(helper);
+			int onExact;
+			if (helper.getBoolean())
+				onExact = 0;
+			else
+				onExact = helper.getBoolean() ? -1 : 1;
+			SortedSearchFilter filter = SortedSearchFilter.values()[helper.getInt(0, SortedSearchFilter.values().length)];
+			return (ObservableChainLink<T, X>) new SortedSetObserveRelative<>(path, sourceCL, sourceCL.getType(), value, onExact, filter);
+		}
+	};
+
 	public static final List<ChainLinkGenerator> GENERATORS = Collections.unmodifiableList(Arrays.asList(//
 		SIZE_GENERATOR, CONTAINS_VALUE_GENERATOR, OBSERVE_ELEMENT_GENERATOR, CONDITION_FINDER_GENERATOR, //
-		ONLY_GENERATOR, MIN_MAX_GENERATOR, SUM_GENERATOR));
+		ONLY_GENERATOR, MIN_MAX_GENERATOR, SUM_GENERATOR//
+		// , OBSERVE_ELEMENT_GENERATOR TODO
+		));
 
 	public static class CollectionSize<T> extends CollectionDerivedValue<T, Integer> {
 		CollectionSize(String path, ObservableCollectionLink<?, T> sourceLink) {
@@ -545,6 +576,82 @@ public class CollectionDerivedValues {
 		@Override
 		public String toString() {
 			return "sum()";
+		}
+	}
+
+	public static class SortedSetObserveRelative<T> extends CollectionDerivedValue<T, T> {
+		private final T theValue;
+		private final int onExact;
+		private final Comparable<? super T> theSearch;
+		private final SortedSearchFilter theFilter;
+
+		public SortedSetObserveRelative(String path, ObservableCollectionLink<?, T> sourceLink, TestValueType type, T value, int onExact,
+			SortedSearchFilter filter) {
+			super(path, sourceLink, type);
+			theValue = value;
+			this.onExact = onExact;
+			theFilter = filter;
+			theSearch = ((ObservableSortedSet<T>) getSourceLink().getCollection()).searchFor(theValue, onExact);
+		}
+
+		@Override
+		public ObservableElement<T> getValue() {
+			return (ObservableElement<T>) super.getValue();
+		}
+
+		@Override
+		public ObservableElementTester<T> getTester() {
+			return (ObservableElementTester<T>) super.getTester();
+		}
+
+		@Override
+		protected ObservableValue<T> createValue(TestHelper h) {
+			return ((ObservableSortedSet<T>) getSourceLink().getCollection()).observeRelative(theSearch, theFilter, null);
+		}
+
+		@Override
+		public void expectFromSource(ExpectedCollectionOperation<?, T> sourceOp) {}
+
+		@Override
+		public void validate(boolean transactionEnd) throws AssertionError {
+			// This derived value is only consistent when the transaction ends
+			if (transactionEnd)
+				getTester().checkSynced();
+
+			ObservableSortedSet<T> set=(ObservableSortedSet<T>) getSourceLink().getCollection();
+			CollectionElement<T> result=set.search(theSearch, theFilter);
+			getTester().check(result==null ? null : result.getElementId(), result==null ? null : result.get());
+			if(result==null){
+				if(theFilter==SortedSearchFilter.OnlyMatch)
+					Assert.assertFalse(set.contains(theValue));
+				else
+					Assert.assertTrue(set.isEmpty());
+			} else if(set.equivalence().elementEquals(result.get(), theValue)){//
+				Assert.assertEquals(0, onExact);
+			} else{
+				int comp=set.comparator().compare(result.get(), theValue);
+				CollectionElement<T> adj=set.getAdjacentElement(result.getElementId(), comp>0);
+				if(adj!=null)
+					Assert.assertNotEquals(comp<0, set.comparator().compare(adj.get(), theValue));
+				switch(theFilter){
+				case OnlyMatch:
+					throw new AssertionError("Should not have found a non-matching value");
+				case PreferLess:
+					if(comp>0)
+						Assert.assertNull(adj);
+					break;
+				case PreferGreater:
+					if(comp<0)
+						Assert.assertNull(adj);
+					break;
+				case Less:
+					Assert.assertTrue(comp < 0);
+					break;
+				case Greater:
+					Assert.assertTrue(comp > 0);
+					break;
+				}
+			}
 		}
 	}
 }

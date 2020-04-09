@@ -133,17 +133,17 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 	public CollectionLinkElement<S, T> expectAdd(T value, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before,
 		boolean first, OperationRejection rejection) {
 		if (theOptions.getReverse() == null) {
-			rejection.reject(StdMsg.UNSUPPORTED_OPERATION, true);
+			rejection.reject(StdMsg.UNSUPPORTED_OPERATION);
 			return null;
 		} else if (!getCollection().equivalence().elementEquals(theCurrentMap.map(theOptions.getReverse().apply(value)), value)) {
-			rejection.reject(StdMsg.ILLEGAL_ELEMENT, true);
+			rejection.reject(StdMsg.ILLEGAL_ELEMENT);
 			return null;
 		}
 		return super.expectAdd(value, after, before, first, rejection);
 	}
 
 	@Override
-	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection) {
+	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection, boolean execute) {
 		switch (derivedOp.getType()) {
 		case add:
 		case move:
@@ -156,22 +156,23 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 				// Update, re-use the previous source value
 				CollectionLinkElement<?, S> sourceEl = (CollectionLinkElement<?, S>) derivedOp.getElement().getSourceElements().getFirst();
 				getSourceLink().expect(
-					new ExpectedCollectionOperation<>(sourceEl, derivedOp.getType(), sourceEl.getValue(), sourceEl.getValue()), rejection);
+					new ExpectedCollectionOperation<>(sourceEl, derivedOp.getType(), sourceEl.getValue(), sourceEl.getValue()), rejection,
+					execute);
 				return;
 			}
 			if (theOptions.getReverse() == null) {
-				rejection.reject(StdMsg.UNSUPPORTED_OPERATION, true);
+				rejection.reject(StdMsg.UNSUPPORTED_OPERATION);
 				return;
 			}
 			S reversed = theOptions.getReverse().apply(derivedOp.getValue());
 			T reMapped = theCurrentMap.map(reversed);
 			if (!getCollection().equivalence().elementEquals(reMapped, derivedOp.getValue())) {
-				rejection.reject(StdMsg.ILLEGAL_ELEMENT, true);
+				rejection.reject(StdMsg.ILLEGAL_ELEMENT);
 				return;
 			}
 			break;
 		}
-		super.expect(derivedOp, rejection);
+		super.expect(derivedOp, rejection, execute);
 	}
 
 	public static boolean supportsTransform(TestValueType sourceType, boolean allowManyToOne, boolean requireReversible) {

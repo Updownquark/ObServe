@@ -47,7 +47,7 @@ public class SortedCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	public SortedCollectionLink(String path, ObservableCollectionLink<?, T> sourceLink, ObservableCollectionTestDef<T> def,
 		Comparator<? super T> compare, TestHelper helper) {
 		super(path, sourceLink, def, helper);
-		theHelper = new SortedLinkHelper<>(compare);
+		theHelper = new SortedLinkHelper<>(compare, true);
 	}
 
 	@Override
@@ -99,13 +99,13 @@ public class SortedCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	}
 
 	@Override
-	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection) {
+	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection, boolean execute) {
 		if (!theHelper.expectSet(derivedOp, rejection, getElements()))
 			return;
 		CollectionLinkElement<T, T> element = (CollectionLinkElement<T, T>) derivedOp.getElement();
 		CollectionLinkElement<?, T> sourceEl = element.getSourceElements().getFirst();
 		getSourceLink().expect(new ExpectedCollectionOperation<>(//
-			sourceEl, derivedOp.getType(), derivedOp.getOldValue(), derivedOp.getValue()), rejection);
+			sourceEl, derivedOp.getType(), derivedOp.getOldValue(), derivedOp.getValue()), rejection, execute);
 	}
 
 	@Override
