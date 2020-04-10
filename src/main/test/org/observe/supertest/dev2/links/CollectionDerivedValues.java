@@ -1,6 +1,6 @@
 package org.observe.supertest.dev2.links;
 
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -162,11 +162,20 @@ public class CollectionDerivedValues {
 		}
 	};
 
-	public static final List<ChainLinkGenerator> GENERATORS = Collections.unmodifiableList(Arrays.asList(//
-		SIZE_GENERATOR, CONTAINS_VALUE_GENERATOR, OBSERVE_ELEMENT_GENERATOR, CONDITION_FINDER_GENERATOR, //
-		ONLY_GENERATOR, MIN_MAX_GENERATOR, SUM_GENERATOR//
-		// , OBSERVE_ELEMENT_GENERATOR TODO
-		));
+	public static final List<ChainLinkGenerator> GENERATORS;
+	static {
+		List<ChainLinkGenerator> generators = new ArrayList<>();
+		// These are listed individually so I can easily comment out any of them
+		generators.add(SIZE_GENERATOR);
+		generators.add(CONTAINS_VALUE_GENERATOR);
+		generators.add(OBSERVE_ELEMENT_GENERATOR);
+		generators.add(CONDITION_FINDER_GENERATOR);
+		generators.add(ONLY_GENERATOR);
+		generators.add(MIN_MAX_GENERATOR);
+		generators.add(SUM_GENERATOR);
+		// generators.add(OBSERVE_ELEMENT_GENERATOR);
+		GENERATORS = Collections.unmodifiableList(generators);
+	}
 
 	public static class CollectionSize<T> extends CollectionDerivedValue<T, Integer> {
 		CollectionSize(String path, ObservableCollectionLink<?, T> sourceLink) {

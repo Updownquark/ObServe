@@ -49,8 +49,8 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	}
 
 	@Override
-	public void incrementModification() {
-		theModificationNumber++;
+	public void setModification(int modification) {
+		theModificationNumber = modification;
 	}
 
 	@Override

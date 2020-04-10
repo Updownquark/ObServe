@@ -48,7 +48,8 @@ public abstract class AbstractChainLink<S, T> implements ObservableChainLink<S, 
 		return ((AbstractChainLink<?, S>) getSourceLink()).getModification();
 	}
 
-	public void incrementModification() {
-		((AbstractChainLink<?, S>) getSourceLink()).incrementModification();
+	@Override
+	public void setModification(int modification) {
+		((AbstractChainLink<?, S>) getSourceLink()).setModification(modification);
 	}
 }

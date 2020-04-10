@@ -26,6 +26,8 @@ public interface ObservableChainLink<S, T> extends Transactable {
 
 	String printValue();
 
+	void setModification(int modification);
+
 	default int getLinkCount() {
 		int count = 1;
 		for (ObservableChainLink<T, ?> link : getDerivedLinks()) {

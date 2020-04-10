@@ -209,11 +209,12 @@ public class DistinctSortedCollectionLink<T> extends ObservableCollectionLink<T,
 			element = valueEl.element;
 			Assert.assertTrue(valueEl.sourceElements.remove(sourceOp.getElement()));
 			if (valueEl.sourceElements.isEmpty()) {
-				theValues.remove(sourceOp.getValue());
+				T oldValue = element.getValue();
+				theValues.remove(oldValue);
 				element.expectRemoval();
 				for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
 					derived.expectFromSource(
-						new ExpectedCollectionOperation<>(element, CollectionOpType.remove, element.getValue(), element.getValue()));
+						new ExpectedCollectionOperation<>(element, CollectionOpType.remove, oldValue, element.getValue()));
 			}
 			break;
 		case set:
@@ -228,6 +229,7 @@ public class DistinctSortedCollectionLink<T> extends ObservableCollectionLink<T,
 				BetterList<CollectionLinkElement<T, ?>> derivedEls = sourceOp.getElement().getDerivedElements(getSiblingIndex());
 				ValueElement newValueEl;
 				T oldValue = valueEl.element.getValue();
+				Assert.assertEquals(oldValue, sourceOp.getOldValue());
 				if (theValues.containsKey(sourceOp.getValue())) {
 					newValueEl = theValues.get(sourceOp.getValue());
 					Assert.assertEquals(2, derivedEls.size());

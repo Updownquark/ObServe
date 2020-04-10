@@ -415,7 +415,6 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			testBounds(helper);
 		});
 		addExtraActions(action);
-		incrementModification();
 	}
 
 	protected void addExtraActions(TestHelper.RandomAction action) {}

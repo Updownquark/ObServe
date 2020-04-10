@@ -121,7 +121,9 @@ public class SubSetLink<T> extends ObservableCollectionLink<T, T> {
 			rejection.reject(StdMsg.ILLEGAL_ELEMENT);
 			return null;
 		}
-		CollectionLinkElement<?, T> sourceEl = getSourceLink().expectAdd(value, after, before, first, rejection);
+		CollectionLinkElement<?, T> sourceEl = getSourceLink().expectAdd(value, //
+			after == null ? null : (CollectionLinkElement<?, T>) after.getFirstSource(), //
+			before == null ? null : (CollectionLinkElement<?, T>) before.getFirstSource(), first, rejection);
 		if (rejection.isRejected())
 			return null;
 		return (CollectionLinkElement<T, T>) sourceEl.getDerivedElements(getSiblingIndex()).getFirst();
@@ -131,8 +133,9 @@ public class SubSetLink<T> extends ObservableCollectionLink<T, T> {
 	public CollectionLinkElement<T, T> expectMove(CollectionLinkElement<?, T> source, CollectionLinkElement<?, T> after,
 		CollectionLinkElement<?, T> before, boolean first, OperationRejection rejection) {
 		CollectionLinkElement<?, T> sourceEl = getSourceLink().expectMove(//
-			(CollectionLinkElement<?, T>) source.getFirstSource(), (CollectionLinkElement<?, T>) after,
-			(CollectionLinkElement<?, T>) before, first, rejection);
+			(CollectionLinkElement<?, T>) source.getFirstSource(), //
+			after == null ? null : (CollectionLinkElement<?, T>) after.getFirstSource(), //
+				before == null ? null : (CollectionLinkElement<?, T>) before.getFirstSource(), first, rejection);
 		if (rejection.isRejected())
 			return null;
 		return (CollectionLinkElement<T, T>) sourceEl.getDerivedElements(getSiblingIndex()).getFirst();
@@ -149,8 +152,6 @@ public class SubSetLink<T> extends ObservableCollectionLink<T, T> {
 				new ExpectedCollectionOperation<>((CollectionLinkElement<?, T>) derivedOp.getElement().getFirstSource(),
 					derivedOp.getType(), derivedOp.getValue(), derivedOp.getValue()),
 				rejection, execute);
-			if (!rejection.isRejected())
-				derivedOp.getElement().expectRemoval();
 			break;
 		case set:
 			if (!isInBound(derivedOp.getValue())) {
@@ -161,8 +162,6 @@ public class SubSetLink<T> extends ObservableCollectionLink<T, T> {
 				new ExpectedCollectionOperation<>((CollectionLinkElement<?, T>) derivedOp.getElement().getFirstSource(),
 					derivedOp.getType(), derivedOp.getElement().getValue(), derivedOp.getValue()),
 				rejection, execute);
-			if (!rejection.isRejected())
-				derivedOp.getElement().setValue(derivedOp.getValue());
 			break;
 		}
 	}
@@ -196,24 +195,25 @@ public class SubSetLink<T> extends ObservableCollectionLink<T, T> {
 			if (wasContained || isContained) {
 				CollectionLinkElement<T, T> element = (CollectionLinkElement<T, T>) sourceOp.getElement()
 					.getDerivedElements(getSiblingIndex()).getFirst();
+				T oldValue = element.getValue();
 				if (wasContained) {
-					T oldValue = element.getValue();
 					if (isContained) {
 						element.setValue(sourceOp.getValue());
 						for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
 							derived.expectFromSource(
 								new ExpectedCollectionOperation<>(element, sourceOp.getType(), oldValue, sourceOp.getValue()));
 					} else {
-						element.expectAdded(sourceOp.getValue());
+						element.expectRemoval();
 						for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
 							derived.expectFromSource(
-								new ExpectedCollectionOperation<>(element, CollectionOpType.add, oldValue, sourceOp.getValue()));
+								new ExpectedCollectionOperation<>(element, CollectionOpType.remove, element.getValue(),
+									sourceOp.getValue()));
 					}
 				} else if (isContained) {
-					element.expectRemoval();
+					element.expectAdded(sourceOp.getValue());
 					for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
 						derived.expectFromSource(
-							new ExpectedCollectionOperation<>(element, CollectionOpType.remove, element.getValue(), sourceOp.getValue()));
+							new ExpectedCollectionOperation<>(element, CollectionOpType.add, oldValue, sourceOp.getValue()));
 				}
 			}
 			break;
