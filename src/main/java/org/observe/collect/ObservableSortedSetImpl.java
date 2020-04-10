@@ -25,6 +25,7 @@ import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.Transaction;
+import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterSet;
 import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.BetterSortedList.SortedSearchFilter;
@@ -177,8 +178,11 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public ObservableSortedSet<E> subSet(Comparable<? super E> from, Comparable<? super E> to) {
-			return new ObservableSubSet<>(getWrapped(), BetterSortedList.and(getFrom(), from, true),
-				BetterSortedList.and(getTo(), to, false));
+			if (BetterCollections.simplifyDuplicateOperations())
+				return new ObservableSubSet<>(getWrapped(), BetterSortedList.and(getFrom(), from, true),
+					BetterSortedList.and(getTo(), to, false));
+			else
+				return ObservableSortedSet.super.subSet(from, to);
 		}
 
 		@Override
@@ -305,6 +309,14 @@ public class ObservableSortedSetImpl {
 		@Override
 		public CollectionElement<E> search(Comparable<? super E> search, BetterSortedList.SortedSearchFilter filter) {
 			return CollectionElement.reverse(getWrapped().search(v -> -search.compareTo(v), filter.opposite()));
+		}
+
+		@Override
+		public ObservableSortedSet<E> reverse() {
+			if (BetterCollections.simplifyDuplicateOperations())
+				return this;
+			else
+				return ObservableSortedSet.super.reverse();
 		}
 	}
 

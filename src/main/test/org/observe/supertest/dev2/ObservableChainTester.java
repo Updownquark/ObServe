@@ -25,8 +25,10 @@ import org.qommons.QommonsUtils;
 import org.qommons.TestHelper;
 import org.qommons.TestHelper.Testable;
 import org.qommons.Transaction;
+import org.qommons.collect.BetterCollections;
 import org.qommons.debug.Debug;
 
+/** Tests many of the classes in ObServe using randomly generated observable structure chains and randomly generated-data. */
 public class ObservableChainTester implements Testable {
 	private static final int MAX_VALUE = 1000;
 	static final Map<TestValueType, Function<TestHelper, ?>> SUPPLIERS;
@@ -95,6 +97,7 @@ public class ObservableChainTester implements Testable {
 	 */
 	@Test
 	public void superTest() {
+		BetterCollections.setSimplifyDuplicateOperations(false);
 		Duration testDuration = Duration.ofMinutes(5);
 		int maxFailures = 1;
 		System.out.println(

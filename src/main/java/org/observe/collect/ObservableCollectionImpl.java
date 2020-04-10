@@ -46,6 +46,7 @@ import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
 import org.qommons.collect.BetterCollection;
+import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.CollectionElement;
@@ -1640,6 +1641,14 @@ public final class ObservableCollectionImpl {
 			try (Transaction t = lock(false, null)) {
 				return getWrapped().onChange(new ReversedSubscriber(observer, size()));
 			}
+		}
+
+		@Override
+		public ObservableCollection<E> reverse() {
+			if (BetterCollections.simplifyDuplicateOperations())
+				return this;
+			else
+				return ObservableCollection.super.reverse();
 		}
 
 		@Override

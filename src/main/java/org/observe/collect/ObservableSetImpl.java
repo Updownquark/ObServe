@@ -40,6 +40,7 @@ import org.qommons.QommonsUtils;
 import org.qommons.Ternian;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
+import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterMap;
 import org.qommons.collect.BetterSet;
@@ -100,6 +101,14 @@ public class ObservableSetImpl {
 		@Override
 		public <X> boolean repair(RepairListener<E, X> listener) {
 			return getWrapped().repair(listener == null ? null : new BetterSet.ReversedBetterSet.ReversedRepairListener<>(listener));
+		}
+
+		@Override
+		public ObservableSet<E> reverse() {
+			if (BetterCollections.simplifyDuplicateOperations())
+				return this;
+			else
+				return ObservableSet.super.reverse();
 		}
 
 		@Override
