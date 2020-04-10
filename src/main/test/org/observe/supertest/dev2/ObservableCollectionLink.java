@@ -6,6 +6,7 @@ import static org.observe.supertest.dev2.ObservableCollectionLink.CollectionOpTy
 import static org.observe.supertest.dev2.ObservableCollectionLink.CollectionOpType.set;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Set;
@@ -436,104 +437,6 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 	public String printValue() {
 		return getCollection().size() + getCollection().toString();
 	}
-
-	@Override
-	protected <X> CollectionSourcedLink<T, X> deriveOne(TestHelper helper) {
-		TestHelper.RandomSupplier<CollectionSourcedLink<T, X>> action = helper.createSupplier();
-		// TODO whereContained
-		// TODO refreshEach
-		// TODO combine
-		/*.or(1, () -> { // flattenValues
-		theDerivedLink = FlattenedValuesLink.createFlattenedValuesLink(this, theDef.flow, helper);
-		derived.accept((ObservableCollectionLink<T, X>) theDerivedLink);
-		})//*/
-		// TODO flatMap
-		/*.or(1, () -> { // distinct
-		derived.accept((ObservableCollectionLink<T, X>) deriveDistinct(helper, false));
-		})//
-		.or(1, () -> { // distinct sorted
-		derived.accept((ObservableCollectionLink<T, X>) deriveDistinctSorted(helper, false));
-		})*/;//
-		/*if(theCollection instanceof ObservableSet){
-			// TODO mapEquivalent
-		 }
-		 */
-		/*if (theCollection instanceof ObservableSortedSet) {
-			ObservableSortedSet<T> sortedSet = (ObservableSortedSet<T>) theCollection;
-			action.or(1, () -> { // subSet
-				T min, max;
-				boolean includeMin, includeMax;
-				ObservableSortedSet<T> subSet;
-				if (helper.getBoolean(.33)) {
-					min = theSupplier.apply(helper);
-					includeMin = helper.getBoolean();
-					max = null;
-					includeMax = true;
-					subSet = sortedSet.tailSet(min, includeMin);
-				} else if (helper.getBoolean()) {
-					max = theSupplier.apply(helper);
-					includeMax = helper.getBoolean();
-					min = null;
-					includeMin = true;
-					subSet = sortedSet.headSet(max, includeMax);
-				} else {
-					T v1 = theSupplier.apply(helper);
-					T v2 = theSupplier.apply(helper);
-					if (sortedSet.comparator().compare(v1, v2) <= 0) {
-						min = v1;
-						max = v2;
-					} else {
-						min = v2;
-						max = v1;
-					}
-					includeMin = helper.getBoolean();
-					includeMax = helper.getBoolean();
-					subSet = sortedSet.subSet(min, includeMin, max, includeMax);
-				}
-				CollectionDataFlow<?, ?, T> derivedFlow = subSet.flow();
-				theDerivedLink = new SubSetLink<>(this, theType, (ObservableCollection.DistinctSortedDataFlow<?, ?, T>) derivedFlow, helper,
-					true, min, includeMin, max, includeMax);
-				derived.accept((ObservableCollectionLink<T, X>) theDerivedLink);
-			});
-		}*/
-
-		// TODO containsAny
-		// TODO containsAll
-		// TODO groupBy
-		// TODO groupBy(Sorted)
-		return action.get(null);
-	}
-
-	/*protected ObservableCollectionLink<T, T> deriveDistinct(TestHelper helper, boolean asRoot) {
-		ValueHolder<FlowOptions.UniqueOptions> options = new ValueHolder<>();
-		CollectionDataFlow<?, ?, T> flow = theDef.flow;
-		// distinct() is a no-op for a distinct flow, so unless we change the equivalence, this is pointless
-		// plus, hash distinct() can affect ordering, so this could cause failures
-		if (flow instanceof ObservableCollection.DistinctDataFlow || helper.getBoolean()) {
-			Comparator<T> compare = SortedCollectionLink.compare(theDef.type, helper);
-			flow = flow.withEquivalence(Equivalence.of((Class<T>) getType().getRawType(), compare, false));
-		}
-		CollectionDataFlow<?, ?, T> derivedFlow = flow.distinct(opts -> {
-			// opts.useFirst(helper.getBoolean()).preserveSourceOrder(opts.canPreserveSourceOrder() && helper.getBoolean()); TODO
-			options.accept(opts);
-		});
-		theDerivedLink = new DistinctCollectionLink<>(this, theType, derivedFlow, theFlow, helper, isCheckingRemovedValues, options.get(),
-			asRoot);
-		return (ObservableCollectionLink<T, T>) theDerivedLink;
-	}
-
-	protected ObservableCollectionLink<T, T> deriveDistinctSorted(TestHelper helper, boolean asRoot) {
-		FlowOptions.UniqueOptions options = new FlowOptions.SimpleUniqueOptions(true);
-		CollectionDataFlow<?, ?, T> flow = theDef.flow;
-		Comparator<T> compare = SortedCollectionLink.compare(theDef.type, helper);
-		options.useFirst(//
-			//TODO helper.getBoolean()
-			false);
-		CollectionDataFlow<?, ?, T> derivedFlow = flow.distinctSorted(compare, options.isUseFirst());
-		theDerivedLink = new DistinctCollectionLink<>(this, theType, derivedFlow, theFlow, helper, isCheckingRemovedValues, options,
-			asRoot);
-		return (ObservableCollectionLink<T, T>) theDerivedLink;
-	}*/
 
 	public enum CollectionOpType {
 		add, remove, set, move;
@@ -1261,5 +1164,24 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			} catch (IndexOutOfBoundsException | IllegalArgumentException e) { // We'll allow either exception
 			}
 		}
+		Object[] referenceArray = new Object[getCollection().size()];
+		int i = 0;
+		for (T value : getCollection())
+			referenceArray[i++] = value;
+		Assert.assertEquals(i, getCollection().size());
+		Assert.assertArrayEquals(referenceArray, getCollection().toArray());
+		Assert.assertArrayEquals(referenceArray, getMultiStepCollection().toArray());
+		List<T> refList = new ArrayList<>(referenceArray.length);
+		refList.addAll((List<T>) Arrays.asList(referenceArray));
+		Assert.assertEquals(getCollection(), refList);
+		Assert.assertEquals(getMultiStepCollection(), refList);
+		if (!refList.isEmpty() && helper.getBoolean())
+			refList.remove(helper.getInt(0, refList.size()));
+		else if (theSupplier != null)
+			refList.add(theSupplier.apply(helper));
+		else
+			return;
+		Assert.assertNotEquals(getCollection(), refList);
+		Assert.assertNotEquals(getMultiStepCollection(), refList);
 	}
 }

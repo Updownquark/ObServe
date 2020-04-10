@@ -623,31 +623,64 @@ public class CollectionDerivedValues {
 
 		@Override
 		public void validate(boolean transactionEnd) throws AssertionError {
-			ObservableSortedSet<T> set=(ObservableSortedSet<T>) getSourceLink().getCollection();
-			CollectionElement<T> result=set.search(theSearch, theFilter);
+			ObservableSortedSet<T> set = (ObservableSortedSet<T>) getSourceLink().getCollection();
+			CollectionElement<T> result = set.search(theSearch, theFilter);
 			Assert.assertEquals(result == null ? null : result.getElementId(), getValue().getElementId());
 			Assert.assertEquals(result == null ? null : result.get(), getValue().get());
-			if(result==null){
-				if(theFilter==SortedSearchFilter.OnlyMatch)
-					Assert.assertFalse(set.contains(theValue));
-				else
+			if (result == null) {
+				switch (theFilter) {
+				case OnlyMatch:
+					if (onExact == 0)
+						Assert.assertFalse(set.contains(theValue));
+					break;
+				case PreferLess:
+				case PreferGreater:
 					Assert.assertTrue(set.isEmpty());
-			} else if(set.equivalence().elementEquals(result.get(), theValue)){//
-				Assert.assertEquals(0, onExact);
-			} else{
-				int comp=set.comparator().compare(result.get(), theValue);
-				CollectionElement<T> adj=set.getAdjacentElement(result.getElementId(), comp>0);
-				if(adj!=null)
-					Assert.assertNotEquals(comp<0, set.comparator().compare(adj.get(), theValue));
-				switch(theFilter){
+					break;
+				case Less:
+					if (!set.isEmpty() && set.comparator().compare(set.getFirst(), theValue) <= 0)
+						throw new AssertionError("Should have found " + set.getFirst());
+					break;
+				case Greater:
+					if (!set.isEmpty() && set.comparator().compare(set.getLast(), theValue) >= 0)
+						throw new AssertionError("Should have found " + set.getLast());
+					break;
+				}
+			} else if (set.equivalence().elementEquals(result.get(), theValue)) {//
+				switch (theFilter) {
+				case OnlyMatch:
+					Assert.assertEquals(0, onExact);
+					break;
+				case Less:
+					if (onExact < 0)
+						throw new AssertionError("Should not have found anything");
+					break;
+				case Greater:
+					if (onExact > 0)
+						throw new AssertionError("Should not have found anything");
+					break;
+				case PreferLess:
+				case PreferGreater:
+					int comp = set.comparator().compare(result.get(), theValue);
+					CollectionElement<T> adj = set.getAdjacentElement(result.getElementId(), comp < 0);
+					if (adj != null)
+						Assert.assertNotEquals(comp < 0, set.comparator().compare(adj.get(), theValue));
+					break;
+				}
+			} else {
+				int comp = set.comparator().compare(result.get(), theValue);
+				CollectionElement<T> adj = set.getAdjacentElement(result.getElementId(), comp < 0);
+				if (adj != null)
+					Assert.assertNotEquals(comp < 0, set.comparator().compare(adj.get(), theValue));
+				switch (theFilter) {
 				case OnlyMatch:
 					throw new AssertionError("Should not have found a non-matching value");
 				case PreferLess:
-					if(comp>0)
+					if (comp > 0)
 						Assert.assertNull(adj);
 					break;
 				case PreferGreater:
-					if(comp<0)
+					if (comp < 0)
 						Assert.assertNull(adj);
 					break;
 				case Less:
@@ -657,6 +690,23 @@ public class CollectionDerivedValues {
 					Assert.assertTrue(comp > 0);
 					break;
 				}
+			}
+
+			switch (theFilter) {
+			case Less:
+				if (onExact < 0)
+					Assert.assertEquals(CollectionElement.get(result), set.lower(theValue));
+				else if (onExact == 0)
+					Assert.assertEquals(CollectionElement.get(result), set.floor(theValue));
+				break;
+			case Greater:
+				if (onExact > 0)
+					Assert.assertEquals(CollectionElement.get(result), set.higher(theValue));
+				else if (onExact == 0)
+					Assert.assertEquals(CollectionElement.get(result), set.ceiling(theValue));
+				break;
+			default:
+				break;
 			}
 
 			// This derived value is only consistent when the transaction ends
