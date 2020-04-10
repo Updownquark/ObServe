@@ -173,7 +173,7 @@ public class CollectionDerivedValues {
 		generators.add(ONLY_GENERATOR);
 		generators.add(MIN_MAX_GENERATOR);
 		generators.add(SUM_GENERATOR);
-		// generators.add(OBSERVE_ELEMENT_GENERATOR);
+		generators.add(OBSERVE_RELATIVE_GENERATOR);
 		GENERATORS = Collections.unmodifiableList(generators);
 	}
 
@@ -623,13 +623,10 @@ public class CollectionDerivedValues {
 
 		@Override
 		public void validate(boolean transactionEnd) throws AssertionError {
-			// This derived value is only consistent when the transaction ends
-			if (transactionEnd)
-				getTester().checkSynced();
-
 			ObservableSortedSet<T> set=(ObservableSortedSet<T>) getSourceLink().getCollection();
 			CollectionElement<T> result=set.search(theSearch, theFilter);
-			getTester().check(result==null ? null : result.getElementId(), result==null ? null : result.get());
+			Assert.assertEquals(result == null ? null : result.getElementId(), getValue().getElementId());
+			Assert.assertEquals(result == null ? null : result.get(), getValue().get());
 			if(result==null){
 				if(theFilter==SortedSearchFilter.OnlyMatch)
 					Assert.assertFalse(set.contains(theValue));
@@ -661,6 +658,15 @@ public class CollectionDerivedValues {
 					break;
 				}
 			}
+
+			// This derived value is only consistent when the transaction ends
+			if (transactionEnd)
+				getTester().checkSynced();
+		}
+
+		@Override
+		public String toString() {
+			return "observeRelative(" + theValue + ", " + onExact + ", " + theFilter + ")";
 		}
 	}
 }
