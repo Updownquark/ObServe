@@ -220,7 +220,7 @@ public class ObservableChainTester implements Testable {
 					.println("Modification set " + (tri + 1) + ": " + transactionMods + " modifications on link " + targetLink.path);
 				helper.placemark("Transaction");
 				for (int transactionTri = 0; transactionTri < transactionMods; transactionTri++) {
-					theRoot.setModification(transactionTri);
+					theRoot.setModification(tri, transactionTri, (int) modifications);
 					String preValue = printValues(targetLink.path);
 					if (helper.isReproducing())
 						System.out.print("\tMod " + (transactionTri + 1) + ": ");

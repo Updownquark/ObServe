@@ -26,7 +26,13 @@ public interface ObservableChainLink<S, T> extends Transactable {
 
 	String printValue();
 
-	void setModification(int modification);
+	int getModSet();
+
+	int getModification();
+
+	int getOverallModification();
+
+	void setModification(int modSet, int modification, int overall);
 
 	default int getLinkCount() {
 		int count = 1;

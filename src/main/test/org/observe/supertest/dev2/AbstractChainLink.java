@@ -44,12 +44,23 @@ public abstract class AbstractChainLink<S, T> implements ObservableChainLink<S, 
 			derived.initialize(helper);
 	}
 
-	public int getModification() {
-		return ((AbstractChainLink<?, S>) getSourceLink()).getModification();
+	@Override
+	public int getModSet() {
+		return getSourceLink().getModSet();
 	}
 
 	@Override
-	public void setModification(int modification) {
-		((AbstractChainLink<?, S>) getSourceLink()).setModification(modification);
+	public int getModification() {
+		return getSourceLink().getModification();
+	}
+
+	@Override
+	public int getOverallModification() {
+		return getSourceLink().getOverallModification();
+	}
+
+	@Override
+	public void setModification(int modSet, int modification, int overall) {
+		((AbstractChainLink<?, S>) getSourceLink()).setModification(modSet, modification, overall);
 	}
 }

@@ -37,10 +37,17 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		}
 	};
 
+	private int theModSet;
 	private int theModificationNumber;
+	private int theOverallModification;
 
 	public BaseCollectionLink(String path, ObservableCollectionTestDef<T> def, TestHelper helper) {
 		super(path, null, def, helper);
+	}
+
+	@Override
+	public int getModSet() {
+		return theModSet;
 	}
 
 	@Override
@@ -49,8 +56,15 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	}
 
 	@Override
-	public void setModification(int modification) {
+	public int getOverallModification() {
+		return theOverallModification;
+	}
+
+	@Override
+	public void setModification(int modSet, int modification, int overallModification) {
+		theModSet = modSet;
 		theModificationNumber = modification;
+		theOverallModification = overallModification;
 	}
 
 	@Override

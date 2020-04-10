@@ -177,7 +177,7 @@ public class DistinctSortedCollectionLink<T> extends ObservableCollectionLink<T,
 	public void expectFromSource(ExpectedCollectionOperation<?, T> sourceOp) {
 		if (isSetting)
 			return;
-		if (getModification() != theLastRefreshedModification) {
+		if (getOverallModification() != theLastRefreshedModification) {
 			// There are very unique circumstances which can cause a source element encountered here to not have any
 			// derived elements mapped to this link.
 			// This is not a bug, but a consequence of the order of eventing and the fact that the distinct manager swallows
@@ -232,7 +232,11 @@ public class DistinctSortedCollectionLink<T> extends ObservableCollectionLink<T,
 				Assert.assertEquals(oldValue, sourceOp.getOldValue());
 				if (theValues.containsKey(sourceOp.getValue())) {
 					newValueEl = theValues.get(sourceOp.getValue());
-					Assert.assertEquals(2, derivedEls.size());
+					if (derivedEls.size() != 2) {
+						for (CollectionLinkElement<T, T> el : getElements())
+							el.updateSourceLinks(false);
+						Assert.assertEquals(2, derivedEls.size());
+					}
 					Assert.assertEquals(newValueEl.element, derivedEls.getLast());
 				} else if (valueEl.sourceElements.size() > 1
 					|| theHelper.expectMoveFromSource(sourceOp, getSiblingIndex(), getElements())) {
