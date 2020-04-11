@@ -72,11 +72,20 @@ public final class ObservableCollectionImpl {
 	 *        used)
 	 * @param equiv The equivalence set to make a set of
 	 * @param c The collection whose values to add to the set
+	 * @param excluded A boolean flag that will be set to true if any elements in the second are excluded as not belonging to the
+	 *        BetterCollection
 	 * @return The set
 	 */
-	public static <E> Set<E> toSet(BetterCollection<E> collection, Equivalence<? super E> equiv, Collection<?> c) {
+	public static <E> Set<E> toSet(BetterCollection<E> collection, Equivalence<? super E> equiv, Collection<?> c, boolean[] excluded) {
 		try (Transaction t = Transactable.lock(c, false, null)) {
-			return c.stream().filter(el -> collection.belongs(el)).map(e -> (E) e).collect(Collectors.toCollection(equiv::createSet));
+			Set<E> set = equiv.createSet();
+			for (Object value : c) {
+				if (collection.belongs(value))
+					set.add((E) value);
+				else if (excluded != null)
+					excluded[0] = true;
+			}
+			return set;
 		}
 	}
 

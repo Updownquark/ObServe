@@ -413,7 +413,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			if (helper.isReproducing())
 				System.out.println("Check bounds");
 			helper.placemark();
-			testBounds(helper);
+			testNoModOps(helper);
 		});
 		addExtraActions(action);
 	}
@@ -1125,7 +1125,8 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		Assert.assertEquals(preSize - removed, getCollection().size());
 	}
 
-	private void testBounds(TestHelper helper) {
+	private void testNoModOps(TestHelper helper) {
+		// Test index bounds
 		try {
 			getCollection().get(-1);
 			Assert.assertFalse("Should have errored", true);
@@ -1164,6 +1165,8 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			} catch (IndexOutOfBoundsException | IllegalArgumentException e) { // We'll allow either exception
 			}
 		}
+
+		// Test toArray()
 		Object[] referenceArray = new Object[getCollection().size()];
 		int i = 0;
 		for (T value : getCollection())
@@ -1171,6 +1174,8 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		Assert.assertEquals(i, getCollection().size());
 		Assert.assertArrayEquals(referenceArray, getCollection().toArray());
 		Assert.assertArrayEquals(referenceArray, getMultiStepCollection().toArray());
+
+		// Test equals(Object)
 		List<T> refList = new ArrayList<>(referenceArray.length);
 		refList.addAll((List<T>) Arrays.asList(referenceArray));
 		Assert.assertEquals(getCollection(), refList);
@@ -1183,5 +1188,51 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			return;
 		Assert.assertNotEquals(getCollection(), refList);
 		Assert.assertNotEquals(getMultiStepCollection(), refList);
+
+		// Test toString()
+		String expectString = new ArrayList<>(getCollection()).toString();
+		String oneStepString = getCollection().toString();
+		String multiStepString = getMultiStepCollection().toString();
+		expectString = expectString.substring(1, expectString.length() - 1); // Trim off the brackets
+		oneStepString = oneStepString.substring(1, oneStepString.length() - 1); // Trim off the brackets
+		multiStepString = multiStepString.substring(1, multiStepString.length() - 1); // Trim off the brackets
+		Assert.assertEquals(expectString, oneStepString);
+		Assert.assertEquals(expectString, multiStepString);
+
+		if (theSupplier != null) {
+			// Test contains, containsAll, containsAny
+			T testValue = theSupplier.apply(helper);
+			int testValsLen = helper.getInt(5, 20); // Change min to 0
+			List<T> testValues = new ArrayList<>(testValsLen);
+			for (i = 0; i < testValsLen; i++)
+				testValues.add(theSupplier.apply(helper));
+			boolean expectContains = false;
+			for (T v : getCollection()) {
+				if (getCollection().equivalence().elementEquals(v, testValue)) {
+					expectContains = true;
+					break;
+				}
+			}
+			boolean expectContainsAny = false, expectContainsAll = true;
+			for (T testV : testValues) {
+				boolean found = false;
+				for (T v : getCollection()) {
+					if (getCollection().equivalence().elementEquals(v, testV)) {
+						found = true;
+						break;
+					}
+				}
+				if (found)
+					expectContainsAny = true;
+				else
+					expectContainsAll = false;
+			}
+			Assert.assertEquals(expectContains, getCollection().contains(testValue));
+			Assert.assertEquals(expectContains, getMultiStepCollection().contains(testValue));
+			Assert.assertEquals(expectContainsAny, getCollection().containsAny(testValues));
+			Assert.assertEquals(expectContainsAny, getMultiStepCollection().containsAny(testValues));
+			Assert.assertEquals(expectContainsAll, getCollection().containsAll(testValues));
+			Assert.assertEquals(expectContainsAll, getMultiStepCollection().containsAll(testValues));
+		}
 	}
 }

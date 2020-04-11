@@ -9,6 +9,7 @@ import java.util.function.Function;
 import org.junit.Assert;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
+import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableElement;
 import org.observe.collect.ObservableElementTester;
 import org.observe.collect.ObservableSortedSet;
@@ -56,6 +57,26 @@ public class CollectionDerivedValues {
 		@Override
 		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
 			return (ObservableChainLink<T, X>) new CollectionContainsValue<>(path, (ObservableCollectionLink<?, T>) sourceLink, helper);
+		}
+	};
+
+	public static final ChainLinkGenerator CONTAINS_VALUES_GENERATOR = new ChainLinkGenerator() {
+		@Override
+		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
+			if (!(sourceLink instanceof ObservableCollectionLink))
+				return 0;
+			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
+			if (sourceCL.getValueSupplier() == null)
+				return 0;
+			return .05;
+		}
+
+		@Override
+		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
+			ObservableCollection<T> values = ObservableCollection.build(sourceCL.getCollection().getType()).safe(false).build();
+			boolean containsAny = helper.getBoolean();
+			return (ObservableChainLink<T, X>) new CollectionContainsValues<>(path, sourceCL, values, containsAny);
 		}
 	};
 
@@ -168,6 +189,7 @@ public class CollectionDerivedValues {
 		// These are listed individually so I can easily comment out any of them
 		generators.add(SIZE_GENERATOR);
 		generators.add(CONTAINS_VALUE_GENERATOR);
+		generators.add(CONTAINS_VALUES_GENERATOR);
 		generators.add(OBSERVE_ELEMENT_GENERATOR);
 		generators.add(CONDITION_FINDER_GENERATOR);
 		generators.add(ONLY_GENERATOR);
@@ -245,6 +267,87 @@ public class CollectionDerivedValues {
 		@Override
 		public String toString() {
 			return "contains(" + theValue.get() + ")";
+		}
+	}
+
+	public static class CollectionContainsValues<T> extends CollectionDerivedValue<T, Boolean> {
+		private final ObservableCollection<T> theSearchValues;
+		private final boolean isContainsAny;
+
+		public CollectionContainsValues(String path, ObservableCollectionLink<?, T> sourceLink, ObservableCollection<T> searchValues,
+			boolean containsAny) {
+			super(path, sourceLink, sourceLink.getType());
+			theSearchValues = searchValues;
+			isContainsAny = containsAny;
+		}
+
+		@Override
+		protected ObservableValue<Boolean> createValue(TestHelper h) {
+			if (isContainsAny)
+				return getSourceLink().getCollection().observeContainsAny(theSearchValues);
+			else
+				return getSourceLink().getCollection().observeContainsAll(theSearchValues);
+		}
+
+		@Override
+		public double getModificationAffinity() {
+			return super.getModificationAffinity() + 6;
+		}
+
+		@Override
+		public void tryModify(TestHelper.RandomAction action, TestHelper h) throws AssertionError {
+			super.tryModify(action, h);
+			action.or(1, () -> { // Add a value
+				T newValue = getSourceLink().getValueSupplier().apply(h);
+				if (h.isReproducing())
+					System.out.println("Add search value " + newValue);
+				theSearchValues.add(newValue);
+			}).or(.5, () -> { // Add multiple values
+				int size = h.getInt(0, 10);
+				List<T> newValues = new ArrayList<>(size);
+				for (int i = 0; i < size; i++)
+					newValues.add(getSourceLink().getValueSupplier().apply(h));
+				if (h.isReproducing())
+					System.out.println("Add search values " + newValues);
+				theSearchValues.addAll(newValues);
+			});
+			if (!theSearchValues.isEmpty()) {
+				action.or(1, () -> { // Remove a value
+					int index = h.getInt(0, theSearchValues.size());
+					if (h.isReproducing())
+						System.out.println("Remove search value [" + index + "]" + theSearchValues.get(index));
+					theSearchValues.remove(index);
+				}).or(.5, () -> { // Remove a range
+					int index1 = h.getInt(0, theSearchValues.size());
+					int index2 = h.getInt(0, theSearchValues.size());
+					if (index1 > index2) {
+						int temp = index2;
+						index2 = index1;
+						index1 = temp;
+					}
+					if (h.isReproducing())
+						System.out.println("Remove search values [" + index1 + ".." + index2 + "]");
+					theSearchValues.removeRange(index1, index2);
+				});
+			}
+		}
+
+		@Override
+		public void expectFromSource(ExpectedCollectionOperation<?, T> sourceOp) {}
+
+		@Override
+		public void validate(boolean transactionEnd) throws AssertionError {
+			boolean expect;
+			if (isContainsAny)
+				expect = getSourceLink().getCollection().containsAny(theSearchValues);
+			else
+				expect = getSourceLink().getCollection().containsAll(theSearchValues);
+			Assert.assertEquals(expect, getValue().get().booleanValue());
+		}
+
+		@Override
+		public String toString() {
+			return "contains" + (isContainsAny ? "Any" : "All") + "(" + theSearchValues + ")";
 		}
 	}
 
@@ -625,71 +728,73 @@ public class CollectionDerivedValues {
 		public void validate(boolean transactionEnd) throws AssertionError {
 			ObservableSortedSet<T> set = (ObservableSortedSet<T>) getSourceLink().getCollection();
 			CollectionElement<T> result = set.search(theSearch, theFilter);
-			Assert.assertEquals(result == null ? null : result.getElementId(), getValue().getElementId());
-			Assert.assertEquals(result == null ? null : result.get(), getValue().get());
-			if (result == null) {
-				switch (theFilter) {
-				case OnlyMatch:
+			int compare = result == null ? 0 : set.comparator().compare(result.get(), theValue);
+			switch (theFilter) {
+			case OnlyMatch:
+				if (result == null) {
 					if (onExact == 0)
 						Assert.assertFalse(set.contains(theValue));
-					break;
-				case PreferLess:
-				case PreferGreater:
-					Assert.assertTrue(set.isEmpty());
-					break;
-				case Less:
-					if (!set.isEmpty() && set.comparator().compare(set.getFirst(), theValue) <= 0)
-						throw new AssertionError("Should have found " + set.getFirst());
-					break;
-				case Greater:
-					if (!set.isEmpty() && set.comparator().compare(set.getLast(), theValue) >= 0)
-						throw new AssertionError("Should have found " + set.getLast());
-					break;
-				}
-			} else if (set.equivalence().elementEquals(result.get(), theValue)) {//
-				switch (theFilter) {
-				case OnlyMatch:
+				} else if (compare == 0)
 					Assert.assertEquals(0, onExact);
-					break;
-				case Less:
-					if (onExact < 0)
-						throw new AssertionError("Should not have found anything");
-					break;
-				case Greater:
-					if (onExact > 0)
-						throw new AssertionError("Should not have found anything");
-					break;
-				case PreferLess:
-				case PreferGreater:
-					int comp = set.comparator().compare(result.get(), theValue);
-					CollectionElement<T> adj = set.getAdjacentElement(result.getElementId(), comp < 0);
-					if (adj != null)
-						Assert.assertNotEquals(comp < 0, set.comparator().compare(adj.get(), theValue));
-					break;
-				}
-			} else {
-				int comp = set.comparator().compare(result.get(), theValue);
-				CollectionElement<T> adj = set.getAdjacentElement(result.getElementId(), comp < 0);
-				if (adj != null)
-					Assert.assertNotEquals(comp < 0, set.comparator().compare(adj.get(), theValue));
-				switch (theFilter) {
-				case OnlyMatch:
+				else
 					throw new AssertionError("Should not have found a non-matching value");
-				case PreferLess:
-					if (comp > 0)
-						Assert.assertNull(adj);
-					break;
-				case PreferGreater:
-					if (comp < 0)
-						Assert.assertNull(adj);
-					break;
-				case Less:
-					Assert.assertTrue(comp < 0);
-					break;
-				case Greater:
-					Assert.assertTrue(comp > 0);
-					break;
+				break;
+			case Less:
+				if (result == null) {
+					if (!set.isEmpty()) {
+						int firstComp = set.comparator().compare(set.getFirst(), theValue);
+						if (firstComp < 0 || (onExact == 0 && firstComp == 0))
+							throw new AssertionError("Should have found " + set.getFirst());
+					}
+				} else if (compare == 0)
+					Assert.assertTrue(onExact >= 0);
+				else if (compare > 0)
+					throw new AssertionError("Should not have returned a greater result");
+				break;
+			case Greater:
+				if (result == null) {
+					if (!set.isEmpty()) {
+						int lastComp = set.comparator().compare(set.getLast(), theValue);
+						if (lastComp > 0 || (onExact == 0 && lastComp == 0))
+							throw new AssertionError("Should have found " + set.getLast());
+					}
+				} else if (compare == 0)
+					Assert.assertTrue(onExact <= 0);
+				else if (compare < 0)
+					throw new AssertionError("Should not have returned a lesser result");
+				break;
+			case PreferLess:
+				if (result == null)
+					Assert.assertTrue(set.isEmpty());
+				else if (compare == 0)
+					Assert.assertTrue(onExact >= 0);
+				else if (compare > 0)
+					Assert.assertNull(set.getAdjacentElement(result.getElementId(), false));
+				else {
+					CollectionElement<T> adj = set.getAdjacentElement(result.getElementId(), true);
+					if (adj != null) {
+						int adjComp = set.comparator().compare(adj.get(), theValue);
+						if (adjComp < 0 || (adjComp == 0 && onExact == 0))
+							throw new AssertionError("Should have found " + adj + " instead of " + result);
+					}
 				}
+				break;
+			case PreferGreater:
+				if (result == null)
+					Assert.assertTrue(set.isEmpty());
+				else if (compare == 0)
+					Assert.assertTrue(onExact <= 0);
+				else if (compare < 0)
+					Assert.assertNull(set.getAdjacentElement(result.getElementId(), true));
+				else {
+					CollectionElement<T> adj = set.getAdjacentElement(result.getElementId(), false);
+					if (adj != null) {
+						int adjComp = set.comparator().compare(adj.get(), theValue);
+						if (adjComp > 0 || (adjComp == 0 && onExact == 0))
+							throw new AssertionError("Should have found " + adj + " instead of " + result);
+					}
+				}
+				break;
 			}
 
 			switch (theFilter) {
@@ -709,6 +814,8 @@ public class CollectionDerivedValues {
 				break;
 			}
 
+			Assert.assertEquals(result == null ? null : result.getElementId(), getValue().getElementId());
+			Assert.assertEquals(result == null ? null : result.get(), getValue().get());
 			// This derived value is only consistent when the transaction ends
 			if (transactionEnd)
 				getTester().checkSynced();

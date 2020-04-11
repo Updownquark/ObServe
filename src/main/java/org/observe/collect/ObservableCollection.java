@@ -136,10 +136,10 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 				} else {
 					if (c.isEmpty())
 						return false;
-					Set<E> cSet = ObservableCollectionImpl.toSet(this, equivalence(), c);
+					Set<E> cSet = ObservableCollectionImpl.toSet(this, equivalence(), c, null);
 					CollectionElement<E> el = getTerminalElement(true);
 					while (el != null) {
-						if (cSet.contains(el))
+						if (cSet.contains(el.get()))
 							return true;
 						el = getAdjacentElement(el.getElementId(), true);
 					}
@@ -163,7 +163,10 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 				} else {
 					if (c.isEmpty())
 						return false;
-					Set<E> cSet = ObservableCollectionImpl.toSet(this, equivalence(), c);
+					boolean[] excluded = new boolean[1];
+					Set<E> cSet = ObservableCollectionImpl.toSet(this, equivalence(), c, excluded);
+					if (excluded[0])
+						return false;
 					cSet.removeAll(this);
 					return cSet.isEmpty();
 				}
