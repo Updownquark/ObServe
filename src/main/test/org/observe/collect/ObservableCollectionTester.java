@@ -26,6 +26,7 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 	private final ArrayList<E> theBatchSyncedCopy;
 	private final List<E> theExpected;
 	private boolean checkRemovedValues;
+	private boolean isOrderImportant;
 
 	/**
 	 * @param name A name for this tester (for debugging)
@@ -49,6 +50,12 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 		theExpected = expected;
 		theExpected.addAll(collect);
 		checkRemovedValues = true;
+		isOrderImportant = true;
+	}
+
+	/** @param orderImportant Whether this tester should expect values in the same order as the expected collection */
+	public void setOrderImportant(boolean orderImportant) {
+		isOrderImportant = orderImportant;
 	}
 
 	/**
@@ -191,9 +198,9 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 	 * @param transactionComplete Whether all transactions have completed
 	 */
 	public void checkValue(Collection<E> expected, boolean transactionComplete) {
-		assertThat(theSyncedCopy, QommonsTestUtils.collectionsEqual(expected, true));
+		assertThat(theSyncedCopy, QommonsTestUtils.collectionsEqual(expected, isOrderImportant));
 		if (transactionComplete)
-			assertThat(theBatchSyncedCopy, QommonsTestUtils.collectionsEqual(expected, true));
+			assertThat(theBatchSyncedCopy, QommonsTestUtils.collectionsEqual(expected, isOrderImportant));
 	}
 
 	@Override
@@ -214,7 +221,7 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 	 */
 	public void checkNonBatchSynced(Collection<E> expected) {
 		assertThat(theSyncedCopy, QommonsTestUtils.collectionsEqual(theCollection, true));
-		assertThat(theSyncedCopy, QommonsTestUtils.collectionsEqual(expected, true));
+		assertThat(theSyncedCopy, QommonsTestUtils.collectionsEqual(expected, isOrderImportant));
 	}
 
 	@Override

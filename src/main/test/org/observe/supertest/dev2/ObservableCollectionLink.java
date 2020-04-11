@@ -18,6 +18,7 @@ import org.observe.Observable;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionEvent;
 import org.observe.collect.ObservableCollectionTester;
+import org.qommons.QommonsTestUtils;
 import org.qommons.TestHelper;
 import org.qommons.TestHelper.RandomAction;
 import org.qommons.Transaction;
@@ -71,6 +72,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			theMultiStepCollection = def.multiStepFlow.collectActive(Observable.empty);
 
 		theMultiStepTester = new ObservableCollectionTester<>("[" + getDepth() + "] Multi-step", theMultiStepCollection);
+		theMultiStepTester.setOrderImportant(def.orderImportant);
 		init(helper);
 	}
 
@@ -1172,14 +1174,17 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		for (T value : getCollection())
 			referenceArray[i++] = value;
 		Assert.assertEquals(i, getCollection().size());
-		Assert.assertArrayEquals(referenceArray, getCollection().toArray());
-		Assert.assertArrayEquals(referenceArray, getMultiStepCollection().toArray());
+		Assert.assertThat(Arrays.asList(getCollection().toArray()), //
+			QommonsTestUtils.collectionsEqual(Arrays.asList(referenceArray), theDef.orderImportant));
+		Assert.assertThat(Arrays.asList(getMultiStepCollection().toArray()), //
+			QommonsTestUtils.collectionsEqual(Arrays.asList(referenceArray), theDef.orderImportant));
 
 		// Test equals(Object)
 		List<T> refList = new ArrayList<>(referenceArray.length);
 		refList.addAll((List<T>) Arrays.asList(referenceArray));
 		Assert.assertEquals(getCollection(), refList);
-		Assert.assertEquals(getMultiStepCollection(), refList);
+		if (theDef.orderImportant)
+			Assert.assertEquals(getMultiStepCollection(), refList);
 		if (!refList.isEmpty() && helper.getBoolean())
 			refList.remove(helper.getInt(0, refList.size()));
 		else if (theSupplier != null)
@@ -1192,12 +1197,14 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		// Test toString()
 		String expectString = new ArrayList<>(getCollection()).toString();
 		String oneStepString = getCollection().toString();
-		String multiStepString = getMultiStepCollection().toString();
 		expectString = expectString.substring(1, expectString.length() - 1); // Trim off the brackets
 		oneStepString = oneStepString.substring(1, oneStepString.length() - 1); // Trim off the brackets
-		multiStepString = multiStepString.substring(1, multiStepString.length() - 1); // Trim off the brackets
 		Assert.assertEquals(expectString, oneStepString);
-		Assert.assertEquals(expectString, multiStepString);
+		if (theDef.orderImportant) {
+			String multiStepString = getMultiStepCollection().toString();
+			multiStepString = multiStepString.substring(1, multiStepString.length() - 1); // Trim off the brackets
+			Assert.assertEquals(expectString, multiStepString);
+		}
 
 		if (theSupplier != null) {
 			// Test contains, containsAll, containsAny

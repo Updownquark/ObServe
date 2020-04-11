@@ -13,6 +13,7 @@ import java.util.function.Supplier;
 import org.junit.Test;
 import org.observe.supertest.dev2.links.BaseCollectionLink;
 import org.observe.supertest.dev2.links.CollectionDerivedValues;
+import org.observe.supertest.dev2.links.DistinctCollectionLink;
 import org.observe.supertest.dev2.links.DistinctSortedCollectionLink;
 import org.observe.supertest.dev2.links.FilteredCollectionLink;
 import org.observe.supertest.dev2.links.MappedCollectionLink;
@@ -68,6 +69,7 @@ public class ObservableChainTester implements Testable {
 		generators.add(ModFilteredCollectionLink.GENERATE);
 		generators.add(FilteredCollectionLink.GENERATE);
 		generators.add(SortedCollectionLink.GENERATE);
+		generators.add(DistinctCollectionLink.GENERATE);
 		generators.add(DistinctSortedCollectionLink.GENERATE);
 		generators.add(SubSetLink.GENERATE);
 
