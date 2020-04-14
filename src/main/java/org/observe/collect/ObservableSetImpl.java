@@ -775,12 +775,13 @@ public class ObservableSetImpl {
 					if (newValueId.getElementId().equals(ue.theValueId))
 						return ue;
 					else {
-						UniqueElement newEl = new UniqueElement(ue.theValue);
+						UniqueElement newEl = createUniqueElement(ue.theValue);
+						newEl.theValue = ue.theValue;
 						newEl.theValueId = newValueId.getElementId();
+						theElementsByValue.mutableEntry(newValueId.getElementId()).setValue(newEl);
 						for (DerivedCollectionElement<T> parentEl : ue.theParentElements.keySet())
 							newEl.addParent(parentEl, null);
 						newEl.theActiveElement = ue.theActiveElement;
-						theAccepter.accept(ue, null);
 						return newEl;
 					}
 				}
@@ -830,7 +831,10 @@ public class ObservableSetImpl {
 			theAccepter = onElement;
 			theParent.begin(fromStart, (parentEl, cause) -> {
 				T value = parentEl.get();
-				theElementsByValue.computeIfAbsent(value, v -> createUniqueElement(v)).addParent(parentEl, cause);
+				theElementsByValue
+				.computeIfAbsent(value, //
+					v -> createUniqueElement(v))//
+				.addParent(parentEl, cause);
 			}, listening);
 		}
 
@@ -1199,7 +1203,8 @@ public class ObservableSetImpl {
 			void moveTo(T newValue) {
 				theValue = newValue;
 				if (theElementsByValue.keySet().mutableElement(theValueId).isAcceptable(newValue) == null)
-					theElementsByValue.keySet().mutableElement(theValueId).set(newValue);
+					theElementsByValue.keySet().mutableElement(theValueId)//
+					.set(newValue);
 				else {
 					theElementsByValue.mutableEntry(theValueId).remove();
 					theValueId = theElementsByValue.putEntry(newValue, this, false).getElementId();
