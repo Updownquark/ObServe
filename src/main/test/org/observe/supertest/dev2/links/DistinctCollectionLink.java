@@ -231,7 +231,7 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		}
 	}
 
-	private int theLastRefreshedModification;
+	private int theLastRefreshedModification = -1;
 
 	private void refreshElements() {
 		for (CollectionLinkElement<T, T> el : getElements())

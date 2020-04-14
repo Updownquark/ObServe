@@ -17,7 +17,7 @@ import org.qommons.tree.BetterTreeList;
 import com.google.common.reflect.TypeToken;
 
 public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
-	public static ChainLinkGenerator GENERATE = new ChainLinkGenerator() {
+	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator() {
 		@Override
 		public <T> double getAffinity(ObservableChainLink<?, T> link) {
 			if (link != null)

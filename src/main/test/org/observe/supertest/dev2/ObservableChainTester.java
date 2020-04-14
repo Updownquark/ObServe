@@ -230,6 +230,7 @@ public class ObservableChainTester implements Testable {
 					try {
 						targetLink.link.tryModify(action, helper);
 						action.execute("Modification");
+						modifications++;
 					} catch (RuntimeException | Error e) {
 						System.err.println("Modifying link " + targetLink.path);
 						System.err.println("Error on transaction " + (tri + 1) + ", mod " + (transactionTri + 1) + " after "
@@ -249,7 +250,6 @@ public class ObservableChainTester implements Testable {
 						throw e;
 					}
 				}
-				modifications += transactionMods;
 				if (!helper.isReproducing()) {
 					if (tri % 10 == 9)
 						System.out.print('|');
