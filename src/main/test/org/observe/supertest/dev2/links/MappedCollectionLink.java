@@ -5,12 +5,14 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.observe.SimpleSettableValue;
 import org.observe.collect.FlowOptions;
 import org.observe.collect.FlowOptions.MapDef;
+import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.dev2.ChainLinkGenerator;
 import org.observe.supertest.dev2.CollectionLinkElement;
@@ -66,26 +68,35 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 			boolean reEvalOnUpdate = needsUpdateReeval || helper.getBoolean();
 			boolean oneToMany = variableMap || transform.isOneToMany();
 			boolean manyToOne = variableMap || transform.isManyToOne();
-			CollectionDataFlow<?, ?, X> derivedOneStepFlow = oneStepFlow.map((TypeToken<X>) transform.getType().getType(),
-				LambdaUtils.printableFn(src -> txValue.get().map(src), () -> txValue.get().toString()), o -> {
-					o.manyToOne(manyToOne).oneToMany(oneToMany);
-					if (withReverse)
-						o.withReverse(x -> txValue.get().reverse(x));
-					options.accept(o.cache(cache).fireIfUnchanged(fireIfUnchanged).reEvalOnUpdate(reEvalOnUpdate));
-				});
-			CollectionDataFlow<?, ?, X> derivedMultiStepFlow = multiStepFlow.map((TypeToken<X>) transform.getType().getType(),
-				LambdaUtils.printableFn(src -> txValue.get().map(src), () -> txValue.get().toString()), o -> {
-					o.manyToOne(manyToOne).oneToMany(oneToMany);
-					if (withReverse)
-						o.withReverse(x -> txValue.get().reverse(x));
-					options.accept(o.cache(cache).fireIfUnchanged(fireIfUnchanged).reEvalOnUpdate(reEvalOnUpdate));
-				});
+			TypeToken<X> type = (TypeToken<X>) transform.getType().getType();
+			Function<T, X> map = LambdaUtils.printableFn(src -> txValue.get().map(src), () -> txValue.get().toString());
+			Function<X, T> reverse = LambdaUtils.printableFn(dest -> txValue.get().reverse(dest), () -> txValue.get().reverseName());
+			Consumer<FlowOptions.MapOptions<T, X>> opts = o -> {
+				o.manyToOne(manyToOne).oneToMany(oneToMany);
+				if (withReverse)
+					o.withReverse(reverse);
+				options.accept(o.cache(cache).fireIfUnchanged(fireIfUnchanged).reEvalOnUpdate(reEvalOnUpdate));
+			};
+			CollectionDataFlow<?, ?, X> derivedOneStepFlow, derivedMultiStepFlow;
+			boolean mapEquivalent;
+			if (oneStepFlow instanceof ObservableCollection.DistinctDataFlow && !variableMap && transform.supportsReverse() && !oneToMany
+				&& !manyToOne) {
+				mapEquivalent = true;
+				derivedOneStepFlow = ((ObservableCollection.DistinctDataFlow<?, ?, T>) oneStepFlow).mapEquivalent(//
+					type, map, reverse, opts);
+				derivedMultiStepFlow = ((ObservableCollection.DistinctDataFlow<?, ?, T>) multiStepFlow).mapEquivalent(//
+					type, map, reverse, opts);
+			} else {
+				mapEquivalent = false;
+				derivedOneStepFlow = oneStepFlow.map(type, map, opts);
+				derivedMultiStepFlow = multiStepFlow.map(type, map, opts);
+			}
 			boolean checkOldValues = cache;
 			if (!variableMap)
 				checkOldValues |= sourceCL.getDef().checkOldValues;
 			ObservableCollectionTestDef<X> newDef = new ObservableCollectionTestDef<>(transform.getType(), derivedOneStepFlow,
 				derivedMultiStepFlow, sourceCL.getDef().orderImportant, checkOldValues);
-			return new MappedCollectionLink<>(path, sourceCL, newDef, helper, txValue, variableMap,
+			return new MappedCollectionLink<>(path, sourceCL, newDef, helper, txValue, variableMap, mapEquivalent,
 				new FlowOptions.MapDef<>(options.get()));
 		}
 	};
@@ -93,14 +104,17 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 	private final SimpleSettableValue<TypeTransformation<S, T>> theMapValue;
 	private TypeTransformation<S, T> theCurrentMap;
 	private final boolean isMapVariable;
+	private final boolean isMapEquivalent;
 	private final FlowOptions.MapDef<S, T> theOptions;
 
 	public MappedCollectionLink(String path, ObservableCollectionLink<?, S> sourceLink, ObservableCollectionTestDef<T> def,
-		TestHelper helper, SimpleSettableValue<TypeTransformation<S, T>> mapValue, boolean isMapVariable, MapDef<S, T> options) {
+		TestHelper helper, SimpleSettableValue<TypeTransformation<S, T>> mapValue, boolean mapVariable, boolean mapEquivalent,
+		MapDef<S, T> options) {
 		super(path, sourceLink, def, helper);
 		theMapValue = mapValue;
 		theCurrentMap = theMapValue.get();
-		this.isMapVariable = isMapVariable;
+		this.isMapVariable = mapVariable;
+		isMapEquivalent = mapEquivalent;
 		theOptions = options;
 	}
 
@@ -279,7 +293,10 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 
 	@Override
 	public String toString() {
-		String str = "map(" + theCurrentMap;
+		String str = "map";
+		if (isMapEquivalent)
+			str += "Equivalent";
+		str += "(" + theCurrentMap;
 		if (isMapVariable)
 			str += ", variable";
 		if (theOptions.getReverse() == null)
