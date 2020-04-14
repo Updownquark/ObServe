@@ -597,9 +597,10 @@ public class ObservableSortedSetImpl {
 			MapOptions<E, X> mapOptions = new MapOptions<>();
 			options.accept(mapOptions);
 			mapOptions.withReverse(reverse);
-			return new DistinctSortedMapOp<>(getSource(), this, target, map, new MapDef<>(mapOptions), (x1, x2) -> {
-				return comparator().compare(reverse.apply(x1), reverse.apply(x2));
-			});
+			return new DistinctSortedMapOp<>(getSource(), this, target, map, new MapDef<>(mapOptions), //
+				LambdaUtils.printableComparator((x1, x2) -> {
+					return comparator().compare(reverse.apply(x1), reverse.apply(x2));
+				}, () -> comparator() + ".map(" + reverse + ")"));
 		}
 
 		@Override

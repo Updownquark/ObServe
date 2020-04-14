@@ -807,19 +807,29 @@ public class ObservableSetImpl {
 			if (elements.isEmpty())
 				return;
 			UniqueElement uniqueEl = theElementsByValue.get(newValue);
-			if (uniqueEl != null && elements.stream().anyMatch(el -> uniqueEl != el))
-				throw new IllegalArgumentException(StdMsg.ELEMENT_EXISTS);
+			if (uniqueEl != null) {
+				if (elements.stream().anyMatch(el -> uniqueEl != el))
+					throw new IllegalArgumentException(StdMsg.ELEMENT_EXISTS);
+			} else {
+				String msg = elements.stream()
+					.map(el -> theElementsByValue.keySet().mutableElement(((UniqueElement) el).theValueId).isAcceptable(newValue))
+					.filter(m -> m != null).findAny().orElse(null);
+				if (StdMsg.UNSUPPORTED_OPERATION.equals(msg))
+					throw new UnsupportedOperationException(msg);
+				else if (msg != null)
+					throw new IllegalArgumentException(msg);
+			}
 			// Change the first element to be the element at the new value
 			UniqueElement first = (UniqueElement) elements.iterator().next();
 			T oldValue = first.theValue;
 			first.moveTo(newValue);
 			try {
-				theParent.setValues(//
-					elements.stream().flatMap(el -> {
-						UniqueElement uel = (UniqueElement) el;
-						return Stream.concat(Stream.of(uel.theActiveElement), //
-							uel.theParentElements.keySet().stream().filter(pe -> pe != uel.theActiveElement));
-					}).collect(Collectors.toList()), newValue);
+				List<DerivedCollectionElement<T>> parentEls = elements.stream().flatMap(el -> {
+					UniqueElement uel = (UniqueElement) el;
+					return Stream.concat(Stream.of(uel.theActiveElement), //
+						uel.theParentElements.keySet().stream().filter(pe -> pe != uel.theActiveElement).sorted());
+				}).collect(Collectors.toList());
+				theParent.setValues(parentEls, newValue);
 			} catch (RuntimeException e) {
 				first.moveTo(oldValue);
 				throw e;

@@ -3518,40 +3518,39 @@ public class ObservableCollectionDataFlowImpl {
 				return;
 			if (theOptions.isCached()) {
 				I oldValue = null;
-				boolean first = true, allIdenticalUpdates = true;
+				boolean first = true, allUpdates = true, allIdenticalUpdates = true;
 				for (MappedElement el : remaining) {
-					allIdenticalUpdates &= equivalence().elementEquals(el.theValue, newValue);
-					I elOldValue = el.theCacheHandler.getSourceCache();
-					if (first) {
-						oldValue = elOldValue;
-						first = false;
-					} else
-						allIdenticalUpdates &= theParent.equivalence().elementEquals(oldValue, elOldValue);
-					if (!allIdenticalUpdates)
+					allUpdates &= equivalence().elementEquals(el.theValue, newValue);
+					allIdenticalUpdates &= allUpdates;
+					if (!allUpdates)
 						break;
+					if (allIdenticalUpdates) {
+						I elOldValue = el.theCacheHandler.getSourceCache();
+						if (first) {
+							oldValue = elOldValue;
+							first = false;
+						} else
+							allIdenticalUpdates &= theParent.equivalence().elementEquals(oldValue, elOldValue);
+					}
 				}
-				if (allIdenticalUpdates)
+				if (allIdenticalUpdates) {
 					theParent.setValues(//
 						remaining.stream().map(el -> el.theParentEl).collect(Collectors.toList()), oldValue);
-				else if (theOptions.getReverse() != null) {
-					I reversed = theOptions.getReverse().apply(newValue);
-					if (!theEquivalence.elementEquals(theMap.apply(reversed, newValue), newValue))
-						throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
-					theParent.setValues(//
-						remaining.stream().map(el -> el.theParentEl).collect(Collectors.toList()), reversed);
-				} else {
+					return;
+				} else if (allUpdates) {
 					for (MappedElement el : remaining)
 						el.theParentEl.set(el.theCacheHandler.getSourceCache());
+					return;
 				}
-			} else if (theOptions.getReverse() != null) {
+			}
+			if (theOptions.getReverse() != null) {
 				I reversed = theOptions.getReverse().apply(newValue);
 				if (!theEquivalence.elementEquals(theMap.apply(reversed, newValue), newValue))
 					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 				theParent.setValues(//
 					remaining.stream().map(el -> el.theParentEl).collect(Collectors.toList()), reversed);
-			} else {
+			} else
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-			}
 		}
 
 		@Override
