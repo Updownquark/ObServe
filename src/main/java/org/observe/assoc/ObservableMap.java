@@ -195,6 +195,21 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 			}
 
 			@Override
+			public boolean isLockSupported() {
+				return ObservableMap.this.isLockSupported();
+			}
+
+			@Override
+			public Transaction lock(boolean write, Object cause) {
+				return ObservableMap.this.lock(write, cause);
+			}
+
+			@Override
+			public Transaction tryLock(boolean write, Object cause) {
+				return ObservableMap.this.tryLock(write, cause);
+			}
+
+			@Override
 			public V get() {
 				try (Transaction t = ObservableMap.this.lock(false, null)) {
 					MapEntryHandle<K, V> entry;

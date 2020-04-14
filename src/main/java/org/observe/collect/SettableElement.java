@@ -4,6 +4,7 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.qommons.Identifiable;
+import org.qommons.Transaction;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 
@@ -64,7 +65,7 @@ public interface SettableElement<E> extends ObservableElement<E>, SettableValue<
 
 	/**
 	 * Implements {@link SettableElement#empty(TypeToken)}
-	 * 
+	 *
 	 * @param <E> The type of the element
 	 */
 	class EmptyElement<E> extends AbstractIdentifiable implements SettableElement<E> {
@@ -72,6 +73,21 @@ public interface SettableElement<E> extends ObservableElement<E>, SettableValue<
 
 		public EmptyElement(TypeToken<E> type) {
 			theType = type;
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return true;
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return Transaction.NONE;
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, Object cause) {
+			return Transaction.NONE;
 		}
 
 		@Override

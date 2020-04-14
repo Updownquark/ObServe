@@ -89,6 +89,21 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 	}
 
 	@Override
+	public boolean isLockSupported() {
+		return theLock.isLockSupported();
+	}
+
+	@Override
+	public Transaction lock(boolean write, Object cause) {
+		return theLock.lock(write, cause);
+	}
+
+	@Override
+	public Transaction tryLock(boolean write, Object cause) {
+		return theLock.tryLock(write, cause);
+	}
+
+	@Override
 	public T get() {
 		return theValue;
 	}

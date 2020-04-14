@@ -1,5 +1,7 @@
 package org.observe;
 
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
@@ -11,7 +13,9 @@ import org.observe.XformOptions.SimpleXformOptions;
 import org.observe.XformOptions.XformDef;
 import org.observe.util.TypeTokens;
 import org.qommons.Identifiable;
+import org.qommons.Lockable;
 import org.qommons.Transactable;
+import org.qommons.Transaction;
 import org.qommons.TriFunction;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
@@ -24,7 +28,7 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <T> The type of the value
  */
-public interface SettableValue<T> extends ObservableValue<T> {
+public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	/** This class's type key */
 	@SuppressWarnings("rawtypes")
 	static TypeTokens.TypeKey<SettableValue> TYPE_KEY = TypeTokens.get().keyFor(SettableValue.class)
@@ -44,6 +48,9 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	ObservableValue<String> ALWAYS_ENABLED = ObservableValue.of(STRING_TYPE, null);
 	/** A string-typed observable that always returns {@link org.qommons.collect.MutableCollectionElement.StdMsg#UNSUPPORTED_OPERATION} */
 	ObservableValue<String> ALWAYS_DISABLED = ObservableValue.of(STRING_TYPE, StdMsg.UNSUPPORTED_OPERATION);
+
+	@Override
+	boolean isLockSupported();
 
 	/**
 	 * @param <V> The type of the value to set
@@ -79,6 +86,16 @@ public interface SettableValue<T> extends ObservableValue<T> {
 
 	/** @return An observable whose value reports null if this value can be set directly, or a string describing why it cannot */
 	ObservableValue<String> isEnabled();
+
+	@Override
+	default Transaction lock() {
+		return lock(false, null);
+	}
+
+	@Override
+	default Transaction tryLock() {
+		return lock(true, null);
+	}
 
 	/**
 	 * @param value The value to assign this settable to
@@ -593,6 +610,21 @@ public interface SettableValue<T> extends ObservableValue<T> {
 		}
 
 		@Override
+		public boolean isLockSupported() {
+			return theWrapped.isLockSupported();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return theWrapped.lock(write, cause);
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, Object cause) {
+			return theWrapped.lock(write, cause);
+		}
+
+		@Override
 		public T get() {
 			return theWrapped.get();
 		}
@@ -657,6 +689,33 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			ObservableValue<?>... composed) {
 			super(type, function, operation, options, composed);
 		}
+
+		@Override
+		public boolean isLockSupported() {
+			return super.isLockSupported();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return Lockable.lockAll(null, //
+				() -> Arrays.asList(getComposed()), val -> {
+					if (val instanceof Transactable)
+						return Lockable.lockable((Transactable) val, write, cause);
+					else
+						return val;
+				});
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, Object cause) {
+			return Lockable.tryLockAll(null, //
+				() -> Arrays.asList(getComposed()), val -> {
+					if (val instanceof Transactable)
+						return Lockable.lockable((Transactable) val, write, cause);
+					else
+						return val;
+				});
+		}
 	}
 
 	/**
@@ -675,6 +734,21 @@ public interface SettableValue<T> extends ObservableValue<T> {
 		@Override
 		protected SettableValue<T> getWrapped() {
 			return (SettableValue<T>) super.getWrapped();
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return getWrapped().isLockSupported();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return getWrapped().lock(write, cause);
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, Object cause) {
+			return getWrapped().tryLock(write, cause);
 		}
 
 		@Override
@@ -706,6 +780,21 @@ public interface SettableValue<T> extends ObservableValue<T> {
 		@Override
 		protected SettableValue<T> getWrapped() {
 			return (SettableValue<T>) super.getWrapped();
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return getWrapped().isLockSupported();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return getWrapped().lock(write, cause);
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, Object cause) {
+			return getWrapped().tryLock(write, cause);
 		}
 
 		@Override
@@ -743,6 +832,21 @@ public interface SettableValue<T> extends ObservableValue<T> {
 		}
 
 		@Override
+		public boolean isLockSupported() {
+			return getWrapped().isLockSupported();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return getWrapped().lock(write, cause);
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, Object cause) {
+			return getWrapped().tryLock(write, cause);
+		}
+
+		@Override
 		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
 			return getWrapped().set(value, cause);
 		}
@@ -772,6 +876,43 @@ public interface SettableValue<T> extends ObservableValue<T> {
 		protected SettableFlattenedObservableValue(ObservableValue<? extends ObservableValue<? extends T>> value,
 			Supplier<? extends T> defaultValue) {
 			super(value, defaultValue);
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			if (!getWrapped().isLockSupported())
+				return false;
+			ObservableValue<? extends T> value = getWrapped().get();
+			if (value == null)
+				return false;
+			else
+				return value.isLockSupported();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return Lockable.lockAll(getWrapped(), () -> {
+				ObservableValue<? extends T> value = getWrapped().get();
+				if (value == null)
+					return Collections.emptyList();
+				else if (value instanceof SettableValue)
+					return Arrays.asList(Lockable.lockable((SettableValue<? extends T>) value, write, cause));
+				else
+					return Arrays.asList(value);
+			}, v -> v);
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, Object cause) {
+			return Lockable.tryLockAll(getWrapped(), () -> {
+				ObservableValue<? extends T> value = getWrapped().get();
+				if (value == null)
+					return Collections.emptyList();
+				else if (value instanceof SettableValue)
+					return Arrays.asList(Lockable.lockable((SettableValue<? extends T>) value, write, cause));
+				else
+					return Arrays.asList(value);
+			}, v -> v);
 		}
 
 		@Override

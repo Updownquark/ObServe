@@ -58,6 +58,21 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 				}
 
 				@Override
+				public boolean isLockSupported() {
+					return source.isLockSupported();
+				}
+
+				@Override
+				public Transaction lock(boolean write, Object cause) {
+					return source.lock(write, cause);
+				}
+
+				@Override
+				public Transaction tryLock(boolean write, Object cause) {
+					return source.tryLock(write, cause);
+				}
+
+				@Override
 				public N get() {
 					return source.get();
 				}
@@ -146,6 +161,21 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 				@Override
 				public TypeToken<E> getType() {
 					return source.getType();
+				}
+
+				@Override
+				public boolean isLockSupported() {
+					return source.isLockSupported();
+				}
+
+				@Override
+				public Transaction lock(boolean write, Object cause) {
+					return source.lock(write, cause);
+				}
+
+				@Override
+				public Transaction tryLock(boolean write, Object cause) {
+					return source.tryLock(write, cause);
 				}
 
 				@Override

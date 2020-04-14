@@ -78,6 +78,21 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 	}
 
 	@Override
+	public boolean isLockSupported() {
+		return theEventer.isLockSupported();
+	}
+
+	@Override
+	public Transaction lock(boolean write, Object cause) {
+		return Transactable.lock(theEventer.getLock(), write, cause);
+	}
+
+	@Override
+	public Transaction tryLock(boolean write, Object cause) {
+		return Transactable.tryLock(theEventer.getLock(), write, cause);
+	}
+
+	@Override
 	public Observable<ObservableValueEvent<T>> noInitChanges() {
 		return theEventer.readOnly();
 	}

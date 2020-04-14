@@ -1159,6 +1159,21 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 				}
 
 				@Override
+				public boolean isLockSupported() {
+					return getSource().isLockSupported();
+				}
+
+				@Override
+				public Transaction lock(boolean write, Object cause) {
+					return getSource().lock(write, cause);
+				}
+
+				@Override
+				public Transaction tryLock(boolean write, Object cause) {
+					return getSource().tryLock(write, cause);
+				}
+
+				@Override
 				public X get() {
 					return combined.get();
 				}
@@ -1196,7 +1211,6 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 					});
 				}
 			}
-			;
 			return new CombinedElement();
 		}
 

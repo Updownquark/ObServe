@@ -27,6 +27,7 @@ import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
+import org.qommons.Lockable;
 import org.qommons.QommonsUtils;
 import org.qommons.Stamped;
 import org.qommons.Transaction;
@@ -281,6 +282,24 @@ public class ObservableConfigContent {
 		@Override
 		public TypeToken<String> getType() {
 			return TypeTokens.get().STRING;
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			if (!theConfigChild.isLockSupported())
+				return false;
+			ObservableConfig child = theConfigChild.get();
+			return child.isLockSupported();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return Lockable.lock(theConfigChild, () -> Lockable.lockable(theConfigChild.get(), write, cause));
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, Object cause) {
+			return Lockable.tryLock(theConfigChild, () -> Lockable.lockable(theConfigChild.get(), write, cause));
 		}
 
 		@Override

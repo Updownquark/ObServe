@@ -785,6 +785,21 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public boolean isLockSupported() {
+			return getCollection().isLockSupported();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return getCollection().lock(write, cause);
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, Object cause) {
+			return getCollection().tryLock(write, cause);
+		}
+
+		@Override
 		public ObservableValue<String> isEnabled() {
 			class Enabled extends AbstractIdentifiable implements ObservableValue<String> {
 				@Override
