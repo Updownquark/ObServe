@@ -105,7 +105,7 @@ public class ObservableChainTester implements Testable {
 		System.out.println(
 			"Executing up to " + QommonsUtils.printTimeLength(testDuration.toMillis()) + " of tests with max " + maxFailures + " failures");
 		TestHelper.TestSummary summary = TestHelper.createTester(getClass())//
-			/**/.withRandomCases(-1).withMaxTotalDuration(testDuration)//
+			/**/.withRandomCases(-1).withMaxCaseDuration(Duration.ofSeconds(30)).withMaxTotalDuration(testDuration)//
 			/**/.withMaxFailures(maxFailures)//
 			/**/.withPersistenceDir(new File("src/main/test/org/observe/supertest/dev2"), false)//
 			/**/.withPlacemarks("Transaction", "Modification")

@@ -21,6 +21,8 @@ import org.observe.supertest.dev2.ObservableCollectionTestDef;
 import org.observe.supertest.dev2.TestValueType;
 import org.qommons.LambdaUtils;
 import org.qommons.TestHelper;
+import org.qommons.TestHelper.RandomAction;
+import org.qommons.Transactable;
 import org.qommons.collect.CollectionElement;
 
 import com.google.common.reflect.TypeToken;
@@ -51,7 +53,7 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
 			derivedOneStepFlow = derivedOneStepFlow.filter(filter);
 			derivedMultiStepFlow = derivedMultiStepFlow.filter(filter);
 			ObservableCollectionTestDef<T> def = new ObservableCollectionTestDef<>(sourceCL.getType(), derivedOneStepFlow,
-				derivedMultiStepFlow, sourceCL.getDef().orderImportant, true);
+				derivedMultiStepFlow, sourceCL.getDef().orderImportant, sourceCL.getDef().checkOldValues);
 			return (ObservableCollectionLink<T, X>) new FilteredCollectionLink<>(path, sourceCL, def, filterValue, variableFilter, helper);
 		}
 	};
@@ -67,6 +69,11 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	}
 
 	@Override
+	protected Transactable getSupplementalLock() {
+		return isVariableFilter ? theFilterValue : null;
+	}
+
+	@Override
 	public boolean isAcceptable(T value) {
 		String msg = theFilterValue.get().apply(value);
 		if (msg != null)
@@ -77,6 +84,53 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	@Override
 	public T getUpdateValue(T value) {
 		return getSourceLink().getUpdateValue(value);
+	}
+
+	@Override
+	public double getModificationAffinity() {
+		double affinity = super.getModificationAffinity();
+		if (isVariableFilter)
+			affinity++;
+		return affinity;
+	}
+
+	@Override
+	public void tryModify(RandomAction action, TestHelper helper) {
+		super.tryModify(action, helper);
+		if (isVariableFilter) {
+			action.or(1, () -> {
+				Function<T, String> oldFilter = theFilterValue.get();
+				Function<T, String> newFilter = FilteredCollectionLink.filterFor(getType(), helper);
+				if (helper.isReproducing())
+					System.out.println("Filter " + oldFilter + " -> " + newFilter);
+				theFilterValue.set(newFilter, null);
+				expectFilterChange(oldFilter, newFilter);
+			});
+		}
+	}
+
+	protected void expectFilterChange(Function<T, String> oldFilter, Function<T, String> newFilter) {
+		for (CollectionLinkElement<?, T> sourceEl : getSourceLink().getElements()) {
+			String oldMsg = oldFilter.apply(sourceEl.getValue());
+			String newMsg = newFilter.apply(sourceEl.getValue());
+			if ((oldMsg == null) == (newMsg == null))
+				continue;
+			if (oldMsg != null) { // Was excluded, now included
+				CollectionLinkElement<T, T> linkEl = (CollectionLinkElement<T, T>) sourceEl.getDerivedElements(getSiblingIndex())
+					.getFirst();
+				linkEl.expectAdded(sourceEl.getValue());
+				for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
+					derived.expectFromSource(
+						new ExpectedCollectionOperation<>(linkEl, CollectionOpType.add, linkEl.getValue(), linkEl.getValue()));
+			} else { // Was included, now excluded
+				CollectionLinkElement<T, T> linkEl = (CollectionLinkElement<T, T>) sourceEl.getDerivedElements(getSiblingIndex())
+					.getFirst();
+				linkEl.expectRemoval();
+				for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
+					derived.expectFromSource(
+						new ExpectedCollectionOperation<>(linkEl, CollectionOpType.remove, linkEl.getValue(), linkEl.getValue()));
+			}
+		}
 	}
 
 	@Override

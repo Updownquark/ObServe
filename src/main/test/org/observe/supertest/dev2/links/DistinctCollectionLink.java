@@ -251,7 +251,12 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 			theLastRefreshedModification = getModification();
 			refreshElements();
 		}
-		ValueElement valueEl = theValues.get(sourceOp.getType() == CollectionOpType.add ? sourceOp.getValue() : sourceOp.getOldValue());
+		T searchValue;
+		if (sourceOp.getType() == CollectionOpType.add)
+			searchValue = sourceOp.getValue();
+		else
+			searchValue = (T) sourceOp.getElement().getDerivedElements(getSiblingIndex()).getFirst().getValue();
+		ValueElement valueEl = theValues.get(searchValue);
 		CollectionLinkElement<T, T> element;
 		switch (sourceOp.getType()) {
 		case add:

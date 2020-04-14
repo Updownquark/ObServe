@@ -6,6 +6,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import org.observe.SimpleSettableValue;
 import org.observe.collect.FlowOptions;
@@ -13,6 +14,7 @@ import org.observe.collect.FlowOptions.MapDef;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.dev2.ChainLinkGenerator;
 import org.observe.supertest.dev2.CollectionLinkElement;
+import org.observe.supertest.dev2.CollectionSourcedLink;
 import org.observe.supertest.dev2.ExpectedCollectionOperation;
 import org.observe.supertest.dev2.ObservableChainLink;
 import org.observe.supertest.dev2.ObservableCollectionLink;
@@ -22,6 +24,8 @@ import org.observe.supertest.dev2.TestValueType;
 import org.observe.supertest.dev2.TypeTransformation;
 import org.qommons.LambdaUtils;
 import org.qommons.TestHelper;
+import org.qommons.TestHelper.RandomAction;
+import org.qommons.Transactable;
 import org.qommons.ValueHolder;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 
@@ -56,26 +60,31 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 			}
 			boolean needsUpdateReeval = !sourceCL.getDef().checkOldValues || variableMap;
 			ValueHolder<FlowOptions.MapOptions<T, X>> options = new ValueHolder<>();
-			boolean cache = helper.getBoolean();
+			boolean cache = helper.getBoolean(.75);
 			boolean withReverse = transform.supportsReverse() && helper.getBoolean(.95);
 			boolean fireIfUnchanged = needsUpdateReeval || helper.getBoolean();
 			boolean reEvalOnUpdate = needsUpdateReeval || helper.getBoolean();
+			boolean oneToMany = variableMap || transform.isOneToMany();
+			boolean manyToOne = variableMap || transform.isManyToOne();
 			CollectionDataFlow<?, ?, X> derivedOneStepFlow = oneStepFlow.map((TypeToken<X>) transform.getType().getType(),
 				LambdaUtils.printableFn(src -> txValue.get().map(src), () -> txValue.get().toString()), o -> {
-					o.manyToOne(txValue.get().isManyToOne()).oneToMany(txValue.get().isOneToMany());
+					o.manyToOne(manyToOne).oneToMany(oneToMany);
 					if (withReverse)
 						o.withReverse(x -> txValue.get().reverse(x));
 					options.accept(o.cache(cache).fireIfUnchanged(fireIfUnchanged).reEvalOnUpdate(reEvalOnUpdate));
 				});
 			CollectionDataFlow<?, ?, X> derivedMultiStepFlow = multiStepFlow.map((TypeToken<X>) transform.getType().getType(),
 				LambdaUtils.printableFn(src -> txValue.get().map(src), () -> txValue.get().toString()), o -> {
-					o.manyToOne(txValue.get().isManyToOne()).oneToMany(txValue.get().isOneToMany());
+					o.manyToOne(manyToOne).oneToMany(oneToMany);
 					if (withReverse)
 						o.withReverse(x -> txValue.get().reverse(x));
 					options.accept(o.cache(cache).fireIfUnchanged(fireIfUnchanged).reEvalOnUpdate(reEvalOnUpdate));
 				});
+			boolean checkOldValues = cache;
+			if (!variableMap)
+				checkOldValues |= sourceCL.getDef().checkOldValues;
 			ObservableCollectionTestDef<X> newDef = new ObservableCollectionTestDef<>(transform.getType(), derivedOneStepFlow,
-				derivedMultiStepFlow, sourceCL.getDef().orderImportant, !needsUpdateReeval);
+				derivedMultiStepFlow, sourceCL.getDef().orderImportant, checkOldValues);
 			return new MappedCollectionLink<>(path, sourceCL, newDef, helper, txValue, variableMap,
 				new FlowOptions.MapDef<>(options.get()));
 		}
@@ -93,6 +102,11 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 		theCurrentMap = theMapValue.get();
 		this.isMapVariable = isMapVariable;
 		theOptions = options;
+	}
+
+	@Override
+	protected Transactable getSupplementalLock() {
+		return isMapVariable ? theMapValue : null;
 	}
 
 	@Override
@@ -127,6 +141,41 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 			return value;
 		else
 			return map(getSourceLink().getUpdateValue(reverse(value)));
+	}
+
+	@Override
+	public double getModificationAffinity() {
+		double affinity = super.getModificationAffinity();
+		if (isMapVariable)
+			affinity++;
+		return affinity;
+	}
+
+	@Override
+	public void tryModify(RandomAction action, TestHelper helper) {
+		super.tryModify(action, helper);
+		if (isMapVariable) {
+			action.or(1, () -> {
+				TypeTransformation<S, T> oldMap = theCurrentMap;
+				TypeTransformation<S, T> newMap = MappedCollectionLink.transform(getSourceLink().getDef().type, getType(), helper, true,
+					oldMap.supportsReverse());
+				if (helper.isReproducing())
+					System.out.println("Map " + oldMap + " -> " + newMap);
+				theCurrentMap = newMap;
+				theMapValue.set(newMap, null);
+				expectMapChange(oldMap, newMap);
+			});
+		}
+	}
+
+	protected void expectMapChange(TypeTransformation<S, T> oldMap, TypeTransformation<S, T> newMap) {
+		for (CollectionLinkElement<S, T> element : getElements()) {
+			T oldValue = element.getValue();
+			T newValue = newMap.map(element.getFirstSource().getValue());
+			element.setValue(newValue);
+			for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
+				derived.expectFromSource(new ExpectedCollectionOperation<>(element, CollectionOpType.set, oldValue, newValue));
+		}
 	}
 
 	@Override
@@ -210,6 +259,21 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 			else
 				break;
 		}
+		return (TypeTransformation<E, T>) transform;
+	}
+
+	public static <E, T> TypeTransformation<E, T> transform(TestValueType sourceType, TestValueType destType, TestHelper helper,
+		boolean allowManyToOne, boolean requireReversible) {
+		List<? extends TypeTransformation<E, ?>> transforms = (List<? extends TypeTransformation<E, ?>>) TYPE_TRANSFORMATIONS
+			.get(sourceType).stream().filter(transform -> transform.getType() == destType).filter(transform -> {
+				if (!allowManyToOne && transform.isManyToOne())
+					return false;
+				else if (requireReversible && !transform.supportsReverse())
+					return false;
+				else
+					return true;
+			}).collect(Collectors.toList());
+		TypeTransformation<E, ?> transform = transforms.get(helper.getInt(0, transforms.size()));
 		return (TypeTransformation<E, T>) transform;
 	}
 

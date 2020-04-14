@@ -18,10 +18,11 @@ import org.observe.Observable;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionEvent;
 import org.observe.collect.ObservableCollectionTester;
-import org.qommons.BreakpointHere;
+import org.qommons.Lockable;
 import org.qommons.QommonsTestUtils;
 import org.qommons.TestHelper;
 import org.qommons.TestHelper.RandomAction;
+import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterList;
@@ -74,6 +75,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 
 		theMultiStepTester = new ObservableCollectionTester<>("[" + getDepth() + "] Multi-step", theMultiStepCollection);
 		theMultiStepTester.setOrderImportant(def.orderImportant);
+		theMultiStepTester.checkRemovedValues(def.checkOldValues);
 		init(helper);
 	}
 
@@ -88,6 +90,8 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		theMultiStepCollection = multiStepCollection;
 
 		theMultiStepTester = new ObservableCollectionTester<>("[" + getDepth() + "] Multi-step", theMultiStepCollection);
+		theMultiStepTester.setOrderImportant(def.orderImportant);
+		theMultiStepTester.checkRemovedValues(def.checkOldValues);
 		init(helper);
 	}
 
@@ -118,7 +122,8 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 				case remove:
 					CollectionElement<CollectionLinkElement<S, T>> removed = theElementsForCollection.getElement(evt.getIndex());
 					if (theDef.checkOldValues && !getCollection().equivalence().elementEquals(removed.get().getValue(), evt.getOldValue()))
-						throw new AssertionError("Old values do not match: Expected " + removed.get() + " but was " + evt.getOldValue());
+						throw new AssertionError(
+							getPath() + ": Old values do not match: Expected " + removed.get() + " but was " + evt.getOldValue());
 					removed.get().removed();
 					theElementsForCollection.mutableElement(removed.getElementId()).remove();
 					break;
@@ -126,7 +131,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 					CollectionLinkElement<S, T> element = theElementsForCollection.get(evt.getIndex());
 					if (theDef.checkOldValues && !getCollection().equivalence().elementEquals(element.getValue(), evt.getOldValue()))
 						throw new AssertionError(
-							"Old values do not match: Expected " + element.getValue() + " but was " + evt.getOldValue());
+							getPath() + ": Old values do not match: Expected " + element.getValue() + " but was " + evt.getOldValue());
 					element.updated();
 					break;
 				}
@@ -146,6 +151,10 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		return theDef.type;
 	}
 
+	protected Transactable getSupplementalLock() {
+		return null;
+	}
+
 	@Override
 	public boolean isLockSupported() {
 		return getCollection().isLockSupported();
@@ -153,12 +162,18 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 
 	@Override
 	public Transaction lock(boolean write, Object cause) {
-		return getCollection().lock(write, cause);
+		Transactable supplemental = getSupplementalLock();
+		if (supplemental == null)
+			return getCollection().lock(write, cause);
+		return Lockable.lockAll(Lockable.lockable(supplemental, write, cause), Lockable.lockable(getCollection(), write, cause));
 	}
 
 	@Override
 	public Transaction tryLock(boolean write, Object cause) {
-		return getCollection().tryLock(write, cause);
+		Transactable supplemental = getSupplementalLock();
+		if (supplemental == null)
+			return getCollection().lock(write, cause);
+		return Lockable.tryLockAll(Lockable.lockable(supplemental, write, cause), Lockable.lockable(getCollection(), write, cause));
 	}
 
 	@Override
@@ -652,8 +667,6 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 
 	private void addSingle(CollectionOp op, TestHelper helper) {
 		prepareOp(op);
-		if (getModSet() == 7 && getModification() == 16)
-			BreakpointHere.breakpoint();
 		BetterList<T> modify = op.context.modify;
 		String msg;
 		boolean error;

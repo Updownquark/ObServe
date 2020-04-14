@@ -49,7 +49,8 @@ public class CollectionDerivedValues {
 			if (!(sourceLink instanceof ObservableCollectionLink))
 				return 0;
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
-			if (sourceCL.getValueSupplier() == null)
+			if (sourceCL.getValueSupplier() == null//
+				|| !sourceCL.getDef().checkOldValues) // This derived value relies on the old values
 				return 0;
 			return .05;
 		}
@@ -66,7 +67,8 @@ public class CollectionDerivedValues {
 			if (!(sourceLink instanceof ObservableCollectionLink))
 				return 0;
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
-			if (sourceCL.getValueSupplier() == null)
+			if (sourceCL.getValueSupplier() == null//
+				|| !sourceCL.getDef().checkOldValues) // This derived value relies on the old values
 				return 0;
 			return .05;
 		}
@@ -130,6 +132,9 @@ public class CollectionDerivedValues {
 		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
 			if (!(sourceLink instanceof ObservableCollectionLink))
 				return 0;
+			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
+			if (!sourceCL.getDef().checkOldValues) // The reduction relies on the old values being correct
+				return 0;
 			return .1;
 		}
 
@@ -145,7 +150,8 @@ public class CollectionDerivedValues {
 			if (!(sourceLink instanceof ObservableCollectionLink))
 				return 0;
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
-			if (sourceCL.getType() != TestValueType.INT)
+			if (sourceCL.getType() != TestValueType.INT//
+				|| !sourceCL.getDef().checkOldValues) // The sum relies on the old values being correct
 				return 0;
 			return .1;
 		}
