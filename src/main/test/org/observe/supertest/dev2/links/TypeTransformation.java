@@ -1,4 +1,6 @@
-package org.observe.supertest.dev2;
+package org.observe.supertest.dev2.links;
+
+import org.observe.supertest.dev2.TestValueType;
 
 public interface TypeTransformation<E, T> {
 	TestValueType getSourceType();

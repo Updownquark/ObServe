@@ -23,7 +23,6 @@ import org.observe.supertest.dev2.ObservableCollectionLink;
 import org.observe.supertest.dev2.ObservableCollectionTestDef;
 import org.observe.supertest.dev2.OneToOneCollectionLink;
 import org.observe.supertest.dev2.TestValueType;
-import org.observe.supertest.dev2.TypeTransformation;
 import org.qommons.LambdaUtils;
 import org.qommons.TestHelper;
 import org.qommons.TestHelper.RandomAction;
@@ -79,8 +78,7 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 			};
 			CollectionDataFlow<?, ?, X> derivedOneStepFlow, derivedMultiStepFlow;
 			boolean mapEquivalent;
-			if (oneStepFlow instanceof ObservableCollection.DistinctDataFlow && !variableMap && transform.supportsReverse() && !oneToMany
-				&& !manyToOne) {
+			if (oneStepFlow instanceof ObservableCollection.DistinctDataFlow && !variableMap && withReverse && !oneToMany && !manyToOne) {
 				mapEquivalent = true;
 				derivedOneStepFlow = ((ObservableCollection.DistinctDataFlow<?, ?, T>) oneStepFlow).mapEquivalent(//
 					type, map, reverse, opts);
@@ -218,8 +216,25 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 				&& getCollection().equivalence().elementEquals(derivedOp.getElement().getValue(), derivedOp.getValue())) {
 				// Update, re-use the previous source value
 				CollectionLinkElement<?, S> sourceEl = (CollectionLinkElement<?, S>) derivedOp.getElement().getSourceElements().getFirst();
+				S sourceValue;
+				if (theOptions.getReverse() != null) {
+					// If the mapping is reversible, then the source operation for an update is valid either with the reverse-mapped value
+					// or the re-used previous source value. So allow either.
+					S reversed = theOptions.getReverse().apply(derivedOp.getValue());
+					if (getSourceLink().getCollection().equivalence().elementEquals(sourceEl.getCollectionValue(), reversed))
+						sourceValue = reversed;
+					else if (getSourceLink().getCollection().equivalence().elementEquals(sourceEl.getCollectionValue(),
+						sourceEl.getValue()))
+						sourceValue = sourceEl.getValue();
+					else {
+						sourceEl.error("Reverse operation produced " + sourceEl.getCollectionValue() + ", not " + reversed + " or "
+							+ sourceEl.getValue());
+						return;
+					}
+				} else
+					sourceValue = sourceEl.getValue();
 				getSourceLink().expect(
-					new ExpectedCollectionOperation<>(sourceEl, derivedOp.getType(), sourceEl.getValue(), sourceEl.getValue()), rejection,
+					new ExpectedCollectionOperation<>(sourceEl, derivedOp.getType(), sourceEl.getValue(), sourceValue), rejection,
 					execute);
 				return;
 			}
