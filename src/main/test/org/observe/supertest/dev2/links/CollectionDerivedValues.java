@@ -753,7 +753,7 @@ public class CollectionDerivedValues {
 							throw new AssertionError("Should have found " + set.getFirst());
 					}
 				} else if (compare == 0)
-					Assert.assertTrue(onExact >= 0);
+					Assert.assertTrue(onExact >= 0); // onExact>0 means that the search treats equal values as greater
 				else if (compare > 0)
 					throw new AssertionError("Should not have returned a greater result");
 				break;
@@ -765,16 +765,15 @@ public class CollectionDerivedValues {
 							throw new AssertionError("Should have found " + set.getLast());
 					}
 				} else if (compare == 0)
-					Assert.assertTrue(onExact <= 0);
+					Assert.assertTrue(onExact <= 0); // onExact<0 means that the search treats equal values as less
 				else if (compare < 0)
 					throw new AssertionError("Should not have returned a lesser result");
 				break;
 			case PreferLess:
 				if (result == null)
 					Assert.assertTrue(set.isEmpty());
-				else if (compare == 0)
-					Assert.assertTrue(onExact >= 0);
-				else if (compare > 0)
+				else if (compare == 0 && onExact >= 0) {// onExact>0 means that the search treats equal values as greater
+				} else if (compare >= 0)
 					Assert.assertNull(set.getAdjacentElement(result.getElementId(), false));
 				else {
 					CollectionElement<T> adj = set.getAdjacentElement(result.getElementId(), true);
@@ -788,9 +787,8 @@ public class CollectionDerivedValues {
 			case PreferGreater:
 				if (result == null)
 					Assert.assertTrue(set.isEmpty());
-				else if (compare == 0)
-					Assert.assertTrue(onExact <= 0);
-				else if (compare < 0)
+				else if (compare == 0 && onExact <= 0) { // onExact<0 means that the search treats equal values as less
+				} else if (compare < 0)
 					Assert.assertNull(set.getAdjacentElement(result.getElementId(), true));
 				else {
 					CollectionElement<T> adj = set.getAdjacentElement(result.getElementId(), false);
@@ -829,7 +827,7 @@ public class CollectionDerivedValues {
 
 		@Override
 		public String toString() {
-			return "observeRelative(" + theValue + ", " + onExact + ", " + theFilter + ")";
+			return "observeRelative(" + theSearch + ", " + theFilter + ")";
 		}
 	}
 }

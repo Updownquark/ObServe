@@ -303,7 +303,8 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 				BetterList<CollectionLinkElement<T, ?>> derivedEls = sourceOp.getElement().getDerivedElements(getSiblingIndex());
 				ValueElement newValueEl;
 				T oldValue = valueEl.element.getValue();
-				Assert.assertEquals(oldValue, sourceOp.getOldValue());
+				if (getSourceLink().getDef().checkOldValues)
+					Assert.assertEquals(oldValue, sourceOp.getOldValue());
 				if (theValues.containsKey(sourceOp.getValue())) {
 					newValueEl = theValues.get(sourceOp.getValue());
 					if (derivedEls.size() != 2) {
