@@ -25,6 +25,18 @@ public interface XformOptions {
 	 */
 	XformOptions cache(boolean cache);
 
+	/**
+	 * @param manyToOne Whether the mapping may produce the same output from different source values
+	 * @return This builder
+	 */
+	XformOptions manyToOne(boolean manyToOne);
+
+	/**
+	 * @param oneToMany Whether the reverse mapping may produce the same source value from different potential collection values
+	 * @return This builder
+	 */
+	XformOptions oneToMany(boolean oneToMany);
+
 	/** @return Whether the result should be re-evaluated on an update from the source */
 	boolean isReEvalOnUpdate();
 	/** @return Whether the result should fire an update as a result of a source event that does not affect the result value */
@@ -32,11 +44,19 @@ public interface XformOptions {
 	/** @return Whether to store both the source and result values for performance */
 	boolean isCached();
 
+	/** @return Whether the mapping may produce the same output from different source values */
+	boolean isManyToOne();
+
+	/** @return Whether the reverse mapping may produce the same source value from different mapped values */
+	boolean isOneToMany();
+
 	/** A simple abstract implementation of XformOptions */
 	class SimpleXformOptions implements XformOptions {
 		private boolean reEvalOnUpdate;
 		private boolean fireIfUnchanged;
 		private boolean isCached;
+		private boolean isManyToOne;
+		private boolean isOneToMany;
 
 		public SimpleXformOptions() {
 			reEvalOnUpdate = true;
@@ -63,6 +83,18 @@ public interface XformOptions {
 		}
 
 		@Override
+		public XformOptions manyToOne(boolean manyToOne) {
+			isManyToOne = manyToOne;
+			return this;
+		}
+
+		@Override
+		public XformOptions oneToMany(boolean oneToMany) {
+			isOneToMany = oneToMany;
+			return this;
+		}
+
+		@Override
 		public boolean isReEvalOnUpdate() {
 			return reEvalOnUpdate;
 		}
@@ -75,6 +107,16 @@ public interface XformOptions {
 		@Override
 		public boolean isCached() {
 			return isCached;
+		}
+
+		@Override
+		public boolean isManyToOne() {
+			return isManyToOne;
+		}
+
+		@Override
+		public boolean isOneToMany() {
+			return isOneToMany;
 		}
 	}
 
@@ -83,11 +125,15 @@ public interface XformOptions {
 		private final boolean reEvalOnUpdate;
 		private final boolean fireIfUnchanged;
 		private final boolean isCached;
+		private final boolean isManyToOne;
+		private final boolean isOneToMany;
 
 		public XformDef(XformOptions options) {
 			reEvalOnUpdate = options.isReEvalOnUpdate();
 			fireIfUnchanged = options.isFireIfUnchanged();
 			isCached = options.isCached();
+			isManyToOne = options.isManyToOne();
+			isOneToMany = options.isOneToMany();
 		}
 
 		public boolean isReEvalOnUpdate() {
@@ -100,6 +146,14 @@ public interface XformOptions {
 
 		public boolean isCached() {
 			return isCached;
+		}
+
+		public boolean isManyToOne() {
+			return isManyToOne;
+		}
+
+		public boolean isOneToMany() {
+			return isOneToMany;
 		}
 
 		public <E, T> XformCacheHandler<E, T> createCacheHandler(XformCacheHandlingInterface<E, T> intf) {

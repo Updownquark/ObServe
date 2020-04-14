@@ -43,6 +43,18 @@ public class Combination {
 			return this;
 		}
 
+		@Override
+		public CombinationPrecursor<E, T> manyToOne(boolean manyToOne) {
+			super.manyToOne(manyToOne);
+			return this;
+		}
+
+		@Override
+		public CombinationPrecursor<E, T> oneToMany(boolean oneToMany) {
+			super.oneToMany(oneToMany);
+			return this;
+		}
+
 		/**
 		 * @param <V> The type of the argument value
 		 * @param value The argument value to combine with the source elements
@@ -110,6 +122,7 @@ public class Combination {
 		}
 
 		/** @return Whether the mapping may produce the same output from different source (collection) values */
+		@Override
 		public boolean isManyToOne() {
 			return isManyToOne;
 		}
@@ -153,6 +166,12 @@ public class Combination {
 
 		@Override
 		CombinedCollectionBuilder<E, T> fireIfUnchanged(boolean fire);
+
+		@Override
+		CombinedCollectionBuilder<E, T> manyToOne(boolean manyToOne);
+
+		@Override
+		CombinedCollectionBuilder<E, T> oneToMany(boolean oneToMany);
 
 		default CombinedFlowDef<E, T> build(Function<? super CombinedValues<? extends E>, ? extends T> combination) {
 			return build((cv, o) -> combination.apply(cv));
@@ -199,6 +218,18 @@ public class Combination {
 		@Override
 		public CombinedCollectionBuilder2<E, V, T> fireIfUnchanged(boolean fire) {
 			super.fireIfUnchanged(fire);
+			return this;
+		}
+
+		@Override
+		public CombinedCollectionBuilder2<E, V, T> manyToOne(boolean manyToOne) {
+			super.manyToOne(manyToOne);
+			return this;
+		}
+
+		@Override
+		public CombinedCollectionBuilder2<E, V, T> oneToMany(boolean oneToMany) {
+			super.oneToMany(oneToMany);
 			return this;
 		}
 
@@ -281,6 +312,18 @@ public class Combination {
 			return this;
 		}
 
+		@Override
+		public CombinedCollectionBuilder3<E, V1, V2, T> manyToOne(boolean manyToOne) {
+			super.manyToOne(manyToOne);
+			return this;
+		}
+
+		@Override
+		public CombinedCollectionBuilder3<E, V1, V2, T> oneToMany(boolean oneToMany) {
+			super.oneToMany(oneToMany);
+			return this;
+		}
+
 		/**
 		 * @param reverse The reverse function to enable adding values to the result
 		 * @return This builder
@@ -350,6 +393,18 @@ public class Combination {
 		@Override
 		public CombinedCollectionBuilder<E, T> fireIfUnchanged(boolean fire) {
 			super.fireIfUnchanged(fire);
+			return this;
+		}
+
+		@Override
+		public CombinedCollectionBuilderN<E, T> manyToOne(boolean manyToOne) {
+			super.manyToOne(manyToOne);
+			return this;
+		}
+
+		@Override
+		public CombinedCollectionBuilderN<E, T> oneToMany(boolean oneToMany) {
+			super.oneToMany(oneToMany);
 			return this;
 		}
 
@@ -428,6 +483,18 @@ public class Combination {
 		@Override
 		public CombinedCollectionBuilder<E, R> cache(boolean cache) {
 			super.cache(cache);
+			return this;
+		}
+
+		@Override
+		public CombinedCollectionBuilder<E, R> manyToOne(boolean manyToOne) {
+			super.manyToOne(manyToOne);
+			return this;
+		}
+
+		@Override
+		public CombinedCollectionBuilder<E, R> oneToMany(boolean oneToMany) {
+			super.oneToMany(oneToMany);
 			return this;
 		}
 
