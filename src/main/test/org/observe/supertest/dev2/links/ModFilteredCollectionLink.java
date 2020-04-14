@@ -72,8 +72,8 @@ public class ModFilteredCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 				filter.accept(f);
 			});
 			return (ObservableCollectionLink<T, X>) new ModFilteredCollectionLink<>(path, sourceCL,
-				new ObservableCollectionTestDef<>(sourceCL.getDef().type, derivedOneStepFlow, derivedMultiStepFlow, true,
-					sourceCL.getDef().checkOldValues),
+				new ObservableCollectionTestDef<>(sourceCL.getDef().type, derivedOneStepFlow, derivedMultiStepFlow,
+					sourceCL.getDef().orderImportant, sourceCL.getDef().checkOldValues),
 				helper, new ObservableCollectionDataFlowImpl.ModFilterer<>(filter.get()));
 		}
 	};

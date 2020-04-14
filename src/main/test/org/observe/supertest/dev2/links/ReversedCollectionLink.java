@@ -27,8 +27,10 @@ public class ReversedCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 			else
 				oneStepFlow = sourceCL.getCollection().flow().reverse();
 			CollectionDataFlow<?, ?, T> multiStepFlow = sourceCL.getDef().multiStepFlow.reverse();
-			return (ObservableCollectionLink<T, X>) new ReversedCollectionLink<>(path, sourceCL, new ObservableCollectionTestDef<>(
-				sourceCL.getDef().type, oneStepFlow, multiStepFlow, true, sourceCL.getDef().checkOldValues), helper);
+			return (ObservableCollectionLink<T, X>) new ReversedCollectionLink<>(path, sourceCL,
+				new ObservableCollectionTestDef<>(sourceCL.getDef().type, oneStepFlow, multiStepFlow, sourceCL.getDef().orderImportant,
+					sourceCL.getDef().checkOldValues),
+				helper);
 		}
 	};
 

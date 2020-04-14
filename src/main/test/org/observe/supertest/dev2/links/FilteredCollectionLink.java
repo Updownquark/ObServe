@@ -51,7 +51,7 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
 			derivedOneStepFlow = derivedOneStepFlow.filter(filter);
 			derivedMultiStepFlow = derivedMultiStepFlow.filter(filter);
 			ObservableCollectionTestDef<T> def = new ObservableCollectionTestDef<>(sourceCL.getType(), derivedOneStepFlow,
-				derivedMultiStepFlow, true, true);
+				derivedMultiStepFlow, sourceCL.getDef().orderImportant, true);
 			return (ObservableCollectionLink<T, X>) new FilteredCollectionLink<>(path, sourceCL, def, filterValue, variableFilter, helper);
 		}
 	};

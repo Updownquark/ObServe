@@ -18,6 +18,7 @@ import org.observe.Observable;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionEvent;
 import org.observe.collect.ObservableCollectionTester;
+import org.qommons.BreakpointHere;
 import org.qommons.QommonsTestUtils;
 import org.qommons.TestHelper;
 import org.qommons.TestHelper.RandomAction;
@@ -580,6 +581,9 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		} else if (maxIndex == 0) {
 			op.after = null;
 			op.before = theElements.peekFirst();
+		} else if (op.type == CollectionOpType.move) {
+			op.after = theElements.isEmpty() ? null : theElements.get(minIndex);
+			op.before = maxIndex >= theElements.size() - 1 ? null : theElements.get(maxIndex + 1);
 		} else {
 			op.after = minIndex == 0 ? null : theElements.get(minIndex - 1);
 			op.before = maxIndex == theElements.size() ? null : theElements.get(maxIndex);
@@ -648,6 +652,8 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 
 	private void addSingle(CollectionOp op, TestHelper helper) {
 		prepareOp(op);
+		if (getModSet() == 7 && getModification() == 16)
+			BreakpointHere.breakpoint();
 		BetterList<T> modify = op.context.modify;
 		String msg;
 		boolean error;
@@ -1039,6 +1045,8 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			if (before != null && before.isPresent() && moved.getElementId().compareTo(before) > 0)//
 				throw new AssertionError("Expected move before [" + op.context.modify.getElementsBefore(before) + "], but was ["
 					+ op.context.modify.getElementsBefore(moved.getElementId()) + "]");
+			Assert.assertTrue(getCollection().equivalence().elementEquals(op.elements.get(0).element.getValue(), //
+				op.context.modify.getElement(moved.getElementId()).get())); // Just verify all the links are still working
 		}
 
 		op.elements.get(0).actualRejection = msg;
@@ -1081,6 +1089,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 				throw new AssertionError("Unexpected operation exception", e);
 			error = true;
 		}
+		modify.getElement(element.getElementId()).get(); // Just verify all the links are still working
 
 		el.actualRejection = msg;
 		expectModification(op, helper);

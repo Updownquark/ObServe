@@ -1,9 +1,13 @@
 package org.observe.supertest.dev2.links;
 
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 
 import org.junit.Assert;
+import org.observe.collect.Equivalence;
 import org.observe.collect.FlowOptions;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.dev2.ChainLinkGenerator;
@@ -16,14 +20,41 @@ import org.observe.supertest.dev2.ObservableCollectionTestDef;
 import org.qommons.BiTuple;
 import org.qommons.TestHelper;
 import org.qommons.collect.BetterList;
-import org.qommons.collect.BetterSortedMap;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.tree.BetterTreeList;
-import org.qommons.tree.BetterTreeMap;
 
-public class DistinctSortedCollectionLink<T> extends ObservableCollectionLink<T, T> {
+public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator() {
+		@Override
+		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
+			if (sourceLink instanceof ObservableCollectionLink)
+				return 1;
+			return 0;
+		}
+
+		@Override
+		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
+			FlowOptions.UniqueOptions options = new FlowOptions.SimpleUniqueOptions(true);
+			options.useFirst(// TODO helper.getBoolean()
+				false);
+			CollectionDataFlow<?, ?, T> oneStepFlow = sourceCL.getCollection().flow();
+			CollectionDataFlow<?, ?, T> multiStepFlow = sourceCL.getDef().multiStepFlow;
+			if (oneStepFlow.equivalence() instanceof Equivalence.ComparatorEquivalence) {
+				oneStepFlow = oneStepFlow.withEquivalence(Equivalence.DEFAULT);
+				multiStepFlow = multiStepFlow.withEquivalence(Equivalence.DEFAULT);
+			}
+			oneStepFlow = oneStepFlow.distinct(opts -> opts.isUseFirst());
+			multiStepFlow = multiStepFlow.distinct(opts -> opts.isUseFirst());
+			ObservableCollectionTestDef<T> def = new ObservableCollectionTestDef<>(sourceLink.getType(), oneStepFlow, multiStepFlow, false,
+				true);
+			DistinctCollectionLink<T> derived = new DistinctCollectionLink<>(path, sourceCL, def, null, options.isUseFirst(), helper);
+			return (ObservableChainLink<T, X>) derived;
+		}
+	};
+
+	public static final ChainLinkGenerator GENERATE_SORTED = new ChainLinkGenerator() {
 		@Override
 		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
 			if (sourceLink instanceof ObservableCollectionLink)
@@ -44,23 +75,25 @@ public class DistinctSortedCollectionLink<T> extends ObservableCollectionLink<T,
 			multiStepFlow = multiStepFlow.distinctSorted(compare, options.isUseFirst());
 			ObservableCollectionTestDef<T> def = new ObservableCollectionTestDef<>(sourceLink.getType(), oneStepFlow, multiStepFlow, true,
 				true);
-			DistinctSortedCollectionLink<T> derived = new DistinctSortedCollectionLink<>(path, sourceCL, def, compare, options.isUseFirst(),
-				helper);
+			DistinctCollectionLink<T> derived = new DistinctCollectionLink<>(path, sourceCL, def, compare, options.isUseFirst(), helper);
 			return (ObservableChainLink<T, X>) derived;
 		}
 	};
 
 	private final SortedLinkHelper<T> theHelper;
-	private final BetterSortedMap<T, ValueElement> theValues;
+	private final Map<T, ValueElement> theValues;
+	private final boolean isUsingFirst;
 
-	public DistinctSortedCollectionLink(String path, ObservableCollectionLink<?, T> sourceLink, ObservableCollectionTestDef<T> def,
+	public DistinctCollectionLink(String path, ObservableCollectionLink<?, T> sourceLink, ObservableCollectionTestDef<T> def,
 		Comparator<? super T> compare, boolean useFirst, TestHelper helper) {
 		super(path, sourceLink, def, helper);
-		theHelper = new SortedLinkHelper<>(compare, useFirst);
-		theValues = new BetterTreeMap<>(false, compare);
+		theHelper = compare == null ? null : new SortedLinkHelper<>(compare, useFirst);
+		if (compare != null)
+			theValues = new TreeMap<>(compare);
+		else
+			theValues = new HashMap<>();
+		isUsingFirst = useFirst;
 	}
-
-	// TODO initial values
 
 	@Override
 	public boolean isAcceptable(T value) {
@@ -74,43 +107,70 @@ public class DistinctSortedCollectionLink<T> extends ObservableCollectionLink<T,
 		return getSourceLink().getUpdateValue(value);
 	}
 
+	private boolean isControllingOperation;
+
 	@Override
 	public CollectionLinkElement<T, T> expectAdd(T value, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before,
 		boolean first, OperationRejection rejection) {
-		BiTuple<CollectionLinkElement<?, T>, CollectionLinkElement<?, T>> afterBefore = theHelper.expectAdd(value, after, before, first,
-			rejection);
-		if (afterBefore == null)
-			return null;
+		if (theHelper != null) {
+			BiTuple<CollectionLinkElement<?, T>, CollectionLinkElement<?, T>> afterBefore = theHelper.expectAdd(value, after, before, first,
+				rejection);
+			if (afterBefore == null)
+				return null;
+			after = afterBefore.getValue1();
+			before = afterBefore.getValue2();
+		}
 		if (theValues.containsKey(value)) {
 			rejection.reject(StdMsg.ELEMENT_EXISTS);
 			return null;
 		}
-		after = afterBefore.getValue1();
-		before = afterBefore.getValue2();
 
-		CollectionLinkElement<?, T> sourceEl = getSourceLink().expectAdd(value, //
-			after == null ? null : (CollectionLinkElement<?, T>) after.getSourceElements().getFirst(),
-				before == null ? null : (CollectionLinkElement<?, T>) before.getSourceElements().getFirst(), //
-					first, rejection);
+		CollectionLinkElement<?, T> sourceEl;
+		if (theHelper != null)
+			sourceEl = getSourceLink().expectAdd(value, //
+				after == null ? null : (CollectionLinkElement<?, T>) after.getSourceElements().getFirst(),
+					before == null ? null : (CollectionLinkElement<?, T>) before.getSourceElements().getFirst(), //
+						first, rejection);
+		else
+			sourceEl = getSourceLink().expectAdd(value, null, null, first, rejection);
 		if (rejection.isRejected())
 			return null;
 		CollectionLinkElement<T, T> element = (CollectionLinkElement<T, T>) sourceEl.getDerivedElements(getSiblingIndex()).getFirst();
-		theHelper.checkOrder(getElements(), element);
+		checkOrder(element, after, before);
 		return element;
 	}
 
 	@Override
 	public CollectionLinkElement<T, T> expectMove(CollectionLinkElement<?, T> source, CollectionLinkElement<?, T> after,
 		CollectionLinkElement<?, T> before, boolean first, OperationRejection rejection) {
-		theHelper.expectMove(source, after, before, first, rejection);
-		return rejection.isRejected() ? null : (CollectionLinkElement<T, T>) source; // Can't do an actual move operation
+		if (theHelper != null)
+			theHelper.expectMove(source, after, before, first, rejection);
+		if (!rejection.isRejected()) {
+			CollectionLinkElement<T, T> newSource;
+			if (!source.isPresent()) {
+				BetterList<CollectionLinkElement<T, ?>> sourceDerived = ((CollectionLinkElement<T, T>) source.getFirstSource())
+					.getDerivedElements(getSiblingIndex());
+				Assert.assertEquals(2, sourceDerived.size());
+				newSource = (CollectionLinkElement<T, T>) sourceDerived.getLast();
+				source.expectRemoval();
+				for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
+					derived.expectFromSource(
+						new ExpectedCollectionOperation<>(source, CollectionOpType.remove, source.getValue(), source.getValue()));
+				newSource.expectAdded(source.getValue());
+				for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
+					derived.expectFromSource(
+						new ExpectedCollectionOperation<>(newSource, CollectionOpType.add, source.getValue(), source.getValue()));
+			} else
+				newSource = (CollectionLinkElement<T, T>) source;
+			theValues.get(source.getValue()).element = newSource;
+			checkOrder(newSource, after == source ? null : after, before == source ? null : before);
+		}
+		return rejection.isRejected() ? null : (CollectionLinkElement<T, T>) source; // Doesn't delegate to source for a move operation
 	}
-
-	private boolean isSetting;
 
 	@Override
 	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection, boolean execute) {
-		if (!theHelper.expectSet(derivedOp, rejection, getElements()))
+		if (theHelper != null && !theHelper.expectSet(derivedOp, rejection, getElements()))
 			return;
 		T oldValue = derivedOp.getElement().getValue();
 		ValueElement valueEl = theValues.computeIfAbsent(oldValue,
@@ -125,11 +185,16 @@ public class DistinctSortedCollectionLink<T> extends ObservableCollectionLink<T,
 		if (execute) {
 			boolean set = derivedOp.getType() == CollectionOpType.set;
 			if (set) {
-				if (theHelper.getCompare().compare(oldValue, derivedOp.getValue()) != 0 && theValues.containsKey(derivedOp.getValue())) {
+				boolean equal;
+				if (theHelper != null)
+					equal = theHelper.getCompare().compare(oldValue, derivedOp.getValue()) == 0;
+				else
+					equal = oldValue.equals(derivedOp.getValue());
+				if (!equal && theValues.containsKey(derivedOp.getValue())) {
 					rejection.reject(StdMsg.ELEMENT_EXISTS);
 					return;
 				}
-				isSetting = true;
+				isControllingOperation = true;
 			}
 
 			// The distinct manager calls the active parent element first, but which one is active involves a lot of state to figure out
@@ -149,15 +214,15 @@ public class DistinctSortedCollectionLink<T> extends ObservableCollectionLink<T,
 				if (sourceEl.getCollectionAddress().equals(activeEl))
 					continue;
 				getSourceLink().expect(
-					new ExpectedCollectionOperation<>(sourceEl, derivedOp.getType(), sourceEl.getValue(), derivedOp.getValue()),
-					rejection, true);
+					new ExpectedCollectionOperation<>(sourceEl, derivedOp.getType(), sourceEl.getValue(), derivedOp.getValue()), rejection,
+					true);
 				if (rejection.isRejected())
 					throw new AssertionError("Operation accepted on test, but rejected on execution");
 			}
 			if (set) {
 				theValues.remove(oldValue);
 				theValues.put(derivedOp.getValue(), valueEl);
-				isSetting = false;
+				isControllingOperation = false;
 				valueEl.element.setValue(derivedOp.getValue());
 				for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
 					derived.expectFromSource(//
@@ -175,7 +240,7 @@ public class DistinctSortedCollectionLink<T> extends ObservableCollectionLink<T,
 
 	@Override
 	public void expectFromSource(ExpectedCollectionOperation<?, T> sourceOp) {
-		if (isSetting)
+		if (isControllingOperation)
 			return;
 		if (getOverallModification() != theLastRefreshedModification) {
 			// There are very unique circumstances which can cause a source element encountered here to not have any
@@ -186,8 +251,7 @@ public class DistinctSortedCollectionLink<T> extends ObservableCollectionLink<T,
 			theLastRefreshedModification = getModification();
 			refreshElements();
 		}
-		ValueElement valueEl = theValues
-			.get(sourceOp.getType() == CollectionOpType.add ? sourceOp.getValue() : sourceOp.getOldValue());
+		ValueElement valueEl = theValues.get(sourceOp.getType() == CollectionOpType.add ? sourceOp.getValue() : sourceOp.getOldValue());
 		CollectionLinkElement<T, T> element;
 		switch (sourceOp.getType()) {
 		case add:
@@ -218,7 +282,12 @@ public class DistinctSortedCollectionLink<T> extends ObservableCollectionLink<T,
 			}
 			break;
 		case set:
-			if (theHelper.getCompare().compare(sourceOp.getOldValue(), sourceOp.getValue()) == 0) {
+			boolean equal;
+			if (theHelper != null)
+				equal = theHelper.getCompare().compare(sourceOp.getOldValue(), sourceOp.getValue()) == 0;
+			else
+				equal = sourceOp.getOldValue().equals(sourceOp.getValue());
+			if (equal) {
 				element = valueEl.element;
 				T oldValue = element.getValue();
 				element.setValue(sourceOp.getValue());
@@ -239,7 +308,7 @@ public class DistinctSortedCollectionLink<T> extends ObservableCollectionLink<T,
 					}
 					Assert.assertEquals(newValueEl.element, derivedEls.getLast());
 				} else if (valueEl.sourceElements.size() > 1
-					|| theHelper.expectMoveFromSource(sourceOp, getSiblingIndex(), getElements())) {
+					|| (theHelper != null && theHelper.expectMoveFromSource(sourceOp, getSiblingIndex(), getElements()))) {
 					Assert.assertEquals(2, derivedEls.size());
 					newValueEl = new ValueElement((CollectionLinkElement<T, T>) derivedEls.getLast());
 					theValues.put(sourceOp.getValue(), newValueEl);
@@ -278,12 +347,23 @@ public class DistinctSortedCollectionLink<T> extends ObservableCollectionLink<T,
 
 	@Override
 	protected void validate(CollectionLinkElement<T, T> element) {
-		theHelper.checkOrder(getElements(), element);
+		checkOrder(element, null, null);
+	}
+
+	void checkOrder(CollectionLinkElement<?, T> element, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before) {
+		if (theHelper != null)
+			theHelper.checkOrder(getElements(), (CollectionLinkElement<T, T>) element);
+		else {
+			if (after != null && element.getElementAddress().compareTo(after.getElementAddress()) <= 0)
+				element.error("Added before " + after);
+			if (before != null && element.getElementAddress().compareTo(before.getElementAddress()) >= 0)
+				element.error("Added after " + before);
+		}
 	}
 
 	@Override
 	public String toString() {
-		return "distinctSorted(" + (theHelper.isUsingFirstSource() ? "first" : "") + ")";
+		return "distinct" + (theHelper != null ? "Sorted" : "") + "(" + (isUsingFirst ? "first" : "") + ")";
 	}
 
 	class ValueElement {

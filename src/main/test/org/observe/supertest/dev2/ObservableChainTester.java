@@ -14,7 +14,6 @@ import org.junit.Test;
 import org.observe.supertest.dev2.links.BaseCollectionLink;
 import org.observe.supertest.dev2.links.CollectionDerivedValues;
 import org.observe.supertest.dev2.links.DistinctCollectionLink;
-import org.observe.supertest.dev2.links.DistinctSortedCollectionLink;
 import org.observe.supertest.dev2.links.FilteredCollectionLink;
 import org.observe.supertest.dev2.links.MappedCollectionLink;
 import org.observe.supertest.dev2.links.ModFilteredCollectionLink;
@@ -70,7 +69,7 @@ public class ObservableChainTester implements Testable {
 		generators.add(FilteredCollectionLink.GENERATE);
 		generators.add(SortedCollectionLink.GENERATE);
 		generators.add(DistinctCollectionLink.GENERATE);
-		generators.add(DistinctSortedCollectionLink.GENERATE);
+		generators.add(DistinctCollectionLink.GENERATE_SORTED);
 		generators.add(SubSetLink.GENERATE);
 
 		// Derived collection value generators
@@ -100,6 +99,7 @@ public class ObservableChainTester implements Testable {
 	@Test
 	public void superTest() {
 		BetterCollections.setSimplifyDuplicateOperations(false);
+		BetterCollections.setTesting(true);
 		Duration testDuration = Duration.ofMinutes(5);
 		int maxFailures = 1;
 		System.out.println(

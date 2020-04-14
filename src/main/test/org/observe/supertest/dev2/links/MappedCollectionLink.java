@@ -75,7 +75,7 @@ public class MappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 					options.accept(o.cache(cache).fireIfUnchanged(fireIfUnchanged).reEvalOnUpdate(reEvalOnUpdate));
 				});
 			ObservableCollectionTestDef<X> newDef = new ObservableCollectionTestDef<>(transform.getType(), derivedOneStepFlow,
-				derivedMultiStepFlow, variableMap, !needsUpdateReeval);
+				derivedMultiStepFlow, sourceCL.getDef().orderImportant, !needsUpdateReeval);
 			return new MappedCollectionLink<>(path, sourceCL, newDef, helper, txValue, variableMap,
 				new FlowOptions.MapDef<>(options.get()));
 		}
