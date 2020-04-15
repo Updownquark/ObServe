@@ -153,7 +153,7 @@ public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLin
 	@Override
 	public void tryModify(RandomAction action, TestHelper helper) {
 		super.tryModify(action, helper);
-		action.or(1, () -> {
+		action.or(2, () -> {
 			int targetValue = helper.getInt(0, theValues.size());
 			V newValue = theValueSupplier.apply(helper);
 

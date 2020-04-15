@@ -96,7 +96,6 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 	}
 
 	private void init(TestHelper helper) {
-
 		if (getSourceLink() == null && theSupplier != null && helper.getBoolean(.25)) {
 			int size = helper.getInt(0, 10);
 			for (int i = 0; i < size; i++)
