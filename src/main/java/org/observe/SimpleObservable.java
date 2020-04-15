@@ -273,5 +273,24 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 		public Transaction tryLock() {
 			return theWrapped.tryLock();
 		}
+
+		@Override
+		public int hashCode() {
+			return theWrapped.hashCode();
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (this == obj)
+				return true;
+			if (!(obj instanceof ReadOnlyObservable))
+				return false;
+			return theWrapped.equals(((ReadOnlyObservable<?>) obj).theWrapped);
+		}
+
+		@Override
+		public String toString() {
+			return theWrapped.toString();
+		}
 	}
 }

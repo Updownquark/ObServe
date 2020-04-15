@@ -3198,8 +3198,11 @@ public class ObservableCollectionDataFlowImpl {
 			Collection<AbstractMappedElement> remaining;
 			if (isElementReversible()) {
 				remaining = new ArrayList<>();
+				// Don't perform the operation on the same parent value twice, even if it exists in multiple elements
+				Map<I, Boolean> parentValues = new IdentityHashMap<>();
 				for (AbstractMappedElement el : (Collection<AbstractMappedElement>) elements) {
-					if (elementReverse(el.getParentValue(), newValue, true) == null)
+					I parentValue = el.getParentValue();
+					if (parentValues.put(parentValue, true) == null && elementReverse(parentValue, newValue, true) != null)
 						remaining.add(el);
 				}
 			} else
@@ -4741,11 +4744,11 @@ public class ObservableCollectionDataFlowImpl {
 		private class RefreshHolder {
 			private final ElementId theElementId;
 			private final Subscription theSub;
-			final BetterCollection<RefreshingElement> elements;
+			final BetterSortedSet<RefreshingElement> elements;
 
 			RefreshHolder(Observable<?> refresh) {
 				theElementId = theRefreshObservables.putEntry(refresh, this, false).getElementId();
-				elements = new BetterTreeList<>(false);
+				elements = new BetterTreeSet<>(false, RefreshingElement::compareTo);
 				theSub = theListening.withConsumer(r -> {
 					try (Transaction t = Lockable.lockAll(Lockable.lockable(theLock, true),
 						Lockable.lockable(theParent, false, null))) {
@@ -4971,7 +4974,7 @@ public class ObservableCollectionDataFlowImpl {
 				}
 			}
 
-			private void refresh(Object cause) {
+			void refresh(Object cause) {
 				T value = get();
 				ObservableCollectionDataFlowImpl.update(theListener, value, value, cause);
 			}
@@ -5020,6 +5023,11 @@ public class ObservableCollectionDataFlowImpl {
 			@Override
 			public void remove() throws UnsupportedOperationException {
 				theParentEl.remove();
+			}
+
+			@Override
+			public String toString() {
+				return theParentEl.toString();
 			}
 		}
 	}

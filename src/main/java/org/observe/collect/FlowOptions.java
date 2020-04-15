@@ -185,16 +185,12 @@ public interface FlowOptions {
 		private final Function<? super T, ? extends E> theReverse;
 		private final ElementSetter<? super E, ? super T> theElementReverse;
 		private final Equivalence<? super T> theEquivalence;
-		private final boolean isManyToOne;
-		private final boolean isOneToMany;
 
 		public MapDef(MapOptions<E, T> options) {
 			super(options);
 			theReverse = options.getReverse();
 			theElementReverse = options.getElementReverse();
 			theEquivalence = options.getEquivalence();
-			isManyToOne = options.isManyToOne();
-			isOneToMany = options.isOneToMany();
 		}
 
 		/** @return The equivalence set to use for the mapped values */
@@ -210,16 +206,6 @@ public interface FlowOptions {
 		/** @return The reverse function, if set */
 		public Function<? super T, ? extends E> getReverse() {
 			return theReverse;
-		}
-
-		/** @return Whether the mapping may produce the same output from different source values */
-		public boolean isManyToOne() {
-			return isManyToOne;
-		}
-
-		/** @return Whether the reverse mapping may produce the same source value from different potential collection values */
-		public boolean isOneToMany() {
-			return isOneToMany;
 		}
 	}
 }

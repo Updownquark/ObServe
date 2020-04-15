@@ -922,9 +922,8 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		 */
 		default <X> CollectionDataFlow<E, ?, X> flattenValues(TypeToken<X> target,
 			Function<? super T, ? extends ObservableValue<? extends X>> map) {
-			TypeToken<ObservableValue<? extends X>> valueType = new TypeToken<ObservableValue<? extends X>>() {}
-			.where(new TypeParameter<X>() {}, target.wrap());
-			return map(valueType, map).refreshEach(v -> v.changes().noInit()).map(target, //
+			TypeToken<ObservableValue<? extends X>> valueType = ObservableValue.TYPE_KEY.getCompoundType(target.wrap());
+			return map(valueType, map).refreshEach(v -> v.noInitChanges()).map(target, //
 				LambdaUtils.printableFn(obs -> obs == null ? null : obs.get(), () -> "flatten"), //
 				options -> options//
 				.withElementSetting((ov, newValue, doSet) -> {
