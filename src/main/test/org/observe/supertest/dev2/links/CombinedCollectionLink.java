@@ -86,7 +86,6 @@ public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLin
 			Function<CombinationPrecursor<S, T>, CombinedFlowDef<S, T>> combination = combine -> {
 				Combination.CombinationPrecursor<S, T> combinePre = combine.cache(cache).manyToOne(manyToOne).oneToMany(oneToMany)//
 					.fireIfUnchanged(fireIfUnchanged).reEvalOnUpdate(reEvalOnUpdate);
-				org.qommons.BreakpointHere.breakpoint();
 				Combination.CombinedCollectionBuilder<S, T> builder = combinePre.with(values.get(0));
 				for (int i = 1; i < values.size(); i++)
 					builder = builder.with(values.get(i));
@@ -449,8 +448,9 @@ public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLin
 							// The a + b - b is not always equal to a due to precision losses
 							CombinedCollectionLink.<Double, Double, Double> transform(type1, type1, type2, (d1, d2) -> noNeg0(d1 + d2),
 								(d1, d2) -> noNeg0(d1 - d2), true, true, "+", "-"), //
+							// Same with a * b / b
 							CombinedCollectionLink.<Double, Double, Double> transform(type1, type1, type2, (d1, d2) -> noNeg0(d1 * d2),
-								(d1, d2) -> noNeg0(d1 / d2), true, false, "*", "/") //
+								(d1, d2) -> noNeg0(d1 / d2), true, true, "*", "/") //
 							);
 						break;
 					}
