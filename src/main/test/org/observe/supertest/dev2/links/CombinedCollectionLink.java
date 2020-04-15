@@ -410,7 +410,14 @@ public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLin
 							CombinedCollectionLink.<Integer, Integer, Integer> transform(type1, type1, type2, (i1, i2) -> i1 + i2,
 								(i1, i2) -> i1 - i2, false, false, "+", "-"), //
 							CombinedCollectionLink.<Integer, Integer, Integer> transform(type1, type1, type2, (i1, i2) -> i1 * i2,
-								(i1, i2) -> i1 / i2, false, true, "*", "/")//
+								(i1, i2) -> {
+									if (i2 != 0)
+										return i1 / i2;
+									else if (i1 >= 0)
+										return Integer.MAX_VALUE;
+									else
+										return Integer.MIN_VALUE;
+								}, false, true, "*", "/")//
 							);
 						break;
 					}
