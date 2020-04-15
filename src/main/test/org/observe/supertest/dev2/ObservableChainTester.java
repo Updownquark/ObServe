@@ -13,6 +13,7 @@ import java.util.function.Supplier;
 import org.junit.Test;
 import org.observe.supertest.dev2.links.BaseCollectionLink;
 import org.observe.supertest.dev2.links.CollectionDerivedValues;
+import org.observe.supertest.dev2.links.CombinedCollectionLink;
 import org.observe.supertest.dev2.links.DistinctCollectionLink;
 import org.observe.supertest.dev2.links.FilteredCollectionLink;
 import org.observe.supertest.dev2.links.MappedCollectionLink;
@@ -31,7 +32,8 @@ import org.qommons.debug.Debug;
 /** Tests many of the classes in ObServe using randomly generated observable structure chains and randomly generated-data. */
 public class ObservableChainTester implements Testable {
 	private static final int MAX_VALUE = 1000;
-	static final Map<TestValueType, Function<TestHelper, ?>> SUPPLIERS;
+	/** Providers of random values for each type */
+	public static final Map<TestValueType, Function<TestHelper, ?>> SUPPLIERS;
 	static {
 		SUPPLIERS = new HashMap<>();
 		for (TestValueType type : TestValueType.values()) {
@@ -64,6 +66,7 @@ public class ObservableChainTester implements Testable {
 
 		// Derived collection generators
 		generators.add(MappedCollectionLink.GENERATE);
+		generators.add(CombinedCollectionLink.GENERATE);
 		generators.add(ReversedCollectionLink.GENERATE);
 		generators.add(ModFilteredCollectionLink.GENERATE);
 		generators.add(FilteredCollectionLink.GENERATE);
@@ -100,7 +103,7 @@ public class ObservableChainTester implements Testable {
 	public void superTest() {
 		BetterCollections.setSimplifyDuplicateOperations(false);
 		BetterCollections.setTesting(true);
-		Duration testDuration = Duration.ofMinutes(5);
+		Duration testDuration = Duration.ofMinutes(20);
 		int maxFailures = 1;
 		System.out.println(
 			"Executing up to " + QommonsUtils.printTimeLength(testDuration.toMillis()) + " of tests with max " + maxFailures + " failures");

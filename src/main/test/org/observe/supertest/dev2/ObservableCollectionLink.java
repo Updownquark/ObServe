@@ -299,14 +299,15 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 					int index = helper.getInt(0, modify.size());
 					T value;
 					CollectionLinkElement<S, T> element = theElements.get(opCtx.subListStart + index);
-					if (helper.getBoolean(0.1)) // More updates
+					boolean update = helper.getBoolean(0.1);
+					if (update) // More updates
 						value = element.getValue();
 					else
 						value = theSupplier.apply(helper);
 					CollectionOp op = new CollectionOp(opCtx, set, index, index, value, false);
 					op.add(element);
 					if (helper.isReproducing())
-						System.out.println(op + " from " + element.getValue());
+						System.out.println(op + (update ? "(update)" : "") + " from " + element.getValue());
 					helper.placemark();
 					set(op, helper);
 				});
@@ -649,6 +650,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 					continue; // A hack, putting the value to remove in the initial element
 				expect(//
 					new ExpectedCollectionOperation<>(exEl, op.type, exEl.getValue(), exEl.getValue()), el, true);
+
 			}
 			break;
 		case set:

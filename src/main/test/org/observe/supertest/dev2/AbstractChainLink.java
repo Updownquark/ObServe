@@ -63,4 +63,7 @@ public abstract class AbstractChainLink<S, T> implements ObservableChainLink<S, 
 	public void setModification(int modSet, int modification, int overall) {
 		((AbstractChainLink<?, S>) getSourceLink()).setModification(modSet, modification, overall);
 	}
+
+	@Override
+	public abstract String toString();
 }

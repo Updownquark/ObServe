@@ -1,5 +1,6 @@
 package org.observe.supertest.dev2.links;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -10,20 +11,26 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.observe.SettableValue;
+import org.observe.collect.Combination;
 import org.observe.collect.Combination.CombinationPrecursor;
-import org.observe.collect.Combination.CombinedCollectionBuilder2;
 import org.observe.collect.Combination.CombinedFlowDef;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.dev2.ChainLinkGenerator;
+import org.observe.supertest.dev2.CollectionLinkElement;
+import org.observe.supertest.dev2.CollectionSourcedLink;
+import org.observe.supertest.dev2.ExpectedCollectionOperation;
 import org.observe.supertest.dev2.ObservableChainLink;
+import org.observe.supertest.dev2.ObservableChainTester;
 import org.observe.supertest.dev2.ObservableCollectionLink;
-import org.observe.supertest.dev2.OneToOneCollectionLink;
+import org.observe.supertest.dev2.ObservableCollectionTestDef;
 import org.observe.supertest.dev2.TestValueType;
 import org.qommons.TestHelper;
+import org.qommons.TestHelper.RandomAction;
+import org.qommons.ValueHolder;
 
 import com.google.common.reflect.TypeToken;
 
-public class CombinedCollectionLink<S, V, T> extends OneToOneCollectionLink<S, T> {
+public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLink<S, T> {
 	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator() {
 		@Override
 		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
@@ -44,8 +51,29 @@ public class CombinedCollectionLink<S, V, T> extends OneToOneCollectionLink<S, T
 
 		private <S, V, T> CombinedCollectionLink<S, V, T> deriveLink(String path, ObservableCollectionLink<?, S> sourceCL,
 			BiTypeTransformation<S, V, T> transform, TestHelper helper) {
-			SettableValue<V> value = SettableValue.build((TypeToken<V>) transform.getValueType().getType()).safe(false).build();
+			int valueCount = helper.getInt(1, 5); // Between 1 and 4, inclusive
+			List<SettableValue<V>> values = new ArrayList<>(valueCount);
+			for (int i = 0; i < valueCount; i++)
+				values.add(SettableValue.build((TypeToken<V>) transform.getValueType().getType()).safe(false).build());
+			Function<TestHelper, V> valueSupplier = (Function<TestHelper, V>) ObservableChainTester.SUPPLIERS.get(transform.getValueType());
+			for (int i = 0; i < valueCount; i++)
+				values.get(i).set(valueSupplier.apply(helper), null);
+			Function<List<V>, V> valueCombination = getValueCombination(transform.getValueType());
 
+			Function<Combination.CombinedValues<? extends S>, T> map = cv -> {
+				List<V> valueList = (List<V>) Arrays.asList(new Object[values.size()]);
+				for (int i = 0; i < values.size(); i++)
+					valueList.set(i, cv.get(values.get(i)));
+				V combinedV = valueCombination.apply(valueList);
+				return transform.map(cv.getElement(), combinedV);
+			};
+			Function<Combination.CombinedValues<? extends T>, S> reverse = cv -> {
+				List<V> valueList = (List<V>) Arrays.asList(new Object[values.size()]);
+				for (int i = 0; i < values.size(); i++)
+					valueList.set(i, cv.get(values.get(i)));
+				V combinedV = valueCombination.apply(valueList);
+				return transform.reverse(cv.getElement(), combinedV);
+			};
 			boolean needsUpdateReeval = !sourceCL.getDef().checkOldValues;
 			boolean cache = helper.getBoolean(.75);
 			boolean withReverse = transform.supportsReverse() && helper.getBoolean(.95);
@@ -54,54 +82,101 @@ public class CombinedCollectionLink<S, V, T> extends OneToOneCollectionLink<S, T
 			boolean oneToMany = transform.isOneToMany();
 			boolean manyToOne = transform.isManyToOne();
 			TypeToken<T> type = (TypeToken<T>) transform.getTargetType().getType();
+			ValueHolder<Combination.CombinedFlowDef<S, T>> options = new ValueHolder<>();
 			Function<CombinationPrecursor<S, T>, CombinedFlowDef<S, T>> combination = combine -> {
-				CombinedCollectionBuilder2<S, V, T> combineVal = combine.with(value).cache(cache).manyToOne(manyToOne).oneToMany(oneToMany);
-				if (transform.supportsReverse())
-					combineVal.withReverse(transform::reverse);
-				return combineVal.build(vals -> transform.map(vals.getElement(), vals.get(value)));
+				Combination.CombinationPrecursor<S, T> combinePre = combine.cache(cache).manyToOne(manyToOne).oneToMany(oneToMany)//
+					.fireIfUnchanged(fireIfUnchanged).reEvalOnUpdate(reEvalOnUpdate);
+				org.qommons.BreakpointHere.breakpoint();
+				Combination.CombinedCollectionBuilder<S, T> builder = combinePre.with(values.get(0));
+				for (int i = 1; i < values.size(); i++)
+					builder = builder.with(values.get(i));
+
+				if (withReverse)
+					builder.withReverse(reverse);
+				Combination.CombinedFlowDef<S, T> def = builder.build(map);
+				options.accept(def);
+				return def;
 			};
 			CollectionDataFlow<?, ?, T> oneStepFlow = sourceCL.getCollection().flow().combine(type, combination);
 			CollectionDataFlow<?, ?, T> multiStepFlow = sourceCL.getDef().multiStepFlow.combine(type, combination);
 
-			// TODO Auto-generated method stub
+			ObservableCollectionTestDef<T> newDef = new ObservableCollectionTestDef<>(transform.getTargetType(), oneStepFlow, multiStepFlow,
+				sourceCL.getDef().orderImportant, cache);
+			return new CombinedCollectionLink<>(path, sourceCL, newDef, helper, transform, values, valueCombination, valueSupplier,
+				options.get());
 		}
 	};
 
 	private final BiTypeTransformation<S, V, T> theOperation;
-	private final SettableValue<V> theValue;
+	private final List<SettableValue<V>> theValues;
+	private final Function<List<V>, V> theValueCombination;
+	private final Function<TestHelper, V> theValueSupplier;
+	private final CombinedFlowDef<S, T> theOptions;
+
+	public CombinedCollectionLink(String path, ObservableCollectionLink<?, S> sourceLink, ObservableCollectionTestDef<T> def,
+		TestHelper helper, BiTypeTransformation<S, V, T> operation, List<SettableValue<V>> values, Function<List<V>, V> valueCombination,
+		Function<TestHelper, V> valueSupplier, CombinedFlowDef<S, T> options) {
+		super(path, sourceLink, def, helper, options.isCached());
+		theOperation = operation;
+		theValues = values;
+		theValueCombination = valueCombination;
+		theValueSupplier = valueSupplier;
+
+		theOptions = options;
+	}
+
+	protected V getValueSum() {
+		return theValueCombination.apply(toList(theValues));
+	}
 
 	@Override
 	protected T map(S sourceValue) {
-		return theOperation.map(sourceValue, theValue.get());
+		return theOperation.map(sourceValue, getValueSum());
 	}
 
 	@Override
 	protected S reverse(T value) {
-		return theOperation.reverse(value, theValue.get());
+		if (!isReversible())
+			throw new IllegalStateException();
+		return theOperation.reverse(value, getValueSum());
 	}
 
 	@Override
 	protected boolean isReversible() {
-		return theOperation.supportsReverse();
+		return theOptions.getReverse() != null;
 	}
 
 	@Override
-	public boolean isAcceptable(T value) {
-		S reversed;
-		try {
-			reversed = theOperation.reverse(value, theValue.get());
-		} catch (RuntimeException e) {
-			return false;
+	public double getModificationAffinity() {
+		return super.getModificationAffinity() + 2;
+	}
+
+	@Override
+	public void tryModify(RandomAction action, TestHelper helper) {
+		super.tryModify(action, helper);
+		action.or(1, () -> {
+			int targetValue = helper.getInt(0, theValues.size());
+			V newValue = theValueSupplier.apply(helper);
+
+			V oldValue = theValues.get(targetValue).get();
+			V oldCombinedValue = getValueSum();
+			theValues.get(targetValue).set(newValue, null);
+			V newCombinedValue = getValueSum();
+			if (helper.isReproducing())
+				System.out.println(
+					"Value[" + targetValue + "] " + oldValue + "->" + newValue + "; total " + oldCombinedValue + "->" + newCombinedValue);
+			expectValueChange(oldCombinedValue, newCombinedValue);
+		});
+	}
+
+	protected void expectValueChange(V oldCombinedValue, V newCombinedValue) {
+		for (CollectionLinkElement<S, T> element : getElements()) {
+			T oldValue = element.getValue();
+			T newValue = theOperation.map(element.getFirstSource().getValue(), newCombinedValue);
+			element.setValue(newValue);
+			for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
+				derived.expectFromSource(new ExpectedCollectionOperation<>(element, CollectionOpType.set, oldValue, newValue));
 		}
-		return getSourceLink().isAcceptable(reversed);
-	}
-
-	@Override
-	public T getUpdateValue(T value) {
-		if (theOptions.isCached() || !isReversible())
-			return value;
-		else
-			return map(getSourceLink().getUpdateValue(reverse(value)));
 	}
 
 	public interface BiTypeTransformation<S, V, T> {
@@ -242,7 +317,7 @@ public class CombinedCollectionLink<S, V, T> extends OneToOneCollectionLink<S, T
 
 	@Override
 	public String toString() {
-		String str = theOperation + " " + theValue.get();
+		String str = "combined:" + theOperation + toList(theValues);
 		if (theOptions.getReverse() == null)
 			str += ", irreversible";
 		return str + ")";
@@ -375,7 +450,7 @@ public class CombinedCollectionLink<S, V, T> extends OneToOneCollectionLink<S, T
 							CombinedCollectionLink.<Double, Double, Double> transform(type1, type1, type2, (d1, d2) -> noNeg0(d1 + d2),
 								(d1, d2) -> noNeg0(d1 - d2), true, true, "+", "-"), //
 							CombinedCollectionLink.<Double, Double, Double> transform(type1, type1, type2, (d1, d2) -> noNeg0(d1 * d2),
-								(d1, d2) -> noNeg0(d1 / d2), false, true, "*", "/") //
+								(d1, d2) -> noNeg0(d1 / d2), true, false, "*", "/") //
 							);
 						break;
 					}
@@ -434,5 +509,36 @@ public class CombinedCollectionLink<S, V, T> extends OneToOneCollectionLink<S, T
 		if (str.endsWith(".0"))
 			str = str.substring(0, str.length() - 2);
 		return str;
+	}
+
+	static <V> Function<List<V>, V> getValueCombination(TestValueType valueType) {
+		switch (valueType) {
+		case INT:
+			return values -> (V) Integer.valueOf(((List<Integer>) values).stream().mapToInt(Integer::intValue).sum());
+		case DOUBLE:
+			return values -> (V) Double.valueOf(((List<Double>) values).stream().mapToDouble(Double::doubleValue).sum());
+		case BOOLEAN:
+			return values -> {
+				boolean ret = false;
+				for (V v : values)
+					ret ^= ((Boolean) v).booleanValue();
+				return (V) Boolean.valueOf(ret);
+			};
+		case STRING:
+			return values -> {
+				StringBuilder sb = new StringBuilder();
+				for (V val : values)
+					sb.append(val);
+				return (V) sb.toString();
+			};
+		}
+		throw new IllegalStateException();
+	}
+
+	static <V> List<V> toList(List<SettableValue<V>> values) {
+		List<V> list = (List<V>) Arrays.asList(new Object[values.size()]);
+		for (int i = 0; i < values.size(); i++)
+			list.set(i, values.get(i).get());
+		return list;
 	}
 }
