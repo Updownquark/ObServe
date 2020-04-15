@@ -798,7 +798,26 @@ public class ObservableSetImpl {
 
 		@Override
 		public boolean clear() {
-			return theParent.clear();
+			int firstFail = -1;
+			int i = 0;
+			for (UniqueElement el : theElementsByValue.values()) {
+				if (el.canRemove() != null) {
+					firstFail = i;
+					break;
+				}
+				i++;
+			}
+			if (firstFail < 0)
+				return theParent.clear();
+			i = 0;
+			for (UniqueElement el : theElementsByValue.values()) {
+				if (i < firstFail)
+					el.remove();
+				else if (i > firstFail && el.canRemove() == null)
+					el.remove();
+				i++;
+			}
+			return false;
 		}
 
 		@Override

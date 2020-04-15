@@ -61,7 +61,7 @@ public class Combination {
 		 * @return A binary (source + argument) combined collection builder
 		 */
 		public <V> CombinedCollectionBuilder2<E, V, T> with(ObservableValue<V> value) {
-			return new CombinedCollectionBuilder2<>(value);
+			return new CombinedCollectionBuilder2<>(this, value);
 		}
 	}
 
@@ -75,23 +75,20 @@ public class Combination {
 		private final Set<ObservableValue<?>> theArgs;
 		private final BiFunction<? super CombinedValues<? extends E>, ? super T, ? extends T> theCombination;
 		private final Function<? super CombinedValues<T>, ? extends E> theReverse;
-		private final boolean isManyToOne;
 
 		/**
 		 * @param builder The builder containing the option data
 		 * @param args The observable values to combine with each source element
 		 * @param combination The combination function to combine the source and argument values
 		 * @param reverse The reverse function to map from result values to source values, for adding values to the result, etc.
-		 * @param manyToOne Whether the mapping may produce the same output from different source (collection) values
 		 */
 		public CombinedFlowDef(CombinedCollectionBuilder<E, T> builder, Set<ObservableValue<?>> args,
 			BiFunction<? super CombinedValues<? extends E>, ? super T, ? extends T> combination,
-			Function<? super CombinedValues<T>, ? extends E> reverse, boolean manyToOne) {
+			Function<? super CombinedValues<T>, ? extends E> reverse) {
 			super(builder);
 			theArgs = args;
 			theCombination = combination;
 			theReverse = reverse;
-			isManyToOne = manyToOne;
 		}
 
 		@Override
@@ -120,12 +117,6 @@ public class Combination {
 		public Function<? super CombinedValues<T>, ? extends E> getReverse() {
 			return theReverse;
 		}
-
-		/** @return Whether the mapping may produce the same output from different source (collection) values */
-		@Override
-		public boolean isManyToOne() {
-			return isManyToOne;
-		}
 	}
 
 	/**
@@ -133,11 +124,10 @@ public class Combination {
 	 * values
 	 *
 	 * @param <E> The type of elements in the source collection
-	 * @param <I> Intermediate type
 	 * @param <T> The type of elements in the resulting collection
-	 * @see ObservableCollection.CollectionDataFlow#combineWith(ObservableValue, TypeToken)
+	 * @see ObservableCollection.CollectionDataFlow#combine(TypeToken, Function)
 	 */
-	interface CombinedCollectionBuilder<E, T> extends XformOptions {
+	public interface CombinedCollectionBuilder<E, T> extends XformOptions {
 		/**
 		 * Adds another observable value to the combination mix
 		 *
@@ -173,10 +163,19 @@ public class Combination {
 		@Override
 		CombinedCollectionBuilder<E, T> oneToMany(boolean oneToMany);
 
+		/**
+		 * @param combination A function producing a combination value from a structure containing the source value and all combined values
+		 * @return The combined collection definition
+		 */
 		default CombinedFlowDef<E, T> build(Function<? super CombinedValues<? extends E>, ? extends T> combination) {
 			return build((cv, o) -> combination.apply(cv));
 		}
 
+		/**
+		 * @param combination A function producing a combination value from a structure containing the source value and all combined values,
+		 *        as well as the previous combination value
+		 * @return The combined collection definition
+		 */
 		CombinedFlowDef<E, T> build(BiFunction<? super CombinedValues<? extends E>, ? super T, ? extends T> combination);
 	}
 
@@ -192,9 +191,12 @@ public class Combination {
 	public static class CombinedCollectionBuilder2<E, V, T> extends Combination.AbstractCombinedCollectionBuilder<E, T> {
 		private final ObservableValue<V> theArg2;
 
-		/** @param arg2 The argument to combine with the flow values */
-		protected CombinedCollectionBuilder2(ObservableValue<V> arg2) {
-			super(null);
+		/**
+		 * @param precursor The combination precursor at the beginning of the combination
+		 * @param arg2 The argument to combine with the flow values
+		 */
+		protected CombinedCollectionBuilder2(CombinationPrecursor<E, T> precursor, ObservableValue<V> arg2) {
+			super(precursor);
 			theArg2 = arg2;
 			addArg(arg2);
 		}
@@ -445,16 +447,9 @@ public class Combination {
 	implements CombinedCollectionBuilder<E, R> {
 		private final BetterHashSet<ObservableValue<?>> theArgs;
 		private Function<? super CombinedValues<? extends R>, ? extends E> theReverse;
-		private final boolean isManyToOne;
 
-		protected AbstractCombinedCollectionBuilder(AbstractCombinedCollectionBuilder<E, R> template) {
-			if (template != null) {
-				cache(template.isCached());
-				reEvalOnUpdate(template.isReEvalOnUpdate());
-				fireIfUnchanged(template.isFireIfUnchanged());
-				isManyToOne = template.isManyToOne;
-			} else
-				isManyToOne = false;
+		protected AbstractCombinedCollectionBuilder(XformOptions template) {
+			super(template);
 			theArgs = BetterHashSet.build().identity().unsafe().buildSet();
 		}
 
@@ -512,7 +507,7 @@ public class Combination {
 		@Override
 		public CombinedFlowDef<E, R> build(BiFunction<? super CombinedValues<? extends E>, ? super R, ? extends R> combination) {
 			Set<ObservableValue<?>> args = Collections.unmodifiableSet(BetterHashSet.build().identity().unsafe().buildSet(theArgs));
-			return new CombinedFlowDef<>(this, args, combination, theReverse, isManyToOne);
+			return new CombinedFlowDef<>(this, args, combination, theReverse);
 		}
 	}
 }

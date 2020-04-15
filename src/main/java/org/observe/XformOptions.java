@@ -46,22 +46,39 @@ public interface XformOptions {
 
 	/** @return Whether the mapping may produce the same output from different source values */
 	boolean isManyToOne();
-
 	/** @return Whether the reverse mapping may produce the same source value from different mapped values */
 	boolean isOneToMany();
 
 	/** A simple abstract implementation of XformOptions */
-	class SimpleXformOptions implements XformOptions {
+	public class SimpleXformOptions implements XformOptions {
 		private boolean reEvalOnUpdate;
 		private boolean fireIfUnchanged;
 		private boolean isCached;
 		private boolean isManyToOne;
 		private boolean isOneToMany;
 
+		/** Creates the options */
 		public SimpleXformOptions() {
-			reEvalOnUpdate = true;
-			fireIfUnchanged = true;
-			isCached = true;
+			this(null);
+		}
+
+		/**
+		 * Copies a set of options
+		 *
+		 * @param options The options to copy
+		 */
+		public SimpleXformOptions(XformOptions options) {
+			if (options != null) {
+				reEvalOnUpdate = options.isReEvalOnUpdate();
+				fireIfUnchanged = options.isFireIfUnchanged();
+				isCached = options.isCached();
+				isManyToOne = options.isManyToOne();
+				isOneToMany = options.isOneToMany();
+			} else {
+				reEvalOnUpdate = true;
+				fireIfUnchanged = true;
+				isCached = true;
+			}
 		}
 
 		@Override
@@ -121,13 +138,14 @@ public interface XformOptions {
 	}
 
 	/** An immutable version of {@link XformOptions} */
-	class XformDef {
+	public class XformDef {
 		private final boolean reEvalOnUpdate;
 		private final boolean fireIfUnchanged;
 		private final boolean isCached;
 		private final boolean isManyToOne;
 		private final boolean isOneToMany;
 
+		/** @param options The configured options */
 		public XformDef(XformOptions options) {
 			reEvalOnUpdate = options.isReEvalOnUpdate();
 			fireIfUnchanged = options.isFireIfUnchanged();
@@ -136,26 +154,35 @@ public interface XformOptions {
 			isOneToMany = options.isOneToMany();
 		}
 
+		/** @return Whether the result should be re-evaluated on an update from the source */
 		public boolean isReEvalOnUpdate() {
 			return reEvalOnUpdate;
 		}
 
+		/** @return Whether the result should fire an update as a result of a source event that does not affect the result value */
 		public boolean isFireIfUnchanged() {
 			return fireIfUnchanged;
 		}
 
+		/** @return Whether to store both the source and result values for performance */
 		public boolean isCached() {
 			return isCached;
 		}
 
+		/** @return Whether the mapping may produce the same output from different source values */
 		public boolean isManyToOne() {
 			return isManyToOne;
 		}
 
+		/** @return Whether the reverse mapping may produce the same source value from different mapped values */
 		public boolean isOneToMany() {
 			return isOneToMany;
 		}
 
+		/**
+		 * @param intf The interface dictating behavior for the cache
+		 * @return A cache handler that obeys the settings of this option set
+		 */
 		public <E, T> XformCacheHandler<E, T> createCacheHandler(XformCacheHandlingInterface<E, T> intf) {
 			return new XformCacheHandler<>(this, intf);
 		}
@@ -167,7 +194,7 @@ public interface XformOptions {
 	 * @param <E> The type of the source values
 	 * @param <T> The type of the mapped values
 	 */
-	interface XformCacheHandlingInterface<E, T> {
+	public interface XformCacheHandlingInterface<E, T> {
 		/** @return A mapping function to produce mapped values from source values */
 		BiFunction<? super E, ? super T, ? extends T> map();
 
@@ -191,7 +218,7 @@ public interface XformOptions {
 	 * @param <E> The type of the source values
 	 * @param <T> The type of the mapped values
 	 */
-	class XformCacheHandler<E, T> {
+	public class XformCacheHandler<E, T> {
 		private final XformDef theDef;
 		private E theSrcCache;
 		private final XformCacheHandlingInterface<E, T> theIntf;
