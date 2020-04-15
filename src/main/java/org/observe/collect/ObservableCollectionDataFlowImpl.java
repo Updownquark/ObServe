@@ -4346,7 +4346,7 @@ public class ObservableCollectionDataFlowImpl {
 					}
 					Object oldValue = getOptions().isCached() ? holder.getSourceCache() : evt.getOldValue();
 					Ternian update = holder.isUpdate(evt.getOldValue(), evt.getNewValue());
-					if (update == null)
+					if (update == Ternian.NONE)
 						return; // No change, no event
 					try (Transaction t = lock(false, null)) {
 						// The old values are not needed if we're caching each element value
@@ -4414,7 +4414,10 @@ public class ObservableCollectionDataFlowImpl {
 
 			void updated(Function<I, Combination.CombinedValues<I>> oldValues, Object cause, boolean isUpdate) {
 				I parentValue = getOptions().isCached() ? theCacheHandler.getSourceCache() : getParentEl().get();
-				BiTuple<T, T> values = theCacheHandler.handleChange(parentValue, parentValue, isUpdate);
+				Function<? super I, ? extends T> oldMap = oldSrc -> getOptions().getCombination()//
+					.apply(//
+						oldValues.apply(oldSrc), null);
+				BiTuple<T, T> values = theCacheHandler.handleChange(parentValue, oldMap, parentValue, isUpdate);
 				if (values != null)
 					ObservableCollectionDataFlowImpl.update(theListener, values.getValue1(), values.getValue2(), cause);
 			}

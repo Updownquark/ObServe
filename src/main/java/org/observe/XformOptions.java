@@ -1,6 +1,7 @@
 package org.observe;
 
 import java.util.function.BiFunction;
+import java.util.function.Function;
 
 import org.qommons.BiTuple;
 import org.qommons.Ternian;
@@ -270,6 +271,17 @@ public interface XformOptions {
 		 * @return A tuple of old and new mapped values to fire an event on, or null if the change is irrelevant to this data set
 		 */
 		public BiTuple<T, T> handleChange(E oldSource, E newSource, boolean update) {
+			return handleChange(oldSource, null, newSource, update);
+		}
+
+		/**
+		 * @param oldSource The previous source value (according to an event)
+		 * @param oldMap The mapping function to use to produce the old mapped value (may be null to use the current map)
+		 * @param newSource The new source value
+		 * @param update Whether the change is to be treated as an update
+		 * @return A tuple of old and new mapped values to fire an event on, or null if the change is irrelevant to this data set
+		 */
+		public BiTuple<T, T> handleChange(E oldSource, Function<? super E, ? extends T> oldMap, E newSource, boolean update) {
 			// Now figure out if we need to fire an event
 			T oldValue, newValue;
 			BiFunction<? super E, ? super T, ? extends T> map = theIntf.map();
@@ -284,7 +296,10 @@ public interface XformOptions {
 				if (update)
 					oldValue = newValue = map.apply(newSource, null);
 				else {
-					oldValue = map.apply(oldSource, null);
+					if (oldMap != null)
+						oldValue = oldMap.apply(oldSource);
+					else
+						oldValue = map.apply(oldSource, null);
 					newValue = map.apply(newSource, oldValue);
 				}
 			}
