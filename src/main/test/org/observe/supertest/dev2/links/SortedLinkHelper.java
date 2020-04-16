@@ -106,7 +106,7 @@ public class SortedLinkHelper<T> {
 		CollectionLinkElement<T, T> element = (CollectionLinkElement<T, T>) sourceOp.getElement().getDerivedElements(siblingIndex)
 			.getFirst();
 		boolean expectMove;
-		int comp = theCompare.compare(sourceOp.getValue(), element.getValue());
+		int comp = theCompare.compare(sourceOp.getValue(), sourceOp.getOldValue());
 		if (comp < 0) {
 			CollectionElement<CollectionLinkElement<T, T>> adj = elements.getAdjacentElement(element.getElementAddress(), false);
 			while (adj != null && (adj.get().isRemoveExpected() || adj.get().wasAdded()))

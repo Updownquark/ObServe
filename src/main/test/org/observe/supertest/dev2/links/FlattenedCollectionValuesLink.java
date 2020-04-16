@@ -111,7 +111,8 @@ public class FlattenedCollectionValuesLink<S, T> extends AbstractMappedCollectio
 		if (first != null) {
 			first.setValue(newValue);
 			for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
-				derived.expectFromSource(new ExpectedCollectionOperation<>(first, CollectionOpType.set, oldValue, newValue));
+				derived.expectFromSource(//
+					new ExpectedCollectionOperation<>(first, CollectionOpType.set, oldValue, newValue));
 		}
 		for (CollectionLinkElement<S, T> element : getElements()) {
 			if (element == first)
@@ -120,7 +121,8 @@ public class FlattenedCollectionValuesLink<S, T> extends AbstractMappedCollectio
 			if (entry.getElementId().equals(getBucket(sourceValue).getElementId())) {
 				element.setValue(newValue);
 				for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
-					derived.expectFromSource(new ExpectedCollectionOperation<>(element, CollectionOpType.set, oldValue, newValue));
+					derived.expectFromSource(//
+						new ExpectedCollectionOperation<>(element, CollectionOpType.set, oldValue, newValue));
 			}
 		}
 	}
@@ -140,7 +142,7 @@ public class FlattenedCollectionValuesLink<S, T> extends AbstractMappedCollectio
 
 	@Override
 	public String toString() {
-		return "flattenedValues(" + getType() + ")";
+		return "flattenedValues(" + theBuckets.size() + " " + getType() + ")";
 	}
 
 	static <S, T> MapEntryHandle<S, SettableValue<T>> getBucket(BetterSortedMap<S, SettableValue<T>> buckets, S sourceValue) {

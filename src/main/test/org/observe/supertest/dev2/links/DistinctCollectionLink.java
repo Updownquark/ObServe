@@ -68,8 +68,8 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 			Comparator<T> compare = SortedCollectionLink.compare(sourceCL.getDef().type, helper);
 			FlowOptions.UniqueOptions options = new FlowOptions.SimpleUniqueOptions(true);
 			options.useFirst(// TODO helper.getBoolean()
-					false)//
-				.preserveSourceOrder(// TODO helper.getBoolean()
+				false)//
+			.preserveSourceOrder(// TODO helper.getBoolean()
 				false);
 			CollectionDataFlow<?, ?, T> oneStepFlow = sourceCL.getCollection().flow();
 			CollectionDataFlow<?, ?, T> multiStepFlow = sourceCL.getDef().multiStepFlow;
@@ -250,14 +250,14 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 			// This is not a bug, but a consequence of the order of eventing and the fact that the distinct manager swallows
 			// duplicate values (by design)
 			// So we need to do this manually
-			theLastRefreshedModification = getModification();
+			theLastRefreshedModification = getOverallModification();
 			refreshElements();
 		}
 		T searchValue;
 		if (sourceOp.getType() == CollectionOpType.add)
 			searchValue = sourceOp.getValue();
 		else
-			searchValue = (T) sourceOp.getElement().getDerivedElements(getSiblingIndex()).getFirst().getValue();
+			searchValue = sourceOp.getOldValue();
 		ValueElement valueEl = theValues.get(searchValue);
 		CollectionLinkElement<T, T> element;
 		switch (sourceOp.getType()) {
