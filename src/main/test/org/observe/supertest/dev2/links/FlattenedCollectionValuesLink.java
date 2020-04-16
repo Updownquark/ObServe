@@ -102,12 +102,20 @@ public class FlattenedCollectionValuesLink<S, T> extends AbstractMappedCollectio
 			MapEntryHandle<S, SettableValue<T>> entry = theBuckets.getEntryById(theBuckets.keySet().getElement(targetIndex).getElementId());
 			T oldValue = entry.get().get();
 			entry.get().set(newValue, null);
-			expectBucketChange(entry, oldValue, newValue);
+			expectBucketChange(entry, oldValue, newValue, null);
 		});
 	}
 
-	protected void expectBucketChange(MapEntryHandle<S, SettableValue<T>> entry, T oldValue, T newValue) {
+	protected void expectBucketChange(MapEntryHandle<S, SettableValue<T>> entry, T oldValue, T newValue,
+		CollectionLinkElement<S, T> first) {
+		if (first != null) {
+			first.setValue(newValue);
+			for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
+				derived.expectFromSource(new ExpectedCollectionOperation<>(first, CollectionOpType.set, oldValue, newValue));
+		}
 		for (CollectionLinkElement<S, T> element : getElements()) {
+			if (element == first)
+				continue;
 			S sourceValue = element.getFirstSource().getValue();
 			if (entry.getElementId().equals(getBucket(sourceValue).getElementId())) {
 				element.setValue(newValue);
@@ -123,7 +131,8 @@ public class FlattenedCollectionValuesLink<S, T> extends AbstractMappedCollectio
 			if (execute) {
 				S sourceVal = ((ExpectedCollectionOperation<S, T>) derivedOp).getElement().getFirstSource().getValue();
 				MapEntryHandle<S, SettableValue<T>> bucket = getBucket(sourceVal);
-				expectBucketChange(bucket, derivedOp.getElement().getValue(), derivedOp.getValue());
+				expectBucketChange(bucket, derivedOp.getElement().getValue(), derivedOp.getValue(),
+					(CollectionLinkElement<S, T>) derivedOp.getElement());
 			}
 		} else
 			super.expect(derivedOp, rejection, execute);
