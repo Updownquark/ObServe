@@ -76,7 +76,7 @@ public class FlattenedValueBaseCollectionLink<T> extends BaseCollectionLink<T> {
 
 	@Override
 	public double getModificationAffinity() {
-		return super.getModificationAffinity() + 2; // TODO Scale this back to just 1
+		return super.getModificationAffinity() + 2;
 	}
 
 	@Override
@@ -88,7 +88,7 @@ public class FlattenedValueBaseCollectionLink<T> extends BaseCollectionLink<T> {
 			ObservableCollection<T> newCollection = collectionIdx == theCollections.size() ? null : theCollections.get(collectionIdx);
 			if (helper.isReproducing())
 				System.out.println("Replacing " + (oldCollection == null ? "" : ("" + oldCollection.size())) + oldCollection//
-					+ " with " + (newCollection == null ? "" : ("" + newCollection.size())) + oldCollection + newCollection);
+					+ " with " + (newCollection == null ? "" : ("" + newCollection.size())) + newCollection);
 			theCollectionValue.set(newCollection, null);
 			expectCollectionChange(oldCollection, newCollection);
 		});
