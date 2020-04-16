@@ -20,20 +20,20 @@ import org.observe.collect.FlowOptions.UniqueOptions;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.DistinctDataFlow;
 import org.observe.collect.ObservableCollection.ModFilterBuilder;
-import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
-import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveSetManager;
+import org.observe.collect.ObservableCollectionActiveManagers.ActiveCollectionManager;
+import org.observe.collect.ObservableCollectionActiveManagers.ActiveSetManager;
+import org.observe.collect.ObservableCollectionActiveManagers.CollectionElementListener;
+import org.observe.collect.ObservableCollectionActiveManagers.DerivedCollectionElement;
+import org.observe.collect.ObservableCollectionActiveManagers.ElementAccepter;
 import org.observe.collect.ObservableCollectionDataFlowImpl.BaseCollectionDataFlow;
-import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionElementListener;
-import org.observe.collect.ObservableCollectionDataFlowImpl.DerivedCollectionElement;
-import org.observe.collect.ObservableCollectionDataFlowImpl.ElementAccepter;
 import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
-import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.RepairListener;
 import org.observe.collect.ObservableCollectionImpl.ActiveDerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.ConstantCollection;
 import org.observe.collect.ObservableCollectionImpl.FlattenedValueCollection;
 import org.observe.collect.ObservableCollectionImpl.PassiveDerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.ReversedObservableCollection;
+import org.observe.collect.ObservableCollectionPassiveManagers.PassiveCollectionManager;
 import org.observe.util.WeakListening;
 import org.qommons.Identifiable;
 import org.qommons.QommonsUtils;
@@ -511,7 +511,7 @@ public class ObservableSetImpl {
 		}
 	}
 
-	static class DistinctBaseManager<E> extends ObservableCollectionDataFlowImpl.BaseCollectionManager<E>
+	static class DistinctBaseManager<E> extends ObservableCollectionActiveManagers.BaseCollectionManager<E>
 	implements ActiveSetManager<E, E, E> {
 		DistinctBaseManager(ObservableSet<E> source) {
 			super(source);
@@ -625,12 +625,12 @@ public class ObservableSetImpl {
 
 		@Override
 		public Transaction lock(boolean write, Object cause) {
-			return ObservableCollectionDataFlowImpl.structureAffectedPassLockThroughToParent(theParent, write, cause);
+			return ObservableCollectionActiveManagers.structureAffectedPassLockThroughToParent(theParent, write, cause);
 		}
 
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
-			return ObservableCollectionDataFlowImpl.structureAffectedTryPassLockThroughToParent(theParent, write, cause);
+			return ObservableCollectionActiveManagers.structureAffectedTryPassLockThroughToParent(theParent, write, cause);
 		}
 
 		@Override
@@ -770,7 +770,7 @@ public class ObservableSetImpl {
 					CollectionElement<T> newValueId = theElementsByValue.keySet().move(ue.theValueId, //
 						after == null ? null : ((UniqueElement) after).theValueId,
 							before == null ? null : ((UniqueElement) before).theValueId, first, () -> {
-								ObservableCollectionDataFlowImpl.removed(ue.theListener, ue.theValue, null);
+							ObservableCollectionActiveManagers.removed(ue.theListener, ue.theValue, null);
 							});
 					if (newValueId.getElementId().equals(ue.theValueId))
 						return ue;
@@ -946,7 +946,7 @@ public class ObservableSetImpl {
 					T newActiveValue = parentEl.get();
 					theActiveElement = parentEl;
 					if (oldValue != newActiveValue)
-						ObservableCollectionDataFlowImpl.update(theListener, oldValue, newActiveValue, cause);
+						ObservableCollectionActiveManagers.update(theListener, oldValue, newActiveValue, cause);
 				} else
 					theDebug.act("add:no-effect").param("value", theValue).exec();
 
@@ -958,7 +958,7 @@ public class ObservableSetImpl {
 						if (isInternallySetting) {
 							if (theActiveElement == parentEl) {
 								theDebug.act("update:trueUpdate").exec();
-								ObservableCollectionDataFlowImpl.update(theListener, realOldValue, newValue, innerCause);
+								ObservableCollectionActiveManagers.update(theListener, realOldValue, newValue, innerCause);
 							} else
 								theDebug.act("update:no-effect").exec();
 							theParentElements.mutableEntry(node.getElementId()).setValue(newValue);
@@ -1003,7 +1003,7 @@ public class ObservableSetImpl {
 								if (consistent.getAsBoolean()) {
 									theDebug.act("update:trueUpdate").exec();
 									theValue = newValue;
-									ObservableCollectionDataFlowImpl.update(theListener, realOldValue, newValue, innerCause);
+									ObservableCollectionActiveManagers.update(theListener, realOldValue, newValue, innerCause);
 								} else
 									reInsert = true;
 							} else {
@@ -1021,7 +1021,7 @@ public class ObservableSetImpl {
 							theDebug.act("update:move").exec();
 							moveTo(newValue);
 							theParentElements.mutableEntry(node.getElementId()).setValue(newValue);
-							ObservableCollectionDataFlowImpl.update(theListener, realOldValue, newValue, innerCause);
+							ObservableCollectionActiveManagers.update(theListener, realOldValue, newValue, innerCause);
 							parentUpdated(node, realOldValue, newValue, innerCause);
 							reInsert = false;
 						} else
@@ -1036,7 +1036,7 @@ public class ObservableSetImpl {
 								theDebug.act("update:remove").param("value", theValue).exec();
 								// This element is no longer represented
 								theElementsByValue.mutableEntry(theValueId).remove();
-								ObservableCollectionDataFlowImpl.removed(theListener, realOldValue, innerCause);
+								ObservableCollectionActiveManagers.removed(theListener, realOldValue, innerCause);
 								parentRemoved(node, realOldValue, innerCause);
 							} else if (theActiveElement == parentEl) {
 								Map.Entry<DerivedCollectionElement<T>, T> activeEntry = theParentElements.firstEntry();
@@ -1044,7 +1044,7 @@ public class ObservableSetImpl {
 								theDebug.act("update:remove:representativeChange").exec();
 								theValue = activeEntry.getValue();
 								if (realOldValue != theValue)
-									ObservableCollectionDataFlowImpl.update(theListener, realOldValue, theValue, innerCause);
+									ObservableCollectionActiveManagers.update(theListener, realOldValue, theValue, innerCause);
 								parentUpdated(node, realOldValue, newValue, innerCause);
 							} else
 								theDebug.act("update:remove:no-effect").exec();
@@ -1073,7 +1073,7 @@ public class ObservableSetImpl {
 							theDebug.act("remove:remove").param("value", theValue).exec();
 							// This element is no longer represented
 							theElementsByValue.mutableEntry(theValueId).remove();
-							ObservableCollectionDataFlowImpl.removed(theListener, theValue, innerCause);
+							ObservableCollectionActiveManagers.removed(theListener, theValue, innerCause);
 						} else if (theActiveElement == parentEl) {
 							theDebug.act("remove:representativeChange").exec();
 							Map.Entry<DerivedCollectionElement<T>, T> activeEntry = theParentElements.firstEntry();
@@ -1088,10 +1088,10 @@ public class ObservableSetImpl {
 								// Since the manager doesn't attempt to keep the elements in source order (which would be expensive),
 								// there's no quick way to determine if the new active element actually is out of order.
 								// So we need to just remove and re-add this element
-								ObservableCollectionDataFlowImpl.removed(theListener, theValue, innerCause);
+								ObservableCollectionActiveManagers.removed(theListener, theValue, innerCause);
 								theAccepter.accept(UniqueElement.this, innerCause);
 							} else if (oldValue != theValue)
-								ObservableCollectionDataFlowImpl.update(theListener, oldValue, theValue, innerCause);
+								ObservableCollectionActiveManagers.update(theListener, oldValue, theValue, innerCause);
 						}
 					}
 				});

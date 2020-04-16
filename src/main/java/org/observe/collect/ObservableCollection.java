@@ -15,7 +15,6 @@ import java.util.function.Supplier;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.Observer;
-import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.TypedValueContainer;
 import org.observe.assoc.ObservableMultiMap;
@@ -24,9 +23,9 @@ import org.observe.collect.Combination.CombinationPrecursor;
 import org.observe.collect.Combination.CombinedFlowDef;
 import org.observe.collect.FlowOptions.MapOptions;
 import org.observe.collect.FlowOptions.UniqueOptions;
-import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
-import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveSetManager;
-import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
+import org.observe.collect.ObservableCollectionActiveManagers.ActiveCollectionManager;
+import org.observe.collect.ObservableCollectionActiveManagers.ActiveSetManager;
+import org.observe.collect.ObservableCollectionPassiveManagers.PassiveCollectionManager;
 import org.observe.util.ObservableUtils;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
@@ -920,26 +919,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		 * @return A {@link #supportsPassive() active} flow capable of producing a collection that is the value of the observable values mapped to
 		 *         each element of the source.
 		 */
-		default <X> CollectionDataFlow<E, ?, X> flattenValues(TypeToken<X> target,
-			Function<? super T, ? extends ObservableValue<? extends X>> map) {
-			TypeToken<ObservableValue<? extends X>> valueType = ObservableValue.TYPE_KEY.getCompoundType(target.wrap());
-			return map(valueType, map).refreshEach(v -> v.noInitChanges()).map(target, //
-				LambdaUtils.printableFn(obs -> obs == null ? null : obs.get(), () -> "flatten"), //
-				options -> options//
-				.withElementSetting((ov, newValue, doSet) -> {
-					// Allow setting elements via the wrapped settable value
-					if (!(ov instanceof SettableValue))
-						return MutableCollectionElement.StdMsg.UNSUPPORTED_OPERATION;
-					else if (newValue != null && !TypeTokens.get().isInstance(ov.getType(), newValue))
-						return MutableCollectionElement.StdMsg.BAD_TYPE;
-					String msg = ((SettableValue<X>) ov).isAcceptable(newValue);
-					if (msg != null)
-						return msg;
-					if (doSet)
-						((SettableValue<X>) ov).set(newValue, null);
-					return null;
-				}));
-		}
+		<X> CollectionDataFlow<E, ?, X> flattenValues(TypeToken<X> target, Function<? super T, ? extends ObservableValue<? extends X>> map);
 
 		/**
 		 * @param target The type of values in the flattened result

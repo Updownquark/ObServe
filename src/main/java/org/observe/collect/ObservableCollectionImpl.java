@@ -22,12 +22,11 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
-import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
-import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionElementListener;
-import org.observe.collect.ObservableCollectionDataFlowImpl.DerivedCollectionElement;
-import org.observe.collect.ObservableCollectionDataFlowImpl.ElementAccepter;
+import org.observe.collect.ObservableCollectionActiveManagers.ActiveCollectionManager;
+import org.observe.collect.ObservableCollectionActiveManagers.CollectionElementListener;
+import org.observe.collect.ObservableCollectionActiveManagers.ElementAccepter;
 import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
-import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
+import org.observe.collect.ObservableCollectionPassiveManagers.PassiveCollectionManager;
 import org.observe.util.ObservableUtils;
 import org.observe.util.TypeTokens;
 import org.observe.util.WeakListening;
@@ -2226,17 +2225,17 @@ public final class ObservableCollectionImpl {
 	 */
 	public static class ActiveDerivedCollection<T> extends AbstractIdentifiable implements DerivedCollection<T> {
 		/**
-		 * Holds a {@link ObservableCollectionDataFlowImpl.DerivedCollectionElement}s for an {@link ActiveDerivedCollection}
+		 * Holds a {@link ObservableCollectionActiveManagers.DerivedCollectionElement}s for an {@link ActiveDerivedCollection}
 		 *
 		 * @param <T> The type of the collection
 		 */
 		protected static class DerivedElementHolder<T> implements ElementId {
 			/** The element from the flow */
-			protected final DerivedCollectionElement<T> element;
+			protected final ObservableCollectionActiveManagers.DerivedCollectionElement<T> element;
 			BinaryTreeNode<DerivedElementHolder<T>> treeNode;
 
 			/** @param element The element from the flow */
-			protected DerivedElementHolder(DerivedCollectionElement<T> element) {
+			protected DerivedElementHolder(ObservableCollectionActiveManagers.DerivedCollectionElement<T> element) {
 				this.element = element;
 			}
 
@@ -2357,7 +2356,7 @@ public final class ObservableCollectionImpl {
 		 * @param el The flow element
 		 * @return The holder for the element
 		 */
-		protected DerivedElementHolder<T> createHolder(DerivedCollectionElement<T> el) {
+		protected DerivedElementHolder<T> createHolder(ObservableCollectionActiveManagers.DerivedCollectionElement<T> el) {
 			return new DerivedElementHolder<>(el);
 		}
 
@@ -2479,7 +2478,7 @@ public final class ObservableCollectionImpl {
 		@Override
 		public CollectionElement<T> getElement(T value, boolean first) {
 			try (Transaction t = lock(false, null)) {
-				Comparable<DerivedCollectionElement<T>> finder = getFlow().getElementFinder(value);
+				Comparable<ObservableCollectionActiveManagers.DerivedCollectionElement<T>> finder = getFlow().getElementFinder(value);
 				if (finder != null) {
 					BinaryTreeNode<DerivedElementHolder<T>> found = theDerivedElements.search(holder -> finder.compareTo(holder.element), //
 						BetterSortedList.SortedSearchFilter.of(first, false));
@@ -2645,7 +2644,7 @@ public final class ObservableCollectionImpl {
 		@Override
 		public CollectionElement<T> addElement(T value, ElementId after, ElementId before, boolean first)
 			throws UnsupportedOperationException, IllegalArgumentException {
-			DerivedCollectionElement<T> derived = theFlow.addElement(value, //
+			ObservableCollectionActiveManagers.DerivedCollectionElement<T> derived = theFlow.addElement(value, //
 				strip(after), strip(before), first);
 			return derived == null ? null : elementFor(idFromSynthetic(derived));
 		}
@@ -2659,18 +2658,18 @@ public final class ObservableCollectionImpl {
 		@Override
 		public CollectionElement<T> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
 			throws UnsupportedOperationException, IllegalArgumentException {
-			DerivedCollectionElement<T> derived = theFlow.move(//
+			ObservableCollectionActiveManagers.DerivedCollectionElement<T> derived = theFlow.move(//
 				strip(valueEl), strip(after), strip(before), first, afterRemove);
 			return elementFor(idFromSynthetic(derived));
 		}
 
-		private DerivedElementHolder<T> idFromSynthetic(DerivedCollectionElement<T> added) {
+		private DerivedElementHolder<T> idFromSynthetic(ObservableCollectionActiveManagers.DerivedCollectionElement<T> added) {
 			BinaryTreeNode<DerivedElementHolder<T>> found = theDerivedElements.search(//
 				holder -> added.compareTo(holder.element), BetterSortedList.SortedSearchFilter.OnlyMatch);
 			return found.get();
 		}
 
-		private DerivedCollectionElement<T> strip(ElementId id) {
+		private ObservableCollectionActiveManagers.DerivedCollectionElement<T> strip(ElementId id) {
 			return id == null ? null : ((DerivedElementHolder<T>) id).element;
 		}
 

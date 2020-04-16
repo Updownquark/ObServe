@@ -12,9 +12,8 @@ import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.DistinctDataFlow;
 import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
-import org.observe.collect.ObservableCollectionDataFlowImpl;
 import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
-import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
+import org.observe.collect.ObservableCollectionPassiveManagers.PassiveCollectionManager;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSetImpl;
 import org.observe.collect.ObservableSortedSet;
@@ -49,9 +48,9 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 	private final ObservableMultiMap<K0, V0> theSourceMap;
 	private final Function<CollectionDataFlow<V0, ?, V0>, CollectionDataFlow<V0, ?, V>> theValueFlow;
 
-	private final ObservableCollectionDataFlowImpl.PassiveCollectionManager<K0, ?, K> theKeyManager;
+	private final PassiveCollectionManager<K0, ?, K> theKeyManager;
 	private final ObservableSet<K> theKeySet;
-	private final ObservableCollectionDataFlowImpl.PassiveCollectionManager<V0, ?, V> theValueManager;
+	private final PassiveCollectionManager<V0, ?, V> theValueManager;
 
 	/**
 	 * @param sourceMap The source map
