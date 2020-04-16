@@ -14,6 +14,13 @@ import org.qommons.collect.ElementId;
 import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BetterTreeSet;
 
+/**
+ * An element in an {@link ObservableCollectionLink} corresponding to all elements currently in the collection, as well as any elements
+ * removed during the currently executing modification.
+ *
+ * @param <S> The type of the link's source collection
+ * @param <T> The type of the link's collection
+ */
 public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkElement<S, T>> {
 	private final ObservableCollectionLink<S, T> theCollectionLink;
 	private final BetterSortedSet<CollectionLinkElement<?, S>> theSourceElements;
@@ -31,6 +38,11 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 
 	private List<String> theErrors;
 
+	/**
+	 * @param collectionLink The link that this element belongs to
+	 * @param collectionAddress The ID of this element in the link's one-step collection
+	 * @param elementAddress The address of this element in the link's {@link ObservableCollectionLink#getElements() elements}
+	 */
 	public CollectionLinkElement(ObservableCollectionLink<S, T> collectionLink, ElementId collectionAddress, ElementId elementAddress) {
 		theCollectionLink = collectionLink;
 		theCollectionAddress = collectionAddress;
@@ -59,43 +71,50 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 		}
 	}
 
+	/** Called when this element is removed from the actual collection */
 	public void removed() {
 		wasRemoved = true;
 	}
 
+	/** Called when a set operation occurs on this element in the actual collection */
 	public void updated() {
 		wasUpdated = true;
 	}
 
+	/** @return The value of this element, as last known by the collection link */
 	public T getValue() {
 		return theValue;
 	}
 
+	/** @param value The new value to expect in element */
 	public void setValue(T value) {
 		theValue = value;
 	}
 
+	/** @return The address of this element in the link's {@link ObservableCollectionLink#getElements() elements} */
 	public ElementId getElementAddress() {
 		return theElementAddress;
 	}
 
+	/** @return The ID of this element in the link's one-step collection */
 	public ElementId getCollectionAddress() {
 		return theCollectionAddress;
 	}
 
-	public CollectionLinkElement<S, T> withSourceElement(CollectionLinkElement<?, S> source) {
-		theSourceElements.add(source);
-		return this;
-	}
-
+	/** @return All collection elements from the link's source that are sources of this element */
 	public BetterList<CollectionLinkElement<?, S>> getSourceElements() {
 		return BetterCollections.unmodifiableList(theSourceElements);
 	}
 
+	/** @return The first collection element from the link's source that is a source of this element */
 	public CollectionLinkElement<?, S> getFirstSource() {
 		return theSourceElements.getFirst();
 	}
 
+	/**
+	 * @param siblingIndex The {@link ObservableChainLink#getSiblingIndex() sibling index} of the derived link to get derived elements for
+	 * @return All elements in the given derived collection link that have this element as a source
+	 */
 	public BetterList<CollectionLinkElement<T, ?>> getDerivedElements(int siblingIndex) {
 		return BetterCollections.unmodifiableList(theDerivedElements[siblingIndex]);
 	}
@@ -115,22 +134,27 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 		theDerivedElements[siblingIndex].add(derived);
 	}
 
+	/** @return The current value of the element in the actual collection */
 	public T getCollectionValue() {
 		return theCollectionLink.getCollection().getElement(theCollectionAddress).get();
 	}
 
+	/** @return Whether the element is currently present in the actual collection */
 	public boolean isPresent() {
 		return theCollectionAddress.isPresent();
 	}
 
+	/** @return The index of this element in the link's elements */
 	public int getIndex() {
 		return theCollectionLink.getElements().getElementsBefore(theElementAddress);
 	}
 
+	/** @return Whether this element was added and has not yet been {@link #expectAdded(Object) expected} */
 	public boolean wasAdded() {
 		return wasAdded;
 	}
 
+	/** @return Whether this element's removal is expected */
 	public boolean isRemoveExpected() {
 		return isRemoveExpected;
 	}
@@ -140,6 +164,12 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 		return theElementAddress.compareTo(o.theElementAddress);
 	}
 
+	/**
+	 * Logs an error message with this element, to be thrown when its link next {@link ObservableChainLink#validate(boolean) validates}
+	 *
+	 * @param err Appends an error to log
+	 * @return This element
+	 */
 	public CollectionLinkElement<S, T> error(Consumer<StringBuilder> err) {
 		StringBuilder str = new StringBuilder().append('[').append(theLastKnownIndex).append(']');
 		if (theCollectionAddress.isPresent())
@@ -152,10 +182,22 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 		return this;
 	}
 
+	/**
+	 * Logs an error message with this element, to be thrown when its link next {@link ObservableChainLink#validate(boolean) validates}
+	 *
+	 * @param err The error to log
+	 * @return This element
+	 */
 	public CollectionLinkElement<S, T> error(String err) {
 		return error(e -> e.append(err));
 	}
 
+	/**
+	 * Marks this element as an expected new element in the collection as a result of the current modification
+	 *
+	 * @param value The expected initial value of the element
+	 * @return This element
+	 */
 	public CollectionLinkElement<S, T> expectAdded(T value) {
 		if (isRemoveExpected)
 			isRemoveExpected = false;
@@ -167,11 +209,21 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 		return this;
 	}
 
+	/**
+	 * Marks this element as expected to be removed from the collection as a result of the current modification
+	 *
+	 * @return This element
+	 */
 	public CollectionLinkElement<S, T> expectRemoval() {
 		isRemoveExpected = true;
 		return this;
 	}
 
+	/**
+	 * Updates this element's source elements
+	 * 
+	 * @param withRemove Whether to remove source elements that are no longer in the source collection, or just add new ones
+	 */
 	public void updateSourceLinks(boolean withRemove) {
 		if (!wasRemoved && theCollectionLink.getSourceLink() != null) {
 			BetterList<ElementId> sourceElements = theCollectionLink.getCollection().getSourceElements(theCollectionAddress,
@@ -205,6 +257,11 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 		}
 	}
 
+	/**
+	 * Checks this element for any inconsistencies or errors
+	 *
+	 * @param error The string builder to print any errors into
+	 */
 	public void validate(StringBuilder error) {
 		ObservableCollection<T> collection = theCollectionLink.getCollection();
 		if (wasAdded)

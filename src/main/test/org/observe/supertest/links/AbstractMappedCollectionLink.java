@@ -5,12 +5,26 @@ import org.observe.supertest.ExpectedCollectionOperation;
 import org.observe.supertest.ObservableCollectionLink;
 import org.observe.supertest.ObservableCollectionTestDef;
 import org.observe.supertest.OneToOneCollectionLink;
+import org.observe.supertest.OperationRejection;
 import org.qommons.TestHelper;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 
+/**
+ * An abstract class that helps with any one-to-one collection link type that performs a mapping
+ *
+ * @param <S> The type of the source link
+ * @param <T> The type of this link
+ */
 public abstract class AbstractMappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 	private final boolean isCached;
 
+	/**
+	 * @param path The path for this link
+	 * @param sourceLink The source for this link
+	 * @param def The collection definition for this link
+	 * @param helper The randomness for this link
+	 * @param cached Whether source and mapped values are cached by the collection
+	 */
 	public AbstractMappedCollectionLink(String path, ObservableCollectionLink<?, S> sourceLink, ObservableCollectionTestDef<T> def,
 		TestHelper helper, boolean cached) {
 		super(path, sourceLink, def, helper);
@@ -62,7 +76,7 @@ public abstract class AbstractMappedCollectionLink<S, T> extends OneToOneCollect
 		case set:
 			if (isCached && getCollection().equivalence().elementEquals(derivedOp.getElement().getValue(), derivedOp.getValue())) {
 				// Update, re-use the previous source value
-				CollectionLinkElement<?, S> sourceEl = (CollectionLinkElement<?, S>) derivedOp.getElement().getSourceElements().getFirst();
+				CollectionLinkElement<?, S> sourceEl = (CollectionLinkElement<?, S>) derivedOp.getElement().getFirstSource();
 				S sourceValue;
 				if (isReversible()) {
 					// If the mapping is reversible, then the source operation for an update is valid either with the reverse-mapped value

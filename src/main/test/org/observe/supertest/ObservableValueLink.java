@@ -10,20 +10,33 @@ import org.qommons.TestHelper;
 import org.qommons.Transaction;
 import org.qommons.collect.ElementId;
 
+/**
+ * An {@link ObservableChainLink} whose observable structure is an {@link ObservableValue}
+ * 
+ * @param <S> The type of the source link
+ * @param <T> The type of this link's value
+ */
 public abstract class ObservableValueLink<S, T> extends AbstractChainLink<S, T> {
 	private final TestValueType theType;
 	private ObservableValue<T> theValue;
 	private ObservableValueTester<T> theTester;
 
+	/**
+	 * @param path The path for this link
+	 * @param sourceLink The source for this link
+	 * @param type The type for this link
+	 */
 	public ObservableValueLink(String path, ObservableChainLink<?, S> sourceLink, TestValueType type) {
 		super(path, sourceLink);
 		theType = type;
 	}
 
+	/** @return This link's value */
 	public ObservableValue<T> getValue() {
 		return theValue;
 	}
 
+	/** @return This link's value tester */
 	public ObservableValueTester<T> getTester() {
 		return theTester;
 	}
@@ -38,6 +51,12 @@ public abstract class ObservableValueLink<S, T> extends AbstractChainLink<S, T> 
 			theTester = new ObservableValueTester<>(theValue);
 	}
 
+	/**
+	 * Creates the value for this link
+	 * 
+	 * @param helper The source of randomness to use to create the value
+	 * @return The value for this link
+	 */
 	protected abstract ObservableValue<T> createValue(TestHelper helper);
 
 	@Override

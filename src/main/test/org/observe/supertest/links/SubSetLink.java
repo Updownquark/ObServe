@@ -10,10 +10,17 @@ import org.observe.supertest.ExpectedCollectionOperation;
 import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.ObservableCollectionLink;
 import org.observe.supertest.ObservableCollectionTestDef;
+import org.observe.supertest.OperationRejection;
 import org.qommons.TestHelper;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 
+/**
+ * Tests {@link ObservableSortedSet#subSet(Object, boolean, Object, boolean)}
+ *
+ * @param <T> The type of values in the set
+ */
 public class SubSetLink<T> extends ObservableCollectionLink<T, T> {
+	/** Generates {@link SubSetLink}s */
 	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator() {
 		@Override
 		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
@@ -76,6 +83,18 @@ public class SubSetLink<T> extends ObservableCollectionLink<T, T> {
 	private final T theHighBound;
 	private final boolean isHighIncluded;
 
+	/**
+	 * @param path The path for this link
+	 * @param sourceLink The source for this link
+	 * @param def The collection definition for this link
+	 * @param oneStepSet The one-step subset
+	 * @param multiStepSet The multi-step subset
+	 * @param helper The randomness to use to initialize this link
+	 * @param lowBound The low bound of the subset
+	 * @param lowIncluded Whether the low bound is included in the subset
+	 * @param highBound The high bound of the subset
+	 * @param highIncluded Whether the high bound is included in the subset
+	 */
 	public SubSetLink(String path, ObservableCollectionLink<?, T> sourceLink, ObservableCollectionTestDef<T> def,
 		ObservableSortedSet<T> oneStepSet, ObservableSortedSet<T> multiStepSet, TestHelper helper, T lowBound, boolean lowIncluded,
 		T highBound, boolean highIncluded) {
@@ -86,6 +105,7 @@ public class SubSetLink<T> extends ObservableCollectionLink<T, T> {
 		isHighIncluded = highIncluded;
 	}
 
+	/** @return The sorting used by the set */
 	public Comparator<? super T> comparator() {
 		return ((ObservableSortedSet<T>) getCollection()).comparator();
 	}
@@ -123,7 +143,7 @@ public class SubSetLink<T> extends ObservableCollectionLink<T, T> {
 		}
 		CollectionLinkElement<?, T> sourceEl = getSourceLink().expectAdd(value, //
 			after == null ? null : (CollectionLinkElement<?, T>) after.getFirstSource(), //
-			before == null ? null : (CollectionLinkElement<?, T>) before.getFirstSource(), first, rejection);
+				before == null ? null : (CollectionLinkElement<?, T>) before.getFirstSource(), first, rejection);
 		if (rejection.isRejected())
 			return null;
 		return (CollectionLinkElement<T, T>) sourceEl.getDerivedElements(getSiblingIndex()).getFirst();
@@ -206,14 +226,14 @@ public class SubSetLink<T> extends ObservableCollectionLink<T, T> {
 						element.expectRemoval();
 						for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
 							derived.expectFromSource(
-								new ExpectedCollectionOperation<>(element, CollectionOpType.remove, element.getValue(),
+								new ExpectedCollectionOperation<>(element, ExpectedCollectionOperation.CollectionOpType.remove, element.getValue(),
 									sourceOp.getValue()));
 					}
 				} else if (isContained) {
 					element.expectAdded(sourceOp.getValue());
 					for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
 						derived.expectFromSource(
-							new ExpectedCollectionOperation<>(element, CollectionOpType.add, oldValue, sourceOp.getValue()));
+							new ExpectedCollectionOperation<>(element, ExpectedCollectionOperation.CollectionOpType.add, oldValue, sourceOp.getValue()));
 				}
 			}
 			break;

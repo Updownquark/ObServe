@@ -1,5 +1,6 @@
 package org.observe.supertest.links;
 
+import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.ChainLinkGenerator;
 import org.observe.supertest.CollectionLinkElement;
@@ -7,9 +8,16 @@ import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.ObservableCollectionLink;
 import org.observe.supertest.ObservableCollectionTestDef;
 import org.observe.supertest.OneToOneCollectionLink;
+import org.observe.supertest.OperationRejection;
 import org.qommons.TestHelper;
 
+/**
+ * Tests {@link ObservableCollection#reverse()} and {@link org.observe.collect.ObservableCollection.CollectionDataFlow#reverse()}
+ *
+ * @param <T> The type of values in the collection
+ */
 public class ReversedCollectionLink<T> extends OneToOneCollectionLink<T, T> {
+	/** Generates {@link ReversedCollectionLink}s */
 	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator() {
 		@Override
 		public <T> double getAffinity(ObservableChainLink<?, T> link) {
@@ -34,6 +42,12 @@ public class ReversedCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 		}
 	};
 
+	/**
+	 * @param path The path for this link
+	 * @param sourceLink The source for this link
+	 * @param def The collection definition for this link
+	 * @param helper The randomness to use to initialize this link
+	 */
 	public ReversedCollectionLink(String path, ObservableCollectionLink<?, T> sourceLink, ObservableCollectionTestDef<T> def,
 		TestHelper helper) {
 		super(path, sourceLink, def, helper);
@@ -79,7 +93,7 @@ public class ReversedCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 	@Override
 	protected void checkOrder(CollectionLinkElement<T, T> element) {
 		int elIndex = element.getIndex();
-		int sourceIndex = getSourceLink().getElements().getElementsAfter(element.getSourceElements().getFirst().getElementAddress());
+		int sourceIndex = getSourceLink().getElements().getElementsAfter(element.getFirstSource().getElementAddress());
 		if (elIndex != sourceIndex)
 			element.error(err -> err.append("Expected at [").append(sourceIndex).append("] but found at [").append(elIndex).append(']'));
 	}

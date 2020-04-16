@@ -1,9 +1,9 @@
 package org.observe.supertest;
 
-import static org.observe.supertest.ObservableCollectionLink.CollectionOpType.add;
-import static org.observe.supertest.ObservableCollectionLink.CollectionOpType.move;
-import static org.observe.supertest.ObservableCollectionLink.CollectionOpType.remove;
-import static org.observe.supertest.ObservableCollectionLink.CollectionOpType.set;
+import static org.observe.supertest.ExpectedCollectionOperation.CollectionOpType.add;
+import static org.observe.supertest.ExpectedCollectionOperation.CollectionOpType.move;
+import static org.observe.supertest.ExpectedCollectionOperation.CollectionOpType.remove;
+import static org.observe.supertest.ExpectedCollectionOperation.CollectionOpType.set;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -34,15 +34,13 @@ import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.tree.BetterTreeList;
 
+/**
+ * Abstract base class for chain links whose structures are {@link ObservableCollection}s
+ *
+ * @param <S> The type of the source link
+ * @param <T> The type of the collection values
+ */
 public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S, T> implements CollectionSourcedLink<S, T> {
-	public interface OperationRejection {
-		boolean isRejected();
-
-		void reject(String message);
-
-		String getActualRejection();
-	}
-
 	private final ObservableCollectionTestDef<T> theDef;
 	private final ObservableCollection<T> theOneStepCollection;
 	private final ObservableCollection<T> theMultiStepCollection;
@@ -52,6 +50,12 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 	private final BetterTreeList<CollectionLinkElement<S, T>> theElements;
 	private final BetterTreeList<CollectionLinkElement<S, T>> theElementsForCollection;
 
+	/**
+	 * @param path The path for this link
+	 * @param sourceLink The source for this link
+	 * @param def The collection definition for this link
+	 * @param helper The randomness to use to initialize this link
+	 */
 	public ObservableCollectionLink(String path, ObservableCollectionLink<?, S> sourceLink, ObservableCollectionTestDef<T> def,
 		TestHelper helper) {
 		super(path, sourceLink);
@@ -59,11 +63,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		theSupplier = (Function<TestHelper, T>) ObservableChainTester.SUPPLIERS.get(def.type);
 		theElements = new BetterTreeList<>(false);
 		theElementsForCollection = new BetterTreeList<>(false);
-		boolean passive;
-		if (def.allowPassive.value != null)
-			passive = def.allowPassive.value;
-		else
-			passive = def.oneStepFlow.supportsPassive() && helper.getBoolean();
+		boolean passive = def.oneStepFlow.supportsPassive() && helper.getBoolean();
 		if (passive)
 			theOneStepCollection = def.oneStepFlow.collectPassive();
 		else
@@ -73,12 +73,22 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		else
 			theMultiStepCollection = def.multiStepFlow.collectActive(Observable.empty);
 
-		theMultiStepTester = new ObservableCollectionTester<>("[" + getDepth() + "] Multi-step", theMultiStepCollection);
+		theMultiStepTester = new ObservableCollectionTester<>(getPath() + " Multi-step", theMultiStepCollection);
 		theMultiStepTester.setOrderImportant(def.orderImportant);
 		theMultiStepTester.checkRemovedValues(def.checkOldValues);
 		init(helper);
 	}
 
+	/**
+	 * Constructor that also provides the actual collections
+	 *
+	 * @param path The path for this link
+	 * @param sourceLink The source for this link
+	 * @param def The collection definition for this link
+	 * @param oneStepCollection The one-step collection descended from the source link's
+	 * @param multiStepCollection The multi-step collection descended from the root link's
+	 * @param helper The randomness to use to initialize this link
+	 */
 	public ObservableCollectionLink(String path, ObservableCollectionLink<?, S> sourceLink, ObservableCollectionTestDef<T> def,
 		ObservableCollection<T> oneStepCollection, ObservableCollection<T> multiStepCollection, TestHelper helper) {
 		super(path, sourceLink);
@@ -89,7 +99,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		theOneStepCollection = oneStepCollection;
 		theMultiStepCollection = multiStepCollection;
 
-		theMultiStepTester = new ObservableCollectionTester<>("[" + getDepth() + "] Multi-step", theMultiStepCollection);
+		theMultiStepTester = new ObservableCollectionTester<>(getPath() + " Multi-step", theMultiStepCollection);
 		theMultiStepTester.setOrderImportant(def.orderImportant);
 		theMultiStepTester.checkRemovedValues(def.checkOldValues);
 		init(helper);
@@ -143,6 +153,11 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		super.initialize(helper);
 	}
 
+	/**
+	 * Validates aspects of a single element
+	 *
+	 * @param element The element to validate
+	 */
 	protected abstract void validate(CollectionLinkElement<S, T> element);
 
 	@Override
@@ -150,6 +165,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		return theDef.type;
 	}
 
+	/** @return Any supplemental structures that should be locked when this structure is locked */
 	protected Transactable getSupplementalLock() {
 		return null;
 	}
@@ -180,10 +196,12 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		return (ObservableCollectionLink<?, S>) super.getSourceLink();
 	}
 
+	/** @return This link's collection definition */
 	public ObservableCollectionTestDef<T> getDef() {
 		return theDef;
 	}
 
+	/** @return The source of new values for this link */
 	public Function<TestHelper, T> getValueSupplier() {
 		return theSupplier;
 	}
@@ -193,10 +211,15 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		return (List<CollectionSourcedLink<T, ?>>) super.getDerivedLinks();
 	}
 
+	/** @return This link's main collection */
 	public ObservableCollection<T> getCollection() {
 		return theOneStepCollection;
 	}
 
+	/**
+	 * @return Another collection managed by this link using the same underlying mechanisms, but without intermediate
+	 *         {@link org.observe.collect.ObservableCollection.CollectionDataFlow#collect() collecting}
+	 */
 	public ObservableCollection<T> getMultiStepCollection() {
 		return theMultiStepCollection;
 	}
@@ -205,25 +228,60 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		return theElements;
 	}
 
+	/** @return This link's elements, each a representation of an element in the collection */
 	public BetterList<CollectionLinkElement<S, T>> getElements() {
 		return BetterCollections.unmodifiableList(theElements);
 	}
 
+	/**
+	 * @param collectionEl The collection element ID to get the test element for
+	 * @return The test element associated with the given collection element
+	 */
 	public CollectionLinkElement<S, T> getElement(ElementId collectionEl) {
 		return CollectionElement
 			.get(theElementsForCollection.search(el -> collectionEl.compareTo(el.getCollectionAddress()), SortedSearchFilter.OnlyMatch));
 	}
 
-	public abstract void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection, boolean execute);
-
+	/**
+	 *
+	 * @param value The value to attempt to add
+	 * @param after The element to add the value after (if any)
+	 * @param before The element to add the value before (if any)
+	 * @param first Whether to attempt to add the value near the beginning of the specified range
+	 * @param rejection The rejection capability for the operation
+	 * @return The new element
+	 */
 	public abstract CollectionLinkElement<S, T> expectAdd(T value, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before,
 		boolean first, OperationRejection rejection);
 
+	/**
+	 * @param source The element to attempt to move
+	 * @param after The element to move the element after (if any)
+	 * @param before The element to move the element before (if any)
+	 * @param first Whether to attempt to move the element near the beginning of the specified range
+	 * @param rejection The rejection capability for the operation
+	 * @return The new element
+	 */
 	public abstract CollectionLinkElement<S, T> expectMove(CollectionLinkElement<?, T> source, CollectionLinkElement<?, T> after,
 		CollectionLinkElement<?, T> before, boolean first, OperationRejection rejection);
 
+	/**
+	 * @param derivedOp The non-add, non-move operation to attempt
+	 * @param rejection The rejection capability for the operation
+	 * @param execute Whether to actually execute the operation if it is not rejected
+	 */
+	public abstract void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection, boolean execute);
+
+	/**
+	 * @param value The value to test
+	 * @return Whether the given value may be acceptable as a value in this link's collection
+	 */
 	public abstract boolean isAcceptable(T value);
 
+	/**
+	 * @param value The input value
+	 * @return The value, reverse-mapped to the root, then re-mapped back to this collection
+	 */
 	public abstract T getUpdateValue(T value);
 
 	@Override
@@ -453,10 +511,6 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		return getCollection().size() + getCollection().toString();
 	}
 
-	public enum CollectionOpType {
-		add, remove, set, move;
-	}
-
 	private class CollectionOpContext {
 		final BetterList<T> modify;
 		final boolean subList;
@@ -473,7 +527,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 
 	private class CollectionOp {
 		final CollectionOpContext context;
-		final CollectionOpType type;
+		final ExpectedCollectionOperation.CollectionOpType type;
 		final T value;
 		final List<T> values;
 		final int minIndex;
@@ -485,7 +539,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 
 		final List<CollectionOpElement> elements;
 
-		CollectionOp(CollectionOpContext ctx, CollectionOpType type, int minIndex, int maxIndex, T value, boolean towardBeginning) {
+		CollectionOp(CollectionOpContext ctx, ExpectedCollectionOperation.CollectionOpType type, int minIndex, int maxIndex, T value, boolean towardBeginning) {
 			context = ctx;
 			this.type = type;
 			this.minIndex = minIndex;
@@ -496,7 +550,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			elements = new ArrayList<>();
 		}
 
-		CollectionOp(CollectionOpContext ctx, CollectionOpType type, int index, List<T> values) {
+		CollectionOp(CollectionOpContext ctx, ExpectedCollectionOperation.CollectionOpType type, int index, List<T> values) {
 			context = ctx;
 			this.type = type;
 			minIndex = maxIndex = index;
@@ -527,7 +581,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 					str.append('-').append(maxIndex);
 			}
 			str.append(' ');
-			if (type == CollectionOpType.move) {
+			if (type == ExpectedCollectionOperation.CollectionOpType.move) {
 				str.append('[').append(elements.get(0).element.getIndex()).append(']').append(elements.get(0).element.getValue());
 			} else if (values != null)
 				str.append(values.size()).append(values);
@@ -593,7 +647,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		} else if (maxIndex == 0) {
 			op.after = null;
 			op.before = theElements.peekFirst();
-		} else if (op.type == CollectionOpType.move) {
+		} else if (op.type == ExpectedCollectionOperation.CollectionOpType.move) {
 			op.after = theElements.isEmpty() ? null : theElements.get(minIndex);
 			op.before = maxIndex >= theElements.size() - 1 ? null : theElements.get(maxIndex + 1);
 		} else {

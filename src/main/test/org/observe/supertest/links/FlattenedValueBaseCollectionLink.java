@@ -13,6 +13,7 @@ import org.observe.supertest.CollectionSourcedLink;
 import org.observe.supertest.ExpectedCollectionOperation;
 import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.ObservableCollectionTestDef;
+import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
 import org.qommons.TestHelper;
 import org.qommons.TestHelper.RandomAction;
@@ -20,8 +21,14 @@ import org.qommons.collect.MutableCollectionElement.StdMsg;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * Tests {@link org.observe.collect.ObservableCollection#flattenValue(org.observe.ObservableValue)}
+ *
+ * @param <T> The type of the collection
+ */
 public class FlattenedValueBaseCollectionLink<T> extends BaseCollectionLink<T> {
-	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator() {
+	/** Generates a root {@link FlattenedValueBaseCollectionLink} */
+	public static final ChainLinkGenerator GENERATE_FLATTENED = new ChainLinkGenerator() {
 		@Override
 		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
 			if (sourceLink != null)
@@ -53,6 +60,13 @@ public class FlattenedValueBaseCollectionLink<T> extends BaseCollectionLink<T> {
 	private final List<ObservableCollection<T>> theCollections;
 	private final SettableValue<ObservableCollection<T>> theCollectionValue;
 
+	/**
+	 * @param path The path for the link (generally "root")
+	 * @param def The collection definition for the link
+	 * @param helper The randomness to use to initialize the link
+	 * @param collections The collections to toggle between
+	 * @param collectionValue The value containing the active collection
+	 */
 	public FlattenedValueBaseCollectionLink(String path, ObservableCollectionTestDef<T> def, TestHelper helper,
 		List<ObservableCollection<T>> collections, SettableValue<ObservableCollection<T>> collectionValue) {
 		super(path, def, helper);
@@ -91,7 +105,7 @@ public class FlattenedValueBaseCollectionLink<T> extends BaseCollectionLink<T> {
 				for (CollectionSourcedLink<T, ?> derived : getDerivedLinks()) {
 					Assert.assertTrue(oldCollection.equivalence().elementEquals(value, element.getValue()));
 					derived.expectFromSource(//
-						new ExpectedCollectionOperation<>(element, CollectionOpType.remove, value, value));
+						new ExpectedCollectionOperation<>(element, ExpectedCollectionOperation.CollectionOpType.remove, value, value));
 				}
 			}
 		}
@@ -101,7 +115,7 @@ public class FlattenedValueBaseCollectionLink<T> extends BaseCollectionLink<T> {
 				element.expectAdded(value);
 				for (CollectionSourcedLink<T, ?> derived : getDerivedLinks()) {
 					derived.expectFromSource(//
-						new ExpectedCollectionOperation<>(element, CollectionOpType.add, value, value));
+						new ExpectedCollectionOperation<>(element, ExpectedCollectionOperation.CollectionOpType.add, value, value));
 				}
 			}
 		}

@@ -30,7 +30,15 @@ import org.qommons.ValueHolder;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * Tests {@link org.observe.collect.ObservableCollection.CollectionDataFlow#combine(TypeToken, Function)}
+ *
+ * @param <S> The source link type
+ * @param <V> The type of the value to combine with the source values
+ * @param <T> The type of the values produced by the combination
+ */
 public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLink<S, T> {
+	/** Generates {@link CombinedCollectionLink}s */
 	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator() {
 		@Override
 		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
@@ -112,6 +120,17 @@ public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLin
 	private final Function<TestHelper, V> theValueSupplier;
 	private final CombinedFlowDef<S, T> theOptions;
 
+	/**
+	 * @param path The path for this link
+	 * @param sourceLink The source for this link
+	 * @param def The collection definition for this link
+	 * @param helper The randomness to use to initialize this link
+	 * @param operation The combination operation
+	 * @param values The list of values to combine with the source
+	 * @param valueCombination The operation to combine all the values into a single value for the combination
+	 * @param valueSupplier The value supplier for the combined values
+	 * @param options The options used to define the combination
+	 */
 	public CombinedCollectionLink(String path, ObservableCollectionLink<?, S> sourceLink, ObservableCollectionTestDef<T> def,
 		TestHelper helper, BiTypeTransformation<S, V, T> operation, List<SettableValue<V>> values, Function<List<V>, V> valueCombination,
 		Function<TestHelper, V> valueSupplier, CombinedFlowDef<S, T> options) {
@@ -124,6 +143,7 @@ public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLin
 		theOptions = options;
 	}
 
+	/** @return The sum of all of this link's combination values */
 	protected V getValueSum() {
 		return theValueCombination.apply(toList(theValues));
 	}
@@ -168,35 +188,66 @@ public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLin
 		});
 	}
 
+	/**
+	 * Called when an input value is changed
+	 *
+	 * @param oldCombinedValue The previous combination of all the input values
+	 * @param newCombinedValue The new, current combination of all the input values
+	 */
 	protected void expectValueChange(V oldCombinedValue, V newCombinedValue) {
 		for (CollectionLinkElement<S, T> element : getElements()) {
 			T oldValue = element.getValue();
 			T newValue = theOperation.map(element.getFirstSource().getValue(), newCombinedValue);
 			element.setValue(newValue);
 			for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
-				derived.expectFromSource(new ExpectedCollectionOperation<>(element, CollectionOpType.set, oldValue, newValue));
+				derived.expectFromSource(new ExpectedCollectionOperation<>(element, ExpectedCollectionOperation.CollectionOpType.set, oldValue, newValue));
 		}
 	}
 
+	/**
+	 * A 2-to-1 transformation
+	 *
+	 * @param <S> The source value type
+	 * @param <V> The input value type
+	 * @param <T> The target type
+	 */
 	public interface BiTypeTransformation<S, V, T> {
+		/** @return The source value type */
 		TestValueType getSourceType();
 
+		/** @return The input value type */
 		TestValueType getValueType();
 
+		/** @return The target type */
 		TestValueType getTargetType();
 
+		/**
+		 * @param source The source value to map
+		 * @param value The input value to combine
+		 * @return The result value
+		 */
 		T map(S source, V value);
 
+		/** @return Whether this transformation supports {@link #reverse(Object, Object) reversal} */
 		boolean supportsReverse();
 
+		/**
+		 * @param mapped The result value to reverse
+		 * @param value The input value to de-combine
+		 * @return The reversed source value
+		 */
 		S reverse(T mapped, V value);
 
+		/** @return Whether many source values may map to a single target value */
 		boolean isManyToOne();
 
+		/** @return Whether many target values may reverse-map to a single source value */
 		boolean isOneToMany();
 
+		/** @return The name of the {@link #reverse() reverse} mapping */
 		String reverseName();
 
+		/** @return The reverse of this mapping, if supported */
 		default BiTypeTransformation<T, V, S> reverse() {
 			if (!supportsReverse())
 				throw new UnsupportedOperationException();
@@ -260,6 +311,12 @@ public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLin
 		}
 	}
 
+	/**
+	 * @param sourceType The type to transform
+	 * @param allowManyToOne Whether {@link TypeTransformation#isManyToOne() many-to-one} transformations are acceptable
+	 * @param requireReversible Whether acceptable mappings must {@link TypeTransformation#supportsReverse() support reversal}
+	 * @return Whether any acceptable transformations exist
+	 */
 	public static boolean supportsTransform(TestValueType sourceType, boolean allowManyToOne, boolean requireReversible) {
 		List<? extends BiTypeTransformation<?, ?, ?>> transforms = TYPE_TRANSFORMATIONS.get(sourceType);
 		if (transforms == null || transforms.isEmpty())
@@ -277,6 +334,15 @@ public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLin
 		return true;
 	}
 
+	/**
+	 * @param <E> The source type
+	 * @param <T> The target type
+	 * @param type The source type to transform
+	 * @param helper The randomness to use to get a random transformation
+	 * @param allowManyToOne Whether {@link TypeTransformation#isManyToOne() many-to-one} transformations are acceptable
+	 * @param requireReversible Whether acceptable mappings must {@link TypeTransformation#supportsReverse() support reversal}
+	 * @return The transformation
+	 */
 	public static <E, T> BiTypeTransformation<E, ?, T> transform(TestValueType type, TestHelper helper, boolean allowManyToOne,
 		boolean requireReversible) {
 		List<? extends BiTypeTransformation<E, ?, ?>> transforms = (List<? extends BiTypeTransformation<E, ?, ?>>) TYPE_TRANSFORMATIONS
@@ -299,6 +365,16 @@ public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLin
 		return (BiTypeTransformation<E, ?, T>) transform;
 	}
 
+	/**
+	 * @param <E> The source type
+	 * @param <T> The target type
+	 * @param sourceType The source type to transform
+	 * @param destType The target type to transform values into
+	 * @param helper The randomness to use to get a random transformation
+	 * @param allowManyToOne Whether {@link TypeTransformation#isManyToOne() many-to-one} transformations are acceptable
+	 * @param requireReversible Whether acceptable mappings must {@link TypeTransformation#supportsReverse() support reversal}
+	 * @return The transformation
+	 */
 	public static <E, T> BiTypeTransformation<E, ?, T> transform(TestValueType sourceType, TestValueType destType, TestHelper helper,
 		boolean allowManyToOne, boolean requireReversible) {
 		List<? extends BiTypeTransformation<E, ?, ?>> transforms = (List<? extends BiTypeTransformation<E, ?, ?>>) TYPE_TRANSFORMATIONS
@@ -377,24 +453,6 @@ public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLin
 				return name;
 			}
 		};
-	}
-
-	private static <E, T> List<TypeTransformation<E, T>> asList(TypeTransformation<E, T>... transforms) {
-		return Arrays.asList(transforms);
-	}
-
-	private static String reverse(String s) {
-		char[] c = s.toCharArray();
-		int start = 0;
-		if (c.length > 0 && c[start] == '-')
-			start++;
-		for (int i = start; i < c.length / 2; i++) {
-			char temp = c[i];
-			int opposite = c.length - i - 1;
-			c[i] = c[opposite];
-			c[opposite] = temp;
-		}
-		return new String(c);
 	}
 
 	private static final Map<TestValueType, List<? extends BiTypeTransformation<?, ?, ?>>> TYPE_TRANSFORMATIONS;
@@ -509,13 +567,6 @@ public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLin
 			if (backward != null && transform.supportsReverse())
 				backward.add(transform.reverse());
 		}
-	}
-
-	private static String stringValueOf(double d) {
-		String str = String.valueOf(d);
-		if (str.endsWith(".0"))
-			str = str.substring(0, str.length() - 2);
-		return str;
 	}
 
 	static <V> Function<List<V>, V> getValueCombination(TestValueType valueType) {

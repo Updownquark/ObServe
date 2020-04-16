@@ -4,6 +4,7 @@ import java.util.function.Function;
 
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
+import org.observe.collect.ObservableCollectionDataFlowImpl;
 import org.observe.supertest.ChainLinkGenerator;
 import org.observe.supertest.CollectionLinkElement;
 import org.observe.supertest.ExpectedCollectionOperation;
@@ -11,11 +12,17 @@ import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.ObservableCollectionLink;
 import org.observe.supertest.ObservableCollectionTestDef;
 import org.observe.supertest.OneToOneCollectionLink;
-import org.observe.collect.ObservableCollectionDataFlowImpl;
+import org.observe.supertest.OperationRejection;
 import org.qommons.TestHelper;
 import org.qommons.ValueHolder;
 
+/**
+ * Tests {@link org.observe.collect.ObservableCollection.CollectionDataFlow#filterMod(java.util.function.Consumer)}
+ * 
+ * @param <T> The type of values in the collection
+ */
 public class ModFilteredCollectionLink<T> extends OneToOneCollectionLink<T, T> {
+	/** Generates {@link ModFilteredCollectionLink}s */
 	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator() {
 		@Override
 		public <T> double getAffinity(ObservableChainLink<?, T> link) {
@@ -80,6 +87,13 @@ public class ModFilteredCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 
 	private final ObservableCollectionDataFlowImpl.ModFilterer<T> theFilter;
 
+	/**
+	 * @param path The path for this link
+	 * @param sourceLink The source for this link
+	 * @param def The collection definition for this link
+	 * @param helper The randomness to use to initialize this link
+	 * @param filter The modification filter to apply to expected modifications here or downstream
+	 */
 	public ModFilteredCollectionLink(String path, ObservableCollectionLink<?, T> sourceLink, ObservableCollectionTestDef<T> def,
 		TestHelper helper, ObservableCollectionDataFlowImpl.ModFilterer<T> filter) {
 		super(path, sourceLink, def, helper);

@@ -10,6 +10,7 @@ import org.junit.Assert;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
+import org.observe.collect.ObservableCollectionImpl.ObservableCollectionFinder;
 import org.observe.collect.ObservableElement;
 import org.observe.collect.ObservableElementTester;
 import org.observe.collect.ObservableSortedSet;
@@ -18,6 +19,7 @@ import org.observe.supertest.CollectionDerivedValue;
 import org.observe.supertest.ExpectedCollectionOperation;
 import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.ObservableCollectionLink;
+import org.observe.supertest.ObservableValueLink;
 import org.observe.supertest.TestValueType;
 import org.observe.util.TypeTokens;
 import org.qommons.Ternian;
@@ -28,7 +30,9 @@ import org.qommons.collect.ElementId;
 
 import com.google.common.reflect.TypeToken;
 
+/** Container class for many {@link ObservableValueLink} classes derived from {@link ObservableCollectionLink}s */
 public class CollectionDerivedValues {
+	/** Generates {@link CollectionSize} links to test {@link ObservableCollection#observeSize()} */
 	public static final ChainLinkGenerator SIZE_GENERATOR = new ChainLinkGenerator() {
 		@Override
 		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
@@ -43,6 +47,7 @@ public class CollectionDerivedValues {
 		}
 	};
 
+	/** Generates {@link CollectionContainsValue} links to test {@link ObservableCollection#observeContains(ObservableValue)} */
 	public static final ChainLinkGenerator CONTAINS_VALUE_GENERATOR = new ChainLinkGenerator() {
 		@Override
 		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
@@ -61,6 +66,10 @@ public class CollectionDerivedValues {
 		}
 	};
 
+	/**
+	 * Generates {@link CollectionContainsValues} links to test {@link ObservableCollection#observeContainsAll(ObservableCollection)} and
+	 * {@link ObservableCollection#observeContainsAll(ObservableCollection)}
+	 */
 	public static final ChainLinkGenerator CONTAINS_VALUES_GENERATOR = new ChainLinkGenerator() {
 		@Override
 		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
@@ -82,6 +91,7 @@ public class CollectionDerivedValues {
 		}
 	};
 
+	/** Generates {@link CollectionObserveElement} links to test {@link ObservableCollection#observeElement(Object, boolean)} */
 	public static final ChainLinkGenerator OBSERVE_ELEMENT_GENERATOR = new ChainLinkGenerator() {
 		@Override
 		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
@@ -99,6 +109,7 @@ public class CollectionDerivedValues {
 		}
 	};
 
+	/** Generates {@link ObservableCollectionFinder} links to test {@link ObservableCollection#observeFind(java.util.function.Predicate)} */
 	public static final ChainLinkGenerator CONDITION_FINDER_GENERATOR = new ChainLinkGenerator() {
 		@Override
 		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
@@ -113,6 +124,7 @@ public class CollectionDerivedValues {
 		}
 	};
 
+	/** Generates {@link CollectionOnlyValue} links to test {@link ObservableCollection#only()} */
 	public static final ChainLinkGenerator ONLY_GENERATOR = new ChainLinkGenerator() {
 		@Override
 		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
@@ -127,6 +139,7 @@ public class CollectionDerivedValues {
 		}
 	};
 
+	/** Generates {@link CollectionMinMaxValue} links to test ObservableCollection reduction */
 	public static final ChainLinkGenerator MIN_MAX_GENERATOR = new ChainLinkGenerator() {
 		@Override
 		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
@@ -144,6 +157,7 @@ public class CollectionDerivedValues {
 		}
 	};
 
+	/** Generates {@link CollectionSum} links to test ObservableCollection reduction */
 	public static final ChainLinkGenerator SUM_GENERATOR = new ChainLinkGenerator() {
 		@Override
 		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
@@ -162,6 +176,10 @@ public class CollectionDerivedValues {
 		}
 	};
 
+	/**
+	 * Generates {@link SortedSetObserveRelative} links to test
+	 * {@link ObservableSortedSet#observeRelative(Comparable, SortedSearchFilter, java.util.function.Supplier)}
+	 */
 	public static final ChainLinkGenerator OBSERVE_RELATIVE_GENERATOR = new ChainLinkGenerator() {
 		@Override
 		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
@@ -189,6 +207,7 @@ public class CollectionDerivedValues {
 		}
 	};
 
+	/** All generators in this container class */
 	public static final List<ChainLinkGenerator> GENERATORS;
 	static {
 		List<ChainLinkGenerator> generators = new ArrayList<>();
@@ -205,6 +224,11 @@ public class CollectionDerivedValues {
 		GENERATORS = Collections.unmodifiableList(generators);
 	}
 
+	/**
+	 * {@link ObservableCollection#observeSize()} tester
+	 *
+	 * @param <T> The type of the source collection
+	 */
 	public static class CollectionSize<T> extends CollectionDerivedValue<T, Integer> {
 		CollectionSize(String path, ObservableCollectionLink<?, T> sourceLink) {
 			super(path, sourceLink, TestValueType.INT);
@@ -229,6 +253,11 @@ public class CollectionDerivedValues {
 		}
 	}
 
+	/**
+	 * {@link ObservableCollection#observeContains(ObservableValue)} tester
+	 *
+	 * @param <T> The type of the source collection
+	 */
 	public static class CollectionContainsValue<T> extends CollectionDerivedValue<T, Boolean> {
 		private final SettableValue<T> theValue;
 
@@ -276,11 +305,17 @@ public class CollectionDerivedValues {
 		}
 	}
 
+	/**
+	 * {@link ObservableCollection#observeContainsAll(ObservableCollection)} and
+	 * {@link ObservableCollection#observeContainsAny(ObservableCollection)} tester
+	 *
+	 * @param <T> The type of the source collection
+	 */
 	public static class CollectionContainsValues<T> extends CollectionDerivedValue<T, Boolean> {
 		private final ObservableCollection<T> theSearchValues;
 		private final boolean isContainsAny;
 
-		public CollectionContainsValues(String path, ObservableCollectionLink<?, T> sourceLink, ObservableCollection<T> searchValues,
+		CollectionContainsValues(String path, ObservableCollectionLink<?, T> sourceLink, ObservableCollection<T> searchValues,
 			boolean containsAny) {
 			super(path, sourceLink, sourceLink.getType());
 			theSearchValues = searchValues;
@@ -357,6 +392,11 @@ public class CollectionDerivedValues {
 		}
 	}
 
+	/**
+	 * {@link ObservableCollection#observeElement(Object, boolean)} tester
+	 *
+	 * @param <T> The type of the source collection
+	 */
 	public static class CollectionObserveElement<T> extends CollectionDerivedValue<T, T> {
 		private final T theValue;
 		private final boolean isFirst;
@@ -425,6 +465,11 @@ public class CollectionDerivedValues {
 		}
 	}
 
+	/**
+	 * {@link ObservableCollection#observeFind(java.util.function.Predicate)} tester
+	 *
+	 * @param <T> The type of the source collection
+	 */
 	public static class CollectionConditionFinder<T> extends CollectionDerivedValue<T, T> {
 		private final SettableValue<Function<T, String>> theConditionValue;
 		private final Ternian theLocation;
@@ -526,6 +571,11 @@ public class CollectionDerivedValues {
 		}
 	}
 
+	/**
+	 * {@link ObservableCollection#only()} tester
+	 *
+	 * @param <T> The type of the source collection
+	 */
 	public static class CollectionOnlyValue<T> extends CollectionDerivedValue<T, T> {
 		CollectionOnlyValue(String path, ObservableCollectionLink<?, T> sourceLink) {
 			super(path, sourceLink, TestValueType.INT);
@@ -556,6 +606,12 @@ public class CollectionDerivedValues {
 		}
 	}
 
+	/**
+	 * Reduction tester, using {@link ObservableCollection#minBy(Comparator, java.util.function.Supplier, Ternian)} and
+	 * {@link ObservableCollection#maxBy(Comparator, java.util.function.Supplier, Ternian)}
+	 *
+	 * @param <T> The type of the source collection
+	 */
 	public static class CollectionMinMaxValue<T> extends CollectionDerivedValue<T, T> {
 		private final boolean isMin;
 		private final Ternian theLocation;
@@ -667,6 +723,7 @@ public class CollectionDerivedValues {
 		}
 	}
 
+	/** Reduction (sum) tester for int collections */
 	public static class CollectionSum extends CollectionDerivedValue<Integer, Long> {
 		CollectionSum(String path, ObservableCollectionLink<?, Integer> sourceLink) {
 			super(path, sourceLink, TestValueType.INT);
@@ -697,13 +754,18 @@ public class CollectionDerivedValues {
 		}
 	}
 
+	/**
+	 * {@link ObservableSortedSet#observeRelative(Comparable, SortedSearchFilter, java.util.function.Supplier)} tester
+	 *
+	 * @param <T> The type of the source set
+	 */
 	public static class SortedSetObserveRelative<T> extends CollectionDerivedValue<T, T> {
 		private final T theValue;
 		private final int onExact;
 		private final Comparable<? super T> theSearch;
 		private final SortedSearchFilter theFilter;
 
-		public SortedSetObserveRelative(String path, ObservableCollectionLink<?, T> sourceLink, TestValueType type, T value, int onExact,
+		SortedSetObserveRelative(String path, ObservableCollectionLink<?, T> sourceLink, TestValueType type, T value, int onExact,
 			SortedSearchFilter filter) {
 			super(path, sourceLink, type);
 			theValue = value;

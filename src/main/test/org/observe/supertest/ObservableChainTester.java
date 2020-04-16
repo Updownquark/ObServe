@@ -64,8 +64,8 @@ public class ObservableChainTester implements Testable {
 		List<ChainLinkGenerator> generators = new ArrayList<>();
 		// Initial link generators
 		generators.add(BaseCollectionLink.GENERATE);
-		generators.add(SortedBaseCollectionLink.GENERATE);
-		generators.add(FlattenedValueBaseCollectionLink.GENERATE);
+		generators.add(SortedBaseCollectionLink.GENERATE_SORTED);
+		generators.add(FlattenedValueBaseCollectionLink.GENERATE_FLATTENED);
 
 		// Derived collection generators
 		generators.add(MappedCollectionLink.GENERATE);

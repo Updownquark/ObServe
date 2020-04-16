@@ -1,5 +1,10 @@
 package org.observe.supertest;
 
+/**
+ * An {@link ObservableChainLink} whose source is an {@link ObservableValueLink}
+ * 
+ * @param <S> The type of the source link's value
+ * @param <T> The type of this link
+ */
 public interface ValueSourcedLink<S, T> extends ObservableChainLink<S, T> {
-
 }

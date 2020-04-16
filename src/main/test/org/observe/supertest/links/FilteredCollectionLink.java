@@ -18,6 +18,7 @@ import org.observe.supertest.ExpectedCollectionOperation;
 import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.ObservableCollectionLink;
 import org.observe.supertest.ObservableCollectionTestDef;
+import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
 import org.qommons.LambdaUtils;
 import org.qommons.TestHelper;
@@ -27,7 +28,13 @@ import org.qommons.collect.CollectionElement;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * Tests {@link org.observe.collect.ObservableCollection.CollectionDataFlow#filter(Class)}
+ *
+ * @param <T> The type of the collection values
+ */
 public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
+	/** Generates {@link FilteredCollectionLink}s */
 	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator() {
 		@Override
 		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
@@ -61,6 +68,14 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	private final SettableValue<Function<T, String>> theFilterValue;
 	private final boolean isVariableFilter;
 
+	/**
+	 * @param path The path for this link
+	 * @param sourceLink The source for this link
+	 * @param def The collection definition for this link
+	 * @param filter The filter to apply the source values
+	 * @param variable Whether to modify the filter periodically
+	 * @param helper The randomness to use to initialize this link
+	 */
 	public FilteredCollectionLink(String path, ObservableCollectionLink<?, T> sourceLink, ObservableCollectionTestDef<T> def,
 		SettableValue<Function<T, String>> filter, boolean variable, TestHelper helper) {
 		super(path, sourceLink, def, helper);
@@ -109,6 +124,12 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		}
 	}
 
+	/**
+	 * Called when the filter is switched out
+	 * 
+	 * @param oldFilter The previously used filter
+	 * @param newFilter The new filter
+	 */
 	protected void expectFilterChange(Function<T, String> oldFilter, Function<T, String> newFilter) {
 		for (CollectionLinkElement<?, T> sourceEl : getSourceLink().getElements()) {
 			String oldMsg = oldFilter.apply(sourceEl.getValue());
@@ -121,14 +142,14 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
 				linkEl.expectAdded(sourceEl.getValue());
 				for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
 					derived.expectFromSource(
-						new ExpectedCollectionOperation<>(linkEl, CollectionOpType.add, linkEl.getValue(), linkEl.getValue()));
+						new ExpectedCollectionOperation<>(linkEl, ExpectedCollectionOperation.CollectionOpType.add, linkEl.getValue(), linkEl.getValue()));
 			} else { // Was included, now excluded
 				CollectionLinkElement<T, T> linkEl = (CollectionLinkElement<T, T>) sourceEl.getDerivedElements(getSiblingIndex())
 					.getFirst();
 				linkEl.expectRemoval();
 				for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
 					derived.expectFromSource(
-						new ExpectedCollectionOperation<>(linkEl, CollectionOpType.remove, linkEl.getValue(), linkEl.getValue()));
+						new ExpectedCollectionOperation<>(linkEl, ExpectedCollectionOperation.CollectionOpType.remove, linkEl.getValue(), linkEl.getValue()));
 			}
 		}
 	}
@@ -142,8 +163,8 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
 			return null;
 		}
 		CollectionLinkElement<?, T> sourceAdded = getSourceLink().expectAdd(value, //
-			after == null ? null : (CollectionLinkElement<?, T>) after.getSourceElements().getFirst(), //
-				before == null ? null : (CollectionLinkElement<?, T>) before.getSourceElements().getFirst(), //
+			after == null ? null : (CollectionLinkElement<?, T>) after.getFirstSource(), //
+				before == null ? null : (CollectionLinkElement<?, T>) before.getFirstSource(), //
 					first, rejection);
 		if (rejection.isRejected())
 			return null;
@@ -178,7 +199,7 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
 			break;
 		}
 		getSourceLink().expect(//
-			new ExpectedCollectionOperation<>((CollectionLinkElement<?, T>) derivedOp.getElement().getSourceElements().getFirst(),
+			new ExpectedCollectionOperation<>((CollectionLinkElement<?, T>) derivedOp.getElement().getFirstSource(),
 				derivedOp.getType(), derivedOp.getOldValue(), derivedOp.getValue()),
 			rejection, execute);
 	}
@@ -213,12 +234,12 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
 				// Filtered out before, but now included
 				element = (CollectionLinkElement<T, T>) sourceOp.getElement().getDerivedElements(getSiblingIndex()).getFirst();
 				element.expectAdded(sourceOp.getValue());
-				op = new ExpectedCollectionOperation<>(element, CollectionOpType.add, null, sourceOp.getValue());
+				op = new ExpectedCollectionOperation<>(element, ExpectedCollectionOperation.CollectionOpType.add, null, sourceOp.getValue());
 			} else if (postMsg != null) {
 				// Included before, but now filtered out
 				element = (CollectionLinkElement<T, T>) sourceOp.getElement().getDerivedElements(getSiblingIndex()).getFirst();
 				element.expectRemoval();
-				op = new ExpectedCollectionOperation<>(element, CollectionOpType.remove, sourceOp.getOldValue(),
+				op = new ExpectedCollectionOperation<>(element, ExpectedCollectionOperation.CollectionOpType.remove, sourceOp.getOldValue(),
 					sourceOp.getOldValue());
 			} else {
 				// Included before and after
@@ -242,8 +263,8 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
 			while (adj != null && !adj.get().isPresent())
 				adj = getElements().getAdjacentElement(adj.getElementId(), false);
 			if (adj != null) {
-				int comp = adj.get().getSourceElements().getFirst().getElementAddress().compareTo(//
-					element.getSourceElements().getFirst().getElementAddress());
+				int comp = adj.get().getFirstSource().getElementAddress().compareTo(//
+					element.getFirstSource().getElementAddress());
 				if (comp >= 0)
 					throw new AssertionError("Filtered elements not in source order");
 			}
@@ -258,6 +279,12 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		return str + ")";
 	}
 
+	/**
+	 * @param <T> The type of value to filter
+	 * @param type The test type of value to filter
+	 * @param helper The randomness to use to get a random filter
+	 * @return A random filter to filter test values of the given type
+	 */
 	public static <T> Function<T, String> filterFor(TestValueType type, TestHelper helper) {
 		List<Function<?, String>> typeFilters = FILTERS.get(type);
 		return (Function<T, String>) typeFilters.get(helper.getInt(0, typeFilters.size()));

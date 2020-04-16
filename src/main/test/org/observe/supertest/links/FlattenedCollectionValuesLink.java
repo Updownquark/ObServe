@@ -12,6 +12,7 @@ import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.ObservableChainTester;
 import org.observe.supertest.ObservableCollectionLink;
 import org.observe.supertest.ObservableCollectionTestDef;
+import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
 import org.qommons.TestHelper;
 import org.qommons.TestHelper.RandomAction;
@@ -23,7 +24,17 @@ import org.qommons.tree.BetterTreeMap;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * Tests {@link org.observe.collect.ObservableCollection.CollectionDataFlow#flattenValues(TypeToken, Function)} and, thereby,
+ * {@link org.observe.collect.ObservableCollection.CollectionDataFlow#refresh(org.observe.Observable)} and mapped
+ * {@link org.observe.collect.FlowOptions.MapOptions#withElementSetting(org.observe.collect.ObservableCollection.ElementSetter) element
+ * setting}.
+ *
+ * @param <S> The type of the source link's collection
+ * @param <T> The type of this link's collection
+ */
 public class FlattenedCollectionValuesLink<S, T> extends AbstractMappedCollectionLink<S, T> {
+	/** Generates {@link FlattenedCollectionValuesLink}s */
 	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator() {
 		@Override
 		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
@@ -55,19 +66,29 @@ public class FlattenedCollectionValuesLink<S, T> extends AbstractMappedCollectio
 				sourceVal -> getBucket(buckets, sourceVal).get());
 			ObservableCollectionTestDef<X> def = new ObservableCollectionTestDef<>(type, oneStepFlow, multiStepFlow,
 				sourceCL.getDef().orderImportant, sourceCL.getDef().checkOldValues);
-			return new FlattenedCollectionValuesLink<>(path, sourceCL, def, helper, sourceCL.getDef().checkOldValues,
-				BetterCollections.unmodifiableSortedMap(buckets));
+			return new FlattenedCollectionValuesLink<>(path, sourceCL, def, helper, BetterCollections.unmodifiableSortedMap(buckets));
 		}
 	};
 
 	private final BetterSortedMap<S, SettableValue<T>> theBuckets;
 
+	/**
+	 * @param path The path for this link
+	 * @param sourceLink The source for this link
+	 * @param def The collection definition for this link
+	 * @param helper The randomness to use to initialize this link
+	 * @param buckets The bucket values used to produce this collection's values for source values
+	 */
 	public FlattenedCollectionValuesLink(String path, ObservableCollectionLink<?, S> sourceLink, ObservableCollectionTestDef<T> def,
-		TestHelper helper, boolean cached, BetterSortedMap<S, SettableValue<T>> buckets) {
-		super(path, sourceLink, def, helper, cached);
+		TestHelper helper, BetterSortedMap<S, SettableValue<T>> buckets) {
+		super(path, sourceLink, def, helper, sourceLink.getDef().checkOldValues);
 		theBuckets = buckets;
 	}
 
+	/**
+	 * @param sourceValue The source value
+	 * @return The entry of the bucket to use for the value
+	 */
 	protected MapEntryHandle<S, SettableValue<T>> getBucket(S sourceValue) {
 		return getBucket(theBuckets, sourceValue);
 	}
@@ -103,19 +124,27 @@ public class FlattenedCollectionValuesLink<S, T> extends AbstractMappedCollectio
 			T oldValue = entry.get().get();
 			if (helper.isReproducing())
 				System.out.println("Changing bucket [" + theBuckets.keySet().getElementsBefore(entry.getElementId()) + "]" + entry.getKey()
-					+ " " + oldValue + "->" + newValue);
+				+ " " + oldValue + "->" + newValue);
 			entry.get().set(newValue, null);
 			expectBucketChange(entry, oldValue, newValue, null);
 		});
 	}
 
+	/**
+	 * Called when the value of a bucket is changed
+	 * 
+	 * @param entry The bucket whose value has changed
+	 * @param oldValue The previous value in the bucket
+	 * @param newValue The new value in the bucket
+	 * @param first The element to apply the change to first, if any
+	 */
 	protected void expectBucketChange(MapEntryHandle<S, SettableValue<T>> entry, T oldValue, T newValue,
 		CollectionLinkElement<S, T> first) {
 		if (first != null) {
 			first.setValue(newValue);
 			for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
 				derived.expectFromSource(//
-					new ExpectedCollectionOperation<>(first, CollectionOpType.set, oldValue, newValue));
+					new ExpectedCollectionOperation<>(first, ExpectedCollectionOperation.CollectionOpType.set, oldValue, newValue));
 		}
 		for (CollectionLinkElement<S, T> element : getElements()) {
 			if (element == first)
@@ -125,14 +154,14 @@ public class FlattenedCollectionValuesLink<S, T> extends AbstractMappedCollectio
 				element.setValue(newValue);
 				for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
 					derived.expectFromSource(//
-						new ExpectedCollectionOperation<>(element, CollectionOpType.set, oldValue, newValue));
+						new ExpectedCollectionOperation<>(element, ExpectedCollectionOperation.CollectionOpType.set, oldValue, newValue));
 			}
 		}
 	}
 
 	@Override
 	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection, boolean execute) {
-		if (derivedOp.getType() == CollectionOpType.set) {
+		if (derivedOp.getType() == ExpectedCollectionOperation.CollectionOpType.set) {
 			if (execute) {
 				S sourceVal = ((ExpectedCollectionOperation<S, T>) derivedOp).getElement().getFirstSource().getValue();
 				MapEntryHandle<S, SettableValue<T>> bucket = getBucket(sourceVal);

@@ -14,12 +14,19 @@ import org.observe.supertest.ExpectedCollectionOperation;
 import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.ObservableCollectionLink;
 import org.observe.supertest.ObservableCollectionTestDef;
+import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
 import org.qommons.BiTuple;
 import org.qommons.LambdaUtils;
 import org.qommons.TestHelper;
 
+/**
+ * Tests {@link org.observe.collect.ObservableCollection.CollectionDataFlow#sorted(Comparator)}
+ *
+ * @param <T> The type of values in the collection
+ */
 public class SortedCollectionLink<T> extends ObservableCollectionLink<T, T> {
+	/** Generates {@link SortedCollectionLink}s */
 	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator() {
 		@Override
 		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
@@ -44,6 +51,13 @@ public class SortedCollectionLink<T> extends ObservableCollectionLink<T, T> {
 
 	private final SortedLinkHelper<T> theHelper;
 
+	/**
+	 * @param path The path for this link
+	 * @param sourceLink The source for this link
+	 * @param def The collection definition for this link
+	 * @param compare The sorting for the collection
+	 * @param helper The randomness to use to initialize this link
+	 */
 	public SortedCollectionLink(String path, ObservableCollectionLink<?, T> sourceLink, ObservableCollectionTestDef<T> def,
 		Comparator<? super T> compare, TestHelper helper) {
 		super(path, sourceLink, def, helper);
@@ -71,8 +85,8 @@ public class SortedCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		before = afterBefore.getValue2();
 
 		CollectionLinkElement<?, T> sourceEl = getSourceLink().expectAdd(value, //
-			after == null ? null : (CollectionLinkElement<?, T>) after.getSourceElements().getFirst(),
-				before == null ? null : (CollectionLinkElement<?, T>) before.getSourceElements().getFirst(), //
+			after == null ? null : (CollectionLinkElement<?, T>) after.getFirstSource(),
+				before == null ? null : (CollectionLinkElement<?, T>) before.getFirstSource(), //
 					first, rejection);
 		if (rejection.isRejected())
 			return null;
@@ -92,8 +106,8 @@ public class SortedCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		before = afterBefore.getValue2();
 		CollectionLinkElement<?, T> sourceEl = getSourceLink().expectMove(//
 			(CollectionLinkElement<?, T>) source.getFirstSource(), //
-			after == null ? null : (CollectionLinkElement<?, T>) after.getSourceElements().getFirst(),
-				before == null ? null : (CollectionLinkElement<?, T>) before.getSourceElements().getFirst(), //
+			after == null ? null : (CollectionLinkElement<?, T>) after.getFirstSource(),
+				before == null ? null : (CollectionLinkElement<?, T>) before.getFirstSource(), //
 					first, rejection);
 		return sourceEl == null ? null : (CollectionLinkElement<T, T>) sourceEl.getDerivedElements(getSiblingIndex()).getFirst();
 	}
@@ -103,7 +117,7 @@ public class SortedCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		if (!theHelper.expectSet(derivedOp, rejection, getElements()))
 			return;
 		CollectionLinkElement<T, T> element = (CollectionLinkElement<T, T>) derivedOp.getElement();
-		CollectionLinkElement<?, T> sourceEl = element.getSourceElements().getFirst();
+		CollectionLinkElement<?, T> sourceEl = element.getFirstSource();
 		getSourceLink().expect(new ExpectedCollectionOperation<>(//
 			sourceEl, derivedOp.getType(), derivedOp.getOldValue(), derivedOp.getValue()), rejection, execute);
 	}
@@ -124,13 +138,13 @@ public class SortedCollectionLink<T> extends ObservableCollectionLink<T, T> {
 			boolean expectMove = theHelper.expectMoveFromSource(sourceOp, getSiblingIndex(), getElements());
 			if (expectMove) {
 				element.expectRemoval();
-				ExpectedCollectionOperation<T, T> op = new ExpectedCollectionOperation<>(element, CollectionOpType.remove,
+				ExpectedCollectionOperation<T, T> op = new ExpectedCollectionOperation<>(element, ExpectedCollectionOperation.CollectionOpType.remove,
 					sourceOp.getOldValue(), sourceOp.getOldValue());
 				for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
 					derived.expectFromSource(op);
 				element = (CollectionLinkElement<T, T>) sourceOp.getElement().getDerivedElements(getSiblingIndex()).get(1);
 				element.expectAdded(sourceOp.getValue());
-				op = new ExpectedCollectionOperation<>(element, CollectionOpType.add, null, sourceOp.getValue());
+				op = new ExpectedCollectionOperation<>(element, ExpectedCollectionOperation.CollectionOpType.add, null, sourceOp.getValue());
 				for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
 					derived.expectFromSource(op);
 				return;
@@ -182,6 +196,11 @@ public class SortedCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		}
 	}
 
+	/**
+	 * @param type The type to sort values of
+	 * @param helper The randomness to get the sorting with
+	 * @return A sorting scheme for the given type
+	 */
 	public static <E> Comparator<E> compare(TestValueType type, TestHelper helper) {
 		List<Comparator<E>> typeCompares = (List<Comparator<E>>) COMPARATORS.get(type);
 		return typeCompares.get(helper.getInt(0, typeCompares.size()));

@@ -1,6 +1,5 @@
 package org.observe.supertest.links;
 
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -30,7 +29,14 @@ import org.qommons.ValueHolder;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * Tests {@link org.observe.collect.ObservableCollection.CollectionDataFlow#map(TypeToken, Function)}
+ *
+ * @param <S> The type of the source link's collection
+ * @param <T> The type of this link's collection
+ */
 public class MappedCollectionLink<S, T> extends AbstractMappedCollectionLink<S, T> {
+	/** Generates {@link MappedCollectionLink}s */
 	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator() {
 		@Override
 		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
@@ -103,6 +109,18 @@ public class MappedCollectionLink<S, T> extends AbstractMappedCollectionLink<S, 
 	private final boolean isMapEquivalent;
 	private final FlowOptions.MapDef<S, T> theOptions;
 
+	/**
+	 * @param path The path for this link
+	 * @param sourceLink The source for this link
+	 * @param def The collection definition for this link
+	 * @param helper The randomness to use to initialize this link
+	 * @param mapValue The value holding the current mapping
+	 * @param mapVariable Whether to vary the mapping periodically
+	 * @param mapEquivalent Whether the operation was a
+	 *        {@link org.observe.collect.ObservableCollection.DistinctDataFlow#mapEquivalent(TypeToken, Function, Function) mapEquivalent}
+	 *        operation on a distinct flow
+	 * @param options The options used to create the mapping
+	 */
 	public MappedCollectionLink(String path, ObservableCollectionLink<?, S> sourceLink, ObservableCollectionTestDef<T> def,
 		TestHelper helper, SimpleSettableValue<TypeTransformation<S, T>> mapValue, boolean mapVariable, boolean mapEquivalent,
 		MapDef<S, T> options) {
@@ -161,16 +179,28 @@ public class MappedCollectionLink<S, T> extends AbstractMappedCollectionLink<S, 
 		}
 	}
 
+	/**
+	 * Called when the mapping is switched out
+	 *
+	 * @param oldMap The previously used mapping function
+	 * @param newMap The new, current mapping function
+	 */
 	protected void expectMapChange(TypeTransformation<S, T> oldMap, TypeTransformation<S, T> newMap) {
 		for (CollectionLinkElement<S, T> element : getElements()) {
 			T oldValue = element.getValue();
 			T newValue = newMap.map(element.getFirstSource().getValue());
 			element.setValue(newValue);
 			for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
-				derived.expectFromSource(new ExpectedCollectionOperation<>(element, CollectionOpType.set, oldValue, newValue));
+				derived.expectFromSource(new ExpectedCollectionOperation<>(element, ExpectedCollectionOperation.CollectionOpType.set, oldValue, newValue));
 		}
 	}
 
+	/**
+	 * @param sourceType The type to transform
+	 * @param allowManyToOne Whether {@link TypeTransformation#isManyToOne() many-to-one} transformations are acceptable
+	 * @param requireReversible Whether acceptable mappings must {@link TypeTransformation#supportsReverse() support reversal}
+	 * @return Whether any acceptable transformations exist
+	 */
 	public static boolean supportsTransform(TestValueType sourceType, boolean allowManyToOne, boolean requireReversible) {
 		List<? extends TypeTransformation<?, ?>> transforms = TYPE_TRANSFORMATIONS.get(sourceType);
 		if (transforms == null || transforms.isEmpty())
@@ -188,6 +218,15 @@ public class MappedCollectionLink<S, T> extends AbstractMappedCollectionLink<S, 
 		return true;
 	}
 
+	/**
+	 * @param <E> The source type
+	 * @param <T> The target type
+	 * @param type The source type to transform
+	 * @param helper The randomness to use to get a random transformation
+	 * @param allowManyToOne Whether {@link TypeTransformation#isManyToOne() many-to-one} transformations are acceptable
+	 * @param requireReversible Whether acceptable mappings must {@link TypeTransformation#supportsReverse() support reversal}
+	 * @return The transformation
+	 */
 	public static <E, T> TypeTransformation<E, T> transform(TestValueType type, TestHelper helper, boolean allowManyToOne,
 		boolean requireReversible) {
 		List<? extends TypeTransformation<E, ?>> transforms = (List<? extends TypeTransformation<E, ?>>) TYPE_TRANSFORMATIONS.get(type);
@@ -209,6 +248,16 @@ public class MappedCollectionLink<S, T> extends AbstractMappedCollectionLink<S, 
 		return (TypeTransformation<E, T>) transform;
 	}
 
+	/**
+	 * @param <E> The source type
+	 * @param <T> The target type
+	 * @param sourceType The source type to transform
+	 * @param destType The target type to transform values into
+	 * @param helper The randomness to use to get a random transformation
+	 * @param allowManyToOne Whether {@link TypeTransformation#isManyToOne() many-to-one} transformations are acceptable
+	 * @param requireReversible Whether acceptable mappings must {@link TypeTransformation#supportsReverse() support reversal}
+	 * @return The transformation
+	 */
 	public static <E, T> TypeTransformation<E, T> transform(TestValueType sourceType, TestValueType destType, TestHelper helper,
 		boolean allowManyToOne, boolean requireReversible) {
 		List<? extends TypeTransformation<E, ?>> transforms = (List<? extends TypeTransformation<E, ?>>) TYPE_TRANSFORMATIONS
@@ -336,10 +385,6 @@ public class MappedCollectionLink<S, T> extends AbstractMappedCollectionLink<S, 
 				return name;
 			}
 		};
-	}
-
-	private static <E, T> List<TypeTransformation<E, T>> asList(TypeTransformation<E, T>... transforms) {
-		return Arrays.asList(transforms);
 	}
 
 	private static String reverse(String s) {

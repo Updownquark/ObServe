@@ -2,23 +2,44 @@ package org.observe.supertest.links;
 
 import org.observe.supertest.TestValueType;
 
+/**
+ * A mapping for tests
+ * 
+ * @param <E> The source type of the mapping
+ * @param <T> The target type of the mapping
+ */
 public interface TypeTransformation<E, T> {
+	/** @return The source type */
 	TestValueType getSourceType();
 
+	/** @return The target type */
 	TestValueType getType();
 
+	/**
+	 * @param source The source value
+	 * @return The target value
+	 */
 	T map(E source);
 
+	/** @return Whether this transformation supports {@link #reverse(Object) reversal} */
 	boolean supportsReverse();
 
+	/**
+	 * @param mapped The target value to reverse-map
+	 * @return The reversed source value
+	 */
 	E reverse(T mapped);
 
+	/** @return Whether many source values may map to a single target value */
 	boolean isManyToOne();
 
+	/** @return Whether many target values may reverse-map to a single source value */
 	boolean isOneToMany();
 
+	/** @return The name of the {@link #reverse() reverse} mapping */
 	String reverseName();
 
+	/** @return The reverse of this mapping, if supported */
 	default TypeTransformation<T, E> reverse() {
 		if (!supportsReverse())
 			throw new UnsupportedOperationException();

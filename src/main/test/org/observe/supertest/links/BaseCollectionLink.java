@@ -8,13 +8,20 @@ import org.observe.supertest.ExpectedCollectionOperation;
 import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.ObservableCollectionLink;
 import org.observe.supertest.ObservableCollectionTestDef;
+import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
 import org.qommons.TestHelper;
 import org.qommons.collect.CollectionElement;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * Simple base collection link
+ * 
+ * @param <T> The type of values in the collection
+ */
 public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
+	/** Generator for {@link BaseCollectionLink}s */
 	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator() {
 		@Override
 		public <T> double getAffinity(ObservableChainLink<?, T> link) {
@@ -36,6 +43,11 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	private int theModificationNumber;
 	private int theOverallModification;
 
+	/**
+	 * @param path The path for this link (generally "root")
+	 * @param def The collection definition for this link
+	 * @param helper The randomness to initialize this link
+	 */
 	public BaseCollectionLink(String path, ObservableCollectionTestDef<T> def, TestHelper helper) {
 		super(path, null, def, helper);
 	}
@@ -68,7 +80,7 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		CollectionLinkElement<T, T> linkEl = getElements().peekFirst();
 		while (el != null) {
 			linkEl.expectAdded(el.get());
-			ExpectedCollectionOperation<T, T> result = new ExpectedCollectionOperation<>(linkEl, CollectionOpType.add, null,
+			ExpectedCollectionOperation<T, T> result = new ExpectedCollectionOperation<>(linkEl, ExpectedCollectionOperation.CollectionOpType.add, null,
 				linkEl.getValue());
 			for (CollectionSourcedLink<T, ?> derivedLink : getDerivedLinks())
 				derivedLink.expectFromSource(result);
@@ -106,7 +118,7 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 			derivedOp.getElement().expectRemoval();
 			for (CollectionSourcedLink<T, ?> derivedLink : getDerivedLinks()) {
 				derivedLink.expectFromSource(//
-					new ExpectedCollectionOperation<>(derivedOp.getElement(), CollectionOpType.remove, derivedOp.getElement().getValue(),
+					new ExpectedCollectionOperation<>(derivedOp.getElement(), ExpectedCollectionOperation.CollectionOpType.remove, derivedOp.getElement().getValue(),
 						derivedOp.getElement().getValue()));
 			}
 			break;
@@ -115,7 +127,7 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 			derivedOp.getElement().setValue(derivedOp.getValue());
 			for (CollectionSourcedLink<T, ?> derivedLink : getDerivedLinks()) {
 				derivedLink.expectFromSource(//
-					new ExpectedCollectionOperation<>(derivedOp.getElement(), CollectionOpType.set, oldValue, derivedOp.getValue()));
+					new ExpectedCollectionOperation<>(derivedOp.getElement(), ExpectedCollectionOperation.CollectionOpType.set, oldValue, derivedOp.getValue()));
 			}
 			break;
 		}
@@ -131,7 +143,7 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 				el.get().expectAdded(value);
 				for (CollectionSourcedLink<T, ?> derivedLink : getDerivedLinks())
 					derivedLink.expectFromSource(//
-						new ExpectedCollectionOperation<>(el.get(), CollectionOpType.add, null, el.get().getCollectionValue()));
+						new ExpectedCollectionOperation<>(el.get(), ExpectedCollectionOperation.CollectionOpType.add, null, el.get().getCollectionValue()));
 				return el.get();
 			}
 		}
@@ -144,7 +156,7 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		if (source.isPresent())
 			return (CollectionLinkElement<T, T>) source;
 		expect(//
-			new ExpectedCollectionOperation<>(source, CollectionOpType.remove, source.getValue(), source.getValue()), rejection, true);
+			new ExpectedCollectionOperation<>(source, ExpectedCollectionOperation.CollectionOpType.remove, source.getValue(), source.getValue()), rejection, true);
 		while (after != null && (after == source || !after.isPresent() || after.wasAdded()))
 			after = CollectionElement.get(getElements().getAdjacentElement(after.getElementAddress(), false));
 		while (before != null && (before == source || !before.isPresent() || before.wasAdded()))
@@ -156,6 +168,10 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	@Override
 	protected void validate(CollectionLinkElement<T, T> element) {}
 
+	/**
+	 * @param helper The randomness to use to get the type
+	 * @return A random test type
+	 */
 	public static TestValueType nextType(TestHelper helper) {
 		// The DOUBLE type is much less performant. There may be some value, but we'll use it less often.
 		TestHelper.RandomSupplier<TestValueType> action = helper.createSupplier();

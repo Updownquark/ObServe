@@ -17,6 +17,7 @@ import org.observe.supertest.ExpectedCollectionOperation;
 import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.ObservableCollectionLink;
 import org.observe.supertest.ObservableCollectionTestDef;
+import org.observe.supertest.OperationRejection;
 import org.qommons.BiTuple;
 import org.qommons.TestHelper;
 import org.qommons.collect.BetterList;
@@ -24,7 +25,14 @@ import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.tree.BetterTreeList;
 
+/**
+ * Tests {@link org.observe.collect.ObservableCollection.CollectionDataFlow#distinct()} and
+ * {@link org.observe.collect.ObservableCollection.CollectionDataFlow#distinctSorted(Comparator, boolean)}
+ *
+ * @param <T> The type of the collection values
+ */
 public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
+	/** Generates {@link DistinctCollectionLink}s to test {@link org.observe.collect.ObservableCollection.CollectionDataFlow#distinct()} */
 	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator() {
 		@Override
 		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
@@ -54,6 +62,10 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		}
 	};
 
+	/**
+	 * Generates sorted {@link DistinctCollectionLink}s to test
+	 * {@link org.observe.collect.ObservableCollection.CollectionDataFlow#distinctSorted(Comparator, boolean)}
+	 */
 	public static final ChainLinkGenerator GENERATE_SORTED = new ChainLinkGenerator() {
 		@Override
 		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
@@ -86,6 +98,14 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	private final Map<T, ValueElement> theValues;
 	private final boolean isUsingFirst;
 
+	/**
+	 * @param path The path for this link
+	 * @param sourceLink The source for this link
+	 * @param def The collection definition for this link
+	 * @param compare The sorting to use (if sorted)
+	 * @param useFirst Whether the collection should be using the first source link associated with each value as the active element
+	 * @param helper The randomness to use to initialize this link
+	 */
 	public DistinctCollectionLink(String path, ObservableCollectionLink<?, T> sourceLink, ObservableCollectionTestDef<T> def,
 		Comparator<? super T> compare, boolean useFirst, TestHelper helper) {
 		super(path, sourceLink, def, helper);
@@ -130,8 +150,8 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		CollectionLinkElement<?, T> sourceEl;
 		if (theHelper != null)
 			sourceEl = getSourceLink().expectAdd(value, //
-				after == null ? null : (CollectionLinkElement<?, T>) after.getSourceElements().getFirst(),
-					before == null ? null : (CollectionLinkElement<?, T>) before.getSourceElements().getFirst(), //
+				after == null ? null : (CollectionLinkElement<?, T>) after.getFirstSource(),
+					before == null ? null : (CollectionLinkElement<?, T>) before.getFirstSource(), //
 						first, rejection);
 		else
 			sourceEl = getSourceLink().expectAdd(value, null, null, first, rejection);
@@ -157,11 +177,11 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 				source.expectRemoval();
 				for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
 					derived.expectFromSource(
-						new ExpectedCollectionOperation<>(source, CollectionOpType.remove, source.getValue(), source.getValue()));
+						new ExpectedCollectionOperation<>(source, ExpectedCollectionOperation.CollectionOpType.remove, source.getValue(), source.getValue()));
 				newSource.expectAdded(source.getValue());
 				for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
 					derived.expectFromSource(
-						new ExpectedCollectionOperation<>(newSource, CollectionOpType.add, source.getValue(), source.getValue()));
+						new ExpectedCollectionOperation<>(newSource, ExpectedCollectionOperation.CollectionOpType.add, source.getValue(), source.getValue()));
 			} else
 				newSource = (CollectionLinkElement<T, T>) source;
 			theValues.get(source.getValue()).element = newSource;
@@ -185,7 +205,7 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 				return;
 		}
 		if (execute) {
-			boolean set = derivedOp.getType() == CollectionOpType.set;
+			boolean set = derivedOp.getType() == ExpectedCollectionOperation.CollectionOpType.set;
 			if (set) {
 				boolean equal;
 				if (theHelper != null)
@@ -228,7 +248,7 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 				valueEl.element.setValue(derivedOp.getValue());
 				for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
 					derived.expectFromSource(//
-						new ExpectedCollectionOperation<>(valueEl.element, CollectionOpType.set, oldValue, derivedOp.getValue()));
+						new ExpectedCollectionOperation<>(valueEl.element, ExpectedCollectionOperation.CollectionOpType.set, oldValue, derivedOp.getValue()));
 			}
 		}
 	}
@@ -254,7 +274,7 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 			refreshElements();
 		}
 		T searchValue;
-		if (sourceOp.getType() == CollectionOpType.add)
+		if (sourceOp.getType() == ExpectedCollectionOperation.CollectionOpType.add)
 			searchValue = sourceOp.getValue();
 		else
 			searchValue = sourceOp.getOldValue();
@@ -273,7 +293,7 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 			if (add) {
 				element.expectAdded(sourceOp.getValue());
 				for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
-					derived.expectFromSource(new ExpectedCollectionOperation<>(element, CollectionOpType.add, null, sourceOp.getValue()));
+					derived.expectFromSource(new ExpectedCollectionOperation<>(element, ExpectedCollectionOperation.CollectionOpType.add, null, sourceOp.getValue()));
 			}
 			break;
 		case remove:
@@ -285,7 +305,7 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 				element.expectRemoval();
 				for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
 					derived.expectFromSource(
-						new ExpectedCollectionOperation<>(element, CollectionOpType.remove, oldValue, element.getValue()));
+						new ExpectedCollectionOperation<>(element, ExpectedCollectionOperation.CollectionOpType.remove, oldValue, element.getValue()));
 			}
 			break;
 		case set:
@@ -300,7 +320,7 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 				element.setValue(sourceOp.getValue());
 				for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
 					derived.expectFromSource(//
-						new ExpectedCollectionOperation<>(element, CollectionOpType.set, oldValue, sourceOp.getValue()));
+						new ExpectedCollectionOperation<>(element, ExpectedCollectionOperation.CollectionOpType.set, oldValue, sourceOp.getValue()));
 			} else {
 				BetterList<CollectionLinkElement<T, ?>> derivedEls = sourceOp.getElement().getDerivedElements(getSiblingIndex());
 				ValueElement newValueEl;
@@ -328,7 +348,7 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 					theValues.put(sourceOp.getValue(), valueEl);
 					for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
 						derived.expectFromSource(
-							new ExpectedCollectionOperation<>(valueEl.element, CollectionOpType.set, oldValue, sourceOp.getValue()));
+							new ExpectedCollectionOperation<>(valueEl.element, ExpectedCollectionOperation.CollectionOpType.set, oldValue, sourceOp.getValue()));
 					return;
 				}
 
@@ -338,7 +358,7 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 					valueEl.element.expectRemoval();
 					for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
 						derived.expectFromSource(//
-							new ExpectedCollectionOperation<>(valueEl.element, CollectionOpType.remove, oldValue, oldValue));
+							new ExpectedCollectionOperation<>(valueEl.element, ExpectedCollectionOperation.CollectionOpType.remove, oldValue, oldValue));
 				}
 				add = newValueEl.sourceElements.isEmpty();
 				newValueEl.sourceElements.add(sourceOp.getElement());
@@ -346,7 +366,7 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 					newValueEl.element.expectAdded(sourceOp.getValue());
 					for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
 						derived.expectFromSource(//
-							new ExpectedCollectionOperation<>(newValueEl.element, CollectionOpType.add, null, sourceOp.getValue()));
+							new ExpectedCollectionOperation<>(newValueEl.element, ExpectedCollectionOperation.CollectionOpType.add, null, sourceOp.getValue()));
 				}
 			}
 			break;

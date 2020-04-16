@@ -5,11 +5,13 @@ import java.util.Comparator;
 import org.observe.collect.DefaultObservableCollection;
 import org.observe.collect.DefaultObservableSortedSet;
 import org.observe.collect.ObservableCollection;
+import org.observe.collect.ObservableSortedSet;
 import org.observe.supertest.ChainLinkGenerator;
 import org.observe.supertest.CollectionLinkElement;
 import org.observe.supertest.ExpectedCollectionOperation;
 import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.ObservableCollectionTestDef;
+import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
 import org.qommons.BiTuple;
 import org.qommons.TestHelper;
@@ -22,8 +24,14 @@ import org.qommons.tree.SortedTreeList;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * Tests basic {@link ObservableSortedSet}s and non-distinct sorted {@link ObservableCollection}s
+ *
+ * @param <T> The type of values in the set
+ */
 public class SortedBaseCollectionLink<T> extends BaseCollectionLink<T> {
-	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator() {
+	/** Generates a root {@link SortedBaseCollectionLink} */
+	public static final ChainLinkGenerator GENERATE_SORTED = new ChainLinkGenerator() {
 		@Override
 		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
 			if (sourceLink != null)
@@ -54,6 +62,13 @@ public class SortedBaseCollectionLink<T> extends BaseCollectionLink<T> {
 	private final SortedLinkHelper<T> theHelper;
 	private final BetterSet<T> theDistinctValues;
 
+	/**
+	 * @param path The path for this link (generally "root")
+	 * @param def The collection definition for this link
+	 * @param compare The sorting for the values
+	 * @param distinct Whether the collection is an {@link ObservableSortedSet} or just a sorted, non-distinct collection
+	 * @param helper The randomness to use to initialize this link
+	 */
 	public SortedBaseCollectionLink(String path, ObservableCollectionTestDef<T> def, Comparator<? super T> compare, boolean distinct,
 		TestHelper helper) {
 		super(path, def, helper);
@@ -108,7 +123,7 @@ public class SortedBaseCollectionLink<T> extends BaseCollectionLink<T> {
 	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection, boolean execute) {
 		if (!theHelper.expectSet(derivedOp, rejection, getElements()))
 			return;
-		boolean newValue = derivedOp.getType() == CollectionOpType.set //
+		boolean newValue = derivedOp.getType() == ExpectedCollectionOperation.CollectionOpType.set //
 			&& theHelper.getCompare().compare(derivedOp.getElement().getValue(), derivedOp.getValue()) != 0//
 			&& theDistinctValues != null;
 		if (newValue && theDistinctValues.contains(derivedOp.getValue())) {
