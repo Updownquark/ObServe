@@ -101,6 +101,9 @@ public class FlattenedCollectionValuesLink<S, T> extends AbstractMappedCollectio
 
 			MapEntryHandle<S, SettableValue<T>> entry = theBuckets.getEntryById(theBuckets.keySet().getElement(targetIndex).getElementId());
 			T oldValue = entry.get().get();
+			if (helper.isReproducing())
+				System.out.println("Changing bucket [" + theBuckets.keySet().getElementsBefore(entry.getElementId()) + "]" + entry.getKey()
+					+ " " + oldValue + "->" + newValue);
 			entry.get().set(newValue, null);
 			expectBucketChange(entry, oldValue, newValue, null);
 		});

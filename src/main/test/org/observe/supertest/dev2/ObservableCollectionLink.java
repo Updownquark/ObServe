@@ -433,10 +433,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			helper.placemark();
 			testNoModOps(helper);
 		});
-		addExtraActions(action);
 	}
-
-	protected void addExtraActions(TestHelper.RandomAction action) {}
 
 	@Override
 	public void validate(boolean transactionEnd) throws AssertionError {

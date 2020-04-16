@@ -1,6 +1,6 @@
 package org.observe.supertest.dev2.links;
 
-import org.observe.collect.DefaultObservableCollection;
+import org.observe.collect.ObservableCollection;
 import org.observe.supertest.dev2.ChainLinkGenerator;
 import org.observe.supertest.dev2.CollectionLinkElement;
 import org.observe.supertest.dev2.CollectionSourcedLink;
@@ -10,9 +10,7 @@ import org.observe.supertest.dev2.ObservableCollectionLink;
 import org.observe.supertest.dev2.ObservableCollectionTestDef;
 import org.observe.supertest.dev2.TestValueType;
 import org.qommons.TestHelper;
-import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
-import org.qommons.tree.BetterTreeList;
 
 import com.google.common.reflect.TypeToken;
 
@@ -28,10 +26,7 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		@Override
 		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
 			TestValueType type = nextType(helper);
-
-			// Simple tree-backed list
-			BetterList<X> backing = new BetterTreeList<>(true);
-			DefaultObservableCollection<X> base = new DefaultObservableCollection<>((TypeToken<X>) type.getType(), backing);
+			ObservableCollection<X> base = ObservableCollection.build((TypeToken<X>) type.getType()).build();
 			ObservableCollectionTestDef<X> def = new ObservableCollectionTestDef<>(type, base.flow(), base.flow(), true, true);
 			return (ObservableChainLink<T, X>) new BaseCollectionLink<>(path, def, helper);
 		}
