@@ -193,7 +193,7 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 
 	@Override
 	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection, boolean execute) {
-		if (theHelper != null && !theHelper.expectSet(derivedOp, rejection, getElements()))
+		if (rejection.isRejectable() && theHelper != null && !theHelper.expectSet(derivedOp, rejection, getElements()))
 			return;
 		T oldValue = derivedOp.getElement().getValue();
 		ValueElement valueEl = theValues.computeIfAbsent(oldValue,
@@ -205,33 +205,33 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 			if (rejection.isRejected())
 				return;
 		}
-		if (execute) {
-			boolean set = derivedOp.getType() == ExpectedCollectionOperation.CollectionOpType.set;
-			if (set) {
-				boolean equal;
-				if (theHelper != null)
-					equal = theHelper.getCompare().compare(oldValue, derivedOp.getValue()) == 0;
-				else
-					equal = oldValue.equals(derivedOp.getValue());
-				if (!equal && theValues.containsKey(derivedOp.getValue())) {
-					rejection.reject(StdMsg.ELEMENT_EXISTS);
-					return;
-				}
-				isControllingOperation = true;
+		boolean set = derivedOp.getType() == ExpectedCollectionOperation.CollectionOpType.set;
+		if (set) {
+			boolean equal;
+			if (theHelper != null)
+				equal = theHelper.getCompare().compare(oldValue, derivedOp.getValue()) == 0;
+			else
+				equal = oldValue.equals(derivedOp.getValue());
+			if (!equal && rejection.isRejectable() && theValues.containsKey(derivedOp.getValue())) {
+				rejection.reject(StdMsg.ELEMENT_EXISTS);
+				return;
 			}
+		}
+		if (execute) {
+			if (set)
+				isControllingOperation = true;
 
 			// The distinct manager calls the active parent element first, but which one is active involves a lot of state to figure out
 			// The order of operations here isn't always important, but it can affect other things
 			ElementId activeEl = getCollection().getSourceElements(valueEl.element.getCollectionAddress(), getSourceLink().getCollection())
 				.getFirst();
+			rejection.unrejectable();
 			for (CollectionLinkElement<?, T> sourceEl : valueEl.sourceElements) {
 				if (!sourceEl.getCollectionAddress().equals(activeEl))
 					continue;
 				getSourceLink().expect(
 					new ExpectedCollectionOperation<>(sourceEl, derivedOp.getType(), sourceEl.getValue(), derivedOp.getValue()), rejection,
 					true);
-				if (rejection.isRejected())
-					throw new AssertionError("Operation accepted on test, but rejected on execution");
 			}
 			for (CollectionLinkElement<?, T> sourceEl : valueEl.sourceElements) {
 				if (sourceEl.getCollectionAddress().equals(activeEl))
@@ -239,8 +239,6 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 				getSourceLink().expect(
 					new ExpectedCollectionOperation<>(sourceEl, derivedOp.getType(), sourceEl.getValue(), derivedOp.getValue()), rejection,
 					true);
-				if (rejection.isRejected())
-					throw new AssertionError("Operation accepted on test, but rejected on execution");
 			}
 			if (set) {
 				theValues.remove(oldValue);
@@ -330,12 +328,8 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 					Assert.assertEquals(oldValue, sourceOp.getOldValue());
 				if (theValues.containsKey(sourceOp.getValue())) {
 					newValueEl = theValues.get(sourceOp.getValue());
-					if (derivedEls.size() != 2) {
-						for (CollectionLinkElement<T, T> el : getElements())
-							el.updateSourceLinks(false);
-						if (derivedEls.size() != 2)
-							Assert.assertEquals(getPath() + this + ":" + sourceOp.getElement().toString(), 2, derivedEls.size());
-					}
+					if (derivedEls.size() != 2)
+						Assert.assertEquals(getPath() + this + ":" + sourceOp.getElement().toString(), 2, derivedEls.size());
 					Assert.assertEquals(newValueEl.element, derivedEls.getLast());
 				} else if (valueEl.sourceElements.size() > 1
 					|| (theHelper != null && theHelper.expectMoveFromSource(sourceOp, getSiblingIndex(), getElements()))) {
@@ -343,13 +337,18 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 						Assert.assertEquals(getPath() + this + ":" + sourceOp.getElement().toString(), 2, derivedEls.size());
 					newValueEl = new ValueElement((CollectionLinkElement<T, T>) derivedEls.getLast());
 					theValues.put(sourceOp.getValue(), newValueEl);
+				} else if (derivedEls.size() > 1) {
+					// Order of events can determine whether an element needs to be moved or not,
+					// so we'll accommodate if it's moved unexpectedly
+					newValueEl = theValues.computeIfAbsent(sourceOp.getValue(),
+						__ -> new ValueElement((CollectionLinkElement<T, T>) derivedEls.getLast()));
 				} else {
 					valueEl.element.setValue(sourceOp.getValue());
 					theValues.remove(oldValue);
 					theValues.put(sourceOp.getValue(), valueEl);
 					for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
-						derived.expectFromSource(
-							new ExpectedCollectionOperation<>(valueEl.element, ExpectedCollectionOperation.CollectionOpType.set, oldValue, sourceOp.getValue()));
+						derived.expectFromSource(new ExpectedCollectionOperation<>(valueEl.element,
+							ExpectedCollectionOperation.CollectionOpType.set, oldValue, sourceOp.getValue()));
 					return;
 				}
 
@@ -359,7 +358,8 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 					valueEl.element.expectRemoval();
 					for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
 						derived.expectFromSource(//
-							new ExpectedCollectionOperation<>(valueEl.element, ExpectedCollectionOperation.CollectionOpType.remove, oldValue, oldValue));
+							new ExpectedCollectionOperation<>(valueEl.element, ExpectedCollectionOperation.CollectionOpType.remove,
+								oldValue, oldValue));
 				}
 				add = newValueEl.sourceElements.isEmpty();
 				newValueEl.sourceElements.add(sourceOp.getElement());
@@ -367,7 +367,8 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 					newValueEl.element.expectAdded(sourceOp.getValue());
 					for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
 						derived.expectFromSource(//
-							new ExpectedCollectionOperation<>(newValueEl.element, ExpectedCollectionOperation.CollectionOpType.add, null, sourceOp.getValue()));
+							new ExpectedCollectionOperation<>(newValueEl.element, ExpectedCollectionOperation.CollectionOpType.add, null,
+								sourceOp.getValue()));
 				}
 			}
 			break;

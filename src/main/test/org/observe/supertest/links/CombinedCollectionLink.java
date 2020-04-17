@@ -464,9 +464,10 @@ public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLin
 				case INT:
 					switch (type2) {
 					case INT: {
-						supportTransforms(type1, type2, //
+						supportTransforms(type1, type2, true, //
 							CombinedCollectionLink.<Integer, Integer, Integer> transform(type1, type1, type2, (i1, i2) -> i1 + i2,
-								(i1, i2) -> i1 - i2, false, false, "+", "-"), //
+								(i1, i2) -> i1 - i2, false, false, "+", "-"));
+						supportTransforms(type1, type2, false, //
 							CombinedCollectionLink.<Integer, Integer, Integer> transform(type1, type1, type2, (i1, i2) -> i1 * i2,
 								(i1, i2) -> {
 									if (i2 != 0)
@@ -480,7 +481,7 @@ public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLin
 						break;
 					}
 					case DOUBLE: {
-						supportTransforms(type1, type2, //
+						supportTransforms(type1, type2, true, //
 							CombinedCollectionLink.<Integer, Double, Double> transform(type1, type2, type2, //
 								(i, d) -> noNeg0(i + d), //
 								(d1, d2) -> (int) Math.round(d1 - d2), //
@@ -509,7 +510,7 @@ public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLin
 					case INT: // Already done above
 						break;
 					case DOUBLE: {
-						CombinedCollectionLink.<Double, Double> supportTransforms(type1, type2, //
+						CombinedCollectionLink.<Double, Double> supportTransforms(type1, type2, true, //
 							// The a + b - b is not always equal to a due to precision losses
 							CombinedCollectionLink.<Double, Double, Double> transform(type1, type1, type2, (d1, d2) -> noNeg0(d1 + d2),
 								(d1, d2) -> noNeg0(d1 - d2), true, true, "+", "-"), //
@@ -530,7 +531,7 @@ public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLin
 					case DOUBLE:
 						break;
 					case STRING: {
-						supportTransforms(type1, type2, //
+						supportTransforms(type1, type2, true, //
 							CombinedCollectionLink.<String, String, String> transform(type1, type1, type2, (s1, s2) -> s1 + s2, null, false,
 								false, "append", null), //
 							CombinedCollectionLink.<String, String, String> transform(type1, type1, type2, (s1, s2) -> s2 + s1, null, false,
@@ -557,14 +558,15 @@ public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLin
 		return d;
 	}
 
-	private static <S, T> void supportTransforms(TestValueType type1, TestValueType type2, BiTypeTransformation<S, ?, T>... transforms) {
+	private static <S, T> void supportTransforms(TestValueType type1, TestValueType type2, boolean withReverse,
+		BiTypeTransformation<S, ?, T>... transforms) {
 		List<BiTypeTransformation<S, ?, T>> forward = (List<BiTypeTransformation<S, ?, T>>) TYPE_TRANSFORMATIONS.computeIfAbsent(type1,
 			t -> new LinkedList<>());
 		List<BiTypeTransformation<T, ?, S>> backward = (List<BiTypeTransformation<T, ?, S>>) TYPE_TRANSFORMATIONS.computeIfAbsent(type2,
 			t -> new LinkedList<>());
 		for (BiTypeTransformation<S, ?, T> transform : transforms) {
 			forward.add(transform);
-			if (backward != null && transform.supportsReverse())
+			if (withReverse && transform.supportsReverse())
 				backward.add(transform.reverse());
 		}
 	}

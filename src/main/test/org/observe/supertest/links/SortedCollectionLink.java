@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.junit.Assert;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.ChainLinkGenerator;
 import org.observe.supertest.CollectionLinkElement;
@@ -114,7 +115,7 @@ public class SortedCollectionLink<T> extends ObservableCollectionLink<T, T> {
 
 	@Override
 	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection, boolean execute) {
-		if (!theHelper.expectSet(derivedOp, rejection, getElements()))
+		if (rejection.isRejectable() && !theHelper.expectSet(derivedOp, rejection, getElements()))
 			return;
 		CollectionLinkElement<T, T> element = (CollectionLinkElement<T, T>) derivedOp.getElement();
 		CollectionLinkElement<?, T> sourceEl = element.getFirstSource();
@@ -135,21 +136,31 @@ public class SortedCollectionLink<T> extends ObservableCollectionLink<T, T> {
 			element.expectRemoval();
 			break;
 		case set:
-			boolean expectMove = theHelper.expectMoveFromSource(sourceOp, getSiblingIndex(), getElements());
-			if (expectMove) {
+			// Order of events can determine whether an element needs to be moved or not,
+			// so we'll accommodate if it's moved unexpectedly
+			if (element.getFirstSource().getDerivedElements(getSiblingIndex()).size() > 1) {
 				element.expectRemoval();
-				ExpectedCollectionOperation<T, T> op = new ExpectedCollectionOperation<>(element, ExpectedCollectionOperation.CollectionOpType.remove,
-					sourceOp.getOldValue(), sourceOp.getOldValue());
+				ExpectedCollectionOperation<T, T> op = new ExpectedCollectionOperation<>(element,
+					ExpectedCollectionOperation.CollectionOpType.remove, sourceOp.getOldValue(), sourceOp.getOldValue());
 				for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
 					derived.expectFromSource(op);
-				element = (CollectionLinkElement<T, T>) sourceOp.getElement().getDerivedElements(getSiblingIndex()).get(1);
-				element.expectAdded(sourceOp.getValue());
-				op = new ExpectedCollectionOperation<>(element, ExpectedCollectionOperation.CollectionOpType.add, null, sourceOp.getValue());
-				for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
-					derived.expectFromSource(op);
+				element = (CollectionLinkElement<T, T>) sourceOp.getElement().getDerivedElements(getSiblingIndex()).getLast();
+				Assert.assertTrue(element.wasAdded());
+				// This can happen multiple times in some cases, e.g. because of flattened values and distinctness
+				if (!element.isAddExpected()) {
+					element.expectAdded(sourceOp.getValue());
+					op = new ExpectedCollectionOperation<>(element, ExpectedCollectionOperation.CollectionOpType.add, null,
+						sourceOp.getValue());
+					for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
+						derived.expectFromSource(op);
+				} else
+					Assert.assertTrue(getCollection().equivalence().elementEquals(sourceOp.getValue(), element.getValue()));
 				return;
-			} else
+			} else {
+				if (theHelper.expectMoveFromSource(sourceOp, getSiblingIndex(), getElements()))
+					throw new AssertionError("Expected move");
 				element.setValue(sourceOp.getValue());
+			}
 			break;
 		case move:
 			throw new IllegalStateException();

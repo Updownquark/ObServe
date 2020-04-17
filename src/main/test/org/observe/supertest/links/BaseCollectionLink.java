@@ -17,7 +17,7 @@ import com.google.common.reflect.TypeToken;
 
 /**
  * Simple base collection link
- * 
+ *
  * @param <T> The type of values in the collection
  */
 public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
@@ -139,7 +139,8 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		for (CollectionElement<CollectionLinkElement<T, T>> el : getElements().elementsBetween(
 			after == null ? null : after.getElementAddress(), false, //
 				before == null ? null : before.getElementAddress(), false)) {
-			if (el.get().wasAdded() && getCollection().equivalence().elementEquals(el.get().getCollectionValue(), value)) {
+			if (el.get().wasAdded() && !el.get().isAddExpected()
+				&& getCollection().equivalence().elementEquals(el.get().getCollectionValue(), value)) {
 				el.get().expectAdded(value);
 				for (CollectionSourcedLink<T, ?> derivedLink : getDerivedLinks())
 					derivedLink.expectFromSource(//

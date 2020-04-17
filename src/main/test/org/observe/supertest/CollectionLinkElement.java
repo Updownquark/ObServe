@@ -34,6 +34,7 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 	private boolean wasRemoved;
 	private boolean wasUpdated;
 	private T theValue;
+	private int isAddExpected;
 	private boolean isRemoveExpected;
 
 	private List<String> theErrors;
@@ -157,6 +158,11 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 		return wasAdded;
 	}
 
+	/** @return Whether this element's addition has been expected */
+	public boolean isAddExpected() {
+		return isAddExpected > 0;
+	}
+
 	/** @return Whether this element's removal is expected */
 	public boolean isRemoveExpected() {
 		return isRemoveExpected;
@@ -174,7 +180,7 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 	 * @return This element
 	 */
 	public CollectionLinkElement<S, T> error(Consumer<StringBuilder> err) {
-		StringBuilder str = new StringBuilder().append('[').append(theLastKnownIndex).append(']');
+		StringBuilder str = new StringBuilder().append('[').append(getIndex()).append(']');
 		if (theCollectionAddress.isPresent())
 			str.append(getCollectionValue());
 		else
@@ -204,10 +210,8 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 	public CollectionLinkElement<S, T> expectAdded(T value) {
 		if (isRemoveExpected)
 			isRemoveExpected = false;
-		else if (wasAdded)
-			wasAdded = false;
 		else
-			error("Mistakenly expected re-addition");
+			isAddExpected++;
 		theValue = value;
 		return this;
 	}
@@ -268,7 +272,16 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 	public void validate(StringBuilder error) {
 		ObservableCollection<T> collection = theCollectionLink.getCollection();
 		int index = theCollectionLink.getElements().getElementsBefore(theElementAddress);
-		if (wasAdded)
+		if (isAddExpected > 0) {
+			if (!wasAdded) {
+				if (isAddExpected == 1)
+					error("Mistakenly expected re-addition");
+				else
+					error("Mistakenly expected re-addition " + isAddExpected + " times");
+			} else if (isAddExpected > 1) {
+				error("Expected addition too many times: " + isAddExpected);
+			}
+		} else if (wasAdded)
 			error("Unexpected addition");
 		else if (wasRemoved != isRemoveExpected) {
 			if (isRemoveExpected)
@@ -298,7 +311,8 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 			if (theCollectionAddress.isPresent())
 				theValue = getCollectionValue();
 		}
-		wasUpdated = false;
+		wasAdded = wasUpdated = false;
+		isAddExpected = 0;
 		updateSourceLinks(true);
 	}
 

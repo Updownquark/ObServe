@@ -602,15 +602,19 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 	private class CollectionOpElement implements OperationRejection {
 		CollectionLinkElement<S, T> element;
 
+		private boolean isRejectable;
 		String actualRejection;
 		private String theMessage;
 
 		CollectionOpElement(CollectionLinkElement<S, T> element) {
 			this.element = element;
+			isRejectable = true;
 		}
 
 		@Override
 		public void reject(String message) {
+			if (!isRejectable)
+				throw new IllegalStateException("Not rejectable");
 			theMessage = message;
 		}
 
@@ -626,6 +630,17 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		@Override
 		public String getActualRejection() {
 			return actualRejection;
+		}
+
+		@Override
+		public boolean isRejectable() {
+			return isRejectable;
+		}
+
+		@Override
+		public OperationRejection unrejectable() {
+			isRejectable = false;
+			return this;
 		}
 
 		@Override
