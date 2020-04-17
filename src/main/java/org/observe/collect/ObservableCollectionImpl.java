@@ -53,6 +53,7 @@ import org.qommons.collect.ElementId;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.debug.Debug;
 import org.qommons.tree.BetterTreeSet;
 import org.qommons.tree.BinaryTreeNode;
 
@@ -174,14 +175,58 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public Subscription subscribe(Observer<? super CollectionChangeEvent<E>> observer) {
+			return subscribe(observer, null);
+		}
+
+		/**
+		 * Subscribes to this changes observable, with the option to flush accumulated changes on unsubscribe
+		 *
+		 * @param observer The observer to receive batch change events
+		 * @param flushOnUnsubscribe A boolean array, the first element of which determines whether, when the subscription is unsubscribed,
+		 *        this observable will flush accumulated changes to the observer.
+		 * @return The subscription to cease notification
+		 */
+		public Subscription subscribe(Observer<? super CollectionChangeEvent<E>> observer, boolean[] flushOnUnsubscribe) {
+			Map<Object, Object>[] currentData = new Map[1];
+			Causable[] currentCause = new Causable[1];
+			boolean[] subscribed = new boolean[] { true };
 			Causable.CausableKey key = Causable.key((cause, data) -> {
-				fireEventsFromSessionData((SessionChangeTracker<E>) data.get(SESSION_TRACKER_PROPERTY), cause, observer);
+				if (!subscribed[0])
+					return;
+				SessionChangeTracker<E> tracker = (SessionChangeTracker<E>) data.get(SESSION_TRACKER_PROPERTY);
+				fireEventsFromSessionData(tracker, cause, observer);
 				data.remove(SESSION_TRACKER_PROPERTY);
+				currentData[0] = null;
+				currentCause[0] = null;
 			});
-			return collection.onChange(evt -> {
-				evt.getRootCausable().onFinish(key).compute(SESSION_TRACKER_PROPERTY,
-					(k, tracker) -> accumulate((SessionChangeTracker<E>) tracker, evt, observer));
+			Subscription collSub = collection.onChange(evt -> {
+				Causable cause = evt.getRootCausable();
+				Map<Object, Object> data = cause.onFinish(key);
+				Object newTracker = data.compute(SESSION_TRACKER_PROPERTY,
+					(k, tracker) -> {
+						tracker = accumulate((SessionChangeTracker<E>) tracker, evt, observer);
+						return tracker;
+					});
+				if (newTracker == null) {
+					currentData[0] = null;
+					currentCause[0] = null;
+				} else {
+					currentData[0] = data;
+					currentCause[0] = cause;
+				}
 			});
+			return () -> {
+				collSub.unsubscribe();
+				if (flushOnUnsubscribe != null && flushOnUnsubscribe[0]) {
+					if (currentData[0] != null) {
+						SessionChangeTracker<E> tracker = (SessionChangeTracker<E>) currentData[0].remove(SESSION_TRACKER_PROPERTY);
+						fireEventsFromSessionData(tracker, currentCause[0], observer);
+						currentData[0] = null;
+						currentCause[0] = null;
+					}
+				}
+				subscribed[0] = false;
+			};
 		}
 
 		@Override
@@ -2820,17 +2865,13 @@ public final class ObservableCollectionImpl {
 		@Override
 		public int getElementsBefore(ElementId id) {
 			ObservableCollection<? extends E> coll = theCollectionObservable.get();
-			if (coll == null)
-				throw new IllegalArgumentException("This element is not present in this collection");
-			return coll.getElementsBefore(id);
+			return coll.getElementsBefore(strip(coll, id));
 		}
 
 		@Override
 		public int getElementsAfter(ElementId id) {
 			ObservableCollection<? extends E> coll = theCollectionObservable.get();
-			if (coll == null)
-				throw new IllegalArgumentException("This element is not present in this collection");
-			return coll.getElementsAfter(id);
+			return coll.getElementsAfter(strip(coll, id));
 		}
 
 		@Override
@@ -2858,7 +2899,7 @@ public final class ObservableCollectionImpl {
 			ObservableCollection<? extends E> current = getWrapped().get();
 			if (current == null)
 				throw new IndexOutOfBoundsException(index + " of 0");
-			return ((ObservableCollection<E>) current).getElement(index);
+			return getElement(current, ((ObservableCollection<E>) current).getElement(index));
 		}
 
 		@Override
@@ -2866,15 +2907,13 @@ public final class ObservableCollectionImpl {
 			ObservableCollection<? extends E> current = getWrapped().get();
 			if (current == null)
 				return null;
-			return ((ObservableCollection<E>) current).getElement(value, first);
+			return getElement(current, ((ObservableCollection<E>) current).getElement(value, first));
 		}
 
 		@Override
 		public CollectionElement<E> getElement(ElementId id) {
 			ObservableCollection<? extends E> current = getWrapped().get();
-			if (current == null)
-				throw new NoSuchElementException();
-			return ((ObservableCollection<E>) current).getElement(id);
+			return getElement(current, current.getElement(strip(current, id)));
 		}
 
 		@Override
@@ -2882,23 +2921,19 @@ public final class ObservableCollectionImpl {
 			ObservableCollection<? extends E> current = getWrapped().get();
 			if (current == null)
 				return null;
-			return ((ObservableCollection<E>) current).getTerminalElement(first);
+			return getElement(current, current.getTerminalElement(first));
 		}
 
 		@Override
 		public CollectionElement<E> getAdjacentElement(ElementId elementId, boolean next) {
 			ObservableCollection<? extends E> current = getWrapped().get();
-			if (current == null)
-				throw new NoSuchElementException();
-			return ((ObservableCollection<E>) current).getAdjacentElement(elementId, next);
+			return getElement(current, current.getAdjacentElement(strip(current, elementId), next));
 		}
 
 		@Override
 		public MutableCollectionElement<E> mutableElement(ElementId id) {
 			ObservableCollection<? extends E> current = getWrapped().get();
-			if (current == null)
-				throw new NoSuchElementException();
-			return ((ObservableCollection<E>) current).mutableElement(id);
+			return getElement(current, current.mutableElement(strip(current, id)));
 		}
 
 		@Override
@@ -2908,7 +2943,8 @@ public final class ObservableCollectionImpl {
 			ObservableCollection<? extends E> current = getWrapped().get();
 			if (current == null)
 				return BetterList.empty();
-			return ((ObservableCollection<E>) current).getElementsBySource(sourceEl, sourceCollection);
+			return BetterList
+				.of(current.getElementsBySource(strip(current, sourceEl), sourceCollection).stream().map(el -> getElement(current, el)));
 		}
 
 		@Override
@@ -2917,9 +2953,11 @@ public final class ObservableCollectionImpl {
 			if (current == null)
 				return BetterList.empty();
 			if (sourceCollection == this)
-				return current.getSourceElements(localElement, current);
+				return BetterList.of(current.getSourceElements(strip(current, localElement), current).stream()
+					.map(el -> new FlattenedElementId(current, el)));
 			else
-				return current.getSourceElements(localElement, sourceCollection);
+				return BetterList.of(current.getSourceElements(strip(current, localElement), sourceCollection).stream()
+					.map(el -> new FlattenedElementId(current, el)));
 		}
 
 		@Override
@@ -2929,18 +2967,22 @@ public final class ObservableCollectionImpl {
 				return MutableCollectionElement.StdMsg.UNSUPPORTED_OPERATION;
 			else if (value != null && !TypeTokens.get().isInstance(current.getType(), value))
 				return MutableCollectionElement.StdMsg.BAD_TYPE;
-			return ((ObservableCollection<E>) current).canAdd(value, after, before);
+			return ((ObservableCollection<E>) current).canAdd(//
+				value, strip(current, after), strip(current, before));
 		}
 
 		@Override
 		public CollectionElement<E> addElement(E value, ElementId after, ElementId before, boolean first)
 			throws UnsupportedOperationException, IllegalArgumentException {
-			ObservableCollection<? extends E> coll = theCollectionObservable.get();
-			if (coll == null)
-				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-			if (value != null && !TypeTokens.get().isInstance(coll.getType(), value))
-				throw new IllegalArgumentException(MutableCollectionElement.StdMsg.BAD_TYPE);
-			return ((ObservableCollection<E>) coll).addElement(value, after, before, first);
+			try (Transaction t = lock(true, null)) {
+				ObservableCollection<? extends E> coll = theCollectionObservable.get();
+				if (coll == null)
+					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				if (value != null && !TypeTokens.get().isInstance(coll.getType(), value))
+					throw new IllegalArgumentException(MutableCollectionElement.StdMsg.BAD_TYPE);
+				return getElement(coll, ((ObservableCollection<E>) coll).addElement(//
+					value, strip(coll, after), strip(coll, before), first));
+			}
 		}
 
 		@Override
@@ -2948,32 +2990,40 @@ public final class ObservableCollectionImpl {
 			ObservableCollection<? extends E> coll = theCollectionObservable.get();
 			if (coll == null)
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-			return coll.canMove(valueEl, after, before);
+			return coll.canMove(//
+				strip(coll, valueEl), strip(coll, after), strip(coll, before));
 		}
 
 		@Override
 		public CollectionElement<E> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
 			throws UnsupportedOperationException, IllegalArgumentException {
-			ObservableCollection<? extends E> coll = theCollectionObservable.get();
-			if (coll == null)
-				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-			return ((ObservableCollection<E>) coll).move(valueEl, after, before, first, afterRemove);
+			try (Transaction t = lock(true, null)) {
+				ObservableCollection<? extends E> coll = theCollectionObservable.get();
+				if (coll == null)
+					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				return getElement(coll, coll.move(//
+					strip(coll, valueEl), strip(coll, after), strip(coll, before), first, afterRemove));
+			}
 		}
 
 		@Override
 		public void clear() {
-			ObservableCollection<? extends E> coll = theCollectionObservable.get();
-			if (coll != null)
-				coll.clear();
+			try (Transaction t = lock(true, null)) {
+				ObservableCollection<? extends E> coll = theCollectionObservable.get();
+				if (coll != null)
+					coll.clear();
+			}
 		}
 
 		@Override
 		public void setValue(Collection<ElementId> elements, E value) {
-			ObservableCollection<? extends E> coll = theCollectionObservable.get();
-			if (coll != null)
-				((ObservableCollection<E>) coll).setValue(elements, value);
-			else if (!elements.isEmpty())
-				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+			try (Transaction t = lock(true, null)) {
+				ObservableCollection<? extends E> coll = theCollectionObservable.get();
+				if (coll == null && !elements.isEmpty())
+					throw new NoSuchElementException(StdMsg.ELEMENT_REMOVED);
+				List<ElementId> sourceEls = elements.stream().map(el -> strip(coll, el)).collect(Collectors.toList());
+				((ObservableCollection<E>) coll).setValue(sourceEls, value);
+			}
 		}
 
 		@Override
@@ -2982,8 +3032,9 @@ public final class ObservableCollectionImpl {
 				@Override
 				public Subscription subscribe(Observer<? super CollectionChangeEvent<E>> observer) {
 					class ChangeObserver implements Observer<ObservableValueEvent<? extends ObservableCollection<? extends E>>> {
-						private Subscription collectionSub;
 						private ObservableCollection<? extends E> collection;
+						private Subscription collectionSub;
+						private final boolean[] flushOnUnsubscribe = new boolean[] { true };
 
 						@Override
 						public <V extends ObservableValueEvent<? extends ObservableCollection<? extends E>>> void onNext(V collEvt) {
@@ -3020,6 +3071,7 @@ public final class ObservableCollectionImpl {
 							}
 							collection = collEvt.getNewValue();
 							if (collection != null) {
+								CollectionChangesObservable<? extends E> changes;
 								if (clearAndAdd) {
 									try (Transaction t = collection.lock(false, null)) {
 										List<CollectionChangeEvent.ElementChange<E>> elements = new ArrayList<>(collection.size());
@@ -3031,11 +3083,15 @@ public final class ObservableCollectionImpl {
 										try (Transaction evtT = Causable.use(populateEvt)) {
 											observer.onNext(populateEvt);
 										}
-										collectionSub = collection.changes()
-											.subscribe((Observer<CollectionChangeEvent<? extends E>>) observer);
+										changes = new CollectionChangesObservable<>(collection);
+										collectionSub = changes.subscribe((Observer<CollectionChangeEvent<? extends E>>) observer,
+											flushOnUnsubscribe);
 									}
-								} else
-									collectionSub = collection.changes().subscribe((Observer<CollectionChangeEvent<? extends E>>) observer);
+								} else {
+									changes = new CollectionChangesObservable<>(collection);
+									collectionSub = changes.subscribe((Observer<CollectionChangeEvent<? extends E>>) observer,
+										flushOnUnsubscribe);
+								}
 							}
 						}
 
@@ -3055,6 +3111,7 @@ public final class ObservableCollectionImpl {
 					ChangeObserver chgObserver = new ChangeObserver();
 					Subscription obsSub = theCollectionObservable.changes().subscribe(chgObserver);
 					return () -> {
+						chgObserver.flushOnUnsubscribe[0] = false;
 						obsSub.unsubscribe();
 						chgObserver.unsubscribe();
 					};
@@ -3101,6 +3158,24 @@ public final class ObservableCollectionImpl {
 
 		private CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer, boolean populate,
 			boolean forward) {
+			class ElementMappingChangeObserver implements Consumer<ObservableCollectionEvent<? extends E>> {
+				private final ObservableCollection<? extends E> theCollection;
+				private final Consumer<? super ObservableCollectionEvent<? extends E>> theWrapped;
+
+				ElementMappingChangeObserver(ObservableCollection<? extends E> collection,
+					Consumer<? super ObservableCollectionEvent<? extends E>> wrapped) {
+					theCollection = collection;
+					theWrapped = wrapped;
+				}
+
+				@Override
+				public void accept(ObservableCollectionEvent<? extends E> event) {
+					ObservableCollectionEvent<E> mapped = new ObservableCollectionEvent<>(//
+						new FlattenedElementId(theCollection, event.getElementId()), getType(), event.getIndex(), event.getType(),
+						event.getOldValue(), event.getNewValue(), event);
+					theWrapped.accept(mapped);
+				}
+			}
 			class ChangesSubscription implements Observer<ObservableValueEvent<? extends ObservableCollection<? extends E>>> {
 				ObservableCollection<? extends E> collection;
 				Subscription collectionSub;
@@ -3130,7 +3205,9 @@ public final class ObservableCollectionImpl {
 							try (Transaction t = collection.lock(false, null)) {
 								collectionSub.unsubscribe();
 								collectionSub = null;
-								ObservableUtils.depopulateValues(collection, observer, !forward); // De-populate in opposite direction
+								// De-populate in opposite direction
+								ObservableUtils.depopulateValues(collection, new ElementMappingChangeObserver(collection, observer),
+									!forward);
 							}
 						} else { // Don't need to lock
 							collectionSub.unsubscribe();
@@ -3140,12 +3217,9 @@ public final class ObservableCollectionImpl {
 					collection = collEvt.getNewValue();
 					if (collection != null) {
 						if (clearAndAdd) {
-							try (Transaction t = collection.lock(false, null)) {
-								ObservableUtils.populateValues(collection, observer, forward);
-								collectionSub = collection.onChange(observer);
-							}
+							collectionSub = collection.subscribe(new ElementMappingChangeObserver(collection, observer), forward);
 						} else // Don't need to lock
-							collectionSub = collection.onChange(observer);
+							collectionSub = collection.onChange(new ElementMappingChangeObserver(collection, observer));
 					}
 				}
 
@@ -3160,7 +3234,9 @@ public final class ObservableCollectionImpl {
 							try (Transaction t = collection.lock(false, null)) {
 								collectionSub.unsubscribe();
 								collectionSub = null;
-								ObservableUtils.depopulateValues(collection, observer, !forward); // De-populate in opposite direction
+								// De-populate in opposite direction
+								ObservableUtils.depopulateValues(collection, new ElementMappingChangeObserver(collection, observer),
+									!forward);
 							}
 						} else { // Don't need to lock
 							collectionSub.unsubscribe();
@@ -3191,6 +3267,186 @@ public final class ObservableCollectionImpl {
 		@Override
 		public String toString() {
 			return BetterCollection.toString(this);
+		}
+
+		ElementId strip(ObservableCollection<? extends E> coll, ElementId id) {
+			if (id == null)
+				return null;
+			FlattenedElementId flatId = (FlattenedElementId) id;
+			if (!flatId.check(coll))
+				throw new NoSuchElementException(StdMsg.ELEMENT_REMOVED);
+			return flatId.theSourceEl;
+		}
+
+		CollectionElement<E> getElement(ObservableCollection<? extends E> collection, CollectionElement<? extends E> element) {
+			if (element == null)
+				return null;
+			return new FlattenedValueElement(collection, element);
+		}
+
+		MutableCollectionElement<E> getElement(ObservableCollection<? extends E> collection,
+			MutableCollectionElement<? extends E> element) {
+			return new MutableFlattenedValueElement(collection, element);
+		}
+
+		class FlattenedElementId implements ElementId {
+			private final ObservableCollection<? extends E> theCollection;
+			private final ElementId theSourceEl;
+
+			FlattenedElementId(ObservableCollection<? extends E> collection, ElementId sourceEl) {
+				theCollection = collection;
+				theSourceEl = sourceEl;
+			}
+
+			boolean check(ObservableCollection<? extends E> collection) {
+				if (collection == theCollection)
+					return true;
+				else if (collection != null && theCollection.getIdentity().equals(collection.getIdentity()))
+					return true;
+				else
+					return false;
+			}
+
+			boolean check() {
+				return check(getWrapped().get());
+			}
+
+			@Override
+			public int compareTo(ElementId o) {
+				FlattenedElementId other = (FlattenedElementId) o;
+				if (!check(other.theCollection))
+					throw new IllegalStateException("Cannot compare these elements--one or both have been removed");
+				return theSourceEl.compareTo(other.theSourceEl);
+			}
+
+			@Override
+			public boolean isPresent() {
+				// Fudging this just a little, because the contract says that this method should never return true after it is removed
+				// This could toggle between true and false, if the value of the wrapped observable goes from A to B to A.
+				// The value of this method is only critical during transition events and when using an element from deep storage,
+				// and we should be fine in those situations.
+				return check() && theSourceEl.isPresent();
+			}
+
+			@Override
+			public int hashCode() {
+				return theSourceEl.hashCode();
+			}
+
+			@Override
+			public boolean equals(Object obj) {
+				if (obj == this)
+					return true;
+				else if (!(obj instanceof FlattenedValueCollection.FlattenedElementId))
+					return false;
+				FlattenedElementId other = (FlattenedElementId) obj;
+				return check(other.theCollection) && theSourceEl.equals(other.theSourceEl);
+			}
+
+			@Override
+			public String toString() {
+				String str = theSourceEl.toString();
+				if (theSourceEl.isPresent() && !check())
+					str = "(removed) " + str;
+				return str;
+			}
+		}
+
+		class FlattenedValueElement implements CollectionElement<E> {
+			private final FlattenedElementId theId;
+			private final CollectionElement<? extends E> theElement;
+
+			FlattenedValueElement(ObservableCollection<? extends E> collection, CollectionElement<? extends E> element) {
+				theElement = element;
+				theId = new FlattenedElementId(collection, element.getElementId());
+			}
+
+			protected CollectionElement<? extends E> getElement() {
+				return theElement;
+			}
+
+			@Override
+			public FlattenedElementId getElementId() {
+				return theId;
+			}
+
+			@Override
+			public E get() {
+				return theElement.get();
+			}
+
+			@Override
+			public int hashCode() {
+				return theElement.hashCode();
+			}
+
+			@Override
+			public boolean equals(Object obj) {
+				return obj instanceof FlattenedValueCollection.FlattenedValueElement && theId.equals(((FlattenedValueElement) obj).theId);
+			}
+
+			@Override
+			public String toString() {
+				String str = theElement.toString();
+				if (theElement.getElementId().isPresent() && !theId.check())
+					str = "(removed) " + str;
+				return str;
+			}
+		}
+
+		class MutableFlattenedValueElement extends FlattenedValueElement implements MutableCollectionElement<E> {
+			MutableFlattenedValueElement(ObservableCollection<? extends E> collection, MutableCollectionElement<? extends E> element) {
+				super(collection, element);
+			}
+
+			@Override
+			protected MutableCollectionElement<? extends E> getElement() {
+				return (MutableCollectionElement<? extends E>) super.getElement();
+			}
+
+			@Override
+			public BetterCollection<E> getCollection() {
+				return FlattenedValueCollection.this;
+			}
+
+			@Override
+			public String isEnabled() {
+				if (!getElementId().check())
+					return StdMsg.UNSUPPORTED_OPERATION;
+				return getElement().isEnabled();
+			}
+
+			@Override
+			public String isAcceptable(E value) {
+				if (!getElementId().check())
+					return StdMsg.UNSUPPORTED_OPERATION;
+				else if (!getWrapped().get().belongs(value))
+					return StdMsg.BAD_TYPE;
+				return ((MutableCollectionElement<E>) getElement()).isAcceptable(value);
+			}
+
+			@Override
+			public void set(E value) throws UnsupportedOperationException, IllegalArgumentException {
+				if (!getElementId().check())
+					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				else if (!getWrapped().get().belongs(value))
+					throw new IllegalArgumentException(StdMsg.BAD_TYPE);
+				((MutableCollectionElement<E>) getElement()).set(value);
+			}
+
+			@Override
+			public String canRemove() {
+				if (!getElementId().check())
+					return StdMsg.UNSUPPORTED_OPERATION;
+				return getElement().canRemove();
+			}
+
+			@Override
+			public void remove() throws UnsupportedOperationException {
+				if (!getElementId().check())
+					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				getElement().remove();
+			}
 		}
 	}
 }
