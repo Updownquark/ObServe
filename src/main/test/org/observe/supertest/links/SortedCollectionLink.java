@@ -139,18 +139,21 @@ public class SortedCollectionLink<T> extends ObservableCollectionLink<T, T> {
 			// Order of events can determine whether an element needs to be moved or not,
 			// so we'll accommodate if it's moved unexpectedly
 			if (element.getFirstSource().getDerivedElements(getSiblingIndex()).size() > 1) {
-				element.expectRemoval();
-				ExpectedCollectionOperation<T, T> op = new ExpectedCollectionOperation<>(element,
-					ExpectedCollectionOperation.CollectionOpType.remove, sourceOp.getOldValue(), sourceOp.getOldValue());
-				for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
-					derived.expectFromSource(op);
+				// This can happen multiple times in some cases, e.g. because of flattened values and distinctness
+				Assert.assertTrue(!element.isPresent());
+				if (!element.isRemoveExpected()) {
+					element.expectRemoval();
+					ExpectedCollectionOperation<T, T> op = new ExpectedCollectionOperation<>(element,
+						ExpectedCollectionOperation.CollectionOpType.remove, sourceOp.getOldValue(), sourceOp.getOldValue());
+					for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
+						derived.expectFromSource(op);
+				}
 				element = (CollectionLinkElement<T, T>) sourceOp.getElement().getDerivedElements(getSiblingIndex()).getLast();
 				Assert.assertTrue(element.wasAdded());
-				// This can happen multiple times in some cases, e.g. because of flattened values and distinctness
 				if (!element.isAddExpected()) {
 					element.expectAdded(sourceOp.getValue());
-					op = new ExpectedCollectionOperation<>(element, ExpectedCollectionOperation.CollectionOpType.add, null,
-						sourceOp.getValue());
+					ExpectedCollectionOperation<T, T> op = new ExpectedCollectionOperation<>(element,
+						ExpectedCollectionOperation.CollectionOpType.add, null, sourceOp.getValue());
 					for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
 						derived.expectFromSource(op);
 				} else

@@ -132,7 +132,7 @@ public class FlattenedCollectionValuesLink<S, T> extends AbstractMappedCollectio
 
 	/**
 	 * Called when the value of a bucket is changed
-	 * 
+	 *
 	 * @param entry The bucket whose value has changed
 	 * @param oldValue The previous value in the bucket
 	 * @param newValue The new value in the bucket
@@ -177,7 +177,7 @@ public class FlattenedCollectionValuesLink<S, T> extends AbstractMappedCollectio
 		return "flattenedValues(" + theBuckets.size() + " " + getType() + ")";
 	}
 
-	static <S, T> MapEntryHandle<S, SettableValue<T>> getBucket(BetterSortedMap<S, SettableValue<T>> buckets, S sourceValue) {
+	static <S, T> MapEntryHandle<S, T> getBucket(BetterSortedMap<S, T> buckets, S sourceValue) {
 		return buckets.search(buckets.keySet().searchFor(sourceValue, 0), SortedSearchFilter.PreferLess);
 	}
 }

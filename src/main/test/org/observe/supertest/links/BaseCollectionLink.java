@@ -50,6 +50,7 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	 */
 	public BaseCollectionLink(String path, ObservableCollectionTestDef<T> def, TestHelper helper) {
 		super(path, null, def, helper);
+		theOverallModification = -1;
 	}
 
 	@Override
