@@ -93,9 +93,10 @@ public class ReversedCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 	@Override
 	protected void checkOrder(CollectionLinkElement<T, T> element) {
 		int elIndex = element.getIndex();
-		int sourceIndex = getSourceLink().getElements().getElementsAfter(element.getFirstSource().getElementAddress());
-		if (elIndex != sourceIndex)
-			element.error(err -> err.append("Expected at [").append(sourceIndex).append("] but found at [").append(elIndex).append(']'));
+		int reversedSourceIndex = getSourceLink().getElements().size() - element.getFirstSource().getIndex() - 1;
+		if (elIndex != reversedSourceIndex)
+			element.error(
+				err -> err.append("Expected at [").append(reversedSourceIndex).append("] but found at [").append(elIndex).append(']'));
 	}
 
 	@Override

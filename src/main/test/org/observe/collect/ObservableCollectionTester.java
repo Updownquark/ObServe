@@ -11,6 +11,7 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 import org.observe.AbstractObservableTester;
+import org.observe.Observable;
 import org.observe.Subscription;
 import org.qommons.QommonsTestUtils;
 
@@ -244,9 +245,14 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 			}
 		}, true);
 		theBatchSyncedCopy.addAll(theCollection); // The changes observable doesn't populate initial values
-		Subscription batchSub = theCollection.changes().act(new Consumer<CollectionChangeEvent<? extends E>>() {
+		Observable<? extends CollectionChangeEvent<? extends E>> batchChanges = theCollection.changes();
+		// if (theName.startsWith("root "))
+		// Debug.d().debug(batchChanges, true).setField("debug", true).setField("name", theName);
+		Subscription batchSub = batchChanges.act(new Consumer<CollectionChangeEvent<? extends E>>() {
 			@Override
 			public void accept(CollectionChangeEvent<? extends E> evt) {
+				// if (theName.startsWith("root "))
+				// System.out.println(theBatchSyncedCopy + " " + evt);
 				op();
 				switch (evt.type) {
 				case add:

@@ -108,8 +108,12 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 	private void init(TestHelper helper) {
 		if (getSourceLink() == null && theSupplier != null && helper.getBoolean(.25)) {
 			int size = helper.getInt(0, 10);
-			for (int i = 0; i < size; i++)
-				getCollection().add(theSupplier.apply(helper));
+			try {
+				for (int i = 0; i < size; i++)
+					getCollection().add(theSupplier.apply(helper));
+			} catch (UnsupportedOperationException e) {
+				// Allow it--for example, the flat base collection can't add elements if the value is null
+			}
 		}
 
 		// Listen to the collection to populate and maintain theElements

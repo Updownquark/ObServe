@@ -65,7 +65,7 @@ public class ObservableValueTester<T> extends AbstractObservableTester<T> {
 	protected void event(ObservableValueEvent<? extends T> evt) {
 		op();
 		if (!Objects.equals(theSynced, evt.getOldValue()))
-			throw new AssertionError("Expected " + theSynced + " but was " + evt.getNewValue());
+			throw new AssertionError("Expected " + theSynced + " but was " + evt.getOldValue());
 		theSynced = evt.getNewValue();
 	}
 }

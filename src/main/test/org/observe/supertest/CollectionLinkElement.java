@@ -146,7 +146,10 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 
 	/** @return The index of this element in the link's elements */
 	public int getIndex() {
-		return theCollectionLink.getElements().getElementsBefore(theElementAddress);
+		if (theElementAddress.isPresent())
+			return theCollectionLink.getElements().getElementsBefore(theElementAddress);
+		else
+			return theLastKnownIndex;
 	}
 
 	/** @return Whether this element was added and has not yet been {@link #expectAdded(Object) expected} */
@@ -221,7 +224,7 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 
 	/**
 	 * Updates this element's source elements
-	 * 
+	 *
 	 * @param withRemove Whether to remove source elements that are no longer in the source collection, or just add new ones
 	 */
 	public void updateSourceLinks(boolean withRemove) {
@@ -264,6 +267,7 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 	 */
 	public void validate(StringBuilder error) {
 		ObservableCollection<T> collection = theCollectionLink.getCollection();
+		int index = theCollectionLink.getElements().getElementsBefore(theElementAddress);
 		if (wasAdded)
 			error("Unexpected addition");
 		else if (wasRemoved != isRemoveExpected) {
@@ -290,7 +294,7 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 			theErrors.clear();
 		}
 		if (theElementAddress.isPresent()) {
-			theLastKnownIndex = theCollectionLink.getElements().getElementsBefore(theElementAddress);
+			theLastKnownIndex = index;
 			if (theCollectionAddress.isPresent())
 				theValue = getCollectionValue();
 		}

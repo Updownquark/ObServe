@@ -45,7 +45,10 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
 			FlowOptions.UniqueOptions options = new FlowOptions.SimpleUniqueOptions(true);
-			options.useFirst(// TODO helper.getBoolean()
+			options
+			.useFirst(// TODO helper.getBoolean()
+				false)//
+			.preserveSourceOrder(// TODO helper.getBoolean()
 				false);
 			CollectionDataFlow<?, ?, T> oneStepFlow = sourceCL.getCollection().flow();
 			CollectionDataFlow<?, ?, T> multiStepFlow = sourceCL.getDef().multiStepFlow;
@@ -80,8 +83,6 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 			Comparator<T> compare = SortedCollectionLink.compare(sourceCL.getDef().type, helper);
 			FlowOptions.UniqueOptions options = new FlowOptions.SimpleUniqueOptions(true);
 			options.useFirst(// TODO helper.getBoolean()
-				false)//
-			.preserveSourceOrder(// TODO helper.getBoolean()
 				false);
 			CollectionDataFlow<?, ?, T> oneStepFlow = sourceCL.getCollection().flow();
 			CollectionDataFlow<?, ?, T> multiStepFlow = sourceCL.getDef().multiStepFlow;

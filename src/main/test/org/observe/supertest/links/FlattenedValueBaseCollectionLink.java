@@ -3,6 +3,7 @@ package org.observe.supertest.links;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.function.Function;
 
 import org.junit.Assert;
 import org.observe.SettableValue;
@@ -12,6 +13,7 @@ import org.observe.supertest.CollectionLinkElement;
 import org.observe.supertest.CollectionSourcedLink;
 import org.observe.supertest.ExpectedCollectionOperation;
 import org.observe.supertest.ObservableChainLink;
+import org.observe.supertest.ObservableChainTester;
 import org.observe.supertest.ObservableCollectionTestDef;
 import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
@@ -49,6 +51,20 @@ public class FlattenedValueBaseCollectionLink<T> extends BaseCollectionLink<T> {
 			int collectionIdx = getRandomCollectionIndex(collections.size(), helper);
 			ObservableCollection<X> initCollection = collectionIdx == collections.size() ? null : collections.get(collectionIdx);
 			collectionValue.set(initCollection, null);
+
+			// Populate the collections (except the initial collection--that is populated by the collection link)
+			Function<TestHelper, X> supplier = (Function<TestHelper, X>) ObservableChainTester.SUPPLIERS.get(type);
+			if (supplier != null) {
+				for (ObservableCollection<X> coll : collections) {
+					if (coll == initCollection)
+						continue;
+					if (helper.getBoolean(.25)) {
+						int size = helper.getInt(0, 10);
+						for (int i = 0; i < size; i++)
+							coll.add(supplier.apply(helper));
+					}
+				}
+			}
 
 			ObservableCollection<X> flatCollection = ObservableCollection.flattenValue(collectionValue);
 			ObservableCollectionTestDef<X> def = new ObservableCollectionTestDef<>(type, flatCollection.flow(), flatCollection.flow(), true,
