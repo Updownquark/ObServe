@@ -2245,11 +2245,6 @@ public final class ObservableCollectionImpl {
 			}
 
 			@Override
-			public boolean isDerivedFrom(ElementId other) {
-				return equals(other) || element.isDerivedFrom(other);
-			}
-
-			@Override
 			public int compareTo(ElementId o) {
 				return treeNode.getElementId().compareTo(((DerivedElementHolder<T>) o).treeNode.getElementId());
 			}

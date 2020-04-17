@@ -192,11 +192,6 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSe
 	}
 
 	@Override
-	default ObservableSortedSet<E> subList(int fromIndex, int toIndex) {
-		return (ObservableSortedSet<E>) BetterSortedSet.super.subList(fromIndex, toIndex);
-	}
-
-	@Override
 	default ObservableSortedSet<E> with(E... values) {
 		ObservableSet.super.with(values);
 		return this;

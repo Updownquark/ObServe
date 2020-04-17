@@ -160,19 +160,6 @@ public class ObservableCollectionActiveManagers2 {
 			}
 
 			@Override
-			public boolean isDerivedFrom(ElementId sourceEl) {
-				if (theParentEl.isDerivedFrom(sourceEl))
-					return true;
-				for (ElementId rightEl : intersection.rightElements)
-					if (sourceEl.equals(rightEl))
-						return true;
-				for (ElementId rightEl : intersection.rightElements)
-					if (rightEl.isDerivedFrom(sourceEl))
-						return true;
-				return false;
-			}
-
-			@Override
 			public T get() {
 				return theParentEl.get();
 			}
@@ -570,11 +557,6 @@ public class ObservableCollectionActiveManagers2 {
 			}
 
 			@Override
-			public boolean isDerivedFrom(ElementId sourceEl) {
-				return theParentEl.isDerivedFrom(sourceEl);
-			}
-
-			@Override
 			public T get() {
 				return theParentEl.get();
 			}
@@ -798,11 +780,6 @@ public class ObservableCollectionActiveManagers2 {
 			@Override
 			public void setListener(ObservableCollectionActiveManagers.CollectionElementListener<T> listener) {
 				theListener = listener;
-			}
-
-			@Override
-			public boolean isDerivedFrom(ElementId sourceEl) {
-				return theParentEl.isDerivedFrom(sourceEl);
 			}
 
 			@Override
@@ -1102,11 +1079,6 @@ public class ObservableCollectionActiveManagers2 {
 			public void setListener(ObservableCollectionActiveManagers.CollectionElementListener<T> listener) {
 				theListener = listener;
 				installOrUninstall();
-			}
-
-			@Override
-			public boolean isDerivedFrom(ElementId sourceEl) {
-				return theParentEl.isDerivedFrom(sourceEl);
 			}
 
 			@Override
@@ -1616,11 +1588,6 @@ public class ObservableCollectionActiveManagers2 {
 			@Override
 			public void setListener(ObservableCollectionActiveManagers.CollectionElementListener<T> listener) {
 				theListener = listener;
-			}
-
-			@Override
-			public boolean isDerivedFrom(ElementId sourceEl) {
-				return theParentEl.isDerivedFrom(sourceEl) || theHolder.theParentEl.isDerivedFrom(sourceEl);
 			}
 
 			@Override

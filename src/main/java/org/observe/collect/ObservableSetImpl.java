@@ -1143,12 +1143,6 @@ public class ObservableSetImpl {
 			}
 
 			@Override
-			public boolean isDerivedFrom(ElementId sourceEl) {
-				// Only represent the active elements--the others are basically filtered out
-				return theActiveElement.isDerivedFrom(sourceEl);
-			}
-
-			@Override
 			public T get() {
 				return theActiveElement.get();
 			}

@@ -62,12 +62,6 @@ public class ObservableCollectionActiveManagers {
 		 */
 		void setListener(CollectionElementListener<E> listener);
 
-		/**
-		 * @param sourceEl The element that is possibly a source of this element
-		 * @return Whether this element is derived from the given element
-		 */
-		boolean isDerivedFrom(ElementId sourceEl);
-
 		/** @return The current value of this element */
 		E get();
 
@@ -116,11 +110,6 @@ public class ObservableCollectionActiveManagers {
 				@Override
 				public void setListener(CollectionElementListener<E> listener) {
 					outer.setListener(listener);
-				}
-
-				@Override
-				public boolean isDerivedFrom(ElementId sourceEl) {
-					return outer.isDerivedFrom(sourceEl);
 				}
 
 				@Override
@@ -579,11 +568,6 @@ public class ObservableCollectionActiveManagers {
 			}
 
 			@Override
-			public boolean isDerivedFrom(ElementId sourceEl) {
-				return source.getElementId().equals(sourceEl) || source.getElementId().isDerivedFrom(sourceEl);
-			}
-
-			@Override
 			public E get() {
 				return source.get();
 			}
@@ -990,11 +974,6 @@ public class ObservableCollectionActiveManagers {
 			}
 
 			@Override
-			public boolean isDerivedFrom(ElementId sourceEl) {
-				return theParentEl.isDerivedFrom(sourceEl);
-			}
-
-			@Override
 			public T get() {
 				if (theValueNode != null)
 					return theValueNode.get().getValue1();
@@ -1216,11 +1195,6 @@ public class ObservableCollectionActiveManagers {
 			@Override
 			public void setListener(CollectionElementListener<T> listener) {
 				theListener = listener;
-			}
-
-			@Override
-			public boolean isDerivedFrom(ElementId sourceEl) {
-				return theParentEl.isDerivedFrom(sourceEl);
 			}
 
 			@Override
@@ -1572,11 +1546,6 @@ public class ObservableCollectionActiveManagers {
 			@Override
 			public int compareTo(DerivedCollectionElement<T> o) {
 				return theParentEl.compareTo(((ActiveMappedElement) o).theParentEl);
-			}
-
-			@Override
-			public boolean isDerivedFrom(ElementId sourceEl) {
-				return theParentEl.isDerivedFrom(sourceEl);
 			}
 
 			@Override

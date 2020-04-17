@@ -26,6 +26,7 @@ import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollections;
+import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSet;
 import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.BetterSortedList.SortedSearchFilter;
@@ -173,7 +174,7 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public void setValue(Collection<ElementId> elements, E value) {
-			getWrapped().setValue(elements, value);
+			getWrapped().setValue(BetterList.of(elements.stream().map(this::unwrap)), value);
 		}
 
 		@Override
@@ -193,7 +194,7 @@ public class ObservableSortedSetImpl {
 					{
 						thePresentElements = new BetterTreeSet<>(false, ElementId::compareTo);
 						for (CollectionElement<E> el : elements())
-							thePresentElements.add(el.getElementId());
+							thePresentElements.add(unwrap(el.getElementId()));
 					}
 
 					@Override
@@ -255,8 +256,8 @@ public class ObservableSortedSetImpl {
 					}
 
 					void fire(ObservableCollectionEvent<? extends E> evt, CollectionChangeType type, int index, E oldValue, E newValue) {
-						ObservableCollectionEvent<? extends E> evt2 = new ObservableCollectionEvent<>(evt.getElementId(), getType(), index,
-							type, oldValue, newValue, evt);
+						ObservableCollectionEvent<? extends E> evt2 = new ObservableCollectionEvent<>(wrap(evt.getElementId()), getType(),
+							index, type, oldValue, newValue, evt);
 						try (Transaction evtT = Causable.use(evt2)) {
 							observer.accept(evt2);
 						}
