@@ -125,7 +125,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 	default boolean containsAny(Collection<?> c) {
 		try (Transaction ct = Transactable.lock(c, false, null)) {
 			if (c.isEmpty())
-				return true;
+				return false;
 			try (Transaction t = lock(false, null)) {
 				if (c.size() < size()) {
 					for (Object o : c)
@@ -428,54 +428,8 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 	}
 
 	/** @return An observable value containing the only value in this collection while its size==1, otherwise null */
-	default ObservableValue<E> only() {
-		return new ObservableCollectionImpl.ReducedValue<E, Integer, E>(this, getType()) {
-			@Override
-			protected Object createIdentity() {
-				return Identifiable.wrap(getCollection().getIdentity(), "only");
-			}
-
-			@Override
-			public long getStamp() {
-				return getCollection().getStamp();
-			}
-
-			@Override
-			public E get() {
-				try (Transaction t = getCollection().lock(false, null)) {
-					if (getCollection().size() == 1)
-						return getCollection().getFirst();
-					else
-						return null;
-				}
-			}
-
-			@Override
-			protected Integer init() {
-				return getCollection().size();
-			}
-
-			@Override
-			protected Integer update(Integer oldValue, ObservableCollectionEvent<? extends E> change) {
-				switch (change.getType()) {
-				case add:
-					return oldValue + 1;
-				case remove:
-					return oldValue - 1;
-				case set:
-					break;
-				}
-				return oldValue;
-			}
-
-			@Override
-			protected E getValue(Integer updated) {
-				if (updated == 1)
-					return getCollection().getFirst();
-				else
-					return null;
-			}
-		};
+	default SettableElement<E> only() {
+		return new ObservableCollectionImpl.OnlyElement<>(this);
 	}
 
 	/**

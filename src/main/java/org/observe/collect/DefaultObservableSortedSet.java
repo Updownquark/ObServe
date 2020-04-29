@@ -71,7 +71,8 @@ public class DefaultObservableSortedSet<E> extends DefaultObservableCollection<E
 		public ObservableSortedSet<E> build() {
 			BetterList<E> backing = getBacking();
 			if (backing == null)
-				backing = BetterTreeSet.<E> buildTreeSet(getSorting()).withDescription(getDescription()).withLocker(getLocker()).build();
+				backing = BetterTreeSet.<E> buildTreeSet(getSorting()).withDescription(getDescription()).withLocker(this::getLocker)
+					.build();
 			else if (!(backing instanceof BetterSortedSet))
 				throw new IllegalStateException("An ObservableSortedSet must be backed by an instance of BetterSortedSet");
 			return new DefaultObservableSortedSet<>(getType(), (BetterSortedSet<E>) backing, getElementSource(), getSourceElements());

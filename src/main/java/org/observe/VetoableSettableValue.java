@@ -2,6 +2,7 @@ package org.observe;
 
 import java.util.LinkedList;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.Function;
 
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
@@ -45,7 +46,8 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 	 * @param nullable Whether null can be assigned to the value
 	 */
 	public VetoableSettableValue(TypeToken<T> type, boolean nullable) {
-		this(type, nullable, Transactable.transactable(new ReentrantReadWriteLock()));
+		this(type, "settable-value" + SettableValue.Builder.ID_GEN.getAndIncrement(), //
+			nullable, ListenerList.build(), sv -> Transactable.transactable(new ReentrantReadWriteLock(), sv));
 	}
 
 	/**
@@ -54,15 +56,16 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 	 * @param lock The lock for this value;
 	 */
 	public VetoableSettableValue(TypeToken<T> type, boolean nullable, Transactable lock) {
-		this(type, "settable-value", nullable, ListenerList.build(), lock);
+		this(type, "settable-value" + SettableValue.Builder.ID_GEN.getAndIncrement(), //
+			nullable, ListenerList.build(), __ -> lock);
 	}
 
 	VetoableSettableValue(TypeToken<T> type, String description, boolean nullable, ListenerList.Builder listening,
-		Transactable lock) {
+		Function<Object, Transactable> lock) {
 		theType = type;
 		theDescription = description;
 		isNullable = nullable;
-		theLock = lock;
+		theLock = lock == null ? null : lock.apply(this);
 		if (theLock != null) {
 			// We secure this list ourselves, so no need for any thread-safety
 			listening.forEachSafe(false).allowReentrant().withFastSize(false).withSyncType(ListenerList.SynchronizationType.NONE);

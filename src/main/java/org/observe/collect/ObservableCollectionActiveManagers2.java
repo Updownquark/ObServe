@@ -829,7 +829,8 @@ public class ObservableCollectionActiveManagers2 {
 				theElementId = theRefreshObservables.putEntry(refresh, this, false).getElementId();
 				elements = new BetterTreeSet<>(false, RefreshingElement::compareTo);
 				theSub = theListening.withConsumer(r -> {
-					try (Transaction t = Lockable.lockAll(Lockable.lockable(theLock, true), Lockable.lockable(theParent, false, null))) {
+					try (Transaction t = Lockable.lockAll(Lockable.lockable(theLock, ElementRefreshingCollectionManager.this, true),
+						Lockable.lockable(theParent, false, null))) {
 						RefreshingElement setting = (RefreshingElement) theSettingElement.get();
 						if (setting != null && elements.contains(setting))
 							setting.refresh(r);
@@ -897,7 +898,7 @@ public class ObservableCollectionActiveManagers2 {
 			if (write)
 				return theParent.lock(write, cause);
 			else
-				return Lockable.lockAll(Lockable.lockable(theParent, write, cause), Lockable.lockable(theLock, false));
+				return Lockable.lockAll(Lockable.lockable(theParent, write, cause), Lockable.lockable(theLock, this, false));
 		}
 
 		@Override
@@ -909,11 +910,11 @@ public class ObservableCollectionActiveManagers2 {
 			if (write)
 				return theParent.tryLock(write, cause);
 			else
-				return Lockable.tryLockAll(Lockable.lockable(theParent, write, cause), Lockable.lockable(theLock, false));
+				return Lockable.tryLockAll(Lockable.lockable(theParent, write, cause), Lockable.lockable(theLock, this, false));
 		}
 
 		Transaction lockRefresh(boolean exclusive) {
-			return Lockable.lock(theLock, exclusive);
+			return Lockable.lock(theLock, this, exclusive);
 		}
 
 		@Override

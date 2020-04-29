@@ -489,7 +489,7 @@ public class ObservableConfigTest {
 		public ObservableConfigSuperTester() {
 			theEncoding = new XmlEncoding(":x", ":xx", " ", "blah", "test");
 			// Use unsafe locking for performance--we're not doing anything thread-unsafe here
-			theConfig = ObservableConfig.createRoot("test", null, new FastFailLockingStrategy());
+			theConfig = ObservableConfig.createRoot("test", null, __ -> new FastFailLockingStrategy());
 			try {
 				ObservableConfig.readXml(theConfig, ObservableConfigTest.class.getResourceAsStream("TestValues.xml"), theEncoding);
 			} catch (IOException | SAXException e) {

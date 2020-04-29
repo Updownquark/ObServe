@@ -2,6 +2,8 @@ package org.observe;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Objects;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
@@ -94,7 +96,7 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 
 	@Override
 	default Transaction tryLock() {
-		return lock(true, null);
+		return tryLock(false, null);
 	}
 
 	/**
@@ -201,6 +203,14 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	default SettableValue<T> disableWith(ObservableValue<String> enabled) {
 		return new WrappingSettableValue<T>(this) {
 			@Override
+			public <V extends T> String isAcceptable(V value) {
+				String msg = enabled.get();
+				if (msg != null)
+					return msg;
+				return theWrapped.isAcceptable(value);
+			}
+
+			@Override
 			public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
 				String msg = enabled.get();
 				if (msg != null)
@@ -279,13 +289,20 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 		}, "map", new XformDef(xform), this) {
 			@Override
 			public <V extends R> R set(V value, Object cause) throws IllegalArgumentException {
-				T old = root.set(reverse.apply(root.get(), value), cause);
+				T reversed = reverse.apply(root.get(), value);
+				if (!Objects.equals(reversed, function.apply(reversed)))
+					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+				T old = root.set(reversed, cause);
 				return function.apply(old);
 			}
 
 			@Override
 			public <V extends R> String isAcceptable(V value) {
-				return root.isAcceptable(reverse.apply(root.get(), value));
+				T reversed = reverse.apply(root.get(), value);
+				String msg = root.isAcceptable(reversed);
+				if (msg == null && !Objects.equals(value, function.apply(reversed)))
+					msg = StdMsg.ILLEGAL_ELEMENT;
+				return msg;
 			}
 
 			@Override
@@ -369,30 +386,7 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	 */
 	public default <U, R> SettableValue<R> combine(TypeToken<R> type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
 		BiFunction<? super R, ? super U, ? extends T> reverse, Consumer<XformOptions> options) {
-		SimpleXformOptions xform = new SimpleXformOptions();
-		if (options != null)
-			options.accept(xform);
-		SettableValue<T> root = this;
-		return new ComposedSettableValue<R>(type, args -> {
-			return function.apply((T) args[0], (U) args[1]);
-		}, "combine", new XformDef(xform), this, arg) {
-			@Override
-			public <V extends R> R set(V value, Object cause) throws IllegalArgumentException {
-				U argVal = arg.get();
-				T old = root.set(reverse.apply(value, argVal), cause);
-				return function.apply(old, argVal);
-			}
-
-			@Override
-			public <V extends R> String isAcceptable(V value) {
-				return root.isAcceptable(reverse.apply(value, arg.get()));
-			}
-
-			@Override
-			public ObservableValue<String> isEnabled() {
-				return root.isEnabled();
-			}
-		};
+		return combine(type, function, arg, (__, ___) -> null, reverse, options);
 	}
 
 	/**
@@ -421,7 +415,15 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 			@Override
 			public <V extends R> R set(V value, Object cause) throws IllegalArgumentException {
 				U argVal = arg.get();
-				T old = root.set(reverse.apply(value, argVal), cause);
+				String msg = accept.apply(value, argVal);
+				if (StdMsg.UNSUPPORTED_OPERATION.equals(msg))
+					throw new UnsupportedOperationException(msg);
+				else if (msg != null)
+					throw new IllegalArgumentException(msg);
+				T reversed = reverse.apply(value, argVal);
+				if (!Objects.equals(value, function.apply(reversed, argVal)))
+					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+				T old = root.set(reversed, cause);
 				return function.apply(old, argVal);
 			}
 
@@ -429,8 +431,12 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 			public <V extends R> String isAcceptable(V value) {
 				U argVal = arg.get();
 				String ret = accept.apply(value, argVal);
-				if (ret == null)
-					ret = root.isAcceptable(reverse.apply(value, arg.get()));
+				if (ret == null) {
+					T reversed = reverse.apply(value, argVal);
+					ret = root.isAcceptable(reversed);
+					if (ret == null && !Objects.equals(value, function.apply(reversed, argVal)))
+						ret = StdMsg.ILLEGAL_ELEMENT;
+				}
 				return ret;
 			}
 
@@ -484,15 +490,24 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 		}, "combine", new XformDef(xform), this, arg2, arg3) {
 			@Override
 			public <V2 extends R> R set(V2 value, Object cause) throws IllegalArgumentException {
-				U arg2Val = arg2.get();
-				V arg3Val = arg3.get();
-				T old = root.set(reverse.apply(value, arg2Val, arg3Val), cause);
-				return function.apply(old, arg2Val, arg3Val);
+				U arg2V = arg2.get();
+				V arg3V = arg3.get();
+				T reversed = reverse.apply(value, arg2V, arg3V);
+				if (!Objects.equals(reversed, function.apply(reversed, arg2V, arg3V)))
+					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+				T old = root.set(reversed, cause);
+				return function.apply(old, arg2V, arg3V);
 			}
 
 			@Override
 			public <V2 extends R> String isAcceptable(V2 value) {
-				return root.isAcceptable(reverse.apply(value, arg2.get(), arg3.get()));
+				U arg2V = arg2.get();
+				V arg3V = arg3.get();
+				T reversed = reverse.apply(value, arg2V, arg3V);
+				String msg = root.isAcceptable(reversed);
+				if (msg == null && !Objects.equals(value, function.apply(reversed, arg2V, arg3V)))
+					msg = StdMsg.ILLEGAL_ELEMENT;
+				return msg;
 			}
 
 			@Override
@@ -971,10 +986,12 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 
 	/** @param <T> The type for the settable value */
 	class Builder<T> {
+		static final AtomicLong ID_GEN = new AtomicLong();
+
 		private final TypeToken<T> theType;
 		private String theDescription;
 		private boolean isVetoable;
-		private Transactable theLock;
+		private Function<Object, Transactable> theLock;
 		private boolean isSafe;
 		private ListenerList.Builder theListenerBuilder;
 		private T theInitialValue;
@@ -999,6 +1016,11 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 		}
 
 		public Builder<T> withLock(Transactable lock) {
+			theLock = __ -> lock;
+			return this;
+		}
+
+		public Builder<T> withLock(Function<Object, Transactable> lock) {
 			theLock = lock;
 			return this;
 		}
@@ -1024,15 +1046,15 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 		}
 
 		public SettableValue<T> build() {
-			Transactable lock = theLock;
+			Function<Object, Transactable> lock = theLock;
 			if (lock == null && isSafe)
-				lock = Transactable.transactable(new ReentrantReadWriteLock());
-			if (isVetoable)
-				return new VetoableSettableValue<>(theType, theDescription, isNullable, theListenerBuilder, lock).withValue(theInitialValue,
-					null);
-			else
-				return new SimpleSettableValue<>(theType, theDescription, isNullable, lock, theListenerBuilder).withValue(theInitialValue,
-					null);
+				lock = sv -> Transactable.transactable(new ReentrantReadWriteLock(), sv);
+				if (isVetoable)
+					return new VetoableSettableValue<>(theType, theDescription, isNullable, theListenerBuilder, lock).withValue(theInitialValue,
+						null);
+				else
+					return new SimpleSettableValue<>(theType, theDescription, isNullable, lock, theListenerBuilder).withValue(theInitialValue,
+						null);
 		}
 	}
 }

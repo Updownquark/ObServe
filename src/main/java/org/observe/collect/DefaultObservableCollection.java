@@ -5,6 +5,7 @@ import java.util.Comparator;
 import java.util.LinkedList;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 import org.observe.Subscription;
 import org.observe.util.TypeTokens;
@@ -38,7 +39,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	public static class Builder<E, B extends Builder<E, B>> {
 		private final TypeToken<E> theType;
 		private BetterList<E> theBacking;
-		private CollectionLockingStrategy theLocker;
+		private Function<Object, CollectionLockingStrategy> theLocker;
 		private Comparator<? super E> theSorting;
 		private BiFunction<ElementId, BetterCollection<?>, ElementId> theElementSource;
 		private BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> theSourceElements;
@@ -92,6 +93,14 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 		 * @return This builder
 		 */
 		public B withLocker(CollectionLockingStrategy locker) {
+			return withLocker(__ -> locker);
+		}
+
+		/**
+		 * @param locker The locker for the collection
+		 * @return This builder
+		 */
+		public B withLocker(Function<Object, CollectionLockingStrategy> locker) {
 			theLocker = locker;
 			return (B) this;
 		}
@@ -101,7 +110,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 		 * @return This builder
 		 */
 		public B safe(boolean safe) {
-			withLocker(safe ? new StampedLockingStrategy() : new FastFailLockingStrategy());
+			withLocker(v -> safe ? new StampedLockingStrategy(v) : new FastFailLockingStrategy());
 			return (B) this;
 		}
 
@@ -194,12 +203,15 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			return theDescription;
 		}
 
-		/** @return The locker for the collection */
-		protected CollectionLockingStrategy getLocker() {
+		/**
+		 * @param built The built collection
+		 * @return The locker for the collection
+		 */
+		protected CollectionLockingStrategy getLocker(Object built) {
 			if (theLocker != null)
-				return theLocker;
+				return theLocker.apply(built);
 			else
-				return new StampedLockingStrategy();
+				return new StampedLockingStrategy(built);
 		}
 
 		/** @return The sorting for the collection */
@@ -213,7 +225,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			if (backing == null) {
 				RedBlackNodeList.RBNLBuilder<E, ?> builder = theSorting != null ? SortedTreeList.buildTreeList(theSorting)
 					: BetterTreeList.build();
-				backing = builder.withDescription(theDescription).withLocker(getLocker()).build();
+				backing = builder.withDescription(theDescription).withLocker(this::getLocker).build();
 			}
 			return new DefaultObservableCollection<>(theType, backing, theElementSource, theSourceElements, theEquivalence);
 		}

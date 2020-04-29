@@ -284,7 +284,8 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 			try {
 				return function.apply((T) args[0], (U) args[1]);
 			} catch (NullPointerException e) { // DEBUG
-				System.err.println("null args");
+				if (args == null)
+					System.err.println("null args");
 				throw e;
 			}
 		}, "combine", new XformDef(xform), this, arg);

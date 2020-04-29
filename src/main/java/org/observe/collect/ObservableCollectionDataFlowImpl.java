@@ -921,7 +921,7 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public PassiveCollectionManager<E, ?, T> managePassive() {
 			return new ObservableCollectionPassiveManagers.PassiveMappedCollectionManager<>(getParent().managePassive(), getTargetType(),
-				src -> theMap.apply(src, null),
+				LambdaUtils.printableFn(src -> theMap.apply(src, null), theMap::toString), //
 				equivalence(), theOptions);
 		}
 

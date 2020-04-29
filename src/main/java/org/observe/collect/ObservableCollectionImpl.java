@@ -463,6 +463,272 @@ public final class ObservableCollectionImpl {
 	}
 
 	/**
+	 * Implements {@link ObservableCollection#only()}
+	 *
+	 * @param <E> The type of the collection
+	 */
+	public static class OnlyElement<E> extends AbstractIdentifiable implements SettableElement<E> {
+		/** The message rejection message returned for set operations when the collection size is not exactly 1 */
+		public static final String COLL_SIZE_NOT_1 = "Collection size is not 1";
+
+		private final ObservableCollection<E> theCollection;
+
+		/** @param collection The collection whose first element to represent */
+		public OnlyElement(ObservableCollection<E> collection) {
+			theCollection = collection;
+		}
+
+		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(theCollection.getIdentity(), "only");
+		}
+
+		@Override
+		public TypeToken<E> getType() {
+			return theCollection.getType();
+		}
+
+		@Override
+		public long getStamp() {
+			return theCollection.getStamp();
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return theCollection.isLockSupported();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return theCollection.lock(write, cause);
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, Object cause) {
+			return theCollection.tryLock(write, cause);
+		}
+
+		@Override
+		public ObservableValue<String> isEnabled() {
+			class OnlyEnabled extends AbstractIdentifiable implements ObservableValue<String> {
+				@Override
+				protected Object createIdentity() {
+					return Identifiable.wrap(OnlyElement.this.getIdentity(), "enabled");
+				}
+
+				@Override
+				public TypeToken<String> getType() {
+					return TypeTokens.get().STRING;
+				}
+
+				@Override
+				public long getStamp() {
+					return theCollection.getStamp();
+				}
+
+				@Override
+				public String get() {
+					try (Transaction t = theCollection.lock(false, null)) {
+						if (theCollection.size() == 1)
+							return theCollection.mutableElement(theCollection.getTerminalElement(true).getElementId()).isEnabled();
+						else
+							return COLL_SIZE_NOT_1;
+					}
+				}
+
+				@Override
+				public Observable<ObservableValueEvent<String>> noInitChanges() {
+					class OnlyEnabledChanges extends AbstractIdentifiable implements Observable<ObservableValueEvent<String>> {
+						@Override
+						protected Object createIdentity() {
+							return Identifiable.wrap(OnlyEnabled.this.getIdentity(), "noInitChanges");
+						}
+
+						@Override
+						public boolean isSafe() {
+							return theCollection.isLockSupported();
+						}
+
+						@Override
+						public Transaction lock() {
+							return theCollection.lock(false, null);
+						}
+
+						@Override
+						public Transaction tryLock() {
+							return theCollection.tryLock(false, null);
+						}
+
+						@Override
+						public Subscription subscribe(Observer<? super ObservableValueEvent<String>> observer) {
+							try (Transaction t = lock()) {
+								return theCollection.onChange(new Consumer<ObservableCollectionEvent<? extends E>>() {
+									private String theOldMessage = get();
+
+									@Override
+									public void accept(ObservableCollectionEvent<? extends E> event) {
+										int size = theCollection.size();
+										if (size > 2)
+											return;
+										switch (event.getType()) {
+										case add:
+											fireNewValue(size, event);
+											break;
+										case remove:
+											if (size != 2)
+												fireNewValue(size, event);
+											break;
+										case set:
+											if (size == 1)
+												fireNewValue(size, event);
+											break;
+										}
+									}
+
+									private void fireNewValue(int size, Object cause) {
+										String message;
+										if (size == 1)
+											message = theCollection.mutableElement(theCollection.getTerminalElement(true).getElementId())
+											.isEnabled();
+										else
+											message = COLL_SIZE_NOT_1;
+										if (Objects.equals(theOldMessage, message))
+											return;
+										ObservableValueEvent<String> event = createChangeEvent(theOldMessage, message, cause);
+										theOldMessage = message;
+										try (Transaction evtT = Causable.use(event)) {
+											observer.onNext(event);
+										}
+									}
+								});
+							}
+						}
+					}
+					return new OnlyEnabledChanges();
+				}
+			}
+			return new OnlyEnabled();
+		}
+
+		@Override
+		public <V extends E> String isAcceptable(V value) {
+			try (Transaction t = theCollection.lock(false, null)) {
+				if (theCollection.size() == 1)
+					return theCollection.mutableElement(theCollection.getTerminalElement(true).getElementId()).isAcceptable(value);
+				else
+					return COLL_SIZE_NOT_1;
+			}
+		}
+
+		@Override
+		public ElementId getElementId() {
+			try (Transaction t = theCollection.lock(false, null)) {
+				if (theCollection.size() == 1)
+					return theCollection.getTerminalElement(true).getElementId();
+				else
+					return null;
+			}
+		}
+
+		@Override
+		public E get() {
+			try (Transaction t = theCollection.lock(false, null)) {
+				if (theCollection.size() == 1)
+					return theCollection.getFirst();
+				else
+					return null;
+			}
+		}
+
+		@Override
+		public <V extends E> E set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+			try (Transaction t = theCollection.lock(true, cause)) {
+				if (theCollection.size() == 1) {
+					CollectionElement<E> firstEl = theCollection.getTerminalElement(true);
+					E oldValue = firstEl.get();
+					theCollection.mutableElement(firstEl.getElementId()).set(value);
+					return oldValue;
+				} else
+					throw new UnsupportedOperationException(COLL_SIZE_NOT_1);
+			}
+		}
+
+		@Override
+		public Observable<ObservableElementEvent<E>> elementChanges() {
+			class OnlyElementChanges extends AbstractIdentifiable implements Observable<ObservableElementEvent<E>> {
+				@Override
+				protected Object createIdentity() {
+					return Identifiable.wrap(OnlyElement.this.getIdentity(), "elementChanges");
+				}
+
+				@Override
+				public boolean isSafe() {
+					return theCollection.isLockSupported();
+				}
+
+				@Override
+				public Transaction lock() {
+					return theCollection.lock(false, null);
+				}
+
+				@Override
+				public Transaction tryLock() {
+					return theCollection.tryLock(false, null);
+				}
+
+				@Override
+				public Subscription subscribe(Observer<? super ObservableElementEvent<E>> observer) {
+					class OnlySubscriber implements Consumer<ObservableCollectionEvent<? extends E>> {
+						private ElementId theOldElement;
+						private E theOldValue;
+
+						{
+							ObservableElementEvent<E> event;
+							if (theCollection.size() == 1) {
+								theOldElement = theCollection.getTerminalElement(true).getElementId();
+								theOldValue = theCollection.getElement(theOldElement).get();
+								event = createInitialEvent(theOldElement, theOldValue, null);
+							} else
+								event = createInitialEvent(null, null, null);
+							try (Transaction evtT = Causable.use(event)) {
+								observer.onNext(event);
+							}
+						}
+
+						@Override
+						public void accept(ObservableCollectionEvent<? extends E> event) {
+							if (theCollection.size() == 1 || theOldElement != null)
+								fireNewValue(event);
+						}
+
+						private void fireNewValue(Object cause) {
+							ElementId newElement;
+							E newValue;
+							if (theCollection.size() == 1) {
+								newElement = theCollection.getTerminalElement(true).getElementId();
+								newValue = theCollection.getFirst();
+							} else {
+								newElement = null;
+								newValue = null;
+							}
+							ObservableElementEvent<E> event = createChangeEvent(theOldElement, theOldValue, newElement, newValue, cause);
+							theOldElement = newElement;
+							theOldValue = newValue;
+							try (Transaction evtT = Causable.use(event)) {
+								observer.onNext(event);
+							}
+						}
+					}
+					try (Transaction t = lock()) {
+						return theCollection.onChange(new OnlySubscriber());
+					}
+				}
+			}
+			return new OnlyElementChanges();
+		}
+	}
+
+	/**
 	 * An {@link ObservableElement} whose state reflects the value of an element within a collection whose value matches some condition
 	 *
 	 * @param <E> The type of the element
@@ -699,9 +965,11 @@ public final class ObservableCollectionImpl {
 							}
 
 							synchronized void refresh(Object cause) {
-								if (isRefreshNeeded)
-									return; // We already know
-								else if (isChanging) {
+								if (isRefreshNeeded) {
+									// We already know, but the last match may have been found manually in the mean time
+									theLastMatch = null;
+									return;
+								} else if (isChanging) {
 									// If the collection is also changing, just do the refresh after all the other changes
 									theLastMatch = null;
 									isRefreshNeeded = true;
@@ -988,12 +1256,11 @@ public final class ObservableCollectionImpl {
 					if (msg == null)
 						return null;
 				}
-				if (getDefault() != null)
-					msg = getCollection().canAdd(getDefault().get(), //
-						isFirst == Ternian.FALSE ? lastMatch : null, isFirst == Ternian.TRUE ? lastMatch : null);
+				msg = getCollection().canAdd(value, //
+					isFirst == Ternian.FALSE ? lastMatch : null, isFirst == Ternian.TRUE ? lastMatch : null);
+				if (msg == null)
+					return null;
 			}
-			if (msg == null)
-				msg = StdMsg.UNSUPPORTED_OPERATION;
 			return msg;
 		}
 
@@ -1002,7 +1269,7 @@ public final class ObservableCollectionImpl {
 			if (!theTest.test(value))
 				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 			String msg = null;
-			try (Transaction t = getCollection().lock(false, null)) {
+			try (Transaction t = getCollection().lock(true, null)) {
 				ElementId lastMatch = getLastMatch();
 				if (lastMatch == null || !lastMatch.isPresent() || !theTest.test(getCollection().getElement(lastMatch).get())) {
 					lastMatch = getElementId();
@@ -1015,12 +1282,13 @@ public final class ObservableCollectionImpl {
 						return oldValue;
 					}
 				}
-				if (getDefault() != null) {
-					msg = getCollection().canAdd(getDefault().get());
-					if (msg == null)
-						getCollection().addElement(getDefault().get(), //
-							isFirst == Ternian.FALSE ? lastMatch : null, isFirst == Ternian.TRUE ? lastMatch : null,
-								isFirst == Ternian.TRUE);
+				msg = getCollection().canAdd(value, //
+					isFirst == Ternian.FALSE ? lastMatch : null, isFirst == Ternian.TRUE ? lastMatch : null);
+				if (msg == null) {
+					E oldValue = get();
+					getCollection().addElement(value, //
+						isFirst == Ternian.FALSE ? lastMatch : null, isFirst == Ternian.TRUE ? lastMatch : null, isFirst == Ternian.TRUE);
+					return oldValue;
 				}
 			}
 			if (msg == null || msg.equals(StdMsg.UNSUPPORTED_OPERATION))

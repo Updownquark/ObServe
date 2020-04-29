@@ -3,6 +3,9 @@ package org.observe.collect;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
+import org.observe.Observer;
+import org.observe.Subscription;
+import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.Transaction;
 import org.qommons.collect.CollectionElement;
@@ -130,7 +133,37 @@ public interface ObservableElement<T> extends ObservableValue<T> {
 
 			@Override
 			public Observable<ObservableElementEvent<T>> elementChanges() {
-				return Observable.empty();
+				class ElementChanges extends AbstractIdentifiable implements Observable<ObservableElementEvent<T>> {
+					@Override
+					protected Object createIdentity() {
+						return Identifiable.wrap(EmptyElement.this.getIdentity(), "changes");
+					}
+
+					@Override
+					public boolean isSafe() {
+						return true;
+					}
+
+					@Override
+					public Transaction lock() {
+						return Transaction.NONE;
+					}
+
+					@Override
+					public Transaction tryLock() {
+						return Transaction.NONE;
+					}
+
+					@Override
+					public Subscription subscribe(Observer<? super ObservableElementEvent<T>> observer) {
+						ObservableElementEvent<T> event = createInitialEvent(null, null, null);
+						try (Transaction t = Causable.use(event)) {
+							observer.onNext(event);
+						}
+						return Subscription.NONE;
+					}
+				}
+				return new ElementChanges();
 			}
 		}
 		return new EmptyElement();

@@ -405,12 +405,12 @@ public class ObservableConfig implements Transactable, Stamped {
 	private final ListenerList<InternalObservableConfigListener> theListeners;
 	private long theModCount;
 
-	protected ObservableConfig(String name, CollectionLockingStrategy locking) {
+	protected ObservableConfig(String name, Function<Object, CollectionLockingStrategy> locking) {
 		if (name.length() == 0)
 			throw new IllegalArgumentException("Name must not be empty");
-		theLocking = locking;
+		theLocking = locking.apply(this);
 		theName = name;
-		theContent = new BetterTreeList<>(locking);
+		theContent = BetterTreeList.<ObservableConfig> build().withLocker(theLocking).build();
 		theListeners = ListenerList.build().allowReentrant().build();
 	}
 
@@ -514,7 +514,7 @@ public class ObservableConfig implements Transactable, Stamped {
 		return TYPE;
 	}
 
-	protected ObservableConfig createChild(String name, CollectionLockingStrategy locking) {
+	protected ObservableConfig createChild(String name, Function<Object, CollectionLockingStrategy> locking) {
 		return new ObservableConfig(name, locking);
 	}
 
@@ -853,7 +853,7 @@ public class ObservableConfig implements Transactable, Stamped {
 	public ObservableConfig addChild(ObservableConfig after, ObservableConfig before, boolean first, String name,
 		Consumer<ObservableConfig> preAddMod) {
 		try (Transaction t = lock(true, null)) {
-			ObservableConfig child = createChild(name, theLocking);
+			ObservableConfig child = createChild(name, __ -> theLocking);
 			if (preAddMod != null)
 				preAddMod.accept(child);
 			addChild(child, after, before, first);
@@ -1129,10 +1129,10 @@ public class ObservableConfig implements Transactable, Stamped {
 	}
 
 	public static ObservableConfig createRoot(String name) {
-		return createRoot(name, null, new StampedLockingStrategy());
+		return createRoot(name, null, v -> new StampedLockingStrategy(v));
 	}
 
-	public static ObservableConfig createRoot(String name, String value, CollectionLockingStrategy locking) {
+	public static ObservableConfig createRoot(String name, String value, Function<Object, CollectionLockingStrategy> locking) {
 		return new ObservableConfig(name, locking)//
 			.setValue(value)//
 			.initialize(null, null);
@@ -1303,7 +1303,7 @@ public class ObservableConfig implements Transactable, Stamped {
 						persistAttributes(config, attributes);
 						isRoot = false;
 					} else {
-						newConfig = theStack.getLast().createChild(name, theStack.getLast().getLocker());
+						newConfig = theStack.getLast().createChild(name, __ -> theStack.getLast().getLocker());
 						persistAttributes(newConfig, attributes);
 					}
 					theStack.add(newConfig);

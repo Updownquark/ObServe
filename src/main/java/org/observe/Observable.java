@@ -333,6 +333,42 @@ public interface Observable<T> extends Lockable, Identifiable {
 	}
 
 	/**
+	 * @param <T> The type of value to fire
+	 * @param value Supplies the value to fire via {@link Observer#onCompleted(Object)} upon subscription
+	 * @return An observable that fires the given value once via {@link Observer#onCompleted(Object)} once upon subscription
+	 */
+	static <T> Observable<T> once(Supplier<T> value) {
+		class OnceObservable extends AbstractIdentifiable implements Observable<T> {
+			@Override
+			protected Object createIdentity() {
+				return Identifiable.wrap(value, "once");
+			}
+
+			@Override
+			public boolean isSafe() {
+				return true;
+			}
+
+			@Override
+			public Transaction lock() {
+				return Transaction.NONE;
+			}
+
+			@Override
+			public Transaction tryLock() {
+				return Transaction.NONE;
+			}
+
+			@Override
+			public Subscription subscribe(Observer<? super T> observer) {
+				observer.onCompleted(value.get());
+				return Subscription.NONE;
+			}
+		}
+		return new OnceObservable();
+	}
+
+	/**
 	 * @return An observable that fires (a null value) both for {@link Observer#onNext(Object) onNext} and
 	 *         {@link Observer#onCompleted(Object) onCompleted} as the Java VM is shutting down
 	 */
@@ -1018,12 +1054,12 @@ public interface Observable<T> extends Lockable, Identifiable {
 
 		@Override
 		public Transaction lock() {
-			return Lockable.lockAll(theWrapped, Lockable.lockable(theLock, false));
+			return Lockable.lockAll(theWrapped, Lockable.lockable(theLock, this, false));
 		}
 
 		@Override
 		public Transaction tryLock() {
-			return Lockable.tryLockAll(theWrapped, Lockable.lockable(theLock, false));
+			return Lockable.tryLockAll(theWrapped, Lockable.lockable(theLock, this, false));
 		}
 	}
 

@@ -2,6 +2,7 @@ package org.observe;
 
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 import org.observe.util.TypeTokens;
 import org.qommons.Identifiable;
@@ -49,7 +50,8 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 	 */
 	public SimpleSettableValue(TypeToken<T> type, boolean nullable, ReentrantReadWriteLock lock,
 		Consumer<ListenerList.Builder> listeningOptions) {
-		this(type, "settable-value", nullable, lock == null ? null : Transactable.transactable(lock), listeningFor(listeningOptions));
+		this(type, "settable-value" + SettableValue.Builder.ID_GEN.getAndIncrement(), //
+			nullable, lock == null ? null : sv -> Transactable.transactable(lock, sv), listeningFor(listeningOptions));
 	}
 
 	private static ListenerList.Builder listeningFor(Consumer<ListenerList.Builder> listeningOptions) {
@@ -59,12 +61,12 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 		return listening;
 	}
 
-	SimpleSettableValue(TypeToken<T> type, String description, boolean nullable, Transactable lock,
+	SimpleSettableValue(TypeToken<T> type, String description, boolean nullable, Function<Object, Transactable> lock,
 		ListenerList.Builder listening) {
 		theType = type;
 		isNullable = nullable && !type.isPrimitive();
 		theIdentity = Identifiable.baseId(description, this);
-		theEventer = createEventer(lock, listening);
+		theEventer = createEventer(lock == null ? null : lock.apply(this), listening);
 	}
 
 	@Override
@@ -149,7 +151,7 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 	 * @return The observable for this value to use to fire its initial and change events
 	 */
 	protected SimpleObservable<ObservableValueEvent<T>> createEventer(Transactable lock, ListenerList.Builder listening) {
-		return new SimpleObservable<>(null, Identifiable.wrap(theIdentity, "noInitChanges"), true, lock, listening);
+		return new SimpleObservable<>(null, Identifiable.wrap(theIdentity, "noInitChanges"), true, __ -> lock, listening);
 	}
 
 	@Override

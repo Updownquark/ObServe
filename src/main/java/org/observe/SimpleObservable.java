@@ -25,7 +25,7 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 		private Object theIdentity;
 		private ListenerList.Builder theListening;
 		private boolean isInternalState;
-		private Transactable theLock;
+		private Function<Object, Transactable> theLock;
 
 		Builder() {
 			theListening = ListenerList.build();
@@ -37,11 +37,11 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 		 */
 		public Builder safe(boolean safe) {
 			if (safe) {
-				theLock = Transactable.transactable(new ReentrantReadWriteLock());
+				theLock = o -> Transactable.transactable(new ReentrantReadWriteLock(), o);
 				theListening = theListening.forEachSafe(true).reentrancyError("Reentrancy not allowed").withFastSize(true)
 					.withSyncType(ListenerList.SynchronizationType.ELEMENT);
 			} else {
-				theLock = Transactable.NONE;
+				theLock = __ -> Transactable.NONE;
 				theListening = theListening.unsafe();
 			}
 			return this;
@@ -70,6 +70,15 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 		 * @return This builder
 		 */
 		public Builder withLock(Transactable lock) {
+			theLock = __ -> lock;
+			return this;
+		}
+
+		/**
+		 * @param lock The lock to (potentially) ensure thread safety for the observable's firing
+		 * @return This builder
+		 */
+		public Builder withLock(Function<Object, Transactable> lock) {
 			theLock = lock;
 			return this;
 		}
@@ -79,7 +88,7 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 		 * @return This builder
 		 */
 		public Builder withLock(ReentrantReadWriteLock lock) {
-			theLock = Transactable.transactable(lock);
+			theLock = o -> Transactable.transactable(lock, o);
 			return this;
 		}
 
@@ -94,7 +103,7 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 		 */
 		public <T> SimpleObservable<T> build(Consumer<? super Observer<? super T>> onSubscribe) {
 			return new SimpleObservable<>(onSubscribe, theIdentity, isInternalState, //
-				theLock != null ? theLock : Transactable.transactable(new ReentrantReadWriteLock()), theListening);
+				theLock != null ? theLock : o -> Transactable.transactable(new ReentrantReadWriteLock(), o), theListening);
 		}
 	}
 
@@ -136,7 +145,7 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 	 */
 	public SimpleObservable(Consumer<? super Observer<? super T>> onSubscribe, Object identity, boolean internalState,
 		ReentrantReadWriteLock lock, ListenerList.Builder listening) {
-		this(onSubscribe, identity, internalState, Transactable.transactable(lock), listening);
+		this(onSubscribe, identity, internalState, o -> Transactable.transactable(lock, o), listening);
 	}
 
 	/**
@@ -146,8 +155,8 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 	 * @param lock The lock for this observable
 	 * @param listening Listening options for this observable
 	 */
-	SimpleObservable(Consumer<? super Observer<? super T>> onSubscribe, Object identity, boolean internalState, Transactable lock,
-		ListenerList.Builder listening) {
+	SimpleObservable(Consumer<? super Observer<? super T>> onSubscribe, Object identity, boolean internalState,
+		Function<Object, Transactable> lock, ListenerList.Builder listening) {
 		theIdentity = identity != null ? identity : Identifiable.baseId("observable", this);
 		/* Java's ConcurrentLinkedQueue has a problem (for me) that makes the class unusable here.  As documented in fireNext() below, the
 		 * behavior of observables is advertised such that if a listener is added by a listener, the new listener will be added at the end
@@ -164,7 +173,7 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 		theListeners = listening.build();
 		theOnSubscribe = onSubscribe;
 		isInternalState = internalState;
-		theLock = lock;
+		theLock = lock == null ? null : lock.apply(this);
 	}
 
 	/** @return This observable's lock */
