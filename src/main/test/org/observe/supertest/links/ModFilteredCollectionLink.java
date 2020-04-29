@@ -18,7 +18,7 @@ import org.qommons.ValueHolder;
 
 /**
  * Tests {@link org.observe.collect.ObservableCollection.CollectionDataFlow#filterMod(java.util.function.Consumer)}
- * 
+ *
  * @param <T> The type of values in the collection
  */
 public class ModFilteredCollectionLink<T> extends OneToOneCollectionLink<T, T> {
@@ -142,12 +142,13 @@ public class ModFilteredCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 				// Things get complicated when the elements are equivalent.
 				// Lower level caching and operations can affect whether the operation is actually detected as an update
 				msg = rejection.getActualRejection();
-			} else {
+			} else if (rejection.isRejectable()) {
 				msg = theFilter.canRemove(//
 					() -> derivedOp.getElement().getValue());
 				if (msg == null)
 					msg = theFilter.canAdd(derivedOp.getValue());
-			}
+			} else
+				msg = null;
 			break;
 		}
 		if (msg != null)

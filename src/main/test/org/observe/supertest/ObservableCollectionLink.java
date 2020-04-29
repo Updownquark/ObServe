@@ -18,12 +18,9 @@ import org.observe.Observable;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionEvent;
 import org.observe.collect.ObservableCollectionTester;
-import org.qommons.Lockable;
 import org.qommons.QommonsTestUtils;
 import org.qommons.TestHelper;
 import org.qommons.TestHelper.RandomAction;
-import org.qommons.Transactable;
-import org.qommons.Transaction;
 import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSet;
@@ -167,32 +164,6 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 	@Override
 	public TestValueType getType() {
 		return theDef.type;
-	}
-
-	/** @return Any supplemental structures that should be locked when this structure is locked */
-	protected Transactable getSupplementalLock() {
-		return null;
-	}
-
-	@Override
-	public boolean isLockSupported() {
-		return getCollection().isLockSupported();
-	}
-
-	@Override
-	public Transaction lock(boolean write, Object cause) {
-		Transactable supplemental = getSupplementalLock();
-		if (supplemental == null)
-			return getCollection().lock(write, cause);
-		return Lockable.lockAll(Lockable.lockable(supplemental, write, cause), Lockable.lockable(getCollection(), write, cause));
-	}
-
-	@Override
-	public Transaction tryLock(boolean write, Object cause) {
-		Transactable supplemental = getSupplementalLock();
-		if (supplemental == null)
-			return getCollection().lock(write, cause);
-		return Lockable.tryLockAll(Lockable.lockable(supplemental, write, cause), Lockable.lockable(getCollection(), write, cause));
 	}
 
 	@Override
@@ -599,48 +570,11 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		}
 	}
 
-	private class CollectionOpElement implements OperationRejection {
+	private class CollectionOpElement extends OperationRejection.Simple {
 		CollectionLinkElement<S, T> element;
-
-		private boolean isRejectable;
-		String actualRejection;
-		private String theMessage;
 
 		CollectionOpElement(CollectionLinkElement<S, T> element) {
 			this.element = element;
-			isRejectable = true;
-		}
-
-		@Override
-		public void reject(String message) {
-			if (!isRejectable)
-				throw new IllegalStateException("Not rejectable");
-			theMessage = message;
-		}
-
-		@Override
-		public boolean isRejected() {
-			return theMessage != null;
-		}
-
-		public String getMessage() {
-			return theMessage;
-		}
-
-		@Override
-		public String getActualRejection() {
-			return actualRejection;
-		}
-
-		@Override
-		public boolean isRejectable() {
-			return isRejectable;
-		}
-
-		@Override
-		public OperationRejection unrejectable() {
-			isRejectable = false;
-			return this;
 		}
 
 		@Override
@@ -841,7 +775,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			}
 		}
 
-		op.add(null).actualRejection = msg;
+		op.add(null).withActualRejection(msg);
 		expectModification(op, helper);
 		if (op.minIndex < 0 && !getCollection().isContentControlled() && isAcceptable(op.value)) {
 			if (element == null) {
@@ -908,7 +842,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		int i = 0;
 		for (T value : op.values) {
 			msgs[i] = modify.canAdd(value, after, before);
-			op.add(null).actualRejection = msgs[i];
+			op.add(null).withActualRejection(msgs[i]);
 			i++;
 		}
 		boolean modified;
@@ -982,7 +916,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			}
 		}
 
-		op.elements.get(0).actualRejection = msg;
+		op.elements.get(0).withActualRejection(msg);
 		expectModification(op, helper);
 
 		CollectionOpElement el = op.elements.get(0);
@@ -1013,7 +947,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		String[] msgs = new String[op.maxIndex - op.minIndex];
 		for (int i = 0; i < msgs.length; i++) {
 			msgs[i] = modify.mutableElement(element.getElementId()).canRemove();
-			op.elements.get(i).actualRejection = msgs[i];
+			op.elements.get(i).withActualRejection(msgs[i]);
 			if (msgs[i] == null)
 				removable++;
 
@@ -1050,7 +984,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		int preModSize = modify.size();
 		int preSize = getCollection().size();
 		for (CollectionOpElement el : op.elements)
-			el.actualRejection = modify.mutableElement(el.element.getCollectionAddress()).canRemove();
+			el.withActualRejection(modify.mutableElement(el.element.getCollectionAddress()).canRemove());
 		boolean modified = modify.removeAll(op.values);
 
 		expectModification(op, helper);
@@ -1076,7 +1010,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		int preModSize = modify.size();
 		int preSize = getCollection().size();
 		for (CollectionOpElement el : op.elements)
-			el.actualRejection = modify.mutableElement(el.element.getCollectionAddress()).canRemove();
+			el.withActualRejection(modify.mutableElement(el.element.getCollectionAddress()).canRemove());
 		boolean modified = modify.retainAll(values);
 
 		expectModification(op, helper);
@@ -1133,7 +1067,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 				op.context.modify.getElement(moved.getElementId()).get())); // Just verify all the links are still working
 		}
 
-		op.elements.get(0).actualRejection = msg;
+		op.elements.get(0).withActualRejection(msg);
 		expectModification(op, helper);
 
 		CollectionOpElement el = op.elements.get(0);
@@ -1175,7 +1109,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		}
 		modify.getElement(element.getElementId()).get(); // Just verify all the links are still working
 
-		el.actualRejection = msg;
+		el.withActualRejection(msg);
 		expectModification(op, helper);
 
 		if (el.getMessage() == null && msg != null)
@@ -1201,7 +1135,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		int preModSize = op.context.modify.size();
 		int preSize = getCollection().size();
 		for (CollectionOpElement el : op.elements)
-			el.actualRejection = op.context.modify.mutableElement(el.element.getCollectionAddress()).canRemove();
+			el.withActualRejection(op.context.modify.mutableElement(el.element.getCollectionAddress()).canRemove());
 		op.context.modify.clear();
 
 		expectModification(op, helper);

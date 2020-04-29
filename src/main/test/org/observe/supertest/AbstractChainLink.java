@@ -3,11 +3,14 @@ package org.observe.supertest;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.qommons.Lockable;
 import org.qommons.TestHelper;
+import org.qommons.Transactable;
+import org.qommons.Transaction;
 
 /**
  * {@link ObservableChainLink} implementation that takes care of a few low-level things
- * 
+ *
  * @param <S> The type of the source link
  * @param <T> The type of this link
  */
@@ -52,6 +55,25 @@ public abstract class AbstractChainLink<S, T> implements ObservableChainLink<S, 
 	public void initialize(TestHelper helper) {
 		for (ObservableChainLink<T, ?> derived : theDerivedLinks)
 			derived.initialize(helper);
+	}
+
+	/** @return Any supplemental structures that should be locked when this structure is locked */
+	protected Transactable getLocking() {
+		return null;
+	}
+
+	@Override
+	public Transaction lock(boolean write, Object cause) {
+		Transactable locking = getLocking();
+		return Lockable.lockAll(//
+			Lockable.lockable(locking, write, cause), Lockable.lockable(getSourceLink(), write, cause));
+	}
+
+	@Override
+	public Transaction tryLock(boolean write, Object cause) {
+		Transactable locking = getLocking();
+		return Lockable.tryLockAll(//
+			Lockable.lockable(locking, write, cause), Lockable.lockable(getSourceLink(), write, cause));
 	}
 
 	@Override

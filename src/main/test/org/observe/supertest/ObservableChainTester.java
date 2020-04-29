@@ -14,16 +14,19 @@ import org.junit.Test;
 import org.observe.supertest.links.BaseCollectionLink;
 import org.observe.supertest.links.CollectionDerivedValues;
 import org.observe.supertest.links.CombinedCollectionLink;
+import org.observe.supertest.links.CombinedValueLink;
 import org.observe.supertest.links.DistinctCollectionLink;
 import org.observe.supertest.links.FilteredCollectionLink;
 import org.observe.supertest.links.FlattenedCollectionValuesLink;
 import org.observe.supertest.links.FlattenedValueBaseCollectionLink;
 import org.observe.supertest.links.MappedCollectionLink;
+import org.observe.supertest.links.MappedValueLink;
 import org.observe.supertest.links.ModFilteredCollectionLink;
 import org.observe.supertest.links.ReversedCollectionLink;
 import org.observe.supertest.links.SortedBaseCollectionLink;
 import org.observe.supertest.links.SortedCollectionLink;
 import org.observe.supertest.links.SubSetLink;
+import org.qommons.LockDebug;
 import org.qommons.QommonsUtils;
 import org.qommons.TestHelper;
 import org.qommons.TestHelper.Testable;
@@ -82,6 +85,10 @@ public class ObservableChainTester implements Testable {
 		// Derived collection value generators
 		generators.addAll(CollectionDerivedValues.GENERATORS);
 
+		// Derived value generators
+		generators.add(MappedValueLink.GENERATE);
+		generators.add(CombinedValueLink.GENERATE);
+
 		LINK_GENERATORS = Collections.unmodifiableList(generators);
 	}
 
@@ -90,13 +97,23 @@ public class ObservableChainTester implements Testable {
 
 	@Override
 	public void accept(TestHelper helper) {
+		BetterCollections.setSimplifyDuplicateOperations(false);
+		BetterCollections.setTesting(true);
 		boolean debugging = helper.isReproducing();
 		if (debugging)
 			Debug.d().start();// .watchFor(new Debugging());
-		assemble(helper);
-		test(helper);
-		if (debugging)
-			Debug.d().end();
+		boolean tempLockDebug = debugging && !LockDebug.isDebugging();
+		if (tempLockDebug)
+			LockDebug.setDebugging(true);
+		try {
+			assemble(helper);
+			test(helper);
+		} finally {
+			if (debugging)
+				Debug.d().end();
+			if (tempLockDebug)
+				LockDebug.setDebugging(false);
+		}
 	}
 
 	/**
@@ -105,19 +122,18 @@ public class ObservableChainTester implements Testable {
 	 */
 	@Test
 	public void superTest() {
-		BetterCollections.setSimplifyDuplicateOperations(false);
-		BetterCollections.setTesting(true);
 		Duration testDuration = Duration.ofMinutes(20);
 		int maxFailures = 1;
 		System.out.println(
 			"Executing up to " + QommonsUtils.printTimeLength(testDuration.toMillis()) + " of tests with max " + maxFailures + " failures");
 		TestHelper.TestSummary summary = TestHelper.createTester(getClass())//
-			/**/.withRandomCases(-1).withMaxCaseDuration(Duration.ofSeconds(30)).withMaxTotalDuration(testDuration)//
-			/**/.withMaxFailures(maxFailures)//
-			/**/.withPersistenceDir(new File("src/main/test/org/observe/supertest"), false)//
-			/**/.withPlacemarks("Transaction", "Modification")
-			/**/.withDebug(true)//
-			/**/.execute();
+			.withRandomCases(-1).withMaxCaseDuration(Duration.ofSeconds(30)).withMaxTotalDuration(testDuration)
+			.withMaxProgressInterval(Duration.ofSeconds(5))//
+			.withMaxFailures(maxFailures)//
+			.withConcurrency(max -> max - 1)//
+			.withPersistenceDir(new File("src/main/test/org/observe/supertest"), false)//
+			.withPlacemarks("Transaction", "Modification").withDebug(true)//
+			.execute();
 		System.out.println("Summary: " + summary);
 		summary.throwErrorIfFailed();
 	}

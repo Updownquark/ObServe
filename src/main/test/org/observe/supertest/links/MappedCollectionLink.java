@@ -133,8 +133,11 @@ public class MappedCollectionLink<S, T> extends AbstractMappedCollectionLink<S, 
 	}
 
 	@Override
-	protected Transactable getSupplementalLock() {
-		return isMapVariable ? theMapValue : null;
+	protected Transactable getLocking() {
+		if (isMapVariable)
+			return Transactable.combine(theMapValue, super.getLocking());
+		else
+			return super.getLocking();
 	}
 
 	@Override

@@ -26,6 +26,7 @@ import org.observe.supertest.ObservableCollectionTestDef;
 import org.observe.supertest.TestValueType;
 import org.qommons.TestHelper;
 import org.qommons.TestHelper.RandomAction;
+import org.qommons.Transactable;
 import org.qommons.ValueHolder;
 
 import com.google.common.reflect.TypeToken;
@@ -163,6 +164,14 @@ public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLin
 	@Override
 	protected boolean isReversible() {
 		return theOptions.getReverse() != null;
+	}
+
+	@Override
+	protected Transactable getLocking() {
+		ArrayList<Transactable> locking = new ArrayList<>(theValues.size() + 1);
+		locking.addAll(theValues);
+		locking.add(super.getLocking());
+		return Transactable.combine(locking);
 	}
 
 	@Override
@@ -532,10 +541,10 @@ public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLin
 						break;
 					case STRING: {
 						supportTransforms(type1, type2, true, //
-							CombinedCollectionLink.<String, String, String> transform(type1, type1, type2, (s1, s2) -> s1 + s2, null, false,
-								false, "append", null), //
-							CombinedCollectionLink.<String, String, String> transform(type1, type1, type2, (s1, s2) -> s2 + s1, null, false,
-								false, "prepend", null)//
+							CombinedCollectionLink.<String, String, String> transform(type1, type1, type2,
+								(s1, s2) -> combineStrings(s1, s2), null, false, false, "append", null), //
+							CombinedCollectionLink.<String, String, String> transform(type1, type1, type2,
+								(s1, s2) -> combineStrings(s2, s1), null, false, false, "prepend", null)//
 							);
 						break;
 					}
@@ -556,6 +565,17 @@ public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLin
 		if (d == -0.0)
 			return 0.0;
 		return d;
+	}
+
+	static String combineStrings(String s1, String s2) {
+		StringBuilder str = new StringBuilder();
+		if (s2.length() > 0 && s2.charAt(0) == '-') {
+			if (s1.length() == 0 || s1.charAt(0) != '-')
+				str.append('-');
+			str.append(s1).append(s2, 1, s2.length());
+		} else
+			str.append(s1).append(s2);
+		return str.toString();
 	}
 
 	private static <S, T> void supportTransforms(TestValueType type1, TestValueType type2, boolean withReverse,

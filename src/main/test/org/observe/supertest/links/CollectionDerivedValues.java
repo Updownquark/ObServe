@@ -10,16 +10,20 @@ import org.junit.Assert;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
+import org.observe.collect.ObservableCollectionImpl;
 import org.observe.collect.ObservableCollectionImpl.ObservableCollectionFinder;
 import org.observe.collect.ObservableElement;
 import org.observe.collect.ObservableElementTester;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.supertest.ChainLinkGenerator;
 import org.observe.supertest.CollectionDerivedValue;
+import org.observe.supertest.CollectionLinkElement;
 import org.observe.supertest.ExpectedCollectionOperation;
+import org.observe.supertest.ExpectedCollectionOperation.CollectionOpType;
 import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.ObservableCollectionLink;
 import org.observe.supertest.ObservableValueLink;
+import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
 import org.observe.util.TypeTokens;
 import org.qommons.Ternian;
@@ -231,7 +235,12 @@ public class CollectionDerivedValues {
 	 */
 	public static class CollectionSize<T> extends CollectionDerivedValue<T, Integer> {
 		CollectionSize(String path, ObservableCollectionLink<?, T> sourceLink) {
-			super(path, sourceLink, TestValueType.INT);
+			super(path, sourceLink, TestValueType.INT, true);
+		}
+
+		@Override
+		public boolean isTransactional() {
+			return true;
 		}
 
 		@Override
@@ -245,6 +254,11 @@ public class CollectionDerivedValues {
 		@Override
 		public void validate(boolean transactionEnd) throws AssertionError {
 			Assert.assertEquals(getSourceLink().getCollection().size(), getValue().get().intValue());
+		}
+
+		@Override
+		public void expectSet(Integer value, OperationRejection rejection) {
+			throw new IllegalStateException(); // Size is not settable
 		}
 
 		@Override
@@ -262,7 +276,7 @@ public class CollectionDerivedValues {
 		private final SettableValue<T> theValue;
 
 		CollectionContainsValue(String path, ObservableCollectionLink<?, T> sourceLink, TestHelper helper) {
-			super(path, sourceLink, TestValueType.BOOLEAN);
+			super(path, sourceLink, TestValueType.BOOLEAN, true);
 			theValue = SettableValue.build((TypeToken<T>) getSourceLink().getType().getType()).safe(false).build();
 			theValue.set(sourceLink.getValueSupplier().apply(helper), null);
 		}
@@ -270,6 +284,11 @@ public class CollectionDerivedValues {
 		@Override
 		protected ObservableValue<Boolean> createValue(TestHelper __) {
 			return getSourceLink().getCollection().observeContains(theValue);
+		}
+
+		@Override
+		public boolean isTransactional() {
+			return true;
 		}
 
 		@Override
@@ -293,10 +312,17 @@ public class CollectionDerivedValues {
 
 		@Override
 		public void validate(boolean transactionEnd) throws AssertionError {
+			if (!transactionEnd)
+				return; // May not be valid until the transaction end
 			CollectionElement<T> found = getSourceLink().getCollection().getElement(theValue.get(), true);
 			Assert.assertEquals(found != null, getValue().get().booleanValue());
 			if (found != null)
 				Assert.assertTrue(getSourceLink().getCollection().equivalence().elementEquals(found.get(), theValue.get()));
+		}
+
+		@Override
+		public void expectSet(Boolean value, OperationRejection rejection) {
+			throw new IllegalStateException(); // Contains is not settable
 		}
 
 		@Override
@@ -317,9 +343,14 @@ public class CollectionDerivedValues {
 
 		CollectionContainsValues(String path, ObservableCollectionLink<?, T> sourceLink, ObservableCollection<T> searchValues,
 			boolean containsAny) {
-			super(path, sourceLink, sourceLink.getType());
+			super(path, sourceLink, TestValueType.BOOLEAN, true);
 			theSearchValues = searchValues;
 			isContainsAny = containsAny;
+		}
+
+		@Override
+		public boolean isTransactional() {
+			return true;
 		}
 
 		@Override
@@ -384,6 +415,32 @@ public class CollectionDerivedValues {
 			else
 				expect = getSourceLink().getCollection().containsAll(theSearchValues);
 			Assert.assertEquals(expect, getValue().get().booleanValue());
+			boolean actual;
+			if (isContainsAny) {
+				actual = false;
+				for (T value : theSearchValues) {
+					if (getSourceLink().getCollection().contains(value)) {
+						actual = true;
+						break;
+					}
+				}
+			} else {
+				actual = true;
+				for (T value : theSearchValues) {
+					if (!getSourceLink().getCollection().contains(value)) {
+						actual = false;
+						break;
+					}
+				}
+			}
+			Assert.assertEquals(actual, expect);
+			if (transactionEnd)
+				getTester().check(expect);
+		}
+
+		@Override
+		public void expectSet(Boolean value, OperationRejection rejection) {
+			throw new IllegalStateException(); // Contains is not settable
 		}
 
 		@Override
@@ -402,9 +459,14 @@ public class CollectionDerivedValues {
 		private final boolean isFirst;
 
 		CollectionObserveElement(String path, ObservableCollectionLink<?, T> sourceLink, TestHelper helper) {
-			super(path, sourceLink, sourceLink.getType());
+			super(path, sourceLink, sourceLink.getType(), true);
 			theValue = sourceLink.getValueSupplier().apply(helper);
 			isFirst = helper.getBoolean();
+		}
+
+		@Override
+		public boolean isTransactional() {
+			return true;
 		}
 
 		@Override
@@ -460,6 +522,11 @@ public class CollectionDerivedValues {
 		}
 
 		@Override
+		public void expectSet(T value, OperationRejection rejection) {
+			throw new IllegalStateException(); // observeElement is not settable
+		}
+
+		@Override
 		public String toString() {
 			return "observeElement(" + theValue + ")";
 		}
@@ -473,13 +540,20 @@ public class CollectionDerivedValues {
 	public static class CollectionConditionFinder<T> extends CollectionDerivedValue<T, T> {
 		private final SettableValue<Function<T, String>> theConditionValue;
 		private final Ternian theLocation;
+		private ElementId theElement;
+		private boolean isRefreshed;
 
 		CollectionConditionFinder(String path, ObservableCollectionLink<?, T> sourceLink, TestHelper helper) {
-			super(path, sourceLink, sourceLink.getType());
+			super(path, sourceLink, sourceLink.getType(), true);
 			theConditionValue = SettableValue.build((TypeToken<Function<T, String>>) (TypeToken<?>) TypeTokens.get().OBJECT).safe(false)
 				.build();
 			theConditionValue.set(FilteredCollectionLink.filterFor(getType(), helper), null);
 			theLocation = Ternian.values()[helper.getInt(0, 3)];
+		}
+
+		@Override
+		public boolean isTransactional() {
+			return true;
 		}
 
 		@Override
@@ -511,6 +585,7 @@ public class CollectionDerivedValues {
 				Function<T, String> newFilter = FilteredCollectionLink.filterFor(getType(), h);
 				if (h.isReproducing())
 					System.out.println("Condition " + theConditionValue.get() + " -> " + newFilter);
+				isRefreshed = true;
 				theConditionValue.set(newFilter, null);
 			});
 		}
@@ -520,6 +595,12 @@ public class CollectionDerivedValues {
 
 		@Override
 		public void validate(boolean transactionEnd) throws AssertionError {
+			if (transactionEnd)
+				isRefreshed = false;
+			else if (isRefreshed) {
+				theElement = getValue().getElementId();
+				return; // After a refresh, this value won't be valid until the transaction ends
+			}
 			// This derived value is only consistent when the transaction ends, and if there are multiple passing values,
 			// the specific result found is not consistent with a Ternian.NONE location
 			if (transactionEnd && theLocation != Ternian.NONE)
@@ -563,11 +644,73 @@ public class CollectionDerivedValues {
 				}
 				break;
 			}
+			theElement = getValue().getElementId();
+		}
+
+		@Override
+		public void expectSet(T value, OperationRejection rejection) {
+			String msg = theConditionValue.get().apply(value);
+			if (msg != null) {
+				rejection.reject(msg);
+				return;
+			}
+			CollectionLinkElement<?, T> found = null;
+			switch (theLocation) {
+			case TRUE:
+				for (CollectionLinkElement<?, T> el : getSourceLink().getElements()) {
+					if (!el.wasAdded() && theConditionValue.get().apply(el.getValue()) == null) {
+						found = el;
+						break;
+					}
+				}
+				break;
+			case FALSE:
+				for (CollectionLinkElement<?, T> el : getSourceLink().getElements().reverse()) {
+					if (!el.wasAdded() && theConditionValue.get().apply(el.getValue()) == null) {
+						found = el;
+						break;
+					}
+				}
+				break;
+			case NONE:
+				if (theElement != null)
+					found = getSourceLink().getElement(theElement);
+				else
+					found = null;
+				break;
+			}
+
+			if (found != null) {
+				ExpectedCollectionOperation<?, T> op = new ExpectedCollectionOperation<>(found, CollectionOpType.set, found.getValue(),
+					value);
+				getSourceLink().expect(op, rejection, false);
+				if (rejection.isRejected()) {
+					rejection.reset();
+					getSourceLink().expectAdd(value, //
+						theLocation == Ternian.FALSE ? found : null, //
+							theLocation == Ternian.TRUE ? found : null, //
+								true, rejection);
+				} else
+					getSourceLink().expect(op, rejection.unrejectable(), true);
+			} else
+				getSourceLink().expectAdd(value, null, null, true, rejection);
 		}
 
 		@Override
 		public String toString() {
-			return "find(" + theConditionValue.get() + ")";
+			String str = "find(" + theConditionValue.get() + ", ";
+			switch (theLocation) {
+			case TRUE:
+				str += "first";
+				break;
+			case FALSE:
+				str += "last";
+				break;
+			case NONE:
+				str += "anywhere";
+				break;
+			}
+			return str + ")";
 		}
 	}
 
@@ -578,7 +721,7 @@ public class CollectionDerivedValues {
 	 */
 	public static class CollectionOnlyValue<T> extends CollectionDerivedValue<T, T> {
 		CollectionOnlyValue(String path, ObservableCollectionLink<?, T> sourceLink) {
-			super(path, sourceLink, TestValueType.INT);
+			super(path, sourceLink, sourceLink.getType(), true);
 		}
 
 		@Override
@@ -601,6 +744,16 @@ public class CollectionDerivedValues {
 		}
 
 		@Override
+		public void expectSet(T value, OperationRejection rejection) {
+			if(getSourceLink().getCollection().size()==1){
+				CollectionLinkElement<?, T> element=getSourceLink().getElements().getFirst();
+				getSourceLink().expect(new ExpectedCollectionOperation<>(element, CollectionOpType.set, element.getValue(), value),
+					rejection, true);
+			} else
+				rejection.reject(ObservableCollectionImpl.OnlyElement.COLL_SIZE_NOT_1);
+		}
+
+		@Override
 		public String toString() {
 			return "only()";
 		}
@@ -618,7 +771,7 @@ public class CollectionDerivedValues {
 		private final Comparator<T> theCompare;
 
 		CollectionMinMaxValue(String path, ObservableCollectionLink<?, T> sourceLink, TestHelper helper) {
-			super(path, sourceLink, TestValueType.INT);
+			super(path, sourceLink, sourceLink.getType(), true);
 			isMin = helper.getBoolean();
 			theLocation = Ternian.values()[helper.getInt(0, 3)];
 			switch (getSourceLink().getType()) { // Reductions
@@ -637,6 +790,11 @@ public class CollectionDerivedValues {
 			default:
 				throw new IllegalStateException();
 			}
+		}
+
+		@Override
+		public boolean isTransactional() {
+			return true;
 		}
 
 		@Override
@@ -718,6 +876,11 @@ public class CollectionDerivedValues {
 		}
 
 		@Override
+		public void expectSet(T value, OperationRejection rejection) {
+			throw new IllegalStateException(); // Reduction is not settable
+		}
+
+		@Override
 		public String toString() {
 			return (isMin ? "min" : "max") + "()";
 		}
@@ -726,7 +889,17 @@ public class CollectionDerivedValues {
 	/** Reduction (sum) tester for int collections */
 	public static class CollectionSum extends CollectionDerivedValue<Integer, Long> {
 		CollectionSum(String path, ObservableCollectionLink<?, Integer> sourceLink) {
-			super(path, sourceLink, TestValueType.INT);
+			super(path, sourceLink, TestValueType.INT, true);
+		}
+
+		@Override
+		public boolean isTransactional() {
+			return true;
+		}
+
+		@Override
+		public boolean isTypeCheat() {
+			return true;
 		}
 
 		@Override
@@ -749,6 +922,11 @@ public class CollectionDerivedValues {
 		}
 
 		@Override
+		public void expectSet(Long value, OperationRejection rejection) {
+			throw new IllegalStateException(); // Reduction is not settable
+		}
+
+		@Override
 		public String toString() {
 			return "sum()";
 		}
@@ -767,11 +945,16 @@ public class CollectionDerivedValues {
 
 		SortedSetObserveRelative(String path, ObservableCollectionLink<?, T> sourceLink, TestValueType type, T value, int onExact,
 			SortedSearchFilter filter) {
-			super(path, sourceLink, type);
+			super(path, sourceLink, type, true);
 			theValue = value;
 			this.onExact = onExact;
 			theFilter = filter;
 			theSearch = ((ObservableSortedSet<T>) getSourceLink().getCollection()).searchFor(theValue, onExact);
+		}
+
+		@Override
+		public boolean isTransactional() {
+			return true;
 		}
 
 		@Override
@@ -885,6 +1068,11 @@ public class CollectionDerivedValues {
 			// This derived value is only consistent when the transaction ends
 			if (transactionEnd)
 				getTester().checkSynced();
+		}
+
+		@Override
+		public void expectSet(T value, OperationRejection rejection) {
+			throw new IllegalStateException(); // observeRelative is not settable
 		}
 
 		@Override

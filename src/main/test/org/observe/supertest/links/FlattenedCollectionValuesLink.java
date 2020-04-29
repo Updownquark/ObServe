@@ -1,5 +1,6 @@
 package org.observe.supertest.links;
 
+import java.util.ArrayList;
 import java.util.function.Function;
 
 import org.observe.SettableValue;
@@ -16,6 +17,7 @@ import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
 import org.qommons.TestHelper;
 import org.qommons.TestHelper.RandomAction;
+import org.qommons.Transactable;
 import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterSortedList.SortedSearchFilter;
 import org.qommons.collect.BetterSortedMap;
@@ -91,6 +93,14 @@ public class FlattenedCollectionValuesLink<S, T> extends AbstractMappedCollectio
 	 */
 	protected MapEntryHandle<S, SettableValue<T>> getBucket(S sourceValue) {
 		return getBucket(theBuckets, sourceValue);
+	}
+
+	@Override
+	protected Transactable getLocking() {
+		ArrayList<Transactable> transactables = new ArrayList<>(theBuckets.size() + 1);
+		transactables.addAll(theBuckets.values());
+		transactables.add(super.getLocking());
+		return Transactable.combine(transactables);
 	}
 
 	@Override

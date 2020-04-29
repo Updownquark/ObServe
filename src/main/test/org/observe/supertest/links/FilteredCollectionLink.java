@@ -84,8 +84,11 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	}
 
 	@Override
-	protected Transactable getSupplementalLock() {
-		return isVariableFilter ? theFilterValue : null;
+	protected Transactable getLocking() {
+		if (isVariableFilter)
+			return Transactable.combine(theFilterValue, super.getLocking());
+		else
+			return super.getLocking();
 	}
 
 	@Override
@@ -126,7 +129,7 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
 
 	/**
 	 * Called when the filter is switched out
-	 * 
+	 *
 	 * @param oldFilter The previously used filter
 	 * @param newFilter The new filter
 	 */
@@ -313,7 +316,7 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
 				break;
 			case BOOLEAN:
 				typeFilters.add(filter((Boolean b) -> b, "true"));
-				typeFilters.add(filter((Boolean b) -> b, "false"));
+				typeFilters.add(filter((Boolean b) -> !b, "false"));
 				break;
 			}
 		}

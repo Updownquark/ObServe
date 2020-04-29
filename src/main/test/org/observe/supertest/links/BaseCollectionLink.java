@@ -11,6 +11,7 @@ import org.observe.supertest.ObservableCollectionTestDef;
 import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
 import org.qommons.TestHelper;
+import org.qommons.Transactable;
 import org.qommons.collect.CollectionElement;
 
 import com.google.common.reflect.TypeToken;
@@ -73,6 +74,11 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		theModSet = modSet;
 		theModificationNumber = modification;
 		theOverallModification = overallModification;
+	}
+
+	@Override
+	protected Transactable getLocking() {
+		return getCollection();
 	}
 
 	@Override

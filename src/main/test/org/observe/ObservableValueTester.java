@@ -15,10 +15,12 @@ public class ObservableValueTester<T> extends AbstractObservableTester<T> {
 	private final ObservableValue<? extends T> theValue;
 	private T theSynced;
 	private double theTolerance;
+	private boolean isCheckingOldValues;
 
 	/** @param value The observable value to test */
 	public ObservableValueTester(ObservableValue<? extends T> value) {
 		this(value, Double.NaN);
+		isCheckingOldValues = true;
 	}
 
 	/**
@@ -36,6 +38,20 @@ public class ObservableValueTester<T> extends AbstractObservableTester<T> {
 	/** @return The observable value being tested */
 	protected ObservableValue<? extends T> getValue() {
 		return theValue;
+	}
+
+	/** @return Whether this tester is comparing old values in events to the previous set value */
+	public boolean isCheckingOldValues() {
+		return isCheckingOldValues;
+	}
+
+	/**
+	 * @param checkOldValues Whether this tester should compare old values in events to the previous set value
+	 * @return This tester
+	 */
+	public ObservableValueTester<T> checkOldValues(boolean checkOldValues) {
+		isCheckingOldValues = checkOldValues;
+		return this;
 	}
 
 	@Override
@@ -64,7 +80,7 @@ public class ObservableValueTester<T> extends AbstractObservableTester<T> {
 	/** @param evt The event that occurred */
 	protected void event(ObservableValueEvent<? extends T> evt) {
 		op();
-		if (!Objects.equals(theSynced, evt.getOldValue()))
+		if (isCheckingOldValues && !Objects.equals(theSynced, evt.getOldValue()))
 			throw new AssertionError("Expected " + theSynced + " but was " + evt.getOldValue());
 		theSynced = evt.getNewValue();
 	}
