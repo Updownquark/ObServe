@@ -140,14 +140,14 @@ public class PanelPopulation {
 	}
 
 	public static class LazyLock implements Supplier<Transactable> {
-		private final Supplier<Transactable> theLockCreator;
+		private final Function<Object, Transactable> theLockCreator;
 		private Transactable theLock;
 
 		public LazyLock() {
-			this(() -> Transactable.transactable(new ReentrantReadWriteLock()));
+			this(o -> Transactable.transactable(new ReentrantReadWriteLock(), o));
 		}
 
-		public LazyLock(Supplier<Transactable> lockCreator) {
+		public LazyLock(Function<Object, Transactable> lockCreator) {
 			theLockCreator = lockCreator;
 		}
 
@@ -156,7 +156,7 @@ public class PanelPopulation {
 			if (theLock == null) {
 				synchronized (this) {
 					if (theLock == null)
-						theLock = theLockCreator.get();
+						theLock = theLockCreator.apply(this);
 				}
 			}
 			return theLock;
@@ -1556,8 +1556,11 @@ public class PanelPopulation {
 						constraints.append(", ");
 					constraints.append("growx, pushx");
 				}
-				if (field.isFillV())
+				if (field.isFillV()) {
+					if (constraints.length() > 0)
+						constraints.append(", ");
 					constraints.append("growy, pushy");
+				}
 			}
 			getContainer().add(component, constraints.toString());
 			if (postLabel != null)
@@ -2431,11 +2434,13 @@ public class PanelPopulation {
 				ObservableSwingUtils.syncSelection(getEditor(), model, getEditor()::getSelectionModel, model.getWrapped().equivalence(),
 					theSelectionValues, until);
 
-			for (ListItemAction<?> action : theActions) {
-				if (action.isAllowedForEmpty() || action.isAllowedForMultiple()) {
-					System.err.println("Multi actions not supported yet");
-				} else
-					getEditor().addItemAction(itemActionFor(action, until));
+			if (theActions != null) {
+				for (ListItemAction<?> action : theActions) {
+					if (action.isAllowedForEmpty() || action.isAllowedForMultiple()) {
+						System.err.println("Multi actions not supported yet");
+					} else
+						getEditor().addItemAction(itemActionFor(action, until));
+				}
 			}
 
 			return decorate(new ScrollPaneLite(getEditor()));
@@ -2822,34 +2827,34 @@ public class PanelPopulation {
 			.add(new CategoryRenderStrategy<>(up ? "\u2191" : "\u2193", TypeTokens.get().OBJECT, v -> null)
 				.withHeaderTooltip("Move row " + (up ? "up" : "down")).decorateAll(deco -> deco.withIcon(getMoveIcon(up, 16)))//
 				.withWidths(15, 20, 20)//
-					.withMutation(
-						m -> m.mutateAttribute2((r, c) -> c).withEditor(ObservableCellEditor.createButtonCellEditor(__ -> null, cell -> {
-					if (up && cell.getRowIndex() == 0)
-						return cell.getCellValue();
-					else if (!up && cell.getRowIndex() == theSafeRows.size() - 1)
-						return cell.getCellValue();
-					try (Transaction t = theRows.lock(true, null)) {
-						if (!theSafeRows.hasQueuedEvents()) {
-							CollectionElement<R> row = theRows.getElement(cell.getRowIndex());
-							CollectionElement<R> adj = theRows.getAdjacentElement(row.getElementId(), !up);
-							if (adj != null) {
-								CollectionElement<R> adj2 = theRows.getAdjacentElement(adj.getElementId(), !up);
-								theRows.move(row.getElementId(), up ? CollectionElement.getElementId(adj2) : adj.getElementId(),
-									up ? adj.getElementId() : CollectionElement.getElementId(adj2), up, null);
-								ListSelectionModel selModel = getEditor().getSelectionModel();
-								int newIdx = up ? cell.getRowIndex() - 1 : cell.getRowIndex() + 1;
-								selModel.addSelectionInterval(newIdx, newIdx);
+				.withMutation(
+					m -> m.mutateAttribute2((r, c) -> c).withEditor(ObservableCellEditor.createButtonCellEditor(__ -> null, cell -> {
+						if (up && cell.getRowIndex() == 0)
+							return cell.getCellValue();
+						else if (!up && cell.getRowIndex() == theSafeRows.size() - 1)
+							return cell.getCellValue();
+						try (Transaction t = theRows.lock(true, null)) {
+							if (!theSafeRows.hasQueuedEvents()) {
+								CollectionElement<R> row = theRows.getElement(cell.getRowIndex());
+								CollectionElement<R> adj = theRows.getAdjacentElement(row.getElementId(), !up);
+								if (adj != null) {
+									CollectionElement<R> adj2 = theRows.getAdjacentElement(adj.getElementId(), !up);
+									theRows.move(row.getElementId(), up ? CollectionElement.getElementId(adj2) : adj.getElementId(),
+										up ? adj.getElementId() : CollectionElement.getElementId(adj2), up, null);
+									ListSelectionModel selModel = getEditor().getSelectionModel();
+									int newIdx = up ? cell.getRowIndex() - 1 : cell.getRowIndex() + 1;
+									selModel.addSelectionInterval(newIdx, newIdx);
+								}
 							}
 						}
-					}
-					return cell.getCellValue();
-				}).decorate((cell, deco) -> {
-					deco.withIcon(getMoveIcon(up, 16));
-					if (up)
-						deco.enabled(cell.getRowIndex() > 0);
-					else
-						deco.enabled(cell.getRowIndex() < theSafeRows.size() - 1);
-				}))));
+						return cell.getCellValue();
+					}).decorate((cell, deco) -> {
+						deco.withIcon(getMoveIcon(up, 16));
+						if (up)
+							deco.enabled(cell.getRowIndex() > 0);
+						else
+							deco.enabled(cell.getRowIndex() < theSafeRows.size() - 1);
+					}))));
 			return (P) this;
 		}
 

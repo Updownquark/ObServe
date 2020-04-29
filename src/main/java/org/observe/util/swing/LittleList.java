@@ -76,7 +76,7 @@ public class LittleList<E> extends JComponent implements Scrollable {
 		setLayout(new ScrollableFlowLayout(FlowLayout.LEFT));
 		theSyntheticContainer = new SyntheticContainer();
 		add(theSyntheticContainer); // So the tree lock works right
-		theRenderStrategy.withRenderer(new ObservableCellRenderer.DefaultObservableCellRenderer<>((m, c) -> String.valueOf(c))//
+		theRenderStrategy.withRenderer(new ObservableCellRenderer.DefaultObservableCellRenderer<E, E>((m, c) -> String.valueOf(c))//
 			.decorate((cell, cd) -> cd.bold(cell.isSelected())));
 		theSelectionModel = new DefaultListSelectionModel();
 
@@ -272,11 +272,12 @@ public class LittleList<E> extends JComponent implements Scrollable {
 		return this;
 	}
 
-	public void setItemBorder(Border border) {
+	public LittleList<E> setItemBorder(Border border) {
 		theSyntheticContainer.theHolder.setBorder(border);
+		return this;
 	}
 
-	public void adjustBorder(BiConsumer<Border, ? super E> borderAdjuster) {
+	public LittleList<E> adjustBorder(BiConsumer<Border, ? super E> borderAdjuster) {
 		if (theBorderAdjuster == null)
 			theBorderAdjuster = borderAdjuster;
 		else if (borderAdjuster == null)
@@ -288,6 +289,7 @@ public class LittleList<E> extends JComponent implements Scrollable {
 				borderAdjuster.accept(border, item);
 			};
 		}
+		return this;
 	}
 
 	@Override
@@ -499,8 +501,8 @@ public class LittleList<E> extends JComponent implements Scrollable {
 			y -= (int) holderBounds.getY();
 			if (x >= holderBounds.getWidth() || y >= holderBounds.getHeight())
 				return -1;
-			int itemX = (int) itemBounds.getX() - x;
-			int itemY = (int) itemBounds.getY() - y;
+			int itemX = x - (int) itemBounds.getX();
+			int itemY = y - (int) itemBounds.getY();
 			if (itemX >= 0 && itemX < itemBounds.getWidth() && itemY >= 0 && itemY < itemBounds.getHeight())
 				return 0;
 			for (int i = 0; i < actionBounds.size(); i++) {
@@ -617,12 +619,16 @@ public class LittleList<E> extends JComponent implements Scrollable {
 			ObservableCellRenderer<E, E> renderer;
 			if (selected < theModel.getSize()) {
 				row = theModel.getElementAt(selected);
+				String tt = theRenderStrategy.getTooltip(row, row);
+				if (tt != null)
+					return tt;
 				renderer = (ObservableCellRenderer<E, E>) theRenderStrategy.getRenderer();
 			} else if (selected == theModel.getSize() && theRenderStrategy.getAddRow() != null) {
 				row = theRenderStrategy.getAddRow().getEditSeedRow().get();
 				renderer = (ObservableCellRenderer<E, E>) theRenderStrategy.getAddRow().getRenderer();
 			} else
 				throw new IndexOutOfBoundsException(selected + " of " + getComponentCount());
+
 			Component rendered = renderer.getCellRendererComponent(LittleList.this,
 				new ModelCell.Default<>(LambdaUtils.constantSupplier(row, () -> String.valueOf(row), row), row, selected, 0, //
 					theSelectionModel.isSelectedIndex(selected), theSelectionModel.isSelectedIndex(selected), true, true),
@@ -662,6 +668,7 @@ public class LittleList<E> extends JComponent implements Scrollable {
 		private final List<JLabel> theItemActionLabels;
 		private final Action theAction;
 		private ItemBoundsData theBounds;
+		private boolean isRecursive;
 
 		ItemHolder() {
 			super(new JustifiedBoxLayout(false).setMargin(2, 2, 0, 2).mainJustified().crossCenter());
@@ -675,51 +682,63 @@ public class LittleList<E> extends JComponent implements Scrollable {
 		}
 
 		ItemHolder forRender(int renderIndex, E item, Component rendered, boolean initBounds) {
-			if (theBorderAdjuster != null && getBorder() != null)
-				theBorderAdjuster.accept(getBorder(), item);
-			theBounds = theSyntheticContainer.getBounds(renderIndex);
-			while (theBounds.actionBounds.size() < theItemActionLabels.size())
-				theBounds.actionBounds.add(new Rectangle());
-			theComponent.forRender(renderIndex, rendered);
-			if (initBounds) {
-				super.setBounds(theBounds.holderBounds.x, theBounds.holderBounds.y, theBounds.holderBounds.width,
-					theBounds.holderBounds.height);
-				theComponent.internalSetBounds(theBounds.itemBounds);
+			if (isRecursive)
+				return this;
+			isRecursive = true;
+			try {
+				if (theBorderAdjuster != null && getBorder() != null)
+					theBorderAdjuster.accept(getBorder(), item);
+				theBounds = theSyntheticContainer.getBounds(renderIndex);
+				while (theBounds.actionBounds.size() < theItemActionLabels.size())
+					theBounds.actionBounds.add(new Rectangle());
+				// System.out.println("Rendering " + renderIndex + ": " + ((JLabel) rendered).getText() + ", " + rendered.getForeground()
+				// + " @" + theBounds.holderBounds.getLocation() + "->" + theBounds.itemBounds);
+				theComponent.forRender(renderIndex, rendered);
+				if (initBounds) {
+					if (!getBounds().equals(theBounds.holderBounds)) {
+						super.setBounds(theBounds.holderBounds.x, theBounds.holderBounds.y, theBounds.holderBounds.width,
+							theBounds.holderBounds.height);
+					}
+					theComponent.internalSetBounds(theBounds.itemBounds);
+				}
+				if (renderIndex < theModel.getSize()) {
+					ArrayUtils.adjust(theItemActionLabels, theItemActions,
+						new ArrayUtils.DifferenceListener<JLabel, ItemAction<? super E>>() {
+						@Override
+						public boolean identity(JLabel o1, ItemAction<? super E> o2) {
+							return true;
+						}
+
+						@Override
+						public JLabel added(ItemAction<? super E> o, int mIdx, int retIdx) {
+							JLabel label = new JLabel();
+							((SyntheticContainer) getParent()).addAction(retIdx);
+							sync(label, o, renderIndex, retIdx);
+							add(label, retIdx + 1);
+							return label;
+						}
+
+						@Override
+						public JLabel removed(JLabel o, int oIdx, int incMod, int retIdx) {
+							((SyntheticContainer) getParent()).removeAction(incMod);
+							remove(incMod);
+							return null;
+						}
+
+						@Override
+						public JLabel set(JLabel o1, int idx1, int incMod, ItemAction<? super E> o2, int idx2, int retIdx) {
+							sync(o1, o2, renderIndex, incMod);
+							return o1;
+						}
+					});
+				} else {
+					for (JLabel actionLabel : theItemActionLabels)
+						actionLabel.setVisible(false);
+				}
+				invalidate();
+			} finally {
+				isRecursive = false;
 			}
-			if (renderIndex < theModel.getSize()) {
-				ArrayUtils.adjust(theItemActionLabels, theItemActions, new ArrayUtils.DifferenceListener<JLabel, ItemAction<? super E>>() {
-					@Override
-					public boolean identity(JLabel o1, ItemAction<? super E> o2) {
-						return true;
-					}
-
-					@Override
-					public JLabel added(ItemAction<? super E> o, int mIdx, int retIdx) {
-						JLabel label = new JLabel();
-						((SyntheticContainer) getParent()).addAction(retIdx);
-						sync(label, o, renderIndex, retIdx);
-						add(label, retIdx + 1);
-						return label;
-					}
-
-					@Override
-					public JLabel removed(JLabel o, int oIdx, int incMod, int retIdx) {
-						((SyntheticContainer) getParent()).removeAction(incMod);
-						remove(incMod);
-						return null;
-					}
-
-					@Override
-					public JLabel set(JLabel o1, int idx1, int incMod, ItemAction<? super E> o2, int idx2, int retIdx) {
-						sync(o1, o2, renderIndex, incMod);
-						return o1;
-					}
-				});
-			} else {
-				for (JLabel actionLabel : theItemActionLabels)
-					actionLabel.setVisible(false);
-			}
-			invalidate();
 			return this;
 		}
 

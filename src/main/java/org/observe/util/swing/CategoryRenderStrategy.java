@@ -267,7 +267,7 @@ public class CategoryRenderStrategy<R, C> {
 	private CategoryMouseListener<? super R, ? super C> theMouseListener;
 	private String theHeaderTooltip;
 	private BiFunction<? super R, ? super C, String> theTooltip;
-	private ObservableCellRenderer<? super R, ? super C> theRenderer;
+	private ObservableCellRenderer<R, C> theRenderer;
 	private CellDecorator<R, C> theDecorator;
 	private AddRowRenderer theAddRow;
 	private int theMinWidth;
@@ -360,16 +360,22 @@ public class CategoryRenderStrategy<R, C> {
 		return theMouseListener;
 	}
 
-	public CategoryRenderStrategy<R, C> withRenderer(ObservableCellRenderer<? super R, ? super C> renderer) {
+	public CategoryRenderStrategy<R, C> withRenderer(ObservableCellRenderer<R, C> renderer) {
 		theRenderer = renderer;
+		if (theRenderer != null)
+			theRenderer.decorate(theDecorator);
 		return this;
 	}
 
 	public CategoryRenderStrategy<R, C> decorate(CellDecorator<R, C> decorator) {
+		if (decorator == null)
+			return this;
 		if (theDecorator == null)
 			theDecorator = decorator;
 		else
 			theDecorator = theDecorator.modify(decorator);
+		if (theRenderer != null)
+			theRenderer.decorate(theDecorator);
 		return this;
 	}
 
@@ -382,13 +388,11 @@ public class CategoryRenderStrategy<R, C> {
 	}
 
 	public CategoryRenderStrategy<R, C> formatText(BiFunction<? super R, ? super C, String> format) {
-		theRenderer = ObservableCellRenderer.formatted(format);
-		return this;
+		return withRenderer(ObservableCellRenderer.formatted(format));
 	}
 
 	public CategoryRenderStrategy<R, C> formatText(Function<? super C, String> format) {
-		theRenderer = ObservableCellRenderer.formatted(format);
-		return this;
+		return withRenderer(ObservableCellRenderer.formatted(format));
 	}
 
 	public ObservableCellRenderer<? super R, ? super C> getRenderer() {

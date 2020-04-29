@@ -146,7 +146,9 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 					callbackLock[0] = true;
 					try (Transaction avT = availableValues.lock(false, null)) {
 						int index = availableValues.indexOf(evt.getNewValue());
-						if (index >= 0)
+						if (index >= 0 && index < comboBox.getModel().getSize()//
+							&& ((Equivalence<T>) availableValues.equivalence()).elementEquals(availableValues.get(index),
+								comboBox.getModel().getElementAt(index)))
 							comboBox.setSelectedIndex(index);
 						else
 							comboBox.setSelectedIndex(-1);
