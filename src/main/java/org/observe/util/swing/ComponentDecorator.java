@@ -99,7 +99,7 @@ public class ComponentDecorator {
 		return deriveFont(font -> font.deriveFont(style));
 	}
 
-	public ComponentDecorator withFontStyle(float size) {
+	public ComponentDecorator withFontSize(float size) {
 		return deriveFont(font -> font.deriveFont(size));
 	}
 
