@@ -46,8 +46,11 @@ import javax.swing.event.ListDataListener;
 
 import org.observe.Subscription;
 import org.observe.util.swing.ObservableCellRenderer.CellRenderContext;
-import org.qommons.ArrayUtils;
 import org.qommons.LambdaUtils;
+import org.qommons.collect.CollectionUtils;
+import org.qommons.collect.CollectionUtils.AdjustmentOrder;
+import org.qommons.collect.CollectionUtils.ElementSyncAction;
+import org.qommons.collect.CollectionUtils.ElementSyncInput;
 
 public class LittleList<E> extends JComponent implements Scrollable {
 	private static final int CLICK_TOLERANCE = 4;
@@ -541,6 +544,7 @@ public class LittleList<E> extends JComponent implements Scrollable {
 		private final ItemHolder theHolder;
 		private List<ItemBoundsData> bounds;
 		private boolean layoutOrRender;
+		boolean isRecursive;
 
 		SyntheticContainer() {
 			theHolder = new ItemHolder();
@@ -574,42 +578,53 @@ public class LittleList<E> extends JComponent implements Scrollable {
 
 		@Override
 		public Component getComponent(int n) {
-			E row;
-			ObservableCellRenderer<E, E> renderer;
-			if (n < theModel.getSize()) {
-				row = theModel.getElementAt(n);
-				renderer = (ObservableCellRenderer<E, E>) theRenderStrategy.getRenderer();
-			} else if (n == theModel.getSize() && theRenderStrategy.getAddRow() != null) {
-				row = theRenderStrategy.getAddRow().getEditSeedRow().get();
-				renderer = (ObservableCellRenderer<E, E>) theRenderStrategy.getAddRow().getRenderer();
-			} else
-				throw new IndexOutOfBoundsException(n + " of " + getComponentCount());
-			Component rendered = renderer.getCellRendererComponent(LittleList.this,
-				new ModelCell.Default<>(LambdaUtils.constantSupplier(row, () -> String.valueOf(row), row), row, n, 0, //
-					theSelectionModel.isSelectedIndex(n), theSelectionModel.isSelectedIndex(n), true, true),
-				CellRenderContext.DEFAULT);
-			boolean newBounds;
-			if (n >= bounds.size()) {
-				newBounds = true;
-				bounds.add(new ItemBoundsData());
-			} else
-				newBounds = false;
-			if (theEditorComponent != null && theSelectionModel.getMinSelectionIndex() == n) {
-				if (layoutOrRender)
-					theHolder.forRender(n, row, theEditorComponent, !newBounds);
-				else
-					theHolder.forRender(n, row, null, !newBounds);
-			} else
-				theHolder.forRender(n, row, rendered, !newBounds);
-			return theHolder;
+			// This is called from ItemHolder.super.setBounds() within the forRender() call, via mixOnReshaping()
+			// but the value is not really used because there are no heavyweight components in here.
+			// It will mess up the rendering if we call the renderer here and it's wasted effort anyway
+			if (isRecursive)
+				return theHolder;
+			isRecursive = true;
+			try {
+				E row;
+				ObservableCellRenderer<E, E> renderer;
+				if (n < theModel.getSize()) {
+					row = theModel.getElementAt(n);
+					renderer = (ObservableCellRenderer<E, E>) theRenderStrategy.getRenderer();
+				} else if (n == theModel.getSize() && theRenderStrategy.getAddRow() != null) {
+					row = theRenderStrategy.getAddRow().getEditSeedRow().get();
+					renderer = (ObservableCellRenderer<E, E>) theRenderStrategy.getAddRow().getRenderer();
+				} else
+					throw new IndexOutOfBoundsException(n + " of " + getComponentCount());
+				Component rendered = renderer
+					.getCellRendererComponent(LittleList.this,
+						new ModelCell.Default<>(LambdaUtils.constantSupplier(row, () -> String.valueOf(row), row), row, n, 0, //
+							theSelectionModel.isSelectedIndex(n), theSelectionModel.isSelectedIndex(n), true, true),
+						CellRenderContext.DEFAULT);
+				boolean newBounds;
+				if (n >= bounds.size()) {
+					newBounds = true;
+					bounds.add(new ItemBoundsData());
+				} else
+					newBounds = false;
+				if (theEditorComponent != null && theSelectionModel.getMinSelectionIndex() == n) {
+					if (layoutOrRender)
+						theHolder.forRender(n, row, theEditorComponent, !newBounds);
+					else
+						theHolder.forRender(n, row, null, !newBounds);
+				} else
+					theHolder.forRender(n, row, rendered, !newBounds);
+				return theHolder;
+			} finally {
+				isRecursive = false;
+			}
 		}
 
-		void addAction(int actionIndex){
-			for(ItemBoundsData bd : bounds)
+		void addAction(int actionIndex) {
+			for (ItemBoundsData bd : bounds)
 				bd.actionBounds.add(actionIndex, new Rectangle());
 		}
 
-		void removeAction(int actionIndex){
+		void removeAction(int actionIndex) {
 			for (ItemBoundsData bd : bounds)
 				bd.actionBounds.remove(actionIndex);
 		}
@@ -668,7 +683,6 @@ public class LittleList<E> extends JComponent implements Scrollable {
 		private final List<JLabel> theItemActionLabels;
 		private final Action theAction;
 		private ItemBoundsData theBounds;
-		private boolean isRecursive;
 
 		ItemHolder() {
 			super(new JustifiedBoxLayout(false).setMargin(2, 2, 0, 2).mainJustified().crossCenter());
@@ -682,67 +696,58 @@ public class LittleList<E> extends JComponent implements Scrollable {
 		}
 
 		ItemHolder forRender(int renderIndex, E item, Component rendered, boolean initBounds) {
-			if (isRecursive)
-				return this;
-			isRecursive = true;
-			try {
-				if (theBorderAdjuster != null && getBorder() != null)
-					theBorderAdjuster.accept(getBorder(), item);
-				theBounds = theSyntheticContainer.getBounds(renderIndex);
-				while (theBounds.actionBounds.size() < theItemActionLabels.size())
-					theBounds.actionBounds.add(new Rectangle());
-				// System.out.println("Rendering " + renderIndex + ": " + ((JLabel) rendered).getText() + ", " + rendered.getForeground()
-				// + " @" + theBounds.holderBounds.getLocation() + "->" + theBounds.itemBounds);
-				theComponent.forRender(renderIndex, rendered);
-				if (initBounds) {
-					if (!getBounds().equals(theBounds.holderBounds)) {
-						super.setBounds(theBounds.holderBounds.x, theBounds.holderBounds.y, theBounds.holderBounds.width,
-							theBounds.holderBounds.height);
-					}
-					theComponent.internalSetBounds(theBounds.itemBounds);
+			if (theBorderAdjuster != null && getBorder() != null)
+				theBorderAdjuster.accept(getBorder(), item);
+			theBounds = theSyntheticContainer.getBounds(renderIndex);
+			while (theBounds.actionBounds.size() < theItemActionLabels.size())
+				theBounds.actionBounds.add(new Rectangle());
+			theComponent.forRender(renderIndex, rendered);
+			if (initBounds) {
+				if (!getBounds().equals(theBounds.holderBounds)) {
+					super.setBounds(theBounds.holderBounds.x, theBounds.holderBounds.y, theBounds.holderBounds.width,
+						theBounds.holderBounds.height);
 				}
-				if (renderIndex < theModel.getSize()) {
-					ArrayUtils.adjust(theItemActionLabels, theItemActions,
-						new ArrayUtils.DifferenceListener<JLabel, ItemAction<? super E>>() {
-						@Override
-						public boolean identity(JLabel o1, ItemAction<? super E> o2) {
-							return true;
-						}
-
-						@Override
-						public JLabel added(ItemAction<? super E> o, int mIdx, int retIdx) {
-							JLabel label = new JLabel();
-							((SyntheticContainer) getParent()).addAction(retIdx);
-							sync(label, o, renderIndex, retIdx);
-							add(label, retIdx + 1);
-							return label;
-						}
-
-						@Override
-						public JLabel removed(JLabel o, int oIdx, int incMod, int retIdx) {
-							((SyntheticContainer) getParent()).removeAction(incMod);
-							remove(incMod);
-							return null;
-						}
-
-						@Override
-						public JLabel set(JLabel o1, int idx1, int incMod, ItemAction<? super E> o2, int idx2, int retIdx) {
-							sync(o1, o2, renderIndex, incMod);
-							return o1;
-						}
-					});
-				} else {
-					for (JLabel actionLabel : theItemActionLabels)
-						actionLabel.setVisible(false);
-				}
-				invalidate();
-			} finally {
-				isRecursive = false;
+				theComponent.internalSetBounds(theBounds.itemBounds);
 			}
+			if (renderIndex < theModel.getSize()) {
+				CollectionUtils.synchronize(theItemActionLabels, theItemActions, (i1, i2) -> true)
+				.adjust(new CollectionUtils.CollectionSynchronizer<JLabel, ItemAction<? super E>>() {
+					@Override
+					public boolean getOrder(ElementSyncInput<JLabel, ItemAction<? super E>> element) {
+						return true;
+					}
+
+					@Override
+					public ElementSyncAction leftOnly(ElementSyncInput<JLabel, ItemAction<? super E>> element) {
+						((SyntheticContainer) getParent()).removeAction(element.getUpdatedLeftIndex());
+						remove(element.getUpdatedLeftIndex());
+						return element.remove();
+					}
+
+					@Override
+					public ElementSyncAction rightOnly(ElementSyncInput<JLabel, ItemAction<? super E>> element) {
+						JLabel label = new JLabel();
+						((SyntheticContainer) getParent()).addAction(element.getTargetIndex());
+						syncActionLabel(label, element.getRightValue(), renderIndex, element.getTargetIndex());
+						add(label, element.getTargetIndex() + 1);
+						return element.useValue(label);
+					}
+
+					@Override
+					public ElementSyncAction common(ElementSyncInput<JLabel, ItemAction<? super E>> element) {
+						syncActionLabel(element.getLeftValue(), element.getRightValue(), renderIndex, element.getUpdatedLeftIndex());
+						return element.preserve();
+					}
+				}, AdjustmentOrder.RightOrder);
+			} else {
+				for (JLabel actionLabel : theItemActionLabels)
+					actionLabel.setVisible(false);
+			}
+			invalidate();
 			return this;
 		}
 
-		void sync(JLabel actionLabel, ItemAction<? super E> action, int modelIndex, int actionIndex) {
+		void syncActionLabel(JLabel actionLabel, ItemAction<? super E> action, int modelIndex, int actionIndex) {
 			action.configureAction(theAction, null, modelIndex);
 			String text = string(theAction.getValue(Action.NAME));
 			boolean diff = false;
@@ -787,7 +792,13 @@ public class LittleList<E> extends JComponent implements Scrollable {
 		@Override
 		public void setBounds(int x, int y, int width, int height) {
 			boolean layout = x != getX() || y != getY() || width != getWidth() || height != getHeight();
-			super.setBounds(x, y, width, height);
+			boolean oldRecurse = theSyntheticContainer.isRecursive;
+			theSyntheticContainer.isRecursive = true;
+			try {
+				super.setBounds(x, y, width, height);
+			} finally {
+				theSyntheticContainer.isRecursive = oldRecurse;
+			}
 			theBounds.holderBounds.setBounds(x, y, width, height);
 			if (layout) {
 				getLayout().layoutContainer(this);
@@ -942,7 +953,13 @@ public class LittleList<E> extends JComponent implements Scrollable {
 
 		@Override
 		public void setBounds(int x, int y, int width, int height) {
-			super.setBounds(x, y, width, height);
+			boolean oldRecurse = theSyntheticContainer.isRecursive;
+			theSyntheticContainer.isRecursive = true;
+			try {
+				super.setBounds(x, y, width, height);
+			} finally {
+				theSyntheticContainer.isRecursive = oldRecurse;
+			}
 			if (theRendered != null) {
 				if (theRendered.getParent() == LittleList.this) {
 					// The editor component belongs to the root, not this holder, so apply the offset
