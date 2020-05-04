@@ -4,8 +4,6 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -44,13 +42,13 @@ public class FactoringFlatMapCollectionLink extends ObservableCollectionLink<Int
 		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
 			ObservableCollectionLink<?, Integer> sourceCL = (ObservableCollectionLink<?, Integer>) sourceLink;
 			ObservableCollection.CollectionDataFlow<?, ?, Integer> oneStepFlow = sourceCL.getCollection().flow()
-				.flatMap(TypeTokens.get().INT, i -> ObservableCollection.of(TypeTokens.get().INT, factor(i)).flow());
+				.flatMap(TypeTokens.get().INT, i -> getPrimeFactors(i).flow());
 			// Eclipse is being stupid about whether this cast is needed or not. It definitely should not be necessary
 			// and eclipse flags it with a warning, but if I remove it, there's an error.
 			// But the error doesn't actually seem to be a compile error, because the class will still run.
 			@SuppressWarnings("cast")
 			ObservableCollection.CollectionDataFlow<?, ?, Integer> multiStepFlow = (CollectionDataFlow<?, ?, Integer>) sourceCL
-			.getDef().multiStepFlow.flatMap(TypeTokens.get().INT, i -> ObservableCollection.of(TypeTokens.get().INT, factor(i)).flow());
+			.getDef().multiStepFlow.flatMap(TypeTokens.get().INT, i -> getPrimeFactors(i).flow());
 			ObservableCollectionTestDef<Integer> def = new ObservableCollectionTestDef<>(TestValueType.INT, oneStepFlow, multiStepFlow,
 				sourceCL.getDef().orderImportant, true);
 			return (ObservableChainLink<T, X>) new FactoringFlatMapCollectionLink(path, sourceCL, def, helper);
@@ -98,7 +96,7 @@ public class FactoringFlatMapCollectionLink extends ObservableCollectionLink<Int
 		List<CollectionLinkElement<Integer, ?>> derivedEls = sourceOp.getElement().getDerivedElements(getSiblingIndex());
 		switch (sourceOp.getType()) {
 		case add:
-			List<Integer> factored = factor(sourceOp.getValue());
+			List<Integer> factored = getPrimeFactors(sourceOp.getValue());
 			Assert.assertEquals(factored.size(), derivedEls.size());
 			for (int i = 0; i < factored.size(); i++)
 				((CollectionLinkElement<Integer, Integer>) derivedEls.get(i)).expectAdded(factored.get(i));
@@ -111,11 +109,11 @@ public class FactoringFlatMapCollectionLink extends ObservableCollectionLink<Int
 			throw new IllegalStateException();
 		case set:
 			if (!sourceOp.getOldValue().equals(sourceOp.getValue())) {
-				factored = factor(sourceOp.getOldValue());
+				factored = getPrimeFactors(sourceOp.getOldValue());
 				int i;
 				for (i = 0; i < factored.size(); i++)
 					((CollectionLinkElement<Integer, Integer>) derivedEls.get(i)).expectRemoval();
-				factored = factor(sourceOp.getValue());
+				factored = getPrimeFactors(sourceOp.getValue());
 				for (int j = 0; j < factored.size(); j++, i++)
 					((CollectionLinkElement<Integer, Integer>) derivedEls.get(i)).expectAdded(factored.get(j));
 			}
@@ -188,36 +186,31 @@ public class FactoringFlatMapCollectionLink extends ObservableCollectionLink<Int
 		}
 	}
 
-	private static List<Integer> factor(int value) {
-		if (value == 1 || value == 0)
-			return Arrays.asList(value);
-		else if (value == -1)
-			return Arrays.asList(-1);
-		boolean neg=value<0;
-		if(neg)
-			value=-value;
-
-		List<Integer> factors = CACHED_FACTORIZATION.computeIfAbsent(value, v->{
-			List<Integer> f= new ArrayList<>(5);
-			for (int factor : PRIME_INTS) {
-				while (v % factor == 0) {
-					f.add(factor);
-					v /= factor;
-				}
-			}
-			// Possible to get a value not completely factorizable by the primes in my list
-			if (v > 1)
-				f.add(v);
-			return Collections.unmodifiableList(f);
-		});
-		if (neg){
-			List<Integer> newFactors = new ArrayList<>(factors.size());
-			newFactors.add(-1);
-			newFactors.addAll(factors);
-			factors = newFactors;
-		}
-		return factors;
+	static ObservableCollection<Integer> getPrimeFactors(int value) {
+		return CACHED_FACTORIZATION.computeIfAbsent(value, FactoringFlatMapCollectionLink::_factor);
 	}
 
-	private static Map<Integer, List<Integer>> CACHED_FACTORIZATION=new ConcurrentHashMap<>();
+	private static ObservableCollection<Integer> _factor(int value) {
+		if (value == 1 || value == 0 || value == -1)
+			return ObservableCollection.of(TypeTokens.get().INT, value);
+
+		List<Integer> factors = new ArrayList<>(5);
+		if (value < 0) {
+			factors.add(-1);
+			value=-value;
+		}
+
+		for (int factor : PRIME_INTS) {
+			while (value % factor == 0) {
+				factors.add(factor);
+				value /= factor;
+			}
+		}
+		// Possible to get a value not completely factorizable by the primes in my list
+		if (value > 1)
+			factors.add(value);
+		return ObservableCollection.of(TypeTokens.get().INT, factors);
+	}
+
+	private static Map<Integer, ObservableCollection<Integer>> CACHED_FACTORIZATION = new ConcurrentHashMap<>();
 }
