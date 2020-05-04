@@ -130,9 +130,9 @@ public class ObservableChainTester implements Testable {
 			"Executing up to " + QommonsUtils.printTimeLength(testDuration.toMillis()) + " of tests with max " + maxFailures + " failures");
 		TestHelper.TestSummary summary = TestHelper.createTester(getClass())//
 			.withRandomCases(-1)//
-			.withMaxCaseDuration(Duration.ofSeconds(60))// Since we're using progress interval checking, this can be pretty long
-			.withMaxTotalDuration(testDuration)
-			.withMaxProgressInterval(Duration.ofSeconds(5))//
+			.withMaxCaseDuration(Duration.ofMinutes(3)) // Since we're using progress interval checking, this can be pretty long
+			.withMaxTotalDuration(testDuration)//
+			.withMaxProgressInterval(Duration.ofSeconds(10))//
 			.withMaxFailures(maxFailures)//
 			.withConcurrency(max -> max - 1)//
 			.withPersistenceDir(new File("src/main/test/org/observe/supertest"), false)//
