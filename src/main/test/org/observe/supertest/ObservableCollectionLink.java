@@ -789,11 +789,11 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		}
 
 		CollectionOpElement el = op.elements.get(0);
-		if (msg == null && el.getMessage() != null)
-			throw new AssertionError("Expected rejection with " + el.getMessage());
-		else if (msg != null && el.getMessage() == null)
+		if (msg == null && el.getRejection() != null)
+			throw new AssertionError("Expected rejection with " + el.getRejection());
+		else if (msg != null && el.getRejection() == null)
 			throw new AssertionError("Unexpected rejection with " + msg);
-		Assert.assertEquals(el.getMessage() == null, msg == null);
+		Assert.assertEquals(el.getRejection() == null, msg == null);
 		if (addByElement) {
 			if (msg != null && !error)
 				throw new AssertionError("Rejection with " + msg + " was expected to generate an error");
@@ -855,7 +855,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 
 		int addable = 0;
 		for (i = 0; i < op.elements.size(); i++) {
-			String expectMsg = op.elements.get(i).getMessage();
+			String expectMsg = op.elements.get(i).getRejection();
 			String msg = msgs[i];
 			if (msg != null && expectMsg == null)
 				throw new AssertionError("Unexpected rejection of add[" + i + "]=" + op.values.get(i) + " with " + msg);
@@ -922,9 +922,9 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		CollectionOpElement el = op.elements.get(0);
 		if (!getCollection().isContentControlled() && el.element != null && msg != null)
 			throw new AssertionError("Uncontrolled collection failed to remove element");
-		if (msg == null && el.getMessage() != null)
-			throw new AssertionError("Expected rejection with " + el.getMessage());
-		else if (msg != null && el.getMessage() == null)
+		if (msg == null && el.getRejection() != null)
+			throw new AssertionError("Expected rejection with " + el.getRejection());
+		else if (msg != null && el.getRejection() == null)
 			throw new AssertionError("Unexpected rejection with " + msg);
 		if (error)
 			Assert.assertNotNull(msg);
@@ -963,7 +963,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 
 		expectModification(op, helper);
 		for (int i = 0; i < msgs.length; i++) {
-			String msg = op.elements.get(i).getMessage();
+			String msg = op.elements.get(i).getRejection();
 			Assert.assertEquals(msg != null, msgs[i] != null);
 		}
 
@@ -991,7 +991,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 
 		int removable = 0;
 		for (CollectionOpElement el : op.elements) {
-			if (el.getMessage() != null)
+			if (el.getRejection() != null)
 				continue;
 			removable++;
 			if (getCollection() instanceof Set)
@@ -1017,7 +1017,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 
 		int removable = 0;
 		for (CollectionOpElement el : op.elements) {
-			if (el.getMessage() != null)
+			if (el.getRejection() != null)
 				continue;
 			removable++;
 			if (getCollection() instanceof Set)
@@ -1076,9 +1076,9 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		CollectionOpElement el = op.elements.get(0);
 		if (!getCollection().isContentControlled() && msg != null)
 			throw new AssertionError("Uncontrolled collection failed to move element: " + msg);
-		if (el.getMessage() != null && msg == null)
-			throw new AssertionError("Expected rejection with " + el.getMessage());
-		else if (el.getMessage() == null && msg != null)
+		if (el.getRejection() != null && msg == null)
+			throw new AssertionError("Expected rejection with " + el.getRejection());
+		else if (el.getRejection() == null && msg != null)
 			throw new AssertionError("Unexpected rejection with " + msg);
 		if (error)
 			Assert.assertNotNull(msg);
@@ -1115,10 +1115,10 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		el.withActualRejection(msg);
 		expectModification(op, helper);
 
-		if (el.getMessage() == null && msg != null)
+		if (el.getRejection() == null && msg != null)
 			throw new AssertionError("Unexpected rejection with " + msg);
-		else if (el.getMessage() != null && msg == null)
-			throw new AssertionError("Expected rejection with " + el.getMessage());
+		else if (el.getRejection() != null && msg == null)
+			throw new AssertionError("Expected rejection with " + el.getRejection());
 		boolean wasSettable = msg == null;
 		if (!getCollection().isContentControlled() && !wasSettable)
 			throw new AssertionError("Uncontrolled collection failed to set element");
@@ -1145,7 +1145,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 
 		int removed = 0;
 		for (CollectionOpElement el : op.elements) {
-			if (el.getMessage() != null)
+			if (el.getRejection() != null)
 				continue;
 			removed++;
 			if (getCollection() instanceof Set)
@@ -1205,7 +1205,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			referenceArray[i++] = value;
 		Assert.assertEquals(i, getCollection().size());
 		Assert.assertThat(Arrays.asList(getCollection().toArray()), //
-			QommonsTestUtils.collectionsEqual(Arrays.asList(referenceArray), theDef.orderImportant));
+			QommonsTestUtils.collectionsEqual(Arrays.asList(referenceArray), true));
 		Assert.assertThat(Arrays.asList(getMultiStepCollection().toArray()), //
 			QommonsTestUtils.collectionsEqual(Arrays.asList(referenceArray), theDef.orderImportant));
 

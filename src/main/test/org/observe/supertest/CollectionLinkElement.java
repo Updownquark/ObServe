@@ -40,6 +40,8 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 
 	private List<String> theErrors;
 
+	private Object theCustomData;
+
 	/**
 	 * @param collectionLink The link that this element belongs to
 	 * @param collectionAddress The ID of this element in the link's one-step collection
@@ -147,6 +149,23 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 			return theCollectionLink.getElements().getElementsBefore(theElementAddress);
 		else
 			return theLastKnownIndex;
+	}
+
+	/**
+	 * @param customData The custom data to store for this element
+	 * @return This element
+	 */
+	public CollectionLinkElement<S, T> withCustomData(Object customData) {
+		theCustomData = customData;
+		return this;
+	}
+
+	/**
+	 * @param <V> The presumed type of the data
+	 * @return The custom data stored for this element
+	 */
+	public <V> V getCustomData() {
+		return (V) theCustomData;
 	}
 
 	/** @return Whether this element was added and has not yet been {@link #expectAdded(Object) expected} */

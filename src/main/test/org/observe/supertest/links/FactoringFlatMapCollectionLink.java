@@ -10,7 +10,6 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.junit.Assert;
 import org.observe.collect.ObservableCollection;
-import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.ChainLinkGenerator;
 import org.observe.supertest.CollectionLinkElement;
 import org.observe.supertest.ExpectedCollectionOperation;
@@ -26,7 +25,7 @@ import org.qommons.io.CsvParser;
 import org.qommons.io.TextParseException;
 
 /** Simple flat-map test that maps integer-typed collections to the factorization of each element */
-public class FactoringFlatMapCollectionLink extends ObservableCollectionLink<Integer, Integer> {
+public class FactoringFlatMapCollectionLink extends AbstractFlatMappedCollectionLink<Integer, Integer> {
 	/** Generates {@link FactoringFlatMapCollectionLink}s */
 	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator() {
 		@Override
@@ -47,10 +46,10 @@ public class FactoringFlatMapCollectionLink extends ObservableCollectionLink<Int
 			// and eclipse flags it with a warning, but if I remove it, there's an error.
 			// But the error doesn't actually seem to be a compile error, because the class will still run.
 			@SuppressWarnings("cast")
-			ObservableCollection.CollectionDataFlow<?, ?, Integer> multiStepFlow = (CollectionDataFlow<?, ?, Integer>) sourceCL
-			.getDef().multiStepFlow.flatMap(TypeTokens.get().INT, i -> getPrimeFactors(i).flow());
+			ObservableCollection.CollectionDataFlow<?, ?, Integer> multiStepFlow = (ObservableCollection.CollectionDataFlow<?, ?, Integer>) sourceCL
+				.getDef().multiStepFlow.flatMap(TypeTokens.get().INT, i -> getPrimeFactors(i).flow());
 			ObservableCollectionTestDef<Integer> def = new ObservableCollectionTestDef<>(TestValueType.INT, oneStepFlow, multiStepFlow,
-				sourceCL.getDef().orderImportant, true);
+				sourceCL.getDef().orderImportant, sourceCL.getDef().checkOldValues);
 			return (ObservableChainLink<T, X>) new FactoringFlatMapCollectionLink(path, sourceCL, def, helper);
 		}
 	};
@@ -118,29 +117,6 @@ public class FactoringFlatMapCollectionLink extends ObservableCollectionLink<Int
 					((CollectionLinkElement<Integer, Integer>) derivedEls.get(i)).expectAdded(factored.get(j));
 			}
 			break;
-		}
-	}
-
-	@Override
-	protected void validate(CollectionLinkElement<Integer, Integer> element) {
-		int siblingIndex = getSiblingIndex();
-		CollectionLinkElement<Integer, Integer> lastEl = null;
-		for (CollectionLinkElement<?, Integer> sourceEl : getSourceLink().getElements()) {
-			int mult = 1;
-			for (CollectionLinkElement<Integer, ?> derivedEl : sourceEl.getDerivedElements(siblingIndex)) {
-				if(derivedEl.isPresent()){
-					if (lastEl != null)
-						Assert.assertTrue(lastEl.getCollectionAddress().compareTo(derivedEl.getCollectionAddress()) < 0);
-					lastEl = (CollectionLinkElement<Integer, Integer>) derivedEl;
-					if (lastEl.getValue() == null) {
-						// Let the super throw the error
-						mult = sourceEl.getValue().intValue();
-						break;
-					}
-					mult *= lastEl.getValue();
-				}
-			}
-			Assert.assertEquals(mult, sourceEl.getValue().intValue());
 		}
 	}
 

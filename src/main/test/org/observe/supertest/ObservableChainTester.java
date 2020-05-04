@@ -206,6 +206,17 @@ public class ObservableChainTester implements Testable {
 		fillLinks(theLinks, theRoot, 0, "root");
 	}
 
+	public static <T> ObservableCollectionLink<?, T> generateCollectionLink(TestValueType type, TestHelper helper, int length) {
+		ObservableCollectionLink<Object, Object> baseLink;
+		TestHelper.RandomSupplier<ChainLinkGenerator> firstLink = helper.createSupplier();
+		for (ChainLinkGenerator gen : LINK_GENERATORS) {
+			double weight = gen.getAffinity(null);
+			if (weight > 0)
+				firstLink.or(weight, () -> gen);
+		}
+		baseLink = firstLink.get(null).deriveLink("root", null, helper);
+	}
+
 	private static void fillLinks(List<LinkStruct> links, ObservableChainLink<?, ?> link, int depth, String path) {
 		links.add(new LinkStruct(link, depth, path));
 		int d = 0;

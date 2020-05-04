@@ -8,6 +8,9 @@ public interface OperationRejection {
 	/** @return Whether the operation was rejected */
 	boolean isRejected();
 
+	/** @return The message this operation was rejected with, or null if it was not rejected */
+	String getRejection();
+
 	/** @param message The message with which to reject the operation */
 	void reject(String message);
 
@@ -67,8 +70,8 @@ public interface OperationRejection {
 			return theMessage != null;
 		}
 
-		/** @return The message that the operation was rejected with */
-		public String getMessage() {
+		@Override
+		public String getRejection() {
 			return theMessage;
 		}
 

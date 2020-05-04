@@ -134,7 +134,7 @@ public abstract class ObservableValueLink<S, T> extends AbstractChainLink<S, T> 
 				if (message != null && !rejection.isRejected())
 					throw new AssertionError("Unexpected rejection with " + message);
 				else if (rejection.isRejected() && message == null)
-					throw new AssertionError("Expected rejection with " + rejection.getMessage());
+					throw new AssertionError("Expected rejection with " + rejection.getRejection());
 			});
 	}
 
