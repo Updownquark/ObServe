@@ -1477,7 +1477,7 @@ public class ObservableCollectionActiveManagers2 {
 
 		private class FlattenedHolder {
 			private final DerivedCollectionElement<I> theParentEl;
-			private final BetterTreeList<FlattenedElement> theElements;
+			private final BetterTreeSet<FlattenedElement> theElements;
 			private final WeakListening.Builder theChildListening = theListening.child();
 			private final boolean isFromStart;
 			ElementId holderElement;
@@ -1486,7 +1486,7 @@ public class ObservableCollectionActiveManagers2 {
 
 			FlattenedHolder(DerivedCollectionElement<I> parentEl, WeakListening listening, Object cause, boolean fromStart) {
 				theParentEl = parentEl;
-				theElements = new BetterTreeList<>(false);
+				theElements = BetterTreeSet.<FlattenedElement> buildTreeSet(FlattenedElement::compareTo).safe(false).build();
 				isFromStart = fromStart;
 				updated(theParentEl.get(), cause);
 				theParentEl.setListener(new CollectionElementListener<I>() {
@@ -1512,6 +1512,8 @@ public class ObservableCollectionActiveManagers2 {
 						return;
 					ActiveCollectionManager<?, ?, ? extends T> newManager = newFlow.manageActive();
 					if (manager != null && manager.getIdentity().equals(newManager.getIdentity())) {
+						@SuppressWarnings("unused") // For debugging
+						ActiveCollectionManager<?, ?, ? extends T> oldManager = manager;
 						ignoreRemoves = true;
 						clearSubElements(cause);
 						ignoreRemoves = false;
@@ -1535,7 +1537,6 @@ public class ObservableCollectionActiveManagers2 {
 							theElements.mutableElement(oldFlatEl[0].getElementId()).remove();
 							oldFlatEl[0] = theElements.getAdjacentElement(oldFlatEl[0].getElementId(), isFromStart);
 						}
-						oldFlatEl[0] = null;
 					} else {
 						clearSubElements(cause);
 						theFlow = newFlow;
