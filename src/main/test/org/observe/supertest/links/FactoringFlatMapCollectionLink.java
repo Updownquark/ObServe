@@ -5,7 +5,10 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.junit.Assert;
 import org.observe.collect.ObservableCollection;
@@ -190,20 +193,31 @@ public class FactoringFlatMapCollectionLink extends ObservableCollectionLink<Int
 			return Arrays.asList(value);
 		else if (value == -1)
 			return Arrays.asList(-1);
-		List<Integer> factors = new ArrayList<>(5);
-		if (value < 0) {
-			factors.add(-1);
-			value = -value;
-		}
-		for (int factor : PRIME_INTS) {
-			while (value % factor == 0) {
-				factors.add(factor);
-				value /= factor;
+		boolean neg=value<0;
+		if(neg)
+			value=-value;
+
+		List<Integer> factors = CACHED_FACTORIZATION.computeIfAbsent(value, v->{
+			List<Integer> f= new ArrayList<>(5);
+			for (int factor : PRIME_INTS) {
+				while (v % factor == 0) {
+					f.add(factor);
+					v /= factor;
+				}
 			}
+			// Possible to get a value not completely factorizable by the primes in my list
+			if (v > 1)
+				f.add(v);
+			return Collections.unmodifiableList(f);
+		});
+		if (neg){
+			List<Integer> newFactors = new ArrayList<>(factors.size());
+			newFactors.add(-1);
+			newFactors.addAll(factors);
+			factors = newFactors;
 		}
-		// Possible to get a value not completely factorizable by the primes in my list
-		if (value > 1)
-			factors.add(value);
 		return factors;
 	}
+
+	private static Map<Integer, List<Integer>> CACHED_FACTORIZATION=new ConcurrentHashMap<>();
 }
