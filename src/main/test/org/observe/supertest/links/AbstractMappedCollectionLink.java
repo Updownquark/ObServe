@@ -4,7 +4,6 @@ import org.observe.supertest.CollectionLinkElement;
 import org.observe.supertest.ExpectedCollectionOperation;
 import org.observe.supertest.ObservableCollectionLink;
 import org.observe.supertest.ObservableCollectionTestDef;
-import org.observe.supertest.OneToOneCollectionLink;
 import org.observe.supertest.OperationRejection;
 import org.qommons.TestHelper;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
