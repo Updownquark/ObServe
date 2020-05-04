@@ -1567,6 +1567,7 @@ public class ObservableCollectionActiveManagers2 {
 		}
 
 		boolean ignoreRemoves;
+		FlattenedElement priorityUpdateReceiver;
 
 		private class FlattenedElement implements DerivedCollectionElement<T> {
 			private final FlattenedHolder theHolder;
@@ -1597,6 +1598,10 @@ public class ObservableCollectionActiveManagers2 {
 					public void update(X oldValue, X newValue, Object cause) {
 						// Need to make sure that the flattened collection isn't firing at the same time as the child collection
 						try (Transaction parentT = theParent.lock(false, null); Transaction localT = lockLocal()) {
+							if (priorityUpdateReceiver != null) {
+								ObservableCollectionActiveManagers.update(priorityUpdateReceiver.theListener, oldValue, newValue, cause);
+								priorityUpdateReceiver = null;
+							}
 							ObservableCollectionActiveManagers.update(theListener, oldValue, newValue, cause);
 						}
 					}
@@ -1653,7 +1658,14 @@ public class ObservableCollectionActiveManagers2 {
 			public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
 				if (value != null && !TypeTokens.get().isInstance(theHolder.manager.getTargetType(), value))
 					throw new IllegalArgumentException(StdMsg.BAD_TYPE);
-				((DerivedCollectionElement<T>) theParentEl).set(value);
+				try (Transaction t = FlattenedManager.this.lock(true, null)) {
+					priorityUpdateReceiver = this;
+					try {
+						((DerivedCollectionElement<T>) theParentEl).set(value);
+					} finally {
+						priorityUpdateReceiver = null;
+					}
+				}
 			}
 
 			@Override
