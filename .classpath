@@ -11,6 +11,10 @@
 	<classpathentry kind="lib" path="lib/hamcrest-core-1.3.jar"/>
 	<classpathentry kind="lib" path="lib/junit-4.11.jar"/>
 	<classpathentry exported="true" kind="lib" path="lib/guava-18.0.jar"/>
+	<classpathentry kind="lib" path="lib/dbug.jar" sourcepath="/dbug"/>
+	<classpathentry kind="lib" path="lib/miglayout-core-4.2.jar"/>
+	<classpathentry kind="lib" path="lib/miglayout-swing-4.2.jar"/>
 	<classpathentry combineaccessrules="false" kind="src" path="/Qommons"/>
+	<classpathentry kind="lib" path="lib/swingx-1.6.jar"/>
 	<classpathentry kind="output" path="classes"/>
 </classpath>

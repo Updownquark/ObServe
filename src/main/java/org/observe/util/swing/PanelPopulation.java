@@ -1,6 +1,7 @@
 package org.observe.util.swing;
 
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Dimension;
@@ -10,6 +11,9 @@ import java.awt.Insets;
 import java.awt.LayoutManager;
 import java.awt.LayoutManager2;
 import java.awt.datatransfer.DataFlavor;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
@@ -34,6 +38,7 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import javax.swing.Action;
+import javax.swing.BorderFactory;
 import javax.swing.BoundedRangeModel;
 import javax.swing.Box;
 import javax.swing.Icon;
@@ -59,6 +64,8 @@ import javax.swing.event.ListDataEvent;
 import javax.swing.event.ListDataListener;
 import javax.swing.event.ListSelectionListener;
 
+import org.jdesktop.swingx.JXCollapsiblePane;
+import org.jdesktop.swingx.JXPanel;
 import org.observe.Observable;
 import org.observe.ObservableAction;
 import org.observe.ObservableValue;
@@ -89,12 +96,14 @@ import org.qommons.collect.FastFailLockingStrategy;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.RRWLockingStrategy;
+import org.qommons.io.FileUtils.FileDataSource;
 import org.qommons.io.Format;
 import org.qommons.threading.QommonsTimer;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
 
+/** This utility class simplifies the population of many styles of user interface */
 public class PanelPopulation {
 	// TODO Replace "MIG" everywhere here with "grid"
 
@@ -172,6 +181,8 @@ public class PanelPopulation {
 
 		<F> P addLabel(String fieldName, ObservableValue<F> field, Format<F> format, Consumer<FieldEditor<JLabel, ?>> modify);
 
+		P addIcon(String fieldName, ObservableValue<Icon> icon, Consumer<FieldEditor<JLabel, ?>> modify);
+
 		P addCheckField(String fieldName, SettableValue<Boolean> field, Consumer<FieldEditor<JCheckBox, ?>> modify);
 
 		/* TODO
@@ -183,7 +194,6 @@ public class PanelPopulation {
 		 * menu button
 		 * (multi-) split pane (with configurable splitter panel)
 		 * scroll pane
-		 * accordion pane?
 		 * value selector
 		 * tree
 		 * settings menu
@@ -218,6 +228,9 @@ public class PanelPopulation {
 
 		<F> P addComboField(String fieldName, SettableValue<F> value, List<? extends F> availableValues,
 			Consumer<ComboEditor<F, ?>> modify);
+
+		<F extends FileDataSource> P addFileField(String fieldName, SettableValue<F> value, boolean open,
+			Consumer<FieldEditor<ObservableFileButton<F>, ?>> modify);
 
 		// public <F> MigPanelPopulatorField<F, JToggleButton> addToggleField(String fieldName, SettableValue<F> value,
 		// boolean radio, F... availableValues) {
@@ -278,6 +291,12 @@ public class PanelPopulation {
 		}
 
 		P addHPanel(String fieldName, LayoutManager layout, Consumer<PanelPopulator<JPanel, ?>> panel);
+
+		default P addCollapsePanel(boolean vertical, String layoutType, Consumer<CollapsePanel<JXCollapsiblePane, JXPanel, ?>> panel) {
+			return addCollapsePanel(vertical, makeLayout(layoutType), panel);
+		}
+
+		P addCollapsePanel(boolean vertical, LayoutManager layout, Consumer<CollapsePanel<JXCollapsiblePane, JXPanel, ?>> panel);
 
 		@Override
 		default Alert alert(String title, String message) {
@@ -564,6 +583,15 @@ public class PanelPopulation {
 		P withHContent(LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel);
 
 		P withContent(Component component);
+	}
+
+	public interface CollapsePanel<CP extends Container, C extends Container, P extends CollapsePanel<CP, C, P>>
+	extends PanelPopulator<C, P> {
+		P withCollapsed(SettableValue<Boolean> collapsed);
+
+		P modifyCP(Consumer<CP> cp);
+
+		P withHeader(Consumer<PanelPopulator<JPanel, ?>> header);
 	}
 
 	public interface ListWidgetBuilder<R, C extends Component, P extends ListWidgetBuilder<R, C, P>> extends ComponentEditor<C, P> {
@@ -1034,10 +1062,27 @@ public class PanelPopulation {
 		@Override
 		default <F> P addLabel(String fieldName, ObservableValue<F> field, Format<F> format, Consumer<FieldEditor<JLabel, ?>> modify) {
 			JLabel label = new JLabel();
+			field.changes().takeUntil(getUntil()).act(evt -> label.setText(format.format(evt.getNewValue())));
 			SimpleFieldEditor<JLabel, ?> fieldPanel = new SimpleFieldEditor<>(fieldName, label, getLock());
 			fieldPanel.getTooltip().changes().takeUntil(getUntil()).act(evt -> fieldPanel.getEditor().setToolTipText(evt.getNewValue()));
 			if (field instanceof SettableValue) {
 				((SettableValue<F>) field).isEnabled().combine((enabled, tt) -> enabled == null ? tt : enabled, fieldPanel.getTooltip())
+				.changes().takeUntil(getUntil()).act(evt -> label.setToolTipText(evt.getNewValue()));
+			}
+			if (modify != null)
+				modify.accept(fieldPanel);
+			doAdd(fieldPanel);
+			return (P) this;
+		}
+
+		@Override
+		default P addIcon(String fieldName, ObservableValue<Icon> icon, Consumer<FieldEditor<JLabel, ?>> modify) {
+			JLabel label = new JLabel();
+			icon.changes().takeUntil(getUntil()).act(evt -> label.setIcon(evt.getNewValue()));
+			SimpleFieldEditor<JLabel, ?> fieldPanel = new SimpleFieldEditor<>(fieldName, label, getLock());
+			fieldPanel.getTooltip().changes().takeUntil(getUntil()).act(evt -> fieldPanel.getEditor().setToolTipText(evt.getNewValue()));
+			if (icon instanceof SettableValue) {
+				((SettableValue<Icon>) icon).isEnabled().combine((enabled, tt) -> enabled == null ? tt : enabled, fieldPanel.getTooltip())
 				.changes().takeUntil(getUntil()).act(evt -> label.setToolTipText(evt.getNewValue()));
 			}
 			if (modify != null)
@@ -1083,6 +1128,18 @@ public class PanelPopulation {
 			Subscription sub = ObservableComboBoxModel.comboFor(fieldPanel.getEditor(), fieldPanel.getTooltip(), fieldPanel::getTooltip,
 				observableValues, value);
 			getUntil().take(1).act(__ -> sub.unsubscribe());
+			if (modify != null)
+				modify.accept(fieldPanel);
+			doAdd(fieldPanel);
+			return (P) this;
+		}
+
+		@Override
+		default <F extends FileDataSource> P addFileField(String fieldName, SettableValue<F> value, boolean open,
+			Consumer<FieldEditor<ObservableFileButton<F>, ?>> modify) {
+			SimpleFieldEditor<ObservableFileButton<F>, ?> fieldPanel = new SimpleFieldEditor<>(fieldName,
+				new ObservableFileButton<>(value, open, getUntil()), getLock());
+			fieldPanel.getTooltip().changes().takeUntil(getUntil()).act(evt -> fieldPanel.getEditor().setToolTipText(evt.getNewValue()));
 			if (modify != null)
 				modify.accept(fieldPanel);
 			doAdd(fieldPanel);
@@ -1164,6 +1221,16 @@ public class PanelPopulation {
 			doAdd(subPanel, null, null);
 			return (P) this;
 		}
+
+		@Override
+		default P addCollapsePanel(boolean vertical, LayoutManager layout, Consumer<CollapsePanel<JXCollapsiblePane, JXPanel, ?>> panel) {
+			JXCollapsiblePane cp = new JXCollapsiblePane();
+			cp.setLayout(layout);
+			SimpleCollapsePane collapsePanel = new SimpleCollapsePane(cp, getUntil(), getLock(), vertical, layout);
+			panel.accept(collapsePanel);
+			doAdd(collapsePanel, null, null);
+			return (P) this;
+		}
 	}
 
 	static abstract class PanelPopulatorImpl<C extends Container, P extends PanelPopulatorImpl<C, P>> implements PanelPopulator<C, P> {
@@ -1219,7 +1286,7 @@ public class PanelPopulation {
 			theValueCache = new SimpleValueCache(lock);
 		}
 
-		protected Supplier<Transactable> getLock() {
+		public Supplier<Transactable> getLock() {
 			return theLock;
 		}
 
@@ -2230,6 +2297,151 @@ public class PanelPopulation {
 			isContentSet = true;
 			getEditor().add(component);
 			return (P) this;
+		}
+	}
+
+	static class SimpleCollapsePane extends AbstractComponentEditor<JXPanel, SimpleCollapsePane>
+	implements PartialPanelPopulatorImpl<JXPanel, SimpleCollapsePane>, CollapsePanel<JXCollapsiblePane, JXPanel, SimpleCollapsePane> {
+		private final JXCollapsiblePane theCollapsePane;
+		private final PartialPanelPopulatorImpl<JPanel, ?> theOuterContainer;
+		private final PartialPanelPopulatorImpl<JXPanel, ?> theContentPanel;
+		private SimpleHPanel<JPanel> theHeaderPanel;
+		private final Observable<?> theUntil;
+		private final SettableValue<Boolean> theInternalCollapsed;
+
+		private Icon theCollapsedIcon;
+		private Icon theExpandedIcon;
+
+		private SettableValue<Boolean> isCollapsed;
+		private boolean isInitialized;
+
+		SimpleCollapsePane(JXCollapsiblePane cp, Observable<?> until, Supplier<Transactable> lock, boolean vertical, LayoutManager layout) {
+			super((JXPanel) cp.getContentPane(), lock);
+			theCollapsePane = cp;
+			theCollapsePane.setLayout(layout);
+			theUntil = until;
+			if (vertical)
+				theContentPanel = new MigFieldPanel(getEditor(), getUntil(), lock);
+			else
+				theContentPanel = new SimpleHPanel(null, getEditor(), lock, getUntil());
+			theOuterContainer = new MigFieldPanel(new JPanel(), until, lock);
+			theHeaderPanel = new SimpleHPanel(null,
+				new JPanel(new JustifiedBoxLayout(false).setMainAlignment(JustifiedBoxLayout.Alignment.LEADING)), getLock(), getUntil());
+
+			theCollapsedIcon = ObservableSwingUtils.getFixedIcon(PanelPopulation.class, "/icons/circlePlus.png", 16, 16);
+			theExpandedIcon = ObservableSwingUtils.getFixedIcon(PanelPopulation.class, "/icons/circleMinus.png", 16, 16);
+			theInternalCollapsed = SettableValue.build(boolean.class).safe(false).withValue(theCollapsePane.isCollapsed()).build();
+			theInternalCollapsed.set(theCollapsePane.isCollapsed(), null);
+			theCollapsePane.addPropertyChangeListener("collapsed", evt -> {
+				boolean collapsed = Boolean.TRUE.equals(evt.getNewValue());
+				theInternalCollapsed.set(collapsed, evt);
+				if (collapsed)
+					theCollapsePane.setVisible(false);
+			});
+			theHeaderPanel.fill().decorate(cd -> cd.bold().withFontSize(16))//
+			.addIcon(null, theInternalCollapsed.map(collapsed -> collapsed ? theCollapsedIcon : theExpandedIcon),
+				icon -> icon.withTooltip(theInternalCollapsed.map(collapsed -> collapsed ? "Expand" : "Collapse")))
+			.spacer(2);
+			decorate(deco -> deco.withBorder(BorderFactory.createLineBorder(Color.black)));
+		}
+
+		@Override
+		public Component getComponent() {
+			return getOrCreateComponent(theUntil);
+		}
+
+		@Override
+		public SimpleCollapsePane withCollapsed(SettableValue<Boolean> collapsed) {
+			isCollapsed = collapsed;
+			return this;
+		}
+
+		@Override
+		public SimpleCollapsePane modifyCP(Consumer<JXCollapsiblePane> cp) {
+			cp.accept(theCollapsePane);
+			return this;
+		}
+
+		@Override
+		public SimpleCollapsePane withHeader(Consumer<PanelPopulator<JPanel, ?>> header) {
+			header.accept(theHeaderPanel);
+			return this;
+		}
+
+		@Override
+		public Observable<?> getUntil() {
+			return theUntil;
+		}
+
+		@Override
+		public void doAdd(AbstractComponentEditor<?, ?> field, Component fieldLabel, Component postLabel) {
+			theContentPanel.doAdd(field, fieldLabel, postLabel);
+		}
+
+		@Override
+		public JXPanel getContainer() {
+			return theContentPanel.getContainer();
+		}
+
+		@Override
+		protected Component getOrCreateComponent(Observable<?> until) {
+			if (!isInitialized) {
+				isInitialized = true;
+				theOuterContainer.doAdd(theHeaderPanel, null, null);
+				theOuterContainer.addComponent(null, theCollapsePane, c -> c.fill());
+				theHeaderPanel.getComponent().addMouseListener(new MouseAdapter() {
+					@Override
+					public void mouseClicked(MouseEvent e) {
+						theCollapsePane.setVisible(true);
+						theCollapsePane.setCollapsed(!theCollapsePane.isCollapsed());
+					}
+				});
+				SettableValue<Boolean> collapsed = isCollapsed;
+				if (collapsed != null) {
+					boolean[] feedback = new boolean[1];
+					collapsed.changes().act(evt -> {
+						if (feedback[0])
+							return;
+						feedback[0] = true;
+						try {
+							theCollapsePane.setCollapsed(Boolean.TRUE.equals(evt.getNewValue()));
+						} finally {
+							feedback[0] = false;
+						}
+					});
+					theCollapsePane.addPropertyChangeListener("collapsed", new PropertyChangeListener() {
+						@Override
+						public void propertyChange(PropertyChangeEvent evt) {
+							if (feedback[0])
+								return;
+							feedback[0] = true;
+							try {
+								collapsed.set(Boolean.TRUE.equals(evt.getNewValue()), evt);
+							} finally {
+								feedback[0] = false;
+							}
+						}
+					});
+				}
+				theContentPanel.getComponent(); // Initialization
+			}
+			decorate(theOuterContainer.getComponent());
+			return theOuterContainer.getComponent();
+		}
+
+		@Override
+		public ObservableValue<String> getTooltip() {
+			return null;
+		}
+
+		@Override
+		protected Component createFieldNameLabel(Observable<?> until) {
+			return null;
+		}
+
+		@Override
+		protected Component createPostLabel(Observable<?> until) {
+			return null;
 		}
 	}
 
