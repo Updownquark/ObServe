@@ -12,8 +12,10 @@ import com.google.common.reflect.TypeToken;
 
 /** Tests {@link EntityReflector} */
 public class EntityReflectorTest {
+	/** ID-tag for getter */
 	public static @interface Id {}
 
+	@SuppressWarnings("javadoc")
 	public static interface A {
 		int getId();
 
@@ -28,6 +30,7 @@ public class EntityReflectorTest {
 		}
 	}
 
+	@SuppressWarnings("javadoc")
 	public static interface B {
 		int getId();
 
@@ -43,6 +46,7 @@ public class EntityReflectorTest {
 		}
 	}
 
+	@SuppressWarnings("javadoc")
 	public static interface C extends A, B {
 		@Override
 		default int getB() {
@@ -86,6 +90,7 @@ public class EntityReflectorTest {
 		// TODO
 	}
 
+	@SuppressWarnings("javadoc")
 	public static interface D {
 		@ObjectMethodOverride(ObjectMethod.toString)
 		String getString();
@@ -93,6 +98,9 @@ public class EntityReflectorTest {
 		void setString(String s);
 	}
 
+	/**
+	 * Tests the ability to override Object methods such as {@link Object#equals(Object) equals()} and {@link Object#toString() toString()}
+	 */
 	@Test
 	public void testObjectOverride() {
 		EntityReflector<D> dRef = EntityReflector.build(TypeTokens.get().of(D.class), true).build();
