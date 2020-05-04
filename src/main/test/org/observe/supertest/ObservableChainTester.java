@@ -16,6 +16,7 @@ import org.observe.supertest.links.CollectionDerivedValues;
 import org.observe.supertest.links.CombinedCollectionLink;
 import org.observe.supertest.links.CombinedValueLink;
 import org.observe.supertest.links.DistinctCollectionLink;
+import org.observe.supertest.links.FactoringFlatMapCollectionLink;
 import org.observe.supertest.links.FilteredCollectionLink;
 import org.observe.supertest.links.FlattenedCollectionValuesLink;
 import org.observe.supertest.links.FlattenedValueBaseCollectionLink;
@@ -81,6 +82,7 @@ public class ObservableChainTester implements Testable {
 		generators.add(DistinctCollectionLink.GENERATE_SORTED);
 		generators.add(SubSetLink.GENERATE);
 		generators.add(FlattenedCollectionValuesLink.GENERATE);
+		generators.add(FactoringFlatMapCollectionLink.GENERATE);
 
 		// Derived collection value generators
 		generators.addAll(CollectionDerivedValues.GENERATORS);
@@ -127,7 +129,9 @@ public class ObservableChainTester implements Testable {
 		System.out.println(
 			"Executing up to " + QommonsUtils.printTimeLength(testDuration.toMillis()) + " of tests with max " + maxFailures + " failures");
 		TestHelper.TestSummary summary = TestHelper.createTester(getClass())//
-			.withRandomCases(-1).withMaxCaseDuration(Duration.ofSeconds(30)).withMaxTotalDuration(testDuration)
+			.withRandomCases(-1)//
+			.withMaxCaseDuration(Duration.ofMinutes(2))// Since we're using progress interval checking, this can be pretty long
+			.withMaxTotalDuration(testDuration)
 			.withMaxProgressInterval(Duration.ofSeconds(5))//
 			.withMaxFailures(maxFailures)//
 			.withConcurrency(max -> max - 1)//
