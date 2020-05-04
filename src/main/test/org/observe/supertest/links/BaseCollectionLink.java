@@ -3,7 +3,6 @@ package org.observe.supertest.links;
 import org.observe.collect.ObservableCollection;
 import org.observe.supertest.ChainLinkGenerator;
 import org.observe.supertest.CollectionLinkElement;
-import org.observe.supertest.CollectionSourcedLink;
 import org.observe.supertest.ExpectedCollectionOperation;
 import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.ObservableCollectionLink;
@@ -87,10 +86,6 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		CollectionLinkElement<T, T> linkEl = getElements().peekFirst();
 		while (el != null) {
 			linkEl.expectAdded(el.get());
-			ExpectedCollectionOperation<T, T> result = new ExpectedCollectionOperation<>(linkEl, ExpectedCollectionOperation.CollectionOpType.add, null,
-				linkEl.getValue());
-			for (CollectionSourcedLink<T, ?> derivedLink : getDerivedLinks())
-				derivedLink.expectFromSource(result);
 
 			el = getCollection().getAdjacentElement(el.getElementId(), true);
 			linkEl = CollectionElement.get(getElements().getAdjacentElement(linkEl.getElementAddress(), true));
@@ -123,19 +118,9 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 			throw new IllegalStateException("Should be using expectAdd");
 		case remove:
 			derivedOp.getElement().expectRemoval();
-			for (CollectionSourcedLink<T, ?> derivedLink : getDerivedLinks()) {
-				derivedLink.expectFromSource(//
-					new ExpectedCollectionOperation<>(derivedOp.getElement(), ExpectedCollectionOperation.CollectionOpType.remove, derivedOp.getElement().getValue(),
-						derivedOp.getElement().getValue()));
-			}
 			break;
 		case set:
-			T oldValue = derivedOp.getElement().getValue();
-			derivedOp.getElement().setValue(derivedOp.getValue());
-			for (CollectionSourcedLink<T, ?> derivedLink : getDerivedLinks()) {
-				derivedLink.expectFromSource(//
-					new ExpectedCollectionOperation<>(derivedOp.getElement(), ExpectedCollectionOperation.CollectionOpType.set, oldValue, derivedOp.getValue()));
-			}
+			derivedOp.getElement().expectSet(derivedOp.getValue());
 			break;
 		}
 	}
@@ -149,9 +134,6 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 			if (el.get().wasAdded() && !el.get().isAddExpected()
 				&& getCollection().equivalence().elementEquals(el.get().getCollectionValue(), value)) {
 				el.get().expectAdded(value);
-				for (CollectionSourcedLink<T, ?> derivedLink : getDerivedLinks())
-					derivedLink.expectFromSource(//
-						new ExpectedCollectionOperation<>(el.get(), ExpectedCollectionOperation.CollectionOpType.add, null, el.get().getCollectionValue()));
 				return el.get();
 			}
 		}

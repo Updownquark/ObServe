@@ -1053,6 +1053,9 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		} catch (UnsupportedOperationException | IllegalArgumentException e) {
 			if (msg == null)
 				throw new AssertionError("Unexpected operation exception", e);
+			if ((after == null || op.elements.get(0).element.getCollectionAddress().compareTo(after) >= 0)//
+				&& (before == null || op.elements.get(0).element.getCollectionAddress().compareTo(before) <= 0))
+				throw new AssertionError("Trivial movement operations should never be rejected");
 			error = true;
 		}
 

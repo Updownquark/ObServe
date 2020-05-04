@@ -15,8 +15,6 @@ import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.ChainLinkGenerator;
 import org.observe.supertest.CollectionLinkElement;
-import org.observe.supertest.CollectionSourcedLink;
-import org.observe.supertest.ExpectedCollectionOperation;
 import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.ObservableCollectionLink;
 import org.observe.supertest.ObservableCollectionTestDef;
@@ -190,11 +188,8 @@ public class MappedCollectionLink<S, T> extends AbstractMappedCollectionLink<S, 
 	 */
 	protected void expectMapChange(TypeTransformation<S, T> oldMap, TypeTransformation<S, T> newMap) {
 		for (CollectionLinkElement<S, T> element : getElements()) {
-			T oldValue = element.getValue();
 			T newValue = newMap.map(element.getFirstSource().getValue());
-			element.setValue(newValue);
-			for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
-				derived.expectFromSource(new ExpectedCollectionOperation<>(element, ExpectedCollectionOperation.CollectionOpType.set, oldValue, newValue));
+			element.expectSet(newValue);
 		}
 	}
 

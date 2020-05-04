@@ -17,8 +17,6 @@ import org.observe.collect.Combination.CombinedFlowDef;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.ChainLinkGenerator;
 import org.observe.supertest.CollectionLinkElement;
-import org.observe.supertest.CollectionSourcedLink;
-import org.observe.supertest.ExpectedCollectionOperation;
 import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.ObservableChainTester;
 import org.observe.supertest.ObservableCollectionLink;
@@ -205,11 +203,8 @@ public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLin
 	 */
 	protected void expectValueChange(V oldCombinedValue, V newCombinedValue) {
 		for (CollectionLinkElement<S, T> element : getElements()) {
-			T oldValue = element.getValue();
 			T newValue = theOperation.map(element.getFirstSource().getValue(), newCombinedValue);
-			element.setValue(newValue);
-			for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
-				derived.expectFromSource(new ExpectedCollectionOperation<>(element, ExpectedCollectionOperation.CollectionOpType.set, oldValue, newValue));
+			element.expectSet(newValue);
 		}
 	}
 

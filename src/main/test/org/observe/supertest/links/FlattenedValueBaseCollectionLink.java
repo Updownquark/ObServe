@@ -5,12 +5,10 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.function.Function;
 
-import org.junit.Assert;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.supertest.ChainLinkGenerator;
 import org.observe.supertest.CollectionLinkElement;
-import org.observe.supertest.CollectionSourcedLink;
 import org.observe.supertest.ExpectedCollectionOperation;
 import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.ObservableChainTester;
@@ -115,24 +113,16 @@ public class FlattenedValueBaseCollectionLink<T> extends BaseCollectionLink<T> {
 			return;
 		Iterator<CollectionLinkElement<T, T>> elements = getElements().iterator();
 		if (oldCollection != null) {
-			for (T value : oldCollection) {
+			for (@SuppressWarnings("unused")
+			T value : oldCollection) {
 				CollectionLinkElement<T, T> element = elements.next();
 				element.expectRemoval();
-				for (CollectionSourcedLink<T, ?> derived : getDerivedLinks()) {
-					Assert.assertTrue(oldCollection.equivalence().elementEquals(value, element.getValue()));
-					derived.expectFromSource(//
-						new ExpectedCollectionOperation<>(element, ExpectedCollectionOperation.CollectionOpType.remove, value, value));
-				}
 			}
 		}
 		if (newCollection != null) {
 			for (T value : newCollection) {
 				CollectionLinkElement<T, T> element = elements.next();
 				element.expectAdded(value);
-				for (CollectionSourcedLink<T, ?> derived : getDerivedLinks()) {
-					derived.expectFromSource(//
-						new ExpectedCollectionOperation<>(element, ExpectedCollectionOperation.CollectionOpType.add, value, value));
-				}
 			}
 		}
 	}

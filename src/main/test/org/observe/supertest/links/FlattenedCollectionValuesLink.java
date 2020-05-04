@@ -7,7 +7,6 @@ import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.ChainLinkGenerator;
 import org.observe.supertest.CollectionLinkElement;
-import org.observe.supertest.CollectionSourcedLink;
 import org.observe.supertest.ExpectedCollectionOperation;
 import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.ObservableChainTester;
@@ -151,21 +150,14 @@ public class FlattenedCollectionValuesLink<S, T> extends AbstractMappedCollectio
 	protected void expectBucketChange(MapEntryHandle<S, SettableValue<T>> entry, T oldValue, T newValue,
 		CollectionLinkElement<S, T> first) {
 		if (first != null) {
-			first.setValue(newValue);
-			for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
-				derived.expectFromSource(//
-					new ExpectedCollectionOperation<>(first, ExpectedCollectionOperation.CollectionOpType.set, oldValue, newValue));
+			first.expectSet(newValue);
 		}
 		for (CollectionLinkElement<S, T> element : getElements()) {
 			if (element == first)
 				continue;
 			S sourceValue = element.getFirstSource().getValue();
-			if (entry.getElementId().equals(getBucket(sourceValue).getElementId())) {
-				element.setValue(newValue);
-				for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
-					derived.expectFromSource(//
-						new ExpectedCollectionOperation<>(element, ExpectedCollectionOperation.CollectionOpType.set, oldValue, newValue));
-			}
+			if (entry.getElementId().equals(getBucket(sourceValue).getElementId()))
+				element.expectSet(newValue);
 		}
 	}
 

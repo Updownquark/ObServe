@@ -2,7 +2,6 @@ package org.observe.supertest.links;
 
 import org.junit.Assert;
 import org.observe.supertest.CollectionLinkElement;
-import org.observe.supertest.CollectionSourcedLink;
 import org.observe.supertest.ExpectedCollectionOperation;
 import org.observe.supertest.ObservableCollectionLink;
 import org.observe.supertest.ObservableCollectionTestDef;
@@ -130,28 +129,14 @@ public abstract class OneToOneCollectionLink<S, T> extends ObservableCollectionL
 		T value = map(sourceEl.getValue());
 		CollectionLinkElement<S, T> newElement = (CollectionLinkElement<S, T>) sourceEl.getDerivedElements(getSiblingIndex()).getFirst();
 		newElement.expectAdded(value);
-		ExpectedCollectionOperation<S, T> result = new ExpectedCollectionOperation<>(newElement,
-			ExpectedCollectionOperation.CollectionOpType.add, null, newElement.getValue());
-		for (CollectionSourcedLink<T, ?> derivedLink : getDerivedLinks())
-			derivedLink.expectFromSource(result);
 	}
 
 	private void expectRemoveFromSource(CollectionLinkElement<?, S> sourceEl, S oldSrcValue) {
-		CollectionLinkElement<S, T> element = (CollectionLinkElement<S, T>) sourceEl.getDerivedElements(getSiblingIndex()).getFirst()
-			.expectRemoval();
-		ExpectedCollectionOperation<S, T> result = new ExpectedCollectionOperation<>(element,
-			ExpectedCollectionOperation.CollectionOpType.remove, element.getValue(), element.getValue());
-		for (CollectionSourcedLink<T, ?> derivedLink : getDerivedLinks())
-			derivedLink.expectFromSource(result);
+		sourceEl.getDerivedElements(getSiblingIndex()).getFirst().expectRemoval();
 	}
 
 	private void expectChangeFromSource(CollectionLinkElement<?, S> sourceEl, S oldSrcValue) {
 		CollectionLinkElement<S, T> element = (CollectionLinkElement<S, T>) sourceEl.getDerivedElements(getSiblingIndex()).getFirst();
-		T oldValue = element.getValue();
-		element.setValue(map(sourceEl.getValue()));
-		ExpectedCollectionOperation<S, T> result = new ExpectedCollectionOperation<>(element,
-			ExpectedCollectionOperation.CollectionOpType.set, oldValue, element.getValue());
-		for (CollectionSourcedLink<T, ?> derivedLink : getDerivedLinks())
-			derivedLink.expectFromSource(result);
+		element.expectSet(map(sourceEl.getValue()));
 	}
 }

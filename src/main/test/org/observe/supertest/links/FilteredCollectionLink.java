@@ -13,7 +13,6 @@ import org.observe.SimpleSettableValue;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.ChainLinkGenerator;
 import org.observe.supertest.CollectionLinkElement;
-import org.observe.supertest.CollectionSourcedLink;
 import org.observe.supertest.ExpectedCollectionOperation;
 import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.ObservableCollectionLink;
@@ -143,16 +142,10 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
 				CollectionLinkElement<T, T> linkEl = (CollectionLinkElement<T, T>) sourceEl.getDerivedElements(getSiblingIndex())
 					.getFirst();
 				linkEl.expectAdded(sourceEl.getValue());
-				for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
-					derived.expectFromSource(
-						new ExpectedCollectionOperation<>(linkEl, ExpectedCollectionOperation.CollectionOpType.add, linkEl.getValue(), linkEl.getValue()));
 			} else { // Was included, now excluded
 				CollectionLinkElement<T, T> linkEl = (CollectionLinkElement<T, T>) sourceEl.getDerivedElements(getSiblingIndex())
 					.getFirst();
 				linkEl.expectRemoval();
-				for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
-					derived.expectFromSource(
-						new ExpectedCollectionOperation<>(linkEl, ExpectedCollectionOperation.CollectionOpType.remove, linkEl.getValue(), linkEl.getValue()));
 			}
 		}
 	}
@@ -210,7 +203,6 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	@Override
 	public void expectFromSource(ExpectedCollectionOperation<?, T> sourceOp) {
 		CollectionLinkElement<T, T> element;
-		ExpectedCollectionOperation<?, T> op;
 		switch (sourceOp.getType()) {
 		case add:
 			String msg = theFilterValue.get().apply(sourceOp.getValue());
@@ -218,7 +210,6 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
 				return;
 			element = (CollectionLinkElement<T, T>) sourceOp.getElement().getDerivedElements(getSiblingIndex()).getFirst();
 			element.expectAdded(sourceOp.getValue());
-			op = new ExpectedCollectionOperation<>(element, sourceOp.getType(), sourceOp.getOldValue(), sourceOp.getValue());
 			break;
 		case remove:
 			msg = theFilterValue.get().apply(sourceOp.getOldValue());
@@ -226,7 +217,6 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
 				return;
 			element = (CollectionLinkElement<T, T>) sourceOp.getElement().getDerivedElements(getSiblingIndex()).getFirst();
 			element.expectRemoval();
-			op = new ExpectedCollectionOperation<>(element, sourceOp.getType(), sourceOp.getOldValue(), sourceOp.getValue());
 			break;
 		case set:
 			String preMsg = theFilterValue.get().apply(sourceOp.getOldValue());
@@ -237,26 +227,19 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
 				// Filtered out before, but now included
 				element = (CollectionLinkElement<T, T>) sourceOp.getElement().getDerivedElements(getSiblingIndex()).getFirst();
 				element.expectAdded(sourceOp.getValue());
-				op = new ExpectedCollectionOperation<>(element, ExpectedCollectionOperation.CollectionOpType.add, null, sourceOp.getValue());
 			} else if (postMsg != null) {
 				// Included before, but now filtered out
 				element = (CollectionLinkElement<T, T>) sourceOp.getElement().getDerivedElements(getSiblingIndex()).getFirst();
 				element.expectRemoval();
-				op = new ExpectedCollectionOperation<>(element, ExpectedCollectionOperation.CollectionOpType.remove, sourceOp.getOldValue(),
-					sourceOp.getOldValue());
 			} else {
 				// Included before and after
 				element = (CollectionLinkElement<T, T>) sourceOp.getElement().getDerivedElements(getSiblingIndex()).getFirst();
-				element.setValue(sourceOp.getValue());
-				op = new ExpectedCollectionOperation<>(element, sourceOp.getType(), sourceOp.getOldValue(), sourceOp.getValue());
+				element.expectSet(sourceOp.getValue());
 			}
 			break;
 		default:
 			throw new IllegalStateException();
 		}
-
-		for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
-			derived.expectFromSource(op);
 	}
 
 	@Override

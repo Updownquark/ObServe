@@ -5,7 +5,6 @@ import java.util.Comparator;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.supertest.ChainLinkGenerator;
 import org.observe.supertest.CollectionLinkElement;
-import org.observe.supertest.CollectionSourcedLink;
 import org.observe.supertest.ExpectedCollectionOperation;
 import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.ObservableCollectionLink;
@@ -193,10 +192,7 @@ public class SubSetLink<T> extends ObservableCollectionLink<T, T> {
 			if (isInBound(sourceOp.getValue())) {
 				CollectionLinkElement<T, T> element = (CollectionLinkElement<T, T>) sourceOp.getElement()
 					.getDerivedElements(getSiblingIndex()).getFirst();
-				T oldValue = element.getValue();
 				element.expectAdded(sourceOp.getValue());
-				for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
-					derived.expectFromSource(new ExpectedCollectionOperation<>(element, sourceOp.getType(), oldValue, sourceOp.getValue()));
 			}
 			break;
 		case remove:
@@ -204,9 +200,6 @@ public class SubSetLink<T> extends ObservableCollectionLink<T, T> {
 				CollectionLinkElement<T, T> element = (CollectionLinkElement<T, T>) sourceOp.getElement()
 					.getDerivedElements(getSiblingIndex()).getFirst();
 				element.expectRemoval();
-				for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
-					derived.expectFromSource(
-						new ExpectedCollectionOperation<>(element, sourceOp.getType(), element.getValue(), sourceOp.getValue()));
 			}
 			break;
 		case set:
@@ -215,26 +208,13 @@ public class SubSetLink<T> extends ObservableCollectionLink<T, T> {
 			if (wasContained || isContained) {
 				CollectionLinkElement<T, T> element = (CollectionLinkElement<T, T>) sourceOp.getElement()
 					.getDerivedElements(getSiblingIndex()).getFirst();
-				T oldValue = element.getValue();
 				if (wasContained) {
-					if (isContained) {
-						element.setValue(sourceOp.getValue());
-						for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
-							derived.expectFromSource(
-								new ExpectedCollectionOperation<>(element, sourceOp.getType(), oldValue, sourceOp.getValue()));
-					} else {
+					if (isContained)
+						element.expectSet(sourceOp.getValue());
+					else
 						element.expectRemoval();
-						for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
-							derived.expectFromSource(
-								new ExpectedCollectionOperation<>(element, ExpectedCollectionOperation.CollectionOpType.remove, element.getValue(),
-									sourceOp.getValue()));
-					}
-				} else if (isContained) {
+				} else if (isContained)
 					element.expectAdded(sourceOp.getValue());
-					for (CollectionSourcedLink<T, ?> derived : getDerivedLinks())
-						derived.expectFromSource(
-							new ExpectedCollectionOperation<>(element, ExpectedCollectionOperation.CollectionOpType.add, oldValue, sourceOp.getValue()));
-				}
 			}
 			break;
 		case move:

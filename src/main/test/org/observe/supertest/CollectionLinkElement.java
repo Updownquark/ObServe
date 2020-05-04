@@ -6,6 +6,7 @@ import java.util.function.Consumer;
 
 import org.junit.Assert;
 import org.observe.collect.ObservableCollection;
+import org.observe.supertest.ExpectedCollectionOperation.CollectionOpType;
 import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedSet;
@@ -85,11 +86,6 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 	/** @return The value of this element, as last known by the collection link */
 	public T getValue() {
 		return theValue;
-	}
-
-	/** @param value The new value to expect in element */
-	public void setValue(T value) {
-		theValue = value;
 	}
 
 	/** @return The address of this element in the link's {@link ObservableCollectionLink#getElements() elements} */
@@ -213,6 +209,9 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 		else
 			isAddExpected++;
 		theValue = value;
+		ExpectedCollectionOperation<S, T> op = new ExpectedCollectionOperation<>(this, CollectionOpType.add, null, value);
+		for (CollectionSourcedLink<T, ?> derived : theCollectionLink.getDerivedLinks())
+			derived.expectFromSource(op);
 		return this;
 	}
 
@@ -223,7 +222,19 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 	 */
 	public CollectionLinkElement<S, T> expectRemoval() {
 		isRemoveExpected = true;
+		ExpectedCollectionOperation<S, T> op = new ExpectedCollectionOperation<>(this, CollectionOpType.remove, theValue, theValue);
+		for (CollectionSourcedLink<T, ?> derived : theCollectionLink.getDerivedLinks())
+			derived.expectFromSource(op);
 		return this;
+	}
+
+	/** @param value The new value to expect in element */
+	public void expectSet(T value) {
+		T oldValue = theValue;
+		theValue = value;
+		ExpectedCollectionOperation<S, T> op = new ExpectedCollectionOperation<>(this, CollectionOpType.set, oldValue, theValue);
+		for (CollectionSourcedLink<T, ?> derived : theCollectionLink.getDerivedLinks())
+			derived.expectFromSource(op);
 	}
 
 	/**
