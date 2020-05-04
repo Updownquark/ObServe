@@ -358,7 +358,12 @@ public class ObservableSetImpl {
 
 		@Override
 		public ActiveSetManager<E, ?, T> manageActive() {
-			return new DistinctManager<>(getParent().manageActive(), equivalence(), isAlwaysUsingFirst, isPreservingSourceOrder);
+			DistinctManager<E, T> mgr = new DistinctManager<>(getParent().manageActive(), equivalence(), isAlwaysUsingFirst,
+				isPreservingSourceOrder);
+			Debug.DebugData d = Debug.d().debug(this);
+			if (d.isActive())
+				mgr.theDebug = Debug.d().debug(mgr, true).merge(d);
+			return mgr;
 		}
 	}
 
@@ -600,7 +605,7 @@ public class ObservableSetImpl {
 			isAlwaysUsingFirst = alwaysUseFirst;
 			isPreservingSourceOrder = preserveSourceOrder;
 
-			theDebug = Debug.d().debug(DistinctManager.class).add("distinct");
+			theDebug = Debug.d().debug(this);
 		}
 
 		@Override
@@ -770,7 +775,7 @@ public class ObservableSetImpl {
 					CollectionElement<T> newValueId = theElementsByValue.keySet().move(ue.theValueId, //
 						after == null ? null : ((UniqueElement) after).theValueId,
 							before == null ? null : ((UniqueElement) before).theValueId, first, () -> {
-							ObservableCollectionActiveManagers.removed(ue.theListener, ue.theValue, null);
+								ObservableCollectionActiveManagers.removed(ue.theListener, ue.theValue, null);
 							});
 					if (newValueId.getElementId().equals(ue.theValueId))
 						return ue;
@@ -933,14 +938,17 @@ public class ObservableSetImpl {
 					theValueId = theElementsByValue.getEntry(theValue).getElementId();
 				boolean only = theParentElements.isEmpty();
 				BinaryTreeEntry<DerivedCollectionElement<T>, T> node = theParentElements.putEntry(parentEl, parentEl.get(), false);
-				theDebug.debugIf(!theDebug.is("internalAdd")).act("addSource").param("@", theValue).exec();
+				if (node == null) {
+					theDebug.act("duplicate").param("value", theValue).exec();
+					throw new IllegalStateException("Duplicate parent added: " + parentEl);
+				}
 				if (only) {
 					// The parent is the first representing this element
 					theDebug.act("add:new").param("value", theValue).exec();
 					theActiveElement = parentEl;
 					theAccepter.accept(this, cause);
 				} else if (isAlwaysUsingFirst && node.getClosest(true) == null) {
-					theDebug.act("add:representativeChanged").param("value", theValue).exec();
+					theDebug.act("add:repChange").param("value", theValue).exec();
 					// The new element takes precedence over the current one
 					T oldValue = theActiveElement.get();
 					T newActiveValue = parentEl.get();
@@ -1041,7 +1049,7 @@ public class ObservableSetImpl {
 							} else if (theActiveElement == parentEl) {
 								Map.Entry<DerivedCollectionElement<T>, T> activeEntry = theParentElements.firstEntry();
 								theActiveElement = activeEntry.getKey();
-								theDebug.act("update:remove:representativeChange").exec();
+								theDebug.act("update:remove:repChange").exec();
 								theValue = activeEntry.getValue();
 								if (realOldValue != theValue)
 									ObservableCollectionActiveManagers.update(theListener, realOldValue, theValue, innerCause);
@@ -1064,7 +1072,6 @@ public class ObservableSetImpl {
 
 					@Override
 					public void removed(T value, Object innerCause) {
-						theDebug.act("remove").param("@", theValue).exec();
 						theParentElements
 						.mutableEntry(//
 							node.getElementId())//
@@ -1075,7 +1082,7 @@ public class ObservableSetImpl {
 							theElementsByValue.mutableEntry(theValueId).remove();
 							ObservableCollectionActiveManagers.removed(theListener, theValue, innerCause);
 						} else if (theActiveElement == parentEl) {
-							theDebug.act("remove:representativeChange").exec();
+							theDebug.act("remove:repChange").exec();
 							Map.Entry<DerivedCollectionElement<T>, T> activeEntry = theParentElements.firstEntry();
 							theActiveElement = activeEntry.getKey();
 							T oldValue = theValue;

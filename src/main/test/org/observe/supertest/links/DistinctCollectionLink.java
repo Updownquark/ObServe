@@ -22,6 +22,7 @@ import org.qommons.TestHelper;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.debug.Debug;
 import org.qommons.tree.BetterTreeList;
 
 /**
@@ -31,6 +32,8 @@ import org.qommons.tree.BetterTreeList;
  * @param <T> The type of the collection values
  */
 public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
+	private static final String DEBUG_PATH = null;
+
 	/** Generates {@link DistinctCollectionLink}s to test {@link org.observe.collect.ObservableCollection.CollectionDataFlow#distinct()} */
 	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator() {
 		@Override
@@ -57,6 +60,11 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 			}
 			oneStepFlow = oneStepFlow.distinct(opts -> opts.isUseFirst());
 			multiStepFlow = multiStepFlow.distinct(opts -> opts.isUseFirst());
+			if(path.equals(DEBUG_PATH)){
+				Debug.d().debug(multiStepFlow, true).onAction(action -> {
+					System.out.println(Integer.toHexString(action.getData().getValue().hashCode()) + ":" + action);
+				});
+			}
 			ObservableCollectionTestDef<T> def = new ObservableCollectionTestDef<>(sourceLink.getType(), oneStepFlow, multiStepFlow, false,
 				true);
 			DistinctCollectionLink<T> derived = new DistinctCollectionLink<>(path, sourceCL, def, null, options.isUseFirst(), helper);
