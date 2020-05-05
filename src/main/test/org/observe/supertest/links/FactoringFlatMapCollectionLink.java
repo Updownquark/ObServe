@@ -10,6 +10,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.junit.Assert;
 import org.observe.collect.ObservableCollection;
+import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.ChainLinkGenerator;
 import org.observe.supertest.CollectionLinkElement;
 import org.observe.supertest.ExpectedCollectionOperation;
@@ -27,18 +28,21 @@ import org.qommons.io.TextParseException;
 /** Simple flat-map test that maps integer-typed collections to the factorization of each element */
 public class FactoringFlatMapCollectionLink extends AbstractFlatMappedCollectionLink<Integer, Integer> {
 	/** Generates {@link FactoringFlatMapCollectionLink}s */
-	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator() {
+	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator.CollectionLinkGenerator() {
 		@Override
-		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
+		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink, TestValueType targetType) {
 			if (PRIME_INTS == null || !(sourceLink instanceof ObservableCollectionLink))
 				return 0;
 			else if (sourceLink.getType() != TestValueType.INT)
+				return 0;
+			else if (targetType != null && targetType != TestValueType.INT)
 				return 0;
 			return .5; // This link can be quite expensive, so we'll use it more sparingly
 		}
 
 		@Override
-		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+		public <T, X> ObservableCollectionLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestValueType targetType,
+			TestHelper helper) {
 			ObservableCollectionLink<?, Integer> sourceCL = (ObservableCollectionLink<?, Integer>) sourceLink;
 			ObservableCollection.CollectionDataFlow<?, ?, Integer> oneStepFlow = sourceCL.getCollection().flow()
 				.flatMap(TypeTokens.get().INT, i -> getPrimeFactors(i).flow());
@@ -46,11 +50,11 @@ public class FactoringFlatMapCollectionLink extends AbstractFlatMappedCollection
 			// and eclipse flags it with a warning, but if I remove it, there's an error.
 			// But the error doesn't actually seem to be a compile error, because the class will still run.
 			@SuppressWarnings("cast")
-			ObservableCollection.CollectionDataFlow<?, ?, Integer> multiStepFlow = (ObservableCollection.CollectionDataFlow<?, ?, Integer>) sourceCL
-				.getDef().multiStepFlow.flatMap(TypeTokens.get().INT, i -> getPrimeFactors(i).flow());
+			ObservableCollection.CollectionDataFlow<?, ?, Integer> multiStepFlow = (CollectionDataFlow<?, ?, Integer>) sourceCL
+			.getDef().multiStepFlow.flatMap(TypeTokens.get().INT, i -> getPrimeFactors(i).flow());
 			ObservableCollectionTestDef<Integer> def = new ObservableCollectionTestDef<>(TestValueType.INT, oneStepFlow, multiStepFlow,
 				sourceCL.getDef().orderImportant, sourceCL.getDef().checkOldValues);
-			return (ObservableChainLink<T, X>) new FactoringFlatMapCollectionLink(path, sourceCL, def, helper);
+			return (ObservableCollectionLink<T, X>) new FactoringFlatMapCollectionLink(path, sourceCL, def, helper);
 		}
 	};
 

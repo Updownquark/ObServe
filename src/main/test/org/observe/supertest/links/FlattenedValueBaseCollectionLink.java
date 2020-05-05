@@ -12,6 +12,7 @@ import org.observe.supertest.CollectionLinkElement;
 import org.observe.supertest.ExpectedCollectionOperation;
 import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.ObservableChainTester;
+import org.observe.supertest.ObservableCollectionLink;
 import org.observe.supertest.ObservableCollectionTestDef;
 import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
@@ -28,19 +29,20 @@ import com.google.common.reflect.TypeToken;
  */
 public class FlattenedValueBaseCollectionLink<T> extends BaseCollectionLink<T> {
 	/** Generates a root {@link FlattenedValueBaseCollectionLink} */
-	public static final ChainLinkGenerator GENERATE_FLATTENED = new ChainLinkGenerator() {
+	public static final ChainLinkGenerator GENERATE_FLATTENED = new ChainLinkGenerator.CollectionLinkGenerator() {
 		@Override
-		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
+		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink, TestValueType targetType) {
 			if (sourceLink != null)
 				return 0;
 			return 0.1;
 		}
 
 		@Override
-		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+		public <T, X> ObservableCollectionLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestValueType targetType,
+			TestHelper helper) {
 			int collectionCount = helper.getInt(2, 4);
 			List<ObservableCollection<X>> collections = new ArrayList<>(collectionCount);
-			TestValueType type = nextType(helper);
+			TestValueType type = targetType != null ? targetType : nextType(helper);
 			TypeToken<X> collectionType = (TypeToken<X>) type.getType();
 			for (int i = 0; i < collectionCount; i++)
 				collections.add(ObservableCollection.build(collectionType).build());
@@ -67,7 +69,7 @@ public class FlattenedValueBaseCollectionLink<T> extends BaseCollectionLink<T> {
 			ObservableCollection<X> flatCollection = ObservableCollection.flattenValue(collectionValue);
 			ObservableCollectionTestDef<X> def = new ObservableCollectionTestDef<>(type, flatCollection.flow(), flatCollection.flow(), true,
 				true);
-			return (ObservableChainLink<T, X>) new FlattenedValueBaseCollectionLink<>(path, def, helper, collections, collectionValue);
+			return (ObservableCollectionLink<T, X>) new FlattenedValueBaseCollectionLink<>(path, def, helper, collections, collectionValue);
 		}
 	};
 

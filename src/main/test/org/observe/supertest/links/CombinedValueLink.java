@@ -16,6 +16,7 @@ import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.ObservableChainTester;
 import org.observe.supertest.ObservableValueLink;
 import org.observe.supertest.OperationRejection;
+import org.observe.supertest.TestValueType;
 import org.observe.supertest.ValueSourcedLink;
 import org.observe.supertest.links.CombinedCollectionLink.BiTypeTransformation;
 import org.qommons.TestHelper;
@@ -38,19 +39,20 @@ public class CombinedValueLink<S, V, T> extends ObservableValueLink<S, T> implem
 	/** Generates {@link CombinedValueLink}s */
 	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator() {
 		@Override
-		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
+		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink, TestValueType targetType) {
 			if (!(sourceLink instanceof ObservableValueLink))
 				return 0;
 			ObservableValueLink<?, T> sourceVL = (ObservableValueLink<?, T>) sourceLink;
-			if (sourceVL.isTypeCheat() || !CombinedCollectionLink.supportsTransform(sourceVL.getType(), true, false))
+			if (sourceVL.isTypeCheat() || !CombinedCollectionLink.supportsTransform(sourceVL.getType(), targetType, true, false))
 				return 0;
 			return 1;
 		}
 
 		@Override
-		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestValueType targetType,
+			TestHelper helper) {
 			ObservableValueLink<?, T> sourceCL = (ObservableValueLink<?, T>) sourceLink;
-			BiTypeTransformation<T, ?, X> transform = CombinedCollectionLink.transform(sourceCL.getType(), helper, true, false);
+			BiTypeTransformation<T, ?, X> transform = CombinedCollectionLink.transform(sourceCL.getType(), targetType, helper, true, false);
 			return deriveLink(path, sourceCL, transform, helper);
 		}
 

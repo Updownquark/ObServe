@@ -8,6 +8,7 @@ import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.ObservableCollectionLink;
 import org.observe.supertest.ObservableCollectionTestDef;
 import org.observe.supertest.OperationRejection;
+import org.observe.supertest.TestValueType;
 import org.qommons.TestHelper;
 
 /**
@@ -17,16 +18,19 @@ import org.qommons.TestHelper;
  */
 public class ReversedCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 	/** Generates {@link ReversedCollectionLink}s */
-	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator() {
+	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator.CollectionLinkGenerator() {
 		@Override
-		public <T> double getAffinity(ObservableChainLink<?, T> link) {
+		public <T> double getAffinity(ObservableChainLink<?, T> link, TestValueType targetType) {
 			if (!(link instanceof ObservableCollectionLink))
+				return 0;
+			else if (targetType != null && targetType != link.getType())
 				return 0;
 			return 1;
 		}
 
 		@Override
-		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+		public <T, X> ObservableCollectionLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestValueType targetType,
+			TestHelper helper) {
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
 			CollectionDataFlow<?, ?, T> oneStepFlow;
 			if (helper.getBoolean())

@@ -35,21 +35,22 @@ import com.google.common.reflect.TypeToken;
  */
 public class MappedCollectionLink<S, T> extends AbstractMappedCollectionLink<S, T> {
 	/** Generates {@link MappedCollectionLink}s */
-	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator() {
+	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator.CollectionLinkGenerator() {
 		@Override
-		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
+		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink, TestValueType targetType) {
 			if (!(sourceLink instanceof ObservableCollectionLink))
 				return 0;
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
-			if (!MappedCollectionLink.supportsTransform(sourceCL.getDef().type, true, false))
+			if (!MappedCollectionLink.supportsTransform(sourceCL.getDef().type, targetType, true, false))
 				return 0;
 			return 1;
 		}
 
 		@Override
-		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+		public <T, X> ObservableCollectionLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestValueType targetType,
+			TestHelper helper) {
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
-			TypeTransformation<T, X> transform = MappedCollectionLink.transform(sourceCL.getDef().type, helper, true, false);
+			TypeTransformation<T, X> transform = MappedCollectionLink.transform(sourceCL.getDef().type, targetType, helper, true, false);
 			SimpleSettableValue<TypeTransformation<T, X>> txValue = new SimpleSettableValue<>(
 				(TypeToken<TypeTransformation<T, X>>) (TypeToken<?>) new TypeToken<Object>() {}, false);
 			txValue.set(transform, null);
@@ -195,79 +196,63 @@ public class MappedCollectionLink<S, T> extends AbstractMappedCollectionLink<S, 
 
 	/**
 	 * @param sourceType The type to transform
+	 * @param targetType The target type for the transform, or null if unspecified
 	 * @param allowManyToOne Whether {@link TypeTransformation#isManyToOne() many-to-one} transformations are acceptable
 	 * @param requireReversible Whether acceptable mappings must {@link TypeTransformation#supportsReverse() support reversal}
 	 * @return Whether any acceptable transformations exist
 	 */
-	public static boolean supportsTransform(TestValueType sourceType, boolean allowManyToOne, boolean requireReversible) {
+	public static boolean supportsTransform(TestValueType sourceType, TestValueType targetType, boolean allowManyToOne,
+		boolean requireReversible) {
 		List<? extends TypeTransformation<?, ?>> transforms = TYPE_TRANSFORMATIONS.get(sourceType);
 		if (transforms == null || transforms.isEmpty())
 			return false;
 		if (!allowManyToOne || requireReversible) {
 			boolean supported = false;
 			for (TypeTransformation<?, ?> transform : transforms) {
-				if (!allowManyToOne && transform.isManyToOne()) {} else if (requireReversible && !transform.supportsReverse()) {} else {
+				if (!allowManyToOne && transform.isManyToOne()) {//
+				} else if (requireReversible && !transform.supportsReverse()) {//
+				} else if (targetType != null && transform.getType() != targetType) {//
+				} else {
 					supported = true;
 					break;
 				}
 			}
 			return supported;
 		}
-		return true;
+		return false;
 	}
 
 	/**
 	 * @param <E> The source type
 	 * @param <T> The target type
 	 * @param type The source type to transform
+	 * @param targetType The target type for the transform, or null if unspecified
 	 * @param helper The randomness to use to get a random transformation
 	 * @param allowManyToOne Whether {@link TypeTransformation#isManyToOne() many-to-one} transformations are acceptable
 	 * @param requireReversible Whether acceptable mappings must {@link TypeTransformation#supportsReverse() support reversal}
 	 * @return The transformation
 	 */
-	public static <E, T> TypeTransformation<E, T> transform(TestValueType type, TestHelper helper, boolean allowManyToOne,
+	public static <E, T> TypeTransformation<E, T> transform(TestValueType type, TestValueType targetType, TestHelper helper,
+		boolean allowManyToOne,
 		boolean requireReversible) {
-		List<? extends TypeTransformation<E, ?>> transforms = (List<? extends TypeTransformation<E, ?>>) TYPE_TRANSFORMATIONS.get(type);
-		if ((!allowManyToOne || requireReversible) && !supportsTransform(type, allowManyToOne, requireReversible))
-			throw new UnsupportedOperationException();
-		TypeTransformation<E, ?> transform;
-		while (true) {
-			if (transforms.size() == 1)
-				transform = transforms.get(0);
-			else
-				transform = transforms.get(helper.getInt(0, transforms.size()));
-			if (!allowManyToOne && transform.isManyToOne())
-				continue;
-			else if (requireReversible && !transform.supportsReverse())
-				continue;
-			else
-				break;
-		}
-		return (TypeTransformation<E, T>) transform;
-	}
-
-	/**
-	 * @param <E> The source type
-	 * @param <T> The target type
-	 * @param sourceType The source type to transform
-	 * @param destType The target type to transform values into
-	 * @param helper The randomness to use to get a random transformation
-	 * @param allowManyToOne Whether {@link TypeTransformation#isManyToOne() many-to-one} transformations are acceptable
-	 * @param requireReversible Whether acceptable mappings must {@link TypeTransformation#supportsReverse() support reversal}
-	 * @return The transformation
-	 */
-	public static <E, T> TypeTransformation<E, T> transform(TestValueType sourceType, TestValueType destType, TestHelper helper,
-		boolean allowManyToOne, boolean requireReversible) {
-		List<? extends TypeTransformation<E, ?>> transforms = (List<? extends TypeTransformation<E, ?>>) TYPE_TRANSFORMATIONS
-			.get(sourceType).stream().filter(transform -> transform.getType() == destType).filter(transform -> {
+		List<? extends TypeTransformation<E, ?>> transforms = (List<? extends TypeTransformation<E, ?>>) TYPE_TRANSFORMATIONS.get(type)
+			.stream().filter(transform -> {
 				if (!allowManyToOne && transform.isManyToOne())
 					return false;
 				else if (requireReversible && !transform.supportsReverse())
 					return false;
+				else if (targetType != null && transform.getType() != targetType)
+					return false;
 				else
 					return true;
 			}).collect(Collectors.toList());
-		TypeTransformation<E, ?> transform = transforms.get(helper.getInt(0, transforms.size()));
+		if ((!allowManyToOne || requireReversible) && !supportsTransform(type, targetType, allowManyToOne, requireReversible))
+			throw new UnsupportedOperationException();
+		TypeTransformation<E, ?> transform;
+		if (transforms.size() == 1)
+			transform = transforms.get(0);
+		else
+			transform = transforms.get(helper.getInt(0, transforms.size()));
 		return (TypeTransformation<E, T>) transform;
 	}
 

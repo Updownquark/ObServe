@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -1190,31 +1191,32 @@ public class ObservableCollectionActiveManagers2 {
 		@Override
 		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
 			try (Transaction t = lock(false, null)) {
+				List<DerivedCollectionElement<T>> elements = new LinkedList<>();
+
 				BetterList<DerivedCollectionElement<I>> parentEBS = theParent.getElementsBySource(sourceEl, sourceCollection);
-				return BetterList.of(Stream.concat(//
-					parentEBS.stream().flatMap(outerEl -> {
-						BinaryTreeNode<FlattenedHolder> fh = theOuterElements.getRoot()
-							.findClosest(fhEl -> outerEl.compareTo(fhEl.get().theParentEl), true, true, OptimisticContext.TRUE);
-						return fh == null ? Stream.empty() : fh.get().theElements.stream();
-					}), //
-					// Unfortunately, I think the only way to do this reliably is to ask every outer element
-					theOuterElements.stream().flatMap(holder -> {
-						for (DerivedCollectionElement<I> fromParent : parentEBS)
-							if (fromParent.compareTo(holder.theParentEl) == 0)
-								return Stream.empty();
-						return holder.manager.getElementsBySource(sourceEl, sourceCollection).stream().flatMap(innerEl -> {
-							BinaryTreeNode<FlattenedElement> fe = holder.theElements.getRoot()
-								.findClosest(
-									feEl -> ((DerivedCollectionElement<T>) innerEl)
-									.compareTo((DerivedCollectionElement<T>) feEl.get().theParentEl),
-									true, true, OptimisticContext.TRUE);
-							if (fe != null && fe.get().theParentEl.equals(innerEl))
-								return Stream.of(fe.get());
-							else
-								return Stream.empty();
-						});
-					})//
-					));
+				for (DerivedCollectionElement<I> outerEl : parentEBS) {
+					BinaryTreeNode<FlattenedHolder> fh = theOuterElements.getRoot()
+						.findClosest(fhEl -> outerEl.compareTo(fhEl.get().theParentEl), true, true, OptimisticContext.TRUE);
+					if (fh != null)
+						elements.addAll(fh.get().theElements);
+				}
+
+				for (FlattenedHolder holder : theOuterElements) {
+					if (parentEBS.contains(holder.theParentEl))
+						continue;
+					BetterList<? extends DerivedCollectionElement<? extends T>> holderEls = holder.manager.getElementsBySource(sourceEl,
+						sourceCollection);
+					for (DerivedCollectionElement<? extends T> innerEl : holderEls) {
+						BinaryTreeNode<FlattenedElement> fe = holder.theElements.getRoot().findClosest(
+							feEl -> ((DerivedCollectionElement<T>) innerEl).compareTo((DerivedCollectionElement<T>) feEl.get().theParentEl),
+							true, true, OptimisticContext.TRUE);
+						if (fe != null
+							&& ((DerivedCollectionElement<T>) fe.get().theParentEl).compareTo((DerivedCollectionElement<T>) innerEl) == 0)
+							elements.add(fe.get());
+					}
+				}
+				return elements.isEmpty() ? BetterList.empty()
+					: BetterList.of(elements.toArray(new DerivedCollectionElement[elements.size()]));
 			}
 		}
 
@@ -1246,8 +1248,13 @@ public class ObservableCollectionActiveManagers2 {
 
 		class FlattenedHolderIter {
 			FlattenedHolder holder;
-			DerivedCollectionElement<T> lowBound;
-			DerivedCollectionElement<T> highBound;
+			FlattenedElement lowBound;
+			FlattenedElement highBound;
+
+			DerivedCollectionElement<T> getBound(boolean low) {
+				FlattenedElement bound = low ? lowBound : highBound;
+				return bound == null ? null : (DerivedCollectionElement<T>) bound.theParentEl;
+			}
 		}
 
 		class InterElementIterable implements Iterable<FlattenedHolderIter> {
@@ -1268,10 +1275,17 @@ public class ObservableCollectionActiveManagers2 {
 					private FlattenedHolderIter theIterStruct;
 
 					{
-						if (start == null)
-							theHolder = CollectionElement.get(theOuterElements.getTerminalElement(ascending));
-						else
-							theHolder = start.theHolder;
+						if (ascending) {
+							if (start == null)
+								theHolder = CollectionElement.get(theOuterElements.getTerminalElement(true));
+							else
+								theHolder = start.theHolder;
+						} else {
+							if (end == null)
+								theHolder = CollectionElement.get(theOuterElements.getTerminalElement(false));
+							else
+								theHolder = end.theHolder;
+						}
 						while (theHolder != null && theHolder.manager == null)
 							theHolder = CollectionElement.get(theOuterElements.getAdjacentElement(theHolder.holderElement, ascending));
 						theIterStruct = new FlattenedHolderIter();
@@ -1281,9 +1295,10 @@ public class ObservableCollectionActiveManagers2 {
 					public boolean hasNext() {
 						if (theHolder == null)
 							return false;
-						else if (end == null)
+						FlattenedElement terminal = ascending ? end : start;
+						if (terminal == null)
 							return true;
-						int comp = theHolder.holderElement.compareTo(end.theHolder.holderElement);
+						int comp = theHolder.holderElement.compareTo(terminal.theHolder.holderElement);
 						if (comp == 0)
 							return true;
 						else
@@ -1295,25 +1310,14 @@ public class ObservableCollectionActiveManagers2 {
 						if (!hasNext())
 							throw new NoSuchElementException();
 						theIterStruct.holder = theHolder;
-						if (ascending) {
-							if (start == null || !theHolder.equals(start.theHolder))
-								theIterStruct.lowBound = null;
-							else
-								theIterStruct.lowBound = (DerivedCollectionElement<T>) start.theParentEl;
-							if (end == null || !theHolder.equals(end.theHolder))
-								theIterStruct.highBound = null;
-							else
-								theIterStruct.highBound = (DerivedCollectionElement<T>) end.theParentEl;
-						} else {
-							if (end == null || !theHolder.equals(end.theHolder))
-								theIterStruct.lowBound = null;
-							else
-								theIterStruct.lowBound = (DerivedCollectionElement<T>) end.theParentEl;
-							if (start == null || !theHolder.equals(start.theHolder))
-								theIterStruct.highBound = null;
-							else
-								theIterStruct.highBound = (DerivedCollectionElement<T>) start.theParentEl;
-						}
+						if (start == null || !theHolder.equals(start.theHolder))
+							theIterStruct.lowBound = null;
+						else
+							theIterStruct.lowBound = start;
+						if (end == null || !theHolder.equals(end.theHolder))
+							theIterStruct.highBound = null;
+						else
+							theIterStruct.highBound = end;
 						do {
 							theHolder = CollectionElement.get(theOuterElements.getAdjacentElement(theHolder.holderElement, ascending));
 						} while (theHolder != null && theHolder.manager == null);
@@ -1333,7 +1337,8 @@ public class ObservableCollectionActiveManagers2 {
 						|| !holder.holder.manager.equivalence().isElement(toAdd)) {
 						msg = StdMsg.ILLEGAL_ELEMENT;
 					} else
-						msg = ((ActiveCollectionManager<?, ?, T>) holder.holder.manager).canAdd(toAdd, holder.lowBound, holder.highBound);
+						msg = ((ActiveCollectionManager<?, ?, T>) holder.holder.manager).canAdd(toAdd, holder.getBound(true),
+							holder.getBound(false));
 					if (msg == null)
 						return null;
 					else if (firstMsg == null)
@@ -1356,10 +1361,11 @@ public class ObservableCollectionActiveManagers2 {
 						|| !holder.holder.manager.equivalence().isElement(value)) {
 						msg = StdMsg.ILLEGAL_ELEMENT;
 					} else
-						msg = ((ActiveCollectionManager<?, ?, T>) holder.holder.manager).canAdd(value, holder.lowBound, holder.highBound);
+						msg = ((ActiveCollectionManager<?, ?, T>) holder.holder.manager).canAdd(value, holder.getBound(true),
+							holder.getBound(false));
 					if (msg == null) {
 						DerivedCollectionElement<T> added = ((ActiveCollectionManager<?, ?, T>) holder.holder.manager).addElement(value,
-							holder.lowBound, holder.highBound, first);
+							holder.getBound(true), holder.getBound(false), first);
 						if (added != null)
 							return new FlattenedElement(holder.holder, added, true);
 					} else if (firstMsg == null)
@@ -1383,14 +1389,18 @@ public class ObservableCollectionActiveManagers2 {
 					String msg;
 					if (holder.holder.equals(flatV.theHolder))
 						msg = ((ActiveCollectionManager<?, ?, T>) holder.holder.manager)
-						.canMove((DerivedCollectionElement<T>) flatV.theParentEl, holder.lowBound, holder.highBound);
-					else if (!TypeTokens.get().isInstance(holder.holder.manager.getTargetType(), value)
+						.canMove((DerivedCollectionElement<T>) flatV.theParentEl, holder.getBound(true), holder.getBound(false));
+					else if (holder.holder.manager.getIdentity().equals(flatV.theHolder.manager.getIdentity())) {
+						// Don't support moving an element from 2 uses of the same collection--super messy
+						msg = StdMsg.UNSUPPORTED_OPERATION;
+					} else if (!TypeTokens.get().isInstance(holder.holder.manager.getTargetType(), value)
 						|| !holder.holder.manager.equivalence().isElement(value)) {
 						msg = StdMsg.ILLEGAL_ELEMENT;
 					} else if (removable != null)
 						msg = removable;
 					else
-						msg = ((ActiveCollectionManager<?, ?, T>) holder.holder.manager).canAdd(value, holder.lowBound, holder.highBound);
+						msg = ((ActiveCollectionManager<?, ?, T>) holder.holder.manager).canAdd(value, holder.getBound(true),
+							holder.getBound(false));
 					if (msg == null)
 						return null;
 					else if (firstMsg == null)
@@ -1405,33 +1415,42 @@ public class ObservableCollectionActiveManagers2 {
 		@Override
 		public DerivedCollectionElement<T> move(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after,
 			DerivedCollectionElement<T> before, boolean first, Runnable afterRemove) {
+			if (first && after != null && valueEl.compareTo(after) == 0)
+				return valueEl;
+			else if (!first && before != null && valueEl.compareTo(before) == 0)
+				return valueEl;
 			FlattenedElement flatV = (FlattenedManager<E, I, T>.FlattenedElement) valueEl;
 			String firstMsg = null;
 			try (Transaction t = theParent.lock(false, null)) {
 				String removable = flatV.theParentEl.canRemove();
 				T value = flatV.theParentEl.get();
 				DerivedCollectionElement<T> moved = null;
-				for (FlattenedHolderIter holder : new InterElementIterable(after, before, true)) {
+				for (FlattenedHolderIter holder : new InterElementIterable(after, before, first)) {
 					String msg;
 					if (holder.holder.equals(flatV.theHolder)) {
 						msg = ((ActiveCollectionManager<?, ?, T>) holder.holder.manager)
-							.canMove((DerivedCollectionElement<T>) flatV.theParentEl, holder.lowBound, holder.highBound);
+							.canMove((DerivedCollectionElement<T>) flatV.theParentEl, holder.getBound(true), holder.getBound(false));
 						if (msg == null)
 							moved = ((ActiveCollectionManager<?, ?, T>) holder.holder.manager).move(
-								(DerivedCollectionElement<T>) flatV.theParentEl, holder.lowBound, holder.highBound, first, afterRemove);
+								(DerivedCollectionElement<T>) flatV.theParentEl, holder.getBound(true), holder.getBound(false), first,
+								afterRemove);
+					} else if (holder.holder.manager.getIdentity().equals(flatV.theHolder.manager.getIdentity())) {
+						// Don't support moving an element from 2 uses of the same collection--super messy
+						msg = StdMsg.UNSUPPORTED_OPERATION;
 					} else if (!TypeTokens.get().isInstance(holder.holder.manager.getTargetType(), value)
 						|| !holder.holder.manager.equivalence().isElement(value)) {
 						msg = StdMsg.ILLEGAL_ELEMENT;
 					} else if (removable != null)
 						msg = removable;
 					else {
-						msg = ((ActiveCollectionManager<?, ?, T>) holder.holder.manager).canAdd(value, holder.lowBound, holder.highBound);
+						msg = ((ActiveCollectionManager<?, ?, T>) holder.holder.manager).canAdd(value, holder.getBound(true),
+							holder.getBound(false));
 						if (msg == null) {
 							flatV.theParentEl.remove();
 							if (afterRemove != null)
 								afterRemove.run();
-							moved = ((ActiveCollectionManager<?, ?, T>) holder.holder.manager).addElement(value, holder.lowBound,
-								holder.highBound, first);
+							moved = ((ActiveCollectionManager<?, ?, T>) holder.holder.manager).addElement(value, holder.getBound(true),
+								holder.getBound(false), first);
 							if (moved == null)
 								throw new IllegalStateException("Removed, but unable to re-add");
 						}
@@ -1567,7 +1586,7 @@ public class ObservableCollectionActiveManagers2 {
 		}
 
 		boolean ignoreRemoves;
-		FlattenedElement priorityUpdateReceiver;
+		CollectionElementListener<T> priorityUpdateReceiver;
 
 		private class FlattenedElement implements DerivedCollectionElement<T> {
 			private final FlattenedHolder theHolder;
@@ -1599,7 +1618,7 @@ public class ObservableCollectionActiveManagers2 {
 						// Need to make sure that the flattened collection isn't firing at the same time as the child collection
 						try (Transaction parentT = theParent.lock(false, null); Transaction localT = lockLocal()) {
 							if (priorityUpdateReceiver != null) {
-								ObservableCollectionActiveManagers.update(priorityUpdateReceiver.theListener, oldValue, newValue, cause);
+								ObservableCollectionActiveManagers.update(priorityUpdateReceiver, oldValue, newValue, cause);
 								priorityUpdateReceiver = null;
 							}
 							ObservableCollectionActiveManagers.update(theListener, oldValue, newValue, cause);
@@ -1620,6 +1639,7 @@ public class ObservableCollectionActiveManagers2 {
 			}
 
 			void remove(Object cause) {
+				theHolder.theElements.mutableElement(theElementId).remove();
 				ObservableCollectionActiveManagers.removed(theListener, theParentEl.get(), cause);
 			}
 
@@ -1659,11 +1679,17 @@ public class ObservableCollectionActiveManagers2 {
 				if (value != null && !TypeTokens.get().isInstance(theHolder.manager.getTargetType(), value))
 					throw new IllegalArgumentException(StdMsg.BAD_TYPE);
 				try (Transaction t = FlattenedManager.this.lock(true, null)) {
-					priorityUpdateReceiver = this;
+					// The purpose of this code wrapped around the set call is to ensure that this method's listener gets called first.
+					// This prevents any possible re-arranging or other operations that could result
+					// in this set operation removing this element
+					CollectionElementListener<T> listener = theListener;
+					theListener = null;
+					priorityUpdateReceiver = listener;
 					try {
 						((DerivedCollectionElement<T>) theParentEl).set(value);
 					} finally {
 						priorityUpdateReceiver = null;
+						theListener = listener;
 					}
 				}
 			}
@@ -1675,7 +1701,8 @@ public class ObservableCollectionActiveManagers2 {
 
 			@Override
 			public void remove() throws UnsupportedOperationException {
-				theParentEl.remove();
+				if (theElementId.isPresent())
+					theParentEl.remove();
 			}
 
 			@Override

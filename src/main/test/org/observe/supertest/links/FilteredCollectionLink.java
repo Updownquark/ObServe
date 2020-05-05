@@ -34,16 +34,19 @@ import com.google.common.reflect.TypeToken;
  */
 public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	/** Generates {@link FilteredCollectionLink}s */
-	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator() {
+	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator.CollectionLinkGenerator() {
 		@Override
-		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
+		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink, TestValueType targetType) {
 			if (!(sourceLink instanceof ObservableCollectionLink))
+				return 0;
+			else if (targetType != null && targetType != sourceLink.getType())
 				return 0;
 			return 1;
 		}
 
 		@Override
-		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+		public <T, X> ObservableCollectionLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestValueType targetType,
+			TestHelper helper) {
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
 			SettableValue<Function<T, String>> filterValue = new SimpleSettableValue<>(
 				(TypeToken<Function<T, String>>) (TypeToken<?>) new TypeToken<Object>() {}, false);

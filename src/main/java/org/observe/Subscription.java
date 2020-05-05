@@ -4,9 +4,14 @@ import java.util.Collection;
 
 /** A subscription to an observable */
 @FunctionalInterface
-public interface Subscription {
+public interface Subscription extends AutoCloseable {
 	/** Unsubscribes the observer for this subscription from the observable */
 	void unsubscribe();
+
+	@Override
+	default void close() {
+		unsubscribe();
+	}
 
 	/**
 	 * @param subs The subscriptions to bundle

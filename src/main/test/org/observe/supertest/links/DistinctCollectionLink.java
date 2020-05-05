@@ -17,6 +17,7 @@ import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.ObservableCollectionLink;
 import org.observe.supertest.ObservableCollectionTestDef;
 import org.observe.supertest.OperationRejection;
+import org.observe.supertest.TestValueType;
 import org.qommons.BiTuple;
 import org.qommons.TestHelper;
 import org.qommons.collect.BetterList;
@@ -35,16 +36,19 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	private static final String DEBUG_PATH = null;
 
 	/** Generates {@link DistinctCollectionLink}s to test {@link org.observe.collect.ObservableCollection.CollectionDataFlow#distinct()} */
-	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator() {
+	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator.CollectionLinkGenerator() {
 		@Override
-		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
-			if (sourceLink instanceof ObservableCollectionLink)
-				return 1;
-			return 0;
+		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink, TestValueType targetType) {
+			if (!(sourceLink instanceof ObservableCollectionLink))
+				return 0;
+			else if (targetType != null && targetType != sourceLink.getType())
+				return 0;
+			return 1;
 		}
 
 		@Override
-		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+		public <T, X> ObservableCollectionLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestValueType targetType,
+			TestHelper helper) {
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
 			FlowOptions.UniqueOptions options = new FlowOptions.SimpleUniqueOptions(true);
 			options
@@ -68,7 +72,7 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 			ObservableCollectionTestDef<T> def = new ObservableCollectionTestDef<>(sourceLink.getType(), oneStepFlow, multiStepFlow, false,
 				true);
 			DistinctCollectionLink<T> derived = new DistinctCollectionLink<>(path, sourceCL, def, null, options.isUseFirst(), helper);
-			return (ObservableChainLink<T, X>) derived;
+			return (ObservableCollectionLink<T, X>) derived;
 		}
 	};
 
@@ -76,16 +80,19 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	 * Generates sorted {@link DistinctCollectionLink}s to test
 	 * {@link org.observe.collect.ObservableCollection.CollectionDataFlow#distinctSorted(Comparator, boolean)}
 	 */
-	public static final ChainLinkGenerator GENERATE_SORTED = new ChainLinkGenerator() {
+	public static final ChainLinkGenerator GENERATE_SORTED = new ChainLinkGenerator.CollectionLinkGenerator() {
 		@Override
-		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
-			if (sourceLink instanceof ObservableCollectionLink)
-				return 1;
-			return 0;
+		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink, TestValueType targetType) {
+			if (!(sourceLink instanceof ObservableCollectionLink))
+				return 0;
+			else if (targetType != null && targetType != sourceLink.getType())
+				return 0;
+			return 1;
 		}
 
 		@Override
-		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+		public <T, X> ObservableCollectionLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestValueType targetType,
+			TestHelper helper) {
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
 			Comparator<T> compare = SortedCollectionLink.compare(sourceCL.getDef().type, helper);
 			FlowOptions.UniqueOptions options = new FlowOptions.SimpleUniqueOptions(true);
@@ -98,7 +105,7 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 			ObservableCollectionTestDef<T> def = new ObservableCollectionTestDef<>(sourceLink.getType(), oneStepFlow, multiStepFlow, true,
 				true);
 			DistinctCollectionLink<T> derived = new DistinctCollectionLink<>(path, sourceCL, def, compare, options.isUseFirst(), helper);
-			return (ObservableChainLink<T, X>) derived;
+			return (ObservableCollectionLink<T, X>) derived;
 		}
 	};
 

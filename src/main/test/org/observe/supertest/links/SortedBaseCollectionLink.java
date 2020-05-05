@@ -10,6 +10,7 @@ import org.observe.supertest.ChainLinkGenerator;
 import org.observe.supertest.CollectionLinkElement;
 import org.observe.supertest.ExpectedCollectionOperation;
 import org.observe.supertest.ObservableChainLink;
+import org.observe.supertest.ObservableCollectionLink;
 import org.observe.supertest.ObservableCollectionTestDef;
 import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
@@ -31,17 +32,18 @@ import com.google.common.reflect.TypeToken;
  */
 public class SortedBaseCollectionLink<T> extends BaseCollectionLink<T> {
 	/** Generates a root {@link SortedBaseCollectionLink} */
-	public static final ChainLinkGenerator GENERATE_SORTED = new ChainLinkGenerator() {
+	public static final ChainLinkGenerator GENERATE_SORTED = new ChainLinkGenerator.CollectionLinkGenerator() {
 		@Override
-		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
+		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink, TestValueType targetType) {
 			if (sourceLink != null)
 				return 0;
 			return 0.5;
 		}
 
 		@Override
-		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
-			TestValueType type = nextType(helper);
+		public <T, X> ObservableCollectionLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestValueType targetType,
+			TestHelper helper) {
+			TestValueType type = targetType != null ? targetType : nextType(helper);
 
 			// Tree-backed sorted list or set
 			Comparator<? super X> compare = SortedCollectionLink.compare(type, helper);
@@ -55,7 +57,7 @@ public class SortedBaseCollectionLink<T> extends BaseCollectionLink<T> {
 				base = new DefaultObservableCollection<>((TypeToken<X>) type.getType(), backing);
 			}
 			ObservableCollectionTestDef<X> def = new ObservableCollectionTestDef<>(type, base.flow(), base.flow(), true, true);
-			return (ObservableChainLink<T, X>) new SortedBaseCollectionLink<>(path, def, compare, distinct, helper);
+			return (ObservableCollectionLink<T, X>) new SortedBaseCollectionLink<>(path, def, compare, distinct, helper);
 		}
 	};
 

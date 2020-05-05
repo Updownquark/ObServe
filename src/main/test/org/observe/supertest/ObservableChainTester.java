@@ -18,6 +18,7 @@ import org.observe.supertest.links.CombinedValueLink;
 import org.observe.supertest.links.DistinctCollectionLink;
 import org.observe.supertest.links.FactoringFlatMapCollectionLink;
 import org.observe.supertest.links.FilteredCollectionLink;
+import org.observe.supertest.links.FlatMapCollectionLink;
 import org.observe.supertest.links.FlattenedCollectionValuesLink;
 import org.observe.supertest.links.FlattenedValueBaseCollectionLink;
 import org.observe.supertest.links.MappedCollectionLink;
@@ -83,6 +84,7 @@ public class ObservableChainTester implements Testable {
 		generators.add(SubSetLink.GENERATE);
 		generators.add(FlattenedCollectionValuesLink.GENERATE);
 		generators.add(FactoringFlatMapCollectionLink.GENERATE);
+		generators.add(FlatMapCollectionLink.GENERATE);
 
 		// Derived collection value generators
 		generators.addAll(CollectionDerivedValues.GENERATORS);
@@ -149,11 +151,11 @@ public class ObservableChainTester implements Testable {
 		// Create the root link
 		TestHelper.RandomSupplier<ChainLinkGenerator> firstLink = helper.createSupplier();
 		for (ChainLinkGenerator gen : LINK_GENERATORS) {
-			double weight = gen.getAffinity(null);
+			double weight = gen.getAffinity(null, null);
 			if (weight > 0)
 				firstLink.or(weight, () -> gen);
 		}
-		theRoot = firstLink.get(null).deriveLink("root", null, helper);
+		theRoot = firstLink.get(null).deriveLink("root", null, null, helper);
 
 		class LinkDerivation<T> {
 			final ObservableChainLink<?, T> link;
@@ -165,11 +167,12 @@ public class ObservableChainTester implements Testable {
 				TestHelper.RandomSupplier<ObservableChainLink<T, ?>> deriver = helper.createSupplier();
 				double totalWeight = 0;
 				for (ChainLinkGenerator gen : LINK_GENERATORS) {
-					double weight = gen.getAffinity(link);
+					double weight = gen.getAffinity(link, null);
 					if (weight > 0) {
 						totalWeight += weight;
 						ChainLinkGenerator fGen = gen;
-						deriver.or(weight, () -> fGen.deriveLink(link.getPath() + "[" + link.getDerivedLinks().size() + "]", link, helper));
+						deriver.or(weight,
+							() -> fGen.deriveLink(link.getPath() + "[" + link.getDerivedLinks().size() + "]", link, null, helper));
 					}
 				}
 				this.linkDeriver = () -> deriver.get(null);
@@ -206,15 +209,46 @@ public class ObservableChainTester implements Testable {
 		fillLinks(theLinks, theRoot, 0, "root");
 	}
 
-	public static <T> ObservableCollectionLink<?, T> generateCollectionLink(TestValueType type, TestHelper helper, int length) {
+	public static <T> ObservableCollectionLink<?, T> generateCollectionLink(String rootPath, TestValueType type, TestHelper helper,
+		int length) {
 		ObservableCollectionLink<Object, Object> baseLink;
-		TestHelper.RandomSupplier<ChainLinkGenerator> firstLink = helper.createSupplier();
+		TestHelper.RandomSupplier<ChainLinkGenerator.CollectionLinkGenerator> firstLink = helper.createSupplier();
 		for (ChainLinkGenerator gen : LINK_GENERATORS) {
-			double weight = gen.getAffinity(null);
-			if (weight > 0)
-				firstLink.or(weight, () -> gen);
+			if (gen instanceof ChainLinkGenerator.CollectionLinkGenerator) {
+				double weight = gen.getAffinity(null, length == 1 ? type : null);
+				if (weight > 0)
+					firstLink.or(weight, () -> (ChainLinkGenerator.CollectionLinkGenerator) gen);
+			}
 		}
-		baseLink = firstLink.get(null).deriveLink("root", null, helper);
+		baseLink = firstLink.get(null).deriveLink(rootPath, null, length == 1 ? type : null, helper);
+
+		ObservableCollectionLink<Object, Object> loopLink = baseLink;
+		for (int i = 1; i < length; i++) {
+			TestValueType targetType = i == length - 1 ? type : null;
+			ObservableCollectionLink<Object, Object> link = loopLink;
+			TestHelper.RandomSupplier<ObservableCollectionLink<Object, ?>> deriver = helper.createSupplier();
+			for (ChainLinkGenerator gen : LINK_GENERATORS) {
+				if (!(gen instanceof ChainLinkGenerator.CollectionLinkGenerator))
+					continue;
+				double weight = gen.getAffinity(link, targetType);
+				if (weight > 0) {
+					ChainLinkGenerator fGen = gen;
+					deriver.or(weight, () -> ((ChainLinkGenerator.CollectionLinkGenerator) fGen)
+						.deriveLink(rootPath + "[" + link.getDerivedLinks().size() + "]", link, targetType, helper));
+				}
+			}
+			ObservableCollectionLink<Object, Object> newLink = (ObservableCollectionLink<Object, Object>) deriver.get(null);
+			loopLink.getDerivedLinks().add(newLink);
+			loopLink = newLink;
+		}
+		loopLink = baseLink;
+		while (true) {
+			loopLink.initialize(helper);
+			if (loopLink.getDerivedLinks().isEmpty())
+				break;
+			loopLink = (ObservableCollectionLink<Object, Object>) loopLink.getDerivedLinks().get(0);
+		}
+		return (ObservableCollectionLink<?, T>) loopLink;
 	}
 
 	private static void fillLinks(List<LinkStruct> links, ObservableChainLink<?, ?> link, int depth, String path) {

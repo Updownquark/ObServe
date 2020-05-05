@@ -27,16 +27,19 @@ import org.qommons.TestHelper;
  */
 public class SortedCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	/** Generates {@link SortedCollectionLink}s */
-	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator() {
+	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator.CollectionLinkGenerator() {
 		@Override
-		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
+		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink, TestValueType targetType) {
 			if (!(sourceLink instanceof ObservableCollectionLink))
+				return 0;
+			else if (targetType != null && targetType != sourceLink.getType())
 				return 0;
 			return 1;
 		}
 
 		@Override
-		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+		public <T, X> ObservableCollectionLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestValueType targetType,
+			TestHelper helper) {
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
 			Comparator<T> compare = compare(sourceLink.getType(), helper);
 			CollectionDataFlow<?, ?, T> derivedOneStepFlow = sourceCL.getCollection().flow();
@@ -81,14 +84,27 @@ public class SortedCollectionLink<T> extends ObservableCollectionLink<T, T> {
 			rejection);
 		if (afterBefore == null)
 			return null;
-		after = afterBefore.getValue1();
-		before = afterBefore.getValue2();
 
-		CollectionLinkElement<?, T> sourceEl = getSourceLink().expectAdd(value, //
-			after == null ? null : (CollectionLinkElement<?, T>) after.getFirstSource(),
+		CollectionLinkElement<?, T> sourceEl = null;
+		if (afterBefore.getValue1() == null && afterBefore.getValue2() == null) {
+			if (first && after != null)
+				sourceEl = getSourceLink().expectAdd(value, //
+					(CollectionLinkElement<?, T>) after.getFirstSource(), null, first, rejection);
+			rejection.reset();
+			if (sourceEl == null && !first && before != null)
+				sourceEl = getSourceLink().expectAdd(value, null, (CollectionLinkElement<?, T>) before.getFirstSource(), first, rejection);
+			rejection.reset();
+		}
+		if (sourceEl == null) {
+			after = afterBefore.getValue1();
+			before = afterBefore.getValue2();
+
+			sourceEl = getSourceLink().expectAdd(value, //
+				after == null ? null : (CollectionLinkElement<?, T>) after.getFirstSource(),
 				before == null ? null : (CollectionLinkElement<?, T>) before.getFirstSource(), //
-					first, rejection);
-		if (rejection.isRejected())
+				first, rejection);
+		}
+		if (sourceEl == null)
 			return null;
 		CollectionLinkElement<T, T> element = (CollectionLinkElement<T, T>) sourceEl.getDerivedElements(getSiblingIndex()).getFirst();
 		checkOrder(element);

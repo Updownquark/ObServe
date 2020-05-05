@@ -39,14 +39,17 @@ public class CollectionDerivedValues {
 	/** Generates {@link CollectionSize} links to test {@link ObservableCollection#observeSize()} */
 	public static final ChainLinkGenerator SIZE_GENERATOR = new ChainLinkGenerator() {
 		@Override
-		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
+		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink, TestValueType targetType) {
 			if (!(sourceLink instanceof ObservableCollectionLink))
+				return 0;
+			else if (targetType != null && targetType != TestValueType.INT)
 				return 0;
 			return .05;
 		}
 
 		@Override
-		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestValueType targetType,
+			TestHelper helper) {
 			return (ObservableChainLink<T, X>) new CollectionSize<>(path, (ObservableCollectionLink<?, T>) sourceLink);
 		}
 	};
@@ -54,8 +57,10 @@ public class CollectionDerivedValues {
 	/** Generates {@link CollectionContainsValue} links to test {@link ObservableCollection#observeContains(ObservableValue)} */
 	public static final ChainLinkGenerator CONTAINS_VALUE_GENERATOR = new ChainLinkGenerator() {
 		@Override
-		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
+		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink, TestValueType targetType) {
 			if (!(sourceLink instanceof ObservableCollectionLink))
+				return 0;
+			else if (targetType != null && targetType != TestValueType.BOOLEAN)
 				return 0;
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
 			if (sourceCL.getValueSupplier() == null//
@@ -65,7 +70,8 @@ public class CollectionDerivedValues {
 		}
 
 		@Override
-		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestValueType targetType,
+			TestHelper helper) {
 			return (ObservableChainLink<T, X>) new CollectionContainsValue<>(path, (ObservableCollectionLink<?, T>) sourceLink, helper);
 		}
 	};
@@ -76,8 +82,10 @@ public class CollectionDerivedValues {
 	 */
 	public static final ChainLinkGenerator CONTAINS_VALUES_GENERATOR = new ChainLinkGenerator() {
 		@Override
-		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
+		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink, TestValueType targetType) {
 			if (!(sourceLink instanceof ObservableCollectionLink))
+				return 0;
+			else if (targetType != null && targetType != TestValueType.BOOLEAN)
 				return 0;
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
 			if (sourceCL.getValueSupplier() == null//
@@ -87,7 +95,8 @@ public class CollectionDerivedValues {
 		}
 
 		@Override
-		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestValueType targetType,
+			TestHelper helper) {
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
 			ObservableCollection<T> values = ObservableCollection.build(sourceCL.getCollection().getType()).safe(false).build();
 			boolean containsAny = helper.getBoolean();
@@ -98,8 +107,10 @@ public class CollectionDerivedValues {
 	/** Generates {@link CollectionObserveElement} links to test {@link ObservableCollection#observeElement(Object, boolean)} */
 	public static final ChainLinkGenerator OBSERVE_ELEMENT_GENERATOR = new ChainLinkGenerator() {
 		@Override
-		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
+		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink, TestValueType targetType) {
 			if (!(sourceLink instanceof ObservableCollectionLink))
+				return 0;
+			else if (targetType != null && targetType != sourceLink.getType())
 				return 0;
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
 			if (sourceCL.getValueSupplier() == null)
@@ -108,7 +119,8 @@ public class CollectionDerivedValues {
 		}
 
 		@Override
-		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestValueType targetType,
+			TestHelper helper) {
 			return (ObservableChainLink<T, X>) new CollectionObserveElement<>(path, (ObservableCollectionLink<?, T>) sourceLink, helper);
 		}
 	};
@@ -116,14 +128,17 @@ public class CollectionDerivedValues {
 	/** Generates {@link ObservableCollectionFinder} links to test {@link ObservableCollection#observeFind(java.util.function.Predicate)} */
 	public static final ChainLinkGenerator CONDITION_FINDER_GENERATOR = new ChainLinkGenerator() {
 		@Override
-		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
+		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink, TestValueType targetType) {
 			if (!(sourceLink instanceof ObservableCollectionLink))
+				return 0;
+			else if (targetType != null && targetType != sourceLink.getType())
 				return 0;
 			return .1;
 		}
 
 		@Override
-		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestValueType targetType,
+			TestHelper helper) {
 			return (ObservableChainLink<T, X>) new CollectionConditionFinder<>(path, (ObservableCollectionLink<?, T>) sourceLink, helper);
 		}
 	};
@@ -131,14 +146,17 @@ public class CollectionDerivedValues {
 	/** Generates {@link CollectionOnlyValue} links to test {@link ObservableCollection#only()} */
 	public static final ChainLinkGenerator ONLY_GENERATOR = new ChainLinkGenerator() {
 		@Override
-		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
+		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink, TestValueType targetType) {
 			if (!(sourceLink instanceof ObservableCollectionLink))
+				return 0;
+			else if (targetType != null && targetType != sourceLink.getType())
 				return 0;
 			return .05;
 		}
 
 		@Override
-		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestValueType targetType,
+			TestHelper helper) {
 			return (ObservableChainLink<T, X>) new CollectionOnlyValue<>(path, (ObservableCollectionLink<?, T>) sourceLink);
 		}
 	};
@@ -146,8 +164,10 @@ public class CollectionDerivedValues {
 	/** Generates {@link CollectionMinMaxValue} links to test ObservableCollection reduction */
 	public static final ChainLinkGenerator MIN_MAX_GENERATOR = new ChainLinkGenerator() {
 		@Override
-		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
+		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink, TestValueType targetType) {
 			if (!(sourceLink instanceof ObservableCollectionLink))
+				return 0;
+			else if (targetType != null && targetType != sourceLink.getType())
 				return 0;
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
 			if (!sourceCL.getDef().checkOldValues) // The reduction relies on the old values being correct
@@ -156,7 +176,8 @@ public class CollectionDerivedValues {
 		}
 
 		@Override
-		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestValueType targetType,
+			TestHelper helper) {
 			return (ObservableChainLink<T, X>) new CollectionMinMaxValue<>(path, (ObservableCollectionLink<?, T>) sourceLink, helper);
 		}
 	};
@@ -164,9 +185,11 @@ public class CollectionDerivedValues {
 	/** Generates {@link CollectionSum} links to test ObservableCollection reduction */
 	public static final ChainLinkGenerator SUM_GENERATOR = new ChainLinkGenerator() {
 		@Override
-		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
+		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink, TestValueType targetType) {
 			if (!(sourceLink instanceof ObservableCollectionLink))
 				return 0;
+			else if (targetType != null)
+				return 0; // Since the sum is a type-cheating link, we can't truly satisfy any specified type
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
 			if (sourceCL.getType() != TestValueType.INT//
 				|| !sourceCL.getDef().checkOldValues) // The sum relies on the old values being correct
@@ -175,7 +198,8 @@ public class CollectionDerivedValues {
 		}
 
 		@Override
-		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestValueType targetType,
+			TestHelper helper) {
 			return (ObservableChainLink<T, X>) new CollectionSum(path, (ObservableCollectionLink<?, Integer>) sourceLink);
 		}
 	};
@@ -186,8 +210,10 @@ public class CollectionDerivedValues {
 	 */
 	public static final ChainLinkGenerator OBSERVE_RELATIVE_GENERATOR = new ChainLinkGenerator() {
 		@Override
-		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
+		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink, TestValueType targetType) {
 			if (!(sourceLink instanceof ObservableCollectionLink))
+				return 0;
+			else if (targetType != null && targetType != sourceLink.getType())
 				return 0;
 			else if (((ObservableCollectionLink<?, ?>) sourceLink).getValueSupplier() == null)
 				return 0;
@@ -198,7 +224,8 @@ public class CollectionDerivedValues {
 		}
 
 		@Override
-		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestValueType targetType,
+			TestHelper helper) {
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
 			T value = sourceCL.getValueSupplier().apply(helper);
 			int onExact;

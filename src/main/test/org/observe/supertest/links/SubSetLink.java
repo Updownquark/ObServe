@@ -10,6 +10,7 @@ import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.ObservableCollectionLink;
 import org.observe.supertest.ObservableCollectionTestDef;
 import org.observe.supertest.OperationRejection;
+import org.observe.supertest.TestValueType;
 import org.qommons.TestHelper;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 
@@ -20,10 +21,12 @@ import org.qommons.collect.MutableCollectionElement.StdMsg;
  */
 public class SubSetLink<T> extends ObservableCollectionLink<T, T> {
 	/** Generates {@link SubSetLink}s */
-	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator() {
+	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator.CollectionLinkGenerator() {
 		@Override
-		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
+		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink, TestValueType targetType) {
 			if (!(sourceLink instanceof ObservableCollectionLink))
+				return 0;
+			else if (targetType != null && targetType != sourceLink.getType())
 				return 0;
 			else if (((ObservableCollectionLink<?, ?>) sourceLink).getValueSupplier() == null)
 				return 0;
@@ -34,7 +37,8 @@ public class SubSetLink<T> extends ObservableCollectionLink<T, T> {
 		}
 
 		@Override
-		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+		public <T, X> ObservableCollectionLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestValueType targetType,
+			TestHelper helper) {
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
 			T low, high;
 			boolean lowIncluded, highIncluded;
@@ -73,8 +77,8 @@ public class SubSetLink<T> extends ObservableCollectionLink<T, T> {
 			}
 			ObservableCollectionTestDef<T> def = new ObservableCollectionTestDef<>(sourceCL.getType(), oneStep.flow(), multiStep.flow(),
 				true, sourceCL.getDef().checkOldValues);
-			return (ObservableChainLink<T, X>) new SubSetLink<>(path, sourceCL, def, oneStep, multiStep, helper, low, lowIncluded, high,
-				highIncluded);
+			return (ObservableCollectionLink<T, X>) new SubSetLink<>(path, sourceCL, def, oneStep, multiStep, helper, low, lowIncluded,
+				high, highIncluded);
 		}
 	};
 	private final T theLowBound;

@@ -115,7 +115,10 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 	 * @return All elements in the given derived collection link that have this element as a source
 	 */
 	public BetterList<CollectionLinkElement<T, ?>> getDerivedElements(int siblingIndex) {
-		return BetterCollections.unmodifiableList(theDerivedElements[siblingIndex]);
+		if (theDerivedElements == null)
+			return BetterList.empty();
+		BetterList<CollectionLinkElement<T, ?>> derived = theDerivedElements[siblingIndex];
+		return derived == null ? BetterList.empty() : BetterCollections.unmodifiableList(derived);
 	}
 
 	void addDerived(int siblingIndex, CollectionLinkElement<T, ?> derived) {

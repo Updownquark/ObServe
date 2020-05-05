@@ -245,6 +245,37 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 	}
 
 	@Override
+	default void removeRange(int fromIndex, int toIndex) {
+		// Because of the possibility of cascading operations (e.g. with flattened collections that re-use multiple component collections),
+		// this operation has to be done a little differently
+		if (fromIndex == toIndex)
+			return;
+		else if (toIndex < fromIndex)
+			throw new IndexOutOfBoundsException(fromIndex + " to " + toIndex);
+		try (Transaction t = lock(true, null)) {
+			if (fromIndex == size())
+				return;
+			ElementId[] next = new ElementId[] { getElement(fromIndex).getElementId() };
+			ElementId[] end = new ElementId[] { toIndex < size() ? getElement(toIndex).getElementId() : null };
+			try (Subscription sub = onChange(evt -> {
+				if (evt.getType() == CollectionChangeType.remove) {
+					if (evt.getElementId().equals(next[0]))
+						next[0] = CollectionElement.getElementId(getAdjacentElement(next[0], true));
+					if (evt.getElementId().equals(end[0]))
+						end[0] = CollectionElement.getElementId(getAdjacentElement(end[0], true));
+				}
+			})) {
+				while (next[0] != null && (end[0] == null || next[0].compareTo(end[0]) < 0)) {
+					MutableCollectionElement<E> mutableEl = mutableElement(next[0]);
+					next[0] = CollectionElement.getElementId(getAdjacentElement(next[0], true));
+					if (mutableEl.canRemove() == null)
+						mutableEl.remove();
+				}
+			}
+		}
+	}
+
+	@Override
 	default <T> T[] toArray(T[] a) {
 		ArrayList<E> ret;
 		try (Transaction t = lock(false, null)) {

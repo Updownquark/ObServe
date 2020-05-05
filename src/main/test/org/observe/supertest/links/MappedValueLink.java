@@ -23,7 +23,7 @@ import com.google.common.reflect.TypeToken;
 
 /**
  * Tests {@link ObservableValue#map(Function)}
- * 
+ *
  * @param <S> The source value type
  * @param <T> The target value type
  */
@@ -31,8 +31,10 @@ public class MappedValueLink<S, T> extends ObservableValueLink<S, T> implements 
 	/** Generates {@link MappedValueLink}s */
 	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator() {
 		@Override
-		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink) {
+		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink, TestValueType targetType) {
 			if (!(sourceLink instanceof ObservableValueLink))
+				return 0;
+			else if (!MappedCollectionLink.supportsTransform(sourceLink.getType(), targetType, true, false))
 				return 0;
 			ObservableValueLink<?, T> sourceVL = (ObservableValueLink<?, T>) sourceLink;
 			if (sourceVL.isTypeCheat())
@@ -41,9 +43,10 @@ public class MappedValueLink<S, T> extends ObservableValueLink<S, T> implements 
 		}
 
 		@Override
-		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
+		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestValueType targetType,
+			TestHelper helper) {
 			ObservableValueLink<?, T> sourceVL = (ObservableValueLink<?, T>) sourceLink;
-			TypeTransformation<T, X> transform = MappedCollectionLink.transform(sourceVL.getType(), helper, true, false);
+			TypeTransformation<T, X> transform = MappedCollectionLink.transform(sourceVL.getType(), targetType, helper, true, false);
 			SimpleSettableValue<TypeTransformation<T, X>> txValue = new SimpleSettableValue<>(
 				(TypeToken<TypeTransformation<T, X>>) (TypeToken<?>) new TypeToken<Object>() {}, false);
 			txValue.set(transform, null);

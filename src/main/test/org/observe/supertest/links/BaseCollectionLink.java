@@ -22,20 +22,21 @@ import com.google.common.reflect.TypeToken;
  */
 public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	/** Generator for {@link BaseCollectionLink}s */
-	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator() {
+	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator.CollectionLinkGenerator() {
 		@Override
-		public <T> double getAffinity(ObservableChainLink<?, T> link) {
+		public <T> double getAffinity(ObservableChainLink<?, T> link, TestValueType targetType) {
 			if (link != null)
 				return 0;
 			return 1;
 		}
 
 		@Override
-		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestHelper helper) {
-			TestValueType type = nextType(helper);
+		public <T, X> ObservableCollectionLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestValueType targetType,
+			TestHelper helper) {
+			TestValueType type = targetType != null ? targetType : nextType(helper);
 			ObservableCollection<X> base = ObservableCollection.build((TypeToken<X>) type.getType()).build();
 			ObservableCollectionTestDef<X> def = new ObservableCollectionTestDef<>(type, base.flow(), base.flow(), true, true);
-			return (ObservableChainLink<T, X>) new BaseCollectionLink<>(path, def, helper);
+			return (ObservableCollectionLink<T, X>) new BaseCollectionLink<>(path, def, helper);
 		}
 	};
 
