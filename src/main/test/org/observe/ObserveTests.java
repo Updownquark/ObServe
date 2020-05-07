@@ -12,6 +12,7 @@ import org.qommons.QommonsTests;
 @SuiteClasses({ //
 	QommonsTests.class, //
 	ObservableTest.class, //
+	ObservableValueTest.class, //
 	ObservableCollectionsTest.class, //
 	ObservableAssocTest.class//
 })

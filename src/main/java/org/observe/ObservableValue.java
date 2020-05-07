@@ -1603,15 +1603,12 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 
 		@Override
 		public T get() {
-			T value = null;
 			for (ObservableValue<? extends T> v : theValues) {
-				value = v.get();
+				T value = v.get();
 				if (theTest.test(value))
-					break;
+					return value;
 			}
-			if (value == null)
-				value = theDefault.get();
-			return value;
+			return theDefault.get();
 		}
 
 		@Override
@@ -1635,7 +1632,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 			@Override
 			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
 				if (theValues.length == 0) {
-					ObservableValueEvent<T> evt = createInitialEvent(null, null);
+					ObservableValueEvent<T> evt = createInitialEvent(theDefault.get(), null);
 					try (Transaction t = ObservableValueEvent.use(evt)) {
 						observer.onNext(evt);
 					}
@@ -1684,15 +1681,19 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 									toFire = null;
 							} else {
 								if (found) {
-									lastValue[0] = event.getNewValue();
 									toFire = new ObservableValueEvent<>(getType(), !hasFiredInit[0], oldValue, event.getNewValue(), event);
-								} else if (nextIndex == theValues.length)
-									toFire = new ObservableValueEvent<>(getType(), !hasFiredInit[0], oldValue, theDefault.get(), event);
-								else
+								} else if (nextIndex == theValues.length) {
+									T def = theDefault.get();
+									if (oldValue != def)
+										toFire = new ObservableValueEvent<>(getType(), !hasFiredInit[0], oldValue, def, event);
+									else
+										toFire = null;
+								} else
 									toFire = null;
 							}
 							if (toFire != null) {
 								hasFiredInit[0] = true;
+								lastValue[0] = toFire.getNewValue();
 								try (Transaction t = ObservableValueEvent.use(toFire)) {
 									observer.onNext(toFire);
 								}
@@ -1708,7 +1709,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 									}
 								} else if (nextIndex < theValues.length)
 									valueSubs[nextIndex] = theValues[nextIndex].changes().subscribe(new ElementFirstObserver(nextIndex));
-							} else if (!hasFiredInit[0])
+							} else if (event.isInitial() && nextIndex < theValues.length)
 								valueSubs[nextIndex] = theValues[nextIndex].changes().subscribe(new ElementFirstObserver(nextIndex));
 						} finally {
 							lock.unlock();
