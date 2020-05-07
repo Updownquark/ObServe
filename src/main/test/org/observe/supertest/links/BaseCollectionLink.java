@@ -128,32 +128,39 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 
 	@Override
 	public CollectionLinkElement<T, T> expectAdd(T value, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before,
-		boolean first, OperationRejection rejection) {
+		boolean first, OperationRejection rejection, boolean execute) {
 		for (CollectionElement<CollectionLinkElement<T, T>> el : getElements().elementsBetween(
 			after == null ? null : after.getElementAddress(), false, //
 				before == null ? null : before.getElementAddress(), false)) {
 			if (el.get().wasAdded() && !el.get().isAddExpected()
 				&& getCollection().equivalence().elementEquals(el.get().getCollectionValue(), value)) {
-				el.get().expectAdded(value);
+				if (execute)
+					el.get().expectAdded(value);
 				return el.get();
 			}
 		}
-		throw new AssertionError("No new elements found to expect between " + after + " and " + before);
+		if (execute)
+			throw new AssertionError("No new elements found to expect between " + after + " and " + before);
+		else {
+			return null;
+		}
 	}
 
 	@Override
 	public CollectionLinkElement<T, T> expectMove(CollectionLinkElement<?, T> source, CollectionLinkElement<?, T> after,
-		CollectionLinkElement<?, T> before, boolean first, OperationRejection rejection) {
+		CollectionLinkElement<?, T> before, boolean first, OperationRejection rejection, boolean execute) {
 		if (source.isPresent())
 			return (CollectionLinkElement<T, T>) source;
 		expect(//
-			new ExpectedCollectionOperation<>(source, ExpectedCollectionOperation.CollectionOpType.remove, source.getValue(), source.getValue()), rejection, true);
+			new ExpectedCollectionOperation<>(source, ExpectedCollectionOperation.CollectionOpType.remove, source.getValue(),
+				source.getValue()),
+			rejection, execute);
 		while (after != null && (after == source || !after.isPresent() || after.wasAdded()))
 			after = CollectionElement.get(getElements().getAdjacentElement(after.getElementAddress(), false));
 		while (before != null && (before == source || !before.isPresent() || before.wasAdded()))
 			before = CollectionElement.get(getElements().getAdjacentElement(before.getElementAddress(), true));
 		return expectAdd(//
-			source.getValue(), after, before, first, rejection);
+			source.getValue(), after, before, first, rejection, execute);
 	}
 
 	@Override

@@ -71,14 +71,15 @@ public class FactoringFlatMapCollectionLink extends AbstractFlatMappedCollection
 
 	@Override
 	public CollectionLinkElement<Integer, Integer> expectAdd(Integer value, CollectionLinkElement<?, Integer> after,
-		CollectionLinkElement<?, Integer> before, boolean first, OperationRejection rejection) {
+		CollectionLinkElement<?, Integer> before, boolean first, OperationRejection rejection, boolean execute) {
 		rejection.reject(StdMsg.UNSUPPORTED_OPERATION);
 		return null;
 	}
 
 	@Override
 	public CollectionLinkElement<Integer, Integer> expectMove(CollectionLinkElement<?, Integer> source,
-		CollectionLinkElement<?, Integer> after, CollectionLinkElement<?, Integer> before, boolean first, OperationRejection rejection) {
+		CollectionLinkElement<?, Integer> after, CollectionLinkElement<?, Integer> before, boolean first, OperationRejection rejection,
+		boolean execute) {
 		if (after != null && source.getCollectionAddress().compareTo(after.getCollectionAddress()) < 0) {
 			rejection.reject(StdMsg.UNSUPPORTED_OPERATION);
 			return null;

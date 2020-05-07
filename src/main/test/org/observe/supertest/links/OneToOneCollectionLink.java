@@ -82,11 +82,11 @@ public abstract class OneToOneCollectionLink<S, T> extends ObservableCollectionL
 
 	@Override
 	public CollectionLinkElement<S, T> expectAdd(T value, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before,
-		boolean first, OperationRejection rejection) {
+		boolean first, OperationRejection rejection, boolean execute) {
 		CollectionLinkElement<?, S> sourceEl = getSourceLink().expectAdd(reverse(value), //
 			after == null ? null : ((CollectionLinkElement<S, T>) after).getFirstSource(), //
 				before == null ? null : ((CollectionLinkElement<S, T>) before).getFirstSource(), //
-					first, rejection);
+			first, rejection, execute);
 		if (rejection.isRejected())
 			return null;
 		return (CollectionLinkElement<S, T>) sourceEl.getDerivedElements(getSiblingIndex()).getFirst();
@@ -94,12 +94,12 @@ public abstract class OneToOneCollectionLink<S, T> extends ObservableCollectionL
 
 	@Override
 	public CollectionLinkElement<S, T> expectMove(CollectionLinkElement<?, T> source, CollectionLinkElement<?, T> after,
-		CollectionLinkElement<?, T> before, boolean first, OperationRejection rejection) {
+		CollectionLinkElement<?, T> before, boolean first, OperationRejection rejection, boolean execute) {
 		CollectionLinkElement<?, S> oldSource = (CollectionLinkElement<?, S>) source.getFirstSource();
 		CollectionLinkElement<?, S> sourceEl = getSourceLink().expectMove(oldSource, //
 			after == null ? null : ((CollectionLinkElement<S, T>) after).getFirstSource(), //
 				before == null ? null : ((CollectionLinkElement<S, T>) before).getFirstSource(), //
-					first, rejection);
+			first, rejection, execute);
 		if (rejection.isRejected())
 			return null;
 		return (CollectionLinkElement<S, T>) sourceEl.getDerivedElements(getSiblingIndex()).getFirst();

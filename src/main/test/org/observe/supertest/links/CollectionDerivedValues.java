@@ -716,11 +716,11 @@ public class CollectionDerivedValues {
 					getSourceLink().expectAdd(value, //
 						theLocation == Ternian.FALSE ? found : null, //
 							theLocation == Ternian.TRUE ? found : null, //
-								true, rejection);
+						true, rejection, true);
 				} else
 					getSourceLink().expect(op, rejection.unrejectable(), true);
 			} else
-				getSourceLink().expectAdd(value, null, null, true, rejection);
+				getSourceLink().expectAdd(value, null, null, true, rejection, true);
 		}
 
 		@Override

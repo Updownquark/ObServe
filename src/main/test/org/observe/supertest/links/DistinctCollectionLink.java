@@ -19,6 +19,7 @@ import org.observe.supertest.ObservableCollectionTestDef;
 import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
 import org.qommons.BiTuple;
+import org.qommons.QommonsUtils;
 import org.qommons.TestHelper;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.ElementId;
@@ -148,7 +149,7 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 
 	@Override
 	public CollectionLinkElement<T, T> expectAdd(T value, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before,
-		boolean first, OperationRejection rejection) {
+		boolean first, OperationRejection rejection, boolean execute) {
 		if (theHelper != null) {
 			BiTuple<CollectionLinkElement<?, T>, CollectionLinkElement<?, T>> afterBefore = theHelper.expectAdd(value, after, before, first,
 				rejection);
@@ -167,9 +168,9 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 			sourceEl = getSourceLink().expectAdd(value, //
 				after == null ? null : (CollectionLinkElement<?, T>) after.getFirstSource(),
 					before == null ? null : (CollectionLinkElement<?, T>) before.getFirstSource(), //
-						first, rejection);
+						first, rejection, execute);
 		else
-			sourceEl = getSourceLink().expectAdd(value, null, null, first, rejection);
+			sourceEl = getSourceLink().expectAdd(value, null, null, first, rejection, execute);
 		if (rejection.isRejected())
 			return null;
 		CollectionLinkElement<T, T> element = (CollectionLinkElement<T, T>) sourceEl.getDerivedElements(getSiblingIndex()).getFirst();
@@ -179,7 +180,7 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 
 	@Override
 	public CollectionLinkElement<T, T> expectMove(CollectionLinkElement<?, T> source, CollectionLinkElement<?, T> after,
-		CollectionLinkElement<?, T> before, boolean first, OperationRejection rejection) {
+		CollectionLinkElement<?, T> before, boolean first, OperationRejection rejection, boolean execute) {
 		if (theHelper != null)
 			theHelper.expectMove(source, after, before, first, rejection);
 		if (!rejection.isRejected()) {
@@ -189,8 +190,10 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 					.getDerivedElements(getSiblingIndex());
 				Assert.assertEquals(2, sourceDerived.size());
 				newSource = (CollectionLinkElement<T, T>) sourceDerived.getLast();
-				source.expectRemoval();
-				newSource.expectAdded(source.getValue());
+				if (execute) {
+					source.expectRemoval();
+					newSource.expectAdded(source.getValue());
+				}
 			} else
 				newSource = (CollectionLinkElement<T, T>) source;
 			theValues.get(source.getValue()).element = newSource;
@@ -206,23 +209,25 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		T oldValue = derivedOp.getElement().getValue();
 		ValueElement valueEl = theValues.computeIfAbsent(oldValue,
 			__ -> new ValueElement((CollectionLinkElement<T, T>) derivedOp.getElement()));
-		for (CollectionLinkElement<?, T> sourceEl : valueEl.sourceElements) {
-			getSourceLink().expect(
-				new ExpectedCollectionOperation<>(sourceEl, derivedOp.getType(), sourceEl.getValue(), derivedOp.getValue()), rejection,
-				false);
-			if (rejection.isRejected())
-				return;
-		}
 		boolean set = derivedOp.getType() == ExpectedCollectionOperation.CollectionOpType.set;
-		if (set) {
-			boolean equal;
-			if (theHelper != null)
-				equal = theHelper.getCompare().compare(oldValue, derivedOp.getValue()) == 0;
-			else
-				equal = oldValue.equals(derivedOp.getValue());
-			if (!equal && rejection.isRejectable() && theValues.containsKey(derivedOp.getValue())) {
-				rejection.reject(StdMsg.ELEMENT_EXISTS);
-				return;
+		if (rejection.isRejectable()) { // If not rejectable, presumably this has already been tested
+			for (CollectionLinkElement<?, T> sourceEl : valueEl.sourceElements) {
+				getSourceLink().expect(
+					new ExpectedCollectionOperation<>(sourceEl, derivedOp.getType(), sourceEl.getValue(), derivedOp.getValue()), rejection,
+					false);
+				if (rejection.isRejected())
+					return;
+			}
+			if (set) {
+				boolean equal;
+				if (theHelper != null)
+					equal = theHelper.getCompare().compare(oldValue, derivedOp.getValue()) == 0;
+				else
+					equal = oldValue.equals(derivedOp.getValue());
+				if (!equal && rejection.isRejectable() && theValues.containsKey(derivedOp.getValue())) {
+					rejection.reject(StdMsg.ELEMENT_EXISTS);
+					return;
+				}
 			}
 		}
 		if (execute) {
@@ -234,15 +239,20 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 			ElementId activeEl = getCollection().getSourceElements(valueEl.element.getCollectionAddress(), getSourceLink().getCollection())
 				.getFirst();
 			rejection.unrejectable();
-			for (CollectionLinkElement<?, T> sourceEl : valueEl.sourceElements) {
-				if (!sourceEl.getCollectionAddress().equals(activeEl))
+			// Because each source.expect method below has the potential to remove multiple source elements,
+			// we may need to make a copy of the list
+			List<CollectionLinkElement<?, T>> sourceEls = valueEl.sourceElements;
+			if (isComposite())
+				sourceEls = QommonsUtils.unmodifiableCopy(sourceEls);
+			for (CollectionLinkElement<?, T> sourceEl : sourceEls) {
+				if (sourceEl.isRemoveExpected() || !sourceEl.getCollectionAddress().equals(activeEl))
 					continue;
 				getSourceLink().expect(
 					new ExpectedCollectionOperation<>(sourceEl, derivedOp.getType(), sourceEl.getValue(), derivedOp.getValue()), rejection,
 					true);
 			}
-			for (CollectionLinkElement<?, T> sourceEl : valueEl.sourceElements) {
-				if (sourceEl.getCollectionAddress().equals(activeEl))
+			for (CollectionLinkElement<?, T> sourceEl : sourceEls) {
+				if (sourceEl.isRemoveExpected() || sourceEl.getCollectionAddress().equals(activeEl))
 					continue;
 				getSourceLink().expect(
 					new ExpectedCollectionOperation<>(sourceEl, derivedOp.getType(), sourceEl.getValue(), derivedOp.getValue()), rejection,

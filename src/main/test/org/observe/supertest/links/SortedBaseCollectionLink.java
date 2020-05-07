@@ -95,30 +95,32 @@ public class SortedBaseCollectionLink<T> extends BaseCollectionLink<T> {
 
 	@Override
 	public CollectionLinkElement<T, T> expectAdd(T value, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before,
-		boolean first, OperationRejection rejection) {
+		boolean first, OperationRejection rejection, boolean execute) {
 		BiTuple<CollectionLinkElement<?, T>, CollectionLinkElement<?, T>> afterBefore = theHelper.expectAdd(value, after, before, first,
 			rejection);
 		if (afterBefore == null)
 			return null;
-		if (theDistinctValues != null && !theDistinctValues.add(value)) {
-			rejection.reject(StdMsg.ELEMENT_EXISTS);
-			return null;
+		if (theDistinctValues != null) {
+			if ((execute && !theDistinctValues.add(value)) || (!execute & theDistinctValues.contains(value))) {
+				rejection.reject(StdMsg.ELEMENT_EXISTS);
+				return null;
+			}
 		}
 		after = afterBefore.getValue1();
 		before = afterBefore.getValue2();
-		return super.expectAdd(value, after, before, first, rejection);
+		return super.expectAdd(value, after, before, first, rejection, execute);
 	}
 
 	@Override
 	public CollectionLinkElement<T, T> expectMove(CollectionLinkElement<?, T> source, CollectionLinkElement<?, T> after,
-		CollectionLinkElement<?, T> before, boolean first, OperationRejection rejection) {
+		CollectionLinkElement<?, T> before, boolean first, OperationRejection rejection, boolean execute) {
 		BiTuple<CollectionLinkElement<?, T>, CollectionLinkElement<?, T>> afterBefore = theHelper.expectMove(source, after, before, first,
 			rejection);
 		if (afterBefore == null)
 			return null;
 		after = afterBefore.getValue1();
 		before = afterBefore.getValue2();
-		return super.expectMove(source, after, before, first, rejection);
+		return super.expectMove(source, after, before, first, rejection, execute);
 	}
 
 	@Override

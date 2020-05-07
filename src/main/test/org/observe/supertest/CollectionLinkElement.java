@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.function.Consumer;
 
 import org.junit.Assert;
+import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
 import org.observe.supertest.ExpectedCollectionOperation.CollectionOpType;
 import org.qommons.collect.BetterCollections;
@@ -35,6 +36,7 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 	private boolean wasRemoved;
 	private boolean wasUpdated;
 	private T theValue;
+	private T theCollectionValue;
 	private int isAddExpected;
 	private boolean isRemoveExpected;
 
@@ -57,6 +59,7 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 		theErrors = new LinkedList<>();
 		theLastKnownIndex = theCollectionLink.getElements().getElementsBefore(elementAddress);
 		wasAdded = true;
+		theCollectionValue = getCollectionValue();
 
 		if (theCollectionLink.getSourceLink() != null) {
 			BetterList<ElementId> sourceElements = theCollectionLink.getCollection().getSourceElements(theCollectionAddress,
@@ -80,9 +83,19 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 		wasRemoved = true;
 	}
 
-	/** Called when a set operation occurs on this element in the actual collection */
-	public void updated() {
+	/**
+	 * Called when a set operation occurs on this element in the actual collection
+	 *
+	 * @param oldValue The previous value of the element in the collection
+	 * @param newValue The new value of the element in the collection
+	 */
+	public void updated(T oldValue, T newValue) {
+		if (theCollectionLink.getDef().checkOldValues
+			&& !theCollectionLink.getCollection().equivalence().elementEquals(theCollectionValue, oldValue))
+			throw new AssertionError(
+				theCollectionLink.getPath() + ": Old values do not match: Expected " + theCollectionValue + " but was " + oldValue);
 		wasUpdated = true;
+		theCollectionValue = newValue;
 	}
 
 	/** @return The value of this element, as last known by the collection link */
@@ -174,6 +187,11 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 	/** @return Whether this element was added and has not yet been {@link #expectAdded(Object) expected} */
 	public boolean wasAdded() {
 		return wasAdded;
+	}
+
+	/** @return Whether this element was updated ({@link CollectionChangeType#set}) during the current modification */
+	public boolean wasUpdated() {
+		return wasUpdated;
 	}
 
 	/** @return Whether this element's addition has been expected */
@@ -347,6 +365,28 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 		wasAdded = wasUpdated = false;
 		isAddExpected = 0;
 		updateSourceLinks(true);
+	}
+
+	/**
+	 * Prints this collection element and its sources, their sources, etc.
+	 *
+	 * @param str The string builder to append to (one will be created if null)
+	 * @param indent The amount to indent
+	 * @return The string builder
+	 */
+	public StringBuilder printAncestry(StringBuilder str, int indent) {
+		if (str == null)
+			str = new StringBuilder();
+		for (int i = 0; i < indent; i++)
+			str.append('\t');
+		str.append(theCollectionLink.getPath()).append(':').append(theCollectionLink).append(' ').append(toString());
+		if (theCustomData instanceof CollectionLinkElement)
+			((CollectionLinkElement<?, ?>) theCustomData).printAncestry(str.append('\n'), indent + 1);
+		else if (theCustomData != null)
+			str.append(" (").append(theCustomData).append(')');
+		for (CollectionLinkElement<?, S> sourceEl : theSourceElements)
+			sourceEl.printAncestry(str.append('\n'), indent + 1);
+		return str;
 	}
 
 	@Override

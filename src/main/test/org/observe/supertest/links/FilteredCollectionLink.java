@@ -155,7 +155,7 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
 
 	@Override
 	public CollectionLinkElement<T, T> expectAdd(T value, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before,
-		boolean first, OperationRejection rejection) {
+		boolean first, OperationRejection rejection, boolean execute) {
 		String msg = theFilterValue.get().apply(value);
 		if (msg != null) {
 			rejection.reject(msg);
@@ -164,7 +164,7 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		CollectionLinkElement<?, T> sourceAdded = getSourceLink().expectAdd(value, //
 			after == null ? null : (CollectionLinkElement<?, T>) after.getFirstSource(), //
 				before == null ? null : (CollectionLinkElement<?, T>) before.getFirstSource(), //
-					first, rejection);
+			first, rejection, execute);
 		if (rejection.isRejected())
 			return null;
 		return (CollectionLinkElement<T, T>) sourceAdded.getDerivedElements(getSiblingIndex()).getFirst();
@@ -172,12 +172,12 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
 
 	@Override
 	public CollectionLinkElement<T, T> expectMove(CollectionLinkElement<?, T> source, CollectionLinkElement<?, T> after,
-		CollectionLinkElement<?, T> before, boolean first, OperationRejection rejection) {
+		CollectionLinkElement<?, T> before, boolean first, OperationRejection rejection, boolean execute) {
 		CollectionLinkElement<?, T> sourceEl = getSourceLink().expectMove(//
 			(CollectionLinkElement<?, T>) source.getFirstSource(), //
 			after == null ? null : (CollectionLinkElement<?, T>) after.getFirstSource(), //
 				before == null ? null : (CollectionLinkElement<?, T>) before.getFirstSource(), //
-					first, rejection);
+			first, rejection, execute);
 		return sourceEl == null ? null : (CollectionLinkElement<T, T>) sourceEl.getDerivedElements(getSiblingIndex()).getFirst();
 	}
 

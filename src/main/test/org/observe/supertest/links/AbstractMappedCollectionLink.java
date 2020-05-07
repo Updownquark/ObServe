@@ -53,7 +53,7 @@ public abstract class AbstractMappedCollectionLink<S, T> extends OneToOneCollect
 
 	@Override
 	public CollectionLinkElement<S, T> expectAdd(T value, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before,
-		boolean first, OperationRejection rejection) {
+		boolean first, OperationRejection rejection, boolean execute) {
 		if (!isReversible()) {
 			rejection.reject(StdMsg.UNSUPPORTED_OPERATION);
 			return null;
@@ -61,7 +61,7 @@ public abstract class AbstractMappedCollectionLink<S, T> extends OneToOneCollect
 			rejection.reject(StdMsg.ILLEGAL_ELEMENT);
 			return null;
 		}
-		return super.expectAdd(value, after, before, first, rejection);
+		return super.expectAdd(value, after, before, first, rejection, execute);
 	}
 
 	@Override

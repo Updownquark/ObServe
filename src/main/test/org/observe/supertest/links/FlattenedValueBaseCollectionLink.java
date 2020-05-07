@@ -136,12 +136,12 @@ public class FlattenedValueBaseCollectionLink<T> extends BaseCollectionLink<T> {
 
 	@Override
 	public CollectionLinkElement<T, T> expectAdd(T value, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before,
-		boolean first, OperationRejection rejection) {
+		boolean first, OperationRejection rejection, boolean execute) {
 		if (theCollectionValue.get() == null) {
 			rejection.reject(StdMsg.UNSUPPORTED_OPERATION);
 			return null;
 		}
-		return super.expectAdd(value, after, before, first, rejection);
+		return super.expectAdd(value, after, before, first, rejection, execute);
 	}
 
 	@Override

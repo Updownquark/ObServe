@@ -83,14 +83,14 @@ public class ReversedCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 
 	@Override
 	public CollectionLinkElement<T, T> expectAdd(T value, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before,
-		boolean first, OperationRejection rejection) {
-		return super.expectAdd(value, before, after, !first, rejection);
+		boolean first, OperationRejection rejection, boolean execute) {
+		return super.expectAdd(value, before, after, !first, rejection, execute);
 	}
 
 	@Override
 	public CollectionLinkElement<T, T> expectMove(CollectionLinkElement<?, T> source, CollectionLinkElement<?, T> after,
-		CollectionLinkElement<?, T> before, boolean first, OperationRejection rejection) {
-		return super.expectMove(source, before, after, !first, rejection);
+		CollectionLinkElement<?, T> before, boolean first, OperationRejection rejection, boolean execute) {
+		return super.expectMove(source, before, after, !first, rejection, execute);
 	}
 
 	@Override

@@ -79,31 +79,19 @@ public class SortedCollectionLink<T> extends ObservableCollectionLink<T, T> {
 
 	@Override
 	public CollectionLinkElement<T, T> expectAdd(T value, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before,
-		boolean first, OperationRejection rejection) {
+		boolean first, OperationRejection rejection, boolean execute) {
 		BiTuple<CollectionLinkElement<?, T>, CollectionLinkElement<?, T>> afterBefore = theHelper.expectAdd(value, after, before, first,
 			rejection);
 		if (afterBefore == null)
 			return null;
 
-		CollectionLinkElement<?, T> sourceEl = null;
-		if (afterBefore.getValue1() == null && afterBefore.getValue2() == null) {
-			if (first && after != null)
-				sourceEl = getSourceLink().expectAdd(value, //
-					(CollectionLinkElement<?, T>) after.getFirstSource(), null, first, rejection);
-			rejection.reset();
-			if (sourceEl == null && !first && before != null)
-				sourceEl = getSourceLink().expectAdd(value, null, (CollectionLinkElement<?, T>) before.getFirstSource(), first, rejection);
-			rejection.reset();
-		}
-		if (sourceEl == null) {
-			after = afterBefore.getValue1();
-			before = afterBefore.getValue2();
+		after = afterBefore.getValue1();
+		before = afterBefore.getValue2();
 
-			sourceEl = getSourceLink().expectAdd(value, //
-				after == null ? null : (CollectionLinkElement<?, T>) after.getFirstSource(),
-				before == null ? null : (CollectionLinkElement<?, T>) before.getFirstSource(), //
-				first, rejection);
-		}
+		CollectionLinkElement<?, T> sourceEl = getSourceLink().expectAdd(value, //
+			after == null ? null : (CollectionLinkElement<?, T>) after.getFirstSource(),
+			before == null ? null : (CollectionLinkElement<?, T>) before.getFirstSource(), //
+			first, rejection, execute);
 		if (sourceEl == null)
 			return null;
 		CollectionLinkElement<T, T> element = (CollectionLinkElement<T, T>) sourceEl.getDerivedElements(getSiblingIndex()).getFirst();
@@ -113,7 +101,7 @@ public class SortedCollectionLink<T> extends ObservableCollectionLink<T, T> {
 
 	@Override
 	public CollectionLinkElement<T, T> expectMove(CollectionLinkElement<?, T> source, CollectionLinkElement<?, T> after,
-		CollectionLinkElement<?, T> before, boolean first, OperationRejection rejection) {
+		CollectionLinkElement<?, T> before, boolean first, OperationRejection rejection, boolean execute) {
 		BiTuple<CollectionLinkElement<?, T>, CollectionLinkElement<?, T>> afterBefore = theHelper.expectMove(source, after, before, first,
 			rejection);
 		if (afterBefore == null)
@@ -124,7 +112,7 @@ public class SortedCollectionLink<T> extends ObservableCollectionLink<T, T> {
 			(CollectionLinkElement<?, T>) source.getFirstSource(), //
 			after == null ? null : (CollectionLinkElement<?, T>) after.getFirstSource(),
 				before == null ? null : (CollectionLinkElement<?, T>) before.getFirstSource(), //
-					first, rejection);
+					first, rejection, execute);
 		return sourceEl == null ? null : (CollectionLinkElement<T, T>) sourceEl.getDerivedElements(getSiblingIndex()).getFirst();
 	}
 
