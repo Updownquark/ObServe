@@ -2,6 +2,7 @@ package org.observe;
 
 import java.io.File;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.function.Function;
 
 import org.junit.Test;
@@ -9,6 +10,7 @@ import org.observe.supertest.ObservableChainTester;
 import org.observe.supertest.TestValueType;
 import org.observe.supertest.links.BaseCollectionLink;
 import org.observe.supertest.links.FilteredCollectionLink;
+import org.qommons.StringUtils;
 import org.qommons.TestHelper;
 
 import com.google.common.reflect.TypeToken;
@@ -53,14 +55,61 @@ public class ObservableValueTest {
 			System.out.println("Testing " + count + " " + type + "s with " + test + ", default " + defValue);
 			helper.placemark();
 			ObservableValueTester<Object> tester = new ObservableValueTester<>(first);
-			check(tester, values, test, defValue);
-			if (count == 0)
-				return;
-			for (int change = 0; change < 100; change++) {
-				int index = helper.getInt(0, count);
-				Object newValue = ObservableChainTester.SUPPLIERS.get(type).apply(helper);
-				values[index].set(newValue, null);
+			boolean initial = true;
+			int change = 0;
+			int target = -1;
+			boolean changing = false;
+			StringBuilder preValues = new StringBuilder(), postValues = new StringBuilder();
+			try {
+				StringUtils.print(postValues, ", ", Arrays.asList(values), (s, v) -> {
+					if (test.apply(v.get()) == null)
+						s.append('*');
+					s.append(v.get());
+				});
+				if (helper.isReproducing())
+					System.out.println("Initial values: " + postValues);
 				check(tester, values, test, defValue);
+				initial = false;
+				if (count == 0)
+					return;
+				for (; change < 100; change++) {
+					StringBuilder temp = preValues;
+					preValues = postValues;
+					postValues = temp;
+					postValues.setLength(0);
+					target = helper.getInt(0, count);
+					changing = true;
+					Object newValue = ObservableChainTester.SUPPLIERS.get(type).apply(helper);
+					if (helper.isReproducing())
+						System.out.println("Change " + change + ": [" + target + "] " + values[target].get() + "->" + newValue);
+					changing = false;
+					values[target].set(newValue, null);
+					StringUtils.print(postValues, ", ", Arrays.asList(values), (s, v) -> {
+						if (test.apply(v.get()) == null)
+							s.append('*');
+						s.append(v.get());
+					});
+					check(tester, values, test, defValue);
+					if (helper.isReproducing())
+						System.out.println("Values: " + postValues);
+				}
+			} catch (RuntimeException | Error e) {
+				String msg = "Error ";
+				if (initial)
+					msg += "on initial values";
+				else if (changing)
+					msg += " during change " + change + " on value " + target;
+				else
+					msg += "after change " + change + " on value " + target;
+				System.err.println(msg);
+				if (initial)
+					System.err.println("Values: " + preValues);
+				else {
+					System.err.println("Pre-change values:  " + preValues);
+					if (!changing)
+						System.err.println("Post-change values: " + postValues);
+				}
+				throw e;
 			}
 		}
 

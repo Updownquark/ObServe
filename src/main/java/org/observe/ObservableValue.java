@@ -1670,47 +1670,57 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 								while (nextIndex < theValues.length && finished[nextIndex])
 									nextIndex++;
 							}
-							T oldValue = (T) lastValue[0];
 							ObservableValueEvent<T> toFire;
 							if (complete) {
 								finished[index] = true;
 								valueSubs[index] = null;
-								if (allCompleted())
-									toFire = new ObservableValueEvent<>(getType(), !hasFiredInit[0], oldValue, oldValue, event);
-								else
+							}
+							boolean allComplete = complete && allCompleted();
+							if (!found) {
+								if (!isFound && !event.isInitial())
 									toFire = null;
-							} else {
-								if (found) {
-									toFire = new ObservableValueEvent<>(getType(), !hasFiredInit[0], oldValue, event.getNewValue(), event);
-								} else if (nextIndex == theValues.length) {
+								else if (nextIndex < theValues.length) {
+									toFire = null;
+									valueSubs[nextIndex] = theValues[nextIndex].changes().subscribe(new ElementFirstObserver(nextIndex));
+								} else if (allComplete) {
+									toFire = createChangeEvent((T) lastValue[0], (T) lastValue[0], event);
+								} else {
 									T def = theDefault.get();
-									if (oldValue != def)
-										toFire = new ObservableValueEvent<>(getType(), !hasFiredInit[0], oldValue, def, event);
+									if (!hasFiredInit[0])
+										toFire = createInitialEvent(def, event);
+									else if (def != lastValue[0])
+										toFire = createChangeEvent((T) lastValue[0], def, event);
 									else
 										toFire = null;
-								} else
-									toFire = null;
-							}
-							if (toFire != null) {
-								hasFiredInit[0] = true;
-								lastValue[0] = toFire.getNewValue();
-								try (Transaction t = ObservableValueEvent.use(toFire)) {
-									observer.onNext(toFire);
+									lastValue[0] = def;
 								}
-							}
-							if (found != isFound) {
-								isFound = found;
-								if (found) {
+							} else {
+								if (!isFound) {
 									for (int i = index + 1; i < valueSubs.length; i++) {
 										if (valueSubs[i] != null) {
 											valueSubs[i].unsubscribe();
 											valueSubs[i] = null;
 										}
 									}
-								} else if (nextIndex < theValues.length)
-									valueSubs[nextIndex] = theValues[nextIndex].changes().subscribe(new ElementFirstObserver(nextIndex));
-							} else if (event.isInitial() && nextIndex < theValues.length)
-								valueSubs[nextIndex] = theValues[nextIndex].changes().subscribe(new ElementFirstObserver(nextIndex));
+								}
+								if (!hasFiredInit[0])
+									toFire = createInitialEvent(event.getNewValue(), event);
+								else
+									toFire = createChangeEvent((T) lastValue[0], event.getNewValue(), event);
+								lastValue[0] = event.getNewValue();
+							}
+							isFound = found;
+
+							if (toFire != null) {
+								hasFiredInit[0] = true;
+								lastValue[0] = toFire.getNewValue();
+								try (Transaction t = ObservableValueEvent.use(toFire)) {
+									if (allComplete)
+										observer.onCompleted(toFire);
+									else
+										observer.onNext(toFire);
+								}
+							}
 						} finally {
 							lock.unlock();
 						}
