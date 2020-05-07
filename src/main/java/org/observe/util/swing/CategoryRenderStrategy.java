@@ -94,6 +94,7 @@ public class CategoryRenderStrategy<R, C> {
 		public CategoryMutationStrategy asCheck() {
 			if (!TypeTokens.get().isBoolean(getType()))
 				throw new IllegalStateException("Can only use checkbox editing with a boolean-typed category, not " + getType());
+			withRenderer(ObservableCellRenderer.checkRenderer(c -> Boolean.TRUE.equals(c.getCellValue())));
 			return withEditor((ObservableCellEditor<R, C>) ObservableCellEditor.createCheckBoxEditor());
 		}
 

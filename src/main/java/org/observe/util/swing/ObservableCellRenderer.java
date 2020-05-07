@@ -3,9 +3,11 @@ package org.observe.util.swing;
 import java.awt.Component;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import javax.swing.DefaultListCellRenderer;
+import javax.swing.JCheckBox;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JTable;
@@ -15,6 +17,8 @@ import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableCellRenderer;
 import javax.swing.tree.DefaultTreeCellRenderer;
 import javax.swing.tree.TreeCellRenderer;
+
+import org.qommons.LambdaUtils;
 
 public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 	public interface CellRenderContext {
@@ -215,6 +219,62 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 		}
 	}
 
+	class CheckCellRenderer<M, C> implements ObservableCellRenderer<M, C> {
+		private final Predicate<? super ModelCell<? extends M, ? extends C>> theRender;
+		private final JCheckBox theCheckBox;
+
+		private Function<? super ModelCell<? extends M, ? extends C>, String> theText;
+		private CellDecorator<M, C> theDecorator;
+		private ComponentDecorator theComponentDecorator;
+
+		public CheckCellRenderer(Predicate<? super ModelCell<? extends M, ? extends C>> render) {
+			theRender = render;
+			theCheckBox = new JCheckBox();
+			theCheckBox.setHorizontalAlignment(JCheckBox.CENTER);
+		}
+
+		public CheckCellRenderer<M, C> setText(String text) {
+			return withText(LambdaUtils.constantFn(text, () -> text, null));
+		}
+
+		public CheckCellRenderer<M, C> withValueText(Function<? super C, String> text) {
+			return withText(cell -> text.apply(cell.getCellValue()));
+		}
+
+		public CheckCellRenderer<M, C> withText(Function<? super ModelCell<? extends M, ? extends C>, String> text) {
+			theText = text;
+			return this;
+		}
+
+		@Override
+		public String renderAsText(Supplier<M> modelValue, C columnValue) {
+			return String.valueOf(columnValue);
+		}
+
+		@Override
+		public CheckCellRenderer<M, C> decorate(CellDecorator<M, C> decorator) {
+			theDecorator = decorator;
+			return this;
+		}
+
+		@Override
+		public Component getCellRendererComponent(Component parent, ModelCell<M, C> cell, CellRenderContext ctx) {
+			JCheckBox cb = theCheckBox;
+			if (theText != null)
+				cb.setText(theText.apply(cell));
+			cb.setSelected(theRender.test(cell));
+			if (theDecorator != null) {
+				if (theComponentDecorator == null)
+					theComponentDecorator = new ComponentDecorator();
+				else
+					theComponentDecorator.reset();
+				theDecorator.decorate(cell, theComponentDecorator);
+				cb = theComponentDecorator.decorate(cb);
+			}
+			return cb;
+		}
+	}
+
 	public static <M, C, R extends JLabel> DefaultObservableCellRenderer<M, C> formatted(BiFunction<? super M, ? super C, String> format) {
 		class BiFormattedCellRenderer extends DefaultObservableCellRenderer<M, C> {
 			public BiFormattedCellRenderer() {
@@ -241,5 +301,9 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 			}
 		}
 		return new BiFormattedCellRenderer();
+	}
+
+	public static <M, C> ObservableCellRenderer<M, C> checkRenderer(Predicate<? super ModelCell<? extends M, ? extends C>> value) {
+		return new CheckCellRenderer<>(value);
 	}
 }
