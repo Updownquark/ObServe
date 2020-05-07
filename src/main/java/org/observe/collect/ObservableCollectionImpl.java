@@ -2026,7 +2026,7 @@ public final class ObservableCollectionImpl {
 		@Override
 		public ObservableCollection<E> reverse() {
 			if (BetterCollections.simplifyDuplicateOperations())
-				return this;
+				return getWrapped();
 			else
 				return ObservableCollection.super.reverse();
 		}
@@ -3255,8 +3255,7 @@ public final class ObservableCollectionImpl {
 			ObservableCollection<? extends E> current = getWrapped().get();
 			if (current == null)
 				return BetterList.empty();
-			return BetterList
-				.of(current.getElementsBySource(strip(current, sourceEl), sourceCollection).stream().map(el -> getElement(current, el)));
+			return BetterList.of(current.getElementsBySource(sourceEl, sourceCollection).stream().map(el -> getElement(current, el)));
 		}
 
 		@Override

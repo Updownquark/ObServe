@@ -106,7 +106,7 @@ public class ObservableSetImpl {
 		@Override
 		public ObservableSet<E> reverse() {
 			if (BetterCollections.simplifyDuplicateOperations())
-				return this;
+				return getWrapped();
 			else
 				return ObservableSet.super.reverse();
 		}

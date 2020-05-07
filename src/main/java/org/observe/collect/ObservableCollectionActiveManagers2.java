@@ -852,6 +852,7 @@ public class ObservableCollectionActiveManagers2 {
 			theRefresh = refresh;
 			theRefreshObservables = BetterHashMap.build().unsafe().buildMap();
 			theLock = new ReentrantReadWriteLock();
+			theSettingElement = () -> null;
 		}
 
 		void withSettingElement(Supplier<DerivedCollectionElement<? extends T>> settingElement) {

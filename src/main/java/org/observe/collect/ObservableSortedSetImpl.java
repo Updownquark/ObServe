@@ -174,7 +174,7 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public void setValue(Collection<ElementId> elements, E value) {
-			getWrapped().setValue(BetterList.of(elements.stream().map(this::unwrap)), value);
+			getWrapped().setValue(BetterList.of(elements.stream().map(BetterSortedSet.BetterSubSet::unwrap)), value);
 		}
 
 		@Override
@@ -315,7 +315,7 @@ public class ObservableSortedSetImpl {
 		@Override
 		public ObservableSortedSet<E> reverse() {
 			if (BetterCollections.simplifyDuplicateOperations())
-				return this;
+				return getWrapped();
 			else
 				return ObservableSortedSet.super.reverse();
 		}
