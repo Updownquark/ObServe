@@ -1192,7 +1192,7 @@ public class ObservableCollectionDataFlowImpl {
 					String msg = ((SettableValue<T>) sourceAndValue.source).isAcceptable(sourceAndValue.result);
 					if (msg != null)
 						return sourceAndValue.reject(msg, true);
-					return null;
+					return sourceAndValue;
 				}
 
 				@Override
@@ -1216,7 +1216,26 @@ public class ObservableCollectionDataFlowImpl {
 				public ObservableValue<? extends T> reverse(DerivedCollectionElement<? extends ObservableValue<? extends T>> element,
 					T newValue) {
 					settingElement.accept(element);
-					return reverse(element.get(), newValue);
+					try {
+						return reverse(element.get(), newValue);
+					} finally {
+						settingElement.clear();
+					}
+				}
+
+				@Override
+				public int hashCode() {
+					return RefreshingMapReverse.class.hashCode();
+				}
+
+				@Override
+				public boolean equals(Object obj) {
+					return obj.getClass() == getClass();
+				}
+
+				@Override
+				public String toString() {
+					return "flattenedValueSet";
 				}
 			}
 			ActiveCollectionManager<E, ?, T> manager = getParent()//
@@ -1225,7 +1244,7 @@ public class ObservableCollectionDataFlowImpl {
 				.map(getTargetType(), //
 					LambdaUtils.printableFn(obs -> obs == null ? null : obs.get(), () -> "flatten"), //
 					options -> options//
-					.withReverse(new RefreshingMapReverse()))//
+					.withReverse(new RefreshingMapReverse()).propagateUpdateToParent(false))//
 				.manageActive();
 			if (manager instanceof AbstractMappingManager//
 				&& ((AbstractMappingManager<?, ?, ?>) manager)
@@ -1390,7 +1409,9 @@ public class ObservableCollectionDataFlowImpl {
 					if (theOptions.isPropagatingUpdatesToParent() || !getParent().equivalence().elementEquals(parentValue, newParentValue))
 						el.setParent(newParentValue);
 				}
-			} else if (theOptions.isCached()) {
+				return;
+			}
+			if (theOptions.isCached()) {
 				I oldSource = null;
 				boolean first = true, allUpdates = true, allIdenticalUpdates = true;
 				for (AbstractMappedElement el : (Collection<AbstractMappedElement>) elements) {

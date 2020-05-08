@@ -1182,7 +1182,8 @@ public class ObservableSetImpl {
 					return StdMsg.ELEMENT_EXISTS;
 				}
 				if (!isPreservingSourceOrder) {
-					msg = theElementsByValue.keySet().mutableElement(theValueId).isAcceptable(value);
+					msg = theElementsByValue.keySet().mutableElement(theValueId)//
+						.isAcceptable(value);
 					if (msg != null)
 						return msg;
 				}

@@ -382,7 +382,7 @@ public interface XformOptions {
 		@Override
 		public XformCacheHandler<E, T> initialize(Supplier<E> value) {
 			if (theDef.isCached() || !theDef.isFireIfUnchanged())
-				theSrcCache = value.get();
+				theSrcCache = value == null ? null : value.get();
 			return this;
 		}
 
