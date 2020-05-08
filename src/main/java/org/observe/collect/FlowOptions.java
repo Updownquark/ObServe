@@ -5,6 +5,7 @@ import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 import org.observe.XformOptions;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
@@ -183,7 +184,64 @@ public interface FlowOptions {
 	}
 
 	/**
-	 * Allows the ability to add and/or set elements in a flow by providing source values from target values
+	 * A result of {@link MapReverse#canReverse(Supplier, Object)}
+	 *
+	 * @param <E> The source type of the flow
+	 * @param <T> The target type of the flow
+	 */
+	public interface ReverseQueryResult<E, T> {
+		/** @return The error for the operation, if it was rejected */
+		String getError();
+
+		/**
+		 * @return The reversed value, if the operation was accepted
+		 * @throws UnsupportedOperationException If the operation was unsupported
+		 * @throws IllegalArgumentException If the argument was illegal
+		 */
+		E getReversed() throws UnsupportedOperationException, IllegalArgumentException;
+
+		/**
+		 * @param message The rejection message
+		 * @return The error result
+		 */
+		public static <E, T> ReverseQueryResult<E, T> reject(String message) {
+			return new ReverseQueryResult<E, T>() {
+				@Override
+				public String getError() {
+					return message;
+				}
+
+				@Override
+				public E getReversed() {
+					if (message.equals(StdMsg.UNSUPPORTED_OPERATION))
+						throw new UnsupportedOperationException(message);
+					else
+						throw new IllegalArgumentException(message);
+				}
+			};
+		}
+
+		/**
+		 * @param value The reversed value
+		 * @return The value result
+		 */
+		public static <E, T> ReverseQueryResult<E, T> value(E value) {
+			return new ReverseQueryResult<E, T>() {
+				@Override
+				public String getError() {
+					return null;
+				}
+
+				@Override
+				public E getReversed() {
+					return value;
+				}
+			};
+		}
+	}
+
+	/**
+	 * Allows the ability to add and/or set elements in a mapped flow by providing source values from target values
 	 *
 	 * @param <E> The source type of the flow
 	 * @param <T> The target type of the flow
@@ -193,23 +251,18 @@ public interface FlowOptions {
 		boolean isStateful();
 
 		/**
-		 * @param sourceAndValue A filter map result containing the new result value and (possibly) previous source value for the element.
-		 *        The previous source value may be null if
-		 *        <ul>
-		 *        <li>The query operation is an addition</li>
-		 *        <li>This reverse is not {@link #isStateful() stateful}, which indicates that the previous source value is not necessary.
-		 *        If this is the case, the source value may or may not be present.</li>
-		 *        </ul>
+		 * @param previousSource Supplies the previous source value, if needed--will be null for add operation queries
+		 * @param newValue The new target value
 		 * @return The result, either {@link FilterMapResult#reject(String, boolean) rejected} or with its source set to the reversed value
 		 */
-		FilterMapResult<E, T> canReverse(FilterMapResult<E, T> sourceAndValue);
+		ReverseQueryResult<E, T> canReverse(Supplier<? extends E> previousSource, T newValue);
 
 		/**
-		 * @param previousSource The previous source value (which may be null--see {@link #canReverse(FilterMapResult)})
+		 * @param previousSource Supplies the previous source value, if needed--will be null for add operation queries
 		 * @param newValue The value to reverse
 		 * @return The value to set in the source collection
 		 */
-		E reverse(E previousSource, T newValue);
+		E reverse(Supplier<? extends E> previousSource, T newValue);
 	}
 
 	/**
@@ -258,26 +311,34 @@ public interface FlowOptions {
 		}
 
 		@Override
-		public FilterMapResult<E, T> canReverse(FilterMapResult<E, T> sourceAndValue) {
+		public ReverseQueryResult<E, T> canReverse(Supplier<? extends E> previousSource, T newValue) {
+			E sourceValue;
+			if (previousSource == null || !isStateful)
+				sourceValue = null;
+			else
+				sourceValue = previousSource.get();
 			if (theEnablement != null) {
-				String msg = theEnablement.apply(sourceAndValue.source, sourceAndValue.result);
-				if (msg != null)
-					return sourceAndValue.reject(msg, true);
+				String msg = theEnablement.apply(sourceValue, newValue);
+				return ReverseQueryResult.reject(msg);
 			}
-			sourceAndValue.source = theReverse.apply(sourceAndValue.source, sourceAndValue.result, false);
-			return sourceAndValue;
+			return ReverseQueryResult.value(theReverse.apply(sourceValue, newValue, false));
 		}
 
 		@Override
-		public E reverse(E previousSource, T newValue) {
+		public E reverse(Supplier<? extends E> previousSource, T newValue) {
+			E sourceValue;
+			if (previousSource == null || !isStateful)
+				sourceValue = null;
+			else
+				sourceValue = previousSource.get();
 			if (theEnablement != null) {
-				String msg = theEnablement.apply(previousSource, newValue);
+				String msg = theEnablement.apply(sourceValue, newValue);
 				if (StdMsg.UNSUPPORTED_OPERATION.equals(msg))
 					throw new UnsupportedOperationException(msg);
 				else if (msg != null)
 					throw new IllegalArgumentException(msg);
 			}
-			return theReverse.apply(previousSource, newValue, true);
+			return theReverse.apply(sourceValue, newValue, true);
 		}
 
 		@Override
@@ -306,7 +367,7 @@ public interface FlowOptions {
 	/**
 	 * A {@link MapReverse} implementation that sets a field on the object in the source flow to a value in the result flow, or some
 	 * analogous operation
-	 * 
+	 *
 	 * @param <E> The source type of the flow
 	 * @param <T> The target type of the flow
 	 */
@@ -338,39 +399,41 @@ public interface FlowOptions {
 		}
 
 		@Override
-		public FilterMapResult<E, T> canReverse(FilterMapResult<E, T> sourceAndValue) {
-			if (sourceAndValue.source != null) {
+		public ReverseQueryResult<E, T> canReverse(Supplier<? extends E> previousSource, T newValue) {
+			if (previousSource != null) {
+				E sourceValue = previousSource.get();
 				if (theEnablement != null) {
-					String msg = theEnablement.apply(sourceAndValue.source, sourceAndValue.result);
+					String msg = theEnablement.apply(sourceValue, newValue);
 					if (msg != null)
-						return sourceAndValue.reject(msg, true);
+						return ReverseQueryResult.reject(msg);
 				}
 				// No source change
-				return sourceAndValue;
+				return ReverseQueryResult.value(sourceValue);
 			} else if (theCreator == null)
-				return sourceAndValue.reject(StdMsg.UNSUPPORTED_OPERATION, true);
+				return ReverseQueryResult.reject(StdMsg.UNSUPPORTED_OPERATION);
 			else {
 				if (theCreationEnablement != null) {
-					String msg = theCreationEnablement.apply(sourceAndValue.result);
+					String msg = theCreationEnablement.apply(newValue);
 					if (msg != null)
-						return sourceAndValue.reject(msg, true);
+						return ReverseQueryResult.reject(msg);
 				}
-				sourceAndValue.source = theCreator.apply(sourceAndValue.result, false);
-				return sourceAndValue;
+				return ReverseQueryResult.value(theCreator.apply(newValue, false));
 			}
 		}
 
 		@Override
-		public E reverse(E previousSource, T newValue) {
+		public E reverse(Supplier<? extends E> previousSource, T newValue) {
 			if (previousSource != null) {
+				E sourceValue = previousSource.get();
 				if (theEnablement != null) {
-					String msg = theEnablement.apply(previousSource, newValue);
+					String msg = theEnablement.apply(sourceValue, newValue);
 					if (StdMsg.UNSUPPORTED_OPERATION.equals(msg))
 						throw new UnsupportedOperationException(msg);
 					else if (msg != null)
 						throw new IllegalArgumentException(msg);
 				}
-				theFieldSetter.accept(previousSource, newValue);
+				theFieldSetter.accept(sourceValue, newValue);
+				return sourceValue;
 			} else if (theCreator == null)
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 			else {
@@ -383,7 +446,6 @@ public interface FlowOptions {
 				}
 				return theCreator.apply(newValue, true);
 			}
-			return previousSource;
 		}
 
 		@Override

@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import org.observe.ObservableValue;
@@ -13,10 +14,10 @@ import org.observe.ObservableValueEvent;
 import org.observe.XformOptions;
 import org.observe.collect.Combination.CombinedFlowDef;
 import org.observe.collect.FlowOptions.MapDef;
+import org.observe.collect.FlowOptions.ReverseQueryResult;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.AbstractMappingManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionOperation;
-import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
 import org.observe.collect.ObservableCollectionDataFlowImpl.FlowElementSetter;
 import org.observe.collect.ObservableCollectionDataFlowImpl.RepairListener;
 import org.observe.collect.ObservableCollectionImpl.ActiveDerivedCollection;
@@ -1376,12 +1377,10 @@ public class ObservableCollectionActiveManagers {
 		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
 			if (!isReversible() || getOptions().isManyToOne())
 				return null;
-			FilterMapResult<I, T> fmr = new FilterMapResult<>();
-			fmr.result = value;
-			fmr = canReverse(fmr);
-			if (!fmr.isAccepted())
+			ReverseQueryResult<I, T> qr = canReverse(null, value);
+			if (qr.getError() != null)
 				return null;
-			I reversed = fmr.source;
+			I reversed = qr.getReversed();
 			if (!equivalence().elementEquals(map(reversed, value), value))
 				return null;
 			Comparable<DerivedCollectionElement<I>> pef = getParent().getElementFinder(reversed);
@@ -1409,12 +1408,10 @@ public class ObservableCollectionActiveManagers {
 		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
 			if (!isReversible())
 				return StdMsg.UNSUPPORTED_OPERATION;
-			FilterMapResult<I, T> fmr = new FilterMapResult<>();
-			fmr.result = toAdd;
-			fmr = canReverse(fmr);
-			if (!fmr.isAccepted())
-				return fmr.getRejectReason();
-			I reversed = fmr.source;
+			ReverseQueryResult<I, T> qr = canReverse(null, toAdd);
+			if (qr.getError() != null)
+				return qr.getError();
+			I reversed = qr.getReversed();
 			if (!equivalence().elementEquals(map(reversed, toAdd), toAdd))
 				return StdMsg.ILLEGAL_ELEMENT;
 			return getParent().canAdd(reversed, strip(after), strip(before));
@@ -1425,14 +1422,12 @@ public class ObservableCollectionActiveManagers {
 			boolean first) {
 			if (!isReversible())
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-			FilterMapResult<I, T> fmr = new FilterMapResult<>();
-			fmr.result = value;
-			fmr = canReverse(fmr);
-			if (StdMsg.UNSUPPORTED_OPERATION.equals(fmr.getRejectReason()))
+			ReverseQueryResult<I, T> qr = canReverse(null, value);
+			if (StdMsg.UNSUPPORTED_OPERATION.equals(qr.getError()))
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-			else if (!fmr.isAccepted())
-				throw new IllegalArgumentException(fmr.getRejectReason());
-			I reversed = fmr.source;
+			else if (qr.getError() != null)
+				throw new IllegalArgumentException(qr.getError());
+			I reversed = qr.getReversed();
 			if (!equivalence().elementEquals(map(reversed, value), value))
 				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 			DerivedCollectionElement<I> parentEl = getParent().addElement(reversed, strip(after),
@@ -1639,8 +1634,8 @@ public class ObservableCollectionActiveManagers {
 		}
 
 		@Override
-		protected FilterMapResult<I, T> canReverse(FilterMapResult<I, T> sourceAndResult) {
-			return getOptions().getReverse().canReverse(sourceAndResult);
+		protected ReverseQueryResult<I, T> canReverse(Supplier<? extends I> previousSource, T newValue) {
+			return getOptions().getReverse().canReverse(previousSource, newValue);
 		}
 
 		@Override
@@ -1649,7 +1644,7 @@ public class ObservableCollectionActiveManagers {
 			if (reverse instanceof FlowElementSetter)
 				return ((FlowElementSetter<I, T>) reverse).reverse(((MappedElement) preSourceEl).getParentEl(), value);
 			else
-				return getOptions().getReverse().reverse(preSourceEl.getParentValue(), value);
+				return getOptions().getReverse().reverse(preSourceEl::getParentValue, value);
 		}
 
 		@Override
@@ -1745,9 +1740,8 @@ public class ObservableCollectionActiveManagers {
 		}
 
 		@Override
-		protected FilterMapResult<I, T> canReverse(FilterMapResult<I, T> sourceAndResult) {
-			sourceAndResult.source = reverse(null, sourceAndResult.result);
-			return sourceAndResult;
+		protected ReverseQueryResult<I, T> canReverse(Supplier<? extends I> previousSource, T newValue) {
+			return ReverseQueryResult.value(reverse(null, newValue));
 		}
 
 		@Override

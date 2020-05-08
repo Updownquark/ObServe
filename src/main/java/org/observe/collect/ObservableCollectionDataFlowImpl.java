@@ -24,6 +24,7 @@ import org.observe.collect.Combination.CombinedFlowDef;
 import org.observe.collect.FlatMapOptions.FlatMapDef;
 import org.observe.collect.FlowOptions.MapDef;
 import org.observe.collect.FlowOptions.MapOptions;
+import org.observe.collect.FlowOptions.ReverseQueryResult;
 import org.observe.collect.FlowOptions.SimpleUniqueOptions;
 import org.observe.collect.FlowOptions.UniqueOptions;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
@@ -1175,26 +1176,32 @@ public class ObservableCollectionDataFlowImpl {
 				}
 
 				@Override
-				public FilterMapResult<ObservableValue<? extends T>, T> canReverse(
-					FilterMapResult<ObservableValue<? extends T>, T> sourceAndValue) {
-					if (!(sourceAndValue.source instanceof SettableValue))
-						return sourceAndValue.reject(StdMsg.UNSUPPORTED_OPERATION, true);
-					if (!TypeTokens.get().isInstance(sourceAndValue.source.getType(), sourceAndValue.result))
-						return sourceAndValue.reject(StdMsg.BAD_TYPE, true);
-					String msg = ((SettableValue<T>) sourceAndValue.source).isAcceptable(sourceAndValue.result);
+				public ReverseQueryResult<ObservableValue<? extends T>, T> canReverse(
+					Supplier<? extends ObservableValue<? extends T>> previousSource, T newValue) {
+					if (previousSource == null)
+						return ReverseQueryResult.reject(StdMsg.UNSUPPORTED_OPERATION);
+					ObservableValue<? extends T> sourceValue = previousSource.get();
+					if (!(sourceValue instanceof SettableValue))
+						return ReverseQueryResult.reject(StdMsg.UNSUPPORTED_OPERATION);
+					if (!TypeTokens.get().isInstance(sourceValue.getType(), newValue))
+						return ReverseQueryResult.reject(StdMsg.BAD_TYPE);
+					String msg = ((SettableValue<T>) sourceValue).isAcceptable(newValue);
 					if (msg != null)
-						return sourceAndValue.reject(msg, true);
-					return sourceAndValue;
+						return ReverseQueryResult.reject(msg);
+					return ReverseQueryResult.value(sourceValue);
 				}
 
 				@Override
-				public ObservableValue<? extends T> reverse(ObservableValue<? extends T> previousSource, T newValue) {
-					if (!(previousSource instanceof SettableValue))
+				public ObservableValue<? extends T> reverse(Supplier<? extends ObservableValue<? extends T>> previousSource, T newValue) {
+					if (previousSource == null)
 						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-					if (!TypeTokens.get().isInstance(previousSource.getType(), newValue))
+					ObservableValue<? extends T> sourceValue = previousSource.get();
+					if (!(sourceValue instanceof SettableValue))
+						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+					if (!TypeTokens.get().isInstance(sourceValue.getType(), newValue))
 						throw new IllegalArgumentException(StdMsg.BAD_TYPE);
-					((SettableValue<T>) previousSource).set(newValue, null);
-					return previousSource;
+					((SettableValue<T>) sourceValue).set(newValue, null);
+					return sourceValue;
 				}
 
 				@Override
@@ -1202,7 +1209,7 @@ public class ObservableCollectionDataFlowImpl {
 					T newValue) {
 					settingElement.accept(element);
 					try {
-						return reverse(element.get(), newValue);
+						return reverse(element::get, newValue);
 					} finally {
 						settingElement.clear();
 					}
@@ -1373,7 +1380,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		protected abstract boolean isReversible();
 
-		protected abstract FilterMapResult<I, T> canReverse(FilterMapResult<I, T> sourceAndResult);
+		protected abstract ReverseQueryResult<I, T> canReverse(Supplier<? extends I> previousSource, T newValue);
 
 		protected abstract I reverse(AbstractMappedElement preSourceEl, T value);
 
@@ -1466,13 +1473,10 @@ public class ObservableCollectionDataFlowImpl {
 				String msg = null;
 				I reversed;
 				if (isReversible() && isReverseStateful()) {
-					FilterMapResult<I, T> fmr = new FilterMapResult<>();
-					fmr.result = value;
-					fmr.source = getCachedSource();
-					fmr = canReverse(fmr);
-					if (fmr.rejectReason != null)
-						return fmr.rejectReason;
-					reversed = fmr.source;
+					ReverseQueryResult<I, T> result = canReverse(this::getCachedSource, value);
+					if (result.getError() != null)
+						return result.getError();
+					reversed = result.getReversed();
 				} else {
 					if (theOptions.isCached() && equivalence().elementEquals(getValue(), value)) {
 						reversed = getCachedSource();

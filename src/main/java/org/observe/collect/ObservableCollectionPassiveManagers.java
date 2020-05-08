@@ -17,6 +17,7 @@ import org.observe.Subscription;
 import org.observe.XformOptions;
 import org.observe.collect.Combination.CombinedFlowDef;
 import org.observe.collect.FlowOptions.MapDef;
+import org.observe.collect.FlowOptions.ReverseQueryResult;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.AbstractMappingManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionOperation;
@@ -449,11 +450,11 @@ public class ObservableCollectionPassiveManagers {
 			if (!isReversible())
 				return dest.reject(StdMsg.UNSUPPORTED_OPERATION, true);
 			T value = dest.source;
-			FilterMapResult<I, T> test=(FilterMapResult<I, T>) dest;
-			test.result=value;
-			test.source=null;
-			test=canReverse(test);
-			FilterMapResult<I, E> intermediate = (FilterMapResult<I, E>) test;
+			ReverseQueryResult<I, T> qr = canReverse(null, value);
+			if (qr.getError() != null)
+				return dest.reject(qr.getError(), true);
+			FilterMapResult<I, E> intermediate = (FilterMapResult<I, E>) dest;
+			intermediate.source = qr.getReversed();
 			intermediate.result=null;
 			if (intermediate.isAccepted() && !equivalence().elementEquals(map(intermediate.source, null), value))
 				return dest.reject(StdMsg.ILLEGAL_ELEMENT, true);
@@ -648,8 +649,8 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
-		protected FilterMapResult<I, T> canReverse(FilterMapResult<I, T> sourceAndResult) {
-			return getOptions().getReverse().canReverse(sourceAndResult);
+		protected ReverseQueryResult<I, T> canReverse(Supplier<? extends I> previousSource, T newValue) {
+			return getOptions().getReverse().canReverse(previousSource, newValue);
 		}
 
 		@Override
@@ -705,9 +706,8 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
-		protected FilterMapResult<I, T> canReverse(FilterMapResult<I, T> sourceAndResult) {
-			sourceAndResult.source = reverse(null, sourceAndResult.result);
-			return sourceAndResult;
+		protected ReverseQueryResult<I, T> canReverse(Supplier<? extends I> previousSource, T newValue) {
+			return ReverseQueryResult.value(reverse(null, newValue));
 		}
 
 		@Override
