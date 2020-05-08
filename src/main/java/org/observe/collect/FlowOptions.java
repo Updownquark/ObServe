@@ -11,6 +11,8 @@ import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
 import org.qommons.LambdaUtils;
 import org.qommons.TriFunction;
+import org.qommons.collect.BetterCollection;
+import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 
 import com.google.common.reflect.TypeToken;
@@ -180,19 +182,55 @@ public interface FlowOptions {
 		}
 	}
 
+	/**
+	 * Allows the ability to add and/or set elements in a flow by providing source values from target values
+	 *
+	 * @param <E> The source type of the flow
+	 * @param <T> The target type of the flow
+	 */
 	public interface MapReverse<E, T> {
+		/** @return Whether this reverse depends on the previous source */
 		boolean isStateful();
 
+		/**
+		 * @param sourceAndValue A filter map result containing the new result value and (possibly) previous source value for the element.
+		 *        The previous source value may be null if
+		 *        <ul>
+		 *        <li>The query operation is an addition</li>
+		 *        <li>This reverse is not {@link #isStateful() stateful}, which indicates that the previous source value is not necessary.
+		 *        If this is the case, the source value may or may not be present.</li>
+		 *        </ul>
+		 * @return The result, either {@link FilterMapResult#reject(String, boolean) rejected} or with its source set to the reversed value
+		 */
 		FilterMapResult<E, T> canReverse(FilterMapResult<E, T> sourceAndValue);
 
+		/**
+		 * @param previousSource The previous source value (which may be null--see {@link #canReverse(FilterMapResult)})
+		 * @param newValue The value to reverse
+		 * @return The value to set in the source collection
+		 */
 		E reverse(E previousSource, T newValue);
 	}
 
+	/**
+	 * Simple {@link MapReverse} implementation
+	 *
+	 * @param <E> The source type of the flow
+	 * @param <T> The target type of the flow
+	 */
 	public class SimpleMapReverse<E, T> implements MapReverse<E, T> {
 		private final TriFunction<? super E, ? super T, Boolean, ? extends E> theReverse;
 		private final BiFunction<? super E, ? super T, String> theEnablement;
 		private final boolean isStateful;
 
+		/**
+		 * @param reverse A function accepting the previous source value (which may be null for additions or if the reverse is not
+		 *        stateful), the value to reverse, and a boolean indicating if the reversed value is needed for a query (like
+		 *        {@link MutableCollectionElement#isAcceptable(Object)}) or a real operation (like
+		 *        {@link MutableCollectionElement#set(Object)})
+		 * @param enabled An optional function to provide enablement for reverse operations
+		 * @param stateful Whether the reverse function depends on the previous source value
+		 */
 		public SimpleMapReverse(TriFunction<? super E, ? super T, Boolean, ? extends E> reverse,
 			BiFunction<? super E, ? super T, String> enabled, boolean stateful) {
 			theReverse = reverse;
@@ -200,6 +238,10 @@ public interface FlowOptions {
 			isStateful = stateful;
 		}
 
+		/**
+		 * @param reverse A function to provide source values from target values
+		 * @param enabled An optional function to provide enablement for reverse operations
+		 */
 		public SimpleMapReverse(Function<? super T, ? extends E> reverse, Function<? super T, String> enabled) {
 			this(
 				LambdaUtils.printableTriFn((preSource, value, apply) -> reverse.apply(value), reverse::toString,
@@ -261,18 +303,33 @@ public interface FlowOptions {
 		}
 	}
 
+	/**
+	 * A {@link MapReverse} implementation that sets a field on the object in the source flow to a value in the result flow, or some
+	 * analogous operation
+	 * 
+	 * @param <E> The source type of the flow
+	 * @param <T> The target type of the flow
+	 */
 	public class FieldSettingMapReverse<E, T> implements MapReverse<E, T> {
 		private final BiConsumer<? super E, ? super T> theFieldSetter;
 		private final BiFunction<? super E, ? super T, String> theEnablement;
 		private final BiFunction<? super T, Boolean, ? extends E> theCreator;
 		private final Function<? super T, String> theCreationEnablement;
 
-		public FieldSettingMapReverse(BiConsumer<? super E, ? super T> fieldSetter, BiFunction<? super E, ? super T, String> enablement,
-			BiFunction<? super T, Boolean, ? extends E> creator, Function<? super T, String> creationEnablement) {
+		/**
+		 * @param fieldSetter Sets the field in the source value to the target value
+		 * @param enabled An optional function to provide enablement for reverse operations
+		 * @param creator An optional function to create new source values for additions (the second argument is whether the result is
+		 *        intended for a query operation (like {@link BetterCollection#canAdd(Object)}) or a real operation (like
+		 *        {@link BetterCollection#addElement(Object, boolean)})
+		 * @param creationEnabled An optional function to provide enablement for create operations
+		 */
+		public FieldSettingMapReverse(BiConsumer<? super E, ? super T> fieldSetter, BiFunction<? super E, ? super T, String> enabled,
+			BiFunction<? super T, Boolean, ? extends E> creator, Function<? super T, String> creationEnabled) {
 			theFieldSetter = fieldSetter;
-			theEnablement = enablement;
+			theEnablement = enabled;
 			theCreator = creator;
-			theCreationEnablement = creationEnablement;
+			theCreationEnablement = creationEnabled;
 		}
 
 		@Override
