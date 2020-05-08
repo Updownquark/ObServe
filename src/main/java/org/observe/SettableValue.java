@@ -254,17 +254,29 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 		}, "map", new XformDef(xform), this) {
 			@Override
 			public <V extends R> R set(V value, Object cause) throws IllegalArgumentException {
-				T old = root.set(reverse.apply(value), cause);
+				T reversed = reverse.apply(value);
+				T old;
+				if (!getOptions().isPropagatingUpdatesToParent()) {
+					old = root.get();
+					if (!Objects.equals(reversed, old))
+						root.set(reversed, cause);
+				} else
+					old = root.set(reversed, cause);
 				return function.apply(old);
 			}
 
 			@Override
 			public <V extends R> String isAcceptable(V value) {
-				return root.isAcceptable(reverse.apply(value));
+				T reversed = reverse.apply(value);
+				if (!getOptions().isPropagatingUpdatesToParent() && Objects.equals(reversed, root.get()))
+					return null;
+				return root.isAcceptable(reversed);
 			}
 
 			@Override
 			public ObservableValue<String> isEnabled() {
+				if (!getOptions().isPropagatingUpdatesToParent())
+					return ALWAYS_ENABLED;
 				return root.isEnabled();
 			}
 		};
@@ -292,21 +304,30 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 				T reversed = reverse.apply(root.get(), value);
 				if (!Objects.equals(reversed, function.apply(reversed)))
 					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
-				T old = root.set(reversed, cause);
+				T old;
+				if (!getOptions().isPropagatingUpdatesToParent()) {
+					old = root.get();
+					if (!Objects.equals(reversed, old))
+						root.set(reversed, cause);
+				} else
+					old = root.set(reversed, cause);
 				return function.apply(old);
 			}
 
 			@Override
 			public <V extends R> String isAcceptable(V value) {
 				T reversed = reverse.apply(root.get(), value);
-				String msg = root.isAcceptable(reversed);
-				if (msg == null && !Objects.equals(value, function.apply(reversed)))
-					msg = StdMsg.ILLEGAL_ELEMENT;
-				return msg;
+				if (!Objects.equals(value, function.apply(reversed)))
+					return StdMsg.ILLEGAL_ELEMENT;
+				if (!getOptions().isPropagatingUpdatesToParent() && Objects.equals(reversed, root.get()))
+					return null;
+				return root.isAcceptable(reversed);
 			}
 
 			@Override
 			public ObservableValue<String> isEnabled() {
+				if (!getOptions().isPropagatingUpdatesToParent())
+					return ALWAYS_ENABLED;
 				return root.isEnabled();
 			}
 		};
@@ -335,7 +356,7 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 				T v = outer.get();
 				F old = getter.apply(v);
 				setter.accept(v, value);
-				if (outer.isAcceptable(v) == null)
+				if (getOptions().isPropagatingUpdatesToParent())
 					outer.set(v, cause);
 				return old;
 			}
@@ -423,7 +444,13 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 				T reversed = reverse.apply(value, argVal);
 				if (!Objects.equals(value, function.apply(reversed, argVal)))
 					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
-				T old = root.set(reversed, cause);
+				T old;
+				if (!getOptions().isPropagatingUpdatesToParent()) {
+					old = root.get();
+					if (!Objects.equals(reversed, old))
+						root.set(reversed, cause);
+				} else
+					old = root.set(reversed, cause);
 				return function.apply(old, argVal);
 			}
 
@@ -433,15 +460,19 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 				String ret = accept.apply(value, argVal);
 				if (ret == null) {
 					T reversed = reverse.apply(value, argVal);
-					ret = root.isAcceptable(reversed);
-					if (ret == null && !Objects.equals(value, function.apply(reversed, argVal)))
-						ret = StdMsg.ILLEGAL_ELEMENT;
+					if (!Objects.equals(value, function.apply(reversed, argVal)))
+						return StdMsg.ILLEGAL_ELEMENT;
+					if (!getOptions().isPropagatingUpdatesToParent() && Objects.equals(reversed, root.get()))
+						return null;
+					return root.isAcceptable(reversed);
 				}
 				return ret;
 			}
 
 			@Override
 			public ObservableValue<String> isEnabled() {
+				if (!getOptions().isPropagatingUpdatesToParent())
+					return ALWAYS_ENABLED;
 				return root.isEnabled();
 			}
 		};
@@ -495,7 +526,13 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 				T reversed = reverse.apply(value, arg2V, arg3V);
 				if (!Objects.equals(reversed, function.apply(reversed, arg2V, arg3V)))
 					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
-				T old = root.set(reversed, cause);
+				T old;
+				if (!getOptions().isPropagatingUpdatesToParent()) {
+					old = root.get();
+					if (!Objects.equals(reversed, old))
+						root.set(reversed, cause);
+				} else
+					old = root.set(reversed, cause);
 				return function.apply(old, arg2V, arg3V);
 			}
 
@@ -504,14 +541,17 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 				U arg2V = arg2.get();
 				V arg3V = arg3.get();
 				T reversed = reverse.apply(value, arg2V, arg3V);
-				String msg = root.isAcceptable(reversed);
-				if (msg == null && !Objects.equals(value, function.apply(reversed, arg2V, arg3V)))
-					msg = StdMsg.ILLEGAL_ELEMENT;
-				return msg;
+				if (!Objects.equals(value, function.apply(reversed, arg2V, arg3V)))
+					return StdMsg.ILLEGAL_ELEMENT;
+				if (!getOptions().isPropagatingUpdatesToParent() && Objects.equals(reversed, root.get()))
+					return null;
+				return root.isAcceptable(reversed);
 			}
 
 			@Override
 			public ObservableValue<String> isEnabled() {
+				if (!getOptions().isPropagatingUpdatesToParent())
+					return ALWAYS_ENABLED;
 				return root.isEnabled();
 			}
 		};

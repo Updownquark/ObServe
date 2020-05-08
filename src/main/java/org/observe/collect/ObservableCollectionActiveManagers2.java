@@ -1492,6 +1492,7 @@ public class ObservableCollectionActiveManagers2 {
 				for (DerivedCollectionElement<T> el : elements)
 					grouped.computeIfAbsent(((FlattenedElement) el).theHolder, h -> new ArrayList<>())
 					.add((DerivedCollectionElement<V>) ((FlattenedElement) el).theParentEl);
+
 				for (Map.Entry<FlattenedHolder, List<DerivedCollectionElement<V>>> entry : grouped.entrySet())
 					((ActiveCollectionManager<?, ?, V>) entry.getKey().manager).setValues(entry.getValue(), (V) newValue);
 			} else if (!theOptions.isReverseStateful()) {
@@ -1499,6 +1500,7 @@ public class ObservableCollectionActiveManagers2 {
 				BetterMap<FlattenedHolder, List<FlattenedElement>> grouped = BetterHashMap.build().identity().unsafe().buildMap();
 				for (DerivedCollectionElement<T> el : elements)
 					grouped.computeIfAbsent(((FlattenedElement) el).theHolder, h -> new ArrayList<>()).add((FlattenedElement) el);
+
 				for (Map.Entry<FlattenedHolder, List<FlattenedElement>> entry : grouped.entrySet()) {
 					if (theOptions.isCached()) {
 						V oldValue = null;
@@ -1830,7 +1832,8 @@ public class ObservableCollectionActiveManagers2 {
 					if (!equivalence().elementEquals(reMapped, value))
 						return StdMsg.ILLEGAL_ELEMENT;
 				}
-				if (msg == null)
+				if (msg == null && (theOptions.isPropagatingUpdatesToParent()
+					|| !((ActiveCollectionManager<?, ?, V>) theHolder.manager).equivalence().elementEquals(getParentValue(), reversed)))
 					msg = ((DerivedCollectionElement<V>) theParentEl).isAcceptable(reversed);
 				return msg;
 			}
@@ -1859,6 +1862,9 @@ public class ObservableCollectionActiveManagers2 {
 						if (!equivalence().elementEquals(reMapped, value))
 							throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 					}
+					if (!theOptions.isPropagatingUpdatesToParent()
+						&& !((ActiveCollectionManager<?, ?, V>) theHolder.manager).equivalence().elementEquals(getParentValue(), reversed))
+						return;
 					// The purpose of this code wrapped around the set call is to ensure that this method's listener gets called first.
 					// This prevents any possible re-arranging or other operations that could result
 					// in this set operation removing this element
