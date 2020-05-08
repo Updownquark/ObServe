@@ -432,16 +432,6 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
-		protected boolean isElementReversible() {
-			return false;
-		}
-
-		@Override
-		protected String elementReverse(AbstractMappedElement source, T newValue, boolean replace) {
-			throw new IllegalStateException();
-		}
-
-		@Override
 		protected void doParentMultiSet(Collection<AbstractMappedElement> elements, I newValue) {
 			getParent().setValue(elements.stream().map(el -> ((PassiveMappedElement) el).getParentEl()).collect(Collectors.toList()),
 				newValue);
@@ -459,7 +449,12 @@ public class ObservableCollectionPassiveManagers {
 			if (!isReversible())
 				return dest.reject(StdMsg.UNSUPPORTED_OPERATION, true);
 			T value = dest.source;
-			FilterMapResult<I, E> intermediate = dest.map(this::reverse);
+			FilterMapResult<I, T> test=(FilterMapResult<I, T>) dest;
+			test.result=value;
+			test.source=null;
+			test=canReverse(test);
+			FilterMapResult<I, E> intermediate = (FilterMapResult<I, E>) test;
+			intermediate.result=null;
 			if (intermediate.isAccepted() && !equivalence().elementEquals(map(intermediate.source, null), value))
 				return dest.reject(StdMsg.ILLEGAL_ELEMENT, true);
 			return (FilterMapResult<T, E>) getParent().reverse(intermediate, forAdd);
@@ -653,8 +648,18 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
-		protected I reverse(T value) {
-			return getOptions().getReverse().apply(value);
+		protected FilterMapResult<I, T> canReverse(FilterMapResult<I, T> sourceAndResult) {
+			return getOptions().getReverse().canReverse(sourceAndResult);
+		}
+
+		@Override
+		protected I reverse(I preSource, T value) {
+			return getOptions().getReverse().reverse(preSource, value);
+		}
+
+		@Override
+		protected boolean isReverseStateful() {
+			return false;
 		}
 
 		@Override
@@ -700,7 +705,13 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
-		protected I reverse(T value) {
+		protected FilterMapResult<I, T> canReverse(FilterMapResult<I, T> sourceAndResult) {
+			sourceAndResult.source = reverse(sourceAndResult.source, sourceAndResult.result);
+			return sourceAndResult;
+		}
+
+		@Override
+		protected I reverse(I preSource, T value) {
 			return getOptions().getReverse().apply(new Combination.CombinedValues<T>() {
 				@Override
 				public T getElement() {
@@ -712,6 +723,11 @@ public class ObservableCollectionPassiveManagers {
 					return arg.get();
 				}
 			});
+		}
+
+		@Override
+		protected boolean isReverseStateful() {
+			return false;
 		}
 
 		@Override

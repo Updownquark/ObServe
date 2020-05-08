@@ -1598,7 +1598,7 @@ public class ObservableCollectionActiveManagers2 {
 						public void setDestCache(Void value) {}
 					});
 				if (theCacheHandler != null)
-					theCacheHandler.initialize(theParentEl.get());
+					theCacheHandler.initialize(theParentEl::get);
 				updated(null, getValue(), cause);
 				theParentEl.setListener(new CollectionElementListener<I>() {
 					@Override
@@ -1639,7 +1639,7 @@ public class ObservableCollectionActiveManagers2 {
 						}, theChildListening.getListening());
 					} else if (theOptions != null) {
 						I oldSource = theOptions.isCached() ? theCacheHandler.getSourceCache() : oldValue;
-						Ternian update = theCacheHandler.isUpdate(oldValue, newValue);
+						Ternian update = theCacheHandler.isSourceUpdate(oldValue, newValue);
 						if (update == Ternian.NONE)
 							return; // No change, no event
 						try (Transaction flatT = manager.lock(false, null)) {
@@ -1705,7 +1705,7 @@ public class ObservableCollectionActiveManagers2 {
 							}
 						});
 					if (theCacheHandler != null)
-						theCacheHandler.initialize(parentEl.get());
+						theCacheHandler.initialize(parentEl::get);
 					installListener(parentEl);
 				} else {
 					theCacheHandler = null;
@@ -1765,7 +1765,7 @@ public class ObservableCollectionActiveManagers2 {
 			void valueUpdated(V oldValue, V newValue, Object cause) {
 				if (theOptions == null)
 					ObservableCollectionActiveManagers.update(theListener, (T) oldValue, (T) newValue, cause);
-				BiTuple<T, T> values = theCacheHandler.handleChange(oldValue, newValue);
+				BiTuple<T, T> values = theCacheHandler.handleSourceChange(oldValue, newValue);
 				if (values != null)
 					ObservableCollectionActiveManagers.update(theListener, values.getValue1(), values.getValue2(), cause);
 			}

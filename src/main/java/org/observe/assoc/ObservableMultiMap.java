@@ -512,11 +512,8 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 				mapFlow = backing.flow()
 					.groupSorted(entries -> entries.map(theKeyType, //
 						entry -> entry.key, //
-						opts -> opts.withElementSetting((element, newValue, replace) -> {
-							if (replace)
-								element.key = newValue;
-							return null;
-						})).distinctSorted(((Equivalence.ComparatorEquivalence<K>) theKeyEquivalence).comparator(), true), //
+						opts -> opts.withFieldSetReverse((element, newValue) -> element.key = newValue, null))//
+						.distinctSorted(((Equivalence.ComparatorEquivalence<K>) theKeyEquivalence).comparator(), true), //
 						(key, entry) -> {
 							entry.key = key;
 							return entry;
@@ -525,11 +522,9 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 				mapFlow = backing.flow().groupBy(//
 					entries -> entries.map(theKeyType, //
 						entry -> entry.key, //
-						opts -> opts.withElementSetting((element, newValue, replace) -> {
-							if (replace)
-								element.key = newValue;
-							return null;
-						}).withEquivalence(theKeyEquivalence)).distinct(), //
+						opts -> opts.withFieldSetReverse((element, newValue) -> element.key = newValue, null)//
+							.withEquivalence(theKeyEquivalence))
+						.distinct(), //
 					(key, entry) -> {
 						entry.key = key;
 						return entry;
@@ -537,13 +532,10 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 			}
 			return mapFlow.withValues(entries -> entries.map(theValueType, //
 				entry -> entry.value, //
-				opts -> opts.withElementSetting((element, newValue, replace) -> {
-					if (replace)
-						element.value = newValue;
-					return null;
-				}).withReverse(//
-					value -> new MapEntry<>(value)//
-					).withEquivalence(theValueEquivalence)))//
+					opts -> opts
+						.withFieldSetReverse((element, newValue) -> element.value = newValue, null,
+							(newValue, create) -> new MapEntry<>(newValue), null)//
+						.withEquivalence(theValueEquivalence)))//
 				.gatherActive(until);
 		}
 	}

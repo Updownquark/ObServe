@@ -158,13 +158,11 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 	public ObservableCollection<N> getNodeValues() {
 		if (theNodeValues == null)
 			theNodeValues = theNodes.flow().refreshEach(n -> n.changes().noInit()).map(theNodeType, n -> n.get(), options -> {
-				options.withReverse(this::createNode).withElementSetting((node, nodeValue, replace) -> {
-					if (replace) {
-						node.set(nodeValue, null);
-						return null;
-					} else
-						return node.isAcceptable(nodeValue);
-				});
+				options.withFieldSetReverse(//
+					(node, nodeValue) -> node.set(nodeValue, null), //
+					(node, nodeValue) -> node.isAcceptable(nodeValue), //
+					(nodeValue, create) -> createNode(nodeValue), //
+					null);// Weird that we don't have a canAdd capability
 			}).collect();
 		return theNodeValues;
 	}

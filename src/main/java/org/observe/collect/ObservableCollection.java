@@ -869,7 +869,8 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		 */
 		default <X> CollectionDataFlow<E, T, X> map(TypeToken<X> target, Function<? super T, ? extends X> map,
 			Consumer<MapOptions<T, X>> options) {
-			return map(target, LambdaUtils.printableBiFn((src, oldResult) -> map.apply(src), map::toString), options);
+			return map(target, LambdaUtils.printableBiFn((src, oldResult) -> map.apply(src), map::toString, LambdaUtils.getIdentifier(map)),
+				options);
 		}
 
 		/**

@@ -1,6 +1,5 @@
 package org.observe.collect;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.IdentityHashMap;
@@ -30,7 +29,6 @@ import org.observe.collect.FlowOptions.UniqueOptions;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.DistinctDataFlow;
 import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
-import org.observe.collect.ObservableCollection.ElementSetter;
 import org.observe.collect.ObservableCollection.ModFilterBuilder;
 import org.observe.collect.ObservableCollectionActiveManagers.ActiveCollectionManager;
 import org.observe.collect.ObservableCollectionActiveManagers.DerivedCollectionElement;
@@ -45,7 +43,6 @@ import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
 import org.qommons.collect.CollectionElement;
-import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 
 import com.google.common.reflect.TypeToken;
@@ -1134,14 +1131,21 @@ public class ObservableCollectionDataFlowImpl {
 	 * @param <I> The type of the source element to set values of
 	 * @param <T> The type of the values to set in the source elements
 	 */
-	public interface FlowElementSetter<I, T> extends ElementSetter<I, T> {
+	public interface FlowElementSetter<I, T> extends FlowOptions.MapReverse<I, T> {
 		/**
 		 * @param element The source element
-		 * @param newValue The derived value
-		 * @param replace Whether to actually do the replacement, as opposed to just testing whether it is possible/allowed
-		 * @return Null if the replacement is possible/allowed/done; otherwise a string saying why it is not
+		 * @param sourceAndValue The filter map result with the derived value to test
+		 * @return The result, either rejected or with the source to update with
 		 */
-		String setElement(ObservableCollectionActiveManagers.DerivedCollectionElement<? extends I> element, T newValue, boolean replace);
+		FilterMapResult<I, T> canReverse(ObservableCollectionActiveManagers.DerivedCollectionElement<? extends I> element,
+			FilterMapResult<I, T> sourceAndValue);
+
+		/**
+		 * @param element The source element
+		 * @param newValue The new mapped value
+		 * @return The value to set in the source element
+		 */
+		I reverse(ObservableCollectionActiveManagers.DerivedCollectionElement<? extends I> element, T newValue);
 	}
 
 	private static class FlattenedValuesOp<E, I, T> extends AbstractDataFlow<E, I, T> {
@@ -1172,44 +1176,56 @@ public class ObservableCollectionDataFlowImpl {
 		public ActiveCollectionManager<E, ?, T> manageActive() {
 			TypeToken<ObservableValue<? extends T>> valueType = ObservableValue.TYPE_KEY.getCompoundType(getTargetType());
 			ValueHolder<ObservableCollectionActiveManagers.DerivedCollectionElement<? extends ObservableValue<? extends T>>> settingElement = new ValueHolder<>();
+			class RefreshingMapReverse implements FlowElementSetter<ObservableValue<? extends T>, T> {
+				@Override
+				public boolean isStateful() {
+					return true;
+				}
+
+				@Override
+				public FilterMapResult<ObservableValue<? extends T>, T> canReverse(
+					FilterMapResult<ObservableValue<? extends T>, T> sourceAndValue) {
+					if (!(sourceAndValue.source instanceof SettableValue))
+						return sourceAndValue.reject(StdMsg.UNSUPPORTED_OPERATION, true);
+					if (!TypeTokens.get().isInstance(sourceAndValue.source.getType(), sourceAndValue.result))
+						return sourceAndValue.reject(StdMsg.BAD_TYPE, true);
+					String msg = ((SettableValue<T>) sourceAndValue.source).isAcceptable(sourceAndValue.result);
+					if (msg != null)
+						return sourceAndValue.reject(msg, true);
+					return null;
+				}
+
+				@Override
+				public ObservableValue<? extends T> reverse(ObservableValue<? extends T> previousSource, T newValue) {
+					if (!(previousSource instanceof SettableValue))
+						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+					if (!TypeTokens.get().isInstance(previousSource.getType(), newValue))
+						throw new IllegalArgumentException(StdMsg.BAD_TYPE);
+					((SettableValue<T>) previousSource).set(newValue, null);
+					return previousSource;
+				}
+
+				@Override
+				public FilterMapResult<ObservableValue<? extends T>, T> canReverse(
+					DerivedCollectionElement<? extends ObservableValue<? extends T>> element,
+						FilterMapResult<ObservableValue<? extends T>, T> sourceAndValue) {
+					return canReverse(sourceAndValue);
+				}
+
+				@Override
+				public ObservableValue<? extends T> reverse(DerivedCollectionElement<? extends ObservableValue<? extends T>> element,
+					T newValue) {
+					settingElement.accept(element);
+					return reverse(element.get(), newValue);
+				}
+			}
 			ActiveCollectionManager<E, ?, T> manager = getParent()//
 				.map(valueType, theMap)//
 				.refreshEach(LambdaUtils.printableFn(ObservableValue::noInitChanges, "noInitChanges", "ObservableValue.noInitChanges"))//
 				.map(getTargetType(), //
 					LambdaUtils.printableFn(obs -> obs == null ? null : obs.get(), () -> "flatten"), //
 					options -> options//
-					.withElementSetting(new FlowElementSetter<ObservableValue<? extends T>, T>() {
-						@Override
-						public String setElement(
-							ObservableCollectionActiveManagers.DerivedCollectionElement<? extends ObservableValue<? extends T>> element,
-								T newValue,
-								boolean replace) {
-							String result;
-							if (replace)
-								settingElement.accept(element);
-							try {
-								result = setElement(element.get(), newValue, replace);
-							} finally {
-								settingElement.clear();
-							}
-							return result;
-						}
-
-						@Override
-						public String setElement(ObservableValue<? extends T> ov, T newValue, boolean doSet) {
-							// Allow setting elements via the wrapped settable value
-							if (!(ov instanceof SettableValue))
-								return MutableCollectionElement.StdMsg.UNSUPPORTED_OPERATION;
-							else if (newValue != null && !TypeTokens.get().isInstance(ov.getType(), newValue))
-								return MutableCollectionElement.StdMsg.BAD_TYPE;
-							String msg = ((SettableValue<T>) ov).isAcceptable(newValue);
-							if (msg != null)
-								return msg;
-							if (doSet)
-								((SettableValue<T>) ov).set(newValue, null);
-							return null;
-						}
-					}))//
+					.withReverse(new RefreshingMapReverse()))//
 				.manageActive();
 			if (manager instanceof AbstractMappingManager//
 				&& ((AbstractMappingManager<?, ?, ?>) manager)
@@ -1349,64 +1365,64 @@ public class ObservableCollectionDataFlowImpl {
 			return !isReversible() || theOptions.isOneToMany() || theParent.isContentControlled();
 		}
 
-		protected abstract boolean isReversible();
-
-		protected abstract boolean isElementReversible();
-
 		protected abstract T map(I value, T previousValue);
 
-		protected abstract I reverse(T value);
+		protected abstract boolean isReversible();
 
-		protected abstract String elementReverse(AbstractMappedElement source, T newValue, boolean replace);
+		protected abstract FilterMapResult<I, T> canReverse(FilterMapResult<I, T> sourceAndResult);
+
+		protected abstract I reverse(I preSource, T value);
+
+		protected abstract boolean isReverseStateful();
 
 		protected abstract void doParentMultiSet(Collection<AbstractMappedElement> elements, I newValue);
 
 		protected void setElementsValue(Collection<?> elements, T newValue) throws UnsupportedOperationException, IllegalArgumentException {
-			Collection<AbstractMappedElement> remaining;
-			if (isElementReversible()) {
-				remaining = new ArrayList<>();
+			if (isReversible() && isReverseStateful()) {
+				// Since the reversal depends on the previous value of each individual element here, we can't really do anything in bulk
 				// Don't perform the operation on the same parent value twice, even if it exists in multiple elements
-				Map<I, Boolean> parentValues = new IdentityHashMap<>();
+				Map<I, I> parentValues = new IdentityHashMap<>();
 				for (AbstractMappedElement el : (Collection<AbstractMappedElement>) elements) {
 					I parentValue = el.getParentValue();
-					if (parentValues.put(parentValue, true) == null && elementReverse(el, newValue, true) != null)
-						remaining.add(el);
+					I newParentValue = parentValues.computeIfAbsent(parentValue, pv -> {
+						return reverse(pv, newValue);
+					});
+					if (theOptions.isPropagatingUpdatesToParent() || !getParent().equivalence().elementEquals(parentValue, newParentValue))
+						el.setParent(newParentValue);
 				}
-			} else
-				remaining = (Collection<AbstractMappedElement>) elements;
-			if (remaining.isEmpty())
-				return;
-			if (theOptions.isCached()) {
-				I oldValue = null;
+			} else if (theOptions.isCached()) {
+				I oldSource = null;
 				boolean first = true, allUpdates = true, allIdenticalUpdates = true;
-				for (AbstractMappedElement el : remaining) {
-					allUpdates &= equivalence().elementEquals(el.getValue(), newValue);
+				for (AbstractMappedElement el : (Collection<AbstractMappedElement>) elements) {
+					boolean elementUpdate = equivalence().elementEquals(el.getValue(), newValue);
+					if (elementUpdate && !theOptions.isPropagatingUpdatesToParent())
+						allUpdates &= elementUpdate;
 					allIdenticalUpdates &= allUpdates;
 					if (!allUpdates)
 						break;
 					if (allIdenticalUpdates) {
 						I elOldValue = el.getCachedSource();
 						if (first) {
-							oldValue = elOldValue;
+							oldSource = elOldValue;
 							first = false;
 						} else
-							allIdenticalUpdates &= theParent.equivalence().elementEquals(oldValue, elOldValue);
+							allIdenticalUpdates &= theParent.equivalence().elementEquals(oldSource, elOldValue);
 					}
 				}
 				if (allIdenticalUpdates) {
-					doParentMultiSet(remaining, oldValue);
+					doParentMultiSet((Collection<AbstractMappedElement>) elements, oldSource);
 					return;
 				} else if (allUpdates) {
-					for (AbstractMappedElement el : remaining)
+					for (AbstractMappedElement el : (Collection<AbstractMappedElement>) elements)
 						el.setParent(el.getCachedSource());
 					return;
 				}
 			}
 			if (isReversible()) {
-				I reversed = reverse(newValue);
+				I reversed = reverse(null, newValue);
 				if (!equivalence().elementEquals(map(reversed, newValue), newValue))
 					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
-				doParentMultiSet(remaining, reversed);
+				doParentMultiSet((Collection<AbstractMappedElement>) elements, reversed);
 			} else
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 		}
@@ -1427,11 +1443,12 @@ public class ObservableCollectionDataFlowImpl {
 			}
 
 			public I reverseForElement(T source) {
-				return reverse(source);
+				return reverse(theOptions.isCached() ? getParentValue() : null, source);
 			}
 
 			protected String isEnabledLocal() {
-				if (isElementReversible())
+				// If updates on this element may not have an effect on the source, then such an operation can't be prevented by the source
+				if (isReversible() && !theOptions.isPropagatingUpdatesToParent())
 					return null;
 				// If we're caching, updates are enabled even without a reverse map
 				if (!isReversible() && !theOptions.isCached())
@@ -1441,34 +1458,38 @@ public class ObservableCollectionDataFlowImpl {
 
 			protected String isAcceptable(T value) {
 				String msg = null;
-				if (isElementReversible()) {
-					msg = elementReverse(this, value, false);
-					if (msg == null)
-						return null;
-				}
 				I reversed;
-				if (theOptions.isCached() && equivalence().elementEquals(getValue(), value)) {
-					reversed = getCachedSource();
+				if (isReversible() && isReverseStateful()) {
+					FilterMapResult<I, T> fmr = new FilterMapResult<>();
+					fmr.result = value;
+					fmr.source = getCachedSource();
+					fmr = canReverse(fmr);
+					if (fmr.rejectReason != null)
+						return fmr.rejectReason;
+					reversed = fmr.source;
 				} else {
-					if (!isReversible())
-						return StdMsg.UNSUPPORTED_OPERATION;
-					reversed = reverseForElement(value);
-					if (!equivalence().elementEquals(mapForElement(reversed, value), value))
-						return StdMsg.ILLEGAL_ELEMENT;
+					if (theOptions.isCached() && equivalence().elementEquals(getValue(), value)) {
+						reversed = getCachedSource();
+					} else {
+						if (!isReversible())
+							return StdMsg.UNSUPPORTED_OPERATION;
+						reversed = reverseForElement(value);
+						if (!equivalence().elementEquals(mapForElement(reversed, value), value))
+							return StdMsg.ILLEGAL_ELEMENT;
+					}
 				}
 				// If the element reverse is set, it should get the final word on the error message
-				if (msg == null)
+				if (msg == null
+					&& (theOptions.isPropagatingUpdatesToParent() || !getParent().equivalence().elementEquals(getCachedSource(), reversed)))
 					msg = isParentAcceptable(reversed);
 				return msg;
 			}
 
 			protected void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
-				if (isElementReversible()) {
-					if (elementReverse(this, value, true) == null)
-						return;
-				}
 				I reversed;
-				if (theOptions.isCached() && equivalence().elementEquals(getValue(), value))
+				if (isReversible() && isReverseStateful()) {
+					reversed = reverse(getCachedSource(), value);
+				} else if (theOptions.isCached() && equivalence().elementEquals(getValue(), value))
 					reversed = getCachedSource();
 				else if (!isReversible())
 					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
@@ -1477,7 +1498,8 @@ public class ObservableCollectionDataFlowImpl {
 					if (!equivalence().elementEquals(mapForElement(reversed, value), value))
 						throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 				}
-				setParent(reversed);
+				if (theOptions.isPropagatingUpdatesToParent() || !getParent().equivalence().elementEquals(getCachedSource(), reversed))
+					setParent(reversed);
 			}
 		}
 	}

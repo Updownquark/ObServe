@@ -14,10 +14,9 @@ import org.observe.XformOptions;
 import org.observe.collect.Combination.CombinedFlowDef;
 import org.observe.collect.FlowOptions.MapDef;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
-import org.observe.collect.ObservableCollection.ElementSetter;
 import org.observe.collect.ObservableCollectionDataFlowImpl.AbstractMappingManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionOperation;
-import org.observe.collect.ObservableCollectionDataFlowImpl.FlowElementSetter;
+import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
 import org.observe.collect.ObservableCollectionDataFlowImpl.RepairListener;
 import org.observe.collect.ObservableCollectionImpl.ActiveDerivedCollection;
 import org.observe.util.WeakListening;
@@ -1376,7 +1375,12 @@ public class ObservableCollectionActiveManagers {
 		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
 			if (!isReversible() || getOptions().isManyToOne())
 				return null;
-			I reversed = reverse(value);
+			FilterMapResult<I, T> fmr = new FilterMapResult<>();
+			fmr.result = value;
+			fmr = canReverse(fmr);
+			if (!fmr.isAccepted())
+				return null;
+			I reversed = fmr.source;
 			if (!equivalence().elementEquals(map(reversed, value), value))
 				return null;
 			Comparable<DerivedCollectionElement<I>> pef = getParent().getElementFinder(reversed);
@@ -1404,7 +1408,12 @@ public class ObservableCollectionActiveManagers {
 		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
 			if (!isReversible())
 				return StdMsg.UNSUPPORTED_OPERATION;
-			I reversed = reverse(toAdd);
+			FilterMapResult<I, T> fmr = new FilterMapResult<>();
+			fmr.result = toAdd;
+			fmr = canReverse(fmr);
+			if (!fmr.isAccepted())
+				return fmr.getRejectReason();
+			I reversed = fmr.source;
 			if (!equivalence().elementEquals(map(reversed, toAdd), toAdd))
 				return StdMsg.ILLEGAL_ELEMENT;
 			return getParent().canAdd(reversed, strip(after), strip(before));
@@ -1415,7 +1424,14 @@ public class ObservableCollectionActiveManagers {
 			boolean first) {
 			if (!isReversible())
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-			I reversed = reverse(value);
+			FilterMapResult<I, T> fmr = new FilterMapResult<>();
+			fmr.result = value;
+			fmr = canReverse(fmr);
+			if (StdMsg.UNSUPPORTED_OPERATION.equals(fmr.getRejectReason()))
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+			else if (!fmr.isAccepted())
+				throw new IllegalArgumentException(fmr.getRejectReason());
+			I reversed = fmr.source;
 			if (!equivalence().elementEquals(map(reversed, value), value))
 				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 			DerivedCollectionElement<I> parentEl = getParent().addElement(reversed, strip(after),
@@ -1476,17 +1492,13 @@ public class ObservableCollectionActiveManagers {
 							theValue = value;
 						}
 					});
-					// Populate the initial values if these are needed
-					if (getOptions().isCached() || !getOptions().isFireIfUnchanged()) {
-						I srcVal = parentEl.get();
-						theCacheHandler.initialize(srcVal);
-						if (getOptions().isCached())
-							theValue = mapForElement(srcVal, null);
-					}
+					theCacheHandler.initialize(parentEl::get);
+					if (getOptions().isCached())
+						theValue = mapForElement(theCacheHandler.getSourceCache(), null);
 					theParentEl.setListener(new CollectionElementListener<I>() {
 						@Override
 						public void update(I oldSource, I newSource, Object cause) {
-							BiTuple<T, T> values = theCacheHandler.handleChange(oldSource, newSource);
+							BiTuple<T, T> values = theCacheHandler.handleSourceChange(oldSource, newSource);
 							if (values != null)
 								ObservableCollectionActiveManagers.update(theListener, values.getValue1(), values.getValue2(), cause);
 						}
@@ -1621,27 +1633,23 @@ public class ObservableCollectionActiveManagers {
 		}
 
 		@Override
-		protected boolean isElementReversible() {
-			return getOptions().getElementReverse() != null;
+		protected boolean isReverseStateful() {
+			return getOptions().getReverse() != null && getOptions().getReverse().isStateful();
+		}
+
+		@Override
+		protected FilterMapResult<I, T> canReverse(FilterMapResult<I, T> sourceAndResult) {
+			return getOptions().getReverse().canReverse(sourceAndResult);
+		}
+
+		@Override
+		protected I reverse(I preSource, T value) {
+			return getOptions().getReverse().reverse(preSource, value);
 		}
 
 		@Override
 		protected T map(I value, T previousValue) {
 			return theMap.apply(value, previousValue);
-		}
-
-		@Override
-		protected I reverse(T value) {
-			return getOptions().getReverse().apply(value);
-		}
-
-		@Override
-		protected String elementReverse(AbstractMappedElement source, T newValue, boolean replace) {
-			ElementSetter<? super I, ? super T> elSetter = getOptions().getElementReverse();
-			if (elSetter instanceof FlowElementSetter)
-				return ((FlowElementSetter<I, T>) elSetter).setElement(((MappedElement) source).getParentEl(), newValue, replace);
-			else
-				return elSetter.setElement(source.getParentValue(), newValue, replace);
 		}
 
 		@Override
@@ -1732,7 +1740,28 @@ public class ObservableCollectionActiveManagers {
 		}
 
 		@Override
-		protected boolean isElementReversible() {
+		protected FilterMapResult<I, T> canReverse(FilterMapResult<I, T> sourceAndResult) {
+			sourceAndResult.source = reverse(sourceAndResult.source, sourceAndResult.result);
+			return sourceAndResult;
+		}
+
+		@Override
+		protected I reverse(I preSource, T value) {
+			return getOptions().getReverse().apply(new Combination.CombinedValues<T>() {
+				@Override
+				public T getElement() {
+					return value;
+				}
+
+				@Override
+				public <V> V get(ObservableValue<V> arg) {
+					return getArgValue(arg);
+				}
+			});
+		}
+
+		@Override
+		protected boolean isReverseStateful() {
 			return false;
 		}
 
@@ -1749,26 +1778,6 @@ public class ObservableCollectionActiveManagers {
 					return getArgValue(arg);
 				}
 			}, previousValue);
-		}
-
-		@Override
-		protected I reverse(T value) {
-			return getOptions().getReverse().apply(new Combination.CombinedValues<T>() {
-				@Override
-				public T getElement() {
-					return value;
-				}
-
-				@Override
-				public <V> V get(ObservableValue<V> arg) {
-					return getArgValue(arg);
-				}
-			});
-		}
-
-		@Override
-		protected String elementReverse(AbstractMappedElement source, T newValue, boolean replace) {
-			throw new IllegalStateException();
 		}
 
 		@Override
@@ -1815,11 +1824,11 @@ public class ObservableCollectionActiveManagers {
 				XformOptions.XformCacheHandler<Object, Void> holder = arg.getValue();
 				listening.withConsumer((ObservableValueEvent<?> evt) -> {
 					if (evt.isInitial()) {
-						holder.initialize(evt.getNewValue());
+						holder.initialize(evt::getNewValue);
 						return;
 					}
 					Object oldValue = getOptions().isCached() ? holder.getSourceCache() : evt.getOldValue();
-					Ternian update = holder.isUpdate(evt.getOldValue(), evt.getNewValue());
+					Ternian update = holder.isSourceUpdate(evt.getOldValue(), evt.getNewValue());
 					if (update == Ternian.NONE)
 						return; // No change, no event
 					try (Transaction t = lock(false, null)) {
@@ -1891,7 +1900,7 @@ public class ObservableCollectionActiveManagers {
 				Function<? super I, ? extends T> oldMap = oldSrc -> getOptions().getCombination()//
 					.apply(//
 						oldValues.apply(oldSrc), null);
-				BiTuple<T, T> values = theCacheHandler.handleChange(parentValue, oldMap, parentValue, isUpdate);
+				BiTuple<T, T> values = theCacheHandler.handleSourceChange(parentValue, oldMap, parentValue, isUpdate);
 				if (values != null)
 					ObservableCollectionActiveManagers.update(theListener, values.getValue1(), values.getValue2(), cause);
 			}

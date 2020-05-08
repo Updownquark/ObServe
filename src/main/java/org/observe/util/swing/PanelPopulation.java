@@ -3208,14 +3208,9 @@ public class PanelPopulation {
 					}
 				});
 				filtered = TableContentControl.applyRowControl(theSafeRows, () -> renderers, theFilter.refresh(columnChanges), until);
-				model = new ObservableTableModel<>(filtered.flow().map(theRows.getType(), f -> f.value, opts -> opts.withElementSetting(//
-					new ObservableCollection.ElementSetter<TableContentControl.FilteredValue<R>, R>() {
-						@Override
-						public String setElement(FilteredValue<R> element, R newValue, boolean replace) {
-							element.setValue(newValue);
-							return null;
-						}
-					})).collectActive(until), //
+				model = new ObservableTableModel<>(
+					filtered.flow().map(theRows.getType(), f -> f.value, opts -> opts.withFieldSetReverse(FilteredValue::setValue, null))
+					.collectActive(until), //
 					true, safeColumns, true);
 			} else {
 				filtered = null;

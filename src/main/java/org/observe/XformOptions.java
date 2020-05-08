@@ -3,6 +3,7 @@ package org.observe;
 import java.util.Objects;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 import org.qommons.BiTuple;
 import org.qommons.Ternian;
@@ -11,21 +12,30 @@ import org.qommons.Transaction;
 /** Super-interface used for options by several map-type operations */
 public interface XformOptions {
 	/**
-	 * @param reEval Whether the result should be re-evaluated on an update from the source. Default is true.
-	 * @return This option set
-	 */
-	XformOptions reEvalOnUpdate(boolean reEval);
-	/**
-	 * @param fire Whether the result should fire an update as a result of a source event that does not affect the result value. Default is
-	 *        true
-	 * @return This option set
-	 */
-	XformOptions fireIfUnchanged(boolean fire);
-	/**
 	 * @param cache Whether to store both the source and result values for performance. Default is true.
 	 * @return This option set
 	 */
 	XformOptions cache(boolean cache);
+
+	/**
+	 * @param reEval Whether the result should be re-evaluated on an update from the source. Default is true.
+	 * @return This option set
+	 */
+	XformOptions reEvalOnUpdate(boolean reEval);
+
+	/**
+	 * @param fire Whether the result should fire an update as a result of a source event that does not affect the result value. Default is
+	 *        true.
+	 * @return This option set
+	 */
+	XformOptions fireIfUnchanged(boolean fire);
+
+	/**
+	 * @param propagate Whether an operation on the result that does not affect the source value should cause an update event in the source.
+	 *        Default is true. This option requires {@link #cache(boolean) caching}.
+	 * @return This option set
+	 */
+	XformOptions propagateUpdateToParent(boolean propagate);
 
 	/**
 	 * @param manyToOne Whether the mapping may produce the same output from different source values
@@ -39,23 +49,30 @@ public interface XformOptions {
 	 */
 	XformOptions oneToMany(boolean oneToMany);
 
-	/** @return Whether the result should be re-evaluated on an update from the source */
-	boolean isReEvalOnUpdate();
-	/** @return Whether the result should fire an update as a result of a source event that does not affect the result value */
-	boolean isFireIfUnchanged();
 	/** @return Whether to store both the source and result values for performance */
 	boolean isCached();
 
+	/** @return Whether the result should be re-evaluated on an update from the source */
+	boolean isReEvalOnUpdate();
+
+	/** @return Whether the result should fire an update as a result of a source event that does not affect the result value */
+	boolean isFireIfUnchanged();
+
+	/** @return Whether operations on the result that do not affect the source values should fire updates in the source */
+	boolean isPropagatingUpdatesToParent();
+
 	/** @return Whether the mapping may produce the same output from different source values */
 	boolean isManyToOne();
+
 	/** @return Whether the reverse mapping may produce the same source value from different mapped values */
 	boolean isOneToMany();
 
 	/** A simple abstract implementation of XformOptions */
 	public class SimpleXformOptions implements XformOptions {
+		private boolean isCached;
 		private boolean reEvalOnUpdate;
 		private boolean fireIfUnchanged;
-		private boolean isCached;
+		private boolean propagateUpdateToParent;
 		private boolean isManyToOne;
 		private boolean isOneToMany;
 
@@ -71,16 +88,24 @@ public interface XformOptions {
 		 */
 		public SimpleXformOptions(XformOptions options) {
 			if (options != null) {
+				isCached = options.isCached();
 				reEvalOnUpdate = options.isReEvalOnUpdate();
 				fireIfUnchanged = options.isFireIfUnchanged();
-				isCached = options.isCached();
+				propagateUpdateToParent = options.isPropagatingUpdatesToParent();
 				isManyToOne = options.isManyToOne();
 				isOneToMany = options.isOneToMany();
 			} else {
+				isCached = true;
 				reEvalOnUpdate = true;
 				fireIfUnchanged = true;
-				isCached = true;
+				propagateUpdateToParent = true;
 			}
+		}
+
+		@Override
+		public XformOptions cache(boolean cache) {
+			isCached = cache;
+			return this;
 		}
 
 		@Override
@@ -96,8 +121,8 @@ public interface XformOptions {
 		}
 
 		@Override
-		public XformOptions cache(boolean cache) {
-			isCached = cache;
+		public XformOptions propagateUpdateToParent(boolean propagate) {
+			propagateUpdateToParent = propagate;
 			return this;
 		}
 
@@ -114,6 +139,11 @@ public interface XformOptions {
 		}
 
 		@Override
+		public boolean isCached() {
+			return isCached;
+		}
+
+		@Override
 		public boolean isReEvalOnUpdate() {
 			return reEvalOnUpdate;
 		}
@@ -124,8 +154,8 @@ public interface XformOptions {
 		}
 
 		@Override
-		public boolean isCached() {
-			return isCached;
+		public boolean isPropagatingUpdatesToParent() {
+			return propagateUpdateToParent;
 		}
 
 		@Override
@@ -141,19 +171,28 @@ public interface XformOptions {
 
 	/** An immutable version of {@link XformOptions} */
 	public class XformDef {
+		private final boolean isCached;
 		private final boolean reEvalOnUpdate;
 		private final boolean fireIfUnchanged;
-		private final boolean isCached;
+		private boolean propagateUpdateToParent;
 		private final boolean isManyToOne;
 		private final boolean isOneToMany;
 
 		/** @param options The configured options */
 		public XformDef(XformOptions options) {
+			isCached = options.isCached();
 			reEvalOnUpdate = options.isReEvalOnUpdate();
 			fireIfUnchanged = options.isFireIfUnchanged();
-			isCached = options.isCached();
+			propagateUpdateToParent = options.isPropagatingUpdatesToParent();
 			isManyToOne = options.isManyToOne();
 			isOneToMany = options.isOneToMany();
+			if (!propagateUpdateToParent && !isCached)
+				throw new IllegalStateException("Caching must be enabled to prevent parent update propagation");
+		}
+
+		/** @return Whether to store both the source and result values for performance */
+		public boolean isCached() {
+			return isCached;
 		}
 
 		/** @return Whether the result should be re-evaluated on an update from the source */
@@ -166,9 +205,9 @@ public interface XformOptions {
 			return fireIfUnchanged;
 		}
 
-		/** @return Whether to store both the source and result values for performance */
-		public boolean isCached() {
-			return isCached;
+		/** @return Whether operations on the result that do not affect the source values should fire updates in the source */
+		public boolean isPropagatingUpdatesToParent() {
+			return propagateUpdateToParent;
 		}
 
 		/** @return Whether the mapping may produce the same output from different source values */
@@ -186,12 +225,12 @@ public interface XformOptions {
 		 * @return A cache handler that obeys the settings of this option set
 		 */
 		public <E, T> XformCacheHandler<E, T> createCacheHandler(XformCacheHandlingInterface<E, T> intf) {
-			return new XformCacheHandler<>(this, intf);
+			return new XformCacheHandlerImpl<>(this, intf);
 		}
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(isCached, reEvalOnUpdate, fireIfUnchanged, isManyToOne, isOneToMany);
+			return Objects.hash(isCached, reEvalOnUpdate, fireIfUnchanged, propagateUpdateToParent, isManyToOne, isOneToMany);
 		}
 
 		@Override
@@ -204,6 +243,7 @@ public interface XformOptions {
 			return isCached == other.isCached//
 				&& reEvalOnUpdate == other.reEvalOnUpdate//
 				&& fireIfUnchanged == other.fireIfUnchanged//
+				&& propagateUpdateToParent == other.propagateUpdateToParent//
 				&& isManyToOne == other.isManyToOne//
 				&& isOneToMany == other.isOneToMany;
 		}
@@ -213,6 +253,8 @@ public interface XformOptions {
 			StringBuilder str = new StringBuilder();
 			str.append(isCached ? "" : "un").append("cached, ");
 			str.append("re-eval=").append(reEvalOnUpdate).append(", fire-on-update=").append(fireIfUnchanged);
+			if (!propagateUpdateToParent)
+				str.append(", no-parent-updates");
 			if (isManyToOne)
 				str.append(", many-to-one");
 			if (isOneToMany)
@@ -222,7 +264,7 @@ public interface XformOptions {
 	}
 
 	/**
-	 * Interfaces between a {@link XformCacheHandler} and the data it manages
+	 * Interfaces between a {@link XformCacheHandlerImpl} and the data it manages
 	 *
 	 * @param <E> The type of the source values
 	 * @param <T> The type of the mapped values
@@ -251,26 +293,15 @@ public interface XformOptions {
 	 * @param <E> The type of the source values
 	 * @param <T> The type of the mapped values
 	 */
-	public class XformCacheHandler<E, T> {
-		private final XformDef theDef;
-		private E theSrcCache;
-		private final XformCacheHandlingInterface<E, T> theIntf;
-
-		XformCacheHandler(XformDef def, XformCacheHandlingInterface<E, T> intf) {
-			theDef = def;
-			theIntf = intf;
-		}
+	public interface XformCacheHandler<E, T> {
+		/**
+		 * @param value Supplies the initial source value for this cache
+		 * @return This handler
+		 */
+		XformCacheHandler<E, T> initialize(Supplier<E> value);
 
 		/** @return The cached source value, if caching is enabled */
-		public E getSourceCache() {
-			return theSrcCache;
-		}
-
-		/** @param value The initial source value for this cache */
-		public void initialize(E value) {
-			if (theDef.isCached())
-				theSrcCache = value;
-		}
+		E getSourceCache();
 
 		/**
 		 * @param oldSource The previous source value (according to an event)
@@ -278,7 +309,90 @@ public interface XformOptions {
 		 * @return Whether the change is to be treated as an update, or {@link Ternian#NONE NONE} if the change is irrelevant to the data
 		 *         set
 		 */
-		public Ternian isUpdate(E oldSource, E newSource) {
+		Ternian isSourceUpdate(E oldSource, E newSource);
+
+		/**
+		 * @param oldSource The previous source value (according to an event)
+		 * @param newSource The new source value
+		 * @return A tuple of old and new mapped values to fire an event on, or null if the change is irrelevant to this data set
+		 */
+		BiTuple<T, T> handleSourceChange(E oldSource, E newSource);
+
+		/**
+		 * @param oldSource The previous source value (according to an event)
+		 * @param newSource The new source value
+		 * @param update Whether the change is to be treated as an update
+		 * @return A tuple of old and new mapped values to fire an event on, or null if the change is irrelevant to this data set
+		 */
+		BiTuple<T, T> handleSourceChange(E oldSource, E newSource, boolean update);
+
+		/**
+		 * @param oldSource The previous source value (according to an event)
+		 * @param oldMap The mapping function to use to produce the old mapped value (may be null to use the current map)
+		 * @param newSource The new source value
+		 * @param update Whether the change is to be treated as an update
+		 * @return A tuple of old and new mapped values to fire an event on, or null if the change is irrelevant to this data set
+		 */
+		BiTuple<T, T> handleSourceChange(E oldSource, Function<? super E, ? extends T> oldMap, E newSource, boolean update);
+
+		// /**
+		// * @param newResult The new result value
+		// * @return Whether the change is to be treated as an update, or {@link Ternian#NONE NONE} if the change is irrelevant to the data
+		// * set
+		// */
+		// Ternian isResultUpdate(T newResult);
+		// /**
+		// * @param newResult The new result value
+		// * @return A tuple of old and new mapped values to fire an event on, or null if the change is irrelevant to this data set
+		// */
+		// BiTuple<T, T> handleResultChange(E newResult);
+		// /**
+		// * @param oldSource The previous source value (according to an event)
+		// * @param newSource The new source value
+		// * @param update Whether the change is to be treated as an update
+		// * @return A tuple of old and new mapped values to fire an event on, or null if the change is irrelevant to this data set
+		// */
+		// BiTuple<T, T> handleSourceChange(E oldSource, E newSource, boolean update);
+		// /**
+		// * @param oldSource The previous source value (according to an event)
+		// * @param oldMap The mapping function to use to produce the old mapped value (may be null to use the current map)
+		// * @param newSource The new source value
+		// * @param update Whether the change is to be treated as an update
+		// * @return A tuple of old and new mapped values to fire an event on, or null if the change is irrelevant to this data set
+		// */
+		// BiTuple<T, T> handleSourceChange(E oldSource, Function<? super E, ? extends T> oldMap, E newSource, boolean update);
+	}
+
+	/**
+	 * Default {@link XformCacheHandler} implementation
+	 *
+	 * @param <E> The type of the source values
+	 * @param <T> The type of the mapped values
+	 */
+	class XformCacheHandlerImpl<E, T> implements XformCacheHandler<E, T> {
+		private final XformDef theDef;
+		private E theSrcCache;
+		private final XformCacheHandlingInterface<E, T> theIntf;
+
+		XformCacheHandlerImpl(XformDef def, XformCacheHandlingInterface<E, T> intf) {
+			theDef = def;
+			theIntf = intf;
+		}
+
+		@Override
+		public XformCacheHandler<E, T> initialize(Supplier<E> value) {
+			if (theDef.isCached() || !theDef.isFireIfUnchanged())
+				theSrcCache = value.get();
+			return this;
+		}
+
+		@Override
+		public E getSourceCache() {
+			return theSrcCache;
+		}
+
+		@Override
+		public Ternian isSourceUpdate(E oldSource, E newSource) {
 			E oldStored = theSrcCache; // May or may not have a valid value depending on caching
 			if (theDef.isCached())
 				theSrcCache = newSource;
@@ -296,24 +410,23 @@ public interface XformOptions {
 				return Ternian.NONE;
 		}
 
-		/**
-		 * @param oldSource The previous source value (according to an event)
-		 * @param newSource The new source value
-		 * @param update Whether the change is to be treated as an update
-		 * @return A tuple of old and new mapped values to fire an event on, or null if the change is irrelevant to this data set
-		 */
-		public BiTuple<T, T> handleChange(E oldSource, E newSource, boolean update) {
-			return handleChange(oldSource, null, newSource, update);
+		@Override
+		public BiTuple<T, T> handleSourceChange(E oldSource, E newSource) {
+			Ternian update = isSourceUpdate(oldSource, newSource);
+			if (update.value == null)
+				return null; // No change, no event
+			try (Transaction t = theIntf.lock()) {
+				return handleSourceChange(oldSource, newSource, update.value);
+			}
 		}
 
-		/**
-		 * @param oldSource The previous source value (according to an event)
-		 * @param oldMap The mapping function to use to produce the old mapped value (may be null to use the current map)
-		 * @param newSource The new source value
-		 * @param update Whether the change is to be treated as an update
-		 * @return A tuple of old and new mapped values to fire an event on, or null if the change is irrelevant to this data set
-		 */
-		public BiTuple<T, T> handleChange(E oldSource, Function<? super E, ? extends T> oldMap, E newSource, boolean update) {
+		@Override
+		public BiTuple<T, T> handleSourceChange(E oldSource, E newSource, boolean update) {
+			return handleSourceChange(oldSource, null, newSource, update);
+		}
+
+		@Override
+		public BiTuple<T, T> handleSourceChange(E oldSource, Function<? super E, ? extends T> oldMap, E newSource, boolean update) {
 			// Now figure out if we need to fire an event
 			T oldValue, newValue;
 			BiFunction<? super E, ? super T, ? extends T> map = theIntf.map();
@@ -338,20 +451,6 @@ public interface XformOptions {
 			if (oldValue != newValue || theDef.isFireIfUnchanged())
 				return new BiTuple<>(oldValue, newValue);
 			return null;
-		}
-
-		/**
-		 * @param oldSource The previous source value (according to an event)
-		 * @param newSource The new source value
-		 * @return A tuple of old and new mapped values to fire an event on, or null if the change is irrelevant to this data set
-		 */
-		public BiTuple<T, T> handleChange(E oldSource, E newSource) {
-			Ternian update = isUpdate(oldSource, newSource);
-			if (update.value == null)
-				return null; // No change, no event
-			try (Transaction t = theIntf.lock()) {
-				return handleChange(oldSource, newSource, update.value);
-			}
 		}
 	}
 }

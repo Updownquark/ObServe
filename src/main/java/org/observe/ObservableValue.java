@@ -758,11 +758,11 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 								public <V extends ObservableValueEvent<?>> void onNext(V event) {
 									if (event.isInitial()) {
 										initialized[index] = true;
-										caches[index].initialize(event.getNewValue());
+										caches[index].initialize(event::getNewValue);
 										return;
 									} else if (!isInitialized())
 										return;
-									BiTuple<T, T> change = caches[index].handleChange(event.getOldValue(), event.getNewValue());
+									BiTuple<T, T> change = caches[index].handleSourceChange(event.getOldValue(), event.getNewValue());
 									if (change != null) {
 										ObservableValueEvent<T> toFire = ComposedObservableValue.this.createChangeEvent(change.getValue1(),
 											change.getValue2(), event);
@@ -781,10 +781,10 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 								public <V extends ObservableValueEvent<?>> void onCompleted(V event) {
 									completed[0] = true;
 									if (!isInitialized()) {
-										caches[index].initialize(event.getNewValue());
+										caches[index].initialize(event::getNewValue);
 										return;
 									}
-									BiTuple<T, T> change = caches[index].handleChange(event.getOldValue(), event.getNewValue());
+									BiTuple<T, T> change = caches[index].handleSourceChange(event.getOldValue(), event.getNewValue());
 									if (change == null) {
 										T value = combineCache(caches, index, event.getNewValue());
 										change = new BiTuple<>(value, value);
