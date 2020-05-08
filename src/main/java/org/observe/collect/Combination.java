@@ -3,6 +3,7 @@ package org.observe.collect;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -116,6 +117,32 @@ public class Combination {
 		/** @return The reverse function to map from result values to source values, for adding values to the result, etc. */
 		public Function<? super CombinedValues<T>, ? extends E> getReverse() {
 			return theReverse;
+		}
+
+		@Override
+		public int hashCode() {
+			return super.hashCode() * 7 + Objects.hash(theArgs, theCombination, theReverse);
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (obj == this)
+				return true;
+			else if (!(obj instanceof CombinedFlowDef) || !super.equals(obj))
+				return false;
+			CombinedFlowDef<?, ?> other = (CombinedFlowDef<?, ?>) obj;
+			return Objects.equals(theArgs, other.theArgs)//
+				&& Objects.equals(theCombination, other.theCombination)//
+				&& Objects.equals(theReverse, other.theReverse);
+		}
+
+		@Override
+		public String toString() {
+			StringBuilder str = new StringBuilder();
+			str.append("combination(");
+			StringUtils.print(str, ", ", theArgs, (s, arg) -> s.append(arg.getIdentity()));
+			str.append(") with ").append(theCombination).append(", ").append(super.toString());
+			return str.toString();
 		}
 	}
 

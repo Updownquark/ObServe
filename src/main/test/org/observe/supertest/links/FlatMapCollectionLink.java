@@ -559,12 +559,14 @@ public class FlatMapCollectionLink<S, T> extends AbstractFlatMappedCollectionLin
 		case set:
 			if (getSourceLink().getCollection().equivalence().elementEquals(sourceOp.getOldValue(), sourceOp.getValue()))
 				return; // No-op
-			theSourceElementsByAddedTime.remove(sourceOp.getElement());
-			theSourceElementsByAddedTime.add(sourceOp.getElement());
 			bucket = getBucket(sourceOp.getOldValue()).get();
 			BetterList<CollectionLinkElement<S, T>> elements = (BetterList<CollectionLinkElement<S, T>>) (BetterList<?>) sourceOp
 				.getElement().getDerivedElements(getSiblingIndex());
 			ObservableCollectionLink<?, T> newBucket = getBucket(sourceOp.getValue()).get();
+			if (bucket != newBucket) {
+				theSourceElementsByAddedTime.remove(sourceOp.getElement());
+				theSourceElementsByAddedTime.add(sourceOp.getElement());
+			}
 			// For changes where the old and new values map to the same bucket, the collection should just update everything,
 			// but if event order messes with this, we'll allow remove and re-add
 			if (bucket != newBucket || elements.isEmpty() || !elements.getFirst().isPresent()) {

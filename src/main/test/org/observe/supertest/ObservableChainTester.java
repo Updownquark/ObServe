@@ -208,6 +208,15 @@ public class ObservableChainTester implements Testable {
 		fillLinks(theLinks, theRoot, 0, "root");
 	}
 
+	/**
+	 * Generates a random collection link chain for use by other links
+	 *
+	 * @param rootPath The path for the first link in the chain
+	 * @param type The type for the last link in the chain
+	 * @param helper The randomness to use to produce and initialize the links
+	 * @param length The number of links for the chain
+	 * @return The last link in the new chain
+	 */
 	public static <T> ObservableCollectionLink<?, T> generateCollectionLink(String rootPath, TestValueType type, TestHelper helper,
 		int length) {
 		ObservableCollectionLink<Object, Object> baseLink;

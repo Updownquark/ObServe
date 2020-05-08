@@ -354,6 +354,11 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getParent().getIdentity(), "distinctSorted", theCompare);
+		}
+
+		@Override
 		public DistinctSortedDataFlow<E, T, T> reverse() {
 			return new DistinctSortedDataFlowWrapper<>(getSource(), super.reverse(), BetterSortedSet.ReversedSortedSet.reverse(theCompare));
 		}

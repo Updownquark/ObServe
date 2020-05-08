@@ -1,5 +1,6 @@
 package org.observe;
 
+import java.util.Objects;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
@@ -186,6 +187,37 @@ public interface XformOptions {
 		 */
 		public <E, T> XformCacheHandler<E, T> createCacheHandler(XformCacheHandlingInterface<E, T> intf) {
 			return new XformCacheHandler<>(this, intf);
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(isCached, reEvalOnUpdate, fireIfUnchanged, isManyToOne, isOneToMany);
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (obj == this)
+				return true;
+			else if (!(obj instanceof XformDef))
+				return false;
+			XformDef other = (XformDef) obj;
+			return isCached == other.isCached//
+				&& reEvalOnUpdate == other.reEvalOnUpdate//
+				&& fireIfUnchanged == other.fireIfUnchanged//
+				&& isManyToOne == other.isManyToOne//
+				&& isOneToMany == other.isOneToMany;
+		}
+
+		@Override
+		public String toString() {
+			StringBuilder str = new StringBuilder();
+			str.append(isCached ? "" : "un").append("cached, ");
+			str.append("re-eval=").append(reEvalOnUpdate).append(", fire-on-update=").append(fireIfUnchanged);
+			if (isManyToOne)
+				str.append(", many-to-one");
+			if (isOneToMany)
+				str.append(", one-to-many");
+			return str.toString();
 		}
 	}
 

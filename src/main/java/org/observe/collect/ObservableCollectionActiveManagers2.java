@@ -8,8 +8,10 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -17,6 +19,8 @@ import java.util.stream.Stream;
 
 import org.observe.Observable;
 import org.observe.Subscription;
+import org.observe.XformOptions;
+import org.observe.collect.FlatMapOptions.FlatMapDef;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollectionActiveManagers.ActiveCollectionManager;
 import org.observe.collect.ObservableCollectionActiveManagers.CollectionElementListener;
@@ -25,9 +29,11 @@ import org.observe.collect.ObservableCollectionActiveManagers.ElementAccepter;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ModFilterer;
 import org.observe.util.TypeTokens;
 import org.observe.util.WeakListening;
+import org.qommons.BiTuple;
 import org.qommons.Identifiable;
 import org.qommons.Lockable;
 import org.qommons.QommonsUtils;
+import org.qommons.Ternian;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterHashMap;
@@ -236,7 +242,7 @@ public class ObservableCollectionActiveManagers2 {
 
 		@Override
 		public Object getIdentity() {
-			return Identifiable.wrap(theParent.getIdentity(), isExclude ? "without" : "intersect", theFilter);
+			return Identifiable.wrap(theParent.getIdentity(), isExclude ? "without" : "intersect", theFilter.getIdentity());
 		}
 
 		@Override
@@ -414,7 +420,7 @@ public class ObservableCollectionActiveManagers2 {
 
 		@Override
 		public Object getIdentity() {
-			return theParent.getIdentity();
+			return Identifiable.wrap(theParent.getIdentity(), "filterMod", theFilter);
 		}
 
 		@Override
@@ -1106,21 +1112,23 @@ public class ObservableCollectionActiveManagers2 {
 		}
 	}
 
-	static class FlattenedManager<E, I, T> implements ActiveCollectionManager<E, I, T> {
+	static class FlattenedManager<E, I, V, T> implements ActiveCollectionManager<E, I, T> {
 		private final ActiveCollectionManager<E, ?, I> theParent;
 		private final TypeToken<T> theTargetType;
-		private final Function<? super I, ? extends CollectionDataFlow<?, ?, ? extends T>> theMap;
+		private final Function<? super I, ? extends CollectionDataFlow<?, ?, ? extends V>> theMap;
+		private final FlatMapDef<I, V, T> theOptions;
 
 		private ElementAccepter<T> theAccepter;
 		private WeakListening theListening;
 		private final BetterTreeSet<FlattenedHolder> theOuterElements;
 		private final ReentrantReadWriteLock theLock;
 
-		public FlattenedManager(ActiveCollectionManager<E, ?, I> parent, TypeToken<T> targetType,
-			Function<? super I, ? extends CollectionDataFlow<?, ?, ? extends T>> map) {
+		FlattenedManager(ActiveCollectionManager<E, ?, I> parent, TypeToken<T> targetType,
+			Function<? super I, ? extends CollectionDataFlow<?, ?, ? extends V>> map, FlatMapDef<I, V, T> options) {
 			theParent = parent;
 			theTargetType = targetType;
 			theMap = map;
+			theOptions = options;
 
 			theOuterElements = BetterTreeSet.<FlattenedHolder> buildTreeSet((f1, f2) -> f1.theParentEl.compareTo(f2.theParentEl))
 				.safe(false).build();
@@ -1129,7 +1137,7 @@ public class ObservableCollectionActiveManagers2 {
 
 		@Override
 		public Object getIdentity() {
-			return Identifiable.wrap(theParent.getIdentity(), "flatten", theMap);
+			return Identifiable.wrap(theParent.getIdentity(), "flatten", theMap, theOptions);
 		}
 
 		@Override
@@ -1205,14 +1213,14 @@ public class ObservableCollectionActiveManagers2 {
 				for (FlattenedHolder holder : theOuterElements) {
 					if (parentEBS.contains(holder.theParentEl))
 						continue;
-					BetterList<? extends DerivedCollectionElement<? extends T>> holderEls = holder.manager.getElementsBySource(sourceEl,
+					BetterList<? extends DerivedCollectionElement<? extends V>> holderEls = holder.manager.getElementsBySource(sourceEl,
 						sourceCollection);
-					for (DerivedCollectionElement<? extends T> innerEl : holderEls) {
+					for (DerivedCollectionElement<? extends V> innerEl : holderEls) {
 						BinaryTreeNode<FlattenedElement> fe = holder.theElements.getRoot().findClosest(
-							feEl -> ((DerivedCollectionElement<T>) innerEl).compareTo((DerivedCollectionElement<T>) feEl.get().theParentEl),
+							feEl -> ((DerivedCollectionElement<V>) innerEl).compareTo((DerivedCollectionElement<V>) feEl.get().theParentEl),
 							true, true, OptimisticContext.TRUE);
 						if (fe != null
-							&& ((DerivedCollectionElement<T>) fe.get().theParentEl).compareTo((DerivedCollectionElement<T>) innerEl) == 0)
+							&& ((DerivedCollectionElement<V>) fe.get().theParentEl).compareTo((DerivedCollectionElement<V>) innerEl) == 0)
 							elements.add(fe.get());
 					}
 				}
@@ -1252,9 +1260,9 @@ public class ObservableCollectionActiveManagers2 {
 			FlattenedElement lowBound;
 			FlattenedElement highBound;
 
-			DerivedCollectionElement<T> getBound(boolean low) {
+			DerivedCollectionElement<V> getBound(boolean low) {
 				FlattenedElement bound = low ? lowBound : highBound;
-				return bound == null ? null : (DerivedCollectionElement<T>) bound.theParentEl;
+				return bound == null ? null : (DerivedCollectionElement<V>) bound.theParentEl;
 			}
 		}
 
@@ -1264,8 +1272,8 @@ public class ObservableCollectionActiveManagers2 {
 			private final boolean ascending;
 
 			InterElementIterable(DerivedCollectionElement<T> start, DerivedCollectionElement<T> end, boolean ascending) {
-				this.start = (FlattenedManager<E, I, T>.FlattenedElement) start;
-				this.end = (FlattenedManager<E, I, T>.FlattenedElement) end;
+				this.start = (FlattenedManager<E, I, V, T>.FlattenedElement) start;
+				this.end = (FlattenedManager<E, I, V, T>.FlattenedElement) end;
 				this.ascending = ascending;
 			}
 
@@ -1330,15 +1338,18 @@ public class ObservableCollectionActiveManagers2 {
 
 		@Override
 		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
+			if (theOptions != null && !theOptions.isReversible())
+				return StdMsg.UNSUPPORTED_OPERATION;
 			String firstMsg = null;
 			try (Transaction t = theParent.lock(false, null)) {
 				for (FlattenedHolderIter holder : new InterElementIterable(after, before, true)) {
+					V reversed = theOptions == null ? (V) toAdd : theOptions.reverse(holder.holder.theParentEl.get(), null, toAdd);
 					String msg;
-					if (!TypeTokens.get().isInstance(holder.holder.manager.getTargetType(), toAdd)
-						|| !holder.holder.manager.equivalence().isElement(toAdd)) {
+					if (!TypeTokens.get().isInstance(holder.holder.manager.getTargetType(), reversed)
+						|| !holder.holder.manager.equivalence().isElement(reversed)) {
 						msg = StdMsg.ILLEGAL_ELEMENT;
 					} else
-						msg = ((ActiveCollectionManager<?, ?, T>) holder.holder.manager).canAdd(toAdd, holder.getBound(true),
+						msg = ((ActiveCollectionManager<?, ?, V>) holder.holder.manager).canAdd(reversed, holder.getBound(true),
 							holder.getBound(false));
 					if (msg == null)
 						return null;
@@ -1354,18 +1365,21 @@ public class ObservableCollectionActiveManagers2 {
 		@Override
 		public DerivedCollectionElement<T> addElement(T value, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before,
 			boolean first) {
+			if (theOptions != null && !theOptions.isReversible())
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 			try (Transaction t = theParent.lock(false, null)) {
 				String firstMsg = null;
 				for (FlattenedHolderIter holder : new InterElementIterable(after, before, first)) {
+					V reversed = theOptions == null ? (V) value : theOptions.reverse(holder.holder.theParentEl.get(), null, value);
 					String msg;
-					if (!TypeTokens.get().isInstance(holder.holder.manager.getTargetType(), value)
-						|| !holder.holder.manager.equivalence().isElement(value)) {
+					if (!TypeTokens.get().isInstance(holder.holder.manager.getTargetType(), reversed)
+						|| !holder.holder.manager.equivalence().isElement(reversed)) {
 						msg = StdMsg.ILLEGAL_ELEMENT;
 					} else
-						msg = ((ActiveCollectionManager<?, ?, T>) holder.holder.manager).canAdd(value, holder.getBound(true),
+						msg = ((ActiveCollectionManager<?, ?, V>) holder.holder.manager).canAdd(reversed, holder.getBound(true),
 							holder.getBound(false));
 					if (msg == null) {
-						DerivedCollectionElement<T> added = ((ActiveCollectionManager<?, ?, T>) holder.holder.manager).addElement(value,
+						DerivedCollectionElement<V> added = ((ActiveCollectionManager<?, ?, V>) holder.holder.manager).addElement(reversed,
 							holder.getBound(true), holder.getBound(false), first);
 						if (added != null)
 							return new FlattenedElement(holder.holder, added, true);
@@ -1381,16 +1395,16 @@ public class ObservableCollectionActiveManagers2 {
 
 		@Override
 		public String canMove(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
-			FlattenedElement flatV = (FlattenedManager<E, I, T>.FlattenedElement) valueEl;
+			FlattenedElement flatV = (FlattenedManager<E, I, V, T>.FlattenedElement) valueEl;
 			String firstMsg = null;
 			try (Transaction t = theParent.lock(false, null)) {
 				String removable = flatV.theParentEl.canRemove();
-				T value = flatV.theParentEl.get();
+				V value = flatV.theParentEl.get();
 				for (FlattenedHolderIter holder : new InterElementIterable(after, before, true)) {
 					String msg;
 					if (holder.holder.equals(flatV.theHolder))
-						msg = ((ActiveCollectionManager<?, ?, T>) holder.holder.manager)
-						.canMove((DerivedCollectionElement<T>) flatV.theParentEl, holder.getBound(true), holder.getBound(false));
+						msg = ((ActiveCollectionManager<?, ?, V>) holder.holder.manager)
+						.canMove((DerivedCollectionElement<V>) flatV.theParentEl, holder.getBound(true), holder.getBound(false));
 					else if (holder.holder.manager.getIdentity().equals(flatV.theHolder.manager.getIdentity())) {
 						// Don't support moving an element from 2 uses of the same collection--super messy
 						msg = StdMsg.UNSUPPORTED_OPERATION;
@@ -1400,7 +1414,7 @@ public class ObservableCollectionActiveManagers2 {
 					} else if (removable != null)
 						msg = removable;
 					else
-						msg = ((ActiveCollectionManager<?, ?, T>) holder.holder.manager).canAdd(value, holder.getBound(true),
+						msg = ((ActiveCollectionManager<?, ?, V>) holder.holder.manager).canAdd(value, holder.getBound(true),
 							holder.getBound(false));
 					if (msg == null)
 						return null;
@@ -1420,37 +1434,37 @@ public class ObservableCollectionActiveManagers2 {
 				return valueEl;
 			else if (!first && before != null && valueEl.compareTo(before) == 0)
 				return valueEl;
-			FlattenedElement flatV = (FlattenedManager<E, I, T>.FlattenedElement) valueEl;
+			FlattenedElement flatV = (FlattenedElement) valueEl;
 			String firstMsg = null;
 			try (Transaction t = theParent.lock(false, null)) {
 				String removable = flatV.theParentEl.canRemove();
-				T value = flatV.theParentEl.get();
-				DerivedCollectionElement<T> moved = null;
+				V value = flatV.theParentEl.get();
+				DerivedCollectionElement<V> moved = null;
 				for (FlattenedHolderIter holder : new InterElementIterable(after, before, first)) {
 					String msg;
 					if (holder.holder.equals(flatV.theHolder)) {
-						msg = ((ActiveCollectionManager<?, ?, T>) holder.holder.manager)
-							.canMove((DerivedCollectionElement<T>) flatV.theParentEl, holder.getBound(true), holder.getBound(false));
+						msg = ((ActiveCollectionManager<?, ?, V>) holder.holder.manager)
+							.canMove((DerivedCollectionElement<V>) flatV.theParentEl, holder.getBound(true), holder.getBound(false));
 						if (msg == null)
-							moved = ((ActiveCollectionManager<?, ?, T>) holder.holder.manager).move(
-								(DerivedCollectionElement<T>) flatV.theParentEl, holder.getBound(true), holder.getBound(false), first,
+							moved = ((ActiveCollectionManager<?, ?, V>) holder.holder.manager).move(
+								(DerivedCollectionElement<V>) flatV.theParentEl, holder.getBound(true), holder.getBound(false), first,
 								afterRemove);
 					} else if (holder.holder.manager.getIdentity().equals(flatV.theHolder.manager.getIdentity())) {
 						// Don't support moving an element from 2 uses of the same collection--super messy
 						msg = StdMsg.UNSUPPORTED_OPERATION;
-					} else if (!TypeTokens.get().isInstance(holder.holder.manager.getTargetType(), value)
-						|| !holder.holder.manager.equivalence().isElement(value)) {
-						msg = StdMsg.ILLEGAL_ELEMENT;
 					} else if (removable != null)
 						msg = removable;
-					else {
-						msg = ((ActiveCollectionManager<?, ?, T>) holder.holder.manager).canAdd(value, holder.getBound(true),
+					else if (!TypeTokens.get().isInstance(holder.holder.manager.getTargetType(), value)
+						|| !holder.holder.manager.equivalence().isElement(value)) {
+						msg = StdMsg.ILLEGAL_ELEMENT;
+					} else {
+						msg = ((ActiveCollectionManager<?, ?, V>) holder.holder.manager).canAdd(value, holder.getBound(true),
 							holder.getBound(false));
 						if (msg == null) {
 							flatV.theParentEl.remove();
 							if (afterRemove != null)
 								afterRemove.run();
-							moved = ((ActiveCollectionManager<?, ?, T>) holder.holder.manager).addElement(value, holder.getBound(true),
+							moved = ((ActiveCollectionManager<?, ?, V>) holder.holder.manager).addElement(value, holder.getBound(true),
 								holder.getBound(false), first);
 							if (moved == null)
 								throw new IllegalStateException("Removed, but unable to re-add");
@@ -1471,16 +1485,69 @@ public class ObservableCollectionActiveManagers2 {
 		@Override
 		public void setValues(Collection<DerivedCollectionElement<T>> elements, T newValue)
 			throws UnsupportedOperationException, IllegalArgumentException {
-			// Group by collection
-			BetterMap<ActiveCollectionManager<?, ?, T>, List<DerivedCollectionElement<T>>> grouped = BetterHashMap.build().identity()
-				.unsafe().buildMap();
-			for (DerivedCollectionElement<T> el : elements)
-				grouped
-				.computeIfAbsent((ActiveCollectionManager<?, ?, T>) ((FlattenedElement) el).theHolder.manager, h -> new ArrayList<>())
-				.add((DerivedCollectionElement<T>) ((FlattenedElement) el).theParentEl);
-
-			for (Map.Entry<ActiveCollectionManager<?, ?, T>, List<DerivedCollectionElement<T>>> entry : grouped.entrySet())
-				entry.getKey().setValues(entry.getValue(), newValue);
+			if (theOptions == null) {
+				// Group by flattened collection
+				BetterMap<FlattenedHolder, List<DerivedCollectionElement<V>>> grouped = BetterHashMap.build().identity().unsafe()
+					.buildMap();
+				for (DerivedCollectionElement<T> el : elements)
+					grouped.computeIfAbsent(((FlattenedElement) el).theHolder, h -> new ArrayList<>())
+					.add((DerivedCollectionElement<V>) ((FlattenedElement) el).theParentEl);
+				for (Map.Entry<FlattenedHolder, List<DerivedCollectionElement<V>>> entry : grouped.entrySet())
+					((ActiveCollectionManager<?, ?, V>) entry.getKey().manager).setValues(entry.getValue(), (V) newValue);
+			} else if (!theOptions.isReverseStateful()) {
+				// Group by flattened collection
+				BetterMap<FlattenedHolder, List<FlattenedElement>> grouped = BetterHashMap.build().identity().unsafe().buildMap();
+				for (DerivedCollectionElement<T> el : elements)
+					grouped.computeIfAbsent(((FlattenedElement) el).theHolder, h -> new ArrayList<>()).add((FlattenedElement) el);
+				for (Map.Entry<FlattenedHolder, List<FlattenedElement>> entry : grouped.entrySet()) {
+					if (theOptions.isCached()) {
+						V oldValue = null;
+						boolean first = true, allUpdates = true, allIdenticalUpdates = true;
+						for (FlattenedElement el : entry.getValue()) {
+							allUpdates &= equivalence().elementEquals(el.get(), newValue);
+							allIdenticalUpdates &= allUpdates;
+							if (!allUpdates)
+								break;
+							if (allIdenticalUpdates) {
+								V elOldValue = el.theCacheHandler.getSourceCache();
+								if (first) {
+									oldValue = elOldValue;
+									first = false;
+								} else
+									allIdenticalUpdates &= ((ActiveCollectionManager<?, ?, V>) entry.getKey().manager).equivalence()
+									.elementEquals(oldValue, elOldValue);
+							}
+						}
+						if (allIdenticalUpdates) {
+							((ActiveCollectionManager<?, ?, V>) entry.getKey().manager).setValues(//
+								BetterList.of(entry.getValue().stream().map(el -> (DerivedCollectionElement<V>) el.theParentEl)), oldValue);
+							return;
+						} else if (allUpdates) {
+							for (DerivedCollectionElement<T> el : elements) {
+								FlattenedElement flatEl = (FlattenedManager<E, I, V, T>.FlattenedElement) el;
+								((DerivedCollectionElement<V>) flatEl.theParentEl).set(flatEl.theCacheHandler.getSourceCache());
+							}
+							return;
+						}
+					}
+					if (theOptions.isReversible()) {
+						I holderValue = entry.getKey().getValue();
+						V reversed = theOptions.reverse(holderValue, null, newValue);
+						T reMapped = theOptions.map(holderValue, reversed, newValue);
+						if (!equivalence().elementEquals(reMapped, newValue))
+							throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+						((ActiveCollectionManager<?, ?, V>) entry.getKey().manager).setValues(//
+							BetterList.of(entry.getValue().stream().map(el -> (DerivedCollectionElement<V>) el.theParentEl)), reversed);
+					} else
+						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				}
+			} else {
+				// Since the reversal depends on the previous value of each individual element here, we can't really do anything in bulk
+				for (DerivedCollectionElement<T> element : elements) {
+					if (((FlattenedElement) element).theElementId.isPresent())
+						element.set(newValue);
+				}
+			}
 		}
 
 		@Override
@@ -1501,18 +1568,42 @@ public class ObservableCollectionActiveManagers2 {
 			private final WeakListening.Builder theChildListening = theListening.child();
 			private final boolean isFromStart;
 			ElementId holderElement;
-			private CollectionDataFlow<?, ?, ? extends T> theFlow;
-			ActiveCollectionManager<?, ?, ? extends T> manager;
+			private CollectionDataFlow<?, ?, ? extends V> theFlow;
+			ActiveCollectionManager<?, ?, ? extends V> manager;
+			private final XformOptions.XformCacheHandler<I, Void> theCacheHandler;
 
 			FlattenedHolder(DerivedCollectionElement<I> parentEl, WeakListening listening, Object cause, boolean fromStart) {
 				theParentEl = parentEl;
 				theElements = BetterTreeSet.<FlattenedElement> buildTreeSet(FlattenedElement::compareTo).safe(false).build();
 				isFromStart = fromStart;
-				updated(theParentEl.get(), cause);
+				theCacheHandler = theOptions == null ? null
+					: theOptions.createCacheHandler(new XformOptions.XformCacheHandlingInterface<I, Void>() {
+						@Override
+						public BiFunction<? super I, ? super Void, ? extends Void> map() {
+							return (v, o) -> null;
+						}
+
+						@Override
+						public Transaction lock() {
+							// Should not be called, though
+							return Lockable.lockable(manager, false, null).lock();
+						}
+
+						@Override
+						public Void getDestCache() {
+							return null;
+						}
+
+						@Override
+						public void setDestCache(Void value) {}
+					});
+				if (theCacheHandler != null)
+					theCacheHandler.initialize(theParentEl.get());
+				updated(null, getValue(), cause);
 				theParentEl.setListener(new CollectionElementListener<I>() {
 					@Override
 					public void update(I oldValue, I newValue, Object innerCause) {
-						updated(newValue, innerCause);
+						updated(oldValue, newValue, innerCause);
 					}
 
 					@Override
@@ -1525,39 +1616,18 @@ public class ObservableCollectionActiveManagers2 {
 				});
 			}
 
-			void updated(I newValue, Object cause) {
+			I getValue() {
+				if (theOptions != null && theOptions.isCached())
+					return theCacheHandler.getSourceCache();
+				else
+					return theParentEl.get();
+			}
+
+			void updated(I oldValue, I newValue, Object cause) {
 				try (Transaction parentT = theParent.lock(false, null); Transaction t = lockLocal()) {
-					CollectionDataFlow<?, ?, ? extends T> newFlow = theMap.apply(newValue);
-					if (newFlow == theFlow)
-						return;
-					ActiveCollectionManager<?, ?, ? extends T> newManager = newFlow.manageActive();
-					if (manager != null && manager.getIdentity().equals(newManager.getIdentity())) {
-						@SuppressWarnings("unused") // For debugging
-						ActiveCollectionManager<?, ?, ? extends T> oldManager = manager;
-						ignoreRemoves = true;
-						clearSubElements(cause);
-						ignoreRemoves = false;
-						theFlow = newFlow;
-						manager = newManager;
-						CollectionElement<FlattenedElement>[] oldFlatEl = new CollectionElement[1];
-						oldFlatEl[0] = theElements.getTerminalElement(isFromStart);
-						manager.begin(isFromStart, (childEl, innerCause) -> {
-							if (oldFlatEl[0] != null) {
-								oldFlatEl[0].get().replaceParent(childEl, cause);
-								oldFlatEl[0] = theElements.getAdjacentElement(oldFlatEl[0].getElementId(), isFromStart);
-							} else {
-								try (Transaction innerParentT = theParent.lock(false, null); Transaction innerLocalT = lockLocal()) {
-									FlattenedElement flatEl = new FlattenedElement(this, childEl, false);
-									theAccepter.accept(flatEl, innerCause);
-								}
-							}
-						}, theChildListening.getListening());
-						while (oldFlatEl[0] != null) {
-							oldFlatEl[0].get().remove(cause);
-							theElements.mutableElement(oldFlatEl[0].getElementId()).remove();
-							oldFlatEl[0] = theElements.getAdjacentElement(oldFlatEl[0].getElementId(), isFromStart);
-						}
-					} else {
+					CollectionDataFlow<?, ?, ? extends V> newFlow = theMap.apply(newValue);
+					if (manager == null || !Objects.equals(theFlow, newFlow)) {
+						ActiveCollectionManager<?, ?, ? extends V> newManager = newFlow.manageActive();
 						clearSubElements(cause);
 						theFlow = newFlow;
 						manager = newManager;
@@ -1567,6 +1637,15 @@ public class ObservableCollectionActiveManagers2 {
 								theAccepter.accept(flatEl, innerCause);
 							}
 						}, theChildListening.getListening());
+					} else if (theOptions != null) {
+						I oldSource = theOptions.isCached() ? theCacheHandler.getSourceCache() : oldValue;
+						Ternian update = theCacheHandler.isUpdate(oldValue, newValue);
+						if (update == Ternian.NONE)
+							return; // No change, no event
+						try (Transaction flatT = manager.lock(false, null)) {
+							for (FlattenedElement flatEl : theElements)
+								flatEl.sourceUpdated(oldSource, newValue, update.value, cause);
+						}
 					}
 				}
 			}
@@ -1586,62 +1665,109 @@ public class ObservableCollectionActiveManagers2 {
 			}
 		}
 
-		boolean ignoreRemoves;
-		CollectionElementListener<T> priorityUpdateReceiver;
+		FlattenedElement priorityUpdateReceiver;
+		boolean wasPriorityNotified;
 
 		private class FlattenedElement implements DerivedCollectionElement<T> {
 			private final FlattenedHolder theHolder;
-			private DerivedCollectionElement<? extends T> theParentEl;
+			private DerivedCollectionElement<? extends V> theParentEl;
 			private final ElementId theElementId;
+			private final XformOptions.XformCacheHandler<V, T> theCacheHandler;
 			private CollectionElementListener<T> theListener;
+			private T theDestCache;
 
-			<X extends T> FlattenedElement(FlattenedHolder holder, DerivedCollectionElement<X> parentEl, boolean synthetic) {
+			<X extends V> FlattenedElement(FlattenedHolder holder, DerivedCollectionElement<X> parentEl, boolean synthetic) {
 				theHolder = holder;
 				theParentEl = parentEl;
 				if (!synthetic) {
 					theElementId = theHolder.theElements.addElement(this, false).getElementId();
+					theCacheHandler = theOptions == null ? null
+						: theOptions.createCacheHandler(new XformOptions.XformCacheHandlingInterface<V, T>() {
+							@Override
+							public BiFunction<? super V, ? super T, ? extends T> map() {
+								return (v, preValue) -> theOptions.map(theHolder.getValue(), v, preValue);
+							}
+
+							@Override
+							public Transaction lock() {
+								// No need to lock, as modifications only come from one source
+								return Transaction.NONE;
+							}
+
+							@Override
+							public T getDestCache() {
+								return theDestCache;
+							}
+
+							@Override
+							public void setDestCache(T value) {
+								theDestCache = value;
+							}
+						});
+					if (theCacheHandler != null)
+						theCacheHandler.initialize(parentEl.get());
 					installListener(parentEl);
-				} else
+				} else {
+					theCacheHandler = null;
 					theElementId = null;
+				}
 			}
 
-			void replaceParent(DerivedCollectionElement<? extends T> newParent, Object cause) {
-				T oldValue = theParentEl.get();
-				theParentEl = newParent;
-				ObservableCollectionActiveManagers.update(theListener, oldValue, theParentEl.get(), cause);
-				installListener(theParentEl);
-			}
-
-			<X extends T> void installListener(DerivedCollectionElement<X> parentEl) {
+			<X extends V> void installListener(DerivedCollectionElement<X> parentEl) {
 				parentEl.setListener(new CollectionElementListener<X>() {
 					@Override
 					public void update(X oldValue, X newValue, Object cause) {
 						// Need to make sure that the flattened collection isn't firing at the same time as the child collection
 						try (Transaction parentT = theParent.lock(false, null); Transaction localT = lockLocal()) {
-							if (priorityUpdateReceiver != null) {
-								ObservableCollectionActiveManagers.update(priorityUpdateReceiver, oldValue, newValue, cause);
-								priorityUpdateReceiver = null;
+							if (!wasPriorityNotified && priorityUpdateReceiver != null) {
+								wasPriorityNotified = true;
+								priorityUpdateReceiver.valueUpdated(oldValue, newValue, cause);
 							}
-							ObservableCollectionActiveManagers.update(theListener, oldValue, newValue, cause);
+							if (priorityUpdateReceiver != FlattenedElement.this)
+								valueUpdated(oldValue, newValue, cause);
 						}
 					}
 
 					@Override
 					public void removed(X value, Object cause) {
-						if (ignoreRemoves)
-							return;
 						theHolder.theElements.mutableElement(theElementId).remove();
 						// Need to make sure that the flattened collection isn't firing at the same time as the child collection
 						try (Transaction parentT = theParent.lock(false, null); Transaction localT = lockLocal()) {
-							ObservableCollectionActiveManagers.removed(theListener, value, cause);
+							T val;
+							if (theOptions == null)
+								val = (T) value;
+							else if (theOptions.isCached())
+								val = theDestCache;
+							else
+								val = theOptions.map(theHolder.getValue(), value, null);
+							ObservableCollectionActiveManagers.removed(theListener, val, cause);
+							theListener = null;
 						}
 					}
 				});
 			}
 
-			void remove(Object cause) {
-				theHolder.theElements.mutableElement(theElementId).remove();
-				ObservableCollectionActiveManagers.removed(theListener, theParentEl.get(), cause);
+			void sourceUpdated(I oldSource, I newSource, boolean update, Object cause) {
+				if (theListener == null)
+					return;
+				// This is not called without options
+				T oldValue = theOptions.isCached() ? theDestCache : theOptions.map(oldSource, theParentEl.get(), null);
+				T newValue;
+				if (update && !theOptions.isReEvalOnUpdate())
+					newValue = theDestCache;
+				else if (theOptions.isCached())
+					newValue = theOptions.map(newSource, theCacheHandler.getSourceCache(), theDestCache);
+				else
+					newValue = theOptions.map(newSource, theParentEl.get(), null);
+				ObservableCollectionActiveManagers.update(theListener, oldValue, newValue, cause);
+			}
+
+			void valueUpdated(V oldValue, V newValue, Object cause) {
+				if (theOptions == null)
+					ObservableCollectionActiveManagers.update(theListener, (T) oldValue, (T) newValue, cause);
+				BiTuple<T, T> values = theCacheHandler.handleChange(oldValue, newValue);
+				if (values != null)
+					ObservableCollectionActiveManagers.update(theListener, values.getValue1(), values.getValue2(), cause);
 			}
 
 			@Override
@@ -1658,9 +1784,21 @@ public class ObservableCollectionActiveManagers2 {
 				theListener = listener;
 			}
 
+			V getParentValue() {
+				if (theOptions != null && theOptions.isCached())
+					return theCacheHandler.getSourceCache();
+				else
+					return theParentEl.get();
+			}
+
 			@Override
 			public T get() {
-				return theParentEl.get();
+				if (theOptions == null)
+					return (T) theParentEl.get();
+				else if (theOptions.isCached())
+					return theDestCache;
+				else
+					return theOptions.map(theHolder.getValue(), theParentEl.get(), null);
 			}
 
 			@Override
@@ -1672,7 +1810,29 @@ public class ObservableCollectionActiveManagers2 {
 			public String isAcceptable(T value) {
 				if (value != null && !TypeTokens.get().isInstance(theHolder.manager.getTargetType(), value))
 					return StdMsg.BAD_TYPE;
-				return ((DerivedCollectionElement<T>) theParentEl).isAcceptable(value);
+				String msg = null;
+				if (theOptions == null) {
+					if (value != null && !TypeTokens.get().isInstance(theHolder.manager.getTargetType(), value))
+						return StdMsg.BAD_TYPE;
+					return ((DerivedCollectionElement<T>) theParentEl).isAcceptable(value);
+				}
+				V reversed;
+				if (theOptions.isCached() && equivalence().elementEquals(theDestCache, value)) {
+					reversed = theCacheHandler.getSourceCache();
+				} else {
+					if (!theOptions.isReversible())
+						return StdMsg.UNSUPPORTED_OPERATION;
+					else if (theOptions.isCached())
+						reversed = theOptions.reverse(theHolder.getValue(), theCacheHandler.getSourceCache(), theDestCache);
+					else
+						reversed = theOptions.reverse(theHolder.theParentEl.get(), theParentEl.get(), null);
+					T reMapped = theOptions.map(theHolder.getValue(), reversed, value);
+					if (!equivalence().elementEquals(reMapped, value))
+						return StdMsg.ILLEGAL_ELEMENT;
+				}
+				if (msg == null)
+					msg = ((DerivedCollectionElement<V>) theParentEl).isAcceptable(reversed);
+				return msg;
 			}
 
 			@Override
@@ -1680,17 +1840,34 @@ public class ObservableCollectionActiveManagers2 {
 				if (value != null && !TypeTokens.get().isInstance(theHolder.manager.getTargetType(), value))
 					throw new IllegalArgumentException(StdMsg.BAD_TYPE);
 				try (Transaction t = FlattenedManager.this.lock(true, null)) {
+					V reversed;
+					if (theOptions == null)
+						reversed = (V) value;
+					else if (theOptions.isCached() && equivalence().elementEquals(theDestCache, value))
+						reversed = theCacheHandler.getSourceCache();
+					else if (!theOptions.isReversible())
+						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+					else {
+						I holderValue = theHolder.getValue();
+						V preValue;
+						if (theOptions.isCached() || !theOptions.isReverseStateful())
+							preValue = getParentValue();
+						else
+							preValue = null;
+						reversed = theOptions.reverse(holderValue, preValue, value);
+						T reMapped = theOptions.map(holderValue, reversed, value);
+						if (!equivalence().elementEquals(reMapped, value))
+							throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+					}
 					// The purpose of this code wrapped around the set call is to ensure that this method's listener gets called first.
 					// This prevents any possible re-arranging or other operations that could result
 					// in this set operation removing this element
-					CollectionElementListener<T> listener = theListener;
-					theListener = null;
-					priorityUpdateReceiver = listener;
+					priorityUpdateReceiver = this;
+					wasPriorityNotified = false;
 					try {
-						((DerivedCollectionElement<T>) theParentEl).set(value);
+						((DerivedCollectionElement<V>) theParentEl).set(reversed);
 					} finally {
 						priorityUpdateReceiver = null;
-						theListener = listener;
 					}
 				}
 			}
@@ -1708,7 +1885,10 @@ public class ObservableCollectionActiveManagers2 {
 
 			@Override
 			public String toString() {
-				return theHolder.theParentEl.toString() + "/" + theParentEl.toString();
+				StringBuilder str = new StringBuilder().append(theHolder.theParentEl).append('/').append(theParentEl);
+				if (theOptions != null && theOptions.isCached())
+					str.append('=').append(theDestCache);
+				return str.toString();
 			}
 		}
 	}

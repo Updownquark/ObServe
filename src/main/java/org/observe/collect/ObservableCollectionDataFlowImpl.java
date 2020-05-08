@@ -5,6 +5,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.IdentityHashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -21,6 +22,7 @@ import org.observe.assoc.impl.DefaultMultiMapFlow;
 import org.observe.assoc.impl.DefaultSortedMultiMapFlow;
 import org.observe.collect.Combination.CombinationPrecursor;
 import org.observe.collect.Combination.CombinedFlowDef;
+import org.observe.collect.FlatMapOptions.FlatMapDef;
 import org.observe.collect.FlowOptions.MapDef;
 import org.observe.collect.FlowOptions.MapOptions;
 import org.observe.collect.FlowOptions.SimpleUniqueOptions;
@@ -37,6 +39,7 @@ import org.observe.collect.ObservableCollectionImpl.PassiveDerivedCollection;
 import org.observe.collect.ObservableCollectionPassiveManagers.PassiveCollectionManager;
 import org.observe.util.TypeTokens;
 import org.qommons.Identifiable;
+import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
@@ -521,6 +524,28 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public int hashCode() {
+			return Objects.hash(theUnmodifiableMessage, areUpdatesAllowed, theAddMessage, theRemoveMessage, theMoveMessage, //
+				theAddFilter, theRemoveFilter);
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (obj == this)
+				return true;
+			else if (!(obj instanceof ModFilterer))
+				return false;
+			ModFilterer<?> other = (ModFilterer<?>) obj;
+			return Objects.equals(theUnmodifiableMessage, other.theUnmodifiableMessage)//
+				&& areUpdatesAllowed == other.areUpdatesAllowed//
+				&& Objects.equals(theAddMessage, other.theAddMessage)//
+				&& Objects.equals(theRemoveMessage, other.theRemoveMessage)//
+				&& Objects.equals(theMoveMessage, other.theMoveMessage)//
+				&& Objects.equals(theAddFilter, other.theAddFilter)//
+				&& Objects.equals(theRemoveFilter, other.theRemoveFilter);
+		}
+
+		@Override
 		public String toString() {
 			StringBuilder s = new StringBuilder();
 			if (theAddFilter != null)
@@ -551,7 +576,7 @@ public class ObservableCollectionDataFlowImpl {
 	 * @param <I> The type this flow's parent
 	 * @param <T> This flow's type, i.e. the type of the collection that would be produced by {@link #collect()}
 	 */
-	public static abstract class AbstractDataFlow<E, I, T> implements CollectionDataFlow<E, I, T> {
+	public static abstract class AbstractDataFlow<E, I, T> extends AbstractIdentifiable implements CollectionDataFlow<E, I, T> {
 		private final ObservableCollection<E> theSource;
 		private final CollectionDataFlow<E, ?, I> theParent;
 		private final TypeToken<T> theTargetType;
@@ -645,7 +670,19 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public <X> CollectionDataFlow<E, ?, X> flatMap(TypeToken<X> target,
 			Function<? super T, ? extends CollectionDataFlow<?, ?, ? extends X>> map) {
-			return new FlattenedOp<>(theSource, this, target, map);
+			return new FlattenedOp<>(theSource, this, target, map, null);
+		}
+
+		@Override
+		public <V, X> CollectionDataFlow<E, ?, X> flatMap(TypeToken<X> target,
+			Function<? super T, ? extends CollectionDataFlow<?, ?, ? extends V>> map,
+				Function<FlatMapOptions<T, V, X>, FlatMapDef<T, V, X>> options) {
+			if (options == null)
+				throw new IllegalArgumentException("options required");
+			FlatMapDef<T, V, X> def = options.apply(new FlatMapOptions.SimpleFlatMapOptions<>());
+			if (def == null)
+				throw new IllegalArgumentException("options required");
+			return new FlattenedOp<>(theSource, this, target, map, def);
 		}
 
 		@Override
@@ -746,6 +783,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getParent().getIdentity(), "sorted", theCompare);
+		}
+
+		@Override
 		public boolean supportsPassive() {
 			return false;
 		}
@@ -770,6 +812,11 @@ public class ObservableCollectionDataFlowImpl {
 		/** @param source The source collection */
 		protected BaseCollectionDataFlow(ObservableCollection<E> source) {
 			super(source, null, source.getType(), source.equivalence());
+		}
+
+		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getSource().getIdentity(), "flow");
 		}
 
 		@Override
@@ -799,6 +846,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getParent().getIdentity(), "reverse");
+		}
+
+		@Override
 		public boolean supportsPassive() {
 			return getParent().supportsPassive();
 		}
@@ -820,6 +872,11 @@ public class ObservableCollectionDataFlowImpl {
 		FilterOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, Function<? super T, String> filter) {
 			super(source, parent, parent.getTargetType(), parent.equivalence());
 			theFilter = filter;
+		}
+
+		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getParent().getIdentity(), "filter", theFilter);
 		}
 
 		@Override
@@ -850,6 +907,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getParent().getIdentity(), isExclude ? "without" : "intersect", theFilter.getIdentity());
+		}
+
+		@Override
 		public boolean supportsPassive() {
 			return false;
 		}
@@ -868,6 +930,11 @@ public class ObservableCollectionDataFlowImpl {
 	private static class EquivalenceSwitchOp<E, T> extends AbstractDataFlow<E, T, T> {
 		EquivalenceSwitchOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, Equivalence<? super T> equivalence) {
 			super(source, parent, parent.getTargetType(), equivalence);
+		}
+
+		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getParent().getIdentity(), "withEquivalence", equivalence());
 		}
 
 		@Override
@@ -909,6 +976,11 @@ public class ObservableCollectionDataFlowImpl {
 			super(source, parent, target, mapEquivalence(parent.getTargetType(), parent.equivalence(), target, map, options));
 			theMap = map;
 			theOptions = options;
+		}
+
+		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getParent().getIdentity(), "map", theMap, theOptions);
 		}
 
 		@Override
@@ -967,6 +1039,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getParent().getIdentity(), "combine", theDef);
+		}
+
+		@Override
 		public boolean supportsPassive() {
 			if (theDef.isCached())
 				return false;
@@ -1000,6 +1077,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getParent().getIdentity(), "refresh", theRefresh.getIdentity());
+		}
+
+		@Override
 		public boolean supportsPassive() {
 			return getParent().supportsPassive();
 		}
@@ -1022,6 +1104,11 @@ public class ObservableCollectionDataFlowImpl {
 			Function<? super T, ? extends Observable<?>> elementRefresh) {
 			super(source, parent, parent.getTargetType(), parent.equivalence());
 			theElementRefresh = elementRefresh;
+		}
+
+		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getParent().getIdentity(), "refreshEach", theElementRefresh);
 		}
 
 		@Override
@@ -1067,6 +1154,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getParent().getIdentity(), "flattenValues", theMap);
+		}
+
+		@Override
 		public boolean supportsPassive() {
 			return false;
 		}
@@ -1082,7 +1174,7 @@ public class ObservableCollectionDataFlowImpl {
 			ValueHolder<ObservableCollectionActiveManagers.DerivedCollectionElement<? extends ObservableValue<? extends T>>> settingElement = new ValueHolder<>();
 			ActiveCollectionManager<E, ?, T> manager = getParent()//
 				.map(valueType, theMap)//
-				.refreshEach(v -> v.noInitChanges())//
+				.refreshEach(LambdaUtils.printableFn(ObservableValue::noInitChanges, "noInitChanges", "ObservableValue.noInitChanges"))//
 				.map(getTargetType(), //
 					LambdaUtils.printableFn(obs -> obs == null ? null : obs.get(), () -> "flatten"), //
 					options -> options//
@@ -1160,6 +1252,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getParent().getIdentity(), "filterMod", theOptions);
+		}
+
+		@Override
 		public boolean supportsPassive() {
 			return getParent().supportsPassive();
 		}
@@ -1175,13 +1272,20 @@ public class ObservableCollectionDataFlowImpl {
 		}
 	}
 
-	private static class FlattenedOp<E, I, T> extends AbstractDataFlow<E, I, T> {
-		private final Function<? super I, ? extends CollectionDataFlow<?, ?, ? extends T>> theMap;
+	private static class FlattenedOp<E, I, V, T> extends AbstractDataFlow<E, I, T> {
+		private final Function<? super I, ? extends CollectionDataFlow<?, ?, ? extends V>> theMap;
+		private final FlatMapDef<I, V, T> theOptions;
 
 		FlattenedOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, I> parent, TypeToken<T> targetType,
-			Function<? super I, ? extends CollectionDataFlow<?, ?, ? extends T>> map) {
+			Function<? super I, ? extends CollectionDataFlow<?, ?, ? extends V>> map, FlatMapDef<I, V, T> options) {
 			super(source, parent, targetType, Equivalence.DEFAULT);
 			theMap = map;
+			theOptions = options;
+		}
+
+		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getParent().getIdentity(), "flatMap", theMap, theOptions);
 		}
 
 		@Override
@@ -1196,7 +1300,8 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public ActiveCollectionManager<E, ?, T> manageActive() {
-			return new ObservableCollectionActiveManagers2.FlattenedManager<>(getParent().manageActive(), getTargetType(), theMap);
+			return new ObservableCollectionActiveManagers2.FlattenedManager<>(getParent().manageActive(), getTargetType(), theMap,
+				theOptions);
 		}
 	}
 

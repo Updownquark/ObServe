@@ -773,7 +773,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 	 * @param <I> An intermediate type
 	 * @param <T> The type of collection this flow may build
 	 */
-	interface CollectionDataFlow<E, I, T> {
+	interface CollectionDataFlow<E, I, T> extends Identifiable {
 		/** @return The type of collection this flow may build */
 		TypeToken<T> getTargetType();
 
@@ -913,6 +913,28 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		 */
 		<X> CollectionDataFlow<E, ?, X> flatMap(TypeToken<X> target,
 			Function<? super T, ? extends CollectionDataFlow<?, ?, ? extends X>> map);
+
+		/**
+		 * @param target The type of values in the flattened result
+		 * @param map The function to produce {@link ObservableCollection.CollectionDataFlow data flows} from each element in this flow
+		 * @param options The options to use to combine the source element with each element in the mapped flow to produce the target values
+		 * @return A flow containing each element in the data flow produced by the map of each element in this flow
+		 */
+		<V, X> CollectionDataFlow<E, ?, X> flatMap(TypeToken<X> target,
+			Function<? super T, ? extends CollectionDataFlow<?, ?, ? extends V>> map,
+				Function<FlatMapOptions<T, V, X>, FlatMapOptions.FlatMapDef<T, V, X>> options);
+
+		/**
+		 * @param target The type of values in the flattened result
+		 * @param other The flow to combine with this one
+		 * @param options The options to use to combine the elements of this flow and the other to produce the target values
+		 * @return A flow containing one element for each combination of an element from this flow and an element from the other flow. The
+		 *         resulting flow will have a number of elements equal to that of this flow times that of the other
+		 */
+		default <V, X> CollectionDataFlow<E, ?, X> cross(TypeToken<X> target, CollectionDataFlow<?, ?, ? extends V> other,
+			Function<FlatMapOptions<T, V, X>, FlatMapOptions.FlatMapDef<T, V, X>> options) {
+			return flatMap(target, v -> other, options);
+		}
 
 		/**
 		 * @param compare The comparator to use to sort the source elements

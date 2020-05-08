@@ -154,7 +154,7 @@ public class ObservableCollectionPassiveManagers {
 
 		@Override
 		public Object getIdentity() {
-			return theSource.getIdentity();
+			return Identifiable.wrap(theSource.getIdentity(), "passiveManager");
 		}
 
 		@Override
@@ -629,7 +629,7 @@ public class ObservableCollectionPassiveManagers {
 
 		@Override
 		public Object getIdentity() {
-			return Identifiable.wrap(getParent().getIdentity(), "map", theMap);
+			return Identifiable.wrap(getParent().getIdentity(), "map", theMap, getOptions());
 		}
 
 		@Override
@@ -716,7 +716,7 @@ public class ObservableCollectionPassiveManagers {
 
 		@Override
 		public Object getIdentity() {
-			return Identifiable.wrap(getParent().getIdentity(), "map", getOptions().getIdentity());
+			return Identifiable.wrap(getParent().getIdentity(), "map", getOptions());
 		}
 
 		@Override
@@ -1076,7 +1076,7 @@ public class ObservableCollectionPassiveManagers {
 
 		@Override
 		public Object getIdentity() {
-			return theParent.getIdentity();
+			return Identifiable.wrap(theParent.getIdentity(), "filterMod", theFilter);
 		}
 
 		@Override

@@ -1010,6 +1010,7 @@ public final class ObservableCollectionImpl {
 						}))
 							listener.theCurrentElement = null;
 						Subscription collSub = theCollection.onChange(listener);
+						@SuppressWarnings("resource")
 						Subscription refreshSub = theRefresh != null ? theRefresh.act(r -> listener.refresh(r)) : Subscription.NONE;
 						ElementId initId = listener.theCurrentElement == null ? null : listener.theCurrentElement.getElementId();
 						E initVal = listener.theCurrentElement == null ? theDefault.get() : listener.theCurrentElement.get();

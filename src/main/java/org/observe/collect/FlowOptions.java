@@ -1,5 +1,6 @@
 package org.observe.collect;
 
+import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -206,6 +207,23 @@ public interface FlowOptions {
 		/** @return The reverse function, if set */
 		public Function<? super T, ? extends E> getReverse() {
 			return theReverse;
+		}
+
+		@Override
+		public int hashCode() {
+			return super.hashCode() * 7 + Objects.hash(theReverse, theElementReverse, theEquivalence);
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (this == obj)
+				return true;
+			if (!(obj instanceof MapDef) || !super.equals(obj))
+				return false;
+			MapDef<?, ?> other = (MapDef<?, ?>) obj;
+			return Objects.equals(theReverse, other.theReverse)//
+				&& Objects.equals(theElementReverse, other.theElementReverse)//
+				&& Objects.equals(theEquivalence, other.theEquivalence);
 		}
 	}
 }

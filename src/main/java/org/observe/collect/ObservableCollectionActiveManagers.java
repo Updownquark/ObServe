@@ -429,7 +429,7 @@ public class ObservableCollectionActiveManagers {
 
 		@Override
 		public Object getIdentity() {
-			return theSource.getIdentity();
+			return Identifiable.wrap(theSource.getIdentity(), "activeManager");
 		}
 
 		@Override
@@ -1646,7 +1646,7 @@ public class ObservableCollectionActiveManagers {
 
 		@Override
 		public Object getIdentity() {
-			return Identifiable.wrap(getParent().getIdentity(), "map", theMap);
+			return Identifiable.wrap(getParent().getIdentity(), "map", theMap, getOptions());
 		}
 
 		@Override
@@ -1773,7 +1773,7 @@ public class ObservableCollectionActiveManagers {
 
 		@Override
 		public Object getIdentity() {
-			return Identifiable.wrap(getParent().getIdentity(), "map", getOptions().getIdentity());
+			return Identifiable.wrap(getParent().getIdentity(), "combine", getOptions());
 		}
 
 		@Override

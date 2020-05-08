@@ -137,6 +137,11 @@ public class ObservableSetImpl {
 		}
 
 		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getParent().getIdentity(), "distinct");
+		}
+
+		@Override
 		public DistinctDataFlow<E, T, T> reverse() {
 			return new DistinctDataFlowWrapper<>(getSource(), super.reverse(), equivalence());
 		}
