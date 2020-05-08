@@ -653,8 +653,8 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
-		protected I reverse(I preSource, T value) {
-			return getOptions().getReverse().reverse(preSource, value);
+		protected I reverse(AbstractMappedElement preSourceEl, T value) {
+			return getOptions().getReverse().reverse(null, value);
 		}
 
 		@Override
@@ -706,12 +706,12 @@ public class ObservableCollectionPassiveManagers {
 
 		@Override
 		protected FilterMapResult<I, T> canReverse(FilterMapResult<I, T> sourceAndResult) {
-			sourceAndResult.source = reverse(sourceAndResult.source, sourceAndResult.result);
+			sourceAndResult.source = reverse(null, sourceAndResult.result);
 			return sourceAndResult;
 		}
 
 		@Override
-		protected I reverse(I preSource, T value) {
+		protected I reverse(AbstractMappedElement preSourceEl, T value) {
 			return getOptions().getReverse().apply(new Combination.CombinedValues<T>() {
 				@Override
 				public T getElement() {

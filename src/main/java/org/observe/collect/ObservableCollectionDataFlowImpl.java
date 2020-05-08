@@ -1375,7 +1375,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		protected abstract FilterMapResult<I, T> canReverse(FilterMapResult<I, T> sourceAndResult);
 
-		protected abstract I reverse(I preSource, T value);
+		protected abstract I reverse(AbstractMappedElement preSourceEl, T value);
 
 		protected abstract boolean isReverseStateful();
 
@@ -1389,7 +1389,7 @@ public class ObservableCollectionDataFlowImpl {
 				for (AbstractMappedElement el : (Collection<AbstractMappedElement>) elements) {
 					I parentValue = el.getParentValue();
 					I newParentValue = parentValues.computeIfAbsent(parentValue, pv -> {
-						return reverse(pv, newValue);
+						return reverse(el, newValue);
 					});
 					if (theOptions.isPropagatingUpdatesToParent() || !getParent().equivalence().elementEquals(parentValue, newParentValue))
 						el.setParent(newParentValue);
@@ -1449,7 +1449,7 @@ public class ObservableCollectionDataFlowImpl {
 			}
 
 			public I reverseForElement(T source) {
-				return reverse(theOptions.isCached() ? getParentValue() : null, source);
+				return reverse(this, source);
 			}
 
 			protected String isEnabledLocal() {
@@ -1494,7 +1494,7 @@ public class ObservableCollectionDataFlowImpl {
 			protected void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
 				I reversed;
 				if (isReversible() && isReverseStateful()) {
-					reversed = reverse(getCachedSource(), value);
+					reversed = reverse(this, value);
 				} else if (theOptions.isCached() && equivalence().elementEquals(getValue(), value))
 					reversed = getCachedSource();
 				else if (!isReversible())

@@ -17,6 +17,7 @@ import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.AbstractMappingManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionOperation;
 import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
+import org.observe.collect.ObservableCollectionDataFlowImpl.FlowElementSetter;
 import org.observe.collect.ObservableCollectionDataFlowImpl.RepairListener;
 import org.observe.collect.ObservableCollectionImpl.ActiveDerivedCollection;
 import org.observe.util.WeakListening;
@@ -1643,8 +1644,12 @@ public class ObservableCollectionActiveManagers {
 		}
 
 		@Override
-		protected I reverse(I preSource, T value) {
-			return getOptions().getReverse().reverse(preSource, value);
+		protected I reverse(AbstractMappedElement preSourceEl, T value) {
+			FlowOptions.MapReverse<I, T> reverse = getOptions().getReverse();
+			if (reverse instanceof FlowElementSetter)
+				return ((FlowElementSetter<I, T>) reverse).reverse(((MappedElement) preSourceEl).getParentEl(), value);
+			else
+				return getOptions().getReverse().reverse(preSourceEl.getParentValue(), value);
 		}
 
 		@Override
@@ -1741,12 +1746,12 @@ public class ObservableCollectionActiveManagers {
 
 		@Override
 		protected FilterMapResult<I, T> canReverse(FilterMapResult<I, T> sourceAndResult) {
-			sourceAndResult.source = reverse(sourceAndResult.source, sourceAndResult.result);
+			sourceAndResult.source = reverse(null, sourceAndResult.result);
 			return sourceAndResult;
 		}
 
 		@Override
-		protected I reverse(I preSource, T value) {
+		protected I reverse(AbstractMappedElement preSourceEl, T value) {
 			return getOptions().getReverse().apply(new Combination.CombinedValues<T>() {
 				@Override
 				public T getElement() {

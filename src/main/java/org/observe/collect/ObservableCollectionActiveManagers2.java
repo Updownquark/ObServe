@@ -1832,7 +1832,7 @@ public class ObservableCollectionActiveManagers2 {
 					if (!equivalence().elementEquals(reMapped, value))
 						return StdMsg.ILLEGAL_ELEMENT;
 				}
-				if (msg == null && (theOptions.isPropagatingUpdatesToParent()
+				if (msg == null && (theOptions == null || theOptions.isPropagatingUpdatesToParent()
 					|| !((ActiveCollectionManager<?, ?, V>) theHolder.manager).equivalence().elementEquals(getParentValue(), reversed)))
 					msg = ((DerivedCollectionElement<V>) theParentEl).isAcceptable(reversed);
 				return msg;
@@ -1862,7 +1862,7 @@ public class ObservableCollectionActiveManagers2 {
 						if (!equivalence().elementEquals(reMapped, value))
 							throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 					}
-					if (!theOptions.isPropagatingUpdatesToParent()
+					if (theOptions != null && !theOptions.isPropagatingUpdatesToParent()
 						&& !((ActiveCollectionManager<?, ?, V>) theHolder.manager).equivalence().elementEquals(getParentValue(), reversed))
 						return;
 					// The purpose of this code wrapped around the set call is to ensure that this method's listener gets called first.
