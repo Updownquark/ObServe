@@ -1134,14 +1134,6 @@ public class ObservableCollectionDataFlowImpl {
 	public interface FlowElementSetter<I, T> extends FlowOptions.MapReverse<I, T> {
 		/**
 		 * @param element The source element
-		 * @param sourceAndValue The filter map result with the derived value to test
-		 * @return The result, either rejected or with the source to update with
-		 */
-		FilterMapResult<I, T> canReverse(ObservableCollectionActiveManagers.DerivedCollectionElement<? extends I> element,
-			FilterMapResult<I, T> sourceAndValue);
-
-		/**
-		 * @param element The source element
 		 * @param newValue The new mapped value
 		 * @return The value to set in the source element
 		 */
@@ -1203,13 +1195,6 @@ public class ObservableCollectionDataFlowImpl {
 						throw new IllegalArgumentException(StdMsg.BAD_TYPE);
 					((SettableValue<T>) previousSource).set(newValue, null);
 					return previousSource;
-				}
-
-				@Override
-				public FilterMapResult<ObservableValue<? extends T>, T> canReverse(
-					DerivedCollectionElement<? extends ObservableValue<? extends T>> element,
-						FilterMapResult<ObservableValue<? extends T>, T> sourceAndValue) {
-					return canReverse(sourceAndValue);
 				}
 
 				@Override
