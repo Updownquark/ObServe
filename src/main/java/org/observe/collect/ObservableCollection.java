@@ -934,7 +934,9 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		 */
 		default <V, X> CollectionDataFlow<E, ?, X> cross(TypeToken<X> target, CollectionDataFlow<?, ?, ? extends V> other,
 			Function<FlatMapOptions<T, V, X>, FlatMapOptions.FlatMapDef<T, V, X>> options) {
-			return flatMap(target, v -> other, options);
+			// Don't allow structural modifications to crossed collections, as they have lots of side effects
+			String noModMsg = "Crossed collections cannot be structurally modified";
+			return flatMap(target, v -> other, options).filterMod(f -> f.noAdd(noModMsg).noRemove(noModMsg).noMove(noModMsg));
 		}
 
 		/**

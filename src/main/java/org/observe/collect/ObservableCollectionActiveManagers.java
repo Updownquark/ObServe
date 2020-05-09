@@ -1377,7 +1377,7 @@ public class ObservableCollectionActiveManagers {
 		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
 			if (!isReversible() || getOptions().isManyToOne())
 				return null;
-			ReverseQueryResult<I, T> qr = canReverse(null, value);
+			ReverseQueryResult<I> qr = canReverse(null, value);
 			if (qr.getError() != null)
 				return null;
 			I reversed = qr.getReversed();
@@ -1408,7 +1408,7 @@ public class ObservableCollectionActiveManagers {
 		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
 			if (!isReversible())
 				return StdMsg.UNSUPPORTED_OPERATION;
-			ReverseQueryResult<I, T> qr = canReverse(null, toAdd);
+			ReverseQueryResult<I> qr = canReverse(null, toAdd);
 			if (qr.getError() != null)
 				return qr.getError();
 			I reversed = qr.getReversed();
@@ -1422,7 +1422,7 @@ public class ObservableCollectionActiveManagers {
 			boolean first) {
 			if (!isReversible())
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-			ReverseQueryResult<I, T> qr = canReverse(null, value);
+			ReverseQueryResult<I> qr = canReverse(null, value);
 			if (StdMsg.UNSUPPORTED_OPERATION.equals(qr.getError()))
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 			else if (qr.getError() != null)
@@ -1634,7 +1634,7 @@ public class ObservableCollectionActiveManagers {
 		}
 
 		@Override
-		protected ReverseQueryResult<I, T> canReverse(Supplier<? extends I> previousSource, T newValue) {
+		protected ReverseQueryResult<I> canReverse(Supplier<? extends I> previousSource, T newValue) {
 			return getOptions().getReverse().canReverse(previousSource, newValue);
 		}
 
@@ -1740,7 +1740,7 @@ public class ObservableCollectionActiveManagers {
 		}
 
 		@Override
-		protected ReverseQueryResult<I, T> canReverse(Supplier<? extends I> previousSource, T newValue) {
+		protected ReverseQueryResult<I> canReverse(Supplier<? extends I> previousSource, T newValue) {
 			return ReverseQueryResult.value(reverse(null, newValue));
 		}
 

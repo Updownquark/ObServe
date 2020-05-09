@@ -1338,23 +1338,35 @@ public class ObservableCollectionActiveManagers2 {
 
 		@Override
 		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
-			if (theOptions != null && !theOptions.isReversible())
+			if (theOptions != null && theOptions.getReverse() == null)
 				return StdMsg.UNSUPPORTED_OPERATION;
 			String firstMsg = null;
 			try (Transaction t = theParent.lock(false, null)) {
 				for (FlattenedHolderIter holder : new InterElementIterable(after, before, true)) {
-					V reversed = theOptions == null ? (V) toAdd : theOptions.reverse(holder.holder.theParentEl.get(), null, toAdd);
-					String msg;
-					if (!TypeTokens.get().isInstance(holder.holder.manager.getTargetType(), reversed)
-						|| !holder.holder.manager.equivalence().isElement(reversed)) {
-						msg = StdMsg.ILLEGAL_ELEMENT;
-					} else
-						msg = ((ActiveCollectionManager<?, ?, V>) holder.holder.manager).canAdd(reversed, holder.getBound(true),
-							holder.getBound(false));
-					if (msg == null)
-						return null;
-					else if (firstMsg == null)
-						firstMsg = msg;
+					FlatMapOptions.FlatMapReverseQueryResult<I, V> result;
+					if (theOptions == null)
+						result = FlatMapOptions.FlatMapReverseQueryResult.value((V) toAdd);
+					else
+						result = theOptions.getReverse().canReverse(holder.holder::getValue, null, toAdd);
+					if (result.getError() != null) {
+						if (firstMsg == null)
+							firstMsg = result.getError();
+					} else if (result.replaceSecondary()) {
+						V reversed = result.getSecondary();
+						String msg;
+						if (!TypeTokens.get().isInstance(holder.holder.manager.getTargetType(), reversed)
+							|| !holder.holder.manager.equivalence().isElement(reversed)) {
+							msg = StdMsg.ILLEGAL_ELEMENT;
+						} else
+							msg = ((ActiveCollectionManager<?, ?, V>) holder.holder.manager).canAdd(reversed, holder.getBound(true),
+								holder.getBound(false));
+						if (msg == null)
+							return null;
+						else if (firstMsg == null)
+							firstMsg = msg;
+					}
+					if (result.replaceSource())
+						throw new UnsupportedOperationException("Source elements cannot be replaced with an add operation");
 				}
 			}
 			if (firstMsg == null)
@@ -1365,26 +1377,38 @@ public class ObservableCollectionActiveManagers2 {
 		@Override
 		public DerivedCollectionElement<T> addElement(T value, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before,
 			boolean first) {
-			if (theOptions != null && !theOptions.isReversible())
+			if (theOptions != null && theOptions.getReverse() == null)
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 			try (Transaction t = theParent.lock(false, null)) {
 				String firstMsg = null;
 				for (FlattenedHolderIter holder : new InterElementIterable(after, before, first)) {
-					V reversed = theOptions == null ? (V) value : theOptions.reverse(holder.holder.theParentEl.get(), null, value);
-					String msg;
-					if (!TypeTokens.get().isInstance(holder.holder.manager.getTargetType(), reversed)
-						|| !holder.holder.manager.equivalence().isElement(reversed)) {
-						msg = StdMsg.ILLEGAL_ELEMENT;
-					} else
-						msg = ((ActiveCollectionManager<?, ?, V>) holder.holder.manager).canAdd(reversed, holder.getBound(true),
-							holder.getBound(false));
-					if (msg == null) {
-						DerivedCollectionElement<V> added = ((ActiveCollectionManager<?, ?, V>) holder.holder.manager).addElement(reversed,
-							holder.getBound(true), holder.getBound(false), first);
-						if (added != null)
-							return new FlattenedElement(holder.holder, added, true);
-					} else if (firstMsg == null)
-						firstMsg = msg;
+					FlatMapOptions.FlatMapReverseQueryResult<I, V> result;
+					if (theOptions == null)
+						result = FlatMapOptions.FlatMapReverseQueryResult.value((V) value);
+					else
+						result = theOptions.getReverse().reverse(holder.holder::getValue, null, value);
+					if (result.getError() != null) {
+						if (firstMsg == null)
+							firstMsg = result.getError();
+					} else if (result.replaceSecondary()) {
+						V reversed = result.getSecondary();
+						String msg;
+						if (!TypeTokens.get().isInstance(holder.holder.manager.getTargetType(), reversed)
+							|| !holder.holder.manager.equivalence().isElement(reversed)) {
+							msg = StdMsg.ILLEGAL_ELEMENT;
+						} else
+							msg = ((ActiveCollectionManager<?, ?, V>) holder.holder.manager).canAdd(reversed, holder.getBound(true),
+								holder.getBound(false));
+						if (msg == null) {
+							DerivedCollectionElement<V> added = ((ActiveCollectionManager<?, ?, V>) holder.holder.manager)
+								.addElement(reversed, holder.getBound(true), holder.getBound(false), first);
+							if (added != null)
+								return new FlattenedElement(holder.holder, added, true);
+						} else if (firstMsg == null)
+							firstMsg = msg;
+					}
+					if (result.replaceSource())
+						throw new UnsupportedOperationException("Source elements cannot be replaced with an add operation");
 				}
 				if (firstMsg == null || firstMsg.equals(StdMsg.UNSUPPORTED_OPERATION))
 					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
@@ -1495,7 +1519,7 @@ public class ObservableCollectionActiveManagers2 {
 
 				for (Map.Entry<FlattenedHolder, List<DerivedCollectionElement<V>>> entry : grouped.entrySet())
 					((ActiveCollectionManager<?, ?, V>) entry.getKey().manager).setValues(entry.getValue(), (V) newValue);
-			} else if (!theOptions.isReverseStateful()) {
+			} else if (theOptions.getReverse() == null || !theOptions.getReverse().isStateful()) {
 				// Group by flattened collection
 				BetterMap<FlattenedHolder, List<FlattenedElement>> grouped = BetterHashMap.build().identity().unsafe().buildMap();
 				for (DerivedCollectionElement<T> el : elements)
@@ -1532,14 +1556,24 @@ public class ObservableCollectionActiveManagers2 {
 							return;
 						}
 					}
-					if (theOptions.isReversible()) {
+					if (theOptions.getReverse() != null) {
 						I holderValue = entry.getKey().getValue();
-						V reversed = theOptions.reverse(holderValue, null, newValue);
-						T reMapped = theOptions.map(holderValue, reversed, newValue);
-						if (!equivalence().elementEquals(reMapped, newValue))
-							throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
-						((ActiveCollectionManager<?, ?, V>) entry.getKey().manager).setValues(//
-							BetterList.of(entry.getValue().stream().map(el -> (DerivedCollectionElement<V>) el.theParentEl)), reversed);
+						FlatMapOptions.FlatMapReverseQueryResult<I, V> result = theOptions.getReverse().reverse(//
+							() -> holderValue, null, newValue);
+						if (StdMsg.UNSUPPORTED_OPERATION.equals(result.getError()))
+							throw new UnsupportedOperationException(result.getError());
+						else if (result.getError() != null)
+							throw new IllegalArgumentException(result.getError());
+						if (result.replaceSecondary()) {
+							V reversed = result.getSecondary();
+							T reMapped = theOptions.map(holderValue, reversed, newValue);
+							if (!equivalence().elementEquals(reMapped, newValue))
+								throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+							((ActiveCollectionManager<?, ?, V>) entry.getKey().manager).setValues(//
+								BetterList.of(entry.getValue().stream().map(el -> (DerivedCollectionElement<V>) el.theParentEl)), reversed);
+						}
+						if (result.replaceSource())
+							entry.getKey().theParentEl.set(result.getSource());
 					} else
 						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 				}
@@ -1813,28 +1847,45 @@ public class ObservableCollectionActiveManagers2 {
 				if (value != null && !TypeTokens.get().isInstance(theHolder.manager.getTargetType(), value))
 					return StdMsg.BAD_TYPE;
 				String msg = null;
-				if (theOptions == null) {
-					if (value != null && !TypeTokens.get().isInstance(theHolder.manager.getTargetType(), value))
-						return StdMsg.BAD_TYPE;
-					return ((DerivedCollectionElement<T>) theParentEl).isAcceptable(value);
-				}
-				V reversed;
-				if (theOptions.isCached() && equivalence().elementEquals(theDestCache, value)) {
-					reversed = theCacheHandler.getSourceCache();
-				} else {
-					if (!theOptions.isReversible())
+				FlatMapOptions.FlatMapReverseQueryResult<I, V> result;
+				if (theOptions == null)
+					result = FlatMapOptions.FlatMapReverseQueryResult.value((V) value);
+				else if (theOptions.isCached() && equivalence().elementEquals(theDestCache, value))
+					result = FlatMapOptions.FlatMapReverseQueryResult.value(theCacheHandler.getSourceCache());
+				else {
+					if (theOptions.getReverse() == null)
 						return StdMsg.UNSUPPORTED_OPERATION;
-					else if (theOptions.isCached())
-						reversed = theOptions.reverse(theHolder.getValue(), theCacheHandler.getSourceCache(), theDestCache);
-					else
-						reversed = theOptions.reverse(theHolder.theParentEl.get(), theParentEl.get(), null);
-					T reMapped = theOptions.map(theHolder.getValue(), reversed, value);
-					if (!equivalence().elementEquals(reMapped, value))
-						return StdMsg.ILLEGAL_ELEMENT;
+					result = theOptions.getReverse()//
+						.canReverse(//
+							theHolder::getValue, this::getParentValue, value);
 				}
-				if (msg == null && (theOptions == null || theOptions.isPropagatingUpdatesToParent()
-					|| !((ActiveCollectionManager<?, ?, V>) theHolder.manager).equivalence().elementEquals(getParentValue(), reversed)))
-					msg = ((DerivedCollectionElement<V>) theParentEl).isAcceptable(reversed);
+				if (result.getError() != null)
+					return result.getError();
+				if (result.replaceSecondary()) {
+					V reversed = result.getSecondary();
+					if (!TypeTokens.get().isInstance(theHolder.manager.getTargetType(), reversed)
+						|| !theHolder.manager.equivalence().isElement(reversed))
+						return StdMsg.ILLEGAL_ELEMENT;
+					if (theOptions != null) {
+						T reMapped = theOptions.map(theHolder.getValue(), reversed, value);
+						if (!equivalence().elementEquals(reMapped, value))
+							return StdMsg.ILLEGAL_ELEMENT;
+					}
+					if ((theOptions == null || theOptions.isPropagatingUpdatesToParent()
+						|| !((ActiveCollectionManager<?, ?, V>) theHolder.manager).equivalence().elementEquals(getParentValue(), reversed)))
+						msg = ((DerivedCollectionElement<V>) theParentEl).isAcceptable(reversed);
+				}
+				if (msg == null && result.replaceSource()) {
+					I reversed = result.getSource();
+					if (!TypeTokens.get().isInstance(theParent.getTargetType(), reversed) || !theParent.equivalence().isElement(reversed))
+						return StdMsg.ILLEGAL_ELEMENT;
+					CollectionDataFlow<?, ?, ? extends V> newFlow = theMap.apply(reversed);
+					if (!theHolder.theFlow.equals(newFlow))
+						return StdMsg.ILLEGAL_ELEMENT;
+					if ((theOptions == null || theOptions.isPropagatingUpdatesToParent()
+						|| !theParent.equivalence().elementEquals(theHolder.getValue(), reversed)))
+						msg = theHolder.theParentEl.isAcceptable(reversed);
+				}
 				return msg;
 			}
 
@@ -1843,37 +1894,59 @@ public class ObservableCollectionActiveManagers2 {
 				if (value != null && !TypeTokens.get().isInstance(theHolder.manager.getTargetType(), value))
 					throw new IllegalArgumentException(StdMsg.BAD_TYPE);
 				try (Transaction t = FlattenedManager.this.lock(true, null)) {
-					V reversed;
+					FlatMapOptions.FlatMapReverseQueryResult<I, V> result;
 					if (theOptions == null)
-						reversed = (V) value;
+						result = FlatMapOptions.FlatMapReverseQueryResult.value((V) value);
 					else if (theOptions.isCached() && equivalence().elementEquals(theDestCache, value))
-						reversed = theCacheHandler.getSourceCache();
-					else if (!theOptions.isReversible())
-						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+						result = FlatMapOptions.FlatMapReverseQueryResult.value(theCacheHandler.getSourceCache());
 					else {
-						I holderValue = theHolder.getValue();
-						V preValue;
-						if (theOptions.isCached() || !theOptions.isReverseStateful())
-							preValue = getParentValue();
-						else
-							preValue = null;
-						reversed = theOptions.reverse(holderValue, preValue, value);
-						T reMapped = theOptions.map(holderValue, reversed, value);
-						if (!equivalence().elementEquals(reMapped, value))
-							throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+						if (theOptions.getReverse() == null)
+							throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+						result = theOptions.getReverse()//
+							.reverse(//
+								theHolder::getValue, this::getParentValue, value);
 					}
-					if (theOptions != null && !theOptions.isPropagatingUpdatesToParent()
-						&& !((ActiveCollectionManager<?, ?, V>) theHolder.manager).equivalence().elementEquals(getParentValue(), reversed))
-						return;
-					// The purpose of this code wrapped around the set call is to ensure that this method's listener gets called first.
-					// This prevents any possible re-arranging or other operations that could result
-					// in this set operation removing this element
-					priorityUpdateReceiver = this;
-					wasPriorityNotified = false;
-					try {
-						((DerivedCollectionElement<V>) theParentEl).set(reversed);
-					} finally {
-						priorityUpdateReceiver = null;
+					if (StdMsg.UNSUPPORTED_OPERATION.equals(result.getError()))
+						throw new UnsupportedOperationException(result.getError());
+					else if (result.getError() != null)
+						throw new IllegalArgumentException(result.getError());
+					if (result.replaceSecondary()) {
+						V reversed = result.getSecondary();
+						if (!TypeTokens.get().isInstance(theHolder.manager.getTargetType(), reversed)
+							|| !theHolder.manager.equivalence().isElement(reversed))
+							throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+						if (theOptions != null) {
+							T reMapped = theOptions.map(theHolder.getValue(), reversed, value);
+							if (!equivalence().elementEquals(reMapped, value))
+								throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+						}
+						if ((theOptions == null || theOptions.isPropagatingUpdatesToParent()
+							|| !((ActiveCollectionManager<?, ?, V>) theHolder.manager).equivalence().elementEquals(getParentValue(),
+								reversed))) {
+							// The purpose of this code wrapped around the set call
+							// is to ensure that this method's listener gets called first.
+							// This prevents any possible re-arranging or other operations that could result
+							// in this set operation removing this element
+							priorityUpdateReceiver = this;
+							wasPriorityNotified = false;
+							try {
+								((DerivedCollectionElement<V>) theParentEl).set(reversed);
+							} finally {
+								priorityUpdateReceiver = null;
+							}
+						}
+					}
+					if (result.replaceSource()) {
+						I reversed = result.getSource();
+						if (!TypeTokens.get().isInstance(theParent.getTargetType(), reversed)
+							|| !theParent.equivalence().isElement(reversed))
+							throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+						CollectionDataFlow<?, ?, ? extends V> newFlow = theMap.apply(reversed);
+						if (!theHolder.theFlow.equals(newFlow))
+							throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+						if ((theOptions == null || theOptions.isPropagatingUpdatesToParent()
+							|| !theParent.equivalence().elementEquals(theHolder.getValue(), reversed)))
+							theHolder.theParentEl.set(reversed);
 					}
 				}
 			}

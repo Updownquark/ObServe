@@ -143,11 +143,36 @@ public interface FlowOptions {
 			return this;
 		}
 
+		/**
+		 * Enables element setting in a mapped flow by defining a function that performs some operation on the source value with the target
+		 * value, causing the mapping operation to produce the new target value
+		 *
+		 * @param setter The field setter
+		 * @param enabled The function to disable such operations
+		 * @return This option set
+		 */
 		public MapOptions<E, T> withFieldSetReverse(BiConsumer<? super E, ? super T> setter,
 			BiFunction<? super E, ? super T, String> enabled) {
 			return withFieldSetReverse(setter, enabled, null, null);
 		}
 
+		/**
+		 * <p>
+		 * Enables element setting in a mapped flow by defining a function that performs some operation on the source value with the target
+		 * value, causing the mapping operation to become the new target value.
+		 * </p>
+		 * <p>
+		 * This method also allow the creation of new source values as a function of a target value.
+		 * </p>
+		 *
+		 * @param setter The field setter
+		 * @param enabled The function to disable some set operations
+		 * @param creator The function to create source values from target values (second function argument is false for capability queries
+		 *        (like {@link BetterCollection#canAdd(Object)}), true for intentional operations (like
+		 *        {@link BetterCollection#addElement(Object, boolean)})
+		 * @param creationEnabled The function to disable some create operations
+		 * @return This option set
+		 */
 		public MapOptions<E, T> withFieldSetReverse(BiConsumer<? super E, ? super T> setter,
 			BiFunction<? super E, ? super T, String> enabled, BiFunction<? super T, Boolean, ? extends E> creator,
 			Function<? super T, String> creationEnabled) {
@@ -187,9 +212,8 @@ public interface FlowOptions {
 	 * A result of {@link MapReverse#canReverse(Supplier, Object)}
 	 *
 	 * @param <E> The source type of the flow
-	 * @param <T> The target type of the flow
 	 */
-	public interface ReverseQueryResult<E, T> {
+	public interface ReverseQueryResult<E> {
 		/** @return The error for the operation, if it was rejected */
 		String getError();
 
@@ -204,8 +228,8 @@ public interface FlowOptions {
 		 * @param message The rejection message
 		 * @return The error result
 		 */
-		public static <E, T> ReverseQueryResult<E, T> reject(String message) {
-			return new ReverseQueryResult<E, T>() {
+		public static <E> ReverseQueryResult<E> reject(String message) {
+			return new ReverseQueryResult<E>() {
 				@Override
 				public String getError() {
 					return message;
@@ -225,8 +249,8 @@ public interface FlowOptions {
 		 * @param value The reversed value
 		 * @return The value result
 		 */
-		public static <E, T> ReverseQueryResult<E, T> value(E value) {
-			return new ReverseQueryResult<E, T>() {
+		public static <E> ReverseQueryResult<E> value(E value) {
+			return new ReverseQueryResult<E>() {
 				@Override
 				public String getError() {
 					return null;
@@ -255,7 +279,7 @@ public interface FlowOptions {
 		 * @param newValue The new target value
 		 * @return The result, either {@link FilterMapResult#reject(String, boolean) rejected} or with its source set to the reversed value
 		 */
-		ReverseQueryResult<E, T> canReverse(Supplier<? extends E> previousSource, T newValue);
+		ReverseQueryResult<E> canReverse(Supplier<? extends E> previousSource, T newValue);
 
 		/**
 		 * @param previousSource Supplies the previous source value, if needed--will be null for add operation queries
@@ -311,7 +335,7 @@ public interface FlowOptions {
 		}
 
 		@Override
-		public ReverseQueryResult<E, T> canReverse(Supplier<? extends E> previousSource, T newValue) {
+		public ReverseQueryResult<E> canReverse(Supplier<? extends E> previousSource, T newValue) {
 			E sourceValue;
 			if (previousSource == null || !isStateful)
 				sourceValue = null;
@@ -399,7 +423,7 @@ public interface FlowOptions {
 		}
 
 		@Override
-		public ReverseQueryResult<E, T> canReverse(Supplier<? extends E> previousSource, T newValue) {
+		public ReverseQueryResult<E> canReverse(Supplier<? extends E> previousSource, T newValue) {
 			if (previousSource != null) {
 				E sourceValue = previousSource.get();
 				if (theEnablement != null) {
@@ -522,8 +546,6 @@ public interface FlowOptions {
 			super(options);
 			theReverse = options.getReverse();
 			theEquivalence = options.getEquivalence();
-			if (theReverse != null && theReverse.isStateful() && !isCached())
-				throw new IllegalStateException("Stateful reverse is not supported without caching");
 		}
 
 		/** @return The equivalence set to use for the mapped values */

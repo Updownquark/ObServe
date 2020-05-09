@@ -450,7 +450,7 @@ public class ObservableCollectionPassiveManagers {
 			if (!isReversible())
 				return dest.reject(StdMsg.UNSUPPORTED_OPERATION, true);
 			T value = dest.source;
-			ReverseQueryResult<I, T> qr = canReverse(null, value);
+			ReverseQueryResult<I> qr = canReverse(null, value);
 			if (qr.getError() != null)
 				return dest.reject(qr.getError(), true);
 			FilterMapResult<I, E> intermediate = (FilterMapResult<I, E>) dest;
@@ -649,7 +649,7 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
-		protected ReverseQueryResult<I, T> canReverse(Supplier<? extends I> previousSource, T newValue) {
+		protected ReverseQueryResult<I> canReverse(Supplier<? extends I> previousSource, T newValue) {
 			return getOptions().getReverse().canReverse(previousSource, newValue);
 		}
 
@@ -706,7 +706,7 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
-		protected ReverseQueryResult<I, T> canReverse(Supplier<? extends I> previousSource, T newValue) {
+		protected ReverseQueryResult<I> canReverse(Supplier<? extends I> previousSource, T newValue) {
 			return ReverseQueryResult.value(reverse(null, newValue));
 		}
 

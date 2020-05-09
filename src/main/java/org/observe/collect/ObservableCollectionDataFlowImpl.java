@@ -1138,7 +1138,7 @@ public class ObservableCollectionDataFlowImpl {
 		 * @param newValue The new mapped value
 		 * @return The value to set in the source element
 		 */
-		I reverse(ObservableCollectionActiveManagers.DerivedCollectionElement<? extends I> element, T newValue);
+		I reverse(DerivedCollectionElement<? extends I> element, T newValue);
 	}
 
 	private static class FlattenedValuesOp<E, I, T> extends AbstractDataFlow<E, I, T> {
@@ -1168,7 +1168,7 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public ActiveCollectionManager<E, ?, T> manageActive() {
 			TypeToken<ObservableValue<? extends T>> valueType = ObservableValue.TYPE_KEY.getCompoundType(getTargetType());
-			ValueHolder<ObservableCollectionActiveManagers.DerivedCollectionElement<? extends ObservableValue<? extends T>>> settingElement = new ValueHolder<>();
+			ValueHolder<DerivedCollectionElement<? extends ObservableValue<? extends T>>> settingElement = new ValueHolder<>();
 			class RefreshingMapReverse implements FlowElementSetter<ObservableValue<? extends T>, T> {
 				@Override
 				public boolean isStateful() {
@@ -1176,7 +1176,7 @@ public class ObservableCollectionDataFlowImpl {
 				}
 
 				@Override
-				public ReverseQueryResult<ObservableValue<? extends T>, T> canReverse(
+				public ReverseQueryResult<ObservableValue<? extends T>> canReverse(
 					Supplier<? extends ObservableValue<? extends T>> previousSource, T newValue) {
 					if (previousSource == null)
 						return ReverseQueryResult.reject(StdMsg.UNSUPPORTED_OPERATION);
@@ -1380,7 +1380,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		protected abstract boolean isReversible();
 
-		protected abstract ReverseQueryResult<I, T> canReverse(Supplier<? extends I> previousSource, T newValue);
+		protected abstract ReverseQueryResult<I> canReverse(Supplier<? extends I> previousSource, T newValue);
 
 		protected abstract I reverse(AbstractMappedElement preSourceEl, T value);
 
@@ -1473,7 +1473,7 @@ public class ObservableCollectionDataFlowImpl {
 				String msg = null;
 				I reversed;
 				if (isReversible() && isReverseStateful()) {
-					ReverseQueryResult<I, T> result = canReverse(this::getCachedSource, value);
+					ReverseQueryResult<I> result = canReverse(this::getCachedSource, value);
 					if (result.getError() != null)
 						return result.getError();
 					reversed = result.getReversed();
