@@ -164,8 +164,8 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		CollectionLinkElement<?, T> sourceAdded = getSourceLink().expectAdd(value, //
 			after == null ? null : (CollectionLinkElement<?, T>) after.getFirstSource(), //
 				before == null ? null : (CollectionLinkElement<?, T>) before.getFirstSource(), //
-			first, rejection, execute);
-		if (rejection.isRejected())
+					first, rejection, execute);
+		if (sourceAdded == null)
 			return null;
 		return (CollectionLinkElement<T, T>) sourceAdded.getDerivedElements(getSiblingIndex()).getFirst();
 	}
@@ -177,7 +177,7 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
 			(CollectionLinkElement<?, T>) source.getFirstSource(), //
 			after == null ? null : (CollectionLinkElement<?, T>) after.getFirstSource(), //
 				before == null ? null : (CollectionLinkElement<?, T>) before.getFirstSource(), //
-			first, rejection, execute);
+					first, rejection, execute);
 		return sourceEl == null ? null : (CollectionLinkElement<T, T>) sourceEl.getDerivedElements(getSiblingIndex()).getFirst();
 	}
 

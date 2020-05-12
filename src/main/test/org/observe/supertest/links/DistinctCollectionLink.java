@@ -171,7 +171,7 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 						first, rejection, execute);
 		else
 			sourceEl = getSourceLink().expectAdd(value, null, null, first, rejection, execute);
-		if (rejection.isRejected())
+		if (sourceEl == null)
 			return null;
 		CollectionLinkElement<T, T> element = (CollectionLinkElement<T, T>) sourceEl.getDerivedElements(getSiblingIndex()).getFirst();
 		checkOrder(element, after, before);

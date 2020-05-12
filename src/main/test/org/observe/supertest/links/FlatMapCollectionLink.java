@@ -1,8 +1,10 @@
 package org.observe.supertest.links;
 
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Set;
 
 import org.junit.Assert;
 import org.observe.collect.ObservableCollection;
@@ -204,12 +206,9 @@ public class FlatMapCollectionLink<S, T> extends AbstractFlatMappedCollectionLin
 
 	@Override
 	public boolean isComposite() {
-		ElementId lastBucket = null;
+		Set<ElementId> buckets = new HashSet<>();
 		for (CollectionLinkElement<?, S> sourceEl : getSourceLink().getElements()) {
-			ElementId bucket = getBucket(sourceEl.getValue()).getElementId();
-			if (lastBucket == null)
-				lastBucket = bucket;
-			else if (!lastBucket.equals(bucket))
+			if (!buckets.add(getBucket(sourceEl.getValue()).getElementId()))
 				return true;
 		}
 		return false;
@@ -421,7 +420,7 @@ public class FlatMapCollectionLink<S, T> extends AbstractFlatMappedCollectionLin
 				if (bucketMoved != null) {
 					if (bucketMoved == element.getCustomData())
 						return (CollectionLinkElement<S, T>) element; // No-op
-					removeFromBucket(bucket, element);
+					removeFromBucket(bucket, element.getCustomData());
 					return addToBucket(source, bucket, bucketMoved, execute);
 				}
 			} else if (bucket == sourceBucket) {
@@ -435,7 +434,7 @@ public class FlatMapCollectionLink<S, T> extends AbstractFlatMappedCollectionLin
 					sourceBucket.expect(new ExpectedCollectionOperation<>(element.getCustomData(), CollectionOpType.remove,
 						element.getValue(), element.getValue()), rejection, true);
 					if (execute)
-						removeFromBucket(sourceBucket, element);
+						removeFromBucket(sourceBucket, element.getCustomData());
 					return addToBucket(source, bucket, bucketAdded, execute);
 				}
 			}
@@ -507,8 +506,7 @@ public class FlatMapCollectionLink<S, T> extends AbstractFlatMappedCollectionLin
 			if (sBucket == bucket) {
 				boolean found = false;
 				for (CollectionLinkElement<S, ?> derived : s.getDerivedElements(getSiblingIndex())) {
-					if (!derived.isPresent() && !derived.isRemoveExpected()
-						&& getCollection().equivalence().elementEquals(bucketRemoved.getValue(), derived.getValue())) {
+					if (derived.getCustomData() == bucketRemoved) {
 						derived.expectRemoval();
 						found = true;
 						break;

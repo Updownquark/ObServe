@@ -18,6 +18,7 @@ import org.observe.supertest.links.CombinedValueLink;
 import org.observe.supertest.links.DistinctCollectionLink;
 import org.observe.supertest.links.FactoringFlatMapCollectionLink;
 import org.observe.supertest.links.FilteredCollectionLink;
+import org.observe.supertest.links.FlatMapCollectionLink;
 import org.observe.supertest.links.FlattenedCollectionValuesLink;
 import org.observe.supertest.links.FlattenedValueBaseCollectionLink;
 import org.observe.supertest.links.MappedCollectionLink;
@@ -83,7 +84,7 @@ public class ObservableChainTester implements Testable {
 		generators.add(SubSetLink.GENERATE);
 		generators.add(FlattenedCollectionValuesLink.GENERATE);
 		generators.add(FactoringFlatMapCollectionLink.GENERATE);
-		// generators.add(FlatMapCollectionLink.GENERATE);
+		generators.add(FlatMapCollectionLink.GENERATE);
 
 		// Derived collection value generators
 		generators.addAll(CollectionDerivedValues.GENERATORS);
@@ -95,6 +96,8 @@ public class ObservableChainTester implements Testable {
 		LINK_GENERATORS = Collections.unmodifiableList(generators);
 	}
 
+	private static boolean DEBUG_LOCKS = false;
+
 	private ObservableChainLink<?, ?> theRoot;
 	private List<LinkStruct> theLinks;
 
@@ -105,7 +108,7 @@ public class ObservableChainTester implements Testable {
 		boolean debugging = helper.isReproducing();
 		if (debugging)
 			Debug.d().start();// .watchFor(new Debugging());
-		boolean tempLockDebug = debugging && !LockDebug.isDebugging();
+		boolean tempLockDebug = debugging && DEBUG_LOCKS && !LockDebug.isDebugging();
 		if (tempLockDebug)
 			LockDebug.setDebugging(true);
 		try {

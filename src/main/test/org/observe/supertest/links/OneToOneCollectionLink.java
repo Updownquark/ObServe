@@ -86,8 +86,8 @@ public abstract class OneToOneCollectionLink<S, T> extends ObservableCollectionL
 		CollectionLinkElement<?, S> sourceEl = getSourceLink().expectAdd(reverse(value), //
 			after == null ? null : ((CollectionLinkElement<S, T>) after).getFirstSource(), //
 				before == null ? null : ((CollectionLinkElement<S, T>) before).getFirstSource(), //
-			first, rejection, execute);
-		if (rejection.isRejected())
+					first, rejection, execute);
+		if (sourceEl == null)
 			return null;
 		return (CollectionLinkElement<S, T>) sourceEl.getDerivedElements(getSiblingIndex()).getFirst();
 	}
@@ -99,7 +99,7 @@ public abstract class OneToOneCollectionLink<S, T> extends ObservableCollectionL
 		CollectionLinkElement<?, S> sourceEl = getSourceLink().expectMove(oldSource, //
 			after == null ? null : ((CollectionLinkElement<S, T>) after).getFirstSource(), //
 				before == null ? null : ((CollectionLinkElement<S, T>) before).getFirstSource(), //
-			first, rejection, execute);
+					first, rejection, execute);
 		if (rejection.isRejected())
 			return null;
 		return (CollectionLinkElement<S, T>) sourceEl.getDerivedElements(getSiblingIndex()).getFirst();

@@ -130,6 +130,8 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 	public BetterList<CollectionLinkElement<T, ?>> getDerivedElements(int siblingIndex) {
 		if (theDerivedElements == null)
 			return BetterList.empty();
+		else if (siblingIndex >= theDerivedElements.length)
+			return BetterList.empty();
 		BetterList<CollectionLinkElement<T, ?>> derived = theDerivedElements[siblingIndex];
 		return derived == null ? BetterList.empty() : BetterCollections.unmodifiableList(derived);
 	}
