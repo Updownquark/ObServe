@@ -1799,8 +1799,10 @@ public class ObservableCollectionActiveManagers2 {
 			}
 
 			void valueUpdated(V oldValue, V newValue, Object cause) {
-				if (theOptions == null)
+				if (theOptions == null) {
 					ObservableCollectionActiveManagers.update(theListener, (T) oldValue, (T) newValue, cause);
+					return;
+				}
 				BiTuple<T, T> values = theCacheHandler.handleSourceChange(oldValue, newValue);
 				if (values != null)
 					ObservableCollectionActiveManagers.update(theListener, values.getValue1(), values.getValue2(), cause);
