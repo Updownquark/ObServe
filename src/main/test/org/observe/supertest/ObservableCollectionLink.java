@@ -281,7 +281,10 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 	public void tryModify(RandomAction action, TestHelper helper) {
 		int subListStart, subListEnd;
 		BetterList<T> modify;
-		boolean subList = helper.getBoolean(.05);
+		// Composite collections and sub lists don't go together--unexpected adds or removes before the initial sub list index
+		// make the sub-list inconsistent. There's not an efficient workaround for this.
+		// Composite collections aren't really an excellent use-case anyway--it's just convenient for testing
+		boolean subList = !isComposite() && helper.getBoolean(.05);
 		if (subList) {
 			subListStart = helper.getInt(0, getCollection().size());
 			subListEnd = subListStart + helper.getInt(0, getCollection().size() - subListStart);
@@ -758,7 +761,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 				try {
 					element = modify.addElement(op.value, //
 						op.after == null ? null : op.after.getCollectionAddress(), //
-						op.before == null ? null : op.before.getCollectionAddress(), op.towardBeginning);
+							op.before == null ? null : op.before.getCollectionAddress(), op.towardBeginning);
 					error = false;
 				} catch (UnsupportedOperationException | IllegalArgumentException e) {
 					if (msg == null)
