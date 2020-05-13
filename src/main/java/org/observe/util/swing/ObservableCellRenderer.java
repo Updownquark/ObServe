@@ -104,7 +104,7 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 		JLabel label = (JLabel) comp;
 		String text = label.getText();
 		String newText = tryEmphasize(text, ctx);
-		label.setText(newText.toString());
+		label.setText(newText);
 		return comp;
 	}
 
