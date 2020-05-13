@@ -261,6 +261,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 	public abstract boolean isAcceptable(T value);
 
 	/**
+	 * @param element The element to update the value for
 	 * @param value The input value
 	 * @return The value, reverse-mapped to the root, then re-mapped back to this collection
 	 */

@@ -15,6 +15,7 @@ import org.observe.supertest.links.BaseCollectionLink;
 import org.observe.supertest.links.CollectionDerivedValues;
 import org.observe.supertest.links.CombinedCollectionLink;
 import org.observe.supertest.links.CombinedValueLink;
+import org.observe.supertest.links.ContainmentCollectionLink;
 import org.observe.supertest.links.DistinctCollectionLink;
 import org.observe.supertest.links.FactoringFlatMapCollectionLink;
 import org.observe.supertest.links.FilteredCollectionLink;
@@ -84,6 +85,7 @@ public class ObservableChainTester implements Testable {
 		generators.add(SubSetLink.GENERATE);
 		generators.add(FlattenedCollectionValuesLink.GENERATE);
 		generators.add(FactoringFlatMapCollectionLink.GENERATE);
+		generators.add(ContainmentCollectionLink.GENERATE);
 		generators.add(FlatMapCollectionLink.GENERATE);
 
 		// Derived collection value generators
