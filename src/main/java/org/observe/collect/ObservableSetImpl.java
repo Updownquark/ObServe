@@ -808,24 +808,18 @@ public class ObservableSetImpl {
 
 		@Override
 		public boolean clear() {
-			int firstFail = -1;
-			int i = 0;
+			boolean hasFail = false;
 			for (UniqueElement el : theElementsByValue.values()) {
 				if (el.canRemove() != null) {
-					firstFail = i;
+					hasFail = true;
 					break;
 				}
-				i++;
 			}
-			if (firstFail < 0)
+			if (!hasFail)
 				return theParent.clear();
-			i = 0;
 			for (UniqueElement el : theElementsByValue.values()) {
-				if (i < firstFail)
+				if (el.canRemove() == null)
 					el.remove();
-				else if (i > firstFail && el.canRemove() == null)
-					el.remove();
-				i++;
 			}
 			return false;
 		}

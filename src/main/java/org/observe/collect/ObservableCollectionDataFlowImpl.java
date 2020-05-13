@@ -1408,8 +1408,7 @@ public class ObservableCollectionDataFlowImpl {
 				boolean first = true, allUpdates = true, allIdenticalUpdates = true;
 				for (AbstractMappedElement el : (Collection<AbstractMappedElement>) elements) {
 					boolean elementUpdate = equivalence().elementEquals(el.getValue(), newValue);
-					if (elementUpdate && !theOptions.isPropagatingUpdatesToParent())
-						allUpdates &= elementUpdate;
+					allUpdates &= elementUpdate;
 					allIdenticalUpdates &= allUpdates;
 					if (!allUpdates)
 						break;
@@ -1422,7 +1421,9 @@ public class ObservableCollectionDataFlowImpl {
 							allIdenticalUpdates &= theParent.equivalence().elementEquals(oldSource, elOldValue);
 					}
 				}
-				if (allIdenticalUpdates) {
+				if (allUpdates && !theOptions.isPropagatingUpdatesToParent())
+					return;
+				else if (allIdenticalUpdates) {
 					doParentMultiSet((Collection<AbstractMappedElement>) elements, oldSource);
 					return;
 				} else if (allUpdates) {

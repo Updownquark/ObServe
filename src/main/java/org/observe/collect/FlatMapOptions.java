@@ -76,6 +76,24 @@ public interface FlatMapOptions<S, V, X> extends XformOptions {
 		}
 	}
 
+	@Override
+	FlatMapOptions<S, V, X> cache(boolean cache);
+
+	@Override
+	FlatMapOptions<S, V, X> reEvalOnUpdate(boolean reEval);
+
+	@Override
+	FlatMapOptions<S, V, X> fireIfUnchanged(boolean fire);
+
+	@Override
+	FlatMapOptions<S, V, X> propagateUpdateToParent(boolean propagate);
+
+	@Override
+	FlatMapOptions<S, V, X> manyToOne(boolean manyToOne);
+
+	@Override
+	FlatMapOptions<S, V, X> oneToMany(boolean oneToMany);
+
 	/**
 	 * <p>
 	 * Enables element setting in a flat-mapped flow by defining a function able to produce source element values from target values.
@@ -506,13 +524,13 @@ public interface FlatMapOptions<S, V, X> extends XformOptions {
 
 		@Override
 		public FlatMapReverseQueryResult<S, V> canReverse(Supplier<? extends S> sourceValue, Supplier<? extends V> secondary, X newValue) {
-			return canReverse(sourceValue, secondary, newValue);
+			return reverse(sourceValue, secondary, newValue);
 		}
 
 		@Override
 		public FlatMapReverseQueryResult<S, V> reverse(Supplier<? extends S> sourceValue, Supplier<? extends V> secondary, X newValue) {
 			S source = sourceValue == null ? null : sourceValue.get();
-			V value = sourceValue == null ? null : secondary.get();
+			V value = secondary == null ? null : secondary.get();
 			if (theUpdateEnabled != null) {
 				String msg = theUpdateEnabled.apply(source, value, newValue);
 				if (msg != null)
@@ -695,6 +713,42 @@ public interface FlatMapOptions<S, V, X> extends XformOptions {
 	 */
 	public class SimpleFlatMapOptions<S, V, X> extends XformOptions.SimpleXformOptions implements FlatMapOptions<S, V, X> {
 		private FlatMapReverse<S, V, X> theReverse;
+
+		@Override
+		public FlatMapOptions<S, V, X> cache(boolean cache) {
+			super.cache(cache);
+			return this;
+		}
+
+		@Override
+		public FlatMapOptions<S, V, X> reEvalOnUpdate(boolean reEval) {
+			super.reEvalOnUpdate(reEval);
+			return this;
+		}
+
+		@Override
+		public FlatMapOptions<S, V, X> fireIfUnchanged(boolean fire) {
+			super.fireIfUnchanged(fire);
+			return this;
+		}
+
+		@Override
+		public FlatMapOptions<S, V, X> propagateUpdateToParent(boolean propagate) {
+			super.propagateUpdateToParent(propagate);
+			return this;
+		}
+
+		@Override
+		public FlatMapOptions<S, V, X> manyToOne(boolean manyToOne) {
+			super.manyToOne(manyToOne);
+			return this;
+		}
+
+		@Override
+		public FlatMapOptions<S, V, X> oneToMany(boolean oneToMany) {
+			super.oneToMany(oneToMany);
+			return this;
+		}
 
 		@Override
 		public FlatMapOptions<S, V, X> withReverse(FlatMapReverse<S, V, X> reverse) {

@@ -2257,13 +2257,16 @@ public final class ObservableCollectionImpl {
 			else {
 				boolean reverse = isReversed;
 				try (Transaction t = lock(true, null)) {
+					ElementId lastStatic = null;
 					Function<? super E, ? extends T> map = theFlow.map().get();
 					CollectionElement<E> el = theSource.getTerminalElement(reverse);
 					while (el != null) {
 						MutableCollectionElement<E> mutable = theSource.mutableElement(el.getElementId());
 						if (theFlow.map(mutable, map).canRemove() == null)
 							mutable.remove();
-						el = theSource.getAdjacentElement(el.getElementId(), reverse);
+						else
+							lastStatic = el.getElementId();
+						el = lastStatic == null ? theSource.getTerminalElement(reverse) : theSource.getAdjacentElement(lastStatic, reverse);
 					}
 				}
 			}
