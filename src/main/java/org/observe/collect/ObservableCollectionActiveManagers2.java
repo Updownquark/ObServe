@@ -3,6 +3,7 @@ package org.observe.collect;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
@@ -226,9 +227,9 @@ public class ObservableCollectionActiveManagers2 {
 		private final Equivalence<? super T> theEquivalence; // Make this a field since we'll need it often
 		/** Whether a value's presence in the right causes the value in the left to be present (false) or absent (true) in the result */
 		private final boolean isExclude;
-		private Map<T, IntersectionElement> theValues;
+		private final Map<T, IntersectionElement> theValues;
 		// The following two fields are needed because the values may mutate
-		private Map<ElementId, IntersectionElement> theRightElementValues;
+		private final Map<ElementId, IntersectionElement> theRightElementValues;
 
 		private ElementAccepter<T> theAccepter;
 
@@ -238,6 +239,7 @@ public class ObservableCollectionActiveManagers2 {
 			theEquivalence = parent.equivalence();
 			isExclude = exclude;
 			theValues = theEquivalence.createMap();
+			theRightElementValues = new HashMap<>();
 		}
 
 		@Override
@@ -289,13 +291,15 @@ public class ObservableCollectionActiveManagers2 {
 
 		@Override
 		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
-			return BetterList.of(Stream.concat(//
-				theParent.getElementsBySource(sourceEl, sourceCollection).stream()
-				.map(el -> new IntersectedCollectionElement(el, null, true)), //
-				theFilter.getElementsBySource(sourceEl, sourceCollection).stream().flatMap(el -> {
-					IntersectionElement intEl = theRightElementValues.get(el.getElementId());
-					return intEl == null ? Stream.empty() : intEl.leftElements.stream();
-				}).distinct()));
+			try (Transaction t = lock(false, null)) {
+				return BetterList.of(Stream.concat(//
+					theParent.getElementsBySource(sourceEl, sourceCollection).stream()
+					.map(el -> new IntersectedCollectionElement(el, null, true)), //
+					theFilter.getElementsBySource(sourceEl, sourceCollection).stream().flatMap(el -> {
+						IntersectionElement intEl = theRightElementValues.get(el.getElementId());
+						return intEl == null ? Stream.empty() : intEl.leftElements.stream();
+					}).distinct()));
+			}
 		}
 
 		@Override
@@ -361,6 +365,7 @@ public class ObservableCollectionActiveManagers2 {
 
 		@Override
 		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
+			theAccepter = onElement;
 			listening.withConsumer((ObservableCollectionEvent<? extends X> evt) -> {
 				// We're not modifying, but we want to obtain an exclusive lock
 				// to ensure that nothing above or below us is firing events at the same time.
@@ -385,16 +390,17 @@ public class ObservableCollectionActiveManagers2 {
 						if (element != null && theEquivalence.elementEquals(element.value, evt.getNewValue()))
 							return; // No change;
 						boolean newIsElement = equivalence().isElement(evt.getNewValue());
-						if (element != null) {
-							theRightElementValues.remove(evt.getElementId());
-							element.decrementRight(evt.getElementId(), evt);
-						}
-						if (newIsElement) {
-							element = theValues.computeIfAbsent((T) evt.getNewValue(), v -> new IntersectionElement(v));
-							element.incrementRight(evt.getElementId(), evt);
-							theRightElementValues.put(evt.getElementId(), element);
-						}
-						break;
+						IntersectionElement newEl = newIsElement
+							? theValues.computeIfAbsent((T) evt.getNewValue(), v -> new IntersectionElement(v)) : null;
+							if (newEl != null)
+								theRightElementValues.put(evt.getElementId(), newEl);
+							else if (element != null)
+								theRightElementValues.remove(evt.getElementId());
+							if (element != null)
+								element.decrementRight(evt.getElementId(), evt);
+							if (newIsElement)
+								newEl.incrementRight(evt.getElementId(), evt);
+							break;
 					}
 				}
 			}, action -> theFilter.subscribe(action, fromStart).removeAll());
