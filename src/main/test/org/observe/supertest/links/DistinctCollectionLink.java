@@ -141,8 +141,9 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	}
 
 	@Override
-	public T getUpdateValue(T value) {
-		return getSourceLink().getUpdateValue(value);
+	public T getUpdateValue(CollectionLinkElement<T, T> element, T value) {
+		return ((ObservableCollectionLink<Object, T>) getSourceLink())
+			.getUpdateValue((CollectionLinkElement<Object, T>) element.getFirstSource(), value);
 	}
 
 	private boolean isControllingOperation;

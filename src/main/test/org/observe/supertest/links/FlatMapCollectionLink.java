@@ -5,8 +5,11 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Function;
 
 import org.junit.Assert;
+import org.observe.collect.FlatMapOptions;
+import org.observe.collect.FlatMapOptions.FlatMapDef;
 import org.observe.collect.ObservableCollection;
 import org.observe.supertest.AbstractChainLink;
 import org.observe.supertest.ChainLinkGenerator;
@@ -20,9 +23,11 @@ import org.observe.supertest.ObservableCollectionLink;
 import org.observe.supertest.ObservableCollectionTestDef;
 import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
+import org.observe.supertest.links.CombinedCollectionLink.BiTypeTransformation;
 import org.qommons.TestHelper;
 import org.qommons.TestHelper.RandomAction;
 import org.qommons.Transactable;
+import org.qommons.ValueHolder;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedMap;
 import org.qommons.collect.CollectionElement;
@@ -38,15 +43,19 @@ import com.google.common.reflect.TypeToken;
  * tests flat map functionality much more completely than {@link FactoringFlatMapCollectionLink}, but is much more expensive as well.
  *
  * @param <S> The type of the source link
+ * @param <V> The type of the flattened collections
  * @param <T> The type of this link
  */
-public class FlatMapCollectionLink<S, T> extends AbstractFlatMappedCollectionLink<S, T> {
+public class FlatMapCollectionLink<S, V, T> extends AbstractFlatMappedCollectionLink<S, T> {
 	/** Generates {@link FlatMapCollectionLink}s */
 	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator.CollectionLinkGenerator() {
 		@Override
 		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink, TestValueType targetType) {
-			if (!(sourceLink instanceof ObservableCollectionLink)
-				|| ((ObservableCollectionLink<?, ?>) sourceLink).getValueSupplier() == null)
+			if (!(sourceLink instanceof ObservableCollectionLink))
+				return 0;
+			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
+			if (sourceCL.getValueSupplier() == null
+				|| CombinedCollectionLink.supportsTransform(null, sourceCL.getType(), targetType, true, false))
 				return 0;
 			return .1; // This link is really heavy--make it less frequent
 		}
@@ -55,44 +64,98 @@ public class FlatMapCollectionLink<S, T> extends AbstractFlatMappedCollectionLin
 		public <T, X> ObservableCollectionLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestValueType targetType,
 			TestHelper helper) {
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
-			TestValueType type = targetType != null ? targetType : BaseCollectionLink.nextType(helper);
-			BetterSortedMap<T, ObservableCollectionLink<?, X>> buckets = BetterTreeMap
-				.<T> build(SortedCollectionLink.compare(sourceCL.getType(), helper))//
+			if (helper.getBoolean()) {
+				TestValueType type = targetType != null ? targetType : BaseCollectionLink.nextType(helper);
+				BetterSortedMap<T, ObservableCollectionLink<?, X>> buckets = createBuckets(path, sourceCL, type, helper);
+				ObservableCollection.CollectionDataFlow<?, ?, X> oneStepFlow = sourceCL.getCollection().flow()//
+					.flatMap((TypeToken<X>) type.getType(), s -> {
+						MapEntryHandle<T, ObservableCollectionLink<?, X>> bucket = FlattenedCollectionValuesLink.getBucket(buckets, s);
+						return bucket.get().getCollection().flow();
+					});
+				ObservableCollection.CollectionDataFlow<?, ?, X> multiStepFlow = sourceCL.getDef().multiStepFlow.flatMap(
+					(TypeToken<X>) type.getType(), s -> FlattenedCollectionValuesLink.getBucket(buckets, s).get().getDef().multiStepFlow);
+				boolean orderImportant = sourceCL.getDef().orderImportant;
+				boolean checkOldValues = sourceCL.getDef().checkOldValues;
+				for (ObservableCollectionLink<?, X> bucket : buckets.values()) {
+					orderImportant &= bucket.getDef().orderImportant;
+					checkOldValues &= bucket.getDef().checkOldValues;
+				}
+				ObservableCollectionTestDef<X> def = new ObservableCollectionTestDef<>(type, oneStepFlow, multiStepFlow, orderImportant,
+					checkOldValues);
+				return new FlatMapCollectionLink<>(path, sourceCL, def, helper, buckets, null, null);
+			} else
+				return complexCombine(path, sourceCL, targetType, helper);
+		}
+
+		private <S, X> BetterSortedMap<S, ObservableCollectionLink<?, X>> createBuckets(String path,
+			ObservableCollectionLink<?, S> sourceCL, TestValueType targetType, TestHelper helper) {
+			BetterSortedMap<S, ObservableCollectionLink<?, X>> buckets = BetterTreeMap
+				.<S> build(SortedCollectionLink.compare(sourceCL.getType(), helper))//
 				.safe(false).buildMap();
 			// Having more buckets actually makes this class more performant, since fewer buckets means that additions to this link
 			// aren't duplicated more times though the flattened collection, and there are fewer duplicate update events propagated
 			int bucketCount = helper.getInt(10, 20);
 			for (int b = 0; b < bucketCount; b++) {
-				T bucketKey = sourceCL.getValueSupplier().apply(helper);
+				S bucketKey = sourceCL.getValueSupplier().apply(helper);
 				if (!buckets.containsKey(bucketKey)) {
 					ObservableCollectionLink<?, X> bucketLink = ObservableChainTester.generateCollectionLink(path + ".bucket[" + b + "]",
-						type, helper, helper.getInt(1, 3));
+						targetType, helper, helper.getInt(1, 3));
 					buckets.put(bucketKey, bucketLink);
 				}
 			}
-			ObservableCollection.CollectionDataFlow<?, ?, X> oneStepFlow = sourceCL.getCollection().flow()//
-				.flatMap((TypeToken<X>) type.getType(), s -> {
-					MapEntryHandle<T, ObservableCollectionLink<?, X>> bucket = FlattenedCollectionValuesLink.getBucket(buckets, s);
-					return bucket.get().getCollection().flow();
-				});
-			ObservableCollection.CollectionDataFlow<?, ?, X> multiStepFlow = sourceCL.getDef().multiStepFlow
-				.flatMap((TypeToken<X>) type.getType(),
-					s -> FlattenedCollectionValuesLink.getBucket(buckets, s).get().getDef().multiStepFlow);
+			return buckets;
+		}
+
+		private <S, V, X> ObservableCollectionLink<S, X> complexCombine(String path, ObservableCollectionLink<?, S> sourceCL,
+			TestValueType targetType, TestHelper helper) {
+			CombinedCollectionLink.BiTypeTransformation<V, S, X> transform = CombinedCollectionLink.transform(null, sourceCL.getType(),
+				targetType, helper, true, false);
+			targetType = transform.getTargetType(); // May have been unset
+			TestValueType flatType = transform.getSourceType();
+
+			boolean needsUpdateReeval = !sourceCL.getDef().checkOldValues;
+			boolean cache = helper.getBoolean(.75);
+			boolean withReverse = transform.supportsReverse() && helper.getBoolean(.95);
+			boolean fireIfUnchanged = needsUpdateReeval || helper.getBoolean();
+			boolean reEvalOnUpdate = needsUpdateReeval || helper.getBoolean();
+			boolean oneToMany = transform.isOneToMany();
+			boolean manyToOne = transform.isManyToOne();
+			TypeToken<X> typeToken = (TypeToken<X>) targetType.getType();
+			BetterSortedMap<S, ObservableCollectionLink<?, V>> buckets = createBuckets(path, sourceCL, flatType, helper);
+
+			ValueHolder<FlatMapOptions.FlatMapDef<S, V, X>> options = new ValueHolder<>();
+			Function<FlatMapOptions<S, V, X>, FlatMapOptions.FlatMapDef<S, V, X>> combination = flatMap -> {
+				flatMap = flatMap.cache(cache).manyToOne(manyToOne).oneToMany(oneToMany)//
+					.fireIfUnchanged(fireIfUnchanged).reEvalOnUpdate(reEvalOnUpdate);
+				if (withReverse)
+					flatMap.replaceValue((s, v, x) -> transform.reverse(x, s), null);
+				options.accept(flatMap.map((s, v, x) -> transform.map(v, s)));
+				return options.get();
+			};
+			ObservableCollection.CollectionDataFlow<?, ?, X> oneStepFlow = sourceCL.getCollection().flow().flatMap(typeToken, s -> {
+				MapEntryHandle<S, ObservableCollectionLink<?, V>> bucket = FlattenedCollectionValuesLink.getBucket(buckets, s);
+				return bucket.get().getCollection().flow();
+			}, combination);
+			ObservableCollection.CollectionDataFlow<?, ?, X> multiStepFlow = sourceCL.getDef().multiStepFlow.flatMap(
+				(TypeToken<X>) targetType.getType(), s -> FlattenedCollectionValuesLink.getBucket(buckets, s).get().getDef().multiStepFlow,
+				combination);
 			boolean orderImportant = sourceCL.getDef().orderImportant;
-			boolean checkOldValues = sourceCL.getDef().checkOldValues;
-			for (ObservableCollectionLink<?, X> bucket : buckets.values()) {
+			boolean checkOldValues = cache && sourceCL.getDef().checkOldValues;
+			for (ObservableCollectionLink<?, V> bucket : buckets.values()) {
 				orderImportant &= bucket.getDef().orderImportant;
 				checkOldValues &= bucket.getDef().checkOldValues;
 			}
-			ObservableCollectionTestDef<X> def = new ObservableCollectionTestDef<>(type, oneStepFlow, multiStepFlow,
-				orderImportant, checkOldValues);
-			return new FlatMapCollectionLink<>(path, sourceCL, def, helper, buckets);
+			ObservableCollectionTestDef<X> def = new ObservableCollectionTestDef<>(targetType, oneStepFlow, multiStepFlow, orderImportant,
+				checkOldValues);
+			return new FlatMapCollectionLink<>(path, sourceCL, def, helper, buckets, transform, options.get());
 		}
 	};
 
-	private final BetterSortedMap<S, ObservableCollectionLink<?, T>> theBuckets;
+	private final BetterSortedMap<S, ObservableCollectionLink<?, V>> theBuckets;
 	private final int[] theBucketCounts;
 	private final int theDeepBucketCount;
+	private final BiTypeTransformation<V, S, T> theTransform;
+	private final FlatMapDef<S, V, T> theOptions;
 
 	private final List<CollectionLinkElement<?, S>> theSourceElementsByAddedTime;
 
@@ -102,30 +165,35 @@ public class FlatMapCollectionLink<S, T> extends AbstractFlatMappedCollectionLin
 	 * @param def The collection definition for this link
 	 * @param helper The randomness for this link
 	 * @param buckets The collection buckets for this link
+	 * @param transform The transformation to produce target values from source values and intermediate collection values
+	 * @param options The options used to create the flat-mapped collection
 	 */
 	public FlatMapCollectionLink(String path, ObservableCollectionLink<?, S> sourceLink, ObservableCollectionTestDef<T> def,
-		TestHelper helper, BetterSortedMap<S, ObservableCollectionLink<?, T>> buckets) {
+		TestHelper helper, BetterSortedMap<S, ObservableCollectionLink<?, V>> buckets, BiTypeTransformation<V, S, T> transform,
+		FlatMapOptions.FlatMapDef<S, V, T> options) {
 		super(path, sourceLink, def, helper);
 		theBuckets = buckets;
+		theTransform = transform;
+		theOptions = options;
 		int bucketCount = 0;
 		theBucketCounts = new int[buckets.size()];
 		int bucketIdx = 0;
-		class BucketReporting extends AbstractChainLink<T, T> implements CollectionSourcedLink<T, T> {
-			private final ObservableCollectionLink<?, T> theBucket;
+		class BucketReporting extends AbstractChainLink<V, T> implements CollectionSourcedLink<V, T> {
+			private final ObservableCollectionLink<?, V> theBucket;
 
-			BucketReporting(ObservableChainLink<?, T> bucket, int bucketIndex) {
+			BucketReporting(ObservableChainLink<?, V> bucket, int bucketIndex) {
 				super(FlatMapCollectionLink.this.getPath() + ".bucket[" + bucketIndex + "]*", bucket);
 				theBucket = getBucket(bucketIndex).get();
 			}
 
 			@Override
 			public TestValueType getType() {
-				return FlatMapCollectionLink.this.getType();
+				return theBucket.getType();
 			}
 
 			@Override
-			public ObservableCollectionLink<?, T> getSourceLink() {
-				return (ObservableCollectionLink<?, T>) super.getSourceLink();
+			public ObservableCollectionLink<?, V> getSourceLink() {
+				return (ObservableCollectionLink<?, V>) super.getSourceLink();
 			}
 
 			@Override
@@ -145,7 +213,7 @@ public class FlatMapCollectionLink<S, T> extends AbstractFlatMappedCollectionLin
 			}
 
 			@Override
-			public void expectFromSource(ExpectedCollectionOperation<?, T> sourceOp) {
+			public void expectFromSource(ExpectedCollectionOperation<?, V> sourceOp) {
 				switch (sourceOp.getType()) {
 				case move:
 					throw new IllegalStateException();
@@ -166,7 +234,7 @@ public class FlatMapCollectionLink<S, T> extends AbstractFlatMappedCollectionLin
 				return "";
 			}
 		}
-		for (ObservableCollectionLink<?, T> bucket : buckets.values()) {
+		for (ObservableCollectionLink<?, V> bucket : buckets.values()) {
 			ObservableCollectionLink<?, ?> b = bucket;
 			while (b != null) {
 				bucketCount++;
@@ -184,7 +252,7 @@ public class FlatMapCollectionLink<S, T> extends AbstractFlatMappedCollectionLin
 	 * @param sourceValue The source value
 	 * @return The entry of the bucket to use for the value
 	 */
-	protected MapEntryHandle<S, ObservableCollectionLink<?, T>> getBucket(S sourceValue) {
+	protected MapEntryHandle<S, ObservableCollectionLink<?, V>> getBucket(S sourceValue) {
 		return FlattenedCollectionValuesLink.getBucket(theBuckets, sourceValue);
 	}
 
@@ -192,7 +260,7 @@ public class FlatMapCollectionLink<S, T> extends AbstractFlatMappedCollectionLin
 	 * @param index The index of the bucket to get
 	 * @return The entry of the bucket to use for the value
 	 */
-	protected MapEntryHandle<S, ObservableCollectionLink<?, T>> getBucket(int index) {
+	protected MapEntryHandle<S, ObservableCollectionLink<?, V>> getBucket(int index) {
 		return theBuckets.getEntryById(theBuckets.keySet().getElement(index).getElementId());
 	}
 
@@ -205,11 +273,25 @@ public class FlatMapCollectionLink<S, T> extends AbstractFlatMappedCollectionLin
 	public boolean isComposite() {
 		Set<ElementId> buckets = new HashSet<>();
 		for (CollectionLinkElement<?, S> sourceEl : getSourceLink().getElements()) {
-			MapEntryHandle<S, ObservableCollectionLink<?, T>> bucket = getBucket(sourceEl.getValue());
+			MapEntryHandle<S, ObservableCollectionLink<?, V>> bucket = getBucket(sourceEl.getValue());
 			if (!buckets.add(bucket.getElementId()) || bucket.getValue().isComposite())
 				return true;
 		}
 		return false;
+	}
+
+	T map(S source, V value) {
+		if (theTransform == null)
+			return (T) value;
+		else
+			return theTransform.map(value, source);
+	}
+
+	V reverse(S source, T value) {
+		if (theTransform == null)
+			return (V) value;
+		else
+			return theTransform.reverse(value, source);
 	}
 
 	@Override
@@ -218,8 +300,10 @@ public class FlatMapCollectionLink<S, T> extends AbstractFlatMappedCollectionLin
 	}
 
 	@Override
-	public T getUpdateValue(T value) {
-		return value;
+	public T getUpdateValue(CollectionLinkElement<S, T> element, T value) {
+		S sourceVal = element.getFirstSource().getValue();
+		ObservableCollectionLink<?, V> bucket = getBucket(sourceVal).getValue();
+		return map(sourceVal, bucket.getUpdateValue(element.getCustomData(), reverse(sourceVal, value)));
 	}
 
 	@Override
@@ -232,6 +316,7 @@ public class FlatMapCollectionLink<S, T> extends AbstractFlatMappedCollectionLin
 		super.tryModify(action, helper);
 		action.or(10, () -> {
 			// Allow a bucket to mod itself
+			syncModCounts();
 			int deepBucketIndex = helper.getInt(0, theDeepBucketCount);
 			int bucketIndex = 0;
 			ObservableCollectionLink<?, ?> bucketLink = null;
@@ -260,13 +345,14 @@ public class FlatMapCollectionLink<S, T> extends AbstractFlatMappedCollectionLin
 		action.or(getCollection().size() / 5, () -> {
 			if (helper.isReproducing())
 				System.out.println("Trimming buckets");
+			syncModCounts();
 			// In order to keep this test case manageable, we need to keep the bucket sizes down
-			for (ObservableCollectionLink<?, T> bucket : theBuckets.values()) {
+			for (ObservableCollectionLink<?, V> bucket : theBuckets.values()) {
 				int maxSize = helper.getInt(0, 3);
 				boolean removable = true;
 				while (removable && bucket.getCollection().size() > maxSize) {
 					int index = helper.getInt(0, bucket.getCollection().size());
-					CollectionElement<T> element = bucket.getCollection().getElement(index);
+					CollectionElement<V> element = bucket.getCollection().getElement(index);
 					while (element != null && bucket.getCollection().mutableElement(element.getElementId()).canRemove() != null)
 						element = bucket.getCollection().getAdjacentElement(element.getElementId(), true);
 					if (element == null) {
@@ -276,7 +362,7 @@ public class FlatMapCollectionLink<S, T> extends AbstractFlatMappedCollectionLin
 						} while (element != null && bucket.getCollection().mutableElement(element.getElementId()).canRemove() != null);
 					}
 					if (element != null) {
-						CollectionLinkElement<?, T> bucketEl = bucket.getElement(element.getElementId());
+						CollectionLinkElement<?, V> bucketEl = bucket.getElement(element.getElementId());
 						bucket.getCollection().mutableElement(element.getElementId()).remove();
 						OperationRejection.Simple rejection = new OperationRejection.Simple();
 						bucket.expect(
@@ -293,6 +379,11 @@ public class FlatMapCollectionLink<S, T> extends AbstractFlatMappedCollectionLin
 	@Override
 	public CollectionLinkElement<S, T> expectAdd(T value, CollectionLinkElement<?, T> after, CollectionLinkElement<?, T> before,
 		boolean first, OperationRejection rejection, boolean execute) {
+		if (theOptions != null && theOptions.getReverse() == null) {
+			rejection.reject(StdMsg.UNSUPPORTED_OPERATION);
+			return null;
+		}
+		syncModCounts();
 		CollectionLinkElement<?, S> source;
 		CollectionLinkElement<?, S> afterSource = after == null ? null : (CollectionLinkElement<?, S>) after.getFirstSource();
 		CollectionLinkElement<?, S> beforeSource = before == null ? null : (CollectionLinkElement<?, S>) before.getFirstSource();
@@ -314,28 +405,34 @@ public class FlatMapCollectionLink<S, T> extends AbstractFlatMappedCollectionLin
 		}
 
 		String firstReject = null;
-		MapEntryHandle<S, ObservableCollectionLink<?, T>> acceptedBucket = null;
+		MapEntryHandle<S, ObservableCollectionLink<?, V>> acceptedBucket = null;
 		while (source != null) {
 			if (first)
 				isBefore = beforeSource != null && source == beforeSource;
 			else
 				isAfter = afterSource != null && source == afterSource;
 			boolean isTerminal = first ? isBefore : isAfter;
-			ObservableCollectionLink<?, T> bucket = getBucket(source.getValue()).get();
-			CollectionLinkElement<?, T> bucketAdded = bucket.expectAdd(value, //
-				isAfter ? after.getCustomData() : null, //
-					isBefore ? before.getCustomData() : null, //
-						first, rejection, false);
-			if (bucketAdded != null) {
-				if (execute)
-					bucket.expectAdd(value, //
-						isAfter ? after.getCustomData() : null, //
-							isBefore ? before.getCustomData() : null, //
-								first, rejection, true);
-				return getElementByBucketEl(source, bucket, bucketAdded);
+			ObservableCollectionLink<?, V> bucket = getBucket(source.getValue()).get();
+			V reversed = reverse(source.getValue(), value);
+			T reMapped = map(source.getValue(), reversed);
+			if (!getCollection().equivalence().elementEquals(reMapped, value))
+				rejection.reject(StdMsg.ILLEGAL_ELEMENT);
+			else {
+				CollectionLinkElement<?, V> bucketAdded = bucket.expectAdd(reversed, //
+					isAfter ? after.getCustomData() : null, //
+						isBefore ? before.getCustomData() : null, //
+							first, rejection, false);
+				if (bucketAdded != null) {
+					if (execute)
+						bucket.expectAdd(reversed, //
+							isAfter ? after.getCustomData() : null, //
+								isBefore ? before.getCustomData() : null, //
+									first, rejection, true);
+					return getElementByBucketEl(source, bucket, bucketAdded);
+				}
+				if (acceptedBucket == null && !rejection.isRejected())
+					acceptedBucket = getBucket(source.getValue());
 			}
-			if (acceptedBucket == null && !rejection.isRejected())
-				acceptedBucket = getBucket(source.getValue());
 			if (firstReject == null)
 				firstReject = rejection.getRejection();
 			rejection.reset();
@@ -347,16 +444,19 @@ public class FlatMapCollectionLink<S, T> extends AbstractFlatMappedCollectionLin
 				isBefore = false;
 			source = CollectionElement.get(getSourceLink().getElements().getAdjacentElement(source.getElementAddress(), first));
 		}
-		if (acceptedBucket != null)
-			throw new AssertionError("Add should have been accepted by " + acceptedBucket + ", but no new element was found");
+		if (acceptedBucket != null) {
+			if (execute)
+				throw new AssertionError("Add should have been accepted by " + acceptedBucket + ", but no new element was found");
+			return null;
+		}
 		if (firstReject == null)
 			firstReject = StdMsg.UNSUPPORTED_OPERATION;
 		rejection.reject(firstReject);
 		return null;
 	}
 
-	CollectionLinkElement<S, T> getElementByBucketEl(CollectionLinkElement<?, S> sourceEl, ObservableCollectionLink<?, T> bucket,
-		CollectionLinkElement<?, T> bucketEl) {
+	CollectionLinkElement<S, T> getElementByBucketEl(CollectionLinkElement<?, S> sourceEl, ObservableCollectionLink<?, V> bucket,
+		CollectionLinkElement<?, V> bucketEl) {
 		for (CollectionElement<T> el : getCollection().getElementsBySource(//
 			bucketEl.getCollectionAddress(), bucket.getCollection())) {
 			CollectionLinkElement<S, T> element = getElement(el.getElementId());
@@ -369,6 +469,7 @@ public class FlatMapCollectionLink<S, T> extends AbstractFlatMappedCollectionLin
 	@Override
 	public CollectionLinkElement<S, T> expectMove(CollectionLinkElement<?, T> element, CollectionLinkElement<?, T> after,
 		CollectionLinkElement<?, T> before, boolean first, OperationRejection rejection, boolean execute) {
+		syncModCounts();
 		CollectionLinkElement<?, S> source;
 		CollectionLinkElement<?, S> afterSource = after == null ? null : (CollectionLinkElement<?, S>) after.getFirstSource();
 		CollectionLinkElement<?, S> beforeSource = before == null ? null : (CollectionLinkElement<?, S>) before.getFirstSource();
@@ -389,9 +490,9 @@ public class FlatMapCollectionLink<S, T> extends AbstractFlatMappedCollectionLin
 				source = (CollectionLinkElement<?, S>) before.getFirstSource();
 		}
 
-		ObservableCollectionLink<?, T> sourceBucket = getBucket((S) element.getFirstSource().getValue()).get();
-		sourceBucket.expect(
-			new ExpectedCollectionOperation<>(element.getCustomData(), CollectionOpType.remove, element.getValue(), element.getValue()),
+		ObservableCollectionLink<?, V> sourceBucket = getBucket((S) element.getFirstSource().getValue()).get();
+		CollectionLinkElement<?, V> bucketEl = element.getCustomData();
+		sourceBucket.expect(new ExpectedCollectionOperation<>(bucketEl, CollectionOpType.remove, bucketEl.getValue(), bucketEl.getValue()),
 			rejection, false);
 		String canRemove = rejection.getRejection();
 		rejection.reset();
@@ -403,9 +504,9 @@ public class FlatMapCollectionLink<S, T> extends AbstractFlatMappedCollectionLin
 			else
 				isAfter = afterSource != null && source == afterSource;
 			boolean isTerminal = first ? isBefore : isAfter;
-			ObservableCollectionLink<?, T> bucket = getBucket(source.getValue()).get();
+			ObservableCollectionLink<?, V> bucket = getBucket(source.getValue()).get();
 			if (source == element.getFirstSource()) {
-				CollectionLinkElement<?, T> bucketMoved = sourceBucket.expectMove(//
+				CollectionLinkElement<?, V> bucketMoved = sourceBucket.expectMove(//
 					element.getCustomData(), //
 					isAfter ? after.getCustomData() : null, isBefore ? before.getCustomData() : null, //
 						first, rejection, execute);
@@ -419,13 +520,14 @@ public class FlatMapCollectionLink<S, T> extends AbstractFlatMappedCollectionLin
 			} else if (canRemove != null) {
 				rejection.reject(canRemove);
 			} else {
-				CollectionLinkElement<?, T> bucketAdded = bucket.expectAdd(element.getValue(), //
+				CollectionLinkElement<?, V> bucketAdded = bucket.expectAdd(bucketEl.getValue(), //
 					isAfter ? after.getCustomData() : null, isBefore ? before.getCustomData() : null, first, rejection, false);
 				if (bucketAdded != null) {
 					if (execute) {
-						sourceBucket.expect(new ExpectedCollectionOperation<>(element.getCustomData(), CollectionOpType.remove,
-							element.getValue(), element.getValue()), rejection, execute);
-						bucket.expectAdd(element.getValue(), //
+						sourceBucket.expect(
+							new ExpectedCollectionOperation<>(bucketEl, CollectionOpType.remove, bucketEl.getValue(), bucketEl.getValue()),
+							rejection, execute);
+						bucket.expectAdd(bucketEl.getValue(), //
 							isAfter ? after.getCustomData() : null, isBefore ? before.getCustomData() : null, first, rejection, true);
 					}
 					return getElementByBucketEl(source, bucket, bucketAdded);
@@ -449,46 +551,54 @@ public class FlatMapCollectionLink<S, T> extends AbstractFlatMappedCollectionLin
 		return null;
 	}
 
-	private CollectionLinkElement<?, T> priorityUpdateReceiver;
+	private CollectionLinkElement<S, T> priorityUpdateReceiver;
 
 	@Override
 	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection, boolean execute) {
+		syncModCounts();
 		CollectionLinkElement<?, S> source = (CollectionLinkElement<?, S>) derivedOp.getElement().getFirstSource();
-		ObservableCollectionLink<?, T> bucket = getBucket(source.getValue()).get();
-		CollectionLinkElement<?, T> bucketEl = derivedOp.getElement().getCustomData();
+		ObservableCollectionLink<?, V> bucket = getBucket(source.getValue()).get();
+		CollectionLinkElement<?, V> bucketEl = derivedOp.getElement().getCustomData();
+		V oldBucketValue, newBucketValue;
 		switch (derivedOp.getType()) {
 		case remove:
 			// May have already been removed by another representation
 			if (bucketEl.isRemoveExpected())
 				return;
+			oldBucketValue = newBucketValue = bucketEl.getValue();
 			break;
 		case set:
 			// Emulate the flat-map's capability to prevent remove-and-re-add when setting
-			priorityUpdateReceiver = derivedOp.getElement();
+			priorityUpdateReceiver = (CollectionLinkElement<S, T>) derivedOp.getElement();
+			oldBucketValue = bucketEl.getValue();
+			if (theOptions != null && theOptions.getReverse() == null) {
+				rejection.reject(StdMsg.UNSUPPORTED_OPERATION);
+				return;
+			}
+			newBucketValue = reverse(source.getValue(), derivedOp.getValue());
 			break;
 		default:
-			break;
+			throw new IllegalStateException();
 		}
-		bucket.expect(new ExpectedCollectionOperation<>(bucketEl, derivedOp.getType(),
-			derivedOp.getOldValue(), derivedOp.getValue()), rejection, execute);
+		bucket.expect(new ExpectedCollectionOperation<>(bucketEl, derivedOp.getType(), oldBucketValue, newBucketValue), rejection, execute);
 		priorityUpdateReceiver = null;
 	}
 
-	void addToBucket(ObservableCollectionLink<?, T> bucket, CollectionLinkElement<?, T> bucketAdded, boolean execute) {
+	void addToBucket(ObservableCollectionLink<?, V> bucket, CollectionLinkElement<?, V> bucketAdded, boolean execute) {
 		// Account for other source elements mapping to the same bucket
 		for (CollectionLinkElement<?, S> s : theSourceElementsByAddedTime) {
-			ObservableCollectionLink<?, T> sBucket = getBucket(s.getValue()).get();
+			ObservableCollectionLink<?, V> sBucket = getBucket(s.getValue()).get();
 			if (sBucket == bucket) {
 				CollectionLinkElement<S, T> added2 = getElementByBucketEl(s, bucket, bucketAdded);
-				added2.withCustomData(bucketAdded).expectAdded(bucketAdded.getValue());
+				added2.withCustomData(bucketAdded).expectAdded(map(s.getValue(), bucketAdded.getValue()));
 			}
 		}
 	}
 
-	void removeFromBucket(ObservableCollectionLink<?, T> bucket, CollectionLinkElement<?, T> bucketRemoved) {
+	void removeFromBucket(ObservableCollectionLink<?, V> bucket, CollectionLinkElement<?, V> bucketRemoved) {
 		// Account for other source elements mapping to the same bucket
 		for (CollectionLinkElement<?, S> s : theSourceElementsByAddedTime) {
-			ObservableCollectionLink<?, T> sBucket = getBucket(s.getValue()).get();
+			ObservableCollectionLink<?, V> sBucket = getBucket(s.getValue()).get();
 			if (sBucket == bucket) {
 				boolean found = false;
 				for (CollectionLinkElement<S, ?> derived : s.getDerivedElements(getSiblingIndex())) {
@@ -504,19 +614,27 @@ public class FlatMapCollectionLink<S, T> extends AbstractFlatMappedCollectionLin
 		}
 	}
 
-	void setInBucket(ObservableCollectionLink<?, T> bucket, CollectionLinkElement<?, T> bucketSet) {
+	void setInBucket(ObservableCollectionLink<?, V> bucket, CollectionLinkElement<?, V> bucketSet) {
 		if (priorityUpdateReceiver != null && priorityUpdateReceiver.getCustomData() == bucketSet) {
-			priorityUpdateReceiver.expectSet(bucketSet.getValue());
+			priorityUpdateReceiver.expectSet(map(priorityUpdateReceiver.getFirstSource().getValue(), bucketSet.getValue()));
 		}
 		// Account for other source elements mapping to the same bucket
 		for (CollectionLinkElement<?, S> s : theSourceElementsByAddedTime) {
-			ObservableCollectionLink<?, T> sBucket = getBucket(s.getValue()).get();
+			ObservableCollectionLink<?, V> sBucket = getBucket(s.getValue()).get();
 			if (sBucket == bucket) {
 				CollectionLinkElement<S, T> derived = getElementByBucketEl(s, bucket, bucketSet);
 				if (derived != priorityUpdateReceiver)
-					derived.expectSet(bucketSet.getValue());
+					derived.expectSet(map(s.getValue(), bucketSet.getValue()));
 			}
 		}
+	}
+
+	void syncModCounts() {
+		int modSet = getModSet();
+		int mod = getModification();
+		int overall = getOverallModification();
+		for (ObservableCollectionLink<?, V> bucket : theBuckets.values())
+			bucket.setModification(modSet, mod, overall);
 	}
 
 	@Override
@@ -526,13 +644,13 @@ public class FlatMapCollectionLink<S, T> extends AbstractFlatMappedCollectionLin
 			throw new IllegalStateException();
 		case add:
 			theSourceElementsByAddedTime.add(sourceOp.getElement());
-			ObservableCollectionLink<?, T> bucket = getBucket(sourceOp.getValue()).get();
+			ObservableCollectionLink<?, V> bucket = getBucket(sourceOp.getValue()).get();
 			BetterList<CollectionLinkElement<S, T>> added;
 			added = (BetterList<CollectionLinkElement<S, T>>) (BetterList<?>) sourceOp.getElement().getDerivedElements(getSiblingIndex());
 			Assert.assertEquals(bucket.getCollection().size(), added.size());
 			for (int i = 0; i < added.size(); i++) {
-				CollectionLinkElement<?, T> bucketEl = bucket.getElements().get(i);
-				added.get(i).withCustomData(bucketEl).expectAdded(bucketEl.getValue());
+				CollectionLinkElement<?, V> bucketEl = bucket.getElements().get(i);
+				added.get(i).withCustomData(bucketEl).expectAdded(map(sourceOp.getValue(), bucketEl.getValue()));
 			}
 			break;
 		case remove:
@@ -550,7 +668,7 @@ public class FlatMapCollectionLink<S, T> extends AbstractFlatMappedCollectionLin
 			bucket = getBucket(sourceOp.getOldValue()).get();
 			BetterList<CollectionLinkElement<S, T>> elements = (BetterList<CollectionLinkElement<S, T>>) (BetterList<?>) sourceOp
 				.getElement().getDerivedElements(getSiblingIndex());
-			ObservableCollectionLink<?, T> newBucket = getBucket(sourceOp.getValue()).get();
+			ObservableCollectionLink<?, V> newBucket = getBucket(sourceOp.getValue()).get();
 			if (bucket != newBucket) {
 				theSourceElementsByAddedTime.remove(sourceOp.getElement());
 				theSourceElementsByAddedTime.add(sourceOp.getElement());
@@ -564,8 +682,8 @@ public class FlatMapCollectionLink<S, T> extends AbstractFlatMappedCollectionLin
 					elementIter.next().expectRemoval();
 
 				for (int i = 0; i < newBucket.getCollection().size(); i++) {
-					CollectionLinkElement<?, T> bucketEl = newBucket.getElements().get(i);
-					elementIter.next().withCustomData(bucketEl).expectAdded(bucketEl.getValue());
+					CollectionLinkElement<?, V> bucketEl = newBucket.getElements().get(i);
+					elementIter.next().withCustomData(bucketEl).expectAdded(map(sourceOp.getValue(), bucketEl.getValue()));
 				}
 			}
 		}
@@ -574,7 +692,7 @@ public class FlatMapCollectionLink<S, T> extends AbstractFlatMappedCollectionLin
 	@Override
 	public void validate(boolean transactionEnd) throws AssertionError {
 		LinkedList<ObservableCollectionLink<?, ?>> bucketChain = new LinkedList<>();
-		for (ObservableCollectionLink<?, T> bucket : theBuckets.values()) {
+		for (ObservableCollectionLink<?, V> bucket : theBuckets.values()) {
 			bucketChain.clear();
 			ObservableCollectionLink<?, ?> bucketLink = bucket;
 			while (bucketLink != null) {

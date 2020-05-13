@@ -44,11 +44,12 @@ public abstract class AbstractMappedCollectionLink<S, T> extends OneToOneCollect
 	}
 
 	@Override
-	public T getUpdateValue(T value) {
+	public T getUpdateValue(CollectionLinkElement<S, T> element, T value) {
 		if (isCached || !isReversible())
 			return value;
 		else
-			return map(getSourceLink().getUpdateValue(reverse(value)));
+			return map(((ObservableCollectionLink<Object, S>) getSourceLink())
+				.getUpdateValue((CollectionLinkElement<Object, S>) element.getFirstSource(), reverse(value)));
 	}
 
 	@Override
@@ -93,9 +94,8 @@ public abstract class AbstractMappedCollectionLink<S, T> extends OneToOneCollect
 					}
 				} else
 					sourceValue = sourceEl.getValue();
-				getSourceLink().expect(
-					new ExpectedCollectionOperation<>(sourceEl, derivedOp.getType(), sourceEl.getValue(), sourceValue), rejection,
-					execute);
+				getSourceLink().expect(new ExpectedCollectionOperation<>(sourceEl, derivedOp.getType(), sourceEl.getValue(), sourceValue),
+					rejection, execute);
 				return;
 			}
 			if (!isReversible()) {

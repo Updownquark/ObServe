@@ -131,8 +131,8 @@ public class FactoringFlatMapCollectionLink extends AbstractFlatMappedCollection
 	}
 
 	@Override
-	public Integer getUpdateValue(Integer value) {
-		return getSourceLink().getUpdateValue(value);
+	public Integer getUpdateValue(CollectionLinkElement<Integer, Integer> element, Integer value) {
+		return ((ObservableCollectionLink<Object, Integer>)getSourceLink()).getUpdateValue((CollectionLinkElement<Object, Integer>) element.getFirstSource(), value);
 	}
 
 	@Override

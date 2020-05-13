@@ -131,10 +131,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 					break;
 				case remove:
 					CollectionElement<CollectionLinkElement<S, T>> removed = theElementsForCollection.getElement(evt.getIndex());
-					if (theDef.checkOldValues && !getCollection().equivalence().elementEquals(removed.get().getValue(), evt.getOldValue()))
-						throw new AssertionError(
-							getPath() + ": Old values do not match: Expected " + removed.get() + " but was " + evt.getOldValue());
-					removed.get().removed();
+					removed.get().removed(evt.getOldValue());
 					theElementsForCollection.mutableElement(removed.getElementId()).remove();
 					break;
 				case set:
@@ -267,7 +264,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 	 * @param value The input value
 	 * @return The value, reverse-mapped to the root, then re-mapped back to this collection
 	 */
-	public abstract T getUpdateValue(T value);
+	public abstract T getUpdateValue(CollectionLinkElement<S, T> element, T value);
 
 	@Override
 	public double getModificationAffinity() {

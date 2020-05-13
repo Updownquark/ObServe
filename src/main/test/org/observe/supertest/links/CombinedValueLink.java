@@ -43,7 +43,7 @@ public class CombinedValueLink<S, V, T> extends ObservableValueLink<S, T> implem
 			if (!(sourceLink instanceof ObservableValueLink))
 				return 0;
 			ObservableValueLink<?, T> sourceVL = (ObservableValueLink<?, T>) sourceLink;
-			if (sourceVL.isTypeCheat() || !CombinedCollectionLink.supportsTransform(sourceVL.getType(), targetType, true, false))
+			if (sourceVL.isTypeCheat() || !CombinedCollectionLink.supportsTransform(sourceVL.getType(), null, targetType, true, false))
 				return 0;
 			return 1;
 		}
@@ -52,7 +52,8 @@ public class CombinedValueLink<S, V, T> extends ObservableValueLink<S, T> implem
 		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestValueType targetType,
 			TestHelper helper) {
 			ObservableValueLink<?, T> sourceCL = (ObservableValueLink<?, T>) sourceLink;
-			BiTypeTransformation<T, ?, X> transform = CombinedCollectionLink.transform(sourceCL.getType(), targetType, helper, true, false);
+			BiTypeTransformation<T, ?, X> transform = CombinedCollectionLink.transform(sourceCL.getType(), null, targetType, helper, true,
+				false);
 			return deriveLink(path, sourceCL, transform, helper);
 		}
 

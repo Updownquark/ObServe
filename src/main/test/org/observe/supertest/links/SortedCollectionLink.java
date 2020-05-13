@@ -73,8 +73,9 @@ public class SortedCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	}
 
 	@Override
-	public T getUpdateValue(T value) {
-		return getSourceLink().getUpdateValue(value);
+	public T getUpdateValue(CollectionLinkElement<T, T> element, T value) {
+		return ((ObservableCollectionLink<Object, T>) getSourceLink())
+			.getUpdateValue((CollectionLinkElement<Object, T>) element.getFirstSource(), value);
 	}
 
 	@Override
@@ -90,8 +91,8 @@ public class SortedCollectionLink<T> extends ObservableCollectionLink<T, T> {
 
 		CollectionLinkElement<?, T> sourceEl = getSourceLink().expectAdd(value, //
 			after == null ? null : (CollectionLinkElement<?, T>) after.getFirstSource(),
-			before == null ? null : (CollectionLinkElement<?, T>) before.getFirstSource(), //
-			first, rejection, execute);
+				before == null ? null : (CollectionLinkElement<?, T>) before.getFirstSource(), //
+					first, rejection, execute);
 		if (sourceEl == null)
 			return null;
 		CollectionLinkElement<T, T> element = (CollectionLinkElement<T, T>) sourceEl.getDerivedElements(getSiblingIndex()).getFirst();

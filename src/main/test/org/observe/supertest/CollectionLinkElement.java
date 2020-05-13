@@ -78,8 +78,16 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 		}
 	}
 
-	/** Called when this element is removed from the actual collection */
-	public void removed() {
+	/**
+	 * Called when this element is removed from the actual collection
+	 *
+	 * @param oldValue The previous value of the element in the collection
+	 */
+	public void removed(T oldValue) {
+		if (theCollectionLink.getDef().checkOldValues
+			&& !theCollectionLink.getCollection().equivalence().elementEquals(theCollectionValue, oldValue))
+			throw new AssertionError(
+				theCollectionLink.getPath() + ": Old values do not match: Expected " + theCollectionValue + " but was " + oldValue);
 		wasRemoved = true;
 	}
 

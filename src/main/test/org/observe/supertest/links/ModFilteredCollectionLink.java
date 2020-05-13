@@ -124,8 +124,9 @@ public class ModFilteredCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 	}
 
 	@Override
-	public T getUpdateValue(T value) {
-		return getSourceLink().getUpdateValue(value);
+	public T getUpdateValue(CollectionLinkElement<T, T> element, T value) {
+		return ((ObservableCollectionLink<Object, T>) getSourceLink())
+			.getUpdateValue((CollectionLinkElement<Object, T>) element.getFirstSource(), value);
 	}
 
 	@Override
@@ -140,7 +141,7 @@ public class ModFilteredCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 				() -> derivedOp.getElement().getValue());
 			break;
 		case set:
-			T updateValue = getUpdateValue(derivedOp.getElement().getValue());
+			T updateValue = getUpdateValue((CollectionLinkElement<T, T>) derivedOp.getElement(), derivedOp.getElement().getValue());
 			if (theFilter.areUpdatesAllowed() && getCollection().equivalence().elementEquals(updateValue, derivedOp.getValue())) {
 				// Things get complicated when the elements are equivalent.
 				// Lower level caching and operations can affect whether the operation is actually detected as an update

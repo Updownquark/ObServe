@@ -142,7 +142,7 @@ public class ObservableChainTester implements Testable {
 		.withPersistenceDir(new File("src/main/test/org/observe/supertest"), false)//
 		.withPlacemarks("Transaction", "Modification").withDebug(true)//
 		.execute()//
-		.throwErrorIfFailed().printResults();
+		.printResults().throwErrorIfFailed();
 	}
 
 	private <E> void assemble(TestHelper helper) {

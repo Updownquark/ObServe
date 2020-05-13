@@ -100,7 +100,7 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	}
 
 	@Override
-	public T getUpdateValue(T value) {
+	public T getUpdateValue(CollectionLinkElement<T, T> element, T value) {
 		return value;
 	}
 

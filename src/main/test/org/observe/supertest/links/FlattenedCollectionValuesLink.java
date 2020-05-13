@@ -28,7 +28,7 @@ import com.google.common.reflect.TypeToken;
 /**
  * Tests {@link org.observe.collect.ObservableCollection.CollectionDataFlow#flattenValues(TypeToken, Function)} and, thereby,
  * {@link org.observe.collect.ObservableCollection.CollectionDataFlow#refresh(org.observe.Observable)} and mapped
- * {@link org.observe.collect.FlowOptions.MapOptions#withElementSetting(org.observe.collect.ObservableCollection.ElementSetter) element
+ * {@link org.observe.collect.FlowOptions.MapOptions#withFieldSetReverse(java.util.function.BiConsumer, java.util.function.BiFunction) field
  * setting}.
  *
  * @param <S> The type of the source link's collection

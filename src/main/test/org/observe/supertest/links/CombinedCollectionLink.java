@@ -2,13 +2,11 @@ package org.observe.supertest.links;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.observe.SettableValue;
 import org.observe.collect.Combination;
@@ -44,7 +42,7 @@ public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLin
 			if (!(sourceLink instanceof ObservableCollectionLink))
 				return 0;
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
-			if (!CombinedCollectionLink.supportsTransform(sourceCL.getDef().type, targetType, true, false))
+			if (!CombinedCollectionLink.supportsTransform(sourceCL.getDef().type, null, targetType, true, false))
 				return 0;
 			return 1;
 		}
@@ -53,8 +51,8 @@ public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLin
 		public <T, X> ObservableCollectionLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestValueType targetType,
 			TestHelper helper) {
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
-			BiTypeTransformation<T, ?, X> transform = CombinedCollectionLink.transform(sourceCL.getDef().type, targetType, helper, true,
-				false);
+			BiTypeTransformation<T, ?, X> transform = CombinedCollectionLink.transform(sourceCL.getDef().type, null, targetType, helper,
+				true, false);
 			return deriveLink(path, sourceCL, transform, helper);
 		}
 
@@ -319,63 +317,59 @@ public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLin
 
 	/**
 	 * @param sourceType The type to transform
+	 * @param valueType The value type of the transform, or null if unspecified
 	 * @param targetType The target type of the transform, or null if unspecified
 	 * @param allowManyToOne Whether {@link TypeTransformation#isManyToOne() many-to-one} transformations are acceptable
 	 * @param requireReversible Whether acceptable mappings must {@link TypeTransformation#supportsReverse() support reversal}
 	 * @return Whether any acceptable transformations exist
 	 */
-	public static boolean supportsTransform(TestValueType sourceType, TestValueType targetType, boolean allowManyToOne,
-		boolean requireReversible) {
-		List<? extends BiTypeTransformation<?, ?, ?>> transforms = TYPE_TRANSFORMATIONS.get(sourceType);
-		if (transforms == null || transforms.isEmpty())
-			return false;
-		if (!allowManyToOne || requireReversible) {
-			boolean supported = false;
-			for (BiTypeTransformation<?, ?, ?> transform : transforms) {
-				if (!allowManyToOne && transform.isManyToOne()) {//
-				} else if (requireReversible && !transform.supportsReverse()) {//
-				} else if (targetType != null && transform.getTargetType() != targetType) {//
-				} else {
-					supported = true;
-					break;
-				}
-			}
-			return supported;
-		}
-		return false;
+	public static boolean supportsTransform(TestValueType sourceType, TestValueType valueType, TestValueType targetType,
+		boolean allowManyToOne, boolean requireReversible) {
+		return getTransformStream(sourceType, valueType, targetType, allowManyToOne, requireReversible).limit(1).count() == 1;
+	}
+
+	private static Stream<BiTypeTransformation<?, ?, ?>> getTransformStream(TestValueType sourceType, TestValueType valueType,
+		TestValueType targetType, boolean allowManyToOne, boolean requireReversible) {
+		return TYPE_TRANSFORMATIONS.stream().filter(transform -> {
+			if (!allowManyToOne && transform.isManyToOne())
+				return false;
+			else if (requireReversible && !transform.supportsReverse())
+				return false;
+			else if (sourceType != null && transform.getSourceType() != sourceType)
+				return false;
+			else if (targetType != null && transform.getTargetType() != targetType)
+				return false;
+			else if (valueType != null && transform.getValueType() != valueType)
+				return false;
+			else
+				return true;
+		});
 	}
 
 	/**
 	 * @param <E> The source type
 	 * @param <T> The target type
 	 * @param type The source type to transform
+	 * @param valueType The value type of the transform, or null if unspecified
 	 * @param targetType The target type of the transform, or null if unspecified
 	 * @param helper The randomness to use to get a random transformation
 	 * @param allowManyToOne Whether {@link TypeTransformation#isManyToOne() many-to-one} transformations are acceptable
 	 * @param requireReversible Whether acceptable mappings must {@link TypeTransformation#supportsReverse() support reversal}
 	 * @return The transformation
 	 */
-	public static <E, T> BiTypeTransformation<E, ?, T> transform(TestValueType type, TestValueType targetType, TestHelper helper,
+	public static <E, V, T> BiTypeTransformation<E, V, T> transform(TestValueType type, TestValueType valueType, TestValueType targetType,
+		TestHelper helper,
 		boolean allowManyToOne, boolean requireReversible) {
-		List<? extends BiTypeTransformation<E, ?, ?>> transforms = (List<? extends BiTypeTransformation<E, ?, ?>>) TYPE_TRANSFORMATIONS
-			.get(type).stream().filter(transform -> {
-				if (!allowManyToOne && transform.isManyToOne())
-					return false;
-				else if (requireReversible && !transform.supportsReverse())
-					return false;
-				else if (targetType != null && transform.getTargetType() != targetType)
-					return false;
-				else
-					return true;
-			}).collect(Collectors.toList());
+		List<BiTypeTransformation<?, ?, ?>> transforms = getTransformStream(type, valueType, targetType, allowManyToOne, requireReversible)
+			.collect(Collectors.toList());
 		if (transforms.isEmpty())
 			throw new UnsupportedOperationException();
-		BiTypeTransformation<E, ?, ?> transform;
+		BiTypeTransformation<?, ?, ?> transform;
 		if (transforms.size() == 1)
 			transform = transforms.get(0);
 		else
 			transform = transforms.get(helper.getInt(0, transforms.size()));
-		return (BiTypeTransformation<E, ?, T>) transform;
+		return (BiTypeTransformation<E, V, T>) transform;
 	}
 
 	@Override
@@ -443,9 +437,9 @@ public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLin
 		};
 	}
 
-	private static final Map<TestValueType, List<? extends BiTypeTransformation<?, ?, ?>>> TYPE_TRANSFORMATIONS;
+	private static final List<BiTypeTransformation<?, ?, ?>> TYPE_TRANSFORMATIONS;
 	static {
-		TYPE_TRANSFORMATIONS = new HashMap<>();
+		TYPE_TRANSFORMATIONS = new ArrayList<>();
 		for (TestValueType type1 : TestValueType.values()) {
 			for (TestValueType type2 : TestValueType.values()) {
 				switch (type1) {
@@ -559,14 +553,10 @@ public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLin
 
 	private static <S, T> void supportTransforms(TestValueType type1, TestValueType type2, boolean withReverse,
 		BiTypeTransformation<S, ?, T>... transforms) {
-		List<BiTypeTransformation<S, ?, T>> forward = (List<BiTypeTransformation<S, ?, T>>) TYPE_TRANSFORMATIONS.computeIfAbsent(type1,
-			t -> new LinkedList<>());
-		List<BiTypeTransformation<T, ?, S>> backward = (List<BiTypeTransformation<T, ?, S>>) TYPE_TRANSFORMATIONS.computeIfAbsent(type2,
-			t -> new LinkedList<>());
 		for (BiTypeTransformation<S, ?, T> transform : transforms) {
-			forward.add(transform);
+			TYPE_TRANSFORMATIONS.add(transform);
 			if (withReverse && transform.supportsReverse())
-				backward.add(transform.reverse());
+				TYPE_TRANSFORMATIONS.add(transform.reverse());
 		}
 	}
 
