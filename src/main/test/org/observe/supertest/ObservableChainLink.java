@@ -65,4 +65,7 @@ public interface ObservableChainLink<S, T> extends Transactable {
 	 * @param overall The overall number of modifications completed so far
 	 */
 	void setModification(int modSet, int modification, int overall);
+
+	/** Frees any persistent resources that this link might be using */
+	void dispose();
 }

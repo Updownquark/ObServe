@@ -4,7 +4,7 @@ import org.qommons.TestHelper;
 import org.qommons.collect.CollectionElement;
 
 /**
- * Just implements {@link #validate(CollectionLinkElement)}
+ * Just implements {@link #validate(CollectionLinkElement, boolean)}
  *
  * @param <S> The type of the source link
  * @param <T> The type of this link
@@ -22,7 +22,7 @@ public abstract class AbstractFlatMappedCollectionLink<S, T> extends ObservableC
 	}
 
 	@Override
-	protected void validate(CollectionLinkElement<S, T> element) {
+	protected void validate(CollectionLinkElement<S, T> element, boolean transactionEnd) {
 		if (!element.isPresent())
 			return;
 		CollectionLinkElement<?, S> source = element.getFirstSource();

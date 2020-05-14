@@ -51,6 +51,17 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		theOverallModification = -1;
 	}
 
+	/**
+	 * @param path The path for this link (generally "root")
+	 * @param def The collection definition for this link
+	 * @param collection The collection
+	 * @param helper The randomness to use to initialize this link
+	 */
+	public BaseCollectionLink(String path, ObservableCollectionTestDef<T> def, ObservableCollection<T> collection, TestHelper helper) {
+		super(path, null, def, collection, collection, helper);
+		theOverallModification = -1;
+	}
+
 	@Override
 	public int getModSet() {
 		return theModSet;
@@ -161,7 +172,7 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	}
 
 	@Override
-	protected void validate(CollectionLinkElement<T, T> element) {}
+	protected void validate(CollectionLinkElement<T, T> element, boolean transactionEnd) {}
 
 	/**
 	 * @param helper The randomness to use to get the type

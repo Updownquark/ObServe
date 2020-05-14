@@ -103,7 +103,7 @@ public abstract class OneToOneCollectionLink<S, T> extends ObservableCollectionL
 	}
 
 	@Override
-	protected void validate(CollectionLinkElement<S, T> element) {
+	protected void validate(CollectionLinkElement<S, T> element, boolean transactionEnd) {
 		if (element.isPresent()) {
 			Assert.assertEquals(1, element.getSourceElements().size());
 			checkOrder(element);

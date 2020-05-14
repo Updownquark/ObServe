@@ -224,7 +224,7 @@ public class SubSetLink<T> extends ObservableCollectionLink<T, T> {
 	}
 
 	@Override
-	protected void validate(CollectionLinkElement<T, T> element) {
+	protected void validate(CollectionLinkElement<T, T> element, boolean transactionEnd) {
 		if (!isInBound(element.getValue()))
 			element.error("Element is out of bounds");
 	}

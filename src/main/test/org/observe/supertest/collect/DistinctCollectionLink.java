@@ -9,6 +9,7 @@ import java.util.TreeMap;
 import org.junit.Assert;
 import org.observe.collect.Equivalence;
 import org.observe.collect.FlowOptions;
+import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.ChainLinkGenerator;
 import org.observe.supertest.CollectionOpType;
@@ -122,6 +123,28 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	public DistinctCollectionLink(String path, ObservableCollectionLink<?, T> sourceLink, ObservableCollectionTestDef<T> def,
 		Comparator<? super T> compare, boolean useFirst, TestHelper helper) {
 		super(path, sourceLink, def, helper);
+		theHelper = compare == null ? null : new SortedLinkHelper<>(compare, useFirst);
+		if (compare != null)
+			theValues = new TreeMap<>(compare);
+		else
+			theValues = new HashMap<>();
+		isUsingFirst = useFirst;
+	}
+
+	/**
+	 * @param path The path for this link
+	 * @param sourceLink The source for this link
+	 * @param def The collection definition for this link
+	 * @param oneStepCollection The one-step collection descended from the source link's
+	 * @param multiStepCollection The multi-step collection descended from the root link's
+	 * @param compare The sorting for the values
+	 * @param useFirst Whether the collection should be using the first source link associated with each value as the active element
+	 * @param helper The randomness to use to initialize this link
+	 */
+	public DistinctCollectionLink(String path, ObservableCollectionLink<?, T> sourceLink, ObservableCollectionTestDef<T> def,
+		ObservableCollection<T> oneStepCollection, ObservableCollection<T> multiStepCollection, Comparator<? super T> compare,
+		boolean useFirst, TestHelper helper) {
+		super(path, sourceLink, def, oneStepCollection, multiStepCollection, helper);
 		theHelper = compare == null ? null : new SortedLinkHelper<>(compare, useFirst);
 		if (compare != null)
 			theValues = new TreeMap<>(compare);
@@ -370,7 +393,7 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	}
 
 	@Override
-	protected void validate(CollectionLinkElement<T, T> element) {
+	protected void validate(CollectionLinkElement<T, T> element, boolean transactionEnd) {
 		checkOrder(element, null, null);
 	}
 

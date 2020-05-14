@@ -78,6 +78,23 @@ public class SortedBaseCollectionLink<T> extends BaseCollectionLink<T> {
 			theDistinctValues = null;
 	}
 
+	/**
+	 * @param path The path for this link (generally "root")
+	 * @param def The collection definition for this link
+	 * @param collection The collection
+	 * @param compare The sorting for the values
+	 * @param helper The randomness to use to initialize this link
+	 */
+	public SortedBaseCollectionLink(String path, ObservableCollectionTestDef<T> def, ObservableCollection<T> collection,
+		Comparator<? super T> compare, TestHelper helper) {
+		super(path, def, collection, helper);
+		theHelper = new SortedLinkHelper<>(compare, false);
+		if (collection instanceof ObservableSortedSet)
+			theDistinctValues = getCollection().equivalence().createSet();
+		else
+			theDistinctValues = null;
+	}
+
 	@Override
 	public void initialize(TestHelper helper) {
 		super.initialize(helper);
@@ -158,7 +175,7 @@ public class SortedBaseCollectionLink<T> extends BaseCollectionLink<T> {
 	}
 
 	@Override
-	protected void validate(CollectionLinkElement<T, T> element) {
+	protected void validate(CollectionLinkElement<T, T> element, boolean transactionEnd) {
 		checkOrder(element);
 	}
 

@@ -3,6 +3,8 @@ package org.observe.supertest;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.observe.Observable;
+import org.observe.SimpleObservable;
 import org.qommons.Lockable;
 import org.qommons.TestHelper;
 import org.qommons.Transactable;
@@ -19,6 +21,7 @@ public abstract class AbstractChainLink<S, T> implements ObservableChainLink<S, 
 	private final ObservableChainLink<?, S> theSourceLink;
 	private final List<? extends ObservableChainLink<T, ?>> theDerivedLinks;
 	private final int theSiblingIndex;
+	private final SimpleObservable<Void> theDestruction;
 
 	/**
 	 * @param path The path for this link
@@ -29,6 +32,7 @@ public abstract class AbstractChainLink<S, T> implements ObservableChainLink<S, 
 		theSourceLink = sourceLink;
 		theDerivedLinks = new ArrayList<>();
 		theSiblingIndex = theSourceLink == null ? -1 : theSourceLink.getDerivedLinks().size(); // Assume we'll be added at the end
+		theDestruction = SimpleObservable.build().safe(false).build();
 	}
 
 	@Override
@@ -60,6 +64,11 @@ public abstract class AbstractChainLink<S, T> implements ObservableChainLink<S, 
 	/** @return Any supplemental structures that should be locked when this structure is locked */
 	protected Transactable getLocking() {
 		return null;
+	}
+
+	/** @return An observable that fires when this link is destroyed */
+	protected Observable<Void> getDestruction(){
+		return theDestruction;
 	}
 
 	@Override
@@ -94,6 +103,11 @@ public abstract class AbstractChainLink<S, T> implements ObservableChainLink<S, 
 	@Override
 	public void setModification(int modSet, int modification, int overall) {
 		((AbstractChainLink<?, S>) getSourceLink()).setModification(modSet, modification, overall);
+	}
+
+	@Override
+	public void dispose() {
+		theDestruction.onNext(null);
 	}
 
 	@Override

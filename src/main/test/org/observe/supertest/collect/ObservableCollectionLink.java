@@ -14,7 +14,6 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.junit.Assert;
-import org.observe.Observable;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionEvent;
 import org.observe.collect.ObservableCollectionTester;
@@ -69,11 +68,11 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		if (passive)
 			theOneStepCollection = def.oneStepFlow.collectPassive();
 		else
-			theOneStepCollection = def.oneStepFlow.collectActive(Observable.empty);
+			theOneStepCollection = def.oneStepFlow.collectActive(getDestruction());
 		if (passive && def.multiStepFlow.supportsPassive())
 			theMultiStepCollection = def.multiStepFlow.collectPassive();
 		else
-			theMultiStepCollection = def.multiStepFlow.collectActive(Observable.empty);
+			theMultiStepCollection = def.multiStepFlow.collectActive(getDestruction());
 
 		theMultiStepTester = new ObservableCollectionTester<>(getPath() + " Multi-step", theMultiStepCollection);
 		theMultiStepTester.setOrderImportant(def.orderImportant);
@@ -108,7 +107,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 	}
 
 	private void init(TestHelper helper) {
-		if (getSourceLink() == null && theSupplier != null && helper.getBoolean(.25)) {
+		if (getSourceLink() == null && helper != null && theSupplier != null && helper.getBoolean(.25)) {
 			int size = helper.getInt(0, 10);
 			try {
 				for (int i = 0; i < size; i++)
@@ -157,8 +156,10 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 	 * Validates aspects of a single element
 	 *
 	 * @param element The element to validate
+	 * @param transactionEnd Whether any transaction begun before the modification has been closed
+	 * @throws AssertionError If this link's data is not valid
 	 */
-	protected abstract void validate(CollectionLinkElement<S, T> element);
+	protected abstract void validate(CollectionLinkElement<S, T> element, boolean transactionEnd) throws AssertionError;
 
 	@Override
 	public TestValueType getType() {
@@ -488,7 +489,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 	public void validate(boolean transactionEnd) throws AssertionError {
 		StringBuilder error = new StringBuilder();
 		for (CollectionLinkElement<S, T> link : theElements) {
-			validate(link);
+			validate(link, transactionEnd);
 			link.validate(error);
 		}
 
