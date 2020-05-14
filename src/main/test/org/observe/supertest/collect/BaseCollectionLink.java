@@ -2,6 +2,7 @@ package org.observe.supertest.collect;
 
 import org.observe.collect.ObservableCollection;
 import org.observe.supertest.ChainLinkGenerator;
+import org.observe.supertest.CollectionOpType;
 import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
@@ -148,7 +149,7 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		if (source.isPresent())
 			return (CollectionLinkElement<T, T>) source;
 		expect(//
-			new ExpectedCollectionOperation<>(source, ExpectedCollectionOperation.CollectionOpType.remove, source.getValue(),
+			new ExpectedCollectionOperation<>(source, CollectionOpType.remove, source.getValue(),
 				source.getValue()),
 			rejection, execute);
 		while (after != null && (after == source || !after.isPresent() || after.wasAdded()))

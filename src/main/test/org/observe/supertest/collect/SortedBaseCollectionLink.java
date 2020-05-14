@@ -7,6 +7,7 @@ import org.observe.collect.DefaultObservableSortedSet;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.supertest.ChainLinkGenerator;
+import org.observe.supertest.CollectionOpType;
 import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
@@ -123,7 +124,7 @@ public class SortedBaseCollectionLink<T> extends BaseCollectionLink<T> {
 	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection, boolean execute) {
 		if (!theHelper.expectSet(derivedOp, rejection, getElements()))
 			return;
-		boolean newValue = derivedOp.getType() == ExpectedCollectionOperation.CollectionOpType.set //
+		boolean newValue = derivedOp.getType() == CollectionOpType.set //
 			&& theHelper.getCompare().compare(derivedOp.getElement().getValue(), derivedOp.getValue()) != 0//
 			&& theDistinctValues != null;
 		if (newValue && theDistinctValues.contains(derivedOp.getValue())) {

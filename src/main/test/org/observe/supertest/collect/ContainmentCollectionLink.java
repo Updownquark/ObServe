@@ -4,10 +4,10 @@ import java.util.Set;
 
 import org.observe.collect.ObservableCollection;
 import org.observe.supertest.ChainLinkGenerator;
+import org.observe.supertest.CollectionOpType;
 import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
-import org.observe.supertest.collect.ExpectedCollectionOperation.CollectionOpType;
 import org.qommons.TestHelper;
 import org.qommons.TestHelper.RandomAction;
 import org.qommons.collect.CollectionElement;

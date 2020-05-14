@@ -11,6 +11,7 @@ import org.observe.collect.Equivalence;
 import org.observe.collect.FlowOptions;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.ChainLinkGenerator;
+import org.observe.supertest.CollectionOpType;
 import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
@@ -206,7 +207,7 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		T oldValue = derivedOp.getElement().getValue();
 		ValueElement valueEl = theValues.computeIfAbsent(oldValue,
 			__ -> new ValueElement((CollectionLinkElement<T, T>) derivedOp.getElement()));
-		boolean set = derivedOp.getType() == ExpectedCollectionOperation.CollectionOpType.set;
+		boolean set = derivedOp.getType() == CollectionOpType.set;
 		if (rejection.isRejectable()) { // If not rejectable, presumably this has already been tested
 			for (CollectionLinkElement<?, T> sourceEl : valueEl.sourceElements) {
 				getSourceLink().expect(
@@ -285,7 +286,7 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 			refreshElements();
 		}
 		T searchValue;
-		if (sourceOp.getType() == ExpectedCollectionOperation.CollectionOpType.add)
+		if (sourceOp.getType() == CollectionOpType.add)
 			searchValue = sourceOp.getValue();
 		else
 			searchValue = sourceOp.getOldValue();

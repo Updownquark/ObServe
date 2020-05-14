@@ -1,6 +1,7 @@
 package org.observe.supertest.collect;
 
 import org.junit.Assert;
+import org.observe.supertest.CollectionOpType;
 import org.observe.supertest.OperationRejection;
 import org.qommons.TestHelper;
 
@@ -65,12 +66,12 @@ public abstract class OneToOneCollectionLink<S, T> extends ObservableCollectionL
 			CollectionLinkElement<?, S> sourceEl = (CollectionLinkElement<?, S>) derivedOp.getElement().getFirstSource();
 			S reversed = isReversible() ? reverse(derivedOp.getElement().getValue()) : sourceEl.getValue();
 			getSourceLink().expect(new ExpectedCollectionOperation<>(//
-				sourceEl, ExpectedCollectionOperation.CollectionOpType.remove, reversed, reversed), rejection, execute);
+				sourceEl, CollectionOpType.remove, reversed, reversed), rejection, execute);
 			break;
 		case set:
 			getSourceLink().expect(new ExpectedCollectionOperation<>(//
 				(CollectionLinkElement<Object, S>) derivedOp.getElement().getFirstSource(),
-				ExpectedCollectionOperation.CollectionOpType.set, reverse(derivedOp.getElement().getValue()),
+				CollectionOpType.set, reverse(derivedOp.getElement().getValue()),
 				reverse(derivedOp.getValue())), rejection, execute);
 			break;
 		}

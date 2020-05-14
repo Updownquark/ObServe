@@ -6,6 +6,7 @@ import java.util.function.Function;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.ChainLinkGenerator;
+import org.observe.supertest.CollectionOpType;
 import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.ObservableChainTester;
 import org.observe.supertest.OperationRejection;
@@ -160,7 +161,7 @@ public class FlattenedCollectionValuesLink<S, T> extends AbstractMappedCollectio
 
 	@Override
 	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection, boolean execute) {
-		if (derivedOp.getType() == ExpectedCollectionOperation.CollectionOpType.set) {
+		if (derivedOp.getType() == CollectionOpType.set) {
 			if (execute) {
 				S sourceVal = ((ExpectedCollectionOperation<S, T>) derivedOp).getElement().getFirstSource().getValue();
 				MapEntryHandle<S, SettableValue<T>> bucket = getBucket(sourceVal);

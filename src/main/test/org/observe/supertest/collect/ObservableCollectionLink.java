@@ -1,9 +1,9 @@
 package org.observe.supertest.collect;
 
-import static org.observe.supertest.collect.ExpectedCollectionOperation.CollectionOpType.add;
-import static org.observe.supertest.collect.ExpectedCollectionOperation.CollectionOpType.move;
-import static org.observe.supertest.collect.ExpectedCollectionOperation.CollectionOpType.remove;
-import static org.observe.supertest.collect.ExpectedCollectionOperation.CollectionOpType.set;
+import static org.observe.supertest.CollectionOpType.add;
+import static org.observe.supertest.CollectionOpType.move;
+import static org.observe.supertest.CollectionOpType.remove;
+import static org.observe.supertest.CollectionOpType.set;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -19,6 +19,7 @@ import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionEvent;
 import org.observe.collect.ObservableCollectionTester;
 import org.observe.supertest.AbstractChainLink;
+import org.observe.supertest.CollectionOpType;
 import org.observe.supertest.ObservableChainTester;
 import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
@@ -517,7 +518,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 
 	private class CollectionOp {
 		final CollectionOpContext context;
-		final ExpectedCollectionOperation.CollectionOpType type;
+		final CollectionOpType type;
 		final T value;
 		final List<T> values;
 		final int minIndex;
@@ -529,7 +530,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 
 		final List<CollectionOpElement> elements;
 
-		CollectionOp(CollectionOpContext ctx, ExpectedCollectionOperation.CollectionOpType type, int minIndex, int maxIndex, T value, boolean towardBeginning) {
+		CollectionOp(CollectionOpContext ctx, CollectionOpType type, int minIndex, int maxIndex, T value, boolean towardBeginning) {
 			context = ctx;
 			this.type = type;
 			this.minIndex = minIndex;
@@ -540,7 +541,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			elements = new ArrayList<>();
 		}
 
-		CollectionOp(CollectionOpContext ctx, ExpectedCollectionOperation.CollectionOpType type, int index, List<T> values) {
+		CollectionOp(CollectionOpContext ctx, CollectionOpType type, int index, List<T> values) {
 			context = ctx;
 			this.type = type;
 			minIndex = maxIndex = index;
@@ -571,7 +572,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 					str.append('-').append(maxIndex);
 			}
 			str.append(' ');
-			if (type == ExpectedCollectionOperation.CollectionOpType.move) {
+			if (type == CollectionOpType.move) {
 				str.append('[').append(elements.get(0).element.getIndex()).append(']').append(elements.get(0).element.getValue());
 			} else if (values != null)
 				str.append(values.size()).append(values);
@@ -615,7 +616,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		} else if (maxIndex == 0) {
 			op.after = null;
 			op.before = theElements.peekFirst();
-		} else if (op.type == ExpectedCollectionOperation.CollectionOpType.move) {
+		} else if (op.type == CollectionOpType.move) {
 			op.after = theElements.isEmpty() ? null : theElements.get(minIndex);
 			op.before = maxIndex >= theElements.size() - 1 ? null : theElements.get(maxIndex + 1);
 		} else {

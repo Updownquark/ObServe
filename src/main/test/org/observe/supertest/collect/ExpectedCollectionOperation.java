@@ -1,5 +1,7 @@
 package org.observe.supertest.collect;
 
+import org.observe.supertest.CollectionOpType;
+
 /**
  * An operation on an {@link ObservableCollectionLink}
  * 
@@ -7,20 +9,8 @@ package org.observe.supertest.collect;
  * @param <T> The type of the link this operation is on
  */
 public class ExpectedCollectionOperation<S, T> {
-	/** The type of a collection operation */
-	public enum CollectionOpType {
-		/** An add operation */
-		add,
-		/** A remove operation */
-		remove,
-		/** A set operation */
-		set,
-		/** A move operation */
-		move;
-	}
-
 	private final CollectionLinkElement<S, T> theElement;
-	private final ExpectedCollectionOperation.CollectionOpType theType;
+	private final CollectionOpType theType;
 	private final T theOldValue;
 	private final T theValue;
 

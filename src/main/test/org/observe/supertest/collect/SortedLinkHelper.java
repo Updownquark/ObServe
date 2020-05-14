@@ -2,6 +2,7 @@ package org.observe.supertest.collect;
 
 import java.util.Comparator;
 
+import org.observe.supertest.CollectionOpType;
 import org.observe.supertest.OperationRejection;
 import org.qommons.BiTuple;
 import org.qommons.collect.BetterList;
@@ -112,7 +113,7 @@ public class SortedLinkHelper<T> {
 	 */
 	public boolean expectSet(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection,
 		BetterList<CollectionLinkElement<T, T>> elements) {
-		if (derivedOp.getType() != ExpectedCollectionOperation.CollectionOpType.set)
+		if (derivedOp.getType() != CollectionOpType.set)
 			return true;
 		CollectionLinkElement<T, T> element = (CollectionLinkElement<T, T>) derivedOp.getElement();
 		CollectionElement<CollectionLinkElement<T, T>> adj = elements.getAdjacentElement(element.getElementAddress(), false);
