@@ -8,8 +8,8 @@ import java.util.function.Function;
 import org.junit.Test;
 import org.observe.supertest.ObservableChainTester;
 import org.observe.supertest.TestValueType;
-import org.observe.supertest.links.BaseCollectionLink;
-import org.observe.supertest.links.FilteredCollectionLink;
+import org.observe.supertest.collect.BaseCollectionLink;
+import org.observe.supertest.collect.FilteredCollectionLink;
 import org.qommons.StringUtils;
 import org.qommons.TestHelper;
 

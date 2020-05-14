@@ -1,5 +1,6 @@
 package org.observe.supertest;
 
+import org.observe.supertest.collect.ObservableCollectionLink;
 import org.qommons.TestHelper;
 
 /** A generator capable of making new {@link ObservableChainLink}s */

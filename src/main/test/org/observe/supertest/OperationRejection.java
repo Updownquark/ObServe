@@ -1,5 +1,7 @@
 package org.observe.supertest;
 
+import org.observe.supertest.collect.ObservableCollectionLink;
+
 /**
  * Provides the ability for the target observable link being modified or one upstream of it to reject an attempted modification due to the
  * expectation that the observable structure represented by the link will reject it
@@ -20,7 +22,8 @@ public interface OperationRejection {
 	/**
 	 * Marks this operation as unrejectable. This may be done when a single operation cascades into batch operations for collections
 	 * upstream. Before using this, the downstream collection should ensure that the operation is not rejected by calling
-	 * {@link ObservableCollectionLink#expect(ExpectedCollectionOperation, OperationRejection, boolean) expect} with execute=false.
+	 * {@link ObservableCollectionLink#expect(org.observe.supertest.collect.ExpectedCollectionOperation, OperationRejection, boolean)
+	 * expect} with execute=false.
 	 *
 	 * @return This operation
 	 */
