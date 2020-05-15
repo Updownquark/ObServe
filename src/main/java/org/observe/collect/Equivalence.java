@@ -454,6 +454,11 @@ public interface Equivalence<E> {
 		}
 
 		@Override
+		public ElementId getEquivalentElement(ElementId equivalentEl) {
+			return theWrapped.getEquivalentElement(equivalentEl);
+		}
+
+		@Override
 		public String canAdd(T2 value) {
 			return theWrapped.canAdd(theReverse.apply(value));
 		}

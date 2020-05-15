@@ -247,6 +247,11 @@ public class ObservableSetImpl {
 		}
 
 		@Override
+		public DerivedCollectionElement<T> getEquivalentElement(DerivedCollectionElement<?> flowEl) {
+			return theWrapped.getEquivalentElement(flowEl);
+		}
+
+		@Override
 		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
 			return theWrapped.canAdd(toAdd, after, before);
 		}
@@ -672,6 +677,17 @@ public class ObservableSetImpl {
 			return sourceEls.isEmpty() ? BetterList.empty() : sourceEls;
 		}
 
+		@Override
+		public DerivedCollectionElement<T> getEquivalentElement(DerivedCollectionElement<?> flowEl) {
+			if (!(flowEl instanceof DistinctManager.UniqueElement))
+				return null;
+			UniqueElement other = (UniqueElement) flowEl;
+			if (other.getMgr() == this)
+				return other;
+			DerivedCollectionElement<T> found = theParent.getEquivalentElement(other.theActiveElement);
+			return found == null ? null : theElementsByValue.get(found.get());
+		}
+
 		/**
 		 * @param value The value to get the element for
 		 * @return The handle for the element at the given value
@@ -912,6 +928,10 @@ public class ObservableSetImpl {
 			protected UniqueElement(T value) {
 				theValue = value;
 				theParentElements = new BetterTreeMap<>(false, DerivedCollectionElement::compareTo);
+			}
+
+			DistinctManager<E, T> getMgr() {
+				return DistinctManager.this;
 			}
 
 			/** @return The source element that currently represents this element in the distinct collection */

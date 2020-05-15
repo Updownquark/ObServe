@@ -574,6 +574,11 @@ public class ObservableConfigContent {
 		}
 
 		@Override
+		public ElementId getEquivalentElement(ElementId equivalentEl) {
+			return getConfig()._getContent().getEquivalentElement(equivalentEl);
+		}
+
+		@Override
 		public String canAdd(C value, ElementId after, ElementId before) {
 			return StdMsg.UNSUPPORTED_OPERATION;
 		}
@@ -815,6 +820,17 @@ public class ObservableConfigContent {
 			if (sourceCollection == this)
 				return getConfig()._getContent().getSourceElements(localElement, getConfig()._getContent());
 			return getConfig()._getContent().getSourceElements(localElement, sourceCollection);
+		}
+
+		@Override
+		public ElementId getEquivalentElement(ElementId equivalentEl) {
+			ElementId found = getConfig()._getContent().getEquivalentElement(equivalentEl);
+			if (found == null)
+				return null;
+			ObservableConfig config = getConfig()._getContent().getElement(found).get();
+			if (!thePathElement.matches(config))
+				return null;
+			return equivalentEl;
 		}
 
 		@Override

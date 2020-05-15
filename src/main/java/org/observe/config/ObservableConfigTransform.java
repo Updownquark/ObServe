@@ -755,6 +755,12 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 			}
 
 			@Override
+			public ElementId getEquivalentElement(ElementId equivalentEl) {
+				BetterCollection<ConfigElement> values = theElements.values();
+				return values.getEquivalentElement(equivalentEl);
+			}
+
+			@Override
 			public String canMove(ElementId valueEl, ElementId after, ElementId before) {
 				return null;
 			}

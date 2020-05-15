@@ -24,6 +24,7 @@ import org.observe.Observer;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollectionActiveManagers.ActiveCollectionManager;
 import org.observe.collect.ObservableCollectionActiveManagers.CollectionElementListener;
+import org.observe.collect.ObservableCollectionActiveManagers.DerivedCollectionElement;
 import org.observe.collect.ObservableCollectionActiveManagers.ElementAccepter;
 import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
 import org.observe.collect.ObservableCollectionPassiveManagers.PassiveCollectionManager;
@@ -2376,6 +2377,16 @@ public final class ObservableCollectionImpl {
 			return theSource.getSourceElements(localElement, sourceCollection);
 		}
 
+		@Override
+		public ElementId getEquivalentElement(ElementId equivalentEl) {
+			if (isReversed)
+				equivalentEl = equivalentEl.reverse();
+			ElementId found = theSource.getEquivalentElement(equivalentEl);
+			if (isReversed)
+				found = ElementId.reverse(found);
+			return found;
+		}
+
 		/**
 		 * @param el The source element
 		 * @param map The mapping function for the element's values, or null to just get the current map from the flow
@@ -2612,7 +2623,7 @@ public final class ObservableCollectionImpl {
 
 			DerivedElementHolder<T> check() {
 				if (treeNode == null)
-					throw new IllegalStateException("This node is not currentlly present in the collection");
+					throw new IllegalStateException("This node is not currently present in the collection");
 				return this;
 			}
 
@@ -2950,6 +2961,18 @@ public final class ObservableCollectionImpl {
 			}
 		}
 
+		@Override
+		public ElementId getEquivalentElement(ElementId equivalentEl) {
+			if (!(equivalentEl instanceof DerivedElementHolder))
+				return null;
+			DerivedElementHolder<?> holder=(DerivedElementHolder<?>) equivalentEl;
+			ElementId local=theDerivedElements.getEquivalentElement(holder.treeNode.getElementId());
+			if(local==null)
+				return equivalentEl;
+			DerivedCollectionElement<T> found = theFlow.getEquivalentElement(holder.element);
+			return found == null ? null : idFromSynthetic(found);
+		}
+
 		/**
 		 * @param el The element holder
 		 * @return A collection element for the given element in this collection
@@ -3273,6 +3296,21 @@ public final class ObservableCollectionImpl {
 			else
 				return BetterList.of(current.getSourceElements(strip(current, localElement), sourceCollection).stream()
 					.map(el -> new FlattenedElementId(current, el)));
+		}
+
+		@Override
+		public ElementId getEquivalentElement(ElementId equivalentEl) {
+			ObservableCollection<? extends E> current = getWrapped().get();
+			if (current == null)
+				return null;
+			if (equivalentEl instanceof FlattenedValueCollection.FlattenedElementId){
+				if(((FlattenedElementId) equivalentEl).theCollection==current)
+					return new FlattenedElementId(current, ((FlattenedElementId) equivalentEl).theSourceEl);
+				else
+					equivalentEl = ((FlattenedElementId) equivalentEl).theSourceEl;
+			}
+			ElementId found = current.getEquivalentElement(equivalentEl);
+			return found == null ? null : new FlattenedElementId(current, found);
 		}
 
 		@Override

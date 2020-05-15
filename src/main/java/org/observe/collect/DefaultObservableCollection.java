@@ -473,6 +473,11 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	}
 
 	@Override
+	public ElementId getEquivalentElement(ElementId equivalentEl) {
+		return theValues.getEquivalentElement(equivalentEl);
+	}
+
+	@Override
 	public String canAdd(E value, ElementId after, ElementId before) {
 		return theValues.canAdd(value, after, before);
 	}

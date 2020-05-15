@@ -116,6 +116,11 @@ public abstract class ObservableCollectionWrapper<E> implements ObservableCollec
 	}
 
 	@Override
+	public ElementId getEquivalentElement(ElementId equivalentEl) {
+		return getWrapped().getEquivalentElement(equivalentEl);
+	}
+
+	@Override
 	public String canAdd(E value, ElementId after, ElementId before) {
 		return getWrapped().canAdd(value, after, before);
 	}

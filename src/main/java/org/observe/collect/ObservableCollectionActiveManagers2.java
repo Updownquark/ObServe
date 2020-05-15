@@ -40,6 +40,7 @@ import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterHashMap;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterMap;
+import org.qommons.collect.BetterSortedList.SortedSearchFilter;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
@@ -312,6 +313,14 @@ public class ObservableCollectionActiveManagers2 {
 		}
 
 		@Override
+		public DerivedCollectionElement<T> getEquivalentElement(DerivedCollectionElement<?> flowEl) {
+			if (!(flowEl instanceof IntersectionManager.IntersectedCollectionElement))
+				return null;
+			DerivedCollectionElement<T> found = theParent.getEquivalentElement(((IntersectedCollectionElement) flowEl).theParentEl);
+			return found == null ? null : new IntersectedCollectionElement(found, null, true);
+		}
+
+		@Override
 		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
 			IntersectionElement intersect = theValues.get(toAdd);
 			boolean filterHas = intersect == null ? false : !intersect.rightElements.isEmpty();
@@ -485,6 +494,14 @@ public class ObservableCollectionActiveManagers2 {
 		@Override
 		public BetterList<ElementId> getSourceElements(DerivedCollectionElement<T> localElement, BetterCollection<?> sourceCollection) {
 			return theParent.getSourceElements(((ModFilteredElement) localElement).theParentEl, sourceCollection);
+		}
+
+		@Override
+		public DerivedCollectionElement<T> getEquivalentElement(DerivedCollectionElement<?> flowEl) {
+			if (!(flowEl instanceof ActiveModFilteredManager.ModFilteredElement))
+				return null;
+			DerivedCollectionElement<T> found = theParent.getEquivalentElement(((ModFilteredElement) flowEl).theParentEl);
+			return found == null ? null : new ModFilteredElement(found);
 		}
 
 		@Override
@@ -669,6 +686,14 @@ public class ObservableCollectionActiveManagers2 {
 		@Override
 		public BetterList<ElementId> getSourceElements(DerivedCollectionElement<T> localElement, BetterCollection<?> sourceCollection) {
 			return theParent.getSourceElements(((RefreshingElement) localElement).theParentEl, sourceCollection);
+		}
+
+		@Override
+		public DerivedCollectionElement<T> getEquivalentElement(DerivedCollectionElement<?> flowEl) {
+			if (!(flowEl instanceof ActiveRefreshingCollectionManager.RefreshingElement))
+				return null;
+			DerivedCollectionElement<T> found = theParent.getEquivalentElement(((RefreshingElement) flowEl).theParentEl);
+			return found == null ? null : new RefreshingElement(found, true);
 		}
 
 		@Override
@@ -940,6 +965,14 @@ public class ObservableCollectionActiveManagers2 {
 		@Override
 		public BetterList<ElementId> getSourceElements(DerivedCollectionElement<T> localElement, BetterCollection<?> sourceCollection) {
 			return theParent.getSourceElements(((RefreshingElement) localElement).theParentEl, sourceCollection);
+		}
+
+		@Override
+		public DerivedCollectionElement<T> getEquivalentElement(DerivedCollectionElement<?> flowEl) {
+			if (!(flowEl instanceof ElementRefreshingCollectionManager.RefreshingElement))
+				return null;
+			DerivedCollectionElement<T> found = theParent.getEquivalentElement(((RefreshingElement) flowEl).theParentEl);
+			return found == null ? null : new RefreshingElement(found);
 		}
 
 		@Override
@@ -1246,6 +1279,24 @@ public class ObservableCollectionActiveManagers2 {
 					theParent.getSourceElements(flatEl.theHolder.theParentEl, sourceCollection).stream(), //
 					mgr.getSourceElements((DerivedCollectionElement<T>) flatEl.theParentEl, sourceCollection).stream()//
 					));
+		}
+
+		@Override
+		public DerivedCollectionElement<T> getEquivalentElement(DerivedCollectionElement<?> flowEl) {
+			if (!(flowEl instanceof FlattenedManager.FlattenedElement))
+				return null;
+			FlattenedElement other = (FlattenedElement) flowEl;
+			DerivedCollectionElement<I> parentFound = theParent.getEquivalentElement(other.theHolder.theParentEl);
+			if (parentFound == null)
+				return null;
+			FlattenedHolder holder = theOuterElements.searchValue(h -> parentFound.compareTo(h.theParentEl), SortedSearchFilter.OnlyMatch);
+			if (holder == null || holder.manager == null)
+				return null;
+			DerivedCollectionElement<V> flatFound = (DerivedCollectionElement<V>) holder.manager.getEquivalentElement(other.theParentEl);
+			if (flatFound == null)
+				return null;
+			return holder.theElements.searchValue(e -> flatFound.compareTo((DerivedCollectionElement<V>) e.theParentEl),
+				SortedSearchFilter.OnlyMatch);
 		}
 
 		@Override

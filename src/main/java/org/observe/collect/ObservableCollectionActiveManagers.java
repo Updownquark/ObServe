@@ -197,6 +197,14 @@ public class ObservableCollectionActiveManagers {
 			BetterCollection<?> sourceCollection);
 
 		/**
+		 * Satisfies {@link BetterCollection#getEquivalentElement(ElementId)} for actively-derived collection elements
+		 *
+		 * @param flowEl An element from a different collection flow
+		 * @return The element in this flow equivalent to the given element, or null if no such element exists
+		 */
+		DerivedCollectionElement<T> getEquivalentElement(DerivedCollectionElement<?> flowEl);
+
+		/**
 		 * @param toAdd The value to add
 		 * @param after The element to insert the value after (or null for no lower bound)
 		 * @param before The element to insert the value before (or null if no upper bound)
@@ -482,6 +490,17 @@ public class ObservableCollectionActiveManagers {
 		}
 
 		@Override
+		public DerivedCollectionElement<E> getEquivalentElement(DerivedCollectionElement<?> flowEl) {
+			if (!(flowEl instanceof BaseCollectionManager.BaseDerivedElement))
+				return null;
+			BaseDerivedElement other = (BaseDerivedElement) flowEl;
+			if (other.getMgr() == this)
+				return other;
+			ElementId found = theSource.getEquivalentElement(other.getElementId());
+			return found == null ? null : new BaseDerivedElement(theSource.mutableElement(found));
+		}
+
+		@Override
 		public boolean clear() {
 			theSource.clear();
 			return true;
@@ -552,6 +571,10 @@ public class ObservableCollectionActiveManagers {
 
 			BaseDerivedElement(MutableCollectionElement<E> src) {
 				source = src;
+			}
+
+			BaseCollectionManager<E> getMgr() {
+				return BaseCollectionManager.this;
 			}
 
 			ElementId getElementId() {
@@ -665,6 +688,11 @@ public class ObservableCollectionActiveManagers {
 		public BetterList<ElementId> getSourceElements(DerivedCollectionElement<T> localElement,
 			BetterCollection<?> sourceCollection) {
 			return theParent.getSourceElements(localElement.reverse(), sourceCollection);
+		}
+
+		@Override
+		public DerivedCollectionElement<T> getEquivalentElement(DerivedCollectionElement<?> flowEl) {
+			return DerivedCollectionElement.reverse(theParent.getEquivalentElement(flowEl.reverse()));
 		}
 
 		@Override
@@ -799,6 +827,17 @@ public class ObservableCollectionActiveManagers {
 		public BetterList<ElementId> getSourceElements(DerivedCollectionElement<T> localElement,
 			BetterCollection<?> sourceCollection) {
 			return theParent.getSourceElements(((SortedElement) localElement).theParentEl, sourceCollection);
+		}
+
+		@Override
+		public DerivedCollectionElement<T> getEquivalentElement(DerivedCollectionElement<?> flowEl) {
+			if (!(flowEl instanceof SortedManager.SortedElement))
+				return null;
+			SortedElement other = (SortedElement) flowEl;
+			if (other.getMgr() == this)
+				return other;
+			DerivedCollectionElement<T> found = theParent.getEquivalentElement(other.theParentEl);
+			return found == null ? null : new SortedElement(found, true);
 		}
 
 		@Override
@@ -943,6 +982,10 @@ public class ObservableCollectionActiveManagers {
 						}
 					});
 				}
+			}
+
+			SortedManager<E, T> getMgr() {
+				return SortedManager.this;
 			}
 
 			boolean isInCorrectOrder(T newValue, DerivedCollectionElement<T> parentEl) {
@@ -1093,6 +1136,19 @@ public class ObservableCollectionActiveManagers {
 		}
 
 		@Override
+		public DerivedCollectionElement<T> getEquivalentElement(DerivedCollectionElement<?> flowEl) {
+			if (!(flowEl instanceof FilteredCollectionManager.FilteredElement))
+				return null;
+			FilteredElement other = (FilteredElement) flowEl;
+			if (other.getMgr() == this)
+				return other;
+			DerivedCollectionElement<T> found = theParent.getEquivalentElement(other.theParentEl);
+			if (found == null)
+				return null;
+			return new FilteredElement(found, true, true);
+		}
+
+		@Override
 		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
 			String msg = theFilter.apply(toAdd);
 			if (msg == null)
@@ -1186,6 +1242,10 @@ public class ObservableCollectionActiveManagers {
 						}
 					});
 				}
+			}
+
+			FilteredCollectionManager<E, T> getMgr() {
+				return FilteredCollectionManager.this;
 			}
 
 			@Override
@@ -1308,6 +1368,11 @@ public class ObservableCollectionActiveManagers {
 		}
 
 		@Override
+		public DerivedCollectionElement<T> getEquivalentElement(DerivedCollectionElement<?> flowEl) {
+			return theParent.getEquivalentElement(flowEl);
+		}
+
+		@Override
 		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
 			return theParent.canAdd(toAdd, after, before);
 		}
@@ -1402,6 +1467,14 @@ public class ObservableCollectionActiveManagers {
 		public BetterList<ElementId> getSourceElements(DerivedCollectionElement<T> localElement,
 			BetterCollection<?> sourceCollection) {
 			return getParent().getSourceElements(((ActiveMappedElement) localElement).getParentEl(), sourceCollection);
+		}
+
+		@Override
+		public DerivedCollectionElement<T> getEquivalentElement(DerivedCollectionElement<?> flowEl) {
+			if (!(flowEl instanceof AbstractActiveMappingManager.ActiveMappedElement))
+				return null;
+			DerivedCollectionElement<I> found = getParent().getEquivalentElement(((ActiveMappedElement) flowEl).getParentEl());
+			return found == null ? null : map(found, true);
 		}
 
 		@Override

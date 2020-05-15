@@ -311,11 +311,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		if (theSupplier != null) {
 			action.or(10, () -> { // More position-less adds than other ops
 				T value = theSupplier.apply(helper);
-				CollectionOp op = new CollectionOp(opCtx, add, -1, -1, value, helper.getBoolean());
-				if (helper.isReproducing())
-					System.out.println(op);
-				helper.placemark();
-				addSingle(op, helper);
+				tryAdd(opCtx, value, helper, null);
 			}).or(3, () -> { // Add in position range
 				int minIndex = (int) helper.getDouble(0, modify.size() / 3, modify.size());
 				int maxIndex = helper.getInt(minIndex, modify.size());
@@ -324,7 +320,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 				if (helper.isReproducing())
 					System.out.println(op);
 				helper.placemark();
-				addSingle(op, helper);
+				addSingle(op, helper, null);
 			}).or(.1, () -> { // addAll
 				int length = (int) helper.getDouble(0, 2, 15); // Aggressively tend smaller
 				List<T> values = new ArrayList<>(length);
@@ -363,21 +359,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			}
 			action.or(1, () -> {// Remove by value
 				T value = theSupplier.apply(helper);
-				CollectionOp op = new CollectionOp(opCtx, remove, -1, -1, value, true);
-				boolean found = false;
-				for (int i = 0; i < modify.size(); i++) {
-					if (getCollection().equivalence().elementEquals(modify.get(i), value)) {
-						op.add(theElements.get(opCtx.subListStart + i));
-						found = true;
-						break;
-					}
-				}
-				if (!found)
-					op.add(null);
-				if (helper.isReproducing())
-					System.out.println("Remove " + value + ": " + op.elements.get(0));
-				helper.placemark();
-				removeSingle(op, helper);
+				tryRemove(opCtx, value, helper);
 			}).or(.2, () -> { // removeAll
 				int length = (int) helper.getDouble(0, 25, 100); // Tend smaller
 				List<T> values = new ArrayList<>(length);
@@ -470,13 +452,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			});
 		}
 		action.or(.1, () -> { // clear
-			if (helper.isReproducing())
-				System.out.println("clear()");
-			CollectionOp op = new CollectionOp(opCtx, remove, 0, modify.size(), null, false);
-			for (int i = 0; i < modify.size(); i++)
-				op.add(theElements.get(opCtx.subListStart + i));
-			helper.placemark();
-			clearCollection(op, helper);
+			tryClear(opCtx, helper);
 		}).or(1, () -> {
 			if (helper.isReproducing())
 				System.out.println("Check bounds");
@@ -501,6 +477,58 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 	@Override
 	public String printValue() {
 		return getCollection().size() + getCollection().toString();
+	}
+
+	private CollectionOpContext getStandardContext() {
+		return new CollectionOpContext(getCollection(), false, 0, getCollection().size());
+	}
+
+	public void tryAdd(T value, TestHelper helper, Function<Boolean, CollectionElement<T>> subExecute) {
+		tryAdd(getStandardContext(), value, helper, subExecute);
+	}
+
+	void tryAdd(CollectionOpContext opCtx, T value, TestHelper helper, Function<Boolean, CollectionElement<T>> subExecute) {
+		CollectionOp op = new CollectionOp(opCtx, add, -1, -1, value, helper.getBoolean());
+		if (helper.isReproducing())
+			System.out.println(op);
+		helper.placemark();
+		addSingle(op, helper, subExecute);
+	}
+
+	public void tryRemove(T value, TestHelper helper) {
+		tryRemove(getStandardContext(), value, helper);
+	}
+
+	void tryRemove(CollectionOpContext opCtx, T value, TestHelper helper) {
+		CollectionOp op = new CollectionOp(opCtx, remove, -1, -1, value, true);
+		boolean found = false;
+		for (int i = 0; i < opCtx.modify.size(); i++) {
+			if (getCollection().equivalence().elementEquals(opCtx.modify.get(i), value)) {
+				op.add(theElements.get(opCtx.subListStart + i));
+				found = true;
+				break;
+			}
+		}
+		if (!found)
+			op.add(null);
+		if (helper.isReproducing())
+			System.out.println("Remove " + value + ": " + op.elements.get(0));
+		helper.placemark();
+		removeSingle(op, helper);
+	}
+
+	public void tryClear(TestHelper helper) {
+		tryClear(getStandardContext(), helper);
+	}
+
+	void tryClear(CollectionOpContext opCtx, TestHelper helper) {
+		if (helper.isReproducing())
+			System.out.println("clear()");
+		CollectionOp op = new CollectionOp(opCtx, remove, 0, opCtx.modify.size(), null, false);
+		for (int i = 0; i < opCtx.modify.size(); i++)
+			op.add(theElements.get(opCtx.subListStart + i));
+		helper.placemark();
+		clearCollection(op, helper);
 	}
 
 	private class CollectionOpContext {
@@ -691,7 +719,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		}
 	}
 
-	private void addSingle(CollectionOp op, TestHelper helper) {
+	private void addSingle(CollectionOp op, TestHelper helper, Function<Boolean, CollectionElement<T>> subExecute) {
 		prepareOp(op);
 		BetterList<T> modify = op.context.modify;
 		String msg;
@@ -717,7 +745,10 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			msg = modify.canAdd(op.value);
 			// Test simple add value
 			try {
-				element = modify.addElement(op.value, op.towardBeginning);
+				if (subExecute != null)
+					element = subExecute.apply(op.towardBeginning);
+				else
+					element = modify.addElement(op.value, op.towardBeginning);
 				error = false;
 			} catch (UnsupportedOperationException | IllegalArgumentException e) {
 				if (msg == null)
@@ -740,8 +771,12 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			if (addByElement) {
 				// Test add by element
 				try {
-					ElementId elementId = adjacent.add(op.value, addLeft);
-					element = modify.getElement(elementId);
+					if (subExecute != null)
+						element = subExecute.apply(op.towardBeginning);
+					else {
+						ElementId elementId = adjacent.add(op.value, addLeft);
+						element = modify.getElement(elementId);
+					}
 					error = false;
 				} catch (UnsupportedOperationException | IllegalArgumentException e) {
 					if (msg == null)
@@ -753,7 +788,10 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 				// Test simple add by index
 				// Adding by this method uses an implicit towards-beginning boolean of true
 				try {
-					element = modify.addElement(op.minIndex, op.value);
+					if (subExecute != null)
+						element = subExecute.apply(op.towardBeginning);
+					else
+						element = modify.addElement(op.minIndex, op.value);
 					error = false;
 				} catch (UnsupportedOperationException | IllegalArgumentException e) {
 					if (msg == null)
@@ -763,8 +801,11 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 				}
 			} else {
 				try {
-					element = modify.addElement(op.value, //
-						op.after == null ? null : op.after.getCollectionAddress(), //
+					if (subExecute != null)
+						element = subExecute.apply(op.towardBeginning);
+					else
+						element = modify.addElement(op.value, //
+							op.after == null ? null : op.after.getCollectionAddress(), //
 							op.before == null ? null : op.before.getCollectionAddress(), op.towardBeginning);
 					error = false;
 				} catch (UnsupportedOperationException | IllegalArgumentException e) {

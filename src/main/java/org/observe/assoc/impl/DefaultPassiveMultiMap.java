@@ -347,6 +347,11 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 		}
 
 		@Override
+		public ElementId getEquivalentElement(ElementId equivalentEl) {
+			return theSourceValues.getEquivalentElement(equivalentEl);
+		}
+
+		@Override
 		public String canAdd(V value, ElementId after, ElementId before) {
 			FilterMapResult<V, V0> reversedValue = theValueManager.reverse(value, true);
 			if (!reversedValue.isAccepted())
