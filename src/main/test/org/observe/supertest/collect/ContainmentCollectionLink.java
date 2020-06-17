@@ -3,7 +3,7 @@ package org.observe.supertest.collect;
 import java.util.Set;
 
 import org.observe.collect.ObservableCollection;
-import org.observe.supertest.ChainLinkGenerator;
+import org.observe.supertest.ChainLinkGenerator.CollectionLinkGenerator;
 import org.observe.supertest.CollectionOpType;
 import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.OperationRejection;
@@ -19,9 +19,9 @@ import org.qommons.collect.MutableCollectionElement.StdMsg;
  *
  * @param <T> The type of the collection
  */
-public class ContainmentCollectionLink<T> extends ObservableCollectionLink<T, T> {
+public class ContainmentCollectionLink<T> extends ObservableCollectionLink<T, T> implements CollectionSourcedLink<T, T> {
 	/** Generates {@link ContainmentCollectionLink}s */
-	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator() {
+	public static final CollectionLinkGenerator GENERATE = new CollectionLinkGenerator() {
 		@Override
 		public <T> double getAffinity(ObservableChainLink<?, T> sourceLink, TestValueType targetType) {
 			if (!(sourceLink instanceof ObservableCollectionLink))
@@ -35,7 +35,7 @@ public class ContainmentCollectionLink<T> extends ObservableCollectionLink<T, T>
 		}
 
 		@Override
-		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestValueType targetType,
+		public <T, X> ObservableCollectionLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestValueType targetType,
 			TestHelper helper) {
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
 			ObservableCollection<T> filter = ObservableCollection.build(sourceCL.getCollection().getType()).build();
@@ -71,6 +71,11 @@ public class ContainmentCollectionLink<T> extends ObservableCollectionLink<T, T>
 		super(path, sourceLink, def, helper);
 		theIntersection = intersection;
 		isInclude = include;
+	}
+
+	@Override
+	public ObservableCollectionLink<?, T> getSourceLink() {
+		return (ObservableCollectionLink<?, T>) super.getSourceLink();
 	}
 
 	@Override

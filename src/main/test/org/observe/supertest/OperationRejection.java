@@ -13,8 +13,11 @@ public interface OperationRejection {
 	/** @return The message this operation was rejected with, or null if it was not rejected */
 	String getRejection();
 
-	/** @param message The message with which to reject the operation */
-	void reject(String message);
+	/**
+	 * @param message The message with which to reject the operation
+	 * @return This rejection
+	 */
+	OperationRejection reject(String message);
 
 	/** @return Whether this operation can be rejected */
 	boolean isRejectable();
@@ -62,10 +65,11 @@ public interface OperationRejection {
 		}
 
 		@Override
-		public void reject(String message) {
+		public Simple reject(String message) {
 			if (!isRejectable)
 				throw new IllegalStateException("Not rejectable");
 			theMessage = message;
+			return this;
 		}
 
 		@Override

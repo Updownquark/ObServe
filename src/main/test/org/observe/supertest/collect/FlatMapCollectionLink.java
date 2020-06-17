@@ -230,7 +230,7 @@ public class FlatMapCollectionLink<S, V, T> extends AbstractFlatMappedCollection
 			}
 		}
 		for (ObservableCollectionLink<?, V> bucket : buckets.values()) {
-			ObservableCollectionLink<?, ?> b = bucket;
+			ObservableChainLink<?, ?> b = bucket;
 			while (b != null) {
 				bucketCount++;
 				theBucketCounts[bucketIdx]++;
@@ -314,7 +314,7 @@ public class FlatMapCollectionLink<S, V, T> extends AbstractFlatMappedCollection
 			syncModCounts();
 			int deepBucketIndex = helper.getInt(0, theDeepBucketCount);
 			int bucketIndex = 0;
-			ObservableCollectionLink<?, ?> bucketLink = null;
+			ObservableChainLink<?, ?> bucketLink = null;
 			for (; bucketIndex < theBucketCounts.length; bucketIndex++) {
 				if (deepBucketIndex < theBucketCounts[bucketIndex]) {
 					bucketLink = getBucket(bucketIndex).get();
@@ -686,15 +686,15 @@ public class FlatMapCollectionLink<S, V, T> extends AbstractFlatMappedCollection
 
 	@Override
 	public void validate(boolean transactionEnd) throws AssertionError {
-		LinkedList<ObservableCollectionLink<?, ?>> bucketChain = new LinkedList<>();
+		LinkedList<ObservableChainLink<?, ?>> bucketChain = new LinkedList<>();
 		for (ObservableCollectionLink<?, V> bucket : theBuckets.values()) {
 			bucketChain.clear();
-			ObservableCollectionLink<?, ?> bucketLink = bucket;
+			ObservableChainLink<?, ?> bucketLink = bucket;
 			while (bucketLink != null) {
 				bucketChain.addFirst(bucketLink);
 				bucketLink = bucketLink.getSourceLink();
 			}
-			for (ObservableCollectionLink<?, ?> b : bucketChain) {
+			for (ObservableChainLink<?, ?> b : bucketChain) {
 				try {
 					b.validate(transactionEnd);
 				} catch (RuntimeException | Error e) {

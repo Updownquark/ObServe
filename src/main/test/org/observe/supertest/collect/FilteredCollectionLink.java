@@ -28,7 +28,7 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <T> The type of the collection values
  */
-public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
+public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> implements CollectionSourcedLink<T, T> {
 	/** Generates {@link FilteredCollectionLink}s */
 	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator.CollectionLinkGenerator() {
 		@Override
@@ -79,6 +79,11 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		super(path, sourceLink, def, helper);
 		theFilterValue = filter;
 		isVariableFilter = variable;
+	}
+
+	@Override
+	public ObservableCollectionLink<?, T> getSourceLink() {
+		return (ObservableCollectionLink<?, T>) super.getSourceLink();
 	}
 
 	@Override

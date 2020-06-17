@@ -15,7 +15,7 @@ import org.qommons.collect.MutableCollectionElement.StdMsg;
  *
  * @param <T> The type of values in the set
  */
-public class SubSetLink<T> extends ObservableCollectionLink<T, T> {
+public class SubSetLink<T> extends ObservableCollectionLink<T, T> implements CollectionSourcedLink<T, T> {
 	/** Generates {@link SubSetLink}s */
 	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator.CollectionLinkGenerator() {
 		@Override
@@ -121,6 +121,11 @@ public class SubSetLink<T> extends ObservableCollectionLink<T, T> {
 				return false;
 		}
 		return true;
+	}
+
+	@Override
+	public ObservableCollectionLink<?, T> getSourceLink() {
+		return (ObservableCollectionLink<?, T>) super.getSourceLink();
 	}
 
 	@Override

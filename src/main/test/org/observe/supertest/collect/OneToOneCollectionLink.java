@@ -12,7 +12,7 @@ import org.qommons.TestHelper;
  * @param <S> The type of the source link's collection
  * @param <T> The type of this link's collection
  */
-public abstract class OneToOneCollectionLink<S, T> extends ObservableCollectionLink<S, T> {
+public abstract class OneToOneCollectionLink<S, T> extends ObservableCollectionLink<S, T> implements CollectionSourcedLink<S, T> {
 	/**
 	 * @param path The path for this link
 	 * @param sourceLink The source for this link
@@ -38,6 +38,11 @@ public abstract class OneToOneCollectionLink<S, T> extends ObservableCollectionL
 
 	/** @return Whether this link is capable of producing reverse-mapped source values from locally compatible values */
 	protected abstract boolean isReversible();
+
+	@Override
+	public ObservableCollectionLink<?, S> getSourceLink() {
+		return (ObservableCollectionLink<?, S>) super.getSourceLink();
+	}
 
 	@Override
 	public void expectFromSource(ExpectedCollectionOperation<?, S> sourceOp) {

@@ -66,6 +66,12 @@ public interface ObservableChainLink<S, T> extends Transactable {
 	 */
 	void setModification(int modSet, int modification, int overall);
 
+	/**
+	 * @return Whether this link is (or is derived from one that is) a flattened composition of other links. Such links may violate
+	 *         assumptions that are testable for most other links.
+	 */
+	boolean isComposite();
+
 	/** Frees any persistent resources that this link might be using */
 	void dispose();
 }

@@ -12,6 +12,7 @@ import java.util.function.Supplier;
 
 import org.junit.Test;
 import org.observe.supertest.collect.BaseCollectionLink;
+import org.observe.supertest.collect.CollectionSourcedLink;
 import org.observe.supertest.collect.CombinedCollectionLink;
 import org.observe.supertest.collect.ContainmentCollectionLink;
 import org.observe.supertest.collect.DistinctCollectionLink;
@@ -27,6 +28,8 @@ import org.observe.supertest.collect.ReversedCollectionLink;
 import org.observe.supertest.collect.SortedBaseCollectionLink;
 import org.observe.supertest.collect.SortedCollectionLink;
 import org.observe.supertest.collect.SubSetLink;
+import org.observe.supertest.map.BaseMultiMapLink;
+import org.observe.supertest.map.ObservableMultiMapLink;
 import org.observe.supertest.value.CollectionDerivedValues;
 import org.observe.supertest.value.CombinedValueLink;
 import org.observe.supertest.value.MappedValueLink;
@@ -95,6 +98,10 @@ public class ObservableChainTester implements Testable {
 		// Derived value generators
 		generators.add(MappedValueLink.GENERATE);
 		generators.add(CombinedValueLink.GENERATE);
+
+		// Multi-map generators
+		generators.add(BaseMultiMapLink.GENERATE);
+		generators.add(ObservableMultiMapLink.VALUE_GENERATE);
 
 		LINK_GENERATORS = Collections.unmodifiableList(generators);
 	}
@@ -251,7 +258,7 @@ public class ObservableChainTester implements Testable {
 				}
 			}
 			ObservableCollectionLink<Object, Object> newLink = (ObservableCollectionLink<Object, Object>) deriver.get(null);
-			loopLink.getDerivedLinks().add(newLink);
+			loopLink.getDerivedLinks().add((CollectionSourcedLink<Object, T>) newLink);
 			loopLink = newLink;
 		}
 		loopLink = baseLink;

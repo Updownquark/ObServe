@@ -10,6 +10,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -19,6 +20,7 @@ import org.observe.collect.ObservableCollectionEvent;
 import org.observe.collect.ObservableCollectionTester;
 import org.observe.supertest.AbstractChainLink;
 import org.observe.supertest.CollectionOpType;
+import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.ObservableChainTester;
 import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
@@ -41,7 +43,7 @@ import org.qommons.tree.BetterTreeList;
  * @param <S> The type of the source link
  * @param <T> The type of the collection values
  */
-public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S, T> implements CollectionSourcedLink<S, T> {
+public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S, T> {
 	private final ObservableCollectionTestDef<T> theDef;
 	private final ObservableCollection<T> theOneStepCollection;
 	private final ObservableCollection<T> theMultiStepCollection;
@@ -57,14 +59,14 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 	 * @param def The collection definition for this link
 	 * @param helper The randomness to use to initialize this link
 	 */
-	public ObservableCollectionLink(String path, ObservableCollectionLink<?, S> sourceLink, ObservableCollectionTestDef<T> def,
+	public ObservableCollectionLink(String path, ObservableChainLink<?, S> sourceLink, ObservableCollectionTestDef<T> def,
 		TestHelper helper) {
 		super(path, sourceLink);
 		theDef = def;
 		theSupplier = (Function<TestHelper, T>) ObservableChainTester.SUPPLIERS.get(def.type);
 		theElements = new BetterTreeList<>(false);
 		theElementsForCollection = new BetterTreeList<>(false);
-		boolean passive = def.oneStepFlow.supportsPassive() && helper.getBoolean();
+		boolean passive = def.oneStepFlow.supportsPassive() && (helper == null || helper.getBoolean());
 		if (passive)
 			theOneStepCollection = def.oneStepFlow.collectPassive();
 		else
@@ -90,7 +92,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 	 * @param multiStepCollection The multi-step collection descended from the root link's
 	 * @param helper The randomness to use to initialize this link
 	 */
-	public ObservableCollectionLink(String path, ObservableCollectionLink<?, S> sourceLink, ObservableCollectionTestDef<T> def,
+	public ObservableCollectionLink(String path, ObservableChainLink<?, S> sourceLink, ObservableCollectionTestDef<T> def,
 		ObservableCollection<T> oneStepCollection, ObservableCollection<T> multiStepCollection, TestHelper helper) {
 		super(path, sourceLink);
 		theDef = def;
@@ -164,11 +166,6 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 	@Override
 	public TestValueType getType() {
 		return theDef.type;
-	}
-
-	@Override
-	public ObservableCollectionLink<?, S> getSourceLink() {
-		return (ObservableCollectionLink<?, S>) super.getSourceLink();
 	}
 
 	/** @return This link's collection definition */
@@ -248,17 +245,6 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 	 * @param execute Whether to actually execute the operation if it is not rejected
 	 */
 	public abstract void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection, boolean execute);
-
-	/**
-	 * @return Whether this collection is (or is derived from one that is) composed of other collections. Such links may violate assumptions
-	 *         that are testable for most other collections.
-	 */
-	public boolean isComposite() {
-		if (getSourceLink() == null)
-			return false;
-		else
-			return getSourceLink().isComposite();
-	}
 
 	/**
 	 * @param value The value to test
@@ -359,7 +345,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			}
 			action.or(1, () -> {// Remove by value
 				T value = theSupplier.apply(helper);
-				tryRemove(opCtx, value, helper);
+				tryRemove(opCtx, value, helper, null);
 			}).or(.2, () -> { // removeAll
 				int length = (int) helper.getDouble(0, 25, 100); // Tend smaller
 				List<T> values = new ArrayList<>(length);
@@ -417,7 +403,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 					System.out.println("\t\tShould remove " + op.printElements());
 				}
 				helper.placemark();
-				removeSingle(op, helper);
+				removeSingle(op, helper, null);
 			}).or(.1, () -> { // Remove range
 				int max = modify.size();
 				int minIndex = (int) helper.getDouble(0, max / 3.0, max);
@@ -495,11 +481,11 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		addSingle(op, helper, subExecute);
 	}
 
-	public void tryRemove(T value, TestHelper helper) {
-		tryRemove(getStandardContext(), value, helper);
+	public void tryRemove(T value, TestHelper helper, BooleanSupplier subExecute) {
+		tryRemove(getStandardContext(), value, helper, subExecute);
 	}
 
-	void tryRemove(CollectionOpContext opCtx, T value, TestHelper helper) {
+	void tryRemove(CollectionOpContext opCtx, T value, TestHelper helper, BooleanSupplier subExecute) {
 		CollectionOp op = new CollectionOp(opCtx, remove, -1, -1, value, true);
 		boolean found = false;
 		for (int i = 0; i < opCtx.modify.size(); i++) {
@@ -514,7 +500,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		if (helper.isReproducing())
 			System.out.println("Remove " + value + ": " + op.elements.get(0));
 		helper.placemark();
-		removeSingle(op, helper);
+		removeSingle(op, helper, subExecute);
 	}
 
 	public void tryClear(TestHelper helper) {
@@ -806,7 +792,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 					else
 						element = modify.addElement(op.value, //
 							op.after == null ? null : op.after.getCollectionAddress(), //
-							op.before == null ? null : op.before.getCollectionAddress(), op.towardBeginning);
+								op.before == null ? null : op.before.getCollectionAddress(), op.towardBeginning);
 					error = false;
 				} catch (UnsupportedOperationException | IllegalArgumentException e) {
 					if (msg == null)
@@ -962,7 +948,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		}
 	}
 
-	private void removeSingle(CollectionOp op, TestHelper helper) {
+	private void removeSingle(CollectionOp op, TestHelper helper, BooleanSupplier subExecute) {
 		prepareOp(op);
 		BetterList<T> modify = op.context.modify;
 		int preModSize = modify.size();
@@ -981,13 +967,21 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 				msg = modify.mutableElement(element.getElementId()).canRemove();
 			element = null;
 			try {
-				modify.remove(op.value);
+				boolean modified;
+				if (subExecute != null)
+					modified = subExecute.getAsBoolean();
+				else
+					modified = modify.remove(op.value);
+				if (modified != (element != null))
+					throw new AssertionError("remove(Object) may not return false if the value exists");
 				error = false;
 			} catch (UnsupportedOperationException e) {
 				if (msg == null)
 					throw new AssertionError("Unexpected operation exception", e);
 				error = true;
 			}
+		} else if (subExecute != null) {
+			throw new IllegalStateException("Substitute execution not implemented for remove by index");
 		} else {
 			// Remove by index
 			element = modify.getElement(op.minIndex);

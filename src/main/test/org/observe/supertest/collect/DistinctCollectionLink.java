@@ -31,7 +31,7 @@ import org.qommons.tree.BetterTreeList;
  *
  * @param <T> The type of the collection values
  */
-public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
+public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> implements CollectionSourcedLink<T, T> {
 	private static final String DEBUG_PATH = null;
 
 	/** Generates {@link DistinctCollectionLink}s to test {@link org.observe.collect.ObservableCollection.CollectionDataFlow#distinct()} */
@@ -151,6 +151,11 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		else
 			theValues = new HashMap<>();
 		isUsingFirst = useFirst;
+	}
+
+	@Override
+	public ObservableCollectionLink<?, T> getSourceLink() {
+		return (ObservableCollectionLink<?, T>) super.getSourceLink();
 	}
 
 	@Override

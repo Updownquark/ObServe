@@ -62,17 +62,18 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 		wasAdded = true;
 		theCollectionValue = getCollectionValue();
 
-		if (theCollectionLink.getSourceLink() != null) {
+		if (theCollectionLink.getSourceLink() instanceof ObservableCollectionLink) {
+			ObservableCollectionLink<?, S> source = (ObservableCollectionLink<?, S>) theCollectionLink.getSourceLink();
 			BetterList<ElementId> sourceElements = theCollectionLink.getCollection().getSourceElements(theCollectionAddress,
-				theCollectionLink.getSourceLink().getCollection());
+				source.getCollection());
 			if (sourceElements.isEmpty()) {
 				sourceElements = theCollectionLink.getCollection().getSourceElements(theCollectionAddress, // DEBUGGING
-					theCollectionLink.getSourceLink().getCollection());
+					source.getCollection());
 				Assert.assertFalse("No source elements", sourceElements.isEmpty());
 			}
 			int siblingIndex = theCollectionLink.getSiblingIndex();
 			for (ElementId sourceEl : sourceElements) {
-				CollectionLinkElement<?, S> sourceLinkEl = theCollectionLink.getSourceLink().getElement(sourceEl);
+				CollectionLinkElement<?, S> sourceLinkEl = source.getElement(sourceEl);
 				theSourceElements.add(sourceLinkEl);
 				sourceLinkEl.addDerived(siblingIndex, this);
 			}
@@ -294,18 +295,19 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 	 * @param withRemove Whether to remove source elements that are no longer in the source collection, or just add new ones
 	 */
 	public void updateSourceLinks(boolean withRemove) {
-		if (!wasRemoved && theCollectionLink.getSourceLink() != null) {
+		if (!wasRemoved && theCollectionLink.getSourceLink() instanceof ObservableCollectionLink) {
+			ObservableCollectionLink<?, S> source = (ObservableCollectionLink<?, S>) theCollectionLink.getSourceLink();
 			BetterList<ElementId> sourceElements = theCollectionLink.getCollection().getSourceElements(theCollectionAddress,
-				theCollectionLink.getSourceLink().getCollection());
+				source.getCollection());
 			if (sourceElements.isEmpty()) {
 				sourceElements = theCollectionLink.getCollection().getSourceElements(theCollectionAddress, // DEBUGGING
-					theCollectionLink.getSourceLink().getCollection());
+					source.getCollection());
 				Assert.assertFalse("No source elements", sourceElements.isEmpty());
 			}
 			int siblingIndex = theCollectionLink.getSiblingIndex();
 			CollectionUtils.synchronize(theSourceElements, sourceElements, (e1, e2) -> e1.getCollectionAddress().equals(e2))//
 			.simple(sourceEl -> {
-				CollectionLinkElement<?, S> sourceLinkEl = theCollectionLink.getSourceLink().getElement(sourceEl);
+					CollectionLinkElement<?, S> sourceLinkEl = source.getElement(sourceEl);
 				if (sourceLinkEl == null)
 					throw new IllegalStateException("No such link found: " + sourceEl);
 				return sourceLinkEl;
@@ -314,14 +316,14 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 				if (withRemove)
 					sourceEl.getLeftValue().theDerivedElements[siblingIndex].remove(CollectionLinkElement.this);
 			}).onRight(sourceEl -> {
-				CollectionLinkElement<?, S> sourceLinkEl = theCollectionLink.getSourceLink().getElement(sourceEl.getRightValue());
+					CollectionLinkElement<?, S> sourceLinkEl = source.getElement(sourceEl.getRightValue());
 				if (sourceLinkEl == null)
 					throw new IllegalStateException("No such link found: " + sourceEl);
 				sourceLinkEl.addDerived(siblingIndex, CollectionLinkElement.this);
 			})//
 			.adjust();
 
-			if (theCollectionLink.getSourceLink() != null && getSourceElements().isEmpty())
+			if (getSourceElements().isEmpty())
 				error("No source elements--should have been removed");
 		}
 	}

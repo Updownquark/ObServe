@@ -113,11 +113,6 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 	}
 
 	@Override
-	public void expectFromSource(ExpectedCollectionOperation<?, T> sourceOp) {
-		throw new IllegalStateException("Unexpected source");
-	}
-
-	@Override
 	public void expect(ExpectedCollectionOperation<?, T> derivedOp, OperationRejection rejection, boolean execute) {
 		if (!execute)
 			return;

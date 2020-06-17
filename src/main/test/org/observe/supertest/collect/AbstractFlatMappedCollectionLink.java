@@ -9,7 +9,7 @@ import org.qommons.collect.CollectionElement;
  * @param <S> The type of the source link
  * @param <T> The type of this link
  */
-public abstract class AbstractFlatMappedCollectionLink<S, T> extends ObservableCollectionLink<S, T> {
+public abstract class AbstractFlatMappedCollectionLink<S, T> extends ObservableCollectionLink<S, T> implements CollectionSourcedLink<S, T> {
 	/**
 	 * @param path The path for this link
 	 * @param sourceLink The source for this link
@@ -19,6 +19,11 @@ public abstract class AbstractFlatMappedCollectionLink<S, T> extends ObservableC
 	public AbstractFlatMappedCollectionLink(String path, ObservableCollectionLink<?, S> sourceLink, ObservableCollectionTestDef<T> def,
 		TestHelper helper) {
 		super(path, sourceLink, def, helper);
+	}
+
+	@Override
+	public ObservableCollectionLink<?, S> getSourceLink() {
+		return (ObservableCollectionLink<?, S>) super.getSourceLink();
 	}
 
 	@Override

@@ -106,6 +106,14 @@ public abstract class AbstractChainLink<S, T> implements ObservableChainLink<S, 
 	}
 
 	@Override
+	public boolean isComposite() {
+		if (getSourceLink() == null)
+			return false;
+		else
+			return getSourceLink().isComposite();
+	}
+
+	@Override
 	public void dispose() {
 		theDestruction.onNext(null);
 	}

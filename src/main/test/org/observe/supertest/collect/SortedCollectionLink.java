@@ -21,7 +21,7 @@ import org.qommons.TestHelper;
  *
  * @param <T> The type of values in the collection
  */
-public class SortedCollectionLink<T> extends ObservableCollectionLink<T, T> {
+public class SortedCollectionLink<T> extends ObservableCollectionLink<T, T> implements CollectionSourcedLink<T, T> {
 	/** Generates {@link SortedCollectionLink}s */
 	public static final ChainLinkGenerator GENERATE = new ChainLinkGenerator.CollectionLinkGenerator() {
 		@Override
@@ -61,6 +61,11 @@ public class SortedCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		Comparator<? super T> compare, TestHelper helper) {
 		super(path, sourceLink, def, helper);
 		theHelper = new SortedLinkHelper<>(compare, true);
+	}
+
+	@Override
+	public ObservableCollectionLink<?, T> getSourceLink() {
+		return (ObservableCollectionLink<?, T>) super.getSourceLink();
 	}
 
 	@Override
