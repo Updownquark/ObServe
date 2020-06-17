@@ -600,6 +600,16 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	}
 
 	/**
+	 * @param <T> The type of the value
+	 * @param value The value to represent
+	 * @param disabled The message to report for the disablement of the value
+	 * @return A SettableValue that reflects the given value and is always enabled
+	 */
+	public static <T> SettableValue<T> asSettable(ObservableValue<T> value, Function<? super T, String> disabled){
+		return new DisabledValue<>(value, disabled);
+	}
+
+	/**
 	 * Implements {@link SettableValue#unsettable()}
 	 *
 	 * @param <T> The type of the value
@@ -1003,6 +1013,94 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 				return ((SettableValue<T>) sv).set(value, cause);
 			else
 				throw new IllegalArgumentException("Wrapped value is not settable");
+		}
+	}
+
+	/**
+	 * Implements {@link SettableValue#asSettable(ObservableValue, Function)}
+	 *
+	 * @param <T> The type of the value
+	 */
+	class DisabledValue<T> implements SettableValue<T> {
+		private final ObservableValue<T> theValue;
+		private final Function<? super T, String> theDisablement;
+
+		DisabledValue(ObservableValue<T> value, Function<? super T, String> disablement) {
+			theValue = value;
+			theDisablement = disablement;
+		}
+
+		@Override
+		public TypeToken<T> getType() {
+			return theValue.getType();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return theValue.lock();
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, Object cause) {
+			return theValue.tryLock();
+		}
+
+		@Override
+		public T get() {
+			return theValue.get();
+		}
+
+		@Override
+		public Observable<ObservableValueEvent<T>> noInitChanges() {
+			return theValue.noInitChanges();
+		}
+
+		@Override
+		public long getStamp() {
+			return theValue.getStamp();
+		}
+
+		@Override
+		public Object getIdentity() {
+			return theValue.getIdentity();
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return theValue.isLockSupported();
+		}
+
+		@Override
+		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+			throw new UnsupportedOperationException(isAcceptable(value));
+		}
+
+		@Override
+		public <V extends T> String isAcceptable(V value) {
+			String enabled = theDisablement.apply(theValue.get());
+			if (enabled == null)
+				enabled = "Not enabled";
+			return enabled;
+		}
+
+		@Override
+		public ObservableValue<String> isEnabled() {
+			return theValue.map(theDisablement);
+		}
+
+		@Override
+		public int hashCode() {
+			return theValue.hashCode();
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return obj instanceof DisabledValue && theValue.equals(((DisabledValue<?>) obj).theValue);
+		}
+
+		@Override
+		public String toString() {
+			return theValue.toString();
 		}
 	}
 
