@@ -26,15 +26,18 @@ import java.net.URL;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.IntConsumer;
 import java.util.function.Supplier;
 
+import javax.swing.ButtonGroup;
 import javax.swing.ImageIcon;
 import javax.swing.JCheckBox;
 import javax.swing.JComponent;
@@ -62,18 +65,23 @@ import javax.swing.text.JTextComponent;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
+import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
 import org.observe.config.ObservableConfig;
+import org.observe.util.SafeObservableCollection;
 import org.observe.util.TypeTokens;
-import org.qommons.ArrayUtils;
 import org.qommons.Causable;
 import org.qommons.Causable.CausableKey;
+import org.qommons.LambdaUtils;
 import org.qommons.Transaction;
+import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.ListenerList;
 import org.xml.sax.SAXException;
+
+import com.google.common.reflect.TypeToken;
 
 /** Utilities for the org.observe.util.swing package */
 public class ObservableSwingUtils {
@@ -390,6 +398,103 @@ public class ObservableSwingUtils {
 	}
 
 	/**
+	 * @param availableValues The set of values to represent, each with its own button
+	 * @param selected The selected value
+	 * @param buttonType The type of the buttons to use to represent each value
+	 * @param buttonCreator Creates a button for initial or new values
+	 * @param withButtons Accepts the observable collection of buttons created by this method
+	 * @param render Allows initialization and modification of the buttons with their values
+	 * @param descrip Provides a tooltip for each value button
+	 * @return A subscription that stops all the listening that this method initializes
+	 */
+	public static <T, TB extends JToggleButton> Subscription togglesFor(ObservableCollection<? extends T> availableValues,
+		SettableValue<T> selected, //
+		TypeToken<TB> buttonType, Function<? super T, ? extends TB> buttonCreator, Consumer<ObservableCollection<TB>> withButtons,
+		BiConsumer<? super TB, ? super T> render, Function<? super T, String> descrip) {
+		List<Subscription> subs = new LinkedList<>();
+		SafeObservableCollection<? extends T> safeValues;
+		SimpleObservable<Void> safeUntil = SimpleObservable.build().safe(false).build();
+		subs.add(() -> safeUntil.onNext(null));
+		if (availableValues instanceof SafeObservableCollection)
+			safeValues = (SafeObservableCollection<? extends T>) availableValues;
+		else
+			safeValues = new SafeObservableCollection<>(availableValues, EventQueue::isDispatchThread, EventQueue::invokeLater, safeUntil);
+		ObservableCollection<TB> buttons = safeValues.flow().map(buttonType, (value, button) -> {
+			if (button == null)
+				button = buttonCreator.apply(value);
+			render.accept(button, value);
+			String enabled = selected.isEnabled().get();
+			if (enabled != null)
+				button.setToolTipText(enabled);
+			else if (descrip != null)
+				button.setToolTipText(descrip.apply(value));
+			else
+				button.setToolTipText(null);
+			return button;
+		}, null).collectActive(safeUntil);
+		withButtons.accept(buttons);
+
+		int[] currentSelection = new int[] { -1 };
+		Consumer<String> checkEnabled = enabled -> {
+			for (int i = 0; i < buttons.size(); i++) {
+				TB button = buttons.get(i);
+				button.setEnabled(enabled == null);
+				if (enabled != null)
+					button.setToolTipText(enabled);
+				else if (descrip != null)
+					button.setToolTipText(descrip.apply(safeValues.get(i)));
+				else
+					button.setToolTipText(null);
+			}
+		};
+		BiConsumer<T, Object>[] listener = new BiConsumer[1];
+		subs.add(ObservableComboBoxModel.<T> hookUpComboData(safeValues, selected, index -> {
+			if (index >= 0)
+				buttons.get(index).setSelected(true);
+			else if (currentSelection[0] >= 0)
+				buttons.get(currentSelection[0]).setSelected(false);
+			currentSelection[0] = index;
+		}, lstnr -> {
+			listener[0] = lstnr;
+			return () -> listener[0] = null;
+		}, checkEnabled));
+		ButtonGroup group = new ButtonGroup();
+		ActionListener selectListener = evt -> {
+			Object button = evt.getSource();
+			if (!TypeTokens.get().isInstance(buttonType, button))
+				return;
+			int index = buttons.indexOf(button);
+			if (index >= 0 && listener[0] != null)
+				listener[0].accept(safeValues.get(index), evt);
+		};
+		for (TB button : buttons) {
+			group.add(button);
+			button.addActionListener(selectListener);
+		}
+		subs.add(buttons.changes().act(evt -> {
+			if (listener[0] == null)
+				return;
+			switch (evt.type) {
+			case add:
+				for (TB button : evt.getValues()) {
+					group.add(button);
+					button.addActionListener(selectListener);
+				}
+				break;
+			case remove:
+				for (TB button : evt.getValues()) {
+					group.remove(button);
+					button.removeActionListener(selectListener);
+				}
+				break;
+			case set:
+				break;
+			}
+		}));
+		return Subscription.forAll(subs);
+	}
+
+	/**
 	 * Links up a spinner's {@link JSpinner#getValue() value} with the value in a settable integer value, such that the user's interaction
 	 * with the spinner is reported by the value, and setting the value alters the spinner.
 	 *
@@ -561,7 +666,9 @@ public class ObservableSwingUtils {
 		Consumer<Object> syncSelection = cause -> {
 			List<E> selValues = selectionGetter.get();
 			try (Transaction selT = selection.lock(true, cause)) {
-				ArrayUtils.adjust(selection, selValues, ArrayUtils.acceptAllDifferences(equivalence::elementEquals, null));
+				CollectionUtils.synchronize(selection, selValues, (v1, v2) -> equivalence.elementEquals(v1, v2))//
+					.simple(LambdaUtils.identity())//
+					.adjust();
 			}
 		};
 		ListSelectionListener selListener = e -> {
@@ -925,7 +1032,7 @@ public class ObservableSwingUtils {
 
 	/**
 	 * Starts an application configured by an ObservableConfig
-	 * 
+	 *
 	 * @param configName The name of the application
 	 * @param defaultConfigLocation The default location of the config file
 	 * @param app Builds a component from the ObservableConfig

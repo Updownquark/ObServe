@@ -13,6 +13,7 @@ import java.awt.LayoutManager2;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.MouseMotionListener;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.lang.reflect.Constructor;
@@ -50,11 +51,14 @@ import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JRadioButton;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
 import javax.swing.JSplitPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTable;
+import javax.swing.JToggleButton;
+import javax.swing.JTree;
 import javax.swing.ListSelectionModel;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
@@ -63,6 +67,9 @@ import javax.swing.event.ChangeListener;
 import javax.swing.event.ListDataEvent;
 import javax.swing.event.ListDataListener;
 import javax.swing.event.ListSelectionListener;
+import javax.swing.tree.TreeCellRenderer;
+import javax.swing.tree.TreePath;
+import javax.swing.tree.TreeSelectionModel;
 
 import org.jdesktop.swingx.JXCollapsiblePane;
 import org.jdesktop.swingx.JXPanel;
@@ -75,6 +82,7 @@ import org.observe.SimpleObservable;
 import org.observe.SimpleSettableValue;
 import org.observe.Subscription;
 import org.observe.TypedValueContainer;
+import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.DefaultObservableCollection;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.SafeObservableCollection;
@@ -186,7 +194,6 @@ public class PanelPopulation {
 		P addCheckField(String fieldName, SettableValue<Boolean> field, Consumer<FieldEditor<JCheckBox, ?>> modify);
 
 		/* TODO
-		 * toggle/radio buttons
 		 * slider
 		 * progress bar
 		 * spinner
@@ -195,7 +202,6 @@ public class PanelPopulation {
 		 * (multi-) split pane (with configurable splitter panel)
 		 * scroll pane
 		 * value selector
-		 * tree
 		 * settings menu
 		 * rotation
 		 * form controls (e.g. press enter in a text field and a submit action (also tied to a button) fires)
@@ -232,6 +238,14 @@ public class PanelPopulation {
 		<F extends FileDataSource> P addFileField(String fieldName, SettableValue<F> value, boolean open,
 			Consumer<FieldEditor<ObservableFileButton<F>, ?>> modify);
 
+		default <F> P addRadioField(String fieldName, SettableValue<F> value, F[] values,
+			Consumer<ToggleEditor<F, JRadioButton, ?>> modify) {
+			return addToggleField(fieldName, value, Arrays.asList(values), JRadioButton.class, __ -> new JRadioButton(), modify);
+		}
+
+		<F, TB extends JToggleButton> P addToggleField(String fieldName, SettableValue<F> value, List<? extends F> values,
+			Class<TB> buttonType, Function<? super F, ? extends TB> buttonCreator, Consumer<ToggleEditor<F, TB, ?>> modify);
+
 		// public <F> MigPanelPopulatorField<F, JToggleButton> addToggleField(String fieldName, SettableValue<F> value,
 		// boolean radio, F... availableValues) {
 		// return addToggleField(fieldName, value, radio, Arrays.asList(availableValues));
@@ -245,6 +259,8 @@ public class PanelPopulation {
 		//
 		// public <F> MigPanelPopulatorField<F, ObservableTreeModel> addTree(Object root,
 		// Function<Object, ? extends ObservableCollection<?>> branching) {}
+		//
+		// P addMultiple(String fieldName, Consumer<PanelPopulator<JPanel, ?>> panel);
 
 		default P addButton(String buttonText, Consumer<Object> action, Consumer<ButtonEditor<?>> modify) {
 			return addButton(buttonText, new ObservableAction<Void>() {
@@ -271,6 +287,9 @@ public class PanelPopulation {
 		<R> P addList(ObservableCollection<R> rows, Consumer<ListBuilder<R, ?>> list);
 
 		<R> P addTable(ObservableCollection<R> rows, Consumer<TableBuilder<R, ?>> table);
+
+		<F> P addTree(ObservableValue<? extends F> root, Function<? super F, ? extends ObservableCollection<? extends F>> children,
+			Consumer<TreeEditor<F, ?>> modify);
 
 		P addTabs(Consumer<TabPaneEditor<JTabbedPane, ?>> tabs);
 
@@ -515,6 +534,12 @@ public class PanelPopulation {
 
 	public interface SteppedFieldEditor<E, F, P extends SteppedFieldEditor<E, F, P>> extends FieldEditor<E, P> {
 		P withStepSize(F stepSize);
+	}
+
+	public interface ToggleEditor<F, TB extends JToggleButton, P extends ToggleEditor<F, TB, P>> extends FieldEditor<Map<F, TB>, P> {
+		P render(BiConsumer<? super TB, ? super F> renderer);
+
+		P withValueTooltip(Function<? super F, String> tooltip);
 	}
 
 	public interface TabPaneEditor<E, P extends TabPaneEditor<E, P>> extends ComponentEditor<E, P> {
@@ -791,6 +816,49 @@ public class PanelPopulation {
 		@Override
 		public String toString() {
 			return String.valueOf(theEnablement);
+		}
+	}
+
+	public interface TreeEditor<F, P extends TreeEditor<F, P>> extends ComponentEditor<JTree, P> {
+		ObservableValue<? extends F> getRoot();
+
+		default P renderWith(Function<? super F, String> format) {
+			return renderWith(ObservableCellRenderer.formatted(format));
+		}
+
+		P renderWith(ObservableCellRenderer<List<F>, F> renderer);
+
+		default P withValueTooltip(Function<? super F, String> tooltip) {
+			return withCellTooltip(tooltip == null ? null : cell -> tooltip.apply(cell.getCellValue()));
+		}
+
+		P withCellTooltip(Function<? super ModelCell<List<F>, F>, String> tooltip);
+
+		default P withSelection(SettableValue<F> selection, Function<? super F, ? extends F> parent, boolean enforceSingleSelection) {
+			return withSelection(selection.map(TypeTokens.get().keyFor(List.class).getCompoundType(selection.getType()), //
+				s -> pathTo(s, parent, getRoot().get()), path -> path.get(path.size() - 1), null), enforceSingleSelection);
+		}
+
+		default P withSelection(ObservableCollection<F> selection, Function<? super F, ? extends F> parent) {
+			return withSelection(selection.flow()
+				.map(TypeTokens.get().keyFor(List.class).getCompoundType(selection.getType()), //
+					s -> pathTo(s, parent, getRoot().get()), opts -> opts.cache(false).withReverse(path -> path.get(path.size() - 1)))//
+				.collectPassive());
+		}
+
+		P withSelection(SettableValue<List<F>> selection, boolean enforceSingleSelection);
+
+		P withSelection(ObservableCollection<List<F>> selection);
+
+		static <T> List<T> pathTo(T value, Function<? super T, ? extends T> parent, T root) {
+			LinkedList<T> path = new LinkedList<>();
+			while (true) {
+				path.add(value);
+				if (value == null || value == root)
+					break;
+				value = parent.apply(value);
+			}
+			return path;
 		}
 	}
 
@@ -1135,6 +1203,22 @@ public class PanelPopulation {
 		}
 
 		@Override
+		default <F, TB extends JToggleButton> P addToggleField(String fieldName, SettableValue<F> value, List<? extends F> values,
+			Class<TB> buttonType, Function<? super F, ? extends TB> buttonCreator, Consumer<ToggleEditor<F, TB, ?>> modify) {
+			ObservableCollection<? extends F> observableValues;
+			if (values instanceof ObservableCollection)
+				observableValues = (ObservableCollection<F>) values;
+			else
+				observableValues = ObservableCollection.of(value.getType(), values);
+			SimpleToggleButtonPanel<F, TB, ?> radioPanel = new SimpleToggleButtonPanel<>(fieldName, observableValues, value, //
+				buttonType, buttonCreator, getLock());
+			if (modify != null)
+				modify.accept(radioPanel);
+			doAdd(radioPanel);
+			return (P) this;
+		}
+
+		@Override
 		default <F extends FileDataSource> P addFileField(String fieldName, SettableValue<F> value, boolean open,
 			Consumer<FieldEditor<ObservableFileButton<F>, ?>> modify) {
 			SimpleFieldEditor<ObservableFileButton<F>, ?> fieldPanel = new SimpleFieldEditor<>(fieldName,
@@ -1192,6 +1276,16 @@ public class PanelPopulation {
 			SimpleTableBuilder<R, ?> tb = new SimpleTableBuilder<>(rows, getLock());
 			table.accept(tb);
 			doAdd(tb, null, null);
+			return (P) this;
+		}
+
+		@Override
+		default <F> P addTree(ObservableValue<? extends F> root, Function<? super F, ? extends ObservableCollection<? extends F>> children,
+			Consumer<TreeEditor<F, ?>> modify) {
+			SimpleTreeEditor<F, ?> treeEditor = new SimpleTreeEditor<>(getLock(), root, children);
+			if (modify != null)
+				modify.accept(treeEditor);
+			doAdd(treeEditor, null, null);
 			return (P) this;
 		}
 
@@ -1871,6 +1965,89 @@ public class PanelPopulation {
 			if (theRenderer != null)
 				getEditor().setRenderer(theRenderer);
 			return super.getOrCreateComponent(until);
+		}
+	}
+
+	static class SimpleToggleButtonPanel<F, TB extends JToggleButton, P extends SimpleToggleButtonPanel<F, TB, P>>
+	extends SimpleFieldEditor<Map<F, TB>, P> implements ToggleEditor<F, TB, P> {
+		private final JPanel thePanel;
+		private final ObservableCollection<? extends F> theValues;
+		private final SettableValue<F> theValue;
+		private final Class<TB> theButtonType;
+		private final Function<? super F, ? extends TB> theButtonCreator;
+		private ObservableCollection<TB> theButtons;
+
+		private BiConsumer<? super TB, ? super F> theRenderer;
+		private Function<? super F, String> theValueTooltip;
+
+		SimpleToggleButtonPanel(String fieldName, ObservableCollection<? extends F> values, SettableValue<F> value, Class<TB> buttonType,
+			Function<? super F, ? extends TB> buttonCreator, Supplier<Transactable> lock) {
+			super(fieldName, new HashMap<>(), lock);
+			thePanel = new JPanel(new JustifiedBoxLayout(false).setMainAlignment(JustifiedBoxLayout.Alignment.LEADING).crossJustified());
+
+			theValue = value;
+			theValues = values;
+
+			theButtonType = buttonType;
+			theButtonCreator = buttonCreator;
+			theRenderer = (button, v) -> button.setText(String.valueOf(v));
+		}
+
+		@Override
+		public P render(BiConsumer<? super TB, ? super F> renderer) {
+			theRenderer = renderer;
+			return (P) this;
+		}
+
+		@Override
+		public P withValueTooltip(Function<? super F, String> tooltip) {
+			theValueTooltip = tooltip;
+			return (P) this;
+		}
+
+		void render(TB button, F value) {
+			theRenderer.accept(button, value);
+		}
+
+		String getValueTooltip(F value) {
+			return theValueTooltip == null ? null : theValueTooltip.apply(value);
+		}
+
+		@Override
+		protected Component getOrCreateComponent(Observable<?> until) {
+			if (theButtons == null) {
+				SafeObservableCollection<? extends F> safeValues;
+				if (theValues instanceof SafeObservableCollection)
+					safeValues = (SafeObservableCollection<? extends F>) theValues;
+				else
+					safeValues = new SafeObservableCollection<>(theValues, EventQueue::isDispatchThread, EventQueue::invokeLater, until);
+				ObservableCollection<TB>[] _buttons = new ObservableCollection[1];
+				Subscription valueSub = ObservableSwingUtils.togglesFor(safeValues, theValue, TypeTokens.get().of(theButtonType),
+					theButtonCreator, b -> _buttons[0] = b, this::render, this::getValueTooltip);
+				theButtons = _buttons[0];
+				theButtons.changes().takeUntil(until).act(evt -> {
+					for (CollectionChangeEvent.ElementChange<TB> change : evt.getElements()) {
+						switch (evt.type) {
+						case add:
+							thePanel.add(change.newValue, change.index);
+							break;
+						case remove:
+							thePanel.remove(change.index);
+							break;
+						case set:
+							break; // Re-rendering is handled by the togglesFor method
+						}
+					}
+				});
+				if (until != null)
+					until.take(1).act(__ -> valueSub.unsubscribe());
+			}
+			return decorate(thePanel);
+		}
+
+		@Override
+		public Component getComponent() {
+			return decorate(thePanel);
 		}
 	}
 
@@ -2974,6 +3151,12 @@ public class PanelPopulation {
 		public P withRemove(Consumer<? super List<? extends R>> deletion, Consumer<TableAction<R, ?>> actionMod) {
 			String single = getItemName();
 			String plural = StringUtils.pluralize(single);
+			if(deletion==null){
+				deletion=values->{
+					for(R value : values)
+						theRows.remove(value);
+				};
+			}
 			return withMultiAction(deletion, action -> {
 				action.allowForMultiple(true).withTooltip(items -> "Remove selected " + (items.size() == 1 ? single : plural))//
 				.modifyButton(button -> button.withIcon(getRemoveIcon(16)));
@@ -3668,6 +3851,146 @@ public class PanelPopulation {
 				if (theButtonMod != null)
 					theButtonMod.accept(button);
 			});
+		}
+	}
+
+	static class SimpleTreeEditor<F, P extends SimpleTreeEditor<F, P>> extends AbstractComponentEditor<JTree, P>
+	implements TreeEditor<F, P> {
+		private final ObservableValue<? extends F> theRoot;
+
+		private ObservableCellRenderer<List<F>, F> theRenderer;
+		private Function<? super ModelCell<List<F>, F>, String> theValueTooltip;
+		private SettableValue<List<F>> theSingleSelection;
+		private boolean isSingleSelection;
+		private ObservableCollection<List<F>> theMultiSelection;
+
+		private JPanel thePanel;
+
+		public SimpleTreeEditor(Supplier<Transactable> lock, ObservableValue<? extends F> root,
+			Function<? super F, ? extends ObservableCollection<? extends F>> children) {
+			super(new JTree(new ObservableTreeModel<F>(root) {
+				@Override
+				protected ObservableCollection<? extends F> getChildren(F parent) {
+					return children.apply(parent);
+				}
+
+				@Override
+				public void valueForPathChanged(TreePath path, Object newValue) {}
+
+				@Override
+				public boolean isLeaf(Object node) {
+					return false;
+				}
+			}), lock);
+			theRoot = root;
+		}
+
+		@Override
+		public ObservableValue<? extends F> getRoot() {
+			return theRoot;
+		}
+
+		@Override
+		public P renderWith(ObservableCellRenderer<List<F>, F> renderer) {
+			theRenderer = renderer;
+			return (P) this;
+		}
+
+		@Override
+		public P withCellTooltip(Function<? super ModelCell<List<F>, F>, String> tooltip) {
+			theValueTooltip = tooltip;
+			return (P) this;
+		}
+
+		@Override
+		public P withSelection(SettableValue<List<F>> selection, boolean enforceSingleSelection) {
+			theSingleSelection = selection;
+			isSingleSelection = enforceSingleSelection;
+			return (P) this;
+		}
+
+		@Override
+		public P withSelection(ObservableCollection<List<F>> selection) {
+			theMultiSelection = selection;
+			return (P) this;
+		}
+
+		@Override
+		protected Component getOrCreateComponent(Observable<?> until) {
+			if(theRenderer!=null)
+				getEditor().setCellRenderer(new ObservableTreeCellRenderer<>(theRenderer));
+			MouseMotionListener motion = new MouseAdapter() {
+				@Override
+				public void mouseEntered(MouseEvent e) {
+					mouseMoved(e);
+				}
+
+				@Override
+				public void mouseMoved(MouseEvent e) {
+					TreePath path = getEditor().getPathForLocation(e.getX(), e.getY());
+					if (path == null || theValueTooltip == null)
+						getEditor().setToolTipText(null);
+					else {
+						List<F> list = (List<F>) (List<?>) Arrays.asList(path.getPath());
+						int row = getEditor().getRowForLocation(e.getX(), e.getY());
+						F value = (F) path.getLastPathComponent();
+						ModelCell<List<F>, F> cell = new ModelCell.Default<>(() -> list, value, row, 0,
+							getEditor().getSelectionModel().isRowSelected(row), false, !getEditor().isCollapsed(row),
+							getEditor().getModel().isLeaf(value));
+						getEditor().setToolTipText(theValueTooltip.apply(cell));
+					}
+				}
+			};
+			getEditor().addMouseMotionListener(motion);
+			until.take(1).act(__ -> getEditor().removeMouseMotionListener(motion));
+			if (theMultiSelection != null)
+				ObservableTreeModel.syncSelection(getEditor(), theMultiSelection, until);
+			if (theSingleSelection != null) {
+				ObservableTreeModel.syncSelection(getEditor(), theSingleSelection, until);
+				if (isSingleSelection)
+					getEditor().getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
+			}
+			return decorate(getEditor());
+		}
+
+		@Override
+		public Component getComponent() {
+			return thePanel;
+		}
+
+		@Override
+		public ObservableValue<String> getTooltip() {
+			return null;
+		}
+
+		@Override
+		protected Component createFieldNameLabel(Observable<?> until) {
+			return null;
+		}
+
+		@Override
+		protected Component createPostLabel(Observable<?> until) {
+			return null;
+		}
+
+		static class ObservableTreeCellRenderer<F> implements TreeCellRenderer {
+			private final ObservableCellRenderer<List<F>, F> theRenderer;
+
+			ObservableTreeCellRenderer(ObservableCellRenderer<List<F>, F> renderer) {
+				theRenderer = renderer;
+			}
+
+			@Override
+			public Component getTreeCellRendererComponent(JTree tree, Object value, boolean selected, boolean expanded, boolean leaf,
+				int row, boolean hasFocus) {
+				Supplier<List<F>> modelValue = () -> {
+					TreePath path = tree.getPathForRow(row);
+					List<F> list = (List<F>) (List<?>) Arrays.asList(path.getPath());
+					return list;
+				};
+				ModelCell<List<F>, F> cell = new ModelCell.Default<>(modelValue, (F) value, row, 0, selected, hasFocus, expanded, leaf);
+				return theRenderer.getCellRendererComponent(tree, cell, null);
+			}
 		}
 	}
 
