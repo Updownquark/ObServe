@@ -14,12 +14,15 @@ import org.observe.Observer;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.observe.Subscription;
+import org.observe.assoc.ObservableMap;
+import org.observe.assoc.ObservableMultiMap;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionEvent;
 import org.observe.config.ObservableConfig.ObservableConfigEvent;
 import org.observe.config.ObservableConfigFormat.EntityConfigFormat;
+import org.observe.config.ObservableConfigFormat.MapEntry;
 import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
@@ -1015,6 +1018,27 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 			public void remove() throws UnsupportedOperationException {
 				removeOp();
 			}
+		}
+	}
+
+	static class ObservableConfigMap<K, V> extends ObservableConfigBackedCollection<MapEntry<K, V>> implements ObservableMap<K, V> {
+		ObservableConfigMap(ObservableConfig root, ObservableValue<? extends ObservableConfig> collectionElement, Runnable ceCreate,
+			String keyName, String valueName, TypeToken<K> keyType, TypeToken<V> valueType, ObservableConfigFormat<K> keyFormat,
+			ObservableConfigFormat<V> valueFormat, Observable<?> until, boolean listen, Observable<?> findRefs) {
+			super(root, collectionElement, ceCreate, MapEntry.TYPE_KEY.getCompoundType(keyType, valueType), //
+				new ObservableConfigFormat.EntryFormat<>(true, keyName, valueName, keyType, valueType, keyFormat, valueFormat), valueName,
+				until, listen, findRefs);
+		}
+	}
+
+	static class ObservableConfigMultiMap<K, V> extends ObservableConfigBackedCollection<MapEntry<K, V>>
+		implements ObservableMultiMap<K, V> {
+		ObservableConfigMultiMap(ObservableConfig root, ObservableValue<? extends ObservableConfig> collectionElement, Runnable ceCreate,
+			String keyName, String valueName, TypeToken<K> keyType, TypeToken<V> valueType, ObservableConfigFormat<K> keyFormat,
+			ObservableConfigFormat<V> valueFormat, Observable<?> until, boolean listen, Observable<?> findRefs) {
+			super(root, collectionElement, ceCreate, MapEntry.TYPE_KEY.getCompoundType(keyType, valueType), //
+				new ObservableConfigFormat.EntryFormat<>(true, keyName, valueName, keyType, valueType, keyFormat, valueFormat), valueName,
+				until, listen, findRefs);
 		}
 	}
 }

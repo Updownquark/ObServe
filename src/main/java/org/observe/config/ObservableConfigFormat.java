@@ -21,6 +21,8 @@ import java.util.function.Supplier;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
+import org.observe.assoc.ObservableMap;
+import org.observe.assoc.ObservableMultiMap;
 import org.observe.collect.ObservableCollection;
 import org.observe.config.EntityConfiguredValueType.EntityConfiguredValueField;
 import org.observe.config.ObservableConfig.ObservableConfigEvent;
@@ -33,9 +35,11 @@ import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
+import org.qommons.collect.QuickSet;
 import org.qommons.collect.QuickSet.QuickMap;
 import org.qommons.io.Format;
 
+import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
 
 public interface ObservableConfigFormat<E> {
@@ -181,7 +185,7 @@ public interface ObservableConfigFormat<E> {
 		}
 	}
 
-	static <T> ObservableConfigFormat<T> ofQommonFormat(Format<T> format, Supplier<? extends T> defaultValue) {
+	static <T> SimpleConfigFormat<T> ofQommonFormat(Format<T> format, Supplier<? extends T> defaultValue) {
 		return new SimpleConfigFormat<>(format, defaultValue);
 	}
 
@@ -189,7 +193,7 @@ public interface ObservableConfigFormat<E> {
 		return new SimpleConfigFormat<>(Format.enumFormat(type), defaultValue);
 	}
 
-	class SimpleConfigFormat<T> implements ObservableConfigFormat<T> {
+	public class SimpleConfigFormat<T> implements ObservableConfigFormat<T> {
 		public final Format<T> format;
 		public final Supplier<? extends T> defaultValue;
 
@@ -246,7 +250,7 @@ public interface ObservableConfigFormat<E> {
 		}
 	}
 
-	class ReferenceFormat<T> implements ObservableConfigFormat<T> {
+	public class ReferenceFormat<T> implements ObservableConfigFormat<T> {
 		static class FormattedField<T, F> {
 			public final Function<? super T, F> field;
 			public final ObservableConfigFormat<F> format;
@@ -420,7 +424,7 @@ public interface ObservableConfigFormat<E> {
 		return new ReferenceFormatBuilder<>(retriever, defaultValue);
 	}
 
-	interface ConfigCreator<E> {
+	public interface ConfigCreator<E> {
 		Set<Integer> getRequiredFields();
 
 		ConfigCreator<E> with(String fieldName, Object value) throws IllegalArgumentException;
@@ -430,7 +434,7 @@ public interface ObservableConfigFormat<E> {
 		E create(ObservableConfig config, Observable<?> until);
 	}
 
-	interface EntityConfigCreator<E> extends ConfigCreator<E> {
+	public interface EntityConfigCreator<E> extends ConfigCreator<E> {
 		EntityConfiguredValueType<E> getEntityType();
 
 		@Override
@@ -447,7 +451,7 @@ public interface ObservableConfigFormat<E> {
 		<F> EntityConfigCreator<E> with(Function<? super E, F> fieldGetter, F value) throws IllegalArgumentException;
 	}
 
-	interface EntityConfigFormat<E> extends ObservableConfigFormat<E> {
+	public interface EntityConfigFormat<E> extends ObservableConfigFormat<E> {
 		EntityConfiguredValueType<E> getEntityType();
 
 		<F> ObservableConfigFormat<F> getFieldFormat(ConfiguredValueField<E, F> field);
@@ -573,7 +577,7 @@ public interface ObservableConfigFormat<E> {
 		}
 	}
 
-	class EntitySubFormat<E> {
+	public class EntitySubFormat<E> {
 		final ObservableConfig.ObservableConfigPathElement configFilter;
 		final EntityConfigFormat<E> format;
 		final TypeToken<E> type;
@@ -605,7 +609,7 @@ public interface ObservableConfigFormat<E> {
 		}
 	}
 
-	class PathElementBuilder {
+	public class PathElementBuilder {
 		private final String theName;
 		private final Map<String, String> theAttributes;
 
@@ -633,7 +637,7 @@ public interface ObservableConfigFormat<E> {
 		return new EntityFormatBuilder<>(entityType, formats);
 	}
 
-	abstract class AbstractComponentFormat<E> implements ObservableConfigFormat<E> {
+	public abstract class AbstractComponentFormat<E> implements ObservableConfigFormat<E> {
 		static class ComponentField<E, F> {
 			final String name;
 			final TypeToken<F> type;
@@ -656,15 +660,25 @@ public interface ObservableConfigFormat<E> {
 		}
 		private final QuickMap<String, ComponentField<E, ?>> theFields;
 		private final List<EntitySubFormat<? extends E>> theSubFormats;
-		private QuickMap<String, ComponentField<E, ?>> theFieldsByChildName;
+		private final QuickMap<String, ComponentField<E, ?>> theFieldsByChildName;
+		private final ComponentField<E, ?> theDefaultComponent;
 
 		private AbstractComponentFormat(QuickMap<String, ComponentField<E, ?>> fields, List<EntitySubFormat<? extends E>> subFormats) {
 			theFields = fields;
 			theSubFormats = subFormats;
 			Map<String, ComponentField<E, ?>> fcnReverse = new LinkedHashMap<>();
-			for (int i = 0; i < theFields.keySize(); i++)
-				fcnReverse.put(theFields.get(i).childName, theFields.get(i));
+			ComponentField<E, ?> defComponent = null;
+			for (int i = 0; i < theFields.keySize(); i++) {
+				if (theFields.get(i).childName == null) {
+					if (defComponent == null)
+						defComponent = theFields.get(i);
+					else
+						throw new IllegalArgumentException("Multiple default (unnamed fields)");
+				} else
+					fcnReverse.put(theFields.get(i).childName, theFields.get(i));
+			}
 			theFieldsByChildName = QuickMap.of(fcnReverse, String::compareTo);
+			theDefaultComponent = defComponent;
 		}
 
 		protected abstract TypeToken<E> getType();
@@ -701,9 +715,14 @@ public interface ObservableConfigFormat<E> {
 				acceptedValue.accept(null);
 				config.setName("null");
 				for (int i = 0; i < theFields.keySize(); i++) {
-					ObservableConfig cfg = config.getChild(theFields.get(i).childName);
-					if (cfg != null)
-						cfg.remove();
+					if (theFields.get(i).childName == null) {
+						Object fieldValue = previousValue == null ? null : theFields.get(i).getter.apply(previousValue);
+						formatField((ComponentField<E, Object>) theFields.get(i), fieldValue, config, fv -> {}, until);
+					} else {
+						ObservableConfig cfg = config.getChild(theFields.get(i).childName);
+						if (cfg != null)
+							cfg.remove();
+					}
 				}
 			} else {
 				EntitySubFormat<? extends E> subFormat = formatFor(value);
@@ -745,7 +764,8 @@ public interface ObservableConfigFormat<E> {
 					for (int i = 0; i < theFields.keySize(); i++)
 						parseUpdatedField(ctx, c, i, null);
 				} else if (ctx.getChange().relativePath.isEmpty()) {
-					// Change to the value doesn't change any fields
+					if (theDefaultComponent != null)
+						parseUpdatedField(ctx, c, theDefaultComponent.index, null);
 				} else {
 					ObservableConfigEvent change = ctx.getChange();
 					ObservableConfig child = change.relativePath.get(0);
@@ -788,8 +808,9 @@ public interface ObservableConfigFormat<E> {
 			ComponentField<E, F> field = (ComponentField<E, F>) theFields.get(fieldIndex);
 			F sourceField = field.getter.apply(source);
 			F copyField = field.getter.apply(copy);
-			F newCopy = field.format.copy(sourceField, copyField, asChild(config, field.childName),
-				asChild(config, create, field.childName), until);
+			F newCopy = field.format.copy(sourceField, copyField, //
+				field.childName == null ? config : asChild(config, field.childName),
+					field.childName == null ? config : asChild(config, create, field.childName), until);
 			if (newCopy != copyField)
 				field.setter.accept(copy, newCopy);
 		}
@@ -853,10 +874,18 @@ public interface ObservableConfigFormat<E> {
 			}
 			for (int i = 0; i < fieldValues.keySize(); i++) {
 				int fi = i;
-				ObservableValue<? extends ObservableConfig> fieldConfig = config.observeDescendant(theFields.get(i).childName);
+				ObservableValue<? extends ObservableConfig> fieldConfig;
+				Supplier<ObservableConfig> supply;
+				if (theFields.get(i).childName == null) {
+					fieldConfig = ObservableValue.of(config);
+					supply = () -> config;
+				} else {
+					fieldConfig = config.observeDescendant(theFields.get(i).childName);
+					supply = () -> config.getChild(theFields.get(fi).childName, true, null);
+				}
 				if (fieldValues.get(i) == null)
 					fieldValues.put(i,
-						theFields.get(i).format.parse(ctxFor(config, fieldConfig, () -> config.addChild(theFields.get(fi).childName), null,
+						theFields.get(i).format.parse(ctxFor(config, fieldConfig, supply, null,
 							until, null, findReferences, fv -> fieldValues.put(fi, fv))));
 				else
 					formatField((ComponentField<E, Object>) theFields.get(i), fieldValues.get(i), config, f -> {}, until);
@@ -869,11 +898,16 @@ public interface ObservableConfigFormat<E> {
 		protected <F> void formatField(ComponentField<E, F> field, F fieldValue, ObservableConfig entityConfig, Consumer<F> onFieldValue,
 			Observable<?> until) {
 			boolean[] added = new boolean[1];
-			if (fieldValue != null) {
-				ObservableConfig fieldConfig = entityConfig.getChild(field.childName, true, fc -> {
-					added[0] = true;
-					field.format.format(fieldValue, fieldValue, fc, onFieldValue, until);
-				});
+			if (fieldValue != null || field.childName == null) {
+				ObservableConfig fieldConfig;
+				if (field.childName == null) {
+					fieldConfig = entityConfig;
+				} else {
+					fieldConfig = entityConfig.getChild(field.childName, true, fc -> {
+						added[0] = true;
+						field.format.format(fieldValue, fieldValue, fc, onFieldValue, until);
+					});
+				}
 				if (!added[0])
 					field.format.format(fieldValue, fieldValue, fieldConfig, onFieldValue, until);
 			} else {
@@ -887,30 +921,93 @@ public interface ObservableConfigFormat<E> {
 			ObservableConfigEvent change) throws ParseException {
 			ComponentField<? super E, F> field = (ComponentField<? super E, F>) theFields.get(fieldIdx);
 			F oldValue = field.getter.apply(ctx.getPreviousValue());
-			ObservableValue<? extends ObservableConfig> fieldConfig = entityConfig.observeDescendant(field.childName);
-			if (change != null) {
-				if (change.relativePath.isEmpty() || fieldConfig != change.relativePath.get(0)) {
-					ObservableConfigEvent childChange = change.asFromChild();
-					F newValue;
-					try (Transaction ct = Causable.use(childChange)) {
-						newValue = field.format
-							.parse(ctxFor(entityConfig, fieldConfig, () -> entityConfig.getChild(field.childName, true, null), childChange,
-								ctx.getUntil(), oldValue, ctx.findReferences(), fv -> field.setter.accept(ctx.getPreviousValue(), fv)));
+			ObservableValue<? extends ObservableConfig> fieldConfig;
+			Supplier<ObservableConfig> supply;
+			if (field.childName == null) {
+				fieldConfig = ObservableValue.of(entityConfig);
+				supply = () -> entityConfig;
+				F newValue = field.format.parse(ctxFor(entityConfig, fieldConfig, supply, change, ctx.getUntil(), oldValue,
+					ctx.findReferences(), fv -> field.setter.accept(ctx.getPreviousValue(), fv)));
+				if (newValue != oldValue)
+					field.setter.accept(ctx.getPreviousValue(), newValue);
+				return; // The update does not actually affect the field value
+			} else {
+				fieldConfig = entityConfig.observeDescendant(field.childName);
+				supply = () -> entityConfig.getChild(field.childName, true, null);
+				if (change != null) {
+					if (change.relativePath.isEmpty() || fieldConfig != change.relativePath.get(0)) {
+						ObservableConfigEvent childChange = change.asFromChild();
+						F newValue;
+						try (Transaction ct = Causable.use(childChange)) {
+							newValue = field.format.parse(ctxFor(entityConfig, fieldConfig, supply, childChange, ctx.getUntil(), oldValue,
+								ctx.findReferences(), fv -> field.setter.accept(ctx.getPreviousValue(), fv)));
+						}
+						if (newValue != oldValue)
+							field.setter.accept(ctx.getPreviousValue(), newValue);
+						return; // The update does not actually affect the field value
 					}
-					if (newValue != oldValue)
-						field.setter.accept(ctx.getPreviousValue(), newValue);
-					return; // The update does not actually affect the field value
+					change = change.asFromChild();
 				}
-				change = change.asFromChild();
 			}
-			F newValue = field.format.parse(ctxFor(entityConfig, fieldConfig, () -> entityConfig.addChild(field.childName), change,
+			F newValue = field.format.parse(ctxFor(entityConfig, fieldConfig, supply, change,
 				ctx.getUntil(), oldValue, ctx.findReferences(), fv -> field.setter.accept(ctx.getPreviousValue(), fv)));
 			if (oldValue != newValue)
 				field.setter.accept(ctx.getPreviousValue(), newValue);
 		}
 	}
 
-	class SimpleComponentFormat<E> extends AbstractComponentFormat<E> {
+	static class MapEntry<K, V> {
+		@SuppressWarnings("rawtypes")
+		static TypeTokens.TypeKey<MapEntry> TYPE_KEY = TypeTokens.get().keyFor(MapEntry.class)
+		.enableCompoundTypes(new TypeTokens.BinaryCompoundTypeCreator<MapEntry>() {
+			@Override
+			public <P1, P2> TypeToken<? extends MapEntry> createCompoundType(TypeToken<P1> param1, TypeToken<P2> param2) {
+				return new TypeToken<MapEntry<P1, P2>>() {}.where(new TypeParameter<P1>() {}, param1).where(new TypeParameter<P2>() {},
+					param2);
+			}
+		});
+
+		K key;
+		V value;
+
+		MapEntry(K key, V value) {
+			this.key = key;
+			this.value = value;
+		}
+	}
+
+	static class EntryFormat<K, V> extends AbstractComponentFormat<MapEntry<K, V>> {
+		private final TypeToken<MapEntry<K, V>> theType;
+
+		public EntryFormat(boolean compressed, String keyName, String valueName, TypeToken<K> keyType, TypeToken<V> valueType,
+			ObservableConfigFormat<K> keyFormat, ObservableConfigFormat<V> valueFormat) {
+			super(createFields(compressed, keyName, valueName, keyType, valueType, keyFormat, valueFormat), Collections.emptyList());
+			theType = MapEntry.TYPE_KEY.getCompoundType(keyType, valueType);
+		}
+
+		private static <K, V> QuickMap<String, ComponentField<MapEntry<K, V>, ?>> createFields(boolean compressed, String keyName,
+			String valueName, //
+			TypeToken<K> keyType, TypeToken<V> valueType, //
+			ObservableConfigFormat<K> keyFormat, ObservableConfigFormat<V> valueFormat) {
+			QuickMap<String, ComponentField<MapEntry<K, V>, ?>> fields = QuickSet.of("key").createMap();
+			fields.put("key", new ComponentField<>(keyName, keyType, 0, e -> e.key, (e, k) -> e.key = k, keyFormat, keyName));
+			fields.put("value", new ComponentField<>(compressed ? null : valueName, valueType, 0, e -> e.value, (e, v) -> e.value = v,
+				valueFormat, valueName));
+			return fields.unmodifiable();
+		}
+
+		@Override
+		protected TypeToken<MapEntry<K, V>> getType() {
+			return theType;
+		}
+
+		@Override
+		protected MapEntry<K, V> create(QuickMap<String, Object> fieldValues, ObservableConfig config, Observable<?> until) {
+			return new MapEntry<>((K) fieldValues.get(0), (V) fieldValues.get(1));
+		}
+	}
+
+	public class SimpleComponentFormat<E> extends AbstractComponentFormat<E> {
 		private final TypeToken<E> theType;
 		private final Function<QuickMap<String, Object>, E> theCreator;
 
@@ -932,7 +1029,7 @@ public interface ObservableConfigFormat<E> {
 		}
 	}
 
-	class EntityConfigFormatImpl<E> extends AbstractComponentFormat<E> implements EntityConfigFormat<E> {
+	public class EntityConfigFormatImpl<E> extends AbstractComponentFormat<E> implements EntityConfigFormat<E> {
 		public final EntityConfiguredValueType<E> entityType;
 
 		private EntityConfigFormatImpl(EntityConfiguredValueType<E> entityType, List<EntitySubFormat<? extends E>> subFormats,
@@ -1163,11 +1260,70 @@ public interface ObservableConfigFormat<E> {
 		};
 	}
 
+	static <K, V> ObservableConfigFormat<ObservableMap<K, V>> ofMap(TypeToken<K> keyType, TypeToken<V> valueType, String keyName,
+		String valueName, ObservableConfigFormat<K> keyFormat, ObservableConfigFormat<V> valueFormat) {
+		return new ObservableConfigFormat<ObservableMap<K, V>>() {
+			@Override
+			public void format(ObservableMap<K, V> value, ObservableMap<K, V> previousValue, ObservableConfig config,
+				Consumer<ObservableMap<K, V>> acceptedValue, Observable<?> until) throws IllegalArgumentException {
+				acceptedValue.accept(previousValue);
+			}
+
+			@Override
+			public ObservableMap<K, V> parse(ObservableConfigParseContext<ObservableMap<K, V>> ctx) throws ParseException {
+				if (ctx.getPreviousValue() == null) {
+					return new ObservableConfigTransform.ObservableConfigMap<>(ctx.getRoot(), ctx.getConfig(), () -> ctx.getConfig(true),
+						keyName, valueName, keyType, valueType, keyFormat, valueFormat, ctx.getUntil(), false, ctx.findReferences());
+				} else {
+					((ObservableConfigTransform.ObservableConfigMap<K, V>) ctx.getPreviousValue()).onChange(ctx.getChange());
+					return ctx.getPreviousValue();
+				}
+			}
+
+			@Override
+			public ObservableMap<K, V> copy(ObservableMap<K, V> source, ObservableMap<K, V> copy,
+				ObservableValue<? extends ObservableConfig> config, Supplier<? extends ObservableConfig> create, Observable<?> until) {
+				copy.putAll(source);
+				return copy;
+			}
+		};
+	}
+
+	static <K, V> ObservableConfigFormat<ObservableMultiMap<K, V>> ofMultiMap(TypeToken<K> keyType, TypeToken<V> valueType, String keyName,
+		String valueName, ObservableConfigFormat<K> keyFormat, ObservableConfigFormat<V> valueFormat) {
+		return new ObservableConfigFormat<ObservableMultiMap<K, V>>() {
+			@Override
+			public void format(ObservableMultiMap<K, V> value, ObservableMultiMap<K, V> previousValue, ObservableConfig config,
+				Consumer<ObservableMultiMap<K, V>> acceptedValue, Observable<?> until) throws IllegalArgumentException {
+				acceptedValue.accept(previousValue);
+			}
+
+			@Override
+			public ObservableMultiMap<K, V> parse(ObservableConfigParseContext<ObservableMultiMap<K, V>> ctx) throws ParseException {
+				if (ctx.getPreviousValue() == null) {
+					return new ObservableConfigTransform.ObservableConfigMultiMap<>(ctx.getRoot(), ctx.getConfig(),
+						() -> ctx.getConfig(true), keyName, valueName, keyType, valueType, keyFormat, valueFormat, ctx.getUntil(), false,
+						ctx.findReferences());
+				} else {
+					((ObservableConfigTransform.ObservableConfigMultiMap<K, V>) ctx.getPreviousValue()).onChange(ctx.getChange());
+					return ctx.getPreviousValue();
+				}
+			}
+
+			@Override
+			public ObservableMultiMap<K, V> copy(ObservableMultiMap<K, V> source, ObservableMultiMap<K, V> copy,
+				ObservableValue<? extends ObservableConfig> config, Supplier<? extends ObservableConfig> create, Observable<?> until) {
+				copy.putAll(source);
+				return copy;
+			}
+		};
+	}
+
 	static <T> HeterogeneousFormat.Builder<T> heterogeneous(TypeToken<T> type) {
 		return HeterogeneousFormat.build(type);
 	}
 
-	class HeterogeneousFormat<T> implements ObservableConfigFormat<T> {
+	public class HeterogeneousFormat<T> implements ObservableConfigFormat<T> {
 		public static <T> Builder<T> build(TypeToken<T> type) {
 			return new Builder<>(type);
 		}
@@ -1232,6 +1388,22 @@ public interface ObservableConfigFormat<E> {
 				this.valueFilter = valueFilter;
 			}
 
+			public ObservableConfig.ObservableConfigPathElement getConfigFilter() {
+				return configFilter;
+			}
+
+			public ObservableConfigFormat<T> getFormat() {
+				return format;
+			}
+
+			public TypeToken<T> getType() {
+				return type;
+			}
+
+			public Predicate<? super T> getValueFilter() {
+				return valueFilter;
+			}
+
 			void moldConfig(ObservableConfig config) {
 				if (!configFilter.isMulti() && !config.getName().equals(configFilter.getName()))
 					config.setName(configFilter.getName());
@@ -1250,7 +1422,7 @@ public interface ObservableConfigFormat<E> {
 
 		private final List<SubFormat<? extends T>> theSubFormats;
 
-		public HeterogeneousFormat(List<SubFormat<? extends T>> subFormats) {
+		HeterogeneousFormat(List<SubFormat<? extends T>> subFormats) {
 			theSubFormats = subFormats;
 		}
 
@@ -1270,6 +1442,10 @@ public interface ObservableConfigFormat<E> {
 				if (subFormat.configFilter.matches(config))
 					return subFormat;
 			return null;
+		}
+
+		public List<SubFormat<? extends T>> getSubFormats() {
+			return theSubFormats;
 		}
 
 		@Override

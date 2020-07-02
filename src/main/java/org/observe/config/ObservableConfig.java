@@ -35,6 +35,8 @@ import org.observe.Observer;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.observe.Subscription;
+import org.observe.assoc.ObservableMap;
+import org.observe.assoc.ObservableMultiMap;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
 import org.observe.config.ObservableConfigContent.FullObservableConfigContent;
@@ -599,6 +601,11 @@ public class ObservableConfig implements Transactable, Stamped {
 		return new ObservableConfigValueBuilder<>(type);
 	}
 
+	/**
+	 * Formats ObservableConfig data into any number of different types of data structures
+	 *
+	 * @param <T> The value type of the structure to create
+	 */
 	public class ObservableConfigValueBuilder<T> {
 		private final TypeToken<T> theType;
 		private ObservableConfigFormat<T> theFormat;
@@ -751,6 +758,105 @@ public class ObservableConfig implements Transactable, Stamped {
 			return build(findRefs -> new ObservableConfigTransform.ObservableConfigEntityValues<>(ObservableConfig.this, //
 				getDescendant(true), createDescendant(true)::get, (ObservableConfigFormat.EntityConfigFormat<T>) entityFormat,
 				getChildName(), getUntil(), true, findRefs), preReturnGet);
+		}
+
+		public <K> ObservableConfigMapBuilder<K, T> asMap(TypeToken<K> keyType) {
+			return new ObservableConfigMapBuilder<>(this, keyType);
+		}
+	}
+
+	public class ObservableConfigMapBuilder<K, V> {
+		private final ObservableConfigValueBuilder<V> theValueBuilder;
+		private final TypeToken<K> theKeyType;
+		private String theKeyName;
+		private ObservableConfigFormat<K> theKeyFormat;
+
+		ObservableConfigMapBuilder(ObservableConfigValueBuilder<V> valueBuilder, TypeToken<K> keyType) {
+			theValueBuilder = valueBuilder;
+			theKeyType = keyType;
+		}
+
+		public ObservableConfigMapBuilder<K, V> withKeyFormat(ObservableConfigFormat<K> format) {
+			theKeyFormat = checkFormat(format);
+			return this;
+		}
+
+		public ObservableConfigMapBuilder<K, V> withKeyFormat(Format<K> format, Supplier<? extends K> defaultValue) {
+			theKeyFormat = ObservableConfigFormat.ofQommonFormat(format, defaultValue);
+			return this;
+		}
+
+		public ObservableConfigMapBuilder<K, V> withFormatSet(ObservableConfigFormatSet formatSet) {
+			theValueBuilder.withFormatSet(formatSet);
+			return this;
+		}
+
+		public ObservableConfigMapBuilder<K, V> withHierarchicalFormat(
+			Function<ObservableConfigFormat.HeterogeneousFormat.Builder<K>, ObservableConfigFormat.HeterogeneousFormat<K>> format) {
+			theKeyFormat = checkFormat(format.apply(ObservableConfigFormat.heterogeneous(theKeyType)));
+			return this;
+		}
+
+		private <K2 extends K> ObservableConfigFormat<K2> checkFormat(ObservableConfigFormat<K2> format) {
+			if (format == null || format instanceof ObservableConfigFormat.SimpleConfigFormat)
+				return format;
+			else if (format instanceof ObservableConfigFormat.HeterogeneousFormat) {
+				for (ObservableConfigFormat.HeterogeneousFormat.SubFormat<? extends K> subFormat//
+					: ((ObservableConfigFormat.HeterogeneousFormat<K>) format).getSubFormats()) {
+					checkFormat(subFormat.getFormat());
+				}
+			} else
+				throw new IllegalArgumentException("Only simple key formats are supported");
+			return format;
+		}
+
+		public ObservableConfigMapBuilder<K, V> at(String path) {
+			theValueBuilder.at(path);
+			return this;
+		}
+
+		public ObservableConfigMapBuilder<K, V> at(ObservableConfigPath path) {
+			theValueBuilder.at(path);
+			return this;
+		}
+
+		public ObservableConfigMapBuilder<K, V> until(Observable<?> until) {
+			theValueBuilder.until(until);
+			return this;
+		}
+
+		public ObservableConfigMapBuilder<K, V> withKeyName(String keyName) {
+			theKeyName = keyName;
+			return this;
+		}
+
+		protected ObservableConfigFormat<K> getKeyFormat() {
+			ObservableConfigFormat<K> format = theKeyFormat;
+			if (format == null)
+				format = theValueBuilder.getFormatSet().getConfigFormat(theKeyType, getName());
+			return format;
+		}
+
+		protected String getKeyName() {
+			return theKeyName == null ? "key" : theKeyName;
+		}
+
+		/** @deprecated Not yet implemented */
+		@Deprecated
+		public ObservableMap<K, V> buildMap(Consumer<ObservableMap<K, V>> preReturnGet) {
+			return theValueBuilder.build(findRefs -> new ObservableConfigTransform.ObservableConfigMap<>(ObservableConfig.this, //
+				theValueBuilder.getDescendant(true), theValueBuilder.createDescendant(true)::get, //
+				getKeyName(), theValueBuilder.getChildName(), theKeyType, theValueBuilder.theType, getKeyFormat(),
+				theValueBuilder.getFormat(), theValueBuilder.getUntil(), true, findRefs), preReturnGet);
+		}
+
+		/** @deprecated Not yet implemented */
+		@Deprecated
+		public ObservableMultiMap<K, V> buildMultiMap(Consumer<ObservableMultiMap<K, V>> preReturnGet) {
+			return theValueBuilder.build(findRefs -> new ObservableConfigTransform.ObservableConfigMultiMap<>(ObservableConfig.this, //
+				theValueBuilder.getDescendant(true), theValueBuilder.createDescendant(true)::get, //
+				getKeyName(), theValueBuilder.getChildName(), theKeyType, theValueBuilder.theType, getKeyFormat(),
+				theValueBuilder.getFormat(), theValueBuilder.getUntil(), true, findRefs), preReturnGet);
 		}
 	}
 
