@@ -520,7 +520,17 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 	 * @return An immutable, empty map with the given types
 	 */
 	static <K, V> ObservableMap<K, V> empty(TypeToken<K> keyType, TypeToken<V> valueType) {
-		return new EmtpyObservableMap<>(keyType, valueType);
+		return new EmptyObservableMap<>(keyType, valueType);
+	}
+
+	/**
+	 * @param <K> The key type of the map
+	 * @param <V> The value type of the map
+	 * @param map The map to wrap
+	 * @return An {@link ObservableMap} that reflects the given map's contents but does not allow any modifications
+	 */
+	static <K, V> ObservableMap<K, V> unmodifiable(ObservableMap<K, V> map) {
+		return new UnmodifiableObservableMap<>(map);
 	}
 
 	/**
@@ -961,7 +971,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 	 * @param <K> The key type of the map
 	 * @param <V> The value type of the map
 	 */
-	class EmtpyObservableMap<K, V> extends AbstractIdentifiable implements ObservableMap<K, V> {
+	class EmptyObservableMap<K, V> extends AbstractIdentifiable implements ObservableMap<K, V> {
 		private final TypeToken<K> theKeyType;
 		private final TypeToken<V> theValueType;
 		private TypeToken<Map.Entry<K, V>> theEntryType;
@@ -969,7 +979,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 		private ObservableCollection<V> theValues;
 		private ObservableSet<Map.Entry<K, V>> theEntries;
 
-		public EmtpyObservableMap(TypeToken<K> keyType, TypeToken<V> valueType) {
+		public EmptyObservableMap(TypeToken<K> keyType, TypeToken<V> valueType) {
 			theKeyType = keyType;
 			theValueType = valueType;
 			theKeySet = ObservableCollection.of(keyType).flow().distinct().collect();
@@ -1075,6 +1085,156 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 		@Override
 		public String toString() {
 			return entrySet().toString();
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableMap#unmodifiable(ObservableMap)}
+	 * 
+	 * @param <K> The key type of the map
+	 * @param <V> The value type of the map
+	 */
+	class UnmodifiableObservableMap<K, V> implements ObservableMap<K, V> {
+		private final ObservableMap<K, V> theWrapped;
+		private final ObservableSet<K> theKeySet;
+
+		public UnmodifiableObservableMap(ObservableMap<K, V> wrapped) {
+			theWrapped = wrapped;
+			theKeySet = theWrapped.keySet().flow().unmodifiable().collectPassive();
+		}
+
+		@Override
+		public MapEntryHandle<K, V> getEntry(K key) {
+			return theWrapped.getEntry(key);
+		}
+
+		@Override
+		public MapEntryHandle<K, V> getOrPutEntry(K key, Function<? super K, ? extends V> value, ElementId after, ElementId before,
+			boolean first, Runnable added) {
+			MapEntryHandle<K, V> found = theWrapped.getEntry(key);
+			if (found == null)
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+			return found;
+		}
+
+		@Override
+		public MapEntryHandle<K, V> getEntryById(ElementId entryId) {
+			return theWrapped.getEntryById(entryId);
+		}
+
+		@Override
+		public MutableMapEntryHandle<K, V> mutableEntry(ElementId entryId) {
+			return new UnmodifiableEntry(getEntryById(entryId));
+		}
+
+		@Override
+		public Object getIdentity() {
+			return theWrapped.getIdentity();
+		}
+
+		@Override
+		public TypeToken<K> getKeyType() {
+			return theWrapped.getKeyType();
+		}
+
+		@Override
+		public TypeToken<V> getValueType() {
+			return theWrapped.getValueType();
+		}
+
+		@Override
+		public TypeToken<Map.Entry<K, V>> getEntryType() {
+			return theWrapped.getEntryType();
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return theWrapped.isLockSupported();
+		}
+
+		@Override
+		public Equivalence<? super V> equivalence() {
+			return theWrapped.equivalence();
+		}
+
+		@Override
+		public ObservableSet<K> keySet() {
+			return theKeySet;
+		}
+
+		@Override
+		public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action) {
+			return theWrapped.onChange(action);
+		}
+
+		@Override
+		public int hashCode() {
+			return theWrapped.hashCode();
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (obj instanceof UnmodifiableObservableMap)
+				obj = ((UnmodifiableObservableMap<?, ?>) obj).theWrapped;
+			return theWrapped.equals(obj);
+		}
+
+		@Override
+		public String toString() {
+			return theWrapped.toString();
+		}
+
+		class UnmodifiableEntry implements MutableMapEntryHandle<K, V> {
+			private final MapEntryHandle<K, V> theWrappedEl;
+
+			UnmodifiableEntry(MapEntryHandle<K, V> wrappedEl) {
+				theWrappedEl = wrappedEl;
+			}
+
+			@Override
+			public K getKey() {
+				return theWrappedEl.getKey();
+			}
+
+			@Override
+			public ElementId getElementId() {
+				return theWrappedEl.getElementId();
+			}
+
+			@Override
+			public V get() {
+				return theWrappedEl.get();
+			}
+
+			@Override
+			public BetterCollection<V> getCollection() {
+				return UnmodifiableObservableMap.this.values();
+			}
+
+			@Override
+			public String isEnabled() {
+				return StdMsg.UNSUPPORTED_OPERATION;
+			}
+
+			@Override
+			public String isAcceptable(V value) {
+				return StdMsg.UNSUPPORTED_OPERATION;
+			}
+
+			@Override
+			public void set(V value) throws UnsupportedOperationException, IllegalArgumentException {
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+			}
+
+			@Override
+			public String canRemove() {
+				return StdMsg.UNSUPPORTED_OPERATION;
+			}
+
+			@Override
+			public void remove() throws UnsupportedOperationException {
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+			}
 		}
 	}
 }
