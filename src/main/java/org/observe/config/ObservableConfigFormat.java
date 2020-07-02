@@ -450,6 +450,8 @@ public interface ObservableConfigFormat<E> {
 	interface EntityConfigFormat<E> extends ObservableConfigFormat<E> {
 		EntityConfiguredValueType<E> getEntityType();
 
+		<F> ObservableConfigFormat<F> getFieldFormat(ConfiguredValueField<E, F> field);
+
 		<E2 extends E> EntityConfigCreator<E2> create(TypeToken<E2> subType);
 	}
 
@@ -966,6 +968,11 @@ public interface ObservableConfigFormat<E> {
 		}
 
 		@Override
+		public <F> ObservableConfigFormat<F> getFieldFormat(ConfiguredValueField<E, F> field) {
+			return (ObservableConfigFormat<F>) getFields().get(field.getIndex()).format;
+		}
+
+		@Override
 		public <E2 extends E> EntityConfigCreator<E2> create(TypeToken<E2> subType) {
 			ConfigCreator<E2> creator = super.create(subType);
 			if (creator instanceof EntityConfigCreator)
@@ -1122,17 +1129,17 @@ public interface ObservableConfigFormat<E> {
 		};
 	}
 
-	static <E> ObservableConfigFormat<ObservableValueSet<E>> ofEntitySet(EntityConfigFormat<E> elementFormat, String childName) {
-		return new ObservableConfigFormat<ObservableValueSet<E>>() {
+	static <E> ObservableConfigFormat<SyncValueSet<E>> ofEntitySet(EntityConfigFormat<E> elementFormat, String childName) {
+		return new ObservableConfigFormat<SyncValueSet<E>>() {
 			@Override
-			public void format(ObservableValueSet<E> value, ObservableValueSet<E> preValue, ObservableConfig config,
-				Consumer<ObservableValueSet<E>> acceptedValue, Observable<?> until) {
+			public void format(SyncValueSet<E> value, SyncValueSet<E> preValue, ObservableConfig config,
+				Consumer<SyncValueSet<E>> acceptedValue, Observable<?> until) {
 				// Nah, we don't support calling set on a field like this, nothing to do
 				acceptedValue.accept(preValue);
 			}
 
 			@Override
-			public ObservableValueSet<E> parse(ObservableConfigParseContext<ObservableValueSet<E>> ctx) throws ParseException {
+			public SyncValueSet<E> parse(ObservableConfigParseContext<SyncValueSet<E>> ctx) throws ParseException {
 				if (ctx.getPreviousValue() == null) {
 					return new ObservableConfigTransform.ObservableConfigEntityValues<>(ctx.getRoot(), ctx.getConfig(),
 						() -> ctx.getConfig(true), elementFormat, childName, ctx.getUntil(), false, ctx.findReferences());
@@ -1143,10 +1150,14 @@ public interface ObservableConfigFormat<E> {
 			}
 
 			@Override
-			public ObservableValueSet<E> copy(ObservableValueSet<E> source, ObservableValueSet<E> copy,
+			public SyncValueSet<E> copy(SyncValueSet<E> source, SyncValueSet<E> copy,
 				ObservableValue<? extends ObservableConfig> config, Supplier<? extends ObservableConfig> create, Observable<?> until) {
-				for (E value : source.getValues())
-					copy.copy(value);
+				for (E value : source.getValues()) {
+					if (value == null)
+						copy.create().copy(value).create();
+					else
+						copy.create(TypeTokens.get().of((Class<? extends E>) value.getClass())).copy(value).create();
+				}
 				return copy;
 			}
 		};

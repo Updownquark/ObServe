@@ -1,5 +1,6 @@
 package org.observe.entity;
 
+import java.util.Iterator;
 import java.util.function.Function;
 
 import org.qommons.collect.BetterList;
@@ -23,7 +24,7 @@ public class EntityChainAccess<E, T> implements EntityValueAccess<E, T> {
 		ObservableEntityType<?> entity = null;
 		for (int f = 0; f < fields.length; f++) {
 			if (f > 0) {
-				if (entity.getFields().get(fields[f].getFieldIndex()) != fields[f])
+				if (entity.getFields().get(fields[f].getIndex()) != fields[f])
 					throw new IllegalArgumentException("Bad field sequence--" + fields[f] + " does not follow " + fields[f - 1]);
 			}
 			entity = fields[f].getTargetEntity();
@@ -40,12 +41,12 @@ public class EntityChainAccess<E, T> implements EntityValueAccess<E, T> {
 
 	@Override
 	public ObservableEntityType<E> getSourceEntity() {
-		return ((ObservableEntityFieldType<E, ?>) theFieldSequence.getFirst()).getEntityType();
+		return ((ObservableEntityFieldType<E, ?>) theFieldSequence.getFirst()).getOwnerType();
 	}
 
 	@Override
 	public TypeToken<T> getValueType() {
-		return (TypeToken<T>) theFieldSequence.getLast().getValueType();
+		return (TypeToken<T>) theFieldSequence.getLast().getOwnerType();
 	}
 
 	@Override
@@ -85,10 +86,10 @@ public class EntityChainAccess<E, T> implements EntityValueAccess<E, T> {
 	}
 
 	@Override
-	public T getValue(E entity) {
+	public T get(E entity) {
 		Object value = entity;
 		for (ObservableEntityFieldType<?, ?> field : theFieldSequence)
-			value = ((ObservableEntityFieldType<Object, Object>) field).getValue(value);
+			value = ((ObservableEntityFieldType<Object, Object>) field).get(value);
 		return (T) value;
 	}
 
@@ -96,8 +97,23 @@ public class EntityChainAccess<E, T> implements EntityValueAccess<E, T> {
 	public T getValue(ObservableEntity<? extends E> entity) {
 		Object value = entity;
 		for (ObservableEntityFieldType<?, ?> field : theFieldSequence)
-			value = ((ObservableEntityFieldType<Object, Object>) field).getValue(value);
+			value = ((ObservableEntityFieldType<Object, Object>) field).get(value);
 		return (T) value;
+	}
+
+	@Override
+	public void setValue(ObservableEntity<? extends E> entity, T value) {
+		Object target = entity;
+		Iterator<ObservableEntityFieldType<?, ?>> fieldIter = theFieldSequence.iterator();
+		ObservableEntityFieldType<?, ?> lastField = null;
+		while (fieldIter.hasNext()) {
+			lastField = fieldIter.next();
+			if (fieldIter.hasNext())
+				target = ((ObservableEntityFieldType<Object, Object>) lastField).get(target);
+			else
+				break;
+		}
+		((ObservableEntityFieldType<Object, T>) lastField).set(target, value);
 	}
 
 	@Override
@@ -108,8 +124,8 @@ public class EntityChainAccess<E, T> implements EntityValueAccess<E, T> {
 		Object v2 = o2;
 		for (ObservableEntityFieldType<?, ?> field : theFieldSequence) {
 			ObservableEntityFieldType<Object, Object> f = (ObservableEntityFieldType<Object, Object>) field;
-			v1 = f.getValue(v1);
-			v2 = f.getValue(v2);
+			v1 = f.get(v1);
+			v2 = f.get(v2);
 			if (f.compare(v1, v2) == 0)
 				return 0;
 		}
@@ -146,7 +162,7 @@ public class EntityChainAccess<E, T> implements EntityValueAccess<E, T> {
 
 	@Override
 	public String toString() {
-		StringBuilder str = new StringBuilder(theFieldSequence.getFirst().getEntityType().getName());
+		StringBuilder str = new StringBuilder(theFieldSequence.getFirst().getOwnerType().getName());
 		for (ObservableEntityFieldType<?, ?> field : theFieldSequence)
 			str.append('.').append(field.getName());
 		return str.toString();

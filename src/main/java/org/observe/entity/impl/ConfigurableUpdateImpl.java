@@ -45,22 +45,22 @@ class ConfigurableUpdateImpl<E> extends AbstractConfigurableOperation<E> impleme
 	@Override
 	public <F> ConfigurableUpdate<E> setField(ObservableEntityFieldType<? super E, F> field, F value)
 		throws IllegalStateException, IllegalArgumentException {
-		if (getEntityType().getFields().get(field.getFieldIndex()) != field)
+		if (getEntityType().getFields().get(field.getIndex()) != field)
 			throw new IllegalArgumentException("Unrecognized field " + field);
 		QuickMap<String, Object> copy = theUpdateValues.copy();
 		// TODO Type/constraint check
-		copy.put(field.getFieldIndex(), value);
+		copy.put(field.getIndex(), value);
 		return new ConfigurableUpdateImpl<>(theSelection, getVariables(), copy.unmodifiable(), theUpdateVariables);
 	}
 
 	@Override
 	public ConfigurableUpdate<E> setFieldVariable(ObservableEntityFieldType<? super E, ?> field, String variableName)
 		throws IllegalStateException, IllegalArgumentException {
-		if (getEntityType().getFields().get(field.getFieldIndex()) != field)
+		if (getEntityType().getFields().get(field.getIndex()) != field)
 			throw new IllegalArgumentException("Unrecognized field " + field);
 		QuickMap<String, EntityOperationVariable<E>> variables = getOrAddVariable(variableName);
 		QuickMap<String, EntityOperationVariable<E>> copy = theUpdateVariables.copy();
-		copy.put(field.getFieldIndex(), variables.get(variableName));
+		copy.put(field.getIndex(), variables.get(variableName));
 		return new ConfigurableUpdateImpl<>(theSelection, variables, theUpdateValues, copy.unmodifiable());
 	}
 

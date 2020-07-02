@@ -759,7 +759,7 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 
 	/**
 	 * Either an {@link EntityCondition.OrCondition OR} or an {@link EntityCondition.AndCondition AND} condition
-	 * 
+	 *
 	 * @param <E> The entity type of the condition
 	 */
 	public static abstract class CompositeCondition<E> extends EntityCondition<E> {

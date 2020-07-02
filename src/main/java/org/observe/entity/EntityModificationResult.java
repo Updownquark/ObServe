@@ -23,7 +23,7 @@ public interface EntityModificationResult<E> extends ObservableEntityResult<E> {
 
 	/**
 	 * @return The number of entities that were affected (updated or deleted) by this operation, or -1 if this result's {@link #getStatus()
-	 *         status} is not {@link ObservableEntityResult.ResultStatus#FULFILLED fulfilled}
+	 *         status} is not {@link org.observe.config.ObservableOperationResult.ResultStatus#FULFILLED fulfilled}
 	 */
 	long getModified();
 }

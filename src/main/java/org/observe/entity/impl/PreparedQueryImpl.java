@@ -32,10 +32,10 @@ class PreparedQueryImpl<E> extends AbstractPreparedSetOperation<E, PreparedQuery
 
 	@Override
 	public EntityQuery<E> loadField(ObservableEntityFieldType<E, ?> field, FieldLoadType type) {
-		if (getEntityType().getFields().get(field.getFieldIndex()) != field)
+		if (getEntityType().getFields().get(field.getIndex()) != field)
 			throw new IllegalArgumentException("Unrecognized field: " + field);
 		QuickMap<String, FieldLoadType> loadTypes = theFieldLoadTypes.copy();
-		loadTypes.put(field.getFieldIndex(), type);
+		loadTypes.put(field.getIndex(), type);
 		return new PreparedQueryImpl<>(getDefinition(), getPreparedObject(), getSelection(), loadTypes, getVariableValues());
 	}
 

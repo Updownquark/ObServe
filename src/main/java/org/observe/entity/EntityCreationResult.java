@@ -1,11 +1,13 @@
 package org.observe.entity;
 
+import org.observe.config.ObservableCreationResult;
+
 /**
  * The result of creating an entity with an {@link EntityCreator}
  *
  * @param <E> The type of entity being created
  */
-public interface EntityCreationResult<E> extends ObservableEntityResult<E> {
+public interface EntityCreationResult<E> extends ObservableEntityResult<E>, ObservableCreationResult<E> {
 	@Override
 	EntityCreator<E> getOperation();
 
@@ -23,7 +25,13 @@ public interface EntityCreationResult<E> extends ObservableEntityResult<E> {
 
 	/**
 	 * @return The entity created as a result of the operation, or null if this result's {@link #getStatus() status} is not
-	 *         {@link ObservableEntityResult.ResultStatus#FULFILLED fulfilled}
+	 *         {@link org.observe.config.ObservableOperationResult.ResultStatus#FULFILLED fulfilled}
 	 */
 	ObservableEntity<? extends E> getNewEntity();
+
+	@Override
+	default E getNewValue() {
+		ObservableEntity<? extends E> entity = getNewEntity();
+		return entity == null ? null : entity.getEntity();
+	}
 }

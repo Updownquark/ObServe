@@ -1,7 +1,9 @@
 package org.observe.entity;
 
+import org.observe.config.ValueOperationException;
+
 /** Thrown from an entity set implementation when a requested operation cannot be performed for any reason */
-public class EntityOperationException extends Exception {
+public class EntityOperationException extends ValueOperationException {
 	/** @param message A message describing the cause of the failure */
 	public EntityOperationException(String message) {
 		super(message);

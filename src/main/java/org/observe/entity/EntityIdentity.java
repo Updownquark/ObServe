@@ -40,9 +40,9 @@ public class EntityIdentity<E> implements Comparable<EntityIdentity<?>> {
 	public <F> F getValue(ObservableEntityFieldType<? super E, F> fieldType) {
 		if (fieldType.getIdIndex() < 0)
 			throw new IllegalArgumentException("Field " + fieldType + " is not an identity field");
-		else if (fieldType.getEntityType() == theEntityType)
+		else if (fieldType.getOwnerType() == theEntityType)
 			return (F) theFields.get(fieldType.getIdIndex());
-		else if (fieldType.getEntityType().isAssignableFrom(theEntityType))
+		else if (fieldType.getOwnerType().isAssignableFrom(theEntityType))
 			return (F) theFields.get(fieldType.getName());
 		else
 			throw new IllegalArgumentException("Field " + fieldType + " cannot be applied to an identity of " + theEntityType);

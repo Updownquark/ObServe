@@ -6,7 +6,7 @@ import org.observe.util.TypeTokens;
 /**
  * The result of an {@link EntityQuery}'s {@link EntityQuery#collect(boolean) collect} method. This collection and the one returned from
  * {@link #asSimpleEntities()} will be empty until this result's {@link #getStatus() status} is
- * {@link ObservableEntityResult.ResultStatus#FULFILLED fulfilled}.
+ * {@link org.observe.config.ObservableOperationResult.ResultStatus#FULFILLED fulfilled}.
  *
  * @param <E> The type of entity in the result
  */

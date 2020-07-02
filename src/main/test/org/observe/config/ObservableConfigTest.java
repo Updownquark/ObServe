@@ -22,7 +22,6 @@ import org.qommons.BreakpointHere;
 import org.qommons.QommonsTestUtils;
 import org.qommons.TestHelper;
 import org.qommons.Transaction;
-import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.FastFailLockingStrategy;
 import org.qommons.tree.BetterTreeList;
@@ -187,7 +186,7 @@ public class ObservableConfigTest {
 	private void testSimpleEntities(boolean withModification) throws IOException, SAXException {
 		SimpleObservable<Void> until = new SimpleObservable<>();
 		readXml(getClass().getResourceAsStream("TestValues.xml"));
-		ObservableValueSet<TestEntity> testEntities = theConfig.asValue(TestEntity.class).at("test-entities/test-entity").until(until)
+		SyncValueSet<TestEntity> testEntities = theConfig.asValue(TestEntity.class).at("test-entities/test-entity").until(until)
 			.buildEntitySet(null);
 
 		int i = 0;
@@ -323,7 +322,7 @@ public class ObservableConfigTest {
 	public void testComplexEntities() throws IOException, SAXException {
 		SimpleObservable<Void> until = new SimpleObservable<>();
 		readXml(getClass().getResourceAsStream("TestValues.xml"));
-		ObservableValueSet<TestEntity2> testEntities = theConfig.asValue(TestEntity2.class).at("test-entities2/test-entity2").until(until)
+		SyncValueSet<TestEntity2> testEntities = theConfig.asValue(TestEntity2.class).at("test-entities2/test-entity2").until(until)
 			.buildEntitySet(null);
 
 		int i = 0;
@@ -479,8 +478,8 @@ public class ObservableConfigTest {
 	static class ObservableConfigSuperTester implements TestHelper.Testable {
 		private final XmlEncoding theEncoding;
 		private final ObservableConfig theConfig;
-		private final ObservableValueSet<TestEntity2> testEntities1;
-		private final ObservableValueSet<TestEntity2> testEntities2;
+		private final SyncValueSet<TestEntity2> testEntities1;
+		private final SyncValueSet<TestEntity2> testEntities2;
 
 		private final List<TestEntity2> expected;
 		private final ObservableCollectionTester<TestEntity2> tester1;
@@ -520,7 +519,7 @@ public class ObservableConfigTest {
 			double ticksPerMod = 100.0 / modifications;
 			int ticks = 0;
 			for (int i = 0; i < modifications; i++) {
-				ObservableValueSet<TestEntity2> testEntities = helper.getBoolean() ? testEntities1 : testEntities2;
+				SyncValueSet<TestEntity2> testEntities = helper.getBoolean() ? testEntities1 : testEntities2;
 				int newTicks = (int) (i * ticksPerMod);
 				while (ticks < newTicks) {
 					System.out.print(".");
@@ -608,7 +607,7 @@ public class ObservableConfigTest {
 						int newE = helper.getAnyInt();
 						double newF = 0;
 						boolean te5 = helper.getBoolean();
-						ValueCreator<TestEntity4, ? extends TestEntity4> creator;
+						SyncValueCreator<TestEntity4, ? extends TestEntity4> creator;
 						if (te5) {
 							newF = helper.getAnyDouble();
 							creator = modify.getListedEntities().create(TypeTokens.get().of(TestEntity5.class)).with(TestEntity5::getF,
@@ -734,7 +733,7 @@ public class ObservableConfigTest {
 
 		List<String> getTexts();
 
-		ObservableValueSet<TestEntity4> getListedEntities();
+		SyncValueSet<TestEntity4> getListedEntities();
 	}
 
 	interface TestEntity3 {
@@ -819,8 +818,8 @@ public class ObservableConfigTest {
 		}
 
 		@Override
-		public ObservableValueSet<TestEntity4> getListedEntities() {
-			return new ObservableValueSet<ObservableConfigTest.TestEntity4>() {
+		public SyncValueSet<TestEntity4> getListedEntities() {
+			return new SyncValueSet<ObservableConfigTest.TestEntity4>() {
 				@Override
 				public ObservableCollection<? extends TestEntity4> getValues() {
 					return theListedEntities;
@@ -832,18 +831,13 @@ public class ObservableConfigTest {
 				}
 
 				@Override
-				public <T extends TestEntity4> ValueCreator<TestEntity4, T> create(TypeToken<T> subType) {
+				public <T extends TestEntity4> SyncValueCreator<TestEntity4, T> create(TypeToken<T> subType) {
 					return null;
 				}
 
 				@Override
-				public <E2 extends TestEntity4> CollectionElement<TestEntity4> copy(E2 template) {
-					throw new UnsupportedOperationException();
-				}
-
-				@Override
 				public boolean equals(Object o) {
-					return o instanceof ObservableValueSet && theListedEntities.equals(((ObservableValueSet<?>) o).getValues());
+					return o instanceof SyncValueSet && theListedEntities.equals(((SyncValueSet<?>) o).getValues());
 				}
 			};
 		}

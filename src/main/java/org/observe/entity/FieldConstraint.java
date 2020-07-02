@@ -12,7 +12,7 @@ public interface FieldConstraint<E, F> extends EntityConstraint<E> {
 
 	@Override
 	default ObservableEntityType<E> getEntityType() {
-		return getField().getEntityType();
+		return getField().getOwnerType();
 	}
 
 	/**

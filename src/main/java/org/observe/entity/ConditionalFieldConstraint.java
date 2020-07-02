@@ -16,7 +16,7 @@ public class ConditionalFieldConstraint<E, F> extends ConditionConstraint<E> imp
 	 */
 	public ConditionalFieldConstraint(ObservableEntityFieldType<E, F> field, String name,
 		EntityCondition.LiteralCondition<E, F> condition) {
-		super(field.getEntityType(), name, condition);
+		super(field.getOwnerType(), name, condition);
 		theField = field;
 	}
 

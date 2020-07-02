@@ -3,6 +3,7 @@ package org.observe.entity;
 import java.util.List;
 import java.util.function.Function;
 
+import org.observe.config.ConfiguredValueType;
 import org.observe.entity.EntityIdentity.Builder;
 import org.qommons.Named;
 import org.qommons.collect.QuickSet.QuickMap;
@@ -12,20 +13,23 @@ import org.qommons.collect.QuickSet.QuickMap;
  *
  * @param <E> The java type of the entity
  */
-public interface ObservableEntityType<E> extends Named {
+public interface ObservableEntityType<E> extends ConfiguredValueType<E>, Named {
 	/** @return The entity set that this type belongs to */
 	ObservableEntityDataSet getEntitySet();
 
-	/** @return Any other types that this type inherits from */
+	@Override
 	List<? extends ObservableEntityType<? super E>> getSupers();
 
 	/** @return The java type associated with this entity type, if any */
 	Class<E> getEntityType();
 
-	/** @return This entity's field types */
-	QuickMap<String, ObservableEntityFieldType<E, ?>> getFields();
+	@Override
+	QuickMap<String, ? extends ObservableEntityFieldType<E, ?>> getFields();
 	/** @return This entity's identity field types */
-	QuickMap<String, ObservableEntityFieldType<E, ?>> getIdentityFields();
+	QuickMap<String, ? extends ObservableEntityFieldType<E, ?>> getIdentityFields();
+
+	@Override
+	<F> ObservableEntityFieldType<E, F> getField(Function<? super E, F> fieldGetter) throws IllegalArgumentException;
 
 	/**
 	 * @param id The identity of the entity to get
@@ -46,13 +50,6 @@ public interface ObservableEntityType<E> extends Named {
 	EntityCondition.All<E> select();
 	/** @return An entity creator which may be used to create new instances of this type in the entity set */
 	ConfigurableCreator<E> create();
-
-	/**
-	 * @param fieldGetter The getter for the field in the java type
-	 * @return The field type in this entity type represented by the given java field
-	 * @throws IllegalArgumentException If the given field does not represent a field getter in this entity type
-	 */
-	<F> ObservableEntityFieldType<E, F> getField(Function<? super E, F> fieldGetter) throws IllegalArgumentException;
 
 	/** @return A list of constraints that must be obeyed by all instances of this type in the entity set */
 	List<EntityConstraint<E>> getConstraints();
@@ -83,5 +80,10 @@ public interface ObservableEntityType<E> extends Named {
 			builder.with(field, subId.getValue(field));
 		}
 		return builder.build();
+	}
+
+	@Override
+	default boolean allowsCustomFields() {
+		return false;
 	}
 }

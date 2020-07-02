@@ -6,6 +6,7 @@ import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
 import org.observe.util.TypeTokens;
 import org.qommons.Identifiable;
+import org.qommons.Transaction;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 
 import com.google.common.reflect.TypeToken;
@@ -49,7 +50,22 @@ public class ObservableEntityField<E, F> implements SettableValue<F> {
 
 	@Override
 	public F get() {
-		return (F) getEntity().get(getFieldType().getFieldIndex());
+		return (F) getEntity().get(getFieldType().getIndex());
+	}
+
+	@Override
+	public boolean isLockSupported() {
+		return theField.getOwnerType().getEntitySet().isLockSupported();
+	}
+
+	@Override
+	public Transaction lock(boolean write, Object cause) {
+		return theField.getOwnerType().getEntitySet().lock(write, cause);
+	}
+
+	@Override
+	public Transaction tryLock(boolean write, Object cause) {
+		return theField.getOwnerType().getEntitySet().tryLock(write, cause);
 	}
 
 	@Override
@@ -69,7 +85,7 @@ public class ObservableEntityField<E, F> implements SettableValue<F> {
 			throw new UnsupportedOperationException(msg);
 		else if (msg != null)
 			throw new IllegalArgumentException(msg);
-		return getEntity().set(getFieldType().getFieldIndex(), value, cause);
+		return getEntity().set(getFieldType().getIndex(), value, cause);
 	}
 
 	@Override
@@ -77,7 +93,7 @@ public class ObservableEntityField<E, F> implements SettableValue<F> {
 		String msg = isEnabled().get();
 		if (msg != null)
 			return msg;
-		return getEntity().isAcceptable(getFieldType().getFieldIndex(), value);
+		return getEntity().isAcceptable(getFieldType().getIndex(), value);
 	}
 
 	@Override
@@ -95,7 +111,7 @@ public class ObservableEntityField<E, F> implements SettableValue<F> {
 
 	/** @return An observable that fires {@link ObservableEntityFieldEvent field events} when the value of this field changes */
 	public Observable<ObservableEntityFieldEvent<E, F>> fieldChanges() {
-		return (Observable<ObservableEntityFieldEvent<E, F>>) getEntity().fieldChanges(theField.getFieldIndex());
+		return (Observable<ObservableEntityFieldEvent<E, F>>) getEntity().fieldChanges(theField.getIndex());
 	}
 
 	@Override

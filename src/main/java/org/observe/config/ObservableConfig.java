@@ -526,15 +526,15 @@ public class ObservableConfig implements Transactable, Stamped {
 		return new ObservableConfigChangesObservable(this, path);
 	}
 
-	public ObservableValueSet<? extends ObservableConfig> getAllContent() {
+	public SyncValueSet<? extends ObservableConfig> getAllContent() {
 		return getContent(ANY_NAME);
 	}
 
-	public ObservableValueSet<? extends ObservableConfig> getContent(String path) {
+	public SyncValueSet<? extends ObservableConfig> getContent(String path) {
 		return getContent(createPath(path));
 	}
 
-	public ObservableValueSet<? extends ObservableConfig> getContent(ObservableConfigPath path) {
+	public SyncValueSet<? extends ObservableConfig> getContent(ObservableConfigPath path) {
 		ObservableCollection<? extends ObservableConfig> children;
 		if (path.getElements().size() == 1) {
 			if (path.getLastElement().isMulti())
@@ -744,7 +744,7 @@ public class ObservableConfig implements Transactable, Stamped {
 				findRefs), preReturnGet);
 		}
 
-		public ObservableValueSet<T> buildEntitySet(Consumer<ObservableValueSet<T>> preReturnGet) {
+		public SyncValueSet<T> buildEntitySet(Consumer<SyncValueSet<T>> preReturnGet) {
 			ObservableConfigFormat<T> entityFormat = getFormat();
 			if (!(entityFormat instanceof ObservableConfigFormat.EntityConfigFormat))
 				throw new IllegalStateException("Format for " + theType + " is not entity-enabled");

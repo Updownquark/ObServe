@@ -69,6 +69,7 @@ import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.QuickSet;
 import org.qommons.collect.QuickSet.QuickMap;
+import org.qommons.collect.StampedLockingStrategy;
 import org.qommons.tree.BetterTreeSet;
 
 import com.google.common.reflect.TypeToken;
@@ -79,7 +80,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		ObservableEntityResult<?> apply(boolean synchronous) throws EntityOperationException;
 	}
 
-	private final Transactable theLock;
+	private Transactable theLock;
 	private final BetterSortedSet<ObservableEntityTypeImpl<?>> theEntityTypes;
 	private final Map<Class<?>, String> theClassMapping;
 	private final ObservableEntityProvider theImplementation;
@@ -90,8 +91,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 	private final QueryResultsTree theResults;
 	private final SimpleObservable<List<EntityChange<?>>> theChanges;
 
-	private ObservableEntityDataSetImpl(Transactable lock, ObservableEntityProvider implementation) {
-		theLock = lock;
+	private ObservableEntityDataSetImpl(ObservableEntityProvider implementation) {
 		theEntityTypes = new BetterTreeSet<>(true, (et1, et2) -> compareEntityTypes(et1.getName(), et2.getName()));
 		theClassMapping = new HashMap<>();
 		theImplementation = implementation;
@@ -101,7 +101,8 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		theChanges = new SimpleObservable<>();
 	}
 
-	void startup(Observable<?> refresh, Observable<?> until) {
+	void startup(Transactable lock, Observable<?> refresh, Observable<?> until) {
+		theLock = lock;
 		isActive = true;
 		theImplementation.install(this);
 		refresh.takeUntil(until).act(__ -> {
@@ -458,24 +459,42 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 
 	/**
 	 * @param implementation The data set implementation to power the entity set
-	 * @param lock The lock to govern thread safety of the entity data
-	 * @param refresh An observable to query the data source for changes
 	 * @return A builder for an entity set
 	 */
-	public static EntitySetBuilder build(ObservableEntityProvider implementation, Transactable lock, Observable<?> refresh) {
-		return new EntitySetBuilder(implementation, lock, refresh);
+	public static EntitySetBuilder build(ObservableEntityProvider implementation) {
+		return new EntitySetBuilder(implementation);
 	}
 
 	/** Builds an entity set */
 	public static class EntitySetBuilder {
 		private final ObservableEntityDataSetImpl theEntitySet;
-		private final Observable<?> theRefresh;
+		private Transactable theLock;
+		private Observable<?> theRefresh;
 		private boolean isBuilding;
 
-		EntitySetBuilder(ObservableEntityProvider implementation, Transactable lock, Observable<?> refresh) {
-			theEntitySet = new ObservableEntityDataSetImpl(lock, implementation);
-			theRefresh = refresh;
+		EntitySetBuilder(ObservableEntityProvider implementation) {
+			theEntitySet = new ObservableEntityDataSetImpl(implementation);
+			theLock = new StampedLockingStrategy(theEntitySet);
+			theRefresh = Observable.empty();
 			isBuilding = true;
+		}
+
+		/**
+		 * @param lock The lock to govern thread safety of the entity data
+		 * @return This builder
+		 */
+		public EntitySetBuilder withLock(Transactable lock) {
+			theLock = lock;
+			return this;
+		}
+
+		/**
+		 * @param refresh An observable to query the data source for changes
+		 * @return This builder
+		 */
+		public EntitySetBuilder withRefresh(Observable<?> refresh) {
+			theRefresh = refresh;
+			return this;
 		}
 
 		/**
@@ -569,7 +588,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 			isBuilding = false;
 			for (ObservableEntityType<?> entity : theEntitySet.getEntityTypes())
 				((ObservableEntityTypeImpl<?>) entity).check();
-			theEntitySet.startup(theRefresh, until);
+			theEntitySet.startup(theLock, theRefresh, until);
 			return theEntitySet;
 		}
 	}
@@ -935,7 +954,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 			if (theConstraints == null)
 				theConstraints = new LinkedList<>();
 			theConstraints.add(new FieldConstraintBuilder<>(EntityConstraint.CHECK, name, field -> {
-				return new ConditionalFieldConstraint<>(field, name, condition.apply(field.getEntityType().select().where(field)));
+				return new ConditionalFieldConstraint<>(field, name, condition.apply(field.getOwnerType().select().where(field)));
 			}));
 			return this;
 		}
@@ -1048,7 +1067,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		}
 
 		@Override
-		public ObservableEntityType<E> getEntityType() {
+		public ObservableEntityType<E> getOwnerType() {
 			return theEntityType;
 		}
 
@@ -1068,7 +1087,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		}
 
 		@Override
-		public int getFieldIndex() {
+		public int getIndex() {
 			return theFieldIndex;
 		}
 
@@ -1122,7 +1141,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 			else if (!(obj instanceof ObservableEntityFieldType))
 				return false;
 			ObservableEntityFieldType<?, ?> other = (ObservableEntityFieldType<?, ?>) obj;
-			return theEntityType.equals(other.getEntityType()) && theFieldIndex == other.getFieldIndex();
+			return theEntityType.equals(other.getOwnerType()) && theFieldIndex == other.getIndex();
 		}
 
 		@Override
@@ -1198,10 +1217,10 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 
 		@Override
 		public boolean isLoaded(ObservableEntityFieldType<? super E, ?> field) {
-			if (!theId.getEntityType().equals(field.getEntityType()))
+			if (!theId.getEntityType().equals(field.getOwnerType()))
 				field = theId.getEntityType().getFields().get(field.getName());
-			int idIndex = getType().getFields().get(field.getFieldIndex()).getIdIndex();
-			return idIndex >= 0 || (theFields != null && theFields.get(field.getFieldIndex()) != EntityUpdate.NOT_SET);
+			int idIndex = getType().getFields().get(field.getIndex()).getIdIndex();
+			return idIndex >= 0 || (theFields != null && theFields.get(field.getIndex()) != EntityUpdate.NOT_SET);
 		}
 
 		@Override

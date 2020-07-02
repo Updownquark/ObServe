@@ -1,5 +1,8 @@
 package org.observe.config;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.BiConsumer;
@@ -15,13 +18,16 @@ import com.google.common.reflect.TypeToken;
 
 public class EntityConfiguredValueType<E> implements ConfiguredValueType<E> {
 	private final EntityReflector<E> theReflector;
+	private final List<EntityConfiguredValueType<? super E>> theSupers;
 	private final Map<TypeToken<?>, EntityReflector<?>> theSubTypes;
-	private final QuickMap<String, EntityConfiguredValueField<? super E, ?>> theFields;
+	private final QuickMap<String, ? extends EntityConfiguredValueField<E, ?>> theFields;
 
-	public EntityConfiguredValueType(EntityReflector<E> reflector, Map<TypeToken<?>, EntityReflector<?>> subTypes) {
+	public EntityConfiguredValueType(EntityReflector<E> reflector, List<EntityConfiguredValueType<? super E>> supers,
+		Map<TypeToken<?>, EntityReflector<?>> subTypes) {
 		theReflector = reflector;
+		theSupers = supers;
 		theSubTypes = subTypes;
-		QuickMap<String, EntityConfiguredValueField<? super E, ?>> fields = theReflector.getFields().keySet().createMap();
+		QuickMap<String, EntityConfiguredValueField<E, ?>> fields = theReflector.getFields().keySet().createMap();
 		for (int i = 0; i < fields.keySet().size(); i++)
 			fields.put(i, new EntityConfiguredValueField<>(this, theReflector.getFields().get(i)));
 		theFields = fields.unmodifiable();
@@ -33,8 +39,13 @@ public class EntityConfiguredValueType<E> implements ConfiguredValueType<E> {
 	}
 
 	@Override
-	public QuickMap<String, ConfiguredValueField<? super E, ?>> getFields() {
-		return (QuickMap<String, ConfiguredValueField<? super E, ?>>) (QuickMap<?, ?>) theFields;
+	public List<? extends EntityConfiguredValueType<? super E>> getSupers() {
+		return theSupers;
+	}
+
+	@Override
+	public QuickMap<String, ? extends ConfiguredValueField<E, ?>> getFields() {
+		return theFields;
 	}
 
 	/** @return The set of field IDs that are marked as identifying for this type */
@@ -43,9 +54,9 @@ public class EntityConfiguredValueType<E> implements ConfiguredValueType<E> {
 	}
 
 	@Override
-	public <F> ConfiguredValueField<? super E, F> getField(Function<? super E, F> fieldGetter) {
-		ReflectedField<? super E, F> field = theReflector.getField(fieldGetter);
-		return (ConfiguredValueField<? super E, F>) theFields.get(field.getFieldIndex());
+	public <F> ConfiguredValueField<E, F> getField(Function<? super E, F> fieldGetter) {
+		ReflectedField<E, F> field = theReflector.getField(fieldGetter);
+		return (ConfiguredValueField<E, F>) theFields.get(field.getFieldIndex());
 	}
 
 	@Override
@@ -59,7 +70,7 @@ public class EntityConfiguredValueType<E> implements ConfiguredValueType<E> {
 		EntityReflector<E2> reflector = (EntityReflector<E2>) theSubTypes.get(subType);
 		if (reflector == null)
 			reflector = EntityReflector.build(subType, false).withSupers(theSubTypes).build();
-		return new EntityConfiguredValueType<>(reflector, theSubTypes);
+		return new EntityConfiguredValueType<>(reflector, Collections.singletonList(this), theSubTypes);
 	}
 
 	public E create(IntFunction<Object> fieldGetter, BiConsumer<Integer, Object> fieldSetter) {
@@ -102,16 +113,30 @@ public class EntityConfiguredValueType<E> implements ConfiguredValueType<E> {
 
 	static class EntityConfiguredValueField<E, F> implements ConfiguredValueField<E, F> {
 		private final EntityConfiguredValueType<E> theValueType;
-		private final EntityReflector.ReflectedField<? super E, F> theField;
+		private final EntityReflector.ReflectedField<E, F> theField;
+		private final List<EntityConfiguredValueField<? super E, ? super F>> theOverrides;
 
-		EntityConfiguredValueField(EntityConfiguredValueType<E> valueType, EntityReflector.ReflectedField<? super E, F> field) {
+		EntityConfiguredValueField(EntityConfiguredValueType<E> valueType, EntityReflector.ReflectedField<E, F> field) {
 			theValueType = valueType;
 			theField = field;
+			ArrayList<EntityConfiguredValueField<? super E, ? super F>> overrides = new ArrayList<>();
+			for (EntityConfiguredValueType<? super E> superType : theValueType.getSupers()) {
+				ConfiguredValueField<? super E, ?> override = superType.getFields().getIfPresent(theField.getName());
+				if (override != null)
+					overrides.add((EntityConfiguredValueField<? super E, ? super F>) override);
+			}
+			overrides.trimToSize();
+			theOverrides = Collections.unmodifiableList(overrides);
 		}
 
 		@Override
-		public ConfiguredValueType<E> getValueType() {
+		public ConfiguredValueType<E> getOwnerType() {
 			return theValueType;
+		}
+
+		@Override
+		public List<EntityConfiguredValueField<? super E, ? super F>> getOverrides() {
+			return theOverrides;
 		}
 
 		@Override

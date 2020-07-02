@@ -95,7 +95,7 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 		}
 
 		public <F> Column<F> getColumn(ObservableEntityFieldType<E, F> field) {
-			return (Column<F>) theColumns[field.getFieldIndex()];
+			return (Column<F>) theColumns[field.getIndex()];
 		}
 
 		@Override
@@ -480,7 +480,7 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 					else
 						sql.append(" AND ");
 					ObservableEntityFieldType<E, ?> field = loadRequest.getType().getIdentityFields().get(i);
-					sql.append(naming.getColumn(field.getFieldIndex()).getName());
+					sql.append(naming.getColumn(field.getIndex()).getName());
 					sql.append('=');
 					serialize(field, entity.getFields().get(i), naming, sql);
 				}
@@ -522,9 +522,9 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 				throw new UnsupportedOperationException("Referenced entities are only supported with a single ID field: " + field);
 			return new Column<>(colName,
 				new ReferenceColumnSupport(target, theTypeSupport.getColumnSupport(target.getIdentityFields().get(0), null)),
-				field.getFieldIndex());
+				field.getIndex());
 		} else
-			return new Column<>(colName, theTypeSupport.getColumnSupport(field, null), field.getFieldIndex());
+			return new Column<>(colName, theTypeSupport.getColumnSupport(field, null), field.getIndex());
 	}
 
 	protected static String sqlIfyName(String javaName) {
@@ -551,7 +551,7 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 			if (field instanceof ObservableEntityFieldType) {
 				ObservableEntityFieldType<?, ?> f = (ObservableEntityFieldType<?, ?>) field;
 				if (f.getIdIndex() >= 0)
-					idBuilder.with(f.getIdIndex(), fields.get(f.getFieldIndex()));
+					idBuilder.with(f.getIdIndex(), fields.get(f.getIndex()));
 			}
 		}
 		return new SimpleEntity<>(idBuilder.build(), fields);
@@ -567,7 +567,7 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 	private <E> void deserializeField(EntityValueAccess<?, ?> field, QuickMap<String, Object> entityData, TableNaming<E> naming,
 		ResultSet rs, int column) throws SQLException {
 		if (field instanceof ObservableEntityFieldType) {
-			entityData.put(((ObservableEntityFieldType<?, ?>) field).getFieldIndex(),
+			entityData.put(((ObservableEntityFieldType<?, ?>) field).getIndex(),
 				deserialize((ObservableEntityFieldType<E, Object>) field, naming, rs, column));
 		} else {
 			throw new UnsupportedOperationException("TODO Chain selection is not supported yet"); // TODO
@@ -590,10 +590,10 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 		else if (condition instanceof ValueCondition) {
 			EntityValueAccess<?, ?> field = ((ValueCondition<?, ?>) condition).getField();
 			if (field instanceof ObservableEntityFieldType)
-				return updateValues.get(((ObservableEntityFieldType<?, ?>) field).getFieldIndex()) == EntityUpdate.NOT_SET;
+				return updateValues.get(((ObservableEntityFieldType<?, ?>) field).getIndex()) == EntityUpdate.NOT_SET;
 			else
 				return updateValues
-					.get(((EntityChainAccess<?, ?>) field).getFieldSequence().getFirst().getFieldIndex()) == EntityUpdate.NOT_SET;
+					.get(((EntityChainAccess<?, ?>) field).getFieldSequence().getFirst().getIndex()) == EntityUpdate.NOT_SET;
 		} else if (condition instanceof CompositeCondition) {
 			for (EntityCondition<?> component : ((CompositeCondition<?>) condition).getConditions()) {
 				if (!isConditionValidPostUpdate(component, updateValues))
@@ -607,7 +607,7 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 	private void addFieldRef(EntityValueAccess<?, ?> field, TableNaming<?> naming, StringBuilder sql, Map<String, Join<?, ?, ?>> joins) {
 		if (field.getSourceEntity().equals(naming.getType())) {
 			if (field instanceof ObservableEntityFieldType) {
-				sql.append(naming.getColumn(((ObservableEntityFieldType<?, ?>) field).getFieldIndex()).getName());
+				sql.append(naming.getColumn(((ObservableEntityFieldType<?, ?>) field).getIndex()).getName());
 			} else
 				throw new UnsupportedOperationException("TODO Chain selection is not supported yet"); // TODO
 		} else
@@ -682,7 +682,7 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 			if (value instanceof EntityIdentity)
 				columnValue = ((EntityIdentity<?>) value).getFields().get(0);
 			else
-				columnValue = ((ObservableEntityType<Object>) theEntityType).getIdentityFields().get(0).getValue(value);
+				columnValue = ((ObservableEntityType<Object>) theEntityType).getIdentityFields().get(0).get(value);
 			((JdbcColumn<Object>) theIdColumn).serialize(columnValue, str);
 		}
 

@@ -52,10 +52,10 @@ class ConfigurableQueryImpl<E> extends AbstractConfigurableOperation<E> implemen
 
 	@Override
 	public ConfigurableQuery<E> loadField(ObservableEntityFieldType<E, ?> field, FieldLoadType type) {
-		if (getEntityType().getFields().get(field.getFieldIndex()) != field)
+		if (getEntityType().getFields().get(field.getIndex()) != field)
 			throw new IllegalArgumentException("Unrecognized field: " + field);
 		QuickMap<String, FieldLoadType> loadTypes = theFieldLoadTypes.copy();
-		loadTypes.put(field.getFieldIndex(), type);
+		loadTypes.put(field.getIndex(), type);
 		return new ConfigurableQueryImpl<>(theSelection, getVariables(), loadTypes, theOrder);
 	}
 

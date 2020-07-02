@@ -3,7 +3,7 @@ package org.observe.entity;
 import java.util.List;
 import java.util.function.Function;
 
-import org.qommons.Named;
+import org.observe.config.ConfiguredValueField;
 
 import com.google.common.reflect.TypeToken;
 
@@ -13,28 +13,27 @@ import com.google.common.reflect.TypeToken;
  * @param <E> The type of the entity
  * @param <F> The type of the field
  */
-public interface ObservableEntityFieldType<E, F> extends EntityValueAccess<E, F>, Named {
+public interface ObservableEntityFieldType<E, F> extends ConfiguredValueField<E, F>, EntityValueAccess<E, F> {
 	/** @return The entity type that this field is a member of */
-	ObservableEntityType<E> getEntityType();
+	@Override
+	ObservableEntityType<E> getOwnerType();
+
 	@Override
 	default ObservableEntityType<E> getSourceEntity() {
-		return getEntityType();
+		return getOwnerType();
 	}
-	/** @return The types of values that belong in the field */
-	TypeToken<F> getFieldType();
-	/** return The name of the field */
 	@Override
-	String getName();
-	/** @return The index of this field in the entity type's {@link ObservableEntityType#getFields() field map} */
-	int getFieldIndex();
+	TypeToken<F> getFieldType();
+	@Override
+	int getIndex();
 	/**
 	 * @return The index of this field in the entity type's {@link ObservableEntityType#getIdentityFields() identity field map}, or -1 if
 	 *         this is not an identity field
 	 */
 	int getIdIndex();
 
-	/** @return The fields in the entity's super types that this field overrides */
-	List<? extends ObservableEntityFieldType<? super E, F>> getOverrides();
+	@Override
+	List<? extends ObservableEntityFieldType<? super E, ? super F>> getOverrides();
 	/** @return Any {@link EntityConstraint}s applying specifically to this field */
 	List<FieldConstraint<E, F>> getConstraints();
 
@@ -69,16 +68,31 @@ public interface ObservableEntityFieldType<E, F> extends EntityValueAccess<E, F>
 	}
 
 	@Override
-	default F getValue(E entity) {
-		return getValue(getEntityType().observableEntity(entity));
+	default F get(E entity) {
+		return getValue(getOwnerType().observableEntity(entity));
+	}
+
+	@Override
+	default void set(E entity, F fieldValue) throws UnsupportedOperationException {
+		setValue(getOwnerType().observableEntity(entity), fieldValue);
 	}
 
 	@Override
 	default F getValue(ObservableEntity<? extends E> entity) {
-		if (getEntityType() == entity.getType())
-			return (F) entity.get(getFieldIndex());
-		else if (getEntityType().isAssignableFrom(entity.getType()))
+		if (getOwnerType() == entity.getType())
+			return (F) entity.get(getIndex());
+		else if (getOwnerType().isAssignableFrom(entity.getType()))
 			return (F) entity.getField(getName()).get();
+		else
+			throw new IllegalArgumentException(this + " cannot be applied to an instance of " + entity.getType());
+	}
+
+	@Override
+	default void setValue(ObservableEntity<? extends E> entity, F value) {
+		if (getOwnerType() == entity.getType())
+			entity.set(getIndex(), value, null);
+		else if (getOwnerType().isAssignableFrom(entity.getType()))
+			((ObservableEntityField<E, F>) entity.getField(getName())).set(value, null);
 		else
 			throw new IllegalArgumentException(this + " cannot be applied to an instance of " + entity.getType());
 	}
@@ -87,9 +101,9 @@ public interface ObservableEntityFieldType<E, F> extends EntityValueAccess<E, F>
 	default int compareTo(EntityValueAccess<E, ?> o) {
 		if (!(o instanceof ObservableEntityFieldType))
 			return -1;
-		if (getEntityType() != ((ObservableEntityFieldType<?, ?>) o).getEntityType())
+		if (getOwnerType() != ((ObservableEntityFieldType<?, ?>) o).getOwnerType())
 			throw new IllegalArgumentException("Cannot compare fields of different entity types");
-		return Integer.compare(getFieldIndex(), ((ObservableEntityFieldType<E, ?>) o).getFieldIndex());
+		return Integer.compare(getIndex(), ((ObservableEntityFieldType<E, ?>) o).getIndex());
 	}
 
 	@Override

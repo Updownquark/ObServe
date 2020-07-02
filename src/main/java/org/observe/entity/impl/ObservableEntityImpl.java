@@ -204,15 +204,15 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 
 	@Override
 	public boolean isLoaded(ObservableEntityFieldType<? super E, ?> field) {
-		if (!field.getEntityType().equals(theType))
+		if (!field.getOwnerType().equals(theType))
 			field = theType.getFields().get(field.getName());
-		return theFields.get(field.getFieldIndex()) != EntityUpdate.NOT_SET;
+		return theFields.get(field.getIndex()) != EntityUpdate.NOT_SET;
 	}
 
 	@Override
 	public <F> ObservableEntity<E> load(ObservableEntityFieldType<E, F> field, Consumer<? super F> onLoad,
 		Consumer<EntityOperationException> onFail) throws EntityOperationException {
-		Object value = theFields.get(field.getFieldIndex());
+		Object value = theFields.get(field.getIndex());
 		if (value != EntityUpdate.NOT_SET) {
 			if (onLoad != null)
 				onLoad.accept((F) value);
@@ -245,10 +245,10 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 	}
 
 	<F> void _set(ObservableEntityFieldType<? super E, F> field, F oldValue, F newValue) {
-		if (field.getEntityType() != theType)
+		if (field.getOwnerType() != theType)
 			field = (ObservableEntityFieldType<E, F>) theType.getFields().get(field.getName());
-		Object myOldValue = theFields.get(field.getFieldIndex());
-		theFields.put(field.getFieldIndex(), resolve(field.getFieldType(), myOldValue, newValue));
+		Object myOldValue = theFields.get(field.getIndex());
+		theFields.put(field.getIndex(), resolve(field.getFieldType(), myOldValue, newValue));
 		if (myOldValue != EntityUpdate.NOT_SET) {
 			theStamp++;
 			if (oldValue == EntityUpdate.NOT_SET)

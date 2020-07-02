@@ -32,21 +32,21 @@ class ConfigurableCreatorImpl<E> extends AbstractConfigurableOperation<E> implem
 
 	@Override
 	public <F> ConfigurableCreator<E> setField(ObservableEntityFieldType<? super E, F> field, F value) {
-		if (getEntityType().getFields().get(field.getFieldIndex()) != field)
+		if (getEntityType().getFields().get(field.getIndex()) != field)
 			throw new IllegalArgumentException("Unrecognized field: " + field);
 		// TODO Type/constraint check
 		QuickMap<String, Object> copy = theFieldValues.copy();
-		copy.put(field.getFieldIndex(), value);
+		copy.put(field.getIndex(), value);
 		return new ConfigurableCreatorImpl<>(getEntityType(), getVariables(), copy.unmodifiable(), theFieldVariables);
 	}
 
 	@Override
 	public ConfigurableCreator<E> setFieldVariable(ObservableEntityFieldType<? super E, ?> field, String variableName) {
-		if (getEntityType().getFields().get(field.getFieldIndex()) != field)
+		if (getEntityType().getFields().get(field.getIndex()) != field)
 			throw new IllegalArgumentException("Unrecognized field: " + field);
 		QuickMap<String, EntityOperationVariable<E>> variables = getOrAddVariable(variableName);
 		QuickMap<String, EntityOperationVariable<E>> fieldVariables = theFieldVariables.copy();
-		fieldVariables.put(field.getFieldIndex(), variables.get(variableName));
+		fieldVariables.put(field.getIndex(), variables.get(variableName));
 		return new ConfigurableCreatorImpl<>(getEntityType(), variables, theFieldValues, fieldVariables.unmodifiable());
 	}
 

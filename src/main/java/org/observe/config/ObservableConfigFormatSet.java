@@ -15,6 +15,7 @@ import org.observe.util.EntityReflector;
 import org.observe.util.EntityReflector.EntityReflectionMessage;
 import org.observe.util.EntityReflector.EntityReflectionMessageLevel;
 import org.observe.util.TypeTokens;
+import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
 import org.qommons.io.Format;
 
@@ -64,7 +65,10 @@ public class ObservableConfigFormatSet {
 				if (theReflectors.putIfAbsent(type, reflector) != null)
 					reflector = (EntityReflector<E>) theReflectors.get(type);
 			}
-			format = ObservableConfigFormat.buildEntities(new EntityConfiguredValueType<>(reflector, theReflectors), this).build();
+			format = ObservableConfigFormat.buildEntities(
+				new EntityConfiguredValueType<>(reflector,
+					QommonsUtils.map(reflector.getSuper(), spr -> getEntityType(spr.getType()), true), theReflectors), //
+				this).build();
 			theFormatCache.putIfAbsent(type, format);
 		}
 		if (!(format instanceof EntityConfigFormat))
@@ -79,7 +83,9 @@ public class ObservableConfigFormatSet {
 			if (theReflectors.putIfAbsent(type, reflector) != null)
 				reflector = (EntityReflector<E>) theReflectors.get(type);
 		}
-		EntityFormatBuilder<E> builder = ObservableConfigFormat.buildEntities(new EntityConfiguredValueType<>(reflector, theReflectors),
+		EntityFormatBuilder<E> builder = ObservableConfigFormat.buildEntities(
+			new EntityConfiguredValueType<>(reflector, //
+				QommonsUtils.map(reflector.getSuper(), spr -> getEntityType(spr.getType()), true), theReflectors), //
 			this);
 		if (build != null)
 			build.accept(builder);
@@ -122,9 +128,9 @@ public class ObservableConfigFormatSet {
 			ObservableConfigFormat<?> elementFormat = getConfigFormat(type.resolveType(Collection.class.getTypeParameters()[0]), childName);
 			return (ObservableConfigFormat<T>) ObservableConfigFormat.ofCollection((TypeToken<Collection<Object>>) type,
 				(ObservableConfigFormat<Object>) elementFormat, this, configName, childName);
-		} else if (raw.isAssignableFrom(ObservableValueSet.class)) {
+		} else if (raw.isAssignableFrom(SyncValueSet.class)) {
 			String childName = StringUtils.singularize(configName);
-			TypeToken<?> elementType = type.resolveType(ObservableValueSet.class.getTypeParameters()[0]);
+			TypeToken<?> elementType = type.resolveType(SyncValueSet.class.getTypeParameters()[0]);
 			EntityConfigFormat<Object> elementFormat = (EntityConfigFormat<Object>) getEntityFormat(elementType);
 			format = (ObservableConfigFormat<T>) ObservableConfigFormat.<Object> ofEntitySet(elementFormat, childName);
 			theFormatCache.put(type, format);

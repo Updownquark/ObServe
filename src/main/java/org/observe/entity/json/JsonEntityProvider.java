@@ -545,7 +545,7 @@ public class JsonEntityProvider implements ObservableEntityProvider {
 			jsr.endObject(null);
 			EntityIdentity.Builder<?> idBuilder = type.buildId();
 			for (int i = 0; i < type.getIdentityFields().keySize(); i++)
-				idBuilder.with(i, fields.get(type.getIdentityFields().get(i).getFieldIndex()));
+				idBuilder.with(i, fields.get(type.getIdentityFields().get(i).getIndex()));
 			return new SimpleEntity<>(idBuilder.build(), fields);
 		} else
 			return null;

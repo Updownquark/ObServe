@@ -908,7 +908,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		}
 	}
 
-	static class ObservableConfigEntityValues<E> extends ObservableConfigBackedCollection<E> implements ObservableValueSet<E> {
+	static class ObservableConfigEntityValues<E> extends ObservableConfigBackedCollection<E> implements SyncValueSet<E> {
 		ObservableConfigEntityValues(ObservableConfig root, ObservableValue<? extends ObservableConfig> collectionElement,
 			Runnable ceCreate, EntityConfigFormat<E> format, String childName, Observable<?> until, boolean listen,
 			Observable<?> findRefs) {
@@ -931,10 +931,20 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		}
 
 		@Override
-		public <E2 extends E> ValueCreator<E, E2> create(TypeToken<E2> subType) {
+		public <E2 extends E> SyncValueCreator<E, E2> create(TypeToken<E2> subType) {
 			if (!isConnected().get())
 				throw new UnsupportedOperationException("Not connected");
 			return new SimpleValueCreator<E, E2>(getFormat().create(subType)) {
+				@Override
+				public String isEnabled(ConfiguredValueField<? super E2, ?> field) {
+					return null;
+				}
+
+				@Override
+				public <F> String isAcceptable(ConfiguredValueField<? super E2, F> field, F value) {
+					return null;
+				}
+
 				@Override
 				public CollectionElement<E> create(Consumer<? super E2> preAddAction) {
 					return add(cfg -> {
@@ -945,13 +955,6 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 					});
 				}
 			};
-		}
-
-		@Override
-		public <E2 extends E> CollectionElement<E> copy(E2 template) {
-			return create((TypeToken<E2>) TypeTokens.get().of(template.getClass())).create(v -> {
-				getFormat().copy(template, v, getParent(), null, getUntil());
-			});
 		}
 
 		@Override

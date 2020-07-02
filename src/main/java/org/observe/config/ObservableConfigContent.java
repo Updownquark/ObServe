@@ -4,6 +4,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
@@ -955,7 +956,7 @@ public class ObservableConfigContent {
 	 *
 	 * @param <C> The sub-type of config
 	 */
-	protected static class ObservableChildSet<C extends ObservableConfig> implements ObservableValueSet<C> {
+	protected static class ObservableChildSet<C extends ObservableConfig> implements SyncValueSet<C> {
 		private final ObservableConfig theRoot;
 		private final ObservableConfigPath thePath;
 		private final ObservableCollection<C> theChildren;
@@ -990,12 +991,17 @@ public class ObservableConfigContent {
 				}
 
 				@Override
-				public QuickMap<String, ConfiguredValueField<? super C, ?>> getFields() {
+				public List<? extends ConfiguredValueType<? super C>> getSupers() {
+					return Collections.emptyList();
+				}
+
+				@Override
+				public QuickMap<String, ? extends ConfiguredValueField<C, ?>> getFields() {
 					return QuickSet.<String> empty().createMap();
 				}
 
 				@Override
-				public <F> ConfiguredValueField<? super C, F> getField(Function<? super C, F> fieldGetter) {
+				public <F> ConfiguredValueField<C, F> getField(Function<? super C, F> fieldGetter) {
 					throw new UnsupportedOperationException("No typed fields for an " + ObservableConfig.class.getSimpleName());
 				}
 
@@ -1012,10 +1018,10 @@ public class ObservableConfigContent {
 		}
 
 		@Override
-		public <C2 extends C> ValueCreator<C, C2> create(TypeToken<C2> subType) {
+		public <C2 extends C> SyncValueCreator<C, C2> create(TypeToken<C2> subType) {
 			if (subType != getType().getType())
 				throw new IllegalArgumentException("Unrecognized " + ObservableConfig.class.getSimpleName() + " sub-type " + subType);
-			return (ValueCreator<C, C2>) new ValueCreator<C, C>() {
+			return (SyncValueCreator<C, C2>) new SyncValueCreator<C, C>() {
 				private Map<String, String> theFields;
 				private ElementId theAfter;
 				private ElementId theBefore;
@@ -1032,26 +1038,36 @@ public class ObservableConfigContent {
 				}
 
 				@Override
-				public ValueCreator<C, C> after(ElementId after) {
+				public SyncValueCreator<C, C> after(ElementId after) {
 					theAfter = after;
 					return this;
 				}
 
 				@Override
-				public ValueCreator<C, C> before(ElementId before) {
+				public SyncValueCreator<C, C> before(ElementId before) {
 					theBefore = before;
 					return this;
 
 				}
 
 				@Override
-				public ValueCreator<C, C> towardBeginning(boolean towardBeginning) {
+				public SyncValueCreator<C, C> towardBeginning(boolean towardBeginning) {
 					isTowardBeginning = towardBeginning;
 					return this;
 				}
 
 				@Override
-				public ValueCreator<C, C> with(String fieldName, Object value) throws IllegalArgumentException {
+				public String isEnabled(ConfiguredValueField<? super C, ?> field) {
+					return null;
+				}
+
+				@Override
+				public <F> String isAcceptable(ConfiguredValueField<? super C, F> field, F value) {
+					return null;
+				}
+
+				@Override
+				public SyncValueCreator<C, C> with(String fieldName, Object value) throws IllegalArgumentException {
 					if (theFields == null)
 						theFields = new LinkedHashMap<>();
 					theFields.put(fieldName, String.valueOf(value));
@@ -1059,12 +1075,12 @@ public class ObservableConfigContent {
 				}
 
 				@Override
-				public <F> ValueCreator<C, C> with(ConfiguredValueField<? super C, F> field, F value) throws IllegalArgumentException {
+				public <F> SyncValueCreator<C, C> with(ConfiguredValueField<C, F> field, F value) throws IllegalArgumentException {
 					throw new UnsupportedOperationException();
 				}
 
 				@Override
-				public <F> ValueCreator<C, C> with(Function<? super C, F> field, F value) throws IllegalArgumentException {
+				public <F> SyncValueCreator<C, C> with(Function<? super C, F> field, F value) throws IllegalArgumentException {
 					throw new UnsupportedOperationException();
 				}
 
@@ -1090,13 +1106,6 @@ public class ObservableConfigContent {
 					return theChildren.getElement(newChildId);
 				}
 			};
-		}
-
-		@Override
-		public <E2 extends C> CollectionElement<C> copy(E2 template) {
-			return create().create(c -> {
-				copy(template, c);
-			});
 		}
 
 		static void copy(ObservableConfig source, ObservableConfig dest) {

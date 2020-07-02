@@ -1,13 +1,12 @@
 package org.observe.config;
 
 import java.util.Set;
-import java.util.function.Function;
 
 import org.observe.Observable;
 import org.observe.config.ObservableConfigFormat.EntityConfigCreator;
 import org.qommons.collect.ElementId;
 
-public abstract class SimpleValueCreator<E, E2 extends E> implements ValueCreator<E, E2> {
+public abstract class SimpleValueCreator<E, E2 extends E> implements SyncValueCreator<E, E2> {
 	private final ObservableConfigFormat.EntityConfigCreator<E2> theCreator;
 	private ElementId theAfter;
 	private ElementId theBefore;
@@ -35,19 +34,19 @@ public abstract class SimpleValueCreator<E, E2 extends E> implements ValueCreato
 	}
 
 	@Override
-	public ValueCreator<E, E2> after(ElementId after) {
+	public SimpleValueCreator<E, E2> after(ElementId after) {
 		theAfter = after;
 		return this;
 	}
 
 	@Override
-	public ValueCreator<E, E2> before(ElementId before) {
+	public SimpleValueCreator<E, E2> before(ElementId before) {
 		theBefore = before;
 		return this;
 	}
 
 	@Override
-	public ValueCreator<E, E2> towardBeginning(boolean towardBeginning) {
+	public SimpleValueCreator<E, E2> towardBeginning(boolean towardBeginning) {
 		this.isTowardBeginning = towardBeginning;
 		return this;
 	}
@@ -58,20 +57,8 @@ public abstract class SimpleValueCreator<E, E2 extends E> implements ValueCreato
 	}
 
 	@Override
-	public ValueCreator<E, E2> with(String fieldName, Object value) throws IllegalArgumentException {
-		theCreator.with(fieldName, value);
-		return this;
-	}
-
-	@Override
-	public <F> ValueCreator<E, E2> with(ConfiguredValueField<? super E2, F> field, F value) throws IllegalArgumentException {
+	public <F> SimpleValueCreator<E, E2> with(ConfiguredValueField<E2, F> field, F value) throws IllegalArgumentException {
 		theCreator.with(field, value);
-		return this;
-	}
-
-	@Override
-	public <F> ValueCreator<E, E2> with(Function<? super E2, F> fieldGetter, F value) throws IllegalArgumentException {
-		theCreator.with(fieldGetter, value);
 		return this;
 	}
 

@@ -55,9 +55,9 @@ public interface ObservableEntity<E> extends Stamped, Identifiable, Comparable<O
 	 * @return The value for the given field in this entity
 	 */
 	default <F> F get(ObservableEntityFieldType<? super E, F> field) {
-		if (!getType().equals(field.getEntityType()))
+		if (!getType().equals(field.getOwnerType()))
 			field = (ObservableEntityFieldType<E, F>) getType().getFields().get(field.getName());
-		return (F) get(field.getFieldIndex());
+		return (F) get(field.getIndex());
 	}
 
 	/**
@@ -96,7 +96,7 @@ public interface ObservableEntity<E> extends Stamped, Identifiable, Comparable<O
 	 * @return An observable that fires an event whenever the value of the given field in this entity changes
 	 */
 	default Observable<? extends ObservableEntityFieldEvent<E, ?>> fieldChanges(int fieldIndex) {
-		return allFieldChanges().filter(evt -> evt.getField().getFieldIndex() == fieldIndex);
+		return allFieldChanges().filter(evt -> evt.getField().getIndex() == fieldIndex);
 	}
 	/** @return An observable that fires an event whenever the value of any field in this entity changes */
 	Observable<ObservableEntityFieldEvent<E, ?>> allFieldChanges();
@@ -147,8 +147,8 @@ public interface ObservableEntity<E> extends Stamped, Identifiable, Comparable<O
 	 */
 	default <F> ObservableEntityField<E, F> getField(ObservableEntityFieldType<? super E, F> fieldType) {
 		ObservableEntityFieldType<E, F> myFieldType;
-		if (fieldType.getEntityType() == getType()) {
-			if (getType().getFields().get(fieldType.getFieldIndex()) != fieldType)
+		if (fieldType.getOwnerType() == getType()) {
+			if (getType().getFields().get(fieldType.getIndex()) != fieldType)
 				throw new IllegalArgumentException("Unrecognized field type: " + fieldType);
 			myFieldType = (ObservableEntityFieldType<E, F>) fieldType;
 		} else {
@@ -183,7 +183,7 @@ public interface ObservableEntity<E> extends Stamped, Identifiable, Comparable<O
 	default Observable<ObservableEntity<?>> onDelete() {
 		// Use ID field if we can, since those only fire completed events
 		if (getType().getIdentityFields().keySize() > 0)
-			return fieldChanges(getType().getIdentityFields().get(0).getFieldIndex()).completed().map(__ -> this);
+			return fieldChanges(getType().getIdentityFields().get(0).getIndex()).completed().map(__ -> this);
 		else if (getType().getFields().keySize() > 0)
 			return fieldChanges(0).completed().map(__ -> this);
 		else

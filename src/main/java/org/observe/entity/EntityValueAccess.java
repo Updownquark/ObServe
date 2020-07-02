@@ -41,13 +41,19 @@ public interface EntityValueAccess<E, F> extends Comparator<F>, Comparable<Entit
 	 * @param entity The entity to get the information from
 	 * @return The information specified by this access
 	 */
-	F getValue(E entity);
+	F get(E entity);
 
 	/**
 	 * @param entity The entity to get the information from
 	 * @return The information specified by this access
 	 */
 	F getValue(ObservableEntity<? extends E> entity);
+
+	/**
+	 * @param entity The entity to set the information in from
+	 * @param value The new value for information specified by this access
+	 */
+	void setValue(ObservableEntity<? extends E> entity, F value);
 
 	/**
 	 * @param field Another field
