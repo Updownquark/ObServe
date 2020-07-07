@@ -43,7 +43,7 @@ class ConfigurableUpdateImpl<E> extends AbstractConfigurableOperation<E> impleme
 	}
 
 	@Override
-	public <F> ConfigurableUpdate<E> setField(ObservableEntityFieldType<? super E, F> field, F value)
+	public <F> ConfigurableUpdate<E> with(ObservableEntityFieldType<? super E, F> field, F value)
 		throws IllegalStateException, IllegalArgumentException {
 		if (getEntityType().getFields().get(field.getIndex()) != field)
 			throw new IllegalArgumentException("Unrecognized field " + field);
@@ -54,7 +54,7 @@ class ConfigurableUpdateImpl<E> extends AbstractConfigurableOperation<E> impleme
 	}
 
 	@Override
-	public ConfigurableUpdate<E> setFieldVariable(ObservableEntityFieldType<? super E, ?> field, String variableName)
+	public ConfigurableUpdate<E> withVariable(ObservableEntityFieldType<? super E, ?> field, String variableName)
 		throws IllegalStateException, IllegalArgumentException {
 		if (getEntityType().getFields().get(field.getIndex()) != field)
 			throw new IllegalArgumentException("Unrecognized field " + field);

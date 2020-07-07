@@ -41,7 +41,7 @@ public interface ObservableEntityType<E> extends ConfiguredValueType<E>, Named {
 	 * @param entity The entity object queried from this type
 	 * @return The observable entity represented by the given entity object
 	 */
-	ObservableEntity<? extends E> observableEntity(E entity);
+	<E2 extends E> ObservableEntity<? extends E2> observableEntity(E2 entity);
 
 	/**
 	 * @return A selection object (defaulted to ALL) which may be used to query, update, or delete existing entities of this type from the
@@ -49,7 +49,7 @@ public interface ObservableEntityType<E> extends ConfiguredValueType<E>, Named {
 	 */
 	EntityCondition.All<E> select();
 	/** @return An entity creator which may be used to create new instances of this type in the entity set */
-	ConfigurableCreator<E> create();
+	ConfigurableCreator<E, E> create();
 
 	/** @return A list of constraints that must be obeyed by all instances of this type in the entity set */
 	List<EntityConstraint<E>> getConstraints();

@@ -9,12 +9,12 @@ import org.observe.entity.ObservableEntityType;
 import org.observe.entity.PreparedCreator;
 import org.qommons.collect.QuickSet.QuickMap;
 
-class ConfigurableCreatorImpl<E> extends AbstractConfigurableOperation<E> implements ConfigurableCreator<E> {
+class ConfigurableCreatorImpl<E, E2 extends E> extends AbstractConfigurableOperation<E2> implements ConfigurableCreator<E, E2> {
 	private final QuickMap<String, Object> theFieldValues;
-	private final QuickMap<String, EntityOperationVariable<E>> theFieldVariables;
+	private final QuickMap<String, EntityOperationVariable<E2>> theFieldVariables;
 
-	ConfigurableCreatorImpl(ObservableEntityType<E> entityType, QuickMap<String, EntityOperationVariable<E>> variables,
-		QuickMap<String, Object> fieldValues, QuickMap<String, EntityOperationVariable<E>> fieldVariables) {
+	ConfigurableCreatorImpl(ObservableEntityType<E2> entityType, QuickMap<String, EntityOperationVariable<E2>> variables,
+		QuickMap<String, Object> fieldValues, QuickMap<String, EntityOperationVariable<E2>> fieldVariables) {
 		super(entityType, variables);
 		theFieldValues = fieldValues;
 		theFieldVariables = fieldVariables;
@@ -26,12 +26,12 @@ class ConfigurableCreatorImpl<E> extends AbstractConfigurableOperation<E> implem
 	}
 
 	@Override
-	public QuickMap<String, EntityOperationVariable<E>> getFieldVariables() {
+	public QuickMap<String, EntityOperationVariable<E2>> getFieldVariables() {
 		return theFieldVariables;
 	}
 
 	@Override
-	public <F> ConfigurableCreator<E> setField(ObservableEntityFieldType<? super E, F> field, F value) {
+	public <F> ConfigurableCreator<E, E2> with(ObservableEntityFieldType<? super E2, F> field, F value) {
 		if (getEntityType().getFields().get(field.getIndex()) != field)
 			throw new IllegalArgumentException("Unrecognized field: " + field);
 		// TODO Type/constraint check
@@ -41,24 +41,24 @@ class ConfigurableCreatorImpl<E> extends AbstractConfigurableOperation<E> implem
 	}
 
 	@Override
-	public ConfigurableCreator<E> setFieldVariable(ObservableEntityFieldType<? super E, ?> field, String variableName) {
+	public ConfigurableCreator<E, E2> withVariable(ObservableEntityFieldType<? super E2, ?> field, String variableName) {
 		if (getEntityType().getFields().get(field.getIndex()) != field)
 			throw new IllegalArgumentException("Unrecognized field: " + field);
-		QuickMap<String, EntityOperationVariable<E>> variables = getOrAddVariable(variableName);
-		QuickMap<String, EntityOperationVariable<E>> fieldVariables = theFieldVariables.copy();
+		QuickMap<String, EntityOperationVariable<E2>> variables = getOrAddVariable(variableName);
+		QuickMap<String, EntityOperationVariable<E2>> fieldVariables = theFieldVariables.copy();
 		fieldVariables.put(field.getIndex(), variables.get(variableName));
 		return new ConfigurableCreatorImpl<>(getEntityType(), variables, theFieldValues, fieldVariables.unmodifiable());
 	}
 
 	@Override
-	public PreparedCreator<E> prepare() throws IllegalStateException, EntityOperationException {
+	public PreparedCreator<E2> prepare() throws IllegalStateException, EntityOperationException {
 		return new PreparedCreatorImpl<>(this,
 			((ObservableEntityDataSetImpl) getEntityType().getEntitySet()).getImplementation().prepare(this),
 			getVariables().keySet().createMap());
 	}
 
 	@Override
-	public EntityCreationResult<E> create(boolean sync, Object cause) throws IllegalStateException, EntityOperationException {
-		return ((ObservableEntityTypeImpl<E>) getEntityType()).getEntitySet().create(this, sync, cause);
+	public EntityCreationResult<E2> create(boolean sync, Object cause) throws IllegalStateException, EntityOperationException {
+		return ((ObservableEntityTypeImpl<E2>) getEntityType()).getEntitySet().create(this, sync, cause);
 	}
 }

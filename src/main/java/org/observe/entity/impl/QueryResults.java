@@ -90,8 +90,8 @@ public class QueryResults<E> extends AbstractOperationResult<E> {
 	}
 
 	@Override
-	public Subscription onStatusChange(Consumer<ObservableEntityResult<E>> onChange) {
-		return onStatusChange(() -> onChange.accept(this));
+	public Observable<? extends QueryResults<E>> statusChanges() {
+		return (Observable<? extends QueryResults<E>>) super.statusChanges();
 	}
 
 	public EntityCondition<E> getSelection() {

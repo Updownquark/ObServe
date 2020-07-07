@@ -20,7 +20,6 @@ import java.util.function.Function;
 
 import org.observe.Observable;
 import org.observe.SimpleObservable;
-import org.observe.Subscription;
 import org.observe.entity.ConditionalFieldConstraint;
 import org.observe.entity.EntityChange;
 import org.observe.entity.EntityCollectionResult;
@@ -172,7 +171,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 				System.err.println("Should not happen for async call");
 				continue;
 			}
-			result.onStatusChange(res -> {
+			result.statusChanges().act(res -> {
 				if (res.getStatus().isDone() && completed.incrementAndGet() == actionCount) {
 					synchronized (completed) {
 						completed.notify();
@@ -1270,8 +1269,8 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		}
 
 		@Override
-		public Subscription onStatusChange(Consumer<ObservableEntityResult<E>> onChange) {
-			return Subscription.NONE;
+		public Observable<? extends ObservableEntityResult<E>> statusChanges() {
+			return Observable.empty();
 		}
 
 		@Override
@@ -1297,11 +1296,6 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		@Override
 		public EntityCreator<E> getOperation() {
 			return theOperation;
-		}
-
-		@Override
-		public Subscription onStatusChange(Consumer<ObservableEntityResult<E>> onChange) {
-			return super.onStatusChange(() -> onChange.accept(this));
 		}
 
 		@Override
@@ -1340,8 +1334,8 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		}
 
 		@Override
-		public Subscription onStatusChange(Consumer<ObservableEntityResult<E>> onChange) {
-			return Subscription.NONE;
+		public Observable<? extends ObservableEntityResult<E>> statusChanges() {
+			return Observable.empty();
 		}
 
 		@Override
@@ -1368,11 +1362,6 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		@Override
 		public EntityModification<E> getOperation() {
 			return theOperation;
-		}
-
-		@Override
-		public Subscription onStatusChange(Consumer<ObservableEntityResult<E>> onChange) {
-			return super.onStatusChange(() -> onChange.accept(this));
 		}
 
 		@Override

@@ -23,7 +23,7 @@ public interface EntityFieldSetOperation<E> extends ConfigurableOperation<E> {
 	 * @return A copy of this operation that will set the given field
 	 * @throws IllegalArgumentException If the given value is invalid for the given field
 	 */
-	<F> EntityFieldSetOperation<E> setField(ObservableEntityFieldType<? super E, F> field, F value);
+	<F> EntityFieldSetOperation<E> with(ObservableEntityFieldType<? super E, F> field, F value);
 
 	/**
 	 * @param field The field to set
@@ -31,7 +31,16 @@ public interface EntityFieldSetOperation<E> extends ConfigurableOperation<E> {
 	 * @return A copy of this operation that will set the given field
 	 * @throws IllegalArgumentException If the given value is invalid for the given field
 	 */
-	EntityFieldSetOperation<E> setFieldVariable(ObservableEntityFieldType<? super E, ?> field, String variableName);
+	EntityFieldSetOperation<E> withVariable(ObservableEntityFieldType<? super E, ?> field, String variableName);
+
+	/**
+	 * @param fieldName The name of the field to set
+	 * @param value The value for the field
+	 * @return This operation
+	 */
+	default EntityFieldSetOperation<E> with(String fieldName, Object value) {
+		return with((ObservableEntityFieldType<E, Object>) getEntityType().getFields().get(fieldName), value);
+	}
 
 	/**
 	 * @param <F> The type of the field
@@ -40,8 +49,17 @@ public interface EntityFieldSetOperation<E> extends ConfigurableOperation<E> {
 	 * @return A copy of this operation that will set the given field
 	 * @throws IllegalArgumentException If the given value is invalid for the given field
 	 */
-	default <F> EntityFieldSetOperation<E> setField(Function<? super E, F> field, F value) {
-		return setField(getEntityType().getField(field), value);
+	default <F> EntityFieldSetOperation<E> with(Function<? super E, F> field, F value) {
+		return with(getEntityType().getField(field), value);
+	}
+
+	/**
+	 * @param fieldName The name of the field to set
+	 * @param variableName The variable name to assign the field to
+	 * @return This operation
+	 */
+	default EntityFieldSetOperation<E> withVariable(String fieldName, String variableName) {
+		return withVariable(getEntityType().getFields().get(fieldName), variableName);
 	}
 
 	/**
@@ -50,7 +68,7 @@ public interface EntityFieldSetOperation<E> extends ConfigurableOperation<E> {
 	 * @return A copy of this operation that will set the given field
 	 * @throws IllegalArgumentException If the given value is invalid for the given field
 	 */
-	default <F> EntityFieldSetOperation<E> setFieldVariable(Function<? super E, F> field, String variableName) {
-		return setFieldVariable(getEntityType().getField(field), variableName);
+	default <F> EntityFieldSetOperation<E> withVariable(Function<? super E, F> field, String variableName) {
+		return withVariable(getEntityType().getField(field), variableName);
 	}
 }

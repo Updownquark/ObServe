@@ -949,6 +949,11 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 				}
 
 				@Override
+				public String canCreate() {
+					return null;
+				}
+
+				@Override
 				public CollectionElement<E> create(Consumer<? super E2> preAddAction) {
 					return add(cfg -> {
 						return createValue(cfg, getUntil());
@@ -1032,7 +1037,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 	}
 
 	static class ObservableConfigMultiMap<K, V> extends ObservableConfigBackedCollection<MapEntry<K, V>>
-		implements ObservableMultiMap<K, V> {
+	implements ObservableMultiMap<K, V> {
 		ObservableConfigMultiMap(ObservableConfig root, ObservableValue<? extends ObservableConfig> collectionElement, Runnable ceCreate,
 			String keyName, String valueName, TypeToken<K> keyType, TypeToken<V> valueType, ObservableConfigFormat<K> keyFormat,
 			ObservableConfigFormat<V> valueFormat, Observable<?> until, boolean listen, Observable<?> findRefs) {

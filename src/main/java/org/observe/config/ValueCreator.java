@@ -58,6 +58,8 @@ public interface ValueCreator<E, E2 extends E> {
 		return this;
 	}
 
+	String canCreate();
+
 	default CollectionElement<E> create() throws ValueOperationException {
 		return create(null);
 	}

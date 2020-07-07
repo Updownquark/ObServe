@@ -3,11 +3,11 @@ package org.observe.entity.impl;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.UnaryOperator;
 
-import org.observe.Subscription;
+import org.observe.Observable;
+import org.observe.SimpleObservable;
 import org.observe.entity.EntityOperationException;
 import org.observe.entity.EntityQueryResult;
 import org.observe.entity.ObservableEntityResult;
-import org.qommons.collect.ListenerList;
 
 /**
  * Abstract {@link ObservableEntityResult} implementation that handles status changes and {@link EntityQueryResult#dispose() disposal}
@@ -17,14 +17,14 @@ import org.qommons.collect.ListenerList;
 public abstract class AbstractOperationResult<E> implements ObservableEntityResult<E> {
 	private final boolean isQuery;
 	private final AtomicReference<ResultStatus> theStatus;
-	private final ListenerList<Runnable> theStatusChangeListeners;
+	private final SimpleObservable<AbstractOperationResult<E>> theStatusChanges;
 	private volatile EntityOperationException theFailure;
 	private volatile boolean isDisposed;
 
 	AbstractOperationResult(boolean query) {
 		isQuery = query;
 		theStatus = new AtomicReference<>(ResultStatus.WAITING);
-		theStatusChangeListeners = ListenerList.build().build();
+		theStatusChanges = SimpleObservable.build().safe(false).build();
 	}
 
 	@Override
@@ -40,8 +40,7 @@ public abstract class AbstractOperationResult<E> implements ObservableEntityResu
 			return newStatus;
 		});
 		if (changed[0]) {
-			theStatusChangeListeners.forEach(//
-				Runnable::run);
+			theStatusChanges.onNext(this);
 		}
 	}
 
@@ -97,16 +96,13 @@ public abstract class AbstractOperationResult<E> implements ObservableEntityResu
 		return theFailure;
 	}
 
-	/**
-	 * @param action The action to perform when the status changes
-	 * @return A subscription to cancel listening
-	 */
-	protected Subscription onStatusChange(Runnable action) {
-		return theStatusChangeListeners.add(action, true)::run;
+	@Override
+	public Observable<? extends ObservableEntityResult<E>> statusChanges() {
+		return theStatusChanges.readOnly();
 	}
 
 	/**
-	 * Marks this operation as {@link org.observe.entity.ObservableEntityResult.ResultStatus#FAILED failed})
+	 * Marks this operation as {@link org.observe.config.ObservableOperationResult.ResultStatus#FAILED failed})
 	 *
 	 * @param failure The failure exception
 	 * @return This operation
@@ -118,7 +114,7 @@ public abstract class AbstractOperationResult<E> implements ObservableEntityResu
 	}
 
 	/**
-	 * Marks this operation as {@link org.observe.entity.ObservableEntityResult.ResultStatus#FULFILLED fulfilled})
+	 * Marks this operation as {@link org.observe.config.ObservableOperationResult.ResultStatus#FULFILLED fulfilled})
 	 *
 	 * @return This operation
 	 */

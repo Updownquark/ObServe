@@ -1085,6 +1085,11 @@ public class ObservableConfigContent {
 				}
 
 				@Override
+				public String canCreate() {
+					return null;
+				}
+
+				@Override
 				public CollectionElement<C> create(Consumer<? super C> preAddAction) {
 					ObservableConfig afterChild = theAfter == null ? null : theChildren.getElement(theAfter).get();
 					ObservableConfig beforeChild = theBefore == null ? null : theChildren.getElement(theBefore).get();

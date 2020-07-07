@@ -1,16 +1,12 @@
 package org.observe.entity;
 
-import org.observe.collect.ObservableSortedSet;
-import org.observe.util.TypeTokens;
-
 /**
- * The result of an {@link EntityQuery}'s {@link EntityQuery#collect(boolean) collect} method. This collection and the one returned from
- * {@link #asSimpleEntities()} will be empty until this result's {@link #getStatus() status} is
- * {@link org.observe.config.ObservableOperationResult.ResultStatus#FULFILLED fulfilled}.
+ * The result of an {@link EntityQuery}'s {@link EntityQuery#collect(boolean) collect} method. The collection will be empty until this
+ * result's {@link #getStatus() status} is {@link org.observe.config.ObservableOperationResult.ResultStatus#FULFILLED fulfilled}.
  *
  * @param <E> The type of entity in the result
  */
-public interface EntityCollectionResult<E> extends EntityQueryResult<E>, ObservableSortedSet<ObservableEntity<? extends E>> {
+public interface EntityCollectionResult<E> extends EntityQueryResult<E> {
 	@Override
 	EntityQuery<E> getOperation();
 
@@ -30,16 +26,8 @@ public interface EntityCollectionResult<E> extends EntityQueryResult<E>, Observa
 	}
 
 	/**
-	 * @return This collection, where each entity is represented by its {@link ObservableEntityType#getEntityType() java-type}
-	 * @throws IllegalStateException If the entity is not mapped to a java type
+	 * @return The entities matching this query. Will be empty until
+	 *         {@link org.observe.config.ObservableOperationResult.ResultStatus#FULFILLED fulfilled}
 	 */
-	default ObservableSortedSet<E> asSimpleEntities() throws IllegalStateException {
-		Class<E> type = getOperation().getEntityType().getEntityType();
-		if (type == null)
-			throw new IllegalStateException("This entity is not mapped to a java type");
-		return flow().mapEquivalent(TypeTokens.get().of(type), //
-			ObservableEntity::getEntity, //
-			e -> getOperation().getEntityType().observableEntity(e)//
-			).collectPassive();
-	}
+	ObservableEntitySet<E> get();
 }

@@ -36,6 +36,8 @@ import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.QuickSet.QuickMap;
 import org.qommons.tree.BetterTreeMap;
 
+import com.google.common.reflect.TypeToken;
+
 class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 	private final ObservableEntityDataSetImpl theEntitySet;
 	private final String theName;
@@ -96,6 +98,11 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 		return theReflector == null ? null : TypeTokens.getRawType(theReflector.getType());
 	}
 
+	@Override
+	public TypeToken<E> getType() {
+		return theReflector == null ? null : theReflector.getType();
+	}
+
 	EntityReflector<E> getReflector() {
 		return theReflector;
 	}
@@ -130,15 +137,15 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 				if (entity != null)
 					return entity;
 			}
-			return select().entity(id).query().collect(false).dispose().peekFirst();
+			return select().entity(id).query().collect(false).dispose().get().getEntities().peekFirst();
 		}
 	}
 
 	@Override
-	public ObservableEntityImpl<? extends E> observableEntity(E entity) {
+	public <E2 extends E> ObservableEntityImpl<? extends E2> observableEntity(E2 entity) {
 		if (theReflector == null)
 			throw new IllegalStateException("This entity is not represented by a java type");
-		return (ObservableEntityImpl<? extends E>) theReflector.getAssociated(entity, this);
+		return (ObservableEntityImpl<? extends E2>) theReflector.getAssociated(entity, this);
 	}
 
 	@Override
@@ -175,7 +182,7 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 	}
 
 	@Override
-	public ConfigurableCreator<E> create() {
+	public ConfigurableCreator<E, E> create() {
 		QuickMap<String, Object> values = theFields.keySet().<Object> createMap().fill(EntityUpdate.NOT_SET);
 		for (int f = 0; f < values.keySize(); f++) {
 			Object defaultValue = getDefault(theFields.get(f));
