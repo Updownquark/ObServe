@@ -5,9 +5,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.BiConsumer;
 import java.util.function.Function;
-import java.util.function.IntFunction;
 
 import org.observe.util.EntityReflector;
 import org.observe.util.EntityReflector.EntityReflectionMessage;
@@ -73,9 +71,9 @@ public class EntityConfiguredValueType<E> implements ConfiguredValueType<E> {
 		return new EntityConfiguredValueType<>(reflector, Collections.singletonList(this), theSubTypes);
 	}
 
-	public E create(IntFunction<Object> fieldGetter, BiConsumer<Integer, Object> fieldSetter) {
+	public E create(EntityReflector.EntityInstanceBacking backing) {
 		assertUsableDirectly();
-		return theReflector.newInstance(fieldGetter, fieldSetter);
+		return theReflector.newInstance(backing);
 	}
 
 	public E associate(E entity, Object key, Object associated) {
@@ -130,7 +128,7 @@ public class EntityConfiguredValueType<E> implements ConfiguredValueType<E> {
 		}
 
 		@Override
-		public ConfiguredValueType<E> getOwnerType() {
+		public EntityConfiguredValueType<E> getOwnerType() {
 			return theValueType;
 		}
 

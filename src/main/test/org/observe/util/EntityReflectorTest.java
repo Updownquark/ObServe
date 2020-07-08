@@ -75,7 +75,18 @@ public class EntityReflectorTest {
 		EntityReflector<C> cRef = EntityReflector.build(TypeTokens.get().of(C.class), true).withSupers(supers)
 			.<String> withCustomMethod(C::toString, (c, args) -> c.print()).build();
 		QuickMap<String, Object> c1Fields = cRef.getFields().keySet().createMap();
-		C c1 = cRef.newInstance(c1Fields::get, c1Fields::put);
+		C c1 = cRef.newInstance(new EntityReflector.EntityInstanceBacking() {
+			@Override
+			public Object get(int fieldIndex) {
+				return c1Fields.get(fieldIndex);
+			}
+
+			@Override
+			public void set(int fieldIndex, Object newValue) {
+				c1Fields.put(fieldIndex, newValue);
+			}
+
+		});
 		c1.setId(10);
 		c1.setA(20);
 		try {
@@ -106,7 +117,17 @@ public class EntityReflectorTest {
 		EntityReflector<D> dRef = EntityReflector.build(TypeTokens.get().of(D.class), true).build();
 
 		QuickMap<String, Object> d1Fields = dRef.getFields().keySet().createMap();
-		D d1 = dRef.newInstance(d1Fields::get, d1Fields::put);
+		D d1 = dRef.newInstance(new EntityReflector.EntityInstanceBacking() {
+			@Override
+			public Object get(int fieldIndex) {
+				return d1Fields.get(fieldIndex);
+			}
+
+			@Override
+			public void set(int fieldIndex, Object newValue) {
+				d1Fields.put(fieldIndex, newValue);
+			}
+		});
 		d1.setString("blah");
 		Assert.assertEquals("blah", d1.toString());
 	}

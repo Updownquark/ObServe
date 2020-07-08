@@ -12,7 +12,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -21,6 +20,8 @@ import java.util.function.Supplier;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
+import org.observe.SettableValue;
+import org.observe.Subscription;
 import org.observe.assoc.ObservableMap;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.collect.ObservableCollection;
@@ -28,6 +29,8 @@ import org.observe.config.EntityConfiguredValueType.EntityConfiguredValueField;
 import org.observe.config.ObservableConfig.ObservableConfigEvent;
 import org.observe.config.ObservableConfig.ObservableConfigPathElement;
 import org.observe.config.ObservableConfigFormat.ReferenceFormat.FormattedField;
+import org.observe.util.EntityReflector;
+import org.observe.util.EntityReflector.FieldChange;
 import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
 import org.qommons.Causable;
@@ -35,6 +38,7 @@ import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
+import org.qommons.collect.ListenerList;
 import org.qommons.collect.QuickSet;
 import org.qommons.collect.QuickSet.QuickMap;
 import org.qommons.io.Format;
@@ -638,17 +642,21 @@ public interface ObservableConfigFormat<E> {
 	}
 
 	public abstract class AbstractComponentFormat<E> implements ObservableConfigFormat<E> {
+		public interface ComponentSetter<E, F> {
+			void set(E entity, F field, ObservableConfigEvent cause);
+		}
+
 		static class ComponentField<E, F> {
 			final String name;
 			final TypeToken<F> type;
 			final int index;
 			final Function<? super E, ? extends F> getter;
-			final BiConsumer<? super E, ? super F> setter;
+			final ComponentSetter<? super E, ? super F> setter;
 			final ObservableConfigFormat<F> format;
 			final String childName;
 
 			ComponentField(String name, TypeToken<F> type, int index, Function<? super E, ? extends F> getter,
-				BiConsumer<? super E, ? super F> setter, ObservableConfigFormat<F> format, String childName) {
+				ComponentSetter<? super E, ? super F> setter, ObservableConfigFormat<F> format, String childName) {
 				this.name = name;
 				this.type = type;
 				this.index = index;
@@ -812,7 +820,7 @@ public interface ObservableConfigFormat<E> {
 				field.childName == null ? config : asChild(config, field.childName),
 					field.childName == null ? config : asChild(config, create, field.childName), until);
 			if (newCopy != copyField)
-				field.setter.accept(copy, newCopy);
+				field.setter.set(copy, newCopy, null);
 		}
 
 		public <E2 extends E> ConfigCreator<E2> create(TypeToken<E2> subType) {
@@ -926,10 +934,11 @@ public interface ObservableConfigFormat<E> {
 			if (field.childName == null) {
 				fieldConfig = ObservableValue.of(entityConfig);
 				supply = () -> entityConfig;
+				ObservableConfigEvent fChange = change;
 				F newValue = field.format.parse(ctxFor(entityConfig, fieldConfig, supply, change, ctx.getUntil(), oldValue,
-					ctx.findReferences(), fv -> field.setter.accept(ctx.getPreviousValue(), fv)));
+					ctx.findReferences(), fv -> field.setter.set(ctx.getPreviousValue(), fv, fChange)));
 				if (newValue != oldValue)
-					field.setter.accept(ctx.getPreviousValue(), newValue);
+					field.setter.set(ctx.getPreviousValue(), newValue, change);
 				return; // The update does not actually affect the field value
 			} else {
 				fieldConfig = entityConfig.observeDescendant(field.childName);
@@ -940,19 +949,20 @@ public interface ObservableConfigFormat<E> {
 						F newValue;
 						try (Transaction ct = Causable.use(childChange)) {
 							newValue = field.format.parse(ctxFor(entityConfig, fieldConfig, supply, childChange, ctx.getUntil(), oldValue,
-								ctx.findReferences(), fv -> field.setter.accept(ctx.getPreviousValue(), fv)));
+								ctx.findReferences(), fv -> field.setter.set(ctx.getPreviousValue(), fv, childChange)));
 						}
 						if (newValue != oldValue)
-							field.setter.accept(ctx.getPreviousValue(), newValue);
+							field.setter.set(ctx.getPreviousValue(), newValue, childChange);
 						return; // The update does not actually affect the field value
 					}
 					change = change.asFromChild();
 				}
 			}
+			ObservableConfigEvent fChange = change;
 			F newValue = field.format.parse(ctxFor(entityConfig, fieldConfig, supply, change,
-				ctx.getUntil(), oldValue, ctx.findReferences(), fv -> field.setter.accept(ctx.getPreviousValue(), fv)));
+				ctx.getUntil(), oldValue, ctx.findReferences(), fv -> field.setter.set(ctx.getPreviousValue(), fv, fChange)));
 			if (oldValue != newValue)
-				field.setter.accept(ctx.getPreviousValue(), newValue);
+				field.setter.set(ctx.getPreviousValue(), newValue, change);
 		}
 	}
 
@@ -990,9 +1000,9 @@ public interface ObservableConfigFormat<E> {
 			TypeToken<K> keyType, TypeToken<V> valueType, //
 			ObservableConfigFormat<K> keyFormat, ObservableConfigFormat<V> valueFormat) {
 			QuickMap<String, ComponentField<MapEntry<K, V>, ?>> fields = QuickSet.of("key").createMap();
-			fields.put("key", new ComponentField<>(keyName, keyType, 0, e -> e.key, (e, k) -> e.key = k, keyFormat, keyName));
-			fields.put("value", new ComponentField<>(compressed ? null : valueName, valueType, 0, e -> e.value, (e, v) -> e.value = v,
-				valueFormat, valueName));
+			fields.put("key", new ComponentField<>(keyName, keyType, 0, e -> e.key, (e, k, change) -> e.key = k, keyFormat, keyName));
+			fields.put("value", new ComponentField<>(compressed ? null : valueName, valueType, 0, e -> e.value,
+				(e, v, change) -> e.value = v, valueFormat, valueName));
 			return fields.unmodifiable();
 		}
 
@@ -1030,6 +1040,41 @@ public interface ObservableConfigFormat<E> {
 	}
 
 	public class EntityConfigFormatImpl<E> extends AbstractComponentFormat<E> implements EntityConfigFormat<E> {
+		public static class FieldUpdate<F> {
+			public final F oldValue;
+			public final F newValue;
+			public final ObservableConfigEvent cause;
+
+			public FieldUpdate(F oldValue, F newValue, ObservableConfigEvent cause) {
+				this.oldValue = oldValue;
+				this.newValue = newValue;
+				this.cause = cause;
+			}
+		}
+
+		static class EntityFieldSetter<E, F> implements ComponentSetter<E, F> {
+			private final EntityConfiguredValueField<E, F> field;
+
+			public EntityFieldSetter(EntityConfiguredValueField<E, F> field) {
+				this.field = field;
+			}
+
+			@Override
+			public void set(E entity, F fieldValue, ObservableConfigEvent change) {
+				ListenerList<Consumer<EntityReflector.FieldChange<F>>> listeners;
+				listeners = (ListenerList<Consumer<FieldChange<F>>>) field.getOwnerType().getAssociated(entity, this);
+				if (listeners == null) {
+					field.set(entity, fieldValue);
+				} else {
+					F oldValue = field.get(entity);
+					field.set(entity, fieldValue);
+					FieldChange<F> fieldChange = new FieldChange<>(oldValue, fieldValue, change);
+					listeners.forEach(//
+						l -> l.accept(fieldChange));
+				}
+			}
+		}
+
 		public final EntityConfiguredValueType<E> entityType;
 
 		private EntityConfigFormatImpl(EntityConfiguredValueType<E> entityType, List<EntitySubFormat<? extends E>> subFormats,
@@ -1048,9 +1093,10 @@ public interface ObservableConfigFormat<E> {
 
 		private static <E, F> ComponentField<E, F> buildField(EntityConfiguredValueType<E> entityType,
 			QuickMap<String, ObservableConfigFormat<?>> fieldFormats, QuickMap<String, String> childNames, int index) {
+
 			return new ComponentField<>(fieldFormats.keySet().get(index), (TypeToken<F>) entityType.getFields().get(index).getFieldType(),
 				index, e -> (F) entityType.getFields().get(index).get(e),
-				(e, f) -> ((EntityConfiguredValueField<E, F>) entityType.getFields().get(index)).set(e, f), //
+				new EntityFieldSetter<>((EntityConfiguredValueField<E, F>) entityType.getFields().get(index)), //
 				(ObservableConfigFormat<F>) fieldFormats.get(index), childNames.get(index));
 		}
 
@@ -1120,12 +1166,54 @@ public interface ObservableConfigFormat<E> {
 
 		@Override
 		protected E create(QuickMap<String, Object> fieldValues, ObservableConfig config, Observable<?> until) {
-			E instance = entityType.create(//
-				idx -> fieldValues.get(idx), //
-				(idx, value) -> {
-					fieldValues.put(idx, value);
-					formatField((ComponentField<E, Object>) getFields().get(idx), value, config, v -> fieldValues.put(idx, v), until);
-				});
+			E instance = entityType.create(new EntityReflector.ObservableEntityInstanceBacking<E>() {
+				@Override
+				public Object get(int fieldIndex) {
+					return fieldValues.get(fieldIndex);
+				}
+
+				@Override
+				public void set(int fieldIndex, Object newValue) {
+					fieldValues.put(fieldIndex, newValue);
+					formatField((ComponentField<E, Object>) getFields().get(fieldIndex), newValue, config,
+						v -> fieldValues.put(fieldIndex, v), until);
+				}
+
+				@Override
+				public Subscription addListener(E entity, int fieldIndex, Consumer<FieldChange<?>> listener) {
+					Object key = getFields().get(fieldIndex).setter;
+					try (Transaction t = getLock(fieldIndex).lock(false, null)) {
+						ListenerList<Consumer<FieldChange<?>>> listeners = (ListenerList<Consumer<FieldChange<?>>>) entityType
+							.getAssociated(entity, key);
+						if (listeners == null) {
+							listeners = ListenerList.build().build();
+							entityType.associate(entity, key, listeners);
+						}
+						return listeners.add(listener, true)::run;
+					}
+				}
+
+				@Override
+				public Transactable getLock(int fieldIndex) {
+					// If we ever try to support hierarchical locks or anything, this should be the field config
+					return config;
+				}
+
+				@Override
+				public long getStamp(int fieldIndex) {
+					return config.getChild(getFields().get(fieldIndex).childName, true, null).getStamp();
+				}
+
+				@Override
+				public String isAcceptable(int fieldIndex, Object value) {
+					return null; // No filter mechanism available
+				}
+
+				@Override
+				public ObservableValue<String> isEnabled(int fieldIndex) {
+					return SettableValue.ALWAYS_ENABLED; // No enablement mechanism
+				}
+			});
 			entityType.associate(instance, "until", until);
 			return instance;
 		}
