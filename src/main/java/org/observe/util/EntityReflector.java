@@ -22,11 +22,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.IntFunction;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
@@ -39,9 +37,11 @@ import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.IntList;
 import org.qommons.QommonsUtils;
+import org.qommons.Stamped;
 import org.qommons.StringUtils;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
+import org.qommons.ValueHolder;
 import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterHashSet;
 import org.qommons.collect.BetterSet;
@@ -59,7 +59,7 @@ import com.google.common.reflect.TypeToken;
 
 /**
  * A utility for reflectively compiling a public interface's fields with getters and setters. Especially, this class's
- * {@link #newInstance(IntFunction, BiConsumer) newInstance} method allows the caller to easily create new instances of the target interface
+ * {@link #newInstance(EntityInstanceBacking) newInstance} method allows the caller to easily create new instances of the target interface
  * backed by a custom data set.
  *
  * @param <E> The type of interface entity this reflector is for
@@ -134,6 +134,10 @@ public class EntityReflector<E> {
 			theMessages = new ArrayList<>();
 		}
 
+		/**
+		 * @param supers A set of reflectors for potential super-interfaces of a reflector built with this builder
+		 * @return This builder
+		 */
 		public Builder<E> withSupers(Map<TypeToken<?>, EntityReflector<?>> supers) {
 			theSupers = supers;
 			return this;
@@ -167,7 +171,7 @@ public class EntityReflector<E> {
 		}
 
 		/**
-		 * @param customMethods Custom method implementations for {@link EntityReflector#newInstance(IntFunction, BiConsumer) created
+		 * @param customMethods Custom method implementations for {@link EntityReflector#newInstance(EntityInstanceBacking) created
 		 *        instances} of the type to use
 		 * @return This builder
 		 */
@@ -180,7 +184,7 @@ public class EntityReflector<E> {
 
 		/**
 		 * @param method The method to implement
-		 * @param implementation The custom implementation of the method for {@link EntityReflector#newInstance(IntFunction, BiConsumer)
+		 * @param implementation The custom implementation of the method for {@link EntityReflector#newInstance(EntityInstanceBacking)
 		 *        created instances} of the type to use
 		 * @return This builder
 		 */
@@ -191,6 +195,11 @@ public class EntityReflector<E> {
 			return this;
 		}
 
+		/**
+		 * @param method A function that calls the method to implement
+		 * @param implementation The custom implementation of the method
+		 * @return This builder
+		 */
 		public <R> Builder<E> withCustomMethod(Function<? super E, R> method, BiFunction<? super E, Object[], R> implementation) {
 			if (theProxyHandler == null) {
 				theProxyHandler = new MethodRetrievingHandler();
@@ -208,6 +217,10 @@ public class EntityReflector<E> {
 			return withCustomMethod(m, implementation);
 		}
 
+		/**
+		 * @param ids The names of the fields that should be marked as ID fields in the entity
+		 * @return This builder
+		 */
 		public Builder<E> withId(String... ids) {
 			if (theIdFields == null)
 				theIdFields = new LinkedHashSet<>();
@@ -242,7 +255,7 @@ public class EntityReflector<E> {
 		 * @return The new reflector
 		 */
 		public EntityReflector<E> buildNoPrint() {
-			EntityReflector<E> reflector = new EntityReflector<E>(theSupers, theType, theRawType, //
+			EntityReflector<E> reflector = new EntityReflector<>(theSupers, theType, theRawType, //
 				theGetterFilter, theSetterFilter, theObservableFilter, //
 				theCustomMethods == null ? Collections.emptyMap() : theCustomMethods, theIdFields, theMessages);
 			if (isUsingDirectly)
@@ -259,29 +272,46 @@ public class EntityReflector<E> {
 		}
 	}
 
+	/** The severity level of an {@link EntityReflectionMessage} */
 	public enum EntityReflectionMessageLevel {
-		FATAL, ERROR, WARNING, INFO;
+		/** A fatal message implies that the entity reflector could not be created or cannot be used to create instances at all */
+		FATAL,
+		/**
+		 * An error message implies that entities created with the reflector may throw unexpected exceptions in some situations, typically
+		 * when the message's {@link EntityReflector.EntityReflectionMessage#getMethod() method} is called
+		 */
+		ERROR,
+		/**
+		 * A warning message implies that the entity type violates best practices, which may cause unexpected behavior in some situations
+		 */
+		WARNING,
+		/** An info message is a message that does not imply any problem or misbehavior */
+		INFO;
 	}
 
+	/** A message generated from generating an {@link EntityReflector} */
 	public static class EntityReflectionMessage {
 		private final EntityReflectionMessageLevel theLevel;
 		private final Method theMethod;
 		private final String theMessage;
 
-		public EntityReflectionMessage(EntityReflectionMessageLevel level, Method method, String message) {
+		EntityReflectionMessage(EntityReflectionMessageLevel level, Method method, String message) {
 			theLevel = level;
 			theMethod = method;
 			theMessage = message;
 		}
 
+		/** @return The severity level of this message */
 		public EntityReflectionMessageLevel getLevel() {
 			return theLevel;
 		}
 
+		/** @return The method that this message is in relation to */
 		public Method getMethod() {
 			return theMethod;
 		}
 
+		/** @return The content of the message */
 		public String getMessage() {
 			return theMessage;
 		}
@@ -292,9 +322,11 @@ public class EntityReflector<E> {
 		}
 	}
 
+	/** A method categorizer that combines more than one method */
 	public static class OrFilter implements Function<Method, String> {
 		private final Function<Method, String>[] theComponents;
 
+		/** @param components The method categorizers to combine */
 		public OrFilter(Function<Method, String>... components) {
 			theComponents = components;
 		}
@@ -388,10 +420,12 @@ public class EntityReflector<E> {
 			return theFieldIndex;
 		}
 
+		/** @return The type of this field */
 		public TypeToken<F> getType() {
 			return theGetter.getReturnType();
 		}
 
+		/** @return Whether this field is an identifier for its type */
 		public boolean isId() {
 			return id;
 		}
@@ -406,6 +440,10 @@ public class EntityReflector<E> {
 			return theSetter;
 		}
 
+		/**
+		 * @param entity The entity to get the field of
+		 * @return This field's value in the given entity
+		 */
 		public F get(E entity) {
 			EntityReflector<E>.ProxyMethodHandler p = (EntityReflector<E>.ProxyMethodHandler) Proxy.getInvocationHandler(entity);
 			try {
@@ -417,6 +455,10 @@ public class EntityReflector<E> {
 			}
 		}
 
+		/**
+		 * @param entity The entity to set the field of
+		 * @param value The new value for this field in the given entity
+		 */
 		public void set(E entity, F value) {
 			if (theSetter == null)
 				throw new UnsupportedOperationException("No setter found for field " + theReflector.getType() + "." + theName);
@@ -436,20 +478,35 @@ public class EntityReflector<E> {
 		}
 	}
 
+	/**
+	 * Represents a non-{@link ObservableValueEvent#isInitial() initial} change to the value of an observable field in an entity
+	 *
+	 * @param <E> The type of the entity
+	 * @param <F> The type of the field
+	 */
 	public static class EntityFieldChangeEvent<E, F> extends ObservableValueEvent<F> {
 		private final E theEntity;
 		private final ReflectedField<E, F> theField;
 
-		public EntityFieldChangeEvent(E entity, ReflectedField<E, F> field, boolean initial, F oldValue, F newValue, Object cause) {
-			super(field.getType(), initial, oldValue, newValue, cause);
+		/**
+		 * @param entity The entity whose field value changed
+		 * @param field The field whose value changed
+		 * @param oldValue The previous value of the field
+		 * @param newValue The new (current) value of the field
+		 * @param cause The cause of the change
+		 */
+		public EntityFieldChangeEvent(E entity, ReflectedField<E, F> field, F oldValue, F newValue, Object cause) {
+			super(field.getType(), false, oldValue, newValue, cause);
 			theEntity = entity;
 			theField = field;
 		}
 
+		/** @return The entity whose field value changed */
 		public E getEntity() {
 			return theEntity;
 		}
 
+		/** @return The field whose value changed */
 		public ReflectedField<E, F> getField() {
 			return theField;
 		}
@@ -494,6 +551,7 @@ public class EntityReflector<E> {
 		}
 	}
 
+	/** Provided to {@link EntityReflector#newInstance(EntityInstanceBacking)} to provide and modify field values in the entity instance */
 	public interface EntityInstanceBacking {
 		/**
 		 * @param fieldIndex The {@link EntityReflector.ReflectedField#getFieldIndex() index} of the field to get
@@ -508,23 +566,67 @@ public class EntityReflector<E> {
 		void set(int fieldIndex, Object newValue);
 	}
 
+	/**
+	 * An extension of {@link EntityInstanceBacking} that provides support for observable fields
+	 *
+	 * @param <E> The entity type to support
+	 */
 	public interface ObservableEntityInstanceBacking<E> extends EntityInstanceBacking {
+		/**
+		 * Registers a listener to a field for a particular entity
+		 *
+		 * @param entity The entity instance to listen to
+		 * @param fieldIndex The {@link EntityReflector.ReflectedField#getFieldIndex() index} of the field
+		 * @param listener The listener to install
+		 * @return A subcription to {@link Subscription#unsubscribe() unsubscribe} to stop listening
+		 */
 		Subscription addListener(E entity, int fieldIndex, Consumer<FieldChange<?>> listener);
 
+		/**
+		 * @param fieldIndex The {@link EntityReflector.ReflectedField#getFieldIndex() index} of the field
+		 * @return The locking mechanism for the field
+		 */
 		Transactable getLock(int fieldIndex);
 
+		/**
+		 * @param fieldIndex The {@link EntityReflector.ReflectedField#getFieldIndex() index} of the field
+		 * @return The {@link Stamped#getStamp() stamp} for the field's value
+		 */
 		long getStamp(int fieldIndex);
 
+		/**
+		 * @param fieldIndex The {@link EntityReflector.ReflectedField#getFieldIndex() index} of the field
+		 * @param value The value for the field
+		 * @return null if the given value is acceptable for the field, or a reason why it is not
+		 */
 		String isAcceptable(int fieldIndex, Object value);
 
+		/**
+		 * @param fieldIndex The {@link EntityReflector.ReflectedField#getFieldIndex() index} of the field
+		 * @return A value containing null when the field may be modified, or a reason why it cannot be
+		 */
 		ObservableValue<String> isEnabled(int fieldIndex);
 	}
 
+	/**
+	 * Represents a change to a entity's field (see
+	 * {@link EntityReflector.ObservableEntityInstanceBacking#addListener(Object, int, Consumer)})
+	 *
+	 * @param <F> The type of the field that changed
+	 */
 	public static class FieldChange<F> {
+		/** The previous value of the field */
 		public final F oldValue;
+		/** The new (current) value of the field */
 		public final F newValue;
+		/** The cause of the change */
 		public final Object cause;
 
+		/**
+		 * @param oldValue The previous value of the field
+		 * @param newValue The new (current) value of the field
+		 * @param cause The cause of the change
+		 */
 		public FieldChange(F oldValue, F newValue, Object cause) {
 			this.oldValue = oldValue;
 			this.newValue = newValue;
@@ -532,6 +634,25 @@ public class EntityReflector<E> {
 		}
 	}
 
+	/**
+	 * <p>
+	 * A {@link SettableValue} representing the value of a field in an observably-supported instance of an entity.
+	 * </p>
+	 * <p>
+	 * An instance is observably-supported if the {@link EntityReflector.EntityInstanceBacking} given to the
+	 * {@link EntityReflector#newInstance(EntityInstanceBacking) newInstance} call that created it was an instance of
+	 * {@link EntityReflector.ObservableEntityInstanceBacking}.
+	 * </p>
+	 * <p>
+	 * An instance of this type may be obtained by calling {@link EntityReflector#observeField(Object, int)} or from an observable field
+	 * getter (by default, of the form <code>SettableValue<F> observeFieldName()</code>, see
+	 * {@link EntityReflector.Builder#withObservableFilter(Function)}) on the entity that returns {@link SettableValue} or
+	 * {@link EntityReflector.ObservableField}.
+	 * </p>
+	 *
+	 * @param <E> The type of the entity
+	 * @param <F> The type of the field
+	 */
 	public static class ObservableField<E, F> extends AbstractIdentifiable implements SettableValue<F> {
 		private final E theEntity;
 		private final ReflectedField<E, F> theField;
@@ -543,14 +664,17 @@ public class EntityReflector<E> {
 			theLock = getBacking().getLock(field.getFieldIndex());
 		}
 
-		protected ObservableEntityInstanceBacking getBacking() {
-			return (ObservableEntityInstanceBacking) getHandler(theEntity).theBacking;
+		/** @return The backing of the entity */
+		protected ObservableEntityInstanceBacking<E> getBacking() {
+			return (ObservableEntityInstanceBacking<E>) getHandler(theEntity).theBacking;
 		}
 
+		/** @return The entity whose field this value represents */
 		public E getEntity() {
 			return theEntity;
 		}
 
+		/** @return The field that this value represents */
 		public ReflectedField<E, F> getField() {
 			return theField;
 		}
@@ -650,6 +774,12 @@ public class EntityReflector<E> {
 		};
 	}
 
+	/**
+	 * Returned from the default {@link Identifiable#getIdentity()} method for entities that have {@link EntityReflector#getIdFields() ID
+	 * fields}.
+	 *
+	 * @param <E> The type of the entity
+	 */
 	public static class EntityFieldIdentity<E> {
 		private final Class<E> theType;
 		private final Object[] theIdentityValues;
@@ -683,6 +813,12 @@ public class EntityReflector<E> {
 		}
 	}
 
+	/**
+	 * Returned from the default {@link Identifiable#getIdentity()} method for entities that have no {@link EntityReflector#getIdFields() ID
+	 * fields}.
+	 *
+	 * @param <E> The type of the entity
+	 */
 	public static class EntityInstanceIdentity<E> {
 		private final E theEntity;
 
@@ -722,10 +858,17 @@ public class EntityReflector<E> {
 		}
 	}
 
+	/**
+	 * Called when any method in an entity created by an {@link EntityReflector} is called
+	 *
+	 * @param <E> The type of the entity
+	 * @param <R> The return type of the method
+	 */
 	public static abstract class MethodInterpreter<E, R> implements Comparable<MethodInterpreter<?, ?>> {
 		private final EntityReflector<E> theReflector;
 		private ElementId theMethodElement;
 		private final Method theMethod;
+		/** Methods in super interfaces of this method's entity that this method overrides */
 		protected MethodInterpreter<? super E, ? super R>[] theSuperMethods;
 		private final Class<?>[] theParameters;
 		private final Invokable<E, R> theInvokable;
@@ -751,32 +894,47 @@ public class EntityReflector<E> {
 			theSuperMethods[superIndex] = superMethod;
 		}
 
+		/** @return The reflector that this method belongs to */
 		public EntityReflector<E> getReflector() {
 			return theReflector;
 		}
 
+		/** @return The address of this method in its reflector's {@link EntityReflector#getMethods() methods} */
 		public ElementId getMethodElement() {
 			return theMethodElement;
 		}
 
+		/** @return The {@link Method} that this interpreter implements */
 		public Method getMethod() {
 			return theMethod;
 		}
 
+		/** @return The name of this method */
 		public String getName() {
 			return theMethod.getName();
 		}
 
+		/** @return The Invokable representing this method */
 		public Invokable<E, R> getInvokable() {
 			return theInvokable;
 		}
 
+		/** @return The return type of the method */
 		public TypeToken<R> getReturnType() {
 			return (TypeToken<R>) theInvokable.getReturnType();
 		}
 
-		protected R invoke(E proxy, SuperPath path, Object[] args, EntityInstanceBacking backing)
-			throws Throwable {
+		/**
+		 * Called when the method is invoked
+		 *
+		 * @param proxy The entity instance that this method is being invoked on
+		 * @param path The path to the target super method to invoke
+		 * @param args The arguments with which the method was called
+		 * @param backing The backing of the entity
+		 * @return The return value of the method
+		 * @throws Throwable If the method throws an exception
+		 */
+		protected R invoke(E proxy, SuperPath path, Object[] args, EntityInstanceBacking backing) throws Throwable {
 			if (path == null)
 				return invokeLocal(proxy, args, backing);
 			return (R) theSuperMethods[path.index].invoke(proxy, path.parent, args, superBacking(backing, proxy, path, args));
@@ -832,6 +990,15 @@ public class EntityReflector<E> {
 			}
 		}
 
+		/**
+		 * This method's local implementation (as distinct from a super call)
+		 *
+		 * @param proxy The entity instance that this method is being invoked on
+		 * @param args The arguments with which the method was called
+		 * @param backing The backing of the entity
+		 * @return The return value of the method
+		 * @throws Throwable If the method throws an exception
+		 */
 		protected abstract R invokeLocal(E proxy, Object[] args, EntityInstanceBacking backing) throws Throwable;
 
 		@Override
@@ -841,12 +1008,22 @@ public class EntityReflector<E> {
 			return compare(o.theMethod.getName(), o.theParameters);
 		}
 
+		/**
+		 * @param method The method to compare with
+		 * @return Whether this method should appear before (-) or after (+) the given method, or 0 if its signature is identical to this
+		 *         method
+		 */
 		public int compare(Method method) {
 			if (theMethod == method)
 				return 0;
 			return compare(method.getName(), method.getParameterTypes());
 		}
 
+		/**
+		 * @param sig The method signature to compare with
+		 * @return Whether this method should appear before (-) or after (+) the given method, or 0 if its signature is identical to this
+		 *         method
+		 */
 		public int compare(MethodSignature sig) {
 			return compare(sig.name, sig.parameters);
 		}
@@ -900,6 +1077,13 @@ public class EntityReflector<E> {
 		}
 	}
 
+	/**
+	 * A getter or setter for a field
+	 *
+	 * @param <E> The type of the entity
+	 * @param <F> The type of the field
+	 * @param <R> The return type of the method
+	 */
 	public static abstract class FieldRelatedMethod<E, F, R> extends MethodInterpreter<E, R> {
 		private final ReflectedField<E, F> theField;
 
@@ -908,13 +1092,20 @@ public class EntityReflector<E> {
 			theField = field;
 		}
 
+		/** @return The field this method is a getter or setter for */
 		public ReflectedField<E, F> getField() {
 			return theField;
 		}
 	}
 
+	/**
+	 * A getter for a field
+	 *
+	 * @param <E> The type of the entity
+	 * @param <F> The type of the field
+	 */
 	public static class FieldGetter<E, F> extends FieldRelatedMethod<E, F, F> {
-		public FieldGetter(EntityReflector<E> reflector, Method method, ReflectedField<E, F> field) {
+		FieldGetter(EntityReflector<E> reflector, Method method, ReflectedField<E, F> field) {
 			super(reflector, method, field);
 		}
 
@@ -924,10 +1115,16 @@ public class EntityReflector<E> {
 		}
 	}
 
+	/**
+	 * A getter for a field that has a default implementation which is called once and the value reused thereafter
+	 *
+	 * @param <E> The type of the entity
+	 * @param <F> The type of the field
+	 */
 	public static class CachedFieldGetter<E, F> extends FieldGetter<E, F> {
 		private final MethodHandle theHandle;
 
-		public CachedFieldGetter(EntityReflector<E> reflector, Method method, ReflectedField<E, F> field, MethodHandle handle) {
+		CachedFieldGetter(EntityReflector<E> reflector, Method method, ReflectedField<E, F> field, MethodHandle handle) {
 			super(reflector, method, field);
 			theHandle = handle;
 		}
@@ -946,6 +1143,12 @@ public class EntityReflector<E> {
 		}
 	}
 
+	/**
+	 * A setter for a field
+	 *
+	 * @param <E> The type of the entity
+	 * @param <F> The type of the field
+	 */
 	public static class FieldSetter<E, F> extends FieldRelatedMethod<E, F, Object> {
 		private final SetterReturnType theReturnType;
 
@@ -955,6 +1158,7 @@ public class EntityReflector<E> {
 			field.setSetter(this);
 		}
 
+		/** @return The return type of the setter */
 		public SetterReturnType getSetterReturnType() {
 			return theReturnType;
 		}
@@ -978,10 +1182,23 @@ public class EntityReflector<E> {
 		}
 	}
 
+	/** The return type of a field setter */
 	public enum SetterReturnType {
-		OLD_VALUE, SELF, VOID;
+		/** If the setter's return type is the type of the field, the previous value of the field will be returned */
+		OLD_VALUE,
+		/** If the setter's return type is the type of the entity, the entity will be returned (e.g. for chained calls) */
+		SELF,
+		/** A void-typed setter */
+		VOID;
 	}
 
+	/**
+	 * An observable field getter--returns an {@link ObservableValue} (or {@link SettableValue} or {@link EntityReflector.ObservableField})
+	 * that represents the field value of the entity.
+	 *
+	 * @param <E> The type of the entity
+	 * @param <F> The type of the field
+	 */
 	public static class ObservableFieldGetter<E, F> extends FieldRelatedMethod<E, F, ObservableValue<F>> {
 		private final ObservableGetterType theType;
 
@@ -990,6 +1207,7 @@ public class EntityReflector<E> {
 			theType = type;
 		}
 
+		/** @return The type of the observable this getter returns */
 		public ObservableGetterType getGetterType() {
 			return theType;
 		}
@@ -1013,10 +1231,22 @@ public class EntityReflector<E> {
 		}
 	}
 
+	/** The type of observable returned by an {@link EntityReflector.ObservableFieldGetter} */
 	public enum ObservableGetterType {
-		OBSERVABLE, SETTABLE, FIELD_SETTABLE;
+		/** A simple, un-settable {@link ObservableValue} */
+		OBSERVABLE,
+		/** A {@link SettableValue} (the actual instance will be an {@link EntityReflector.ObservableField}) */
+		SETTABLE,
+		/** Explicitly {@link EntityReflector.ObservableField} */
+		FIELD_SETTABLE;
 	}
 
+	/**
+	 * A method implemented in the entity interface via Java 8's default implementation feature
+	 *
+	 * @param <E> The type of the entity
+	 * @param <R> The return type of the method
+	 */
 	public static class DefaultMethod<E, R> extends MethodInterpreter<E, R> {
 		private final MethodHandle theHandle;
 
@@ -1025,9 +1255,12 @@ public class EntityReflector<E> {
 			theHandle = handle;
 		}
 
+		MethodHandle getHandle() {
+			return theHandle;
+		}
+
 		@Override
-		protected R invokeLocal(E proxy, Object[] args, EntityInstanceBacking backing)
-			throws Throwable {
+		protected R invokeLocal(E proxy, Object[] args, EntityInstanceBacking backing) throws Throwable {
 			if (theHandle == null)
 				throw new IllegalStateException("Unable to reflectively invoke default method " + getInvokable());
 			synchronized (theHandle) {
@@ -1036,9 +1269,38 @@ public class EntityReflector<E> {
 		}
 	}
 
+	/**
+	 * A default method whose implementation is called once and the value cached and returned thereafter
+	 *
+	 * @param <E> The type of the entity
+	 * @param <R> The return type of the method
+	 */
+	public static class CachedMethod<E, R> extends DefaultMethod<E, R> {
+		CachedMethod(EntityReflector<E> reflector, Method method, MethodHandle handle) {
+			super(reflector, method, handle);
+		}
+
+		@Override
+		protected R invokeLocal(E proxy, Object[] args, EntityInstanceBacking backing) throws Throwable {
+			EntityReflector<E>.ProxyMethodHandler handler = getHandler(proxy);
+			ValueHolder<R> holder = (ValueHolder<R>) handler.getAssociated(this);
+			if (holder == null) {
+				R value = super.invokeLocal(proxy, args, backing);
+				holder = new ValueHolder<>(value);
+				handler.associate(this, value);
+			}
+			return holder.get();
+		}
+	}
+
+	/**
+	 * A method whose default implementation is overridden by another
+	 *
+	 * @param <E> The type of the entity
+	 * @param <R> The return type of the method
+	 */
 	public static abstract class SyntheticMethodOverride<E, R> extends MethodInterpreter<E, R> {
 		static class MethodInvocation {
-			private static final Object[] NO_ARGS = new Object[0];
 			final SyntheticMethodOverride<?, ?> method;
 			final Object proxy;
 			final Object[] args;
@@ -1079,8 +1341,7 @@ public class EntityReflector<E> {
 		}
 
 		@Override
-		protected R invoke(E proxy, SuperPath path, Object[] args, EntityInstanceBacking backing)
-			throws Throwable {
+		protected R invoke(E proxy, SuperPath path, Object[] args, EntityInstanceBacking backing) throws Throwable {
 			BetterSet<MethodInvocation> invocations = null;
 			ElementId invocation = null;
 			if (path != null) {
@@ -1099,6 +1360,13 @@ public class EntityReflector<E> {
 		}
 	}
 
+	/**
+	 * A method for which a custom implementation has been provided through code (either not specified in the entity type or overridden over
+	 * it). See {@link EntityReflector.Builder#withCustomMethod(Method, BiFunction)}.
+	 *
+	 * @param <E> The type of the entity
+	 * @param <R> The return type of the method
+	 */
 	public static class CustomMethod<E, R> extends SyntheticMethodOverride<E, R> {
 		private BiFunction<? super E, Object[], R> theInterpreter;
 
@@ -1113,6 +1381,12 @@ public class EntityReflector<E> {
 		}
 	}
 
+	/**
+	 * A method with a default implementation (used for entities when an implementation is not otherwise provided)
+	 *
+	 * @param <E> The type of the entity
+	 * @param <R> The return type of the method
+	 */
 	public static class ObjectMethodWrapper<E, R> extends MethodInterpreter<E, R> {
 		private final MethodInterpreter<Object, R> theObjectMethod;
 
@@ -1121,17 +1395,23 @@ public class EntityReflector<E> {
 			theObjectMethod = objectMethod;
 		}
 
+		/** @return The default method interpreter (see {@link EntityReflector#DEFAULT_METHODS}) */
 		public MethodInterpreter<Object, R> getObjectMethod() {
 			return theObjectMethod;
 		}
 
 		@Override
-		protected R invokeLocal(E proxy, Object[] args, EntityInstanceBacking backing)
-			throws Throwable {
+		protected R invokeLocal(E proxy, Object[] args, EntityInstanceBacking backing) throws Throwable {
 			return theObjectMethod.invokeLocal(proxy, args, backing);
 		}
 	}
 
+	/**
+	 * A method tagged with @{@link ObjectMethodOverride} to override an Object method
+	 *
+	 * @param <E> The type of the entity
+	 * @param <R> The type of the field
+	 */
 	public static class OverrideMethod<E, R> extends SyntheticMethodOverride<E, R> {
 		private final MethodInterpreter<E, R> theOverride;
 
@@ -1141,36 +1421,53 @@ public class EntityReflector<E> {
 		}
 
 		@Override
-		protected R invokeLocal(E proxy, Object[] args, EntityInstanceBacking backing)
-			throws Throwable {
+		protected R invokeLocal(E proxy, Object[] args, EntityInstanceBacking backing) throws Throwable {
 			return theOverride.invokeLocal(proxy, args, backing);
 		}
 	}
 
+	/**
+	 * A method that is implemented in a super type and not overridden
+	 *
+	 * @param <E> The type of the entity
+	 * @param <R> The return type of the method
+	 */
 	public static class SuperDelegateMethod<E, R> extends MethodInterpreter<E, R> {
-		public SuperDelegateMethod(EntityReflector<E> reflector, Method method) {
+		SuperDelegateMethod(EntityReflector<E> reflector, Method method) {
 			super(reflector, method);
 		}
 
 		@Override
-		protected R invokeLocal(E proxy, Object[] args, EntityInstanceBacking backing)
-			throws Throwable {
+		protected R invokeLocal(E proxy, Object[] args, EntityInstanceBacking backing) throws Throwable {
 			throw new IllegalStateException("No super method set");
 		}
 	}
 
+	/** Default implementation of {@link Object#equals(Object)} for entities when not overridden using @{@link ObjectMethodOverride} */
 	public static MethodInterpreter<Object, Boolean> DEFAULT_EQUALS;
+	/** Default implementation of {@link Object#hashCode()} for entities when not overridden using @{@link ObjectMethodOverride} */
 	public static MethodInterpreter<Object, Integer> DEFAULT_HASH_CODE;
+	/** Default implementation of {@link Object#toString()} for entities when not overridden using @{@link ObjectMethodOverride} */
 	public static MethodInterpreter<Object, String> DEFAULT_TO_STRING;
+	/** Default implementation of {@link Object#notify()} for entities */
 	public static MethodInterpreter<Object, Void> DEFAULT_NOTIFY;
+	/** Default implementation of {@link Object#notifyAll()} for entities */
 	public static MethodInterpreter<Object, Void> DEFAULT_NOTIFY_ALL;
+	/** Default implementation of {@link Object#wait()} for entities */
 	public static MethodInterpreter<Object, Void> DEFAULT_WAIT0;
+	/** Default implementation of {@link Object#wait(long)} for entities */
 	public static MethodInterpreter<Object, Void> DEFAULT_WAIT1;
+	/** Default implementation of {@link Object#wait(long, int)} for entities */
 	public static MethodInterpreter<Object, Void> DEFAULT_WAIT2;
+	/** Default implementation of {@link Object#finalize()} for entities */
 	public static MethodInterpreter<Object, Void> DEFAULT_FINALIZE;
+	/** Default implementation of {@link Object#clone()} for entities */
 	public static MethodInterpreter<Object, Object> DEFAULT_CLONE;
+	/** Default implementation of {@link Object#getClass()} for entities */
 	public static MethodInterpreter<Object, Class<?>> DEFAULT_GET_CLASS; // Does this get delegated to here?
+	/** Default implementation of {@link Identifiable#getIdentity()} for entities when not implemented in the entity type */
 	public static MethodInterpreter<Identifiable, Object> DEFAULT_GET_IDENTITY;
+	/** All default methods implementations for entities */
 	public static final Map<Method, MethodInterpreter<Object, ?>> DEFAULT_METHODS;
 
 	static {
@@ -1540,11 +1837,16 @@ public class EntityReflector<E> {
 						ReflectedField<? super E, ?> field = fieldName == null ? null : fields.get(fieldName);
 						if (field != null) {
 							method = new CachedFieldGetter<>(this, m, (ReflectedField<E, ?>) field, handle);
-						} else {
+						} else if (m.getParameterCount() > 0) {
 							errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.WARNING, m,
-								"Default method is marked as Cached, but is not a field"));
+								"Cached Default methods cannot have parameters"));
 							method = new DefaultMethod<>(this, m, handle);
-						}
+						} else if (m.getReturnType() == void.class) {
+							errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.WARNING, m,
+								"Cached Default methods cannot return void"));
+							method = new DefaultMethod<>(this, m, handle);
+						} else
+							method = new CachedMethod<>(this, m, handle);
 					} else
 						method = new DefaultMethod<>(this, m, handle);
 				} else {
@@ -1704,6 +2006,9 @@ public class EntityReflector<E> {
 					subMethod = new FieldSetter<>(this, superMethod.get().getMethod(),
 						fields.get(((FieldSetter<?, ?>) superMethod.get()).getField().getName()),
 						((FieldSetter<?, ?>) superMethod.get()).getSetterReturnType());
+				else if (superMethod.get() instanceof CachedMethod)
+					subMethod = new CachedMethod<>(this, superMethod.get().getMethod(),
+						((CachedMethod<E, ?>) superMethod.get()).getHandle());
 				else
 					subMethod = new SuperDelegateMethod<>(this, superMethod.get().getMethod());
 				subMethod.setElement(methods.addElement(subMethod, false).getElementId());
@@ -1757,10 +2062,19 @@ public class EntityReflector<E> {
 		return theIdFields;
 	}
 
+	/**
+	 * @return Whether this entity type exposes observable field getters. If this is true, then entities created with
+	 *         {@link #newInstance(EntityInstanceBacking)} must be backed by an instance of {@link ObservableEntityInstanceBacking}.
+	 */
 	public boolean hasObservableFields() {
 		return hasObservableFields;
 	}
 
+	/**
+	 * @return Whether instances created with this reflector will be instances of {@link Identifiable}. This will be true either for entity
+	 *         types that themselves extends {@link Identifiable} or for types that do not override {@link Object#equals(Object)} or
+	 *         {@link Object#hashCode()} (via @{@link ObjectMethodOverride}).
+	 */
 	public boolean isIdentifiable() {
 		return isIdentifiable;
 	}
@@ -1848,14 +2162,30 @@ public class EntityReflector<E> {
 			return (E) Proxy.newProxyInstance(theRawType.getClassLoader(), new Class[] { theRawType }, new ProxyMethodHandler(backing));
 	}
 
+	/**
+	 * @param entity The entity whose field to watch
+	 * @param fieldIndex The {@link EntityReflector.ReflectedField#getFieldIndex() index} of the field to watch
+	 * @param listener The listener to receive change events when the value of the given field in the entity changes
+	 * @return The subscription to {@link Subscription#unsubscribe() unsubscribe} to stop receiving change events
+	 */
 	public Subscription watchField(E entity, int fieldIndex, Consumer<? super EntityFieldChangeEvent<E, ?>> listener) {
 		return getHandler(entity).addFieldListener(entity, fieldIndex, listener);
 	}
 
+	/**
+	 * @param entity The entity whose fields to watch
+	 * @param listener The listener to receive change events when the value of any field in the entity changes
+	 * @return The subscription to {@link Subscription#unsubscribe() unsubscribe} to stop receiving change events
+	 */
 	public Subscription watchAllFields(E entity, Consumer<? super EntityFieldChangeEvent<E, ?>> listener) {
 		return getHandler(entity).addFieldListener(entity, listener);
 	}
 
+	/**
+	 * @param entity The entity whose field to watch
+	 * @param fieldIndex The {@link EntityReflector.ReflectedField#getFieldIndex() index} of the field to watch
+	 * @return A {@link SettableValue} representing the value of the given field in the entity
+	 */
 	public ObservableField<? extends E, ?> observeField(E entity, int fieldIndex) {
 		if (!(getHandler(entity).theBacking instanceof ObservableEntityInstanceBacking))
 			throw new UnsupportedOperationException("Observation is not supported by this entity's backing");
@@ -1870,7 +2200,7 @@ public class EntityReflector<E> {
 	/**
 	 * Allows the association of an entity with a custom piece of information (retrievable via {@link #getAssociated(Object, Object)})
 	 *
-	 * @param proxy The entity created with {@link #newInstance(IntFunction, BiConsumer)}
+	 * @param proxy The entity created with {@link #newInstance(EntityReflector.EntityInstanceBacking)}
 	 * @param key The key to associate the data with
 	 * @param associated The data to associate with the entity for the key
 	 * @return The entity
@@ -1882,7 +2212,7 @@ public class EntityReflector<E> {
 	}
 
 	/**
-	 * @param proxy The entity created with {@link #newInstance(IntFunction, BiConsumer)}
+	 * @param proxy The entity created with {@link #newInstance(EntityReflector.EntityInstanceBacking)}
 	 * @param key The key the data is associated with
 	 * @return The data {@link #associate(Object, Object, Object) associated} with the entity and key
 	 */
@@ -1967,7 +2297,7 @@ public class EntityReflector<E> {
 			ListenerList<Consumer<? super EntityFieldChangeEvent<E, ?>>> listeners = theListeners[field.getFieldIndex()];
 			if (listeners == null || listeners.isEmpty())
 				return;
-			EntityFieldChangeEvent<E, F> event = new EntityFieldChangeEvent<>(entity, field, false, change.oldValue, change.newValue,
+			EntityFieldChangeEvent<E, F> event = new EntityFieldChangeEvent<>(entity, field, change.oldValue, change.newValue,
 				change.cause);
 			try (Transaction t = Causable.use(event)) {
 				listeners.forEach(//
