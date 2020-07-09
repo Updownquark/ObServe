@@ -31,11 +31,13 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 		 * @return The configurable query
 		 */
 		ConfigurableQuery<E> query(EntityCondition<E> selection);
+
 		/**
 		 * @param selection The selection to update with
 		 * @return The configurable update
 		 */
 		ConfigurableUpdate<E> update(EntityCondition<E> selection);
+
 		/**
 		 * @param selection The selection to delete with
 		 * @return The configurable deletion
@@ -54,8 +56,7 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 	}
 
 	private EntityCondition(ObservableEntityType<E> entityType, SelectionMechanism<E> mechanism,
-		Map<String, EntityOperationVariable<E>> globalVars,
-		Map<String, EntityOperationVariable<E>> vars) {
+		Map<String, EntityOperationVariable<E>> globalVars, Map<String, EntityOperationVariable<E>> vars) {
 		theEntityType = entityType;
 		theMechanism = mechanism;
 		theGlobalVariables = vars;
@@ -111,9 +112,10 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 	/**
 	 * @param entity The entity to test
 	 * @param varValues The values of all variables in this condition
-	 * @return Whether this condition matches the given entity with the given variable values
+	 * @return null if this condition matches the given entity with the given variable values, or the most specific condition that is
+	 *         voilated
 	 */
-	public abstract boolean test(ObservableEntity<? extends E> entity, QuickMap<String, Object> varValues);
+	public abstract EntityCondition<E> test(ObservableEntity<? extends E> entity, QuickMap<String, Object> varValues);
 
 	/**
 	 * @param other The other condition to test
@@ -126,6 +128,12 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 	 * @return The transformed condition
 	 */
 	public abstract EntityCondition<E> transform(Function<EntityCondition<E>, EntityCondition<E>> transform);
+
+	/**
+	 * @param field The field to get the condition for
+	 * @return The component of this condition related to the given field which must be satisfied for this condition to be satisfied
+	 */
+	public abstract EntityCondition<E> getCondition(ObservableEntityFieldType<E, ?> field);
 
 	/**
 	 * @param variables The values of all variables used by this condition
@@ -149,10 +157,12 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 	public ConfigurableQuery<E> query() {
 		return theMechanism.query(this);
 	}
+
 	/** @return A configurable update to modify entities matching this selection */
 	public ConfigurableUpdate<E> update() {
 		return theMechanism.update(this);
 	}
+
 	/** @return A configurable deletion to remove entities matching this selection */
 	public ConfigurableDeletion<E> delete() {
 		return theMechanism.delete(this);
@@ -252,8 +262,13 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 		}
 
 		@Override
-		public boolean test(ObservableEntity<? extends E> entity, QuickMap<String, Object> varValues) {
-			return true;
+		public EntityCondition<E> getCondition(ObservableEntityFieldType<E, ?> field) {
+			return null;
+		}
+
+		@Override
+		public EntityCondition<E> test(ObservableEntity<? extends E> entity, QuickMap<String, Object> varValues) {
+			return null;
 		}
 
 		@Override
@@ -405,6 +420,19 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 		}
 	}
 
+	/** The condition {@link ValueCondition#getSymbol() symbol} for equality, = */
+	public static final char EQUALS = '=';
+	/** The condition {@link ValueCondition#getSymbol() symbol} for inequality, ≠(\u2260) */
+	public static final char NOT_EQUALS = '\u2260';
+	/** The condition {@link ValueCondition#getSymbol() symbol} for less than, &lt; */
+	public static final char LESS = '<';
+	/** The condition {@link ValueCondition#getSymbol() symbol} for less than or equal, ≤(\u2264) */
+	public static final char LESS_OR_EQUAL = '\u2264';
+	/** The condition {@link ValueCondition#getSymbol() symbol} for greater than, &gt; */
+	public static final char GREATER = '>';
+	/** The condition {@link ValueCondition#getSymbol() symbol} for greater than or equal, ≥(\u2265) */
+	public static final char GREATER_OR_EQUAL = '\u2264';
+
 	/**
 	 * A condition that tests the value of an entity's field against a {@link EntityCondition.LiteralCondition literal} or
 	 * {@link EntityCondition.VariableCondition variable} value.
@@ -450,34 +478,53 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 			return isWithEqual;
 		}
 
-		/** @return ≤(\u2264), &lt;, =, ≠(\u2260), ≥(\u2265), or &gt; */
+		/**
+		 * @return ≤(\u2264), &lt;, =, ≠(\u2260), ≥(\u2265), or &gt;
+		 * @see EntityCondition#EQUALS
+		 * @see EntityCondition#NOT_EQUALS
+		 * @see EntityCondition#LESS
+		 * @see EntityCondition#LESS_OR_EQUAL
+		 * @see EntityCondition#GREATER
+		 * @see EntityCondition#GREATER_OR_EQUAL
+		 */
 		public char getSymbol() {
 			if (theComparison < 0) {
 				if (isWithEqual)
-					return '\u2264';
+					return LESS_OR_EQUAL;
 				else
-					return '<';
+					return LESS;
 			} else if (theComparison == 0) {
 				if (isWithEqual)
-					return '=';
+					return EQUALS;
 				else
-					return '\u2260';
+					return NOT_EQUALS;
 			} else {
 				if (isWithEqual)
-					return '\u2265';
+					return GREATER_OR_EQUAL;
 				else
-					return '>';
+					return GREATER;
 			}
 		}
 
 		public abstract F getConditionValue(QuickMap<String, Object> varValues);
+
 		protected abstract int compareValue(ValueCondition<? super E, ? super F> other);
 
 		@Override
-		public boolean test(ObservableEntity<? extends E> entity, QuickMap<String, Object> varValues) {
+		public EntityCondition<E> getCondition(ObservableEntityFieldType<E, ?> field) {
+			if (theField.getFieldSequence().getFirst().equals(field))
+				return this;
+			return null;
+		}
+
+		@Override
+		public EntityCondition<E> test(ObservableEntity<? extends E> entity, QuickMap<String, Object> varValues) {
 			F value1 = theField.getValue(entity);
 			F value2 = getConditionValue(varValues);
-			return test(value1, value2);
+			if (test(value1, value2))
+				return null;
+			else
+				return this;
 		}
 
 		protected boolean test(F value1, F value2) {
@@ -710,24 +757,24 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 				return false;
 
 			VariableCondition<? super E, ? super F> otherV = (VariableCondition<? super E, ? super F>) other;
-			if(!theVariable.getName().equals(otherV.theVariable.getName()))
+			if (!theVariable.getName().equals(otherV.theVariable.getName()))
 				return false;
-			if(getComparison()<0){
-				if(otherV.getComparison()>0)
+			if (getComparison() < 0) {
+				if (otherV.getComparison() > 0)
 					return false;
-				else if(otherV.getComparison()<0)
+				else if (otherV.getComparison() < 0)
 					return isWithEqual() || !otherV.isWithEqual();
 				else
 					return isWithEqual() && otherV.isWithEqual();
-			} else if(getComparison()>0){
-				if(otherV.getComparison()<0)
+			} else if (getComparison() > 0) {
+				if (otherV.getComparison() < 0)
 					return false;
 				else if (otherV.getComparison() > 0)
 					return isWithEqual() || !otherV.isWithEqual();
 				else
 					return isWithEqual() && otherV.isWithEqual();
 			} else
-				return otherV.getComparison()==0 && isWithEqual()==otherV.isWithEqual();
+				return otherV.getComparison() == 0 && isWithEqual() == otherV.isWithEqual();
 		}
 
 		@Override
@@ -876,12 +923,30 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 		}
 
 		@Override
-		public boolean test(ObservableEntity<? extends E> entity, QuickMap<String, Object> varValues) {
+		public EntityCondition<E> getCondition(ObservableEntityFieldType<E, ?> field) {
+			if (getConditions().size() == 1)
+				return getConditions().get(0).getCondition(field);
+			List<EntityCondition<E>> components = null;
 			for (EntityCondition<E> condition : getConditions()) {
-				if (condition.test(entity, varValues))
-					return true;
+				EntityCondition<E> component = condition.getCondition(field);
+				if (component == null)
+					return null;
+				if (components == null)
+					components = new ArrayList<>(getConditions().size());
+				components.add(component);
 			}
-			return false;
+			return new OrCondition<>(getEntityType(), components.toArray(new EntityCondition[components.size()]));
+		}
+
+		@Override
+		public EntityCondition<E> test(ObservableEntity<? extends E> entity, QuickMap<String, Object> varValues) {
+			if (getConditions().size() == 1)
+				return getConditions().get(0).test(entity, varValues);
+			for (EntityCondition<E> condition : getConditions()) {
+				if (condition.test(entity, varValues) == null)
+					return null;
+			}
+			return this;
 		}
 
 		@Override
@@ -937,11 +1002,31 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 		}
 
 		@Override
-		public boolean test(ObservableEntity<? extends E> entity, QuickMap<String, Object> varValues) {
-			for (EntityCondition<E> condition : getConditions())
-				if (!condition.test(entity, varValues))
-					return false;
-			return true;
+		public EntityCondition<E> getCondition(ObservableEntityFieldType<E, ?> field) {
+			List<EntityCondition<E>> components = null;
+			for (EntityCondition<E> condition : getConditions()) {
+				EntityCondition<E> component = condition.getCondition(field);
+				if (component != null) {
+					if (components == null)
+						components = new ArrayList<>(getConditions().size());
+					components.add(component);
+				}
+			}
+			if (components == null)
+				return null;
+			else if (components.size() == 1)
+				return components.get(0);
+			return new AndCondition<>(getEntityType(), components.toArray(new EntityCondition[components.size()]));
+		}
+
+		@Override
+		public EntityCondition<E> test(ObservableEntity<? extends E> entity, QuickMap<String, Object> varValues) {
+			for (EntityCondition<E> condition : getConditions()) {
+				EntityCondition<E> broken = condition.test(entity, varValues);
+				if (broken != null)
+					return broken;
+			}
+			return null;
 		}
 
 		@Override

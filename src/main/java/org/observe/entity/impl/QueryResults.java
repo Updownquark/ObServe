@@ -17,6 +17,7 @@ import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionEvent;
 import org.observe.collect.ObservableSortedSet;
+import org.observe.entity.ConfigurableCreator;
 import org.observe.entity.EntityChainAccess;
 import org.observe.entity.EntityChange;
 import org.observe.entity.EntityCollectionResult;
@@ -25,14 +26,18 @@ import org.observe.entity.EntityCountResult;
 import org.observe.entity.EntityIdentity;
 import org.observe.entity.EntityOperation;
 import org.observe.entity.EntityOperationException;
+import org.observe.entity.EntityOperationVariable;
 import org.observe.entity.EntityQuery;
 import org.observe.entity.EntityValueAccess;
 import org.observe.entity.ObservableEntity;
 import org.observe.entity.ObservableEntityFieldType;
 import org.observe.entity.ObservableEntityResult;
+import org.observe.entity.ObservableEntitySet;
+import org.observe.entity.ObservableEntityType;
 import org.observe.entity.QueryOrder;
 import org.observe.entity.impl.QueryResultsTree.QueryResultNode;
 import org.observe.util.ObservableCollectionWrapper;
+import org.observe.util.TypeTokens;
 import org.qommons.Ternian;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
@@ -117,7 +122,7 @@ public class QueryResults<E> extends AbstractOperationResult<E> {
 			theRawResults.clear();
 			for (ObservableEntity<?> entity : entities) {
 				if (needsFilter && theSelection.getEntityType().isAssignableFrom(entity.getType())
-					&& !theSelection.test((ObservableEntity<? extends E>) entity, null))
+					&& theSelection.test((ObservableEntity<? extends E>) entity, null) != null)
 					continue;
 				theRawResults.add((ObservableEntity<? extends E>) entity);
 			}
@@ -128,7 +133,7 @@ public class QueryResults<E> extends AbstractOperationResult<E> {
 			long count = 0;
 			for (ObservableEntity<?> entity : entities) {
 				if (needsFilter && theSelection.getEntityType().isAssignableFrom(entity.getType())
-					&& !theSelection.test((ObservableEntity<? extends E>) entity, null))
+					&& theSelection.test((ObservableEntity<? extends E>) entity, null) != null)
 					continue;
 				count++;
 			}
@@ -197,7 +202,7 @@ public class QueryResults<E> extends AbstractOperationResult<E> {
 				for (EntityIdentity<?> id : change.getEntities()) {
 					if (changeSuper && !condition.getEntityType().isAssignableFrom(id.getEntityType()))
 						continue;
-					boolean test = condition.test((ObservableEntity<? extends E>) entities.get(id), QuickMap.empty());
+					boolean test = condition.test((ObservableEntity<? extends E>) entities.get(id), QuickMap.empty()) == null;
 					if (test) {
 						if (hasFalse)
 							break;
@@ -310,7 +315,7 @@ public class QueryResults<E> extends AbstractOperationResult<E> {
 				if (changeSuper && !theSelection.getEntityType().isAssignableFrom(id.getEntityType()))
 					continue;
 				ObservableEntity<? extends E> entity = (ObservableEntity<? extends E>) entities.get(id);
-				boolean included = theSelection.test(entity, QuickMap.empty());
+				boolean included = theSelection.test(entity, QuickMap.empty()) == null;
 				switch (change.changeType) {
 				case add:
 					if (included)
@@ -388,23 +393,15 @@ public class QueryResults<E> extends AbstractOperationResult<E> {
 		};
 	}
 
-	class ResultWrapper extends ObservableCollectionWrapper<ObservableEntity<? extends E>> implements EntityCollectionResult<E> {
+	class ResultWrapper implements EntityCollectionResult<E> {
 		private final EntityQuery<E> theQuery;
+		private final EntitySetImpl theEntitySet;
+		private final EntitySet theEntities;
 
 		ResultWrapper(EntityQuery<E> query, ObservableSortedSet<ObservableEntity<? extends E>> results, boolean withUpdates) {
 			theQuery = query;
-			ObservableCollection.DistinctSortedDataFlow<//
-			ObservableEntity<? extends E>, ObservableEntity<? extends E>, ObservableEntity<? extends E>> flow = results.flow();
-			if (!theQuery.getOrder().isEmpty())
-				flow = flow.distinctSorted(createComparator(query), false);
-			if (!withUpdates)
-				flow = flow.mapEquivalent(flow.getTargetType(), e -> e, e -> e, opts -> opts.cache(false).fireIfUnchanged(false));
-			init(flow.collect());
-		}
-
-		@Override
-		protected ObservableSortedSet<ObservableEntity<? extends E>> getWrapped() throws IllegalStateException {
-			return (ObservableSortedSet<ObservableEntity<? extends E>>) super.getWrapped();
+			theEntitySet = new EntitySetImpl();
+			theEntities = new EntitySet(query, results, withUpdates);
 		}
 
 		@Override
@@ -428,8 +425,8 @@ public class QueryResults<E> extends AbstractOperationResult<E> {
 		}
 
 		@Override
-		public Subscription onStatusChange(Consumer<ObservableEntityResult<E>> onChange) {
-			return QueryResults.this.onStatusChange(() -> onChange.accept(this));
+		public Observable<? extends ObservableEntityResult<E>> statusChanges() {
+			return QueryResults.this.statusChanges();
 		}
 
 		@Override
@@ -439,98 +436,142 @@ public class QueryResults<E> extends AbstractOperationResult<E> {
 		}
 
 		@Override
-		public MutableCollectionElement<ObservableEntity<? extends E>> mutableElement(ElementId id) {
-			MutableCollectionElement<ObservableEntity<? extends E>> superMCE = super.mutableElement(id);
-			return new MutableCollectionElement<ObservableEntity<? extends E>>() {
-				@Override
-				public ElementId getElementId() {
-					return superMCE.getElementId();
-				}
-
-				@Override
-				public ObservableEntity<? extends E> get() {
-					return superMCE.get();
-				}
-
-				@Override
-				public BetterCollection<ObservableEntity<? extends E>> getCollection() {
-					return superMCE.getCollection();
-				}
-
-				@Override
-				public String isEnabled() {
-					return superMCE.isEnabled();
-				}
-
-				@Override
-				public String isAcceptable(ObservableEntity<? extends E> value) {
-					return superMCE.isAcceptable(value); // Let the filter report the error
-				}
-
-				@Override
-				public void set(ObservableEntity<? extends E> value) throws UnsupportedOperationException, IllegalArgumentException {
-					superMCE.set(value); // Let the filter throw the exception
-				}
-
-				@Override
-				public String canRemove() {
-					return get().canDelete();
-				}
-
-				@Override
-				public void remove() throws UnsupportedOperationException {
-					get().delete(null);
-				}
-			};
+		public ObservableEntitySet<E> get() {
+			return theEntitySet;
 		}
 
-		@Override
-		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends ObservableEntity<? extends E>>> observer) {
-			return wrap(() -> super.onChange(observer));
+		class EntitySetImpl implements ObservableEntitySet<E> {
+			@Override
+			public EntityCollectionResult<E> getResults() {
+				return ResultWrapper.this;
+			}
+
+			@Override
+			public ObservableSortedSet<? extends ObservableEntity<? extends E>> getEntities() {
+				return theEntities;
+			}
+
+			@Override
+			public <E2 extends E> ConfigurableCreator<E, E2> create(TypeToken<E2> subType) {
+				ObservableEntityType<E2> subEntity = getType().getEntitySet().getEntityType(TypeTokens.getRawType(subType));
+				if (!getType().isAssignableFrom(subEntity))
+					throw new IllegalArgumentException("No such sub-entity " + subType);
+				QuickMap<String, Object> fieldValues = subEntity.getFields().keySet().createMap();
+				return new ConfigurableCreatorImpl<>(subEntity, QuickMap.empty(), fieldValues.unmodifiable(), //
+					subEntity.getFields().keySet().<EntityOperationVariable<E2>> createMap().unmodifiable(), QueryResults.this);
+			}
 		}
 
-		@Override
-		public int indexFor(Comparable<? super ObservableEntity<? extends E>> search) {
-			return getWrapped().indexFor(search);
-		}
+		class EntitySet extends ObservableCollectionWrapper<ObservableEntity<? extends E>>
+		implements ObservableSortedSet<ObservableEntity<? extends E>> {
+			EntitySet(EntityQuery<E> query, ObservableSortedSet<ObservableEntity<? extends E>> results, boolean withUpdates) {
+				ObservableCollection.DistinctSortedDataFlow<//
+				ObservableEntity<? extends E>, ObservableEntity<? extends E>, ObservableEntity<? extends E>> flow = results.flow();
+				if (!theQuery.getOrder().isEmpty())
+					flow = flow.distinctSorted(createComparator(query), false);
+				if (!withUpdates)
+					flow = flow.mapEquivalent(flow.getTargetType(), e -> e, e -> e, opts -> opts.cache(false).fireIfUnchanged(false));
+				init(flow.collect());
+			}
 
-		@Override
-		public Comparator<? super ObservableEntity<? extends E>> comparator() {
-			return getWrapped().comparator();
-		}
+			@Override
+			protected ObservableSortedSet<ObservableEntity<? extends E>> getWrapped() throws IllegalStateException {
+				return (ObservableSortedSet<ObservableEntity<? extends E>>) super.getWrapped();
+			}
 
-		@Override
-		public CollectionElement<ObservableEntity<? extends E>> search(Comparable<? super ObservableEntity<? extends E>> search,
-			SortedSearchFilter filter) {
-			return getWrapped().search(search, filter);
-		}
+			@Override
+			public MutableCollectionElement<ObservableEntity<? extends E>> mutableElement(ElementId id) {
+				MutableCollectionElement<ObservableEntity<? extends E>> superMCE = super.mutableElement(id);
+				return new MutableCollectionElement<ObservableEntity<? extends E>>() {
+					@Override
+					public ElementId getElementId() {
+						return superMCE.getElementId();
+					}
 
-		@Override
-		public CollectionElement<ObservableEntity<? extends E>> getOrAdd(ObservableEntity<? extends E> value, ElementId after,
-			ElementId before, boolean first,
-			Runnable added) {
-			// The wrapped set will throw the exception if add is invoked
-			return getWrapped().getOrAdd(value, after, before, first, added);
-		}
+					@Override
+					public ObservableEntity<? extends E> get() {
+						return superMCE.get();
+					}
 
-		@Override
-		public boolean isConsistent(ElementId element) {
-			return true; // Shouldn't be any way for the set to become inconsistent
-		}
+					@Override
+					public BetterCollection<ObservableEntity<? extends E>> getCollection() {
+						return superMCE.getCollection();
+					}
 
-		@Override
-		public boolean checkConsistency() {
-			return false; // Shouldn't be any way for the set to become inconsistent
-		}
+					@Override
+					public String isEnabled() {
+						return superMCE.isEnabled();
+					}
 
-		@Override
-		public <X> boolean repair(ElementId element, RepairListener<ObservableEntity<? extends E>, X> listener) {
-			return false; // Shouldn't be any way for the set to become inconsistent
-		}
+					@Override
+					public String isAcceptable(ObservableEntity<? extends E> value) {
+						return superMCE.isAcceptable(value); // Let the filter report the error
+					}
 
-		@Override
-		public <X> boolean repair(RepairListener<ObservableEntity<? extends E>, X> listener) {
-			return false; // Shouldn't be any way for the set to become inconsistent
+					@Override
+					public void set(ObservableEntity<? extends E> value) throws UnsupportedOperationException, IllegalArgumentException {
+						superMCE.set(value); // Let the filter throw the exception
+					}
+
+					@Override
+					public String canRemove() {
+						return get().canDelete();
+					}
+
+					@Override
+					public void remove() throws UnsupportedOperationException {
+						get().delete(null);
+					}
+				};
+			}
+
+			@Override
+			public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends ObservableEntity<? extends E>>> observer) {
+				return wrap(() -> super.onChange(observer));
+			}
+
+			@Override
+			public int indexFor(Comparable<? super ObservableEntity<? extends E>> search) {
+				return getWrapped().indexFor(search);
+			}
+
+			@Override
+			public Comparator<? super ObservableEntity<? extends E>> comparator() {
+				return getWrapped().comparator();
+			}
+
+			@Override
+			public CollectionElement<ObservableEntity<? extends E>> search(Comparable<? super ObservableEntity<? extends E>> search,
+				SortedSearchFilter filter) {
+				return getWrapped().search(search, filter);
+			}
+
+			@Override
+			public CollectionElement<ObservableEntity<? extends E>> getOrAdd(ObservableEntity<? extends E> value, ElementId after,
+				ElementId before, boolean first, Runnable added) {
+				// The wrapped set will throw the exception if add is invoked
+				return getWrapped().getOrAdd(value, after, before, first, added);
+			}
+
+			@Override
+			public boolean isConsistent(ElementId element) {
+				return true; // Shouldn't be any way for the set to become inconsistent
+			}
+
+			@Override
+			public boolean checkConsistency() {
+				return false; // Shouldn't be any way for the set to become inconsistent
+			}
+
+			@Override
+			public <X> boolean repair(ElementId element, RepairListener<ObservableEntity<? extends E>, X> listener) {
+				return false; // Shouldn't be any way for the set to become inconsistent
+			}
+
+			@Override
+			public <X> boolean repair(RepairListener<ObservableEntity<? extends E>, X> listener) {
+				return false; // Shouldn't be any way for the set to become inconsistent
+			}
 		}
 	}
 
@@ -564,8 +605,8 @@ public class QueryResults<E> extends AbstractOperationResult<E> {
 		}
 
 		@Override
-		public Subscription onStatusChange(Consumer<ObservableEntityResult<E>> onChange) {
-			return QueryResults.this.onStatusChange(() -> onChange.accept(this));
+		public Observable<? extends ObservableEntityResult<E>> statusChanges() {
+			return QueryResults.this.statusChanges();
 		}
 
 		@Override
@@ -625,5 +666,4 @@ public class QueryResults<E> extends AbstractOperationResult<E> {
 			};
 		}
 	}
-
 }

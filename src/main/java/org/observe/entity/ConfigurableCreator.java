@@ -1,10 +1,10 @@
 package org.observe.entity;
 
-import java.util.function.Consumer;
 import java.util.function.Function;
 
+import org.observe.config.ConfigurableValueCreator;
 import org.observe.config.ConfiguredValueField;
-import org.observe.config.ValueCreator;
+import org.qommons.collect.ElementId;
 
 /**
  * An un-prepared {@link EntityCreator}
@@ -12,7 +12,8 @@ import org.observe.config.ValueCreator;
  * @param <E> The super-type of the collection this creator is for
  * @param <E2> The type of entity to create instances for
  */
-public interface ConfigurableCreator<E, E2 extends E> extends EntityFieldSetOperation<E2>, EntityCreator<E2>, ValueCreator<E, E2> {
+public interface ConfigurableCreator<E, E2 extends E>
+extends EntityFieldSetOperation<E2>, EntityCreator<E, E2>, ConfigurableValueCreator<E, E2> {
 	@Override
 	default ObservableEntityType<E2> getType() {
 		return getEntityType();
@@ -20,31 +21,34 @@ public interface ConfigurableCreator<E, E2 extends E> extends EntityFieldSetOper
 
 	@Override
 	default ConfigurableCreator<E, E2> with(String fieldName, Object value) throws IllegalArgumentException {
-		ValueCreator.super.with(fieldName, value);
+		ConfigurableValueCreator.super.with(fieldName, value);
 		return this;
 	}
-
 	@Override
 	default <F> ConfigurableCreator<E, E2> with(Function<? super E2, F> fieldGetter, F value) throws IllegalArgumentException {
-		ValueCreator.super.with(fieldGetter, value);
+		ConfigurableValueCreator.super.with(fieldGetter, value);
 		return this;
 	}
-
 	@Override
-	<F> ConfigurableCreator<E, E2> with(ConfiguredValueField<E2, F> field, F value) throws IllegalArgumentException;
+	default <F> ConfigurableCreator<E, E2> with(ConfiguredValueField<E2, F> field, F value) throws IllegalArgumentException {
+		return with((ObservableEntityFieldType<? super E2, F>) field, value);
+	}
 
 	@Override
 	default ConfigurableCreator<E, E2> copy(E template) {
-		ValueCreator.super.copy(template);
+		ConfigurableValueCreator.super.copy(template);
 		return this;
 	}
 
 	@Override
-	EntityCreationResult<E2> createAsync(Consumer<? super E2> preAddAction);
+	ConfigurableCreator<E, E2> after(ElementId after);
+	@Override
+	ConfigurableCreator<E, E2> before(ElementId before);
+	@Override
+	ConfigurableCreator<E, E2> towardBeginning(boolean towardBeginning);
 
 	@Override
 	<F> ConfigurableCreator<E, E2> with(ObservableEntityFieldType<? super E2, F> field, F value);
-
 	@Override
 	ConfigurableCreator<E, E2> withVariable(ObservableEntityFieldType<? super E2, ?> field, String variableName);
 
@@ -60,5 +64,5 @@ public interface ConfigurableCreator<E, E2 extends E> extends EntityFieldSetOper
 	}
 
 	@Override
-	PreparedCreator<E2> prepare() throws IllegalStateException, EntityOperationException;
+	PreparedCreator<E, E2> prepare() throws IllegalStateException, EntityOperationException;
 }

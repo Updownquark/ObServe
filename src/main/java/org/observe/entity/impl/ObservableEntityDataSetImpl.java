@@ -63,6 +63,7 @@ import org.qommons.Stamped;
 import org.qommons.StringUtils;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
+import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
@@ -293,18 +294,27 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		return null; // TODO Check referential constraints
 	}
 
-	<E> EntityCreationResult<E> create(EntityCreator<E> creator, boolean sync, Object cause) throws EntityOperationException {
+	<E> EntityCreationResult<E> create(EntityCreator<? super E, E> creator, boolean sync, Object cause,
+		Consumer<? super ObservableEntity<E>> preAdd)
+			throws EntityOperationException {
 		if (!isActive)
 			throw new IllegalStateException("This entity set is no longer connected to a data source");
-		Object prepared = creator instanceof PreparedCreator ? ((PreparedCreatorImpl<E>) creator).getPreparedObject() : null;
+		Object prepared = creator instanceof PreparedCreator ? ((PreparedCreatorImpl<?, E>) creator).getPreparedObject() : null;
 		if (sync) {
 			SimpleEntity<E> simple = theImplementation.create(creator, prepared, null, null);
-			return new SyncCreateResult<>(creator, getOrCreateEntity(simple.getIdentity(), simple.getFields()));
+			ObservableEntity<E> entity = getOrCreateEntity(simple.getIdentity(), simple.getFields());
+			if (preAdd != null)
+				preAdd.accept(entity);
+			return new SyncCreateResult<>(creator, entity);
 		} else {
 			AsyncCreateResult<E> result = new AsyncCreateResult<>(creator);
 			theImplementation.create(creator, prepared,
-				simple -> result.fulfill(getOrCreateEntity(simple.getIdentity(), simple.getFields())),
-				result::failed);
+				simple -> {
+					ObservableEntity<E> entity = getOrCreateEntity(simple.getIdentity(), simple.getFields());
+					if (preAdd != null)
+						preAdd.accept(entity);
+					result.fulfill(entity);
+				}, result::failed);
 			return result;
 		}
 	}
@@ -1081,6 +1091,11 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		}
 
 		@Override
+		public BetterList<ObservableEntityFieldType<?, ?>> getFieldSequence() {
+			return BetterList.of(this);
+		}
+
+		@Override
 		public String getName() {
 			return theName;
 		}
@@ -1245,10 +1260,10 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 	}
 
 	static class SyncCreateResult<E> implements EntityCreationResult<E> {
-		private final EntityCreator<E> theOperation;
+		private final EntityCreator<? super E, E> theOperation;
 		private final ObservableEntity<? extends E> theResult;
 
-		SyncCreateResult(EntityCreator<E> operation, ObservableEntity<? extends E> result) {
+		SyncCreateResult(EntityCreator<? super E, E> operation, ObservableEntity<? extends E> result) {
 			theOperation = operation;
 			theResult = result;
 		}
@@ -1274,7 +1289,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		}
 
 		@Override
-		public EntityCreator<E> getOperation() {
+		public EntityCreator<? super E, E> getOperation() {
 			return theOperation;
 		}
 
@@ -1285,16 +1300,16 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 	}
 
 	static class AsyncCreateResult<E> extends AbstractOperationResult<E> implements EntityCreationResult<E> {
-		private final EntityCreator<E> theOperation;
+		private final EntityCreator<? super E, E> theOperation;
 		private volatile ObservableEntity<? extends E> theResult;
 
-		AsyncCreateResult(EntityCreator<E> operation) {
+		AsyncCreateResult(EntityCreator<? super E, E> operation) {
 			super(false);
 			theOperation = operation;
 		}
 
 		@Override
-		public EntityCreator<E> getOperation() {
+		public EntityCreator<? super E, E> getOperation() {
 			return theOperation;
 		}
 

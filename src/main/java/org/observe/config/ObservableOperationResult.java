@@ -9,7 +9,7 @@ import org.observe.entity.EntityQueryResult;
 
 /**
  * An asynchronous result from an operation on a set of observable values, e.g. a
- * {@link ValueCreator#createAsync(java.util.function.Consumer) value creation} operation. Inspired by {@link Future}, it provides methods
+ * {@link ConfigurableValueCreator#createAsync(java.util.function.Consumer) value creation} operation. Inspired by {@link Future}, it provides methods
  * for inspecting, controlling, and listening too the fulfillment state as the operation is executed in the entity service.
  *
  * @param <E> The type of the entity/value that the operation was against

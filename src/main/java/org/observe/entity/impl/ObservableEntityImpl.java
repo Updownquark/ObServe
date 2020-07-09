@@ -7,7 +7,9 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 import org.observe.Observable;
+import org.observe.ObservableValue;
 import org.observe.Observer;
+import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
@@ -21,12 +23,15 @@ import org.observe.entity.ObservableEntityField;
 import org.observe.entity.ObservableEntityFieldEvent;
 import org.observe.entity.ObservableEntityFieldType;
 import org.observe.entity.ObservableEntityProvider.CollectionOperationType;
+import org.observe.util.EntityReflector;
+import org.observe.util.EntityReflector.FieldChange;
 import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.QommonsUtils;
+import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterSortedMap;
@@ -68,7 +73,44 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 		if (type.getReflector() == null)
 			theEntity = null;
 		else {
-			theEntity = type.getReflector().newInstance(this::get, (fieldIndex, value) -> set(fieldIndex, value, null));
+			theEntity = type.getReflector().newInstance(new EntityReflector.ObservableEntityInstanceBacking<E>() {
+				@Override
+				public Object get(int fieldIndex) {
+					return ObservableEntityImpl.this.get(fieldIndex);
+				}
+
+				@Override
+				public void set(int fieldIndex, Object newValue) {
+					ObservableEntityImpl.this.set(fieldIndex, newValue, null);
+				}
+
+				@Override
+				public Subscription addListener(E entity, int fieldIndex, Consumer<FieldChange<?>> listener) {
+					// TODO Auto-generated method stub
+				}
+
+				@Override
+				public Transactable getLock(int fieldIndex) {
+					return theType.getEntitySet();
+				}
+
+				@Override
+				public long getStamp(int fieldIndex) {
+					return theStamp;
+				}
+
+				@Override
+				public String isAcceptable(int fieldIndex, Object value) {
+					// TODO Check constraints
+					return null;
+				}
+
+				@Override
+				public ObservableValue<String> isEnabled(int fieldIndex) {
+					// TODO Check constraints
+					return SettableValue.ALWAYS_ENABLED;
+				}
+			});
 			type.getReflector().associate(theEntity, type, this);
 		}
 		theStamp = Double.doubleToLongBits(Math.random());

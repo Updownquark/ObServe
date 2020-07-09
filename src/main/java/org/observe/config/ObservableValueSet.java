@@ -9,11 +9,11 @@ public interface ObservableValueSet<E> {
 
 	ObservableCollection<? extends E> getValues();
 
-	default ValueCreator<E, E> create() {
+	default ConfigurableValueCreator<E, E> create() {
 		return create(getType().getType());
 	}
 
-	<E2 extends E> ValueCreator<E, E2> create(TypeToken<E2> subType);
+	<E2 extends E> ConfigurableValueCreator<E, E2> create(TypeToken<E2> subType);
 
 	static <E> ObservableValueSet<E> empty(TypeToken<E> type) {
 		return new EmptyValueSet<>(type);
@@ -39,7 +39,7 @@ public interface ObservableValueSet<E> {
 		}
 
 		@Override
-		public <E2 extends E> ValueCreator<E, E2> create(TypeToken<E2> subType) {
+		public <E2 extends E> ConfigurableValueCreator<E, E2> create(TypeToken<E2> subType) {
 			throw new UnsupportedOperationException();
 		}
 	}

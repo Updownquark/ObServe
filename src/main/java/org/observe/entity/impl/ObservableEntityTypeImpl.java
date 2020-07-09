@@ -190,7 +190,7 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 				values.put(f, defaultValue);
 		}
 		return new ConfigurableCreatorImpl<>(this, QuickMap.empty(), values.unmodifiable(), //
-			theFields.keySet().<EntityOperationVariable<E>> createMap().unmodifiable());
+			theFields.keySet().<EntityOperationVariable<E>> createMap().unmodifiable(), null);
 	}
 
 	@Override

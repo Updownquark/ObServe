@@ -3,7 +3,7 @@ package org.observe.config;
 import org.observe.entity.ObservableEntityResult;
 
 /**
- * An {@link ObservableEntityResult} for a creation operation (e.g. {@link ValueCreator#createAsync(java.util.function.Consumer)})
+ * An {@link ObservableEntityResult} for a creation operation (e.g. {@link ConfigurableValueCreator#createAsync(java.util.function.Consumer)})
  *
  * @param <E> The type of value being created
  */

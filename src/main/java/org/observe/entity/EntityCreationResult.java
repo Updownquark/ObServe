@@ -9,7 +9,7 @@ import org.observe.config.ObservableCreationResult;
  */
 public interface EntityCreationResult<E> extends ObservableEntityResult<E>, ObservableCreationResult<E> {
 	@Override
-	EntityCreator<E> getOperation();
+	EntityCreator<? super E, E> getOperation();
 
 	@Override
 	default EntityCreationResult<E> waitFor() throws InterruptedException, EntityOperationException {

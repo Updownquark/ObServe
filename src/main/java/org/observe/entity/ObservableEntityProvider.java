@@ -158,7 +158,7 @@ public interface ObservableEntityProvider {
 
 	Object prepare(ConfigurableOperation<?> operation) throws EntityOperationException;
 
-	<E> SimpleEntity<E> create(EntityCreator<E> creator, Object prepared, //
+	<E> SimpleEntity<E> create(EntityCreator<? super E, E> creator, Object prepared, //
 		Consumer<SimpleEntity<E>> identityFieldsOnAsyncComplete, Consumer<EntityOperationException> onError)
 			throws EntityOperationException;
 

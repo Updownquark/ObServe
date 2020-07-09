@@ -34,7 +34,7 @@ public class EntityChainAccess<E, T> implements EntityValueAccess<E, T> {
 		theFieldSequence = BetterList.of(fields);
 	}
 
-	/** @return The sequence of fields that this value access obtains information through */
+	@Override
 	public BetterList<ObservableEntityFieldType<?, ?>> getFieldSequence() {
 		return theFieldSequence;
 	}

@@ -3,6 +3,8 @@ package org.observe.entity;
 import java.util.Comparator;
 import java.util.function.Function;
 
+import org.qommons.collect.BetterList;
+
 import com.google.common.reflect.TypeToken;
 
 /**
@@ -60,4 +62,7 @@ public interface EntityValueAccess<E, F> extends Comparator<F>, Comparable<Entit
 	 * @return Whether the given field is the same as or an override of this field
 	 */
 	boolean isOverride(EntityValueAccess<? extends E, ?> field);
+
+	/** @return The sequence of fields that this value access obtains information through */
+	BetterList<ObservableEntityFieldType<?, ?>> getFieldSequence();
 }
