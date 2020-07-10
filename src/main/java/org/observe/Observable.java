@@ -669,7 +669,7 @@ public interface Observable<T> extends Lockable, Identifiable {
 				public <V extends T> void onCompleted(V value) {
 					R mapped = theMap.apply(value);
 					if (mapped != null)
-						observer.onNext(mapped);
+						observer.onCompleted(mapped);
 					else
 						observer.onCompleted(null); // Gotta pass along the completion even if it doesn't include a value
 				}
