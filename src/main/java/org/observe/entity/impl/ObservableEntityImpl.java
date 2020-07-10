@@ -24,10 +24,12 @@ import org.observe.entity.ObservableEntityFieldEvent;
 import org.observe.entity.ObservableEntityFieldType;
 import org.observe.entity.ObservableEntityProvider.CollectionOperationType;
 import org.observe.util.EntityReflector;
+import org.observe.util.EntityReflector.EntityFieldChangeEvent;
 import org.observe.util.EntityReflector.FieldChange;
+import org.observe.util.EntityReflector.ObservableField;
+import org.observe.util.EntityReflector.ReflectedField;
 import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.TypeTokens;
-import org.qommons.ArrayUtils;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.QommonsUtils;
@@ -37,6 +39,7 @@ import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterSortedMap;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.CollectionLockingStrategy;
+import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MapEntryHandle;
@@ -51,6 +54,33 @@ import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
 
 class ObservableEntityImpl<E> implements ObservableEntity<E> {
+	private static class FieldObserver<E> implements Observer<ObservableEntityFieldEvent<E, ?>> {
+		// We'll do this by index if we can, but if the entity is a subclass, the index may be different
+		private final int theFieldIndex;
+		private final Observer<? super ObservableEntityFieldEvent<E, ?>> theListener;
+
+		FieldObserver(int fieldIndex, Observer<? super ObservableEntityFieldEvent<E, ?>> listener) {
+			theFieldIndex = fieldIndex;
+			theListener = listener;
+		}
+
+		@Override
+		public <V extends ObservableEntityFieldEvent<E, ?>> void onNext(V value) {
+			ObservableEntityFieldType<E, ?> field = value.getField();
+			if (field.getIndex() != theFieldIndex)
+				return;
+			theListener.onNext(value);
+		}
+
+		@Override
+		public <V extends ObservableEntityFieldEvent<E, ?>> void onCompleted(V value) {
+			ObservableEntityFieldType<E, ?> field = value.getField();
+			if (field.getIndex() != theFieldIndex)
+				return;
+			theListener.onCompleted(value);
+		}
+	}
+
 	private final ObservableEntityTypeImpl<E> theType;
 	private final EntityIdentity<E> theId;
 	private final E theEntity;
@@ -69,7 +99,6 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 			else
 				theFields.put(f, EntityUpdate.NOT_SET);
 		}
-		theBackupFields = theFields.keySet().createMap().fill(EntityUpdate.NOT_SET);
 		if (type.getReflector() == null)
 			theEntity = null;
 		else {
@@ -86,7 +115,7 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 
 				@Override
 				public Subscription addListener(E entity, int fieldIndex, Consumer<FieldChange<?>> listener) {
-					// TODO Auto-generated method stub
+					throw new IllegalStateException("watchField() is overridden, so this should not be called");
 				}
 
 				@Override
@@ -101,14 +130,46 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 
 				@Override
 				public String isAcceptable(int fieldIndex, Object value) {
-					// TODO Check constraints
-					return null;
+					return ObservableEntityImpl.this.isAcceptable(fieldIndex, value);
 				}
 
 				@Override
 				public ObservableValue<String> isEnabled(int fieldIndex) {
+					ObservableEntityFieldType<E, ?> field = theType.getFields().get(fieldIndex);
+					if (field.getIdIndex() >= 0)
+						return ObservableEntityField.ID_FIELD_UNSETTABLE_VALUE;
 					// TODO Check constraints
 					return SettableValue.ALWAYS_ENABLED;
+				}
+
+				@Override
+				public Subscription watchField(E entity, int fieldIndex, Consumer<? super EntityFieldChangeEvent<E, ?>> listener) {
+					return theFieldObservers.add(new FieldObserver<>(fieldIndex, new Observer<ObservableEntityFieldEvent<E, ?>>() {
+						@Override
+						public <V extends ObservableEntityFieldEvent<E, ?>> void onNext(V value) {
+							listener.accept(value);
+						}
+
+						@Override
+						public <V extends ObservableEntityFieldEvent<E, ?>> void onCompleted(V value) {}
+					}), true)::run;
+				}
+
+				@Override
+				public Subscription watchAllFields(E entity, Consumer<? super EntityFieldChangeEvent<E, ?>> listener) {
+					return allFieldChanges().act(listener);
+				}
+
+				@Override
+				public <F> ObservableField<E, F> observeField(E entity, ReflectedField<E, F> field) {
+					return ObservableEntityImpl.this.getField((ObservableEntityFieldType<E, F>) getField(field.getFieldIndex()));
+				}
+
+				@Override
+				public <F> EntityFieldChangeEvent<E, F> createFieldChangeEvent(E entity, ReflectedField<E, F> field, F oldValue, F newValue,
+					Object cause) {
+					return new ObservableEntityFieldEvent<>(ObservableEntityImpl.this,
+						(ObservableEntityFieldType<E, F>) getField(field.getFieldIndex()), oldValue, newValue, cause);
 				}
 			});
 			type.getReflector().associate(theEntity, type, this);
@@ -197,7 +258,7 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 					else {
 						EntityModificationResult<E> result = theType.select().entity(theId).update().with(field, value).execute(false,
 							cause);
-						result.onStatusChange(__ -> {
+						result.statusChanges().act(__ -> {
 							// If the operation failed and the field
 							if (result.getFailure() != null && theFields.get(fieldIndex) == value)
 								_set(field, value, oldValue);
@@ -328,30 +389,9 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 				newList = (List<Object>) newValue;
 			else
 				newList = QommonsUtils.unmodifiableCopy(newValue);
-			ArrayUtils.adjust((List<V>) collection, newList, new ArrayUtils.DifferenceListener<V, Object>() {
-				@Override
-				public boolean identity(V o1, Object o2) {
-					return Objects.equals(o1, o2);
-				}
-
-				@Override
-				public V added(Object o, int mIdx, int retIdx) {
-					// TODO Auto-generated method stub
-					return null;
-				}
-
-				@Override
-				public V removed(V o, int oIdx, int incMod, int retIdx) {
-					// TODO Auto-generated method stub
-					return null;
-				}
-
-				@Override
-				public V set(V o1, int idx1, int incMod, Object o2, int idx2, int retIdx) {
-					// TODO Auto-generated method stub
-					return null;
-				}
-			});
+			CollectionUtils.<V, Object> synchronize((List<V>) collection, newList, Objects::equals).simple(v -> (V) v)//
+			// TODO
+			.adjust();
 		} else {
 
 		}

@@ -16,8 +16,6 @@ import java.util.function.Consumer;
 import java.util.function.LongConsumer;
 import java.util.stream.Collectors;
 
-import org.observe.Observable;
-import org.observe.SimpleObservable;
 import org.observe.entity.ConfigurableCreator;
 import org.observe.entity.ConfigurableOperation;
 import org.observe.entity.EntityChainAccess;
@@ -44,10 +42,10 @@ import org.observe.entity.ObservableEntityType;
 import org.observe.entity.jdbc.JdbcEntitySupport.JdbcColumn;
 import org.qommons.IntList;
 import org.qommons.StringUtils;
-import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.CollectionElement;
+import org.qommons.collect.ListenerList;
 import org.qommons.collect.QuickSet;
 import org.qommons.collect.QuickSet.QuickMap;
 import org.qommons.collect.StampedLockingStrategy;
@@ -156,7 +154,7 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 	private final JdbcEntitySupport theTypeSupport;
 	private final Map<String, TableNaming<?>> theTableNaming;
 	private final String theSchemaName;
-	private final SimpleObservable<List<EntityChange<?>>> theChanges;
+	private final ListenerList<EntityChange<?>> theChanges;
 
 	public JdbcEntityProvider(StampedLockingStrategy locker, JdbcEntitySupport typeSupport, ConnectionPool connectionPool,
 		String schemaName) {
@@ -165,17 +163,7 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 		theTypeSupport = typeSupport;
 		theSchemaName = schemaName;
 		theTableNaming = new HashMap<>();
-		theChanges = SimpleObservable.build().withLock(locker).build();
-	}
-
-	@Override
-	public Transaction lock(boolean write, Object cause) {
-		return theLocker.lock(write, cause);
-	}
-
-	@Override
-	public Transaction tryLock(boolean write, Object cause) {
-		return theLocker.tryLock(write, cause);
+		theChanges = ListenerList.build().build();
 	}
 
 	@Override
@@ -191,8 +179,9 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 	}
 
 	@Override
-	public <E> SimpleEntity<E> create(EntityCreator<E> creator, Object prepared, Consumer<SimpleEntity<E>> identityFieldsOnAsyncComplete,
-		Consumer<EntityOperationException> onError) throws EntityOperationException {
+	public <E> SimpleEntity<E> create(EntityCreator<? super E, E> creator, Object prepared,
+		Consumer<SimpleEntity<E>> identityFieldsOnAsyncComplete, Consumer<EntityOperationException> onError)
+			throws EntityOperationException {
 		TableNaming<E> naming = (TableNaming<E>) theTableNaming.get(creator.getEntityType().getName());
 		StringBuilder sql = new StringBuilder();
 		sql.append("INSERT INTO ");
@@ -200,7 +189,7 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 			sql.append(theSchemaName).append('.');
 		sql.append(naming.getTableName());
 		boolean firstValue = true;
-		QuickMap<String, Object> values = ((ConfigurableCreator<E>) creator).getFieldValues();
+		QuickMap<String, Object> values = ((ConfigurableCreator<? super E, E>) creator).getFieldValues();
 		for (int f = 0; f < values.keySize(); f++) {
 			Object value = values.get(f);
 			if (value != EntityUpdate.NOT_SET) {
@@ -415,9 +404,14 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 		}
 	}
 
+	// @Override
+	// public Observable<List<EntityChange<?>>> changes() {
+	// return theChanges.readOnly();
+	// }
+
 	@Override
-	public Observable<List<EntityChange<?>>> changes() {
-		return theChanges.readOnly();
+	public List<EntityChange<?>> changes() {
+		return theChanges.dumpInto(new ArrayList<>(theChanges.size() + 2));
 	}
 
 	@Override
@@ -504,7 +498,7 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 	}
 
 	void changed(EntityChange<?> change) {
-		theChanges.onNext(Collections.singletonList(change));
+		theChanges.add(change, false);
 	}
 
 	protected <E> TableNaming<E> generateNaming(ObservableEntityType<E> type) {

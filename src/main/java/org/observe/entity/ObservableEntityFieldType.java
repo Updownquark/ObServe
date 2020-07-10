@@ -22,10 +22,7 @@ public interface ObservableEntityFieldType<E, F> extends ConfiguredValueField<E,
 	default ObservableEntityType<E> getSourceEntity() {
 		return getOwnerType();
 	}
-	@Override
-	TypeToken<F> getFieldType();
-	@Override
-	int getIndex();
+
 	/**
 	 * @return The index of this field in the entity type's {@link ObservableEntityType#getIdentityFields() identity field map}, or -1 if
 	 *         this is not an identity field

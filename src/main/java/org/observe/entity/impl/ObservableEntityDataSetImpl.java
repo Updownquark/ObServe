@@ -42,6 +42,7 @@ import org.observe.entity.EntityValueAccess;
 import org.observe.entity.FieldConstraint;
 import org.observe.entity.ObservableEntity;
 import org.observe.entity.ObservableEntityDataSet;
+import org.observe.entity.ObservableEntityField;
 import org.observe.entity.ObservableEntityFieldEvent;
 import org.observe.entity.ObservableEntityFieldType;
 import org.observe.entity.ObservableEntityProvider;
@@ -273,6 +274,12 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 
 	<E, F> String isAcceptable(ObservableEntityImpl<E> entity, int fieldIndex, F value) {
 		ObservableEntityFieldType<E, F> field = (ObservableEntityFieldType<E, F>) entity.getField(fieldIndex);
+		if (field.getIdIndex() >= 0)
+			return ObservableEntityField.ID_FIELD_UNSETTABLE;
+		else if (value == null && field.getFieldType().isPrimitive())
+			return "Null is not allowed in a primitive-typed field";
+		else if (value != null && !TypeTokens.get().isInstance(field.getFieldType(), value))
+			return StdMsg.BAD_TYPE;
 		if (value != null && !TypeTokens.get().isInstance(field.getFieldType(), value))
 			return StdMsg.BAD_TYPE;
 		String message = null;

@@ -1,6 +1,7 @@
 package org.observe.entity;
 
 import org.observe.ObservableValueEvent;
+import org.observe.util.EntityReflector;
 
 /**
  * An {@link ObservableValueEvent} for entity fields
@@ -8,7 +9,7 @@ import org.observe.ObservableValueEvent;
  * @param <E> The type of the entity
  * @param <F> The type of the field
  */
-public class ObservableEntityFieldEvent<E, F> extends ObservableValueEvent<F> {
+public class ObservableEntityFieldEvent<E, F> extends EntityReflector.EntityFieldChangeEvent<E, F> {
 	private final ObservableEntity<E> theEntity;
 	private final ObservableEntityFieldType<E, F> theField;
 
@@ -21,13 +22,18 @@ public class ObservableEntityFieldEvent<E, F> extends ObservableValueEvent<F> {
 	 */
 	public ObservableEntityFieldEvent(ObservableEntity<E> entity, ObservableEntityFieldType<E, F> field, F oldValue, F newValue,
 		Object cause) {
-		super(field.getFieldType(), false, oldValue, newValue, cause);
+		super(field.getIndex(), field.getFieldType(), oldValue, newValue, cause);
 		theField = field;
 		theEntity = entity;
 	}
 
+	@Override
+	public E getEntity() {
+		return theEntity.getEntity();
+	}
+
 	/** @return The entity whose field value changed */
-	public ObservableEntity<E> getEntity() {
+	public ObservableEntity<E> getObservableEntity() {
 		return theEntity;
 	}
 

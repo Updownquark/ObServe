@@ -484,31 +484,27 @@ public class EntityReflector<E> {
 	 * @param <E> The type of the entity
 	 * @param <F> The type of the field
 	 */
-	public static class EntityFieldChangeEvent<E, F> extends ObservableValueEvent<F> {
-		private final E theEntity;
-		private final ReflectedField<E, F> theField;
+	public static abstract class EntityFieldChangeEvent<E, F> extends ObservableValueEvent<F> {
+		private final int theFieldIndex;
 
 		/**
-		 * @param entity The entity whose field value changed
-		 * @param field The field whose value changed
+		 * @param fieldIndex The {@link EntityReflector.ReflectedField#getFieldIndex()} of the field whose value changed
+		 * @param type The type of the field whose value changed
 		 * @param oldValue The previous value of the field
 		 * @param newValue The new (current) value of the field
 		 * @param cause The cause of the change
 		 */
-		public EntityFieldChangeEvent(E entity, ReflectedField<E, F> field, F oldValue, F newValue, Object cause) {
-			super(field.getType(), false, oldValue, newValue, cause);
-			theEntity = entity;
-			theField = field;
+		public EntityFieldChangeEvent(int fieldIndex, TypeToken<F> type, F oldValue, F newValue, Object cause) {
+			super(type, false, oldValue, newValue, cause);
+			theFieldIndex = fieldIndex;
 		}
 
 		/** @return The entity whose field value changed */
-		public E getEntity() {
-			return theEntity;
-		}
+		public abstract E getEntity();
 
-		/** @return The field whose value changed */
-		public ReflectedField<E, F> getField() {
-			return theField;
+		/** @return The {@link EntityReflector.ReflectedField#getFieldIndex()} of the field whose value changed */
+		public int getFieldIndex() {
+			return theFieldIndex;
 		}
 	}
 
@@ -575,10 +571,12 @@ public class EntityReflector<E> {
 		/**
 		 * Registers a listener to a field for a particular entity
 		 *
+		 * This method will not be called if {@link #watchField(Object, int, Consumer)} is overridden.
+		 *
 		 * @param entity The entity instance to listen to
 		 * @param fieldIndex The {@link EntityReflector.ReflectedField#getFieldIndex() index} of the field
 		 * @param listener The listener to install
-		 * @return A subcription to {@link Subscription#unsubscribe() unsubscribe} to stop listening
+		 * @return A subscription to {@link Subscription#unsubscribe() unsubscribe} to stop listening
 		 */
 		Subscription addListener(E entity, int fieldIndex, Consumer<FieldChange<?>> listener);
 
@@ -606,6 +604,69 @@ public class EntityReflector<E> {
 		 * @return A value containing null when the field may be modified, or a reason why it cannot be
 		 */
 		ObservableValue<String> isEnabled(int fieldIndex);
+
+		/**
+		 * @param entity The entity whose field to watch (backed by this backing instance)
+		 * @param fieldIndex The index of the field to watch
+		 * @param listener The listener to receive an event when the field changes
+		 * @return The subscription to use to cease listening
+		 */
+		default Subscription watchField(E entity, int fieldIndex, Consumer<? super EntityFieldChangeEvent<E, ?>> listener) {
+			return getHandler(entity).addFieldListener(entity, fieldIndex, listener);
+		}
+
+		/**
+		 * @param entity The entity whose field to watch (backed by this backing instance)
+		 * @param listener The listener to receive an event any field in the entity changes
+		 * @return The subscription to use to cease listening
+		 */
+		default Subscription watchAllFields(E entity, Consumer<? super EntityFieldChangeEvent<E, ?>> listener) {
+			EntityReflector<E> reflector = getHandler(entity).getReflector();
+			Subscription[] subs = new Subscription[reflector.getFields().keySize()];
+			for (int f = 0; f < reflector.getFields().keySize(); f++)
+				subs[f] = watchField(entity, f, listener);
+			return Subscription.forAll(subs);
+		}
+
+		/**
+		 * @param <F> The type of the field to observe
+		 * @param entity The entity to observe the field on
+		 * @param field The field to observe
+		 * @return A settable value reflecting the value of the given field, allowing monitoring of changes to it, and (where allowed)
+		 *         providing setter functionality
+		 */
+		default <F> ObservableField<E, F> observeField(E entity, ReflectedField<E, F> field) {
+			return new ObservableFieldImpl<>(entity, field);
+		}
+
+		/**
+		 * Creates a change event when an observable field's value changes
+		 *
+		 * @param entity The entity to create the event for
+		 * @param field The field that changed
+		 * @param oldValue The previous value of the field
+		 * @param newValue The new (current) value of the field
+		 * @param cause The cause of the change
+		 * @return The event to fire
+		 */
+		default <F> EntityFieldChangeEvent<E, F> createFieldChangeEvent(E entity, ReflectedField<E, F> field, F oldValue, F newValue,
+			Object cause) {
+			return new EntityFieldChangeEventImpl<>(entity, field, oldValue, newValue, cause);
+		}
+	}
+
+	private static class EntityFieldChangeEventImpl<E, F> extends EntityFieldChangeEvent<E, F> {
+		private final E theEntity;
+
+		EntityFieldChangeEventImpl(E entity, ReflectedField<E, F> field, F oldValue, F newValue, Object cause) {
+			super(field.getFieldIndex(), field.getType(), oldValue, newValue, cause);
+			theEntity = entity;
+		}
+
+		@Override
+		public E getEntity() {
+			return theEntity;
+		}
 	}
 
 	/**
@@ -653,12 +714,20 @@ public class EntityReflector<E> {
 	 * @param <E> The type of the entity
 	 * @param <F> The type of the field
 	 */
-	public static class ObservableField<E, F> extends AbstractIdentifiable implements SettableValue<F> {
+	public interface ObservableField<E, F> extends SettableValue<F> {
+		/** @return The entity whose field this value represents */
+		public E getEntity();
+
+		/** @return The {@link EntityReflector.ReflectedField#getFieldIndex()} of the field that this value represents */
+		public int getFieldIndex();
+	}
+
+	static class ObservableFieldImpl<E, F> extends AbstractIdentifiable implements ObservableField<E, F> {
 		private final E theEntity;
 		private final ReflectedField<E, F> theField;
 		private final Transactable theLock;
 
-		ObservableField(E entity, ReflectedField<E, F> field) {
+		ObservableFieldImpl(E entity, ReflectedField<E, F> field) {
 			theEntity = entity;
 			theField = field;
 			theLock = getBacking().getLock(field.getFieldIndex());
@@ -669,14 +738,14 @@ public class EntityReflector<E> {
 			return (ObservableEntityInstanceBacking<E>) getHandler(theEntity).theBacking;
 		}
 
-		/** @return The entity whose field this value represents */
+		@Override
 		public E getEntity() {
 			return theEntity;
 		}
 
-		/** @return The field that this value represents */
-		public ReflectedField<E, F> getField() {
-			return theField;
+		@Override
+		public int getFieldIndex() {
+			return theField.getFieldIndex();
 		}
 
 		@Override
@@ -748,7 +817,7 @@ public class EntityReflector<E> {
 		class FieldObserver extends AbstractIdentifiable implements Observable<ObservableValueEvent<F>> {
 			@Override
 			protected Object createIdentity() {
-				return Identifiable.wrap(ObservableField.this.getIdentity(), "noInitChanges");
+				return Identifiable.wrap(ObservableFieldImpl.this.getIdentity(), "noInitChanges");
 			}
 
 			@Override
@@ -758,12 +827,12 @@ public class EntityReflector<E> {
 
 			@Override
 			public Transaction lock() {
-				return ObservableField.this.lock(false, null);
+				return ObservableFieldImpl.this.lock(false, null);
 			}
 
 			@Override
 			public Transaction tryLock() {
-				return ObservableField.this.tryLock(false, null);
+				return ObservableFieldImpl.this.tryLock(false, null);
 			}
 
 			@Override
@@ -874,15 +943,14 @@ public class EntityReflector<E> {
 		private final Invokable<E, R> theInvokable;
 
 		MethodInterpreter(EntityReflector<E> reflector, Method method) {
+			this(reflector, reflector.getType(), method);
+		}
+
+		MethodInterpreter(EntityReflector<E> reflector, TypeToken<E> type, Method method) {
 			theReflector = reflector;
 			theMethod = method;
 			theSuperMethods = new MethodInterpreter[(reflector == null || reflector.theSupers.isEmpty()) ? 0 : reflector.theSupers.size()];
 			theParameters = method.getParameterTypes();
-			TypeToken<?> type;
-			if (reflector != null)
-				type = reflector.getType();
-			else
-				type = TypeTokens.get().OBJECT;
 			theInvokable = (Invokable<E, R>) type.method(method);
 		}
 
@@ -1489,7 +1557,7 @@ public class EntityReflector<E> {
 			throw new IllegalStateException("Could not find Object methods!", e);
 		}
 		Map<Method, MethodInterpreter<Object, ?>> defaultObjectMethods = new LinkedHashMap<>();
-		DEFAULT_EQUALS = new MethodInterpreter<Object, Boolean>(null, equals) {
+		DEFAULT_EQUALS = new MethodInterpreter<Object, Boolean>(null, TypeTokens.get().OBJECT, equals) {
 			@Override
 			protected Boolean invokeLocal(Object proxy, Object[] args, EntityInstanceBacking backing) {
 				if (proxy == args[0])
@@ -1515,7 +1583,7 @@ public class EntityReflector<E> {
 			}
 		};
 		defaultObjectMethods.put(equals, DEFAULT_EQUALS);
-		DEFAULT_HASH_CODE = new MethodInterpreter<Object, Integer>(null, hashCode) {
+		DEFAULT_HASH_CODE = new MethodInterpreter<Object, Integer>(null, TypeTokens.get().OBJECT, hashCode) {
 			@Override
 			protected Integer invokeLocal(Object proxy, Object[] args, EntityInstanceBacking backing) {
 				EntityReflector<?>.ProxyMethodHandler p = getHandler(proxy);
@@ -1529,7 +1597,7 @@ public class EntityReflector<E> {
 			}
 		};
 		defaultObjectMethods.put(hashCode, DEFAULT_HASH_CODE);
-		DEFAULT_TO_STRING = new MethodInterpreter<Object, String>(null, toString) {
+		DEFAULT_TO_STRING = new MethodInterpreter<Object, String>(null, TypeTokens.get().OBJECT, toString) {
 			@Override
 			protected String invokeLocal(Object proxy, Object[] args, EntityInstanceBacking backing) {
 				EntityReflector<?>.ProxyMethodHandler p = getHandler(proxy);
@@ -1544,7 +1612,7 @@ public class EntityReflector<E> {
 			}
 		};
 		defaultObjectMethods.put(toString, DEFAULT_TO_STRING);
-		DEFAULT_NOTIFY = new MethodInterpreter<Object, Void>(null, notify) {
+		DEFAULT_NOTIFY = new MethodInterpreter<Object, Void>(null, TypeTokens.get().OBJECT, notify) {
 			@Override
 			protected Void invokeLocal(Object proxy, Object[] args, EntityInstanceBacking backing) {
 				Proxy.getInvocationHandler(proxy).notify();
@@ -1552,7 +1620,7 @@ public class EntityReflector<E> {
 			}
 		};
 		defaultObjectMethods.put(notify, DEFAULT_NOTIFY);
-		DEFAULT_NOTIFY_ALL = new MethodInterpreter<Object, Void>(null, notifyAll) {
+		DEFAULT_NOTIFY_ALL = new MethodInterpreter<Object, Void>(null, TypeTokens.get().OBJECT, notifyAll) {
 			@Override
 			protected Void invokeLocal(Object proxy, Object[] args, EntityInstanceBacking backing) {
 				Proxy.getInvocationHandler(proxy).notifyAll();
@@ -1560,7 +1628,7 @@ public class EntityReflector<E> {
 			}
 		};
 		defaultObjectMethods.put(notifyAll, DEFAULT_NOTIFY_ALL);
-		DEFAULT_WAIT0 = new MethodInterpreter<Object, Void>(null, wait0) {
+		DEFAULT_WAIT0 = new MethodInterpreter<Object, Void>(null, TypeTokens.get().OBJECT, wait0) {
 			@Override
 			protected Void invokeLocal(Object proxy, Object[] args, EntityInstanceBacking backing) throws InterruptedException {
 				InvocationHandler handler = Proxy.getInvocationHandler(proxy);
@@ -1569,7 +1637,7 @@ public class EntityReflector<E> {
 			}
 		};
 		defaultObjectMethods.put(wait0, DEFAULT_WAIT0);
-		DEFAULT_WAIT1 = new MethodInterpreter<Object, Void>(null, wait1) {
+		DEFAULT_WAIT1 = new MethodInterpreter<Object, Void>(null, TypeTokens.get().OBJECT, wait1) {
 			@Override
 			protected Void invokeLocal(Object proxy, Object[] args, EntityInstanceBacking backing) throws InterruptedException {
 				InvocationHandler handler = Proxy.getInvocationHandler(proxy);
@@ -1578,7 +1646,7 @@ public class EntityReflector<E> {
 			}
 		};
 		defaultObjectMethods.put(wait1, DEFAULT_WAIT1);
-		DEFAULT_WAIT2 = new MethodInterpreter<Object, Void>(null, wait2) {
+		DEFAULT_WAIT2 = new MethodInterpreter<Object, Void>(null, TypeTokens.get().OBJECT, wait2) {
 			@Override
 			protected Void invokeLocal(Object proxy, Object[] args, EntityInstanceBacking backing) throws InterruptedException {
 				InvocationHandler handler = Proxy.getInvocationHandler(proxy);
@@ -1587,28 +1655,28 @@ public class EntityReflector<E> {
 			}
 		};
 		defaultObjectMethods.put(wait2, DEFAULT_WAIT2);
-		DEFAULT_FINALIZE = new MethodInterpreter<Object, Void>(null, finalize) {
+		DEFAULT_FINALIZE = new MethodInterpreter<Object, Void>(null, TypeTokens.get().OBJECT, finalize) {
 			@Override
 			protected Void invokeLocal(Object proxy, Object[] args, EntityInstanceBacking backing) {
 				return null;
 			}
 		};
 		defaultObjectMethods.put(finalize, DEFAULT_FINALIZE);
-		DEFAULT_CLONE = new MethodInterpreter<Object, Object>(null, clone) {
+		DEFAULT_CLONE = new MethodInterpreter<Object, Object>(null, TypeTokens.get().OBJECT, clone) {
 			@Override
 			protected Object invokeLocal(Object proxy, Object[] args, EntityInstanceBacking backing) throws CloneNotSupportedException {
 				throw new CloneNotSupportedException("Cannot clone proxies");
 			}
 		};
 		defaultObjectMethods.put(clone, DEFAULT_CLONE);
-		DEFAULT_GET_CLASS = new MethodInterpreter<Object, Class<?>>(null, getClass) {
+		DEFAULT_GET_CLASS = new MethodInterpreter<Object, Class<?>>(null, TypeTokens.get().OBJECT, getClass) {
 			@Override
 			protected Class<?> invokeLocal(Object proxy, Object[] args, EntityInstanceBacking backing) {
 				return getHandler(proxy).getReflector().theRawType;
 			}
 		};
 		defaultObjectMethods.put(getClass, DEFAULT_GET_CLASS);
-		DEFAULT_GET_IDENTITY = new MethodInterpreter<Identifiable, Object>(null, getIdentity) {
+		DEFAULT_GET_IDENTITY = new MethodInterpreter<Identifiable, Object>(null, TypeTokens.get().of(Identifiable.class), getIdentity) {
 			@Override
 			protected Object invokeLocal(Identifiable proxy, Object[] args, EntityInstanceBacking backing) throws Throwable {
 				return ((EntityReflector<Identifiable>.IdentifiableProxyMethodHandler) getHandler(proxy)).getIdentity(proxy);
@@ -2169,7 +2237,10 @@ public class EntityReflector<E> {
 	 * @return The subscription to {@link Subscription#unsubscribe() unsubscribe} to stop receiving change events
 	 */
 	public Subscription watchField(E entity, int fieldIndex, Consumer<? super EntityFieldChangeEvent<E, ?>> listener) {
-		return getHandler(entity).addFieldListener(entity, fieldIndex, listener);
+		EntityInstanceBacking backing = getHandler(entity).theBacking;
+		if (!(backing instanceof ObservableEntityInstanceBacking))
+			throw new UnsupportedOperationException("Observation is not supported by this entity's backing");
+		return ((ObservableEntityInstanceBacking<E>) backing).watchField(entity, fieldIndex, listener);
 	}
 
 	/**
@@ -2178,7 +2249,10 @@ public class EntityReflector<E> {
 	 * @return The subscription to {@link Subscription#unsubscribe() unsubscribe} to stop receiving change events
 	 */
 	public Subscription watchAllFields(E entity, Consumer<? super EntityFieldChangeEvent<E, ?>> listener) {
-		return getHandler(entity).addFieldListener(entity, listener);
+		EntityInstanceBacking backing = getHandler(entity).theBacking;
+		if (!(backing instanceof ObservableEntityInstanceBacking))
+			throw new UnsupportedOperationException("Observation is not supported by this entity's backing");
+		return ((ObservableEntityInstanceBacking<E>) backing).watchAllFields(entity, listener);
 	}
 
 	/**
@@ -2187,9 +2261,10 @@ public class EntityReflector<E> {
 	 * @return A {@link SettableValue} representing the value of the given field in the entity
 	 */
 	public ObservableField<? extends E, ?> observeField(E entity, int fieldIndex) {
-		if (!(getHandler(entity).theBacking instanceof ObservableEntityInstanceBacking))
+		EntityInstanceBacking backing = getHandler(entity).theBacking;
+		if (!(backing instanceof ObservableEntityInstanceBacking))
 			throw new UnsupportedOperationException("Observation is not supported by this entity's backing");
-		return new ObservableField<>(entity, getFields().get(fieldIndex));
+		return ((ObservableEntityInstanceBacking<E>) backing).observeField(entity, theFields.get(fieldIndex));
 	}
 
 	@Override
@@ -2283,13 +2358,6 @@ public class EntityReflector<E> {
 			return theListeners[fieldIndex].add(listener, true)::run;
 		}
 
-		Subscription addFieldListener(E entity, Consumer<? super EntityFieldChangeEvent<E, ?>> listener) {
-			Subscription[] subs = new Subscription[theFields.keySize()];
-			for (int f = 0; f < theFields.keySize(); f++)
-				subs[f] = addFieldListener(entity, f, listener);
-			return Subscription.forAll(subs);
-		}
-
 		<F> void fieldChanged(E entity, int fieldIndex, FieldChange<F> change) {
 			if (theListeners == null)
 				return;
@@ -2297,8 +2365,8 @@ public class EntityReflector<E> {
 			ListenerList<Consumer<? super EntityFieldChangeEvent<E, ?>>> listeners = theListeners[field.getFieldIndex()];
 			if (listeners == null || listeners.isEmpty())
 				return;
-			EntityFieldChangeEvent<E, F> event = new EntityFieldChangeEvent<>(entity, field, change.oldValue, change.newValue,
-				change.cause);
+			EntityFieldChangeEvent<E, F> event = ((ObservableEntityInstanceBacking<E>) theBacking).createFieldChangeEvent(entity, field,
+				change.oldValue, change.newValue, change.cause);
 			try (Transaction t = Causable.use(event)) {
 				listeners.forEach(//
 					l -> l.accept(event));
