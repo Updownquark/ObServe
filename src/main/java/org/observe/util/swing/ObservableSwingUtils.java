@@ -667,8 +667,8 @@ public class ObservableSwingUtils {
 			List<E> selValues = selectionGetter.get();
 			try (Transaction selT = selection.lock(true, cause)) {
 				CollectionUtils.synchronize(selection, selValues, (v1, v2) -> equivalence.elementEquals(v1, v2))//
-					.simple(LambdaUtils.identity())//
-					.adjust();
+				.simple(LambdaUtils.identity())//
+				.adjust();
 			}
 		};
 		ListSelectionListener selListener = e -> {
@@ -1015,6 +1015,93 @@ public class ObservableSwingUtils {
 		return icon;
 	}
 
+	public static ObservableUiBuilder buildUI() {
+		return new ObservableUiBuilder();
+	}
+
+	public static class ObservableUiBuilder {
+		private File theDefaultConfigLocation;
+		private String theConfigName;
+		private String theTitle;
+		private Consumer<ObservableConfig> theConfigInit;
+
+		ObservableUiBuilder() {}
+
+		public ObservableUiBuilder withConfigAt(String configLocation) {
+			return withConfigAt(new File(configLocation));
+		}
+
+		public ObservableUiBuilder withConfigAt(File configLocation) {
+			theDefaultConfigLocation = configLocation;
+			return this;
+		}
+
+		public ObservableUiBuilder withConfig(String configName) {
+			theConfigName = configName;
+			return this;
+		}
+
+		public ObservableUiBuilder withTitle(String title) {
+			theTitle = title;
+			return this;
+		}
+
+		public ObservableUiBuilder withConfigInit(Consumer<ObservableConfig> configInit) {
+			theConfigInit = configInit;
+			return this;
+		}
+
+		public ObservableUiBuilder systemLandF() {
+			ObservableSwingUtils.systemLandF();
+			return this;
+		}
+
+		public JFrame build(Function<ObservableConfig, Component> app) {
+			String configName = theConfigName;
+			if (configName == null && theDefaultConfigLocation == null)
+				throw new IllegalStateException("No configuration set to initialize configuration");
+			String configFileLoc = null;
+			if (configName != null)
+				configFileLoc = System.getProperty(configName + ".config");
+			if (configFileLoc == null) {
+				configFileLoc = theDefaultConfigLocation.getPath();
+			}
+			if (configFileLoc == null)
+				configFileLoc = "./" + configName + ".config";
+			ObservableConfig config = ObservableConfig.createRoot("config");
+			ObservableConfig.XmlEncoding encoding = ObservableConfig.XmlEncoding.DEFAULT;
+			File configFile = new File(configFileLoc);
+			if (configFile.exists()) {
+				try {
+					try (InputStream configStream = new BufferedInputStream(new FileInputStream(configFile))) {
+						ObservableConfig.readXml(config, configStream, encoding);
+					}
+				} catch (IOException | SAXException e) {
+					System.err.println("Could not read config file " + configFileLoc);
+					e.printStackTrace();
+				}
+			} else {
+				if (configName != null)
+					config.setName(configName);
+				if (theConfigInit != null)
+					theConfigInit.accept(config);
+			}
+			config.persistOnShutdown(ObservableConfig.toFile(configFile, encoding), ex -> {
+				System.err.println("Could not persist UI config");
+				ex.printStackTrace();
+			});
+			Component ui = app.apply(config);
+			JFrame frame = theTitle == null ? new JFrame() : new JFrame(theTitle);
+			// frame.setContentPane(ui);
+			frame.getContentPane().add(ui);
+			frame.setVisible(true);
+			frame.pack();
+			ObservableSwingUtils.configureFrameBounds(frame, config);
+			frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+			return frame;
+		}
+	}
+
 	/**
 	 * Installs the system-specific Swing look and feel
 	 *
@@ -1062,7 +1149,7 @@ public class ObservableSwingUtils {
 		});
 		ObservableSwingUtils.systemLandF();
 		Component ui = app.apply(config);
-		JFrame frame = new JFrame("Baqery");
+		JFrame frame = new JFrame();
 		// frame.setContentPane(ui);
 		frame.getContentPane().add(ui);
 		frame.setVisible(true);
