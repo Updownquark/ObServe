@@ -640,6 +640,11 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 		}
 
 		@Override
+		public Observable<ObservableValueEvent<T>> noInit() {
+			return theNoInitChanges;
+		}
+
+		@Override
 		public int hashCode() {
 			return getIdentity().hashCode();
 		}
@@ -1282,6 +1287,14 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 				@Override
 				public Transaction tryLock() {
 					return theChanges.tryLock();
+				}
+
+				@Override
+				public Observable<ObservableValueEvent<T>> noInit() {
+					if (withInit)
+						return noInitChanges();
+					else
+						return this;
 				}
 			};
 		}
