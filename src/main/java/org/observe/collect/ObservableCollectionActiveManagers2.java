@@ -865,7 +865,7 @@ public class ObservableCollectionActiveManagers2 {
 								el.refresh(r);
 						}
 					}
-				}, action -> refresh.act(action));
+				}, action -> refresh.noInit().act(action));
 			}
 
 			void remove(ElementId element) {

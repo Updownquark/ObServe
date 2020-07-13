@@ -304,6 +304,11 @@ public interface Observable<T> extends Lockable, Identifiable {
 		}
 
 		@Override
+		public Observable<Object> noInit() {
+			return this;
+		}
+
+		@Override
 		public boolean isSafe() {
 			return true;
 		}
@@ -1060,6 +1065,14 @@ public interface Observable<T> extends Lockable, Identifiable {
 		@Override
 		public Transaction tryLock() {
 			return Lockable.tryLockAll(theWrapped, Lockable.lockable(theLock, this, false));
+		}
+
+		@Override
+		public Observable<T> noInit() {
+			Observable<T> wrap = getWrapped().noInit();
+			if (wrap == getWrapped())
+				return this;
+			return wrap.safe();
 		}
 	}
 
