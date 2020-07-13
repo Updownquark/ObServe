@@ -202,6 +202,11 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 	 * @param <E> The java type of the entity
 	 */
 	public static class All<E> extends EntityCondition<E> {
+		/**
+		 * @param entityType The entity type for the condition
+		 * @param mechanism The selection mechanism to power {@link #query()}, {@link #update()}, and {@link #delete()}
+		 * @param globalVars The variables for the condition
+		 */
 		public All(ObservableEntityType<E> entityType, SelectionMechanism<E> mechanism,
 			Map<String, EntityOperationVariable<E>> globalVars) {
 			super(entityType, mechanism, globalVars, Collections.emptyMap());
@@ -231,14 +236,32 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 			return condition.apply(this);
 		}
 
+		/**
+		 * @param <F> The type of the field for the condition
+		 * @param field The value access to use to derive a value to compare against the condition value (specified later)
+		 * @return An intermediate to select the type of the comparison
+		 */
 		public <F> EntityConditionIntermediate1<E, F> where(EntityValueAccess<E, F> field) {
 			return new EntityConditionIntermediate1<>(this, field);
 		}
 
+		/**
+		 * @param <F> The type of the field for the condition
+		 * @param field A function calling the entity field to use to derive a value to compare against the condition value (specified
+		 *        later). Field sequences are not supported using this method.
+		 * @return An intermediate to select the type of the comparison
+		 */
 		public <F> EntityConditionIntermediate1<E, F> where(Function<? super E, F> field) {
 			return where(getEntityType().getField(field));
 		}
 
+		/**
+		 * @param <F> The type of the field for the condition
+		 * @param init The function calling the entity field to serve as a starting point for the value access to use to derive a value to
+		 *        compare against the condition value (specified later)
+		 * @param field Creates a field sequence starting from the field (see {@link ObservableEntityFieldType#dot(Function)}
+		 * @return An intermediate to select the type of the comparison
+		 */
 		public <I, F> EntityConditionIntermediate1<E, F> where(Function<? super E, I> init,
 			Function<ObservableEntityFieldType<E, I>, EntityValueAccess<E, F>> field) {
 			return where(//
@@ -246,6 +269,10 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 					getEntityType().getField(init)));
 		}
 
+		/**
+		 * @param id The ID of the entity to match
+		 * @return A condition that matches only the entity with the given ID
+		 */
 		public EntityCondition<E> entity(EntityIdentity<? extends E> id) {
 			EntityIdentity<E> id2 = getEntityType().fromSubId(id);
 			EntityCondition<E> c = this;
@@ -257,6 +284,10 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 			return c;
 		}
 
+		/**
+		 * @param entity The entity to match
+		 * @return A condition that matches only the given entity
+		 */
 		public EntityCondition<E> entity(E entity) {
 			return entity(getEntityType().observableEntity(entity).getId());
 		}
@@ -302,6 +333,12 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 		}
 	}
 
+	/**
+	 * Returned from {@link EntityCondition.All#where(EntityValueAccess)} to create a value-based condition
+	 *
+	 * @param <E> The type of entity this condition applies to
+	 * @param <F> The type of the value the new condition will be based on
+	 */
 	public static class EntityConditionIntermediate1<E, F> {
 		private final All<E> theSource;
 		private final EntityValueAccess<E, F> theField;
@@ -314,75 +351,165 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 					"Field " + field + " is for " + field.getSourceEntity() + ", not " + theSource.getEntityType());
 		}
 
+		/** @return The source condition */
 		public All<E> getSource() {
 			return theSource;
 		}
 
+		/** @return The field to use to derive a value from the entity to compare against the condition value (specified later) */
 		public EntityValueAccess<E, F> getField() {
 			return theField;
 		}
 
+		/**
+		 * @param ltEqGt The type of the comparison to make:
+		 *        <ul>
+		 *        <li>&lt;0 for less than or less-than-or-equal</li>
+		 *        <li>0 for equal or not-equal</li>
+		 *        <li>&gt;0 for greater than or greater-than-or-equal</li>
+		 *        </ul>
+		 * @param withEqual True for less-than-or-equal, equal, or greater-than-or-equal. False for less than, not-equal, or greater than.
+		 * @return An intermediate to specify the condition value
+		 */
 		public EntityConditionIntermediate2<E, F> compare(int ltEqGt, boolean withEqual) {
 			return new EntityConditionIntermediate2<>(this, ltEqGt, withEqual);
 		}
 
+		/**
+		 * For making an equals comparison
+		 *
+		 * @return An intermediate to specify the condition value
+		 */
 		public EntityConditionIntermediate2<E, F> equal() {
 			return compare(0, true);
 		}
 
+		/**
+		 * For making an not-equals comparison
+		 *
+		 * @return An intermediate to specify the condition value
+		 */
 		public EntityConditionIntermediate2<E, F> notEqual() {
 			return compare(0, false);
 		}
 
+		/**
+		 * For making a less than comparison
+		 *
+		 * @return An intermediate to specify the condition value
+		 */
 		public EntityConditionIntermediate2<E, F> lessThan() {
 			return compare(-1, false);
 		}
 
+		/**
+		 * For making a less than or equal comparison
+		 *
+		 * @return An intermediate to specify the condition value
+		 */
 		public EntityConditionIntermediate2<E, F> lessThanOrEqual() {
 			return compare(-1, true);
 		}
 
+		/**
+		 * For making a greater than comparison
+		 *
+		 * @return An intermediate to specify the condition value
+		 */
 		public EntityConditionIntermediate2<E, F> greaterThan() {
 			return compare(1, false);
 		}
 
+		/**
+		 * For making a greater than or equal comparison
+		 *
+		 * @return An intermediate to specify the condition value
+		 */
 		public EntityConditionIntermediate2<E, F> greaterThanOrEqual() {
 			return compare(1, true);
 		}
 
+		/**
+		 * For making an equals comparison. Shortcut for {@link #equal()}
+		 *
+		 * @return An intermediate to specify the condition value
+		 */
 		public EntityConditionIntermediate2<E, F> eq() {
 			return equal();
 		}
 
+		/**
+		 * For making an not-equals comparison. Shortcut for {@link #notEqual()}
+		 *
+		 * @return An intermediate to specify the condition value
+		 */
 		public EntityConditionIntermediate2<E, F> neq() {
 			return notEqual();
 		}
 
+		/**
+		 * For making a less than comparison. Shortcut for {@link #lessThan()}
+		 *
+		 * @return An intermediate to specify the condition value
+		 */
 		public EntityConditionIntermediate2<E, F> lt() {
 			return lessThan();
 		}
 
+		/**
+		 * For making a less than or equal comparison. Shortcut for {@link #lessThanOrEqual()}
+		 *
+		 * @return An intermediate to specify the condition value
+		 */
 		public EntityConditionIntermediate2<E, F> lte() {
 			return lessThanOrEqual();
 		}
 
+		/**
+		 * For making a greater than comparison. Shortcut for {@link #greaterThan()}
+		 *
+		 * @return An intermediate to specify the condition value
+		 */
 		public EntityConditionIntermediate2<E, F> gt() {
 			return greaterThan();
 		}
 
+		/**
+		 * For making a greater than or equal comparison. Shortcut for {@link #greaterThanOrEqual()}
+		 *
+		 * @return An intermediate to specify the condition value
+		 */
 		public EntityConditionIntermediate2<E, F> gte() {
 			return greaterThanOrEqual();
 		}
 
+		/**
+		 * For checking for a null value
+		 *
+		 * @return A condition that passes when the entity-derived value is null
+		 */
 		public ValueCondition<E, F> NULL() {
 			return compare(0, true).value(null);
 		}
 
+		/**
+		 * For checking for a non-null value
+		 *
+		 * @return A condition that passes when the entity-derived value is not null
+		 */
 		public ValueCondition<E, F> notNull() {
 			return compare(0, false).value(null);
 		}
 	}
 
+	/**
+	 * Returned from most of the methods in {@link EntityCondition.EntityConditionIntermediate1} which is returned from
+	 * {@link EntityCondition.All#where(EntityValueAccess)}. Allows specification of the value or variable to compare the entity-derived
+	 * value against.
+	 *
+	 * @param <E> The type of entity this condition applies to
+	 * @param <F> The type of the value the new condition will be based on
+	 */
 	public static class EntityConditionIntermediate2<E, F> {
 		private final EntityConditionIntermediate1<E, F> thePrecursor;
 		private final int theCompare;
@@ -394,28 +521,49 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 			isWithEqual = withEqual;
 		}
 
+		/**
+		 * @param value The literal value to compare the entity-derived value against
+		 * @return The new condition
+		 */
 		public LiteralCondition<E, F> value(F value) {
 			return thePrecursor.getSource().createLiteral(thePrecursor.getField(), value, theCompare, isWithEqual);
 		}
 
+		/**
+		 * @param variableName The name of the variable whose satisfied value to compare the entity-derived value against. The variable will
+		 *        be declared if one of the given name was not present in the source condition.
+		 * @return The new condition
+		 */
 		public VariableCondition<E, F> variable(String variableName) {
 			EntityOperationVariable<E> vbl = thePrecursor.getSource().getVariables().get(variableName);
 			if (vbl == null)
-				vbl = new EntityOperationVariable<>(null, variableName);
+				vbl = new EntityOperationVariable<>(thePrecursor.getField().getSourceEntity(), variableName);
+			// TODO Check against the variable type
 			return thePrecursor.getSource().createVariable(thePrecursor.getField(), vbl, theCompare, isWithEqual);
 		}
 
-		public VariableCondition<E, F> declareVariable(String variableName) {
+		/**
+		 * @param variableName The name of the variable whose satisfied value to compare the entity-derived value against
+		 * @return The new condition
+		 * @throws IllegalArgumentException If a variable with the given name already exists
+		 */
+		public VariableCondition<E, F> declareVariable(String variableName) throws IllegalArgumentException {
 			if (thePrecursor.getSource().getGlobalVariables().containsKey(variableName))
 				throw new IllegalArgumentException("A variable named " + variableName + " has already been declared");
 			return thePrecursor.getSource().createVariable(thePrecursor.getField(), new EntityOperationVariable<>(null, variableName),
 				theCompare, isWithEqual);
 		}
 
+		/**
+		 * @param variableName The name of the variable whose satisfied value to compare the entity-derived value against
+		 * @return The new condition
+		 * @throws IllegalArgumentException If no variable with the given name exists
+		 */
 		public VariableCondition<E, F> reuseVariable(String variableName) {
 			EntityOperationVariable<E> vbl = thePrecursor.getSource().getVariables().get(variableName);
 			if (vbl == null)
 				throw new IllegalArgumentException("A variable named " + variableName + " has not been declared");
+			// TODO Check against the variable type
 			return thePrecursor.getSource().createVariable(thePrecursor.getField(), vbl, theCompare, isWithEqual);
 		}
 	}
@@ -506,8 +654,16 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 			}
 		}
 
+		/**
+		 * @param varValues The variable values of the environment where this condition is being used
+		 * @return The value to compare the entity-derived value against for this condition
+		 */
 		public abstract F getConditionValue(QuickMap<String, Object> varValues);
 
+		/**
+		 * @param other The value condition to compare to
+		 * @return The comparison of this condition's value to the other's
+		 */
 		protected abstract int compareValue(ValueCondition<? super E, ? super F> other);
 
 		@Override
@@ -527,8 +683,13 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 				return this;
 		}
 
-		protected boolean test(F value1, F value2) {
-			int comp = getField().compare(value1, value2);
+		/**
+		 * @param entityDerivedValue The value derived from the source entity via this condition's {@link #getField() field}
+		 * @param conditionValue The value to compare against
+		 * @return Whether this condition's test passes
+		 */
+		protected boolean test(F entityDerivedValue, F conditionValue) {
+			int comp = getField().compare(entityDerivedValue, conditionValue);
 			if (isWithEqual && comp == 0)
 				return true;
 			if (theComparison < 0) {
@@ -587,7 +748,7 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 	public static class LiteralCondition<E, F> extends ValueCondition<E, F> {
 		private final F theValue;
 
-		public LiteralCondition(ObservableEntityType<E> entityType, SelectionMechanism<E> mechanism, EntityValueAccess<E, F> field, F value,
+		LiteralCondition(ObservableEntityType<E> entityType, SelectionMechanism<E> mechanism, EntityValueAccess<E, F> field, F value,
 			int comparison, boolean isWithEqual, Map<String, EntityOperationVariable<E>> globalVars) {
 			super(entityType, mechanism, field, comparison, isWithEqual, globalVars, Collections.emptyMap());
 			if (value != null && !TypeTokens.get().isInstance(field.getValueType(), value))
@@ -611,8 +772,12 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 			return getValue();
 		}
 
-		public boolean test(F fieldValue) {
-			return test(fieldValue, theValue);
+		/**
+		 * @param entityDerivedValue The value derived from the source entity by this condition's {@link #getField() field}
+		 * @return Whether this condition would pass for the given entity-derived value
+		 */
+		public boolean test(F entityDerivedValue) {
+			return test(entityDerivedValue, theValue);
 		}
 
 		@Override
@@ -692,7 +857,7 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 	public static class VariableCondition<E, F> extends ValueCondition<E, F> {
 		private final EntityOperationVariable<E> theVariable;
 
-		public VariableCondition(ObservableEntityType<E> entityType, SelectionMechanism<E> mechanism, EntityValueAccess<E, F> field,
+		VariableCondition(ObservableEntityType<E> entityType, SelectionMechanism<E> mechanism, EntityValueAccess<E, F> field,
 			EntityOperationVariable<E> variable, int comparison, boolean isWithEqual, Map<String, EntityOperationVariable<E>> globalVars) {
 			super(entityType, mechanism, field, comparison, isWithEqual, addVar(globalVars, variable), singleVar(variable));
 			theVariable = variable;
@@ -812,12 +977,12 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 	public static abstract class CompositeCondition<E> extends EntityCondition<E> {
 		private final List<EntityCondition<E>> theConditions;
 
-		public CompositeCondition(ObservableEntityType<E> entityType, EntityCondition<E>... conditions) {
+		CompositeCondition(ObservableEntityType<E> entityType, EntityCondition<E>... conditions) {
 			super(entityType, conditions[0].theMechanism, joinVars(conditions));
 			theConditions = Collections.unmodifiableList(Arrays.asList(conditions));
 		}
 
-		protected CompositeCondition(ObservableEntityType<E> entityType, CompositeCondition other, EntityCondition<E> addedCondition) {
+		CompositeCondition(ObservableEntityType<E> entityType, CompositeCondition<E> other, EntityCondition<E> addedCondition) {
 			super(entityType, addedCondition.theMechanism, joinVars(other, addedCondition));
 			List<EntityCondition<E>> conditions = new ArrayList<>(other.theConditions.size() + 1);
 			conditions.addAll(other.theConditions);
@@ -900,12 +1065,17 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 		}
 	}
 
+	/**
+	 * A condition that passes if any one of its component conditions does
+	 *
+	 * @param <E> The entity type of the condition
+	 */
 	public static class OrCondition<E> extends CompositeCondition<E> {
-		public OrCondition(ObservableEntityType<E> entityType, EntityCondition<E>... conditions) {
+		OrCondition(ObservableEntityType<E> entityType, EntityCondition<E>... conditions) {
 			super(entityType, conditions);
 		}
 
-		protected OrCondition(ObservableEntityType<E> entityType, OrCondition other, EntityCondition<E> addedCondition) {
+		OrCondition(ObservableEntityType<E> entityType, OrCondition<E> other, EntityCondition<E> addedCondition) {
 			super(entityType, other, addedCondition);
 		}
 
@@ -987,12 +1157,17 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 		}
 	}
 
+	/**
+	 * A condition that passes if all of its component conditions do
+	 *
+	 * @param <E> The entity type of the condition
+	 */
 	public static class AndCondition<E> extends CompositeCondition<E> {
-		public AndCondition(ObservableEntityType<E> entityType, EntityCondition<E>... conditions) {
+		AndCondition(ObservableEntityType<E> entityType, EntityCondition<E>... conditions) {
 			super(entityType, conditions);
 		}
 
-		protected AndCondition(ObservableEntityType<E> entityType, AndCondition other, EntityCondition<E> addedCondition) {
+		AndCondition(ObservableEntityType<E> entityType, AndCondition<E> other, EntityCondition<E> addedCondition) {
 			super(entityType, other, addedCondition);
 		}
 

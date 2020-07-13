@@ -14,12 +14,22 @@ import org.qommons.collect.QuickSet.QuickMap;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * A thin wrapper around {@link EntityReflector} that helps with a few {@link ObservableConfig}-specific things
+ * 
+ * @param <E> The type of the entity
+ */
 public class EntityConfiguredValueType<E> implements ConfiguredValueType<E> {
 	private final EntityReflector<E> theReflector;
 	private final List<EntityConfiguredValueType<? super E>> theSupers;
 	private final Map<TypeToken<?>, EntityReflector<?>> theSubTypes;
 	private final QuickMap<String, ? extends EntityConfiguredValueField<E, ?>> theFields;
 
+	/**
+	 * @param reflector The reflector to wrap
+	 * @param supers The list of super-type entities that this entity type extends
+	 * @param subTypes A map of entity name to entity sub types of the entities that extend this type
+	 */
 	public EntityConfiguredValueType(EntityReflector<E> reflector, List<EntityConfiguredValueType<? super E>> supers,
 		Map<TypeToken<?>, EntityReflector<?>> subTypes) {
 		theReflector = reflector;
@@ -62,6 +72,10 @@ public class EntityConfiguredValueType<E> implements ConfiguredValueType<E> {
 		return false;
 	}
 
+	/**
+	 * @param subType The type token of the sub type to get
+	 * @return The entity type extending this of the given type
+	 */
 	public <E2 extends E> EntityConfiguredValueType<E2> subType(TypeToken<E2> subType) {
 		if (subType.equals(theReflector.getType()))
 			return (EntityConfiguredValueType<E2>) this;
@@ -71,15 +85,32 @@ public class EntityConfiguredValueType<E> implements ConfiguredValueType<E> {
 		return new EntityConfiguredValueType<>(reflector, Collections.singletonList(this), theSubTypes);
 	}
 
+	/**
+	 * @param backing The entity backing for the new entity
+	 * @return The new instance
+	 */
 	public E create(EntityReflector.EntityInstanceBacking backing) {
 		assertUsableDirectly();
 		return theReflector.newInstance(backing);
 	}
 
+	/**
+	 * @param entity The entity to associate a value into
+	 * @param key The key to associate the value with
+	 * @param associated The value to associate with the given key in the entity
+	 * @return The entity
+	 */
 	public E associate(E entity, Object key, Object associated) {
 		return theReflector.associate(entity, key, associated);
 	}
 
+	/**
+	 * Retrieves data {@link #associate(Object, Object, Object) associated} with an entity
+	 * 
+	 * @param entity The entity to get data from
+	 * @param key The key the data was associated with
+	 * @return The associated data
+	 */
 	public Object getAssociated(E entity, Object key) {
 		return theReflector.getAssociated(entity, key);
 	}

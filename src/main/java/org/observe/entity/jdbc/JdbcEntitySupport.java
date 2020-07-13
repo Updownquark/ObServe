@@ -260,6 +260,11 @@ public class JdbcEntitySupport {
 							values.add(parser.apply(str.substring(0, str.length())));
 						return (T2) values;
 					}
+
+					@Override
+					public String getTypeName() {
+						return "CLOB";
+					}
 				};
 			}
 
@@ -296,6 +301,8 @@ public class JdbcEntitySupport {
 
 		T deserialize(ResultSet rs, int column) throws SQLException;
 
+		String getTypeName();
+
 		public static final JdbcColumn<Integer> INT = new JdbcColumn<Integer>() {
 			@Override
 			public void serialize(Integer value, StringBuilder str) {
@@ -305,6 +312,11 @@ public class JdbcEntitySupport {
 			@Override
 			public Integer deserialize(ResultSet rs, int column) throws SQLException {
 				return rs.getInt(column);
+			}
+
+			@Override
+			public String getTypeName() {
+				return "INTEGER";
 			}
 		};
 		public static final JdbcColumn<Integer> INTEGER = new JdbcColumn<Integer>() {
@@ -323,6 +335,11 @@ public class JdbcEntitySupport {
 				else
 					return ((Number) value).intValue();
 			}
+
+			@Override
+			public String getTypeName() {
+				return "INTEGER";
+			}
 		};
 
 		public static final JdbcColumn<Long> LONG_PRIM = new JdbcColumn<Long>() {
@@ -334,6 +351,11 @@ public class JdbcEntitySupport {
 			@Override
 			public Long deserialize(ResultSet rs, int column) throws SQLException {
 				return rs.getLong(column);
+			}
+
+			@Override
+			public String getTypeName() {
+				return "BIGINT";
 			}
 		};
 		public static final JdbcColumn<Long> LONG_WRAP = new JdbcColumn<Long>() {
@@ -352,6 +374,11 @@ public class JdbcEntitySupport {
 				else
 					return ((Number) value).longValue();
 			}
+
+			@Override
+			public String getTypeName() {
+				return "BIGINT";
+			}
 		};
 
 		public static final JdbcColumn<String> STRING = new JdbcColumn<String>() {
@@ -369,6 +396,11 @@ public class JdbcEntitySupport {
 			@Override
 			public String deserialize(ResultSet rs, int column) throws SQLException {
 				return rs.getString(column);
+			}
+
+			@Override
+			public String getTypeName() {
+				return "VARCHAR";
 			}
 		};
 
@@ -420,6 +452,11 @@ public class JdbcEntitySupport {
 			public Boolean deserialize(ResultSet rs, int column) throws SQLException {
 				return rs.getBoolean(column);
 			}
+
+			@Override
+			public String getTypeName() {
+				return "BOOLEAN";
+			}
 		}
 
 		public static final JdbcColumn<Instant> INSTANT = new JdbcColumn<Instant>() {
@@ -446,6 +483,11 @@ public class JdbcEntitySupport {
 				else
 					return ts.toInstant();
 			}
+
+			@Override
+			public String getTypeName() {
+				return "TIMESTAMP";
+			}
 		};
 
 		public static final JdbcColumn<Duration> DURATION_MILLIS = new JdbcColumn<Duration>() {
@@ -461,6 +503,11 @@ public class JdbcEntitySupport {
 					return null;
 				else
 					return Duration.ofMillis(((Number) value).longValue());
+			}
+
+			@Override
+			public String getTypeName() {
+				return "BIGINT";
 			}
 		};
 
@@ -497,10 +544,15 @@ public class JdbcEntitySupport {
 					}
 				}
 			}
+
+			@Override
+			public String getTypeName() {
+				return "INTEGER";
+			}
 		};
 	}
 
-	public static final JdbcEntitySupport DEFAULT;
+	public static final Builder DEFAULT;
 
 	static {
 		Builder builder = build();
@@ -512,7 +564,7 @@ public class JdbcEntitySupport {
 		builder.supportColumnType(TypeTokens.get().of(Duration.class), JdbcTypeSupport.DURATION);
 		builder.supportColumnType(TypeTokens.get().keyFor(Collection.class).parameterized(), JdbcTypeSupport.COLLECTION);
 
-		DEFAULT = builder.build();
+		DEFAULT = builder;
 	}
 
 	private static class ColumnSupportHolder<T> {
@@ -541,6 +593,12 @@ public class JdbcEntitySupport {
 
 	public static class Builder {
 		private final List<ColumnSupportHolder<?>> theColumnSupport = new ArrayList<>();
+		private String theAutoIncrement;
+
+		public Builder withAutoIncrement(String autoIncrement) {
+			theAutoIncrement = autoIncrement;
+			return this;
+		}
 
 		public <T> Builder supportColumnType(TypeToken<T> type, JdbcTypeSupport<T> columnSupport) {
 			theColumnSupport.add(new ColumnSupportHolder<>(type, columnSupport));
@@ -553,13 +611,15 @@ public class JdbcEntitySupport {
 		}
 
 		public JdbcEntitySupport build() {
-			return new JdbcEntitySupport(theColumnSupport);
+			return new JdbcEntitySupport(theAutoIncrement, theColumnSupport);
 		}
 	}
 
+	private final String theAutoIncrement;
 	private final List<ColumnSupportHolder<?>> theColumnSupport;
 
-	public JdbcEntitySupport(List<ColumnSupportHolder<?>> columnSupport) {
+	public JdbcEntitySupport(String autoIncrement, List<ColumnSupportHolder<?>> columnSupport) {
+		theAutoIncrement = autoIncrement;
 		List<ColumnSupportHolder<?>> copy = new ArrayList<>(columnSupport.size());
 		copy.addAll(columnSupport);
 		theColumnSupport = Collections.unmodifiableList(copy);
@@ -583,5 +643,9 @@ public class JdbcEntitySupport {
 		if (column == null)
 			throw new IllegalArgumentException("Field " + field + ", type " + field.getFieldType() + " not supported");
 		return column;
+	}
+
+	public String getAutoIncrement() {
+		return theAutoIncrement;
 	}
 }

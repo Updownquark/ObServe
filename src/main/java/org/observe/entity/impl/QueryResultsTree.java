@@ -179,7 +179,8 @@ public class QueryResultsTree {
 					newNode.addChild(child.get());
 					child.remove();
 				}
-			}
+			} else
+				children.add(newNode);
 			return newNode;
 		}
 

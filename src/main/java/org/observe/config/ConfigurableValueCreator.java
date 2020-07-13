@@ -13,24 +13,80 @@ import org.qommons.collect.ElementId;
  * @param <E2> The sub-type of the value to create
  */
 public interface ConfigurableValueCreator<E, E2 extends E> extends ValueCreator<E, E2> {
+	/**
+	 * @return The {@link ConfiguredValueField#getIndex() indexes} of fields that must be set in this creator before the value can be
+	 *         created
+	 */
 	Set<Integer> getRequiredFields();
 
+	/**
+	 * @param after The element currently in the collection that the value should be inserted after
+	 * @return This creator
+	 */
 	ConfigurableValueCreator<E, E2> after(ElementId after);
+	/**
+	 * @param before The element currently in the collection that the value should be inserted before
+	 * @return This creator
+	 */
 	ConfigurableValueCreator<E, E2> before(ElementId before);
+	/**
+	 * @param towardBeginning Whether the new value should be inserted into the collection toward the beginning or end
+	 * @return This creator
+	 */
 	ConfigurableValueCreator<E, E2> towardBeginning(boolean towardBeginning);
+	/**
+	 * @param after The element currently in the collection that the value should be inserted after
+	 * @param before The element currently in the collection that the value should be inserted before
+	 * @param towardBeginning Whether the new value should be inserted into the collection toward the beginning or end
+	 * @return This creator
+	 */
 	default ConfigurableValueCreator<E, E2> between(ElementId after, ElementId before, boolean towardBeginning) {
 		return after(after).before(before).towardBeginning(towardBeginning);
 	}
 
+	/**
+	 * @param field The field to check
+	 * @return null if the given field can be set in this creator, or a reason why it can't be
+	 */
 	String isEnabled(ConfiguredValueField<? super E2, ?> field);
+	/**
+	 * @param <F> The type of the field
+	 * @param field The field to check
+	 * @param value The value to check
+	 * @return null if the given field can be set to the given value in this creator, or a reason why it can't be
+	 */
 	<F> String isAcceptable(ConfiguredValueField<? super E2, F> field, F value);
 
+	/**
+	 * Sets a value for a field in this creator. The value created by this creator will have the given value for the field.
+	 *
+	 * @param fieldName The name of the field to set
+	 * @param value The value for the field
+	 * @return This creator
+	 * @throws IllegalArgumentException If the given value is unacceptable for the given field
+	 */
 	default ConfigurableValueCreator<E, E2> with(String fieldName, Object value) throws IllegalArgumentException {
 		return with((ConfiguredValueField<E2, Object>) getType().getFields().get(fieldName), value);
 	}
+	/**
+	 * Sets a value for a field in this creator. The value created by this creator will have the given value for the field.
+	 *
+	 * @param fieldGetter A function that calls the getter for the field to set the value for
+	 * @param value The value for the field
+	 * @return This creator
+	 * @throws IllegalArgumentException If the given value is unacceptable for the given field
+	 */
 	default <F> ConfigurableValueCreator<E, E2> with(Function<? super E2, F> fieldGetter, F value) throws IllegalArgumentException {
 		return with(getType().getField(fieldGetter), value);
 	}
+	/**
+	 * Sets a value for a field in this creator. The value created by this creator will have the given value for the field.
+	 *
+	 * @param field The field to set
+	 * @param value The value for the field
+	 * @return This creator
+	 * @throws IllegalArgumentException If the given value is unacceptable for the given field
+	 */
 	<F> ConfigurableValueCreator<E, E2> with(ConfiguredValueField<E2, F> field, F value) throws IllegalArgumentException;
 
 	/**

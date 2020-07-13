@@ -3,6 +3,8 @@ package org.observe.entity;
 import java.util.function.Consumer;
 
 import org.observe.config.ValueCreator;
+import org.observe.config.ValueOperationException;
+import org.qommons.collect.CollectionElement;
 
 /**
  * An operation to create a new instance of an entity type
@@ -22,6 +24,21 @@ public interface EntityCreator<E, E2 extends E> extends EntityOperation<E2>, Val
 	default ObservableEntityType<E2> getType() {
 		return getEntityType();
 	}
+
+	@Override
+	default CollectionElement<E> create() throws EntityOperationException {
+		try {
+			return ValueCreator.super.create();
+		} catch (ValueOperationException e) {
+			throw (EntityOperationException) e;
+		}
+	}
+
+	@Override
+	CollectionElement<E> create(Consumer<? super E2> preAddAction) throws EntityOperationException;
+
+	@Override
+	EntityCreationResult<E2> createAsync(Consumer<? super E2> preAddAction);
 
 	/**
 	 * Creates a new entity with this creator's configured field values

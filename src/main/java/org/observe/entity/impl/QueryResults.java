@@ -107,6 +107,7 @@ public class QueryResults<E> extends AbstractOperationResult<E> {
 		switch (getStatus()) {
 		case WAITING:
 		case EXECUTING:
+		case FULFILLED:
 			return true;
 		default:
 			return false;
@@ -334,7 +335,16 @@ public class QueryResults<E> extends AbstractOperationResult<E> {
 				}
 			}
 		} else {
-			throw new UnsupportedOperationException("TODO Not implemented yet"); // TODO
+			switch (change.changeType) {
+			case add:
+				theRawCountResult.set(theRawCountResult.get() + 1, change);
+				break;
+			case remove:
+				theRawCountResult.set(theRawCountResult.get() - 1, change);
+				break;
+			default:
+				break;
+			}
 		}
 	}
 

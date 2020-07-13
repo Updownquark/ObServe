@@ -154,7 +154,7 @@ public interface ObservableEntityProvider {
 		}
 	}
 
-	void install(ObservableEntityDataSet entitySet) throws IllegalStateException;
+	void install(ObservableEntityDataSet entitySet) throws EntityOperationException;
 
 	Object prepare(ConfigurableOperation<?> operation) throws EntityOperationException;
 

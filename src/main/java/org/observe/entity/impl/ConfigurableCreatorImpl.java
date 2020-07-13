@@ -58,7 +58,7 @@ implements ConfigurableCreator<E, E2>, EntityCreatorHelper<E, E2> {
 	}
 
 	@Override
-	public <F> ConfigurableCreator<E, E2> with(ObservableEntityFieldType<? super E2, F> field, F value) {
+	public <F> ConfigurableCreator<E, E2> withField(ObservableEntityFieldType<? super E2, F> field, F value) {
 		if (getEntityType().getFields().get(field.getIndex()) != field)
 			throw new IllegalArgumentException("Unrecognized field: " + field);
 		String acceptable = isAcceptable(field, value);
@@ -143,7 +143,7 @@ implements ConfigurableCreator<E, E2>, EntityCreatorHelper<E, E2> {
 
 	@Override
 	public String canCreate() {
-		if (theFieldVariables != null && theFieldVariables.keySize() > 0)
+		if (theFieldVariables != null && theFieldVariables.valueCount() > 0)
 			return CANT_CREATE_HAS_VARIABLES;
 		return EntityCreatorHelper.super.canCreate();
 	}

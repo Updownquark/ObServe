@@ -5,6 +5,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.function.Consumer;
 
+import org.observe.entity.EntityOperationException;
 import org.observe.entity.jdbc.JdbcEntityProvider.SqlAction;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
@@ -39,12 +40,15 @@ public class DefaultConnectionPool implements JdbcEntityProvider.ConnectionPool 
 	private class AsyncTask<T> {
 		private final SqlAction<Statement, T> theAction;
 		private final Consumer<T> onComplete;
-		private final Consumer<SQLException> onError;
+		private final Consumer<SQLException> onSqlError;
+		private final Consumer<EntityOperationException> onEoeError;
 
-		AsyncTask(SqlAction<Statement, T> action, Consumer<T> onComplete, Consumer<SQLException> onError) {
+		AsyncTask(SqlAction<Statement, T> action, Consumer<T> onComplete, Consumer<SQLException> onSqlError,
+			Consumer<EntityOperationException> onEoeError) {
 			theAction = action;
 			this.onComplete = onComplete;
-			this.onError = onError;
+			this.onSqlError = onSqlError;
+			this.onEoeError = onEoeError;
 		}
 
 		public void run(Statement stmt) {
@@ -53,7 +57,9 @@ public class DefaultConnectionPool implements JdbcEntityProvider.ConnectionPool 
 				result = theAction.apply(stmt);
 				onComplete.accept(result);
 			} catch (SQLException e) {
-				onError.accept(e);
+				onSqlError.accept(e);
+			} catch (EntityOperationException e) {
+				onEoeError.accept(e);
 			}
 		}
 	}
@@ -106,12 +112,12 @@ public class DefaultConnectionPool implements JdbcEntityProvider.ConnectionPool 
 	}
 
 	@Override
-	public <T> T connect(SqlAction<Statement, T> action, Consumer<T> asyncOnComplete, Consumer<SQLException> asyncError)
-		throws SQLException {
+	public <T> T connect(SqlAction<Statement, T> action, Consumer<T> asyncOnComplete, Consumer<SQLException> asyncSqlError,
+		Consumer<EntityOperationException> asyncEoeError) throws SQLException, EntityOperationException {
 		if (isClosed)
 			throw new IllegalStateException("This pool has been closed");
 		if (asyncOnComplete != null) {
-			theAsyncExecutor.execute(new AsyncTask<>(action, asyncOnComplete, asyncError));
+			theAsyncExecutor.execute(new AsyncTask<>(action, asyncOnComplete, asyncSqlError, asyncEoeError));
 			return null;
 		} else {
 			try (Statement stmt = theSynchronousConnections.get().connection.get().createStatement()) {

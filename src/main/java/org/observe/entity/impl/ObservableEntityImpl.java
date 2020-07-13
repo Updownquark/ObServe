@@ -254,9 +254,9 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 			try {
 				if (theType.getEntitySet().queueAction(sync -> {
 					if (sync)
-						return theType.select().entity(theId).update().with(field, value).execute(true, cause);
+						return theType.select().entity(theId).update().withField(field, value).execute(true, cause);
 					else {
-						EntityModificationResult<E> result = theType.select().entity(theId).update().with(field, value).execute(false,
+						EntityModificationResult<E> result = theType.select().entity(theId).update().withField(field, value).execute(false,
 							cause);
 						result.statusChanges().act(__ -> {
 							// If the operation failed and the field
@@ -299,7 +299,7 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 			throw new IllegalArgumentException(msg);
 		ObservableEntityFieldType<E, Object> field = (ObservableEntityFieldType<E, Object>) theType.getFields().get(fieldIndex);
 		try {
-			return theType.select().entity(theId).update().with(field, value).execute(true, cause);
+			return theType.select().entity(theId).update().withField(field, value).execute(true, cause);
 		} catch (IllegalStateException | EntityOperationException e) {
 			throw new IllegalArgumentException("Update failed", e);
 		}

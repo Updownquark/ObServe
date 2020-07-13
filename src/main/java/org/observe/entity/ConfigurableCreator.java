@@ -31,7 +31,7 @@ extends EntityFieldSetOperation<E2>, EntityCreator<E, E2>, ConfigurableValueCrea
 	}
 	@Override
 	default <F> ConfigurableCreator<E, E2> with(ConfiguredValueField<E2, F> field, F value) throws IllegalArgumentException {
-		return with((ObservableEntityFieldType<? super E2, F>) field, value);
+		return withField((ObservableEntityFieldType<? super E2, F>) field, value);
 	}
 
 	@Override
@@ -48,7 +48,7 @@ extends EntityFieldSetOperation<E2>, EntityCreator<E, E2>, ConfigurableValueCrea
 	ConfigurableCreator<E, E2> towardBeginning(boolean towardBeginning);
 
 	@Override
-	<F> ConfigurableCreator<E, E2> with(ObservableEntityFieldType<? super E2, F> field, F value);
+	<F> ConfigurableCreator<E, E2> withField(ObservableEntityFieldType<? super E2, F> field, F value);
 	@Override
 	ConfigurableCreator<E, E2> withVariable(ObservableEntityFieldType<? super E2, ?> field, String variableName);
 

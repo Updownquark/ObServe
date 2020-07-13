@@ -9,7 +9,7 @@ import java.util.function.Function;
  */
 public interface ConfigurableUpdate<E> extends EntityFieldSetOperation<E>, EntityUpdate<E> {
 	@Override
-	<F> ConfigurableUpdate<E> with(ObservableEntityFieldType<? super E, F> field, F value)
+	<F> ConfigurableUpdate<E> withField(ObservableEntityFieldType<? super E, F> field, F value)
 		throws IllegalStateException, IllegalArgumentException;
 
 	@Override

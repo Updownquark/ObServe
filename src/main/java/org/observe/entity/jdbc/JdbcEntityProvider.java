@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.LongConsumer;
 import java.util.stream.Collectors;
@@ -54,11 +55,12 @@ import org.qommons.tree.BetterTreeSet;
 /** An observable entity provider implementation backed by a JDBC-accessed relational database */
 public class JdbcEntityProvider implements ObservableEntityProvider {
 	public interface SqlAction<T, V> {
-		V apply(T t) throws SQLException;
+		V apply(T t) throws SQLException, EntityOperationException;
 	}
 
 	public interface ConnectionPool {
-		<T> T connect(SqlAction<Statement, T> action, Consumer<T> asyncOnComplete, Consumer<SQLException> asyncError) throws SQLException;
+		<T> T connect(SqlAction<Statement, T> action, Consumer<T> asyncOnComplete, Consumer<SQLException> asyncSqlError,
+			Consumer<EntityOperationException> asyncEoeError) throws SQLException, EntityOperationException;
 	}
 
 	protected static class TableNaming<E> {
@@ -155,21 +157,26 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 	private final Map<String, TableNaming<?>> theTableNaming;
 	private final String theSchemaName;
 	private final ListenerList<EntityChange<?>> theChanges;
+	private final boolean installSchema;
 
 	public JdbcEntityProvider(StampedLockingStrategy locker, JdbcEntitySupport typeSupport, ConnectionPool connectionPool,
-		String schemaName) {
+		String schemaName, boolean installSchema) {
 		theLocker = locker;
 		theConnectionPool = connectionPool;
 		theTypeSupport = typeSupport;
 		theSchemaName = schemaName;
 		theTableNaming = new HashMap<>();
 		theChanges = ListenerList.build().build();
+		this.installSchema = installSchema;
 	}
 
 	@Override
-	public void install(ObservableEntityDataSet entitySet) throws IllegalStateException {
+	public void install(ObservableEntityDataSet entitySet) throws EntityOperationException {
 		for (ObservableEntityType<?> type : entitySet.getEntityTypes()) {
-			theTableNaming.put(type.getName(), generateNaming(type));
+			TableNaming<?> naming = generateNaming(type);
+			theTableNaming.put(type.getName(), naming);
+			if (installSchema)
+				writeTableIfAbsent(type, naming);
 		}
 	}
 
@@ -201,21 +208,21 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 				sql.append(naming.getColumn(f).getName());
 			}
 		}
-		if (!firstValue) {
-			sql.append(") VALUES (");
-			firstValue = true;
-			for (int f = 0; f < values.keySize(); f++) {
-				Object value = values.get(f);
-				if (value != EntityUpdate.NOT_SET) {
-					if (firstValue)
-						firstValue = false;
-					else
-						sql.append(", ");
-					serialize(creator.getEntityType().getFields().get(f), value, naming, sql);
-				}
-			}
+		if (!firstValue)
 			sql.append(')');
+		sql.append(" VALUES (");
+		firstValue = true;
+		for (int f = 0; f < values.keySize(); f++) {
+			Object value = values.get(f);
+			if (value != EntityUpdate.NOT_SET) {
+				if (firstValue)
+					firstValue = false;
+				else
+					sql.append(", ");
+				serialize(creator.getEntityType().getFields().get(f), value, naming, sql);
+			}
 		}
+		sql.append(')');
 		try {
 			return theConnectionPool.connect(stmt -> {
 				String[] colNames = new String[creator.getEntityType().getFields().keySize()];
@@ -224,14 +231,18 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 				stmt.execute(sql.toString(), colNames);
 				SimpleEntity<E> entity;
 				try (ResultSet rs = stmt.getGeneratedKeys()) {
+					if (!rs.next())
+						throw new EntityOperationException("No generated key set?");
 					entity = (SimpleEntity<E>) buildEntity(creator.getEntityType(), rs, naming, Collections.emptyMap());
+					if (rs.next())
+						System.err.println("Multiple generated key sets?");
 				}
 				changed(new EntityChange.EntityExistenceChange<>(creator.getEntityType(), Instant.now(), true,
 					BetterList.of(entity.getIdentity()), null));
 				return entity;
 			}, identityFieldsOnAsyncComplete, sqle -> {
 				onError.accept(new EntityOperationException("Could not create " + creator.getEntityType(), sqle));
-			});
+			}, onError);
 		} catch (SQLException e) {
 			throw new EntityOperationException("Could not create new " + creator.getEntityType(), e);
 		}
@@ -240,7 +251,38 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 	@Override
 	public long count(EntityQuery<?> query, Object prepared, LongConsumer onAsyncComplete, Consumer<EntityOperationException> onError)
 		throws EntityOperationException {
-		throw new UnsupportedOperationException("TODO Not implemented yet");
+		Long counted = _count(query, prepared, onAsyncComplete, onError);
+		return counted == null ? -1 : counted.longValue();
+	}
+
+	private <E> Long _count(EntityQuery<E> query, Object prepared, LongConsumer onAsyncComplete, Consumer<EntityOperationException> onError)
+		throws EntityOperationException {
+		TableNaming<E> naming = (TableNaming<E>) theTableNaming.get(query.getEntityType().getName());
+		StringBuilder sql = new StringBuilder();
+		sql.append("SELECT COUNT(*) FROM ");
+		if (theSchemaName != null)
+			sql.append(theSchemaName).append('.');
+		sql.append(naming.getTableName());
+		Map<String, Join<?, ?, ?>> joins = new HashMap<>();
+		if (query.getSelection() instanceof EntityCondition.All) {//
+		} else {
+			sql.append(" WHERE ");
+			appendCondition(sql, query.getSelection(), naming, QuickMap.empty(), null, joins);
+			// TODO Joins
+		}
+		try {
+			return theConnectionPool.<Long> connect(stmt -> {
+				try (ResultSet rs = stmt.executeQuery(sql.toString())) {
+					if (!rs.next())
+						return 0L;
+					return rs.getLong(1);
+				}
+			}, onAsyncComplete == null ? null : count -> onAsyncComplete.accept(count), err -> {
+				onError.accept(new EntityOperationException("Query failed: " + query, err));
+			}, onError);
+		} catch (SQLException e) {
+			throw new EntityOperationException("Query failed: " + query, e);
+		}
 	}
 
 	@Override
@@ -270,7 +312,7 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 				return entities;
 			}, onAsyncComplete, err -> {
 				onError.accept(new EntityOperationException("Query failed: " + query, err));
-			});
+			}, onError);
 		} catch (SQLException e) {
 			throw new EntityOperationException("Query failed: " + query, e);
 		}
@@ -351,7 +393,7 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 				return Long.valueOf(affected.size());
 			}, v -> onAsyncComplete.accept(v), err -> {
 				onError.accept(new EntityOperationException("Update failed: " + update, err));
-			});
+			}, onError);
 		} catch (SQLException e) {
 			throw new EntityOperationException("Update failed: " + update, e);
 		}
@@ -398,20 +440,15 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 				return Long.valueOf(affected.size());
 			}, v -> onAsyncComplete.accept(v), err -> {
 				onError.accept(new EntityOperationException("Delete failed: " + delete, err));
-			});
+			}, onError);
 		} catch (SQLException e) {
 			throw new EntityOperationException("Delete failed: " + delete, e);
 		}
 	}
 
-	// @Override
-	// public Observable<List<EntityChange<?>>> changes() {
-	// return theChanges.readOnly();
-	// }
-
 	@Override
 	public List<EntityChange<?>> changes() {
-		return theChanges.dumpInto(new ArrayList<>(theChanges.size() + 2));
+		return theChanges.dumpAndClear();
 	}
 
 	@Override
@@ -425,7 +462,7 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 				return fulfillment;
 			}, onComplete, err -> {
 				onError.accept(new EntityOperationException("Load requests failed: " + loadRequests, err));
-			});
+			}, onError);
 		} catch (SQLException e) {
 			throw new EntityOperationException("Load requests failed: " + loadRequests, e);
 		}
@@ -536,33 +573,40 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 
 	private <E> SimpleEntity<? extends E> buildEntity(ObservableEntityType<E> type, ResultSet results, TableNaming<E> naming,
 		Map<String, Join<?, ?, ?>> joins) throws SQLException {
-		QuickMap<String, Object> fields = type.getFields().keySet().createMap();
 		EntityIdentity.Builder<E> idBuilder = type.buildId();
 		ResultSetMetaData rsmd = results.getMetaData();
 		for (int i = 0; i < rsmd.getColumnCount(); i++) {
-			EntityValueAccess<?, ?> field = getField(rsmd, i, naming);
-			deserializeField(field, fields, naming, results, i);
+			EntityValueAccess<E, ?> field = getField(rsmd, i, naming);
 			if (field instanceof ObservableEntityFieldType) {
-				ObservableEntityFieldType<?, ?> f = (ObservableEntityFieldType<?, ?>) field;
+				ObservableEntityFieldType<E, ?> f = (ObservableEntityFieldType<E, ?>) field;
 				if (f.getIdIndex() >= 0)
-					idBuilder.with(f.getIdIndex(), fields.get(f.getIndex()));
+					idBuilder.with(f.getIdIndex(), deserializeField((ObservableEntityFieldType<E, ?>) field, naming, results, i));
 			}
 		}
-		return new SimpleEntity<>(idBuilder.build(), fields);
+		SimpleEntity<E> entity = new SimpleEntity<>(idBuilder.build());
+		for (int i = 0; i < rsmd.getColumnCount(); i++) {
+			EntityValueAccess<E, ?> field = getField(rsmd, i, naming);
+			deserializeField(field, entity::set, naming, results, i);
+		}
+		return entity;
 	}
 
-	private EntityValueAccess<?, ?> getField(ResultSetMetaData rsmd, int column, TableNaming<?> naming) throws SQLException {
+	private <E> EntityValueAccess<E, ?> getField(ResultSetMetaData rsmd, int column, TableNaming<E> naming) throws SQLException {
 		if (rsmd.getTableName(column + 1).equals(naming.getTableName())) {
 			return naming.getType().getFields().get(naming.getField(rsmd.getColumnName(column + 1)));
 		} else
 			throw new UnsupportedOperationException("TODO Chain selection is not supported yet"); // TODO
 	}
 
-	private <E> void deserializeField(EntityValueAccess<?, ?> field, QuickMap<String, Object> entityData, TableNaming<E> naming,
+	private <E> Object deserializeField(ObservableEntityFieldType<E, ?> field, TableNaming<E> naming, ResultSet rs, int column)
+		throws SQLException {
+		return deserialize((ObservableEntityFieldType<E, Object>) field, naming, rs, column);
+	}
+
+	private <E> Object deserializeField(EntityValueAccess<E, ?> field, BiConsumer<Integer, Object> setField, TableNaming<E> naming,
 		ResultSet rs, int column) throws SQLException {
 		if (field instanceof ObservableEntityFieldType) {
-			entityData.put(((ObservableEntityFieldType<?, ?>) field).getIndex(),
-				deserialize((ObservableEntityFieldType<E, Object>) field, naming, rs, column));
+			return deserialize((ObservableEntityFieldType<E, Object>) field, naming, rs, column);
 		} else {
 			throw new UnsupportedOperationException("TODO Chain selection is not supported yet"); // TODO
 		}
@@ -586,8 +630,7 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 			if (field instanceof ObservableEntityFieldType)
 				return updateValues.get(((ObservableEntityFieldType<?, ?>) field).getIndex()) == EntityUpdate.NOT_SET;
 			else
-				return updateValues
-					.get(((EntityChainAccess<?, ?>) field).getFieldSequence().getFirst().getIndex()) == EntityUpdate.NOT_SET;
+				return updateValues.get(((EntityChainAccess<?, ?>) field).getFieldSequence().getFirst().getIndex()) == EntityUpdate.NOT_SET;
 		} else if (condition instanceof CompositeCondition) {
 			for (EntityCondition<?> component : ((CompositeCondition<?>) condition).getConditions()) {
 				if (!isConditionValidPostUpdate(component, updateValues))
@@ -661,6 +704,48 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 			throw new IllegalStateException("Unrecognized condition type: " + selection.getClass().getName());
 	}
 
+	private void writeTableIfAbsent(ObservableEntityType<?> type, TableNaming<?> naming) throws EntityOperationException {
+		try {
+			theConnectionPool.<Void> connect(stmt -> {
+				boolean schemaPresent;
+				if (theSchemaName == null)
+					schemaPresent = true;
+				else {
+					try (ResultSet rs = stmt.executeQuery(
+						"SELECT * FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME='" + theSchemaName.toUpperCase() + "'")) {
+						schemaPresent = rs.next();
+					}
+				}
+				if (!schemaPresent) {
+					stmt.execute("CREATE SCHEMA " + theSchemaName);
+				}
+				try (ResultSet rs = stmt.executeQuery("SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA"//
+					+ (theSchemaName == null ? " IS NULL" : ("='" + theSchemaName.toUpperCase() + "'")) //
+					+ " AND TABLE_NAME='" + naming.getTableName().toUpperCase() + "'")) {
+					if (rs.next())
+						return null;
+				}
+				StringBuilder create = new StringBuilder("CREATE TABLE ");
+				if (theSchemaName != null)
+					create.append(theSchemaName).append('.');
+				create.append(naming.getTableName()).append('(');
+				for (int c = 0; c < type.getFields().keySize(); c++) {
+					if (c > 0)
+						create.append(',');
+					Column<?> col = naming.getColumn(c);
+					create.append("\n\t").append(col.getName()).append(' ').append(col.getType().getTypeName());
+					if (type.getFields().get(c).getIdIndex() >= 0 && theTypeSupport.getAutoIncrement() != null)
+						create.append(' ').append(theTypeSupport.getAutoIncrement());
+				}
+				create.append("\n);");
+				stmt.execute(create.toString());
+				return null;
+			}, null, null, null);
+		} catch (SQLException e) {
+			throw new EntityOperationException("Could not create table for entity " + type, e);
+		}
+	}
+
 	private static class ReferenceColumnSupport implements JdbcColumn<Object> {
 		private final ObservableEntityType<?> theEntityType;
 		private final JdbcColumn<?> theIdColumn;
@@ -684,6 +769,11 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 		public Object deserialize(ResultSet rs, int column) throws SQLException {
 			Object idValue = theIdColumn.deserialize(rs, column);
 			return theEntityType.buildId().with(0, idValue).build();
+		}
+
+		@Override
+		public String getTypeName() {
+			return theIdColumn.getTypeName();
 		}
 	}
 }

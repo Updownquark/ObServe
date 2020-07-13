@@ -102,7 +102,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		theChanges = new SimpleObservable<>();
 	}
 
-	void startup(Transactable lock, Observable<?> refresh, Observable<?> until) {
+	void startup(Transactable lock, Observable<?> refresh, Observable<?> until) throws EntityOperationException {
 		theLock = lock;
 		isActive = true;
 		theImplementation.install(this);
@@ -194,6 +194,8 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 
 	private void processChanges() {
 		List<EntityChange<?>> changes = theImplementation.changes();
+		if (changes.isEmpty())
+			return;
 		List<EntityLoadRequest<?>> loadRequests = new LinkedList<>();
 		List<EntityChange<?>> noLoadNeeded = new LinkedList<>();
 		Map<EntityIdentity<?>, ObservableEntity<?>> entities = new HashMap<>();
@@ -597,8 +599,9 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		 *
 		 * @param until An observable that, when fired, will stop the entity set from being updated with changes from the data source
 		 * @return The new entity set
+		 * @throws EntityOperationException If an error occurs setting up the entity persistence
 		 */
-		public ObservableEntityDataSet build(Observable<?> until) {
+		public ObservableEntityDataSet build(Observable<?> until) throws EntityOperationException {
 			if (!isBuilding)
 				throw new IllegalStateException("This builder has already built its entity set");
 			isBuilding = false;

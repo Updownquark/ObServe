@@ -23,7 +23,7 @@ public interface EntityFieldSetOperation<E> extends ConfigurableOperation<E> {
 	 * @return A copy of this operation that will set the given field
 	 * @throws IllegalArgumentException If the given value is invalid for the given field
 	 */
-	<F> EntityFieldSetOperation<E> with(ObservableEntityFieldType<? super E, F> field, F value);
+	<F> EntityFieldSetOperation<E> withField(ObservableEntityFieldType<? super E, F> field, F value);
 
 	/**
 	 * @param field The field to set
@@ -39,7 +39,7 @@ public interface EntityFieldSetOperation<E> extends ConfigurableOperation<E> {
 	 * @return This operation
 	 */
 	default EntityFieldSetOperation<E> with(String fieldName, Object value) {
-		return with((ObservableEntityFieldType<E, Object>) getEntityType().getFields().get(fieldName), value);
+		return withField((ObservableEntityFieldType<E, Object>) getEntityType().getFields().get(fieldName), value);
 	}
 
 	/**
@@ -50,7 +50,7 @@ public interface EntityFieldSetOperation<E> extends ConfigurableOperation<E> {
 	 * @throws IllegalArgumentException If the given value is invalid for the given field
 	 */
 	default <F> EntityFieldSetOperation<E> with(Function<? super E, F> field, F value) {
-		return with(getEntityType().getField(field), value);
+		return withField(getEntityType().getField(field), value);
 	}
 
 	/**
