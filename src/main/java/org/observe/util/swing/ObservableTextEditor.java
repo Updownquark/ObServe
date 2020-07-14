@@ -23,7 +23,10 @@ import javax.swing.text.Document;
 import javax.swing.text.JTextComponent;
 
 import org.observe.Observable;
+import org.observe.ObservableValue;
 import org.observe.SettableValue;
+import org.observe.SimpleObservable;
+import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
 import org.qommons.io.Format;
 import org.qommons.io.SpinnerFormat;
@@ -58,6 +61,9 @@ public class ObservableTextEditor<E> {
 	private boolean commitAdjustmentImmediately;
 
 	private BiConsumer<? super E, ? super KeyEvent> theEnterAction;
+
+	private long theStateStamp;
+	private SimpleObservable<Void> theStatusChange;
 
 	public ObservableTextEditor(JTextComponent component, SettableValue<E> value, Format<E> format, Observable<?> until, //
 		Consumer<Boolean> enabled, Consumer<String> tooltip) {
@@ -291,6 +297,16 @@ public class ObservableTextEditor<E> {
 		return this;
 	}
 
+	public ObservableValue<String> getErrorState() {
+		if (theStatusChange == null) {
+			synchronized (this) {
+				if (theStatusChange == null)
+					theStatusChange = SimpleObservable.build().safe(false).build();
+			}
+		}
+		return ObservableValue.of(TypeTokens.get().STRING, () -> theError, () -> theStateStamp, theStatusChange);
+	}
+
 	public void setEnabled(boolean enabled) {
 		isExternallyEnabled = enabled;
 		checkEnabled();
@@ -482,6 +498,10 @@ public class ObservableTextEditor<E> {
 				theTooltipSetter.accept(disabled);
 			else
 				theTooltipSetter.accept(theToolTip);
+		}
+		if (theStatusChange != null) {
+			theStateStamp++;
+			theStatusChange.onNext(null);
 		}
 	}
 

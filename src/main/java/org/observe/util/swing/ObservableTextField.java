@@ -19,6 +19,7 @@ import javax.swing.UIManager;
 import javax.swing.border.Border;
 
 import org.observe.Observable;
+import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.qommons.io.Format;
 import org.qommons.io.SpinnerFormat;
@@ -243,6 +244,11 @@ public class ObservableTextField<E> extends JPasswordField {
 	public ObservableTextField<E> setEmptyText(String emptyText) {
 		theEmptyText = emptyText;
 		return this;
+	}
+
+	/** @return An observable value of the error state of this text field */
+	public ObservableValue<String> getErrorState() {
+		return theEditor.getErrorState();
 	}
 
 	@Override
