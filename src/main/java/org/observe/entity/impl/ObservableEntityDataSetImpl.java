@@ -171,6 +171,8 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 				result=action.apply(false);
 			} catch(EntityOperationException e){
 				System.err.println("Should not happen for async call");
+				e.printStackTrace();
+				completed.getAndIncrement();
 				continue;
 			}
 			result.statusChanges().act(res -> {
@@ -275,7 +277,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 	}
 
 	<E, F> String isAcceptable(ObservableEntityImpl<E> entity, int fieldIndex, F value) {
-		ObservableEntityFieldType<E, F> field = (ObservableEntityFieldType<E, F>) entity.getField(fieldIndex);
+		ObservableEntityFieldType<E, F> field = (ObservableEntityFieldType<E, F>) entity.getType().getFields().get(fieldIndex);
 		if (field.getIdIndex() >= 0)
 			return ObservableEntityField.ID_FIELD_UNSETTABLE;
 		else if (value == null && field.getFieldType().isPrimitive())

@@ -179,8 +179,8 @@ public class QueryResultsTree {
 					newNode.addChild(child.get());
 					child.remove();
 				}
-			} else
-				children.add(newNode);
+			}
+			children.add(newNode);
 			return newNode;
 		}
 
@@ -228,6 +228,13 @@ public class QueryResultsTree {
 			for (QueryResultNode child : children)
 				parent.addChild(child);
 			parent.children.mutableElement(parentChildEl).remove();
+		}
+
+		@Override
+		public String toString() {
+			if (theSelection == null)
+				return "(placeholder)";
+			return theSelection.getEntityType() + ": " + theSelection + (isCount ? " count" : "");
 		}
 	}
 

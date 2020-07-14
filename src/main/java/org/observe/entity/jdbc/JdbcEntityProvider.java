@@ -357,9 +357,13 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 		}
 
 		try {
-			return theConnectionPool.connect(stmt -> {
+			Long value = theConnectionPool.connect(stmt -> {
 				BetterSortedSet<EntityIdentity<? extends E>> affected = new BetterTreeSet<>(false, EntityIdentity::compareTo);
 				QuickMap<String, List<Object>> oldValues = values.keySet().createMap();
+				for (int f = 0; f < values.keySize(); f++) {
+					if (values.get(f) != EntityUpdate.NOT_SET)
+						oldValues.put(f, new ArrayList<>());
+				}
 				long missed = 0;
 				try (ResultSet rs = stmt.executeQuery(querySql.toString())) {
 					while (rs.next()) {
@@ -369,7 +373,7 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 							int index = affected.getElementsBefore(affected.addElement(entity.getIdentity(), false).getElementId());
 							for (int f = 0; f < values.keySize(); f++) {
 								Object targetValue = values.get(f);
-								if (targetValue == EntityUpdate.NOT_SET)
+								if (targetValue != EntityUpdate.NOT_SET)
 									oldValues.get(f).add(index, entity.getFields().get(f));
 							}
 						} else
@@ -394,6 +398,9 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 			}, v -> onAsyncComplete.accept(v), err -> {
 				onError.accept(new EntityOperationException("Update failed: " + update, err));
 			}, onError);
+			if (value == null && onAsyncComplete == null)
+				throw new EntityOperationException("Update failed");
+			return value == null ? -1 : value;
 		} catch (SQLException e) {
 			throw new EntityOperationException("Update failed: " + update, e);
 		}
@@ -586,6 +593,8 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 		SimpleEntity<E> entity = new SimpleEntity<>(idBuilder.build());
 		for (int i = 0; i < rsmd.getColumnCount(); i++) {
 			EntityValueAccess<E, ?> field = getField(rsmd, i, naming);
+			if (field instanceof ObservableEntityFieldType && ((ObservableEntityFieldType<E, ?>) field).getIdIndex() >= 0)
+				continue;
 			deserializeField(field, entity::set, naming, results, i);
 		}
 		return entity;
@@ -606,7 +615,9 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 	private <E> Object deserializeField(EntityValueAccess<E, ?> field, BiConsumer<Integer, Object> setField, TableNaming<E> naming,
 		ResultSet rs, int column) throws SQLException {
 		if (field instanceof ObservableEntityFieldType) {
-			return deserialize((ObservableEntityFieldType<E, Object>) field, naming, rs, column);
+			Object fieldValue = deserialize((ObservableEntityFieldType<E, Object>) field, naming, rs, column);
+			setField.accept(((ObservableEntityFieldType<E, ?>) field).getIndex(), fieldValue);
+			return fieldValue;
 		} else {
 			throw new UnsupportedOperationException("TODO Chain selection is not supported yet"); // TODO
 		}

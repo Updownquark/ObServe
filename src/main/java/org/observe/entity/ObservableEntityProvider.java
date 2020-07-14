@@ -46,7 +46,7 @@ public interface ObservableEntityProvider {
 		public void set(int fieldIndex, Object value) throws IllegalArgumentException {
 			ObservableEntityFieldType<E, ?> field = theIdentity.getEntityType().getFields().get(fieldIndex);
 			String msg = checkType(field.getFieldType(), value, field);
-			if (msg == null)
+			if (msg != null)
 				throw new IllegalArgumentException("Illegal value for field " + field + " (type " + field.getFieldType() + "): " + msg);
 			else
 				theFields.put(fieldIndex, value);

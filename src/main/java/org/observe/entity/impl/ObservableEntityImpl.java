@@ -144,7 +144,7 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 
 				@Override
 				public Subscription watchField(E entity, int fieldIndex, Consumer<? super EntityFieldChangeEvent<E, ?>> listener) {
-					return theFieldObservers.add(new FieldObserver<>(fieldIndex, new Observer<ObservableEntityFieldEvent<E, ?>>() {
+					return allFieldChanges().subscribe(new FieldObserver<>(fieldIndex, new Observer<ObservableEntityFieldEvent<E, ?>>() {
 						@Override
 						public <V extends ObservableEntityFieldEvent<E, ?>> void onNext(V value) {
 							listener.accept(value);
@@ -152,7 +152,7 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 
 						@Override
 						public <V extends ObservableEntityFieldEvent<E, ?>> void onCompleted(V value) {}
-					}), true)::run;
+					}));
 				}
 
 				@Override
@@ -356,11 +356,13 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 			theStamp++;
 			if (oldValue == EntityUpdate.NOT_SET)
 				oldValue = (F) myOldValue;
-			ObservableEntityFieldEvent<E, F> event = new ObservableEntityFieldEvent<>(this, (ObservableEntityFieldType<E, F>) field,
-				oldValue, newValue, null);
-			try (Transaction evtT = Causable.use(event)) {
-				theFieldObservers.forEach(//
-					listener -> listener.onNext(event));
+			if (theFieldObservers != null) {
+				ObservableEntityFieldEvent<E, F> event = new ObservableEntityFieldEvent<>(this, (ObservableEntityFieldType<E, F>) field,
+					oldValue, newValue, null);
+				try (Transaction evtT = Causable.use(event)) {
+					theFieldObservers.forEach(//
+						listener -> listener.onNext(event));
+				}
 			}
 		}
 	}
@@ -370,11 +372,13 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 		if (Collection.class.isAssignableFrom(raw)) {
 			newValue = (F) setCollection((TypeToken<Collection<Object>>) type, oldValue, (BetterCollection<?>) newValue);
 		} else if (ObservableValueSet.class.isAssignableFrom(raw))
-			newValue = (F) setValueSet((TypeToken<ObservableValueSet<Object>>) type, oldValue, (BetterCollection<?>) newValue);
+			newValue = (F) setValueSet((TypeToken<ObservableValueSet<Object>>) type, oldValue, (ObservableValueSet<?>) newValue);
 		else if (Map.class.isAssignableFrom(raw))
 			newValue = (F) setMap((TypeToken<Map<Object, Object>>) type, oldValue, (Map<?, ?>) newValue);
-		// TODO multi maps
+		else if (MultiMap.class.isAssignableFrom(raw))
+			newValue = (F) setMultiMap((TypeToken<MultiMap<Object, Object>>) type, oldValue, (MultiMap<?, ?>) newValue);
 		// TODO entities
+		return (F) newValue;
 	}
 
 	private <V, C extends Collection<V>> C setCollection(TypeToken<C> collectionType, Object oldValue, Collection<?> newValue) {
@@ -409,6 +413,18 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 		// } else {}
 	}
 
+	private <K, V, M extends MultiMap<K, V>> M setMultiMap(TypeToken<M> mapType, Object oldValue, MultiMap<?, ?> newValue) {
+		M map;
+		if (oldValue == EntityUpdate.NOT_SET)
+			map = initMultiMap(mapType);
+		else
+			map = (M) oldValue;
+		// if (map instanceof List) {
+		// List<V> newList;
+
+		// } else {}
+	}
+
 	private <V, C extends ObservableValueSet<V>> C setValueSet(TypeToken<C> collectionType, Object oldValue,
 		ObservableValueSet<?> newValue) {
 		C collection;
@@ -423,6 +439,8 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 	}
 
 	void removed(Object cause) {
+		if (theFieldObservers == null)
+			return;
 		isPresent = false;
 		for (int f = 0; f < theFields.keySize(); f++) {
 			Object oldValue = theFields.get(f);

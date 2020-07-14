@@ -5,6 +5,7 @@ import org.observe.entity.EntityCondition;
 import org.observe.entity.EntityModificationResult;
 import org.observe.entity.EntityOperationException;
 import org.observe.entity.EntityOperationVariable;
+import org.observe.entity.EntityUpdate;
 import org.observe.entity.ObservableEntityFieldType;
 import org.observe.entity.PreparedUpdate;
 import org.qommons.collect.QuickSet.QuickMap;
@@ -16,7 +17,7 @@ class ConfigurableUpdateImpl<E> extends AbstractConfigurableOperation<E> impleme
 
 	ConfigurableUpdateImpl(EntityCondition<E> selection) {
 		this(selection, QuickMap.of(selection.getVariables(), String::compareTo),
-			selection.getEntityType().getFields().keySet().createMap(), QuickMap.empty());
+			selection.getEntityType().getFields().keySet().createMap().fill(EntityUpdate.NOT_SET), QuickMap.empty());
 	}
 
 	ConfigurableUpdateImpl(EntityCondition<E> selection, QuickMap<String, EntityOperationVariable<E>> variables,

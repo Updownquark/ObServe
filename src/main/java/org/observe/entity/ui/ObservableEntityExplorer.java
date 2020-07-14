@@ -1,6 +1,8 @@
 package org.observe.entity.ui;
 
 import java.awt.Dialog.ModalityType;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.MouseEvent;
 import java.text.ParseException;
 import java.time.Duration;
@@ -31,6 +33,7 @@ import org.observe.entity.EntityCollectionResult;
 import org.observe.entity.EntityCondition;
 import org.observe.entity.EntityCountResult;
 import org.observe.entity.EntityOperationException;
+import org.observe.entity.EntityUpdate;
 import org.observe.entity.ObservableEntity;
 import org.observe.entity.ObservableEntityDataSet;
 import org.observe.entity.ObservableEntityFieldType;
@@ -426,21 +429,21 @@ public class ObservableEntityExplorer extends JPanel {
 	}
 
 	<E> void showCreatePanel(ObservableEntityType<E> type) {
-		ConfigurableCreator<E, E> creator = type.create();
+		ConfigurableCreator<E, E>[] creator = new ConfigurableCreator[] { type.create() };
 		EntityRowUpdater<Object, E> updater = new EntityRowUpdater<Object, E>() {
 			@Override
 			public String isEnabled(Object entity, ObservableEntityFieldType<E, ?> field) {
-				return creator.isEnabled(field);
+				return creator[0].isEnabled(field);
 			}
 
 			@Override
 			public <F> String isAcceptable(Object entity, ObservableEntityFieldType<E, F> field, F value) {
-				return creator.isAcceptable(field, value);
+				return creator[0].isAcceptable(field, value);
 			}
 
 			@Override
 			public <F> void set(Object entity, ObservableEntityFieldType<E, F> field, F value) {
-				creator.with(field, value);
+				creator[0] = creator[0].with(field, value);
 			}
 		};
 		ObservableCollection<Object> row = ObservableCollection.build(Object.class).safe(false).build().with((Object) null);
@@ -448,18 +451,18 @@ public class ObservableEntityExplorer extends JPanel {
 			.<Object> addTable(row, fieldTable -> {
 				for (ObservableEntityFieldType<E, ?> field : type.getFields().allValues()) {
 					fieldTable.withColumn(field.getName(), (TypeToken<Object>) field.getFieldType(),
-						__ -> creator.getFieldValues().get(field.getIndex()), //
-						fieldCol -> configureCreateColumn((ObservableEntityFieldType<E, Object>) field, fieldCol, updater));
+						__ -> creator[0].getFieldValues().get(field.getIndex()), //
+						fieldCol -> configureFieldColumn((ObservableEntityFieldType<E, Object>) field, fieldCol, updater));
 				}
 			})//
 			.addButton("Create", __ -> {
 				try {
-					creator.create();
+					creator[0].create();
 				} catch (EntityOperationException e) {
 					e.printStackTrace(); // TODO
 				}
 			}, button -> button
-				.disableWith(ObservableValue.of(TypeTokens.get().STRING, creator::canCreate, row::getStamp, row.simpleChanges())))
+				.disableWith(ObservableValue.of(TypeTokens.get().STRING, () -> creator[0].canCreate(), row::getStamp, row.simpleChanges())))
 			.getContainer();
 		JDialog createDialog = new JDialog(SwingUtilities.getWindowAncestor(this), "Create " + type.getName(), ModalityType.MODELESS);
 		createDialog.getContentPane().add(createPanel);
@@ -514,9 +517,12 @@ public class ObservableEntityExplorer extends JPanel {
 		};
 		JPanel queryPanel = PanelPopulation.populateVPanel((JPanel) null, null)//
 			.addTable(results.get().getEntities(), entityTable -> {
+				entityTable.withRowNumberColumn("Row #", null);
 				for (ObservableEntityFieldType<E, ?> field : condition.getEntityType().getFields().allValues()) {
-					entityTable.withColumn(field.getName(), (TypeToken<Object>) field.getFieldType(), entity -> entity.get(field), //
-						fieldCol -> configureCreateColumn((ObservableEntityFieldType<E, Object>) field, fieldCol, updater));
+					entityTable.withColumn(field.getName(), (TypeToken<Object>) field.getFieldType(), entity -> {
+						return entity.get(field);
+					}, //
+						fieldCol -> configureFieldColumn((ObservableEntityFieldType<E, Object>) field, fieldCol, updater));
 				}
 			})//
 			.getContainer();
@@ -525,6 +531,12 @@ public class ObservableEntityExplorer extends JPanel {
 		createDialog.getContentPane().add(queryPanel);
 		createDialog.pack();
 		createDialog.setVisible(true);
+		createDialog.addComponentListener(new ComponentAdapter() {
+			@Override
+			public void componentHidden(ComponentEvent e) {
+				results.dispose();
+			}
+		});
 	}
 
 	interface EntityRowUpdater<T, E> {
@@ -535,11 +547,18 @@ public class ObservableEntityExplorer extends JPanel {
 		<F> void set(T entity, ObservableEntityFieldType<E, F> field, F value);
 	}
 
-	protected <T, E, F> void configureCreateColumn(ObservableEntityFieldType<E, F> field, CategoryRenderStrategy<T, F> fieldColumn,
+	protected <T, E, F> void configureFieldColumn(ObservableEntityFieldType<E, F> field, CategoryRenderStrategy<T, F> fieldColumn,
 		EntityRowUpdater<? super T, E> creator) {
 		Class<F> raw = TypeTokens.getRawType(field.getFieldType().unwrap());
 		Function<Object, String> fmt = getFormatter(raw);
-		Function<F, String> formatter = v -> v == null ? "" : fmt.apply(v);
+		Function<F, String> formatter = v -> {
+			if (v == null)
+				return "null";
+			else if (v == EntityUpdate.NOT_SET)
+				return v.toString();
+			else
+				return fmt.apply(v);
+		};
 		fieldColumn.formatText(v -> formatter.apply(v));
 		boolean editable = false;
 		if (Enum.class.isAssignableFrom(raw)) {
@@ -554,14 +573,16 @@ public class ObservableEntityExplorer extends JPanel {
 					fFormat = new SpinnerFormat<F>() {
 						@Override
 						public void append(StringBuilder text, F value) {
-							if (value != null)
+							if (value == null || value == EntityUpdate.NOT_SET)
+								text.append(value);
+							else
 								format.append(text, value);
 						}
 
 						@Override
 						public F parse(CharSequence text) throws ParseException {
 							if (text.length() == 0)
-								return null;
+								return (F) EntityUpdate.NOT_SET;
 							return format.parse(text);
 						}
 

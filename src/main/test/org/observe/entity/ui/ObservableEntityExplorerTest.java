@@ -15,6 +15,7 @@ import org.observe.entity.jdbc.JdbcEntitySupport;
 import org.observe.entity.jdbc.SqlConnector;
 import org.observe.util.Identified;
 import org.observe.util.swing.ObservableSwingUtils;
+import org.qommons.Nameable;
 import org.qommons.collect.StampedLockingStrategy;
 
 public class ObservableEntityExplorerTest {
@@ -55,7 +56,11 @@ public class ObservableEntityExplorerTest {
 		});
 	}
 
-	public interface A extends Identified {}
+	public interface A extends Identified, Nameable {
+		public int getValue();
+	}
 
-	public interface B extends Identified {}
+	public interface B extends Identified, Nameable {
+		public Duration getTime();
+	}
 }

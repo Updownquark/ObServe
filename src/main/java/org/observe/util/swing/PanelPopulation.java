@@ -67,6 +67,7 @@ import javax.swing.event.ChangeListener;
 import javax.swing.event.ListDataEvent;
 import javax.swing.event.ListDataListener;
 import javax.swing.event.ListSelectionListener;
+import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.tree.TreeCellRenderer;
 import javax.swing.tree.TreePath;
 import javax.swing.tree.TreeSelectionModel;
@@ -696,6 +697,8 @@ public class PanelPopulation {
 					column.accept(col);
 			});
 		}
+
+		P withRowNumberColumn(String columnName, Consumer<CategoryRenderStrategy<R, Long>> column);
 
 		P withMove(boolean up, Consumer<TableAction<R, ?>> actionMod);
 
@@ -3056,6 +3059,21 @@ public class PanelPopulation {
 			TableBuilder.super.withNameColumn(getName, setName, unique, column);
 			theNameFunction = getName;
 			return (P) this;
+		}
+
+		@Override
+		public P withRowNumberColumn(String columnName, Consumer<CategoryRenderStrategy<R, Long>> column) {
+			return withColumn(columnName, long.class, __ -> 0L, col -> {
+				col.withRenderer(ObservableCellRenderer.fromTableRenderer(new DefaultTableCellRenderer() {
+					@Override
+					public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus,
+						int row, int column) {
+						super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+						setText(String.valueOf(row + 1));
+						return this;
+					}
+				}, (__, c) -> String.valueOf(c)));
+			});
 		}
 
 		@Override
