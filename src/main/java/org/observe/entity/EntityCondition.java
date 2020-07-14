@@ -500,6 +500,16 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 		public ValueCondition<E, F> notNull() {
 			return compare(0, false).value(null);
 		}
+
+		/**
+		 * For checking for a null value
+		 *
+		 * @param isNull True if the condition should pass when the value is null; false if it should pass for NOT NULL
+		 * @return A condition that passes when the entity-derived value is or is not null
+		 */
+		public ValueCondition<E, F> NULL(boolean isNull) {
+			return compare(0, isNull).value(null);
+		}
 	}
 
 	/**

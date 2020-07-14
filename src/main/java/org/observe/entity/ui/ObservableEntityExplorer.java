@@ -11,8 +11,11 @@ import java.util.Collections;
 import java.util.List;
 import java.util.TimeZone;
 import java.util.function.Function;
+import java.util.function.IntConsumer;
+import java.util.function.Supplier;
 
 import javax.swing.JDialog;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 
@@ -24,14 +27,18 @@ import org.observe.collect.ObservableSortedSet;
 import org.observe.config.ObservableConfig;
 import org.observe.config.ObservableOperationResult.ResultStatus;
 import org.observe.entity.ConfigurableCreator;
+import org.observe.entity.EntityCollectionResult;
+import org.observe.entity.EntityCondition;
 import org.observe.entity.EntityCountResult;
 import org.observe.entity.EntityOperationException;
+import org.observe.entity.ObservableEntity;
 import org.observe.entity.ObservableEntityDataSet;
 import org.observe.entity.ObservableEntityFieldType;
 import org.observe.entity.ObservableEntityType;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.CategoryRenderStrategy;
 import org.observe.util.swing.CategoryRenderStrategy.CategoryMouseAdapter;
+import org.observe.util.swing.ObservableTextField;
 import org.observe.util.swing.PanelPopulation;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.qommons.ArrayUtils;
@@ -149,15 +156,268 @@ public class ObservableEntityExplorer extends JPanel {
 	protected void initEntityTypePanel(PanelPopulator<?, ?> panel) {
 		ObservableCollection<ObservableEntityFieldType<?, ?>> fields = ObservableCollection.flattenValue(theSelectedEntityType
 			.map(e -> ObservableCollection.of(FIELD_TYPE, e == null ? Collections.emptyList() : e.entity.getFields().allValues())));
+		SettableValue<EntityCondition<?>> condition = SettableValue.build(new TypeToken<EntityCondition<?>>() {}).safe(false).build();
+		ObservableTextField<EntityCondition<?>>[] conditionTF = new ObservableTextField[1];
+		theSelectedEntityType.noInitChanges()
+		.act(evt -> condition.set(evt.getNewValue() == null ? null : evt.getNewValue().entity.select(), evt));
 		panel.fill().fillV().visibleWhen(theSelectedEntityType.map(e -> e != null))//
 		.addLabel("Name:", theSelectedEntityType.map(e -> e == null ? "" : e.entity.getName()), Format.TEXT,
 			f -> f.decorate(d -> d.bold().withFontSize(18)))//
 		.addLabel("Count:", theSelectedEntityType.map(e -> e == null ? "" : e.printCount()), Format.TEXT, null)//
-		.addTable(fields, this::configureFieldTable)// ;
-		.addHPanel(null, "box", buttonPanel -> {
+		.addTable(fields, this::configureFieldTable).addHPanel(null, "box", buttonPanel -> {
 			buttonPanel.addButton("Create", __ -> showCreatePanel(theSelectedEntityType.get().entity), null)//
-			.addButton("Select", __ -> showSelectPanel(theSelectedEntityType.get().entity), null);
+			.addTextField("Select", condition, new ConditionFormat(() -> theSelectedEntityType.get().entity),
+				tf -> tf.modifyEditor(tf2 -> {
+					conditionTF[0] = tf2;
+					tf2.withColumns(35);
+				}).withPostButton("Select", __ -> showSelectPanel(condition.get()),
+					button -> button.disableWith(conditionTF[0].getErrorState())));
 		});
+	}
+
+	static class ConditionFormat implements Format<EntityCondition<?>> {
+		private final Supplier<ObservableEntityType<?>> theEntityType;
+
+		ConditionFormat(Supplier<ObservableEntityType<?>> entityType) {
+			theEntityType = entityType;
+		}
+
+		@Override
+		public void append(StringBuilder text, EntityCondition<?> value) {
+			if (value instanceof EntityCondition.CompositeCondition) {
+				String join = value instanceof EntityCondition.AndCondition ? " AND " : " OR ";
+				boolean first = true;
+				for (EntityCondition<?> component : ((EntityCondition.CompositeCondition<?>) value).getConditions()) {
+					if (first)
+						first = false;
+					else
+						text.append(join);
+					boolean complex = component instanceof EntityCondition.CompositeCondition;
+					if (complex)
+						text.append('(');
+					append(text, component);
+					if (complex)
+						text.append(')');
+				}
+			} else
+				text.append(value);
+		}
+
+		@Override
+		public EntityCondition<?> parse(CharSequence text) throws ParseException {
+			ObservableEntityType<?> type = theEntityType.get();
+			return _parse(type, text, 0, null);
+		}
+
+		private <E> EntityCondition<E> _parse(ObservableEntityType<E> type, CharSequence text, int c, IntConsumer post)
+			throws ParseException {
+			while (c < text.length() && Character.isWhitespace(text.charAt(c)))
+				c++;
+			if (c == text.length())
+				return type.select();
+			EntityCondition<E> first;
+			if (text.charAt(c) == ')') {
+				int endParen = c + 1;
+				while (endParen < text.length() && text.charAt(endParen) != ')')
+					endParen++;
+				if (endParen == text.length())
+					throw new ParseException("Unmatched parenthesis", c);
+				first = _parse(type, text.subSequence(0, endParen), c + 1, null);
+			} else {
+				int[] postI = new int[1];
+				first = parseSimple(type, text, c, i -> postI[0] = i);
+				c = postI[0];
+			}
+			while (c < text.length() && Character.isWhitespace(text.charAt(c)))
+				c++;
+			if (c == text.length())
+				return first;
+			// I realize that this completely disregards order of operations. I'm just trying to do something very simple here.
+			// Maybe I'll come back around and use ANTLR later
+			if (text.length() - c < 3)
+				throw new ParseException("Unrecognized condition join", c);
+			String join = text.subSequence(c, c + 3).toString().toUpperCase();
+			int[] postI = new int[1];
+			if (join.equals("AND")) {
+				EntityCondition<E> next = _parse(type, text, c + 3, i -> postI[0] = i);
+				first = first.and(all -> next);
+			} else if (join.equals("OR")) {
+				EntityCondition<E> next = _parse(type, text, c + 3, i -> postI[0] = i);
+				first = first.or(all -> next);
+			} else
+				throw new ParseException("Unrecognized condition join", c);
+			c = postI[0];
+			while (c < text.length() && Character.isWhitespace(text.charAt(c)))
+				c++;
+			if (post != null)
+				post.accept(c);
+			else if (c != text.length())
+				throw new ParseException("Unrecognized content after condition", c);
+			return first;
+		}
+
+		private <E, F> EntityCondition.ValueCondition<E, F> parseSimple(ObservableEntityType<E> type, CharSequence text, int c,
+			IntConsumer post) throws ParseException {
+			while (c < text.length() && Character.isWhitespace(text.charAt(c)))
+				c++;
+			if (c == text.length())
+				throw new ParseException("Empty condition", c);
+			int f = c;
+			while (f < text.length() && isFieldChar(text.charAt(f)))
+				f++;
+			String fieldName = text.subSequence(c, f).toString();
+			ObservableEntityFieldType<E, F> field = (ObservableEntityFieldType<E, F>) type.getFields().getIfPresent(fieldName);
+			if (field == null)
+				throw new ParseException("No such field " + type.getName() + "." + fieldName, c);
+			c = f;
+			while (c < text.length() && Character.isWhitespace(text.charAt(c)))
+				c++;
+			if (c + 1 >= text.length())
+				throw new ParseException("No condition on field " + field, c);
+			// TODO use dot
+			if (text.charAt(c) == '=')
+				return type.select().where(field).eq().value(parseValue(field, text, c + 1, post));
+			if (Character.toUpperCase(text.charAt(c)) == 'I' && Character.toUpperCase(text.charAt(c + 1)) == 'S') {
+				c += 2;
+				while (c < text.length() && Character.isWhitespace(text.charAt(c)))
+					c++;
+				if (c + 4 >= text.length())
+					throw new ParseException("Invalid condition on field " + field, c);
+				boolean not = false;
+				if ("NOT".equals(text.subSequence(c, c + 3).toString().toUpperCase())) {
+					not = true;
+					c += 3;
+					while (c < text.length() && Character.isWhitespace(text.charAt(c)))
+						c++;
+					if (c + 4 >= text.length())
+						throw new ParseException("Invalid condition on field " + field, c);
+				}
+				if ("NULL".equals(text.subSequence(c, c + 4).toString().toUpperCase()))
+					return type.select().where(field).NULL(!not);
+				else
+					throw new ParseException("Invalid condition on field " + field, c);
+			}
+			boolean eq = text.charAt(c + 1) == '=';
+			int offset = eq ? 2 : 1;
+			switch (text.charAt(c)) {
+			case '<':
+				return type.select().where(field).compare(-1, eq).value(parseValue(field, text, c + offset, post));
+			case '>':
+				return type.select().where(field).compare(1, eq).value(parseValue(field, text, c + offset, post));
+			case '!':
+				if (!eq)
+					throw new ParseException("Unrecognized operator", c);
+				return type.select().where(field).neq().value(parseValue(field, text, c + offset, post));
+			default:
+				throw new ParseException("Unrecognized operator", c);
+			}
+		}
+
+		private boolean isFieldChar(char c) {
+			if (c >= '0' && c <= '9')
+				return true;
+			else if (c >= 'a' && c <= 'z')
+				return true;
+			else if (c >= 'A' && c <= 'Z')
+				return true;
+			switch (c) {
+			case '_':
+			case '-':
+				return true;
+			}
+			return false;
+		}
+
+		private <E, F> F parseValue(ObservableEntityFieldType<E, F> field, CharSequence text, int c, IntConsumer post)
+			throws ParseException {
+			while (c < text.length() && Character.isWhitespace(text.charAt(c)))
+				c++;
+			if (c == text.length())
+				throw new ParseException("Empty value", c);
+
+			Class<F> raw = TypeTokens.getRawType(field.getFieldType().unwrap());
+			if (raw == String.class) {
+				char quote = text.charAt(c);
+				if (quote != '"' && quote != '\'')
+					throw new ParseException("String must begin with a single or double quote", c);
+				c++;
+				boolean escape = false;
+				StringBuilder str = new StringBuilder();
+				while (c < text.length() && (escape || text.charAt(c) != quote)) {
+					if (escape) {
+						switch (text.charAt(c)) {
+						case '\\':
+						case '\'':
+						case '"':
+							str.append(text.charAt(c));
+							break;
+						case 'n':
+							str.append('\n');
+							break;
+						case 'r':
+							str.append('\r');
+							break;
+						case 't':
+							str.append('\t');
+							break;
+						case 'u':
+							c++;
+							if (c + 4 >= text.length())
+								throw new ParseException("Invalid unicode char expression", c);
+							try {
+								str.append((char) Integer.parseInt(text.subSequence(c, c + 4).toString(), 16));
+							} catch (NumberFormatException e) {
+								throw new ParseException("Invalid unicode char expression", c);
+							}
+							break;
+						default:
+							throw new ParseException("Invalid escaped character", c);
+						}
+					} else if (text.charAt(c) == '\\')
+						escape = true;
+					else
+						str.append(text.charAt(c));
+				}
+				if (c == text.length())
+					throw new ParseException("String must end with " + quote, c);
+				return (F) str.toString();
+			}
+			if (raw == int.class || raw == long.class) {
+				StringBuilder str = new StringBuilder();
+				if (text.charAt(c) == '-') {
+					str.append('-');
+					c++;
+					while (c < text.length() && Character.isWhitespace(text.charAt(c)))
+						c++;
+					if (c == text.length())
+						throw new ParseException("Invalid int value", c);
+				}
+				while (c < text.length()) {
+					if (text.charAt(c) == '_')
+						continue;
+					else if (text.charAt(c) >= '0' && text.charAt(c) <= '9')
+						str.append(text.charAt(c));
+				}
+				if (raw == int.class)
+					return (F) Integer.valueOf(str.toString());
+				else
+					return (F) Long.valueOf(str.toString());
+			} else if (Enum.class.isAssignableFrom(raw)) {
+				StringBuilder str = new StringBuilder();
+				int enumStart = c;
+				while (c < text.length() && isFieldChar(text.charAt(c))) {
+					str.append(text.charAt(c));
+					c++;
+				}
+				String enumName = str.toString();
+				for (F val : raw.getEnumConstants()) {
+					if (((Enum<?>) val).name().equals(enumName))
+						return val;
+				}
+				throw new ParseException("Unrecognized " + raw.getSimpleName() + " constant " + enumName, enumStart);
+			} else
+				throw new ParseException("Unable to parse type " + raw.getName(), c);
+		}
 	}
 
 	protected void configureFieldTable(PanelPopulation.TableBuilder<ObservableEntityFieldType<?, ?>, ?> table) {
@@ -167,13 +427,29 @@ public class ObservableEntityExplorer extends JPanel {
 
 	<E> void showCreatePanel(ObservableEntityType<E> type) {
 		ConfigurableCreator<E, E> creator = type.create();
+		EntityRowUpdater<Object, E> updater = new EntityRowUpdater<Object, E>() {
+			@Override
+			public String isEnabled(Object entity, ObservableEntityFieldType<E, ?> field) {
+				return creator.isEnabled(field);
+			}
+
+			@Override
+			public <F> String isAcceptable(Object entity, ObservableEntityFieldType<E, F> field, F value) {
+				return creator.isAcceptable(field, value);
+			}
+
+			@Override
+			public <F> void set(Object entity, ObservableEntityFieldType<E, F> field, F value) {
+				creator.with(field, value);
+			}
+		};
 		ObservableCollection<Object> row = ObservableCollection.build(Object.class).safe(false).build().with((Object) null);
 		JPanel createPanel = PanelPopulation.populateVPanel((JPanel) null, null)//
 			.<Object> addTable(row, fieldTable -> {
 				for (ObservableEntityFieldType<E, ?> field : type.getFields().allValues()) {
 					fieldTable.withColumn(field.getName(), (TypeToken<Object>) field.getFieldType(),
 						__ -> creator.getFieldValues().get(field.getIndex()), //
-						fieldCol -> configureCreateColumn((ObservableEntityFieldType<E, Object>) field, fieldCol, creator));
+						fieldCol -> configureCreateColumn((ObservableEntityFieldType<E, Object>) field, fieldCol, updater));
 				}
 			})//
 			.addButton("Create", __ -> {
@@ -191,10 +467,76 @@ public class ObservableEntityExplorer extends JPanel {
 		createDialog.setVisible(true);
 	}
 
-	<E> void showSelectPanel(ObservableEntityType<E> type) {}
+	<E> void showSelectPanel(EntityCondition<E> condition) {
+		int chosen = JOptionPane.showOptionDialog(this, "Choose the operation", "Selection Type", JOptionPane.OK_CANCEL_OPTION,
+			JOptionPane.PLAIN_MESSAGE, null, new String[] { "Query", "Update", "Delete" }, "Query");
+		if (chosen == JOptionPane.CLOSED_OPTION)
+			return;
+		switch (chosen) {
+		case 0: // Query
+			showQueryPanel(condition);
+			break;
+		case 1: // Update
+			JOptionPane.showMessageDialog(this, "Update is not suported yet", "Selection Type Not Supported", chosen);
+			break;
+		case 2: // Delete
+			JOptionPane.showMessageDialog(this, "Delete is not suported yet", "Selection Type Not Supported", chosen);
+			break;
+		default:
+			throw new IllegalStateException("Unrecognized selection: " + chosen);
+		}
+	}
 
-	protected <E, F> void configureCreateColumn(ObservableEntityFieldType<E, F> field, CategoryRenderStrategy<?, F> fieldColumn,
-		ConfigurableCreator<E, E> creator) {
+	private <E> void showQueryPanel(EntityCondition<E> condition) {
+		EntityCollectionResult<E> results;
+		try {
+			results = condition.query().collect(true);
+		} catch (EntityOperationException e) {
+			e.printStackTrace();
+			JOptionPane.showMessageDialog(this, e.getMessage(), "Query Failure", JOptionPane.ERROR_MESSAGE);
+			return;
+		}
+		EntityRowUpdater<ObservableEntity<? extends E>, E> updater = new EntityRowUpdater<ObservableEntity<? extends E>, E>() {
+			@Override
+			public String isEnabled(ObservableEntity<? extends E> entity, ObservableEntityFieldType<E, ?> field) {
+				return entity.getField(field).isEnabled().get();
+			}
+
+			@Override
+			public <F> String isAcceptable(ObservableEntity<? extends E> entity, ObservableEntityFieldType<E, F> field, F value) {
+				return entity.isAcceptable(field.getIndex(), value);
+			}
+
+			@Override
+			public <F> void set(ObservableEntity<? extends E> entity, ObservableEntityFieldType<E, F> field, F value) {
+				entity.set(field.getIndex(), value, null);
+			}
+		};
+		JPanel queryPanel = PanelPopulation.populateVPanel((JPanel) null, null)//
+			.addTable(results.get().getEntities(), entityTable -> {
+				for (ObservableEntityFieldType<E, ?> field : condition.getEntityType().getFields().allValues()) {
+					entityTable.withColumn(field.getName(), (TypeToken<Object>) field.getFieldType(), entity -> entity.get(field), //
+						fieldCol -> configureCreateColumn((ObservableEntityFieldType<E, Object>) field, fieldCol, updater));
+				}
+			})//
+			.getContainer();
+		JDialog createDialog = new JDialog(SwingUtilities.getWindowAncestor(this), condition.getEntityType() + ": " + condition.toString(),
+			ModalityType.MODELESS);
+		createDialog.getContentPane().add(queryPanel);
+		createDialog.pack();
+		createDialog.setVisible(true);
+	}
+
+	interface EntityRowUpdater<T, E> {
+		String isEnabled(T entity, ObservableEntityFieldType<E, ?> field);
+
+		<F> String isAcceptable(T entity, ObservableEntityFieldType<E, F> field, F value);
+
+		<F> void set(T entity, ObservableEntityFieldType<E, F> field, F value);
+	}
+
+	protected <T, E, F> void configureCreateColumn(ObservableEntityFieldType<E, F> field, CategoryRenderStrategy<T, F> fieldColumn,
+		EntityRowUpdater<? super T, E> creator) {
 		Class<F> raw = TypeTokens.getRawType(field.getFieldType().unwrap());
 		Function<Object, String> fmt = getFormatter(raw);
 		Function<F, String> formatter = v -> v == null ? "" : fmt.apply(v);
@@ -253,14 +595,15 @@ public class ObservableEntityExplorer extends JPanel {
 				}
 				editable = true;
 				fieldColumn.withMutation(mutator -> {
-					mutator.mutateAttribute((__, f) -> creator.withField(field, f)).asText(fFormat);
+					mutator.asText(fFormat);
 				});
 			}
 		}
 		if (editable)
 			fieldColumn.withMutation(mutator -> mutator//
-				.mutateAttribute((__, f) -> creator.withField(field, f))//
-				.filterAccept((__, f) -> creator.isAcceptable(field, f))//
+				.mutateAttribute((t, f) -> creator.set(t, field, f))//
+				.editableIf((t, f) -> creator.isEnabled(t, field) == null)//
+				.filterAccept((t, f) -> creator.isAcceptable(t.get(), field, f))//
 				.withRowUpdate(true)//
 				);
 	}
