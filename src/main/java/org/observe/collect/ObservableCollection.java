@@ -1403,6 +1403,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		private Function<? super T, String> theRemoveMsgFn;
 
 		public ModFilterBuilder() {
+			areUpdatesAllowed = true;
 		}
 
 		public String getUnmodifiableMsg() {
