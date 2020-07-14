@@ -479,15 +479,16 @@ public class ObservableEntityExplorer extends JPanel {
 		case 0: // Query
 			showQueryPanel(condition);
 			break;
-		case 1: // Update
+		case 1: // Update TODO
 			JOptionPane.showMessageDialog(this, "Update is not suported yet", "Selection Type Not Supported", chosen);
 			break;
-		case 2: // Delete
+		case 2: // Delete TODO
 			JOptionPane.showMessageDialog(this, "Delete is not suported yet", "Selection Type Not Supported", chosen);
 			break;
 		default:
 			throw new IllegalStateException("Unrecognized selection: " + chosen);
 		}
+		// TODO Query ordering
 	}
 
 	private <E> void showQueryPanel(EntityCondition<E> condition) {
@@ -524,6 +525,7 @@ public class ObservableEntityExplorer extends JPanel {
 					}, //
 						fieldCol -> configureFieldColumn((ObservableEntityFieldType<E, Object>) field, fieldCol, updater));
 				}
+				entityTable.withRemove(null, null);
 			})//
 			.getContainer();
 		JDialog createDialog = new JDialog(SwingUtilities.getWindowAncestor(this), condition.getEntityType() + ": " + condition.toString(),
@@ -655,6 +657,14 @@ public class ObservableEntityExplorer extends JPanel {
 			return SpinnerFormat.flexDuration();
 		else
 			return null;
+		/* TODO More types, e.g.
+		 * double
+		 * float
+		 * byte
+		 * short
+		 * binaries? long character streams?
+		 * ...
+		 */
 	}
 
 	static class EntityTypeData<E> {

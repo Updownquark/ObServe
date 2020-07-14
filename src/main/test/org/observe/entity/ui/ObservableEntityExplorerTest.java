@@ -56,6 +56,19 @@ public class ObservableEntityExplorerTest {
 		});
 	}
 
+	/* TODO
+	 * Entity references
+	 * Entity inheritance
+	 * Entity multiple inheritance
+	 * A, B extends A, C extends A, D extends B, C
+	 * Collections of values
+	 * Collections of entities
+	 * value sets
+	 * entity sets
+	 * maps
+	 * multi maps
+	 */
+
 	public interface A extends Identified, Nameable {
 		public int getValue();
 	}

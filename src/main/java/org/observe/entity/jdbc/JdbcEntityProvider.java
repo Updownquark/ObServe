@@ -445,7 +445,7 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 				stmt.executeUpdate(deleteSql.toString());
 				changed(new EntityChange.EntityExistenceChange<>(delete.getEntityType(), Instant.now(), false, affected, null));
 				return Long.valueOf(affected.size());
-			}, v -> onAsyncComplete.accept(v), err -> {
+			}, onAsyncComplete == null ? null : v -> onAsyncComplete.accept(v), err -> {
 				onError.accept(new EntityOperationException("Delete failed: " + delete, err));
 			}, onError);
 		} catch (SQLException e) {
