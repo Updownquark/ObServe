@@ -33,4 +33,9 @@ class ConfigurableDeletionImpl<E> extends AbstractConfigurableOperation<E> imple
 			throw new IllegalStateException("This deletion has variables and must be prepared");
 		return ((ObservableEntityTypeImpl<E>) getEntityType()).getEntitySet().delete(this, sync, cause);
 	}
+
+	@Override
+	public String toString() {
+		return "delete " + theSelection;
+	}
 }

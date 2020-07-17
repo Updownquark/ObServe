@@ -5,7 +5,6 @@ import java.util.concurrent.Future;
 
 import org.observe.Observable;
 import org.observe.Subscription;
-import org.observe.entity.EntityQueryResult;
 
 /**
  * An asynchronous result from an operation on a set of observable values, e.g. a
@@ -29,9 +28,7 @@ public interface ObservableOperationResult<E> {
 		 * Fulfillment of the result failed. In this case the {@link ObservableOperationResult#getFailure() getFailure()} method will return
 		 * the reason.
 		 */
-		FAILED,
-		/** The result was fulfilled, but then {@link EntityQueryResult#dispose() disposed} */
-		DISPOSED;
+		FAILED;
 
 		public boolean isDone() {
 			switch (this) {
@@ -52,14 +49,12 @@ public interface ObservableOperationResult<E> {
 	ConfiguredValueType<E> getValueType();
 
 	/**
-	 * Attempts to cancel fulfillment of this result or, if this result is {@link EntityQueryResult updating},
-	 * {@link EntityQueryResult#dispose() disposes} it.
+	 * Attempts to cancel fulfillment of this result
 	 *
 	 * @param mayInterruptIfRunning {@code true} if the thread fulfilling this result should be interrupted; otherwise, in-progress results
 	 *        are allowed to complete
-	 * @return {@code false} if the result was already fulfilled, or has failed or been previously cancelled; {@code true} otherwise
 	 */
-	boolean cancel(boolean mayInterruptIfRunning);
+	void cancel(boolean mayInterruptIfRunning);
 
 	/** @return The current fulfillment status of this result */
 	ResultStatus getStatus();
@@ -82,9 +77,11 @@ public interface ObservableOperationResult<E> {
 		Subscription interruptSub = null;
 		while (!getStatus().isDone()) {
 			if (interruptSub == null)
-				interruptSub = statusChanges().act(__ -> {
-					synchronized (this) {
-						this.notify();
+				interruptSub = watchStatus().act(__ -> {
+					if (getStatus().isDone()) {
+						synchronized (this) {
+							this.notify();
+						}
 					}
 				});
 			synchronized (this) {
@@ -113,9 +110,11 @@ public interface ObservableOperationResult<E> {
 		Subscription interruptSub = null;
 		while (!getStatus().isDone()) {
 			if (interruptSub == null)
-				interruptSub = statusChanges().act(__ -> {
-					synchronized (this) {
-						this.notify();
+				interruptSub = watchStatus().act(__ -> {
+					if (getStatus().isDone()) {
+						synchronized (this) {
+							this.notify();
+						}
 					}
 				});
 			synchronized (this) {
@@ -131,7 +130,7 @@ public interface ObservableOperationResult<E> {
 	}
 
 	/** @return An observable that fires (with this result as a value) when the result {@link #getStatus()} changes */
-	Observable<? extends ObservableOperationResult<E>> statusChanges();
+	Observable<? extends ObservableOperationResult<E>> watchStatus();
 
 	/**
 	 * Abstract implementation of an operation result for a synchronous operation
@@ -151,9 +150,7 @@ public interface ObservableOperationResult<E> {
 		}
 
 		@Override
-		public boolean cancel(boolean mayInterruptIfRunning) {
-			return false;
-		}
+		public void cancel(boolean mayInterruptIfRunning) {}
 
 		@Override
 		public ResultStatus getStatus() {
@@ -166,7 +163,7 @@ public interface ObservableOperationResult<E> {
 		}
 
 		@Override
-		public Observable<? extends ObservableOperationResult<E>> statusChanges() {
+		public Observable<? extends ObservableOperationResult<E>> watchStatus() {
 			return Observable.empty();
 		}
 	}

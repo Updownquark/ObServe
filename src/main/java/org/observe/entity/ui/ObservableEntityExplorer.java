@@ -1,8 +1,7 @@
 package org.observe.entity.ui;
 
 import java.awt.Dialog.ModalityType;
-import java.awt.event.ComponentAdapter;
-import java.awt.event.ComponentEvent;
+import java.awt.EventQueue;
 import java.awt.event.MouseEvent;
 import java.text.ParseException;
 import java.time.Duration;
@@ -32,6 +31,7 @@ import org.observe.entity.ConfigurableCreator;
 import org.observe.entity.EntityCollectionResult;
 import org.observe.entity.EntityCondition;
 import org.observe.entity.EntityCountResult;
+import org.observe.entity.EntityModificationResult;
 import org.observe.entity.EntityOperationException;
 import org.observe.entity.EntityUpdate;
 import org.observe.entity.ObservableEntity;
@@ -80,11 +80,11 @@ public class ObservableEntityExplorer extends JPanel {
 				if (holder != null) {
 					if (holder.entity == entity)
 						return holder;
-					holder.count.dispose().cancel(true);
+					holder.count.cancel(true);
 				}
 				return new EntityTypeData<>(entity);
 			}, holder -> holder.entity, opts -> opts.cache(true).reEvalOnUpdate(false))//
-			.refreshEach(e -> Observable.or(e.count.statusChanges(), e.count.noInitChanges()))//
+			.refreshEach(e -> Observable.or(e.count.watchStatus(), e.count.noInitChanges()))//
 			.collect();
 		theEventLog = ObservableCollection.build(Object.class).build();
 
@@ -168,12 +168,12 @@ public class ObservableEntityExplorer extends JPanel {
 			f -> f.decorate(d -> d.bold().withFontSize(18)))//
 		.addLabel("Count:", theSelectedEntityType.map(e -> e == null ? "" : e.printCount()), Format.TEXT, null)//
 		.addTable(fields, this::configureFieldTable).addHPanel(null, "box", buttonPanel -> {
-			buttonPanel.addButton("Create", __ -> showCreatePanel(theSelectedEntityType.get().entity), null)//
+			buttonPanel.addButton("Create", __ -> showCreatePanel(theSelectedEntityType.get().entity.create()), null)//
 			.addTextField("Select", condition, new ConditionFormat(() -> theSelectedEntityType.get().entity),
 				tf -> tf.modifyEditor(tf2 -> {
 					conditionTF[0] = tf2;
 					tf2.withColumns(35);
-				}).withPostButton("Select", __ -> showSelectPanel(condition.get()),
+				}).withPostButton("Query", __ -> showQueryPanel(condition.get()),
 					button -> button.disableWith(conditionTF[0].getErrorState())));
 		});
 	}
@@ -428,8 +428,8 @@ public class ObservableEntityExplorer extends JPanel {
 		.withColumn("Type", new TypeToken<TypeToken<?>>() {}, ObservableEntityFieldType::getFieldType, null);
 	}
 
-	<E> void showCreatePanel(ObservableEntityType<E> type) {
-		ConfigurableCreator<E, E>[] creator = new ConfigurableCreator[] { type.create() };
+	<E> void showCreatePanel(ConfigurableCreator<?, E> initCreator) {
+		ConfigurableCreator<?, E>[] creator = new ConfigurableCreator[] { initCreator };
 		EntityRowUpdater<Object, E> updater = new EntityRowUpdater<Object, E>() {
 			@Override
 			public String isEnabled(Object entity, ObservableEntityFieldType<E, ?> field) {
@@ -449,7 +449,7 @@ public class ObservableEntityExplorer extends JPanel {
 		ObservableCollection<Object> row = ObservableCollection.build(Object.class).safe(false).build().with((Object) null);
 		JPanel createPanel = PanelPopulation.populateVPanel((JPanel) null, null)//
 			.<Object> addTable(row, fieldTable -> {
-				for (ObservableEntityFieldType<E, ?> field : type.getFields().allValues()) {
+				for (ObservableEntityFieldType<E, ?> field : initCreator.getEntityType().getFields().allValues()) {
 					fieldTable.withColumn(field.getName(), (TypeToken<Object>) field.getFieldType(),
 						__ -> creator[0].getFieldValues().get(field.getIndex()), //
 						fieldCol -> configureFieldColumn((ObservableEntityFieldType<E, Object>) field, fieldCol, updater));
@@ -459,36 +459,19 @@ public class ObservableEntityExplorer extends JPanel {
 				try {
 					creator[0].create();
 				} catch (EntityOperationException e) {
-					e.printStackTrace(); // TODO
+					e.printStackTrace();
+					JOptionPane.showMessageDialog(ObservableEntityExplorer.this,
+						"Could not create " + initCreator.getEntityType() + ": " + e.getMessage(), "Creation Failed",
+						JOptionPane.ERROR_MESSAGE);
 				}
 			}, button -> button
 				.disableWith(ObservableValue.of(TypeTokens.get().STRING, () -> creator[0].canCreate(), row::getStamp, row.simpleChanges())))
 			.getContainer();
-		JDialog createDialog = new JDialog(SwingUtilities.getWindowAncestor(this), "Create " + type.getName(), ModalityType.MODELESS);
+		JDialog createDialog = new JDialog(SwingUtilities.getWindowAncestor(this), "Create " + initCreator.getEntityType().getName(),
+			ModalityType.MODELESS);
 		createDialog.getContentPane().add(createPanel);
 		createDialog.pack();
 		createDialog.setVisible(true);
-	}
-
-	<E> void showSelectPanel(EntityCondition<E> condition) {
-		int chosen = JOptionPane.showOptionDialog(this, "Choose the operation", "Selection Type", JOptionPane.OK_CANCEL_OPTION,
-			JOptionPane.PLAIN_MESSAGE, null, new String[] { "Query", "Update", "Delete" }, "Query");
-		if (chosen == JOptionPane.CLOSED_OPTION)
-			return;
-		switch (chosen) {
-		case 0: // Query
-			showQueryPanel(condition);
-			break;
-		case 1: // Update TODO
-			JOptionPane.showMessageDialog(this, "Update is not suported yet", "Selection Type Not Supported", chosen);
-			break;
-		case 2: // Delete TODO
-			JOptionPane.showMessageDialog(this, "Delete is not suported yet", "Selection Type Not Supported", chosen);
-			break;
-		default:
-			throw new IllegalStateException("Unrecognized selection: " + chosen);
-		}
-		// TODO Query ordering
 	}
 
 	private <E> void showQueryPanel(EntityCondition<E> condition) {
@@ -516,6 +499,7 @@ public class ObservableEntityExplorer extends JPanel {
 				entity.set(field.getIndex(), value, null);
 			}
 		};
+		SettableValue<String> deleteText = SettableValue.build(String.class).safe(false).withValue("Delete").build();
 		JPanel queryPanel = PanelPopulation.populateVPanel((JPanel) null, null)//
 			.addTable(results.get().getEntities(), entityTable -> {
 				entityTable.withRowNumberColumn("Row #", null);
@@ -527,18 +511,62 @@ public class ObservableEntityExplorer extends JPanel {
 				}
 				entityTable.withRemove(null, null);
 			})//
+			.addHPanel(null, "box", buttons -> {
+				buttons.addButton("Create...", __ -> showCreatePanel(results.get().create()), null);
+				buttons.addButton("Delete", cause -> {
+					int count = results.get().getValues().size();
+					String msg = "Delete " + count + " "
+						+ (count == 1 ? condition.getEntityType().getName() : StringUtils.pluralize(condition.getEntityType().getName()))
+						+ "?";
+					if (!buttons.alert(msg, "Are you sure you want to delete " + (count == 1 ? "this entity" : "these entities") + "?")//
+						.confirm(true))
+						return;
+					try {
+						deleteText.set("Waiting...", null);
+						EntityModificationResult<E> deleteResult = condition.delete().execute(false, cause);
+						deleteResult.watchStatus().act(__ -> {
+							EventQueue.invokeLater(() -> {
+								switch (deleteResult.getStatus()) {
+								case WAITING:
+									break;
+								case EXECUTING:
+									deleteText.set("Executing...", null);
+									break;
+								case FAILED:
+									buttons.alert("Delete Failed", deleteResult.getFailure().getMessage()).error().display();
+									;
+									deleteResult.getFailure().printStackTrace();
+									deleteText.set("Delete", null);
+									break;
+								case CANCELLED:
+									buttons.alert("Delete Cancelled", "Canceled");
+									deleteText.set("Delete", null);
+									break;
+								case FULFILLED:
+									buttons.alert("Delete Successful",
+										deleteResult.getModified() + " "//
+										+ (deleteResult.getModified() == 1 ? condition.getEntityType().getName()
+											: StringUtils.pluralize(condition.getEntityType().getName()))
+										+ " deleted")
+									.display();
+									deleteText.set("Delete", null);
+									break;
+								}
+							});
+						});
+					} catch (EntityOperationException e) {
+						buttons.alert("Delete Failed", e.getMessage()).error().display();
+						e.printStackTrace();
+					}
+				}, button -> button.withText(deleteText)
+					.disableWith(results.get().getValues().observeSize().map(sz -> sz == 0 ? "No entities to delete" : null)));
+			})//
 			.getContainer();
 		JDialog createDialog = new JDialog(SwingUtilities.getWindowAncestor(this), condition.getEntityType() + ": " + condition.toString(),
 			ModalityType.MODELESS);
 		createDialog.getContentPane().add(queryPanel);
 		createDialog.pack();
 		createDialog.setVisible(true);
-		createDialog.addComponentListener(new ComponentAdapter() {
-			@Override
-			public void componentHidden(ComponentEvent e) {
-				results.dispose();
-			}
-		});
 	}
 
 	interface EntityRowUpdater<T, E> {
@@ -692,7 +720,6 @@ public class ObservableEntityExplorer extends JPanel {
 			case FAILED:
 				return "XX";
 			case CANCELLED:
-			case DISPOSED:
 				break;
 			}
 			return "";
@@ -706,8 +733,6 @@ public class ObservableEntityExplorer extends JPanel {
 				return "Executing query";
 			case CANCELLED:
 				return "Query is cancelled";
-			case DISPOSED:
-				return "Query is disposed";
 			case FULFILLED:
 				return "";
 			case FAILED:

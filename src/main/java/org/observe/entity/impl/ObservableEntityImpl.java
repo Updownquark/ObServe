@@ -258,7 +258,7 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 					else {
 						EntityModificationResult<E> result = theType.select().entity(theId).update().withField(field, value).execute(false,
 							cause);
-						result.statusChanges().act(__ -> {
+						result.watchStatus().act(__ -> {
 							// If the operation failed and the field
 							if (result.getFailure() != null && theFields.get(fieldIndex) == value)
 								_set(field, value, oldValue);

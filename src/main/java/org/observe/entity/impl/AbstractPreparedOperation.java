@@ -44,4 +44,10 @@ abstract class AbstractPreparedOperation<E, O extends PreparedOperation<E>> impl
 	}
 
 	protected abstract O copy(QuickMap<String, Object> variableValues);
+
+	@Override
+	protected void finalize() throws Throwable {
+		((ObservableEntityDataSetImpl) theDefinition.getEntityType().getEntitySet()).getImplementation().dispose(thePreparedObject);
+		super.finalize();
+	}
 }

@@ -1,5 +1,6 @@
 package org.observe.entity.jdbc;
 
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
@@ -13,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.BiConsumer;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.LongConsumer;
 import java.util.stream.Collectors;
@@ -32,6 +34,7 @@ import org.observe.entity.EntityDeletion;
 import org.observe.entity.EntityIdentity;
 import org.observe.entity.EntityLoadRequest;
 import org.observe.entity.EntityLoadRequest.Fulfillment;
+import org.observe.entity.EntityModification;
 import org.observe.entity.EntityOperationException;
 import org.observe.entity.EntityQuery;
 import org.observe.entity.EntityUpdate;
@@ -40,6 +43,11 @@ import org.observe.entity.ObservableEntityDataSet;
 import org.observe.entity.ObservableEntityFieldType;
 import org.observe.entity.ObservableEntityProvider;
 import org.observe.entity.ObservableEntityType;
+import org.observe.entity.PreparedCreator;
+import org.observe.entity.PreparedDeletion;
+import org.observe.entity.PreparedOperation;
+import org.observe.entity.PreparedQuery;
+import org.observe.entity.PreparedUpdate;
 import org.observe.entity.jdbc.JdbcEntitySupport.JdbcColumn;
 import org.qommons.IntList;
 import org.qommons.StringUtils;
@@ -54,14 +62,34 @@ import org.qommons.tree.BetterTreeSet;
 
 /** An observable entity provider implementation backed by a JDBC-accessed relational database */
 public class JdbcEntityProvider implements ObservableEntityProvider {
-	public interface SqlAction<T, V> {
-		V apply(T t) throws SQLException, EntityOperationException;
+	public interface SqlAction<T> {
+		T execute(Statement stmt, BooleanSupplier canceled) throws SQLException, EntityOperationException;
+	}
+
+	public interface PreparedSqlAction<T> {
+		T execute(PreparedStatement stmt, QuickMap<String, Object> variableValues, BooleanSupplier canceled)
+			throws SQLException, EntityOperationException;
+	}
+
+	public interface PreparedSqlOperation<E, T> {
+		T execute(PreparedOperation<E> operation) throws SQLException, EntityOperationException;
+
+		Cancelable executeAsync(PreparedOperation<E> operation, Consumer<T> onComplete, Consumer<SQLException> sqlError,
+			Consumer<EntityOperationException> eoeError);
+
+		void dispose();
 	}
 
 	public interface ConnectionPool {
-		<T> T connect(SqlAction<Statement, T> action, Consumer<T> asyncOnComplete, Consumer<SQLException> asyncSqlError,
-			Consumer<EntityOperationException> asyncEoeError) throws SQLException, EntityOperationException;
+		<T> T connect(SqlAction<T> action) throws SQLException, EntityOperationException;
+
+		<T> Cancelable connectAsync(SqlAction<T> action, Consumer<T> onComplete, Consumer<SQLException> sqlError,
+			Consumer<EntityOperationException> eoeError);
+
+		<E, T> PreparedSqlOperation<E, T> prepare(String sql, PreparedSqlAction<T> action) throws SQLException;
 	}
+
+	static final BooleanSupplier ALWAYS_FALSE = () -> false;
 
 	protected static class TableNaming<E> {
 		private final ObservableEntityType<E> theType;
@@ -186,271 +214,454 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 	}
 
 	@Override
-	public <E> SimpleEntity<E> create(EntityCreator<? super E, E> creator, Object prepared,
-		Consumer<SimpleEntity<E>> identityFieldsOnAsyncComplete, Consumer<EntityOperationException> onError)
-			throws EntityOperationException {
-		TableNaming<E> naming = (TableNaming<E>) theTableNaming.get(creator.getEntityType().getName());
-		StringBuilder sql = new StringBuilder();
-		sql.append("INSERT INTO ");
-		if (theSchemaName != null)
-			sql.append(theSchemaName).append('.');
-		sql.append(naming.getTableName());
-		boolean firstValue = true;
-		QuickMap<String, Object> values = ((ConfigurableCreator<? super E, E>) creator).getFieldValues();
-		for (int f = 0; f < values.keySize(); f++) {
-			Object value = values.get(f);
-			if (value != EntityUpdate.NOT_SET) {
-				if (firstValue) {
-					sql.append(" (");
-					firstValue = false;
-				} else
-					sql.append(", ");
-				sql.append(naming.getColumn(f).getName());
-			}
-		}
-		if (!firstValue)
-			sql.append(')');
-		sql.append(" VALUES (");
-		firstValue = true;
-		for (int f = 0; f < values.keySize(); f++) {
-			Object value = values.get(f);
-			if (value != EntityUpdate.NOT_SET) {
-				if (firstValue)
-					firstValue = false;
-				else
-					sql.append(", ");
-				serialize(creator.getEntityType().getFields().get(f), value, naming, sql);
-			}
-		}
-		sql.append(')');
-		try {
-			return theConnectionPool.connect(stmt -> {
-				String[] colNames = new String[creator.getEntityType().getFields().keySize()];
-				for (int i = 0; i < colNames.length; i++)
-					colNames[i] = naming.getColumn(i).getName();
-				stmt.execute(sql.toString(), colNames);
-				SimpleEntity<E> entity;
-				try (ResultSet rs = stmt.getGeneratedKeys()) {
-					if (!rs.next())
-						throw new EntityOperationException("No generated key set?");
-					entity = (SimpleEntity<E>) buildEntity(creator.getEntityType(), rs, naming, Collections.emptyMap());
-					if (rs.next())
-						System.err.println("Multiple generated key sets?");
-				}
-				changed(new EntityChange.EntityExistenceChange<>(creator.getEntityType(), Instant.now(), true,
-					BetterList.of(entity.getIdentity()), null));
-				return entity;
-			}, identityFieldsOnAsyncComplete, sqle -> {
-				onError.accept(new EntityOperationException("Could not create " + creator.getEntityType(), sqle));
-			}, onError);
-		} catch (SQLException e) {
-			throw new EntityOperationException("Could not create new " + creator.getEntityType(), e);
-		}
+	public void dispose(Object prepared) {
+		((PreparedSqlOperation<?, ?>) prepared).dispose();
 	}
 
 	@Override
-	public long count(EntityQuery<?> query, Object prepared, LongConsumer onAsyncComplete, Consumer<EntityOperationException> onError)
-		throws EntityOperationException {
-		Long counted = _count(query, prepared, onAsyncComplete, onError);
-		return counted == null ? -1 : counted.longValue();
-	}
-
-	private <E> Long _count(EntityQuery<E> query, Object prepared, LongConsumer onAsyncComplete, Consumer<EntityOperationException> onError)
-		throws EntityOperationException {
-		TableNaming<E> naming = (TableNaming<E>) theTableNaming.get(query.getEntityType().getName());
-		StringBuilder sql = new StringBuilder();
-		sql.append("SELECT COUNT(*) FROM ");
-		if (theSchemaName != null)
-			sql.append(theSchemaName).append('.');
-		sql.append(naming.getTableName());
-		Map<String, Join<?, ?, ?>> joins = new HashMap<>();
-		if (query.getSelection() instanceof EntityCondition.All) {//
-		} else {
-			sql.append(" WHERE ");
-			appendCondition(sql, query.getSelection(), naming, QuickMap.empty(), null, joins);
-			// TODO Joins
-		}
+	public <E> SimpleEntity<E> create(EntityCreator<? super E, E> creator, Object prepared) throws EntityOperationException {
 		try {
-			return theConnectionPool.<Long> connect(stmt -> {
-				try (ResultSet rs = stmt.executeQuery(sql.toString())) {
-					if (!rs.next())
-						return 0L;
-					return rs.getLong(1);
-				}
-			}, onAsyncComplete == null ? null : count -> onAsyncComplete.accept(count), err -> {
-				onError.accept(new EntityOperationException("Query failed: " + query, err));
-			}, onError);
-		} catch (SQLException e) {
-			throw new EntityOperationException("Query failed: " + query, e);
-		}
-	}
-
-	@Override
-	public <E> Iterable<SimpleEntity<? extends E>> query(EntityQuery<E> query, Object prepared,
-		Consumer<Iterable<SimpleEntity<? extends E>>> onAsyncComplete, Consumer<EntityOperationException> onError)
-			throws EntityOperationException {
-		TableNaming<E> naming = (TableNaming<E>) theTableNaming.get(query.getEntityType().getName());
-		StringBuilder sql = new StringBuilder();
-		sql.append("SELECT * FROM ");
-		if (theSchemaName != null)
-			sql.append(theSchemaName).append('.');
-		sql.append(naming.getTableName());
-		Map<String, Join<?, ?, ?>> joins = new HashMap<>();
-		if (query.getSelection() instanceof EntityCondition.All) {//
-		} else {
-			sql.append(" WHERE ");
-			appendCondition(sql, query.getSelection(), naming, QuickMap.empty(), null, joins);
-			// TODO Joins
-		}
-		try {
-			return theConnectionPool.connect(stmt -> {
-				List<SimpleEntity<? extends E>> entities = new ArrayList<>();
-				try (ResultSet rs = stmt.executeQuery(sql.toString())) {
-					while (rs.next())
-						entities.add(buildEntity(query.getEntityType(), rs, naming, joins));
-				}
-				return entities;
-			}, onAsyncComplete, err -> {
-				onError.accept(new EntityOperationException("Query failed: " + query, err));
-			}, onError);
-		} catch (SQLException e) {
-			throw new EntityOperationException("Query failed: " + query, e);
-		}
-	}
-
-	@Override
-	public <E> long update(EntityUpdate<E> update, Object prepared, LongConsumer onAsyncComplete,
-		Consumer<EntityOperationException> onError) throws EntityOperationException {
-		TableNaming<E> naming = (TableNaming<E>) theTableNaming.get(update.getEntityType().getName());
-		StringBuilder updateSql = new StringBuilder();
-		StringBuilder querySql = new StringBuilder();
-		updateSql.append("UPDATE ");
-		querySql.append("SELECT * FROM ");
-		if (theSchemaName != null) {
-			updateSql.append(theSchemaName).append('.');
-			querySql.append(theSchemaName).append('.');
-		}
-		querySql.append(naming.getTableName());
-		updateSql.append(naming.getTableName());
-		updateSql.append(" SET ");
-		Map<String, Join<?, ?, ?>> joins = new HashMap<>();
-		QuickMap<String, Object> values = update.getFieldValues();
-		boolean firstSet = true;
-		for (int f = 0; f < values.keySize(); f++) {
-			if (values.get(f) == EntityUpdate.NOT_SET)
-				continue;
-			if (firstSet)
-				firstSet = false;
+			if (prepared instanceof PreparedSqlOperation)
+				return ((PreparedSqlOperation<E, SimpleEntity<E>>) prepared).execute((PreparedCreator<? super E, E>) creator);
 			else
-				updateSql.append(", ");
-			updateSql.append(naming.getColumn(f).getName()).append('=');
-			serialize(update.getEntityType().getFields().get(f), values.get(f), naming, updateSql);
+				return theConnectionPool.connect(new CreateAction<>(creator));
+		} catch (SQLException e) {
+			throw new EntityOperationException("Create failed: " + creator, e);
 		}
-		if (update.getSelection() instanceof EntityCondition.All) {//
+	}
+
+	@Override
+	public <E> Cancelable createAsync(EntityCreator<? super E, E> creator, Object prepared,
+		Consumer<SimpleEntity<E>> identityFieldsOnAsyncComplete, Consumer<EntityOperationException> onError) {
+		if (prepared instanceof PreparedSqlOperation) {
+			return ((PreparedSqlOperation<E, SimpleEntity<E>>) prepared).executeAsync((PreparedCreator<? super E, E>) creator, //
+				identityFieldsOnAsyncComplete, sqlE -> {
+					onError.accept(new EntityOperationException("Create failed: " + creator, sqlE));
+				}, onError);
 		} else {
-			StringBuilder whereSql = new StringBuilder();
-			whereSql.append(" WHERE ");
-			appendCondition(whereSql, update.getSelection(), naming, QuickMap.empty(), null, joins);
-			// TODO Joins
-			updateSql.append(whereSql);
-			querySql.append(whereSql);
+			return theConnectionPool.connectAsync(new CreateAction<>(creator), //
+				identityFieldsOnAsyncComplete, sqlE -> {
+					onError.accept(new EntityOperationException("Create failed: " + creator, sqlE));
+				}, onError);
+		}
+	}
+
+	class CreateAction<E> implements SqlAction<SimpleEntity<E>> {
+		private final EntityCreator<? super E, E> theCreator;
+		private final TableNaming<E> theNaming;
+		private final String theCreateSql;
+
+		CreateAction(EntityCreator<? super E, E> creator) {
+			theCreator = creator;
+			theNaming = (TableNaming<E>) theTableNaming.get(creator.getEntityType().getName());
+			StringBuilder sql = new StringBuilder();
+			sql.append("INSERT INTO ");
+			if (theSchemaName != null)
+				sql.append(theSchemaName).append('.');
+			sql.append(theNaming.getTableName());
+			boolean firstValue = true;
+			QuickMap<String, Object> values = ((ConfigurableCreator<? super E, E>) creator).getFieldValues();
+			for (int f = 0; f < values.keySize(); f++) {
+				Object value = values.get(f);
+				if (value != EntityUpdate.NOT_SET) {
+					if (firstValue) {
+						sql.append(" (");
+						firstValue = false;
+					} else
+						sql.append(", ");
+					sql.append(theNaming.getColumn(f).getName());
+				}
+			}
+			if (!firstValue)
+				sql.append(')');
+			sql.append(" VALUES (");
+			firstValue = true;
+			for (int f = 0; f < values.keySize(); f++) {
+				Object value = values.get(f);
+				if (value != EntityUpdate.NOT_SET) {
+					if (firstValue)
+						firstValue = false;
+					else
+						sql.append(", ");
+					serialize(creator.getEntityType().getFields().get(f), value, theNaming, sql);
+				}
+			}
+			sql.append(')');
+			theCreateSql = sql.toString();
 		}
 
+		@Override
+		public SimpleEntity<E> execute(Statement stmt, BooleanSupplier canceled) throws SQLException, EntityOperationException {
+			String[] colNames = new String[theCreator.getEntityType().getFields().keySize()];
+			for (int i = 0; i < colNames.length; i++)
+				colNames[i] = theNaming.getColumn(i).getName();
+			stmt.execute(theCreateSql, colNames);
+			SimpleEntity<E> entity;
+			try (ResultSet rs = stmt.getGeneratedKeys()) {
+				if (!rs.next())
+					throw new EntityOperationException("No generated key set?");
+				entity = (SimpleEntity<E>) buildEntity(theCreator.getEntityType(), rs, theNaming, Collections.emptyMap());
+				if (rs.next())
+					System.err.println("Multiple generated key sets?");
+			}
+			changed(new EntityChange.EntityExistenceChange<>(theCreator.getEntityType(), Instant.now(), true,
+				BetterList.of(entity.getIdentity()), null));
+			return entity;
+		}
+	}
+
+	@Override
+	public Cancelable count(EntityQuery<?> query, Object prepared, LongConsumer onAsyncComplete,
+		Consumer<EntityOperationException> onError) {
+		if (prepared instanceof PreparedSqlOperation) {
+			return ((PreparedSqlOperation<Object, Long>) prepared).executeAsync((PreparedQuery<Object>) query, //
+				v -> onAsyncComplete.accept(v), sqlE -> {
+					onError.accept(new EntityOperationException("Query failed: " + query, sqlE));
+				}, onError);
+		} else {
+			return theConnectionPool.connectAsync(new CountQueryAction<>(query), //
+				v -> onAsyncComplete.accept(v), sqlE -> {
+					onError.accept(new EntityOperationException("Query failed: " + query, sqlE));
+				}, onError);
+		}
+	}
+
+	class CountQueryAction<E> implements SqlAction<Long> {
+		private final String theCountSql;
+
+		CountQueryAction(EntityQuery<E> query) {
+			TableNaming<E> naming = (TableNaming<E>) theTableNaming.get(query.getEntityType().getName());
+			StringBuilder sql = new StringBuilder();
+			sql.append("SELECT COUNT(*) FROM ");
+			if (theSchemaName != null)
+				sql.append(theSchemaName).append('.');
+			sql.append(naming.getTableName());
+			Map<String, Join<?, ?, ?>> joins = new HashMap<>();
+			if (query.getSelection() instanceof EntityCondition.All) {//
+			} else {
+				sql.append(" WHERE ");
+				appendCondition(sql, query.getSelection(), naming, QuickMap.empty(), null, joins);
+				// TODO Joins
+			}
+			theCountSql = sql.toString();
+		}
+
+		@Override
+		public Long execute(Statement stmt, BooleanSupplier canceled) throws SQLException, EntityOperationException {
+			try (ResultSet rs = stmt.executeQuery(theCountSql)) {
+				if (!rs.next())
+					return 0L;
+				return rs.getLong(1);
+			}
+		}
+
+		PreparedSqlAction<Long> prepare() {}
+	}
+
+	@Override
+	public <E> Cancelable query(EntityQuery<E> query, Object prepared, Consumer<Iterable<SimpleEntity<? extends E>>> onAsyncComplete,
+		Consumer<EntityOperationException> onError) {
+		if (prepared instanceof PreparedSqlOperation) {
+			return ((PreparedSqlOperation<E, Iterable<SimpleEntity<? extends E>>>) prepared).executeAsync((PreparedQuery<E>) query, //
+				onAsyncComplete, sqlE -> {
+					onError.accept(new EntityOperationException("Query failed: " + query, sqlE));
+				}, onError);
+		} else {
+			return theConnectionPool.connectAsync(new CollectionQueryAction<>(query), //
+				onAsyncComplete, sqlE -> {
+					onError.accept(new EntityOperationException("Query failed: " + query, sqlE));
+				}, onError);
+		}
+	}
+
+	class CollectionQueryAction<E> implements SqlAction<Iterable<SimpleEntity<? extends E>>> {
+		private final EntityQuery<E> theQuery;
+		private final TableNaming<E> theNaming;
+		private final Map<String, Join<?, ?, ?>> theJoins;
+		private final String theQuerySql;
+
+		CollectionQueryAction(EntityQuery<E> query) {
+			theQuery = query;
+			theNaming = (TableNaming<E>) theTableNaming.get(query.getEntityType().getName());
+			StringBuilder sql = new StringBuilder();
+			sql.append("SELECT * FROM ");
+			if (theSchemaName != null)
+				sql.append(theSchemaName).append('.');
+			sql.append(theNaming.getTableName());
+			theJoins = new HashMap<>();
+			if (query.getSelection() instanceof EntityCondition.All) {//
+			} else {
+				sql.append(" WHERE ");
+				appendCondition(sql, query.getSelection(), theNaming, QuickMap.empty(), null, theJoins);
+				// TODO Joins
+			}
+			theQuerySql = sql.toString();
+		}
+
+		@Override
+		public Iterable<SimpleEntity<? extends E>> execute(Statement stmt, BooleanSupplier canceled)
+			throws SQLException, EntityOperationException {
+			List<SimpleEntity<? extends E>> entities = new ArrayList<>();
+			try (ResultSet rs = stmt.executeQuery(theQuerySql)) {
+				while (rs.next())
+					entities.add(buildEntity(theQuery.getEntityType(), rs, theNaming, theJoins));
+			}
+			return entities;
+		}
+
+		PreparedSqlAction<Iterable<SimpleEntity<? extends E>>> prepare() {}
+	}
+
+	@Override
+	public <E> long update(EntityUpdate<E> update, Object prepared) throws EntityOperationException {
 		try {
-			Long value = theConnectionPool.connect(stmt -> {
-				BetterSortedSet<EntityIdentity<? extends E>> affected = new BetterTreeSet<>(false, EntityIdentity::compareTo);
-				QuickMap<String, List<Object>> oldValues = values.keySet().createMap();
-				for (int f = 0; f < values.keySize(); f++) {
-					if (values.get(f) != EntityUpdate.NOT_SET)
-						oldValues.put(f, new ArrayList<>());
-				}
-				long missed = 0;
-				try (ResultSet rs = stmt.executeQuery(querySql.toString())) {
-					while (rs.next()) {
-						SimpleEntity<? extends E> entity = buildEntity(update.getEntityType(), rs, naming, joins);
-						// TODO Invalid for sub-typed entities
-						if (isDifferent(entity.getFields(), values)) {
-							int index = affected.getElementsBefore(affected.addElement(entity.getIdentity(), false).getElementId());
-							for (int f = 0; f < values.keySize(); f++) {
-								Object targetValue = values.get(f);
-								if (targetValue != EntityUpdate.NOT_SET)
-									oldValues.get(f).add(index, entity.getFields().get(f));
-							}
-						} else
-							missed++;
-					}
-				}
-				if (affected.isEmpty())
-					return Long.valueOf(0);
-				stmt.executeUpdate(updateSql.toString());
-				List<EntityChange.FieldChange<E, ?>> fieldChanges = new ArrayList<>(oldValues.valueCount());
-				for (int f = 0; f < values.keySize(); f++) {
-					if (values.get(f) == EntityUpdate.NOT_SET)
-						continue;
-					fieldChanges.add(new EntityChange.FieldChange<>(
-						(ObservableEntityFieldType<E, Object>) update.getEntityType().getFields().get(f), oldValues.get(f), values.get(f)));
-				}
-				boolean useSelection = affected.size() > 1 && (affected.size() * affected.size() <= missed)
-					&& isConditionValidPostUpdate(update.getSelection(), values);
-				changed(new EntityChange.EntityFieldValueChange<>(update.getEntityType(), Instant.now(), affected, fieldChanges,
-					useSelection ? update.getSelection() : null));
-				return Long.valueOf(affected.size());
-			}, v -> onAsyncComplete.accept(v), err -> {
-				onError.accept(new EntityOperationException("Update failed: " + update, err));
-			}, onError);
-			if (value == null && onAsyncComplete == null)
-				throw new EntityOperationException("Update failed");
-			return value == null ? -1 : value;
+			if (prepared instanceof PreparedSqlOperation)
+				return ((PreparedSqlOperation<E, Long>) prepared).execute((PreparedUpdate<E>) update);
+			else
+				return theConnectionPool.connect(new UpdateAction<>(update));
 		} catch (SQLException e) {
 			throw new EntityOperationException("Update failed: " + update, e);
 		}
 	}
 
 	@Override
-	public <E> long delete(EntityDeletion<E> delete, Object prepared, LongConsumer onAsyncComplete,
+	public <E> Cancelable updateAsync(EntityUpdate<E> update, Object prepared, LongConsumer onAsyncComplete,
 		Consumer<EntityOperationException> onError) throws EntityOperationException {
-		TableNaming<E> naming = (TableNaming<E>) theTableNaming.get(delete.getEntityType().getName());
-		StringBuilder deleteSql = new StringBuilder();
-		StringBuilder querySql = new StringBuilder();
-		deleteSql.append("DELETE FROM ");
-		querySql.append("SELECT * FROM ");
-		if (theSchemaName != null) {
-			deleteSql.append(theSchemaName).append('.');
-			querySql.append(theSchemaName).append('.');
-		}
-		querySql.append(naming.getTableName());
-		deleteSql.append(naming.getTableName());
-		Map<String, Join<?, ?, ?>> joins = new HashMap<>();
-		if (delete.getSelection() instanceof EntityCondition.All) {//
+		if (prepared instanceof PreparedSqlOperation) {
+			return ((PreparedSqlOperation<E, Long>) prepared).executeAsync((PreparedUpdate<E>) update, //
+				v -> onAsyncComplete.accept(v), sqlE -> {
+					onError.accept(new EntityOperationException("Update failed: " + update, sqlE));
+				}, onError);
 		} else {
-			StringBuilder whereSql = new StringBuilder();
-			whereSql.append(" WHERE ");
-			appendCondition(whereSql, delete.getSelection(), naming, QuickMap.empty(), null, joins);
-			// TODO Joins
-			deleteSql.append(whereSql);
-			querySql.append(whereSql);
+			return theConnectionPool.connectAsync(new UpdateAction<>(update), //
+				v -> onAsyncComplete.accept(v), sqlE -> {
+					onError.accept(new EntityOperationException("Update failed: " + update, sqlE));
+				}, onError);
+		}
+	}
+
+	abstract class ModificationAction<E> implements SqlAction<Long> {
+		private final EntityModification<E> theModification;
+		private final TableNaming<E> theNaming;
+		private final String theUpdateSql;
+		private final String theQuerySql;
+		private final Map<String, Join<?, ?, ?>> theJoins;
+
+		ModificationAction(EntityModification<E> update) {
+			theModification = update;
+			theNaming = (TableNaming<E>) theTableNaming.get(update.getEntityType().getName());
+			theJoins = new HashMap<>();
+
+			StringBuilder updateSql = new StringBuilder();
+			StringBuilder querySql = new StringBuilder();
+			updateSql.append(getSqlActionName()).append(' ');
+			querySql.append("SELECT * FROM ");
+			if (theSchemaName != null) {
+				updateSql.append(theSchemaName).append('.');
+				querySql.append(theSchemaName).append('.');
+			}
+			querySql.append(theNaming.getTableName());
+			updateSql.append(theNaming.getTableName());
+			Map<String, Join<?, ?, ?>> joins = new HashMap<>();
+
+			addSqlDetails(updateSql);
+			if (update.getSelection() instanceof EntityCondition.All) {//
+			} else {
+				StringBuilder whereSql = new StringBuilder();
+				whereSql.append(" WHERE ");
+				appendCondition(whereSql, update.getSelection(), theNaming, QuickMap.empty(), null, joins);
+				// TODO Joins
+				updateSql.append(whereSql);
+				querySql.append(whereSql);
+			}
+
+			theUpdateSql = updateSql.toString();
+			theQuerySql = querySql.toString();
 		}
 
-		try {
-			return theConnectionPool.connect(stmt -> {
-				BetterSortedSet<EntityIdentity<? extends E>> affected = new BetterTreeSet<>(false, EntityIdentity::compareTo);
-				try (ResultSet rs = stmt.executeQuery(querySql.toString())) {
-					while (rs.next()) {
-						SimpleEntity<? extends E> entity = buildEntity(delete.getEntityType(), rs, naming, joins);
-						affected.add(entity.getIdentity());
-					}
+		EntityModification<E> getModification() {
+			return theModification;
+		}
+
+		TableNaming<E> getNaming() {
+			return theNaming;
+		}
+
+		Map<String, Join<?, ?, ?>> getJoins() {
+			return theJoins;
+		}
+
+		String getUpdateSql() {
+			return theUpdateSql;
+		}
+
+		String getQuerySql() {
+			return theQuerySql;
+		}
+
+		protected abstract String getSqlActionName();
+
+		protected abstract void addSqlDetails(StringBuilder sql);
+
+		protected abstract PreparedSqlAction<Long> prepare();
+	}
+
+	class UpdateAction<E> extends ModificationAction<E> {
+		UpdateAction(EntityUpdate<E> update) {
+			super(update);
+		}
+
+		@Override
+		public EntityUpdate<E> getModification() {
+			return (EntityUpdate<E>) super.getModification();
+		}
+
+		@Override
+		protected String getSqlActionName() {
+			return "UPDATE";
+		}
+
+		@Override
+		protected void addSqlDetails(StringBuilder sql) {
+			sql.append(" SET ");
+			QuickMap<String, Object> values = getModification().getFieldValues();
+			boolean firstSet = true;
+			for (int f = 0; f < values.keySize(); f++) {
+				if (values.get(f) == EntityUpdate.NOT_SET)
+					continue;
+				if (firstSet)
+					firstSet = false;
+				else
+					sql.append(", ");
+				sql.append(getNaming().getColumn(f).getName()).append('=');
+				serialize(getModification().getEntityType().getFields().get(f), values.get(f), getNaming(), sql);
+			}
+		}
+
+		@Override
+		public Long execute(Statement stmt, BooleanSupplier canceled) throws SQLException, EntityOperationException {
+			if (canceled.getAsBoolean())
+				return null;
+			QuickMap<String, Object> values = getModification().getFieldValues();
+			BetterSortedSet<EntityIdentity<? extends E>> affected = new BetterTreeSet<>(false, EntityIdentity::compareTo);
+			QuickMap<String, List<Object>> oldValues = values.keySet().createMap();
+			for (int f = 0; f < values.keySize(); f++) {
+				if (values.get(f) != EntityUpdate.NOT_SET)
+					oldValues.put(f, new ArrayList<>());
+			}
+			long missed = 0;
+			try (ResultSet rs = stmt.executeQuery(getQuerySql())) {
+				while (rs.next()) {
+					SimpleEntity<? extends E> entity = buildEntity(getModification().getEntityType(), rs, getNaming(), getJoins());
+					// TODO Invalid for sub-typed entities
+					if (isDifferent(entity.getFields(), values)) {
+						int index = affected.getElementsBefore(affected.addElement(entity.getIdentity(), false).getElementId());
+						for (int f = 0; f < values.keySize(); f++) {
+							Object targetValue = values.get(f);
+							if (targetValue != EntityUpdate.NOT_SET)
+								oldValues.get(f).add(index, entity.getFields().get(f));
+						}
+					} else
+						missed++;
 				}
-				if (affected.isEmpty())
-					return Long.valueOf(0);
-				stmt.executeUpdate(deleteSql.toString());
-				changed(new EntityChange.EntityExistenceChange<>(delete.getEntityType(), Instant.now(), false, affected, null));
-				return Long.valueOf(affected.size());
-			}, onAsyncComplete == null ? null : v -> onAsyncComplete.accept(v), err -> {
-				onError.accept(new EntityOperationException("Delete failed: " + delete, err));
-			}, onError);
+			}
+			if (affected.isEmpty())
+				return Long.valueOf(0);
+			else if (canceled.getAsBoolean())
+				return null;
+			stmt.executeUpdate(getUpdateSql());
+			List<EntityChange.FieldChange<E, ?>> fieldChanges = new ArrayList<>(oldValues.valueCount());
+			for (int f = 0; f < values.keySize(); f++) {
+				if (values.get(f) == EntityUpdate.NOT_SET)
+					continue;
+				fieldChanges.add(new EntityChange.FieldChange<>(
+					(ObservableEntityFieldType<E, Object>) getModification().getEntityType().getFields().get(f), oldValues.get(f),
+					values.get(f)));
+			}
+			boolean useSelection = affected.size() > 1 && (affected.size() * affected.size() <= missed)
+				&& isConditionValidPostUpdate(getModification().getSelection(), values);
+			if (canceled.getAsBoolean())
+				return null;
+			changed(new EntityChange.EntityFieldValueChange<>(getModification().getEntityType(), Instant.now(), affected, fieldChanges,
+				useSelection ? getModification().getSelection() : null));
+			return Long.valueOf(affected.size());
+		}
+
+		@Override
+		PreparedUpdateAction<E> prepare() {}
+	}
+
+	class PreparedUpdateAction<E> implements PreparedSqlAction<Long> {
+	}
+
+	@Override
+	public <E> long delete(EntityDeletion<E> delete, Object prepared) throws EntityOperationException {
+		try {
+			if (prepared instanceof PreparedSqlOperation)
+				return ((PreparedSqlOperation<E, Long>) prepared).execute((PreparedDeletion<E>) delete);
+			else
+				return theConnectionPool.connect(new DeleteAction<>(delete));
 		} catch (SQLException e) {
 			throw new EntityOperationException("Delete failed: " + delete, e);
 		}
+	}
+
+	@Override
+	public <E> Cancelable deleteAsync(EntityDeletion<E> delete, Object prepared, LongConsumer onAsyncComplete,
+		Consumer<EntityOperationException> onError) {
+		if (prepared instanceof PreparedSqlOperation) {
+			return ((PreparedSqlOperation<E, Long>) prepared).executeAsync((PreparedDeletion<E>) delete, //
+				v -> onAsyncComplete.accept(v), sqlE -> {
+					onError.accept(new EntityOperationException("Delete failed: " + delete, sqlE));
+				}, onError);
+		} else {
+			return theConnectionPool.connectAsync(new DeleteAction<>(delete), //
+				v -> onAsyncComplete.accept(v), sqlE -> {
+					onError.accept(new EntityOperationException("Delete failed: " + delete, sqlE));
+				}, onError);
+		}
+	}
+
+	class DeleteAction<E> extends ModificationAction<E> {
+		DeleteAction(EntityDeletion<E> update) {
+			super(update);
+		}
+
+		@Override
+		EntityDeletion<E> getModification() {
+			return (EntityDeletion<E>) super.getModification();
+		}
+
+		@Override
+		protected String getSqlActionName() {
+			return "DELETE FROM";
+		}
+
+		@Override
+		protected void addSqlDetails(StringBuilder sql) {
+		}
+
+		@Override
+		public Long execute(Statement stmt, BooleanSupplier canceled) throws SQLException, EntityOperationException {
+			BetterSortedSet<EntityIdentity<? extends E>> affected = new BetterTreeSet<>(false, EntityIdentity::compareTo);
+			try (ResultSet rs = stmt.executeQuery(getQuerySql())) {
+				while (rs.next()) {
+					SimpleEntity<? extends E> entity = buildEntity(getModification().getEntityType(), rs, getNaming(), getJoins());
+					affected.add(entity.getIdentity());
+				}
+			}
+			if (affected.isEmpty())
+				return Long.valueOf(0);
+			stmt.executeUpdate(getUpdateSql().toString());
+			changed(new EntityChange.EntityExistenceChange<>(getModification().getEntityType(), Instant.now(), false, affected, null));
+			return Long.valueOf(affected.size());
+		}
+
+		@Override
+		PreparedDeleteAction<E> prepare();
+	}
+
+	class PreparedDeleteAction<E> implements PreparedSqlAction<Long> {
 	}
 
 	@Override
@@ -459,86 +670,104 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 	}
 
 	@Override
-	public List<Fulfillment<?>> loadEntityData(List<EntityLoadRequest<?>> loadRequests, Consumer<List<Fulfillment<?>>> onComplete,
-		Consumer<EntityOperationException> onError) throws EntityOperationException {
+	public List<Fulfillment<?>> loadEntityData(List<EntityLoadRequest<?>> loadRequests) throws EntityOperationException {
 		try {
-			return theConnectionPool.connect(stmt -> {
-				List<Fulfillment<?>> fulfillment = new ArrayList<>(loadRequests.size());
-				for (EntityLoadRequest<?> request : loadRequests)
-					fulfillment.add(satisfy(request, stmt));
-				return fulfillment;
-			}, onComplete, err -> {
-				onError.accept(new EntityOperationException("Load requests failed: " + loadRequests, err));
-			}, onError);
+			return theConnectionPool.connect(new EntityDataLoadAction(loadRequests));
 		} catch (SQLException e) {
 			throw new EntityOperationException("Load requests failed: " + loadRequests, e);
 		}
 	}
 
-	private <E> Fulfillment<E> satisfy(EntityLoadRequest<E> loadRequest, Statement stmt) throws SQLException {
-		TableNaming<E> naming = (TableNaming<E>) theTableNaming.get(loadRequest.getType().getName());
-		StringBuilder sql = new StringBuilder();
-		sql.append("SELECT ");
-		boolean firstField = true;
-		Map<String, Join<?, ?, ?>> joins = new HashMap<>();
-		for (int i = 0; i < loadRequest.getType().getIdentityFields().keySize(); i++) {
-			if (firstField)
-				firstField = false;
-			else
-				sql.append(", ");
-			addFieldRef(loadRequest.getType().getIdentityFields().get(i), naming, sql, joins);
-		}
-		for (EntityValueAccess<? extends E, ?> field : loadRequest.getFields()) {
-			if (firstField)
-				firstField = false;
-			else
-				sql.append(", ");
-			addFieldRef(field, naming, sql, joins);
-		}
-		// TODO Also need to join with subclass tables if any identities are sub-typed
-		sql.append(" FROM ");
-		if (theSchemaName != null)
-			sql.append(theSchemaName).append('.');
-		sql.append(naming.getTableName()).append(" WHERE ");
-		if (loadRequest.getChange() != null && loadRequest.getChange().getCustomData() instanceof EntityCondition)
-			appendCondition(sql, (EntityCondition<E>) loadRequest.getChange().getCustomData(), naming, QuickMap.empty(), null, joins);
-		else {
-			boolean firstEntity = true;
-			for (EntityIdentity<? extends E> entity : loadRequest.getEntities()) {
-				if (firstEntity)
-					firstEntity = false;
-				else
-					sql.append(" OR ");
-				if (entity.getFields().keySize() > 1)
-					sql.append('(');
-				firstField = true;
-				for (int i = 0; i < entity.getFields().keySize(); i++) {
-					if (firstField)
-						firstField = false;
-					else
-						sql.append(" AND ");
-					ObservableEntityFieldType<E, ?> field = loadRequest.getType().getIdentityFields().get(i);
-					sql.append(naming.getColumn(field.getIndex()).getName());
-					sql.append('=');
-					serialize(field, entity.getFields().get(i), naming, sql);
-				}
-				if (entity.getFields().keySize() > 1)
-					sql.append(')');
-			}
+	@Override
+	public Cancelable loadEntityDataAsync(List<EntityLoadRequest<?>> loadRequests, Consumer<List<Fulfillment<?>>> onComplete,
+		Consumer<EntityOperationException> onError) {
+		return theConnectionPool.connectAsync(new EntityDataLoadAction(loadRequests), //
+			onComplete, sqlE -> {
+				onError.accept(new EntityOperationException("Load requests failed: " + loadRequests, sqlE));
+			}, onError);
+	}
+
+	class EntityDataLoadAction implements SqlAction<List<Fulfillment<?>>> {
+		private final List<EntityLoadRequest<?>> theLoadRequests;
+
+		EntityDataLoadAction(List<EntityLoadRequest<?>> loadRequests) {
+			theLoadRequests = loadRequests;
 		}
 
-		QuickMap<String, Object>[] results = new QuickMap[loadRequest.getEntities().size()];
-		try (ResultSet rs = stmt.executeQuery(sql.toString())) {
-			while (rs.next()) {
-				SimpleEntity<? extends E> entity = buildEntity(loadRequest.getType(), rs, naming, joins);
-				CollectionElement<EntityIdentity<? extends E>> requested = loadRequest.getEntities().getElement(entity.getIdentity(), true);
-				if (requested == null)
-					continue;
-				results[loadRequest.getEntities().getElementsBefore(requested.getElementId())] = entity.getFields();
-			}
+		@Override
+		public List<Fulfillment<?>> execute(Statement stmt, BooleanSupplier canceled) throws SQLException, EntityOperationException {
+			List<Fulfillment<?>> fulfillment = new ArrayList<>(theLoadRequests.size());
+			for (EntityLoadRequest<?> request : theLoadRequests)
+				fulfillment.add(satisfy(request, stmt));
+			return fulfillment;
 		}
-		// TODO Check for missing results and do a secondary, identity-based query for the missing ones
-		return new Fulfillment<>(loadRequest, Arrays.asList(results));
+
+		private <E> Fulfillment<E> satisfy(EntityLoadRequest<E> loadRequest, Statement stmt) throws SQLException {
+			TableNaming<E> naming = (TableNaming<E>) theTableNaming.get(loadRequest.getType().getName());
+			StringBuilder sql = new StringBuilder();
+			sql.append("SELECT ");
+			boolean firstField = true;
+			Map<String, Join<?, ?, ?>> joins = new HashMap<>();
+			for (int i = 0; i < loadRequest.getType().getIdentityFields().keySize(); i++) {
+				if (firstField)
+					firstField = false;
+				else
+					sql.append(", ");
+				addFieldRef(loadRequest.getType().getIdentityFields().get(i), naming, sql, joins);
+			}
+			for (EntityValueAccess<? extends E, ?> field : loadRequest.getFields()) {
+				if (firstField)
+					firstField = false;
+				else
+					sql.append(", ");
+				addFieldRef(field, naming, sql, joins);
+			}
+			// TODO Also need to join with subclass tables if any identities are sub-typed
+			sql.append(" FROM ");
+			if (theSchemaName != null)
+				sql.append(theSchemaName).append('.');
+			sql.append(naming.getTableName()).append(" WHERE ");
+			if (loadRequest.getChange() != null && loadRequest.getChange().getCustomData() instanceof EntityCondition)
+				appendCondition(sql, (EntityCondition<E>) loadRequest.getChange().getCustomData(), naming, QuickMap.empty(), null, joins);
+			else {
+				boolean firstEntity = true;
+				for (EntityIdentity<? extends E> entity : loadRequest.getEntities()) {
+					if (firstEntity)
+						firstEntity = false;
+					else
+						sql.append(" OR ");
+					if (entity.getFields().keySize() > 1)
+						sql.append('(');
+					firstField = true;
+					for (int i = 0; i < entity.getFields().keySize(); i++) {
+						if (firstField)
+							firstField = false;
+						else
+							sql.append(" AND ");
+						ObservableEntityFieldType<E, ?> field = loadRequest.getType().getIdentityFields().get(i);
+						sql.append(naming.getColumn(field.getIndex()).getName());
+						sql.append('=');
+						serialize(field, entity.getFields().get(i), naming, sql);
+					}
+					if (entity.getFields().keySize() > 1)
+						sql.append(')');
+				}
+			}
+
+			QuickMap<String, Object>[] results = new QuickMap[loadRequest.getEntities().size()];
+			try (ResultSet rs = stmt.executeQuery(sql.toString())) {
+				while (rs.next()) {
+					SimpleEntity<? extends E> entity = buildEntity(loadRequest.getType(), rs, naming, joins);
+					CollectionElement<EntityIdentity<? extends E>> requested = loadRequest.getEntities().getElement(entity.getIdentity(),
+						true);
+					if (requested == null)
+						continue;
+					results[loadRequest.getEntities().getElementsBefore(requested.getElementId())] = entity.getFields();
+				}
+			}
+			// TODO Check for missing results and do a secondary, identity-based query for the missing ones
+			return new Fulfillment<>(loadRequest, Arrays.asList(results));
+		}
 	}
 
 	void changed(EntityChange<?> change) {
@@ -717,7 +946,7 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 
 	private void writeTableIfAbsent(ObservableEntityType<?> type, TableNaming<?> naming) throws EntityOperationException {
 		try {
-			theConnectionPool.<Void> connect(stmt -> {
+			theConnectionPool.<Void> connect((stmt, canceled) -> {
 				boolean schemaPresent;
 				if (theSchemaName == null)
 					schemaPresent = true;
@@ -751,7 +980,7 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 				create.append("\n);");
 				stmt.execute(create.toString());
 				return null;
-			}, null, null, null);
+			});
 		} catch (SQLException e) {
 			throw new EntityOperationException("Could not create table for entity " + type, e);
 		}

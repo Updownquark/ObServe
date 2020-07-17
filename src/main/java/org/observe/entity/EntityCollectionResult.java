@@ -8,12 +8,6 @@ package org.observe.entity;
  */
 public interface EntityCollectionResult<E> extends EntityQueryResult<E> {
 	@Override
-	EntityQuery<E> getOperation();
-
-	@Override
-	EntityCollectionResult<E> dispose();
-
-	@Override
 	default EntityCollectionResult<E> waitFor() throws InterruptedException, EntityOperationException {
 		EntityQueryResult.super.waitFor();
 		return this;

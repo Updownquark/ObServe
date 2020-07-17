@@ -4,6 +4,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -28,6 +29,7 @@ import org.observe.entity.EntityOperation;
 import org.observe.entity.EntityOperationException;
 import org.observe.entity.EntityOperationVariable;
 import org.observe.entity.EntityQuery;
+import org.observe.entity.EntityQueryResult;
 import org.observe.entity.EntityValueAccess;
 import org.observe.entity.ObservableEntity;
 import org.observe.entity.ObservableEntityFieldType;
@@ -62,7 +64,6 @@ public class QueryResults<E> extends AbstractOperationResult<E> {
 	private volatile boolean isAdjusting;
 
 	public QueryResults(QueryResultNode node, EntityCondition<E> selection, boolean count) {
-		super(true);
 		theNode = node;
 		theSelection = selection;
 		theListening = new AtomicInteger();
@@ -95,8 +96,18 @@ public class QueryResults<E> extends AbstractOperationResult<E> {
 	}
 
 	@Override
-	public Observable<? extends QueryResults<E>> statusChanges() {
-		return (Observable<? extends QueryResults<E>>) super.statusChanges();
+	public Observable<? extends QueryResults<E>> watchStatus() {
+		return (Observable<? extends QueryResults<E>>) super.watchStatus();
+	}
+
+	@Override
+	public void cancel(boolean mayInterruptIfRunning) {
+		synchronized (theSelection.getEntityType().getEntitySet()) {
+			if (theListening.decrementAndGet() == 0) {
+				super.cancel(mayInterruptIfRunning);
+				theNode.remove();
+			}
+		}
 	}
 
 	public EntityCondition<E> getSelection() {
@@ -337,10 +348,10 @@ public class QueryResults<E> extends AbstractOperationResult<E> {
 		} else {
 			switch (change.changeType) {
 			case add:
-				theRawCountResult.set(theRawCountResult.get() + 1, change);
+				theRawCountResult.set(theRawCountResult.get() + entities.size(), change);
 				break;
 			case remove:
-				theRawCountResult.set(theRawCountResult.get() - 1, change);
+				theRawCountResult.set(theRawCountResult.get() - entities.size(), change);
 				break;
 			default:
 				break;
@@ -349,10 +360,12 @@ public class QueryResults<E> extends AbstractOperationResult<E> {
 	}
 
 	public EntityCollectionResult<E> getResults(EntityQuery<E> query, boolean withUpdates) {
+		theListening.getAndIncrement();
 		return new ResultWrapper(query, theExposedResults, withUpdates);
 	}
 
 	public EntityCountResult<E> getCountResults(EntityQuery<E> query) {
+		theListening.getAndIncrement();
 		ObservableValue<Long> count;
 		if (theRawCountResult != null)
 			count = theRawCountResult;
@@ -403,15 +416,13 @@ public class QueryResults<E> extends AbstractOperationResult<E> {
 		};
 	}
 
-	class ResultWrapper implements EntityCollectionResult<E> {
+	abstract class QueryResultWrapper implements EntityQueryResult<E> {
 		private final EntityQuery<E> theQuery;
-		private final EntitySetImpl theEntitySet;
-		private final EntitySet theEntities;
+		private AtomicBoolean isCanceled;
 
-		ResultWrapper(EntityQuery<E> query, ObservableSortedSet<ObservableEntity<? extends E>> results, boolean withUpdates) {
+		QueryResultWrapper(EntityQuery<E> query) {
 			theQuery = query;
-			theEntitySet = new EntitySetImpl();
-			theEntities = new EntitySet(query, results, withUpdates);
+			isCanceled = getStatus().isDone() ? null : new AtomicBoolean(false);
 		}
 
 		@Override
@@ -420,8 +431,10 @@ public class QueryResults<E> extends AbstractOperationResult<E> {
 		}
 
 		@Override
-		public boolean cancel(boolean mayInterruptIfRunning) {
-			return QueryResults.this.cancel(mayInterruptIfRunning);
+		public void cancel(boolean mayInterruptIfRunning) {
+			AtomicBoolean canceled = isCanceled;
+			if (canceled != null && !canceled.getAndSet(true))
+				QueryResults.this.cancel(mayInterruptIfRunning);
 		}
 
 		@Override
@@ -435,14 +448,19 @@ public class QueryResults<E> extends AbstractOperationResult<E> {
 		}
 
 		@Override
-		public Observable<? extends ObservableEntityResult<E>> statusChanges() {
-			return QueryResults.this.statusChanges();
+		public Observable<? extends ObservableEntityResult<E>> watchStatus() {
+			return QueryResults.this.watchStatus();
 		}
+	}
 
-		@Override
-		public EntityCollectionResult<E> dispose() {
-			QueryResults.this.dispose();
-			return this;
+	class ResultWrapper extends QueryResultWrapper implements EntityCollectionResult<E> {
+		private final EntitySetImpl theEntitySet;
+		private final EntitySet theEntities;
+
+		ResultWrapper(EntityQuery<E> query, ObservableSortedSet<ObservableEntity<? extends E>> results, boolean withUpdates) {
+			super(query);
+			theEntitySet = new EntitySetImpl();
+			theEntities = new EntitySet(query, results, withUpdates);
 		}
 
 		@Override
@@ -477,7 +495,7 @@ public class QueryResults<E> extends AbstractOperationResult<E> {
 			EntitySet(EntityQuery<E> query, ObservableSortedSet<ObservableEntity<? extends E>> results, boolean withUpdates) {
 				ObservableCollection.DistinctSortedDataFlow<//
 				ObservableEntity<? extends E>, ObservableEntity<? extends E>, ObservableEntity<? extends E>> flow = results.flow();
-				if (!theQuery.getOrder().isEmpty())
+				if (!getOperation().getOrder().isEmpty())
 					flow = flow.distinctSorted(createComparator(query), false);
 				if (!withUpdates)
 					flow = flow.mapEquivalent(flow.getTargetType(), e -> e, e -> e, opts -> opts.cache(false).fireIfUnchanged(false));
@@ -585,44 +603,12 @@ public class QueryResults<E> extends AbstractOperationResult<E> {
 		}
 	}
 
-	class CountResultWrapper implements EntityCountResult<E> {
-		private final EntityQuery<E> theQuery;
+	class CountResultWrapper extends QueryResultWrapper implements EntityCountResult<E> {
 		private final ObservableValue<Long> theWrapped;
 
 		CountResultWrapper(EntityQuery<E> query, ObservableValue<Long> wrapped) {
-			theQuery = query;
+			super(query);
 			theWrapped = wrapped;
-		}
-
-		@Override
-		public EntityQuery<E> getOperation() {
-			return theQuery;
-		}
-
-		@Override
-		public boolean cancel(boolean mayInterruptIfRunning) {
-			return QueryResults.this.cancel(mayInterruptIfRunning);
-		}
-
-		@Override
-		public ResultStatus getStatus() {
-			return QueryResults.this.getStatus();
-		}
-
-		@Override
-		public EntityOperationException getFailure() {
-			return QueryResults.this.getFailure();
-		}
-
-		@Override
-		public Observable<? extends ObservableEntityResult<E>> statusChanges() {
-			return QueryResults.this.statusChanges();
-		}
-
-		@Override
-		public EntityCountResult<E> dispose() {
-			QueryResults.this.dispose();
-			return this;
 		}
 
 		@Override

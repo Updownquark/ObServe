@@ -45,5 +45,5 @@ public interface ObservableEntityResult<E> extends ObservableOperationResult<E> 
 	}
 
 	@Override
-	Observable<? extends ObservableEntityResult<E>> statusChanges();
+	Observable<? extends ObservableEntityResult<E>> watchStatus();
 }

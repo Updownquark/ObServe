@@ -154,26 +154,32 @@ public interface ObservableEntityProvider {
 		}
 	}
 
+	public interface Cancelable {
+		void cancel(boolean mayInterruptIfExecuting, Runnable onCancelSuccess);
+	}
+
 	void install(ObservableEntityDataSet entitySet) throws EntityOperationException;
 
 	Object prepare(ConfigurableOperation<?> operation) throws EntityOperationException;
+	void dispose(Object prepared);
 
-	<E> SimpleEntity<E> create(EntityCreator<? super E, E> creator, Object prepared, //
-		Consumer<SimpleEntity<E>> identityFieldsOnAsyncComplete, Consumer<EntityOperationException> onError)
-			throws EntityOperationException;
+	<E> SimpleEntity<E> create(EntityCreator<? super E, E> creator, Object prepared) throws EntityOperationException;
+	<E> Cancelable createAsync(EntityCreator<? super E, E> creator, Object prepared, //
+		Consumer<SimpleEntity<E>> identityFieldsOnAsyncComplete, Consumer<EntityOperationException> onError);
 
-	long count(EntityQuery<?> query, Object prepared, //
+	Cancelable count(EntityQuery<?> query, Object prepared, //
+		LongConsumer onAsyncComplete, Consumer<EntityOperationException> onError);
+
+	<E> Cancelable query(EntityQuery<E> query, Object prepared, //
+		Consumer<Iterable<SimpleEntity<? extends E>>> onAsyncComplete, Consumer<EntityOperationException> onError);
+
+	<E> long update(EntityUpdate<E> update, Object prepared) throws EntityOperationException;
+	<E> Cancelable updateAsync(EntityUpdate<E> update, Object prepared, //
 		LongConsumer onAsyncComplete, Consumer<EntityOperationException> onError) throws EntityOperationException;
 
-	<E> Iterable<SimpleEntity<? extends E>> query(EntityQuery<E> query, Object prepared,
-		Consumer<Iterable<SimpleEntity<? extends E>>> onAsyncComplete, Consumer<EntityOperationException> onError)
-			throws EntityOperationException;
-
-	<E> long update(EntityUpdate<E> update, Object prepared, //
-		LongConsumer onAsyncComplete, Consumer<EntityOperationException> onError) throws EntityOperationException;
-
-	<E> long delete(EntityDeletion<E> delete, Object prepared, //
-		LongConsumer onAsyncComplete, Consumer<EntityOperationException> onError) throws EntityOperationException;
+	<E> long delete(EntityDeletion<E> delete, Object prepared) throws EntityOperationException;
+	<E> Cancelable deleteAsync(EntityDeletion<E> delete, Object prepared, //
+		LongConsumer onAsyncComplete, Consumer<EntityOperationException> onError);
 
 	<V> ElementId updateCollection(BetterCollection<V> collection, CollectionOperationType changeType, ElementId element, V value,
 		Consumer<ElementId> asyncResult);
@@ -186,7 +192,7 @@ public interface ObservableEntityProvider {
 	/** @return All changes to the entity data (including those resulting from calls to this provider) since the previous invocation */
 	List<EntityChange<?>> changes();
 
-	List<EntityLoadRequest.Fulfillment<?>> loadEntityData(List<EntityLoadRequest<?>> loadRequests, //
-		Consumer<List<EntityLoadRequest.Fulfillment<?>>> onComplete, Consumer<EntityOperationException> onError)
-			throws EntityOperationException;
+	List<EntityLoadRequest.Fulfillment<?>> loadEntityData(List<EntityLoadRequest<?>> loadRequests) throws EntityOperationException;
+	Cancelable loadEntityDataAsync(List<EntityLoadRequest<?>> loadRequests, //
+		Consumer<List<EntityLoadRequest.Fulfillment<?>>> onComplete, Consumer<EntityOperationException> onError);
 }

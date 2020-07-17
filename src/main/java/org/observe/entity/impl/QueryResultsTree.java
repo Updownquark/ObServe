@@ -215,7 +215,6 @@ public class QueryResultsTree {
 			QueryResults<?> results = theResults == null ? null : theResults.get();
 			if (results != null) {
 				results.cancel(true);
-				results.dispose();
 			}
 		}
 

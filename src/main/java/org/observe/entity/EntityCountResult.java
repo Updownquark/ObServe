@@ -9,12 +9,6 @@ import org.observe.ObservableValue;
  */
 public interface EntityCountResult<E> extends EntityQueryResult<E>, ObservableValue<Long> {
 	@Override
-	EntityQuery<E> getOperation();
-
-	@Override
-	EntityCountResult<E> dispose();
-
-	@Override
 	default EntityCountResult<E> waitFor() throws InterruptedException, EntityOperationException {
 		EntityQueryResult.super.waitFor();
 		return this;

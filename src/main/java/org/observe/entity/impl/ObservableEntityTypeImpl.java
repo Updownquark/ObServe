@@ -137,7 +137,7 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 				if (entity != null)
 					return entity;
 			}
-			return select().entity(id).query().collect(false).dispose().get().getEntities().peekFirst();
+			return select().entity(id).query().collect(false).get().getEntities().peekFirst();
 		}
 	}
 

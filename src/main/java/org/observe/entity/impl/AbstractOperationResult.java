@@ -1,30 +1,37 @@
 package org.observe.entity.impl;
 
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.UnaryOperator;
 
 import org.observe.Observable;
 import org.observe.SimpleObservable;
 import org.observe.entity.EntityOperationException;
 import org.observe.entity.EntityQueryResult;
+import org.observe.entity.ObservableEntityProvider.Cancelable;
 import org.observe.entity.ObservableEntityResult;
 
 /**
- * Abstract {@link ObservableEntityResult} implementation that handles status changes and {@link EntityQueryResult#dispose() disposal}
+ * Abstract {@link ObservableEntityResult} implementation that handles status changes and {@link EntityQueryResult#cancel(boolean)
+ * cancellation}
  *
  * @param <E> The entity type of the operation
  */
 public abstract class AbstractOperationResult<E> implements ObservableEntityResult<E> {
-	private final boolean isQuery;
 	private final AtomicReference<ResultStatus> theStatus;
 	private final SimpleObservable<AbstractOperationResult<E>> theStatusChanges;
 	private volatile EntityOperationException theFailure;
-	private volatile boolean isDisposed;
+	private volatile boolean isCanceled;
+	private volatile boolean isCancelledWithInterrupt;
+	private volatile Cancelable theCancelable;
 
-	AbstractOperationResult(boolean query) {
-		isQuery = query;
+	AbstractOperationResult() {
 		theStatus = new AtomicReference<>(ResultStatus.WAITING);
-		theStatusChanges = SimpleObservable.build().safe(false).build();
+		theStatusChanges = SimpleObservable.build().safe(true).build(obs -> obs.onNext(this));
+	}
+
+	void setCancelable(Cancelable cancelable) {
+		theCancelable = cancelable;
+		if (isCanceled)
+			theCancelable.cancel(isCancelledWithInterrupt, () -> updateStatus(ResultStatus.CANCELLED));
 	}
 
 	@Override
@@ -32,63 +39,19 @@ public abstract class AbstractOperationResult<E> implements ObservableEntityResu
 		return theStatus.get();
 	}
 
-	private void updateStatus(UnaryOperator<ResultStatus> op) {
-		boolean[] changed = new boolean[1];
-		theStatus.updateAndGet(status -> {
-			ResultStatus newStatus = op.apply(status);
-			changed[0] = newStatus != status;
-			return newStatus;
-		});
-		if (changed[0]) {
+	private void updateStatus(ResultStatus status) {
+		if (theStatus.getAndSet(status) != status)
 			theStatusChanges.onNext(this);
-		}
 	}
 
 	@Override
-	public boolean cancel(boolean mayInterruptIfRunning) {
-		boolean[] cancelled = new boolean[1];
-		boolean[] disposed = new boolean[1];
-		updateStatus(status -> {
-			cancelled[0] = disposed[0] = false;
-			switch (status) {
-			case WAITING:
-				cancelled[0] = true;
-				return ResultStatus.CANCELLED;
-			case EXECUTING:
-				if (mayInterruptIfRunning) {
-					cancelled[0] = true;
-					return ResultStatus.CANCELLED;
-				} else {
-					disposed[0] = true;
-					return status;
-				}
-			case FULFILLED:
-				if (isQuery) {
-					disposed[0] = true;
-					return ResultStatus.DISPOSED;
-				} else
-					return status;
-			default:
-				cancelled[0] = false;
-				return status;
-			}
-		});
-		if (isQuery && disposed[0])
-			isDisposed = true;
-		return cancelled[0];
-	}
-
-	/** Marks this operation as disposed (for {@link EntityQueryResult}s) */
-	protected void dispose() {
-		isDisposed = true;
-		updateStatus(status -> {
-			switch (status) {
-			case FULFILLED:
-				return ResultStatus.DISPOSED;
-			default:
-				return status;
-			}
-		});
+	public void cancel(boolean mayInterruptIfRunning) {
+		if (!getStatus().isDone() && !isCanceled) {
+			isCanceled = true;
+			isCancelledWithInterrupt = mayInterruptIfRunning;
+			if (theCancelable != null)
+				theCancelable.cancel(mayInterruptIfRunning, () -> updateStatus(ResultStatus.CANCELLED));
+		}
 	}
 
 	@Override
@@ -97,7 +60,7 @@ public abstract class AbstractOperationResult<E> implements ObservableEntityResu
 	}
 
 	@Override
-	public Observable<? extends ObservableEntityResult<E>> statusChanges() {
+	public Observable<? extends ObservableEntityResult<E>> watchStatus() {
 		return theStatusChanges.readOnly();
 	}
 
@@ -109,7 +72,7 @@ public abstract class AbstractOperationResult<E> implements ObservableEntityResu
 	 */
 	public AbstractOperationResult<E> failed(EntityOperationException failure) {
 		theFailure = failure;
-		updateStatus(status -> ResultStatus.FAILED);
+		updateStatus(ResultStatus.FAILED);
 		return this;
 	}
 
@@ -119,7 +82,7 @@ public abstract class AbstractOperationResult<E> implements ObservableEntityResu
 	 * @return This operation
 	 */
 	protected AbstractOperationResult<E> fulfilled() {
-		updateStatus(status -> isDisposed ? ResultStatus.DISPOSED : ResultStatus.FULFILLED);
+		updateStatus(ResultStatus.FULFILLED);
 		return this;
 	}
 }
