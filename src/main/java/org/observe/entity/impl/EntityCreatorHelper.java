@@ -109,6 +109,18 @@ interface EntityCreatorHelper<E, E2 extends E> extends EntityCreator<E, E2> {
 		}
 
 		@Override
+		public ObservableEntity<?> getEntity(int fieldIndex) {
+			if (theCreator.getEntityType().getFields().get(fieldIndex).getTargetEntity() == null)
+				throw new IllegalArgumentException(
+					theCreator.getEntityType().getFields().get(fieldIndex) + " is not an entity-typed field");
+			Object v = get(fieldIndex);
+			if (v != null && !(v instanceof ObservableEntity))
+				v = ((ObservableEntityType<Object>) theCreator.getEntityType().getFields().get(fieldIndex).getTargetEntity())
+				.observableEntity(v);
+			return (ObservableEntity<?>) v;
+		}
+
+		@Override
 		public long getStamp() {
 			throw new IllegalStateException("Should not be called from condition test");
 		}
@@ -130,6 +142,12 @@ interface EntityCreatorHelper<E, E2 extends E> extends EntityCreator<E, E2> {
 
 		@Override
 		public <F> F set(int fieldIndex, F value, Object cause) throws UnsupportedOperationException, IllegalArgumentException {
+			throw new IllegalStateException("Should not be called from condition test");
+		}
+
+		@Override
+		public <F> ObservableEntity<F> setEntity(int fieldIndex, ObservableEntity<F> value, Object cause)
+			throws UnsupportedOperationException, IllegalArgumentException {
 			throw new IllegalStateException("Should not be called from condition test");
 		}
 

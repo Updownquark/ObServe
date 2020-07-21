@@ -87,6 +87,11 @@ public abstract class EntityChange<E> {
 		public BetterList<EntityIdentity<? extends E>> getEntities() {
 			return entities;
 		}
+
+		@Override
+		public String toString() {
+			return (changeType == EntityChangeType.add ? "+" : "-") + entities;
+		}
 	}
 
 	/**
@@ -126,6 +131,11 @@ public abstract class EntityChange<E> {
 		public F getNewValue() {
 			return theNewValue;
 		}
+
+		@Override
+		public String toString() {
+			return theField + "->" + theNewValue;
+		}
 	}
 
 	/**
@@ -159,6 +169,11 @@ public abstract class EntityChange<E> {
 		/** @return The fields that changed */
 		public List<FieldChange<E, ?>> getFieldChanges() {
 			return theFieldChanges;
+		}
+
+		@Override
+		public String toString() {
+			return theFieldChanges + " for " + entities;
 		}
 	}
 

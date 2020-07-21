@@ -1000,7 +1000,10 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 		@Override
 		public void serialize(Object value, StringBuilder str) {
 			Object columnValue;
-			if (value instanceof EntityIdentity)
+			if (value == null) {
+				str.append("NULL");
+				return;
+			} else if (value instanceof EntityIdentity)
 				columnValue = ((EntityIdentity<?>) value).getFields().get(0);
 			else if (value instanceof ObservableEntity)
 				columnValue = ((ObservableEntity<?>) value).getId().getFields().get(0);

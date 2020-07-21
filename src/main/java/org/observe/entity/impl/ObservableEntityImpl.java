@@ -285,7 +285,7 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 			 * resulting in a final state not the same as the initial.
 			 */
 			try {
-				if (theType.getEntitySet().queueAction(sync -> {
+				theType.getEntitySet().queueAction(sync -> {
 					try {
 						if (sync)
 							return theType.select().entity(theId).update().withField(field, value).execute(true, cause);
@@ -304,9 +304,8 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 						_set(field, value, oldValue);
 						throw e;
 					}
-				})) {
-					_set(field, oldValue, value);
-				}
+				});
+				_set(field, oldValue, value);
 			} catch (IllegalStateException | EntityOperationException e) {
 				throw new IllegalArgumentException("Update failed", e);
 			}

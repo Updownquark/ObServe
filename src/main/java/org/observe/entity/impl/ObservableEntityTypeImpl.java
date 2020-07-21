@@ -261,7 +261,7 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 			int entityIdx = 0;
 			for (EntityIdentity<?> id : change.getEntities()) {
 				if (isAssignableFrom(id.getEntityType())) {
-					WeakReference<ObservableEntityImpl<? extends E>> entityRef = theEntitiesById.remove(id);
+					WeakReference<ObservableEntityImpl<? extends E>> entityRef = theEntitiesById.get(id);
 					ObservableEntityImpl<? extends E> entity = entityRef == null ? null : entityRef.get();
 					if (entity != null) {
 						for (FieldChange<E, ?> fieldChange : fieldValueChange.getFieldChanges()) {

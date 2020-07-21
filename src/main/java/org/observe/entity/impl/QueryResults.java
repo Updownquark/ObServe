@@ -338,9 +338,13 @@ public class QueryResults<E> extends AbstractOperationResult<E> {
 						theRawResults.remove(entity);
 					break;
 				default:
-					if (included)
-						theRawResults.add(usage.use(entity)); // No effect if already present
-					else
+					if (included) {
+						CollectionElement<ObservableEntity<? extends E>> element = theRawResults.getElement(entity, true);
+						if (element == null)
+							theRawResults.add(usage.use(entity));
+						else
+							theRawResults.mutableElement(element.getElementId()).set(element.get());
+					} else
 						theRawResults.remove(entity); // No effect if already removed
 					break;
 				}

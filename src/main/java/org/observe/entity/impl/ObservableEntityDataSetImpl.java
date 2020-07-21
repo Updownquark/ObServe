@@ -1220,12 +1220,28 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		}
 
 		@Override
+		public ObservableEntity<?> getEntity(int fieldIndex) {
+			if (getType().getFields().get(fieldIndex).getTargetEntity() == null)
+				throw new IllegalArgumentException(getType().getFields().get(fieldIndex) + " is not an entity-typed field");
+			Object v = get(fieldIndex);
+			if (v != null && !(v instanceof ObservableEntity))
+				v = ((ObservableEntityType<Object>) getType().getFields().get(fieldIndex).getTargetEntity()).observableEntity(v);
+			return (ObservableEntity<?>) v;
+		}
+
+		@Override
 		public String isAcceptable(int fieldIndex, Object value) {
 			throw new UnsupportedOperationException("Partial internal implementation");
 		}
 
 		@Override
 		public <F> F set(int fieldIndex, F value, Object cause) throws UnsupportedOperationException, IllegalArgumentException {
+			throw new UnsupportedOperationException("Partial internal implementation");
+		}
+
+		@Override
+		public <F> ObservableEntity<F> setEntity(int fieldIndex, ObservableEntity<F> value, Object cause)
+			throws UnsupportedOperationException, IllegalArgumentException {
 			throw new UnsupportedOperationException("Partial internal implementation");
 		}
 

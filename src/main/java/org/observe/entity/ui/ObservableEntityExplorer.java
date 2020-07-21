@@ -3,6 +3,7 @@ package org.observe.entity.ui;
 import java.awt.Dialog.ModalityType;
 import java.awt.EventQueue;
 import java.awt.datatransfer.DataFlavor;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 import java.io.IOException;
 import java.text.ParseException;
@@ -45,6 +46,7 @@ import org.observe.util.TypeTokens;
 import org.observe.util.swing.CategoryRenderStrategy;
 import org.observe.util.swing.CategoryRenderStrategy.CategoryMouseAdapter;
 import org.observe.util.swing.Dragging;
+import org.observe.util.swing.ModelCell;
 import org.observe.util.swing.ObservableTextField;
 import org.observe.util.swing.PanelPopulation;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
@@ -54,7 +56,6 @@ import org.qommons.Named;
 import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
 import org.qommons.Transaction;
-import org.qommons.collect.CollectionElement;
 import org.qommons.io.Format;
 import org.qommons.io.SpinnerFormat;
 
@@ -146,8 +147,8 @@ public class ObservableEntityExplorer extends JPanel {
 				countCol -> countCol.withValueTooltip((e, c) -> e.printCountStatus())//
 				.withMouseListener(new CategoryMouseAdapter<EntityTypeData<?>, String>() {
 					@Override
-					public void mouseClicked(CollectionElement<? extends EntityTypeData<?>> row, String category, MouseEvent e) {
-						row.get().printError();
+							public void mouseClicked(ModelCell<? extends EntityTypeData<?>, ? extends String> cell, MouseEvent e) {
+								cell.getModelValue().printError();
 					}
 				}))//
 			.withSelection(theSelectedEntityType, true);
@@ -678,6 +679,13 @@ public class ObservableEntityExplorer extends JPanel {
 				});
 			} else if (field.getTargetEntity() != null) {
 				editable = true;
+				fieldColumn.withKeyListener(new CategoryRenderStrategy.CategoryKeyAdapter<T, F>() {
+					@Override
+					public void keyTyped(ModelCell<? extends T, ? extends F> cell, KeyEvent e) {
+						if (e.getKeyChar() == KeyEvent.VK_DELETE && creator.isAcceptable(cell.getModelValue(), field, null) == null)
+							creator.set(cell.getModelValue(), field, null);
+					}
+				});
 				fieldColumn.withMutation(mutator -> mutator//
 					.dragAccept(drag -> drag.fromFlavor(new EntityFlavor(field.getTargetEntity()), new Dragging.DataAccepterTransform<F>() {
 						@Override
