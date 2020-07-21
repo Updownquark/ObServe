@@ -1,5 +1,6 @@
 package org.observe.util.swing;
 
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
@@ -10,7 +11,6 @@ import java.util.function.Supplier;
 
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
-import org.qommons.collect.CollectionElement;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.io.Format;
 
@@ -200,15 +200,15 @@ public class CategoryRenderStrategy<R, C> {
 	 * @param <C> The type of the category
 	 */
 	public interface CategoryMouseListener<R, C> {
-		void mouseClicked(CollectionElement<? extends R> row, C category, MouseEvent e);
+		void mouseClicked(ModelCell<? extends R, ? extends C> cell, MouseEvent e);
 
-		void mousePressed(CollectionElement<? extends R> row, C category, MouseEvent e);
+		void mousePressed(ModelCell<? extends R, ? extends C> cell, MouseEvent e);
 
-		void mouseReleased(CollectionElement<? extends R> row, C category, MouseEvent e);
+		void mouseReleased(ModelCell<? extends R, ? extends C> cell, MouseEvent e);
 
-		void mouseEntered(CollectionElement<? extends R> row, C category, MouseEvent e);
+		void mouseEntered(ModelCell<? extends R, ? extends C> cell, MouseEvent e);
 
-		void mouseExited(CollectionElement<? extends R> row, C category, MouseEvent e);
+		void mouseExited(ModelCell<? extends R, ? extends C> cell, MouseEvent e);
 	}
 
 	/**
@@ -220,19 +220,38 @@ public class CategoryRenderStrategy<R, C> {
 	 */
 	public static abstract class CategoryMouseAdapter<R, C> implements CategoryMouseListener<R, C> {
 		@Override
-		public void mouseClicked(CollectionElement<? extends R> row, C category, MouseEvent e) {}
+		public void mouseClicked(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {}
 
 		@Override
-		public void mousePressed(CollectionElement<? extends R> row, C category, MouseEvent e) {}
+		public void mousePressed(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {}
 
 		@Override
-		public void mouseReleased(CollectionElement<? extends R> row, C category, MouseEvent e) {}
+		public void mouseReleased(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {}
 
 		@Override
-		public void mouseEntered(CollectionElement<? extends R> row, C category, MouseEvent e) {}
+		public void mouseEntered(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {}
 
 		@Override
-		public void mouseExited(CollectionElement<? extends R> row, C category, MouseEvent e) {}
+		public void mouseExited(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {}
+	}
+
+	public interface CategoryKeyListener<R, C> {
+		void keyPressed(ModelCell<? extends R, ? extends C> cell, KeyEvent e);
+
+		void keyReleased(ModelCell<? extends R, ? extends C> cell, KeyEvent e);
+
+		void keyTyped(ModelCell<? extends R, ? extends C> cell, KeyEvent e);
+	}
+
+	public static abstract class CategoryKeyAdapter<R, C> implements CategoryKeyListener<R, C> {
+		@Override
+		public void keyPressed(ModelCell<? extends R, ? extends C> cell, KeyEvent e) {}
+
+		@Override
+		public void keyReleased(ModelCell<? extends R, ? extends C> cell, KeyEvent e) {}
+
+		@Override
+		public void keyTyped(ModelCell<? extends R, ? extends C> cell, KeyEvent e) {}
 	}
 
 	/**
@@ -243,10 +262,10 @@ public class CategoryRenderStrategy<R, C> {
 	 */
 	public static abstract class CategoryClickAdapter<R, C> implements CategoryMouseListener<R, C> {
 		@Override
-		public final void mouseEntered(CollectionElement<? extends R> row, C category, MouseEvent e) {}
+		public final void mouseEntered(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {}
 
 		@Override
-		public final void mouseExited(CollectionElement<? extends R> row, C category, MouseEvent e) {}
+		public final void mouseExited(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {}
 	}
 
 	public class AddRowRenderer extends CategoryRenderStrategy<R, C> {
@@ -278,6 +297,7 @@ public class CategoryRenderStrategy<R, C> {
 	private final Function<? super R, ? extends C> theAccessor;
 	private final CategoryMutationStrategy theMutator;
 	private CategoryMouseListener<? super R, ? super C> theMouseListener;
+	private CategoryKeyListener<? super R, ? super C> theKeyListener;
 	private String theHeaderTooltip;
 	private BiFunction<? super R, ? super C, String> theTooltip;
 	private ObservableCellRenderer<R, C> theRenderer;
@@ -352,6 +372,11 @@ public class CategoryRenderStrategy<R, C> {
 		return this;
 	}
 
+	public CategoryRenderStrategy<R, C> withKeyListener(CategoryKeyListener<? super R, ? super C> listener) {
+		theKeyListener = listener;
+		return this;
+	}
+
 	public CategoryRenderStrategy<R, C> withHeaderTooltip(String tooltip) {
 		theHeaderTooltip = tooltip;
 		return this;
@@ -373,6 +398,10 @@ public class CategoryRenderStrategy<R, C> {
 
 	public CategoryMouseListener<? super R, ? super C> getMouseListener() {
 		return theMouseListener;
+	}
+
+	public CategoryKeyListener<? super R, ? super C> getKeyListener() {
+		return theKeyListener;
 	}
 
 	public CategoryRenderStrategy<R, C> withRenderer(ObservableCellRenderer<R, C> renderer) {

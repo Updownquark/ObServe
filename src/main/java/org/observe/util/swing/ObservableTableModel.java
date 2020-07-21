@@ -1,6 +1,8 @@
 package org.observe.util.swing;
 
 import java.awt.Component;
+import java.awt.event.KeyEvent;
+import java.awt.event.KeyListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
@@ -30,9 +32,9 @@ import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
+import org.observe.util.swing.CategoryRenderStrategy.CategoryKeyListener;
 import org.observe.util.swing.CategoryRenderStrategy.CategoryMouseListener;
 import org.qommons.Transaction;
-import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement;
 
@@ -340,54 +342,72 @@ public class ObservableTableModel<R> implements TableModel {
 				model.getColumnModel().removeListDataListener(columnListener);
 			});
 			MouseListener ml = new MouseListener() {
-				class MouseClickStruct {
-					final CollectionElement<R> row;
-					final Object column;
-					final CategoryMouseListener<? super R, Object> listener;
+				class MouseClickStruct<C> {
+					private final ModelCell<R, C> cell;
+					private final CategoryMouseListener<? super R, ? super C> listener;
 
-					MouseClickStruct(CollectionElement<R> row, Object column, CategoryMouseListener<? super R, Object> listener) {
-						this.row = row;
-						this.column = column;
+					MouseClickStruct(ModelCell<R, C> cell, CategoryMouseListener<? super R, ? super C> listener) {
+						this.cell = cell;
 						this.listener = listener;
+					}
+
+					void clicked(MouseEvent e) {
+						listener.mouseClicked(cell, e);
+					}
+
+					void pressed(MouseEvent e) {
+						listener.mousePressed(cell, e);
+					}
+
+					void relased(MouseEvent e) {
+						listener.mouseReleased(cell, e);
+					}
+
+					void entered(MouseEvent e) {
+						listener.mouseEntered(cell, e);
+					}
+
+					void exited(MouseEvent e) {
+						listener.mouseExited(cell, e);
 					}
 				}
 
 				@Override
 				public void mouseClicked(MouseEvent e) {
-					MouseClickStruct value = getValue(e, false);
+					MouseClickStruct<?> value = getValue(e, false);
 					if (value != null)
-						value.listener.mouseClicked(value.row, value.column, e);
+						value.clicked(e);
 				}
 
 				@Override
 				public void mousePressed(MouseEvent e) {
-					MouseClickStruct value = getValue(e, false);
+					MouseClickStruct<?> value = getValue(e, false);
 					if (value != null)
-						value.listener.mousePressed(value.row, value.column, e);
+						value.pressed(e);
 				}
 
 				@Override
 				public void mouseReleased(MouseEvent e) {
-					MouseClickStruct value = getValue(e, false);
+					MouseClickStruct<?> value = getValue(e, false);
 					if (value != null)
-						value.listener.mouseReleased(value.row, value.column, e);
+						value.relased(e);
 				}
 
 				@Override
 				public void mouseEntered(MouseEvent e) {
-					MouseClickStruct value = getValue(e, true);
+					MouseClickStruct<?> value = getValue(e, true);
 					if (value != null)
-						value.listener.mouseEntered(value.row, value.column, e);
+						value.entered(e);
 				}
 
 				@Override
 				public void mouseExited(MouseEvent e) {
-					MouseClickStruct value = getValue(e, true);
+					MouseClickStruct<?> value = getValue(e, true);
 					if (value != null)
-						value.listener.mouseExited(value.row, value.column, e);
+						value.exited(e);
 				}
 
-				private MouseClickStruct getValue(MouseEvent evt, boolean movement) {
+				private <C> MouseClickStruct<C> getValue(MouseEvent evt, boolean movement) {
 					int row = table.rowAtPoint(evt.getPoint());
 					if (row < 0) {
 						return null;
@@ -398,25 +418,27 @@ public class ObservableTableModel<R> implements TableModel {
 					}
 					row = table.convertRowIndexToModel(row);
 					column = table.convertColumnIndexToModel(column);
-					CategoryRenderStrategy<? super R, Object> category = (CategoryRenderStrategy<? super R, Object>) model
+					CategoryRenderStrategy<? super R, C> category = (CategoryRenderStrategy<? super R, C>) model
 						.getColumn(column);
-					if (category.getMouseListener() == null) {
+					if (category.getMouseListener() == null)
 						return null;
-					} else if (movement && category.getMouseListener() instanceof CategoryRenderStrategy.CategoryClickAdapter)
+					else if (movement && category.getMouseListener() instanceof CategoryRenderStrategy.CategoryClickAdapter)
 						return null;
 
-					CollectionElement<R> rowElement = model.getRows().getElement(row);
-					Object colValue = category.getCategoryValue(rowElement.get());
+					R rowValue = model.getRow(row);
+					C colValue = category.getCategoryValue(rowValue);
 					boolean enabled;
 					if (category.getMutator().getEditability() != null) {
-						enabled = category.getMutator().isEditable(rowElement.get(), colValue);
+						enabled = category.getMutator().isEditable(rowValue, colValue);
 					} else {
 						enabled = true;
 					}
 					if (!enabled) {
 						return null;
 					}
-					return new MouseClickStruct(rowElement, colValue, category.getMouseListener());
+					boolean selected = table.isCellSelected(row, column);
+					ModelCell<R, C> cell = new ModelCell.Default<>(() -> rowValue, colValue, row, column, selected, selected, true, true);
+					return new MouseClickStruct<>(cell, category.getMouseListener());
 				}
 			};
 			table.addMouseListener(ml);
@@ -444,6 +466,79 @@ public class ObservableTableModel<R> implements TableModel {
 			};
 			table.addMouseMotionListener(tableMML);
 			subs.add(() -> table.removeMouseMotionListener(tableMML));
+			KeyListener tableKL = new KeyListener() {
+				class KeyTypeStruct<C> {
+					private final ModelCell<R, C> cell;
+					private final CategoryKeyListener<? super R, ? super C> listener;
+
+					KeyTypeStruct(ModelCell<R, C> cell, CategoryKeyListener<? super R, ? super C> listener) {
+						this.cell = cell;
+						this.listener = listener;
+					}
+
+					void typed(KeyEvent e) {
+						listener.keyTyped(cell, e);
+					}
+
+					void pressed(KeyEvent e) {
+						listener.keyPressed(cell, e);
+					}
+
+					void released(KeyEvent e) {
+						listener.keyReleased(cell, e);
+					}
+				}
+
+				@Override
+				public void keyTyped(KeyEvent e) {
+					KeyTypeStruct<?> value = getValue();
+					if (value != null)
+						value.typed(e);
+				}
+
+				@Override
+				public void keyPressed(KeyEvent e) {
+					KeyTypeStruct<?> value = getValue();
+					if (value != null)
+						value.pressed(e);
+				}
+
+				@Override
+				public void keyReleased(KeyEvent e) {
+					KeyTypeStruct<?> value = getValue();
+					if (value != null)
+						value.released(e);
+				}
+
+				<C> KeyTypeStruct<C> getValue() {
+					int row = table.getSelectedRow();
+					if (row < 0)
+						return null;
+					int column = table.getSelectedColumn();
+					if (column < 0)
+						return null;
+					CategoryRenderStrategy<? super R, C> category = (CategoryRenderStrategy<? super R, C>) model.getColumn(column);
+					if (category.getKeyListener() == null)
+						return null;
+
+					R rowValue = model.getRow(row);
+					C colValue = category.getCategoryValue(rowValue);
+					boolean enabled;
+					if (category.getMutator().getEditability() != null) {
+						enabled = category.getMutator().isEditable(rowValue, colValue);
+					} else {
+						enabled = true;
+					}
+					if (!enabled) {
+						return null;
+					}
+					boolean selected = table.isCellSelected(row, column);
+					ModelCell<R, C> cell = new ModelCell.Default<>(() -> rowValue, colValue, row, column, selected, selected, true, true);
+					return new KeyTypeStruct<>(cell, category.getKeyListener());
+				}
+			};
+			table.addKeyListener(tableKL);
+			subs.add(() -> table.removeKeyListener(tableKL));
 			MouseAdapter headerML = new MouseAdapter() {
 				@Override
 				public void mouseMoved(MouseEvent evt) {
