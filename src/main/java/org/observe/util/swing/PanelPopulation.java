@@ -1,6 +1,5 @@
 package org.observe.util.swing;
 
-import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Container;
@@ -10,7 +9,6 @@ import java.awt.Image;
 import java.awt.Insets;
 import java.awt.LayoutManager;
 import java.awt.LayoutManager2;
-import java.awt.datatransfer.DataFlavor;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionListener;
@@ -21,7 +19,6 @@ import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
@@ -35,12 +32,10 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import javax.swing.Action;
 import javax.swing.BorderFactory;
-import javax.swing.BoundedRangeModel;
 import javax.swing.Box;
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
@@ -62,12 +57,7 @@ import javax.swing.JTree;
 import javax.swing.ListSelectionModel;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
-import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
-import javax.swing.event.ListDataEvent;
-import javax.swing.event.ListDataListener;
-import javax.swing.event.ListSelectionListener;
-import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.tree.TreeCellRenderer;
 import javax.swing.tree.TreePath;
 import javax.swing.tree.TreeSelectionModel;
@@ -89,8 +79,6 @@ import org.observe.collect.ObservableCollection;
 import org.observe.util.SafeObservableCollection;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.ObservableSwingUtils.FontAdjuster;
-import org.observe.util.swing.TableContentControl.FilteredValue;
-import org.observe.util.swing.TableContentControl.ValueRenderer;
 import org.qommons.BiTuple;
 import org.qommons.Identifiable;
 import org.qommons.IntList;
@@ -100,7 +88,6 @@ import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.CollectionLockingStrategy;
-import org.qommons.collect.ElementId;
 import org.qommons.collect.FastFailLockingStrategy;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement;
@@ -109,7 +96,6 @@ import org.qommons.io.FileUtils.FileDataSource;
 import org.qommons.io.Format;
 import org.qommons.threading.QommonsTimer;
 
-import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
 
 /** This utility class simplifies the population of many styles of user interface */
@@ -707,6 +693,10 @@ public class PanelPopulation {
 		P withFiltering(ObservableValue<? extends TableContentControl> filter);
 
 		P withAdaptiveHeight(int minRows, int prefRows, int maxRows);
+
+		P dragSourceRow(Consumer<? super Dragging.TransferSource<R>> source);
+
+		P dragAcceptRow(Consumer<? super Dragging.TransferAccepter<R>> accept);
 	}
 
 	public interface TableAction<R, A extends TableAction<R, A>> {
@@ -884,61 +874,6 @@ public class PanelPopulation {
 	}
 
 	// Drag and cut/copy/paste
-
-	public interface TransferSource<E> {
-		<E2> TransferSource<E2> forType(Predicate<? super E> filter, Function<? super E, ? extends E2> map);
-
-		default <E2 extends E> TransferSource<E2> forType(Class<E2> type) {
-			return forType(value -> type.isInstance(value), value -> (E2) value);
-		}
-
-		TransferSource<E> draggable(boolean draggable);
-
-		TransferSource<E> copyable(boolean copyable);
-
-		TransferSource<E> movable(boolean movable);
-
-		TransferSource<E> appearance(Consumer<TransferAppearance<E>> image);
-
-		default TransferSource<E> toFlavor(DataFlavor flavor, DataTransform<? super E> transform) {
-			return toFlavor(Arrays.asList(flavor), transform);
-		}
-
-		TransferSource<E> toFlavor(Collection<? extends DataFlavor> flavors, DataTransform<? super E> transform);
-
-		TransferSource<E> toObject(); // TODO default this
-		// TODO default this, supporting multiple text-based flavors
-
-		TransferSource<E> toText(Function<? super E, ? extends CharSequence> toString);
-	}
-
-	public interface TransferAppearance<E> {
-		TransferAppearance<E> withDragIcon(String imageLocation, Consumer<ImageControl> imgConfig);
-
-		TransferAppearance<E> withDragOffset(int x, int y);
-
-		TransferAppearance<E> withVisualRep(String imageLocation, Consumer<ImageControl> imgConfig);
-	}
-
-	public interface DataTransform<E> {
-		Object transform(E value, DataFlavor flavor);
-	}
-
-	public interface TransferAccepter<E> {
-		<E2> TransferAccepter<E2> forType(Predicate<? super E2> filter, Function<? super E2, ? extends E> map);
-
-		TransferAccepter<E> draggable(boolean draggable);
-
-		TransferAccepter<E> pastable(boolean pastable);
-
-		default TransferAccepter<E> fromFlavor(DataFlavor flavor, Function<? super DataFlavor, ? extends E> data) {
-			return fromFlavor(Arrays.asList(flavor), data);
-		}
-
-		TransferAccepter<E> fromFlavor(Collection<? extends DataFlavor> flavor, Function<? super DataFlavor, ? extends E> data);
-
-		TransferAccepter<E> fromObject();
-	}
 
 	static final String MIG_LAYOUT_CLASS_NAME = "net.miginfocom.swing.MigLayout";
 
@@ -2998,618 +2933,6 @@ public class PanelPopulation {
 				}
 			}
 			return new ItemAction();
-		}
-	}
-
-	static class SimpleTableBuilder<R, P extends SimpleTableBuilder<R, P>> extends AbstractComponentEditor<JTable, P>
-	implements TableBuilder<R, P> {
-		private final ObservableCollection<R> theRows;
-		private SafeObservableCollection<R> theSafeRows;
-		private String theItemName;
-		private Function<? super R, String> theNameFunction;
-		private ObservableCollection<? extends CategoryRenderStrategy<? super R, ?>> theColumns;
-		private SettableValue<R> theSelectionValue;
-		private ObservableCollection<R> theSelectionValues;
-		private List<SimpleTableAction<R, ?>> theActions;
-		private ObservableValue<? extends TableContentControl> theFilter;
-		private int theAdaptiveMinRowHeight;
-		private int theAdaptivePrefRowHeight;
-		private int theAdaptiveMaxRowHeight;
-
-		private Component theBuiltComponent;
-
-		SimpleTableBuilder(ObservableCollection<R> rows, Supplier<Transactable> lock) {
-			super(new JTable(), lock);
-			theRows = rows;
-			theActions = new LinkedList<>();
-		}
-
-		@Override
-		public String getItemName() {
-			if (theItemName == null)
-				return "item";
-			else
-				return theItemName;
-		}
-
-		Function<? super R, String> getNameFunction() {
-			return theNameFunction;
-		}
-
-		@Override
-		public P withItemName(String itemName) {
-			theItemName = itemName;
-			return (P) this;
-		}
-
-		@Override
-		public ObservableCollection<? extends R> getRows() {
-			return theRows;
-		}
-
-		@Override
-		public P withColumns(ObservableCollection<? extends CategoryRenderStrategy<? super R, ?>> columns) {
-			theColumns = columns;
-			return (P) this;
-		}
-
-		@Override
-		public P withNameColumn(Function<? super R, String> getName, BiConsumer<? super R, String> setName, boolean unique,
-			Consumer<CategoryRenderStrategy<R, String>> column) {
-			TableBuilder.super.withNameColumn(getName, setName, unique, column);
-			theNameFunction = getName;
-			return (P) this;
-		}
-
-		@Override
-		public P withRowNumberColumn(String columnName, Consumer<CategoryRenderStrategy<R, Long>> column) {
-			return withColumn(columnName, long.class, __ -> 0L, col -> {
-				col.withRenderer(ObservableCellRenderer.fromTableRenderer(new DefaultTableCellRenderer() {
-					@Override
-					public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus,
-						int row, int column) {
-						super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
-						setText(String.valueOf(row + 1));
-						return this;
-					}
-				}, (__, c) -> String.valueOf(c)));
-			});
-		}
-
-		@Override
-		public P withColumn(CategoryRenderStrategy<? super R, ?> column) {
-			if (theColumns == null)
-				theColumns = ObservableCollection
-				.create(new TypeToken<CategoryRenderStrategy<? super R, ?>>() {}.where(new TypeParameter<R>() {}, theRows.getType()));
-			((ObservableCollection<CategoryRenderStrategy<? super R, ?>>) theColumns).add(column);
-			return (P) this;
-		}
-
-		@Override
-		public P withSelection(SettableValue<R> selection, boolean enforceSingleSelection) {
-			theSelectionValue = selection;
-			if (enforceSingleSelection)
-				getEditor().getSelectionModel().setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-			return (P) this;
-		}
-
-		@Override
-		public P withSelection(ObservableCollection<R> selection) {
-			theSelectionValues = selection;
-			return (P) this;
-		}
-
-		@Override
-		public P withFiltering(ObservableValue<? extends TableContentControl> filter) {
-			theFilter = filter;
-			return (P) this;
-		}
-
-		@Override
-		public P withAdaptiveHeight(int minRows, int prefRows, int maxRows) {
-			if (minRows < 0 || minRows > prefRows || prefRows > maxRows)
-				throw new IllegalArgumentException("Required: 0<=min<=pref<=max: " + minRows + ", " + prefRows + ", " + maxRows);
-			theAdaptiveMinRowHeight = minRows;
-			theAdaptivePrefRowHeight = prefRows;
-			theAdaptiveMaxRowHeight = maxRows;
-			return (P) this;
-		}
-
-		@Override
-		public List<R> getSelection() {
-			return ObservableSwingUtils.getSelection(((ObservableTableModel<R>) getEditor().getModel()).getRowModel(),
-				getEditor().getSelectionModel(), null);
-		}
-
-		@Override
-		public P withAdd(Supplier<? extends R> creator, Consumer<TableAction<R, ?>> actionMod) {
-			return withMultiAction(values -> {
-				R value = creator.get();
-				CollectionElement<R> el = findElement(value);
-				if (el == null) {
-					el = theRows.addElement(value, false);
-					if (el == null) {
-						// Couldn't add value? Not sure what do to here, but for now we'll tell the dev to fix it.
-						System.err.println("Could not add value " + value);
-						return;
-					}
-				}
-				// Assuming here that the action is only called on the EDT,
-				// meaning the above add operation has now been propagated to the list model and the selection model
-				// It also means that the row model is sync'd with the collection, so we can use the index from the collection here
-				int index = theRows.getElementsBefore(el.getElementId());
-				getEditor().getSelectionModel().setSelectionInterval(index, index);
-			}, action -> {
-				action.allowForMultiple(true).allowForEmpty(true).allowForAnyEnabled(true)//
-				.modifyButton(button -> button.withIcon(getAddIcon(16)).withTooltip("Add new " + getItemName()));
-				if (actionMod != null)
-					actionMod.accept(action);
-			});
-		}
-
-		private CollectionElement<R> findElement(R value) {
-			CollectionElement<R> el = theRows.getElement(value, false);
-			if (el != null && el.get() != value) {
-				CollectionElement<R> lastMatch = theRows.getElement(value, true);
-				if (!lastMatch.getElementId().equals(el.getElementId())) {
-					if (lastMatch.get() == value)
-						el = lastMatch;
-					else {
-						while (el.get() != value && !el.getElementId().equals(lastMatch.getElementId()))
-							el = theRows.getAdjacentElement(el.getElementId(), true);
-					}
-					if (el.get() != value)
-						el = null;
-				}
-			}
-			return el;
-		}
-
-		@Override
-		public P withRemove(Consumer<? super List<? extends R>> deletion, Consumer<TableAction<R, ?>> actionMod) {
-			String single = getItemName();
-			String plural = StringUtils.pluralize(single);
-			if(deletion==null){
-				deletion=values->{
-					for(R value : values)
-						theRows.remove(value);
-				};
-			}
-			return withMultiAction(deletion, action -> {
-				action.allowForMultiple(true).withTooltip(items -> "Remove selected " + (items.size() == 1 ? single : plural))//
-				.modifyButton(button -> button.withIcon(getRemoveIcon(16)));
-				if (actionMod != null)
-					actionMod.accept(action);
-			});
-		}
-
-		@Override
-		public P withCopy(Function<? super R, ? extends R> copier, Consumer<TableAction<R, ?>> actionMod) {
-			return withMultiAction(values -> {
-				try (Transaction t = theRows.lock(true, null)) {
-					if (theSafeRows.hasQueuedEvents()) { // If there are queued changes, we can't rely on indexes we get back from the model
-						simpleCopy(values, copier);
-					} else {// Ignore the given values and use the selection model so we get the indexes right in the case of duplicates
-						betterCopy(copier);
-					}
-				}
-			}, action -> {
-				String single = getItemName();
-				String plural = StringUtils.pluralize(single);
-				action.allowForMultiple(true).withTooltip(items -> "Duplicate selected " + (items.size() == 1 ? single : plural))//
-				.modifyButton(button -> button.withIcon(getCopyIcon(16)));
-				if (actionMod != null)
-					actionMod.accept(action);
-			});
-		}
-
-		private void simpleCopy(List<? extends R> selection, Function<? super R, ? extends R> copier) {
-			for (R value : selection) {
-				R copy = copier.apply(value);
-				theRows.add(copy);
-			}
-		}
-
-		private void betterCopy(Function<? super R, ? extends R> copier) {
-			ListSelectionModel selModel = getEditor().getSelectionModel();
-			IntList newSelection = new IntList();
-			for (int i = selModel.getMinSelectionIndex(); i >= 0 && i <= selModel.getMaxSelectionIndex(); i++) {
-				if (!selModel.isSelectedIndex(i))
-					continue;
-				CollectionElement<R> toCopy = theRows.getElement(i);
-				R copy = copier.apply(toCopy.get());
-				CollectionElement<R> copied = findElement(copy);
-				if (copied != null) {//
-				} else if (theRows.canAdd(copy, toCopy.getElementId(), null) == null)
-					copied = theRows.addElement(copy, toCopy.getElementId(), null, true);
-				else
-					copied = theRows.addElement(copy, false);
-				if (copied != null)
-					newSelection.add(theRows.getElementsBefore(copied.getElementId()));
-			}
-			selModel.setValueIsAdjusting(true);
-			selModel.clearSelection();
-			for (int[] interval : ObservableSwingUtils.getContinuousIntervals(newSelection.toArray(), true))
-				selModel.addSelectionInterval(interval[0], interval[1]);
-			selModel.setValueIsAdjusting(false);
-		}
-
-		@Override
-		public P withMove(boolean up, Consumer<TableAction<R, ?>> actionMod) {
-			((ObservableCollection<CategoryRenderStrategy<? super R, ?>>) theColumns)
-			.add(new CategoryRenderStrategy<>(up ? "\u2191" : "\u2193", TypeTokens.get().OBJECT, v -> null)
-				.withHeaderTooltip("Move row " + (up ? "up" : "down")).decorateAll(deco -> deco.withIcon(getMoveIcon(up, 16)))//
-				.withWidths(15, 20, 20)//
-				.withMutation(
-					m -> m.mutateAttribute2((r, c) -> c).withEditor(ObservableCellEditor.createButtonCellEditor(__ -> null, cell -> {
-						if (up && cell.getRowIndex() == 0)
-							return cell.getCellValue();
-						else if (!up && cell.getRowIndex() == theSafeRows.size() - 1)
-							return cell.getCellValue();
-						try (Transaction t = theRows.lock(true, null)) {
-							if (!theSafeRows.hasQueuedEvents()) {
-								CollectionElement<R> row = theRows.getElement(cell.getRowIndex());
-								CollectionElement<R> adj = theRows.getAdjacentElement(row.getElementId(), !up);
-								if (adj != null) {
-									CollectionElement<R> adj2 = theRows.getAdjacentElement(adj.getElementId(), !up);
-									theRows.move(row.getElementId(), up ? CollectionElement.getElementId(adj2) : adj.getElementId(),
-										up ? adj.getElementId() : CollectionElement.getElementId(adj2), up, null);
-									ListSelectionModel selModel = getEditor().getSelectionModel();
-									int newIdx = up ? cell.getRowIndex() - 1 : cell.getRowIndex() + 1;
-									selModel.addSelectionInterval(newIdx, newIdx);
-								}
-							}
-						}
-						return cell.getCellValue();
-					}).decorate((cell, deco) -> {
-						deco.withIcon(getMoveIcon(up, 16));
-						if (up)
-							deco.enabled(cell.getRowIndex() > 0);
-						else
-							deco.enabled(cell.getRowIndex() < theSafeRows.size() - 1);
-					}))));
-			return (P) this;
-		}
-
-		@Override
-		public P withMoveToEnd(boolean up, Consumer<TableAction<R, ?>> actionMod) {
-			return withMultiAction(values -> {
-				try (Transaction t = theRows.lock(true, null)) {
-					if (theSafeRows.hasQueuedEvents()) { // If there are queued changes, we can't rely on indexes we get back from the model
-					} else {// Ignore the given values and use the selection model so we get the indexes right in the case of duplicates
-						ListSelectionModel selModel = getEditor().getSelectionModel();
-						int selectionCount = 0;
-						ElementId varBound = null;
-						ElementId fixedBound = CollectionElement.getElementId(theRows.getTerminalElement(up));
-						int start = up ? selModel.getMinSelectionIndex() : selModel.getMaxSelectionIndex();
-						int end = up ? selModel.getMaxSelectionIndex() : selModel.getMinSelectionIndex();
-						int inc = up ? 1 : -1;
-						for (int i = start; i >= 0 && i != end; i += inc) {
-							if (!selModel.isSelectedIndex(i))
-								continue;
-							selectionCount++;
-							CollectionElement<R> move = theRows.getElement(i);
-							move = theRows.move(move.getElementId(), up ? varBound : fixedBound, up ? fixedBound : varBound, up, null);
-							varBound = move.getElementId();
-						}
-						if (selectionCount != 0)
-							selModel.setSelectionInterval(0, selectionCount - 1);
-					}
-				}
-			}, action -> {
-				ObservableValue<String> enabled;
-				Supplier<String> enabledGet = () -> {
-					try (Transaction t = theRows.lock(false, null)) {
-						if (theSafeRows.hasQueuedEvents())
-							return "Data set updating";
-						ListSelectionModel selModel = getEditor().getSelectionModel();
-						if (selModel.isSelectionEmpty())
-							return "Nothing selected";
-						int start = up ? selModel.getMinSelectionIndex() : selModel.getMaxSelectionIndex();
-						int end = up ? selModel.getMaxSelectionIndex() : selModel.getMinSelectionIndex();
-						int inc = up ? 1 : -1;
-						ElementId varBound = null;
-						ElementId fixedBound = CollectionElement.getElementId(theRows.getTerminalElement(up));
-						for (int i = start; i >= 0 && i != end; i += inc) {
-							if (!selModel.isSelectedIndex(i))
-								continue;
-							CollectionElement<R> move = theRows.getElement(i);
-							String msg = theRows.canMove(move.getElementId(), up ? varBound : fixedBound, up ? fixedBound : varBound);
-							if (msg != null)
-								return msg;
-							varBound = move.getElementId();
-						}
-						return null;
-					}
-				};
-				if (theSelectionValues != null)
-					enabled = ObservableValue.of(TypeTokens.get().STRING, enabledGet, () -> theSelectionValues.getStamp(),
-						theSelectionValues.simpleChanges());
-				else
-					enabled = theSelectionValue.map(__ -> enabledGet.get());
-				action.allowForMultiple(true)
-				.withTooltip(items -> "Move selected row" + (items.size() == 1 ? "" : "s") + " to the " + (up ? "top" : "bottom"))
-				.modifyButton(button -> button.withIcon(getMoveEndIcon(up, 16)))//
-				.allowForEmpty(false).allowForAnyEnabled(false).modifyAction(a -> a.disableWith(enabled));
-			});
-		}
-
-		@Override
-		public P withMultiAction(Consumer<? super List<? extends R>> action, Consumer<TableAction<R, ?>> actionMod) {
-			SimpleTableAction<R, ?> ta = new SimpleTableAction<>(this, action, this::getSelection);
-			actionMod.accept(ta);
-			theActions.add(ta);
-			return (P) this;
-		}
-
-		@Override
-		public ObservableValue<String> getTooltip() {
-			return null;
-		}
-
-		@Override
-		protected Component createFieldNameLabel(Observable<?> until) {
-			return null;
-		}
-
-		@Override
-		protected Component createPostLabel(Observable<?> until) {
-			return null;
-		}
-
-		@Override
-		public Component getOrCreateComponent(Observable<?> until) {
-			if (theBuiltComponent != null)
-				return theBuiltComponent;
-			theSafeRows = new SafeObservableCollection<>(theRows, EventQueue::isDispatchThread, EventQueue::invokeLater, until);
-			ObservableTableModel<R> model;
-			ObservableCollection<TableContentControl.FilteredValue<R>> filtered;
-			if (theFilter != null) {
-				ObservableCollection<CategoryRenderStrategy<? super R, ?>> safeColumns = new SafeObservableCollection<>(//
-					(ObservableCollection<CategoryRenderStrategy<? super R, ?>>) TableContentControl.applyColumnControl(theColumns,
-						theFilter, until),
-					EventQueue::isDispatchThread, EventQueue::invokeLater, until);
-				Observable<?> columnChanges = safeColumns.simpleChanges();
-				List<ValueRenderer<R>> renderers = new ArrayList<>();
-				columnChanges.act(__ -> {
-					renderers.clear();
-					for (CategoryRenderStrategy<? super R, ?> column : safeColumns) {
-						renderers.add(new TableContentControl.ValueRenderer<R>() {
-							@Override
-							public String getName() {
-								return column.getName();
-							}
-
-							@Override
-							public boolean searchGeneral() {
-								return column.isFilterable();
-							}
-
-							@Override
-							public CharSequence render(R row) {
-								return column.print(row);
-							}
-
-							@Override
-							public int compare(R o1, R o2) {
-								Object c1 = column.getCategoryValue(o1);
-								Object c2 = column.getCategoryValue(o2);
-								if (c1 instanceof String && c2 instanceof String)
-									return StringUtils.compareNumberTolerant((String) c1, (String) c2, true, true);
-								else if (c1 instanceof Comparable && c2 instanceof Comparable) {
-									try {
-										return ((Comparable<Object>) c1).compareTo(c2);
-									} catch (ClassCastException e) {
-										// Ignore
-									}
-								}
-								return 0;
-							}
-						});
-					}
-				});
-				filtered = TableContentControl.applyRowControl(theSafeRows, () -> renderers, theFilter.refresh(columnChanges), until);
-				model = new ObservableTableModel<>(
-					filtered.flow().map(theRows.getType(), f -> f.value, opts -> opts.withFieldSetReverse(FilteredValue::setValue, null))
-					.collectActive(until), //
-					true, safeColumns, true);
-			} else {
-				filtered = null;
-				model = new ObservableTableModel<>(theSafeRows, true, theColumns, true);
-			}
-			JTable table = getEditor();
-			table.setModel(model);
-			Subscription sub = ObservableTableModel.hookUp(table, model, //
-				filtered == null ? null : new ObservableTableModel.TableRenderContext() {
-				@Override
-				public int[][] getEmphaticRegions(int row, int column) {
-					TableContentControl.FilteredValue<R> fv = filtered.get(row);
-					if (column >= fv.getColumns() || !fv.isFiltered())
-						return null;
-					return fv.getMatches(column);
-				}
-			});
-			if (until != null)
-				until.take(1).act(__ -> sub.unsubscribe());
-
-			JScrollPane scroll = new JScrollPane(table);
-			// Default scroll increments are ridiculously small
-			scroll.getVerticalScrollBar().setUnitIncrement(10);
-			scroll.getHorizontalScrollBar().setUnitIncrement(10);
-
-			// Selection
-			Supplier<List<R>> selectionGetter = () -> getSelection();
-			if (theSelectionValue != null)
-				ObservableSwingUtils.syncSelection(table, model.getRowModel(), table::getSelectionModel, model.getRows().equivalence(),
-					theSelectionValue, until, index -> {
-						MutableCollectionElement<R> el = (MutableCollectionElement<R>) getRows()
-							.mutableElement(getRows().getElement(index).getElementId());
-						if (el.isAcceptable(el.get()) == null)
-							el.set(el.get());
-					}, false);
-			if (theSelectionValues != null)
-				ObservableSwingUtils.syncSelection(table, model.getRowModel(), table::getSelectionModel, model.getRows().equivalence(),
-					theSelectionValues, until);
-			if (!theActions.isEmpty()) {
-				ListSelectionListener selListener = e -> {
-					List<R> selection = selectionGetter.get();
-					for (SimpleTableAction<R, ?> action : theActions)
-						action.updateSelection(selection, e);
-				};
-				ListDataListener dataListener = new ListDataListener() {
-					@Override
-					public void intervalAdded(ListDataEvent e) {}
-
-					@Override
-					public void intervalRemoved(ListDataEvent e) {}
-
-					@Override
-					public void contentsChanged(ListDataEvent e) {
-						ListSelectionModel selModel = table.getSelectionModel();
-						if (selModel.getMinSelectionIndex() >= 0 && e.getIndex0() >= selModel.getMinSelectionIndex()
-							&& e.getIndex1() <= selModel.getMaxSelectionIndex()) {
-							List<R> selection = selectionGetter.get();
-							for (SimpleTableAction<R, ?> action : theActions)
-								action.updateSelection(selection, e);
-						}
-					}
-				};
-				List<R> selection = selectionGetter.get();
-				for (SimpleTableAction<R, ?> action : theActions)
-					action.updateSelection(selection, null);
-
-				PropertyChangeListener selModelListener = evt -> {
-					((ListSelectionModel) evt.getOldValue()).removeListSelectionListener(selListener);
-					((ListSelectionModel) evt.getNewValue()).addListSelectionListener(selListener);
-				};
-				table.getSelectionModel().addListSelectionListener(selListener);
-				table.addPropertyChangeListener("selectionModel", selModelListener);
-				model.getRowModel().addListDataListener(dataListener);
-				until.take(1).act(__ -> {
-					table.removePropertyChangeListener("selectionModel", selModelListener);
-					table.getSelectionModel().removeListSelectionListener(selListener);
-					model.getRowModel().removeListDataListener(dataListener);
-				});
-				SimpleHPanel<JPanel> buttonPanel = new SimpleHPanel<>(null,
-					new JPanel(new JustifiedBoxLayout(false).setMainAlignment(JustifiedBoxLayout.Alignment.LEADING)), theLock, until);
-				for (SimpleTableAction<R, ?> action : theActions)
-					action.addButton(buttonPanel);
-				JPanel tablePanel = new JPanel(new BorderLayout());
-				tablePanel.add(buttonPanel.getOrCreateComponent(until), BorderLayout.NORTH);
-				tablePanel.add(scroll, BorderLayout.CENTER);
-				theBuiltComponent = tablePanel;
-			} else
-				theBuiltComponent = scroll;
-			if (theAdaptivePrefRowHeight > 0) {
-				class HeightAdjustmentListener implements ListDataListener, ChangeListener {
-					private boolean isHSBVisible;
-					private boolean isVSBVisible;
-
-					@Override
-					public void intervalRemoved(ListDataEvent e) {
-						if (e.getIndex0() < theAdaptiveMaxRowHeight)
-							adjustHeight();
-					}
-
-					@Override
-					public void intervalAdded(ListDataEvent e) {
-						if (e.getIndex0() < theAdaptiveMaxRowHeight)
-							adjustHeight();
-					}
-
-					@Override
-					public void contentsChanged(ListDataEvent e) {
-						if (e.getIndex0() < theAdaptiveMaxRowHeight)
-							adjustHeight();
-					}
-
-					@Override
-					public void stateChanged(ChangeEvent e) {
-						BoundedRangeModel hbm = scroll.getHorizontalScrollBar().getModel();
-						if (hbm.getValueIsAdjusting())
-							return;
-						if (isHSBVisible != (hbm.getExtent() > hbm.getMaximum())) {
-							adjustHeight();
-						} else {
-							BoundedRangeModel vbm = scroll.getVerticalScrollBar().getModel();
-							if (vbm.getValueIsAdjusting())
-								return;
-							if (isVSBVisible != (vbm.getExtent() > vbm.getMaximum()))
-								adjustHeight();
-						}
-					}
-
-					void adjustHeight() {
-						int minHeight = 0, prefHeight = 0, maxHeight = 0;
-						if (table.getTableHeader() != null && table.getTableHeader().isVisible()) {
-							minHeight += table.getTableHeader().getPreferredSize().height;
-							maxHeight += table.getTableHeader().getPreferredSize().height;
-						}
-						int rowCount = model.getRowCount();
-						for (int i = 0; i < theAdaptiveMaxRowHeight && i < rowCount; i++) {
-							int rowHeight = table.getRowHeight(i);
-							if (i < theAdaptiveMinRowHeight)
-								minHeight += rowHeight;
-							if (i < theAdaptivePrefRowHeight)
-								prefHeight += rowHeight;
-							if (i < theAdaptiveMaxRowHeight)
-								maxHeight += rowHeight;
-						}
-						BoundedRangeModel hbm = scroll.getHorizontalScrollBar().getModel();
-						isHSBVisible = hbm.getExtent() > hbm.getMaximum();
-						if (isHSBVisible) {
-							int sbh = scroll.getHorizontalScrollBar().getHeight();
-							minHeight += sbh;
-							maxHeight += sbh;
-						}
-						BoundedRangeModel vbm = scroll.getVerticalScrollBar().getModel();
-						isVSBVisible = vbm.getExtent() > vbm.getMaximum();
-						Dimension psvs = table.getPreferredScrollableViewportSize();
-						if (psvs.height != prefHeight) {
-							int w = 0;
-							for (int c = 0; c < table.getColumnModel().getColumnCount(); c++)
-								w += table.getColumnModel().getColumn(c).getWidth();
-							table.setPreferredScrollableViewportSize(new Dimension(psvs.width, prefHeight));
-						}
-						Dimension min = scroll.getMinimumSize();
-						if (min.height != minHeight) {
-							int w = 10;
-							if (isVSBVisible)
-								w += scroll.getVerticalScrollBar().getWidth();
-							scroll.getViewport().setMinimumSize(new Dimension(w, minHeight));
-						}
-						Dimension max = scroll.getMaximumSize();
-						if (max.height != maxHeight) {
-							int w = 0;
-							if (isVSBVisible)
-								w += scroll.getVerticalScrollBar().getWidth();
-							for (int c = 0; c < model.getColumnCount(); c++) {
-								w += table.getColumnModel().getColumn(c).getMaxWidth();
-								if (w < 0) {
-									w = Integer.MAX_VALUE;
-									break;
-								}
-							}
-							scroll.getViewport().setMaximumSize(new Dimension(w, maxHeight));
-						}
-						if (scroll.getParent() != null)
-							scroll.getParent().revalidate();
-					}
-				}
-				HeightAdjustmentListener hal = new HeightAdjustmentListener();
-				model.getRowModel().addListDataListener(hal);
-				model.getColumnModel().addListDataListener(hal);
-				scroll.getHorizontalScrollBar().getModel().addChangeListener(hal);
-				scroll.getVerticalScrollBar().getModel().addChangeListener(hal);
-				hal.adjustHeight();
-			}
-			table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
-			return decorate(theBuiltComponent);
-		}
-
-		@Override
-		public Component getComponent() {
-			return theBuiltComponent;
 		}
 	}
 

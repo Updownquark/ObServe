@@ -33,6 +33,7 @@ public class CategoryRenderStrategy<R, C> {
 		private BiFunction<? super R, ? super C, String> theEditorTooltip;
 
 		private BiFunction<MutableCollectionElement<R>, ? super C, String> theValueFilter;
+		private Dragging.SimpleTransferAccepter<C> theDragAccepter;
 
 		CategoryMutationStrategy() {}
 
@@ -179,6 +180,17 @@ public class CategoryRenderStrategy<R, C> {
 		public BiPredicate<? super R, ? super C> getEditability() {
 			return theEditability;
 		}
+
+		public CategoryMutationStrategy dragAccept(Consumer<Dragging.TransferAccepter<C>> accepter) {
+			if (theDragAccepter == null)
+				theDragAccepter = new Dragging.SimpleTransferAccepter<>(theType);
+			accepter.accept(theDragAccepter);
+			return this;
+		}
+
+		public Dragging.TransferAccepter<C> getDragAccepter() {
+			return theDragAccepter;
+		}
 	}
 
 	/**
@@ -275,6 +287,8 @@ public class CategoryRenderStrategy<R, C> {
 	private int thePrefWidth;
 	private int theMaxWidth;
 	private boolean isResizable;
+
+	private Dragging.SimpleTransferSource<C> theDragSource;
 
 	private boolean isFilterable;
 
@@ -463,6 +477,17 @@ public class CategoryRenderStrategy<R, C> {
 
 	public boolean isFilterable() {
 		return isFilterable;
+	}
+
+	public CategoryRenderStrategy<R, C> dragSource(Consumer<Dragging.TransferSource<C>> source) {
+		if (theDragSource == null)
+			theDragSource = new Dragging.SimpleTransferSource<>(theType);
+		source.accept(theDragSource);
+		return this;
+	}
+
+	public Dragging.TransferSource<C> getDragSource() {
+		return theDragSource;
 	}
 
 	public CategoryRenderStrategy<R, C> withAddRow(Supplier<? extends R> rowSeed, Function<? super R, ? extends C> cat,
