@@ -71,6 +71,8 @@ public class ObservableEntityExplorerTest {
 
 	public interface A extends Identified, Nameable {
 		public int getValue();
+
+		public B getB();
 	}
 
 	public interface B extends Identified, Nameable {

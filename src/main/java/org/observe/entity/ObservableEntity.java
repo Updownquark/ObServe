@@ -49,6 +49,13 @@ public interface ObservableEntity<E> extends Stamped, Identifiable, Comparable<O
 	 * @return The value for the given field in this entity
 	 */
 	Object get(int fieldIndex);
+	/**
+	 * Like {@link #get(int)} but for entity-typed fields
+	 * 
+	 * @param fieldIndex The index of the field to get
+	 * @return The entity for the given field in this entity
+	 */
+	ObservableEntity<?> getEntity(int fieldIndex);
 
 	/**
 	 * @param field The field to get
@@ -77,6 +84,19 @@ public interface ObservableEntity<E> extends Stamped, Identifiable, Comparable<O
 	 * @throws IllegalArgumentException If the value may not be set for the given field
 	 */
 	<F> F set(int fieldIndex, F value, Object cause) throws UnsupportedOperationException, IllegalArgumentException;
+	/**
+	 * Like {@link #set(int, Object, Object)}, but for entity-typed fields
+	 *
+	 * @param <F> The type of the field
+	 * @param fieldIndex The index of the field to set
+	 * @param value The value to set for the field
+	 * @param cause The cause of the change, if any
+	 * @return The previous value of the field
+	 * @throws UnsupportedOperationException If the operation is unsupported at the moment regardless of the value
+	 * @throws IllegalArgumentException If the value may not be set for the given field
+	 */
+	<F> ObservableEntity<F> setEntity(int fieldIndex, ObservableEntity<F> value, Object cause)
+		throws UnsupportedOperationException, IllegalArgumentException;
 
 	/**
 	 * @param fieldIndex The index of the field to set

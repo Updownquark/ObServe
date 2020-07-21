@@ -276,10 +276,13 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 			return ObservableEntityField.ID_FIELD_UNSETTABLE;
 		else if (value == null && field.getFieldType().isPrimitive())
 			return "Null is not allowed in a primitive-typed field";
-		else if (value != null && !TypeTokens.get().isInstance(field.getFieldType(), value))
-			return StdMsg.BAD_TYPE;
-		if (value != null && !TypeTokens.get().isInstance(field.getFieldType(), value))
-			return StdMsg.BAD_TYPE;
+		else if (value != null) {
+			if (TypeTokens.get().isInstance(field.getFieldType(), value)) {//
+			} else if (field.getTargetEntity() != null && value instanceof ObservableEntity
+				&& field.getTargetEntity().isAssignableFrom(((ObservableEntity<?>) value).getType())) {//
+			} else
+				return StdMsg.BAD_TYPE;
+		}
 		String message = null;
 		for (FieldConstraint<E, F> constraint : field.getConstraints()) {
 			String msg = constraint.canAccept(value);
@@ -341,8 +344,8 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 				results::init, results::failed));
 		else
 			results
-				.setCancelable(theImplementation.query(query, prepared, //
-					fields -> results.fulfill(entitiesFor(fields)), results::failed));
+			.setCancelable(theImplementation.query(query, prepared, //
+				fields -> results.fulfill(entitiesFor(fields)), results::failed));
 	}
 
 	<E> EntityModificationResult<E> update(EntityUpdate<E> update, boolean sync, Object cause) throws EntityOperationException {

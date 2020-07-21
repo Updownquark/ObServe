@@ -39,7 +39,7 @@ public class JdbcEntitySupport {
 				case "INT":
 				case "INTEGER":
 				case "BIGINT":
-					return (JdbcColumn<T2>) (type.isPrimitive() ? JdbcColumn.INT : JdbcColumn.INTEGER);
+					return (JdbcColumn<T2>) JdbcColumn.INT;
 				default:
 					return null;
 				}
@@ -59,7 +59,7 @@ public class JdbcEntitySupport {
 				case "INT":
 				case "INTEGER":
 				case "BIGINT":
-					return (JdbcColumn<T2>) (type.isPrimitive() ? JdbcColumn.LONG_PRIM : JdbcColumn.LONG_WRAP);
+					return (JdbcColumn<T2>) JdbcColumn.LONG;
 				default:
 					return null;
 				}
@@ -311,22 +311,6 @@ public class JdbcEntitySupport {
 
 			@Override
 			public Integer deserialize(ResultSet rs, int column) throws SQLException {
-				return rs.getInt(column);
-			}
-
-			@Override
-			public String getTypeName() {
-				return "INTEGER";
-			}
-		};
-		public static final JdbcColumn<Integer> INTEGER = new JdbcColumn<Integer>() {
-			@Override
-			public void serialize(Integer value, StringBuilder str) {
-				str.append(value == null ? "NULL" : value.toString());
-			}
-
-			@Override
-			public Integer deserialize(ResultSet rs, int column) throws SQLException {
 				Object value = rs.getObject(column);
 				if (value == null)
 					return null;
@@ -342,7 +326,7 @@ public class JdbcEntitySupport {
 			}
 		};
 
-		public static final JdbcColumn<Long> LONG_PRIM = new JdbcColumn<Long>() {
+		public static final JdbcColumn<Long> LONG = new JdbcColumn<Long>() {
 			@Override
 			public void serialize(Long value, StringBuilder str) {
 				str.append(value == null ? "NULL" : value.toString());
@@ -350,29 +334,10 @@ public class JdbcEntitySupport {
 
 			@Override
 			public Long deserialize(ResultSet rs, int column) throws SQLException {
-				return rs.getLong(column);
-			}
-
-			@Override
-			public String getTypeName() {
-				return "BIGINT";
-			}
-		};
-		public static final JdbcColumn<Long> LONG_WRAP = new JdbcColumn<Long>() {
-			@Override
-			public void serialize(Long value, StringBuilder str) {
-				str.append(value == null ? "NULL" : value.toString());
-			}
-
-			@Override
-			public Long deserialize(ResultSet rs, int column) throws SQLException {
-				Object value = rs.getObject(column);
-				if (value == null)
+				long res = rs.getLong(column);
+				if (rs.wasNull())
 					return null;
-				else if (value instanceof Integer)
-					return (Long) value;
-				else
-					return ((Number) value).longValue();
+				return res;
 			}
 
 			@Override
@@ -450,7 +415,10 @@ public class JdbcEntitySupport {
 
 			@Override
 			public Boolean deserialize(ResultSet rs, int column) throws SQLException {
-				return rs.getBoolean(column);
+				boolean res = rs.getBoolean(column);
+				if (rs.wasNull())
+					return null;
+				return res;
 			}
 
 			@Override

@@ -207,9 +207,27 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 			} catch (EntityOperationException e) {
 				throw new IllegalStateException("Could not load field " + theId + "." + theType.getFields().get(fieldIndex), e);
 			}
-			return theFields.get(fieldIndex);
-		} else
-			return value;
+			value = theFields.get(fieldIndex);
+		}
+		if (value instanceof ObservableEntity && theType.getFields().get(fieldIndex).getTargetEntity().getType() != null)
+			value = ((ObservableEntity<?>) value).getEntity();
+		return value;
+	}
+
+	@Override
+	public ObservableEntity<?> getEntity(int fieldIndex) {
+		if (theType.getFields().get(fieldIndex).getTargetEntity() == null)
+			throw new IllegalArgumentException(theType.getFields().get(fieldIndex) + " is not an entity-typed field");
+		Object value = theFields.get(fieldIndex);
+		if (value == EntityUpdate.NOT_SET) {
+			try {
+				load(theType.getFields().get(fieldIndex), null, null);
+			} catch (EntityOperationException e) {
+				throw new IllegalStateException("Could not load field " + theId + "." + theType.getFields().get(fieldIndex), e);
+			}
+			value = theFields.get(fieldIndex);
+		}
+		return (ObservableEntity<?>) value;
 	}
 
 	@Override
@@ -221,6 +239,21 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 
 	@Override
 	public <F> F set(int fieldIndex, F value, Object cause) {
+		F old = _set(fieldIndex, value, cause);
+		if (old instanceof ObservableEntity && theType.getFields().get(fieldIndex).getTargetEntity().getType() != null)
+			old = (F) ((ObservableEntity<?>) old).getEntity();
+		return old;
+	}
+
+	@Override
+	public <F> ObservableEntity<F> setEntity(int fieldIndex, ObservableEntity<F> value, Object cause)
+		throws UnsupportedOperationException, IllegalArgumentException {
+		if (theType.getFields().get(fieldIndex).getTargetEntity() == null)
+			throw new IllegalArgumentException(theType.getFields().get(fieldIndex) + " is not an entity-typed field");
+		return _set(fieldIndex, value, cause);
+	}
+
+	<F> F _set(int fieldIndex, F value, Object cause) {
 		if (!isPresent)
 			throw new UnsupportedOperationException(ENTITY_REMOVED);
 		String msg = isAcceptable(fieldIndex, value);
@@ -253,17 +286,23 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 			 */
 			try {
 				if (theType.getEntitySet().queueAction(sync -> {
-					if (sync)
-						return theType.select().entity(theId).update().withField(field, value).execute(true, cause);
-					else {
-						EntityModificationResult<E> result = theType.select().entity(theId).update().withField(field, value).execute(false,
-							cause);
-						result.watchStatus().act(__ -> {
-							// If the operation failed and the field
-							if (result.getFailure() != null && theFields.get(fieldIndex) == value)
-								_set(field, value, oldValue);
-						});
-						return result;
+					try {
+						if (sync)
+							return theType.select().entity(theId).update().withField(field, value).execute(true, cause);
+						else {
+							EntityModificationResult<E> result = theType.select().entity(theId).update().withField(field, value)
+								.execute(false, cause);
+							result.watchStatus().act(__ -> {
+								// If the operation failed and the field
+								if (result.getFailure() != null && theFields.get(fieldIndex) == value)
+									_set(field, value, oldValue);
+							});
+							return result;
+						}
+					} catch (RuntimeException | EntityOperationException | Error e) {
+						e.printStackTrace();
+						_set(field, value, oldValue);
+						throw e;
 					}
 				})) {
 					_set(field, oldValue, value);

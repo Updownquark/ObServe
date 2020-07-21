@@ -2,7 +2,9 @@ package org.observe.entity.ui;
 
 import java.awt.Dialog.ModalityType;
 import java.awt.EventQueue;
+import java.awt.datatransfer.DataFlavor;
 import java.awt.event.MouseEvent;
+import java.io.IOException;
 import java.text.ParseException;
 import java.time.Duration;
 import java.time.Instant;
@@ -31,6 +33,7 @@ import org.observe.entity.ConfigurableCreator;
 import org.observe.entity.EntityCollectionResult;
 import org.observe.entity.EntityCondition;
 import org.observe.entity.EntityCountResult;
+import org.observe.entity.EntityIdentity;
 import org.observe.entity.EntityModificationResult;
 import org.observe.entity.EntityOperationException;
 import org.observe.entity.EntityUpdate;
@@ -41,6 +44,7 @@ import org.observe.entity.ObservableEntityType;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.CategoryRenderStrategy;
 import org.observe.util.swing.CategoryRenderStrategy.CategoryMouseAdapter;
+import org.observe.util.swing.Dragging;
 import org.observe.util.swing.ObservableTextField;
 import org.observe.util.swing.PanelPopulation;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
@@ -474,6 +478,15 @@ public class ObservableEntityExplorer extends JPanel {
 		createDialog.setVisible(true);
 	}
 
+	public static class EntityFlavor extends DataFlavor {
+		public final ObservableEntityType<?> entity;
+
+		public EntityFlavor(ObservableEntityType<?> entity) {
+			super("application/x-entity-" + entity.getName(), entity.getName());
+			this.entity = entity;
+		}
+	}
+
 	private <E> void showQueryPanel(EntityCondition<E> condition) {
 		EntityCollectionResult<E> results;
 		try {
@@ -501,7 +514,7 @@ public class ObservableEntityExplorer extends JPanel {
 		};
 		SettableValue<String> deleteText = SettableValue.build(String.class).safe(false).withValue("Delete").build();
 		JPanel queryPanel = PanelPopulation.populateVPanel((JPanel) null, null)//
-			.addTable(results.get().getEntities(), entityTable -> {
+			.addTable((ObservableCollection<ObservableEntity<E>>) results.get().getEntities(), entityTable -> {
 				entityTable.withRowNumberColumn("Row #", null);
 				for (ObservableEntityFieldType<E, ?> field : condition.getEntityType().getFields().allValues()) {
 					entityTable.withColumn(field.getName(), (TypeToken<Object>) field.getFieldType(), entity -> {
@@ -509,6 +522,21 @@ public class ObservableEntityExplorer extends JPanel {
 					}, //
 						fieldCol -> configureFieldColumn((ObservableEntityFieldType<E, Object>) field, fieldCol, updater));
 				}
+				entityTable.dragSourceRow(rowDrag -> rowDrag.advertiseFlavor(new EntityFlavor(condition.getEntityType()))//
+					.toFlavor(
+						flavor -> flavor instanceof EntityFlavor
+						&& ((EntityFlavor) flavor).entity.isAssignableFrom(condition.getEntityType()),
+						new Dragging.DataSourceTransform<ObservableEntity<E>>() {
+							@Override
+							public boolean canTransform(Object value, DataFlavor flavor) {
+								return true;
+							}
+
+							@Override
+							public Object transform(ObservableEntity<E> value, DataFlavor flavor) throws IOException {
+								return value;
+							}
+						}));
 				entityTable.withRemove(null, null);
 			})//
 			.addHPanel(null, "box", buttons -> {
@@ -580,7 +608,7 @@ public class ObservableEntityExplorer extends JPanel {
 	protected <T, E, F> void configureFieldColumn(ObservableEntityFieldType<E, F> field, CategoryRenderStrategy<T, F> fieldColumn,
 		EntityRowUpdater<? super T, E> creator) {
 		Class<F> raw = TypeTokens.getRawType(field.getFieldType().unwrap());
-		Function<Object, String> fmt = getFormatter(raw);
+		Function<Object, String> fmt = getFormatter(field);
 		Function<F, String> formatter = v -> {
 			if (v == null)
 				return "null";
@@ -648,6 +676,20 @@ public class ObservableEntityExplorer extends JPanel {
 				fieldColumn.withMutation(mutator -> {
 					mutator.asText(fFormat);
 				});
+			} else if (field.getTargetEntity() != null) {
+				editable = true;
+				fieldColumn.withMutation(mutator -> mutator//
+					.dragAccept(drag -> drag.fromFlavor(new EntityFlavor(field.getTargetEntity()), new Dragging.DataAccepterTransform<F>() {
+						@Override
+						public boolean canAccept(Object value, DataFlavor flavor) {
+							return true;
+						}
+
+						@Override
+						public F transform(Object value, DataFlavor flavor) throws IOException {
+							return (F) value;
+						}
+					})));
 			}
 		}
 		if (editable)
@@ -659,7 +701,18 @@ public class ObservableEntityExplorer extends JPanel {
 				);
 	}
 
-	static Function<Object, String> getFormatter(Class<?> type) {
+	static <F> Function<Object, String> getFormatter(ObservableEntityFieldType<?, F> field) {
+		if (field.getTargetEntity() != null) {
+			return e -> {
+				if (e instanceof ObservableEntity)
+					return ((ObservableEntity<?>) e).getId().toString();
+				else if (e instanceof EntityIdentity)
+					return e.toString();
+				else
+					return field.getTargetEntity().observableEntity((F) e).getId().toString();
+			};
+		}
+		Class<?> type = TypeTokens.getRawType(field.getFieldType());
 		if (type == Instant.class) {
 			return inst -> QommonsUtils.print(((Instant) inst).toEpochMilli());
 		} else if (type == Duration.class) {

@@ -39,6 +39,7 @@ import org.observe.entity.EntityOperationException;
 import org.observe.entity.EntityQuery;
 import org.observe.entity.EntityUpdate;
 import org.observe.entity.EntityValueAccess;
+import org.observe.entity.ObservableEntity;
 import org.observe.entity.ObservableEntityDataSet;
 import org.observe.entity.ObservableEntityFieldType;
 import org.observe.entity.ObservableEntityProvider;
@@ -824,7 +825,8 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 			EntityValueAccess<E, ?> field = getField(rsmd, i, naming);
 			if (field instanceof ObservableEntityFieldType && ((ObservableEntityFieldType<E, ?>) field).getIdIndex() >= 0)
 				continue;
-			deserializeField(field, entity::set, naming, results, i);
+			deserializeField(field, //
+				entity::set, naming, results, i);
 		}
 		return entity;
 	}
@@ -1000,6 +1002,8 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 			Object columnValue;
 			if (value instanceof EntityIdentity)
 				columnValue = ((EntityIdentity<?>) value).getFields().get(0);
+			else if (value instanceof ObservableEntity)
+				columnValue = ((ObservableEntity<?>) value).getId().getFields().get(0);
 			else
 				columnValue = ((ObservableEntityType<Object>) theEntityType).getIdentityFields().get(0).get(value);
 			((JdbcColumn<Object>) theIdColumn).serialize(columnValue, str);
@@ -1008,6 +1012,8 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 		@Override
 		public Object deserialize(ResultSet rs, int column) throws SQLException {
 			Object idValue = theIdColumn.deserialize(rs, column);
+			if (idValue == null)
+				return null;
 			return theEntityType.buildId().with(0, idValue).build();
 		}
 
