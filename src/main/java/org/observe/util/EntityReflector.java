@@ -1814,7 +1814,7 @@ public class EntityReflector<E> {
 		hasObservableFields = attrs.hasObservables;
 
 		theProxyHandler = new MethodRetrievingHandler();
-		theProxy = (E) Proxy.newProxyInstance(ObservableEntityUtils.class.getClassLoader(), new Class[] { raw }, theProxyHandler);
+		theProxy = (E) Proxy.newProxyInstance(raw.getClassLoader(), new Class[] { raw }, theProxyHandler);
 
 		MethodInterpreter<E, ?> equals;
 		try {
