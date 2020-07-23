@@ -27,9 +27,10 @@ implements ConfigurableCreator<E, E2>, EntityCreatorHelper<E, E2> {
 	private final QueryResults<E> theQuery;
 	private final Set<Integer> theRequiredFields;
 
-	ConfigurableCreatorImpl(ObservableEntityType<E2> entityType, QuickMap<String, EntityOperationVariable<E2>> variables,
-		QuickMap<String, Object> fieldValues, QuickMap<String, EntityOperationVariable<E2>> fieldVariables, QueryResults<E> query) {
-		super(entityType, variables);
+	ConfigurableCreatorImpl(ObservableEntityType<E2> entityType, boolean reportInChanges,
+		QuickMap<String, EntityOperationVariable<E2>> variables, QuickMap<String, Object> fieldValues,
+		QuickMap<String, EntityOperationVariable<E2>> fieldVariables, QueryResults<E> query) {
+		super(entityType, reportInChanges, variables);
 		theFieldValues = fieldValues;
 		theFieldVariables = fieldVariables;
 		theQuery = query;
@@ -66,7 +67,8 @@ implements ConfigurableCreator<E, E2>, EntityCreatorHelper<E, E2> {
 			throw new IllegalArgumentException(acceptable);
 		QuickMap<String, Object> copy = theFieldValues.copy();
 		copy.put(field.getIndex(), value);
-		return new ConfigurableCreatorImpl<>(getEntityType(), getVariables(), copy.unmodifiable(), theFieldVariables, theQuery);
+		return new ConfigurableCreatorImpl<>(getEntityType(), isReportInChanges(), getVariables(), copy.unmodifiable(), theFieldVariables,
+			theQuery);
 	}
 
 	@Override
@@ -76,7 +78,8 @@ implements ConfigurableCreator<E, E2>, EntityCreatorHelper<E, E2> {
 		QuickMap<String, EntityOperationVariable<E2>> variables = getOrAddVariable(variableName);
 		QuickMap<String, EntityOperationVariable<E2>> fieldVariables = theFieldVariables.copy();
 		fieldVariables.put(field.getIndex(), variables.get(variableName));
-		return new ConfigurableCreatorImpl<>(getEntityType(), variables, theFieldValues, fieldVariables.unmodifiable(), theQuery);
+		return new ConfigurableCreatorImpl<>(getEntityType(), isReportInChanges(), variables, theFieldValues, fieldVariables.unmodifiable(),
+			theQuery);
 	}
 
 	@Override

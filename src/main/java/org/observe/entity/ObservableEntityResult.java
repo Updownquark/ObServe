@@ -11,8 +11,9 @@ import org.observe.config.ValueOperationException;
  * controlling, and listening too the fulfillment state as the operation is executed in the entity service.
  *
  * @param <E> The type of the entity that the operation was against
+ * @param <T> The type of the result
  */
-public interface ObservableEntityResult<E> extends ObservableOperationResult<E> {
+public interface ObservableEntityResult<E, T> extends ObservableOperationResult<E, T> {
 	/** @return The operation that this result is for */
 	EntityOperation<E> getOperation();
 
@@ -25,7 +26,7 @@ public interface ObservableEntityResult<E> extends ObservableOperationResult<E> 
 	EntityOperationException getFailure();
 
 	@Override
-	default ObservableEntityResult<E> waitFor() throws InterruptedException, EntityOperationException {
+	default ObservableEntityResult<E, T> waitFor() throws InterruptedException, EntityOperationException {
 		try {
 			ObservableOperationResult.super.waitFor();
 		} catch (ValueOperationException e) {
@@ -35,7 +36,7 @@ public interface ObservableEntityResult<E> extends ObservableOperationResult<E> 
 	}
 
 	@Override
-	default ObservableEntityResult<E> waitFor(long timeout, int nanos) throws InterruptedException, EntityOperationException {
+	default ObservableEntityResult<E, T> waitFor(long timeout, int nanos) throws InterruptedException, EntityOperationException {
 		try {
 			ObservableOperationResult.super.waitFor(timeout, nanos);
 		} catch (ValueOperationException e) {
@@ -45,5 +46,5 @@ public interface ObservableEntityResult<E> extends ObservableOperationResult<E> 
 	}
 
 	@Override
-	Observable<? extends ObservableEntityResult<E>> watchStatus();
+	Observable<? extends ObservableEntityResult<E, T>> watchStatus();
 }

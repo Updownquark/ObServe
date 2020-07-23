@@ -7,7 +7,7 @@ import org.observe.ObservableValue;
  *
  * @param <E> The type of the entities counted in the result
  */
-public interface EntityCountResult<E> extends EntityQueryResult<E>, ObservableValue<Long> {
+public interface EntityCountResult<E> extends EntityQueryResult<E, ObservableValue<Long>> {
 	@Override
 	default EntityCountResult<E> waitFor() throws InterruptedException, EntityOperationException {
 		EntityQueryResult.super.waitFor();
@@ -19,4 +19,11 @@ public interface EntityCountResult<E> extends EntityQueryResult<E>, ObservableVa
 		EntityQueryResult.super.waitFor(timeout, nanos);
 		return this;
 	}
+
+	/**
+	 * @return The number of entities matching the query, or zero if the query is not yet
+	 *         {@link org.observe.config.OperationResult.ResultStatus#FULFILLED fulfilled}
+	 */
+	@Override
+	ObservableValue<Long> getResult();
 }

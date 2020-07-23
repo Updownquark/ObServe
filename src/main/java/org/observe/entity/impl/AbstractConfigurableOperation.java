@@ -3,24 +3,31 @@ package org.observe.entity.impl;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.observe.entity.EntityOperation;
+import org.observe.entity.ConfigurableOperation;
 import org.observe.entity.EntityOperationVariable;
 import org.observe.entity.ObservableEntityType;
 import org.qommons.collect.QuickSet;
 import org.qommons.collect.QuickSet.QuickMap;
 
-abstract class AbstractConfigurableOperation<E> implements EntityOperation<E> {
+abstract class AbstractConfigurableOperation<E> implements ConfigurableOperation<E> {
 	private final ObservableEntityType<E> theType;
+	private final boolean reportInChanges;
 	private final QuickMap<String, EntityOperationVariable<E>> theVariables;
 
-	AbstractConfigurableOperation(ObservableEntityType<E> type, QuickMap<String, EntityOperationVariable<E>> variables) {
+	AbstractConfigurableOperation(ObservableEntityType<E> type, boolean reportInChanges,
+		QuickMap<String, EntityOperationVariable<E>> variables) {
 		theType = type;
+		this.reportInChanges = reportInChanges;
 		theVariables = variables;
 	}
 
 	@Override
 	public ObservableEntityType<E> getEntityType() {
 		return theType;
+	}
+
+	public boolean isReportInChanges() {
+		return reportInChanges;
 	}
 
 	@Override

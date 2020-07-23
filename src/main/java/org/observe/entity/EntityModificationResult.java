@@ -5,7 +5,7 @@ package org.observe.entity;
  *
  * @param <E> The type of entity being updated or deleted
  */
-public interface EntityModificationResult<E> extends ObservableEntityResult<E> {
+public interface EntityModificationResult<E> extends ObservableEntityResult<E, Long> {
 	@Override
 	EntityModification<E> getOperation();
 
@@ -20,10 +20,4 @@ public interface EntityModificationResult<E> extends ObservableEntityResult<E> {
 		ObservableEntityResult.super.waitFor(timeout, nanos);
 		return this;
 	}
-
-	/**
-	 * @return The number of entities that were affected (updated or deleted) by this operation, or -1 if this result's {@link #getStatus()
-	 *         status} is not {@link org.observe.config.ObservableOperationResult.ResultStatus#FULFILLED fulfilled}
-	 */
-	long getModified();
 }

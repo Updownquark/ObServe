@@ -3,10 +3,10 @@ package org.observe.entity.jdbc;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.function.Consumer;
+import java.util.function.Function;
 
+import org.observe.config.OperationResult;
 import org.observe.entity.EntityOperationException;
-import org.observe.entity.ObservableEntityProvider.Cancelable;
 import org.observe.entity.jdbc.JdbcEntityProvider.PreparedSqlAction;
 import org.observe.entity.jdbc.JdbcEntityProvider.PreparedSqlOperation;
 import org.observe.entity.jdbc.JdbcEntityProvider.SqlAction;
@@ -40,56 +40,28 @@ public class DefaultConnectionPool implements JdbcEntityProvider.ConnectionPool 
 		}
 	}
 
-	private static class AsyncTask<T> implements Cancelable {
+	private static class AsyncTask<T> extends OperationResult.AsyncResult<T> {
 		private final SqlAction<T> theAction;
-		private final Consumer<T> onComplete;
-		private final Consumer<SQLException> onSqlError;
-		private final Consumer<EntityOperationException> onEoeError;
-		private volatile boolean isRunning;
-		volatile Runnable canceled;
-		boolean reportedCanceled;
+		private final Function<SQLException, EntityOperationException> theSqlError;
 
-		AsyncTask(SqlAction<T> action, Consumer<T> onComplete, Consumer<SQLException> onSqlError,
-			Consumer<EntityOperationException> onEoeError) {
+		AsyncTask(SqlAction<T> action, Function<SQLException, EntityOperationException> sqlError) {
 			theAction = action;
-			this.onComplete = onComplete;
-			this.onSqlError = onSqlError;
-			this.onEoeError = onEoeError;
+			theSqlError = sqlError;
 		}
 
 		public void run(Statement stmt) {
-			isRunning = true;
-			if (canceled != null) {
-				canceled.run();
+			if (!begin())
 				return;
-			}
 			T result;
 			try {
 				result = theAction.execute(stmt, //
-					this::isCanceled);
-				onComplete.accept(result);
+					() -> checkCanceled(true, true));
+				fulfilled(result);
 			} catch (SQLException e) {
-				onSqlError.accept(e);
+				failed(theSqlError.apply(e));
 			} catch (EntityOperationException e) {
-				onEoeError.accept(e);
+				failed(e);
 			}
-		}
-
-		boolean isCanceled() {
-			if (canceled != null) {
-				if (!reportedCanceled) {
-					reportedCanceled = true;
-					canceled.run();
-				}
-				return true;
-			}
-			return false;
-		}
-
-		@Override
-		public void cancel(boolean mayInterruptIfExecuting, Runnable onCancelSuccess) {
-			if (mayInterruptIfExecuting || !isRunning)
-				this.canceled = onCancelSuccess;
 		}
 	}
 
@@ -150,11 +122,10 @@ public class DefaultConnectionPool implements JdbcEntityProvider.ConnectionPool 
 	}
 
 	@Override
-	public <T> Cancelable connectAsync(SqlAction<T> action, Consumer<T> onComplete, Consumer<SQLException> sqlError,
-		Consumer<EntityOperationException> eoeError) {
+	public <T> OperationResult<T> connectAsync(SqlAction<T> action, Function<SQLException, EntityOperationException> sqlError) {
 		if (isClosed)
 			throw new IllegalStateException("This pool has been closed");
-		AsyncTask<T> task = new AsyncTask<>(action, onComplete, sqlError, eoeError);
+		AsyncTask<T> task = new AsyncTask<>(action, sqlError);
 		theAsyncExecutor.execute(task);
 		return task;
 	}

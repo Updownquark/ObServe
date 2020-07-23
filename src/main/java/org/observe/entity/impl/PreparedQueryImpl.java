@@ -1,6 +1,5 @@
 package org.observe.entity.impl;
 
-import org.observe.entity.ConfigurableQuery;
 import org.observe.entity.EntityCollectionResult;
 import org.observe.entity.EntityCondition;
 import org.observe.entity.EntityCountResult;
@@ -14,15 +13,15 @@ import org.qommons.collect.QuickSet.QuickMap;
 class PreparedQueryImpl<E> extends AbstractPreparedSetOperation<E, PreparedQueryImpl<E>> implements PreparedQuery<E> {
 	private final QuickMap<String, FieldLoadType> theFieldLoadTypes;
 
-	PreparedQueryImpl(ConfigurableQuery<E> definition, Object preparedObject, EntityCondition<E> selection,
+	PreparedQueryImpl(ConfigurableQueryImpl<E> definition, Object preparedObject, EntityCondition<E> selection,
 		QuickMap<String, FieldLoadType> loadTypes, QuickMap<String, Object> variables) {
 		super(definition, preparedObject, variables, selection);
 		theFieldLoadTypes = loadTypes;
 	}
 
 	@Override
-	public ConfigurableQuery<E> getDefinition() {
-		return (ConfigurableQuery<E>) super.getDefinition();
+	public ConfigurableQueryImpl<E> getDefinition() {
+		return (ConfigurableQueryImpl<E>) super.getDefinition();
 	}
 
 	@Override

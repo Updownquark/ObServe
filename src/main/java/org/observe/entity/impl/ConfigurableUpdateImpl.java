@@ -15,14 +15,14 @@ class ConfigurableUpdateImpl<E> extends AbstractConfigurableOperation<E> impleme
 	private final QuickMap<String, Object> theUpdateValues;
 	private final QuickMap<String, EntityOperationVariable<E>> theUpdateVariables;
 
-	ConfigurableUpdateImpl(EntityCondition<E> selection) {
-		this(selection, QuickMap.of(selection.getVariables(), String::compareTo),
+	ConfigurableUpdateImpl(EntityCondition<E> selection, boolean reportInChanges) {
+		this(selection, reportInChanges, QuickMap.of(selection.getVariables(), String::compareTo),
 			selection.getEntityType().getFields().keySet().createMap().fill(EntityUpdate.NOT_SET), QuickMap.empty());
 	}
 
-	ConfigurableUpdateImpl(EntityCondition<E> selection, QuickMap<String, EntityOperationVariable<E>> variables,
+	ConfigurableUpdateImpl(EntityCondition<E> selection, boolean reportInChanges, QuickMap<String, EntityOperationVariable<E>> variables,
 		QuickMap<String, Object> updateValues, QuickMap<String, EntityOperationVariable<E>> updateVariables) {
-		super(selection.getEntityType(), variables);
+		super(selection.getEntityType(), reportInChanges, variables);
 		theSelection = selection;
 		theUpdateValues = updateValues;
 		theUpdateVariables = updateVariables;
@@ -51,7 +51,7 @@ class ConfigurableUpdateImpl<E> extends AbstractConfigurableOperation<E> impleme
 		QuickMap<String, Object> copy = theUpdateValues.copy();
 		// TODO Type/constraint check
 		copy.put(field.getIndex(), value);
-		return new ConfigurableUpdateImpl<>(theSelection, getVariables(), copy.unmodifiable(), theUpdateVariables);
+		return new ConfigurableUpdateImpl<>(theSelection, isReportInChanges(), getVariables(), copy.unmodifiable(), theUpdateVariables);
 	}
 
 	@Override
@@ -62,7 +62,7 @@ class ConfigurableUpdateImpl<E> extends AbstractConfigurableOperation<E> impleme
 		QuickMap<String, EntityOperationVariable<E>> variables = getOrAddVariable(variableName);
 		QuickMap<String, EntityOperationVariable<E>> copy = theUpdateVariables.copy();
 		copy.put(field.getIndex(), variables.get(variableName));
-		return new ConfigurableUpdateImpl<>(theSelection, variables, theUpdateValues, copy.unmodifiable());
+		return new ConfigurableUpdateImpl<>(theSelection, isReportInChanges(), variables, theUpdateValues, copy.unmodifiable());
 	}
 
 	@Override

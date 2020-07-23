@@ -10,8 +10,8 @@ import org.qommons.collect.QuickSet.QuickMap;
 class ConfigurableDeletionImpl<E> extends AbstractConfigurableOperation<E> implements ConfigurableDeletion<E> {
 	private final EntityCondition<E> theSelection;
 
-	ConfigurableDeletionImpl(EntityCondition<E> selection) {
-		super(selection.getEntityType(), QuickMap.of(selection.getVariables(), String::compareTo));
+	ConfigurableDeletionImpl(EntityCondition<E> selection, boolean reportInChanges) {
+		super(selection.getEntityType(), reportInChanges, QuickMap.of(selection.getVariables(), String::compareTo));
 		theSelection = selection;
 	}
 

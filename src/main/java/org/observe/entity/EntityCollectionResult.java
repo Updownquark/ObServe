@@ -2,11 +2,11 @@ package org.observe.entity;
 
 /**
  * The result of an {@link EntityQuery}'s {@link EntityQuery#collect(boolean) collect} method. The collection will be empty until this
- * result's {@link #getStatus() status} is {@link org.observe.config.ObservableOperationResult.ResultStatus#FULFILLED fulfilled}.
+ * result's {@link #getStatus() status} is {@link org.observe.config.OperationResult.ResultStatus#FULFILLED fulfilled}.
  *
  * @param <E> The type of entity in the result
  */
-public interface EntityCollectionResult<E> extends EntityQueryResult<E> {
+public interface EntityCollectionResult<E> extends EntityQueryResult<E, ObservableEntitySet<E>> {
 	@Override
 	default EntityCollectionResult<E> waitFor() throws InterruptedException, EntityOperationException {
 		EntityQueryResult.super.waitFor();
@@ -20,8 +20,9 @@ public interface EntityCollectionResult<E> extends EntityQueryResult<E> {
 	}
 
 	/**
-	 * @return The entities matching this query. Will be empty until
-	 *         {@link org.observe.config.ObservableOperationResult.ResultStatus#FULFILLED fulfilled}
+	 * @return The entities matching the query, or an empty collection if the result is not
+	 *         {@link org.observe.config.OperationResult.ResultStatus#FULFILLED fulfilled}
 	 */
-	ObservableEntitySet<E> get();
+	@Override
+	ObservableEntitySet<E> getResult();
 }

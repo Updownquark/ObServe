@@ -18,6 +18,7 @@ import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionEvent;
 import org.observe.collect.ObservableSortedSet;
+import org.observe.config.OperationResult;
 import org.observe.entity.ConfigurableCreator;
 import org.observe.entity.EntityChainAccess;
 import org.observe.entity.EntityChange;
@@ -53,13 +54,14 @@ import org.qommons.collect.RRWLockingStrategy;
 
 import com.google.common.reflect.TypeToken;
 
-public class QueryResults<E> extends AbstractOperationResult<E> {
+public class QueryResults<E> extends AbstractOperationResult<E, Object, Object> {
 	private final QueryResultNode theNode;
 	private final EntityCondition<E> theSelection;
 	private final ObservableSortedSet<ObservableEntity<? extends E>> theRawResults;
 	private final ObservableSortedSet<ObservableEntity<? extends E>> theExposedResults;
 	private final SettableValue<Long> theRawCountResult;
 
+	private boolean isFulfilled;
 	private final AtomicInteger theListening;
 	private volatile boolean isAdjusting;
 
@@ -110,6 +112,18 @@ public class QueryResults<E> extends AbstractOperationResult<E> {
 		}
 	}
 
+	@Override
+	public ResultStatus getStatus() {
+		if (isFulfilled)
+			return ResultStatus.FULFILLED;
+		return super.getStatus();
+	}
+
+	@Override
+	protected Object getResult(OperationResult<? extends Object> wrapped) {
+		throw new IllegalStateException("Should not be called");
+	}
+
 	public EntityCondition<E> getSelection() {
 		return theSelection;
 	}
@@ -129,7 +143,8 @@ public class QueryResults<E> extends AbstractOperationResult<E> {
 		theNode.fulfill(entities);
 	}
 
-	public void init(Iterable<? extends ObservableEntity<?>> entities, boolean needsFilter) {
+	public synchronized void init(Iterable<? extends ObservableEntity<?>> entities, boolean needsFilter) {
+		isFulfilled = true;
 		if (theRawResults != null) {
 			theRawResults.clear();
 			for (ObservableEntity<?> entity : entities) {
@@ -138,7 +153,6 @@ public class QueryResults<E> extends AbstractOperationResult<E> {
 					continue;
 				theRawResults.add((ObservableEntity<? extends E>) entity);
 			}
-			fulfilled();
 		} else if (!needsFilter && entities instanceof Collection) {
 			init(((Collection<?>) entities).size());
 		} else {
@@ -153,9 +167,9 @@ public class QueryResults<E> extends AbstractOperationResult<E> {
 		}
 	}
 
-	public void init(long count) {
+	public synchronized void init(long count) {
 		theRawCountResult.set(count, null);
-		fulfilled();
+		isFulfilled = true;
 	}
 
 	/**
@@ -420,7 +434,7 @@ public class QueryResults<E> extends AbstractOperationResult<E> {
 		};
 	}
 
-	abstract class QueryResultWrapper implements EntityQueryResult<E> {
+	abstract class QueryResultWrapper<T> implements EntityQueryResult<E, T> {
 		private final EntityQuery<E> theQuery;
 		private AtomicBoolean isCanceled;
 
@@ -452,12 +466,12 @@ public class QueryResults<E> extends AbstractOperationResult<E> {
 		}
 
 		@Override
-		public Observable<? extends ObservableEntityResult<E>> watchStatus() {
-			return QueryResults.this.watchStatus();
+		public Observable<? extends ObservableEntityResult<E, T>> watchStatus() {
+			return QueryResults.this.watchStatus().map(__ -> this);
 		}
 	}
 
-	class ResultWrapper extends QueryResultWrapper implements EntityCollectionResult<E> {
+	class ResultWrapper extends QueryResultWrapper<ObservableEntitySet<E>> implements EntityCollectionResult<E> {
 		private final EntitySetImpl theEntitySet;
 		private final EntitySet theEntities;
 
@@ -468,7 +482,7 @@ public class QueryResults<E> extends AbstractOperationResult<E> {
 		}
 
 		@Override
-		public ObservableEntitySet<E> get() {
+		public ObservableEntitySet<E> getResult() {
 			return theEntitySet;
 		}
 
@@ -489,7 +503,7 @@ public class QueryResults<E> extends AbstractOperationResult<E> {
 				if (!getType().isAssignableFrom(subEntity))
 					throw new IllegalArgumentException("No such sub-entity " + subType);
 				QuickMap<String, Object> fieldValues = subEntity.getFields().keySet().createMap();
-				return new ConfigurableCreatorImpl<>(subEntity, QuickMap.empty(), fieldValues.unmodifiable(), //
+				return new ConfigurableCreatorImpl<>(subEntity, true, QuickMap.empty(), fieldValues.unmodifiable(), //
 					subEntity.getFields().keySet().<EntityOperationVariable<E2>> createMap().unmodifiable(), QueryResults.this);
 			}
 		}
@@ -607,63 +621,76 @@ public class QueryResults<E> extends AbstractOperationResult<E> {
 		}
 	}
 
-	class CountResultWrapper extends QueryResultWrapper implements EntityCountResult<E> {
-		private final ObservableValue<Long> theWrapped;
+	class CountResultWrapper extends QueryResultWrapper<ObservableValue<Long>> implements EntityCountResult<E> {
+		private final CountResult theResult;
 
 		CountResultWrapper(EntityQuery<E> query, ObservableValue<Long> wrapped) {
 			super(query);
-			theWrapped = wrapped;
+			theResult = new CountResult(wrapped);
 		}
 
 		@Override
-		public Object getIdentity() {
-			return theWrapped.getIdentity(); // TODO Can do better than this
+		public ObservableValue<Long> getResult() {
+			return theResult;
 		}
 
-		@Override
-		public long getStamp() {
-			return theWrapped.getStamp();
-		}
+		class CountResult implements ObservableValue<Long> {
+			private final ObservableValue<Long> theWrapped;
 
-		@Override
-		public TypeToken<Long> getType() {
-			return theWrapped.getType();
-		}
+			CountResult(ObservableValue<Long> wrapped) {
+				theWrapped = wrapped;
+			}
 
-		@Override
-		public Long get() {
-			return theWrapped.get();
-		}
+			@Override
+			public Object getIdentity() {
+				return theWrapped.getIdentity(); // TODO Can do better than this
+			}
 
-		@Override
-		public Observable<ObservableValueEvent<Long>> noInitChanges() {
-			Observable<ObservableValueEvent<Long>> superChanges = theWrapped.noInitChanges();
-			return new Observable<ObservableValueEvent<Long>>() {
-				@Override
-				public Object getIdentity() {
-					return superChanges.getIdentity();
-				}
+			@Override
+			public long getStamp() {
+				return theWrapped.getStamp();
+			}
 
-				@Override
-				public Subscription subscribe(Observer<? super ObservableValueEvent<Long>> observer) {
-					return wrap(() -> superChanges.subscribe(observer));
-				}
+			@Override
+			public TypeToken<Long> getType() {
+				return theWrapped.getType();
+			}
 
-				@Override
-				public boolean isSafe() {
-					return superChanges.isSafe();
-				}
+			@Override
+			public Long get() {
+				return theWrapped.get();
+			}
 
-				@Override
-				public Transaction lock() {
-					return superChanges.lock();
-				}
+			@Override
+			public Observable<ObservableValueEvent<Long>> noInitChanges() {
+				Observable<ObservableValueEvent<Long>> superChanges = theWrapped.noInitChanges();
+				return new Observable<ObservableValueEvent<Long>>() {
+					@Override
+					public Object getIdentity() {
+						return superChanges.getIdentity();
+					}
 
-				@Override
-				public Transaction tryLock() {
-					return superChanges.tryLock();
-				}
-			};
+					@Override
+					public Subscription subscribe(Observer<? super ObservableValueEvent<Long>> observer) {
+						return wrap(() -> superChanges.subscribe(observer));
+					}
+
+					@Override
+					public boolean isSafe() {
+						return superChanges.isSafe();
+					}
+
+					@Override
+					public Transaction lock() {
+						return superChanges.lock();
+					}
+
+					@Override
+					public Transaction tryLock() {
+						return superChanges.tryLock();
+					}
+				};
+			}
 		}
 	}
 }

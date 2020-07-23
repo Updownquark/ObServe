@@ -1,15 +1,14 @@
 package org.observe.entity.impl;
 
-import org.observe.entity.ConfigurableOperation;
 import org.observe.entity.PreparedOperation;
 import org.qommons.collect.QuickSet.QuickMap;
 
 abstract class AbstractPreparedOperation<E, O extends PreparedOperation<E>> implements PreparedOperation<E> {
-	private final ConfigurableOperation<E> theDefinition;
+	private final AbstractConfigurableOperation<E> theDefinition;
 	private final Object thePreparedObject;
 	private final QuickMap<String, Object> theVariableValues;
 
-	AbstractPreparedOperation(ConfigurableOperation<E> definition, Object preparedObject, QuickMap<String, Object> variableValues) {
+	AbstractPreparedOperation(AbstractConfigurableOperation<E> definition, Object preparedObject, QuickMap<String, Object> variableValues) {
 		theDefinition = definition;
 		thePreparedObject = preparedObject;
 		theVariableValues = variableValues;
@@ -20,7 +19,7 @@ abstract class AbstractPreparedOperation<E, O extends PreparedOperation<E>> impl
 	}
 
 	@Override
-	public ConfigurableOperation<E> getDefinition() {
+	public AbstractConfigurableOperation<E> getDefinition() {
 		return theDefinition;
 	}
 

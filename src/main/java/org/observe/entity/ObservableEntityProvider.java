@@ -4,9 +4,9 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
-import java.util.function.LongConsumer;
 
 import org.observe.config.ObservableValueSet;
+import org.observe.config.OperationResult;
 import org.observe.util.TypeTokens;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.ElementId;
@@ -154,35 +154,28 @@ public interface ObservableEntityProvider {
 		}
 	}
 
-	public interface Cancelable {
-		void cancel(boolean mayInterruptIfExecuting, Runnable onCancelSuccess);
-	}
-
 	void install(ObservableEntityDataSet entitySet) throws EntityOperationException;
 
 	Object prepare(ConfigurableOperation<?> operation) throws EntityOperationException;
 	void dispose(Object prepared);
 
-	<E> SimpleEntity<E> create(EntityCreator<? super E, E> creator, Object prepared) throws EntityOperationException;
-	<E> Cancelable createAsync(EntityCreator<? super E, E> creator, Object prepared, //
-		Consumer<SimpleEntity<E>> identityFieldsOnAsyncComplete, Consumer<EntityOperationException> onError);
+	<E> SimpleEntity<E> create(EntityCreator<? super E, E> creator, Object prepared, boolean reportInChanges)
+		throws EntityOperationException;
+	<E> OperationResult<SimpleEntity<E>> createAsync(EntityCreator<? super E, E> creator, Object prepared, boolean reportInChanges);
 
-	Cancelable count(EntityQuery<?> query, Object prepared, //
-		LongConsumer onAsyncComplete, Consumer<EntityOperationException> onError);
+	OperationResult<Long> count(EntityQuery<?> query, Object prepared);
+	<E> OperationResult<Iterable<SimpleEntity<? extends E>>> query(EntityQuery<E> query, Object prepared);
 
-	<E> Cancelable query(EntityQuery<E> query, Object prepared, //
-		Consumer<Iterable<SimpleEntity<? extends E>>> onAsyncComplete, Consumer<EntityOperationException> onError);
+	<E> long update(EntityUpdate<E> update, Object prepared, boolean reportInChanges) throws EntityOperationException;
+	<E> OperationResult<Long> updateAsync(EntityUpdate<E> update, Object prepared, boolean reportInChanges);
 
-	<E> long update(EntityUpdate<E> update, Object prepared) throws EntityOperationException;
-	<E> Cancelable updateAsync(EntityUpdate<E> update, Object prepared, //
-		LongConsumer onAsyncComplete, Consumer<EntityOperationException> onError) throws EntityOperationException;
-
-	<E> long delete(EntityDeletion<E> delete, Object prepared) throws EntityOperationException;
-	<E> Cancelable deleteAsync(EntityDeletion<E> delete, Object prepared, //
-		LongConsumer onAsyncComplete, Consumer<EntityOperationException> onError);
+	<E> long delete(EntityDeletion<E> delete, Object prepared, boolean reportInChanges) throws EntityOperationException;
+	<E> OperationResult<Long> deleteAsync(EntityDeletion<E> delete, Object prepared, boolean reportInChanges);
 
 	<V> ElementId updateCollection(BetterCollection<V> collection, CollectionOperationType changeType, ElementId element, V value,
-		Consumer<ElementId> asyncResult);
+		boolean reportInChanges) throws EntityOperationException;
+	<V> OperationResult<ElementId> updateCollectionAsync(BetterCollection<V> collection, CollectionOperationType changeType,
+		ElementId element, V value, boolean reportInChanges);
 
 	<K, V> ElementId updateMap(Map<K, V> collection, CollectionOperationType changeType, K key, V value, Runnable asyncResult);
 
@@ -193,6 +186,5 @@ public interface ObservableEntityProvider {
 	List<EntityChange<?>> changes();
 
 	List<EntityLoadRequest.Fulfillment<?>> loadEntityData(List<EntityLoadRequest<?>> loadRequests) throws EntityOperationException;
-	Cancelable loadEntityDataAsync(List<EntityLoadRequest<?>> loadRequests, //
-		Consumer<List<EntityLoadRequest.Fulfillment<?>>> onComplete, Consumer<EntityOperationException> onError);
+	OperationResult<List<EntityLoadRequest.Fulfillment<?>>> loadEntityDataAsync(List<EntityLoadRequest<?>> loadRequests);
 }

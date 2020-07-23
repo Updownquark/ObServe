@@ -15,10 +15,10 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
-import java.util.function.Consumer;
-import java.util.function.LongConsumer;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import org.observe.config.OperationResult;
 import org.observe.entity.ConfigurableCreator;
 import org.observe.entity.ConfigurableOperation;
 import org.observe.entity.EntityChainAccess;
@@ -75,8 +75,7 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 	public interface PreparedSqlOperation<E, T> {
 		T execute(PreparedOperation<E> operation) throws SQLException, EntityOperationException;
 
-		Cancelable executeAsync(PreparedOperation<E> operation, Consumer<T> onComplete, Consumer<SQLException> sqlError,
-			Consumer<EntityOperationException> eoeError);
+		OperationResult<T> executeAsync(PreparedOperation<E> operation, Function<SQLException, EntityOperationException> sqlError);
 
 		void dispose();
 	}
@@ -84,8 +83,7 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 	public interface ConnectionPool {
 		<T> T connect(SqlAction<T> action) throws SQLException, EntityOperationException;
 
-		<T> Cancelable connectAsync(SqlAction<T> action, Consumer<T> onComplete, Consumer<SQLException> sqlError,
-			Consumer<EntityOperationException> eoeError);
+		<T> OperationResult<T> connectAsync(SqlAction<T> action, Function<SQLException, EntityOperationException> sqlError);
 
 		<E, T> PreparedSqlOperation<E, T> prepare(String sql, PreparedSqlAction<T> action) throws SQLException;
 	}
@@ -220,40 +218,38 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 	}
 
 	@Override
-	public <E> SimpleEntity<E> create(EntityCreator<? super E, E> creator, Object prepared) throws EntityOperationException {
+	public <E> SimpleEntity<E> create(EntityCreator<? super E, E> creator, Object prepared, boolean reportInChanges)
+		throws EntityOperationException {
 		try {
 			if (prepared instanceof PreparedSqlOperation)
 				return ((PreparedSqlOperation<E, SimpleEntity<E>>) prepared).execute((PreparedCreator<? super E, E>) creator);
 			else
-				return theConnectionPool.connect(new CreateAction<>(creator));
+				return theConnectionPool.connect(new CreateAction<>(creator, reportInChanges));
 		} catch (SQLException e) {
 			throw new EntityOperationException("Create failed: " + creator, e);
 		}
 	}
 
 	@Override
-	public <E> Cancelable createAsync(EntityCreator<? super E, E> creator, Object prepared,
-		Consumer<SimpleEntity<E>> identityFieldsOnAsyncComplete, Consumer<EntityOperationException> onError) {
+	public <E> OperationResult<SimpleEntity<E>> createAsync(EntityCreator<? super E, E> creator, Object prepared, boolean reportInChanges) {
 		if (prepared instanceof PreparedSqlOperation) {
 			return ((PreparedSqlOperation<E, SimpleEntity<E>>) prepared).executeAsync((PreparedCreator<? super E, E>) creator, //
-				identityFieldsOnAsyncComplete, sqlE -> {
-					onError.accept(new EntityOperationException("Create failed: " + creator, sqlE));
-				}, onError);
+				sqlE -> new EntityOperationException("Create failed: " + creator, sqlE));
 		} else {
-			return theConnectionPool.connectAsync(new CreateAction<>(creator), //
-				identityFieldsOnAsyncComplete, sqlE -> {
-					onError.accept(new EntityOperationException("Create failed: " + creator, sqlE));
-				}, onError);
+			return theConnectionPool.connectAsync(new CreateAction<>(creator, reportInChanges), //
+				sqlE -> new EntityOperationException("Create failed: " + creator, sqlE));
 		}
 	}
 
 	class CreateAction<E> implements SqlAction<SimpleEntity<E>> {
 		private final EntityCreator<? super E, E> theCreator;
+		private final boolean reportInChanges;
 		private final TableNaming<E> theNaming;
 		private final String theCreateSql;
 
-		CreateAction(EntityCreator<? super E, E> creator) {
+		CreateAction(EntityCreator<? super E, E> creator, boolean reportInChanges) {
 			theCreator = creator;
+			this.reportInChanges = reportInChanges;
 			theNaming = (TableNaming<E>) theTableNaming.get(creator.getEntityType().getName());
 			StringBuilder sql = new StringBuilder();
 			sql.append("INSERT INTO ");
@@ -305,25 +301,21 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 				if (rs.next())
 					System.err.println("Multiple generated key sets?");
 			}
-			changed(new EntityChange.EntityExistenceChange<>(theCreator.getEntityType(), Instant.now(), true,
-				BetterList.of(entity.getIdentity()), null));
+			if (reportInChanges)
+				changed(new EntityChange.EntityExistenceChange<>(theCreator.getEntityType(), Instant.now(), true,
+					BetterList.of(entity.getIdentity()), null));
 			return entity;
 		}
 	}
 
 	@Override
-	public Cancelable count(EntityQuery<?> query, Object prepared, LongConsumer onAsyncComplete,
-		Consumer<EntityOperationException> onError) {
+	public OperationResult<Long> count(EntityQuery<?> query, Object prepared) {
 		if (prepared instanceof PreparedSqlOperation) {
 			return ((PreparedSqlOperation<Object, Long>) prepared).executeAsync((PreparedQuery<Object>) query, //
-				v -> onAsyncComplete.accept(v), sqlE -> {
-					onError.accept(new EntityOperationException("Query failed: " + query, sqlE));
-				}, onError);
+				sqlE -> new EntityOperationException("Query failed: " + query, sqlE));
 		} else {
 			return theConnectionPool.connectAsync(new CountQueryAction<>(query), //
-				v -> onAsyncComplete.accept(v), sqlE -> {
-					onError.accept(new EntityOperationException("Query failed: " + query, sqlE));
-				}, onError);
+				sqlE -> new EntityOperationException("Query failed: " + query, sqlE));
 		}
 	}
 
@@ -360,18 +352,13 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 	}
 
 	@Override
-	public <E> Cancelable query(EntityQuery<E> query, Object prepared, Consumer<Iterable<SimpleEntity<? extends E>>> onAsyncComplete,
-		Consumer<EntityOperationException> onError) {
+	public <E> OperationResult<Iterable<SimpleEntity<? extends E>>> query(EntityQuery<E> query, Object prepared) {
 		if (prepared instanceof PreparedSqlOperation) {
 			return ((PreparedSqlOperation<E, Iterable<SimpleEntity<? extends E>>>) prepared).executeAsync((PreparedQuery<E>) query, //
-				onAsyncComplete, sqlE -> {
-					onError.accept(new EntityOperationException("Query failed: " + query, sqlE));
-				}, onError);
+				sqlE -> new EntityOperationException("Query failed: " + query, sqlE));
 		} else {
 			return theConnectionPool.connectAsync(new CollectionQueryAction<>(query), //
-				onAsyncComplete, sqlE -> {
-					onError.accept(new EntityOperationException("Query failed: " + query, sqlE));
-				}, onError);
+				sqlE -> new EntityOperationException("Query failed: " + query, sqlE));
 		}
 	}
 
@@ -414,42 +401,39 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 	}
 
 	@Override
-	public <E> long update(EntityUpdate<E> update, Object prepared) throws EntityOperationException {
+	public <E> long update(EntityUpdate<E> update, Object prepared, boolean reportInChanges) throws EntityOperationException {
 		try {
 			if (prepared instanceof PreparedSqlOperation)
 				return ((PreparedSqlOperation<E, Long>) prepared).execute((PreparedUpdate<E>) update);
 			else
-				return theConnectionPool.connect(new UpdateAction<>(update));
+				return theConnectionPool.connect(new UpdateAction<>(update, reportInChanges));
 		} catch (SQLException e) {
 			throw new EntityOperationException("Update failed: " + update, e);
 		}
 	}
 
 	@Override
-	public <E> Cancelable updateAsync(EntityUpdate<E> update, Object prepared, LongConsumer onAsyncComplete,
-		Consumer<EntityOperationException> onError) throws EntityOperationException {
+	public <E> OperationResult<Long> updateAsync(EntityUpdate<E> update, Object prepared, boolean reportInChanges) {
 		if (prepared instanceof PreparedSqlOperation) {
 			return ((PreparedSqlOperation<E, Long>) prepared).executeAsync((PreparedUpdate<E>) update, //
-				v -> onAsyncComplete.accept(v), sqlE -> {
-					onError.accept(new EntityOperationException("Update failed: " + update, sqlE));
-				}, onError);
+				sqlE -> new EntityOperationException("Update failed: " + update, sqlE));
 		} else {
-			return theConnectionPool.connectAsync(new UpdateAction<>(update), //
-				v -> onAsyncComplete.accept(v), sqlE -> {
-					onError.accept(new EntityOperationException("Update failed: " + update, sqlE));
-				}, onError);
+			return theConnectionPool.connectAsync(new UpdateAction<>(update, reportInChanges), //
+				sqlE -> new EntityOperationException("Update failed: " + update, sqlE));
 		}
 	}
 
 	abstract class ModificationAction<E> implements SqlAction<Long> {
 		private final EntityModification<E> theModification;
+		final boolean reportInChanges;
 		private final TableNaming<E> theNaming;
 		private final String theUpdateSql;
 		private final String theQuerySql;
 		private final Map<String, Join<?, ?, ?>> theJoins;
 
-		ModificationAction(EntityModification<E> update) {
+		ModificationAction(EntityModification<E> update, boolean reportInChanges) {
 			theModification = update;
+			this.reportInChanges = reportInChanges;
 			theNaming = (TableNaming<E>) theTableNaming.get(update.getEntityType().getName());
 			theJoins = new HashMap<>();
 
@@ -508,8 +492,8 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 	}
 
 	class UpdateAction<E> extends ModificationAction<E> {
-		UpdateAction(EntityUpdate<E> update) {
-			super(update);
+		UpdateAction(EntityUpdate<E> update, boolean reportInChanges) {
+			super(update, reportInChanges);
 		}
 
 		@Override
@@ -544,48 +528,51 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 			if (canceled.getAsBoolean())
 				return null;
 			QuickMap<String, Object> values = getModification().getFieldValues();
-			BetterSortedSet<EntityIdentity<? extends E>> affected = new BetterTreeSet<>(false, EntityIdentity::compareTo);
-			QuickMap<String, List<Object>> oldValues = values.keySet().createMap();
-			for (int f = 0; f < values.keySize(); f++) {
-				if (values.get(f) != EntityUpdate.NOT_SET)
-					oldValues.put(f, new ArrayList<>());
-			}
-			long missed = 0;
-			try (ResultSet rs = stmt.executeQuery(getQuerySql())) {
-				while (rs.next()) {
-					SimpleEntity<? extends E> entity = buildEntity(getModification().getEntityType(), rs, getNaming(), getJoins());
-					// TODO Invalid for sub-typed entities
-					if (isDifferent(entity.getFields(), values)) {
-						int index = affected.getElementsBefore(affected.addElement(entity.getIdentity(), false).getElementId());
-						for (int f = 0; f < values.keySize(); f++) {
-							Object targetValue = values.get(f);
-							if (targetValue != EntityUpdate.NOT_SET)
-								oldValues.get(f).add(index, entity.getFields().get(f));
-						}
-					} else
-						missed++;
+			if (reportInChanges) {
+				BetterSortedSet<EntityIdentity<? extends E>> affected = new BetterTreeSet<>(false, EntityIdentity::compareTo);
+				QuickMap<String, List<Object>> oldValues = values.keySet().createMap();
+				for (int f = 0; f < values.keySize(); f++) {
+					if (values.get(f) != EntityUpdate.NOT_SET)
+						oldValues.put(f, new ArrayList<>());
 				}
-			}
-			if (affected.isEmpty())
-				return Long.valueOf(0);
-			else if (canceled.getAsBoolean())
-				return null;
-			stmt.executeUpdate(getUpdateSql());
-			List<EntityChange.FieldChange<E, ?>> fieldChanges = new ArrayList<>(oldValues.valueCount());
-			for (int f = 0; f < values.keySize(); f++) {
-				if (values.get(f) == EntityUpdate.NOT_SET)
-					continue;
-				fieldChanges.add(new EntityChange.FieldChange<>(
-					(ObservableEntityFieldType<E, Object>) getModification().getEntityType().getFields().get(f), oldValues.get(f),
-					values.get(f)));
-			}
-			boolean useSelection = affected.size() > 1 && (affected.size() * affected.size() <= missed)
-				&& isConditionValidPostUpdate(getModification().getSelection(), values);
-			if (canceled.getAsBoolean())
-				return null;
-			changed(new EntityChange.EntityFieldValueChange<>(getModification().getEntityType(), Instant.now(), affected, fieldChanges,
-				useSelection ? getModification().getSelection() : null));
-			return Long.valueOf(affected.size());
+				long missed = 0;
+				try (ResultSet rs = stmt.executeQuery(getQuerySql())) {
+					while (rs.next()) {
+						SimpleEntity<? extends E> entity = buildEntity(getModification().getEntityType(), rs, getNaming(), getJoins());
+						// TODO Invalid for sub-typed entities
+						if (isDifferent(entity.getFields(), values)) {
+							int index = affected.getElementsBefore(affected.addElement(entity.getIdentity(), false).getElementId());
+							for (int f = 0; f < values.keySize(); f++) {
+								Object targetValue = values.get(f);
+								if (targetValue != EntityUpdate.NOT_SET)
+									oldValues.get(f).add(index, entity.getFields().get(f));
+							}
+						} else
+							missed++;
+					}
+				}
+				if (affected.isEmpty())
+					return Long.valueOf(0);
+				if (canceled.getAsBoolean())
+					return null;
+				stmt.executeUpdate(getUpdateSql());
+				List<EntityChange.FieldChange<E, ?>> fieldChanges = new ArrayList<>(oldValues.valueCount());
+				for (int f = 0; f < values.keySize(); f++) {
+					if (values.get(f) == EntityUpdate.NOT_SET)
+						continue;
+					fieldChanges.add(new EntityChange.FieldChange<>(
+						(ObservableEntityFieldType<E, Object>) getModification().getEntityType().getFields().get(f), oldValues.get(f),
+						values.get(f)));
+				}
+				boolean useSelection = affected.size() > 1 && (affected.size() * affected.size() <= missed)
+					&& isConditionValidPostUpdate(getModification().getSelection(), values);
+				if (canceled.getAsBoolean())
+					return null;
+				changed(new EntityChange.EntityFieldValueChange<>(getModification().getEntityType(), Instant.now(), affected, fieldChanges,
+					useSelection ? getModification().getSelection() : null));
+				return Long.valueOf(affected.size());
+			} else
+				return Long.valueOf(stmt.executeUpdate(getUpdateSql()));
 		}
 
 		@Override
@@ -596,36 +583,31 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 	}
 
 	@Override
-	public <E> long delete(EntityDeletion<E> delete, Object prepared) throws EntityOperationException {
+	public <E> long delete(EntityDeletion<E> delete, Object prepared, boolean reportInChanges) throws EntityOperationException {
 		try {
 			if (prepared instanceof PreparedSqlOperation)
 				return ((PreparedSqlOperation<E, Long>) prepared).execute((PreparedDeletion<E>) delete);
 			else
-				return theConnectionPool.connect(new DeleteAction<>(delete));
+				return theConnectionPool.connect(new DeleteAction<>(delete, reportInChanges));
 		} catch (SQLException e) {
 			throw new EntityOperationException("Delete failed: " + delete, e);
 		}
 	}
 
 	@Override
-	public <E> Cancelable deleteAsync(EntityDeletion<E> delete, Object prepared, LongConsumer onAsyncComplete,
-		Consumer<EntityOperationException> onError) {
+	public <E> OperationResult<Long> deleteAsync(EntityDeletion<E> delete, Object prepared, boolean reportInChanges) {
 		if (prepared instanceof PreparedSqlOperation) {
 			return ((PreparedSqlOperation<E, Long>) prepared).executeAsync((PreparedDeletion<E>) delete, //
-				v -> onAsyncComplete.accept(v), sqlE -> {
-					onError.accept(new EntityOperationException("Delete failed: " + delete, sqlE));
-				}, onError);
+				sqlE -> new EntityOperationException("Delete failed: " + delete, sqlE));
 		} else {
-			return theConnectionPool.connectAsync(new DeleteAction<>(delete), //
-				v -> onAsyncComplete.accept(v), sqlE -> {
-					onError.accept(new EntityOperationException("Delete failed: " + delete, sqlE));
-				}, onError);
+			return theConnectionPool.connectAsync(new DeleteAction<>(delete, reportInChanges), //
+				sqlE -> new EntityOperationException("Delete failed: " + delete, sqlE));
 		}
 	}
 
 	class DeleteAction<E> extends ModificationAction<E> {
-		DeleteAction(EntityDeletion<E> update) {
-			super(update);
+		DeleteAction(EntityDeletion<E> update, boolean reportInChanges) {
+			super(update, reportInChanges);
 		}
 
 		@Override
@@ -644,18 +626,21 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 
 		@Override
 		public Long execute(Statement stmt, BooleanSupplier canceled) throws SQLException, EntityOperationException {
-			BetterSortedSet<EntityIdentity<? extends E>> affected = new BetterTreeSet<>(false, EntityIdentity::compareTo);
-			try (ResultSet rs = stmt.executeQuery(getQuerySql())) {
-				while (rs.next()) {
-					SimpleEntity<? extends E> entity = buildEntity(getModification().getEntityType(), rs, getNaming(), getJoins());
-					affected.add(entity.getIdentity());
+			if (reportInChanges) {
+				BetterSortedSet<EntityIdentity<? extends E>> affected = new BetterTreeSet<>(false, EntityIdentity::compareTo);
+				try (ResultSet rs = stmt.executeQuery(getQuerySql())) {
+					while (rs.next()) {
+						SimpleEntity<? extends E> entity = buildEntity(getModification().getEntityType(), rs, getNaming(), getJoins());
+						affected.add(entity.getIdentity());
+					}
 				}
-			}
-			if (affected.isEmpty())
-				return Long.valueOf(0);
-			stmt.executeUpdate(getUpdateSql().toString());
-			changed(new EntityChange.EntityExistenceChange<>(getModification().getEntityType(), Instant.now(), false, affected, null));
-			return Long.valueOf(affected.size());
+				if (affected.isEmpty())
+					return Long.valueOf(0);
+				stmt.executeUpdate(getUpdateSql().toString());
+				changed(new EntityChange.EntityExistenceChange<>(getModification().getEntityType(), Instant.now(), false, affected, null));
+				return Long.valueOf(affected.size());
+			} else
+				return Long.valueOf(stmt.executeUpdate(getUpdateSql().toString()));
 		}
 
 		@Override
@@ -680,12 +665,9 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 	}
 
 	@Override
-	public Cancelable loadEntityDataAsync(List<EntityLoadRequest<?>> loadRequests, Consumer<List<Fulfillment<?>>> onComplete,
-		Consumer<EntityOperationException> onError) {
+	public OperationResult<List<Fulfillment<?>>> loadEntityDataAsync(List<EntityLoadRequest<?>> loadRequests) {
 		return theConnectionPool.connectAsync(new EntityDataLoadAction(loadRequests), //
-			onComplete, sqlE -> {
-				onError.accept(new EntityOperationException("Load requests failed: " + loadRequests, sqlE));
-			}, onError);
+			sqlE -> new EntityOperationException("Load requests failed: " + loadRequests, sqlE));
 	}
 
 	class EntityDataLoadAction implements SqlAction<List<Fulfillment<?>>> {

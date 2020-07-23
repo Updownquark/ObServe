@@ -133,14 +133,8 @@ public class QueryResultsTree {
 				}
 				if (parentResults != null)
 					results.init(parentResults.getResults(), true);
-				else {
-					try {
-						theEntitySet.executeQuery(query, results);
-					} catch (EntityOperationException e) {
-						results.failed(e);
-						throw e;
-					}
-				}
+				else
+					theEntitySet.executeQuery(query, results);
 			}
 			return results;
 		}
@@ -213,9 +207,8 @@ public class QueryResultsTree {
 
 		void dispose() {
 			QueryResults<?> results = theResults == null ? null : theResults.get();
-			if (results != null) {
+			if (results != null)
 				results.cancel(true);
-			}
 		}
 
 		private void addChild(QueryResultNode child) {

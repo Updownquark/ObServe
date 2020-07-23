@@ -20,6 +20,7 @@ import java.util.function.Function;
 
 import org.observe.Observable;
 import org.observe.SimpleObservable;
+import org.observe.config.OperationResult;
 import org.observe.entity.ConditionalFieldConstraint;
 import org.observe.entity.EntityChange;
 import org.observe.entity.EntityCollectionResult;
@@ -78,7 +79,7 @@ import com.google.common.reflect.TypeToken;
 /** Implementation of an {@link ObservableEntityDataSet entity set} reliant on an {@link ObservableEntityProvider} for its data */
 public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 	interface EntityAction {
-		ObservableEntityResult<?> apply(boolean synchronous) throws EntityOperationException;
+		ObservableEntityResult<?, ?> apply(boolean synchronous) throws EntityOperationException;
 	}
 
 	private Transactable theLock;
@@ -166,7 +167,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		AtomicInteger completed = new AtomicInteger();
 		int actionCount = theQueuedActions.size();
 		for (EntityAction action : theQueuedActions) {
-			ObservableEntityResult<?> result;
+			ObservableEntityResult<?, ?> result;
 			try {
 				result = action.apply(false);
 			} catch (EntityOperationException e) {
@@ -184,14 +185,17 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 			});
 		}
 		theQueuedActions.clear();
+		// Wait for all actions to complete before processing changes,
+		// to make sure the internal state of this entity set is consistent with all expected changes
+		// before we potentially accept changes from external sources
 		synchronized (completed) {
-			processChanges();
 			while (completed.get() < actionCount) {
 				try {
 					completed.wait(1);
 				} catch (InterruptedException e) {}
 			}
 		}
+		processChanges();
 	}
 
 	private void processChanges() {
@@ -227,20 +231,55 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 			}
 		}
 		if (!loadRequests.isEmpty()) {
-			theImplementation.loadEntityDataAsync(loadRequests, fulfilled -> {
+			OperationResult<List<Fulfillment<?>>> result = theImplementation.loadEntityDataAsync(loadRequests);
+			result.watchStatus().filter(r -> r.getStatus().isDone()).act(r -> {
+				if (r.getStatus().isFailed()) {
+					// TODO Logging
+					System.err.println("Unable to load field data for new entities");
+					r.getFailure().printStackTrace();
+					return;
+				}
+				List<Fulfillment<?>> fulfilled = r.getResult();
 				fulfillEntities(fulfilled, entities);
-				for (EntityLoadRequest.Fulfillment<?> f : fulfilled) {
+				for (Fulfillment<?> f : fulfilled) {
 					EntityChange<?> change = f.getRequest().getChange();
 					((ObservableEntityTypeImpl<?>) change.getEntityType()).handleChange(change, entities, false, false);
 					theResults.handleChange(change, entities, usage);
 				}
-			}, err -> {
-				// TODO Logging
-				System.err.println("Unable to load field data for new entities");
-				err.printStackTrace();
 			});
 		}
 		theChanges.onNext(changes);
+	}
+
+	<E> void processChangeFromEntity(EntityChange<E> change) throws EntityOperationException {
+		try (Transaction t = theLock.lock(true, change)) {
+			Map<EntityIdentity<?>, ObservableEntity<?>> entities = new HashMap<>();
+			loadEntities(BetterList.of(change), entities);
+			EntityLoadRequest<E> loadRequest;
+			if (change.changeType == EntityChange.EntityChangeType.remove)
+				loadRequest = null;
+			else {
+				Set<? extends EntityValueAccess<? extends E, ?>> requiredFields = (Set<? extends EntityValueAccess<? extends E, ?>>) theResults
+					.specifyDataRequirements(change, entities);
+				if (requiredFields != null && !requiredFields.isEmpty())
+					loadRequest = new EntityLoadRequest<>(change, (Set<EntityValueAccess<? extends E, ?>>) requiredFields);
+				else
+					loadRequest = null;
+			}
+			if (loadRequest != null) {
+				List<Fulfillment<?>> fulfilled = theImplementation.loadEntityData(BetterList.of(loadRequest));
+				fulfillEntities(fulfilled, entities);
+				((ObservableEntityTypeImpl<?>) change.getEntityType()).handleChange(change, entities, false, false);
+			}
+
+			QueryResultsTree.EntityUsage usage = new QueryResultsTree.EntityUsage() {
+				@Override
+				public <E2> ObservableEntity<E2> use(ObservableEntity<E2> entity) {
+					return ObservableEntityDataSetImpl.this.use(entity, entities);
+				}
+			};
+			theResults.handleChange(change, entities, usage);
+		}
 	}
 
 	@Override
@@ -307,20 +346,21 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		if (!isActive)
 			throw new IllegalStateException("This entity set is no longer connected to a data source");
 		Object prepared = creator instanceof PreparedCreator ? ((PreparedCreatorImpl<?, E>) creator).getPreparedObject() : null;
+		boolean reportInChanges;
+		if (creator instanceof AbstractPreparedOperation)
+			reportInChanges = ((AbstractPreparedOperation<?, ?>) creator).getDefinition().isReportInChanges();
+		else
+			reportInChanges = ((AbstractConfigurableOperation<?>) creator).isReportInChanges();
 		if (sync) {
-			SimpleEntity<E> simple = theImplementation.create(creator, prepared);
+			SimpleEntity<E> simple = theImplementation.create(creator, prepared, reportInChanges);
 			ObservableEntity<E> entity = getOrCreateEntity(simple.getIdentity(), simple.getFields());
 			if (preAdd != null)
 				preAdd.accept(entity);
 			return new SyncCreateResult<>(creator, entity);
 		} else {
-			AsyncCreateResult<E> result = new AsyncCreateResult<>(creator);
-			result.setCancelable(theImplementation.createAsync(creator, prepared, simple -> {
-				ObservableEntity<E> entity = getOrCreateEntity(simple.getIdentity(), simple.getFields());
-				if (preAdd != null)
-					preAdd.accept(entity);
-				result.fulfill(entity);
-			}, result::failed));
+			AsyncCreateResult<E> result = new AsyncCreateResult<>(creator, preAdd);
+			OperationResult<SimpleEntity<E>> implResult = theImplementation.createAsync(creator, prepared, reportInChanges);
+			result.setWrapped(implResult);
 			return result;
 		}
 	}
@@ -339,25 +379,31 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 
 	<E> void executeQuery(EntityQuery<E> query, QueryResults<E> results) throws EntityOperationException {
 		Object prepared = query instanceof PreparedQuery ? ((PreparedQueryImpl<E>) query).getPreparedObject() : null;
-		if (results.isCount())
-			results.setCancelable(theImplementation.count(query, prepared, //
-				results::init, results::failed));
-		else
-			results
-			.setCancelable(theImplementation.query(query, prepared, //
-				fields -> results.fulfill(entitiesFor(fields)), results::failed));
+		if (results.isCount()) {
+			OperationResult<Long> implRes = theImplementation.count(query, prepared);
+			implRes.watchStatus().filter(r -> r.getStatus().isAvailable()).act(r -> results.init(r.getResult()));
+			results.setWrapped(implRes);
+		} else {
+			OperationResult<Iterable<SimpleEntity<? extends E>>> implRes = theImplementation.query(query, prepared);
+			implRes.watchStatus().filter(r -> r.getStatus().isAvailable()).act(r -> results.fulfill(entitiesFor(r.getResult())));
+			results.setWrapped(implRes);
+		}
 	}
 
 	<E> EntityModificationResult<E> update(EntityUpdate<E> update, boolean sync, Object cause) throws EntityOperationException {
 		if (!isActive)
 			throw new IllegalStateException("This entity set is no longer connected to a data source");
 		Object prepared = update instanceof PreparedUpdate ? ((PreparedUpdateImpl<E>) update).getPreparedObject() : null;
+		boolean reportInChanges;
+		if (update instanceof AbstractPreparedOperation)
+			reportInChanges = ((AbstractPreparedOperation<?, ?>) update).getDefinition().isReportInChanges();
+		else
+			reportInChanges = ((AbstractConfigurableOperation<?>) update).isReportInChanges();
 		if (sync)
-			return new SyncModResult<>(update, theImplementation.update(update, prepared));
+			return new SyncModResult<>(update, theImplementation.update(update, prepared, reportInChanges));
 		else {
 			AsyncModResult<E> result = new AsyncModResult<>(update);
-			result.setCancelable(theImplementation.updateAsync(update, prepared, //
-				result::fulfill, result::failed));
+			result.setWrapped(theImplementation.updateAsync(update, prepared, reportInChanges));
 			return result;
 		}
 	}
@@ -366,11 +412,16 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		if (!isActive)
 			throw new IllegalStateException("This entity set is no longer connected to a data source");
 		Object prepared = delete instanceof PreparedDeletion ? ((PreparedDeletionImpl<E>) delete).getPreparedObject() : null;
+		boolean reportInChanges;
+		if (delete instanceof AbstractPreparedOperation)
+			reportInChanges = ((AbstractPreparedOperation<?, ?>) delete).getDefinition().isReportInChanges();
+		else
+			reportInChanges = ((AbstractConfigurableOperation<?>) delete).isReportInChanges();
 		if (sync)
-			return new SyncModResult<>(delete, theImplementation.delete(delete, prepared));
+			return new SyncModResult<>(delete, theImplementation.delete(delete, prepared, reportInChanges));
 		else {
 			AsyncModResult<E> result = new AsyncModResult<>(delete);
-			result.setCancelable(theImplementation.deleteAsync(delete, prepared, result::fulfill, result::failed));
+			result.setWrapped(theImplementation.deleteAsync(delete, prepared, reportInChanges));
 			return result;
 		}
 	}
@@ -466,9 +517,11 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 			List<Fulfillment<?>> fulfilled = theImplementation.loadEntityData(Collections.singletonList(request));
 			entity._set(field, (F) EntityUpdate.NOT_SET, (F) fulfilled.get(0).getResults().get(0));
 		} else {
-			theImplementation.loadEntityDataAsync(Collections.singletonList(request), fulfilled -> {
+			OperationResult<List<Fulfillment<?>>> result = theImplementation.loadEntityDataAsync(Collections.singletonList(request));
+			result.watchStatus().filter(r -> r.getStatus().isDone()).act(r -> {
+				List<Fulfillment<?>> fulfilled = r.getResult();
 				entity._set(field, (F) EntityUpdate.NOT_SET, (F) fulfilled.get(0).getResults().get(0));
-			}, onFail);
+			});
 		}
 	}
 
@@ -1299,8 +1352,8 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		public void cancel(boolean mayInterruptIfRunning) {}
 
 		@Override
-		public ResultStatus getStatus() {
-			return ResultStatus.FULFILLED;
+		public OperationResult.ResultStatus getStatus() {
+			return OperationResult.ResultStatus.FULFILLED;
 		}
 
 		@Override
@@ -1309,7 +1362,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		}
 
 		@Override
-		public Observable<? extends ObservableEntityResult<E>> watchStatus() {
+		public Observable<? extends ObservableEntityResult<E, E>> watchStatus() {
 			return Observable.empty();
 		}
 
@@ -1324,12 +1377,14 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		}
 	}
 
-	static class AsyncCreateResult<E> extends AbstractOperationResult<E> implements EntityCreationResult<E> {
+	class AsyncCreateResult<E> extends AbstractOperationResult<E, SimpleEntity<E>, E> implements EntityCreationResult<E> {
 		private final EntityCreator<? super E, E> theOperation;
+		private Consumer<? super ObservableEntity<E>> thePreAdd;
 		private volatile ObservableEntity<? extends E> theResult;
 
-		AsyncCreateResult(EntityCreator<? super E, E> operation) {
+		AsyncCreateResult(EntityCreator<? super E, E> operation, Consumer<? super ObservableEntity<E>> preAdd) {
 			theOperation = operation;
+			thePreAdd = preAdd;
 		}
 
 		@Override
@@ -1339,18 +1394,26 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 
 		@Override
 		public ObservableEntity<? extends E> getNewEntity() {
+			getResult(); // initialize the result as necessary
 			return theResult;
 		}
 
-		void fulfill(ObservableEntity<? extends E> result) {
-			theResult = result;
-			fulfilled();
+		@Override
+		protected E getResult(OperationResult<? extends SimpleEntity<E>> wrapped) {
+			if (theResult == null) {
+				SimpleEntity<E> simple = wrapped.getResult();
+				ObservableEntity<E> entity = getOrCreateEntity(simple.getIdentity(), simple.getFields());
+				if (thePreAdd != null)
+					thePreAdd.accept(entity);
+				theResult = entity;
+			}
+			return theResult.getEntity();
 		}
 	}
 
 	static class SyncModResult<E> implements EntityModificationResult<E> {
 		private final EntityModification<E> theOperation;
-		private final long theResult;
+		private final Long theResult;
 
 		SyncModResult(EntityModification<E> operation, long result) {
 			theOperation = operation;
@@ -1361,8 +1424,8 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		public void cancel(boolean mayInterruptIfRunning) {}
 
 		@Override
-		public ResultStatus getStatus() {
-			return ResultStatus.FULFILLED;
+		public OperationResult.ResultStatus getStatus() {
+			return OperationResult.ResultStatus.FULFILLED;
 		}
 
 		@Override
@@ -1371,7 +1434,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		}
 
 		@Override
-		public Observable<? extends ObservableEntityResult<E>> watchStatus() {
+		public Observable<? extends ObservableEntityResult<E, Long>> watchStatus() {
 			return Observable.empty();
 		}
 
@@ -1381,18 +1444,16 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		}
 
 		@Override
-		public long getModified() {
+		public Long getResult() {
 			return theResult;
 		}
 	}
 
-	static class AsyncModResult<E> extends AbstractOperationResult<E> implements EntityModificationResult<E> {
+	static class AsyncModResult<E> extends AbstractOperationResult<E, Long, Long> implements EntityModificationResult<E> {
 		private final EntityModification<E> theOperation;
-		private volatile long theResult;
 
 		AsyncModResult(EntityModification<E> operation) {
 			theOperation = operation;
-			theResult = -1;
 		}
 
 		@Override
@@ -1401,13 +1462,8 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		}
 
 		@Override
-		public long getModified() {
-			return theResult;
-		}
-
-		void fulfill(long result) {
-			theResult = result;
-			fulfilled();
+		protected Long getResult(OperationResult<? extends Long> wrapped) {
+			return wrapped.getResult();
 		}
 	}
 }

@@ -29,7 +29,7 @@ import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.config.ObservableConfig;
-import org.observe.config.ObservableOperationResult.ResultStatus;
+import org.observe.config.OperationResult;
 import org.observe.entity.ConfigurableCreator;
 import org.observe.entity.EntityCollectionResult;
 import org.observe.entity.EntityCondition;
@@ -89,7 +89,7 @@ public class ObservableEntityExplorer extends JPanel {
 				}
 				return new EntityTypeData<>(entity);
 			}, holder -> holder.entity, opts -> opts.cache(true).reEvalOnUpdate(false))//
-			.refreshEach(e -> Observable.or(e.count.watchStatus(), e.count.noInitChanges()))//
+			.refreshEach(e -> Observable.or(e.count.watchStatus(), e.count.getResult().noInitChanges()))//
 			.collect();
 		theEventLog = ObservableCollection.build(Object.class).build();
 
@@ -147,8 +147,8 @@ public class ObservableEntityExplorer extends JPanel {
 				countCol -> countCol.withValueTooltip((e, c) -> e.printCountStatus())//
 				.withMouseListener(new CategoryMouseAdapter<EntityTypeData<?>, String>() {
 					@Override
-							public void mouseClicked(ModelCell<? extends EntityTypeData<?>, ? extends String> cell, MouseEvent e) {
-								cell.getModelValue().printError();
+					public void mouseClicked(ModelCell<? extends EntityTypeData<?>, ? extends String> cell, MouseEvent e) {
+						cell.getModelValue().printError();
 					}
 				}))//
 			.withSelection(theSelectedEntityType, true);
@@ -515,7 +515,7 @@ public class ObservableEntityExplorer extends JPanel {
 		};
 		SettableValue<String> deleteText = SettableValue.build(String.class).safe(false).withValue("Delete").build();
 		JPanel queryPanel = PanelPopulation.populateVPanel((JPanel) null, null)//
-			.addTable((ObservableCollection<ObservableEntity<E>>) results.get().getEntities(), entityTable -> {
+			.addTable((ObservableCollection<ObservableEntity<E>>) results.getResult().getEntities(), entityTable -> {
 				entityTable.withRowNumberColumn("Row #", null);
 				for (ObservableEntityFieldType<E, ?> field : condition.getEntityType().getFields().allValues()) {
 					entityTable.withColumn(field.getName(), (TypeToken<Object>) field.getFieldType(), entity -> {
@@ -541,9 +541,9 @@ public class ObservableEntityExplorer extends JPanel {
 				entityTable.withRemove(null, null);
 			})//
 			.addHPanel(null, "box", buttons -> {
-				buttons.addButton("Create...", __ -> showCreatePanel(results.get().create()), null);
+				buttons.addButton("Create...", __ -> showCreatePanel(results.getResult().create()), null);
 				buttons.addButton("Delete", cause -> {
-					int count = results.get().getValues().size();
+					int count = results.getResult().getValues().size();
 					String msg = "Delete " + count + " "
 						+ (count == 1 ? condition.getEntityType().getName() : StringUtils.pluralize(condition.getEntityType().getName()))
 						+ "?";
@@ -563,7 +563,6 @@ public class ObservableEntityExplorer extends JPanel {
 									break;
 								case FAILED:
 									buttons.alert("Delete Failed", deleteResult.getFailure().getMessage()).error().display();
-									;
 									deleteResult.getFailure().printStackTrace();
 									deleteText.set("Delete", null);
 									break;
@@ -573,8 +572,8 @@ public class ObservableEntityExplorer extends JPanel {
 									break;
 								case FULFILLED:
 									buttons.alert("Delete Successful",
-										deleteResult.getModified() + " "//
-										+ (deleteResult.getModified() == 1 ? condition.getEntityType().getName()
+										deleteResult.getResult() + " "//
+											+ (deleteResult.getResult() == 1 ? condition.getEntityType().getName()
 											: StringUtils.pluralize(condition.getEntityType().getName()))
 										+ " deleted")
 									.display();
@@ -588,7 +587,7 @@ public class ObservableEntityExplorer extends JPanel {
 						e.printStackTrace();
 					}
 				}, button -> button.withText(deleteText)
-					.disableWith(results.get().getValues().observeSize().map(sz -> sz == 0 ? "No entities to delete" : null)));
+					.disableWith(results.getResult().getValues().observeSize().map(sz -> sz == 0 ? "No entities to delete" : null)));
 			})//
 			.getContainer();
 		JDialog createDialog = new JDialog(SwingUtilities.getWindowAncestor(this), condition.getEntityType() + ": " + condition.toString(),
@@ -774,7 +773,7 @@ public class ObservableEntityExplorer extends JPanel {
 		String printCount() {
 			switch (count.getStatus()) {
 			case FULFILLED:
-				return String.valueOf(count.get());
+				return String.valueOf(count.getResult());
 			case WAITING:
 			case EXECUTING:
 				return "...";
@@ -823,7 +822,7 @@ public class ObservableEntityExplorer extends JPanel {
 		}
 
 		void printError() {
-			if (count.getStatus() == ResultStatus.FAILED)
+			if (count.getStatus() == OperationResult.ResultStatus.FAILED)
 				count.getFailure().printStackTrace();
 		}
 	}

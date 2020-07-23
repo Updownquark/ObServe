@@ -29,7 +29,7 @@ class ConfigurableQueryImpl<E> extends AbstractConfigurableOperation<E> implemen
 
 	private ConfigurableQueryImpl(EntityCondition<E> selection, QuickMap<String, EntityOperationVariable<E>> variables,
 		QuickMap<String, FieldLoadType> fieldLoadTypes, List<QueryOrder<E, ?>> order) {
-		super(selection.getEntityType(), variables);
+		super(selection.getEntityType(), false, variables);
 		theSelection = selection;
 		theFieldLoadTypes = fieldLoadTypes;
 		theOrder = order;

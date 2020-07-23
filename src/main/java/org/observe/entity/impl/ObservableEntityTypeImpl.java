@@ -15,7 +15,6 @@ import org.observe.entity.ConfigurableDeletion;
 import org.observe.entity.ConfigurableQuery;
 import org.observe.entity.ConfigurableUpdate;
 import org.observe.entity.EntityChange;
-import org.observe.entity.EntityChange.FieldChange;
 import org.observe.entity.EntityCondition;
 import org.observe.entity.EntityConstraint;
 import org.observe.entity.EntityIdentity;
@@ -137,7 +136,7 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 				if (entity != null)
 					return entity;
 			}
-			return select().entity(id).query().collect(false).get().getEntities().peekFirst();
+			return select().entity(id).query().collect(false).getResult().getEntities().peekFirst();
 		}
 	}
 
@@ -163,6 +162,10 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 
 	@Override
 	public EntityCondition.All<E> select() {
+		return select(true);
+	}
+
+	EntityCondition.All<E> select(boolean reportInChanges) {
 		return new EntityCondition.All<>(this, new EntityCondition.SelectionMechanism<E>() {
 			@Override
 			public ConfigurableQuery<E> query(EntityCondition<E> selection) {
@@ -171,25 +174,29 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 
 			@Override
 			public ConfigurableUpdate<E> update(EntityCondition<E> selection) {
-				return new ConfigurableUpdateImpl<>(selection);
+				return new ConfigurableUpdateImpl<>(selection, reportInChanges);
 			}
 
 			@Override
 			public ConfigurableDeletion<E> delete(EntityCondition<E> selection) {
-				return new ConfigurableDeletionImpl<>(selection);
+				return new ConfigurableDeletionImpl<>(selection, reportInChanges);
 			}
 		}, Collections.emptyMap());
 	}
 
 	@Override
 	public ConfigurableCreator<E, E> create() {
+		return create(true);
+	}
+
+	ConfigurableCreator<E, E> create(boolean reportInChanges) {
 		QuickMap<String, Object> values = theFields.keySet().<Object> createMap().fill(EntityUpdate.NOT_SET);
 		for (int f = 0; f < values.keySize(); f++) {
 			Object defaultValue = getDefault(theFields.get(f));
 			if (defaultValue != EntityUpdate.NOT_SET)
 				values.put(f, defaultValue);
 		}
-		return new ConfigurableCreatorImpl<>(this, QuickMap.empty(), values.unmodifiable(), //
+		return new ConfigurableCreatorImpl<>(this, reportInChanges, QuickMap.empty(), values.unmodifiable(), //
 			theFields.keySet().<EntityOperationVariable<E>> createMap().unmodifiable(), null);
 	}
 
@@ -256,27 +263,19 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 				}
 			}
 			break;
-		case setField:
-			EntityChange.EntityFieldValueChange<E> fieldValueChange = (EntityChange.EntityFieldValueChange<E>) change;
+		default:
 			int entityIdx = 0;
 			for (EntityIdentity<?> id : change.getEntities()) {
 				if (isAssignableFrom(id.getEntityType())) {
 					WeakReference<ObservableEntityImpl<? extends E>> entityRef = theEntitiesById.get(id);
 					ObservableEntityImpl<? extends E> entity = entityRef == null ? null : entityRef.get();
 					if (entity != null) {
-						for (FieldChange<E, ?> fieldChange : fieldValueChange.getFieldChanges()) {
-							FieldChange<E, Object> fc = (FieldChange<E, Object>) fieldChange;
-							entity._set(fc.getField(), fc.getOldValues().get(entityIdx), fc.getNewValue());
-						}
+						((ObservableEntityImpl<E>) entity).handleChange((EntityChange<E>) change, entityIdx, entities);
 					}
 				}
 				entityIdx++;
 			}
 			break;
-		case updateCollectionField:
-			// TODO
-		case updateMapField:
-			// TODO
 		}
 		if (propagateDown && !fromSub) {
 			for (ObservableEntityTypeImpl<? extends E> sub : theSubs)
