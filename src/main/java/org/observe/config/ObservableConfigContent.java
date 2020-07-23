@@ -493,7 +493,7 @@ public class ObservableConfigContent {
 		@Override
 		public void clear() {
 			try (Transaction t = getConfig().lock(true, null)) {
-				ObservableConfig lastChild = getConfig()._getContent().getLast();
+				ObservableConfig lastChild = getConfig()._getContent().peekLast();
 				while (lastChild != null) {
 					ObservableConfig nextLast = CollectionElement
 						.get(getConfig()._getContent().getAdjacentElement(lastChild.getParentChildRef(), false));

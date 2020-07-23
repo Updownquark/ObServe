@@ -914,6 +914,8 @@ public class ObservableConfig implements Transactable, Stamped {
 	}
 
 	public ObservableConfig getChild(ObservableConfigPath path, boolean createIfAbsent, Consumer<ObservableConfig> preAddMod) {
+		if (path == null)
+			throw new IllegalArgumentException("No path given");
 		try (Transaction t = lock(createIfAbsent, null)) {
 			ObservableConfig ret = this;
 			for (ObservableConfigPathElement el : path.getElements()) {
@@ -1418,8 +1420,12 @@ public class ObservableConfig implements Transactable, Stamped {
 				}
 
 				private void persistAttributes(ObservableConfig cfg, Attributes attributes) {
-					for (int a = 0; a < attributes.getLength(); a++)
-						cfg.set(encoding.decode(attributes.getLocalName(a)), attributes.getValue(a));
+					for (int a = 0; a < attributes.getLength(); a++) {
+						String attName = attributes.getLocalName(a);
+						if (attName == null || attName.length() == 0)
+							attName = attributes.getQName(a);
+						cfg.set(encoding.decode(attName), attributes.getValue(a));
+					}
 				}
 
 				@Override
