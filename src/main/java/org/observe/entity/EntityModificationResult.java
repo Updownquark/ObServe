@@ -10,13 +10,13 @@ public interface EntityModificationResult<E> extends ObservableEntityResult<E, L
 	EntityModification<E> getOperation();
 
 	@Override
-	default EntityModificationResult<E> waitFor() throws InterruptedException, EntityOperationException {
+	default EntityModificationResult<E> waitFor() throws InterruptedException {
 		ObservableEntityResult.super.waitFor();
 		return this;
 	}
 
 	@Override
-	default EntityModificationResult<E> waitFor(long timeout, int nanos) throws InterruptedException, EntityOperationException {
+	default EntityModificationResult<E> waitFor(long timeout, int nanos) throws InterruptedException {
 		ObservableEntityResult.super.waitFor(timeout, nanos);
 		return this;
 	}

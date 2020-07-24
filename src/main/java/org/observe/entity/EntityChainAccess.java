@@ -74,14 +74,26 @@ public class EntityChainAccess<E, T> implements EntityValueAccess<E, T> {
 	}
 
 	@Override
-	public <T2> EntityValueAccess<E, T2> dot(Function<? super T, T2> attr) {
+	public <T2> EntityChainAccess<E, T2> dot(Function<? super T, T2> attr) {
 		ObservableEntityType<T> target = getTargetEntity();
 		if (target == null)
 			throw new UnsupportedOperationException("This method can only be used with entity-typed fields");
 		ObservableEntityFieldType<T, T2> lastField = target.getField(attr);
+		return dot(lastField);
+	}
+
+	@Override
+	public <T2> EntityChainAccess<E, T2> dot(ObservableEntityFieldType<? super T, T2> field) {
+		ObservableEntityType<T> target = getTargetEntity();
+		if (target == null)
+			throw new UnsupportedOperationException("This method can only be used with entity-typed fields");
+		else if (!field.getOwnerType().isAssignableFrom(target))
+			throw new IllegalArgumentException(field + " cannot be applied to " + target);
+		else if (!field.getOwnerType().equals(target))
+			field = (ObservableEntityFieldType<T, T2>) target.getFields().get(field.getName());
 		ObservableEntityFieldType<?, ?>[] fields = new ObservableEntityFieldType[theFieldSequence.size() + 1];
 		theFieldSequence.toArray(fields);
-		fields[fields.length - 1] = lastField;
+		fields[fields.length - 1] = field;
 		return new EntityChainAccess<>(fields);
 	}
 

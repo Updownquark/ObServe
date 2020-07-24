@@ -1,7 +1,14 @@
 package org.observe.config;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.List;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 import org.observe.Observable;
 import org.observe.Observer;
@@ -57,8 +64,9 @@ public interface OperationResult<T> {
 	 *
 	 * @param mayInterruptIfRunning {@code true} if the thread fulfilling this result should be interrupted; otherwise, in-progress results
 	 *        are allowed to complete
+	 * @return This operation
 	 */
-	void cancel(boolean mayInterruptIfRunning);
+	OperationResult<T> cancel(boolean mayInterruptIfRunning);
 
 	/** @return The current fulfillment status of this result */
 	OperationResult.ResultStatus getStatus();
@@ -78,14 +86,35 @@ public interface OperationResult<T> {
 	ValueOperationException getFailure();
 
 	/**
+	 * @return The result of the operation, if it has been {@link ResultStatus#FULFILLED fulfilled}, or null if it has not finished or was
+	 *         {@link ResultStatus#CANCELLED canceled}
+	 * @throws ValueOperationException If the operation {@link OperationResult.ResultStatus#FAILED}
+	 */
+	default T getOrFail() throws ValueOperationException {
+		switch (getStatus()) {
+		case WAITING:
+		case EXECUTING:
+		case CANCELLED:
+			return null;
+		case FULFILLED:
+			return getResult();
+		case FAILED:
+			ValueOperationException e = getFailure();
+			if (e == null)
+				e = new ValueOperationException("Operation failed without giving cause");
+			throw e;
+		}
+		throw new IllegalStateException();
+	}
+
+	/**
 	 * Waits if necessary for the computation to complete.
 	 *
 	 * @return This result
 	 * @throws CancellationException If the computation was cancelled
-	 * @throws ValueOperationException If the operation has failed or fails while waiting
 	 * @throws InterruptedException If the current thread was interrupted while waiting
 	 */
-	default OperationResult<T> waitFor() throws InterruptedException, ValueOperationException {
+	default OperationResult<T> waitFor() throws InterruptedException {
 		Subscription interruptSub = null;
 		while (!getStatus().isDone()) {
 			if (interruptSub == null)
@@ -102,9 +131,6 @@ public interface OperationResult<T> {
 		}
 		if (interruptSub != null)
 			interruptSub.unsubscribe();
-		ValueOperationException failure = getFailure();
-		if (failure != null)
-			throw failure;
 		return this;
 	}
 
@@ -115,10 +141,9 @@ public interface OperationResult<T> {
 	 * @param nanos The nanoseconds to wait, in addition to the given milliseconds
 	 * @return This result
 	 * @throws CancellationException If the computation was cancelled
-	 * @throws ValueOperationException If the operation has failed or fails while waiting
 	 * @throws InterruptedException If the current thread was interrupted while waiting
 	 */
-	default OperationResult<T> waitFor(long timeout, int nanos) throws InterruptedException, ValueOperationException {
+	default OperationResult<T> waitFor(long timeout, int nanos) throws InterruptedException {
 		Subscription interruptSub = null;
 		while (!getStatus().isDone()) {
 			if (interruptSub == null)
@@ -135,14 +160,24 @@ public interface OperationResult<T> {
 		}
 		if (interruptSub != null)
 			interruptSub.unsubscribe();
-		ValueOperationException failure = getFailure();
-		if (failure != null)
-			throw failure;
 		return this;
 	}
 
 	/** @return An observable that fires (with this result as a value) when the result {@link #getStatus()} changes */
 	Observable<? extends OperationResult<T>> watchStatus();
+
+	/**
+	 * @param onlyFulfilled Whether the listener should only fire if the operation succeeds. If false, the listener will be called for any
+	 *        terminal result status.
+	 * @param listener The listener to notify when this operation finishes
+	 * @return The subscription to use to cancel the notification
+	 */
+	default Subscription whenDone(boolean onlyFulfilled, Consumer<? super OperationResult<T>> listener) {
+		if (onlyFulfilled)
+			return watchStatus().filter(r -> r.getStatus().isAvailable()).act(listener);
+		else
+			return watchStatus().filter(r -> r.getStatus().isDone()).act(listener);
+	}
 
 	/**
 	 * Simple implementation of an operation result for a synchronous operation
@@ -158,7 +193,9 @@ public interface OperationResult<T> {
 		}
 
 		@Override
-		public void cancel(boolean mayInterruptIfRunning) {}
+		public OperationResult<T> cancel(boolean mayInterruptIfRunning) {
+			return this;
+		}
 
 		@Override
 		public OperationResult.ResultStatus getStatus() {
@@ -201,12 +238,13 @@ public interface OperationResult<T> {
 		}
 
 		@Override
-		public synchronized void cancel(boolean mayInterruptIfRunning) {
+		public synchronized AsyncResult<T> cancel(boolean mayInterruptIfRunning) {
 			isCanceled = true;
 			if (mayInterruptIfRunning)
 				isCanceledWithInterrupt = true;
 			if (theStatus == ResultStatus.WAITING)
 				updateStatus(ResultStatus.CANCELLED);
+			return this;
 		}
 
 		@Override
@@ -317,12 +355,13 @@ public interface OperationResult<T> {
 		}
 
 		@Override
-		public synchronized void cancel(boolean mayInterruptIfRunning) {
+		public synchronized WrapperResult<S, T> cancel(boolean mayInterruptIfRunning) {
 			if (theWrapped != null)
 				theWrapped.cancel(mayInterruptIfRunning);
 			isCanceled = true;
 			if (mayInterruptIfRunning)
 				isCanceledWithInterrupt = true;
+			return this;
 		}
 
 		@Override
@@ -405,6 +444,149 @@ public interface OperationResult<T> {
 					return wrapped == null ? null : wrapped.watchStatus().tryLock();
 				}
 			};
+		}
+	}
+
+	/**
+	 * A result composed of multiple component results
+	 *
+	 * @param <S> The type of the component results
+	 * @param <T> The type of this result
+	 */
+	public abstract class MultiResult<S, T> implements OperationResult<T> {
+		private final Collection<? extends OperationResult<? extends S>> theComponents;
+
+		/** @param components The components for this result */
+		public MultiResult(Collection<? extends OperationResult<? extends S>> components) {
+			theComponents = components;
+		}
+
+		@Override
+		public OperationResult<T> cancel(boolean mayInterruptIfRunning) {
+			for (OperationResult<? extends S> component : theComponents)
+				component.cancel(mayInterruptIfRunning);
+			return this;
+		}
+
+		@Override
+		public ResultStatus getStatus() {
+			boolean hasDone = false, hasWaiting = false, hasCanceled = false, hasFailed = false;
+			componentLoop: for (OperationResult<? extends S> component : theComponents) {
+				switch (component.getStatus()) {
+				case WAITING:
+					hasWaiting = true;
+					if (hasDone)
+						break componentLoop;
+					break;
+				case EXECUTING:
+					return ResultStatus.EXECUTING;
+				case CANCELLED:
+					hasCanceled = true;
+					break;
+				case FAILED:
+					hasFailed = true;
+					break;
+				case FULFILLED:
+					hasDone = true;
+					break;
+				}
+			}
+			if (hasWaiting)
+				return (hasDone || hasFailed) ? ResultStatus.EXECUTING : ResultStatus.WAITING;
+			else if (hasFailed)
+				return ResultStatus.FAILED;
+			if (hasCanceled)
+				return ResultStatus.CANCELLED;
+			else
+				return ResultStatus.FULFILLED;
+		}
+
+		@Override
+		public T getResult() {
+			if (getStatus().isAvailable())
+				return getResult(theComponents.stream().map(OperationResult::getResult)//
+					.collect(Collectors.toCollection(() -> new ArrayList<>(theComponents.size()))));
+			return null;
+		}
+
+		/**
+		 * @param componentResults The list of the results of all component results
+		 * @return The result value for this result
+		 */
+		protected abstract T getResult(List<S> componentResults);
+
+		@Override
+		public ValueOperationException getFailure() {
+			for (OperationResult<? extends S> component : theComponents) {
+				ValueOperationException failure = component.getFailure();
+				if (failure != null)
+					return failure;
+			}
+			return null;
+		}
+
+		@Override
+		public Observable<? extends OperationResult<T>> watchStatus() {
+			List<Observable<?>> components = new ArrayList<>(theComponents.size());
+			Iterator<? extends OperationResult<? extends S>> componentIter = theComponents.iterator();
+			if (!componentIter.hasNext())
+				return Observable.constant(this);
+			while (true) {
+				OperationResult<? extends S> component = componentIter.next();
+				if (componentIter.hasNext())
+					components.add(component.watchStatus().noInit());
+				else {
+					components.add(component.watchStatus()); // Add the last component with initialization
+					break;
+				}
+			}
+			AtomicReference<ResultStatus> status = new AtomicReference<>(getStatus());
+			return Observable.or(components.toArray(new Observable[components.size()])).filter(r -> {
+				ResultStatus newStatus = getStatus();
+				return status.getAndSet(newStatus) != newStatus;
+			}).map(__ -> this);
+		}
+
+		@Override
+		public OperationResult<T> waitFor() throws InterruptedException {
+			for (OperationResult<? extends S> component : theComponents) {
+				component.waitFor();
+			}
+			return this;
+		}
+
+		@Override
+		public OperationResult<T> waitFor(long timeout, int nanos) throws InterruptedException {
+			long now = System.currentTimeMillis();
+			int nowNanos;
+			long targetMillis = now + timeout;
+			long targetNanos;
+			if (nanos == 0) {
+				nowNanos = 0;
+				targetNanos = 0;
+			} else {
+				nowNanos = (int) (System.nanoTime() % 1_000_000);
+				targetMillis += nanos / 1_000_000;
+				targetNanos = nowNanos + nanos % 1_000_000;
+			}
+			for (OperationResult<? extends S> component : theComponents) {
+				component.waitFor(timeout, nowNanos);
+				now = System.currentTimeMillis();
+				nowNanos = nanos == 0 ? 0 : (int) (System.nanoTime() % 1_000_000);
+				if (now > targetMillis)
+					break;
+				else if (now == targetMillis) {
+					if (nanos == 0 || nowNanos >= targetNanos)
+						break;
+				}
+			}
+			return this;
+		}
+
+		@Override
+		public Subscription whenDone(boolean onlyFulfilled, Consumer<? super OperationResult<T>> listener) {
+			// TODO Auto-generated method stub
+			return OperationResult.super.whenDone(onlyFulfilled, listener);
 		}
 	}
 }

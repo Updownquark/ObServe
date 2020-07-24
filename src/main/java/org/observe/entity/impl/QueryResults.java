@@ -54,7 +54,7 @@ import org.qommons.collect.RRWLockingStrategy;
 
 import com.google.common.reflect.TypeToken;
 
-public class QueryResults<E> extends AbstractOperationResult<E, Object, Object> {
+class QueryResults<E> extends AbstractOperationResult<E, Object, Object> {
 	private final QueryResultNode theNode;
 	private final EntityCondition<E> theSelection;
 	private final ObservableSortedSet<ObservableEntity<? extends E>> theRawResults;
@@ -63,7 +63,6 @@ public class QueryResults<E> extends AbstractOperationResult<E, Object, Object> 
 
 	private boolean isFulfilled;
 	private final AtomicInteger theListening;
-	private volatile boolean isAdjusting;
 
 	public QueryResults(QueryResultNode node, EntityCondition<E> selection, boolean count) {
 		theNode = node;
@@ -103,13 +102,14 @@ public class QueryResults<E> extends AbstractOperationResult<E, Object, Object> 
 	}
 
 	@Override
-	public void cancel(boolean mayInterruptIfRunning) {
+	public QueryResults<E> cancel(boolean mayInterruptIfRunning) {
 		synchronized (theSelection.getEntityType().getEntitySet()) {
 			if (theListening.decrementAndGet() == 0) {
 				super.cancel(mayInterruptIfRunning);
 				theNode.remove();
 			}
 		}
+		return this;
 	}
 
 	@Override
@@ -449,10 +449,11 @@ public class QueryResults<E> extends AbstractOperationResult<E, Object, Object> 
 		}
 
 		@Override
-		public void cancel(boolean mayInterruptIfRunning) {
+		public EntityQueryResult<E, T> cancel(boolean mayInterruptIfRunning) {
 			AtomicBoolean canceled = isCanceled;
 			if (canceled != null && !canceled.getAndSet(true))
 				QueryResults.this.cancel(mayInterruptIfRunning);
+			return this;
 		}
 
 		@Override

@@ -8,13 +8,13 @@ package org.observe.entity;
  */
 public interface EntityCollectionResult<E> extends EntityQueryResult<E, ObservableEntitySet<E>> {
 	@Override
-	default EntityCollectionResult<E> waitFor() throws InterruptedException, EntityOperationException {
+	default EntityCollectionResult<E> waitFor() throws InterruptedException {
 		EntityQueryResult.super.waitFor();
 		return this;
 	}
 
 	@Override
-	default EntityCollectionResult<E> waitFor(long timeout, int nanos) throws InterruptedException, EntityOperationException {
+	default EntityCollectionResult<E> waitFor(long timeout, int nanos) throws InterruptedException {
 		EntityQueryResult.super.waitFor(timeout, nanos);
 		return this;
 	}

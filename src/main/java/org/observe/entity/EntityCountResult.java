@@ -9,13 +9,13 @@ import org.observe.ObservableValue;
  */
 public interface EntityCountResult<E> extends EntityQueryResult<E, ObservableValue<Long>> {
 	@Override
-	default EntityCountResult<E> waitFor() throws InterruptedException, EntityOperationException {
+	default EntityCountResult<E> waitFor() throws InterruptedException {
 		EntityQueryResult.super.waitFor();
 		return this;
 	}
 
 	@Override
-	default EntityCountResult<E> waitFor(long timeout, int nanos) throws InterruptedException, EntityOperationException {
+	default EntityCountResult<E> waitFor(long timeout, int nanos) throws InterruptedException {
 		EntityQueryResult.super.waitFor(timeout, nanos);
 		return this;
 	}

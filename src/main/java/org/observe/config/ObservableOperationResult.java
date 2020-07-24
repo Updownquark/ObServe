@@ -1,7 +1,5 @@
 package org.observe.config;
 
-import java.util.concurrent.CancellationException;
-
 import org.observe.Observable;
 
 /**
@@ -15,32 +13,14 @@ public interface ObservableOperationResult<E, T> extends OperationResult<T> {
 	/** @return The value type that this result is for */
 	ConfiguredValueType<E> getValueType();
 
-	/**
-	 * Waits if necessary for the computation to complete.
-	 *
-	 * @return This result
-	 * @throws CancellationException If the computation was cancelled
-	 * @throws ValueOperationException If the operation has failed or fails while waiting
-	 * @throws InterruptedException If the current thread was interrupted while waiting
-	 */
 	@Override
-	default ObservableOperationResult<E, T> waitFor() throws InterruptedException, ValueOperationException {
+	default ObservableOperationResult<E, T> waitFor() throws InterruptedException {
 		OperationResult.super.waitFor();
 		return this;
 	}
 
-	/**
-	 * Waits if necessary for at most the given time for the computation to complete. If the result is
-	 *
-	 * @param timeout The maximum time to wait, in milliseconds
-	 * @param nanos The nanoseconds to wait, in addition to the given milliseconds
-	 * @return This result
-	 * @throws CancellationException If the computation was cancelled
-	 * @throws ValueOperationException If the operation has failed or fails while waiting
-	 * @throws InterruptedException If the current thread was interrupted while waiting
-	 */
 	@Override
-	default ObservableOperationResult<E, T> waitFor(long timeout, int nanos) throws InterruptedException, ValueOperationException {
+	default ObservableOperationResult<E, T> waitFor(long timeout, int nanos) throws InterruptedException {
 		OperationResult.super.waitFor(timeout, nanos);
 		return this;
 	}

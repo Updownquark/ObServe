@@ -79,7 +79,7 @@ import com.google.common.reflect.TypeToken;
 /** Implementation of an {@link ObservableEntityDataSet entity set} reliant on an {@link ObservableEntityProvider} for its data */
 public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 	interface EntityAction {
-		ObservableEntityResult<?, ?> apply(boolean synchronous) throws EntityOperationException;
+		OperationResult<?> apply(boolean synchronous) throws EntityOperationException;
 	}
 
 	private Transactable theLock;
@@ -167,7 +167,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		AtomicInteger completed = new AtomicInteger();
 		int actionCount = theQueuedActions.size();
 		for (EntityAction action : theQueuedActions) {
-			ObservableEntityResult<?, ?> result;
+			OperationResult<?> result;
 			try {
 				result = action.apply(false);
 			} catch (EntityOperationException e) {
@@ -176,8 +176,8 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 				completed.getAndIncrement();
 				continue;
 			}
-			result.watchStatus().act(res -> {
-				if (res.getStatus().isDone() && completed.incrementAndGet() == actionCount) {
+			result.whenDone(false, res -> {
+				if (completed.incrementAndGet() == actionCount) {
 					synchronized (completed) {
 						completed.notify();
 					}
@@ -1349,7 +1349,9 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		}
 
 		@Override
-		public void cancel(boolean mayInterruptIfRunning) {}
+		public EntityCreationResult<E> cancel(boolean mayInterruptIfRunning) {
+			return this;
+		}
 
 		@Override
 		public OperationResult.ResultStatus getStatus() {
@@ -1421,7 +1423,9 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		}
 
 		@Override
-		public void cancel(boolean mayInterruptIfRunning) {}
+		public EntityModificationResult<E> cancel(boolean mayInterruptIfRunning) {
+			return this;
+		}
 
 		@Override
 		public OperationResult.ResultStatus getStatus() {

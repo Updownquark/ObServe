@@ -12,13 +12,13 @@ public interface EntityCreationResult<E> extends ObservableEntityResult<E, E>, O
 	EntityCreator<? super E, E> getOperation();
 
 	@Override
-	default EntityCreationResult<E> waitFor() throws InterruptedException, EntityOperationException {
+	default EntityCreationResult<E> waitFor() throws InterruptedException {
 		ObservableEntityResult.super.waitFor();
 		return this;
 	}
 
 	@Override
-	default EntityCreationResult<E> waitFor(long timeout, int nanos) throws InterruptedException, EntityOperationException {
+	default EntityCreationResult<E> waitFor(long timeout, int nanos) throws InterruptedException {
 		ObservableEntityResult.super.waitFor(timeout, nanos);
 		return this;
 	}

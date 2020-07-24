@@ -1,6 +1,7 @@
 package org.observe.entity.impl;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -14,10 +15,13 @@ import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
+import org.observe.collect.ObservableCollectionEvent;
+import org.observe.collect.ObservableSet;
+import org.observe.collect.ObservableSortedSet;
 import org.observe.config.ObservableValueSet;
 import org.observe.config.OperationResult;
-import org.observe.config.ValueOperationException;
 import org.observe.config.OperationResult.ResultStatus;
+import org.observe.entity.EntityChainAccess;
 import org.observe.entity.EntityChange;
 import org.observe.entity.EntityChange.EntityFieldValueChange;
 import org.observe.entity.EntityChange.FieldChange;
@@ -25,6 +29,7 @@ import org.observe.entity.EntityIdentity;
 import org.observe.entity.EntityModificationResult;
 import org.observe.entity.EntityOperationException;
 import org.observe.entity.EntityUpdate;
+import org.observe.entity.EntityValueAccess;
 import org.observe.entity.ObservableEntity;
 import org.observe.entity.ObservableEntityField;
 import org.observe.entity.ObservableEntityFieldEvent;
@@ -44,13 +49,14 @@ import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
+import org.qommons.collect.BetterMap;
+import org.qommons.collect.BetterMultiMap;
 import org.qommons.collect.BetterSortedMap;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ListenerList;
-import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MultiMap;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
@@ -439,7 +445,7 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 		if (field.getOwnerType() != theType)
 			field = (ObservableEntityFieldType<E, F>) theType.getFields().get(field.getName());
 		Object myOldValue = theFields.get(field.getIndex());
-		theFields.put(field.getIndex(), resolve(field.getFieldType(), myOldValue, newValue));
+		theFields.put(field.getIndex(), resolve(field, field.getFieldType(), myOldValue, newValue));
 		if (myOldValue != EntityUpdate.NOT_SET) {
 			theStamp++;
 			if (oldValue == EntityUpdate.NOT_SET)
@@ -455,16 +461,20 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 		}
 	}
 
-	private <F> F resolve(TypeToken<F> type, Object oldValue, Object newValue) {
+	private <F> F resolve(ObservableEntityFieldType<? super E, ?> field, TypeToken<F> type, Object oldValue, Object newValue) {
 		Class<F> raw = TypeTokens.getRawType(type);
 		if (Collection.class.isAssignableFrom(raw)) {
-			newValue = (F) setCollection((TypeToken<Collection<Object>>) type, oldValue, (BetterCollection<?>) newValue);
-		} else if (ObservableValueSet.class.isAssignableFrom(raw))
-			newValue = (F) setValueSet((TypeToken<ObservableValueSet<Object>>) type, oldValue, (ObservableValueSet<?>) newValue);
-		else if (Map.class.isAssignableFrom(raw))
-			newValue = (F) setMap((TypeToken<Map<Object, Object>>) type, oldValue, (Map<?, ?>) newValue);
-		else if (MultiMap.class.isAssignableFrom(raw))
-			newValue = (F) setMultiMap((TypeToken<MultiMap<Object, Object>>) type, oldValue, (MultiMap<?, ?>) newValue);
+			newValue = (F) setCollection(localField(field, type, "Component collection not supported for field "), oldValue,
+				(BetterCollection<?>) newValue);
+		} else if (ObservableValueSet.class.isAssignableFrom(raw)) {
+			newValue = (F) setValueSet(localField(field, type, "Component value set not supported for field "), oldValue,
+				(BetterCollection<?>) newValue);
+		} else if (Map.class.isAssignableFrom(raw)) {
+			newValue = (F) setMap(localField(field, type, "Component map not supported for field "), oldValue, (BetterMap<?, ?>) newValue);
+		} else if (MultiMap.class.isAssignableFrom(raw)) {
+			newValue = (F) setMultiMap(localField(field, type, "Component multi-map not supported for field "), oldValue,
+				(BetterMultiMap<?, ?>) newValue);
+		}
 		ObservableEntityType<F> entityType = theType.getEntitySet().getEntityType(raw);
 		if (entityType != null) {
 			if (newValue == null)
@@ -482,10 +492,21 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 		return (F) newValue;
 	}
 
-	private <V, C extends Collection<V>> C setCollection(TypeToken<C> collectionType, Object oldValue, Collection<?> newValue) {
+	private <F> ObservableEntityFieldType<E, ? extends F> localField(EntityValueAccess<? super E, ?> field, TypeToken<?> type,
+		String errMsg) {
+		if (!field.getValueType().equals(type))
+			throw new IllegalStateException(errMsg + ((EntityChainAccess<? super E, F>) field).getFieldSequence().getFirst());
+		ObservableEntityFieldType<? super E, F> f = (ObservableEntityFieldType<? super E, F>) field;
+		if (f.getSourceEntity() != theType)
+			f = (ObservableEntityFieldType<E, F>) theType.getFields().get(f.getName());
+		return (ObservableEntityFieldType<E, ? extends F>) f;
+	}
+
+	private <V, C extends Collection<V>> C setCollection(ObservableEntityFieldType<E, C> field, Object oldValue,
+		BetterCollection<V> newValue) {
 		ObservableCollection<V> collection;
 		if (oldValue == EntityUpdate.NOT_SET)
-			collection = initCollection(collectionType);
+			collection = initCollection(field, newValue);
 		else
 			collection = (ObservableCollection<V>) oldValue;
 		List<Object> newList;
@@ -499,10 +520,10 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 		return (C) collection;
 	}
 
-	private <K, V, M extends Map<K, V>> M setMap(TypeToken<M> mapType, Object oldValue, Map<?, ?> newValue) {
+	private <K, V, M extends Map<K, V>> M setMap(ObservableEntityFieldType<E, M> field, Object oldValue, BetterMap<K, V> newValue) {
 		M map;
 		if (oldValue == EntityUpdate.NOT_SET)
-			map = initMap(mapType);
+			map = initMap(field);
 		else
 			map = (M) oldValue;
 		// if (map instanceof List) {
@@ -511,10 +532,11 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 		// } else {}
 	}
 
-	private <K, V, M extends MultiMap<K, V>> M setMultiMap(TypeToken<M> mapType, Object oldValue, MultiMap<?, ?> newValue) {
+	private <K, V, M extends MultiMap<K, V>> M setMultiMap(ObservableEntityFieldType<E, M> field, Object oldValue,
+		BetterMultiMap<K, V> newValue) {
 		M map;
 		if (oldValue == EntityUpdate.NOT_SET)
-			map = initMultiMap(mapType);
+			map = initMultiMap(field);
 		else
 			map = (M) oldValue;
 		// if (map instanceof List) {
@@ -523,11 +545,11 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 		// } else {}
 	}
 
-	private <V, C extends ObservableValueSet<V>> C setValueSet(TypeToken<C> collectionType, Object oldValue,
-		ObservableValueSet<?> newValue) {
+	private <V, C extends ObservableValueSet<V>> C setValueSet(ObservableEntityFieldType<E, C> field, Object oldValue,
+		BetterCollection<V> newValue) {
 		C collection;
 		if (oldValue == EntityUpdate.NOT_SET)
-			collection = initValueSet(collectionType);
+			collection = initValueSet(field);
 		else
 			collection = (C) oldValue;
 		// if (collection instanceof List) {
@@ -605,6 +627,7 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 
 	static class CollectionFieldElement<V> {
 		ElementId sourceId;
+		V oldValue;
 		V value;
 		OperationResult<?> currentOp;
 
@@ -622,8 +645,16 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 		}
 	});
 
-	<V, C extends Collection<V>> ObservableCollection<V> initCollection(TypeToken<C> collectionType) {
-
+	<V, C extends Collection<V>> ObservableCollection<V> initCollection(ObservableEntityFieldType<E, C> field, BetterCollection<V> source) {
+		Class<C> raw=TypeTokens.getRawType(field.getFieldType());
+		if(raw.isAssignableFrom(ObservableSortedSet.class))
+			return new EntitySortedSetField<>(field, source);
+		else if(raw.isAssignableFrom(ObservableSet.class))
+			return new EntitySetField<>(field, source);
+		else if(raw.isAssignableFrom(ObservableCollection.class))
+			return new EntityListField<>(field, source);
+		else
+			throw new IllegalStateException("Cannot satisfy collection of type "+raw.getName()+" for field "+field);
 	}
 
 	abstract class EntityCollectionField<V> extends ObservableCollectionWrapper<V> {
@@ -631,16 +662,14 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 		private final ObservableEntityFieldType<E, ? extends Collection<V>> theField;
 		private final TypeToken<V> theValueType;
 		private final BetterSortedMap<ElementId, ElementId> theElementMapping;
-		private final ObservableCollection<CollectionFieldElement<V>> theElements;
+		protected final ObservableCollection<CollectionFieldElement<V>> theElements;
 		private final ObservableCollection<V> theValues;
-		private final Runnable theUpdate;
 		private Object theIdentity;
 
-		EntityCollectionField(ObservableEntityFieldType<E, ? extends Collection<V>> field, BetterCollection<V> source, Runnable update) {
+		EntityCollectionField(ObservableEntityFieldType<E, ? extends Collection<V>> field, BetterCollection<V> source) {
 			theSource = source;
 			theField = field;
 			theValueType = (TypeToken<V>) field.getValueType().resolveType(Collection.class.getTypeParameters()[0]);
-			theUpdate = update;
 			theElementMapping = BetterTreeMap.build(ElementId::compareTo).safe(false).buildMap();
 			theElements = createCollection(
 				(TypeToken<CollectionFieldElement<V>>) (TypeToken<?>) ELEMENT_TYPE.getCompoundType(field.getFieldType()),
@@ -657,11 +686,10 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 
 		protected abstract ObservableCollection<V> createValues(ObservableCollection<CollectionFieldElement<V>> elements);
 
-		ElementId applyChange(CollectionChangeType type, ElementId sourceEl, V value) {
-			ElementId valueId = null;
+		ElementId applyChange(CollectionChangeType type, ElementId sourceEl, ElementId valueId, V value) {
 			switch (type) {
 			case add:
-				value = resolve(theValueType, null, value);
+				value = resolve(null, theValueType, null, value);
 				ElementId prevEl = CollectionElement.getElementId(theSource.getAdjacentElement(sourceEl, false));
 				while (prevEl != null && !theElementMapping.containsKey(prevEl))
 					prevEl = CollectionElement.getElementId(theSource.getAdjacentElement(sourceEl, false));
@@ -672,29 +700,25 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 				theElementMapping.put(sourceEl, valueId);
 				break;
 			case remove:
-				MapEntryHandle<ElementId, ElementId> mapping = theElementMapping.getEntry(sourceEl);
-				if (mapping == null)
-					throw new IllegalStateException("Received remove event for non-existent element: " + sourceEl);
-				valueId = mapping.getValue();
-				theElementMapping.mutableEntry(mapping.getElementId()).remove();
+				if (sourceEl != null)
+					theElementMapping.remove(sourceEl);
 				theElements.mutableElement(valueId).remove();
 				break;
 			case set:
-				mapping = theElementMapping.getEntry(sourceEl);
-				if (mapping == null)
-					throw new IllegalStateException("Received update event for non-existent element: " + sourceEl);
-				valueId = mapping.getValue();
 				CollectionFieldElement<V> el = theElements.getElement(valueId).get();
-				value = resolve(theValueType, el.value, value);
+				value = resolve(null, theValueType, el.value, value);
+				el.oldValue = el.value;
 				el.value = value;
 				theElements.mutableElement(valueId).set(el);
 				break;
 			}
-			theUpdate.run();
 			return valueId;
 		}
 
-		protected abstract ElementId addEntry(MapEntryHandle<ElementId, ElementId> mapping, V value);
+		@Override
+		public TypeToken<V> getType() {
+			return theValueType;
+		}
 
 		@Override
 		public abstract boolean isContentControlled();
@@ -735,8 +759,57 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 
 			@Override
 			public void set(V value) throws UnsupportedOperationException, IllegalArgumentException {
-				theType.getEntitySet().getImplementation().updateCollection(theSource, CollectionOperationType.update, theElement.sourceId,
-					value);
+				try (Transaction t = lock(true, null)) {
+					if (!theElementId.isPresent())
+						throw new UnsupportedOperationException(StdMsg.ELEMENT_REMOVED);
+					String msg = isAcceptable(value);
+					if (StdMsg.UNSUPPORTED_OPERATION.equals(msg))
+						throw new UnsupportedOperationException(msg);
+					else if (msg != null)
+						throw new IllegalArgumentException(msg);
+					theType.getEntitySet().queueAction(sync -> {
+						V oldValue = theElement.value;
+						// TODO Need to de-resolve the value for the impl
+						if (sync) {
+							theType.getEntitySet().getImplementation().updateCollection(theSource, CollectionOperationType.update,
+								theElement.sourceId, value, false);
+							applyChange(CollectionChangeType.set, theElement.sourceId, theElementId, value);
+							theType.getEntitySet().processChangeFromEntity(new EntityChange.EntityCollectionFieldChange<>(Instant.now(),
+								getId(), theField, CollectionChangeType.set, theElementId, oldValue, theElement.value));
+							return null;
+						} else {
+							applyChange(CollectionChangeType.set, theElement.sourceId, theElementId, value);
+							theType.getEntitySet().processChangeFromEntity(new EntityChange.EntityCollectionFieldChange<>(Instant.now(),
+								getId(), theField, CollectionChangeType.set, theElementId, oldValue, theElement.value));
+							OperationResult<ElementId> result = theType.getEntitySet().getImplementation().updateCollectionAsync(theSource,
+								CollectionOperationType.update, theElement.sourceId, value, false);
+							result.whenDone(false, r -> {
+								if (r.getStatus() == ResultStatus.CANCELLED) {//
+								} else if (r.getStatus().isFailed()) {
+									System.err.println(theField + " update failed");
+									r.getFailure().printStackTrace();
+									// TODO Logging
+									applyChange(CollectionChangeType.set, theElement.sourceId, theElementId, oldValue);
+									try {
+										theType.getEntitySet()
+										.processChangeFromEntity(new EntityChange.EntityCollectionFieldChange<>(Instant.now(), getId(),
+											theField, CollectionChangeType.set, theElementId, value, theElement.oldValue));
+									} catch (EntityOperationException e2) {
+										// Well, we tried
+										e2.printStackTrace();
+									}
+								}
+								if (theElement.currentOp == result) {
+									theElement.currentOp = null;
+									theElement.oldValue = null;
+								}
+							});
+							return result;
+						}
+					});
+				} catch (IllegalStateException | EntityOperationException e) {
+					throw new IllegalArgumentException("Update failed", e);
+				}
 			}
 
 			@Override
@@ -746,102 +819,134 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 
 			@Override
 			public void remove() throws UnsupportedOperationException {
-				AsyncOp currentOp=theElement.currentOp;
-				if(currentOp!=null){
-					if(theElement.sourceId==null)
-						currentOp.cancel(true, null);
-					cur
+				try (Transaction t = lock(true, null)) {
+					if (!theElementId.isPresent())
+						throw new UnsupportedOperationException(StdMsg.ELEMENT_REMOVED);
+					String msg = canRemove();
+					if (msg != null)
+						throw new UnsupportedOperationException(msg);
+					theType.getEntitySet().queueAction(sync -> {
+						if (sync) {
+							V oldValue = theElement.value;
+							theType.getEntitySet().getImplementation().updateCollection(theSource, CollectionOperationType.remove,
+								theElement.sourceId, theElement.value, false);
+							applyChange(CollectionChangeType.remove, theElement.sourceId, theElementId, null);
+							theType.getEntitySet().processChangeFromEntity(new EntityChange.EntityCollectionFieldChange<>(Instant.now(),
+								getId(), theField, CollectionChangeType.set, theElementId, oldValue, theElement.value));
+							return null;
+						} else {
+							return removeAsync(theElement, theElementId);
+						}
+					});
+				} catch (IllegalStateException | EntityOperationException e) {
+					throw new IllegalArgumentException("Remove failed", e);
 				}
-				theType.getEntitySet().getImplementation().updateCollection(theSource, CollectionOperationType.remove, theElement.sourceId,
-					null);
 			}
+		}
+
+		OperationResult<?> removeAsync(CollectionFieldElement<V> element, ElementId id) throws EntityOperationException {
+			V oldValue = element.value;
+			applyChange(CollectionChangeType.remove, element.sourceId, id, null);
+			theType.getEntitySet().processChangeFromEntity(new EntityChange.EntityCollectionFieldChange<>(Instant.now(), getId(), theField,
+				CollectionChangeType.remove, id, oldValue, oldValue));
+			OperationResult<ElementId> result = theType.getEntitySet().getImplementation().updateCollectionAsync(theSource,
+				CollectionOperationType.remove, element.sourceId, null, false);
+			result.whenDone(false, r -> {
+				if (r.getStatus() == ResultStatus.CANCELLED) {//
+				} else if (r.getStatus().isFailed()) {
+					System.err.println(theField + " remove failed");
+					r.getFailure().printStackTrace();
+					// TODO Logging
+					applyChange(CollectionChangeType.add, element.sourceId, null, oldValue);
+					try {
+						theType.getEntitySet().processChangeFromEntity(new EntityChange.EntityCollectionFieldChange<>(Instant.now(),
+							getId(), theField, CollectionChangeType.add, id, null, oldValue));
+					} catch (EntityOperationException e2) {
+						// Well, we tried
+						e2.printStackTrace();
+					}
+				}
+				if (element.currentOp == result) {
+					element.currentOp = null;
+					element.oldValue = null;
+				}
+			});
+			return result;
 		}
 
 		@Override
 		public CollectionElement<V> addElement(V value, ElementId after, ElementId before, boolean first)
 			throws UnsupportedOperationException, IllegalArgumentException {
-			try(Transaction t=lock(true, null)){
+			ElementId[] newEl = new ElementId[1];
+			try (Transaction t = lock(true, null)) {
 				ElementId[] target = getSourceAddLocation(value, after, before, first);
 				if (target == null)
 					return null;
-				ElementId [] newEl=new ElementId[1];
-				try {
-					theType.getEntitySet().queueAction(sync -> {
-						try {
-							if (sync) {
-								synchronized (this) {
-									ElementId sourceEl = theType.getEntitySet().getImplementation().updateCollection(theSource,
-										CollectionOperationType.add, target[0], value, false);
-									newEl[0] = applyChange(CollectionChangeType.add, sourceEl, value);
+				theType.getEntitySet().queueAction(sync -> {
+					if (sync) {
+						// TODO Need to de-resolve the value for the impl
+						ElementId sourceEl = theType.getEntitySet().getImplementation().updateCollection(theSource,
+							CollectionOperationType.add, target[0], value, false);
+						newEl[0] = applyChange(CollectionChangeType.add, sourceEl, null, value);
+						theType.getEntitySet().processChangeFromEntity(new EntityChange.EntityCollectionFieldChange<>(Instant.now(),
+							getId(), theField, CollectionChangeType.add, newEl[0], null, value));
+						return null;
+					} else {
+						ElementId valueBefore = target[0] == null ? null : theElementMapping.get(target[0]);
+						ElementId valueAfter = CollectionElement.getElementId(//
+							valueBefore == null//
+							? theElements.getTerminalElement(false)//
+								: theElements.getAdjacentElement(valueBefore, false));
+						CollectionFieldElement<V> newFieldEl = new CollectionFieldElement<>(null, value);
+						newEl[0] = theElements.addElement(newFieldEl, valueAfter, valueBefore, false).getElementId();
+						theType.getEntitySet().processChangeFromEntity(new EntityChange.EntityCollectionFieldChange<>(Instant.now(),
+							getId(), theField, CollectionChangeType.add, newEl[0], null, value));
+						OperationResult<ElementId> result = theType.getEntitySet().getImplementation().updateCollectionAsync(theSource,
+							CollectionOperationType.add, target[0], value, false);
+						result.whenDone(false, r -> {
+							if (r.getStatus() == ResultStatus.CANCELLED) {} else if (r.getStatus().isFailed()) {
+								System.err.println(theField + " addition failed");
+								r.getFailure().printStackTrace();
+								// TODO Logging
+								theElements.mutableElement(newEl[0]).remove();
+								try {
 									theType.getEntitySet().processChangeFromEntity(new EntityChange.EntityCollectionFieldChange<>(
-										Instant.now(), getId(), theField, CollectionChangeType.add, newEl[0], null, value));
+										Instant.now(), getId(), theField, CollectionChangeType.remove, newEl[0], value, value));
+								} catch (EntityOperationException e2) {
+									// Well, we tried
+									e2.printStackTrace();
 								}
 							} else {
-								ElementId valueBefore = target[0] == null ? null : theElementMapping.get(target[0]);
-								ElementId valueAfter = CollectionElement.getElementId(//
-									valueBefore == null//
-									? theElements.getTerminalElement(false)//
-										: theElements.getAdjacentElement(valueBefore, false));
-								CollectionFieldElement<V> newFieldEl = new CollectionFieldElement<>(null, value);
-								newEl[0] = theElements.addElement(newFieldEl, valueAfter, valueBefore, false).getElementId();
-								theType.getEntitySet().processChangeFromEntity(new EntityChange.EntityCollectionFieldChange<>(Instant.now(),
-									getId(), theField, CollectionChangeType.add, newEl[0], null, value));
-								OperationResult<ElementId> result = theType.getEntitySet().getImplementation()
-									.updateCollectionAsync(theSource, CollectionOperationType.add, target[0], value, false);
-								result.watchStatus().filter(r -> r.getStatus().isDone()).act(r -> {
-									synchronized (EntityCollectionField.this) {
-										if (r.getStatus() == ResultStatus.CANCELLED)
-											return;
-										// Because this call is asynchronous, there is a possibility that a different call
-										// changed the expected order
-										ElementId sourceEl;
-										try {
-											sourceEl = r.getResult();
-										} catch (ValueOperationException e) {
-											System.err.println(theField + " addition failed");
-											e.printStackTrace();
-											// Logging
-											theElements.mutableElement(newEl[0]).remove();
-											try {
-												theType.getEntitySet()
-												.processChangeFromEntity(new EntityChange.EntityCollectionFieldChange<>(Instant.now(),
-													getId(), theField, CollectionChangeType.remove, newEl[0], value, value));
-											} catch (EntityOperationException e2) {
-												// Well, we tried
-												e2.printStackTrace();
-											}
-											return;
-										}
-										ElementId prevSrc = CollectionElement.getElementId(theSource.getAdjacentElement(sourceEl, false));
-										while (prevSrc != null && !theElementMapping.containsKey(prevSrc))
-											prevSrc = CollectionElement.getElementId(theSource.getAdjacentElement(prevSrc, false));
-										ElementId prevValueEl = theElementMapping.get(prevSrc);
-										if (newEl[0].compareTo(prevValueEl) <= 0)
-											reAdd(newEl[0], sourceEl, value);
-										ElementId nextSrc = CollectionElement.getElementId(theSource.getAdjacentElement(sourceEl, true));
-										while (nextSrc != null && !theElementMapping.containsKey(nextSrc))
-											nextSrc = CollectionElement.getElementId(theSource.getAdjacentElement(nextSrc, true));
-										ElementId nextValueEl = theElementMapping.get(nextSrc);
-										if (newEl[0].compareTo(nextValueEl) >= 0)
-											reAdd(newEl[0], sourceEl, value);
-										newFieldEl.sourceId = sourceEl;
-										newFieldEl.currentOp = null;
-										theElementMapping.put(sourceEl, newEl[0]);
-									}
-								});
-								newFieldEl.currentOp = result;
+								// Because this call is asynchronous, there is a possibility that a different call
+								// changed the expected order
+								ElementId sourceEl = r.getResult();
+								ElementId prevSrc = CollectionElement.getElementId(theSource.getAdjacentElement(sourceEl, false));
+								while (prevSrc != null && !theElementMapping.containsKey(prevSrc))
+									prevSrc = CollectionElement.getElementId(theSource.getAdjacentElement(prevSrc, false));
+								ElementId prevValueEl = theElementMapping.get(prevSrc);
+								if (newEl[0].compareTo(prevValueEl) <= 0)
+									reAdd(newEl[0], sourceEl, value);
+								ElementId nextSrc = CollectionElement.getElementId(theSource.getAdjacentElement(sourceEl, true));
+								while (nextSrc != null && !theElementMapping.containsKey(nextSrc))
+									nextSrc = CollectionElement.getElementId(theSource.getAdjacentElement(nextSrc, true));
+								ElementId nextValueEl = theElementMapping.get(nextSrc);
+								if (newEl[0].compareTo(nextValueEl) >= 0)
+									reAdd(newEl[0], sourceEl, value);
+								newFieldEl.sourceId = sourceEl;
+								newFieldEl.currentOp = null;
+								theElementMapping.put(sourceEl, newEl[0]);
 							}
-							return null;
-						} catch (RuntimeException | EntityOperationException | Error e) {
-							e.printStackTrace();
-							throw e;
-						}
-					});
-				} catch (IllegalStateException | EntityOperationException e) {
-					throw new IllegalArgumentException("Update failed", e);
-				}
-				return newEl[0] == null ? null : getElement(newEl[0]);
+							if (newFieldEl.currentOp == result)
+								newFieldEl.currentOp = null;
+						});
+						newFieldEl.currentOp = result;
+						return result;
+					}
+				});
+			} catch (IllegalStateException | EntityOperationException e) {
+				throw new IllegalArgumentException("Addition failed", e);
 			}
+			return newEl[0] == null ? null : getElement(newEl[0]);
 		}
 
 		protected abstract ElementId[] getSourceAddLocation(V value, ElementId after, ElementId before, boolean first);
@@ -855,7 +960,7 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 				// Well, we tried
 				e.printStackTrace();
 			}
-			ElementId newEl = applyChange(CollectionChangeType.add, sourceEl, value);
+			ElementId newEl = applyChange(CollectionChangeType.add, sourceEl, null, value);
 			try {
 				theType.getEntitySet().processChangeFromEntity(new EntityChange.EntityCollectionFieldChange<>(Instant.now(), getId(),
 					theField, CollectionChangeType.add, newEl, null, value));
@@ -878,7 +983,37 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 
 		@Override
 		public void clear() {
-			theType.getEntitySet().getImplementation().updateCollection(theSource, CollectionOperationType.clear, null, null, null);
+			try (Transaction t = lock(true, null)) {
+				if (isEmpty())
+					return;
+				theType.getEntitySet().queueAction(sync -> {
+					if (sync) {
+						theType.getEntitySet().getImplementation().updateCollection(theSource, CollectionOperationType.clear, null, null,
+							false);
+						for (CollectionElement<CollectionFieldElement<V>> el : theElements.elements().reverse())
+							applyChange(CollectionChangeType.remove, el.get().sourceId, el.getElementId(), null);
+						return null;
+					} else {
+						List<OperationResult<?>> results = new ArrayList<>(theElements.size());
+						for (CollectionElement<CollectionFieldElement<V>> el : theElements.elements().reverse()) {
+							V oldValue = el.get().value;
+							applyChange(CollectionChangeType.remove, el.get().sourceId, el.getElementId(), null);
+							theType.getEntitySet().processChangeFromEntity(new EntityChange.EntityCollectionFieldChange<>(Instant.now(),
+								getId(), theField, CollectionChangeType.remove, el.getElementId(), oldValue, oldValue));
+							OperationResult<?> result = removeAsync(el.get(), el.getElementId());
+							results.add(result);
+						}
+						return new OperationResult.MultiResult<Object, Object>(results) {
+							@Override
+							protected Object getResult(List<Object> componentResults) {
+								return null; // Don't care about the results, just the status
+							}
+						};
+					}
+				});
+			} catch (IllegalStateException | EntityOperationException e) {
+				throw new UnsupportedOperationException("Clear failed", e);
+			}
 		}
 
 		@Override
@@ -907,6 +1042,66 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 					} catch (InterruptedException e) {}
 				}
 			}
+		}
+
+		@Override
+		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends V>> observer) {
+			return theElements.onChange(elChange -> {
+				V oldValue = null;
+				switch (elChange.getType()) {
+				case add:
+					oldValue = null;
+					break;
+				case remove:
+					oldValue = elChange.getNewValue().value;
+					break;
+				case set:
+					oldValue = elChange.getNewValue().oldValue;
+					break;
+				}
+				ObservableCollectionEvent<V> valueChange = new ObservableCollectionEvent<>(elChange.getElementId(), theValueType,
+					elChange.getIndex(), elChange.getType(), oldValue, elChange.getNewValue().value, elChange);
+				try (Transaction t = Causable.use(valueChange)) {
+					observer.accept(valueChange);
+				}
+			});
+		}
+	}
+
+	class EntityListField<V> extends EntityCollectionField<V> {
+		EntityListField(ObservableEntityFieldType<E, ? extends Collection<V>> field, BetterCollection<V> source) {
+			super(field, source);
+		}
+
+		@Override
+		protected ObservableCollection<CollectionFieldElement<V>> createCollection(TypeToken<CollectionFieldElement<V>> type,
+			CollectionLockingStrategy locking) {
+			return ObservableCollection.build(type).withLocker(locking).build();
+		}
+
+		@Override
+		protected ObservableCollection<V> createValues(ObservableCollection<CollectionFieldElement<V>> elements) {
+			return elements.flow().map(getType(), el -> el.value, opts -> opts.cache(false).fireIfUnchanged(true)).collectPassive();
+		}
+
+		@Override
+		public boolean isContentControlled() {
+			return false;
+		}
+
+		@Override
+		protected ElementId[] getSourceAddLocation(V value, ElementId after, ElementId before, boolean first) {
+			ElementId addLoc;
+			if (first)
+				addLoc = CollectionElement
+				.getElementId(after != null ? theElements.getAdjacentElement(after, true) : theElements.getTerminalElement(true));
+			else {
+				if (before != null)
+					addLoc = before;
+				else
+					addLoc = CollectionElement.getElementId(theElements.getTerminalElement(false));
+			}
+			return new ElementId[] { addLoc };
 		}
 	}
 }

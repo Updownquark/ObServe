@@ -37,7 +37,21 @@ public interface EntityValueAccess<E, F> extends Comparator<F>, Comparable<Entit
 	 * @param attr A recognized attribute of this object's type to get
 	 * @return A new value access object to get the given information from this object's access on an entity
 	 */
-	<T> EntityValueAccess<E, T> dot(Function<? super F, T> attr);
+	<T> EntityChainAccess<E, T> dot(Function<? super F, T> attr);
+
+	/**
+	 * @param field A field of this value access's {@link #getTargetEntity() target entity}
+	 * @return A new value access object to get the given information from this object's access on an entity
+	 */
+	<T> EntityChainAccess<E, T> dot(ObservableEntityFieldType<? super F, T> field);
+
+	/**
+	 * @param field The name of a field of this value access's {@link #getTargetEntity() target entity}
+	 * @return A new value access object to get the given information from this object's access on an entity
+	 */
+	default EntityChainAccess<E, ?> dot(String field) {
+		return dot(getTargetEntity().getFields().get(field));
+	}
 
 	/**
 	 * @param entity The entity to get the information from

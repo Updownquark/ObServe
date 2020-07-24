@@ -51,12 +51,24 @@ public interface ObservableEntityFieldType<E, F> extends ConfiguredValueField<E,
 	}
 
 	@Override
-	default <T> EntityValueAccess<E, T> dot(Function<? super F, T> attr) {
+	default <T> EntityChainAccess<E, T> dot(Function<? super F, T> attr) {
 		ObservableEntityType<F> target = getTargetEntity();
 		if (target == null)
 			throw new UnsupportedOperationException("This method can only be used with entity-typed fields");
 		ObservableEntityFieldType<F, T> lastField = target.getField(attr);
 		return new EntityChainAccess<>(this, lastField);
+	}
+
+	@Override
+	default <T> EntityChainAccess<E, T> dot(ObservableEntityFieldType<? super F, T> field) {
+		ObservableEntityType<F> target = getTargetEntity();
+		if (target == null)
+			throw new UnsupportedOperationException("This method can only be used with entity-typed fields");
+		else if (!field.getOwnerType().isAssignableFrom(target))
+			throw new IllegalArgumentException(field + " cannot be applied to " + target);
+		else if (!field.getOwnerType().equals(target))
+			field = (ObservableEntityFieldType<F, T>) target.getFields().get(field.getName());
+		return new EntityChainAccess<>(this, (ObservableEntityFieldType<F, T>) field);
 	}
 
 	@Override
