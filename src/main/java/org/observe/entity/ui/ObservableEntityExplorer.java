@@ -2,7 +2,10 @@ package org.observe.entity.ui;
 
 import java.awt.Dialog.ModalityType;
 import java.awt.EventQueue;
+import java.awt.Point;
 import java.awt.datatransfer.DataFlavor;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 import java.io.IOException;
@@ -16,6 +19,7 @@ import java.util.List;
 import java.util.TimeZone;
 import java.util.function.Function;
 import java.util.function.IntConsumer;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import javax.swing.JDialog;
@@ -26,6 +30,7 @@ import javax.swing.SwingUtilities;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
+import org.observe.SimpleObservable;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.config.ObservableConfig;
@@ -437,27 +442,30 @@ public class ObservableEntityExplorer extends JPanel {
 		ConfigurableCreator<?, E>[] creator = new ConfigurableCreator[] { initCreator };
 		EntityRowUpdater<Object, E> updater = new EntityRowUpdater<Object, E>() {
 			@Override
-			public String isEnabled(Object entity, ObservableEntityFieldType<E, ?> field) {
-				return creator[0].isEnabled(field);
+			public String isEnabled(Object entity, int fieldIndex) {
+				return creator[0].isEnabled(initCreator.getEntityType().getFields().get(fieldIndex));
 			}
 
 			@Override
-			public <F> String isAcceptable(Object entity, ObservableEntityFieldType<E, F> field, F value) {
-				return creator[0].isAcceptable(field, value);
+			public <F> String isAcceptable(Object entity, int fieldIndex, F value) {
+				return creator[0].isAcceptable((ObservableEntityFieldType<E, F>) initCreator.getEntityType().getFields().get(fieldIndex),
+					value);
 			}
 
 			@Override
-			public <F> void set(Object entity, ObservableEntityFieldType<E, F> field, F value) {
-				creator[0] = creator[0].with(field, value);
+			public <F> void set(Object entity, int fieldIndex, F value) {
+				creator[0] = creator[0].with((ObservableEntityFieldType<E, F>) initCreator.getEntityType().getFields().get(fieldIndex),
+					value);
 			}
 		};
 		ObservableCollection<Object> row = ObservableCollection.build(Object.class).safe(false).build().with((Object) null);
 		JPanel createPanel = PanelPopulation.populateVPanel((JPanel) null, null)//
 			.<Object> addTable(row, fieldTable -> {
 				for (ObservableEntityFieldType<E, ?> field : initCreator.getEntityType().getFields().allValues()) {
-					fieldTable.withColumn(field.getName(), (TypeToken<Object>) field.getFieldType(),
-						__ -> creator[0].getFieldValues().get(field.getIndex()), //
-						fieldCol -> configureFieldColumn((ObservableEntityFieldType<E, Object>) field, fieldCol, updater));
+					ObservableEntityFieldType<E, Object> f = (ObservableEntityFieldType<E, Object>) field;
+					fieldTable.withColumn(field.getName(), (TypeToken<Object>) field.getFieldType(), __ -> {
+						return creator[0].getFieldValues().get(field.getIndex());
+					}, fieldCol -> configureFieldColumn(f.getIndex(), f.getFieldType(), f.getTargetEntity(), fieldCol, updater, null));
 				}
 			})//
 			.addButton("Create", __ -> {
@@ -497,34 +505,36 @@ public class ObservableEntityExplorer extends JPanel {
 			JOptionPane.showMessageDialog(this, e.getMessage(), "Query Failure", JOptionPane.ERROR_MESSAGE);
 			return;
 		}
+		SimpleObservable<Void> close = SimpleObservable.build().safe(false).build();
 		EntityRowUpdater<ObservableEntity<? extends E>, E> updater = new EntityRowUpdater<ObservableEntity<? extends E>, E>() {
 			@Override
-			public String isEnabled(ObservableEntity<? extends E> entity, ObservableEntityFieldType<E, ?> field) {
-				return entity.getField(field).isEnabled().get();
+			public String isEnabled(ObservableEntity<? extends E> entity, int fieldIndex) {
+				return entity.getField(fieldIndex).isEnabled().get();
 			}
 
 			@Override
-			public <F> String isAcceptable(ObservableEntity<? extends E> entity, ObservableEntityFieldType<E, F> field, F value) {
-				return entity.isAcceptable(field.getIndex(), value);
+			public <F> String isAcceptable(ObservableEntity<? extends E> entity, int fieldIndex, F value) {
+				return entity.isAcceptable(fieldIndex, value);
 			}
 
 			@Override
-			public <F> void set(ObservableEntity<? extends E> entity, ObservableEntityFieldType<E, F> field, F value) {
-				entity.set(field.getIndex(), value, null);
+			public <F> void set(ObservableEntity<? extends E> entity, int fieldIndex, F value) {
+				entity.set(fieldIndex, value, null);
 			}
 		};
 		SettableValue<String> deleteText = SettableValue.build(String.class).safe(false).withValue("Delete").build();
-		JPanel queryPanel = PanelPopulation.populateVPanel((JPanel) null, null)//
+		JPanel queryPanel = PanelPopulation.populateVPanel((JPanel) null, close)//
 			.addTable((ObservableCollection<ObservableEntity<E>>) results.getResult().getEntities(), entityTable -> {
-				entityTable.withRowNumberColumn("Row #", null);
+				entityTable.withIndexColumn("Row #", col -> col.formatText(idx -> String.valueOf(idx + 1)));
 				for (ObservableEntityFieldType<E, ?> field : condition.getEntityType().getFields().allValues()) {
+					ObservableEntityFieldType<E, Object> f = (ObservableEntityFieldType<E, Object>) field;
 					entityTable.withColumn(field.getName(), (TypeToken<Object>) field.getFieldType(), entity -> {
 						return entity.get(field);
 					}, //
-						fieldCol -> configureFieldColumn((ObservableEntityFieldType<E, Object>) field, fieldCol, updater));
+						fieldCol -> configureFieldColumn(f.getIndex(), f.getFieldType(), f.getTargetEntity(), fieldCol, updater, close));
 				}
 				entityTable.dragSourceRow(rowDrag -> rowDrag.advertiseFlavor(new EntityFlavor(condition.getEntityType()))//
-					.toFlavor(
+					.toFlavorLike(
 						flavor -> flavor instanceof EntityFlavor
 						&& ((EntityFlavor) flavor).entity.isAssignableFrom(condition.getEntityType()),
 						new Dragging.DataSourceTransform<ObservableEntity<E>>() {
@@ -573,7 +583,7 @@ public class ObservableEntityExplorer extends JPanel {
 								case FULFILLED:
 									buttons.alert("Delete Successful",
 										deleteResult.getResult() + " "//
-											+ (deleteResult.getResult() == 1 ? condition.getEntityType().getName()
+										+ (deleteResult.getResult() == 1 ? condition.getEntityType().getName()
 											: StringUtils.pluralize(condition.getEntityType().getName()))
 										+ " deleted")
 									.display();
@@ -593,22 +603,48 @@ public class ObservableEntityExplorer extends JPanel {
 		JDialog createDialog = new JDialog(SwingUtilities.getWindowAncestor(this), condition.getEntityType() + ": " + condition.toString(),
 			ModalityType.MODELESS);
 		createDialog.getContentPane().add(queryPanel);
+		createDialog.addComponentListener(new ComponentAdapter() {
+			@Override
+			public void componentHidden(ComponentEvent e) {
+				close.onNext(null);
+			}
+		});
 		createDialog.pack();
 		createDialog.setVisible(true);
 	}
 
 	interface EntityRowUpdater<T, E> {
-		String isEnabled(T entity, ObservableEntityFieldType<E, ?> field);
+		String isEnabled(T entity, int fieldIndex);
 
-		<F> String isAcceptable(T entity, ObservableEntityFieldType<E, F> field, F value);
+		<F> String isAcceptable(T entity, int fieldIndex, F value);
 
-		<F> void set(T entity, ObservableEntityFieldType<E, F> field, F value);
+		<F> void set(T entity, int fieldIndex, F value);
 	}
 
-	protected <T, E, F> void configureFieldColumn(ObservableEntityFieldType<E, F> field, CategoryRenderStrategy<T, F> fieldColumn,
-		EntityRowUpdater<? super T, E> creator) {
-		Class<F> raw = TypeTokens.getRawType(field.getFieldType().unwrap());
-		Function<Object, String> fmt = getFormatter(field);
+	protected <T, E, F> void configureFieldColumn(int fieldIndex, TypeToken<F> fieldType, ObservableEntityType<F> targetEntity,
+		CategoryRenderStrategy<T, F> fieldColumn, EntityRowUpdater<? super T, E> creator, Observable<?> expire) {
+		boolean editable = configureFieldFormat(fieldType, targetEntity, fieldColumn, expire);
+		if (targetEntity != null) {
+			fieldColumn.withKeyListener(new CategoryRenderStrategy.CategoryKeyAdapter<T, F>() {
+				@Override
+				public void keyTyped(ModelCell<? extends T, ? extends F> cell, KeyEvent e) {
+					if (e.getKeyChar() == KeyEvent.VK_DELETE && creator.isAcceptable(cell.getModelValue(), fieldIndex, null) == null)
+						creator.set(cell.getModelValue(), fieldIndex, null);
+				}
+			});
+		}
+		if (editable)
+			fieldColumn.withMutation(mutator -> mutator//
+				.mutateAttribute((t, f) -> creator.set(t, fieldIndex, f))//
+				.editableIf((t, f) -> creator.isEnabled(t, fieldIndex) == null)//
+				.filterAccept((t, f) -> creator.isAcceptable(t.get(), fieldIndex, f))//
+				);
+	}
+
+	protected <R, F> boolean configureFieldFormat(TypeToken<F> fieldType, ObservableEntityType<F> targetEntity,
+		CategoryRenderStrategy<R, F> column, Observable<?> expire) {
+		Class<F> raw = TypeTokens.getRawType(fieldType.unwrap());
+		Function<Object, String> fmt = getFormatter(fieldType, targetEntity);
 		Function<F, String> formatter = v -> {
 			if (v == null)
 				return "null";
@@ -617,14 +653,23 @@ public class ObservableEntityExplorer extends JPanel {
 			else
 				return fmt.apply(v);
 		};
-		fieldColumn.formatText(v -> formatter.apply(v));
+		column.formatText(v -> formatter.apply(v));
 		boolean editable = false;
 		if (Enum.class.isAssignableFrom(raw)) {
 			editable = true;
-			fieldColumn.withMutation(mutation -> mutation.asCombo(formatter,
-				ObservableCollection.of(field.getFieldType(), ArrayUtils.add(raw.getEnumConstants(), 0, (F) null))));
+			column.withMutation(mutation -> mutation.asCombo(formatter,
+				ObservableCollection.of(fieldType, ArrayUtils.add(raw.getEnumConstants(), 0, (F) null))));
+			column.dragSource(drag -> drag.toObject());
+		} else if (Collection.class.isAssignableFrom(raw) && expire != null) {
+			column.withMouseListener(new CategoryRenderStrategy.CategoryClickAdapter<R, F>() {
+				@Override
+				public void mouseClicked(ModelCell<? extends R, ? extends F> cell, MouseEvent e) {
+					showCollectionEditor((ObservableEntity<? extends R>) cell.getModelValue(), column.getName(),
+						(ObservableCollection<?>) cell.getCellValue(), e.getLocationOnScreen(), expire);
+				}
+			});
 		} else {
-			Format<F> format = (Format<F>) getFormat(raw);
+			Format<F> format = getFormat(raw);
 			if (format != null) {
 				Format<F> fFormat;
 				if (format instanceof SpinnerFormat) {
@@ -673,20 +718,14 @@ public class ObservableEntityExplorer extends JPanel {
 					};
 				}
 				editable = true;
-				fieldColumn.withMutation(mutator -> {
+				column.dragSource(drag -> drag.toObject());
+				column.withMutation(mutator -> {
 					mutator.asText(fFormat);
 				});
-			} else if (field.getTargetEntity() != null) {
+			} else if (targetEntity != null) {
 				editable = true;
-				fieldColumn.withKeyListener(new CategoryRenderStrategy.CategoryKeyAdapter<T, F>() {
-					@Override
-					public void keyTyped(ModelCell<? extends T, ? extends F> cell, KeyEvent e) {
-						if (e.getKeyChar() == KeyEvent.VK_DELETE && creator.isAcceptable(cell.getModelValue(), field, null) == null)
-							creator.set(cell.getModelValue(), field, null);
-					}
-				});
-				fieldColumn.withMutation(mutator -> mutator//
-					.dragAccept(drag -> drag.fromFlavor(new EntityFlavor(field.getTargetEntity()), new Dragging.DataAccepterTransform<F>() {
+				column.withMutation(mutator -> mutator//
+					.dragAccept(drag -> drag.fromFlavor(new EntityFlavor(targetEntity), new Dragging.DataAccepterTransform<F>() {
 						@Override
 						public boolean canAccept(Object value, DataFlavor flavor) {
 							return true;
@@ -697,29 +736,24 @@ public class ObservableEntityExplorer extends JPanel {
 							return (F) value;
 						}
 					})));
-			}
+			} else
+				column.dragSource(drag -> drag.toObject());
 		}
-		if (editable)
-			fieldColumn.withMutation(mutator -> mutator//
-				.mutateAttribute((t, f) -> creator.set(t, field, f))//
-				.editableIf((t, f) -> creator.isEnabled(t, field) == null)//
-				.filterAccept((t, f) -> creator.isAcceptable(t.get(), field, f))//
-				.withRowUpdate(true)//
-				);
+		return editable;
 	}
 
-	static <F> Function<Object, String> getFormatter(ObservableEntityFieldType<?, F> field) {
-		if (field.getTargetEntity() != null) {
+	static <F> Function<Object, String> getFormatter(TypeToken<F> fieldType, ObservableEntityType<F> targetEntity) {
+		if (targetEntity != null) {
 			return e -> {
 				if (e instanceof ObservableEntity)
 					return ((ObservableEntity<?>) e).getId().toString();
 				else if (e instanceof EntityIdentity)
 					return e.toString();
 				else
-					return field.getTargetEntity().observableEntity((F) e).getId().toString();
+					return targetEntity.observableEntity((F) e).getId().toString();
 			};
 		}
-		Class<?> type = TypeTokens.getRawType(field.getFieldType());
+		Class<?> type = TypeTokens.getRawType(fieldType);
 		if (type == Instant.class) {
 			return inst -> QommonsUtils.print(((Instant) inst).toEpochMilli());
 		} else if (type == Duration.class) {
@@ -728,21 +762,21 @@ public class ObservableEntityExplorer extends JPanel {
 			return String::valueOf;
 	}
 
-	static Format<?> getFormat(Class<?> type) {
+	static <V> Format<V> getFormat(Class<V> type) {
 		if (type == int.class)
-			return SpinnerFormat.INT;
+			return (Format<V>) SpinnerFormat.INT;
 		else if (type == long.class)
-			return SpinnerFormat.LONG;
+			return (Format<V>) SpinnerFormat.LONG;
 		else if (type == double.class)
-			return Format.doubleFormat(6).build();
+			return (Format<V>) Format.doubleFormat(6).build();
 		else if (type == String.class)
-			return SpinnerFormat.NUMERICAL_TEXT;
+			return (Format<V>) SpinnerFormat.NUMERICAL_TEXT;
 		else if (type == boolean.class)
-			return SpinnerFormat.BOOLEAN;
+			return (Format<V>) SpinnerFormat.BOOLEAN;
 		else if (type == Instant.class)
-			return SpinnerFormat.flexDate(Instant::now, "ddMMMyyyy", TimeZone.getDefault());
+			return (Format<V>) SpinnerFormat.flexDate(Instant::now, "ddMMMyyyy", TimeZone.getDefault());
 		else if (type == Duration.class)
-			return SpinnerFormat.flexDuration();
+			return (Format<V>) SpinnerFormat.flexDuration();
 		else
 			return null;
 		/* TODO More types, e.g.
@@ -753,6 +787,83 @@ public class ObservableEntityExplorer extends JPanel {
 		 * binaries? long character streams?
 		 * ...
 		 */
+	}
+
+	private <E, V> void showCollectionEditor(ObservableEntity<E> entity, String fieldName, ObservableCollection<V> collection,
+		Point locationOnScreen, Observable<?> expire) {
+		ObservableEntityType<V> targetEntity = theDataSet.get().getEntityType(TypeTokens.getRawType(collection.getType()));
+		SimpleObservable<Void> close = SimpleObservable.build().safe(false).build();
+		Observable<?> expire2 = Observable.or(expire, close);
+		PanelPopulation.PanelPopulator<?, ?> queryPanel = PanelPopulation.populateVPanel((JPanel) null, expire2)//
+			.addTable(collection, table -> {
+				table.withIndexColumn("Index", null);
+				table.withColumn("Value", collection.getType(), v -> v, //
+					fieldCol -> configureFieldFormat(collection.getType(), targetEntity, fieldCol, expire2));
+				if (targetEntity != null) {
+					Predicate<DataFlavor> filter = flavor -> flavor instanceof EntityFlavor
+						&& ((EntityFlavor) flavor).entity.isAssignableFrom(targetEntity);
+					table.dragSourceRow(rowDrag -> rowDrag.advertiseFlavor(new EntityFlavor(targetEntity))//
+						.toFlavorLike(filter, new Dragging.DataSourceTransform<V>() {
+							@Override
+							public boolean canTransform(Object value, DataFlavor flavor) {
+								return true;
+							}
+
+							@Override
+							public Object transform(V value, DataFlavor flavor) throws IOException {
+								if (value instanceof ObservableEntity)
+									return value;
+								else
+									return targetEntity.observableEntity(value);
+							}
+						}));
+				} else
+					table.dragSourceRow(rowDrag -> rowDrag.toObject());
+				if (targetEntity != null) {
+					table.dragAcceptRow(
+						rowDrag -> rowDrag.fromFlavor(new EntityFlavor(targetEntity), new Dragging.DataAccepterTransform<V>() {
+							@Override
+							public boolean canAccept(Object value, DataFlavor flavor) {
+								if (value == null || !(flavor instanceof EntityFlavor)
+									|| !targetEntity.isAssignableFrom(((EntityFlavor) flavor).entity))
+									return false;
+								return collection.canAdd((V) value) == null;
+							}
+
+							@Override
+							public V transform(Object value, DataFlavor flavor) throws IOException {
+								return (V) value;
+							}
+						}));
+				} else
+					table.dragAcceptRow(rowDrag -> rowDrag.fromObject());
+				table.withRemove(null, null);
+			});
+		if (targetEntity == null) {//
+			SettableValue<V> toAdd = SettableValue.build(collection.getType()).safe(false).build();
+			Class<V> raw = TypeTokens.getRawType(collection.getType());
+			if (raw.isEnum()) {
+				queryPanel.addComboField("Add Value:", toAdd, c -> c.withPostButton("Add", __ -> {
+					collection.add(toAdd.get());
+				}, null), ArrayUtils.add(raw.getEnumConstants(), null));
+			} else {
+				Format<V> format = getFormat(raw);
+				if (format != null)
+					queryPanel.addTextField("Add Value:", toAdd, format, tf -> tf.fill().withPostButton("Add", __ -> {
+						collection.add(toAdd.get());
+					}, null));
+			}
+		}
+		JDialog createDialog = new JDialog(SwingUtilities.getWindowAncestor(this), entity.getId() + "." + fieldName, ModalityType.MODELESS);
+		createDialog.getContentPane().add(queryPanel.getComponent());
+		createDialog.addComponentListener(new ComponentAdapter() {
+			@Override
+			public void componentHidden(ComponentEvent e) {
+				close.onNext(null);
+			}
+		});
+		createDialog.pack();
+		createDialog.setVisible(true);
 	}
 
 	static class EntityTypeData<E> {
@@ -773,7 +884,7 @@ public class ObservableEntityExplorer extends JPanel {
 		String printCount() {
 			switch (count.getStatus()) {
 			case FULFILLED:
-				return String.valueOf(count.getResult());
+				return String.valueOf(count.getResult().get());
 			case WAITING:
 			case EXECUTING:
 				return "...";

@@ -3,6 +3,7 @@ package org.observe.entity;
 import java.util.List;
 import java.util.Set;
 
+import org.qommons.QommonsUtils;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.QuickSet.QuickMap;
 
@@ -14,7 +15,7 @@ import org.qommons.collect.QuickSet.QuickMap;
 public class EntityLoadRequest<E> {
 	private final EntityChange<E> theChange;
 	private final ObservableEntityType<E> theType;
-	private final BetterList<EntityIdentity<? extends E>> theEntities;
+	private final BetterList<EntityIdentity<E>> theEntities;
 	private final Set<EntityValueAccess<? extends E, ?>> theFields;
 
 	/**
@@ -26,7 +27,7 @@ public class EntityLoadRequest<E> {
 	public EntityLoadRequest(EntityChange<E> change, Set<EntityValueAccess<? extends E, ?>> fields) {
 		theChange = change;
 		theType = change.getEntityType();
-		theEntities = change.getEntities();
+		theEntities = QommonsUtils.map2(change.getEntities(), e -> change.getEntityType().fromSubId(e));
 		theFields = fields;
 	}
 
@@ -54,7 +55,7 @@ public class EntityLoadRequest<E> {
 	}
 
 	/** @return The identities of all entities for which data is requested */
-	public BetterList<EntityIdentity<? extends E>> getEntities() {
+	public BetterList<EntityIdentity<E>> getEntities() {
 		return theEntities;
 	}
 

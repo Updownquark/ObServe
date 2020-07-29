@@ -108,7 +108,7 @@ public class EntityIdentity<E> implements Comparable<EntityIdentity<?>> {
 		for (int i = 0; i < theFields.keySet().size(); i++) {
 			if (i > 0)
 				str.append(',');
-			str.append(theEntityType.getFields().get(i).getName()).append('=').append(theFields.get(i));
+			str.append(theEntityType.getIdentityFields().get(i).getName()).append('=').append(theFields.get(i));
 		}
 		str.append(')');
 		return str.toString();

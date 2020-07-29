@@ -128,17 +128,19 @@ implements TableBuilder<R, P> {
 	}
 
 	@Override
-	public P withRowNumberColumn(String columnName, Consumer<CategoryRenderStrategy<R, Long>> column) {
-		return withColumn(columnName, long.class, __ -> 0L, col -> {
+	public P withIndexColumn(String columnName, Consumer<CategoryRenderStrategy<R, Integer>> column) {
+		return withColumn(columnName, int.class, __ -> 0, col -> {
 			col.withRenderer(ObservableCellRenderer.fromTableRenderer(new DefaultTableCellRenderer() {
 				@Override
 				public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus,
 					int rowIndex, int columnIndex) {
 					super.getTableCellRendererComponent(table, value, isSelected, hasFocus, rowIndex, columnIndex);
-					setText(String.valueOf(rowIndex + 1));
+					setText(col.print(() -> theSafeRows.get(rowIndex), rowIndex));
 					return this;
 				}
 			}, (__, c) -> String.valueOf(c)));
+			if (column != null)
+				column.accept(col);
 		});
 	}
 
@@ -814,7 +816,8 @@ implements TableBuilder<R, P> {
 						newRows = null;
 						// Ignore
 					}
-					if (newRows == null) {} else if (support.getComponent() == theTable) {
+					if (newRows == null) {//
+					} else if (support.getComponent() == theTable) {
 						// TODO Moving rows by drag
 					} else {
 						boolean allImportable = true;

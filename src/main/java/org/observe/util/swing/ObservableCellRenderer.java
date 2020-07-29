@@ -32,7 +32,7 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 		int[][] getEmphaticRegions();
 	}
 
-	String renderAsText(Supplier<M> modelValue, C columnValue);
+	String renderAsText(Supplier<? extends M> modelValue, C columnValue);
 
 	ObservableCellRenderer<M, C> decorate(CellDecorator<M, C> decorator);
 
@@ -45,12 +45,12 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 	}
 
 	public static <M, C> ObservableCellRenderer<M, C> fromTableRenderer(TableCellRenderer renderer,
-		BiFunction<Supplier<M>, C, String> asText) {
+		BiFunction<? super Supplier<? extends M>, C, String> asText) {
 		class FlatTableCellRenderer implements ObservableCellRenderer<M, C> {
 			private CellDecorator<M, C> theDecorator;
 
 			@Override
-			public String renderAsText(Supplier<M> modelValue, C columnValue) {
+			public String renderAsText(Supplier<? extends M> modelValue, C columnValue) {
 				return asText.apply(modelValue, columnValue);
 			}
 
@@ -72,12 +72,12 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 	}
 
 	public static <M, C> ObservableCellRenderer<M, C> fromTreeRenderer(TreeCellRenderer renderer,
-		BiFunction<Supplier<M>, C, String> asText) {
+		BiFunction<? super Supplier<? extends M>, C, String> asText) {
 		class FlatTreeCellRenderer implements ObservableCellRenderer<M, C> {
 			private CellDecorator<M, C> theDecorator;
 
 			@Override
-			public String renderAsText(Supplier<M> modelValue, C columnValue) {
+			public String renderAsText(Supplier<? extends M> modelValue, C columnValue) {
 				return asText.apply(modelValue, columnValue);
 			}
 
@@ -164,14 +164,14 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 
 		private CellDecorator<M, C> theDecorator;
 		private ComponentDecorator theComponentDecorator;
-		private final BiFunction<Supplier<M>, C, String> theTextRenderer;
+		private final BiFunction<? super Supplier<? extends M>, C, String> theTextRenderer;
 
-		public DefaultObservableCellRenderer(BiFunction<Supplier<M>, C, String> textRenderer) {
+		public DefaultObservableCellRenderer(BiFunction<? super Supplier<? extends M>, C, String> textRenderer) {
 			theTextRenderer = textRenderer;
 		}
 
 		@Override
-		public String renderAsText(Supplier<M> modelValue, C columnValue) {
+		public String renderAsText(Supplier<? extends M> modelValue, C columnValue) {
 			return theTextRenderer.apply(modelValue, columnValue);
 		}
 
@@ -247,7 +247,7 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 		}
 
 		@Override
-		public String renderAsText(Supplier<M> modelValue, C columnValue) {
+		public String renderAsText(Supplier<? extends M> modelValue, C columnValue) {
 			return String.valueOf(columnValue);
 		}
 
@@ -282,7 +282,7 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 			}
 
 			@Override
-			public String renderAsText(Supplier<M> modelValue, C columnValue) {
+			public String renderAsText(Supplier<? extends M> modelValue, C columnValue) {
 				return format.apply(modelValue.get(), columnValue);
 			}
 		}
@@ -296,7 +296,7 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 			}
 
 			@Override
-			public String renderAsText(Supplier<M> modelValue, C columnValue) {
+			public String renderAsText(Supplier<? extends M> modelValue, C columnValue) {
 				return format.apply(columnValue);
 			}
 		}

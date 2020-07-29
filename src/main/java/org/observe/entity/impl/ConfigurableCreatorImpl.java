@@ -111,7 +111,7 @@ implements ConfigurableCreator<E, E2>, EntityCreatorHelper<E, E2> {
 	@Override
 	public String isEnabled(ConfiguredValueField<? super E2, ?> field) {
 		if (theQuery != null) {
-			ObservableEntityFieldType<E, ?> superField = theQuery.getOperation().getEntityType().getFields().getIfPresent(field.getName());
+			ObservableEntityFieldType<E, ?> superField = theQuery.getSelection().getEntityType().getFields().getIfPresent(field.getName());
 			if (superField == null)
 				return null; // Field is for the sub-type, meaning the super-typed query can't discriminate on it
 			EntityCondition<E> condition = theQuery.getSelection().getCondition(superField);
@@ -130,7 +130,7 @@ implements ConfigurableCreator<E, E2>, EntityCreatorHelper<E, E2> {
 			return StdMsg.BAD_TYPE;
 		// TODO Type/constraint check
 		if (theQuery != null) {
-			ObservableEntityFieldType<E, ?> superField = theQuery.getOperation().getEntityType().getFields().getIfPresent(field.getName());
+			ObservableEntityFieldType<E, ?> superField = theQuery.getSelection().getEntityType().getFields().getIfPresent(field.getName());
 			if (superField == null)
 				return null; // Field is for the sub-type, meaning the super-typed query can't discriminate on it
 			EntityCondition<E> condition = theQuery.getSelection().getCondition(superField);

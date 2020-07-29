@@ -262,6 +262,15 @@ public class CategoryRenderStrategy<R, C> {
 	 */
 	public static abstract class CategoryClickAdapter<R, C> implements CategoryMouseListener<R, C> {
 		@Override
+		public void mouseClicked(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {}
+
+		@Override
+		public void mousePressed(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {}
+
+		@Override
+		public void mouseReleased(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {}
+
+		@Override
 		public final void mouseEntered(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {}
 
 		@Override
@@ -445,10 +454,14 @@ public class CategoryRenderStrategy<R, C> {
 
 	public String print(R rowValue) {
 		C colValue = getCategoryValue(rowValue);
+		return print(() -> rowValue, colValue);
+	}
+
+	public String print(Supplier<? extends R> rowValue, C colValue) {
 		if (theRenderer != null)
-			return theRenderer.renderAsText(() -> rowValue, colValue);
+			return theRenderer.renderAsText(rowValue, colValue);
 		else
-			return printDefault(() -> rowValue, colValue);
+			return printDefault(rowValue, colValue);
 	}
 
 	public CategoryRenderStrategy<R, C> withWidth(String type, int width) {

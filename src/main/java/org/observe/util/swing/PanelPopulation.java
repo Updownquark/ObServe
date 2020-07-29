@@ -684,7 +684,7 @@ public class PanelPopulation {
 			});
 		}
 
-		P withRowNumberColumn(String columnName, Consumer<CategoryRenderStrategy<R, Long>> column);
+		P withIndexColumn(String columnName, Consumer<CategoryRenderStrategy<R, Integer>> column);
 
 		P withMove(boolean up, Consumer<TableAction<R, ?>> actionMod);
 

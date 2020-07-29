@@ -214,7 +214,7 @@ public interface OperationResult<T> {
 
 		@Override
 		public Observable<? extends OperationResult<T>> watchStatus() {
-			return Observable.empty();
+			return Observable.constant(this);
 		}
 	}
 

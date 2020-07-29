@@ -156,9 +156,9 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		int preWLD = theWriteLockDepth;
 		theWriteLockDepth++;
 		return () -> {
-			theWriteLockDepth = preWLD;
 			if (preWLD == 0)
 				flushQueuedActions();
+			theWriteLockDepth = preWLD;
 			t.close();
 		};
 	}
@@ -515,7 +515,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		EntityLoadRequest<E> request = new EntityLoadRequest<>(entity.getId(), Collections.singleton(field));
 		if (onLoad == null) {
 			List<Fulfillment<?>> fulfilled = theImplementation.loadEntityData(Collections.singletonList(request));
-			entity._set(field, (F) EntityUpdate.NOT_SET, (F) fulfilled.get(0).getResults().get(0));
+			entity._set(field, (F) EntityUpdate.NOT_SET, (F) fulfilled.get(0).getResults().get(0).get(field.getIndex()));
 		} else {
 			OperationResult<List<Fulfillment<?>>> result = theImplementation.loadEntityDataAsync(Collections.singletonList(request));
 			result.watchStatus().filter(r -> r.getStatus().isDone()).act(r -> {

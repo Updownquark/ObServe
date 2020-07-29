@@ -4,6 +4,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.time.Duration;
+import java.util.List;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
@@ -38,8 +39,10 @@ public class ObservableEntityExplorerTest {
 				.build(new JdbcEntityProvider(new StampedLockingStrategy(null), //
 					JdbcEntitySupport.DEFAULT.withAutoIncrement("AUTO_INCREMENT").build(), //
 					new DefaultConnectionPool("test", SqlConnector.of(connection)), "test", true))//
-				.withEntityType(A.class).fillFieldsFromClass().build()//
-				.withEntityType(B.class).fillFieldsFromClass().build()//
+				.withEntityType(SimpleValue.class).fillFieldsFromClass().build()//
+				.withEntityType(SimpleReference.class).fillFieldsFromClass().build()//
+				.withEntityType(ValueList.class).fillFieldsFromClass().build()//
+				.withEntityType(EntityList.class).fillFieldsFromClass().build()//
 				.withRefresh(Observable.every(refreshDuration, refreshDuration, null, d -> d, null))
 				.build(Observable.empty());
 		} catch (EntityOperationException e) {
@@ -69,13 +72,19 @@ public class ObservableEntityExplorerTest {
 	 * multi maps
 	 */
 
-	public interface A extends Identified, Nameable {
+	public interface SimpleValue extends Identified, Nameable {
 		public int getValue();
-
-		public B getB();
 	}
 
-	public interface B extends Identified, Nameable {
-		public Duration getTime();
+	public interface SimpleReference extends Identified, Nameable {
+		public SimpleValue getDuration();
+	}
+
+	public interface ValueList extends Identified, Nameable {
+		List<Duration> getDurations();
+	}
+
+	public interface EntityList extends Identified, Nameable {
+		List<SimpleValue> getDurations();
 	}
 }

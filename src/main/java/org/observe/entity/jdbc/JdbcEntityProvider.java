@@ -8,13 +8,18 @@ import java.sql.Statement;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.SortedSet;
+import java.util.TreeMap;
 import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -39,7 +44,6 @@ import org.observe.entity.EntityOperationException;
 import org.observe.entity.EntityQuery;
 import org.observe.entity.EntityUpdate;
 import org.observe.entity.EntityValueAccess;
-import org.observe.entity.ObservableEntity;
 import org.observe.entity.ObservableEntityDataSet;
 import org.observe.entity.ObservableEntityFieldType;
 import org.observe.entity.ObservableEntityProvider;
@@ -50,16 +54,27 @@ import org.observe.entity.PreparedOperation;
 import org.observe.entity.PreparedQuery;
 import org.observe.entity.PreparedUpdate;
 import org.observe.entity.jdbc.JdbcEntitySupport.JdbcColumn;
+import org.observe.util.TypeTokens;
+import org.qommons.BiTuple;
 import org.qommons.IntList;
+import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
+import org.qommons.ValueHolder;
+import org.qommons.collect.BetterCollection;
+import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.CollectionElement;
+import org.qommons.collect.ElementId;
 import org.qommons.collect.ListenerList;
+import org.qommons.collect.MultiMap;
 import org.qommons.collect.QuickSet;
 import org.qommons.collect.QuickSet.QuickMap;
 import org.qommons.collect.StampedLockingStrategy;
+import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BetterTreeSet;
+
+import com.google.common.reflect.TypeToken;
 
 /** An observable entity provider implementation backed by a JDBC-accessed relational database */
 public class JdbcEntityProvider implements ObservableEntityProvider {
@@ -131,32 +146,229 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 		}
 	}
 
-	protected static class Column<T> {
+	protected static abstract class Column<T> {
 		private final String theName;
-		private final JdbcColumn<T> type;
-		private final int fieldIndex;
 
-		Column(String name, JdbcColumn<T> type, int fieldIndex) {
+		Column(String name) {
 			theName = name;
-			this.type = type;
-			this.fieldIndex = fieldIndex;
 		}
 
 		public String getName() {
 			return theName;
 		}
 
+		@Override
+		public String toString() {
+			return theName;
+		}
+	}
+
+	interface SerialColumnComponent {
+		String getName();
+
+		boolean isNull();
+
+		void writeValue(StringBuilder str);
+	}
+
+	protected static abstract class SerialColumn<T> extends Column<T> {
+		SerialColumn(String name) {
+			super(name);
+		}
+
+		abstract int getColumnCount();
+
+		abstract void forEachColumn(Consumer<SimpleColumn<?>> onColumn);
+
+		abstract void forEachColumnValue(T value, Consumer<SerialColumnComponent> onColumn);
+
+		abstract T deserialize(ResultSet rs, int startColumn) throws SQLException;
+	}
+
+	protected static class SimpleColumn<T> extends SerialColumn<T> {
+		private final JdbcColumn<T> type;
+		private final boolean isNullable;
+
+		SimpleColumn(String name, JdbcColumn<T> type, boolean nullable) {
+			super(name);
+			this.type = type;
+			isNullable = nullable;
+		}
+
 		public JdbcColumn<T> getType() {
 			return type;
 		}
 
-		public int getFieldIndex() {
-			return fieldIndex;
+		@Override
+		int getColumnCount() {
+			return 1;
+		}
+
+		public void writeConstraints(StringBuilder str) {
+			if (!isNullable)
+				str.append(" NOT NULL");
 		}
 
 		@Override
-		public String toString() {
-			return theName;
+		void forEachColumn(Consumer<SimpleColumn<?>> onColumn) {
+			onColumn.accept(this);
+		}
+
+		@Override
+		void forEachColumnValue(T value, Consumer<SerialColumnComponent> onColumn) {
+			onColumn.accept(new SerialColumnComponent() {
+				@Override
+				public String getName() {
+					return SimpleColumn.this.getName();
+				}
+
+				@Override
+				public boolean isNull() {
+					return value == null;
+				}
+
+				@Override
+				public void writeValue(StringBuilder str) {
+					type.serialize(value, str);
+				}
+			});
+		}
+
+		@Override
+		T deserialize(ResultSet rs, int startColumn) throws SQLException {
+			return type.deserialize(rs, startColumn);
+		}
+	}
+
+	protected static class ReferenceColumn<E> extends SerialColumn<EntityIdentity<E>> {
+		private final ObservableEntityType<E> theReferenceType;
+		private final SerialColumn<?>[] idColumns;
+
+		ReferenceColumn(String name, ObservableEntityType<E> referenceType, SerialColumn<?>[] idColumns) {
+			super(name);
+			theReferenceType = referenceType;
+			this.idColumns = idColumns;
+		}
+
+		@Override
+		int getColumnCount() {
+			int columns = 0;
+			for (int i = 0; i < idColumns.length; i++)
+				columns += idColumns[i].getColumnCount();
+			return columns;
+		}
+
+		@Override
+		void forEachColumn(Consumer<SimpleColumn<?>> onColumn) {
+			for (int i = 0; i < idColumns.length; i++)
+				idColumns[i].forEachColumn(onColumn);
+		}
+
+		@Override
+		void forEachColumnValue(EntityIdentity<E> value, Consumer<SerialColumnComponent> onColumn) {
+			for (int i = 0; i < idColumns.length; i++)
+				((SerialColumn<Object>) idColumns[i]).forEachColumnValue(value == null ? null : value.getFields().get(i), onColumn);
+		}
+
+		@Override
+		EntityIdentity<E> deserialize(ResultSet rs, int startColumn) throws SQLException {
+			EntityIdentity.Builder<E> builder = theReferenceType.buildId();
+			for (int i = 0; i < idColumns.length; i++) {
+				builder.with(i, idColumns[i].deserialize(rs, startColumn));
+				startColumn += idColumns[i].getColumnCount();
+			}
+			return builder.build();
+		}
+	}
+
+	protected static abstract class EntryColumn<E, T, V> extends Column<T> {
+		private final String theTableName;
+		private final String theIndexColumn;
+		private final ReferenceColumn<E> ownerColumn;
+		private final SerialColumn<V> valueColumn;
+
+		EntryColumn(String name, String tableName, String indexColumn, ReferenceColumn<E> ownerColumn, SerialColumn<V> valueColumn) {
+			super(name);
+			theTableName = tableName;
+			theIndexColumn = indexColumn;
+			this.ownerColumn = ownerColumn;
+			this.valueColumn = valueColumn;
+		}
+
+		public String getTableName() {
+			return theTableName;
+		}
+
+		public String getIndexColumn() {
+			return theIndexColumn;
+		}
+
+		public ReferenceColumn<E> getOwnerColumn() {
+			return ownerColumn;
+		}
+
+		public SerialColumn<V> getValueColumn() {
+			return valueColumn;
+		}
+
+		abstract int getValueColumnCount();
+
+		abstract T createInitialValue(EntityIdentity<E> entity);
+
+		abstract void addValue(T value, ResultSet rs, int columnIndex) throws SQLException;
+	}
+
+	static class BackingList<E, V> extends BetterCollections.UnmodifiableBetterList<V> {
+		private final EntityIdentity<E> theEntity;
+		private final CollectionColumn<E, V> theColumn;
+
+		public BackingList(EntityIdentity<E> entity, CollectionColumn<E, V> column) {
+			super(new BetterTreeList<>(false));
+			theEntity = entity;
+			theColumn = column;
+		}
+
+		@Override
+		protected BetterList<V> getWrapped() {
+			return (BetterList<V>) super.getWrapped();
+		}
+
+		EntityIdentity<E> getEntity() {
+			return theEntity;
+		}
+
+		CollectionColumn<E, V> getColumn() {
+			return theColumn;
+		}
+	}
+
+	protected static class CollectionColumn<E, V> extends EntryColumn<E, BackingList<E, V>, V> {
+		private final boolean isSorted;
+
+		CollectionColumn(String name, String tableName, String indexColumn, ReferenceColumn<E> ownerColumn, SerialColumn<V> valueColumn,
+			boolean sorted) {
+			super(name, tableName, indexColumn, ownerColumn, valueColumn);
+			isSorted = sorted;
+		}
+
+		public boolean isSorted() {
+			return isSorted;
+		}
+
+		@Override
+		int getValueColumnCount() {
+			return getValueColumn().getColumnCount() + (getIndexColumn() == null ? 0 : 1);
+		}
+
+		@Override
+		BackingList<E, V> createInitialValue(EntityIdentity<E> entity) {
+			return new BackingList<>(entity, this);
+		}
+
+		@Override
+		void addValue(BackingList<E, V> value, ResultSet rs, int columnIndex) throws SQLException {
+			value.getWrapped().add(//
+				getValueColumn().deserialize(rs, columnIndex));
 		}
 	}
 
@@ -185,6 +397,7 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 	private final String theSchemaName;
 	private final ListenerList<EntityChange<?>> theChanges;
 	private final boolean installSchema;
+	private ObservableEntityDataSet theEntitySet;
 
 	public JdbcEntityProvider(StampedLockingStrategy locker, JdbcEntitySupport typeSupport, ConnectionPool connectionPool,
 		String schemaName, boolean installSchema) {
@@ -199,6 +412,7 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 
 	@Override
 	public void install(ObservableEntityDataSet entitySet) throws EntityOperationException {
+		theEntitySet = entitySet;
 		for (ObservableEntityType<?> type : entitySet.getEntityTypes()) {
 			TableNaming<?> naming = generateNaming(type);
 			theTableNaming.put(type.getName(), naming);
@@ -256,51 +470,65 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 			if (theSchemaName != null)
 				sql.append(theSchemaName).append('.');
 			sql.append(theNaming.getTableName());
-			boolean firstValue = true;
+			boolean[] firstValue = new boolean[] { true };
 			QuickMap<String, Object> values = ((ConfigurableCreator<? super E, E>) creator).getFieldValues();
 			for (int f = 0; f < values.keySize(); f++) {
 				Object value = values.get(f);
-				if (value != EntityUpdate.NOT_SET) {
-					if (firstValue) {
+				if (value == EntityUpdate.NOT_SET)
+					continue;
+				if(!(theNaming.getColumn(f) instanceof SerialColumn))
+					continue;
+				((SerialColumn<?>) theNaming.getColumn(f)).forEachColumn(column->{
+					if (firstValue[0]) {
 						sql.append(" (");
-						firstValue = false;
+						firstValue[0] = false;
 					} else
 						sql.append(", ");
-					sql.append(theNaming.getColumn(f).getName());
-				}
+					sql.append(column.getName());
+				});
 			}
-			if (!firstValue)
-				sql.append(')');
-			sql.append(" VALUES (");
-			firstValue = true;
+			if (!firstValue[0])
+				sql.append(") VALUES (");
+			firstValue[0] = true;
 			for (int f = 0; f < values.keySize(); f++) {
 				Object value = values.get(f);
-				if (value != EntityUpdate.NOT_SET) {
-					if (firstValue)
-						firstValue = false;
+				if (value == EntityUpdate.NOT_SET)
+					continue;
+				if(!(theNaming.getColumn(f) instanceof SerialColumn))
+					continue;
+				((SerialColumn<Object>) theNaming.getColumn(f)).forEachColumnValue(value, column->{
+					if (firstValue[0])
+						firstValue[0] = false;
 					else
 						sql.append(", ");
-					serialize(creator.getEntityType().getFields().get(f), value, theNaming, sql);
-				}
+					column.writeValue(sql);
+				});
 			}
 			sql.append(')');
 			theCreateSql = sql.toString();
+			// TODO Non-serial columns
 		}
 
 		@Override
 		public SimpleEntity<E> execute(Statement stmt, BooleanSupplier canceled) throws SQLException, EntityOperationException {
-			String[] colNames = new String[theCreator.getEntityType().getFields().keySize()];
-			for (int i = 0; i < colNames.length; i++)
-				colNames[i] = theNaming.getColumn(i).getName();
-			stmt.execute(theCreateSql, colNames);
+			List<String> colNames = new ArrayList<>(theCreator.getEntityType().getFields().keySize() + 3);
+			for (int i = 0; i < theCreator.getEntityType().getFields().keySize(); i++) {
+				if (!(theNaming.getColumn(i) instanceof SerialColumn))
+					continue;
+				((SerialColumn<?>) theNaming.getColumn(i)).forEachColumn(col -> {
+					colNames.add(col.getName());
+				});
+			}
+			stmt.execute(theCreateSql, colNames.toArray(new String[colNames.size()]));
 			SimpleEntity<E> entity;
 			try (ResultSet rs = stmt.getGeneratedKeys()) {
 				if (!rs.next())
 					throw new EntityOperationException("No generated key set?");
-				entity = (SimpleEntity<E>) buildEntity(theCreator.getEntityType(), rs, theNaming, Collections.emptyMap());
+				entity = buildEntity(theCreator.getEntityType(), rs, theNaming, Collections.emptyMap());
 				if (rs.next())
 					System.err.println("Multiple generated key sets?");
 			}
+			// TODO Non-serial columns
 			if (reportInChanges)
 				changed(new EntityChange.EntityExistenceChange<>(theCreator.getEntityType(), Instant.now(), true,
 					BetterList.of(entity.getIdentity()), null));
@@ -333,7 +561,7 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 			if (query.getSelection() instanceof EntityCondition.All) {//
 			} else {
 				sql.append(" WHERE ");
-				appendCondition(sql, query.getSelection(), naming, QuickMap.empty(), null, joins);
+				appendCondition(sql, query.getSelection(), naming, QuickMap.empty(), null, joins, false);
 				// TODO Joins
 			}
 			theCountSql = sql.toString();
@@ -380,7 +608,7 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 			if (query.getSelection() instanceof EntityCondition.All) {//
 			} else {
 				sql.append(" WHERE ");
-				appendCondition(sql, query.getSelection(), theNaming, QuickMap.empty(), null, theJoins);
+				appendCondition(sql, query.getSelection(), theNaming, QuickMap.empty(), null, theJoins, false);
 				// TODO Joins
 			}
 			theQuerySql = sql.toString();
@@ -454,7 +682,7 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 			} else {
 				StringBuilder whereSql = new StringBuilder();
 				whereSql.append(" WHERE ");
-				appendCondition(whereSql, update.getSelection(), theNaming, QuickMap.empty(), null, joins);
+				appendCondition(whereSql, update.getSelection(), theNaming, QuickMap.empty(), null, joins, false);
 				// TODO Joins
 				updateSql.append(whereSql);
 				querySql.append(whereSql);
@@ -510,16 +738,21 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 		protected void addSqlDetails(StringBuilder sql) {
 			sql.append(" SET ");
 			QuickMap<String, Object> values = getModification().getFieldValues();
-			boolean firstSet = true;
+			boolean[] firstSet = new boolean[] { true };
 			for (int f = 0; f < values.keySize(); f++) {
 				if (values.get(f) == EntityUpdate.NOT_SET)
 					continue;
-				if (firstSet)
-					firstSet = false;
-				else
-					sql.append(", ");
-				sql.append(getNaming().getColumn(f).getName()).append('=');
-				serialize(getModification().getEntityType().getFields().get(f), values.get(f), getNaming(), sql);
+				if (!(getNaming().getColumn(f) instanceof SerialColumn))
+					throw new IllegalArgumentException(
+						"Cannot use updates to modify non-serial field " + getModification().getEntityType().getFields().get(f));
+				((SerialColumn<Object>) getNaming().getColumn(f)).forEachColumnValue(values.get(f), column -> {
+					if (firstSet[0])
+						firstSet[0] = false;
+					else
+						sql.append(", ");
+					sql.append(column.getName()).append('=');
+					column.writeValue(sql);
+				});
 			}
 		}
 
@@ -651,6 +884,224 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 	}
 
 	@Override
+	public <V> ElementId updateCollection(BetterCollection<V> collection, CollectionOperationType changeType, ElementId element, V value,
+		boolean reportInChanges) throws EntityOperationException {
+		try {
+			return doUpdateCollection((BackingList<Object, V>) collection, changeType, element, value, reportInChanges);
+		} catch (SQLException e) {
+			throw new EntityOperationException("Collection operation failed: ", e);
+		}
+	}
+
+	private <E, V> ElementId doUpdateCollection(BackingList<E, V> collection, CollectionOperationType changeType, ElementId element,
+		V value, boolean reportInChanges) throws SQLException, EntityOperationException {
+		return theConnectionPool.connect((stmt, canceled) -> {
+			StringBuilder sql = new StringBuilder();
+			boolean[] first = new boolean[] { true };
+			switch (changeType) {
+			case add:
+				int index;
+				if (element != null && collection.getColumn().getIndexColumn() != null) {
+					index = collection.getElementsBefore(element);
+					sql.append("UPDATE ");
+					if (theSchemaName != null)
+						sql.append(theSchemaName).append('.');
+					sql.append(collection.getColumn().getTableName()).append(" SET ").append(collection.getColumn().getIndexColumn())
+					.append('=').append(collection.getColumn().getIndexColumn()).append("+1 WHERE ");
+					boolean compoundId = collection.getColumn().getOwnerColumn().getColumnCount() > 1;
+					if (compoundId)
+						sql.append('(');
+					first[0] = true;
+					collection.getColumn().getOwnerColumn().forEachColumnValue(collection.getEntity(), col -> {
+						if (first[0])
+							first[0] = false;
+						else
+							sql.append(" AND ");
+						sql.append(col.getName()).append('=');
+						col.writeValue(sql);
+					});
+					if (compoundId)
+						sql.append(')');
+					sql.append(" AND ").append(collection.getColumn().getIndexColumn()).append(">=").append(index);
+					stmt.executeUpdate(sql.toString());
+					sql.setLength(0);
+				} else
+					index = collection.size();
+				sql.append("INSERT INTO ");
+				if (theSchemaName != null)
+					sql.append(theSchemaName).append('.');
+				sql.append(collection.getColumn().getTableName()).append(" (");
+				first[0] = true;
+				collection.getColumn().getOwnerColumn().forEachColumn(col -> {
+					if (first[0])
+						first[0] = false;
+					else
+						sql.append(", ");
+					sql.append(col.getName());
+				});
+				if (collection.getColumn().getIndexColumn() != null)
+					sql.append(", ").append(collection.getColumn().getIndexColumn());
+				collection.getColumn().getValueColumn().forEachColumn(col -> {
+					sql.append(", ").append(col.getName());
+				});
+				sql.append(") VALUES (");
+				first[0] = true;
+				collection.getColumn().getOwnerColumn().forEachColumnValue(collection.getEntity(), col -> {
+					if (first[0])
+						first[0] = false;
+					else
+						sql.append(", ");
+					col.writeValue(sql);
+				});
+				if (collection.getColumn().getIndexColumn() != null)
+					sql.append(", ").append(index);
+				collection.getColumn().getValueColumn().forEachColumnValue(value, col -> {
+					sql.append(", ");
+					col.writeValue(sql);
+				});
+				sql.append(')');
+				stmt.executeUpdate(sql.toString());
+				return collection.getWrapped().addElement(value, null, element, false).getElementId();
+			case remove:
+				if (collection.getColumn().getIndexColumn() != null)
+					index = collection.getElementsBefore(element);
+				else
+					index = -1;
+				sql.append("DELETE FROM ");
+				if (theSchemaName != null)
+					sql.append(theSchemaName).append('.');
+				sql.append(collection.getColumn().getTableName()).append(" WHERE ");
+				first[0] = true;
+				collection.getColumn().getOwnerColumn().forEachColumnValue(collection.getEntity(), col -> {
+					if (first[0])
+						first[0] = false;
+					else
+						sql.append(" AND ");
+					sql.append(col.getName()).append('=');
+					col.writeValue(sql);
+				});
+				if (collection.getColumn().getIndexColumn() != null)
+					sql.append(" AND ").append(collection.getColumn().getIndexColumn()).append('=').append(index);
+				else {
+					sql.append(" AND ");
+					collection.getColumn().getValueColumn().forEachColumnValue(collection.getElement(element).get(), col -> {
+						sql.append(col.getName()).append('=');
+						col.writeValue(sql);
+					});
+				}
+				int count = stmt.executeUpdate(sql.toString());
+				if (count != 1) {
+					System.err.println("Expected 1 row removed, but removed " + count);
+				}
+				collection.getWrapped().mutableElement(element).remove();
+				if (collection.getColumn().getIndexColumn() != null) {
+					index = collection.getElementsBefore(element);
+					sql.append("UPDATE ");
+					if (theSchemaName != null)
+						sql.append(theSchemaName).append('.');
+					sql.append(collection.getColumn().getTableName()).append(" SET ").append(collection.getColumn().getIndexColumn())
+					.append('=').append(collection.getColumn().getIndexColumn()).append("-1 WHERE ");
+					boolean compoundId = collection.getColumn().getOwnerColumn().getColumnCount() > 1;
+					if (compoundId)
+						sql.append('(');
+					first[0] = true;
+					collection.getColumn().getOwnerColumn().forEachColumnValue(collection.getEntity(), col -> {
+						if (first[0])
+							first[0] = false;
+						else
+							sql.append(" AND ");
+						sql.append(col.getName()).append('=');
+						col.writeValue(sql);
+					});
+					if (compoundId)
+						sql.append(')');
+					sql.append(" AND ").append(collection.getColumn().getIndexColumn()).append(">").append(index);
+					stmt.executeUpdate(sql.toString());
+					sql.setLength(0);
+				} else
+					index = -1;
+				return element;
+			case update:
+				if (collection.getColumn().getIndexColumn() != null)
+					index = collection.getElementsBefore(element);
+				else
+					index = -1;
+				sql.append("UPDATE ");
+				if (theSchemaName != null)
+					sql.append(theSchemaName).append('.');
+				sql.append(collection.getColumn().getTableName()).append(" SET ");
+				first[0] = true;
+				collection.getColumn().getValueColumn().forEachColumnValue(value, col -> {
+					if (first[0])
+						first[0] = false;
+					else
+						sql.append(", ");
+					sql.append(col.getName()).append('=');
+					col.writeValue(sql);
+				});
+				sql.append(" WHERE ");
+				first[0] = true;
+				collection.getColumn().getOwnerColumn().forEachColumnValue(collection.getEntity(), col -> {
+					if (first[0])
+						first[0] = false;
+					else
+						sql.append(" AND ");
+					sql.append(col.getName()).append('=');
+					col.writeValue(sql);
+				});
+				if (collection.getColumn().getIndexColumn() != null)
+					sql.append(" AND ").append(collection.getColumn().getIndexColumn()).append('=').append(index);
+				else {
+					sql.append(" AND ");
+					collection.getColumn().getValueColumn().forEachColumnValue(value, col -> {
+						sql.append(col.getName()).append('=');
+						col.writeValue(sql);
+					});
+				}
+				count = stmt.executeUpdate(sql.toString());
+				if (count != 1) {
+					System.err.println("Expected 1 row updated, but updated " + count);
+				}
+				collection.getWrapped().mutableElement(element).set(value);
+				return element;
+			case clear:
+				sql.append("DELETE FROM ");
+				if (theSchemaName != null)
+					sql.append(theSchemaName).append('.');
+				sql.append(collection.getColumn().getTableName()).append(" WHERE ");
+				first[0] = true;
+				collection.getColumn().getOwnerColumn().forEachColumnValue(collection.getEntity(), col -> {
+					if (first[0])
+						first[0] = false;
+					else
+						sql.append(" AND ");
+					sql.append(col.getName()).append('=');
+					col.writeValue(sql);
+				});
+				count = stmt.executeUpdate(sql.toString());
+				if (count != collection.size()) {
+					System.err.println("Expected " + collection.size() + " row(s) removed, but removed " + count);
+				}
+				collection.getWrapped().clear();
+				return null;
+			}
+			throw new IllegalStateException("" + changeType);
+		});
+	}
+
+	@Override
+	public <V> OperationResult<ElementId> updateCollectionAsync(BetterCollection<V> collection, CollectionOperationType changeType,
+		ElementId element, V value, boolean reportInChanges) {
+	}
+
+	@Override
+	public <K, V> ElementId updateMap(Map<K, V> collection, CollectionOperationType changeType, K key, V value, Runnable asyncResult) {}
+
+	@Override
+	public <K, V> ElementId updateMultiMap(MultiMap<K, V> collection, CollectionOperationType changeType, ElementId valueElement, K key,
+		V value, Consumer<ElementId> asyncResult) {}
+
+	@Override
 	public List<EntityChange<?>> changes() {
 		return theChanges.dumpAndClear();
 	}
@@ -670,6 +1121,9 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 			sqlE -> new EntityOperationException("Load requests failed: " + loadRequests, sqlE));
 	}
 
+	static final int MAX_RANGES_PER_QUERY = 25;
+	static final int MAX_IDS_PER_QUERY = 100;
+
 	class EntityDataLoadAction implements SqlAction<List<Fulfillment<?>>> {
 		private final List<EntityLoadRequest<?>> theLoadRequests;
 
@@ -686,70 +1140,280 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 		}
 
 		private <E> Fulfillment<E> satisfy(EntityLoadRequest<E> loadRequest, Statement stmt) throws SQLException {
+			// TODO Support non-serial columns
 			TableNaming<E> naming = (TableNaming<E>) theTableNaming.get(loadRequest.getType().getName());
 			StringBuilder sql = new StringBuilder();
 			sql.append("SELECT ");
-			boolean firstField = true;
+			boolean[] firstField = new boolean[] { true };
 			Map<String, Join<?, ?, ?>> joins = new HashMap<>();
-			for (int i = 0; i < loadRequest.getType().getIdentityFields().keySize(); i++) {
-				if (firstField)
-					firstField = false;
-				else
-					sql.append(", ");
-				addFieldRef(loadRequest.getType().getIdentityFields().get(i), naming, sql, joins);
+			for (int i = 0; i < loadRequest.getType().getIdentityFields().keySize(); i++)
+				addFieldRef(loadRequest.getType().getIdentityFields().get(i), naming, sql, joins, firstField);
+			for (EntityValueAccess<? extends E, ?> field : loadRequest.getFields())
+				addFieldRef(field, naming, sql, joins, firstField);
+			SimpleEntity<E>[] results = new SimpleEntity[loadRequest.getEntities().size()];
+			if (!firstField[0]) {
+				// TODO Also need to join with subclass tables if any identities are sub-typed
+				sql.append(" FROM ");
+				if (theSchemaName != null)
+					sql.append(theSchemaName).append('.');
+				sql.append(naming.getTableName()).append(" WHERE ");
+				if (loadRequest.getChange() != null && loadRequest.getChange().getCustomData() instanceof EntityCondition)
+					appendCondition(sql, (EntityCondition<E>) loadRequest.getChange().getCustomData(), naming, QuickMap.empty(), null,
+						joins, false);
+				else {
+					boolean firstEntity = true;
+					for (EntityIdentity<? extends E> entity : loadRequest.getEntities()) {
+						if (firstEntity)
+							firstEntity = false;
+						else
+							sql.append(" OR ");
+						if (entity.getFields().keySize() > 1)
+							sql.append('(');
+						firstField[0] = true;
+						for (int i = 0; i < entity.getFields().keySize(); i++) {
+							ObservableEntityFieldType<E, ?> field = loadRequest.getType().getIdentityFields().get(i);
+							Column<?> column = naming.getColumn(field.getIndex());
+							if (column instanceof SerialColumn) {
+								((SerialColumn<Object>) column).forEachColumnValue(entity.getFields().get(i), col -> {
+									if (firstField[0])
+										firstField[0] = false;
+									else
+										sql.append(" AND ");
+									sql.append(col.getName()).append('=');
+									col.writeValue(sql);
+								});
+							}
+						}
+						if (entity.getFields().keySize() > 1)
+							sql.append(')');
+					}
+				}
+
+				try (ResultSet rs = stmt.executeQuery(sql.toString())) {
+					while (rs.next()) {
+						SimpleEntity<E> entity = buildEntity(loadRequest.getType(), rs, naming, joins);
+						CollectionElement<EntityIdentity<E>> requested = loadRequest.getEntities().getElement(entity.getIdentity(), true);
+						if (requested == null)
+							continue;
+						results[loadRequest.getEntities().getElementsBefore(requested.getElementId())] = entity;
+					}
+				}
+			} else {
+				for (int i = 0; i < loadRequest.getEntities().size(); i++)
+					results[i] = new SimpleEntity<>(loadRequest.getEntities().get(i));
 			}
+			// TODO Check for missing results and do a secondary, identity-based query for the missing ones
 			for (EntityValueAccess<? extends E, ?> field : loadRequest.getFields()) {
-				if (firstField)
-					firstField = false;
-				else
-					sql.append(", ");
-				addFieldRef(field, naming, sql, joins);
+				if (!(field instanceof ObservableEntityFieldType)
+					|| naming.getColumn((ObservableEntityFieldType<E, ?>) field) instanceof SerialColumn)
+					continue;
+				loadNonSerialField(loadRequest, (ObservableEntityFieldType<E, ?>) field, naming,
+					(EntryColumn<E, ?, ?>) naming.getColumn((ObservableEntityFieldType<E, ?>) field), results, stmt);
 			}
-			// TODO Also need to join with subclass tables if any identities are sub-typed
+			return new Fulfillment<>(loadRequest, QommonsUtils.map(Arrays.asList(results), r -> r.getFields(), true));
+		}
+
+		private <E, T, V> void loadNonSerialField(EntityLoadRequest<E> loadRequest, ObservableEntityFieldType<E, ?> field,
+			TableNaming<E> naming, EntryColumn<E, T, V> column, SimpleEntity<E>[] results, Statement stmt) throws SQLException {
+			StringBuilder sql = new StringBuilder("SELECT ");
+			StringBuilder order = new StringBuilder(" ORDER BY ");
+			{
+				int[] columnIndex = new int[1];
+				column.getOwnerColumn().forEachColumn(col -> {
+					if (columnIndex[0] > 0) {
+						sql.append(", ");
+						order.append(", ");
+					}
+					sql.append(col.getName());
+					order.append(col.getName());
+					columnIndex[0]++;
+				});
+				if (column.getIndexColumn() != null) {
+					sql.append(", ").append(column.getIndexColumn());
+					order.append(", ").append(column.getIndexColumn());
+					columnIndex[0]++;
+				}
+				column.getValueColumn().forEachColumn(col -> {
+					sql.append(", ").append(col.getName());
+					columnIndex[0]++;
+				});
+			}
 			sql.append(" FROM ");
 			if (theSchemaName != null)
 				sql.append(theSchemaName).append('.');
-			sql.append(naming.getTableName()).append(" WHERE ");
-			if (loadRequest.getChange() != null && loadRequest.getChange().getCustomData() instanceof EntityCondition)
-				appendCondition(sql, (EntityCondition<E>) loadRequest.getChange().getCustomData(), naming, QuickMap.empty(), null, joins);
-			else {
-				boolean firstEntity = true;
-				for (EntityIdentity<? extends E> entity : loadRequest.getEntities()) {
-					if (firstEntity)
-						firstEntity = false;
+			sql.append(column.getTableName()).append(" WHERE ");
+			List<BiTuple<String, int []>> queries;
+			// See if we can grab everything in one query. This is possible if the list of entities is small
+			// and either the owning entity has a simple identity (one field)
+			// or the identities of all the entities to be loaded are equivalent but for one field
+			if (loadRequest.getEntities().size() == 1) {
+				boolean[] firstCol = new boolean[] { true };
+				StringBuilder queryStr = new StringBuilder();
+				column.getOwnerColumn().forEachColumnValue(loadRequest.getEntities().get(0), col -> {
+					if (firstCol[0])
+						firstCol[0] = false;
 					else
-						sql.append(" OR ");
-					if (entity.getFields().keySize() > 1)
-						sql.append('(');
-					firstField = true;
-					for (int i = 0; i < entity.getFields().keySize(); i++) {
-						if (firstField)
-							firstField = false;
+						queryStr.append(" AND ");
+					queryStr.append(col.getName()).append('=');
+					col.writeValue(queryStr);
+				});
+				queries = Collections.singletonList(new BiTuple<>(queryStr.toString(), sequence(0, 1)));
+			} else if (column.getOwnerColumn().getColumnCount() == 1) {
+				// Single ID column
+				ReferenceColumn<E> idColumn = column.getOwnerColumn();
+				List<BiTuple<String[], int[]>> ranges = getContinuousRanges(loadRequest.getEntities(), naming,
+					loadRequest.getType().getIdentityFields().get(0));
+				if (ranges.size() == 1) {
+					queries = Collections.singletonList(new BiTuple<>(//
+						new StringBuilder().append(idColumn.getName()).append(">=").append(ranges.get(0).getValue1()[0])//
+						.append(" AND ").append(idColumn.getName()).append("<=").append(ranges.get(0).getValue1()[1]).toString(), //
+						sequence(0, loadRequest.getEntities().size())));
+				} else if (Math.ceil(ranges.size() * 1.0 / MAX_RANGES_PER_QUERY) <= Math
+					.ceil(loadRequest.getEntities().size() * 1.0 / MAX_IDS_PER_QUERY)) {
+					IntList entities = new IntList();
+					StringBuilder str = new StringBuilder();
+					int querySize = ranges.size() / ((int) Math.ceil(ranges.size() / MAX_RANGES_PER_QUERY));
+					queries = new ArrayList<>(querySize);
+					for (int r = 0; r < ranges.size(); r++) {
+						if (r % querySize == querySize - 1) {
+							queries.add(new BiTuple<>(str.toString(), entities.toArray()));
+							str.setLength(0);
+							entities.clear();
+						}
+						if (str.length() > 0)
+							str.append(" OR ");
+						BiTuple<String[], int[]> range = ranges.get(r);
+						if (range.getValue1().length == 1)
+							str.append(idColumn.getName()).append('=').append(range.getValue1()[0]);
 						else
-							sql.append(" AND ");
-						ObservableEntityFieldType<E, ?> field = loadRequest.getType().getIdentityFields().get(i);
-						sql.append(naming.getColumn(field.getIndex()).getName());
-						sql.append('=');
-						serialize(field, entity.getFields().get(i), naming, sql);
+							str.append('(').append(idColumn.getName()).append(">=").append(range.getValue1()[0])//
+							.append(" AND ").append(idColumn.getName()).append("<=").append(range.getValue1()[1]).append(')');
+						entities.addAll(range.getValue2());
 					}
-					if (entity.getFields().keySize() > 1)
-						sql.append(')');
+					queries.add(new BiTuple<>(str.toString(), entities.toArray()));
+				} else {
+					// Using IN clause(s) will be simpler and likely be faster
+					int querySize = loadRequest.getEntities().size()
+						/ ((int) Math.ceil(loadRequest.getEntities().size() / MAX_IDS_PER_QUERY));
+					queries = new ArrayList<>(querySize);
+					StringBuilder str = new StringBuilder(idColumn.getName()).append(" IN (");
+					int start = 0;
+					for (int i = 0; i < loadRequest.getEntities().size(); i++) {
+						int mod = i % querySize;
+						if (mod == querySize - 1) {
+							str.append(')');
+							queries.add(new BiTuple<>(str.toString(), sequence(start, i)));
+							str.setLength(0);
+							start = i;
+						} else if (mod != 0)
+							str.append(", ");
+						idColumn.forEachColumnValue(loadRequest.getEntities().get(i), col -> col.writeValue(str));
+					}
+					str.append(')');
+					queries.add(new BiTuple<>(str.toString(), sequence(start, loadRequest.getEntities().size())));
+				}
+			} else {
+				// TODO Multiple identity fields
+				throw new UnsupportedOperationException();
+			}
+			Map<EntityIdentity<E>, Integer> sortedIds = new TreeMap<>();
+			for (int i = 0; i < loadRequest.getEntities().size(); i++) {
+				results[i].set(field.getIndex(), column.createInitialValue(loadRequest.getEntities().get(i)));
+				sortedIds.put(loadRequest.getEntities().get(i), i);
+			}
+			for(BiTuple<String, int []> query : queries){
+				try (ResultSet rs = stmt.executeQuery(sql + query.getValue1() + order)) {
+					Iterator<Map.Entry<EntityIdentity<E>, Integer>> entityIter = sortedIds.entrySet().iterator();
+					Map.Entry<EntityIdentity<E>, Integer> entity = entityIter.next();
+					while (rs.next()) {
+						while (!matches(entity.getKey(), rs, naming))
+							entity = entityIter.next();
+						int columnIdx = column.getOwnerColumn().getColumnCount();
+						if (column.getIndexColumn() != null)
+							columnIdx++;
+						column.addValue(//
+							(T) results[entity.getValue()].getFields().get(field.getIndex()), //
+							rs, columnIdx + 1);
+					}
 				}
 			}
+		}
 
-			QuickMap<String, Object>[] results = new QuickMap[loadRequest.getEntities().size()];
-			try (ResultSet rs = stmt.executeQuery(sql.toString())) {
-				while (rs.next()) {
-					SimpleEntity<? extends E> entity = buildEntity(loadRequest.getType(), rs, naming, joins);
-					CollectionElement<EntityIdentity<? extends E>> requested = loadRequest.getEntities().getElement(entity.getIdentity(),
-						true);
-					if (requested == null)
-						continue;
-					results[loadRequest.getEntities().getElementsBefore(requested.getElementId())] = entity.getFields();
+		private <E> boolean matches(EntityIdentity<E> key, ResultSet rs, TableNaming<E> naming) throws SQLException {
+			int columnIdx = 0;
+			for (ObservableEntityFieldType<E, ?> idField : key.getEntityType().getIdentityFields().allValues()) {
+				SerialColumn<?> column = (SerialColumn<?>) naming.getColumn(idField.getIndex());
+				Object serial = column.deserialize(rs, columnIdx + 1);
+				columnIdx += column.getColumnCount();
+				if (!Objects.equals(key.getFields().get(idField.getIdIndex()), serial))
+					return false;
+			}
+			return true;
+		}
+
+		private int[] sequence(int start, int end) {
+			int[] seq = new int[end - start];
+			for (int i = 0; i < seq.length; i++)
+				seq[i] = start + i;
+			return seq;
+		}
+
+		private <E, I extends Comparable<I>> List<BiTuple<String[], int[]>> getContinuousRanges(List<EntityIdentity<E>> entities,
+			TableNaming<E> naming, ObservableEntityFieldType<E, ?> idField) {
+			SerialColumn<?> idColumn = (SerialColumn<?>) naming.getColumn(idField.getIndex());
+			SimpleColumn<I> simpleIdColumn;
+			{
+				if (idColumn instanceof SimpleColumn)
+					simpleIdColumn = (SimpleColumn<I>) idColumn;
+				else {
+					ValueHolder<SimpleColumn<I>> idColHolder = new ValueHolder<>();
+					idColumn.forEachColumn(col -> idColHolder.accept((SimpleColumn<I>) col));
+					simpleIdColumn = idColHolder.get();
 				}
 			}
-			// TODO Check for missing results and do a secondary, identity-based query for the missing ones
-			return new Fulfillment<>(loadRequest, Arrays.asList(results));
+			if (!simpleIdColumn.getType().testsAdjacent())
+				return null; // No adjacent test, can't detect ranges
+			int idIndex = idField.getIdIndex();
+			// Get the sorted list of IDs to select
+			List<EntityIdentity<? extends E>> sorted = new ArrayList<>(entities.size());
+			for (EntityIdentity<? extends E> entity : entities) {
+				int idx = Collections.<EntityIdentity<? extends E>> binarySearch(sorted, entity, (e1, e2) -> {
+					I id1 = (I) e1.getFields().get(idIndex);
+					I id2 = (I) e2.getFields().get(idIndex);
+					return id1.compareTo(id2);
+				});
+				sorted.add(-idx - 1, entity); // Assume no duplicates, index will be negative
+			}
+			// Group the IDs into ranges
+			if (sorted.size() == 1) {
+				String serialized = simpleIdColumn.getType().serialize((I) sorted.get(0).getFields().get(idIndex), new StringBuilder())
+					.toString();
+				return Collections.singletonList(new BiTuple<>(new String[] { serialized }, sequence(0, entities.size())));
+			}
+			List<BiTuple<String[], int[]>> ranges = new ArrayList<>();
+			IntList rangeEntities = new IntList();
+			rangeEntities.add(0);
+			I start = (I) sorted.get(0).getFields().get(idIndex), end = null;
+			for (int i = 1; i < sorted.size(); i++) {
+				I id = (I) sorted.get(i).getFields().get(idIndex);
+				if (!simpleIdColumn.getType().isAdjacent(start, id)) {
+					if (end == null)
+						ranges.add(new BiTuple<>(//
+							new String[] { simpleIdColumn.getType().serialize(start, new StringBuilder()).toString() }, //
+							rangeEntities.toArray()));
+					else
+						ranges.add(new BiTuple<>(new String[] { //
+							simpleIdColumn.getType().serialize(start, new StringBuilder()).toString(),
+							simpleIdColumn.getType().serialize(end, new StringBuilder()).toString() }, //
+							rangeEntities.toArray()));
+					rangeEntities.clear();
+					start = id;
+					end = null;
+				} else
+					end = id;
+				rangeEntities.add(i);
+			}
+			return ranges;
 		}
 	}
 
@@ -760,37 +1424,58 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 	protected <E> TableNaming<E> generateNaming(ObservableEntityType<E> type) {
 		Column<?>[] columns = new Column[type.getFields().keySize()];
 		for (int c = 0; c < columns.length; c++)
-			columns[c] = generateColumn(type.getFields().get(c));
+			columns[c] = generateColumn(type.getFields().get(c).getName(), type.getFields().get(c), type.getFields().get(c).getFieldType(),
+				false);
 		return new TableNaming<>(type, sqlIfyName(type.getName()), columns);
 	}
 
-	protected Column<?> generateColumn(ObservableEntityFieldType<?, ?> field) {
-		String colName = sqlIfyName(field.getName());
-		if (field.getTargetEntity() != null) {
-			ObservableEntityType<?> target = field.getTargetEntity();
-			if (target.getIdentityFields().keySize() != 1)
-				throw new UnsupportedOperationException("Referenced entities are only supported with a single ID field: " + field);
-			return new Column<>(colName,
-				new ReferenceColumnSupport(target, theTypeSupport.getColumnSupport(target.getIdentityFields().get(0), null)),
-				field.getIndex());
+	protected Column<?> generateColumn(String fieldName, ObservableEntityFieldType<?, ?> field, TypeToken<?> type, boolean onlySerial) {
+		if (fieldName.length() == 0)
+			throw new IllegalStateException("Empty field name not allowed");
+		ObservableEntityType<?> targetEntity = theEntitySet.getEntityType(TypeTokens.getRawType(type));
+		if (targetEntity != null)
+			return generateReferenceColumn(fieldName, targetEntity);
+		Class<?> raw = TypeTokens.getRawType(type);
+		if (Collection.class.isAssignableFrom(raw)) {
+			if (onlySerial)
+				throw new IllegalArgumentException("Compound collection fields not supported: " + field);
+			String tableName = sqlIfyName(field.getOwnerType().getName()) + "_" + sqlIfyName(field.getName());
+			ReferenceColumn<?> ownerColumn = generateReferenceColumn(field.getOwnerType().getName(), field.getOwnerType());
+			SerialColumn<?> valueColumn = (SerialColumn<?>) generateColumn(StringUtils.singularize(fieldName), field,
+				type.resolveType(Collection.class.getTypeParameters()[0]), true);
+			boolean sorted = SortedSet.class.isAssignableFrom(raw);
+			return new CollectionColumn<>(sqlIfyName(fieldName), tableName, //
+				sorted ? null : "index", //
+					ownerColumn, valueColumn, sorted);
 		} else
-			return new Column<>(colName, theTypeSupport.getColumnSupport(field, null), field.getIndex());
+			return new SimpleColumn<>(sqlIfyName(fieldName), theTypeSupport.getColumnSupport(type, null), field.getIdIndex() < 0);
+	}
+
+	protected ReferenceColumn<?> generateReferenceColumn(String fieldName, ObservableEntityType<?> target) {
+		SerialColumn<?>[] idColumns = new SerialColumn[target.getIdentityFields().keySize()];
+		if (idColumns.length == 1)
+			idColumns[0] = (SerialColumn<?>) generateColumn(fieldName, target.getIdentityFields().get(0),
+				target.getIdentityFields().get(0).getFieldType(), true);
+		else {
+			for (int i = 0; i < idColumns.length; i++) {
+				ObservableEntityFieldType<?, ?> refField = target.getIdentityFields().get(i);
+				idColumns[i] = (SerialColumn<?>) generateColumn(fieldName + '_' + refField.getName(), refField, refField.getFieldType(),
+					true);
+			}
+		}
+		return new ReferenceColumn<>(sqlIfyName(fieldName), target, idColumns);
 	}
 
 	protected static String sqlIfyName(String javaName) {
 		return StringUtils.parseByCase(javaName, true).toCaseScheme(false, false, "_").toUpperCase();
 	}
 
-	private <E, F> void serialize(ObservableEntityFieldType<E, F> field, Object value, TableNaming<E> naming, StringBuilder sql) {
-		naming.getColumn(field).getType().serialize((F) value, sql);
-	}
-
 	private <E, F> F deserialize(ObservableEntityFieldType<E, F> field, TableNaming<E> naming, ResultSet rs, int column)
 		throws SQLException {
-		return naming.getColumn(field).getType().deserialize(rs, column + 1);
+		return ((SerialColumn<F>) naming.getColumn(field)).deserialize(rs, column + 1);
 	}
 
-	private <E> SimpleEntity<? extends E> buildEntity(ObservableEntityType<E> type, ResultSet results, TableNaming<E> naming,
+	private <E> SimpleEntity<E> buildEntity(ObservableEntityType<E> type, ResultSet results, TableNaming<E> naming,
 		Map<String, Join<?, ?, ?>> joins) throws SQLException {
 		EntityIdentity.Builder<E> idBuilder = type.buildId();
 		ResultSetMetaData rsmd = results.getMetaData();
@@ -865,146 +1550,231 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 			throw new IllegalStateException("Unrecognized condition type: " + condition.getClass().getName());
 	}
 
-	private void addFieldRef(EntityValueAccess<?, ?> field, TableNaming<?> naming, StringBuilder sql, Map<String, Join<?, ?, ?>> joins) {
+	private <F> void addFieldRef(EntityValueAccess<?, F> field, TableNaming<?> naming, StringBuilder sql, Map<String, Join<?, ?, ?>> joins,
+		boolean[] firstColumn) {
 		if (field.getSourceEntity().equals(naming.getType())) {
 			if (field instanceof ObservableEntityFieldType) {
-				sql.append(naming.getColumn(((ObservableEntityFieldType<?, ?>) field).getIndex()).getName());
+				Column<F> column = (Column<F>) naming.getColumn(((ObservableEntityFieldType<?, ?>) field).getIndex());
+				if (!(column instanceof SerialColumn))
+					return;
+				((SerialColumn<F>) column).forEachColumn(col -> {
+					if (firstColumn[0])
+						firstColumn[0] = false;
+					else
+						sql.append(", ");
+					sql.append(col.getName());
+				});
 			} else
 				throw new UnsupportedOperationException("TODO Chain selection is not supported yet"); // TODO
 		} else
 			throw new UnsupportedOperationException("TODO Type hierarchy is not supported yet"); // TODO
 	}
 
-	private <E> void appendCondition(StringBuilder sql, EntityCondition<E> selection, TableNaming<E> naming,
-		QuickMap<String, IntList> variableLocations, int[] lastLocation, Map<String, Join<?, ?, ?>> joins) {
+	private <E> StringBuilder appendCondition(StringBuilder sql, EntityCondition<E> selection, TableNaming<E> naming,
+		QuickMap<String, IntList> variableLocations, int[] lastLocation, Map<String, Join<?, ?, ?>> joins, boolean inner) {
 		if (selection instanceof ValueCondition) {
 			ValueCondition<E, ?> vc = (ValueCondition<E, ?>) selection;
-			addFieldRef(vc.getField(), naming, sql, joins);
 			if (vc.getField() instanceof ObservableEntityFieldType) {
-				sql.append(' ');
+				ObservableEntityFieldType<E, Object> field = (ObservableEntityFieldType<E, Object>) vc.getField();
+				Column<Object> column = (Column<Object>) naming.getColumn(field.getIndex());
+				boolean compound = false;
+				if (!(column instanceof SerialColumn)) {
+					throw new IllegalArgumentException("Conditions on non-serial columns unsupported: " + field);
+				} else if (((SerialColumn<Object>) column).getColumnCount() != 1) {
+					if (vc.getComparison() != 0)
+						throw new IllegalArgumentException("Non-equality comparisons on compound columns unsupported: " + field);
+					compound = true;
+				}
+				String symbol;
 				if (vc.getComparison() < 0) {
-					sql.append('<');
 					if (vc.isWithEqual())
-						sql.append('=');
+						symbol = "<=";
+					else
+						symbol = "<";
 				} else if (vc.getComparison() > 0) {
-					sql.append('>');
 					if (vc.isWithEqual())
-						sql.append('=');
+						symbol = ">=";
+					else
+						symbol = ">";
 				} else if (vc instanceof LiteralCondition && ((LiteralCondition<E, ?>) vc).getValue() == null) {
-					sql.append("IS");
 					if (!vc.isWithEqual())
-						sql.append(" NOT");
+						symbol = "IS NOT";
+					else
+						symbol = "IS";
 				} else if (vc.isWithEqual())
-					sql.append('=');
+					symbol = "=";
 				else
-					sql.append("<>");
-				sql.append(' ');
+					symbol = "<>";
+				if (compound && inner)
+					sql.append('(');
 				if (vc instanceof LiteralCondition) {
 					Object value = ((LiteralCondition<E, ?>) vc).getValue();
-					serialize((ObservableEntityFieldType<E, Object>) vc.getField(), value, naming, sql);
+					boolean[] first = new boolean[] { true };
+					((SerialColumn<Object>) column).forEachColumnValue(value, col -> {
+						if (first[0])
+							first[0] = false;
+						else if (vc.isWithEqual())
+							sql.append(" AND");
+						else
+							sql.append(" OR");
+						sql.append(' ').append(col.getName()).append(symbol);
+						col.writeValue(sql);
+					});
 				} else {
-					sql.append('?');
-					variableLocations.get(((VariableCondition<E, ?>) vc).getVariable().getName()).add(lastLocation[0]);
-					lastLocation[0]++;
+					boolean[] first = new boolean[] { true };
+					((SerialColumn<Object>) column).forEachColumn(col -> {
+						if (first[0])
+							first[0] = false;
+						else if (vc.isWithEqual())
+							sql.append(" AND");
+						else
+							sql.append(" OR");
+						sql.append(' ').append(col.getName()).append(symbol).append('?');
+						variableLocations.get(((VariableCondition<E, ?>) vc).getVariable().getName()).add(lastLocation[0]);
+						lastLocation[0]++;
+					});
 				}
+				if (compound && inner)
+					sql.append(')');
 			} else
 				throw new UnsupportedOperationException("TODO Chain selection is not supported yet"); // TODO
 		} else if (selection instanceof CompositeCondition) {
 			String name = selection instanceof OrCondition ? "OR" : "AND";
+			if (inner)
+				sql.append('(');
 			boolean firstComponent = true;
 			for (EntityCondition<E> component : ((CompositeCondition<E>) selection).getConditions()) {
 				if (firstComponent)
 					firstComponent = false;
 				else
 					sql.append(' ').append(name).append(' ');
-				boolean paren = component instanceof CompositeCondition;
-				if (paren)
-					sql.append('(');
-				appendCondition(sql, component, naming, variableLocations, lastLocation, joins);
-				if (paren)
-					sql.append(')');
+				appendCondition(sql, component, naming, variableLocations, lastLocation, joins, true);
 			}
+			if (inner)
+				sql.append(')');
 		} else
 			throw new IllegalStateException("Unrecognized condition type: " + selection.getClass().getName());
+		return sql;
 	}
 
 	private void writeTableIfAbsent(ObservableEntityType<?> type, TableNaming<?> naming) throws EntityOperationException {
 		try {
 			theConnectionPool.<Void> connect((stmt, canceled) -> {
 				boolean schemaPresent;
+				StringBuilder sql = new StringBuilder();
 				if (theSchemaName == null)
 					schemaPresent = true;
 				else {
-					try (ResultSet rs = stmt.executeQuery(
-						"SELECT * FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME='" + theSchemaName.toUpperCase() + "'")) {
+					sql.append("SELECT * FROM INFORMATION_SCHEMA.SCHEMATA WHERE LOWER(SCHEMA_NAME)='").append(theSchemaName.toLowerCase())
+					.append("'");
+					try (ResultSet rs = stmt.executeQuery(sql.toString())) {
 						schemaPresent = rs.next();
 					}
 				}
-				if (!schemaPresent) {
+				if (!schemaPresent)
 					stmt.execute("CREATE SCHEMA " + theSchemaName);
-				}
-				try (ResultSet rs = stmt.executeQuery("SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA"//
-					+ (theSchemaName == null ? " IS NULL" : ("='" + theSchemaName.toUpperCase() + "'")) //
-					+ " AND TABLE_NAME='" + naming.getTableName().toUpperCase() + "'")) {
+				sql.setLength(0);
+				sql.append("SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE ");
+				if(theSchemaName==null)
+					sql.append("TABLE_SCHEMA IS NULL");
+				else
+					sql.append("LOWER(TABLE_SCHEMA)='").append(theSchemaName).append("'");
+				sql.append(" AND LOWER(TABLE_NAME)='").append(naming.getTableName().toLowerCase()).append("'");
+				try (ResultSet rs = stmt.executeQuery(sql.toString())) {
 					if (rs.next())
 						return null;
 				}
-				StringBuilder create = new StringBuilder("CREATE TABLE ");
+				sql.setLength(0);
+				sql.append("CREATE TABLE ");
 				if (theSchemaName != null)
-					create.append(theSchemaName).append('.');
-				create.append(naming.getTableName()).append('(');
+					sql.append(theSchemaName).append('.');
+				sql.append(naming.getTableName()).append('(');
+				boolean [] first=new boolean[]{true};
 				for (int c = 0; c < type.getFields().keySize(); c++) {
-					if (c > 0)
-						create.append(',');
 					Column<?> col = naming.getColumn(c);
-					create.append("\n\t").append(col.getName()).append(' ').append(col.getType().getTypeName());
-					if (type.getFields().get(c).getIdIndex() >= 0 && theTypeSupport.getAutoIncrement() != null)
-						create.append(' ').append(theTypeSupport.getAutoIncrement());
+					if(col instanceof SerialColumn)
+						((SerialColumn<?>) col).forEachColumn(column->{
+							if(first[0])
+								first[0]=false;
+							else
+								sql.append(',');
+							sql.append("\n\t").append(column.getName()).append(' ').append(column.getType().getTypeName());
+							column.writeConstraints(sql);
+						});
+					// Auto-increment the last ID field if supported
+					if (type.getFields().get(c).getIdIndex() == type.getIdentityFields().keySize() - 1
+						&& theTypeSupport.getAutoIncrement() != null)
+						sql.append(' ').append(theTypeSupport.getAutoIncrement());
 				}
-				create.append("\n);");
-				stmt.execute(create.toString());
+				sql.append("\n);");
+				System.out.println("Creating table for " + type + ": " + sql);
+				stmt.execute(sql.toString());
+				for (int c = 0; c < type.getFields().keySize(); c++) {
+					Column<?> col = naming.getColumn(c);
+					if (col instanceof SerialColumn)
+						continue;
+					EntryColumn<?, ?, ?> entryCol = (EntryColumn<?, ?, ?>) col;
+					sql.setLength(0);
+					sql.append("CREATE TABLE ");
+					if (theSchemaName != null)
+						sql.append(theSchemaName).append('.');
+					sql.append(entryCol.getTableName()).append('(');
+					first[0] = true;
+					entryCol.getOwnerColumn().forEachColumn(column -> {
+						if (first[0])
+							first[0] = false;
+						else
+							sql.append(',');
+						sql.append("\n\t").append(column.getName()).append(' ').append(column.getType().getTypeName());
+						column.writeConstraints(sql);
+					});
+					if (entryCol.getIndexColumn() != null)
+						sql.append(",\n\tINDEX INTEGER NOT NULL");
+					entryCol.getValueColumn().forEachColumn(column -> {
+						sql.append(",\n\t").append(column.getName()).append(' ').append(column.getType().getTypeName());
+						column.writeConstraints(sql);
+					});
+					sql.append(",\n\n\tPRIMARY KEY (");
+					first[0] = true;
+					entryCol.getOwnerColumn().forEachColumn(column -> {
+						if (first[0])
+							first[0] = false;
+						else
+							sql.append(", ");
+						sql.append(column.getName());
+					});
+					if (entryCol.getIndexColumn() != null)
+						sql.append(", ").append(entryCol.getIndexColumn());
+					else
+						entryCol.getValueColumn().forEachColumn(column -> sql.append(", ").append(column.getName()));
+					sql.append("),\n\tFOREIGN KEY(");
+					first[0] = true;
+					entryCol.getOwnerColumn().forEachColumn(column -> {
+						if (first[0])
+							first[0] = false;
+						else
+							sql.append(", ");
+						sql.append(column.getName());
+					});
+					sql.append(") REFERENCES ").append(naming.getTableName()).append('(');
+					first[0] = true;
+					for (ObservableEntityFieldType<?, ?> field : type.getIdentityFields().allValues()) {
+						((SerialColumn<?>) naming.getColumn(field.getIndex())).forEachColumn(column -> {
+							if (first[0])
+								first[0] = false;
+							else
+								sql.append(", ");
+							sql.append(column.getName());
+						});
+					}
+					sql.append(")\n);");
+					System.out.println("Creating table for " + type.getFields().get(c) + ": " + sql);
+					stmt.execute(sql.toString());
+				}
 				return null;
 			});
 		} catch (SQLException e) {
 			throw new EntityOperationException("Could not create table for entity " + type, e);
-		}
-	}
-
-	private static class ReferenceColumnSupport implements JdbcColumn<Object> {
-		private final ObservableEntityType<?> theEntityType;
-		private final JdbcColumn<?> theIdColumn;
-
-		public ReferenceColumnSupport(ObservableEntityType<?> entityType, JdbcColumn<?> idColumn) {
-			theEntityType = entityType;
-			theIdColumn = idColumn;
-		}
-
-		@Override
-		public void serialize(Object value, StringBuilder str) {
-			Object columnValue;
-			if (value == null) {
-				str.append("NULL");
-				return;
-			} else if (value instanceof EntityIdentity)
-				columnValue = ((EntityIdentity<?>) value).getFields().get(0);
-			else if (value instanceof ObservableEntity)
-				columnValue = ((ObservableEntity<?>) value).getId().getFields().get(0);
-			else
-				columnValue = ((ObservableEntityType<Object>) theEntityType).getIdentityFields().get(0).get(value);
-			((JdbcColumn<Object>) theIdColumn).serialize(columnValue, str);
-		}
-
-		@Override
-		public Object deserialize(ResultSet rs, int column) throws SQLException {
-			Object idValue = theIdColumn.deserialize(rs, column);
-			if (idValue == null)
-				return null;
-			return theEntityType.buildId().with(0, idValue).build();
-		}
-
-		@Override
-		public String getTypeName() {
-			return theIdColumn.getTypeName();
 		}
 	}
 }

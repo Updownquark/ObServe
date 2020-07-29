@@ -66,12 +66,12 @@ public class Dragging {
 			for (DataFlavor f : flavors)
 				advertiseFlavor(f);
 			Set<DataFlavor> flavorSet = flavors instanceof Set ? (Set<DataFlavor>) flavors : new LinkedHashSet<>(flavors);
-			return toFlavor(f -> flavorSet.contains(f), transform);
+			return toFlavorLike(f -> flavorSet.contains(f), transform);
 		}
 
 		TransferSource<E> advertiseFlavor(DataFlavor flavor);
 
-		TransferSource<E> toFlavor(Predicate<? super DataFlavor> flavors, DataSourceTransform<? super E> transform);
+		TransferSource<E> toFlavorLike(Predicate<? super DataFlavor> flavors, DataSourceTransform<? super E> transform);
 
 		TransferSource<E> toObject();
 
@@ -198,7 +198,7 @@ public class Dragging {
 		}
 
 		@Override
-		public TransferSource<E> toFlavor(Predicate<? super DataFlavor> flavors, DataSourceTransform<? super E> transform) {
+		public TransferSource<E> toFlavorLike(Predicate<? super DataFlavor> flavors, DataSourceTransform<? super E> transform) {
 			theTransforms.add(new BiTuple<>(flavors, transform));
 			return this;
 		}
@@ -206,7 +206,7 @@ public class Dragging {
 		@Override
 		public TransferSource<E> toObject() {
 			advertiseFlavor(new DataFlavor(TypeTokens.getRawType(theType), theType.toString()));
-			return toFlavor(
+			return toFlavorLike(
 				f -> f.getRepresentationClass() != null && TypeTokens.getRawType(theType).isAssignableFrom(f.getRepresentationClass()),
 				new DataSourceTransform<E>() {
 					@Override
