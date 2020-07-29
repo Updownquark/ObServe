@@ -747,8 +747,8 @@ public class ObservableConfig implements Transactable, Stamped {
 
 		public ObservableCollection<T> buildCollection(Consumer<ObservableCollection<T>> preReturnGet) {
 			return build(findRefs -> new ObservableConfigTransform.ObservableConfigValues<>(ObservableConfig.this, //
-				getDescendant(true), createDescendant(true)::get, theType, getFormat(), getChildName(), getFormatSet(), getUntil(), true,
-				findRefs), preReturnGet);
+				getDescendant(thePath != null), createDescendant(thePath != null)::get, theType, getFormat(), getChildName(),
+				getFormatSet(), getUntil(), true, findRefs), preReturnGet);
 		}
 
 		public SyncValueSet<T> buildEntitySet(Consumer<SyncValueSet<T>> preReturnGet) {
@@ -756,8 +756,8 @@ public class ObservableConfig implements Transactable, Stamped {
 			if (!(entityFormat instanceof ObservableConfigFormat.EntityConfigFormat))
 				throw new IllegalStateException("Format for " + theType + " is not entity-enabled");
 			return build(findRefs -> new ObservableConfigTransform.ObservableConfigEntityValues<>(ObservableConfig.this, //
-				getDescendant(true), createDescendant(true)::get, (ObservableConfigFormat.EntityConfigFormat<T>) entityFormat,
-				getChildName(), getUntil(), true, findRefs), preReturnGet);
+				getDescendant(thePath != null), createDescendant(thePath != null)::get,
+				(ObservableConfigFormat.EntityConfigFormat<T>) entityFormat, getChildName(), getUntil(), true, findRefs), preReturnGet);
 		}
 
 		public <K> ObservableConfigMapBuilder<K, T> asMap(TypeToken<K> keyType) {
