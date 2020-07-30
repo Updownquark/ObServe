@@ -55,7 +55,7 @@ public abstract class EntityChange<E> {
 	}
 
 	/** @return The identities of all entities affected by the change */
-	public abstract BetterList<EntityIdentity<? extends E>> getEntities();
+	public abstract BetterList<EntityIdentity<E>> getEntities();
 
 	/** @return Data from the source that may be used to optimize {@link EntityLoadRequest load requests} due to this change */
 	public Object getCustomData() {
@@ -68,7 +68,7 @@ public abstract class EntityChange<E> {
 	 * @param <E> The type of the entities that were deleted
 	 */
 	public static class EntityExistenceChange<E> extends EntityChange<E> {
-		private final BetterList<EntityIdentity<? extends E>> entities;
+		private final BetterList<EntityIdentity<E>> entities;
 
 		/**
 		 * @param type The super type of all entities affected by this change
@@ -77,14 +77,14 @@ public abstract class EntityChange<E> {
 		 * @param entities The entities that were added or deleted from the entity set
 		 * @param customData Data from the source that may be used to optimize {@link EntityLoadRequest load requests} due to this change
 		 */
-		public EntityExistenceChange(ObservableEntityType<E> type, Instant time, boolean added,
-			BetterList<EntityIdentity<? extends E>> entities, Object customData) {
+		public EntityExistenceChange(ObservableEntityType<E> type, Instant time, boolean added, BetterList<EntityIdentity<E>> entities,
+			Object customData) {
 			super(type, time, added ? EntityChangeType.add : EntityChangeType.remove, customData);
 			this.entities = entities;
 		}
 
 		@Override
-		public BetterList<EntityIdentity<? extends E>> getEntities() {
+		public BetterList<EntityIdentity<E>> getEntities() {
 			return entities;
 		}
 
@@ -144,7 +144,7 @@ public abstract class EntityChange<E> {
 	 * @param <E> The type of the entity
 	 */
 	public static class EntityFieldValueChange<E> extends EntityChange<E> {
-		private final BetterList<EntityIdentity<? extends E>> entities;
+		private final BetterList<EntityIdentity<E>> entities;
 		private final List<FieldChange<E, ?>> theFieldChanges;
 
 		/**
@@ -154,7 +154,7 @@ public abstract class EntityChange<E> {
 		 * @param fieldChanges Records of each field that changed
 		 * @param customData Data from the source that may be used to optimize {@link EntityLoadRequest load requests} due to this change
 		 */
-		public EntityFieldValueChange(ObservableEntityType<E> type, Instant time, BetterList<EntityIdentity<? extends E>> entities,
+		public EntityFieldValueChange(ObservableEntityType<E> type, Instant time, BetterList<EntityIdentity<E>> entities,
 			List<FieldChange<E, ?>> fieldChanges, Object customData) {
 			super(type, time, EntityChangeType.setField, customData);
 			this.entities = entities;
@@ -162,7 +162,7 @@ public abstract class EntityChange<E> {
 		}
 
 		@Override
-		public BetterList<EntityIdentity<? extends E>> getEntities() {
+		public BetterList<EntityIdentity<E>> getEntities() {
 			return entities;
 		}
 
@@ -216,7 +216,7 @@ public abstract class EntityChange<E> {
 		}
 
 		@Override
-		public BetterList<EntityIdentity<? extends E>> getEntities() {
+		public BetterList<EntityIdentity<E>> getEntities() {
 			return BetterList.of(entity);
 		}
 	}
@@ -265,7 +265,7 @@ public abstract class EntityChange<E> {
 		}
 
 		@Override
-		public BetterList<EntityIdentity<? extends E>> getEntities() {
+		public BetterList<EntityIdentity<E>> getEntities() {
 			return BetterList.of(entity);
 		}
 	}

@@ -6,6 +6,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.SortedSet;
 import java.util.function.Consumer;
 
 import org.observe.Observable;
@@ -633,6 +634,11 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 			this.sourceId = sourceId;
 			this.value = value;
 		}
+
+		@Override
+		public String toString() {
+			return String.valueOf(value);
+		}
 	}
 	@SuppressWarnings("rawtypes")
 	private static final TypeTokens.TypeKey<CollectionFieldElement> ELEMENT_TYPE = TypeTokens.get().keyFor(CollectionFieldElement.class)//
@@ -691,9 +697,11 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 				ElementId prevEl = CollectionElement.getElementId(theSource.getAdjacentElement(sourceEl, false));
 				while (prevEl != null && !theElementMapping.containsKey(prevEl))
 					prevEl = CollectionElement.getElementId(theSource.getAdjacentElement(sourceEl, false));
+				prevEl = prevEl == null ? null : theElementMapping.get(prevEl);
 				ElementId nextEl = CollectionElement.getElementId(theSource.getAdjacentElement(sourceEl, true));
 				while (nextEl != null && !theElementMapping.containsKey(nextEl))
 					nextEl = CollectionElement.getElementId(theSource.getAdjacentElement(sourceEl, true));
+				nextEl = nextEl == null ? null : theElementMapping.get(nextEl);
 				valueId = theElements.addElement(new CollectionFieldElement<>(sourceEl, value), prevEl, nextEl, false).getElementId();
 				theElementMapping.put(sourceEl, valueId);
 				break;
@@ -720,6 +728,12 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 
 		@Override
 		public abstract boolean isContentControlled();
+
+		@Override
+		public MutableCollectionElement<V> mutableElement(ElementId id) {
+			CollectionFieldElement<V> element = theElements.getElement(id).get();
+			return new MutableElement(id, element);
+		}
 
 		protected class MutableElement implements MutableCollectionElement<V> {
 			private final ElementId theElementId;
@@ -765,19 +779,13 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 						throw new UnsupportedOperationException(msg);
 					else if (msg != null)
 						throw new IllegalArgumentException(msg);
-					theType.getEntitySet().queueAction(sync -> {
-						V oldValue = theElement.value;
-						// TODO Need to de-resolve the value for the impl
-						// if (sync) {
-						theType.getEntitySet().getImplementation().updateCollection(theSource, CollectionOperationType.update,
-							theElement.sourceId, value, false);
-						applyChange(CollectionChangeType.set, theElement.sourceId, theElementId, value);
-						theType.getEntitySet().processChangeFromEntity(new EntityChange.EntityCollectionFieldChange<>(Instant.now(),
-							getId(), theField, CollectionChangeType.set, theElementId, oldValue, theElement.value));
-						return null;
-						// } else
-						// return updateAsync(oldValue, value);
-					});
+					V oldValue = theElement.value;
+					// TODO Need to de-resolve the value for the impl
+					theType.getEntitySet().getImplementation().updateCollection(theSource, CollectionOperationType.update,
+						theElement.sourceId, value, false);
+					applyChange(CollectionChangeType.set, theElement.sourceId, theElementId, value);
+					theType.getEntitySet().processChangeFromEntity(new EntityChange.EntityCollectionFieldChange<>(Instant.now(), getId(),
+						theField, CollectionChangeType.set, theElementId, oldValue, theElement.value));
 				} catch (IllegalStateException | EntityOperationException e) {
 					throw new IllegalArgumentException("Update failed", e);
 				}
@@ -796,19 +804,12 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 					String msg = canRemove();
 					if (msg != null)
 						throw new UnsupportedOperationException(msg);
-					theType.getEntitySet().queueAction(sync -> {
-						// if (sync) {
-						V oldValue = theElement.value;
-						theType.getEntitySet().getImplementation().updateCollection(theSource, CollectionOperationType.remove,
-							theElement.sourceId, theElement.value, false);
-						applyChange(CollectionChangeType.remove, theElement.sourceId, theElementId, null);
-						theType.getEntitySet().processChangeFromEntity(new EntityChange.EntityCollectionFieldChange<>(Instant.now(),
-							getId(), theField, CollectionChangeType.set, theElementId, oldValue, theElement.value));
-						return null;
-						// } else {
-						// return removeAsync(theElement, theElementId);
-						// }
-					});
+					V oldValue = theElement.value;
+					theType.getEntitySet().getImplementation().updateCollection(theSource, CollectionOperationType.remove,
+						theElement.sourceId, theElement.value, false);
+					applyChange(CollectionChangeType.remove, theElement.sourceId, theElementId, null);
+					theType.getEntitySet().processChangeFromEntity(new EntityChange.EntityCollectionFieldChange<>(Instant.now(), getId(),
+						theField, CollectionChangeType.remove, theElementId, oldValue, theElement.value));
 				} catch (IllegalStateException | EntityOperationException e) {
 					throw new IllegalArgumentException("Remove failed", e);
 				}
@@ -880,21 +881,19 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 			throws UnsupportedOperationException, IllegalArgumentException {
 			ElementId[] newEl = new ElementId[1];
 			try (Transaction t = lock(true, null)) {
-				ElementId[] target = getSourceAddLocation(value, after, before, first);
+				ElementId[] target = getAddLocation(value, after, before, first);
 				if (target == null)
 					return null;
-				theType.getEntitySet().queueAction(sync -> {
-					// if (sync) {
-					// TODO Need to de-resolve the value for the impl
-					ElementId sourceEl = theType.getEntitySet().getImplementation().updateCollection(theSource,
-						CollectionOperationType.add, target[0], value, false);
-					newEl[0] = applyChange(CollectionChangeType.add, sourceEl, null, value);
-					theType.getEntitySet().processChangeFromEntity(new EntityChange.EntityCollectionFieldChange<>(Instant.now(),
-						getId(), theField, CollectionChangeType.add, newEl[0], null, value));
-					return new OperationResult.SynchronousResult<>(newEl[0]);
-					// }else
-					// return addAsync(target[0], value, newEl);
-				});
+				// Get the source ID to add before
+				while (target[0] != null && theElements.getElement(target[0]).get().sourceId == null)
+					target[0] = CollectionElement.getElementId(theElements.getAdjacentElement(target[0], true));
+				target[0] = target[0] == null ? null : theElements.getElement(target[0]).get().sourceId;
+				// TODO Need to de-resolve the value for the impl
+				ElementId sourceEl = theType.getEntitySet().getImplementation().updateCollection(theSource, CollectionOperationType.add,
+					target[0], value, false);
+				newEl[0] = applyChange(CollectionChangeType.add, sourceEl, null, value);
+				theType.getEntitySet().processChangeFromEntity(new EntityChange.EntityCollectionFieldChange<>(Instant.now(), getId(),
+					theField, CollectionChangeType.add, newEl[0], null, value));
 			} catch (IllegalStateException | EntityOperationException e) {
 				throw new IllegalArgumentException("Addition failed", e);
 			}
@@ -954,7 +953,7 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 			return result;
 		}
 
-		protected abstract ElementId[] getSourceAddLocation(V value, ElementId after, ElementId before, boolean first);
+		protected abstract ElementId[] getAddLocation(V value, ElementId after, ElementId before, boolean first);
 
 		void reAdd(ElementId oldEl, ElementId sourceEl, V value) {
 			theElements.mutableElement(oldEl).remove();
@@ -972,6 +971,48 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 			} catch (EntityOperationException e) {
 				e.printStackTrace();
 			}
+		}
+
+		@Override
+		public CollectionElement<V> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			String msg = canMove(valueEl, after, before);
+			if (StdMsg.UNSUPPORTED_OPERATION.equals(msg))
+				throw new UnsupportedOperationException(msg);
+			else if (msg != null)
+				throw new IllegalArgumentException(msg);
+			// In a sorted set, actual movement is not allowed. Since this operation is allowed, it must be trivial.
+			if (this instanceof SortedSet)
+				return getElement(valueEl);
+			// First, see if this is a no-op
+			if (first) {
+				if (after == null) {
+					if (getElementsBefore(valueEl) == 0)
+						return getElement(valueEl);
+				} else {
+					int comp = valueEl.compareTo(after);
+					if (comp == 0)
+						return getElement(valueEl);
+					else if (comp > 0 && getElementsBefore(valueEl) == getElementsBefore(after) + 1)
+						return getElement(valueEl);
+				}
+			} else {
+				if (before == null) {
+					if (getElementsAfter(valueEl) == 0)
+						return getElement(valueEl);
+				} else {
+					int comp = valueEl.compareTo(before);
+					if (comp == 0)
+						return getElement(valueEl);
+					else if (comp < 0 && getElementsBefore(valueEl) == getElementsBefore(after) - 1)
+						return getElement(valueEl);
+				}
+			}
+			V value = getElement(valueEl).get();
+			mutableElement(valueEl).remove();
+			if (afterRemove != null)
+				afterRemove.run();
+			return addElement(value, after, before, first);
 		}
 
 		@Override
@@ -1099,7 +1140,7 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 		}
 
 		@Override
-		protected ElementId[] getSourceAddLocation(V value, ElementId after, ElementId before, boolean first) {
+		protected ElementId[] getAddLocation(V value, ElementId after, ElementId before, boolean first) {
 			ElementId addLoc;
 			if (first)
 				addLoc = CollectionElement

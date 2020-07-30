@@ -135,6 +135,11 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		return t == null ? null : wrapTransaction(t, write);
 	}
 
+	/**
+	 * @param action The action to execute now if not deep in transactions, or to queue for when the last transaction ends
+	 * @return True if the action was queued to execute after the last transaction, or false if it was executed synchronously
+	 * @throws EntityOperationException
+	 */
 	boolean queueAction(EntityAction action) throws EntityOperationException {
 		if (!isActive)
 			throw new IllegalStateException("This entity set is no longer active");

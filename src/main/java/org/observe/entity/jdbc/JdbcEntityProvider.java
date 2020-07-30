@@ -762,7 +762,7 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 				return null;
 			QuickMap<String, Object> values = getModification().getFieldValues();
 			if (reportInChanges) {
-				BetterSortedSet<EntityIdentity<? extends E>> affected = new BetterTreeSet<>(false, EntityIdentity::compareTo);
+				BetterSortedSet<EntityIdentity<E>> affected = new BetterTreeSet<>(false, EntityIdentity::compareTo);
 				QuickMap<String, List<Object>> oldValues = values.keySet().createMap();
 				for (int f = 0; f < values.keySize(); f++) {
 					if (values.get(f) != EntityUpdate.NOT_SET)
@@ -771,7 +771,7 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 				long missed = 0;
 				try (ResultSet rs = stmt.executeQuery(getQuerySql())) {
 					while (rs.next()) {
-						SimpleEntity<? extends E> entity = buildEntity(getModification().getEntityType(), rs, getNaming(), getJoins());
+						SimpleEntity<E> entity = buildEntity(getModification().getEntityType(), rs, getNaming(), getJoins());
 						// TODO Invalid for sub-typed entities
 						if (isDifferent(entity.getFields(), values)) {
 							int index = affected.getElementsBefore(affected.addElement(entity.getIdentity(), false).getElementId());
@@ -839,8 +839,18 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 	}
 
 	class DeleteAction<E> extends ModificationAction<E> {
+		private final boolean hasNonSerialFields;
+
 		DeleteAction(EntityDeletion<E> update, boolean reportInChanges) {
 			super(update, reportInChanges);
+			boolean nonSerial = false;
+			for (int f = 0; f < getModification().getSelection().getEntityType().getFields().keySize(); f++) {
+				if (getNaming().getColumn(f) instanceof EntryColumn) {
+					nonSerial = true;
+					break;
+				}
+			}
+			hasNonSerialFields = nonSerial;
 		}
 
 		@Override
@@ -859,18 +869,45 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 
 		@Override
 		public Long execute(Statement stmt, BooleanSupplier canceled) throws SQLException, EntityOperationException {
-			if (reportInChanges) {
-				BetterSortedSet<EntityIdentity<? extends E>> affected = new BetterTreeSet<>(false, EntityIdentity::compareTo);
+			if (reportInChanges || hasNonSerialFields) {
+				BetterSortedSet<EntityIdentity<E>> affected = new BetterTreeSet<>(false, EntityIdentity::compareTo);
 				try (ResultSet rs = stmt.executeQuery(getQuerySql())) {
 					while (rs.next()) {
-						SimpleEntity<? extends E> entity = buildEntity(getModification().getEntityType(), rs, getNaming(), getJoins());
+						SimpleEntity<E> entity = buildEntity(getModification().getEntityType(), rs, getNaming(), getJoins());
 						affected.add(entity.getIdentity());
 					}
 				}
 				if (affected.isEmpty())
 					return Long.valueOf(0);
+				if (hasNonSerialFields) {
+					StringBuilder sql = new StringBuilder();
+					for (EntityIdentity<E> entity : affected) {
+						for (int f = 0; f < getModification().getSelection().getEntityType().getFields().keySize(); f++) {
+							if (!(getNaming().getColumn(f) instanceof EntryColumn))
+								continue;
+							EntryColumn<E, ?, ?> column = (EntryColumn<E, ?, ?>) getNaming().getColumn(f);
+							sql.setLength(0);
+							sql.append("DELETE FROM ");
+							if (theSchemaName != null)
+								sql.append(theSchemaName).append('.');
+							sql.append(column.getTableName()).append(" WHERE ");
+							boolean[] firstCol = new boolean[] { true };
+							column.getOwnerColumn().forEachColumnValue(entity, col -> {
+								if (firstCol[0])
+									firstCol[0] = false;
+								else
+									sql.append(" AND ");
+								sql.append(col.getName()).append('=');
+								col.writeValue(sql);
+							});
+							stmt.executeUpdate(sql.toString());
+						}
+					}
+				}
 				stmt.executeUpdate(getUpdateSql().toString());
-				changed(new EntityChange.EntityExistenceChange<>(getModification().getEntityType(), Instant.now(), false, affected, null));
+				if (reportInChanges)
+					changed(
+						new EntityChange.EntityExistenceChange<>(getModification().getEntityType(), Instant.now(), false, affected, null));
 				return Long.valueOf(affected.size());
 			} else
 				return Long.valueOf(stmt.executeUpdate(getUpdateSql().toString()));
@@ -922,7 +959,9 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 					});
 					if (compoundId)
 						sql.append(')');
-					sql.append(" AND ").append(collection.getColumn().getIndexColumn()).append(">=").append(index);
+					if (index > 0)
+						sql.append(" AND ").append(collection.getColumn().getIndexColumn()).append(">=").append(index);
+					System.out.println(sql);
 					stmt.executeUpdate(sql.toString());
 					sql.setLength(0);
 				} else
@@ -960,6 +999,7 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 					col.writeValue(sql);
 				});
 				sql.append(')');
+				System.out.println(sql);
 				stmt.executeUpdate(sql.toString());
 				return collection.getWrapped().addElement(value, null, element, false).getElementId();
 			case remove:
@@ -989,12 +1029,14 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 						col.writeValue(sql);
 					});
 				}
+				System.out.println(sql);
 				int count = stmt.executeUpdate(sql.toString());
 				if (count != 1) {
 					System.err.println("Expected 1 row removed, but removed " + count);
 				}
 				collection.getWrapped().mutableElement(element).remove();
 				if (collection.getColumn().getIndexColumn() != null) {
+					sql.setLength(0);
 					index = collection.getElementsBefore(element);
 					sql.append("UPDATE ");
 					if (theSchemaName != null)
@@ -1015,8 +1057,10 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 					});
 					if (compoundId)
 						sql.append(')');
-					sql.append(" AND ").append(collection.getColumn().getIndexColumn()).append(">").append(index);
+					if (index > 0)
+						sql.append(" AND ").append(collection.getColumn().getIndexColumn()).append(">").append(index);
 					stmt.executeUpdate(sql.toString());
+					System.out.println(sql);
 					sql.setLength(0);
 				} else
 					index = -1;
@@ -1063,6 +1107,7 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 					System.err.println("Expected 1 row updated, but updated " + count);
 				}
 				collection.getWrapped().mutableElement(element).set(value);
+				System.out.println(sql);
 				return element;
 			case clear:
 				sql.append("DELETE FROM ");
@@ -1078,6 +1123,7 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 					sql.append(col.getName()).append('=');
 					col.writeValue(sql);
 				});
+				System.out.println(sql);
 				count = stmt.executeUpdate(sql.toString());
 				if (count != collection.size()) {
 					System.err.println("Expected " + collection.size() + " row(s) removed, but removed " + count);

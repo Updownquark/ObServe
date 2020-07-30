@@ -61,6 +61,8 @@ public class DefaultConnectionPool implements JdbcEntityProvider.ConnectionPool 
 				failed(theSqlError.apply(e));
 			} catch (EntityOperationException e) {
 				failed(e);
+			} catch (RuntimeException | Error e) {
+				failed(new EntityOperationException(e));
 			}
 		}
 	}
@@ -118,6 +120,8 @@ public class DefaultConnectionPool implements JdbcEntityProvider.ConnectionPool 
 			throw new IllegalStateException("This pool has been closed");
 		try (Statement stmt = theSynchronousConnections.get().connection.get().createStatement()) {
 			return action.execute(stmt, JdbcEntityProvider.ALWAYS_FALSE);
+		} catch (RuntimeException | Error e) {
+			throw new EntityOperationException(e);
 		}
 	}
 

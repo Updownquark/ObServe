@@ -796,14 +796,15 @@ public class ObservableEntityExplorer extends JPanel {
 		Observable<?> expire2 = Observable.or(expire, close);
 		PanelPopulation.PanelPopulator<?, ?> queryPanel = PanelPopulation.populateVPanel((JPanel) null, expire2)//
 			.addTable(collection, table -> {
+				table.fill().fillV();
 				table.withIndexColumn("Index", null);
 				table.withColumn("Value", collection.getType(), v -> v, //
 					fieldCol -> configureFieldFormat(collection.getType(), targetEntity, fieldCol, expire2));
 				if (targetEntity != null) {
-					Predicate<DataFlavor> filter = flavor -> flavor instanceof EntityFlavor
+					Predicate<DataFlavor> toFilter = flavor -> flavor instanceof EntityFlavor
 						&& ((EntityFlavor) flavor).entity.isAssignableFrom(targetEntity);
 					table.dragSourceRow(rowDrag -> rowDrag.advertiseFlavor(new EntityFlavor(targetEntity))//
-						.toFlavorLike(filter, new Dragging.DataSourceTransform<V>() {
+						.toFlavorLike(toFilter, new Dragging.DataSourceTransform<V>() {
 							@Override
 							public boolean canTransform(Object value, DataFlavor flavor) {
 								return true;
@@ -817,9 +818,6 @@ public class ObservableEntityExplorer extends JPanel {
 									return targetEntity.observableEntity(value);
 							}
 						}));
-				} else
-					table.dragSourceRow(rowDrag -> rowDrag.toObject());
-				if (targetEntity != null) {
 					table.dragAcceptRow(
 						rowDrag -> rowDrag.fromFlavor(new EntityFlavor(targetEntity), new Dragging.DataAccepterTransform<V>() {
 							@Override
@@ -835,8 +833,10 @@ public class ObservableEntityExplorer extends JPanel {
 								return (V) value;
 							}
 						}));
-				} else
+				} else {
+					table.dragSourceRow(rowDrag -> rowDrag.toObject());
 					table.dragAcceptRow(rowDrag -> rowDrag.fromObject());
+				}
 				table.withRemove(null, null);
 			});
 		if (targetEntity == null) {//
