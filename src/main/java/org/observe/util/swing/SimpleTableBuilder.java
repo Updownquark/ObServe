@@ -4,11 +4,10 @@ import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.EventQueue;
+import java.awt.Rectangle;
+import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
-import java.awt.dnd.DnDConstants;
-import java.awt.dnd.DragGestureEvent;
-import java.awt.dnd.DragGestureListener;
-import java.awt.dnd.DragSource;
+import java.awt.datatransfer.UnsupportedFlavorException;
 import java.beans.PropertyChangeListener;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -53,6 +52,7 @@ import org.observe.util.swing.PanelPopulation.TableAction;
 import org.observe.util.swing.PanelPopulation.TableBuilder;
 import org.observe.util.swing.TableContentControl.FilteredValue;
 import org.observe.util.swing.TableContentControl.ValueRenderer;
+import org.qommons.ArrayUtils;
 import org.qommons.IntList;
 import org.qommons.StringUtils;
 import org.qommons.Transactable;
@@ -422,6 +422,7 @@ implements TableBuilder<R, P> {
 	public P dragAcceptRow(Consumer<? super TransferAccepter<R>> accept) {
 		if (theDragAccepter == null)
 			theDragAccepter = new SimpleTransferAccepter<>(theRows.getType());
+		accept.accept(theDragAccepter);
 		return (P) this;
 	}
 
@@ -702,17 +703,6 @@ implements TableBuilder<R, P> {
 			table.setDropMode(DropMode.INSERT_ROWS);
 			TableBuilderTransferHandler handler = new TableBuilderTransferHandler(table, theDragSource, theDragAccepter);
 			table.setTransferHandler(handler);
-			DragSource source = DragSource.getDefaultDragSource();
-			source.createDefaultDragGestureRecognizer(table, DnDConstants.ACTION_MOVE, new DragGestureListener() {
-				@Override
-				public void dragGestureRecognized(DragGestureEvent dge) {
-					Transferable transferable = handler.createTransferable(table);
-					if (transferable == null)
-						return;
-
-					dge.startDrag(null, transferable);
-				}
-			});
 		}
 
 		return decorate(theBuiltComponent);
@@ -760,9 +750,17 @@ implements TableBuilder<R, P> {
 				Transferable rowTransfer = null;
 				if (theRowSource != null) {
 					Transferable[] rowTs = new Transferable[selectedRows.size()];
-					for (int r = 0; r < selectedRows.size(); r++)
-						rowTs[r] = theRowSource.createTransferable(selectedRows.get(r));
-					rowTransfer = rowTs.length == 1 ? rowTs[0] : new Dragging.AndTransferable(rowTs);
+					ElementId[] rowIds = new ElementId[rowTs.length];
+					int r = 0;
+					for (int i = theTable.getSelectionModel().getMinSelectionIndex(); i <= theTable.getSelectionModel()
+						.getMaxSelectionIndex(); i++) {
+						if (theTable.getSelectionModel().isSelectedIndex(i)) {
+							rowTs[r] = theRowSource.createTransferable(selectedRows.get(r));
+							rowIds[r] = theSafeRows.getElement(i).getElementId();
+							r++;
+						}
+					}
+					rowTransfer = new RowTransferable(rowTs.length == 1 ? rowTs[0] : new Dragging.AndTransferable(rowTs), rowIds);
 				}
 				if (rowTransfer != null && columnTransfer != null)
 					return new Dragging.OrTransferable(rowTransfer, columnTransfer);
@@ -807,8 +805,48 @@ implements TableBuilder<R, P> {
 		@Override
 		public boolean canImport(TransferSupport support) {
 			try (Transaction rowT = theRows.lock(true, support); Transaction colT = theColumns.lock(false, null)) {
-				int rowIndex = support.isDrop() ? theTable.rowAtPoint(support.getDropLocation().getDropPoint()) : theTable.getSelectedRow();
-				if (theRowAccepter != null && theRowAccepter.canAccept(support, true)) {
+				int rowIndex;
+				boolean beforeRow;
+				if (support.isDrop()) {
+					rowIndex = theTable.rowAtPoint(support.getDropLocation().getDropPoint());
+					if (rowIndex < 0) {
+						rowIndex = theSafeRows.size() - 1;
+						beforeRow = false;
+					} else {
+						Rectangle bounds = theTable.getCellRect(rowIndex, 0, false);
+						beforeRow = (support.getDropLocation().getDropPoint().y - bounds.y) <= bounds.height / 2;
+					}
+				} else {
+					rowIndex = theTable.getSelectedRow();
+					beforeRow = true;
+				}
+				ElementId targetRow = theSafeRows.getElement(rowIndex).getElementId();
+				ElementId after = beforeRow ? CollectionElement.getElementId(theSafeRows.getAdjacentElement(targetRow, false)) : targetRow;
+				ElementId before = beforeRow ? targetRow : CollectionElement.getElementId(theSafeRows.getAdjacentElement(targetRow, true));
+				// Support row move before anything else
+				if (support.getComponent() == theTable && support.isDrop()//
+					&& (support.getSourceDropActions() & MOVE) != 0 && support.isDataFlavorSupported(ROW_ELEMENT_FLAVOR)) {
+					// Moving rows by drag
+					ElementId[] rowElements;
+					try {
+						rowElements = (ElementId[]) support.getTransferable().getTransferData(ROW_ELEMENT_FLAVOR);
+						boolean canMoveAll = true;
+						for (ElementId rowEl : rowElements) {
+							if (!rowEl.isPresent())
+								continue;
+							if (rowEl.equals(after) || rowEl.equals(before))
+								continue;
+							if (theSafeRows.canMove(rowEl, after, before) != null) {
+								canMoveAll = false;
+								break;
+							}
+						}
+						if (canMoveAll)
+							return true;
+					} catch (IOException | UnsupportedFlavorException e) {
+						e.printStackTrace();
+					}
+				} else if (theRowAccepter != null && theRowAccepter.canAccept(support, true)) {
 					BetterList<R> newRows;
 					try {
 						newRows = theRowAccepter.accept(support.getTransferable(), true);
@@ -817,8 +855,6 @@ implements TableBuilder<R, P> {
 						// Ignore
 					}
 					if (newRows == null) {//
-					} else if (support.getComponent() == theTable) {
-						// TODO Moving rows by drag
 					} else {
 						boolean allImportable = true;
 						if (rowIndex < 0) {
@@ -829,10 +865,8 @@ implements TableBuilder<R, P> {
 								}
 							}
 						} else {
-							ElementId rowEl = theRows.getElement(rowIndex).getElementId();
-							ElementId prevRowEl = CollectionElement.getElementId(theRows.getAdjacentElement(rowEl, false));
 							for (R row : newRows) {
-								if (theRows.canAdd(row, prevRowEl, rowEl) != null) {
+								if (theRows.canAdd(row, after, before) != null) {
 									allImportable = false;
 									break;
 								}
@@ -851,6 +885,9 @@ implements TableBuilder<R, P> {
 					if (column != null && canImport(support, rowIndex, column, false))
 						return true;
 				}
+			} catch (RuntimeException | Error e) {
+				e.printStackTrace();
+				throw e;
 			}
 			return false;
 		}
@@ -886,7 +923,55 @@ implements TableBuilder<R, P> {
 		@Override
 		public boolean importData(TransferSupport support) {
 			try (Transaction rowT = theRows.lock(true, support); Transaction colT = theColumns.lock(false, null)) {
-				int rowIndex = support.isDrop() ? theTable.rowAtPoint(support.getDropLocation().getDropPoint()) : theTable.getSelectedRow();
+				int rowIndex;
+				boolean beforeRow;
+				if (support.isDrop()) {
+					rowIndex = theTable.rowAtPoint(support.getDropLocation().getDropPoint());
+					if (rowIndex < 0) {
+						rowIndex = theSafeRows.size() - 1;
+						beforeRow = false;
+					} else {
+						Rectangle bounds = theTable.getCellRect(rowIndex, 0, false);
+						beforeRow = (support.getDropLocation().getDropPoint().y - bounds.y) <= bounds.height / 2;
+					}
+				} else {
+					rowIndex = theTable.getSelectedRow();
+					beforeRow = true;
+				}
+				ElementId targetRow = theSafeRows.getElement(rowIndex).getElementId();
+				ElementId after = beforeRow ? CollectionElement.getElementId(theSafeRows.getAdjacentElement(targetRow, false)) : targetRow;
+				ElementId before = beforeRow ? targetRow : CollectionElement.getElementId(theSafeRows.getAdjacentElement(targetRow, true));
+				// Support row move before anything else
+				if (support.getComponent() == theTable && support.isDrop()//
+					&& (support.getSourceDropActions() & MOVE) != 0 && support.isDataFlavorSupported(ROW_ELEMENT_FLAVOR)) {
+					// Moving rows by drag
+					ElementId[] rowElements;
+					boolean moved = false;
+					try {
+						rowElements = (ElementId[]) support.getTransferable().getTransferData(ROW_ELEMENT_FLAVOR);
+						for (ElementId rowEl : rowElements) {
+							// Let's not throw an exception if the collection changed or something else happened
+							// to make an item unmovable
+							if (!rowEl.isPresent())
+								continue;
+							if (rowEl.equals(after) || rowEl.equals(before))
+								continue;
+							moved = true;
+							if (theSafeRows.canMove(rowEl, after, before) != null)
+								continue;
+							boolean fromBefore = after != null && rowEl.compareTo(after) < 0;
+							ElementId newRowEl = theSafeRows.move(rowEl, after, before, true, null).getElementId();
+							if (fromBefore)
+								after = newRowEl;
+							else
+								before = newRowEl;
+						}
+						if (moved)
+							return true;
+					} catch (IOException | UnsupportedFlavorException e) {
+						e.printStackTrace();
+					}
+				}
 				if (theRowAccepter != null && theRowAccepter.canAccept(support, true)) {
 					BetterList<R> newRows;
 					try {
@@ -895,8 +980,7 @@ implements TableBuilder<R, P> {
 						newRows = null;
 						// Ignore
 					}
-					if (newRows == null) {} else if (support.getComponent() == theTable) {
-						// TODO Moving rows by drag
+					if (newRows == null) {//
 					} else {
 						boolean allImportable = true;
 						if (rowIndex < 0) {
@@ -911,16 +995,14 @@ implements TableBuilder<R, P> {
 								return true;
 							}
 						} else {
-							ElementId rowEl = theRows.getElement(rowIndex).getElementId();
-							ElementId prevRowEl = CollectionElement.getElementId(theRows.getAdjacentElement(rowEl, false));
 							for (R row : newRows) {
-								if (theRows.canAdd(row, prevRowEl, rowEl) != null) {
+								if (theRows.canAdd(row, after, before) != null) {
 									allImportable = false;
 									break;
 								}
 							}
 							if (allImportable) {
-								theRows.addAll(rowIndex, newRows);
+								theRows.addAll(beforeRow ? rowIndex : rowIndex + 1, newRows);
 								return true;
 							}
 						}
@@ -936,8 +1018,42 @@ implements TableBuilder<R, P> {
 						return true;
 					}
 				}
+			} catch (RuntimeException | Error e) {
+				e.printStackTrace();
+				throw e;
 			}
 			return false;
+		}
+	}
+
+	static final DataFlavor ROW_ELEMENT_FLAVOR = new DataFlavor(DataFlavor.javaJVMLocalObjectMimeType, "Row Elements");
+
+	static class RowTransferable implements Transferable {
+		private final Transferable theWrapped;
+		private final ElementId[] theRowElements;
+
+		public RowTransferable(Transferable wrapped, ElementId[] rowElements) {
+			theWrapped = wrapped;
+			theRowElements = rowElements;
+		}
+
+		@Override
+		public DataFlavor[] getTransferDataFlavors() {
+			return ArrayUtils.add(theWrapped.getTransferDataFlavors(), ROW_ELEMENT_FLAVOR);
+		}
+
+		@Override
+		public boolean isDataFlavorSupported(DataFlavor flavor) {
+			if (flavor == ROW_ELEMENT_FLAVOR)
+				return true;
+			return theWrapped.isDataFlavorSupported(flavor);
+		}
+
+		@Override
+		public Object getTransferData(DataFlavor flavor) throws UnsupportedFlavorException, IOException {
+			if (flavor == ROW_ELEMENT_FLAVOR)
+				return theRowElements;
+			return theWrapped.getTransferData(flavor);
 		}
 	}
 }

@@ -146,6 +146,7 @@ public class Dragging {
 			theFlavors = new LinkedHashSet<>();
 			theTransforms = new ArrayList<>(2);
 			isDraggable = true;
+			isCopyable = isMovable = true;
 		}
 
 		@Override
@@ -501,9 +502,15 @@ public class Dragging {
 			}
 			for (BiTuple<Set<DataFlavor>, DataAccepterTransform<? extends E>> flavor : theFlavors) {
 				for (DataFlavor f : flavor.getValue1()) {
-					if (transfer.getTransferable().isDataFlavorSupported(f)
-						|| (f instanceof MultiFlavor && transfer.getTransferable().isDataFlavorSupported(((MultiFlavor) f).single)))
+					if (transfer.isDataFlavorSupported(f))
 						return true;
+					else if (f instanceof MultiFlavor) {
+						if (transfer.isDataFlavorSupported(((MultiFlavor) f).single))
+							return true;
+					} else if (withMulti) {
+						if (transfer.isDataFlavorSupported(new MultiFlavor(f)))
+							return true;
+					}
 				}
 			}
 			return false;
@@ -597,12 +604,23 @@ public class Dragging {
 		}
 	}
 
-	public static class AndTransferable implements Transferable {
-		private final Transferable[] theComponents;
+	public static abstract class CompositeTransferable implements Transferable {
+		protected final Transferable[] theComponents;
+
+		public CompositeTransferable(Transferable[] components) {
+			theComponents = components;
+		}
+
+		public Transferable[] getComponents() {
+			return theComponents.clone();
+		}
+	}
+
+	public static class AndTransferable extends CompositeTransferable {
 		private final List<DataFlavor> theFlavors;
 
 		public AndTransferable(Transferable... components) {
-			theComponents = components;
+			super(components);
 			if (theComponents.length == 0)
 				theFlavors = Collections.emptyList();
 			else {
@@ -662,12 +680,11 @@ public class Dragging {
 		}
 	}
 
-	public static class OrTransferable implements Transferable {
-		private final Transferable[] theComponents;
+	public static class OrTransferable extends CompositeTransferable {
 		private List<DataFlavor> theFlavors;
 
 		public OrTransferable(Transferable... components) {
-			theComponents = components;
+			super(components);
 			ArrayList<DataFlavor> flavors = Arrays.stream(theComponents).flatMap(c -> Arrays.stream(c.getTransferDataFlavors())).distinct()
 				.collect(Collectors.toCollection(() -> new ArrayList<>()));
 			flavors.trimToSize();

@@ -40,6 +40,11 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 			this.sourceId = sourceId;
 			this.value = value;
 		}
+
+		@Override
+		public String toString() {
+			return String.valueOf(value);
+		}
 	}
 
 	private final ObservableCollection<E> theCollection;
