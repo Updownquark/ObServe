@@ -3,9 +3,12 @@ package org.observe.entity.impl;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.SortedSet;
 import java.util.function.Consumer;
 
@@ -14,12 +17,22 @@ import org.observe.ObservableValue;
 import org.observe.Observer;
 import org.observe.SettableValue;
 import org.observe.Subscription;
+import org.observe.assoc.ObservableMap;
+import org.observe.assoc.ObservableMultiMap;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionEvent;
+import org.observe.collect.ObservableSet;
+import org.observe.collect.ObservableSortedSet;
+import org.observe.config.ConfigurableValueCreator;
+import org.observe.config.ConfiguredValueField;
+import org.observe.config.ConfiguredValueType;
+import org.observe.config.ObservableCreationResult;
 import org.observe.config.ObservableValueSet;
 import org.observe.config.OperationResult;
 import org.observe.config.OperationResult.ResultStatus;
+import org.observe.config.ValueOperationException;
+import org.observe.entity.ConfigurableCreator;
 import org.observe.entity.EntityChainAccess;
 import org.observe.entity.EntityChange;
 import org.observe.entity.EntityChange.EntityFieldValueChange;
@@ -43,17 +56,14 @@ import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
-import org.qommons.QommonsUtils;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterMap;
 import org.qommons.collect.BetterMultiMap;
-import org.qommons.collect.BetterSortedMap;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.CollectionLockingStrategy;
-import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MultiMap;
@@ -61,7 +71,6 @@ import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.QuickSet.QuickMap;
 import org.qommons.collect.RRWLockingStrategy;
-import org.qommons.tree.BetterTreeMap;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -444,7 +453,7 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 		if (field.getOwnerType() != theType)
 			field = (ObservableEntityFieldType<E, F>) theType.getFields().get(field.getName());
 		Object myOldValue = theFields.get(field.getIndex());
-		theFields.put(field.getIndex(), resolve(field, field.getFieldType(), myOldValue, newValue));
+		theFields.put(field.getIndex(), resolve(field, field.getFieldType(), field.getTargetEntity(), myOldValue, newValue));
 		if (myOldValue != EntityUpdate.NOT_SET) {
 			theStamp++;
 			if (oldValue == EntityUpdate.NOT_SET)
@@ -460,7 +469,8 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 		}
 	}
 
-	private <F> F resolve(ObservableEntityFieldType<? super E, ?> field, TypeToken<F> type, Object oldValue, Object newValue) {
+	private <F> F resolve(ObservableEntityFieldType<? super E, ?> field, TypeToken<F> type, ObservableEntityType<F> target, Object oldValue,
+		Object newValue) {
 		Class<F> raw = TypeTokens.getRawType(type);
 		if (Collection.class.isAssignableFrom(raw)) {
 			newValue = (F) setCollection(localField(field, type, "Component collection not supported for field "), oldValue,
@@ -474,19 +484,25 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 			newValue = (F) setMultiMap(localField(field, type, "Component multi-map not supported for field "), oldValue,
 				(BetterMultiMap<?, ?>) newValue);
 		}
-		ObservableEntityType<F> entityType = theType.getEntitySet().getEntityType(raw);
-		if (entityType != null) {
+		if (target != null) {
 			if (newValue == null)
 				return null;
 			else if (newValue instanceof EntityIdentity) {
 				try {
-					return entityType.observableEntity((EntityIdentity<F>) newValue).getEntity();
+					newValue = target.observableEntity((EntityIdentity<F>) newValue);
 				} catch (EntityOperationException e) {
 					System.err.println("Unable to resolve " + newValue);
 					e.printStackTrace();
 					return null;
 				}
 			}
+			// Some type-meddling here, but should be safe at run time
+			if (TypeTokens.get().isInstance(type, newValue))
+				return (F) newValue;
+			if (newValue instanceof ObservableEntity)
+				return ((ObservableEntity<? extends F>) newValue).getEntity();
+			else
+				return (F) target.observableEntity((F) newValue);
 		}
 		return (F) newValue;
 	}
@@ -508,53 +524,36 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 			collection = initCollection(field, newValue);
 		else
 			collection = (ObservableCollection<V>) oldValue;
-		List<Object> newList;
-		if (newValue instanceof List)
-			newList = (List<Object>) newValue;
-		else
-			newList = QommonsUtils.unmodifiableCopy(newValue);
-		CollectionUtils.<V, Object> synchronize((List<V>) collection, newList, Objects::equals).simple(v -> (V) v)//
-		// TODO
-		.adjust();
 		return (C) collection;
-	}
-
-	private <K, V, M extends Map<K, V>> M setMap(ObservableEntityFieldType<E, M> field, Object oldValue, BetterMap<K, V> newValue) {
-		M map;
-		if (oldValue == EntityUpdate.NOT_SET)
-			map = initMap(field);
-		else
-			map = (M) oldValue;
-		// if (map instanceof List) {
-		// List<V> newList;
-
-		// } else {}
-	}
-
-	private <K, V, M extends MultiMap<K, V>> M setMultiMap(ObservableEntityFieldType<E, M> field, Object oldValue,
-		BetterMultiMap<K, V> newValue) {
-		M map;
-		if (oldValue == EntityUpdate.NOT_SET)
-			map = initMultiMap(field);
-		else
-			map = (M) oldValue;
-		// if (map instanceof List) {
-		// List<V> newList;
-
-		// } else {}
 	}
 
 	private <V, C extends ObservableValueSet<V>> C setValueSet(ObservableEntityFieldType<E, C> field, Object oldValue,
 		BetterCollection<V> newValue) {
-		C collection;
+		ObservableValueSet<V> valueSet;
 		if (oldValue == EntityUpdate.NOT_SET)
-			collection = initValueSet(field);
+			valueSet = initValueSet(field, newValue);
 		else
-			collection = (C) oldValue;
-		// if (collection instanceof List) {
-		// List<V> newList;
-		//
-		// } else {}
+			valueSet = (ObservableValueSet<V>) oldValue;
+		return (C) valueSet;
+	}
+
+	private <K, V, M extends Map<K, V>> M setMap(ObservableEntityFieldType<E, M> field, Object oldValue, BetterMap<K, V> newValue) {
+		ObservableMap<K, V> map;
+		if (oldValue == EntityUpdate.NOT_SET)
+			map = initMap(field, newValue);
+		else
+			map = (ObservableMap<K, V>) oldValue;
+		return (M) map;
+	}
+
+	private <K, V, M extends MultiMap<K, V>> M setMultiMap(ObservableEntityFieldType<E, M> field, Object oldValue,
+		BetterMultiMap<K, V> newValue) {
+		ObservableMultiMap<K, V> map;
+		if (oldValue == EntityUpdate.NOT_SET)
+			map = initMultiMap(field, newValue);
+		else
+			map = (ObservableMultiMap<K, V>) oldValue;
+		return (M) map;
 	}
 
 	void removed(Object cause) {
@@ -651,38 +650,69 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 
 	<V, C extends Collection<V>> ObservableCollection<V> initCollection(ObservableEntityFieldType<E, C> field, BetterCollection<V> source) {
 		Class<C> raw=TypeTokens.getRawType(field.getFieldType());
-		/*TODO if(raw.isAssignableFrom(ObservableSortedSet.class))
-			return new EntitySortedSetField<>(field, source);
-		else if(raw.isAssignableFrom(ObservableSet.class))
-			return new EntitySetField<>(field, source);
-		else */if (raw.isAssignableFrom(ObservableCollection.class))
-			return new EntityListField<>(field, source);
+		TypeToken<V> valueType = (TypeToken<V>) field.getValueType().resolveType(Collection.class.getTypeParameters()[0]);
+		ObservableEntityType<V> targetEntity = (ObservableEntityType<V>) field.getValueTarget();
+		EntityCollectionField<V> collection;
+		if (raw.isAssignableFrom(ObservableSortedSet.class))
+			return new EntitySortedSetField<>(field, valueType, targetEntity, source);
+		else if (raw.isAssignableFrom(ObservableSet.class))
+			collection = new EntitySetField<>(field, valueType, targetEntity, source);
+		else if (raw.isAssignableFrom(ObservableCollection.class))
+			collection = new EntityListField<>(field, valueType, targetEntity, source);
 		else
 			throw new IllegalStateException("Cannot satisfy collection of type "+raw.getName()+" for field "+field);
+		collection.init();
+		return collection;
+	}
+
+	private <V, C extends ObservableValueSet<V>> ObservableValueSet<V> initValueSet(ObservableEntityFieldType<E, C> field,
+		BetterCollection<V> source) {
+		Class<C> raw = TypeTokens.getRawType(field.getFieldType());
+		if (!raw.isAssignableFrom(ObservableValueSet.class))
+			throw new IllegalStateException("Cannot satisfy value set of type " + raw.getName() + " for field " + field);
+		if (field.getValueTarget() == null)
+			throw new IllegalStateException("Cannot create an ObservableValueSets of type "
+				+ field.getFieldType().resolveType(ObservableValueSet.class.getTypeParameters()[0])
+				+ "--ObservableValueSets can only be created for entities");
+		return new EntitySetImpl<>(field, (ObservableEntityType<V>) field.getValueTarget(), source);
 	}
 
 	abstract class EntityCollectionField<V> extends ObservableCollectionWrapper<V> {
 		private final BetterCollection<V> theSource;
-		private final ObservableEntityFieldType<E, ? extends Collection<V>> theField;
+		private final ObservableEntityFieldType<E, ?> theField;
+		private final ObservableEntityType<V> theEntityType;
 		private final TypeToken<V> theValueType;
-		private final BetterSortedMap<ElementId, ElementId> theElementMapping;
-		protected final ObservableCollection<CollectionFieldElement<V>> theElements;
-		private final ObservableCollection<V> theValues;
+		private final Map<ElementId, ElementId> theElementMapping;
+		private ObservableCollection<CollectionFieldElement<V>> theElements;
+		private ObservableCollection<V> theValues;
 		private Object theIdentity;
 
-		EntityCollectionField(ObservableEntityFieldType<E, ? extends Collection<V>> field, BetterCollection<V> source) {
+		EntityCollectionField(ObservableEntityFieldType<E, ?> field, TypeToken<V> valueType, ObservableEntityType<V> targetEntity,
+			BetterCollection<V> source) {
 			theSource = source;
 			theField = field;
-			theValueType = (TypeToken<V>) field.getValueType().resolveType(Collection.class.getTypeParameters()[0]);
-			theElementMapping = BetterTreeMap.build(ElementId::compareTo).safe(false).buildMap();
+			theValueType = valueType;
+			theElementMapping = new HashMap<>();
+			theEntityType = (ObservableEntityType<V>) field.getValueTarget();
+		}
+
+		protected void init() {
 			theElements = createCollection(
-				(TypeToken<CollectionFieldElement<V>>) (TypeToken<?>) ELEMENT_TYPE.getCompoundType(field.getFieldType()),
+				(TypeToken<CollectionFieldElement<V>>) (TypeToken<?>) ELEMENT_TYPE.getCompoundType(theField.getFieldType()),
 				new RRWLockingStrategy(theType.getEntitySet()));
 			theValues = createValues(theElements);
-			for (CollectionElement<V> element : source.elements())
+			for (CollectionElement<V> element : theSource.elements())
 				theElementMapping.put(element.getElementId(), //
 					theElements.addElement(new CollectionFieldElement<>(element.getElementId(), element.get()), false).getElementId());
 			init(theValues);
+		}
+
+		protected ObservableCollection<CollectionFieldElement<V>> getElements() {
+			return theElements;
+		}
+
+		protected ObservableCollection<V> getValues() {
+			return theValues;
 		}
 
 		protected abstract ObservableCollection<CollectionFieldElement<V>> createCollection(TypeToken<CollectionFieldElement<V>> type,
@@ -693,7 +723,7 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 		ElementId applyChange(CollectionChangeType type, ElementId sourceEl, ElementId valueId, V value) {
 			switch (type) {
 			case add:
-				value = resolve(null, theValueType, null, value);
+				value = resolve(null, theValueType, theEntityType, null, value);
 				ElementId prevEl = CollectionElement.getElementId(theSource.getAdjacentElement(sourceEl, false));
 				while (prevEl != null && !theElementMapping.containsKey(prevEl))
 					prevEl = CollectionElement.getElementId(theSource.getAdjacentElement(sourceEl, false));
@@ -712,7 +742,7 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 				break;
 			case set:
 				CollectionFieldElement<V> el = theElements.getElement(valueId).get();
-				value = resolve(null, theValueType, el.value, value);
+				value = resolve(null, theValueType, theEntityType, el.value, value);
 				el.oldValue = el.value;
 				el.value = value;
 				theElements.mutableElement(valueId).set(el);
@@ -729,17 +759,11 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 		@Override
 		public abstract boolean isContentControlled();
 
-		@Override
-		public MutableCollectionElement<V> mutableElement(ElementId id) {
-			CollectionFieldElement<V> element = theElements.getElement(id).get();
-			return new MutableElement(id, element);
-		}
-
 		protected class MutableElement implements MutableCollectionElement<V> {
 			private final ElementId theElementId;
 			private final CollectionFieldElement<V> theElement;
 
-			public MutableElement(ElementId id, CollectionFieldElement<V> element) {
+			protected MutableElement(ElementId id, CollectionFieldElement<V> element) {
 				theElementId = id;
 				theElement = element;
 			}
@@ -766,6 +790,23 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 
 			@Override
 			public String isAcceptable(V value) {
+				if (value == null) {
+					if (getType().isPrimitive())
+						return StdMsg.NULL_DISALLOWED;
+					return null;
+				}
+				if (!TypeTokens.get().isInstance(getType(), value))
+					return StdMsg.BAD_TYPE;
+				if (theEntityType != null) {
+					ObservableEntity<? extends V> entity;
+					if (value instanceof ObservableEntity) {
+						entity = (ObservableEntity<V>) value;
+					} else
+						entity = theEntityType.observableEntity(value);
+					if (!theEntityType.isAssignableFrom(entity.getType()))
+						return StdMsg.BAD_TYPE;
+					// TODO Check field constraints?
+				}
 				return null;
 			}
 
@@ -1068,28 +1109,9 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 
 		@Override
 		public void setValue(Collection<ElementId> elements, V value) {
-			boolean[] complete = new boolean[elements.size()];
-			int i = 0;
-			for (ElementId element : elements) {
-				int fi = i;
-				theType.getEntitySet().getImplementation().updateCollection(theSource, CollectionOperationType.update,
-					theElements.getElement(element).get().sourceId, value, __ -> complete[fi] = true);
-				i++;
-			}
-			while (true) {
-				boolean allComplete = true;
-				for (boolean c : complete) {
-					if (!c) {
-						allComplete = false;
-						break;
-					}
-				}
-				if (allComplete)
-					break;
-				else {
-					try {
-						Thread.sleep(10);
-					} catch (InterruptedException e) {}
+			try (Transaction t = lock(true, null)) {
+				for (ElementId element : elements) {
+					mutableElement(element).set(value);
 				}
 			}
 		}
@@ -1119,8 +1141,9 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 	}
 
 	class EntityListField<V> extends EntityCollectionField<V> {
-		EntityListField(ObservableEntityFieldType<E, ? extends Collection<V>> field, BetterCollection<V> source) {
-			super(field, source);
+		protected EntityListField(ObservableEntityFieldType<E, ?> field, TypeToken<V> valueType, ObservableEntityType<V> targetEntity,
+			BetterCollection<V> source) {
+			super(field, valueType, targetEntity, source);
 		}
 
 		@Override
@@ -1144,7 +1167,7 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 			ElementId addLoc;
 			if (first)
 				addLoc = CollectionElement
-				.getElementId(after != null ? theElements.getAdjacentElement(after, true) : theElements.getTerminalElement(true));
+				.getElementId(after != null ? getElements().getAdjacentElement(after, true) : getElements().getTerminalElement(true));
 			else {
 				if (before != null)
 					addLoc = before;
@@ -1152,6 +1175,301 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 					addLoc = null;
 			}
 			return new ElementId[] { addLoc };
+		}
+
+		@Override
+		public MutableCollectionElement<V> mutableElement(ElementId id) {
+			CollectionFieldElement<V> element = getElements().getElement(id).get();
+			return new MutableElement(id, element);
+		}
+	}
+
+	class EntitySetField<V> extends EntityListField<V> implements ObservableSet<V> {
+		protected EntitySetField(ObservableEntityFieldType<E, ?> field, TypeToken<V> valueType, ObservableEntityType<V> targetEntity,
+			BetterCollection<V> source) {
+			super(field, valueType, targetEntity, source);
+		}
+
+		@Override
+		protected ObservableSet<V> getValues() {
+			return (ObservableSet<V>) super.getValues();
+		}
+
+		@Override
+		protected ObservableSet<V> createValues(ObservableCollection<CollectionFieldElement<V>> elements) {
+			return elements.flow().map(getType(), el -> el.value).distinct(opts -> opts.preserveSourceOrder(true)).collect();
+		}
+
+		@Override
+		protected ElementId[] getAddLocation(V value, ElementId after, ElementId before, boolean first) {
+			CollectionElement<V> el = getValues().getElement(value, true);
+			if (el != null)
+				return null;
+			return super.getAddLocation(value, after, before, first);
+		}
+
+		@Override
+		public boolean isContentControlled() {
+			return true;
+		}
+
+		@Override
+		public CollectionElement<V> getOrAdd(V value, ElementId after, ElementId before, boolean first, Runnable added) {
+			CollectionElement<V> el = getElement(value, true);
+			if (el != null)
+				return el;
+			try (Transaction t = lock(true, null)) {
+				el = getElement(value, true);
+				if (el != null)
+					return el;
+				el = addElement(value, after, before, first);
+				if (added != null)
+					added.run();
+				return el;
+			}
+		}
+
+		@Override
+		public MutableCollectionElement<V> mutableElement(ElementId id) {
+			CollectionFieldElement<V> element = getElements().getElement(id).get();
+			return new DistinctMutableElement(id, element);
+		}
+
+		protected class DistinctMutableElement extends MutableElement {
+			protected DistinctMutableElement(ElementId id, CollectionFieldElement<V> element) {
+				super(id, element);
+			}
+
+			@Override
+			public String isAcceptable(V value) {
+				String msg = super.isAcceptable(value);
+				if (msg != null)
+					return msg;
+				else if (Objects.equals(get(), value))
+					return null;
+				else if (contains(value))
+					return StdMsg.ELEMENT_EXISTS;
+				return null;
+			}
+		}
+
+		@Override
+		public boolean isConsistent(ElementId element) {
+			return getValues().isConsistent(element);
+		}
+
+		@Override
+		public boolean checkConsistency() {
+			return getValues().checkConsistency();
+		}
+
+		@Override
+		public <X> boolean repair(ElementId element, RepairListener<V, X> listener) {
+			throw new UnsupportedOperationException("Not implemented");
+		}
+
+		@Override
+		public <X> boolean repair(RepairListener<V, X> listener) {
+			throw new UnsupportedOperationException("Not implemented");
+		}
+	}
+
+	class EntitySortedSetField<V> extends EntitySetField<V> implements ObservableSortedSet<V> {
+		private final Comparator<? super V> theSorting;
+
+		protected EntitySortedSetField(ObservableEntityFieldType<E, ?> field, TypeToken<V> valueType, ObservableEntityType<V> targetEntity,
+			BetterCollection<V> source) {
+			super(field, valueType, targetEntity, source);
+			if (!Comparable.class.isAssignableFrom(TypeTokens.getRawType(getType())))
+				throw new IllegalStateException("SortedSet<" + getType() + "> not supported--" + getType() + " is not comparable");
+			theSorting = (v1, v2) -> {
+				return ((Comparable<V>) v1).compareTo(v2);
+			};
+		}
+
+		@Override
+		protected ObservableSortedSet<V> getValues() {
+			return (ObservableSortedSet<V>) super.getValues();
+		}
+
+		@Override
+		protected ObservableSortedSet<V> createValues(ObservableCollection<CollectionFieldElement<V>> elements) {
+			return elements.flow().map(getType(), el -> el.value).distinctSorted(theSorting, false).collect();
+		}
+
+		@Override
+		protected ElementId[] getAddLocation(V value, ElementId after, ElementId before, boolean first) {
+			CollectionElement<V> el = getValues().search(getValues().searchFor(value, 0), SortedSearchFilter.Greater);
+			if (el != null && theSorting.compare(el.get(), value) == 0)
+				return null;
+			if (after != null) {
+				if (el != null && after.compareTo(el.getElementId()) >= 0)
+					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT_POSITION);
+			}
+			if (before != null) {
+				if (el == null || before.compareTo(el.getElementId()) < 0)
+					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT_POSITION);
+			}
+			return new ElementId[] { el == null ? null : el.getElementId() };
+		}
+
+		@Override
+		public MutableCollectionElement<V> mutableElement(ElementId id) {
+			CollectionFieldElement<V> element = getElements().getElement(id).get();
+			return new DistinctSortedMutableElement(id, element);
+		}
+
+		// The DistinctMutableElement class doesn't provide us anything we can't do ourselves more performantly
+		protected class DistinctSortedMutableElement extends MutableElement {
+			protected DistinctSortedMutableElement(ElementId id, CollectionFieldElement<V> element) {
+				super(id, element);
+			}
+
+			@Override
+			public String isAcceptable(V value) {
+				String msg = super.isAcceptable(value);
+				if (msg != null)
+					return msg;
+				int comp = theSorting.compare(get(), value);
+				if (comp == 0)
+					return null;
+				CollectionElement<V> adj = getValues().getAdjacentElement(getElementId(), comp > 0);
+				if (adj != null) {
+					int adjComp = theSorting.compare(value, adj.get());
+					if (adjComp == 0)
+						return StdMsg.ELEMENT_EXISTS;
+					else if ((adjComp > 0) == (comp > 0))
+						return StdMsg.ILLEGAL_ELEMENT_POSITION;
+				}
+				return null;
+			}
+		}
+
+		@Override
+		public Comparator<? super V> comparator() {
+			return theSorting;
+		}
+
+		@Override
+		public int indexFor(Comparable<? super V> search) {
+			return getValues().indexFor(search);
+		}
+
+		@Override
+		public CollectionElement<V> search(Comparable<? super V> search, SortedSearchFilter filter) {
+			return getValues().search(search, filter);
+		}
+	}
+
+	class EntitySetImpl<V> implements ObservableValueSet<V> {
+		private final EntityListField<V> theValues;
+		private final ObservableEntityType<V> theEntityType;
+
+		EntitySetImpl(ObservableEntityFieldType<E, ? extends ObservableValueSet<V>> field, ObservableEntityType<V> targetEntity,
+			BetterCollection<V> source) {
+			theValues = new EntityListField<>(field, //
+				(TypeToken<V>) field.getValueType().resolveType(ObservableValueSet.class.getTypeParameters()[0]), //
+				targetEntity, source);
+			theEntityType = targetEntity;
+		}
+
+		@Override
+		public ConfiguredValueType<V> getType() {
+			return theEntityType;
+		}
+
+		@Override
+		public ObservableCollection<? extends V> getValues() {
+			return theValues;
+		}
+
+		@Override
+		public <E2 extends V> ConfigurableValueCreator<V, E2> create(TypeToken<E2> subType) {
+			ObservableEntityType<E2> entityType;
+			if (subType == null || Objects.equals(theEntityType.getType(), subType))
+				entityType = (ObservableEntityType<E2>) theEntityType;
+			else {
+				entityType = theEntityType.getEntitySet().getEntityType(TypeTokens.getRawType(subType));
+				if (entityType == null)
+					throw new IllegalArgumentException("Unrecognized sub-type " + subType + " of " + theEntityType);
+				else if (!theEntityType.isAssignableFrom(entityType))
+					throw new IllegalArgumentException(subType + " is not a sub-type of " + theEntityType);
+			}
+			ConfigurableCreator<E2, E2> typeCreator = entityType.create();
+			return new ConfigurableValueCreator<V, E2>() {
+				private ElementId theAfter;
+				private ElementId theBefore;
+				private boolean isTowardBeginning = true;
+
+				@Override
+				public ConfiguredValueType<E2> getType() {
+					return entityType;
+				}
+
+				@Override
+				public String canCreate() {
+					return typeCreator.canCreate();
+				}
+
+				@Override
+				public CollectionElement<V> create(Consumer<? super E2> preAddAction) throws ValueOperationException {
+					E2 value = typeCreator.create(true, null, null).getOrFail();
+					if (preAddAction != null)
+						preAddAction.accept(value);
+					return theValues.addElement(value, theAfter, theBefore, isTowardBeginning);
+				}
+
+				@Override
+				public ObservableCreationResult<E2> createAsync(Consumer<? super E2> preAddAction) {
+					ObservableCreationResult<E2> result = typeCreator.createAsync(null);
+					result.whenDone(true, r -> {
+						if (preAddAction != null)
+							preAddAction.accept(r.getResult());
+						theValues.addElement(r.getResult(), theAfter, theBefore, isTowardBeginning);
+					});
+					return result;
+				}
+
+				@Override
+				public Set<Integer> getRequiredFields() {
+					return typeCreator.getRequiredFields();
+				}
+
+				@Override
+				public ConfigurableValueCreator<V, E2> after(ElementId after) {
+					theAfter = after;
+					return this;
+				}
+
+				@Override
+				public ConfigurableValueCreator<V, E2> before(ElementId before) {
+					theBefore = before;
+					return this;
+				}
+
+				@Override
+				public ConfigurableValueCreator<V, E2> towardBeginning(boolean towardBeginning) {
+					isTowardBeginning = towardBeginning;
+					return this;
+				}
+
+				@Override
+				public String isEnabled(ConfiguredValueField<? super E2, ?> field) {
+					return typeCreator.isEnabled(field);
+				}
+
+				@Override
+				public <F> String isAcceptable(ConfiguredValueField<? super E2, F> field, F value) {
+					return typeCreator.isAcceptable(field, value);
+				}
+
+				@Override
+				public <F> ConfigurableValueCreator<V, E2> with(ConfiguredValueField<E2, F> field, F value)
+					throws IllegalArgumentException {
+					typeCreator.with(field, value);
+					return this;
+				}
+			};
 		}
 	}
 }

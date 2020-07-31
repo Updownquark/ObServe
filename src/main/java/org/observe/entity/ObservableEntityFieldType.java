@@ -1,9 +1,13 @@
 package org.observe.entity;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
 
 import org.observe.config.ConfiguredValueField;
+import org.observe.config.ObservableValueSet;
+import org.qommons.collect.MultiMap;
 
 import com.google.common.reflect.TypeToken;
 
@@ -28,6 +32,15 @@ public interface ObservableEntityFieldType<E, F> extends ConfiguredValueField<E,
 	 *         this is not an identity field
 	 */
 	int getIdIndex();
+
+	/** @return The entity type for keys of this field (if it is a {@link Map}- or {@link MultiMap}-typed field */
+	ObservableEntityType<?> getKeyTarget();
+
+	/**
+	 * @return The entity type for values of this field (if it is a {@link Collection}-, {@link ObservableValueSet}-, {@link Map}-, or
+	 *         {@link MultiMap}-typed field
+	 */
+	ObservableEntityType<?> getValueTarget();
 
 	@Override
 	List<? extends ObservableEntityFieldType<? super E, ? super F>> getOverrides();

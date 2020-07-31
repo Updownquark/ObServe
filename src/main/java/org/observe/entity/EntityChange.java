@@ -1,9 +1,7 @@
 package org.observe.entity;
 
 import java.time.Instant;
-import java.util.Collection;
 import java.util.List;
-import java.util.Map;
 
 import org.observe.collect.CollectionChangeType;
 import org.qommons.collect.BetterList;
@@ -182,11 +180,10 @@ public abstract class EntityChange<E> {
 	 *
 	 * @param <E> The type of the entity
 	 * @param <F> The type of the values in the collection
-	 * @param <C> The collection sub-type of the field
 	 */
-	public static class EntityCollectionFieldChange<E, F, C extends Collection<F>> extends EntityChange<E> {
+	public static class EntityCollectionFieldChange<E, F> extends EntityChange<E> {
 		/** The field whose value changed in the entity */
-		public final ObservableEntityFieldType<E, C> field;
+		public final ObservableEntityFieldType<E, ?> field;
 		/** The identity of the entity that changed */
 		public final EntityIdentity<E> entity;
 		/** The type of the collection change */
@@ -205,7 +202,7 @@ public abstract class EntityChange<E> {
 		 * @param value The new value of the collection element. May be null for a removal.
 		 * @param customData Data from the source that may be used to optimize {@link EntityLoadRequest load requests} due to this change
 		 */
-		public EntityCollectionFieldChange(Instant time, EntityIdentity<E> entity, ObservableEntityFieldType<E, C> field,
+		public EntityCollectionFieldChange(Instant time, EntityIdentity<E> entity, ObservableEntityFieldType<E, ?> field,
 			CollectionChangeType collectionChangeType, ElementId element, F value, Object customData) {
 			super(entity.getEntityType(), time, EntityChangeType.updateCollectionField, customData);
 			this.field = field;
@@ -227,11 +224,10 @@ public abstract class EntityChange<E> {
 	 * @param <E> The type of the entity
 	 * @param <K> The type of the keys in the map
 	 * @param <V> The type of the values in the map
-	 * @param <M> The map sub-type of the field
 	 */
-	public static class EntityMapFieldChange<E, K, V, M extends Map<K, V>> extends EntityChange<E> {
+	public static class EntityMapFieldChange<E, K, V> extends EntityChange<E> {
 		/** The field whose value changed in the entity */
-		public final ObservableEntityFieldType<E, M> field;
+		public final ObservableEntityFieldType<E, ?> field;
 		/** The identity of the entity that changed */
 		public final EntityIdentity<E> entity;
 		/** The type of the map change */
@@ -253,7 +249,7 @@ public abstract class EntityChange<E> {
 		 * @param value The new value for the key in the map (null for removal)
 		 * @param customData Data from the source that may be used to optimize {@link EntityLoadRequest load requests} due to this change
 		 */
-		public EntityMapFieldChange(Instant time, EntityIdentity<E> entity, ObservableEntityFieldType<E, M> field,
+		public EntityMapFieldChange(Instant time, EntityIdentity<E> entity, ObservableEntityFieldType<E, ?> field,
 			CollectionChangeType collectionChangeType, ElementId element, K key, V value, Object customData) {
 			super(entity.getEntityType(), time, EntityChangeType.updateMapField, customData);
 			this.field = field;

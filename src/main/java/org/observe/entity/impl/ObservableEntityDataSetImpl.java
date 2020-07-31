@@ -3,6 +3,7 @@ package org.observe.entity.impl;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -20,6 +21,7 @@ import java.util.function.Function;
 
 import org.observe.Observable;
 import org.observe.SimpleObservable;
+import org.observe.config.ObservableValueSet;
 import org.observe.config.OperationResult;
 import org.observe.entity.ConditionalFieldConstraint;
 import org.observe.entity.EntityChange;
@@ -68,6 +70,7 @@ import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.BetterSortedSet;
+import org.qommons.collect.MultiMap;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.QuickSet;
 import org.qommons.collect.QuickSet.QuickMap;
@@ -951,6 +954,8 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		Method theFieldGetter;
 		boolean isId;
 		String targetEntity;
+		String keyTargetEntity;
+		String valueTargetEntity;
 		Comparator<? super F> theCompare;
 
 		ObservableEntityFieldBuilder(ObservableEntityTypeBuilder<E> typeBuilder, String name, TypeToken<F> type) {
@@ -1001,6 +1006,26 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 				throw new UnsupportedOperationException("Field of type " + theType + " cannot target an entity");
 			// Can't check the name or retrieve the entity now, because it may not have been defined yet, which is legal
 			targetEntity = entityName;
+			return this;
+		}
+
+		public ObservableEntityFieldBuilder<E, F> withKeyTarget(String entityName) {
+			if (Map.class.isAssignableFrom(TypeTokens.getRawType(theType))) {//
+			} else if (MultiMap.class.isAssignableFrom(TypeTokens.getRawType(theType))) {//
+			} else
+				throw new IllegalStateException("Key targets are only applicable to Map- and MultiMap-typed fields, not " + theType);
+			keyTargetEntity = entityName;
+			return this;
+		}
+
+		public ObservableEntityFieldBuilder<E, F> withValueTarget(String entityName) {
+			if (Collection.class.isAssignableFrom(TypeTokens.getRawType(theType))) {//
+			} else if (ObservableValueSet.class.isAssignableFrom(TypeTokens.getRawType(theType))) {//
+			} else if (Map.class.isAssignableFrom(TypeTokens.getRawType(theType))) {//
+			} else if (MultiMap.class.isAssignableFrom(TypeTokens.getRawType(theType))) {//
+			} else
+				throw new IllegalStateException("Value targets are only applicable to Map- and MultiMap-typed fields, not " + theType);
+			valueTargetEntity = entityName;
 			return this;
 		}
 
@@ -1092,7 +1117,11 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		private final ObservableEntityTypeImpl<E> theEntityType;
 		private final TypeToken<F> theFieldType;
 		private final String theTargetEntityName;
+		private final String theKeyTargetEntityName;
+		private final String theValueTargetEntityName;
 		private ObservableEntityTypeImpl<F> theTargetEntity;
+		private ObservableEntityTypeImpl<?> theKeyTargetEntity;
+		private ObservableEntityTypeImpl<?> theValueTargetEntity;
 		private final String theName;
 		private final Method theFieldGetter;
 		private final int theFieldIndex;
@@ -1109,6 +1138,8 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 			theFieldIndex = fieldIndex;
 			theIdIndex = idIndex;
 			theTargetEntityName = builder.targetEntity;
+			theKeyTargetEntityName = builder.keyTargetEntity;
+			theValueTargetEntityName = builder.valueTargetEntity;
 
 			if (builder.theOverrides == null)
 				theOverrides = Collections.emptyList();
@@ -1160,6 +1191,16 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		}
 
 		@Override
+		public ObservableEntityType<?> getKeyTarget() {
+			return theKeyTargetEntity;
+		}
+
+		@Override
+		public ObservableEntityType<?> getValueTarget() {
+			return theValueTargetEntity;
+		}
+
+		@Override
 		public BetterList<ObservableEntityFieldType<?, ?>> getFieldSequence() {
 			return BetterList.of(this);
 		}
@@ -1194,21 +1235,40 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		}
 
 		void check() {
-			if (theTargetEntityName != null) {
-				ObservableEntityType<?> target = theEntityType.getEntitySet().getEntityType(theTargetEntityName);
+			Class<F> rawType = TypeTokens.getRawType(theFieldType);
+			theTargetEntity = getTargetEntity(theTargetEntityName, rawType);
+			Class<?> keyType = null, valueType = null;
+			if (Collection.class.isAssignableFrom(rawType))
+				valueType = TypeTokens.getRawType(theFieldType.resolveType(Collection.class.getTypeParameters()[0]));
+			else if (ObservableValueSet.class.isAssignableFrom(rawType))
+				valueType = TypeTokens.getRawType(theFieldType.resolveType(ObservableValueSet.class.getTypeParameters()[0]));
+			else if (Map.class.isAssignableFrom(rawType)) {
+				keyType = TypeTokens.getRawType(theFieldType.resolveType(Map.class.getTypeParameters()[0]));
+				valueType = TypeTokens.getRawType(theFieldType.resolveType(Map.class.getTypeParameters()[1]));
+			} else if (MultiMap.class.isAssignableFrom(rawType)) {
+				keyType = TypeTokens.getRawType(theFieldType.resolveType(MultiMap.class.getTypeParameters()[0]));
+				valueType = TypeTokens.getRawType(theFieldType.resolveType(MultiMap.class.getTypeParameters()[1]));
+			} else
+				keyType = null;
+			if (keyType != null)
+				theKeyTargetEntity = getTargetEntity(theKeyTargetEntityName, keyType);
+			if (valueType != null)
+				theValueTargetEntity = getTargetEntity(theValueTargetEntityName, valueType);
+		}
+
+		private <X> ObservableEntityTypeImpl<X> getTargetEntity(String entityName, Class<? super X> type) {
+			if (entityName != null) {
+				ObservableEntityType<?> target = theEntityType.getEntitySet().getEntityType(entityName);
 				if (target == null)
 					throw new IllegalArgumentException(
-						"Target " + theTargetEntityName + " of field " + this + " is not defined in the data set");
-				else if (target.getEntityType() != null && !TypeTokens.getRawType(theFieldType).isAssignableFrom(target.getEntityType()))
+						"Target " + entityName + " of field " + this + " is not defined in the data set");
+				else if (target.getEntityType() != null && !type.isAssignableFrom(ObservableEntity.class)
+					&& !type.isAssignableFrom(target.getEntityType()))
 					throw new IllegalArgumentException("Entity " + target.getName() + "(" + target.getEntityType().getName()
 						+ ") cannot be a target of field " + this + "(" + theFieldType + ")");
-				theTargetEntity = (ObservableEntityTypeImpl<F>) target;
+				return (ObservableEntityTypeImpl<X>) target;
 			} else {
-				theTargetEntity = (ObservableEntityTypeImpl<F>) theEntityType.getEntitySet()
-					.getEntityType(TypeTokens.getRawType(theFieldType));
-				if (theEntityType == null) {
-					// TODO Check against supported types
-				}
+				return (ObservableEntityTypeImpl<X>) theEntityType.getEntitySet().getEntityType(type);
 			}
 		}
 
