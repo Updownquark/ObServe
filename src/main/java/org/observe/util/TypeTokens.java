@@ -557,6 +557,51 @@ public class TypeTokens {
 		return (Class<?>) t;
 	}
 
+	public static String getSimpleName(TypeToken<?> type) {
+		return getSimpleName(type, null).toString();
+	}
+
+	public static StringBuilder getSimpleName(TypeToken<?> type, StringBuilder str) {
+		return getSimpleName(type.getType(), str);
+	}
+
+	public static StringBuilder getSimpleName(Type type, StringBuilder str) {
+		if (str == null)
+			str = new StringBuilder();
+		if (type instanceof Class)
+			str.append(((Class<?>) type).getSimpleName());
+		else if (type instanceof ParameterizedType) {
+			ParameterizedType p = (ParameterizedType) type;
+			if (p.getOwnerType() != null)
+				getSimpleName(p.getOwnerType(), str).append('.');
+			getSimpleName(p.getRawType(), str).append('<');
+			boolean first = true;
+			for (Type arg : p.getActualTypeArguments()) {
+				if (first)
+					first = false;
+				else
+					str.append(',');
+				getSimpleName(arg, str);
+			}
+			str.append('>');
+		} else if (type instanceof GenericArrayType) {
+			GenericArrayType arrayType = (GenericArrayType) type;
+			getSimpleName(arrayType.getGenericComponentType(), str).append("[]");
+		} else if (type instanceof TypeVariable) {
+			TypeVariable<?> v = (TypeVariable<?>) type;
+			str.append(v.getTypeName());
+		} else if (type instanceof WildcardType) {
+			WildcardType w = (WildcardType) type;
+			str.append(w.getTypeName());
+			for (Type ext : w.getLowerBounds())
+				getSimpleName(ext, str.append(" super "));
+			for (Type ext : w.getUpperBounds())
+				getSimpleName(ext, str.append(" extends "));
+		} else
+			str.append("??");
+		return str;
+	}
+
 	public <T> Class<T> wrap(Class<T> type) {
 		// Class<?> wrapper = PRIMITIVE_TO_WRAPPER.get(type);
 		// return wrapper != null ? (Class<T>) wrapper : type;

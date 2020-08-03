@@ -34,7 +34,7 @@ public class ObservableEntityExplorerTest {
 		}
 		ObservableEntityDataSet ds;
 		try {
-			Duration refreshDuration = Duration.ofMillis(100);
+			Duration refreshDuration = Duration.ofMillis(1000);
 			ds = ObservableEntityDataSet
 				.build(new JdbcEntityProvider(new StampedLockingStrategy(null), //
 					JdbcEntitySupport.DEFAULT.withAutoIncrement("AUTO_INCREMENT").build(), //
@@ -43,6 +43,7 @@ public class ObservableEntityExplorerTest {
 				.withEntityType(SimpleReference.class).fillFieldsFromClass().build()//
 				.withEntityType(ValueList.class).fillFieldsFromClass().build()//
 				.withEntityType(EntityList.class).fillFieldsFromClass().build()//
+				.withEntityType(SubValue.class).withSuper(SimpleValue.class).fillFieldsFromClass().build()//
 				.withRefresh(Observable.every(refreshDuration, refreshDuration, null, d -> d, null))
 				.build(Observable.empty());
 		} catch (EntityOperationException e) {
@@ -86,5 +87,9 @@ public class ObservableEntityExplorerTest {
 
 	public interface EntityList extends Identified, Nameable {
 		List<SimpleValue> getDurations();
+	}
+
+	public interface SubValue extends SimpleValue {
+		double getDoubleValue();
 	}
 }

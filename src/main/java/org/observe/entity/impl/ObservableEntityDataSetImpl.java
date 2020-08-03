@@ -718,6 +718,10 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 			isBuilding = true;
 		}
 
+		List<ObservableEntityTypeImpl<? super E>> getSupers() {
+			return theParents;
+		}
+
 		/**
 		 * @param name The name for the entity
 		 * @return This builder
@@ -922,7 +926,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 				Collections.unmodifiableList(constraints));
 			for (ObservableEntityTypeImpl<? super E> parent : theParents)
 				parent.addSub(entityType);
-			for (ObservableEntityFieldBuilder<E, ?> fieldBuilder : theFields.values()) {
+			for (ObservableEntityFieldBuilder<E, ?> fieldBuilder : fieldBuilders.values()) {
 				int fieldIndex = fieldNames.indexOf(fieldBuilder.getName());
 				int idIndex = idFieldNames.indexOfTolerant(fieldBuilder.getName());
 				ObservableEntityFieldType<E, ?> field = fieldBuilder.buildField(entityType, fieldIndex, idIndex);
@@ -936,6 +940,11 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 				theEntitySet.theClassMapping.put(theJavaType, theEntityName);
 			isBuilding = false;
 			return theSetBuilder;
+		}
+
+		@Override
+		public String toString() {
+			return theEntityName;
 		}
 	}
 
@@ -1009,6 +1018,13 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 			return this;
 		}
 
+		/**
+		 * Specifies that the value of this field is a {@link Map} or {@link MultiMap} whose keys are instances of another entity type in
+		 * the entity set
+		 *
+		 * @param entityName The name of the entity type (that may not yet have been built) in the entity set
+		 * @return This builder
+		 */
 		public ObservableEntityFieldBuilder<E, F> withKeyTarget(String entityName) {
 			if (Map.class.isAssignableFrom(TypeTokens.getRawType(theType))) {//
 			} else if (MultiMap.class.isAssignableFrom(TypeTokens.getRawType(theType))) {//
@@ -1018,6 +1034,13 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 			return this;
 		}
 
+		/**
+		 * Specifies that the value of this field is a {@link Collection}, {@link ObservableValueSet}, {@link Map}, or {@link MultiMap}
+		 * whose values are instances of another entity type in the entity set
+		 *
+		 * @param entityName The name of the entity type (that may not yet have been built) in the entity set
+		 * @return This builder
+		 */
 		public ObservableEntityFieldBuilder<E, F> withValueTarget(String entityName) {
 			if (Collection.class.isAssignableFrom(TypeTokens.getRawType(theType))) {//
 			} else if (ObservableValueSet.class.isAssignableFrom(TypeTokens.getRawType(theType))) {//
@@ -1085,7 +1108,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		}
 
 		ObservableEntityFieldType<E, F> buildField(ObservableEntityTypeImpl<E> entityType, int fieldIndex, int idIndex) {
-			if (isId && theOverrides != null)
+			if (isId && !theTypeBuilder.getSupers().isEmpty() && theOverrides == null)
 				throw new IllegalArgumentException("Id fields cannot be added to a sub-entity");
 			return new FieldTypeImpl<>(this, entityType, fieldIndex, idIndex);
 		}
@@ -1097,6 +1120,11 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 		 */
 		public ObservableEntityTypeBuilder<E> build() {
 			return theTypeBuilder;
+		}
+
+		@Override
+		public String toString() {
+			return theTypeBuilder.toString() + "." + theName;
 		}
 	}
 

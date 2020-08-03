@@ -67,6 +67,25 @@ public class JdbcEntitySupport {
 			}
 		};
 
+		public static final JdbcTypeSupport<Double> DOUBLE = new JdbcTypeSupport<Double>() {
+			@Override
+			public <T2 extends Double> JdbcColumn<T2> columnFor(TypeToken<T2> type, String columnTypeName, JdbcEntitySupport support) {
+				switch (columnTypeName.toUpperCase()) {
+				case "DOUBLE":
+				case "FLOAT":
+				case "NUMERIC":
+					return (JdbcColumn<T2>) JdbcColumn.DOUBLE;
+				default:
+					return null;
+				}
+			}
+
+			@Override
+			public String getDefaultColumnType(TypeToken<? extends Double> fieldType) {
+				return "DOUBLE";
+			}
+		};
+
 		public static final JdbcTypeSupport<String> STRING = new JdbcTypeSupport<String>() {
 			@Override
 			public <T2 extends String> JdbcColumn<T2> columnFor(TypeToken<T2> type, String columnTypeName, JdbcEntitySupport support) {
@@ -373,6 +392,35 @@ public class JdbcEntitySupport {
 				return v1 != null && v2 != null && v1 == v2;
 			}
 		};
+		public static final JdbcColumn<Double> DOUBLE = new JdbcColumn<Double>() {
+			@Override
+			public StringBuilder serialize(Double value, StringBuilder str) {
+				return str.append(value == null ? "NULL" : value.toString());
+			}
+
+			@Override
+			public Double deserialize(ResultSet rs, int column) throws SQLException {
+				double res = rs.getDouble(column);
+				if (rs.wasNull())
+					return null;
+				return res;
+			}
+
+			@Override
+			public String getTypeName() {
+				return "DOUBLE";
+			}
+
+			@Override
+			public boolean testsAdjacent() {
+				return true;
+			}
+
+			@Override
+			public boolean isAdjacent(Double v1, Double v2) {
+				return v1 != null && v2 != null && v1 == v2;
+			}
+		};
 
 		public static final JdbcColumn<String> STRING = new JdbcColumn<String>() {
 			@Override
@@ -628,6 +676,7 @@ public class JdbcEntitySupport {
 		Builder builder = build();
 		builder.supportColumnType(TypeTokens.get().INT, JdbcTypeSupport.INT);
 		builder.supportColumnType(TypeTokens.get().LONG, JdbcTypeSupport.LONG);
+		builder.supportColumnType(TypeTokens.get().DOUBLE, JdbcTypeSupport.DOUBLE);
 		builder.supportColumnType(TypeTokens.get().STRING, JdbcTypeSupport.STRING);
 		builder.supportColumnType(TypeTokens.get().BOOLEAN, JdbcTypeSupport.BOOLEAN);
 		builder.supportColumnType(TypeTokens.get().of(Instant.class), JdbcTypeSupport.INSTANT);

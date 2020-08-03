@@ -780,7 +780,6 @@ public class ObservableEntityExplorer extends JPanel {
 		else
 			return null;
 		/* TODO More types, e.g.
-		 * double
 		 * float
 		 * byte
 		 * short
@@ -913,23 +912,28 @@ public class ObservableEntityExplorer extends JPanel {
 		}
 
 		String printIdFields() {
-			return StringUtils.print(", ", idFields, f -> f.getName() + " (" + f.getFieldType() + ")").toString();
+			return StringUtils.print(", ", idFields, f -> f.getName() + " (" + TypeTokens.getSimpleName(f.getFieldType()) + ")").toString();
 		}
 
 		String printOtherFields() {
-			int fieldCount = entity.getFields().keySize() - idFields.size();
-			if (fieldCount <= 2) {
-				StringBuilder str = new StringBuilder();
-				for (ObservableEntityFieldType<E, ?> field : entity.getFields().allValues()) {
-					if (field.getIdIndex() < 0) {
-						if (str.length() > 0)
-							str.append(", ");
-						str.append(field.getName()).append('(').append(field.getFieldType()).append(')');
-					}
+			int printedFields = 0, extraFields = entity.getFields().keySize() - idFields.size();
+			StringBuilder str = new StringBuilder();
+			for (ObservableEntityFieldType<E, ?> field : entity.getFields().allValues()) {
+				if (field.getIdIndex() < 0) {
+					if (str.length() > 0)
+						str.append(", ");
+					str.append(field.getName()).append('(');
+					TypeTokens.getSimpleName(field.getFieldType(), str);
+					str.append(')');
+					printedFields++;
+					extraFields--;
+					if (printedFields + extraFields > 2 && printedFields == 1)
+						break;
 				}
-				return str.toString();
-			} else
-				return String.valueOf(fieldCount);
+			}
+			if (extraFields > 0)
+				str.append(" +").append(extraFields).append(" field").append(extraFields == 1 ? "" : "s");
+			return str.toString();
 		}
 
 		void printError() {

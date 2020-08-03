@@ -11,10 +11,12 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeMap;
 import java.util.function.BiConsumer;
@@ -168,7 +170,7 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 
 		boolean isNull();
 
-		void writeValue(StringBuilder str);
+		StringBuilder writeValue(StringBuilder str);
 	}
 
 	protected static abstract class SerialColumn<T> extends Column<T> {
@@ -228,8 +230,9 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 				}
 
 				@Override
-				public void writeValue(StringBuilder str) {
+				public StringBuilder writeValue(StringBuilder str) {
 					type.serialize(value, str);
+					return str;
 				}
 			});
 		}
@@ -248,6 +251,10 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 			super(name);
 			theReferenceType = referenceType;
 			this.idColumns = idColumns;
+		}
+
+		public ObservableEntityType<E> getReferenceType() {
+			return theReferenceType;
 		}
 
 		@Override
@@ -416,8 +423,16 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 		for (ObservableEntityType<?> type : entitySet.getEntityTypes()) {
 			TableNaming<?> naming = generateNaming(type);
 			theTableNaming.put(type.getName(), naming);
-			if (installSchema)
-				writeTableIfAbsent(type, naming);
+		}
+		if (installSchema && createSchemaIfAbsent()) {
+			for (ObservableEntityType<?> type : entitySet.getEntityTypes()) {
+				TableNaming<?> naming = theTableNaming.get(type.getName());
+				createTable(type, naming);
+			}
+			for (ObservableEntityType<?> type : entitySet.getEntityTypes()) {
+				TableNaming<?> naming = theTableNaming.get(type.getName());
+				createTableLinks(type, naming);
+			}
 		}
 	}
 
@@ -456,81 +471,161 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 	}
 
 	class CreateAction<E> implements SqlAction<SimpleEntity<E>> {
-		private final EntityCreator<? super E, E> theCreator;
+		private final ObservableEntityType<E> theType;
 		private final boolean reportInChanges;
 		private final TableNaming<E> theNaming;
+		private final List<CreateAction<? super E>> theParentCreates;
 		private final String theCreateSql;
 
 		CreateAction(EntityCreator<? super E, E> creator, boolean reportInChanges) {
-			theCreator = creator;
+			this(creator, creator.getEntityType(), new HashSet<>(), reportInChanges);
+		}
+
+		private CreateAction(EntityCreator<?, ? extends E> creator, ObservableEntityType<E> type, Set<ObservableEntityType<?>> visitedTypes,
+			boolean reportInChanges) {
+			theType = type;
 			this.reportInChanges = reportInChanges;
 			theNaming = (TableNaming<E>) theTableNaming.get(creator.getEntityType().getName());
+			theParentCreates = type.getSupers().isEmpty() ? Collections.emptyList() : new ArrayList<>(type.getSupers().size());
+			for (ObservableEntityType<? super E> superType : type.getSupers()) {
+				if (visitedTypes.add(superType))
+					theParentCreates.add(new CreateAction<>(creator, superType, visitedTypes, false));
+			}
 			StringBuilder sql = new StringBuilder();
 			sql.append("INSERT INTO ");
 			if (theSchemaName != null)
 				sql.append(theSchemaName).append('.');
 			sql.append(theNaming.getTableName());
-			boolean[] firstValue = new boolean[] { true };
 			QuickMap<String, Object> values = ((ConfigurableCreator<? super E, E>) creator).getFieldValues();
-			for (int f = 0; f < values.keySize(); f++) {
-				Object value = values.get(f);
+			boolean[] firstValue = new boolean[] { true };
+			for (ObservableEntityFieldType<E, ?> field : theType.getFields().allValues()) {
+				if (field.getIdIndex() < 0 && !field.getOverrides().isEmpty())
+					continue;
+				Object value;
+				if (creator.getEntityType() == type)
+					value = values.get(field.getIndex());
+				else
+					value = values.get(field.getName());
 				if (value == EntityUpdate.NOT_SET)
 					continue;
-				if(!(theNaming.getColumn(f) instanceof SerialColumn))
+				Column<?> column = theNaming.getColumn(field.getIndex());
+				if (!(column instanceof SerialColumn))
 					continue;
-				((SerialColumn<?>) theNaming.getColumn(f)).forEachColumn(column->{
+				((SerialColumn<?>) column).forEachColumn(col -> {
 					if (firstValue[0]) {
 						sql.append(" (");
 						firstValue[0] = false;
 					} else
 						sql.append(", ");
-					sql.append(column.getName());
+					sql.append(col.getName());
 				});
 			}
-			if (!firstValue[0])
+			if (!firstValue[0]) {
 				sql.append(") VALUES (");
-			firstValue[0] = true;
-			for (int f = 0; f < values.keySize(); f++) {
-				Object value = values.get(f);
-				if (value == EntityUpdate.NOT_SET)
-					continue;
-				if(!(theNaming.getColumn(f) instanceof SerialColumn))
-					continue;
-				((SerialColumn<Object>) theNaming.getColumn(f)).forEachColumnValue(value, column->{
-					if (firstValue[0])
-						firstValue[0] = false;
+				firstValue[0] = true;
+				for (ObservableEntityFieldType<E, ?> field : theType.getFields().allValues()) {
+					Column<?> column = theNaming.getColumn(field.getIndex());
+					if (!(column instanceof SerialColumn))
+						continue;
+					Object value;
+					if (creator.getEntityType() == type)
+						value = values.get(field.getIndex());
 					else
-						sql.append(", ");
-					column.writeValue(sql);
-				});
+						value = values.get(field.getName());
+					firstValue[0] = true;
+					if (!field.getOverrides().isEmpty()) {
+						if (field.getIdIndex() >= 0) {
+							((SerialColumn<?>) column).forEachColumn(col -> {
+								if (firstValue[0])
+									firstValue[0] = false;
+								else
+									sql.append(", ");
+								sql.append(':').append(col.getName());
+							});
+						}
+						continue;
+					} else if (value == EntityUpdate.NOT_SET)
+						continue;
+					((SerialColumn<Object>) column).forEachColumnValue(value, col -> {
+						if (firstValue[0])
+							firstValue[0] = false;
+						else
+							sql.append(", ");
+						col.writeValue(sql);
+					});
+				}
+				sql.append(')');
 			}
-			sql.append(')');
 			theCreateSql = sql.toString();
 			// TODO Non-serial columns
 		}
 
 		@Override
 		public SimpleEntity<E> execute(Statement stmt, BooleanSupplier canceled) throws SQLException, EntityOperationException {
-			List<String> colNames = new ArrayList<>(theCreator.getEntityType().getFields().keySize() + 3);
-			for (int i = 0; i < theCreator.getEntityType().getFields().keySize(); i++) {
+			List<SimpleEntity<? super E>> superEntities = theParentCreates.isEmpty() ? Collections.emptyList()
+				: new ArrayList<>(theParentCreates.size());
+			for (CreateAction<? super E> superCreate : theParentCreates) {
+				superEntities.add(superCreate.execute(stmt, canceled));
+				if (canceled.getAsBoolean())
+					return null;
+			}
+			List<String> colNames = new ArrayList<>(theType.getFields().keySize() + 3);
+			for (int i = 0; i < theType.getFields().keySize(); i++) {
 				if (!(theNaming.getColumn(i) instanceof SerialColumn))
+					continue;
+				else if (!theType.getFields().get(i).getOverrides().isEmpty())
 					continue;
 				((SerialColumn<?>) theNaming.getColumn(i)).forEachColumn(col -> {
 					colNames.add(col.getName());
 				});
 			}
-			stmt.execute(theCreateSql, colNames.toArray(new String[colNames.size()]));
+			String createSql = theCreateSql;
+			if (!superEntities.isEmpty()) {
+				String[] newCreateSql = new String[] { createSql };
+				Set<String> idCols = new HashSet<>();
+				for (int e = 0; e < superEntities.size(); e++) {
+					CreateAction<? super E> superCreate = theParentCreates.get(e);
+					SimpleEntity<? super E> superEntity = superEntities.get(e);
+					for (ObservableEntityFieldType<? super E, ?> idField : superCreate.theType.getIdentityFields().allValues()) {
+						if (idCols.add(idField.getName())) {
+							((SerialColumn<Object>) theParentCreates.get(e).theNaming.getColumn(idField.getIndex())).forEachColumnValue(//
+								superEntity.getIdentity(), col -> {
+									newCreateSql[0] = newCreateSql[0].replace(":" + col.getName(),
+										col.writeValue(new StringBuilder()).toString());
+								});
+						}
+					}
+				}
+				createSql = newCreateSql[0];
+			}
+			stmt.execute(createSql, colNames.toArray(new String[colNames.size()]));
 			SimpleEntity<E> entity;
-			try (ResultSet rs = stmt.getGeneratedKeys()) {
-				if (!rs.next())
-					throw new EntityOperationException("No generated key set?");
-				entity = buildEntity(theCreator.getEntityType(), rs, theNaming, Collections.emptyMap());
-				if (rs.next())
-					System.err.println("Multiple generated key sets?");
+			if (!superEntities.isEmpty()) {
+				entity = new SimpleEntity<>(theType.fromSuperId(superEntities.get(0).getIdentity()));
+				for (int e = 0; e < superEntities.size(); e++) {
+					CreateAction<? super E> superCreate = theParentCreates.get(e);
+					SimpleEntity<? super E> superEntity = superEntities.get(e);
+					for (ObservableEntityFieldType<? super E, ?> field : superCreate.theType.getFields().allValues()) {
+						if (field.getIdIndex() >= 0 || !field.getOverrides().isEmpty())
+							continue;
+						Object value = superEntity.getFields().get(field.getIndex());
+						if (value == EntityUpdate.NOT_SET)
+							continue;
+						entity.set(theType.getFields().keyIndex(field.getName()), value);
+					}
+				}
+			} else {
+				try (ResultSet rs = stmt.getGeneratedKeys()) {
+					if (!rs.next())
+						throw new EntityOperationException("No generated key set?");
+					entity = buildEntity(theType, rs, theNaming, Collections.emptyMap());
+					if (rs.next())
+						System.err.println("Multiple generated key sets?");
+				}
 			}
 			// TODO Non-serial columns
 			if (reportInChanges)
-				changed(new EntityChange.EntityExistenceChange<>(theCreator.getEntityType(), Instant.now(), true,
+				changed(new EntityChange.EntityExistenceChange<>(theType, Instant.now(), true,
 					BetterList.of(entity.getIdentity()), null));
 			return entity;
 		}
@@ -1703,9 +1798,9 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 		return sql;
 	}
 
-	private void writeTableIfAbsent(ObservableEntityType<?> type, TableNaming<?> naming) throws EntityOperationException {
+	private boolean createSchemaIfAbsent() throws EntityOperationException {
 		try {
-			theConnectionPool.<Void> connect((stmt, canceled) -> {
+			return theConnectionPool.connect((stmt, canceled) -> {
 				boolean schemaPresent;
 				StringBuilder sql = new StringBuilder();
 				if (theSchemaName == null)
@@ -1719,24 +1814,26 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 				}
 				if (!schemaPresent)
 					stmt.execute("CREATE SCHEMA " + theSchemaName);
-				sql.setLength(0);
-				sql.append("SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE ");
-				if(theSchemaName==null)
-					sql.append("TABLE_SCHEMA IS NULL");
-				else
-					sql.append("LOWER(TABLE_SCHEMA)='").append(theSchemaName).append("'");
-				sql.append(" AND LOWER(TABLE_NAME)='").append(naming.getTableName().toLowerCase()).append("'");
-				try (ResultSet rs = stmt.executeQuery(sql.toString())) {
-					if (rs.next())
-						return null;
-				}
-				sql.setLength(0);
+				return !schemaPresent;
+			});
+		} catch (SQLException e) {
+			throw new EntityOperationException("Could not create schema ", e);
+		}
+	}
+
+	private void createTable(ObservableEntityType<?> type, TableNaming<?> naming) throws EntityOperationException {
+		try {
+			theConnectionPool.<Void> connect((stmt, canceled) -> {
+				StringBuilder sql = new StringBuilder();
 				sql.append("CREATE TABLE ");
 				if (theSchemaName != null)
 					sql.append(theSchemaName).append('.');
 				sql.append(naming.getTableName()).append('(');
 				boolean [] first=new boolean[]{true};
 				for (int c = 0; c < type.getFields().keySize(); c++) {
+					// Don't duplicate non-ID inherited fields
+					if (type.getFields().get(c).getIdIndex() < 0 && !type.getFields().get(c).getOverrides().isEmpty())
+						continue;
 					Column<?> col = naming.getColumn(c);
 					if(col instanceof SerialColumn)
 						((SerialColumn<?>) col).forEachColumn(column->{
@@ -1752,10 +1849,23 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 						&& theTypeSupport.getAutoIncrement() != null)
 						sql.append(' ').append(theTypeSupport.getAutoIncrement());
 				}
-				sql.append("\n);");
+				sql.append(",\n\n\tPRIMARY KEY (");
+				first[0] = true;
+				for (ObservableEntityFieldType<?, ?> idField : type.getIdentityFields().allValues()) {
+					((SerialColumn<?>) naming.getColumn(idField.getIndex())).forEachColumn(col -> {
+						if (first[0])
+							first[0] = false;
+						else
+							sql.append(", ");
+						sql.append(col.getName());
+					});
+				}
+				sql.append(")\n);");
 				System.out.println("Creating table for " + type + ": " + sql);
 				stmt.execute(sql.toString());
 				for (int c = 0; c < type.getFields().keySize(); c++) {
+					if (!type.getFields().get(c).getOverrides().isEmpty())
+						continue;
 					Column<?> col = naming.getColumn(c);
 					if (col instanceof SerialColumn)
 						continue;
@@ -1793,7 +1903,7 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 						sql.append(", ").append(entryCol.getIndexColumn());
 					else
 						entryCol.getValueColumn().forEachColumn(column -> sql.append(", ").append(column.getName()));
-					sql.append("),\n\tFOREIGN KEY(");
+					sql.append("),\n\tFOREIGN KEY (");
 					first[0] = true;
 					entryCol.getOwnerColumn().forEachColumn(column -> {
 						if (first[0])
@@ -1823,4 +1933,127 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 			throw new EntityOperationException("Could not create table for entity " + type, e);
 		}
 	}
+
+	private void createTableLinks(ObservableEntityType<?> type, TableNaming<?> naming) throws EntityOperationException {
+		try {
+			theConnectionPool.<Void> connect((stmt, canceled) -> {
+				StringBuilder sql = new StringBuilder();
+				boolean[] first = new boolean[1];
+				for (ObservableEntityType<?> superType : type.getSupers()) {
+					TableNaming<?> superTable = theTableNaming.get(superType.getName());
+					sql.append("ALTER TABLE ");
+					if (theSchemaName != null)
+						sql.append(theSchemaName).append('.');
+					sql.append(naming.getTableName()).append(" ADD CONSTRAINT ").append(naming.getTableName()).append("_SUPER_")
+					.append(superTable.getTableName()).append("_FK FOREIGN KEY (");
+					first[0] = true;
+					for (ObservableEntityFieldType<?, ?> idField : superType.getIdentityFields().allValues()) {
+						((SerialColumn<?>) superTable.getColumn(idField.getIndex())).forEachColumn(col -> {
+							col.forEachColumn(ci -> {
+								if (first[0])
+									first[0] = false;
+								else
+									sql.append(", ");
+								sql.append(ci.getName());
+							});
+						});
+					}
+					sql.append(") REFERENCES ");
+					if (theSchemaName != null)
+						sql.append(theSchemaName).append('.');
+					sql.append(superTable.getTableName()).append("(");
+					first[0] = true;
+					for (ObservableEntityFieldType<?, ?> idField : superType.getIdentityFields().allValues()) {
+						((SerialColumn<?>) superTable.getColumn(idField.getIndex())).forEachColumn(col -> {
+							col.forEachColumn(ci -> {
+								if (first[0])
+									first[0] = false;
+								else
+									sql.append(", ");
+								sql.append(ci.getName());
+							});
+						});
+					}
+					sql.append(");");
+					System.out.println("Creating foreign key for inheritance " + superType + "->" + type + ": " + sql);
+					stmt.execute(sql.toString());
+				}
+				for (int c = 0; c < type.getFields().keySize(); c++) {
+					Column<?> col = naming.getColumn(c);
+					if (col instanceof ReferenceColumn) {
+						ReferenceColumn<?> refCol = (ReferenceColumn<?>) col;
+						TableNaming<?> refTable = theTableNaming.get(refCol.getReferenceType().getName());
+						sql.append("ALTER TABLE ");
+						if (theSchemaName != null)
+							sql.append(theSchemaName).append('.');
+						sql.append(naming.getTableName()).append(" ADD CONSTRAINT ").append(naming.getTableName()).append('_')
+						.append(col.getName()).append("_FK FOREIGN KEY (");
+						first[0] = true;
+						refCol.forEachColumn(ci -> {
+							if (first[0])
+								first[0] = false;
+							else
+								sql.append(", ");
+							sql.append(ci.getName());
+						});
+						sql.append(") REFERENCES ");
+						if (theSchemaName != null)
+							sql.append(theSchemaName).append('.');
+						sql.append(refTable.getTableName()).append(" (");
+						first[0] = true;
+						for (ObservableEntityFieldType<?, ?> idField : refCol.getReferenceType().getIdentityFields().allValues()) {
+							((SerialColumn<?>) refTable.getColumn(idField.getIndex())).forEachColumn(ci -> {
+								if (first[0])
+									first[0] = false;
+								else
+									sql.append(", ");
+								sql.append(ci.getName());
+							});
+						}
+						sql.append(");");
+						System.out.println("Creating foreign key for field " + type.getFields().get(c) + ": " + sql);
+						stmt.execute(sql.toString());
+					} else if (col instanceof EntryColumn && ((EntryColumn<?, ?, ?>) col).getValueColumn() instanceof ReferenceColumn) {
+						EntryColumn<?, ?, ?> entryCol = (EntryColumn<?, ?, ?>) col;
+						ReferenceColumn<?> refCol = (ReferenceColumn<?>) entryCol.getValueColumn();
+						TableNaming<?> refTable = theTableNaming.get(refCol.getReferenceType().getName());
+						sql.append("ALTER TABLE ");
+						if (theSchemaName != null)
+							sql.append(theSchemaName).append('.');
+						sql.append(entryCol.getTableName()).append(" ADD CONSTRAINT ").append(entryCol.getTableName()).append('_')
+						.append(refTable.getTableName()).append("_FK FOREIGN KEY (");
+						first[0] = true;
+						refCol.forEachColumn(ci -> {
+							if (first[0])
+								first[0] = false;
+							else
+								sql.append(", ");
+							sql.append(ci.getName());
+						});
+						sql.append(") REFERENCES ");
+						if (theSchemaName != null)
+							sql.append(theSchemaName).append('.');
+						sql.append(refTable.getTableName()).append(" (");
+						first[0] = true;
+						for (ObservableEntityFieldType<?, ?> idField : refCol.getReferenceType().getIdentityFields().allValues()) {
+							((SerialColumn<?>) refTable.getColumn(idField.getIndex())).forEachColumn(ci -> {
+								if (first[0])
+									first[0] = false;
+								else
+									sql.append(", ");
+								sql.append(ci.getName());
+							});
+						}
+						sql.append(");");
+						System.out.println("Creating foreign key for field " + type.getFields().get(c) + ": " + sql);
+						stmt.execute(sql.toString());
+					}
+				}
+				return null;
+			});
+		} catch (SQLException e) {
+			throw new EntityOperationException("Could not create table for entity " + type, e);
+		}
+	}
+
 }

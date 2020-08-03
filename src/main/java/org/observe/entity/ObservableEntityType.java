@@ -82,6 +82,21 @@ public interface ObservableEntityType<E> extends ConfiguredValueType<E>, Named {
 		return builder.build();
 	}
 
+	/**
+	 * @param subId An ID for an entity of this type or a sub-types
+	 * @return An ID of this type for the same entity
+	 */
+	default EntityIdentity<E> fromSuperId(EntityIdentity<? super E> subId) {
+		if (subId.getEntityType() == this)
+			return (EntityIdentity<E>) subId;
+		Builder<E> builder = buildId();
+		for (int f = 0; f < getIdentityFields().keySize(); f++) {
+			ObservableEntityFieldType<E, Object> field = (ObservableEntityFieldType<E, Object>) getIdentityFields().get(f);
+			builder.with(field, subId.getFields().get(field.getName()));
+		}
+		return builder.build();
+	}
+
 	@Override
 	default boolean allowsCustomFields() {
 		return false;
