@@ -3,12 +3,16 @@ package org.observe.util.swing;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Container;
+import java.awt.Dialog.ModalityType;
 import java.awt.Dimension;
 import java.awt.EventQueue;
 import java.awt.Image;
 import java.awt.Insets;
 import java.awt.LayoutManager;
 import java.awt.LayoutManager2;
+import java.awt.Window;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionListener;
@@ -43,6 +47,7 @@ import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
+import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -76,6 +81,7 @@ import org.observe.TypedValueContainer;
 import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.DefaultObservableCollection;
 import org.observe.collect.ObservableCollection;
+import org.observe.config.ObservableConfig;
 import org.observe.util.SafeObservableCollection;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.ObservableSwingUtils.FontAdjuster;
@@ -136,6 +142,18 @@ public class PanelPopulation {
 			panel = (C) new JPanel(layout);
 		else if (layout != null)
 			panel.setLayout(layout);
+		return new SimpleHPanel<>(null, panel, new LazyLock(), until == null ? Observable.empty() : until);
+	}
+
+	/**
+	 * Populates a panel without installing a new layout
+	 *
+	 * @param <C> The type of the container
+	 * @param panel The container to add the field widgets to
+	 * @param until The observable that, when fired, will release all associated resources
+	 * @return The API structure to add fields with
+	 */
+	public static <C extends Container> PanelPopulator<C, ?> populatePanel(C panel, Observable<?> until) {
 		return new SimpleHPanel<>(null, panel, new LazyLock(), until == null ? Observable.empty() : until);
 	}
 
@@ -581,8 +599,11 @@ public class PanelPopulation {
 		P last(Component component);
 
 		P withSplitLocation(int split);
-
 		P withSplitProportion(double split);
+
+		P withSplitLocation(SettableValue<Integer> split);
+
+		P withSplitProportion(SettableValue<Double> split);
 	}
 
 	public interface ScrollPane<P extends ScrollPane<P>> extends ComponentEditor<JScrollPane, P> {
@@ -871,6 +892,59 @@ public class PanelPopulation {
 		 * @return Whether the user clicked "Yes" or "OK"
 		 */
 		boolean confirm(boolean confirmType);
+	}
+
+	public interface WindowBuilder<W extends Window, P extends WindowBuilder<W, P>> {
+		W getWindow();
+
+		default P withTitle(String title) {
+			return withTitle(ObservableValue.of(TypeTokens.get().STRING, title));
+		}
+
+		P withTitle(ObservableValue<String> title);
+
+		P withX(SettableValue<Integer> x);
+		P withY(SettableValue<Integer> y);
+		P withWidth(SettableValue<Integer> width);
+		P withHeight(SettableValue<Integer> height);
+		default P withLocation(ObservableConfig locationConfig) {
+			withX(locationConfig.asValue(int.class).at("x").withFormat(Format.INT, () -> getWindow().getX()).buildValue(null));
+			return withY(locationConfig.asValue(int.class).at("y").withFormat(Format.INT, () -> getWindow().getX()).buildValue(null));
+		}
+		default P withSize(ObservableConfig sizeConfig) {
+			withWidth(sizeConfig.asValue(int.class).at("width").withFormat(Format.INT, () -> getWindow().getX()).buildValue(null));
+			return withHeight(sizeConfig.asValue(int.class).at("height").withFormat(Format.INT, () -> getWindow().getX()).buildValue(null));
+		}
+		default P withBounds(ObservableConfig boundsConfig) {
+			withLocation(boundsConfig);
+			return withSize(boundsConfig);
+		}
+
+		P withVisible(SettableValue<Boolean> visible);
+
+		P withVContent(Consumer<PanelPopulator<?, ?>> content);
+
+		default P withHContent(String layoutType, Consumer<PanelPopulator<?, ?>> content) {
+			return withHContent(layoutType == null ? null : makeLayout(layoutType), content);
+		}
+
+		P withHContent(LayoutManager layout, Consumer<PanelPopulator<?, ?>> content);
+
+		P withContent(Component content);
+
+		P run(Component relativeTo);
+	}
+
+	public interface DialogBuilder<D extends JDialog, P extends DialogBuilder<D, P>> extends WindowBuilder<D, P> {
+		default P modal(boolean modal) {
+			return withModality(modal ? ModalityType.APPLICATION_MODAL : ModalityType.MODELESS);
+		}
+
+		default P withModality(ModalityType modality) {
+			return withModality(ObservableValue.of(modality));
+		}
+
+		P withModality(ObservableValue<ModalityType> modality);
 	}
 
 	// Drag and cut/copy/paste
@@ -2235,6 +2309,10 @@ public class PanelPopulation {
 
 	static class SimpleSplitEditor<P extends SimpleSplitEditor<P>> extends AbstractComponentEditor<JSplitPane, P> implements SplitPane<P> {
 		private final Observable<?> theUntil;
+		private int theDivLocation = -1;
+		private double theDivProportion = Double.NaN;
+		private SettableValue<Integer> theObsDivLocation;
+		private SettableValue<Double> theObsDivProportion;
 
 		SimpleSplitEditor(boolean vertical, Supplier<Transactable> lock, Observable<?> until) {
 			super(new JSplitPane(vertical ? JSplitPane.VERTICAL_SPLIT : JSplitPane.HORIZONTAL_SPLIT), lock);
@@ -2243,6 +2321,7 @@ public class PanelPopulation {
 
 		boolean hasSetFirst;
 		boolean hasSetLast;
+		boolean initialized;
 
 		@Override
 		public P firstV(Consumer<PanelPopulator<?, ?>> vPanel) {
@@ -2324,27 +2403,29 @@ public class PanelPopulation {
 
 		@Override
 		public P withSplitLocation(int split) {
-			// This method is typically called when the component is declared, usually before the editor is built or installed.
-			// We'll give the Swing system the chance to finish its work and try a few times as well.
-			Duration interval = Duration.ofMillis(40);
-			QommonsTimer.getCommonInstance().build(() -> {
-				JSplitPane component = getEditor();
-				if (component != null && component.isVisible())
-					component.setDividerLocation(split);
-			}, interval, false).times(5).onEDT().runNextIn(interval);
+			theDivLocation = split;
 			return (P) this;
 		}
 
 		@Override
 		public P withSplitProportion(double split) {
-			// This method is typically called when the component is declared, usually before the editor is built or installed.
-			// We'll give the Swing system the chance to finish its work and try a few times as well.
-			Duration interval = Duration.ofMillis(40);
-			QommonsTimer.getCommonInstance().build(() -> {
-				JSplitPane component = getEditor();
-				if (component != null && component.isVisible())
-					component.setDividerLocation(split);
-			}, interval, false).times(5).onEDT().runNextIn(interval);
+			theDivProportion = split;
+			return (P) this;
+		}
+
+		@Override
+		public P withSplitLocation(SettableValue<Integer> split) {
+			if (theObsDivProportion != null)
+				throw new IllegalStateException("Cannot set the div location and the div proportion both");
+			theObsDivLocation = split;
+			return (P) this;
+		}
+
+		@Override
+		public P withSplitProportion(SettableValue<Double> split) {
+			if (theObsDivLocation != null)
+				throw new IllegalStateException("Cannot set the div location and the div proportion both");
+			theObsDivProportion = split;
 			return (P) this;
 		}
 
@@ -2361,6 +2442,111 @@ public class PanelPopulation {
 		@Override
 		protected Component createPostLabel(Observable<?> until) {
 			return null;
+		}
+
+		@Override
+		protected Component getOrCreateComponent(Observable<?> until) {
+			boolean init = !initialized;
+			Component c = super.getOrCreateComponent(until);
+			if (init) {
+				initialized = true;
+				SettableValue<Integer> divLoc = theObsDivLocation;
+				SettableValue<Double> divProp = theObsDivProportion;
+				if (divLoc != null || divProp != null) {
+					boolean[] callbackLock = new boolean[1];
+					ComponentAdapter visListener = new ComponentAdapter() {
+						@Override
+						public void componentShown(ComponentEvent e) {
+							EventQueue.invokeLater(() -> {
+								callbackLock[0] = true;
+								try {
+									if (divProp != null)
+										getEditor().setDividerLocation(divProp.get());
+									else
+										getEditor().setDividerLocation(divLoc.get());
+								} finally {
+									callbackLock[0] = false;
+								}
+							});
+						}
+
+						@Override
+						public void componentResized(ComponentEvent e) {
+							if (divProp != null) {
+								if (callbackLock[0])
+									return;
+								callbackLock[0] = true;
+								try {
+									getEditor().setDividerLocation(divProp.get());
+								} finally {
+									callbackLock[0] = false;
+								}
+							}
+						}
+					};
+					getEditor().addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, evt -> {
+						if (callbackLock[0])
+							return;
+						callbackLock[0] = true;
+						try {
+							if (divProp != null)
+								divProp.set(getEditor().getDividerLocation() * 1.0 / getEditor().getWidth(), evt);
+							else
+								divLoc.set(getEditor().getDividerLocation(), evt);
+						} finally {
+							callbackLock[0] = false;
+						}
+					});
+					if (divProp != null) {
+						divProp.noInitChanges().takeUntil(until).act(evt -> {
+							if (callbackLock[0])
+								return;
+							callbackLock[0] = true;
+							try {
+								getEditor().setDividerLocation(evt.getNewValue());
+							} finally {
+								callbackLock[0] = false;
+							}
+						});
+					} else {
+						divLoc.noInitChanges().takeUntil(until).act(evt -> {
+							if (callbackLock[0])
+								return;
+							callbackLock[0] = true;
+							try {
+								getEditor().setDividerLocation(evt.getNewValue());
+							} finally {
+								callbackLock[0] = false;
+							}
+						});
+					}
+				} else if (theDivLocation >= 0 || !Double.isNaN(theDivProportion)) {
+					if (c.isVisible()) {
+						EventQueue.invokeLater(() -> {
+							if (theDivLocation >= 0)
+								getEditor().setDividerLocation(theDivLocation);
+							else
+								getEditor().setDividerLocation(theDivProportion);
+						});
+					} else {
+						ComponentAdapter[] visListener = new ComponentAdapter[1];
+						visListener[0] = new ComponentAdapter() {
+							@Override
+							public void componentShown(ComponentEvent e) {
+								c.removeComponentListener(visListener[0]);
+								EventQueue.invokeLater(() -> {
+									if (theDivLocation >= 0)
+										getEditor().setDividerLocation(theDivLocation);
+									else
+										getEditor().setDividerLocation(theDivProportion);
+								});
+							}
+						};
+						c.addComponentListener(visListener[0]);
+					}
+				}
+			}
+			return c;
 		}
 	}
 

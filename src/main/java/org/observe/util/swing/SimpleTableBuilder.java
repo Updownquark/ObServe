@@ -996,13 +996,13 @@ implements TableBuilder<R, P> {
 							}
 						} else {
 							for (R row : newRows) {
-								if (theRows.canAdd(row, after, before) != null) {
+								if (theSafeRows.canAdd(row, after, before) != null) {
 									allImportable = false;
 									break;
 								}
 							}
 							if (allImportable) {
-								theRows.addAll(beforeRow ? rowIndex : rowIndex + 1, newRows);
+								theSafeRows.addAll(beforeRow ? rowIndex : rowIndex + 1, newRows);
 								return true;
 							}
 						}

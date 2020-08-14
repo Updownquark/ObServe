@@ -16,7 +16,7 @@ public interface ModelCell<R, C> {
 	boolean isLeaf();
 
 	public static class Default<M, C> implements ModelCell<M, C> {
-		private final Supplier<M> theModelValue;
+		private final Supplier<? extends M> theModelValue;
 		private final C theCellValue;
 		private final int theRowIndex;
 		private final int theColumnIndex;
@@ -25,7 +25,7 @@ public interface ModelCell<R, C> {
 		private final boolean isExpanded;
 		private final boolean isLeaf;
 
-		public Default(Supplier<M> modelValue, C cellValue, int rowIndex, int columnIndex, boolean selected, boolean focused,
+		public Default(Supplier<? extends M> modelValue, C cellValue, int rowIndex, int columnIndex, boolean selected, boolean focused,
 			boolean expanded, boolean leaf) {
 			theModelValue = modelValue;
 			theCellValue = cellValue;

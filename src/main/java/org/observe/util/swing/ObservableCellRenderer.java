@@ -7,6 +7,7 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import javax.swing.DefaultListCellRenderer;
+import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JLabel;
 import javax.swing.JList;
@@ -248,6 +249,8 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 
 		@Override
 		public String renderAsText(Supplier<? extends M> modelValue, C columnValue) {
+			if (theText != null)
+				return theText.apply(new ModelCell.Default<M, C>(modelValue, columnValue, 0, 0, false, false, false, false));
 			return String.valueOf(columnValue);
 		}
 
@@ -272,6 +275,44 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 				cb = theComponentDecorator.decorate(cb);
 			}
 			return cb;
+		}
+	}
+
+	class ButtonCellRenderer<M, C> implements ObservableCellRenderer<M, C> {
+		private final Function<? super ModelCell<? extends M, ? extends C>, String> theText;
+		private final JButton theButton;
+		private CellDecorator<M, C> theDecorator;
+		private ComponentDecorator theComponentDecorator;
+
+		public ButtonCellRenderer(Function<? super ModelCell<? extends M, ? extends C>, String> text) {
+			theText = text;
+			theButton = new JButton();
+		}
+
+		@Override
+		public String renderAsText(Supplier<? extends M> modelValue, C columnValue) {
+			return theText.apply(new ModelCell.Default<M, C>(modelValue, columnValue, 0, 0, false, false, false, false));
+		}
+
+		@Override
+		public ObservableCellRenderer<M, C> decorate(CellDecorator<M, C> decorator) {
+			theDecorator = decorator;
+			return this;
+		}
+
+		@Override
+		public Component getCellRendererComponent(Component parent, ModelCell<M, C> cell, CellRenderContext ctx) {
+			JButton button = theButton;
+			button.setText(theText.apply(cell));
+			if (theDecorator != null) {
+				if (theComponentDecorator == null)
+					theComponentDecorator = new ComponentDecorator();
+				else
+					theComponentDecorator.reset();
+				theDecorator.decorate(cell, theComponentDecorator);
+				button = theComponentDecorator.decorate(button);
+			}
+			return button;
 		}
 	}
 
@@ -305,5 +346,9 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 
 	public static <M, C> ObservableCellRenderer<M, C> checkRenderer(Predicate<? super ModelCell<? extends M, ? extends C>> value) {
 		return new CheckCellRenderer<>(value);
+	}
+
+	public static <M, C> ObservableCellRenderer<M, C> buttonRenderer(Function<? super ModelCell<? extends M, ? extends C>, String> text) {
+		return new ButtonCellRenderer<>(text);
 	}
 }

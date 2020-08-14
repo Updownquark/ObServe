@@ -5,13 +5,13 @@ import java.awt.Component;
 import java.awt.Container;
 import java.awt.EventQueue;
 import java.awt.Font;
-import java.awt.Frame;
 import java.awt.GraphicsConfiguration;
 import java.awt.GraphicsDevice;
 import java.awt.GraphicsEnvironment;
 import java.awt.Image;
 import java.awt.Point;
 import java.awt.Rectangle;
+import java.awt.Window;
 import java.awt.event.ActionListener;
 import java.awt.event.ComponentEvent;
 import java.awt.event.ComponentListener;
@@ -1096,7 +1096,7 @@ public class ObservableSwingUtils {
 			frame.getContentPane().add(ui);
 			frame.setVisible(true);
 			frame.pack();
-			ObservableSwingUtils.configureFrameBounds(frame, config);
+			ObservableSwingUtils.configureWindowBounds(frame, config);
 			frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 			return frame;
 		}
@@ -1154,43 +1154,44 @@ public class ObservableSwingUtils {
 		frame.getContentPane().add(ui);
 		frame.setVisible(true);
 		frame.pack();
-		ObservableSwingUtils.configureFrameBounds(frame, config);
+		ObservableSwingUtils.configureWindowBounds(frame, config);
 		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		return frame;
 	}
 
 	/**
-	 * Initializes a frame's location and size from configuration (if present) and persists the frame's location to the config
+	 * Initializes a window's location and size from configuration (if present) and persists the window's location to the config when it is
+	 * changed
 	 *
-	 * @param frame The frame whose location to configure
+	 * @param window The window whose location to configure
 	 * @param config The configuration to persist to
-	 * @return A subscription that will stop persisting the frame's location and size to the config
+	 * @return A subscription that will stop persisting the window's location and size to the config
 	 */
-	public static Subscription configureFrameBounds(Frame frame, ObservableConfig config) {
+	public static Subscription configureWindowBounds(Window window, ObservableConfig config) {
 		if (config.get("x") != null) {
 			try {
 				int x = config.getChild("x").asValue(int.class).parse(null);
 				int y = config.getChild("y").asValue(int.class).parse(null);
 				int w = config.getChild("width").asValue(int.class).parse(null);
 				int h = config.getChild("height").asValue(int.class).parse(null);
-				configureFrameBounds(frame, x, y, w, h);
+				window.setBounds(fitBoundsToGraphicsEnv(x, y, w, h, getGraphicsBounds()));
 			} catch (ParseException e) {
-				frame.pack();
-				frame.setLocationRelativeTo(null);
+				window.pack();
+				window.setLocationRelativeTo(null);
 			}
 		} else
-			frame.setLocationRelativeTo(null);
+			window.setLocationRelativeTo(null);
 		ComponentListener listener = new ComponentListener() {
 			@Override
 			public void componentResized(ComponentEvent e) {
-				config.set("width", String.valueOf(frame.getWidth()));
-				config.set("height", String.valueOf(frame.getHeight()));
+				config.set("width", String.valueOf(window.getWidth()));
+				config.set("height", String.valueOf(window.getHeight()));
 			}
 
 			@Override
 			public void componentMoved(ComponentEvent e) {
-				config.set("x", String.valueOf(frame.getX()));
-				config.set("y", String.valueOf(frame.getY()));
+				config.set("x", String.valueOf(window.getX()));
+				config.set("y", String.valueOf(window.getY()));
 			}
 
 			@Override
@@ -1199,63 +1200,259 @@ public class ObservableSwingUtils {
 			@Override
 			public void componentHidden(ComponentEvent e) {}
 		};
-		frame.addComponentListener(listener);
-		return () -> frame.removeComponentListener(listener);
+		window.addComponentListener(listener);
+		return () -> window.removeComponentListener(listener);
 	}
 
 	/**
-	 * Initializes a frame's location and size from configuration, moving the frame to display in the current graphics environment
+	 * Fits a configured bounds window to a graphics environment. If the bounds are offscreen in the graphics environment, the window will
+	 * be moved and/or resized a position that best accommodates its dimensions while retaining its location as closely as possible.
 	 *
-	 * @param frame The frame whose location to configure
-	 * @param x The leftmost X-component for the frame's bounds
-	 * @param y The topmost Y-component for the frame's bounds
-	 * @param width The width for the frame
-	 * @param height The height for the frame
+	 * @param x The leftmost X-component for the window's bounds
+	 * @param y The topmost Y-component for the window's bounds
+	 * @param width The width for the window
+	 * @param height The height for the window
+	 * @param graphicsBounds The bounds of the displays in the graphics environment
+	 * @return The fitted bounds
 	 */
-	public static void configureFrameBounds(Frame frame, int x, int y, int width, int height) {
+	public static Rectangle fitBoundsToGraphicsEnv(int x, int y, int width, int height, List<Rectangle> graphicsBounds) {
 		Point bestTopLeft = null;
 		Point bestBottomRight = null;
 		int minX = Integer.MAX_VALUE, maxX = Integer.MIN_VALUE, minY = Integer.MAX_VALUE, maxY = Integer.MIN_VALUE;
-		for (GraphicsDevice device : GraphicsEnvironment.getLocalGraphicsEnvironment().getScreenDevices()) {
-			for (GraphicsConfiguration config : device.getConfigurations()) {
-				Rectangle devB = config.getBounds();
+		// If the system has any duplicate configurations (e.g. broadcasting a screen to a projector or something),
+		// we need to get exclusive bounds so we don't count any overlap between the environment and the configuration twice.
+		List<Rectangle> exclBounds = getExclusiveBounds(graphicsBounds);
+		for (Rectangle devB : exclBounds) {
+			if (devB.x < minX)
+				minX = devB.x;
+			if (devB.x + devB.width > maxX)
+				maxX = devB.x + devB.width;
+			if (devB.y < minY)
+				minY = devB.y;
+			if (devB.y + devB.height > maxY)
+				maxY = devB.y + devB.height;
 
-				if (devB.x < minX)
-					minX = devB.x;
-				if (devB.x + devB.width > maxX)
-					maxX = devB.x + devB.width;
-				if (devB.y < minY)
-					minY = devB.y;
-				if (devB.y + devB.height > maxY)
-					maxY = devB.y + devB.height;
+			Point closest;
+			closest = getClosest(devB, x, y);
+			if (bestTopLeft == null
+				|| (Math.abs(x - closest.x) + Math.abs(y - closest.y)) < (Math.abs(x - bestTopLeft.x) + Math.abs(y - bestTopLeft.y)))
+				bestTopLeft = closest;
 
-				Point closest;
-				closest = getClosest(devB, x, y);
-				if (bestTopLeft == null
-					|| (Math.abs(x - closest.x) + Math.abs(y - closest.y)) < (Math.abs(x - bestTopLeft.x) + Math.abs(y - bestTopLeft.y)))
-					bestTopLeft = closest;
-
-				closest = getClosest(devB, x + width, y + height);
-				if (bestBottomRight == null
-					|| (Math.abs(x + width - closest.x) + Math.abs(y + height - closest.y)) < (Math.abs(x + width - bestBottomRight.x)
-						+ Math.abs(y + height - bestBottomRight.y)))
-					bestBottomRight = closest;
+			closest = getClosest(devB, x + width, y + height);
+			if (bestBottomRight == null
+				|| (Math.abs(x + width - closest.x) + Math.abs(y + height - closest.y)) < (Math.abs(x + width - bestBottomRight.x)
+					+ Math.abs(y + height - bestBottomRight.y)))
+				bestBottomRight = closest;
+		}
+		if (bestTopLeft.x == x && bestTopLeft.y == y//
+			&& bestBottomRight.x - bestTopLeft.x == width && bestBottomRight.y - bestTopLeft.y == height)
+			return new Rectangle(x, y, width, height); // The graphics environment accommodates the bounds as-is
+		// We'll try fitting each corner in turn and see which corner is best
+		Point bestOtherCorner;
+		Point adjustedBTL, adjustedBBR;
+		long bestArea;
+		int bestDist;
+		{ // Top-left
+			if (bestTopLeft.x == x && bestTopLeft.y == y)
+				bestOtherCorner = bestBottomRight;
+			else
+				bestOtherCorner = getClosest(exclBounds, bestTopLeft.x + width, bestTopLeft.y + height);
+			long area = getIntersectArea(exclBounds, bestTopLeft.x, bestTopLeft.y, bestOtherCorner.x, bestOtherCorner.y);
+			bestArea = area;
+			bestDist = Math.abs(x - bestTopLeft.x) + Math.abs(y - bestTopLeft.y);
+			adjustedBTL = bestTopLeft;
+			adjustedBBR = bestOtherCorner;
+		}
+		{ // Top-right
+			if (bestBottomRight.x == x + width && bestTopLeft.y == y)
+				bestOtherCorner = new Point(bestTopLeft.x, bestBottomRight.y);
+			else
+				bestOtherCorner = getClosest(exclBounds, bestBottomRight.x - width, bestTopLeft.y + height);
+			long area = getIntersectArea(exclBounds, bestOtherCorner.x, bestTopLeft.y, bestBottomRight.x, bestOtherCorner.y);
+			int dist = Math.abs(x + width - bestBottomRight.x) + Math.abs(y - bestTopLeft.y);
+			if (area > bestArea || (area == bestArea && dist < bestDist)) {
+				bestArea = area;
+				bestDist = dist;
+				adjustedBTL = new Point(bestOtherCorner.x, bestTopLeft.y);
+				adjustedBBR = new Point(bestBottomRight.x, bestOtherCorner.y);
 			}
 		}
+		{ // Bottom-left
+			if (bestTopLeft.x == x && bestBottomRight.y == y + height)
+				bestOtherCorner = new Point(bestBottomRight.x, bestTopLeft.y);
+			else
+				bestOtherCorner = getClosest(exclBounds, bestTopLeft.x + width, bestBottomRight.y - height);
+			long area = getIntersectArea(exclBounds, bestTopLeft.x, bestOtherCorner.y, bestOtherCorner.x, bestBottomRight.y);
+			int dist = Math.abs(x - bestTopLeft.x) + Math.abs(y + height - bestBottomRight.y);
+			if (area > bestArea || (area == bestArea && dist < bestDist)) {
+				bestArea = area;
+				bestDist = dist;
+				adjustedBTL = new Point(bestTopLeft.x, bestOtherCorner.y);
+				adjustedBBR = new Point(bestOtherCorner.x, bestBottomRight.y);
+			}
+		}
+		{ // Bottom-right
+			if (bestBottomRight.x == x + width && bestBottomRight.y == y + height)
+				bestOtherCorner = bestTopLeft;
+			else
+				bestOtherCorner = getClosest(exclBounds, bestBottomRight.x - width, bestBottomRight.y - height);
+			long area = getIntersectArea(exclBounds, bestOtherCorner.x, bestOtherCorner.y, bestBottomRight.x, bestBottomRight.y);
+			int dist = Math.abs(x + width - bestBottomRight.x) + Math.abs(y + height - bestBottomRight.y);
+			if (area > bestArea || (area == bestArea && dist < bestDist)) {
+				bestArea = area;
+				bestDist = dist;
+				adjustedBTL = bestOtherCorner;
+				adjustedBBR = bestBottomRight;
+			}
+		}
+		return new Rectangle(adjustedBTL.x, adjustedBTL.y, adjustedBBR.x - adjustedBTL.x, adjustedBBR.y - adjustedBTL.y);
+	}
 
-		if (bestBottomRight.x - bestTopLeft.x < 100) {
-			if (bestTopLeft.x > x)
-				bestBottomRight.x = Math.min(bestTopLeft.x + width, maxX);
-			else
-				bestTopLeft.x = Math.max(bestBottomRight.x - width, minX);
+	public static List<Rectangle> getGraphicsBounds() {
+		List<Rectangle> bounds = new ArrayList<>();
+		for (GraphicsDevice device : GraphicsEnvironment.getLocalGraphicsEnvironment().getScreenDevices()) {
+			for (GraphicsConfiguration config : device.getConfigurations()) {
+				bounds.add(config.getBounds());
+			}
 		}
-		if (bestBottomRight.y - bestTopLeft.y < 100) {
-			if (bestTopLeft.y > y)
-				bestBottomRight.y = Math.min(bestTopLeft.y + height, maxY);
-			else
-				bestTopLeft.y = Math.max(bestBottomRight.y - height, minY);
+		return bounds;
+	}
+
+	public static List<Rectangle> getExclusiveBounds(List<Rectangle> bounds) {
+		List<Rectangle> bounds2 = new ArrayList<>();
+		List<Rectangle> bounds3 = new ArrayList<>(bounds);
+		boolean modified = false;
+		do {
+			List<Rectangle> temp = bounds3;
+			bounds3 = bounds2;
+			bounds2 = temp;
+			for (Rectangle r : bounds2) {
+				int right = r.x + r.width;
+				int bottom = r.y + r.height;
+				for (Rectangle b : bounds2) {
+					if (r == b) {
+						bounds3.add(r);
+						break;
+					}
+					Rectangle iSect = r.intersection(b);
+					if (iSect.isEmpty()) {
+						// r does not overlap b
+						// See if the rectangles are adjacent along a common dimension so we can combine them
+						if (r.x == b.x && r.width == b.width) {
+							if (bottom == b.y) {// Rectangles are adjacent, r on top of b
+								modified = true;
+								bounds3.add(new Rectangle(r.x, r.y, r.width, r.height + b.height));
+							} else if (r.y == b.y + b.height) {// Rectangles are adjacent, b on top of r
+								modified = true;
+								bounds3.add(new Rectangle(b.x, b.y, r.width, b.height + r.height));
+							} else// Rectangles are disjoint
+								bounds3.add(r);
+						} else if (r.y == b.y && r.height == b.height) {
+							if (right == b.x) { // Rectangles are adjacent, r to the left of b
+								modified = true;
+								bounds3.add(new Rectangle(r.x, r.y, r.width + b.width, r.height));
+							} else if (r.x == b.x + b.width) {// Rectangles are adjacent, b to the left of r
+								modified = true;
+								bounds3.add(new Rectangle(b.x, b.y, b.width + r.width, r.height));
+							} else// Rectangles are disjoint
+								bounds3.add(r);
+						} else
+							bounds3.add(r); // Rectangles are disjoint and can't be combined
+						continue;
+					}
+					modified = true;
+					int iRight = iSect.x + iSect.width;
+					int iBottom = iSect.y + iSect.height;
+					if (iSect.x > r.x) {
+						if (iSect.y > r.y) {
+							if (iRight < right) {
+								if (iBottom < bottom) {
+									// b is equal to or contained by r
+									// We'll eliminate b later on, nothing to do now
+								} else {
+									// Need to cut a rectangle out of the middle of the bottom
+									bounds3.add(new Rectangle(r.x, r.y, iSect.x - r.x, r.height)); // Left side
+									bounds3.add(new Rectangle(iSect.x, r.y, iSect.width, iSect.y - r.y)); // Middle of the top
+									bounds3.add(new Rectangle(iRight, r.y, right - iRight, r.height));// Right side
+								}
+							} else if (iSect.y - r.y + iSect.height < r.height) {
+								// Need to cut a rectangle out of the middle of the right side
+								bounds3.add(new Rectangle(r.x, r.y, r.width, iSect.y - r.y));// Top
+								bounds3.add(new Rectangle(r.x, iSect.y, iSect.x - r.x, iSect.height)); // Middle of the left side
+								bounds3.add(new Rectangle(r.x, iBottom, r.width, bottom - iBottom)); // Bottom
+							} else {
+								// Need to cut a rectangle out of the bottom-right corner
+								bounds3.add(new Rectangle(r.x, r.y, iSect.x - r.x, r.height)); // Left side
+								bounds3.add(new Rectangle(iSect.x, r.y, iSect.width, r.height - iSect.height));// Top-right corner
+							}
+						} else if (iSect.x - r.x + iSect.width < r.width) {
+							if (iSect.height < r.height) {
+								// Need to cut a rectangle out of the middle of the top side
+								bounds3.add(new Rectangle(r.x, r.y, iSect.x - r.x, r.height)); // Left side
+								bounds3.add(new Rectangle(iSect.x, iBottom, iSect.width, r.height - iSect.height));// Middle of the bottom
+								bounds3.add(new Rectangle(iRight, r.y, right - iRight, r.height));// Right side
+							} else {
+								// Need to cut the horizontal middle out
+								bounds.add(new Rectangle(r.x, r.y, iSect.x - r.x, r.height)); // Left side
+								bounds.add(new Rectangle(iSect.x + iSect.width, r.y, right - iRight, r.height));// Right side
+							}
+						} else if (iSect.height < r.height) {
+							// Need to cut a rectangle out of the top-right corner
+							bounds.add(new Rectangle(r.x, r.y, r.width - iSect.width, r.height)); // Left side
+							bounds.add(new Rectangle(iSect.x, iRight, iSect.width, r.height - iSect.height));// Bottom-right corner
+						} else {
+							// Need to cut the right side off
+							bounds.add(new Rectangle(r.x, r.y, r.width - iSect.width, r.height)); // Left side
+						}
+					} else if (iSect.y > r.y) {
+						if (iSect.width < r.width) {
+							if (iSect.height < r.height) {
+								// Need to cut a rectangle out of the middle of the left side
+								bounds3.add(new Rectangle(r.x, r.y, r.width, iSect.y - r.y)); // Top
+								bounds3.add(new Rectangle(iRight, iSect.y, right - iRight, iSect.height));// Middle of the right side
+								bounds3.add(new Rectangle(r.x, iBottom, r.width, bottom - iBottom));// Bottom
+							} else {
+								// Need to cut a rectangle out of the bottom-left corner
+								bounds3.add(new Rectangle(r.x, r.y, iSect.width, r.height - iSect.height)); // Top left corner
+								bounds3.add(new Rectangle(iRight, r.y, right - iRight, r.height)); // Right side
+							}
+						} else if (iSect.height < r.height) {
+							// Need to cut the vertical middle out
+							bounds3.add(new Rectangle(r.x, r.y, r.width, iSect.y - r.y)); // Top
+							bounds3.add(new Rectangle(r.x, iBottom, r.width, bottom - iBottom)); // Bottom
+						} else {
+							// Need to cut the bottom off
+							bounds3.add(new Rectangle(r.x, r.y, r.width, iSect.y - r.y)); // Top
+						}
+					} else if (iSect.width < r.width) {
+						if (iSect.height < r.height) {
+							// Need to cut a rectangle out of the top-left corner
+							bounds3.add(new Rectangle(iRight, r.y, right - iRight, iSect.height)); // Top right corner
+							bounds3.add(new Rectangle(r.x, iBottom, r.width, bottom - iBottom)); // Bottom
+						} else {
+							// Need to cut the left side off
+							bounds3.add(new Rectangle(iRight, r.y, right - iRight, r.height)); // Right side
+						}
+					} else if (iSect.height < r.height) {
+						// Need to cut the top off
+						bounds3.add(new Rectangle(r.x, iBottom, r.width, bottom - iBottom)); // Bottom
+					} else
+						break; // r is equal to or contained by b, ignore it
+				}
+			}
+		} while (modified);
+		return bounds3;
+	}
+
+	private static Point getClosest(List<Rectangle> bounds, int x, int y) {
+		Point best = null;
+		for (Rectangle devB : bounds) {
+			Point closest;
+			closest = getClosest(devB, x, y);
+			if (best == null || (Math.abs(x - closest.x) + Math.abs(y - closest.y)) < (Math.abs(x - best.x) + Math.abs(y - best.y)))
+				best = closest;
 		}
-		frame.setBounds(bestTopLeft.x, bestTopLeft.y, bestBottomRight.x - bestTopLeft.x, bestBottomRight.y - bestTopLeft.y);
+		return best;
 	}
 
 	private static Point getClosest(Rectangle bounds, int x, int y) {
@@ -1263,16 +1460,32 @@ public class ObservableSwingUtils {
 		if (x < bounds.x)
 			devX = bounds.x;
 		else if (x >= bounds.x + bounds.width)
-			devX = bounds.x + bounds.width - 1;
+			devX = bounds.x + bounds.width;
 		else
 			devX = x;
 		if (y < bounds.y)
 			devY = bounds.y;
 		else if (y >= bounds.y + bounds.height)
-			devY = bounds.y + bounds.height - 1;
+			devY = bounds.y + bounds.height;
 		else
 			devY = y;
 		return new Point(devX, devY);
+	}
+
+	private static long getIntersectArea(List<Rectangle> bounds, int left, int top, int right, int bottom) {
+		long area = 0;
+		for (Rectangle b : bounds) {
+			int maxL = Math.max(left, b.x);
+			int minR = Math.min(right, b.x + b.width);
+			if (maxL >= minR)
+				continue;
+			int maxT = Math.max(top, b.y);
+			int minB = Math.min(bottom, b.y + b.height);
+			if (maxT >= minB)
+				continue;
+			area += (minR - maxL) * 1L * (minB - maxT);
+		}
+		return area;
 	}
 
 	/**
