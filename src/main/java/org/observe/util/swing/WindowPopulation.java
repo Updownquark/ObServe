@@ -10,6 +10,7 @@ import java.awt.Window;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -204,6 +205,25 @@ public class WindowPopulation {
 					if (h != null && h.get() != null) {
 						boundsObs.add(h.noInitChanges());
 						bounds.height = h.get();
+					}
+					bounds = ObservableSwingUtils.fitBoundsToGraphicsEnv(bounds.x, bounds.y, bounds.width, bounds.height, //
+						Arrays.asList(new Rectangle(0, 0, 2000, 1000)));
+					// ObservableSwingUtils.getGraphicsBounds());
+					try {
+						if (x != null && x.get() != null && x.get() != bounds.x) {
+							x.set(bounds.x, null);
+						}
+						if (y != null && y.get() != null && y.get() != bounds.y) {
+							y.set(bounds.y, null);
+						}
+						if (w != null && w.get() != null && w.get() != bounds.width) {
+							w.set(bounds.width, null);
+						}
+						if (h != null && h.get() != null && h.get() != bounds.height) {
+							h.set(bounds.height, null);
+						}
+					} catch (RuntimeException e) {
+						e.printStackTrace();
 					}
 					theWindow.setBounds(bounds);
 				}

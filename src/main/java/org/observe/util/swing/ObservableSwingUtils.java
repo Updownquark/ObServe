@@ -1321,19 +1321,21 @@ public class ObservableSwingUtils {
 	public static List<Rectangle> getExclusiveBounds(List<Rectangle> bounds) {
 		List<Rectangle> bounds2 = new ArrayList<>();
 		List<Rectangle> bounds3 = new ArrayList<>(bounds);
-		boolean modified = false;
+		boolean modified;
 		do {
+			modified = false;
+			bounds2.clear();
 			List<Rectangle> temp = bounds3;
 			bounds3 = bounds2;
 			bounds2 = temp;
 			for (Rectangle r : bounds2) {
 				int right = r.x + r.width;
 				int bottom = r.y + r.height;
-				for (Rectangle b : bounds2) {
-					if (r == b) {
-						bounds3.add(r);
-						break;
-					}
+				if (bounds3.isEmpty()) {
+					bounds3.add(r);
+					continue;
+				}
+				for (Rectangle b : bounds3) {
 					Rectangle iSect = r.intersection(b);
 					if (iSect.isEmpty()) {
 						// r does not overlap b
@@ -1341,24 +1343,28 @@ public class ObservableSwingUtils {
 						if (r.x == b.x && r.width == b.width) {
 							if (bottom == b.y) {// Rectangles are adjacent, r on top of b
 								modified = true;
+								bounds3.remove(b);
 								bounds3.add(new Rectangle(r.x, r.y, r.width, r.height + b.height));
 							} else if (r.y == b.y + b.height) {// Rectangles are adjacent, b on top of r
 								modified = true;
+								bounds3.remove(b);
 								bounds3.add(new Rectangle(b.x, b.y, r.width, b.height + r.height));
 							} else// Rectangles are disjoint
 								bounds3.add(r);
 						} else if (r.y == b.y && r.height == b.height) {
 							if (right == b.x) { // Rectangles are adjacent, r to the left of b
 								modified = true;
+								bounds3.remove(b);
 								bounds3.add(new Rectangle(r.x, r.y, r.width + b.width, r.height));
 							} else if (r.x == b.x + b.width) {// Rectangles are adjacent, b to the left of r
 								modified = true;
+								bounds3.remove(b);
 								bounds3.add(new Rectangle(b.x, b.y, b.width + r.width, r.height));
 							} else// Rectangles are disjoint
 								bounds3.add(r);
 						} else
 							bounds3.add(r); // Rectangles are disjoint and can't be combined
-						continue;
+						break;
 					}
 					modified = true;
 					int iRight = iSect.x + iSect.width;
@@ -1368,7 +1374,7 @@ public class ObservableSwingUtils {
 							if (iRight < right) {
 								if (iBottom < bottom) {
 									// b is equal to or contained by r
-									// We'll eliminate b later on, nothing to do now
+									bounds3.remove(b);
 								} else {
 									// Need to cut a rectangle out of the middle of the bottom
 									bounds3.add(new Rectangle(r.x, r.y, iSect.x - r.x, r.height)); // Left side
@@ -1393,16 +1399,16 @@ public class ObservableSwingUtils {
 								bounds3.add(new Rectangle(iRight, r.y, right - iRight, r.height));// Right side
 							} else {
 								// Need to cut the horizontal middle out
-								bounds.add(new Rectangle(r.x, r.y, iSect.x - r.x, r.height)); // Left side
-								bounds.add(new Rectangle(iSect.x + iSect.width, r.y, right - iRight, r.height));// Right side
+								bounds3.add(new Rectangle(r.x, r.y, iSect.x - r.x, r.height)); // Left side
+								bounds3.add(new Rectangle(iSect.x + iSect.width, r.y, right - iRight, r.height));// Right side
 							}
 						} else if (iSect.height < r.height) {
 							// Need to cut a rectangle out of the top-right corner
-							bounds.add(new Rectangle(r.x, r.y, r.width - iSect.width, r.height)); // Left side
-							bounds.add(new Rectangle(iSect.x, iRight, iSect.width, r.height - iSect.height));// Bottom-right corner
+							bounds3.add(new Rectangle(r.x, r.y, r.width - iSect.width, r.height)); // Left side
+							bounds3.add(new Rectangle(iSect.x, iRight, iSect.width, r.height - iSect.height));// Bottom-right corner
 						} else {
 							// Need to cut the right side off
-							bounds.add(new Rectangle(r.x, r.y, r.width - iSect.width, r.height)); // Left side
+							bounds3.add(new Rectangle(r.x, r.y, r.width - iSect.width, r.height)); // Left side
 						}
 					} else if (iSect.y > r.y) {
 						if (iSect.width < r.width) {
@@ -1436,8 +1442,9 @@ public class ObservableSwingUtils {
 					} else if (iSect.height < r.height) {
 						// Need to cut the top off
 						bounds3.add(new Rectangle(r.x, iBottom, r.width, bottom - iBottom)); // Bottom
-					} else
-						break; // r is equal to or contained by b, ignore it
+					} else {// r is equal to or contained by b, ignore it
+					}
+					break;
 				}
 			}
 		} while (modified);
