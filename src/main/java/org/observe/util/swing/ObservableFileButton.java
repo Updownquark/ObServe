@@ -28,34 +28,25 @@ import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.util.TypeTokens;
+import org.qommons.io.BetterFile;
 import org.qommons.io.FileUtils;
-import org.qommons.io.FileUtils.FileDataSource;
-import org.qommons.io.FileUtils.MutableFileDataSource;
 import org.qommons.threading.QommonsTimer;
 
 import com.google.common.reflect.TypeToken;
 
-/**
- * A file button that, when clicked, displays a file chooser to allow the user to select a file for a {@link SettableValue}
- *
- * @param <F> The {@link FileDataSource} sub-type of the value
- */
-public class ObservableFileButton<F extends FileDataSource> extends JButton {
-	/**
-	 * Decorates an {@link ObservableFileButton} by its value
-	 *
-	 * @param <F> The {@link ObservableFileButton} sub-type that this decorator understands
-	 */
-	public interface FileDecorator<F extends FileDataSource> {
+/** A file button that, when clicked, displays a file chooser to allow the user to select a file for a {@link SettableValue} */
+public class ObservableFileButton extends JButton {
+	/** Decorates an {@link ObservableFileButton} by its value */
+	public interface FileDecorator {
 		/**
 		 * @param file The value of the {@link ObservableFileButton}--may be null
 		 * @return The icon to use to decorate the button--may be null
 		 */
-		Image getIcon(F file);
+		Image getIcon(File file);
 	}
 
 	/** Default file decoration */
-	public static FileDecorator<FileDataSource> DEFAULT_DECORATION = new FileDecorator<FileDataSource>() {
+	public static FileDecorator DEFAULT_DECORATION = new FileDecorator() {
 		private final ImageIcon theUnselectedIcon;
 		private final ImageIcon theAbsentIcon;
 		private final ImageIcon thePresentIcon;
@@ -67,7 +58,7 @@ public class ObservableFileButton<F extends FileDataSource> extends JButton {
 		}
 
 		@Override
-		public Image getIcon(FileDataSource file) {
+		public Image getIcon(File file) {
 			ImageIcon icon;
 			if (file == null)
 				icon = theUnselectedIcon;
@@ -79,14 +70,14 @@ public class ObservableFileButton<F extends FileDataSource> extends JButton {
 		}
 	};
 
-	private final SettableValue<F> theValue;
+	private final SettableValue<File> theValue;
 	private final Observable<?> theUntil;
 	private final QommonsTimer.TaskHandle theFileWatchHandle;
 	private final JFileChooser theFileChooser;
 	private final JPopupMenu thePopup;
 	private final Map<String, FileAction> theActions;
 
-	private FileDecorator<? super F> theDecorator;
+	private FileDecorator theDecorator;
 	private Image theDecoration;
 	private long theLastMod;
 	private boolean isClearable;
@@ -94,7 +85,7 @@ public class ObservableFileButton<F extends FileDataSource> extends JButton {
 	private String theTooltip;
 	private boolean isExternallyEnabled;
 	private String theApproveText;
-	private F theInitDirectory;
+	private BetterFile theInitDirectory;
 	private String theFileFilterDescrip;
 
 	/**
@@ -102,11 +93,11 @@ public class ObservableFileButton<F extends FileDataSource> extends JButton {
 	 * @param open Whether the chooser should display an "Open" or "Save" choice
 	 * @param until An observable that, when fired will release this button's resources
 	 */
-	public ObservableFileButton(SettableValue<F> value, boolean open, Observable<?> until) {
+	public ObservableFileButton(SettableValue<File> value, boolean open, Observable<?> until) {
 		theValue = value;
 		theUntil = until;
 		theFileWatchHandle = QommonsTimer.getCommonInstance().build(() -> {
-			FileDataSource selected = theValue.get();
+			File selected = theValue.get();
 			if (selected != null && checkFile(selected))
 				repaint();
 		}, Duration.ofSeconds(1), false).onEDT();
@@ -147,15 +138,9 @@ public class ObservableFileButton<F extends FileDataSource> extends JButton {
 			configureFileChooser(theFileChooser);
 			while (true) {
 				if (theFileChooser.showDialog(this, theApproveText) == JFileChooser.APPROVE_OPTION) {
-					MutableFileDataSource newFile = FileUtils.dataSource(theFileChooser.getSelectedFile());
-					if (!TypeTokens.get().isInstance(theValue.getType(), newFile)) {
-						// This probably shouldn't happen--the selected file or initial directory shouldn't have any ancestors
-						// that aren't an instance of the correct type
-						JOptionPane.showMessageDialog(ObservableFileButton.this, newFile + " is not a valid selection", "Invalid selection",
-							JOptionPane.ERROR_MESSAGE);
-					}
+					File newFile = theFileChooser.getSelectedFile();
 					try {
-						theValue.set((F) newFile, evt);
+						theValue.set(newFile, evt);
 						break;
 					} catch (UnsupportedOperationException | IllegalArgumentException e) {
 						JOptionPane.showMessageDialog(ObservableFileButton.this, e.getMessage(), "Invalid selection",
@@ -199,7 +184,7 @@ public class ObservableFileButton<F extends FileDataSource> extends JButton {
 	}
 
 	/** @return This button's value */
-	public SettableValue<F> getValue() {
+	public SettableValue<File> getValue() {
 		return theValue;
 	}
 
@@ -207,7 +192,7 @@ public class ObservableFileButton<F extends FileDataSource> extends JButton {
 	 * @param approveText The text for the button in the file chooser to select the file
 	 * @return This button
 	 */
-	public ObservableFileButton<F> withApproveText(String approveText) {
+	public ObservableFileButton withApproveText(String approveText) {
 		theApproveText = approveText;
 		return this;
 	}
@@ -216,7 +201,7 @@ public class ObservableFileButton<F extends FileDataSource> extends JButton {
 	 * @param openOrSave Whether the file chooser should be an "Open" or "Save" dialog
 	 * @return This button
 	 */
-	public ObservableFileButton<F> openOrSave(boolean openOrSave) {
+	public ObservableFileButton openOrSave(boolean openOrSave) {
 		return withApproveText(openOrSave ? "Open" : "Save");
 	}
 
@@ -224,7 +209,7 @@ public class ObservableFileButton<F extends FileDataSource> extends JButton {
 	 * @param fileFilterDescrip The description for the file filter in the file chooser
 	 * @return This button
 	 */
-	public ObservableFileButton<F> withFileFilterDescrip(String fileFilterDescrip) {
+	public ObservableFileButton withFileFilterDescrip(String fileFilterDescrip) {
 		theFileFilterDescrip = fileFilterDescrip;
 		return this;
 	}
@@ -233,7 +218,7 @@ public class ObservableFileButton<F extends FileDataSource> extends JButton {
 	 * @param initDirectory The initial directory for the file chooser, if the value is absent
 	 * @return This button
 	 */
-	public ObservableFileButton<F> startAt(F initDirectory) {
+	public ObservableFileButton startAt(BetterFile initDirectory) {
 		theInitDirectory = initDirectory;
 		return this;
 	}
@@ -242,7 +227,7 @@ public class ObservableFileButton<F extends FileDataSource> extends JButton {
 	 * @param decorator The decorator for this button's icon
 	 * @return This button
 	 */
-	public ObservableFileButton<F> withDecorator(FileDecorator<? super F> decorator) {
+	public ObservableFileButton withDecorator(FileDecorator decorator) {
 		theDecorator = decorator;
 		theDecoration = decorator == null ? null : decorator.getIcon(theValue.get());
 		repaint();
@@ -306,7 +291,7 @@ public class ObservableFileButton<F extends FileDataSource> extends JButton {
 	 * @param tooltip The tooltip description to set for this button
 	 * @return This button
 	 */
-	public ObservableFileButton<F> withToolTip(String tooltip) {
+	public ObservableFileButton withToolTip(String tooltip) {
 		theTooltip = tooltip;
 		return this;
 	}
@@ -318,13 +303,13 @@ public class ObservableFileButton<F extends FileDataSource> extends JButton {
 	}
 
 	/**
-	 * Called when the file value changes to initialize any variables that will need to be checked by {@link #checkFile(FileDataSource)} to
-	 * determine if it has changed significantly
+	 * Called when the file value changes to initialize any variables that will need to be checked by {@link #checkFile(File)} to determine
+	 * if it has changed significantly
 	 *
 	 * @param file The new file value
 	 */
-	protected void fileSet(FileDataSource file) {
-		theLastMod = file == null ? -1 : file.getLastModified();
+	protected void fileSet(File file) {
+		theLastMod = file == null ? -1 : file.lastModified();
 	}
 
 	/**
@@ -333,8 +318,8 @@ public class ObservableFileButton<F extends FileDataSource> extends JButton {
 	 * @param file The current file value
 	 * @return Whether the file has changed in a way that affects this view
 	 */
-	protected boolean checkFile(FileDataSource file) {
-		long lastMod = file.getLastModified();
+	protected boolean checkFile(File file) {
+		long lastMod = file.lastModified();
 		boolean update = false;
 		if (theLastMod != lastMod) {
 			update = true;
@@ -345,17 +330,18 @@ public class ObservableFileButton<F extends FileDataSource> extends JButton {
 
 	/** @param chooser The file chooser to configure before displaying in response to the user's click on this button */
 	protected void configureFileChooser(JFileChooser chooser) {
-		F value = getValue().get();
+		File value = getValue().get();
+		while (value != null && !value.exists())
+			value = value.getParentFile();
 		if (value != null) {
-			File f = FileUtils.asFile(value);
-			chooser.setCurrentDirectory(f.getParentFile());
-			chooser.setSelectedFile(f);
+			chooser.setCurrentDirectory(value.getParentFile());
+			chooser.setSelectedFile(value);
 		} else if (theInitDirectory != null)
-			chooser.setCurrentDirectory(FileUtils.asFile(theInitDirectory));
+			chooser.setCurrentDirectory(new FileUtils.SyntheticFile(theInitDirectory));
 		chooser.setMultiSelectionEnabled(false);
 		chooser.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
 		chooser.setApproveButtonToolTipText(theTooltip);
-		chooser.setFileFilter(new ValueAcceptableFileFilter<>(theValue, theFileFilterDescrip));
+		chooser.setFileFilter(new ValueAcceptableFileFilter(theValue, theFileFilterDescrip));
 	}
 
 	@Override
@@ -381,7 +367,7 @@ public class ObservableFileButton<F extends FileDataSource> extends JButton {
 		String disabled = theValue.isEnabled().get();
 
 		String tooltip;
-		F value = theValue.get();
+		File value = theValue.get();
 		if (disabled != null)
 			tooltip = disabled;
 		else if (theTooltip != null) {
@@ -478,20 +464,16 @@ public class ObservableFileButton<F extends FileDataSource> extends JButton {
 		}
 	}
 
-	/**
-	 * A file filter that rejects files (not directories, so the user can navigate) that are not acceptable by a value
-	 *
-	 * @param <F> The {@link FileDataSource} sub-type of the value
-	 */
-	public static class ValueAcceptableFileFilter<F extends FileDataSource> extends FileFilter {
-		private final SettableValue<F> theValue;
+	/** A file filter that rejects files (not directories, so the user can navigate) that are not acceptable by a value */
+	public static class ValueAcceptableFileFilter extends FileFilter {
+		private final SettableValue<File> theValue;
 		private String theDescription;
 
 		/**
 		 * @param value The value
 		 * @param descrip The description for this file filter
 		 */
-		public ValueAcceptableFileFilter(SettableValue<F> value, String descrip) {
+		public ValueAcceptableFileFilter(SettableValue<File> value, String descrip) {
 			theValue = value;
 			theDescription = descrip;
 		}
@@ -500,10 +482,7 @@ public class ObservableFileButton<F extends FileDataSource> extends JButton {
 		public boolean accept(File f) {
 			if (f.isDirectory())
 				return true;
-			MutableFileDataSource ds = FileUtils.dataSource(f);
-			if (!TypeTokens.get().isInstance(theValue.getType(), ds))
-				return false;
-			return theValue.isAcceptable((F) ds) == null;
+			return theValue.isAcceptable(f) == null;
 		}
 
 		@Override

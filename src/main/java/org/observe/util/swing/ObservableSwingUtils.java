@@ -22,6 +22,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.ref.WeakReference;
+import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
 import java.text.ParseException;
 import java.util.ArrayList;
@@ -1063,7 +1064,7 @@ public class ObservableSwingUtils {
 			String configFileLoc = null;
 			if (configName != null)
 				configFileLoc = System.getProperty(configName + ".config");
-			if (configFileLoc == null) {
+			if (configFileLoc == null && theDefaultConfigLocation != null) {
 				configFileLoc = theDefaultConfigLocation.getPath();
 			}
 			if (configFileLoc == null)
@@ -1090,15 +1091,28 @@ public class ObservableSwingUtils {
 				System.err.println("Could not persist UI config");
 				ex.printStackTrace();
 			});
+			if (EventQueue.isDispatchThread())
+				return _build(config, app);
+			else {
+				JFrame[] frame = new JFrame[1];
+				try {
+					EventQueue.invokeAndWait(() -> {
+						frame[0] = _build(config, app);
+					});
+				} catch (InvocationTargetException | InterruptedException e) {
+					throw new IllegalStateException(e);
+				}
+				return frame[0];
+			}
+		}
+
+		private JFrame _build(ObservableConfig config, Function<ObservableConfig, Component> app) {
 			Component ui = app.apply(config);
-			JFrame frame = theTitle == null ? new JFrame() : new JFrame(theTitle);
-			// frame.setContentPane(ui);
-			frame.getContentPane().add(ui);
-			frame.setVisible(true);
-			frame.pack();
-			ObservableSwingUtils.configureWindowBounds(frame, config);
-			frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-			return frame;
+			PanelPopulation.WindowBuilder<JFrame, ?> populator = WindowPopulation.populateWindow(null, null, true, true);
+			populator.withBounds(config).withContent(ui);
+			if (theTitle != null)
+				populator.withTitle(theTitle);
+			return populator.run(null).getWindow();
 		}
 	}
 

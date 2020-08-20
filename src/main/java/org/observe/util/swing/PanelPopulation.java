@@ -18,6 +18,7 @@ import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionListener;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
+import java.io.File;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
@@ -36,6 +37,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import javax.swing.Action;
@@ -80,6 +82,7 @@ import org.observe.Subscription;
 import org.observe.TypedValueContainer;
 import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.DefaultObservableCollection;
+import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
 import org.observe.config.ObservableConfig;
 import org.observe.util.SafeObservableCollection;
@@ -92,13 +95,13 @@ import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
+import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.FastFailLockingStrategy;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.RRWLockingStrategy;
-import org.qommons.io.FileUtils.FileDataSource;
 import org.qommons.io.Format;
 import org.qommons.threading.QommonsTimer;
 
@@ -240,8 +243,7 @@ public class PanelPopulation {
 		<F> P addComboField(String fieldName, SettableValue<F> value, List<? extends F> availableValues,
 			Consumer<ComboEditor<F, ?>> modify);
 
-		<F extends FileDataSource> P addFileField(String fieldName, SettableValue<F> value, boolean open,
-			Consumer<FieldEditor<ObservableFileButton<F>, ?>> modify);
+		P addFileField(String fieldName, SettableValue<File> value, boolean open, Consumer<FieldEditor<ObservableFileButton, ?>> modify);
 
 		default <F> P addRadioField(String fieldName, SettableValue<F> value, F[] values,
 			Consumer<ToggleEditor<F, JRadioButton, ?>> modify) {
@@ -840,39 +842,44 @@ public class PanelPopulation {
 			return renderWith(ObservableCellRenderer.formatted(format));
 		}
 
-		P renderWith(ObservableCellRenderer<List<F>, F> renderer);
+		P renderWith(ObservableCellRenderer<BetterList<F>, F> renderer);
 
 		default P withValueTooltip(Function<? super F, String> tooltip) {
 			return withCellTooltip(tooltip == null ? null : cell -> tooltip.apply(cell.getCellValue()));
 		}
 
-		P withCellTooltip(Function<? super ModelCell<List<F>, F>, String> tooltip);
+		P withCellTooltip(Function<? super ModelCell<BetterList<F>, F>, String> tooltip);
 
 		default P withSelection(SettableValue<F> selection, Function<? super F, ? extends F> parent, boolean enforceSingleSelection) {
-			return withSelection(selection.map(TypeTokens.get().keyFor(List.class).getCompoundType(selection.getType()), //
-				s -> pathTo(s, parent, getRoot().get()), path -> path.get(path.size() - 1), null), enforceSingleSelection);
+			return withSelection(selection.map(TypeTokens.get().keyFor(BetterList.class).getCompoundType(selection.getType()), //
+				s -> pathTo(s, parent, getRoot().get()), //
+				path -> path == null ? null : path.get(path.size() - 1), null), enforceSingleSelection);
 		}
 
 		default P withSelection(ObservableCollection<F> selection, Function<? super F, ? extends F> parent) {
 			return withSelection(selection.flow()
-				.map(TypeTokens.get().keyFor(List.class).getCompoundType(selection.getType()), //
+				.map(TypeTokens.get().keyFor(BetterList.class).getCompoundType(selection.getType()), //
 					s -> pathTo(s, parent, getRoot().get()), opts -> opts.cache(false).withReverse(path -> path.get(path.size() - 1)))//
 				.collectPassive());
 		}
 
-		P withSelection(SettableValue<List<F>> selection, boolean enforceSingleSelection);
+		P withSelection(SettableValue<BetterList<F>> selection, boolean enforceSingleSelection);
 
-		P withSelection(ObservableCollection<List<F>> selection);
+		P withSelection(ObservableCollection<BetterList<F>> selection);
 
-		static <T> List<T> pathTo(T value, Function<? super T, ? extends T> parent, T root) {
+		P withLeafTest(Predicate<? super F> leafTest);
+
+		static <T> BetterList<T> pathTo(T value, Function<? super T, ? extends T> parent, T root) {
+			if (value == null)
+				return null;
 			LinkedList<T> path = new LinkedList<>();
 			while (true) {
-				path.add(value);
+				path.addFirst(value);
 				if (value == null || value == root)
 					break;
 				value = parent.apply(value);
 			}
-			return path;
+			return BetterList.of(path);
 		}
 	}
 
@@ -908,12 +915,12 @@ public class PanelPopulation {
 		P withWidth(SettableValue<Integer> width);
 		P withHeight(SettableValue<Integer> height);
 		default P withLocation(ObservableConfig locationConfig) {
-			withX(locationConfig.asValue(int.class).at("x").withFormat(Format.INT, () -> getWindow().getX()).buildValue(null));
-			return withY(locationConfig.asValue(int.class).at("y").withFormat(Format.INT, () -> getWindow().getX()).buildValue(null));
+			withX(locationConfig.asValue(Integer.class).at("x").withFormat(Format.INT, () -> null).buildValue(null));
+			return withY(locationConfig.asValue(Integer.class).at("y").withFormat(Format.INT, () -> getWindow().getX()).buildValue(null));
 		}
 		default P withSize(ObservableConfig sizeConfig) {
-			withWidth(sizeConfig.asValue(int.class).at("width").withFormat(Format.INT, () -> getWindow().getX()).buildValue(null));
-			return withHeight(sizeConfig.asValue(int.class).at("height").withFormat(Format.INT, () -> getWindow().getX()).buildValue(null));
+			withWidth(sizeConfig.asValue(Integer.class).at("width").withFormat(Format.INT, () -> null).buildValue(null));
+			return withHeight(sizeConfig.asValue(Integer.class).at("height").withFormat(Format.INT, () -> null).buildValue(null));
 		}
 		default P withBounds(ObservableConfig boundsConfig) {
 			withLocation(boundsConfig);
@@ -1107,12 +1114,16 @@ public class PanelPopulation {
 	interface PartialPanelPopulatorImpl<C extends Container, P extends PartialPanelPopulatorImpl<C, P>> extends PanelPopulator<C, P> {
 		Observable<?> getUntil();
 
-		void doAdd(AbstractComponentEditor<?, ?> field, Component fieldLabel, Component postLabel);
+		void doAdd(AbstractComponentEditor<?, ?> field, Component fieldLabel, Component postLabel, boolean scrolled);
 
 		Supplier<Transactable> getLock();
 
 		default void doAdd(SimpleFieldEditor<?, ?> field) {
-			doAdd(field, field.createFieldNameLabel(getUntil()), field.createPostLabel(getUntil()));
+			doAdd(field, false);
+		}
+
+		default void doAdd(SimpleFieldEditor<?, ?> field, boolean scrolled) {
+			doAdd(field, field.createFieldNameLabel(getUntil()), field.createPostLabel(getUntil()), scrolled);
 		}
 
 		@Override
@@ -1135,7 +1146,7 @@ public class PanelPopulation {
 			fieldPanel.getTooltip().changes().takeUntil(getUntil()).act(evt -> fieldPanel.getEditor().setToolTipText(evt.getNewValue()));
 			if (modify != null)
 				modify.accept(fieldPanel);
-			doAdd(fieldPanel);
+			doAdd(fieldPanel, true);
 			return (P) this;
 		}
 
@@ -1231,10 +1242,10 @@ public class PanelPopulation {
 		}
 
 		@Override
-		default <F extends FileDataSource> P addFileField(String fieldName, SettableValue<F> value, boolean open,
-			Consumer<FieldEditor<ObservableFileButton<F>, ?>> modify) {
-			SimpleFieldEditor<ObservableFileButton<F>, ?> fieldPanel = new SimpleFieldEditor<>(fieldName,
-				new ObservableFileButton<>(value, open, getUntil()), getLock());
+		default P addFileField(String fieldName, SettableValue<File> value, boolean open,
+			Consumer<FieldEditor<ObservableFileButton, ?>> modify) {
+			SimpleFieldEditor<ObservableFileButton, ?> fieldPanel = new SimpleFieldEditor<>(fieldName,
+				new ObservableFileButton(value, open, getUntil()), getLock());
 			fieldPanel.getTooltip().changes().takeUntil(getUntil()).act(evt -> fieldPanel.getEditor().setToolTipText(evt.getNewValue()));
 			if (modify != null)
 				modify.accept(fieldPanel);
@@ -1255,7 +1266,7 @@ public class PanelPopulation {
 		default P addTabs(Consumer<TabPaneEditor<JTabbedPane, ?>> tabs) {
 			SimpleTabPaneEditor<?> tabPane = new SimpleTabPaneEditor<>(getLock(), getUntil());
 			tabs.accept(tabPane);
-			doAdd(tabPane, null, null);
+			doAdd(tabPane, null, null, false);
 			return (P) this;
 		}
 
@@ -1263,7 +1274,7 @@ public class PanelPopulation {
 		default P addSplit(boolean vertical, Consumer<SplitPane<?>> split) {
 			SimpleSplitEditor<?> splitPane = new SimpleSplitEditor<>(vertical, getLock(), getUntil());
 			split.accept(splitPane);
-			doAdd(splitPane, null, null);
+			doAdd(splitPane, null, null, false);
 			return (P) this;
 		}
 
@@ -1287,7 +1298,7 @@ public class PanelPopulation {
 		default <R> P addTable(ObservableCollection<R> rows, Consumer<TableBuilder<R, ?>> table) {
 			SimpleTableBuilder<R, ?> tb = new SimpleTableBuilder<>(rows, getLock());
 			table.accept(tb);
-			doAdd(tb, null, null);
+			doAdd(tb, null, null, false);
 			return (P) this;
 		}
 
@@ -1297,7 +1308,7 @@ public class PanelPopulation {
 			SimpleTreeEditor<F, ?> treeEditor = new SimpleTreeEditor<>(getLock(), root, children);
 			if (modify != null)
 				modify.accept(treeEditor);
-			doAdd(treeEditor, null, null);
+			doAdd(treeEditor, null, null, false);
 			return (P) this;
 		}
 
@@ -1324,7 +1335,7 @@ public class PanelPopulation {
 			MigFieldPanel<JPanel> subPanel = new MigFieldPanel<>(new JPanel(), getUntil(), getLock());
 			if (panel != null)
 				panel.accept(subPanel);
-			doAdd(subPanel, null, null);
+			doAdd(subPanel, null, null, false);
 			return (P) this;
 		}
 
@@ -1334,7 +1345,7 @@ public class PanelPopulation {
 			cp.setLayout(layout);
 			SimpleCollapsePane collapsePanel = new SimpleCollapsePane(cp, getUntil(), getLock(), vertical, layout);
 			panel.accept(collapsePanel);
-			doAdd(collapsePanel, null, null);
+			doAdd(collapsePanel, null, null, false);
 			return (P) this;
 		}
 	}
@@ -1515,7 +1526,7 @@ public class PanelPopulation {
 		}
 
 		@Override
-		public void doAdd(AbstractComponentEditor<?, ?> field, Component fieldLabel, Component postLabel) {
+		public void doAdd(AbstractComponentEditor<?, ?> field, Component fieldLabel, Component postLabel, boolean scrolled) {
 			if (fieldLabel != null)
 				getContainer().add(fieldLabel, "align right");
 			StringBuilder constraints = new StringBuilder();
@@ -1542,7 +1553,10 @@ public class PanelPopulation {
 			Component component = field.getOrCreateComponent(getUntil());
 			if (component == null)
 				throw new IllegalStateException();
-			getContainer().add(component, constraints.toString());
+			if (scrolled)
+				getContainer().add(new JScrollPane(component), constraints.toString());
+			else
+				getContainer().add(component, constraints.toString());
 			if (postLabel != null)
 				getContainer().add(postLabel, "wrap");
 			if (field.isVisible() != null) {
@@ -1718,7 +1732,7 @@ public class PanelPopulation {
 		}
 
 		@Override
-		public void doAdd(AbstractComponentEditor<?, ?> field, Component fieldLabel, Component postLabel) {
+		public void doAdd(AbstractComponentEditor<?, ?> field, Component fieldLabel, Component postLabel, boolean scrolled) {
 			if (fieldLabel != null)
 				getContainer().add(fieldLabel);
 			Component component = field.getOrCreateComponent(getUntil());
@@ -1735,7 +1749,10 @@ public class PanelPopulation {
 					constraints.append("growy, pushy");
 				}
 			}
-			getContainer().add(component, constraints.toString());
+			if (scrolled)
+				getContainer().add(new JScrollPane(component), constraints.toString());
+			else
+				getContainer().add(component, constraints.toString());
 			if (postLabel != null)
 				getContainer().add(postLabel);
 			if (field.isVisible() != null) {
@@ -1760,7 +1777,7 @@ public class PanelPopulation {
 			if (modify != null)
 				modify.accept(fieldPanel);
 			fieldPanel.onFieldName(fieldPanel.getEditor(), name -> fieldPanel.getEditor().setText(name), getUntil());
-			doAdd(fieldPanel, null, fieldPanel.createPostLabel(theUntil));
+			doAdd(fieldPanel, null, fieldPanel.createPostLabel(theUntil), false);
 			return this;
 		}
 	}
@@ -2675,8 +2692,8 @@ public class PanelPopulation {
 		}
 
 		@Override
-		public void doAdd(AbstractComponentEditor<?, ?> field, Component fieldLabel, Component postLabel) {
-			theContentPanel.doAdd(field, fieldLabel, postLabel);
+		public void doAdd(AbstractComponentEditor<?, ?> field, Component fieldLabel, Component postLabel, boolean scrolled) {
+			theContentPanel.doAdd(field, fieldLabel, postLabel, scrolled);
 		}
 
 		@Override
@@ -2688,7 +2705,7 @@ public class PanelPopulation {
 		protected Component getOrCreateComponent(Observable<?> until) {
 			if (!isInitialized) {
 				isInitialized = true;
-				theOuterContainer.doAdd(theHeaderPanel, null, null);
+				theOuterContainer.doAdd(theHeaderPanel, null, null, false);
 				theOuterContainer.addComponent(null, theCollapsePane, c -> c.fill());
 				theHeaderPanel.getComponent().addMouseListener(new MouseAdapter() {
 					@Override
@@ -3384,32 +3401,48 @@ public class PanelPopulation {
 	static class SimpleTreeEditor<F, P extends SimpleTreeEditor<F, P>> extends AbstractComponentEditor<JTree, P>
 	implements TreeEditor<F, P> {
 		private final ObservableValue<? extends F> theRoot;
+		private JScrollPane theComponent;
 
-		private ObservableCellRenderer<List<F>, F> theRenderer;
-		private Function<? super ModelCell<List<F>, F>, String> theValueTooltip;
-		private SettableValue<List<F>> theSingleSelection;
+		private ObservableCellRenderer<BetterList<F>, F> theRenderer;
+		private Function<? super ModelCell<BetterList<F>, F>, String> theValueTooltip;
+		private SettableValue<BetterList<F>> theSingleSelection;
 		private boolean isSingleSelection;
-		private ObservableCollection<List<F>> theMultiSelection;
+		private ObservableCollection<BetterList<F>> theMultiSelection;
 
 		private JPanel thePanel;
 
 		public SimpleTreeEditor(Supplier<Transactable> lock, ObservableValue<? extends F> root,
 			Function<? super F, ? extends ObservableCollection<? extends F>> children) {
-			super(new JTree(new ObservableTreeModel<F>(root) {
-				@Override
-				protected ObservableCollection<? extends F> getChildren(F parent) {
-					return children.apply(parent);
-				}
-
-				@Override
-				public void valueForPathChanged(TreePath path, Object newValue) {}
-
-				@Override
-				public boolean isLeaf(Object node) {
-					return false;
-				}
-			}), lock);
+			super(new JTree(new PPTreeModel<F>(root, children)), lock);
 			theRoot = root;
+		}
+
+		static class PPTreeModel<F> extends ObservableTreeModel<F> {
+			private final Function<? super F, ? extends ObservableCollection<? extends F>> theChildren;
+			private Predicate<? super F> theLeafTest;
+
+			PPTreeModel(ObservableValue<? extends F> root, Function<? super F, ? extends ObservableCollection<? extends F>> children) {
+				super(root);
+				theChildren = children;
+			}
+
+			@Override
+			protected ObservableCollection<? extends F> getChildren(F parent) {
+				return theChildren.apply(parent);
+			}
+
+			@Override
+			public void valueForPathChanged(TreePath path, Object newValue) {}
+
+			@Override
+			public boolean isLeaf(Object node) {
+				Predicate<? super F> leafTest = theLeafTest;
+				return leafTest != null && leafTest.test((F) node);
+			}
+
+			public void setLeafTest(Predicate<? super F> leafTest) {
+				theLeafTest = leafTest;
+			}
 		}
 
 		@Override
@@ -3418,33 +3451,41 @@ public class PanelPopulation {
 		}
 
 		@Override
-		public P renderWith(ObservableCellRenderer<List<F>, F> renderer) {
+		public P renderWith(ObservableCellRenderer<BetterList<F>, F> renderer) {
 			theRenderer = renderer;
 			return (P) this;
 		}
 
 		@Override
-		public P withCellTooltip(Function<? super ModelCell<List<F>, F>, String> tooltip) {
+		public P withCellTooltip(Function<? super ModelCell<BetterList<F>, F>, String> tooltip) {
 			theValueTooltip = tooltip;
 			return (P) this;
 		}
 
 		@Override
-		public P withSelection(SettableValue<List<F>> selection, boolean enforceSingleSelection) {
+		public P withSelection(SettableValue<BetterList<F>> selection, boolean enforceSingleSelection) {
 			theSingleSelection = selection;
 			isSingleSelection = enforceSingleSelection;
 			return (P) this;
 		}
 
 		@Override
-		public P withSelection(ObservableCollection<List<F>> selection) {
+		public P withSelection(ObservableCollection<BetterList<F>> selection) {
 			theMultiSelection = selection;
 			return (P) this;
 		}
 
 		@Override
+		public P withLeafTest(Predicate<? super F> leafTest) {
+			((PPTreeModel<F>) getEditor().getModel()).setLeafTest(leafTest);
+			return (P) this;
+		}
+
+		@Override
 		protected Component getOrCreateComponent(Observable<?> until) {
-			if(theRenderer!=null)
+			if (theComponent != null)
+				return theComponent;
+			if (theRenderer != null)
 				getEditor().setCellRenderer(new ObservableTreeCellRenderer<>(theRenderer));
 			MouseMotionListener motion = new MouseAdapter() {
 				@Override
@@ -3458,10 +3499,10 @@ public class PanelPopulation {
 					if (path == null || theValueTooltip == null)
 						getEditor().setToolTipText(null);
 					else {
-						List<F> list = (List<F>) (List<?>) Arrays.asList(path.getPath());
+						BetterList<F> list = BetterList.of((List<F>) Arrays.asList(path.getPath()));
 						int row = getEditor().getRowForLocation(e.getX(), e.getY());
 						F value = (F) path.getLastPathComponent();
-						ModelCell<List<F>, F> cell = new ModelCell.Default<>(() -> list, value, row, 0,
+						ModelCell<BetterList<F>, F> cell = new ModelCell.Default<>(() -> list, value, row, 0,
 							getEditor().getSelectionModel().isRowSelected(row), false, !getEditor().isCollapsed(row),
 							getEditor().getModel().isLeaf(value));
 						getEditor().setToolTipText(theValueTooltip.apply(cell));
@@ -3473,16 +3514,17 @@ public class PanelPopulation {
 			if (theMultiSelection != null)
 				ObservableTreeModel.syncSelection(getEditor(), theMultiSelection, until);
 			if (theSingleSelection != null) {
-				ObservableTreeModel.syncSelection(getEditor(), theSingleSelection, until);
+				ObservableTreeModel.syncSelection(getEditor(), theSingleSelection, false, Equivalence.DEFAULT, until);
 				if (isSingleSelection)
 					getEditor().getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
 			}
-			return decorate(getEditor());
+			theComponent = new JScrollPane(decorate(getEditor()));
+			return theComponent;
 		}
 
 		@Override
 		public Component getComponent() {
-			return thePanel;
+			return theComponent;
 		}
 
 		@Override
@@ -3501,21 +3543,22 @@ public class PanelPopulation {
 		}
 
 		static class ObservableTreeCellRenderer<F> implements TreeCellRenderer {
-			private final ObservableCellRenderer<List<F>, F> theRenderer;
+			private final ObservableCellRenderer<BetterList<F>, F> theRenderer;
 
-			ObservableTreeCellRenderer(ObservableCellRenderer<List<F>, F> renderer) {
+			ObservableTreeCellRenderer(ObservableCellRenderer<BetterList<F>, F> renderer) {
 				theRenderer = renderer;
 			}
 
 			@Override
 			public Component getTreeCellRendererComponent(JTree tree, Object value, boolean selected, boolean expanded, boolean leaf,
 				int row, boolean hasFocus) {
-				Supplier<List<F>> modelValue = () -> {
+				Supplier<BetterList<F>> modelValue = () -> {
 					TreePath path = tree.getPathForRow(row);
-					List<F> list = (List<F>) (List<?>) Arrays.asList(path.getPath());
+					BetterList<F> list = BetterList.of((List<F>) Arrays.asList(path.getPath()));
 					return list;
 				};
-				ModelCell<List<F>, F> cell = new ModelCell.Default<>(modelValue, (F) value, row, 0, selected, hasFocus, expanded, leaf);
+				ModelCell<BetterList<F>, F> cell = new ModelCell.Default<>(modelValue, (F) value, row, 0, selected, hasFocus, expanded,
+					leaf);
 				return theRenderer.getCellRendererComponent(tree, cell, null);
 			}
 		}

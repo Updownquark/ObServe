@@ -112,7 +112,7 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 	public static String tryEmphasize(String text, CellRenderContext ctx) {
 		if (text == null || text.isEmpty() || text.startsWith("<html>") || text.startsWith("<HTML>"))
 			return text;
-		int[][] regions = ctx.getEmphaticRegions();
+		int[][] regions = ctx == null ? null : ctx.getEmphaticRegions();
 		if (regions == null || regions.length == 0)
 			return text;
 		StringBuilder newText = new StringBuilder("<html>");

@@ -47,6 +47,8 @@ public class ObservableListModel<E> implements ListModel<E> {
 	 * @param safe Whether the collection is already {@link SafeObservableCollection safe}
 	 */
 	public ObservableListModel(ObservableCollection<E> wrap, boolean safe) {
+		if (wrap == null)
+			throw new NullPointerException();
 		theWrapped = wrap;
 		isSafe = safe;
 		theCachedData = new ArrayList<>();

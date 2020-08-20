@@ -445,6 +445,8 @@ implements TableBuilder<R, P> {
 	public Component getOrCreateComponent(Observable<?> until) {
 		if (theBuiltComponent != null)
 			return theBuiltComponent;
+		if (theColumns == null)
+			throw new IllegalStateException("No columns configured");
 		theSafeRows = new SafeObservableCollection<>(theRows, EventQueue::isDispatchThread, EventQueue::invokeLater, until);
 		ObservableTableModel<R> model;
 		ObservableCollection<TableContentControl.FilteredValue<R>> filtered;

@@ -12,7 +12,7 @@ import java.text.ParseException;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
-import javax.swing.JTextArea;
+import javax.swing.JEditorPane;
 import javax.swing.UIManager;
 
 import org.observe.Observable;
@@ -20,7 +20,7 @@ import org.observe.SettableValue;
 import org.qommons.io.Format;
 import org.qommons.io.SpinnerFormat;
 
-public class ObservableTextArea<E> extends JTextArea {
+public class ObservableTextArea<E> extends JEditorPane {
 	private final ObservableTextEditor<E> theEditor;
 
 	private String theEmptyText;
@@ -31,9 +31,15 @@ public class ObservableTextArea<E> extends JTextArea {
 	 * @param until An observable that, when fired will release this text field's resources
 	 */
 	public ObservableTextArea(SettableValue<E> value, Format<E> format, Observable<?> until) {
-		theEditor = new ObservableTextEditor<>(this, value, format, until, //
+		theEditor = new ObservableTextEditor<E>(this, value, format, until, //
 			e -> super.setEnabled(e), //
-			tt -> super.setToolTipText(tt));
+			tt -> super.setToolTipText(tt)) {
+			@Override
+			protected ObservableTextEditor<E> setText(String text) {
+				ObservableTextArea.this.setText(text);
+				return this;
+			}
+		};
 		addFocusListener(new FocusAdapter() {
 			@Override
 			public void focusGained(FocusEvent e) {
@@ -167,12 +173,8 @@ public class ObservableTextArea<E> extends JTextArea {
 		return this;
 	}
 
-	/**
-	 * @param cols The minimum number of columns of text to display
-	 * @return This text field
-	 */
-	public ObservableTextArea<E> withColumns(int cols) {
-		setColumns(cols);
+	public ObservableTextArea<E> asHtml() {
+		setContentType("text/html");
 		return this;
 	}
 

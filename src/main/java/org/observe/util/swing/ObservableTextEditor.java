@@ -335,7 +335,7 @@ public class ObservableTextEditor<E> {
 		}
 	}
 
-	private ObservableTextEditor<E> setText(String text) {
+	protected ObservableTextEditor<E> setText(String text) {
 		try {
 			Document doc = theComponent.getDocument();
 			if (doc instanceof AbstractDocument) {

@@ -10,7 +10,6 @@ import java.awt.Window;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -135,8 +134,7 @@ public class WindowPopulation {
 		@Override
 		public P run(Component relativeTo) {
 			theWindow.pack();
-			if (relativeTo != null)
-				theWindow.setLocationRelativeTo(relativeTo);
+			theWindow.setLocationRelativeTo(relativeTo);
 			if (theTitle != null) {
 				if (theWindow instanceof Frame)
 					theTitle.changes().takeUntil(theUntil).act(evt -> ((Frame) theWindow).setTitle(evt.getNewValue()));
@@ -161,9 +159,9 @@ public class WindowPopulation {
 						callbackLock = true;
 						Causable evt = Causable.simpleCause(e);
 						try (Transaction t = Causable.use(evt)) {
-							if (w != null && w.get() != theWindow.getWidth())
+							if (w != null && (w.get() == null || w.get() != theWindow.getWidth()))
 								w.set(theWindow.getWidth(), evt);
-							if (h != null && h.get() != theWindow.getHeight())
+							if (h != null && (h.get() == null || h.get() != theWindow.getHeight()))
 								h.set(theWindow.getHeight(), evt);
 						} finally {
 							callbackLock = false;
@@ -177,9 +175,9 @@ public class WindowPopulation {
 						callbackLock = true;
 						Causable evt = Causable.simpleCause(e);
 						try (Transaction t = Causable.use(evt)) {
-							if (x != null && x.get() != theWindow.getX())
+							if (x != null && (x.get() == null || x.get() != theWindow.getX()))
 								x.set(theWindow.getX(), evt);
-							if (y != null && y.get() != theWindow.getY())
+							if (y != null && (y.get() == null || y.get() != theWindow.getY()))
 								y.set(theWindow.getY(), evt);
 						} finally {
 							callbackLock = false;
@@ -207,8 +205,7 @@ public class WindowPopulation {
 						bounds.height = h.get();
 					}
 					bounds = ObservableSwingUtils.fitBoundsToGraphicsEnv(bounds.x, bounds.y, bounds.width, bounds.height, //
-						Arrays.asList(new Rectangle(0, 0, 2000, 1000)));
-					// ObservableSwingUtils.getGraphicsBounds());
+						ObservableSwingUtils.getGraphicsBounds());
 					try {
 						if (x != null && x.get() != null && x.get() != bounds.x) {
 							x.set(bounds.x, null);
