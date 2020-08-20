@@ -648,7 +648,8 @@ public class ObservableCollectionDataFlowImpl {
 		public <X> CollectionDataFlow<E, T, X> map(TypeToken<X> target, BiFunction<? super T, ? super X, ? extends X> map,
 			Consumer<MapOptions<T, X>> options) {
 			MapOptions<T, X> mapOptions = new MapOptions<>();
-			options.accept(mapOptions);
+			if (options != null)
+				options.accept(mapOptions);
 			return new MapOp<>(theSource, this, target, map, new MapDef<>(mapOptions));
 		}
 
