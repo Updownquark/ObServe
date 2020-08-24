@@ -46,6 +46,7 @@ import org.observe.util.swing.Dragging.SimpleTransferSource;
 import org.observe.util.swing.Dragging.TransferAccepter;
 import org.observe.util.swing.Dragging.TransferSource;
 import org.observe.util.swing.PanelPopulation.AbstractComponentEditor;
+import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.observe.util.swing.PanelPopulation.SimpleHPanel;
 import org.observe.util.swing.PanelPopulation.SimpleTableAction;
 import org.observe.util.swing.PanelPopulation.TableAction;
@@ -74,7 +75,7 @@ implements TableBuilder<R, P> {
 	private ObservableCollection<? extends CategoryRenderStrategy<? super R, ?>> theColumns;
 	private SettableValue<R> theSelectionValue;
 	private ObservableCollection<R> theSelectionValues;
-	private List<SimpleTableAction<R, ?>> theActions;
+	private List<Object> theActions;
 	private ObservableValue<? extends TableContentControl> theFilter;
 	private Dragging.SimpleTransferSource<R> theDragSource;
 	private Dragging.SimpleTransferAccepter<R> theDragAccepter;
@@ -411,6 +412,12 @@ implements TableBuilder<R, P> {
 	}
 
 	@Override
+	public P withTableOption(Consumer<? super PanelPopulator<?, ?>> panel) {
+		theActions.add(panel);
+		return (P) this;
+	}
+
+	@Override
 	public P dragSourceRow(Consumer<? super TransferSource<R>> source) {
 		if (theDragSource == null)
 			theDragSource = new SimpleTransferSource<>(theRows.getType());
@@ -539,8 +546,10 @@ implements TableBuilder<R, P> {
 		if (!theActions.isEmpty()) {
 			ListSelectionListener selListener = e -> {
 				List<R> selection = selectionGetter.get();
-				for (SimpleTableAction<R, ?> action : theActions)
-					action.updateSelection(selection, e);
+				for (Object action : theActions) {
+					if (action instanceof SimpleTableAction)
+						((SimpleTableAction<R, ?>) action).updateSelection(selection, e);
+				}
 			};
 			ListDataListener dataListener = new ListDataListener() {
 				@Override
@@ -555,14 +564,18 @@ implements TableBuilder<R, P> {
 					if (selModel.getMinSelectionIndex() >= 0 && e.getIndex0() >= selModel.getMinSelectionIndex()
 						&& e.getIndex1() <= selModel.getMaxSelectionIndex()) {
 						List<R> selection = selectionGetter.get();
-						for (SimpleTableAction<R, ?> action : theActions)
-							action.updateSelection(selection, e);
+						for (Object action : theActions) {
+							if (action instanceof SimpleTableAction)
+								((SimpleTableAction<R, ?>) action).updateSelection(selection, e);
+						}
 					}
 				}
 			};
 			List<R> selection = selectionGetter.get();
-			for (SimpleTableAction<R, ?> action : theActions)
-				action.updateSelection(selection, null);
+			for (Object action : theActions) {
+				if (action instanceof SimpleTableAction)
+					((SimpleTableAction<R, ?>) action).updateSelection(selection, null);
+			}
 
 			PropertyChangeListener selModelListener = evt -> {
 				((ListSelectionModel) evt.getOldValue()).removeListSelectionListener(selListener);
@@ -578,8 +591,12 @@ implements TableBuilder<R, P> {
 			});
 			SimpleHPanel<JPanel> buttonPanel = new SimpleHPanel<>(null,
 				new JPanel(new JustifiedBoxLayout(false).setMainAlignment(JustifiedBoxLayout.Alignment.LEADING)), theLock, until);
-			for (SimpleTableAction<R, ?> action : theActions)
-				action.addButton(buttonPanel);
+			for (Object action : theActions) {
+				if (action instanceof SimpleTableAction)
+					((SimpleTableAction<R, ?>) action).addButton(buttonPanel);
+				else if (action instanceof Consumer)
+					buttonPanel.addHPanel(null, "box", (Consumer<PanelPopulator<JPanel, ?>>) action);
+			}
 			JPanel tablePanel = new JPanel(new BorderLayout());
 			tablePanel.add(buttonPanel.getOrCreateComponent(until), BorderLayout.NORTH);
 			tablePanel.add(scroll, BorderLayout.CENTER);

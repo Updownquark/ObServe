@@ -713,6 +713,8 @@ public class PanelPopulation {
 
 		P withMoveToEnd(boolean up, Consumer<TableAction<R, ?>> actionMod);
 
+		P withTableOption(Consumer<? super PanelPopulator<?, ?>> panel);
+
 		P withFiltering(ObservableValue<? extends TableContentControl> filter);
 
 		P withAdaptiveHeight(int minRows, int prefRows, int maxRows);
@@ -2054,6 +2056,9 @@ public class PanelPopulation {
 				Subscription valueSub = ObservableSwingUtils.togglesFor(safeValues, theValue, TypeTokens.get().of(theButtonType),
 					theButtonCreator, b -> _buttons[0] = b, this::render, this::getValueTooltip);
 				theButtons = _buttons[0];
+				for (JToggleButton button : theButtons) {
+					thePanel.add(button);
+				}
 				theButtons.changes().takeUntil(until).act(evt -> {
 					for (CollectionChangeEvent.ElementChange<TB> change : evt.getElements()) {
 						switch (evt.type) {
