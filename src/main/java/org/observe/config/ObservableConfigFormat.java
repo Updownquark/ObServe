@@ -219,7 +219,7 @@ public interface ObservableConfigFormat<E> {
 		}
 
 		@Override
-		public T parse(ObservableConfigParseContext<T> ctx) throws ParseException {
+		public T parse(ObservableConfigParseContext<T> ctx) {
 			ObservableConfig config = ctx.getConfig(false);
 			if (config == null)
 				return defaultValue.get();
@@ -228,7 +228,12 @@ public interface ObservableConfigFormat<E> {
 				return defaultValue.get();
 			if (ctx.getChange() != null && ctx.getChange().relativePath.size() > 1)
 				return ctx.getPreviousValue(); // Changing a sub-config doesn't affect this value
-			return format.parse(value);
+			try {
+				return format.parse(value);
+			} catch (ParseException e) {
+				e.printStackTrace();
+				return defaultValue == null ? null : defaultValue.get();
+			}
 		}
 
 		@Override
