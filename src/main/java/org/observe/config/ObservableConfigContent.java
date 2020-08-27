@@ -1013,7 +1013,7 @@ public class ObservableConfigContent {
 		}
 
 		@Override
-		public ObservableCollection<? extends C> getValues() {
+		public ObservableCollection<C> getValues() {
 			return theChildren;
 		}
 

@@ -16,7 +16,7 @@ import com.google.common.reflect.TypeToken;
 
 /**
  * A thin wrapper around {@link EntityReflector} that helps with a few {@link ObservableConfig}-specific things
- * 
+ *
  * @param <E> The type of the entity
  */
 public class EntityConfiguredValueType<E> implements ConfiguredValueType<E> {
@@ -52,7 +52,7 @@ public class EntityConfiguredValueType<E> implements ConfiguredValueType<E> {
 	}
 
 	@Override
-	public QuickMap<String, ? extends ConfiguredValueField<E, ?>> getFields() {
+	public QuickMap<String, ? extends EntityConfiguredValueField<E, ?>> getFields() {
 		return theFields;
 	}
 
@@ -106,7 +106,7 @@ public class EntityConfiguredValueType<E> implements ConfiguredValueType<E> {
 
 	/**
 	 * Retrieves data {@link #associate(Object, Object, Object) associated} with an entity
-	 * 
+	 *
 	 * @param entity The entity to get data from
 	 * @param key The key the data was associated with
 	 * @return The associated data
@@ -191,6 +191,15 @@ public class EntityConfiguredValueType<E> implements ConfiguredValueType<E> {
 		@Override
 		public void set(E entity, F fieldValue) throws UnsupportedOperationException {
 			theField.set(entity, fieldValue);
+		}
+
+		public boolean isParentReference() {
+			if (theField.getGetter().getMethod().getAnnotation(ParentReference.class) != null)
+				return true;
+			for (EntityConfiguredValueField<? super E, ? super F> override : theOverrides)
+				if (override.isParentReference())
+					return true;
+			return false;
 		}
 
 		@Override

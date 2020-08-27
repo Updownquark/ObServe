@@ -7,7 +7,7 @@ import com.google.common.reflect.TypeToken;
 public interface ObservableValueSet<E> {
 	ConfiguredValueType<E> getType();
 
-	ObservableCollection<? extends E> getValues();
+	ObservableCollection<E> getValues();
 
 	default ConfigurableValueCreator<E, E> create() {
 		return create(getType().getType());
@@ -34,7 +34,7 @@ public interface ObservableValueSet<E> {
 		}
 
 		@Override
-		public ObservableCollection<? extends E> getValues() {
+		public ObservableCollection<E> getValues() {
 			return theValues;
 		}
 

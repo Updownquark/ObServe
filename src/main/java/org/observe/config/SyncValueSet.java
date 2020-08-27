@@ -32,7 +32,7 @@ public interface SyncValueSet<E> extends ObservableValueSet<E> {
 		}
 
 		@Override
-		public ObservableCollection<? extends E> getValues() {
+		public ObservableCollection<E> getValues() {
 			return theValues;
 		}
 

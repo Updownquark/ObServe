@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringWriter;
 import java.io.Writer;
+import java.lang.ref.WeakReference;
 import java.text.ParseException;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -21,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
+import java.util.WeakHashMap;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -407,6 +409,8 @@ public class ObservableConfig implements Transactable, Stamped {
 	private final ListenerList<InternalObservableConfigListener> theListeners;
 	private long theModCount;
 
+	private volatile WeakHashMap<ObservableConfigParseSession, WeakReference<Object>> theParsedItems;
+
 	protected ObservableConfig(String name, Function<Object, CollectionLockingStrategy> locking) {
 		if (name.length() == 0)
 			throw new IllegalArgumentException("Name must not be empty");
@@ -423,6 +427,34 @@ public class ObservableConfig implements Transactable, Stamped {
 		return this;
 	}
 
+	public Object getParsedItem(ObservableConfigParseSession session) {
+		WeakHashMap<ObservableConfigParseSession, WeakReference<Object>> parsedItems = theParsedItems;
+		if (parsedItems == null)
+			return null;
+		WeakReference<Object> ref = parsedItems.get(session);
+		return ref == null ? null : ref.get();
+	}
+
+	public ObservableConfig withParsedItem(ObservableConfigParseSession session, Object item) {
+		WeakHashMap<ObservableConfigParseSession, WeakReference<Object>> parsedItems = theParsedItems;
+		if (parsedItems == null) {
+			synchronized (this) {
+				parsedItems = theParsedItems;
+				if (parsedItems == null) {
+					theParsedItems = parsedItems = new WeakHashMap<>(3); // Don't imagine there will ever be much in there
+				}
+			}
+		}
+		parsedItems.compute(session, (s, old) -> {
+			Object oldItem = old == null ? null : old.get();
+			if (oldItem == item)
+				return old;
+			else
+				return new WeakReference<>(item);
+		});
+		return this;
+	}
+
 	public String getName() {
 		return theName;
 	}
@@ -432,7 +464,7 @@ public class ObservableConfig implements Transactable, Stamped {
 	}
 
 	public ObservableConfig getParent() {
-		if (theParentContentRef == null || !theParentContentRef.isPresent())
+		if (theParentContentRef != null && !theParentContentRef.isPresent())
 			return null;
 		else
 			return theParent;
@@ -704,8 +736,8 @@ public class ObservableConfig implements Transactable, Stamped {
 		}
 
 		protected ObservableConfigFormat.ObservableConfigParseContext<T> getParseContext(Observable<?> until, Observable<?> findRefs) {
-			return ObservableConfigFormat.ctxFor(ObservableConfig.this, getDescendant(false), createDescendant(false)::get, null, until,
-				null, findRefs, null);
+			return ObservableConfigFormat.ctxFor(new ObservableConfigParseSession(), ObservableConfig.this, getDescendant(false),
+				createDescendant(false)::get, null, until, null, findRefs, null);
 		}
 
 		protected <T, E extends Exception> T build(ExFunction<Observable<?>, T, E> build, Consumer<T> preRefs) throws E {
@@ -741,12 +773,15 @@ public class ObservableConfig implements Transactable, Stamped {
 		}
 
 		public SettableValue<T> buildValue(Consumer<SettableValue<T>> preReturnGet) {
-			return build(findRefs -> new ObservableConfigTransform.ObservableConfigValue<>(ObservableConfig.this, getDescendant(false),
-				createDescendant(false)::get, getUntil(), theType, getFormat(), true, findRefs), preReturnGet);
+			return build(
+				findRefs -> new ObservableConfigTransform.ObservableConfigValue<>(new ObservableConfigParseSession(), ObservableConfig.this,
+					getDescendant(false), createDescendant(false)::get, getUntil(), theType, getFormat(), true, findRefs),
+				preReturnGet);
 		}
 
 		public ObservableCollection<T> buildCollection(Consumer<ObservableCollection<T>> preReturnGet) {
-			return build(findRefs -> new ObservableConfigTransform.ObservableConfigValues<>(ObservableConfig.this, //
+			return build(findRefs -> new ObservableConfigTransform.ObservableConfigValues<>(new ObservableConfigParseSession(),
+				ObservableConfig.this, //
 				getDescendant(thePath != null), createDescendant(thePath != null)::get, theType, getFormat(), getChildName(),
 				getFormatSet(), getUntil(), true, findRefs), preReturnGet);
 		}
@@ -755,7 +790,8 @@ public class ObservableConfig implements Transactable, Stamped {
 			ObservableConfigFormat<T> entityFormat = getFormat();
 			if (!(entityFormat instanceof ObservableConfigFormat.EntityConfigFormat))
 				throw new IllegalStateException("Format for " + theType + " is not entity-enabled");
-			return build(findRefs -> new ObservableConfigTransform.ObservableConfigEntityValues<>(ObservableConfig.this, //
+			return build(findRefs -> new ObservableConfigTransform.ObservableConfigEntityValues<>(new ObservableConfigParseSession(),
+				ObservableConfig.this, //
 				getDescendant(thePath != null), createDescendant(thePath != null)::get,
 				(ObservableConfigFormat.EntityConfigFormat<T>) entityFormat, getChildName(), getUntil(), true, findRefs), preReturnGet);
 		}
@@ -844,19 +880,23 @@ public class ObservableConfig implements Transactable, Stamped {
 		/** @deprecated Not yet implemented */
 		@Deprecated
 		public ObservableMap<K, V> buildMap(Consumer<ObservableMap<K, V>> preReturnGet) {
-			return theValueBuilder.build(findRefs -> new ObservableConfigTransform.ObservableConfigMap<>(ObservableConfig.this, //
-				theValueBuilder.getDescendant(true), theValueBuilder.createDescendant(true)::get, //
-				getKeyName(), theValueBuilder.getChildName(), theKeyType, theValueBuilder.theType, getKeyFormat(),
-				theValueBuilder.getFormat(), theValueBuilder.getUntil(), true, findRefs), preReturnGet);
+			return theValueBuilder.build(
+				findRefs -> new ObservableConfigTransform.ObservableConfigMap<>(new ObservableConfigParseSession(), ObservableConfig.this, //
+					theValueBuilder.getDescendant(true), theValueBuilder.createDescendant(true)::get, //
+					getKeyName(), theValueBuilder.getChildName(), theKeyType, theValueBuilder.theType, getKeyFormat(),
+					theValueBuilder.getFormat(), theValueBuilder.getUntil(), true, findRefs),
+				preReturnGet);
 		}
 
 		/** @deprecated Not yet implemented */
 		@Deprecated
 		public ObservableMultiMap<K, V> buildMultiMap(Consumer<ObservableMultiMap<K, V>> preReturnGet) {
-			return theValueBuilder.build(findRefs -> new ObservableConfigTransform.ObservableConfigMultiMap<>(ObservableConfig.this, //
-				theValueBuilder.getDescendant(true), theValueBuilder.createDescendant(true)::get, //
-				getKeyName(), theValueBuilder.getChildName(), theKeyType, theValueBuilder.theType, getKeyFormat(),
-				theValueBuilder.getFormat(), theValueBuilder.getUntil(), true, findRefs), preReturnGet);
+			return theValueBuilder
+				.build(findRefs -> new ObservableConfigTransform.ObservableConfigMultiMap<>(new ObservableConfigParseSession(),
+					ObservableConfig.this, //
+					theValueBuilder.getDescendant(true), theValueBuilder.createDescendant(true)::get, //
+					getKeyName(), theValueBuilder.getChildName(), theKeyType, theValueBuilder.theType, getKeyFormat(),
+					theValueBuilder.getFormat(), theValueBuilder.getUntil(), true, findRefs), preReturnGet);
 		}
 	}
 
@@ -962,6 +1002,7 @@ public class ObservableConfig implements Transactable, Stamped {
 		Consumer<ObservableConfig> preAddMod) {
 		try (Transaction t = lock(true, null)) {
 			ObservableConfig child = createChild(name, __ -> theLocking);
+			child.theParent = this;
 			if (preAddMod != null)
 				preAddMod.accept(child);
 			addChild(child, after, before, first);
@@ -1076,6 +1117,9 @@ public class ObservableConfig implements Transactable, Stamped {
 	}
 
 	public void remove() {
+		Map<?, ?> parsedItems = theParsedItems;
+		if (parsedItems != null)
+			parsedItems.clear();
 		try (Transaction t = lock(true, null)) {
 			if (!theParentContentRef.isPresent())
 				return;
@@ -1132,7 +1176,7 @@ public class ObservableConfig implements Transactable, Stamped {
 			}
 		}
 		boolean fireWithParent;
-		if (theParent == null)
+		if (theParentContentRef == null)
 			fireWithParent = false;
 		else if (theParentContentRef.isPresent())
 			fireWithParent = true;
