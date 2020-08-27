@@ -1483,8 +1483,11 @@ public class ObservableCollectionDataFlowImpl {
 					if (theOptions.isCached() && equivalence().elementEquals(getValue(), value)) {
 						reversed = getCachedSource();
 					} else {
-						if (!isReversible())
+						if (!isReversible()) {
+							if (value == getValue())
+								return isParentAcceptable(getParentValue());
 							return StdMsg.UNSUPPORTED_OPERATION;
+						}
 						reversed = reverseForElement(value);
 						if (!equivalence().elementEquals(mapForElement(reversed, value), value))
 							return StdMsg.ILLEGAL_ELEMENT;
@@ -1503,9 +1506,14 @@ public class ObservableCollectionDataFlowImpl {
 					reversed = reverse(this, value);
 				} else if (theOptions.isCached() && equivalence().elementEquals(getValue(), value))
 					reversed = getCachedSource();
-				else if (!isReversible())
-					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-				else {
+				else if (!isReversible()) {
+					if (value == getValue()) {
+						if (theOptions.isPropagatingUpdatesToParent())
+							setParent(getParentValue());
+						return;
+					} else
+						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				} else {
 					reversed = reverseForElement(value);
 					if (!equivalence().elementEquals(mapForElement(reversed, value), value))
 						throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
