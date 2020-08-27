@@ -722,6 +722,8 @@ public class PanelPopulation {
 		P dragSourceRow(Consumer<? super Dragging.TransferSource<R>> source);
 
 		P dragAcceptRow(Consumer<? super Dragging.TransferAccepter<R>> accept);
+
+		P scrollable(boolean scrollable);
 	}
 
 	public interface TableAction<R, A extends TableAction<R, A>> {
@@ -752,6 +754,8 @@ public class PanelPopulation {
 		boolean isAllowedForEmpty();
 
 		A allowWhen(Function<? super R, String> filter, Consumer<ActionEnablement<R>> operation);
+
+		A allowWhenMulti(Function<? super List<? extends R>, String> filter, Consumer<ActionEnablement<List<? extends R>>> operation);
 
 		A withTooltip(Function<? super List<? extends R>, String> tooltip);
 
@@ -2506,6 +2510,46 @@ public class PanelPopulation {
 							}
 						}
 					};
+					if (getEditor().getLeftComponent() != null) {
+						getEditor().getLeftComponent().addComponentListener(new ComponentAdapter() {
+							@Override
+							public void componentShown(ComponentEvent e) {
+								if (getEditor().getRightComponent() == null || !getEditor().getRightComponent().isVisible())
+									return;
+								EventQueue.invokeLater(() -> {
+									callbackLock[0] = true;
+									try {
+										if (divProp != null)
+											getEditor().setDividerLocation(divProp.get());
+										else
+											getEditor().setDividerLocation(divLoc.get());
+									} finally {
+										callbackLock[0] = false;
+									}
+								});
+							}
+						});
+					}
+					if (getEditor().getRightComponent() != null) {
+						getEditor().getRightComponent().addComponentListener(new ComponentAdapter() {
+							@Override
+							public void componentShown(ComponentEvent e) {
+								if (getEditor().getLeftComponent() == null || !getEditor().getLeftComponent().isVisible())
+									return;
+								EventQueue.invokeLater(() -> {
+									callbackLock[0] = true;
+									try {
+										if (divProp != null)
+											getEditor().setDividerLocation(divProp.get());
+										else
+											getEditor().setDividerLocation(divLoc.get());
+									} finally {
+										callbackLock[0] = false;
+									}
+								});
+							}
+						});
+					}
 					getEditor().addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, evt -> {
 						if (callbackLock[0])
 							return;
@@ -2565,6 +2609,36 @@ public class PanelPopulation {
 							}
 						};
 						c.addComponentListener(visListener[0]);
+					}
+					if (getEditor().getLeftComponent() != null) {
+						getEditor().getLeftComponent().addComponentListener(new ComponentAdapter() {
+							@Override
+							public void componentShown(ComponentEvent e) {
+								if (getEditor().getRightComponent() == null || !getEditor().getRightComponent().isVisible())
+									return;
+								EventQueue.invokeLater(() -> {
+									if (theDivLocation >= 0)
+										getEditor().setDividerLocation(theDivLocation);
+									else
+										getEditor().setDividerLocation(theDivProportion);
+								});
+							}
+						});
+					}
+					if (getEditor().getRightComponent() != null) {
+						getEditor().getRightComponent().addComponentListener(new ComponentAdapter() {
+							@Override
+							public void componentShown(ComponentEvent e) {
+								if (getEditor().getLeftComponent() == null || !getEditor().getLeftComponent().isVisible())
+									return;
+								EventQueue.invokeLater(() -> {
+									if (theDivLocation >= 0)
+										getEditor().setDividerLocation(theDivLocation);
+									else
+										getEditor().setDividerLocation(theDivProportion);
+								});
+							}
+						});
 					}
 				}
 			}
@@ -3149,6 +3223,7 @@ public class PanelPopulation {
 		final Consumer<? super List<? extends R>> theAction;
 		final Supplier<List<R>> theSelectedValues;
 		private Function<? super R, String> theEnablement;
+		private Function<? super List<? extends R>, String> theMultiEnablement;
 		private Function<? super List<? extends R>, String> theTooltip;
 		private boolean zeroAllowed;
 		private boolean multipleAllowed;
@@ -3228,6 +3303,30 @@ public class PanelPopulation {
 			else {
 				Function<? super R, String> oldFilter = theEnablement;
 				theEnablement = value -> {
+					String msg = oldFilter.apply(value);
+					if (msg != null)
+						return msg;
+					return newFilter.apply(value);
+				};
+			}
+			return (A) this;
+		}
+
+		@Override
+		public A allowWhenMulti(Function<? super List<? extends R>, String> filter,
+			Consumer<ActionEnablement<List<? extends R>>> operation) {
+			Function<? super List<? extends R>, String> newFilter;
+			if (operation != null) {
+				ActionEnablement<List<? extends R>> next = new ActionEnablement<>(filter);
+				operation.accept(next);
+				newFilter = next;
+			} else
+				newFilter = filter;
+			if (theMultiEnablement == null)
+				theMultiEnablement = newFilter;
+			else {
+				Function<? super List<? extends R>, String> oldFilter = theMultiEnablement;
+				theMultiEnablement = value -> {
 					String msg = oldFilter.apply(value);
 					if (msg != null)
 						return msg;
@@ -3344,7 +3443,13 @@ public class PanelPopulation {
 			else if (!multipleAllowed && selectedValues.size() > 1)
 				theEnabledString.set("Multiple " + StringUtils.pluralize(theTable.getItemName()) + " selected", cause);
 			else {
-				if (theEnablement != null) {
+				StringBuilder message = null;
+				if (theMultiEnablement != null) {
+					String msg = theMultiEnablement.apply(selectedValues);
+					if (msg != null)
+						message = new StringBuilder(msg);
+				}
+				if (message == null && theEnablement != null) {
 					Set<String> messages = null;
 					int allowedCount = 0;
 					for (R value : selectedValues) {
@@ -3369,10 +3474,8 @@ public class PanelPopulation {
 						if (messages.isEmpty())
 							messages.add("Multiple " + StringUtils.pluralize(theTable.getItemName()) + " selected");
 					}
-					if (!error)
-						theEnabledString.set(null, cause);
-					else {
-						StringBuilder message = new StringBuilder("<html>");
+					if (error) {
+						message = new StringBuilder("<html>");
 						boolean first = true;
 						for (String msg : messages) {
 							if (!first)
@@ -3381,10 +3484,9 @@ public class PanelPopulation {
 								first = false;
 							message.append(msg);
 						}
-						theEnabledString.set(message.toString(), cause);
 					}
-				} else
-					theEnabledString.set(null, cause);
+				}
+				theEnabledString.set(message == null ? null : message.toString(), cause);
 			}
 
 			if (theTooltipString != null && theEnabledString.get() == null) { // No point generating the tooltip if the disabled string will

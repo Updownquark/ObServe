@@ -82,6 +82,7 @@ implements TableBuilder<R, P> {
 	private int theAdaptiveMinRowHeight;
 	private int theAdaptivePrefRowHeight;
 	private int theAdaptiveMaxRowHeight;
+	private boolean isScrollable;
 
 	private Component theBuiltComponent;
 
@@ -89,6 +90,7 @@ implements TableBuilder<R, P> {
 		super(new JTable(), lock);
 		theRows = rows;
 		theActions = new LinkedList<>();
+		isScrollable = true;
 	}
 
 	@Override
@@ -421,7 +423,10 @@ implements TableBuilder<R, P> {
 	public P dragSourceRow(Consumer<? super TransferSource<R>> source) {
 		if (theDragSource == null)
 			theDragSource = new SimpleTransferSource<>(theRows.getType());
-		source.accept(theDragSource);
+		// if (source == null)
+		// throw new IllegalArgumentException("Drag sourcing must be configured");
+		if (source != null)
+			source.accept(theDragSource);
 		return (P) this;
 	}
 
@@ -429,7 +434,16 @@ implements TableBuilder<R, P> {
 	public P dragAcceptRow(Consumer<? super TransferAccepter<R>> accept) {
 		if (theDragAccepter == null)
 			theDragAccepter = new SimpleTransferAccepter<>(theRows.getType());
-		accept.accept(theDragAccepter);
+		// if (accept == null)
+		// throw new IllegalArgumentException("Drag accepting must be configured");
+		if (accept != null)
+			accept.accept(theDragAccepter);
+		return (P) this;
+	}
+
+	@Override
+	public P scrollable(boolean scrollable) {
+		isScrollable = scrollable;
 		return (P) this;
 	}
 
@@ -526,9 +540,117 @@ implements TableBuilder<R, P> {
 			until.take(1).act(__ -> sub.unsubscribe());
 
 		JScrollPane scroll = new JScrollPane(table);
-		// Default scroll increments are ridiculously small
-		scroll.getVerticalScrollBar().setUnitIncrement(10);
-		scroll.getHorizontalScrollBar().setUnitIncrement(10);
+		if (isScrollable) {
+			// Default scroll increments are ridiculously small
+			scroll.getVerticalScrollBar().setUnitIncrement(10);
+			scroll.getHorizontalScrollBar().setUnitIncrement(10);
+			if (theAdaptivePrefRowHeight > 0) {
+				class HeightAdjustmentListener implements ListDataListener, ChangeListener {
+					private boolean isHSBVisible;
+					private boolean isVSBVisible;
+
+					@Override
+					public void intervalRemoved(ListDataEvent e) {
+						if (e.getIndex0() < theAdaptiveMaxRowHeight)
+							adjustHeight();
+					}
+
+					@Override
+					public void intervalAdded(ListDataEvent e) {
+						if (e.getIndex0() < theAdaptiveMaxRowHeight)
+							adjustHeight();
+					}
+
+					@Override
+					public void contentsChanged(ListDataEvent e) {
+						if (e.getIndex0() < theAdaptiveMaxRowHeight)
+							adjustHeight();
+					}
+
+					@Override
+					public void stateChanged(ChangeEvent e) {
+						BoundedRangeModel hbm = scroll.getHorizontalScrollBar().getModel();
+						if (hbm.getValueIsAdjusting())
+							return;
+						if (isHSBVisible != (hbm.getExtent() > hbm.getMaximum())) {
+							adjustHeight();
+						} else {
+							BoundedRangeModel vbm = scroll.getVerticalScrollBar().getModel();
+							if (vbm.getValueIsAdjusting())
+								return;
+							if (isVSBVisible != (vbm.getExtent() > vbm.getMaximum()))
+								adjustHeight();
+						}
+					}
+
+					void adjustHeight() {
+						int minHeight = 0, prefHeight = 0, maxHeight = 0;
+						if (table.getTableHeader() != null && table.getTableHeader().isVisible()) {
+							minHeight += table.getTableHeader().getPreferredSize().height;
+							maxHeight += table.getTableHeader().getPreferredSize().height;
+						}
+						int rowCount = model.getRowCount();
+						for (int i = 0; i < theAdaptiveMaxRowHeight && i < rowCount; i++) {
+							int rowHeight = table.getRowHeight(i);
+							if (i < theAdaptiveMinRowHeight)
+								minHeight += rowHeight;
+							if (i < theAdaptivePrefRowHeight)
+								prefHeight += rowHeight;
+							if (i < theAdaptiveMaxRowHeight)
+								maxHeight += rowHeight;
+						}
+						BoundedRangeModel hbm = scroll.getHorizontalScrollBar().getModel();
+						isHSBVisible = hbm.getExtent() > hbm.getMaximum();
+						if (isHSBVisible) {
+							int sbh = scroll.getHorizontalScrollBar().getHeight();
+							minHeight += sbh;
+							maxHeight += sbh;
+						}
+						BoundedRangeModel vbm = scroll.getVerticalScrollBar().getModel();
+						isVSBVisible = vbm.getExtent() > vbm.getMaximum();
+						Dimension psvs = table.getPreferredScrollableViewportSize();
+						if (psvs.height != prefHeight) {
+							int w = 0;
+							for (int c = 0; c < table.getColumnModel().getColumnCount(); c++)
+								w += table.getColumnModel().getColumn(c).getWidth();
+							table.setPreferredScrollableViewportSize(new Dimension(psvs.width, prefHeight));
+						}
+						Dimension min = scroll.getMinimumSize();
+						if (min.height != minHeight) {
+							int w = 10;
+							if (isVSBVisible)
+								w += scroll.getVerticalScrollBar().getWidth();
+							scroll.getViewport().setMinimumSize(new Dimension(w, minHeight));
+						}
+						Dimension max = scroll.getMaximumSize();
+						if (max.height != maxHeight) {
+							int w = 0;
+							if (isVSBVisible)
+								w += scroll.getVerticalScrollBar().getWidth();
+							for (int c = 0; c < model.getColumnCount(); c++) {
+								w += table.getColumnModel().getColumn(c).getMaxWidth();
+								if (w < 0) {
+									w = Integer.MAX_VALUE;
+									break;
+								}
+							}
+							scroll.getViewport().setMaximumSize(new Dimension(w, maxHeight));
+						}
+						if (scroll.getParent() != null)
+							scroll.getParent().revalidate();
+					}
+				}
+				HeightAdjustmentListener hal = new HeightAdjustmentListener();
+				model.getRowModel().addListDataListener(hal);
+				model.getColumnModel().addListDataListener(hal);
+				scroll.getHorizontalScrollBar().getModel().addChangeListener(hal);
+				scroll.getVerticalScrollBar().getModel().addChangeListener(hal);
+				hal.adjustHeight();
+			}
+		} else {
+			scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+			scroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_NEVER);
+		}
 
 		// Selection
 		Supplier<List<R>> selectionGetter = () -> getSelection();
@@ -603,109 +725,6 @@ implements TableBuilder<R, P> {
 			theBuiltComponent = tablePanel;
 		} else
 			theBuiltComponent = scroll;
-		if (theAdaptivePrefRowHeight > 0) {
-			class HeightAdjustmentListener implements ListDataListener, ChangeListener {
-				private boolean isHSBVisible;
-				private boolean isVSBVisible;
-
-				@Override
-				public void intervalRemoved(ListDataEvent e) {
-					if (e.getIndex0() < theAdaptiveMaxRowHeight)
-						adjustHeight();
-				}
-
-				@Override
-				public void intervalAdded(ListDataEvent e) {
-					if (e.getIndex0() < theAdaptiveMaxRowHeight)
-						adjustHeight();
-				}
-
-				@Override
-				public void contentsChanged(ListDataEvent e) {
-					if (e.getIndex0() < theAdaptiveMaxRowHeight)
-						adjustHeight();
-				}
-
-				@Override
-				public void stateChanged(ChangeEvent e) {
-					BoundedRangeModel hbm = scroll.getHorizontalScrollBar().getModel();
-					if (hbm.getValueIsAdjusting())
-						return;
-					if (isHSBVisible != (hbm.getExtent() > hbm.getMaximum())) {
-						adjustHeight();
-					} else {
-						BoundedRangeModel vbm = scroll.getVerticalScrollBar().getModel();
-						if (vbm.getValueIsAdjusting())
-							return;
-						if (isVSBVisible != (vbm.getExtent() > vbm.getMaximum()))
-							adjustHeight();
-					}
-				}
-
-				void adjustHeight() {
-					int minHeight = 0, prefHeight = 0, maxHeight = 0;
-					if (table.getTableHeader() != null && table.getTableHeader().isVisible()) {
-						minHeight += table.getTableHeader().getPreferredSize().height;
-						maxHeight += table.getTableHeader().getPreferredSize().height;
-					}
-					int rowCount = model.getRowCount();
-					for (int i = 0; i < theAdaptiveMaxRowHeight && i < rowCount; i++) {
-						int rowHeight = table.getRowHeight(i);
-						if (i < theAdaptiveMinRowHeight)
-							minHeight += rowHeight;
-						if (i < theAdaptivePrefRowHeight)
-							prefHeight += rowHeight;
-						if (i < theAdaptiveMaxRowHeight)
-							maxHeight += rowHeight;
-					}
-					BoundedRangeModel hbm = scroll.getHorizontalScrollBar().getModel();
-					isHSBVisible = hbm.getExtent() > hbm.getMaximum();
-					if (isHSBVisible) {
-						int sbh = scroll.getHorizontalScrollBar().getHeight();
-						minHeight += sbh;
-						maxHeight += sbh;
-					}
-					BoundedRangeModel vbm = scroll.getVerticalScrollBar().getModel();
-					isVSBVisible = vbm.getExtent() > vbm.getMaximum();
-					Dimension psvs = table.getPreferredScrollableViewportSize();
-					if (psvs.height != prefHeight) {
-						int w = 0;
-						for (int c = 0; c < table.getColumnModel().getColumnCount(); c++)
-							w += table.getColumnModel().getColumn(c).getWidth();
-						table.setPreferredScrollableViewportSize(new Dimension(psvs.width, prefHeight));
-					}
-					Dimension min = scroll.getMinimumSize();
-					if (min.height != minHeight) {
-						int w = 10;
-						if (isVSBVisible)
-							w += scroll.getVerticalScrollBar().getWidth();
-						scroll.getViewport().setMinimumSize(new Dimension(w, minHeight));
-					}
-					Dimension max = scroll.getMaximumSize();
-					if (max.height != maxHeight) {
-						int w = 0;
-						if (isVSBVisible)
-							w += scroll.getVerticalScrollBar().getWidth();
-						for (int c = 0; c < model.getColumnCount(); c++) {
-							w += table.getColumnModel().getColumn(c).getMaxWidth();
-							if (w < 0) {
-								w = Integer.MAX_VALUE;
-								break;
-							}
-						}
-						scroll.getViewport().setMaximumSize(new Dimension(w, maxHeight));
-					}
-					if (scroll.getParent() != null)
-						scroll.getParent().revalidate();
-				}
-			}
-			HeightAdjustmentListener hal = new HeightAdjustmentListener();
-			model.getRowModel().addListDataListener(hal);
-			model.getColumnModel().addListDataListener(hal);
-			scroll.getHorizontalScrollBar().getModel().addChangeListener(hal);
-			scroll.getVerticalScrollBar().getModel().addChangeListener(hal);
-			hal.adjustHeight();
-		}
 		table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
 
 		// Set up transfer handling (DnD, copy/paste)
@@ -1058,6 +1077,8 @@ implements TableBuilder<R, P> {
 
 		@Override
 		public DataFlavor[] getTransferDataFlavors() {
+			if (theWrapped == null)
+				return new DataFlavor[] { ROW_ELEMENT_FLAVOR };
 			return ArrayUtils.add(theWrapped.getTransferDataFlavors(), ROW_ELEMENT_FLAVOR);
 		}
 
@@ -1065,14 +1086,18 @@ implements TableBuilder<R, P> {
 		public boolean isDataFlavorSupported(DataFlavor flavor) {
 			if (flavor == ROW_ELEMENT_FLAVOR)
 				return true;
-			return theWrapped.isDataFlavorSupported(flavor);
+			else if (theWrapped != null)
+				return theWrapped.isDataFlavorSupported(flavor);
+			return false;
 		}
 
 		@Override
 		public Object getTransferData(DataFlavor flavor) throws UnsupportedFlavorException, IOException {
 			if (flavor == ROW_ELEMENT_FLAVOR)
 				return theRowElements;
-			return theWrapped.getTransferData(flavor);
+			else if (theWrapped == null)
+				return theWrapped.getTransferData(flavor);
+			throw new UnsupportedFlavorException(flavor);
 		}
 	}
 }
