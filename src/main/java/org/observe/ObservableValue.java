@@ -676,6 +676,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 
 		private final XformDef theOptions;
 
+		private Object[] theComposedValues;
 		private T theValue;
 
 		private final String theOperation;
@@ -819,8 +820,18 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 						for (int i = 0; i < composed.length; i++)
 							if (!initialized[i])
 								throw new IllegalStateException(theComposed.get(i) + " did not fire an initial value");
-						if (!completed[0] && theOptions.isCached())
-							theValue = combineCache(caches, -1, null);
+						if (!completed[0] && theOptions.isCached()) {
+							Object[] cvs = theComposedValues;
+							theComposedValues = null;
+							if (cvs != null) {
+								Object[] newComposed = new Object[caches.length];
+								for (int i = 0; i < newComposed.length; i++)
+									newComposed[i] = caches[i].getSourceCache();
+								if (!Arrays.equals(newComposed, cvs))
+									theValue = combineCache(caches, -1, null);
+							} else
+								theValue = combineCache(caches, -1, null);
+						}
 						// initialized[0] = true;
 					} else {
 						theValue = null;
@@ -885,9 +896,18 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 
 		@Override
 		public T get() {
-			if (theOptions.isCached() && !theObservers.isEmpty())
+			if (theOptions.isCached()) {
+				if (!theObservers.isEmpty())
+					return theValue;
+				Object[] composed = new Object[theComposed.size()];
+				for (int i = 0; i < composed.length; i++)
+					composed[i] = theComposed.get(i).get();
+				if (!Arrays.equals(composed, theComposedValues)) {
+					theComposedValues = composed;
+					theValue = combine(composed);
+				}
 				return theValue;
-			else {
+			} else {
 				Object[] composed = new Object[theComposed.size()];
 				for (int i = 0; i < composed.length; i++)
 					composed[i] = theComposed.get(i).get();
@@ -900,6 +920,8 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 		 * @return The combined value
 		 */
 		protected T combine(Object[] args) {
+			if (args[0] == null && theOptions.isNullToNull())
+				return null;
 			return theFunction.apply(args.clone(), theValue);
 		}
 

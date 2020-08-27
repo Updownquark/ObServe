@@ -12,6 +12,12 @@ import org.qommons.Transaction;
 /** Super-interface used for options by several map-type operations */
 public interface XformOptions {
 	/**
+	 * @param nullToNull Whether null inputs should be mapped to null outputs without calling the mapping function. False by default.
+	 * @return This option set
+	 */
+	XformOptions nullToNull(boolean nullToNull);
+
+	/**
 	 * @param cache Whether to store both the source and result values for performance. Default is true.
 	 * @return This option set
 	 */
@@ -49,6 +55,9 @@ public interface XformOptions {
 	 */
 	XformOptions oneToMany(boolean oneToMany);
 
+	/** @return Whether null inputs should be mapped to null outputs without calling the mapping function */
+	boolean isNullToNull();
+
 	/** @return Whether to store both the source and result values for performance */
 	boolean isCached();
 
@@ -69,6 +78,7 @@ public interface XformOptions {
 
 	/** A simple abstract implementation of XformOptions */
 	public class SimpleXformOptions implements XformOptions {
+		private boolean isNullToNull;
 		private boolean isCached;
 		private boolean reEvalOnUpdate;
 		private boolean fireIfUnchanged;
@@ -100,6 +110,17 @@ public interface XformOptions {
 				fireIfUnchanged = true;
 				propagateUpdateToParent = true;
 			}
+		}
+
+		@Override
+		public XformOptions nullToNull(boolean nullToNull) {
+			isNullToNull = nullToNull;
+			return this;
+		}
+
+		@Override
+		public boolean isNullToNull() {
+			return isNullToNull;
 		}
 
 		@Override
@@ -171,6 +192,7 @@ public interface XformOptions {
 
 	/** An immutable version of {@link XformOptions} */
 	public class XformDef {
+		private final boolean isNullToNull;
 		private final boolean isCached;
 		private final boolean reEvalOnUpdate;
 		private final boolean fireIfUnchanged;
@@ -180,6 +202,7 @@ public interface XformOptions {
 
 		/** @param options The configured options */
 		public XformDef(XformOptions options) {
+			isNullToNull = options.isNullToNull();
 			isCached = options.isCached();
 			reEvalOnUpdate = options.isReEvalOnUpdate();
 			fireIfUnchanged = options.isFireIfUnchanged();
@@ -188,6 +211,11 @@ public interface XformOptions {
 			isOneToMany = options.isOneToMany();
 			if (!propagateUpdateToParent && !isCached)
 				throw new IllegalStateException("Caching must be enabled to prevent parent update propagation");
+		}
+
+		/** @return Whether null inputs should be mapped to null outputs without calling the mapping function */
+		public boolean isNullToNull() {
+			return isNullToNull;
 		}
 
 		/** @return Whether to store both the source and result values for performance */
@@ -240,7 +268,8 @@ public interface XformOptions {
 			else if (!(obj instanceof XformDef))
 				return false;
 			XformDef other = (XformDef) obj;
-			return isCached == other.isCached//
+			return isNullToNull == other.isNullToNull//
+				&& isCached == other.isCached//
 				&& reEvalOnUpdate == other.reEvalOnUpdate//
 				&& fireIfUnchanged == other.fireIfUnchanged//
 				&& propagateUpdateToParent == other.propagateUpdateToParent//
@@ -253,6 +282,8 @@ public interface XformOptions {
 			StringBuilder str = new StringBuilder();
 			str.append(isCached ? "" : "un").append("cached, ");
 			str.append("re-eval=").append(reEvalOnUpdate).append(", fire-on-update=").append(fireIfUnchanged);
+			if (isNullToNull)
+				str.append(", null-to-null");
 			if (!propagateUpdateToParent)
 				str.append(", no-parent-updates");
 			if (isManyToOne)
@@ -433,24 +464,42 @@ public interface XformOptions {
 			if (theDef.isCached()) {
 				oldValue = theIntf.getDestCache();
 				if (!update || theDef.isReEvalOnUpdate()) {
-					newValue = map.apply(newSource, oldValue);
+					newValue = map(map, newSource, oldValue);
 					theIntf.setDestCache(newValue);
 				} else
 					newValue = oldValue;
 			} else {
 				if (update)
-					oldValue = newValue = map.apply(newSource, null);
+					oldValue = newValue = map(map, newSource, null);
 				else {
 					if (oldMap != null)
-						oldValue = oldMap.apply(oldSource);
+						oldValue = map(oldMap, oldSource);
 					else
-						oldValue = map.apply(oldSource, null);
-					newValue = map.apply(newSource, oldValue);
+						oldValue = map(map, oldSource, null);
+					newValue = map(map, newSource, oldValue);
 				}
 			}
 			if (oldValue != newValue || theDef.isFireIfUnchanged())
 				return new BiTuple<>(oldValue, newValue);
 			return null;
+		}
+
+		public T map(E source, T previous) {
+			return map(theIntf.map(), source, previous);
+		}
+
+		private T map(BiFunction<? super E, ? super T, ? extends T> map, E source, T previous) {
+			if (source == null && theDef.isNullToNull())
+				return null;
+			else
+				return map.apply(source, previous);
+		}
+
+		private T map(Function<? super E, ? extends T> map, E source) {
+			if (source == null && theDef.isNullToNull())
+				return null;
+			else
+				return map.apply(source);
 		}
 	}
 }

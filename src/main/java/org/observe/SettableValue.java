@@ -245,6 +245,8 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	 */
 	public default <R> SettableValue<R> map(TypeToken<R> type, Function<? super T, ? extends R> function,
 		Function<? super R, ? extends T> reverse, Consumer<XformOptions> options) {
+		if(type==null || function==null)
+			throw new NullPointerException();
 		SimpleXformOptions xform = new SimpleXformOptions();
 		if (options != null)
 			options.accept(xform);
@@ -254,7 +256,11 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 		}, "map", new XformDef(xform), this) {
 			@Override
 			public <V extends R> R set(V value, Object cause) throws IllegalArgumentException {
-				T reversed = reverse.apply(value);
+				T reversed;
+				if(value==null && xform.isNullToNull())
+					reversed=null;
+				else
+					reversed= reverse.apply(value);
 				T old;
 				if (!getOptions().isPropagatingUpdatesToParent()) {
 					old = root.get();
@@ -267,7 +273,11 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 
 			@Override
 			public <V extends R> String isAcceptable(V value) {
-				T reversed = reverse.apply(value);
+				T reversed;
+				if(value==null && xform.isNullToNull())
+					reversed=null;
+				else
+					reversed= reverse.apply(value);
 				if (!getOptions().isPropagatingUpdatesToParent() && Objects.equals(reversed, root.get()))
 					return null;
 				return root.isAcceptable(reversed);
@@ -292,6 +302,8 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	 */
 	public default <R> SettableValue<R> map(TypeToken<R> type, Function<? super T, ? extends R> function,
 		BiFunction<? super T, ? super R, ? extends T> reverse, Consumer<XformOptions> options) {
+		if (type == null || function == null)
+			throw new NullPointerException();
 		SimpleXformOptions xform = new SimpleXformOptions();
 		if (options != null)
 			options.accept(xform);
@@ -301,7 +313,11 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 		}, "map", new XformDef(xform), this) {
 			@Override
 			public <V extends R> R set(V value, Object cause) throws IllegalArgumentException {
-				T reversed = reverse.apply(root.get(), value);
+				T reversed;
+				if(value==null && xform.isNullToNull())
+					reversed=null;
+				else
+					reversed= reverse.apply(root.get(), value);
 				if (!Objects.equals(reversed, function.apply(reversed)))
 					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 				T old;
@@ -316,7 +332,11 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 
 			@Override
 			public <V extends R> String isAcceptable(V value) {
-				T reversed = reverse.apply(root.get(), value);
+				T reversed;
+				if(value==null && xform.isNullToNull())
+					reversed=null;
+				else
+					reversed= reverse.apply(root.get(), value);
 				if (!Objects.equals(value, function.apply(reversed)))
 					return StdMsg.ILLEGAL_ELEMENT;
 				if (!getOptions().isPropagatingUpdatesToParent() && Objects.equals(reversed, root.get()))
@@ -344,17 +364,25 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	 */
 	default <F> SettableValue<F> asFieldEditor(TypeToken<F> fieldType, Function<? super T, ? extends F> getter,
 		BiConsumer<? super T, ? super F> setter, Consumer<XformOptions> options) {
+		if (fieldType == null || getter == null)
+			throw new NullPointerException();
+		XformOptions xform = new SimpleXformOptions().nullToNull(true);
+		if (options != null)
+			options.accept(xform);
 		SettableValue<T> outer = this;
 		class FieldEditorValue extends ComposedSettableValue<F> {
 			FieldEditorValue() {
-				super(fieldType, args -> args[0] == null ? null : getter.apply((T) args[0]), getter.toString(),
-					new XformDef(new SimpleXformOptions()), outer);
+				super(fieldType, args -> getter.apply((T) args[0]), getter.toString(), new XformDef(xform), outer);
 			}
 
 			@Override
 			public <V extends F> F set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
 				T v = outer.get();
-				F old = getter.apply(v);
+				F old;
+				if(v==null && xform.isNullToNull())
+					old=null;
+				else
+					old = getter.apply(v);
 				setter.accept(v, value);
 				if (getOptions().isPropagatingUpdatesToParent())
 					outer.set(v, cause);
