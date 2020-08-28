@@ -748,7 +748,8 @@ public class Combination {
 		 */
 		@Override
 		public ReversibleCombinedValueBuilder2Impl<E, V, T> withReverse(BiFunction<? super T, ? super V, ? extends E> reverse) {
-			return withReverse(cv -> reverse.apply(cv.getElement(), cv.get(theArg2)));
+			return withReverse(LambdaUtils.printableFn(cv -> //
+			reverse.apply(cv.getElement(), cv.get(theArg2)), reverse::toString));
 		}
 
 		@Override
@@ -915,7 +916,8 @@ public class Combination {
 		@Override
 		public ReversibleCombinedValueBuilder3Impl<E, V1, V2, T> withReverse(
 			TriFunction<? super T, ? super V1, ? super V2, ? extends E> reverse) {
-			return withReverse(cv -> reverse.apply(cv.getElement(), cv.get(theArg2), cv.get(theArg3)));
+			return withReverse(LambdaUtils.printableFn(cv -> //
+			reverse.apply(cv.getElement(), cv.get(theArg2), cv.get(theArg3)), reverse::toString));
 		}
 
 		@Override
