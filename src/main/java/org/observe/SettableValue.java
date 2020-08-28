@@ -894,6 +894,18 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 					public <X> X get(ObservableValue<X> arg) {
 						return (X) argValues[getOptions().getArgIndex(arg)];
 					}
+				}, new Supplier<S>() {
+					boolean hasValue;
+					S sourceValue;
+
+					@Override
+					public S get() {
+						if (!hasValue) {
+							hasValue = true;
+							sourceValue = getOptions().isCached() ? (S) getCachedComposedValue(0) : getSource().get();
+						}
+						return sourceValue;
+					}
 				});
 				return getSource().isAcceptable(sourceVal);
 			}
@@ -917,6 +929,18 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 					@Override
 					public <X> X get(ObservableValue<X> arg) {
 						return (X) argValues[getOptions().getArgIndex(arg)];
+					}
+				}, new Supplier<S>() {
+					boolean hasValue;
+					S sourceValue;
+
+					@Override
+					public S get() {
+						if (!hasValue) {
+							hasValue = true;
+							sourceValue = getOptions().isCached() ? (S) getCachedComposedValue(0) : getSource().get();
+						}
+						return sourceValue;
 					}
 				});
 				S oldValue = getSource().set(sourceVal, cause);

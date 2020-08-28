@@ -703,8 +703,9 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 
 		private final XformDef theOptions;
 
-		private Object[] theComposedValues;
-		private T theValue;
+		private long theCachedStamp;
+		final Object[] theComposedValues;
+		private volatile T theValue;
 
 		private final String theOperation;
 		private Object theIdentity;
@@ -742,10 +743,12 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 			ObservableValue<?>... composed) {
 			theFunction = function;
 			theOperation = operation;
+			theCachedStamp = -1;
 			theOptions = options == null ? new XformDef(new XformOptions.SimpleXformOptions()) : options;
 			theType = type != null ? type
 				: (TypeToken<T>) TypeToken.of(function.getClass()).resolveType(Function.class.getTypeParameters()[1]);
 			theComposed = java.util.Collections.unmodifiableList(java.util.Arrays.asList(composed));
+			theComposedValues = theOptions.isCached() ? new Object[theComposed.size()] : null;
 			final Subscription[] composedSubs = new Subscription[theComposed.size()];
 			boolean[] completed = new boolean[1];
 			theObservers = ListenerList.build().withFastSize(false).withInUse(new ListenerList.InUseListener() {
@@ -760,14 +763,19 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 								.createCacheHandler(new XformOptions.XformCacheHandlingInterface<Object, T>() {
 									@Override
 									public BiFunction<? super Object, ? super T, ? extends T> map() {
-										Object[] composedValues = new Object[theComposed.size()];
-										for (int j = 0; j < composed.length; j++) {
-											if (j != index)
-												composedValues[j] = theOptions.isCached() ? caches[j].getSourceCache() : composed[j].get();
-										}
 										return (src, oldValue) -> {
-											composedValues[index] = src;
-											return combine(composedValues);
+											T value;
+											if (theComposedValues != null) {
+												theComposedValues[index] = src;
+												value = combine(theComposedValues);
+												theValue = value;
+											} else {
+												Object[] cvs = new Object[composed.length];
+												for (int j = 0; j < cvs.length; j++)
+													cvs[j] = j == index ? src : composed[j].get();
+												value = combine(cvs);
+											}
+											return value;
 										};
 									}
 
@@ -847,21 +855,9 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 						for (int i = 0; i < composed.length; i++)
 							if (!initialized[i])
 								throw new IllegalStateException(theComposed.get(i) + " did not fire an initial value");
-						if (!completed[0] && theOptions.isCached()) {
-							Object[] cvs = theComposedValues;
-							theComposedValues = null;
-							if (cvs != null) {
-								Object[] newComposed = new Object[caches.length];
-								for (int i = 0; i < newComposed.length; i++)
-									newComposed[i] = caches[i].getSourceCache();
-								if (!Arrays.equals(newComposed, cvs))
-									theValue = combineCache(caches, -1, null);
-							} else
-								theValue = combineCache(caches, -1, null);
-						}
-						// initialized[0] = true;
+						if (theOptions.isCached())
+							theValue = getOrCompute();
 					} else {
-						theValue = null;
 						for (int i = 0; i < theComposed.size(); i++) {
 							if (composedSubs[i] != null) {
 								composedSubs[i].unsubscribe();
@@ -911,6 +907,17 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 			return theComposed.toArray(new ObservableValue[theComposed.size()]);
 		}
 
+		/**
+		 * @param index The index of the composed value
+		 * @return The cached value for the composed value
+		 */
+		protected Object getCachedComposedValue(int index) {
+			if (theComposedValues == null)
+				throw new IllegalStateException("Not cached");
+			getOrCompute(); // Make sure we're up-to-date
+			return theComposedValues[index];
+		}
+
 		/** @return The function used to map this observable's composed values into its return value */
 		public BiFunction<Object[], T, T> getFunction() {
 			return theFunction;
@@ -923,22 +930,36 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 
 		@Override
 		public T get() {
-			if (theOptions.isCached()) {
-				if (!theObservers.isEmpty())
-					return theValue;
-				Object[] composed = new Object[theComposed.size()];
-				for (int i = 0; i < composed.length; i++)
-					composed[i] = theComposed.get(i).get();
-				if (!Arrays.equals(composed, theComposedValues)) {
-					theComposedValues = composed;
-					theValue = combine(composed);
-				}
-				return theValue;
-			} else {
+			if (!theOptions.isCached()) {
 				Object[] composed = new Object[theComposed.size()];
 				for (int i = 0; i < composed.length; i++)
 					composed[i] = theComposed.get(i).get();
 				return combine(composed);
+			} else if (!theObservers.isEmpty())
+				return theValue; // Value is being maintained
+			else
+				return getOrCompute();
+		}
+
+		T getOrCompute() {
+			try (Transaction t = lock()) {
+				T value = theValue;
+				long newStamp = getStamp();
+				if (theCachedStamp != -1 && theCachedStamp == newStamp)
+					return value; // No changes, value is still valid
+				theCachedStamp = newStamp;
+				boolean reEval = theOptions.isReEvalOnUpdate();
+				for (int i = 0; i < theComposedValues.length; i++) {
+					Object newValue = theComposed.get(i).get();
+					if (!reEval)
+						reEval = theComposedValues[i] != newValue;
+					theComposedValues[i] = newValue;
+				}
+				if (reEval) {
+					value = combine(theComposedValues);
+					theValue = value;
+				}
+				return value;
 			}
 		}
 

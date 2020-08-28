@@ -10,13 +10,13 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import org.observe.Combination;
+import org.observe.Combination.ReversibleCombinationDef;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
 import org.observe.XformOptions;
-import org.observe.Combination.ReversibleCombinationDef;
 import org.observe.collect.FlowOptions.MapDef;
 import org.observe.collect.FlowOptions.ReverseQueryResult;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
@@ -714,6 +714,7 @@ public class ObservableCollectionPassiveManagers {
 
 		@Override
 		protected I reverse(AbstractMappedElement preSourceEl, T value) {
+			Supplier<I> pv = preSourceEl::getParentValue;
 			return getOptions().getReverse().apply(new Combination.CombinedValues<T>() {
 				@Override
 				public T getElement() {
@@ -724,7 +725,7 @@ public class ObservableCollectionPassiveManagers {
 				public <X> X get(ObservableValue<X> arg) {
 					return arg.get();
 				}
-			});
+			}, pv);
 		}
 
 		@Override
@@ -943,7 +944,19 @@ public class ObservableCollectionPassiveManagers {
 
 			@Override
 			public I reverseForElement(T source) {
-				return theCombinedMap.reverse(source);
+				return theCombinedMap.reverse(source, new Supplier<I>() {
+					boolean hasSource;
+					I sourceVal;
+
+					@Override
+					public I get() {
+						if (!hasSource) {
+							sourceVal = getParentValue();
+							hasSource = true;
+						}
+						return sourceVal;
+					}
+				});
 			}
 		}
 
@@ -974,7 +987,7 @@ public class ObservableCollectionPassiveManagers {
 				}, null);
 			}
 
-			I reverse(T dest) {
+			I reverse(T dest, Supplier<I> prevSource) {
 				return getOptions().getReverse().apply(new Combination.CombinedValues<T>() {
 					@Override
 					public T getElement() {
@@ -988,7 +1001,7 @@ public class ObservableCollectionPassiveManagers {
 							throw new IllegalArgumentException("Unrecognized value: " + arg);
 						return (X) holder.get();
 					}
-				});
+				}, prevSource);
 			}
 		}
 	}

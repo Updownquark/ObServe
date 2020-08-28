@@ -10,10 +10,10 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import org.observe.Combination;
+import org.observe.Combination.ReversibleCombinationDef;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.XformOptions;
-import org.observe.Combination.ReversibleCombinationDef;
 import org.observe.collect.FlowOptions.MapDef;
 import org.observe.collect.FlowOptions.ReverseQueryResult;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
@@ -1821,6 +1821,7 @@ public class ObservableCollectionActiveManagers {
 
 		@Override
 		protected I reverse(AbstractMappedElement preSourceEl, T value) {
+			Supplier<I> ps = getOptions().isCached() ? preSourceEl::getCachedSource : preSourceEl::getParentValue;
 			return getOptions().getReverse().apply(new Combination.CombinedValues<T>() {
 				@Override
 				public T getElement() {
@@ -1831,7 +1832,7 @@ public class ObservableCollectionActiveManagers {
 				public <V> V get(ObservableValue<V> arg) {
 					return getArgValue(arg);
 				}
-			});
+			}, ps);
 		}
 
 		@Override

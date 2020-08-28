@@ -10,12 +10,12 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
+import org.observe.Combination.ReversibleCombinationDef;
+import org.observe.Combination.ReversibleCombinationPrecursor;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.XformOptions;
-import org.observe.Combination.ReversibleCombinationDef;
-import org.observe.Combination.ReversibleCombinationPrecursor;
 import org.observe.assoc.ObservableMultiMap.MultiMapFlow;
 import org.observe.assoc.ObservableSortedMultiMap.SortedMultiMapFlow;
 import org.observe.assoc.impl.AddKeyHolder;
@@ -1483,11 +1483,8 @@ public class ObservableCollectionDataFlowImpl {
 					if (theOptions.isCached() && equivalence().elementEquals(getValue(), value)) {
 						reversed = getCachedSource();
 					} else {
-						if (!isReversible()) {
-							if (value == getValue())
-								return isParentAcceptable(getParentValue());
+						if (!isReversible())
 							return StdMsg.UNSUPPORTED_OPERATION;
-						}
 						reversed = reverseForElement(value);
 						if (!equivalence().elementEquals(mapForElement(reversed, value), value))
 							return StdMsg.ILLEGAL_ELEMENT;
@@ -1506,14 +1503,9 @@ public class ObservableCollectionDataFlowImpl {
 					reversed = reverse(this, value);
 				} else if (theOptions.isCached() && equivalence().elementEquals(getValue(), value))
 					reversed = getCachedSource();
-				else if (!isReversible()) {
-					if (value == getValue()) {
-						if (theOptions.isPropagatingUpdatesToParent())
-							setParent(getParentValue());
-						return;
-					} else
-						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-				} else {
+				else if (!isReversible())
+					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				else {
 					reversed = reverseForElement(value);
 					if (!equivalence().elementEquals(mapForElement(reversed, value), value))
 						throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
