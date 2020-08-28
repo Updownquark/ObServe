@@ -2,7 +2,10 @@ package org.observe;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
@@ -18,6 +21,7 @@ import org.observe.XformOptions.SimpleXformOptions;
 import org.observe.XformOptions.XformDef;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
+import org.qommons.ArrayUtils;
 import org.qommons.BiTuple;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
@@ -247,6 +251,29 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 	 */
 	default <R> ObservableValue<R> flatMap(Function<? super T, ? extends ObservableValue<? extends R>> map) {
 		return flatten(map(map));
+	}
+
+	/**
+	 * A more flexible and elegant combination method
+	 *
+	 * @param <R> The type for the combined value
+	 * @param type The type for the combined value
+	 * @param combination Determines how this value an any other arguments are to be combined
+	 * @return The combined value
+	 */
+	default <R> ObservableValue<R> combine(TypeToken<R> type,
+		Function<? super Combination.CombinationPrecursor<T, R>, ? extends Combination.CombinationDef<T, R>> combination) {
+		Combination.CombinationDef<T, R> def = combination.apply(new Combination.CombinationPrecursor<>());
+		ObservableValue<?>[] argValues = new ObservableValue[def.getArgs().size() + 1];
+		argValues[0] = this;
+		Map<ObservableValue<?>, Integer> otherArgs = new HashMap<>((int) Math.ceil(def.getArgs().size() * 1.5));
+		Iterator<ObservableValue<?>> argIter = def.getArgs().iterator();
+		for (int i = 1; i < argValues.length; i++) {
+			ObservableValue<?> arg = argIter.next();
+			argValues[i] = arg;
+			otherArgs.put(arg, i - 1);
+		}
+		return new CombinedObservableValue<>(this, type, def);
 	}
 
 	/**
@@ -972,6 +999,76 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 		@Override
 		public String toString() {
 			return getIdentity().toString();
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableValue#combine(TypeToken, Function)}
+	 *
+	 * @param <S> The type of the source value
+	 * @param <T> The type of the combined value
+	 */
+	public class CombinedObservableValue<S, T> extends ComposedObservableValue<T> {
+		/**
+		 * @param source The source value to combine
+		 * @param type The type of the combined value
+		 * @param combination The definition of the combination operation
+		 */
+		public CombinedObservableValue(ObservableValue<S> source, TypeToken<T> type, Combination.CombinationDef<S, T> combination) {
+			super(type, (args, prevValue) -> {
+				Combination.CombinedValues<S> combined = new Combination.CombinedValues<S>() {
+					@Override
+					public S getElement() {
+						return (S) args[0];
+					}
+
+					@Override
+					public <X> X get(ObservableValue<X> arg) {
+						int index = combination.getArgIndex(arg);
+						return (X) args[index + 1];
+					}
+				};
+				return combination.getCombination().apply(combined, prevValue);
+			}, "combination", combination, makeArgs(source, combination));
+		}
+
+		/**
+		 * @param source The source value
+		 * @param combination The combination definition
+		 * @return An array containing the source value and all combined arguments
+		 */
+		protected static ObservableValue<?>[] makeArgs(ObservableValue<?> source, Combination.CombinationDef<?, ?> combination) {
+			return ArrayUtils.add(combination.getArgs().toArray(new ObservableValue[combination.getArgs().size()]), 0, source);
+		}
+
+		/** @return THe source value of this combination */
+		public ObservableValue<S> getSource() {
+			return (ObservableValue<S>) getComposed()[0];
+		}
+
+		@Override
+		public Combination.CombinationDef<S, T> getOptions() {
+			return (Combination.CombinationDef<S, T>) super.getOptions();
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(getSource(), getOptions());
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (this == obj)
+				return true;
+			else if (!(obj instanceof CombinedObservableValue))
+				return false;
+			CombinedObservableValue<S, T> other = (CombinedObservableValue<S, T>) obj;
+			return getSource().equals(other.getSource()) && getOptions().equals(other.getOptions());
+		}
+
+		@Override
+		public String toString() {
+			return getSource() + "." + getOptions();
 		}
 	}
 

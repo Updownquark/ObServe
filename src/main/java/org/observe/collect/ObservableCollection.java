@@ -17,10 +17,10 @@ import org.observe.ObservableValue;
 import org.observe.Observer;
 import org.observe.Subscription;
 import org.observe.TypedValueContainer;
+import org.observe.Combination.ReversibleCombinationDef;
+import org.observe.Combination.ReversibleCombinationPrecursor;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableSortedMultiMap;
-import org.observe.collect.Combination.CombinationPrecursor;
-import org.observe.collect.Combination.CombinedFlowDef;
 import org.observe.collect.FlowOptions.MapOptions;
 import org.observe.collect.FlowOptions.UniqueOptions;
 import org.observe.collect.ObservableCollectionActiveManagers.ActiveCollectionManager;
@@ -897,7 +897,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		 *         dynamic value of the observable
 		 */
 		<X> CollectionDataFlow<E, T, X> combine(TypeToken<X> targetType,
-			Function<CombinationPrecursor<T, X>, CombinedFlowDef<T, X>> combination);
+			Function<ReversibleCombinationPrecursor<T, X>, ReversibleCombinationDef<T, X>> combination);
 
 		/**
 		 * @param target The target type

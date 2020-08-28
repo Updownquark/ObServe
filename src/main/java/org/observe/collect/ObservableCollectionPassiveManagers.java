@@ -9,13 +9,14 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+import org.observe.Combination;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
 import org.observe.XformOptions;
-import org.observe.collect.Combination.CombinedFlowDef;
+import org.observe.Combination.ReversibleCombinationDef;
 import org.observe.collect.FlowOptions.MapDef;
 import org.observe.collect.FlowOptions.ReverseQueryResult;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
@@ -676,13 +677,14 @@ public class ObservableCollectionPassiveManagers {
 	}
 
 	static class PassiveCombinedCollectionManager<E, I, T> extends AbstractPassiveMappingManager<E, I, T> {
-		PassiveCombinedCollectionManager(PassiveCollectionManager<E, ?, I> parent, TypeToken<T> targetType, CombinedFlowDef<I, T> def) {
+		PassiveCombinedCollectionManager(PassiveCollectionManager<E, ?, I> parent, TypeToken<T> targetType,
+			ReversibleCombinationDef<I, T> def) {
 			super(parent, targetType, def);
 		}
 
 		@Override
-		protected CombinedFlowDef<I, T> getOptions() {
-			return (CombinedFlowDef<I, T>) super.getOptions();
+		protected ReversibleCombinationDef<I, T> getOptions() {
+			return (ReversibleCombinationDef<I, T>) super.getOptions();
 		}
 
 		@Override

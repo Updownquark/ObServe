@@ -8,10 +8,11 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.observe.Combination;
 import org.observe.SettableValue;
-import org.observe.collect.Combination;
-import org.observe.collect.Combination.CombinationPrecursor;
-import org.observe.collect.Combination.CombinedFlowDef;
+import org.observe.Combination.ReversibleCombinationDef;
+import org.observe.Combination.ReversibleCombinationPrecursor;
+import org.observe.Combination.ReversibleCombinedValueBuilder;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.BiTypeTransformation;
 import org.observe.supertest.ChainLinkGenerator;
@@ -88,17 +89,17 @@ public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLin
 			boolean oneToMany = transform.isOneToMany();
 			boolean manyToOne = transform.isManyToOne();
 			TypeToken<T> type = (TypeToken<T>) transform.getTargetType().getType();
-			ValueHolder<Combination.CombinedFlowDef<S, T>> options = new ValueHolder<>();
-			Function<CombinationPrecursor<S, T>, CombinedFlowDef<S, T>> combination = combine -> {
-				Combination.CombinationPrecursor<S, T> combinePre = combine.cache(cache).manyToOne(manyToOne).oneToMany(oneToMany)//
+			ValueHolder<Combination.ReversibleCombinationDef<S, T>> options = new ValueHolder<>();
+			Function<ReversibleCombinationPrecursor<S, T>, ReversibleCombinationDef<S, T>> combination = combine -> {
+				Combination.ReversibleCombinationPrecursor<S, T> combinePre = combine.cache(cache).manyToOne(manyToOne).oneToMany(oneToMany)//
 					.fireIfUnchanged(fireIfUnchanged).reEvalOnUpdate(reEvalOnUpdate);
-				Combination.CombinedCollectionBuilder<S, T> builder = combinePre.with(values.get(0));
+				ReversibleCombinedValueBuilder<S, T> builder = combinePre.with(values.get(0));
 				for (int i = 1; i < values.size(); i++)
 					builder = builder.with(values.get(i));
 
 				if (withReverse)
 					builder.withReverse(reverse);
-				Combination.CombinedFlowDef<S, T> def = builder.build(map);
+				Combination.ReversibleCombinationDef<S, T> def = builder.build(map);
 				options.accept(def);
 				return def;
 			};
@@ -116,7 +117,7 @@ public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLin
 	private final List<SettableValue<V>> theValues;
 	private final Function<List<V>, V> theValueCombination;
 	private final Function<TestHelper, V> theValueSupplier;
-	private final CombinedFlowDef<S, T> theOptions;
+	private final ReversibleCombinationDef<S, T> theOptions;
 
 	/**
 	 * @param path The path for this link
@@ -131,7 +132,7 @@ public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLin
 	 */
 	public CombinedCollectionLink(String path, ObservableCollectionLink<?, S> sourceLink, ObservableCollectionTestDef<T> def,
 		TestHelper helper, BiTypeTransformation<S, V, T> operation, List<SettableValue<V>> values, Function<List<V>, V> valueCombination,
-		Function<TestHelper, V> valueSupplier, CombinedFlowDef<S, T> options) {
+		Function<TestHelper, V> valueSupplier, ReversibleCombinationDef<S, T> options) {
 		super(path, sourceLink, def, helper, options.isCached());
 		theOperation = operation;
 		theValues = values;

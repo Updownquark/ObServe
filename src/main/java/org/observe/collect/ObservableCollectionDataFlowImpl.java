@@ -14,13 +14,13 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.XformOptions;
+import org.observe.Combination.ReversibleCombinationDef;
+import org.observe.Combination.ReversibleCombinationPrecursor;
 import org.observe.assoc.ObservableMultiMap.MultiMapFlow;
 import org.observe.assoc.ObservableSortedMultiMap.SortedMultiMapFlow;
 import org.observe.assoc.impl.AddKeyHolder;
 import org.observe.assoc.impl.DefaultMultiMapFlow;
 import org.observe.assoc.impl.DefaultSortedMultiMapFlow;
-import org.observe.collect.Combination.CombinationPrecursor;
-import org.observe.collect.Combination.CombinedFlowDef;
 import org.observe.collect.FlatMapOptions.FlatMapDef;
 import org.observe.collect.FlowOptions.MapDef;
 import org.observe.collect.FlowOptions.MapOptions;
@@ -655,8 +655,8 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public <X> CollectionDataFlow<E, T, X> combine(TypeToken<X> targetType,
-			Function<CombinationPrecursor<T, X>, CombinedFlowDef<T, X>> combination) {
-			CombinedFlowDef<T, X> def = combination.apply(new CombinationPrecursor<>());
+			Function<ReversibleCombinationPrecursor<T, X>, ReversibleCombinationDef<T, X>> combination) {
+			ReversibleCombinationDef<T, X> def = combination.apply(new ReversibleCombinationPrecursor<>());
 			return new CombinedCollectionOp<>(theSource, this, targetType, def);
 		}
 
@@ -1021,7 +1021,7 @@ public class ObservableCollectionDataFlowImpl {
 	 * @param <T> The type of elements in the resulting collection
 	 */
 	public static class CombinedCollectionOp<E, I, T> extends AbstractDataFlow<E, I, T> {
-		private final CombinedFlowDef<I, T> theDef;
+		private final ReversibleCombinationDef<I, T> theDef;
 
 		/**
 		 * @param source The source collection
@@ -1031,7 +1031,7 @@ public class ObservableCollectionDataFlowImpl {
 		 *        flow's behavior, e.g. caching
 		 */
 		protected CombinedCollectionOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, I> parent, TypeToken<T> target,
-			CombinedFlowDef<I, T> def) {
+			ReversibleCombinationDef<I, T> def) {
 			super(source, parent, target,
 				parent.getTargetType().equals(target) ? (Equivalence<? super T>) parent.equivalence() : Equivalence.DEFAULT);
 			theDef = def;

@@ -231,7 +231,7 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	 * @param reverse The function to map the other value to this one
 	 * @return The mapped settable value
 	 */
-	public default <R> SettableValue<R> map(Function<? super T, ? extends R> function, Function<? super R, ? extends T> reverse) {
+	default <R> SettableValue<R> map(Function<? super T, ? extends R> function, Function<? super R, ? extends T> reverse) {
 		return map(null, function, reverse, null);
 	}
 
@@ -243,8 +243,8 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	 * @param options Options determining the behavior of the result
 	 * @return The mapped settable value
 	 */
-	public default <R> SettableValue<R> map(TypeToken<R> type, Function<? super T, ? extends R> function,
-		Function<? super R, ? extends T> reverse, Consumer<XformOptions> options) {
+	default <R> SettableValue<R> map(TypeToken<R> type, Function<? super T, ? extends R> function, Function<? super R, ? extends T> reverse,
+		Consumer<XformOptions> options) {
 		if(type==null || function==null)
 			throw new NullPointerException();
 		SimpleXformOptions xform = new SimpleXformOptions();
@@ -300,7 +300,7 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	 * @param options Options determining the behavior of the result
 	 * @return The mapped settable value
 	 */
-	public default <R> SettableValue<R> map(TypeToken<R> type, Function<? super T, ? extends R> function,
+	default <R> SettableValue<R> map(TypeToken<R> type, Function<? super T, ? extends R> function,
 		BiFunction<? super T, ? super R, ? extends T> reverse, Consumer<XformOptions> options) {
 		if (type == null || function == null)
 			throw new NullPointerException();
@@ -407,6 +407,20 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	}
 
 	/**
+	 * A more flexible and elegant reversible (settable) combination method
+	 *
+	 * @param <R> The type of the combined value
+	 * @param type The type of the combined value
+	 * @param combination Determines how this value an any other arguments are to be combined
+	 * @return The combined value
+	 */
+	default <R> SettableValue<R> combineReversible(TypeToken<R> type,
+		Function<Combination.ReversibleCombinationPrecursor<T, R>, Combination.ReversibleCombinationDef<T, R>> combination) {
+		Combination.ReversibleCombinationDef<T, R> def = combination.apply(new Combination.ReversibleCombinationPrecursor<>());
+		return new CombinedSettableValue<>(this, type, def);
+	}
+
+	/**
 	 * Composes this settable value with another observable value
 	 *
 	 * @param <U> The type of the value to compose this value with
@@ -416,7 +430,7 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	 * @param reverse The function to reverse the transformation
 	 * @return The composed settable value
 	 */
-	public default <U, R> SettableValue<R> compose(BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
+	default <U, R> SettableValue<R> compose(BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
 		BiFunction<? super R, ? super U, ? extends T> reverse) {
 		return combine(null, function, arg, reverse, null);
 	}
@@ -433,7 +447,7 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	 * @param options Options determining the behavior of the result
 	 * @return The composed settable value
 	 */
-	public default <U, R> SettableValue<R> combine(TypeToken<R> type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
+	default <U, R> SettableValue<R> combine(TypeToken<R> type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
 		BiFunction<? super R, ? super U, ? extends T> reverse, Consumer<XformOptions> options) {
 		return combine(type, function, arg, (__, ___) -> null, reverse, options);
 	}
@@ -451,7 +465,7 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	 * @param options Options determining the behavior of the result
 	 * @return The composed settable value
 	 */
-	public default <U, R> SettableValue<R> combine(TypeToken<R> type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
+	default <U, R> SettableValue<R> combine(TypeToken<R> type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
 		BiFunction<? super R, ? super U, String> accept, BiFunction<? super R, ? super U, ? extends T> reverse,
 		Consumer<XformOptions> options) {
 		SimpleXformOptions xform = new SimpleXformOptions();
@@ -518,7 +532,7 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	 * @param reverse The function to reverse the transformation
 	 * @return The composed settable value
 	 */
-	public default <U, V, R> SettableValue<R> combine(TriFunction<? super T, ? super U, ? super V, R> function, ObservableValue<U> arg2,
+	default <U, V, R> SettableValue<R> combine(TriFunction<? super T, ? super U, ? super V, R> function, ObservableValue<U> arg2,
 		ObservableValue<V> arg3, TriFunction<? super R, ? super U, ? super V, ? extends T> reverse) {
 		return combine(null, function, arg2, arg3, reverse, null);
 	}
@@ -537,7 +551,7 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	 * @param options Options determining the behavior of the result
 	 * @return The composed settable value
 	 */
-	public default <U, V, R> SettableValue<R> combine(TypeToken<R> type, TriFunction<? super T, ? super U, ? super V, R> function,
+	default <U, V, R> SettableValue<R> combine(TypeToken<R> type, TriFunction<? super T, ? super U, ? super V, R> function,
 		ObservableValue<U> arg2, ObservableValue<V> arg3, TriFunction<? super R, ? super U, ? super V, ? extends T> reverse,
 		Consumer<XformOptions> options) {
 		SimpleXformOptions xform = new SimpleXformOptions();
@@ -808,6 +822,116 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 					else
 						return val;
 				});
+		}
+	}
+
+	/**
+	 * Implements {@link SettableValue#combineReversible(TypeToken, Function)}
+	 *
+	 * @param <S> The type of the source value
+	 * @param <T> The type of the combined value
+	 */
+	public class CombinedSettableValue<S, T> extends CombinedObservableValue<S, T> implements SettableValue<T> {
+		/**
+		 * @param source The source value to combine
+		 * @param type The type of the combined value
+		 * @param combination The definition of the combination operation
+		 */
+		public CombinedSettableValue(SettableValue<S> source, TypeToken<T> type, Combination.ReversibleCombinationDef<S, T> combination) {
+			super(source, type, combination);
+		}
+
+		@Override
+		public SettableValue<S> getSource() {
+			return (SettableValue<S>) super.getSource();
+		}
+
+		@Override
+		public Combination.ReversibleCombinationDef<S, T> getOptions() {
+			return (Combination.ReversibleCombinationDef<S, T>) super.getOptions();
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return super.isLockSupported();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return Lockable.lockAll(//
+				Lockable.lockable(getSource(), write, cause), getOptions().getArgs());
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, Object cause) {
+			return Lockable.tryLockAll(//
+				Lockable.lockable(getSource(), write, cause), getOptions().getArgs());
+		}
+
+		@Override
+		public ObservableValue<String> isEnabled() {
+			if (getOptions().getReverse() == null)
+				return ObservableValue.of("Not reversible");
+			return getSource().isEnabled();
+		}
+
+		@Override
+		public <V extends T> String isAcceptable(V value) {
+			if (getOptions().getReverse() == null)
+				return "Not reversible";
+			try (Transaction t = lock(false, null)) {
+				Object[] argValues = new Object[getOptions().getArgs().size()];
+				int i = 0;
+				for (ObservableValue<?> arg : getOptions().getArgs())
+					argValues[i++] = arg.get();
+				S sourceVal = getOptions().getReverse().apply(new Combination.CombinedValues<T>() {
+					@Override
+					public T getElement() {
+						return value;
+					}
+
+					@Override
+					public <X> X get(ObservableValue<X> arg) {
+						return (X) argValues[getOptions().getArgIndex(arg)];
+					}
+				});
+				return getSource().isAcceptable(sourceVal);
+			}
+		}
+
+		@Override
+		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+			if (getOptions().getReverse() == null)
+				throw new UnsupportedOperationException("Not reversible");
+			try (Transaction t = lock(true, null)) {
+				Object[] argValues = new Object[getOptions().getArgs().size()];
+				int i = 0;
+				for (ObservableValue<?> arg : getOptions().getArgs())
+					argValues[i++] = arg.get();
+				S sourceVal = getOptions().getReverse().apply(new Combination.CombinedValues<T>() {
+					@Override
+					public T getElement() {
+						return value;
+					}
+
+					@Override
+					public <X> X get(ObservableValue<X> arg) {
+						return (X) argValues[getOptions().getArgIndex(arg)];
+					}
+				});
+				S oldValue = getSource().set(sourceVal, cause);
+				return getOptions().getCombination().apply(new Combination.CombinedValues<S>() {
+					@Override
+					public S getElement() {
+						return oldValue;
+					}
+
+					@Override
+					public <X> X get(ObservableValue<X> arg) {
+						return (X) argValues[getOptions().getArgIndex(arg)];
+					}
+				}, value);
+			}
 		}
 	}
 
