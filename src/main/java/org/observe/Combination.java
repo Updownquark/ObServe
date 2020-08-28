@@ -11,6 +11,7 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 
 import org.qommons.Identifiable;
+import org.qommons.LambdaUtils;
 import org.qommons.StringUtils;
 import org.qommons.TriFunction;
 import org.qommons.collect.BetterHashSet;
@@ -29,7 +30,19 @@ public class Combination {
 	 * @param <T> The target type
 	 * @see ObservableValue#combine(TypeToken, Function)
 	 */
-	public static class CombinationPrecursor<E, T> extends XformOptions.SimpleXformOptions {
+	public static class CombinationPrecursor<E, T> extends XformOptions.SimpleXformOptions implements CombinedValueBuilder<E, T> {
+		@Override
+		public CombinationPrecursor<E, T> nullToNull(boolean nullToNull) {
+			super.nullToNull(nullToNull);
+			return this;
+		}
+
+		@Override
+		public CombinationPrecursor<E, T> propagateUpdateToParent(boolean propagate) {
+			super.propagateUpdateToParent(propagate);
+			return this;
+		}
+
 		@Override
 		public CombinationPrecursor<E, T> reEvalOnUpdate(boolean reEval) {
 			super.reEvalOnUpdate(reEval);
@@ -60,13 +73,23 @@ public class Combination {
 			return this;
 		}
 
-		/**
-		 * @param <V> The type of the argument value
-		 * @param value The argument value to combine with the source elements
-		 * @return A binary (source + argument) combined collection builder
-		 */
+		@Override
 		public <V> CombinedValueBuilder2<E, V, T> with(ObservableValue<V> value) {
 			return new CombinedValueBuilder2Impl<>(this, value);
+		}
+
+		/**
+		 * @param map The function transforming the source value to the target value
+		 * @return The transformation definition
+		 */
+		public CombinationDef<E, T> build1(Function<? super E, ? extends T> map) {
+			return build(LambdaUtils.printableFn(cv -> //
+			map.apply(cv.getElement()), map::toString));
+		}
+
+		@Override
+		public CombinationDef<E, T> build(BiFunction<? super CombinedValues<? extends E>, ? super T, ? extends T> combination) {
+			return new CombinationDef<>(this, Collections.emptyMap(), combination);
 		}
 	}
 
@@ -78,7 +101,22 @@ public class Combination {
 	 * @see SettableValue#combineReversible(TypeToken, Function)
 	 * @see org.observe.collect.ObservableCollection.CollectionDataFlow#combine(TypeToken, Function)
 	 */
-	public static class ReversibleCombinationPrecursor<E, T> extends CombinationPrecursor<E, T> {
+	public static class ReversibleCombinationPrecursor<E, T> extends CombinationPrecursor<E, T>
+	implements ReversibleCombinedValueBuilder<E, T> {
+		private Function<? super CombinedValues<? extends T>, ? extends E> theReverse;
+
+		@Override
+		public ReversibleCombinationPrecursor<E, T> nullToNull(boolean nullToNull) {
+			super.nullToNull(nullToNull);
+			return this;
+		}
+
+		@Override
+		public ReversibleCombinationPrecursor<E, T> propagateUpdateToParent(boolean propagate) {
+			super.propagateUpdateToParent(propagate);
+			return this;
+		}
+
 		@Override
 		public ReversibleCombinationPrecursor<E, T> reEvalOnUpdate(boolean reEval) {
 			super.reEvalOnUpdate(reEval);
@@ -112,6 +150,23 @@ public class Combination {
 		@Override
 		public <V> ReversibleCombinedValueBuilder2<E, V, T> with(ObservableValue<V> value) {
 			return new ReversibleCombinedValueBuilder2Impl<>(this, value);
+		}
+
+		@Override
+		public ReversibleCombinedValueBuilder<E, T> withReverse(Function<? super CombinedValues<? extends T>, ? extends E> reverse) {
+			theReverse = reverse;
+			return this;
+		}
+
+		@Override
+		public ReversibleCombinationDef<E, T> build1(Function<? super E, ? extends T> map) {
+			return build(LambdaUtils.printableFn(cv -> //
+			map.apply(cv.getElement()), map::toString));
+		}
+
+		@Override
+		public ReversibleCombinationDef<E, T> build(BiFunction<? super CombinedValues<? extends E>, ? super T, ? extends T> combination) {
+			return new ReversibleCombinationDef<>(this, Collections.emptyMap(), combination, theReverse);
 		}
 	}
 
@@ -190,6 +245,8 @@ public class Combination {
 
 		@Override
 		public String toString() {
+			if (theArgs.isEmpty())
+				return theCombination.toString();
 			StringBuilder str = new StringBuilder();
 			str.append("combination(");
 			StringUtils.print(str, ", ", theArgs.keySet(), (s, arg) -> s.append(arg.getIdentity()));
@@ -318,7 +375,7 @@ public class Combination {
 		 * @return The combined collection definition
 		 */
 		default CombinationDef<E, T> build(Function<? super CombinedValues<? extends E>, ? extends T> combination) {
-			return build((cv, o) -> combination.apply(cv));
+			return build(LambdaUtils.toBiFunction1(combination));
 		}
 
 		/**
@@ -373,7 +430,7 @@ public class Combination {
 
 		@Override
 		default ReversibleCombinationDef<E, T> build(Function<? super CombinedValues<? extends E>, ? extends T> combination) {
-			return build((cv, o) -> combination.apply(cv));
+			return build(LambdaUtils.toBiFunction1(combination));
 		}
 
 		@Override
@@ -414,6 +471,12 @@ public class Combination {
 
 		@Override
 		CombinedValueBuilder2<E, V, T> oneToMany(boolean oneToMany);
+
+		/**
+		 * @param combination The function combining the source and argument values
+		 * @return The combination definition
+		 */
+		CombinationDef<E, T> build2(BiFunction<? super E, ? super V, ? extends T> combination);
 	}
 
 	/**
@@ -461,6 +524,9 @@ public class Combination {
 		 * @return This builder
 		 */
 		ReversibleCombinedValueBuilder2<E, V, T> withReverse(BiFunction<? super T, ? super V, ? extends E> reverse);
+
+		@Override
+		ReversibleCombinationDef<E, T> build2(BiFunction<? super E, ? super V, ? extends T> combination);
 	}
 
 	/**
@@ -496,6 +562,12 @@ public class Combination {
 
 		@Override
 		CombinedValueBuilder3<E, V1, V2, T> oneToMany(boolean oneToMany);
+
+		/**
+		 * @param combination The function combining the source and argument values
+		 * @return The combination definition
+		 */
+		CombinationDef<E, T> build3(TriFunction<? super E, ? super V1, ? super V2, ? extends T> combination);
 	}
 
 	/**
@@ -541,6 +613,9 @@ public class Combination {
 		 * @return This builder
 		 */
 		ReversibleCombinedValueBuilder3Impl<E, V1, V2, T> withReverse(TriFunction<? super T, ? super V1, ? super V2, ? extends E> reverse);
+
+		@Override
+		ReversibleCombinationDef<E, T> build3(TriFunction<? super E, ? super V1, ? super V2, ? extends T> combination);
 	}
 
 	private static class CombinedValueBuilder2Impl<E, V, T> extends Combination.AbstractCombinedValueBuilder<E, T>
@@ -602,6 +677,13 @@ public class Combination {
 		@Override
 		public <U> CombinedValueBuilder3Impl<E, V, U, T> with(ObservableValue<U> arg3) {
 			return new CombinedValueBuilder3Impl<>(this, theArg2, arg3);
+		}
+
+		@Override
+		public CombinationDef<E, T> build2(BiFunction<? super E, ? super V, ? extends T> combination) {
+			return build(LambdaUtils.printableFn(cv -> //
+			combination.apply(cv.getElement(), cv.get(theArg2)), //
+			combination::toString));
 		}
 	}
 
@@ -682,6 +764,13 @@ public class Combination {
 				throw new IllegalStateException("Reverse cannot be applied to a collection builder that will be AND-ed");
 			return new ReversibleCombinedValueBuilder3Impl<>(this, theArg2, arg3);
 		}
+
+		@Override
+		public ReversibleCombinationDef<E, T> build2(BiFunction<? super E, ? super V, ? extends T> combination) {
+			return build(LambdaUtils.printableFn(cv -> //
+			combination.apply(cv.getElement(), cv.get(theArg2)), //
+			combination::toString));
+		}
 	}
 
 	private static class CombinedValueBuilder3Impl<E, V1, V2, T> extends Combination.AbstractCombinedValueBuilder<E, T>
@@ -748,6 +837,13 @@ public class Combination {
 		@Override
 		public <T2> CombinedValueBuilder<E, T> with(ObservableValue<T2> arg) {
 			return new CombinedValueBuilderNImpl<>(this, theArg2, theArg3, arg);
+		}
+
+		@Override
+		public CombinationDef<E, T> build3(TriFunction<? super E, ? super V1, ? super V2, ? extends T> combination) {
+			return build(LambdaUtils.printableFn(cv -> //
+			combination.apply(cv.getElement(), cv.get(theArg2), cv.get(theArg3)), //
+			combination::toString));
 		}
 	}
 
@@ -834,6 +930,13 @@ public class Combination {
 			if (getReverse() != null)
 				throw new IllegalStateException("Reverse cannot be applied to a collection builder that will be AND-ed");
 			return new ReversibleCombinedValueBuilderNImpl<>(this, theArg2, theArg3, arg);
+		}
+
+		@Override
+		public ReversibleCombinationDef<E, T> build3(TriFunction<? super E, ? super V1, ? super V2, ? extends T> combination) {
+			return build(LambdaUtils.printableFn(cv -> //
+			combination.apply(cv.getElement(), cv.get(theArg2), cv.get(theArg3)), //
+			combination::toString));
 		}
 	}
 
