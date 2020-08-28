@@ -821,7 +821,7 @@ public class ObservableConfigTest {
 		public SyncValueSet<TestEntity4> getListedEntities() {
 			return new SyncValueSet<ObservableConfigTest.TestEntity4>() {
 				@Override
-				public ObservableCollection<? extends TestEntity4> getValues() {
+				public ObservableCollection<TestEntity4> getValues() {
 					return theListedEntities;
 				}
 
