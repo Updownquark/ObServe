@@ -965,7 +965,6 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 				op.rejectAll(msg);
 			} else
 				msg = modify.mutableElement(element.getElementId()).canRemove();
-			element = null;
 			try {
 				boolean modified;
 				if (subExecute != null)

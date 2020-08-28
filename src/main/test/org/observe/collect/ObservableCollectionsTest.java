@@ -24,7 +24,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
-import java.util.function.BinaryOperator;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -45,6 +45,7 @@ import org.observe.assoc.ObservableMultiMapEvent;
 import org.observe.assoc.ObservableSortedMultiMap;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.qommons.Causable;
+import org.qommons.LambdaUtils;
 import org.qommons.QommonsTestUtils;
 import org.qommons.TestHelper;
 import org.qommons.TestHelper.Testable;
@@ -114,8 +115,8 @@ public class ObservableCollectionsTest {
 		if(check != null)
 			check.accept(coll);
 
-		Function<Integer, Integer> mapFn = v -> v + 1000;
-		Function<Integer, Integer> reverseMapFn = v -> v - 1000;
+		Function<Integer, Integer> mapFn = LambdaUtils.printableFn(v -> v + 1000, () -> "+1000");
+		Function<Integer, Integer> reverseMapFn = LambdaUtils.printableFn(v -> v - 1000, () -> "-1000");
 		ObservableCollection<Integer> mappedOL;
 		ObservableCollectionTester<Integer> mappedTester;
 		if (BARRAGE_USE_MAP) {
@@ -127,7 +128,7 @@ public class ObservableCollectionsTest {
 			mappedTester = null;
 		}
 
-		Function<Integer, String> filterFn1 = v -> v % 3 == 0 ? null : "no";
+		Function<Integer, String> filterFn1 = LambdaUtils.printableFn(v -> v % 3 == 0 ? null : "no", () -> "multiple of 3 only");
 		ObservableCollection<Integer> filteredOL1;
 		ObservableCollectionTester<Integer> filterTester1;
 		if (BARRAGE_USE_FILTER) {
@@ -139,7 +140,7 @@ public class ObservableCollectionsTest {
 			filterTester1 = null;
 		}
 
-		Function<Integer, Integer> groupFn = v -> v % 3;
+		Function<Integer, Integer> groupFn = LambdaUtils.printableFn(v -> v % 3, () -> "%3");
 		ObservableMultiMap<Integer, Integer> grouped;
 		Map<Integer, List<Integer>> groupedSynced;
 		ObservableSortedMultiMap<Integer, Integer> groupedSorted;
@@ -150,7 +151,7 @@ public class ObservableCollectionsTest {
 			groupedSynced = new LinkedHashMap<>();
 			ObservableCollectionsTest.sync(grouped, groupedSynced, () -> new ArrayList<>());
 
-			groupedSorted = coll.flow().groupBy(intType, groupFn, Integer::compareTo, null).gatherActive(null);
+			groupedSorted = coll.flow().groupBy(intType, groupFn, Integer::compareTo, null).gather();
 			d().set("groupedSorted@" + depth, groupedSorted);
 			groupedSortedSynced = new TreeMap<>();
 			ObservableCollectionsTest.sync(groupedSorted, groupedSortedSynced, () -> new ArrayList<>());
@@ -161,15 +162,15 @@ public class ObservableCollectionsTest {
 			groupedSortedSynced = null;
 		}
 
-		BinaryOperator<Integer> combineFn = (v1, v2) -> v1 + v2;
-		BinaryOperator<Integer> reverseCombineFn = (v1, v2) -> v1 - v2;
+		BiFunction<Integer, Integer, Integer> combineFn = LambdaUtils.printableBiFn((v1, v2) -> v1 + v2, "+", null);
+		BiFunction<Integer, Integer, Integer> reverseCombineFn = LambdaUtils.printableBiFn((v1, v2) -> v1 - v2, "-", null);
 		SimpleSettableValue<Integer> combineVar = new SimpleSettableValue<>(Integer.class, false);
 		combineVar.set(10000, null);
 		ObservableCollection<Integer> combinedOL;
 		ObservableCollectionTester<Integer> combinedTester;
 		if (BARRAGE_USE_COMBINE) {
 			combinedOL = coll.flow().combine(intType, combine -> {
-				return combine.with(combineVar).withReverse(reverseCombineFn).build(cv -> //
+				return combine.with(combineVar).withReverse2(reverseCombineFn).build(cv -> //
 				combineFn.apply(cv.getElement(), cv.get(combineVar)));
 			}).collect();
 			d().set("combined@" + depth, combinedOL);
@@ -181,7 +182,7 @@ public class ObservableCollectionsTest {
 
 		// TODO Test reversed observable collections
 
-		BinaryOperator<Integer> maxFn = (v1, v2) -> v1 >= v2 ? v1 : v2;
+		BiFunction<Integer, Integer, Integer> maxFn = LambdaUtils.printableBiFn((v1, v2) -> v1 >= v2 ? v1 : v2, "max", null);
 		ObservableValue<Integer> sum = coll.reduce(0, combineFn, reverseCombineFn);
 		ObservableValue<Integer> maxValue = coll.reduce(Integer.MIN_VALUE, maxFn);
 		Integer [] observedSum = new Integer[1];
@@ -306,7 +307,7 @@ public class ObservableCollectionsTest {
 					}
 				}
 
-				Optional<Integer> actualSum = coll.stream().reduce(combineFn);
+				Optional<Integer> actualSum = coll.stream().reduce((v1, v2) -> combineFn.apply(v1, v2));
 				if(actualSum.isPresent()) {
 					assertEquals(actualSum.get(), sum.get());
 					assertEquals(actualSum.get(), observedSum[0]);
@@ -314,7 +315,7 @@ public class ObservableCollectionsTest {
 					assertEquals(Integer.valueOf(0), sum.get());
 					assertEquals(Integer.valueOf(0), observedSum[0]);
 				}
-				Optional<Integer> actualMax = coll.stream().reduce(maxFn);
+				Optional<Integer> actualMax = coll.stream().reduce((v1, v2) -> maxFn.apply(v1, v2));
 				if(actualMax.isPresent()) {
 					assertEquals(actualMax.get(), maxValue.get());
 					assertEquals(actualMax.get(), observedMax[0]);
