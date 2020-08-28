@@ -78,7 +78,7 @@ public abstract class AbstractDerivedObservableMultiMap<S, K, V> implements Obse
 	@Override
 	public Object getIdentity() {
 		if (theIdentity == null)
-			theIdentity = new MultiMapIdentity(keySet().getIdentity(), getValueManager().getIdentity());
+			theIdentity = new MultiMapIdentity(theActiveKeyFlow.getIdentity(), getValueManager().getIdentity());
 		return theIdentity;
 	}
 
