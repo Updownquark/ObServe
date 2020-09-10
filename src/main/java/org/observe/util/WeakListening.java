@@ -86,6 +86,7 @@ public class WeakListening {
 		SimpleObservable<Void> childUnsub = new SimpleObservable<>();
 		as.subscription = () -> childUnsub.onNext(null);
 
+		@SuppressWarnings("resource")
 		Builder child = new Builder().withUntil(//
 			action -> childUnsub.act(v -> action.run()));
 		return child;
@@ -238,6 +239,12 @@ public class WeakListening {
 		}
 	}
 
+	/**
+	 * @param strongListener The listener to subscribe to
+	 * @param subscribe Subscribes to an observable
+	 * @return A subscription that, when called will cease listening. If the subscription is garbage-collected, it will be unsubscribed as
+	 *         well.
+	 */
 	public static <T> Subscription consumeWeakly(Consumer<? super T> strongListener,
 		Function<? super Consumer<T>, Subscription> subscribe) {
 		Subscription[] sub = new Subscription[1];
@@ -245,12 +252,17 @@ public class WeakListening {
 		return sub[0];
 	}
 
-	public static <T> Subscription observeWeakly(Observer<? super T> strongListener, Observable<T> observable) {
+	static <T> Subscription observeWeakly(Observer<? super T> strongListener, Observable<T> observable) {
 		Subscription[] sub = new Subscription[1];
 		sub[0] = observable.subscribe(new StandaloneWeakObserver<>(strongListener, sub));
 		return sub[0];
 	}
 
+	/**
+	 * @param observable The observable to observe weakly
+	 * @return An observable whose subscriptions only subscribe to the observable weakly--the subscriptions to the observable will be
+	 *         unsubscribed if the weak observable is garbage-collected
+	 */
 	public static <T> Observable<T> weaklyListeningObservable(Observable<T> observable) {
 		class WeaklyListeningObservable implements Observable<T> {
 			private final ListenerList<Observer<? super T>> theObservers = ListenerList.build().allowReentrant().forEachSafe(false)
