@@ -3,10 +3,12 @@ package org.observe.assoc;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.Map;
+import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import org.observe.Equivalence;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.Subscription;
@@ -14,7 +16,6 @@ import org.observe.assoc.ObservableSortedMultiMap.SortedMultiMapFlow;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.CollectionSubscription;
 import org.observe.collect.DefaultObservableCollection;
-import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.DistinctDataFlow;
@@ -28,6 +29,7 @@ import org.observe.util.ObservableUtils.SubscriptionCause;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
+import org.qommons.LambdaUtils;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
@@ -508,34 +510,35 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		public ObservableMultiMap<K, V> build(Observable<?> until) {
 			ObservableCollection<MapEntry<K, V>> backing = theBackingBuilder.withDescription(theDescription + " backing").build();
 			MultiMapFlow<K, MapEntry<K, V>> mapFlow;
+			Function<MapEntry<K, V>, K> keyMap = LambdaUtils.printableFn(entry -> entry.key, "key", null);
+			BiConsumer<MapEntry<K, V>, K> keySet = LambdaUtils.printableBiConsumer((element, newKey) -> element.key = newKey,
+				() -> "key-set", null);
+			BiFunction<K, MapEntry<K, V>, MapEntry<K, V>> keyReverse = LambdaUtils.printableBiFn((key, entry) -> {
+				entry.key = key;
+				return entry;
+			}, "key-reverse", null);
+			Function<MapEntry<K, V>, V> valueMap = LambdaUtils.printableFn(entry -> entry.value, "value", null);
+			BiConsumer<MapEntry<K, V>, V> valueSet = LambdaUtils.printableBiConsumer((element, newValue) -> element.value = newValue,
+				() -> "value-set", null);
+			Function<V, MapEntry<K, V>> addition = LambdaUtils.printableFn(value -> new MapEntry<>(value), "addition", null);
 			if (theKeyEquivalence instanceof Equivalence.ComparatorEquivalence) {
-				mapFlow = backing.flow()
-					.groupSorted(entries -> entries.map(theKeyType, //
-						entry -> entry.key, //
-						opts -> opts.withFieldSetReverse((element, newValue) -> element.key = newValue, null))//
-						.distinctSorted(((Equivalence.ComparatorEquivalence<K>) theKeyEquivalence).comparator(), true), //
-						(key, entry) -> {
-							entry.key = key;
-							return entry;
-						});
+				mapFlow = backing.flow().groupSorted(
+					entries -> entries.transform(theKeyType, tx -> tx.map(keyMap).modifySource(keySet))//
+					.distinctSorted(((Equivalence.ComparatorEquivalence<K>) theKeyEquivalence).comparator(), true), //
+					keyReverse);
 			} else {
-				mapFlow = backing.flow().groupBy(//
-					entries -> entries.map(theKeyType, //
-						entry -> entry.key, //
-						opts -> opts.withFieldSetReverse((element, newValue) -> element.key = newValue, null)//
-							.withEquivalence(theKeyEquivalence))
-						.distinct(), //
-					(key, entry) -> {
-						entry.key = key;
-						return entry;
-					});
+				mapFlow = backing.flow()
+					.groupBy(
+						entries -> entries
+						.transform(theKeyType, tx -> tx.map(keyMap).modifySource(keySet).withEquivalence(theKeyEquivalence)).distinct(),
+						keyReverse);
 			}
-			return mapFlow.withValues(entries -> entries.map(theValueType, //
-				entry -> entry.value, //
-					opts -> opts
-						.withFieldSetReverse((element, newValue) -> element.value = newValue, null,
-							(newValue, create) -> new MapEntry<>(newValue), null)//
-						.withEquivalence(theValueEquivalence)))//
+			return mapFlow
+				.withValues(entries -> entries.transform(theValueType, //
+					tx -> tx.map(valueMap)
+						.modifySource(valueSet, //
+						rvrs -> rvrs.createWith(addition))//
+					.withEquivalence(theValueEquivalence)))//
 				.gatherActive(until);
 		}
 	}

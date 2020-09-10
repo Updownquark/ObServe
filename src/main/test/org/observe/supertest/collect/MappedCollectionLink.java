@@ -9,8 +9,9 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.observe.SimpleSettableValue;
-import org.observe.collect.FlowOptions;
-import org.observe.collect.FlowOptions.MapDef;
+import org.observe.Transformation;
+import org.observe.Transformation.MaybeReversibleMapping;
+import org.observe.Transformation.TransformationPrecursor;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.ChainLinkGenerator;
@@ -61,7 +62,7 @@ public class MappedCollectionLink<S, T> extends AbstractMappedCollectionLink<S, 
 				multiStepFlow = multiStepFlow.refresh(txValue.changes().noInit());
 			}
 			boolean needsUpdateReeval = !sourceCL.getDef().checkOldValues || variableMap;
-			ValueHolder<FlowOptions.MapOptions<T, X>> options = new ValueHolder<>();
+			ValueHolder<TransformationPrecursor<T, X, ?>> options = new ValueHolder<>();
 			boolean cache = helper.getBoolean(.75);
 			boolean withReverse = transform.supportsReverse() && helper.getBoolean(.95);
 			boolean fireIfUnchanged = needsUpdateReeval || helper.getBoolean();
@@ -71,32 +72,50 @@ public class MappedCollectionLink<S, T> extends AbstractMappedCollectionLink<S, 
 			TypeToken<X> type = (TypeToken<X>) transform.getType().getType();
 			Function<T, X> map = LambdaUtils.printableFn(src -> txValue.get().map(src), () -> txValue.get().toString());
 			Function<X, T> reverse = LambdaUtils.printableFn(dest -> txValue.get().reverse(dest), () -> txValue.get().reverseName());
-			Consumer<FlowOptions.MapOptions<T, X>> opts = o -> {
+			Consumer<TransformationPrecursor<T, X, ?>> opts = o -> {
 				o.manyToOne(manyToOne).oneToMany(oneToMany);
-				if (withReverse)
-					o.withReverse(reverse);
 				options.accept(o.cache(cache).fireIfUnchanged(fireIfUnchanged).reEvalOnUpdate(reEvalOnUpdate));
 			};
 			CollectionDataFlow<?, ?, X> derivedOneStepFlow, derivedMultiStepFlow;
 			boolean mapEquivalent;
 			if (oneStepFlow instanceof ObservableCollection.DistinctDataFlow && !variableMap && withReverse && !oneToMany && !manyToOne) {
 				mapEquivalent = true;
-				derivedOneStepFlow = ((ObservableCollection.DistinctDataFlow<?, ?, T>) oneStepFlow).mapEquivalent(//
-					type, map, reverse, opts);
-				derivedMultiStepFlow = ((ObservableCollection.DistinctDataFlow<?, ?, T>) multiStepFlow).mapEquivalent(//
-					type, map, reverse, opts);
+				derivedOneStepFlow = ((ObservableCollection.DistinctDataFlow<?, ?, T>) oneStepFlow).transformEquivalent(//
+					type, tx -> {
+						opts.accept(tx);
+						return tx.map(map).withReverse(reverse);
+					});
+				derivedMultiStepFlow = ((ObservableCollection.DistinctDataFlow<?, ?, T>) multiStepFlow).transformEquivalent(//
+					type, tx -> {
+						opts.accept(tx);
+						return tx.map(map).withReverse(reverse);
+					});
 			} else {
 				mapEquivalent = false;
-				derivedOneStepFlow = oneStepFlow.map(type, map, opts);
-				derivedMultiStepFlow = multiStepFlow.map(type, map, opts);
+				derivedOneStepFlow = oneStepFlow.transform(type, tx -> {
+					opts.accept(tx);
+					MaybeReversibleMapping<T, X> def = tx.map(map);
+					if (withReverse)
+						return def.withReverse(reverse);
+					else
+						return def;
+				});
+				derivedMultiStepFlow = multiStepFlow.transform(type, tx -> {
+					opts.accept(tx);
+					MaybeReversibleMapping<T, X> def = tx.map(map);
+					if (withReverse)
+						return def.withReverse(reverse);
+					else
+						return def;
+				});
 			}
 			boolean checkOldValues = cache;
 			if (!variableMap)
 				checkOldValues |= sourceCL.getDef().checkOldValues;
 			ObservableCollectionTestDef<X> newDef = new ObservableCollectionTestDef<>(transform.getType(), derivedOneStepFlow,
 				derivedMultiStepFlow, sourceCL.getDef().orderImportant, checkOldValues);
-			return new MappedCollectionLink<>(path, sourceCL, newDef, helper, txValue, variableMap, mapEquivalent,
-				new FlowOptions.MapDef<>(options.get()));
+			return new MappedCollectionLink<>(path, sourceCL, newDef, helper, txValue, variableMap, mapEquivalent, withReverse,
+				options.get().map(map));
 		}
 	};
 
@@ -104,7 +123,7 @@ public class MappedCollectionLink<S, T> extends AbstractMappedCollectionLink<S, 
 	private TypeTransformation<S, T> theCurrentMap;
 	private final boolean isMapVariable;
 	private final boolean isMapEquivalent;
-	private final FlowOptions.MapDef<S, T> theOptions;
+	private final boolean isReversible;
 
 	/**
 	 * @param path The path for this link
@@ -116,17 +135,18 @@ public class MappedCollectionLink<S, T> extends AbstractMappedCollectionLink<S, 
 	 * @param mapEquivalent Whether the operation was a
 	 *        {@link org.observe.collect.ObservableCollection.DistinctDataFlow#mapEquivalent(TypeToken, Function, Function) mapEquivalent}
 	 *        operation on a distinct flow
+	 * @param reversible Whether this flow supports setting values, which flow back to the parent
 	 * @param options The options used to create the mapping
 	 */
 	public MappedCollectionLink(String path, ObservableCollectionLink<?, S> sourceLink, ObservableCollectionTestDef<T> def,
 		TestHelper helper, SimpleSettableValue<TypeTransformation<S, T>> mapValue, boolean mapVariable, boolean mapEquivalent,
-		MapDef<S, T> options) {
+		boolean reversible, Transformation<S, T> options) {
 		super(path, sourceLink, def, helper, options.isCached());
 		theMapValue = mapValue;
 		theCurrentMap = theMapValue.get();
-		this.isMapVariable = mapVariable;
+		isMapVariable = mapVariable;
 		isMapEquivalent = mapEquivalent;
-		theOptions = options;
+		isReversible = reversible;
 	}
 
 	@Override
@@ -151,7 +171,7 @@ public class MappedCollectionLink<S, T> extends AbstractMappedCollectionLink<S, 
 
 	@Override
 	protected boolean isReversible() {
-		return theOptions.getReverse() != null;
+		return isReversible;
 	}
 
 	@Override
@@ -262,7 +282,7 @@ public class MappedCollectionLink<S, T> extends AbstractMappedCollectionLink<S, 
 		str += "(" + theCurrentMap;
 		if (isMapVariable)
 			str += ", variable";
-		if (theOptions.getReverse() == null)
+		if (!isReversible())
 			str += ", irreversible";
 		return str + ")";
 	}

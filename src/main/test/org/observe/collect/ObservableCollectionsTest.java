@@ -120,7 +120,8 @@ public class ObservableCollectionsTest {
 		ObservableCollection<Integer> mappedOL;
 		ObservableCollectionTester<Integer> mappedTester;
 		if (BARRAGE_USE_MAP) {
-			mappedOL = coll.flow().map(intType, mapFn, options -> options.cache(false).withReverse(reverseMapFn)).collectPassive();
+			mappedOL = coll.flow().transform(intType, options -> options.cache(false).map(mapFn).withReverse(reverseMapFn))
+				.collectPassive();
 			d().set("mapped@" + depth, mappedOL);
 			mappedTester = new ObservableCollectionTester<>("mapped", mappedOL);
 		} else {
@@ -169,9 +170,9 @@ public class ObservableCollectionsTest {
 		ObservableCollection<Integer> combinedOL;
 		ObservableCollectionTester<Integer> combinedTester;
 		if (BARRAGE_USE_COMBINE) {
-			combinedOL = coll.flow().combine(intType, combine -> {
-				return combine.with(combineVar).withReverse2(reverseCombineFn).build(cv -> //
-				combineFn.apply(cv.getElement(), cv.get(combineVar)));
+			combinedOL = coll.flow().transform(intType, combine -> {
+				return combine.combineWith(combineVar).build((s, cv) -> //
+				combineFn.apply(s, cv.get(combineVar))).withReverse(reverseCombineFn);
 			}).collect();
 			d().set("combined@" + depth, combinedOL);
 			combinedTester = new ObservableCollectionTester<>("combined", combinedOL);
@@ -562,11 +563,12 @@ public class ObservableCollectionsTest {
 					adjustable = false;
 					break;
 				}
-				derivedFlow = source.flow().map(intType, map, options -> {
-					options.cache(helper.getBoolean())//
+				derivedFlow = source.flow().transform(intType,
+					tx -> tx//
+					.cache(helper.getBoolean())//
 					.fireIfUnchanged(helper.getBoolean())//
-					.reEvalOnUpdate(helper.getBoolean());
-				});
+					.reEvalOnUpdate(helper.getBoolean()).map(map)//
+					);
 				refresh = new CollectionAdjuster() {
 					@Override
 					public boolean add(List<Integer> values, int index, Integer value) {
@@ -918,7 +920,7 @@ public class ObservableCollectionsTest {
 		ObservableSet<Integer> set = ObservableCollection.create(intType).flow().distinct().collect();
 		Set<Integer> compare1 = new TreeSet<>();
 		Set<Integer> correct = new TreeSet<>();
-		set.flow().map(intType, value -> value * 10, options -> options.cache(false)).collectPassive().subscribe(evt -> {
+		set.flow().transform(intType, tx -> tx.cache(false).map(value -> value * 10)).collectPassive().subscribe(evt -> {
 			switch (evt.getType()) {
 			case add:
 				assertTrue(compare1.add(evt.getNewValue()));
@@ -984,7 +986,7 @@ public class ObservableCollectionsTest {
 		Set<Integer> correct = new TreeSet<>();
 		set.flow()//
 		.filter(value -> (value == null || value % 2 != 0) ? StdMsg.ILLEGAL_ELEMENT : null)//
-		.map(intType, value -> value / 2)//
+		.transform(intType, tx -> tx.map(value -> value / 2))//
 		.collect().subscribe(evt -> {
 			switch (evt.getType()) {
 			case add:
@@ -1021,8 +1023,8 @@ public class ObservableCollectionsTest {
 		List<Integer> compare1 = new ArrayList<>();
 		Set<Integer> correct = new TreeSet<>();
 		set.flow()//
-		.combine(intType, combine -> {
-			return combine.with(value1).build(cv -> cv.getElement() * cv.get(value1));
+		.transform(intType, combine -> {
+			return combine.combineWith(value1).build((s, cv) -> s * cv.get(value1));
 		}).filter(value -> value != null && value % 3 == 0 ? null : StdMsg.ILLEGAL_ELEMENT)//
 		.collect().subscribe(evt -> {
 			switch (evt.getType()) {
@@ -1275,7 +1277,7 @@ public class ObservableCollectionsTest {
 		set.add(obs1);
 		set.add(obs2);
 		Observable<Integer> folded = ObservableCollection
-			.fold(set.flow().map(new TypeToken<Observable<Integer>>() {}, value -> value.value(), options -> options.cache(false))
+			.fold(set.flow().transform(new TypeToken<Observable<Integer>>() {}, tx -> tx.cache(false).map(value -> value.value()))
 				.collectPassive());
 		int [] received = new int[1];
 		folded.noInit().act(value -> received[0] = value);
@@ -1300,7 +1302,7 @@ public class ObservableCollectionsTest {
 	public void observableListMap() {
 		ObservableCollection<Integer> list = ObservableCollection.create(intType);
 		ObservableCollectionTester<Integer> lwTester = new ObservableCollectionTester<>("light",
-			list.flow().map(intType, value -> value * 10, options -> options.cache(false)).collectPassive());
+			list.flow().transform(intType, tx -> tx.cache(false).map(value -> value * 10)).collectPassive());
 		ObservableCollectionTester<Integer> hwTester = new ObservableCollectionTester<>("heavy",
 			list.flow().map(intType, value -> value * 10).collect());
 
@@ -1470,8 +1472,8 @@ public class ObservableCollectionsTest {
 		SimpleSettableValue<Integer> value1 = new SimpleSettableValue<>(Integer.TYPE, false);
 		value1.set(1, null);
 		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>("combined", list.flow()//
-			.combine(intType, combine -> {
-				return combine.with(value1).build(cv -> cv.getElement() * cv.get(value1));
+			.transform(intType, combine -> {
+				return combine.combineWith(value1).build((s, cv) -> s * cv.get(value1));
 			}).filter(value -> value != null && value % 3 == 0 ? null : StdMsg.ILLEGAL_ELEMENT)//
 			.collect());
 
@@ -2055,9 +2057,9 @@ public class ObservableCollectionsTest {
 		ObservableCollection<Integer> list = ObservableCollection.create(new TypeToken<Integer>() {});
 		SimpleSettableValue<Integer> mult = new SimpleSettableValue<>(new TypeToken<Integer>() {}, false);
 		mult.set(1, null);
-		ObservableCollection<Integer> product = list.flow().combine(intType, combine -> {
-			return combine.with(mult).build(cv -> //
-			cv.getElement() * cv.get(mult));
+		ObservableCollection<Integer> product = list.flow().transform(intType, combine -> {
+			return combine.combineWith(mult).build((s, cv) -> //
+			s * cv.get(mult));
 		}).collect();
 
 		for(int i = 0; i < 30; i++)

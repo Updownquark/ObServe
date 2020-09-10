@@ -17,6 +17,7 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+import org.observe.Equivalence;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
@@ -2161,7 +2162,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public long getStamp() {
-			return theSource.getStamp();
+			return theFlow.getStamp();
 		}
 
 		@Override
@@ -2186,7 +2187,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public String canAdd(T value, ElementId after, ElementId before) {
-			FilterMapResult<T, E> reversed = theFlow.reverse(value, true);
+			FilterMapResult<T, E> reversed = theFlow.reverse(value, true, true);
 			if (!reversed.isAccepted())
 				return reversed.getRejectReason();
 			if (isReversed) {
@@ -2202,7 +2203,7 @@ public final class ObservableCollectionImpl {
 			throws UnsupportedOperationException, IllegalArgumentException {
 			try (Transaction t = lock(true, null)) {
 				// Lock so the reversed value is consistent until it is added
-				FilterMapResult<T, E> reversed = theFlow.reverse(value, true);
+				FilterMapResult<T, E> reversed = theFlow.reverse(value, true, false);
 				if (reversed.throwIfError(IllegalArgumentException::new) != null)
 					return null;
 				if (isReversed) {
@@ -2314,7 +2315,7 @@ public final class ObservableCollectionImpl {
 				boolean forward = first ^ isReversed;
 				if (!theFlow.isManyToOne()) {
 					// If the flow is one-to-one, we can use any search optimizations the source collection may be capable of
-					FilterMapResult<T, E> reversed = theFlow.reverse(value, false);
+					FilterMapResult<T, E> reversed = theFlow.reverse(value, false, true);
 					if (!reversed.isError() && equivalence().elementEquals(map.apply(reversed.result), value)) {
 						CollectionElement<E> srcEl = theSource.getElement(reversed.result, forward);
 						return srcEl == null ? null : elementFor(srcEl, null);

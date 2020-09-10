@@ -5,10 +5,10 @@ import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import org.observe.Equivalence;
 import org.observe.Observable;
 import org.observe.Subscription;
 import org.observe.collect.DefaultObservableCollection;
-import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
@@ -25,6 +25,7 @@ import org.qommons.collect.ElementId;
 import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MultiEntryHandle;
 import org.qommons.collect.MultiEntryValueHandle;
+import org.qommons.collect.MultiMap;
 
 import com.google.common.reflect.TypeToken;
 
@@ -204,8 +205,12 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 	 */
 	class ObservableSortedMultiMapEntrySet<K, V> extends ObservableMultiMapEntrySet<K, V>
 	implements ObservableSortedSet<MultiEntryHandle<K, V>> {
+		private final Equivalence.ComparatorEquivalence<? super MultiEntryHandle<K, V>> theEquivalence;
+
 		public ObservableSortedMultiMapEntrySet(ObservableSortedMultiMap<K, V> map) {
 			super(map);
+			theEquivalence = Equivalence.of((Class<MultiMap.MultiEntry<? extends K, ?>>) (Class<?>) MultiMap.MultiEntry.class,
+				(entry1, entry2) -> getMap().comparator().compare(entry1.getKey(), entry2.getKey()), true);
 		}
 
 		@Override
@@ -214,8 +219,13 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		}
 
 		@Override
+		public Equivalence.ComparatorEquivalence<? super MultiEntryHandle<K, V>> equivalence() {
+			return theEquivalence;
+		}
+
+		@Override
 		public Comparator<? super MultiEntryHandle<K, V>> comparator() {
-			return (entry1, entry2) -> getMap().comparator().compare(entry1.getKey(), entry2.getKey());
+			return equivalence().comparator();
 		}
 
 		@Override
@@ -427,7 +437,7 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		public ObservableSortedSet<? extends MultiEntryHandle<K, V>> entrySet() {
 			Function<MultiEntryHandle<K, V>, MultiEntryHandle<K, V>> map = entry -> entry.reverse();
 			return ((ObservableSortedSet<MultiEntryHandle<K, V>>) getWrapped().entrySet()).reverse().flow()
-				.mapEquivalent(getWrapped().getEntryType(), map, map, options -> options.cache(false)).collectPassive();
+				.transformEquivalent(getWrapped().getEntryType(), tx -> tx.cache(false).map(map).withReverse(map)).collectPassive();
 		}
 
 		@Override

@@ -157,13 +157,15 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 	@Override
 	public ObservableCollection<N> getNodeValues() {
 		if (theNodeValues == null)
-			theNodeValues = theNodes.flow().refreshEach(n -> n.changes().noInit()).map(theNodeType, n -> n.get(), options -> {
-				options.withFieldSetReverse(//
-					(node, nodeValue) -> node.set(nodeValue, null), //
-					(node, nodeValue) -> node.isAcceptable(nodeValue), //
-					(nodeValue, create) -> createNode(nodeValue), //
-					null);// Weird that we don't have a canAdd capability
-			}).collect();
+			theNodeValues = theNodes.flow().refreshEach(n -> n.changes().noInit())
+			.transform(theNodeType,
+				tx -> tx.map(n -> n.get())//
+				.modifySource((node, nodeValue) -> node.set(nodeValue, null), //
+					rvrs -> rvrs.rejectWith((nodeValue, tv) -> tv.getCurrentSource().isAcceptable(nodeValue), false, true)//
+					.createWith(this::createNode)//
+					// We now have the ability to reject additions based on value, but this class doesn't seem to support it
+					// .rejectAddWith()
+					)).collect();
 		return theNodeValues;
 	}
 

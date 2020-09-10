@@ -17,11 +17,10 @@ import java.util.function.LongSupplier;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
-import org.observe.XformOptions.SimpleXformOptions;
-import org.observe.XformOptions.XformDef;
+import org.observe.Transformation.TransformationState;
+import org.observe.Transformation.TransformedElement;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
-import org.qommons.ArrayUtils;
 import org.qommons.BiTuple;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
@@ -205,18 +204,72 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 	}
 
 	/**
+	 * <p>
+	 * Transforms this value into a derived value, potentially including other sources as well. This method satisfies both mapping and
+	 * combination use cases.
+	 * </p>
+	 * <p>
+	 * If dynamic {@link #getType() types} are important, it is preferred to use {@link #transform(TypeToken, Function)}. If no target type
+	 * is supplied (as with this method), one will be inferred, but this is not always reliable, especially with lambdas.
+	 * </p>
+	 *
+	 * @param <R> The type for the combined value
+	 * @param transform Determines how this value and any other arguments are to be combined
+	 * @return The transformed value
+	 */
+	default <R> ObservableValue<R> transform(Function<Transformation.TransformationPrecursor<T, R, ?>, Transformation<T, R>> transform) {
+		return transform(null, transform);
+	}
+
+	/**
+	 * Transforms this value into a derived value, potentially including other sources as well. This method satisfies both mapping and
+	 * combination use cases.
+	 *
+	 * @param <R> The type for the combined value
+	 * @param targetType The type for the transformed value
+	 * @param transform Determines how this value and any other arguments are to be combined
+	 * @return The transformed value
+	 */
+	default <R> ObservableValue<R> transform(TypeToken<R> targetType, //
+		Function<Transformation.TransformationPrecursor<T, R, ?>, Transformation<T, R>> transform) {
+		Transformation<T, R> def = transform.apply(new Transformation.TransformationPrecursor<>());
+		ObservableValue<?>[] argValues = new ObservableValue[def.getArgs().size() + 1];
+		argValues[0] = this;
+		Map<ObservableValue<?>, Integer> otherArgs = new HashMap<>((int) Math.ceil(def.getArgs().size() * 1.5));
+		Iterator<ObservableValue<?>> argIter = def.getArgs().iterator();
+		for (int i = 1; i < argValues.length; i++) {
+			ObservableValue<?> arg = argIter.next();
+			argValues[i] = arg;
+			otherArgs.put(arg, i - 1);
+		}
+		return new TransformedObservableValue<>(targetType, this, def);
+	}
+
+	/**
+	 * <p>
 	 * Composes this observable into another observable that depends on this one
+	 * </p>
+	 * <p>
+	 * This method is supported for compatibility, but {@link #transform(TypeToken, Function)} is a more flexible method for combining
+	 * values
+	 * </p>
 	 *
 	 * @param <R> The type of the new observable
 	 * @param function The function to apply to this observable's value
 	 * @return The new observable whose value is a function of this observable's value
 	 */
 	default <R> ObservableValue<R> map(Function<? super T, R> function) {
-		return map(null, function, null);
+		return transform(tx -> tx.map(function));
 	}
 
 	/**
+	 * <p>
 	 * Composes this observable into another observable that depends on this one
+	 * </p>
+	 * <p>
+	 * This method is supported for compatibility, but {@link #transform(TypeToken, Function)} is a more flexible method for combining
+	 * values
+	 * </p>
 	 *
 	 * @param <R> The type of the new observable
 	 * @param type The run-time type of the new observable
@@ -228,6 +281,11 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 	}
 
 	/**
+	 * <p>
+	 * This method is supported for compatibility, but {@link #transform(TypeToken, Function)} is a more flexible method for combining
+	 * values
+	 * </p>
+	 *
 	 * @param <R> The type of the new observable
 	 * @param type The run-time type of the new observable
 	 * @param function The function to apply to this observable's value
@@ -235,12 +293,11 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 	 * @return The new observable whose value is a function of this observable's value
 	 */
 	default <R> ObservableValue<R> map(TypeToken<R> type, Function<? super T, R> function, Consumer<XformOptions> options) {
-		SimpleXformOptions xform = new SimpleXformOptions();
-		if (options != null)
-			options.accept(xform);
-		return new ComposedObservableValue<>(type, args -> {
-			return function.apply((T) args[0]);
-		}, "map", new XformDef(xform), this);
+		return transform(type, tx -> {
+			if (options != null)
+				options.accept(tx);
+			return tx.map(function);
+		});
 	}
 
 	/**
@@ -254,30 +311,13 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 	}
 
 	/**
-	 * A more flexible and elegant combination method
-	 *
-	 * @param <R> The type for the combined value
-	 * @param type The type for the combined value
-	 * @param combination Determines how this value an any other arguments are to be combined
-	 * @return The combined value
-	 */
-	default <R> ObservableValue<R> combine(TypeToken<R> type,
-		Function<? super Combination.CombinationPrecursor<T, R>, ? extends Combination.CombinationDef<T, R>> combination) {
-		Combination.CombinationDef<T, R> def = combination.apply(new Combination.CombinationPrecursor<>());
-		ObservableValue<?>[] argValues = new ObservableValue[def.getArgs().size() + 1];
-		argValues[0] = this;
-		Map<ObservableValue<?>, Integer> otherArgs = new HashMap<>((int) Math.ceil(def.getArgs().size() * 1.5));
-		Iterator<ObservableValue<?>> argIter = def.getArgs().iterator();
-		for (int i = 1; i < argValues.length; i++) {
-			ObservableValue<?> arg = argIter.next();
-			argValues[i] = arg;
-			otherArgs.put(arg, i - 1);
-		}
-		return new CombinedObservableValue<>(this, type, def);
-	}
-
-	/**
+	 * <p>
 	 * Composes this observable into another observable that depends on this one and one other
+	 * </p>
+	 * <p>
+	 * This method is supported for compatibility, but {@link #transform(TypeToken, Function)} is a more flexible method for combining
+	 * values
+	 * </p>
 	 *
 	 * @param <U> The type of the other argument observable
 	 * @param <R> The type of the new observable
@@ -290,7 +330,13 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 	}
 
 	/**
+	 * <p>
 	 * Composes this observable into another observable that depends on this one and one other
+	 * </p>
+	 * <p>
+	 * This method is supported for compatibility, but {@link #transform(TypeToken, Function)} is a more flexible method for combining
+	 * values
+	 * </p>
 	 *
 	 * @param <U> The type of the other argument observable
 	 * @param <R> The type of the new observable
@@ -302,24 +348,21 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 	 */
 	default <U, R> ObservableValue<R> combine(TypeToken<R> type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
 		Consumer<XformOptions> options) {
-		if (function == null)
-			throw new NullPointerException("Combination function cannot be null");
-		SimpleXformOptions xform = new SimpleXformOptions();
-		if (options != null)
-			options.accept(xform);
-		return new ComposedObservableValue<>(type, args -> {
-			try {
-				return function.apply((T) args[0], (U) args[1]);
-			} catch (NullPointerException e) { // DEBUG
-				if (args == null)
-					System.err.println("null args");
-				throw e;
-			}
-		}, "combine", new XformDef(xform), this, arg);
+		return transform(type, tx -> {
+			if (options != null)
+				options.accept(tx);
+			return tx.combineWith(arg).combine(function);
+		});
 	}
 
 	/**
+	 * <p>
 	 * Composes this observable into another observable that depends on this one and two others
+	 * </p>
+	 * <p>
+	 * This method is supported for compatibility, but {@link #transform(TypeToken, Function)} is a more flexible method for combining
+	 * values
+	 * </p>
 	 *
 	 * @param <U> The type of the first other argument observable
 	 * @param <V> The type of the second other argument observable
@@ -335,7 +378,13 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 	}
 
 	/**
+	 * <p>
 	 * Composes this observable into another observable that depends on this one and two others
+	 * </p>
+	 * <p>
+	 * This method is supported for compatibility, but {@link #transform(TypeToken, Function)} is a more flexible method for combining
+	 * values
+	 * </p>
 	 *
 	 * @param <U> The type of the first other argument observable
 	 * @param <V> The type of the second other argument observable
@@ -349,12 +398,11 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 	 */
 	default <U, V, R> ObservableValue<R> combine(TypeToken<R> type, TriFunction<? super T, ? super U, ? super V, R> function,
 		ObservableValue<U> arg2, ObservableValue<V> arg3, Consumer<XformOptions> options) {
-		SimpleXformOptions xform = new SimpleXformOptions();
-		if (options != null)
-			options.accept(xform);
-		return new ComposedObservableValue<>(type, args -> {
-			return function.apply((T) args[0], (U) args[1], (V) args[2]);
-		}, "combine", new XformDef(xform), this, arg2, arg3);
+		return transform(type, tx -> {
+			if (options != null)
+				options.accept(tx);
+			return tx.combineWith(arg2).combineWith(arg3).combine(function);
+		});
 	}
 
 	/**
@@ -547,26 +595,10 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 	 * @return The new observable value
 	 */
 	public static <T> ObservableValue<T> assemble(TypeToken<T> type, Supplier<T> value, ObservableValue<?>... components) {
-		return assemble(type, value, options -> {}, components);
-	}
-
-	/**
-	 * Assembles an observable value, with changes occurring on the basis of changes to a set of components
-	 *
-	 * @param <T> The type of the value to produce
-	 * @param type The type of the new value
-	 * @param value The function to get the new value on demand
-	 * @param options The transform options for the assembly
-	 * @param components The components whose changes require a new value to be produced
-	 * @return The new observable value
-	 */
-	public static <T> ObservableValue<T> assemble(TypeToken<T> type, Supplier<T> value, Consumer<XformOptions> options,
-		ObservableValue<?>... components) {
-		TypeToken<T> t = type == null ? (TypeToken<T>) TypeToken.of(value.getClass()).resolveType(Supplier.class.getTypeParameters()[0])
-			: type;
-		XformOptions.SimpleXformOptions opts = new XformOptions.SimpleXformOptions();
-		options.accept(opts);
-		return new ComposedObservableValue<>(t, c -> value.get(), "assemble", new XformOptions.XformDef(opts), components);
+		Observable<?>[] changes = new Observable[components.length];
+		for (int i = 0; i < components.length; i++)
+			changes[i] = components[i] == null ? null : components[i].noInitChanges();
+		return of(type, value, () -> Stamped.compositeStamp(Arrays.asList(components)), Observable.or(changes));
 	}
 
 	/**
@@ -688,213 +720,128 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 	}
 
 	/**
-	 * An observable value that depends on the values of other observable values
+	 * A class whose value is that of a source value, transformed by a {@link Transformation}
 	 *
-	 * @param <T> The type of the composed observable
+	 * @param <S> The type of the source value
+	 * @param <T> The type of the transformed value
+	 * @see ObservableValue#transform(TypeToken, Function)
 	 */
-	public class ComposedObservableValue<T> implements ObservableValue<T> {
-		private final List<ObservableValue<?>> theComposed;
-
-		private final BiFunction<Object[], T, T> theFunction;
-
+	public class TransformedObservableValue<S, T> extends AbstractIdentifiable implements ObservableValue<T> {
+		private final TypeToken<T> theType;
+		private final ObservableValue<S> theSource;
+		private final Transformation<S, T> theTransformation;
+		private final Transformation.Engine<S, T> theEngine;
+		private final TransformedElement<S, T> theElement;
+		private volatile long theSourceStamp;
+		private S theCachedSource;
 		private final ListenerList<Observer<? super ObservableValueEvent<T>>> theObservers;
 
-		private final TypeToken<T> theType;
-
-		private final XformDef theOptions;
-
-		private long theCachedStamp;
-		final Object[] theComposedValues;
-		private volatile T theValue;
-
-		private final String theOperation;
-		private Object theIdentity;
-
-		/**
-		 * @param function The function that operates on the argument observables to produce this observable's value
-		 * @param operation A description of the composition operation
-		 * @param options Options determining the behavior of the observable
-		 * @param composed The argument observables whose values are passed to the function
-		 */
-		public ComposedObservableValue(Function<Object[], T> function, String operation, XformDef options, ObservableValue<?>... composed) {
-			this(null, function, operation, options, composed);
-		}
-
 		/**
 		 * @param type The type for this value
-		 * @param function The function that operates on the argument observables to produce this observable's value
-		 * @param operation A description of the composition operation
-		 * @param options Options determining the behavior of the observable
-		 * @param composed The argument observables whose values are passed to the function
+		 * @param source The source value to be transformed
+		 * @param transformation The transformation to apply to the source value
 		 */
-		public ComposedObservableValue(TypeToken<T> type, Function<Object[], T> function, String operation, XformDef options,
-			ObservableValue<?>... composed) {
-			this(type, (args, old) -> function.apply(args), operation, options, composed);
-		}
+		public TransformedObservableValue(TypeToken<T> type, ObservableValue<S> source, Transformation<S, T> transformation) {
+			theType = type != null ? type : (TypeToken<T>) TypeToken.of(transformation.getCombination().getClass())
+				.resolveType(BiFunction.class.getTypeParameters()[1]);
+			theSource = source;
+			theTransformation = transformation;
+			theEngine = theTransformation.createEngine(Equivalence.DEFAULT);
+			theElement = theEngine.createElement(theSource::get);
+			theSourceStamp = -1;
+			theObservers = ListenerList.build().withInUse(new ListenerList.InUseListener() {
+				private Subscription theSourceSub;
+				private Subscription theTransformSub;
 
-		/**
-		 * @param type The type for this value
-		 * @param function The function that operates on the argument observables to produce this observable's value
-		 * @param operation A description of the composition operation
-		 * @param options Options determining the behavior of the observable
-		 * @param composed The argument observables whose values are passed to the function
-		 */
-		public ComposedObservableValue(TypeToken<T> type, BiFunction<Object[], T, T> function, String operation, XformDef options,
-			ObservableValue<?>... composed) {
-			theFunction = function;
-			theOperation = operation;
-			theCachedStamp = -1;
-			theOptions = options == null ? new XformDef(new XformOptions.SimpleXformOptions()) : options;
-			theType = type != null ? type
-				: (TypeToken<T>) TypeToken.of(function.getClass()).resolveType(Function.class.getTypeParameters()[1]);
-			theComposed = java.util.Collections.unmodifiableList(java.util.Arrays.asList(composed));
-			theComposedValues = theOptions.isCached() ? new Object[theComposed.size()] : null;
-			final Subscription[] composedSubs = new Subscription[theComposed.size()];
-			boolean[] completed = new boolean[1];
-			theObservers = ListenerList.build().withFastSize(false).withInUse(new ListenerList.InUseListener() {
 				@Override
-				public void inUseChanged(boolean used) {
-					if (used) {
-						XformOptions.XformCacheHandler<Object, T>[] caches = new XformOptions.XformCacheHandler[composed.length];
-						boolean[] initialized = new boolean[composed.length];
-						for (int i = 0; i < composed.length; i++) {
-							int index = i;
-							caches[index] = theOptions
-								.createCacheHandler(new XformOptions.XformCacheHandlingInterface<Object, T>() {
-									@Override
-									public BiFunction<? super Object, ? super T, ? extends T> map() {
-										return (src, oldValue) -> {
-											T value;
-											if (theComposedValues != null) {
-												theComposedValues[index] = src;
-												value = combine(theComposedValues);
-												theValue = value;
-											} else {
-												Object[] cvs = new Object[composed.length];
-												for (int j = 0; j < cvs.length; j++)
-													cvs[j] = j == index ? src : composed[j].get();
-												value = combine(cvs);
-											}
-											return value;
-										};
-									}
-
-									@Override
-									public Transaction lock() {
-										return changes().lock();
-									}
-
-									@Override
-									public T getDestCache() {
-										return theValue;
-									}
-
-									@Override
-									public void setDestCache(T value) {
-										theValue = value;
-									}
-								});
-							composedSubs[i] = theComposed.get(i).changes().subscribe(new Observer<ObservableValueEvent<?>>() {
-								@Override
-								public <V extends ObservableValueEvent<?>> void onNext(V event) {
-									if (event.isInitial()) {
-										initialized[index] = true;
-										caches[index].initialize(event::getNewValue);
-										return;
-									} else if (!isInitialized())
-										return;
-									BiTuple<T, T> change = caches[index].handleSourceChange(event.getOldValue(), event.getNewValue());
-									if (change != null) {
-										ObservableValueEvent<T> toFire = ComposedObservableValue.this.createChangeEvent(change.getValue1(),
-											change.getValue2(), event);
-										fireNext(toFire);
-									}
-								}
-
-								private boolean isInitialized() {
-									for (boolean b : initialized)
-										if (!b)
-											return false;
-									return true;
-								}
-
-								@Override
-								public <V extends ObservableValueEvent<?>> void onCompleted(V event) {
-									completed[0] = true;
-									if (!isInitialized()) {
-										caches[index].initialize(event::getNewValue);
-										return;
-									}
-									BiTuple<T, T> change = caches[index].handleSourceChange(event.getOldValue(), event.getNewValue());
-									if (change == null) {
-										T value = combineCache(caches, index, event.getNewValue());
-										change = new BiTuple<>(value, value);
-									}
-									ObservableValueEvent<T> toFire = createChangeEvent(change.getValue1(), change.getValue2(), event);
-									fireCompleted(toFire);
-								}
-
-								private void fireNext(ObservableValueEvent<T> next) {
-									try (Transaction t = ObservableValueEvent.use(next)) {
-										theObservers.forEach(//
-											listener -> listener.onNext(next));
-									}
-								}
-
-								private void fireCompleted(ObservableValueEvent<T> next) {
-									try (Transaction t = ObservableValueEvent.use(next)) {
-										theObservers.forEach(//
-											listener -> listener.onCompleted(next));
-										Subscription.forAll(composedSubs).unsubscribe();
-									}
-								}
-							});
-							if (completed[0])
-								break;
+				public void inUseChanged(boolean inUse) {
+					if (!inUse) {
+						if (getTransformation().isCached()) {
+							// So the get() method doesn't need to re-evaluate after cessation of listening
+							// unless something actually changes
+							theSourceStamp = theSource.getStamp();
 						}
-						for (int i = 0; i < composed.length; i++)
-							if (!initialized[i])
-								throw new IllegalStateException(theComposed.get(i) + " did not fire an initial value");
-						if (theOptions.isCached())
-							theValue = getOrCompute();
-					} else {
-						for (int i = 0; i < theComposed.size(); i++) {
-							if (composedSubs[i] != null) {
-								composedSubs[i].unsubscribe();
-								composedSubs[i] = null;
+						Subscription.forAll(theSourceSub, theTransformSub).unsubscribe();
+						theSourceSub = null;
+						theTransformSub = null;
+						return;
+					}
+					try (Transaction t = Lockable.lockAll(theSource, theEngine)) {
+						theSourceSub = theSource.changes().act(evt -> {
+							try (Transaction t2 = evt.isInitial() ? Transaction.NONE : theEngine.lock()) {
+								if (getTransformation().isCached())
+									theCachedSource = evt.getNewValue();
+								BiTuple<T, T> change = theElement.sourceChanged(evt.getOldValue(), evt.getNewValue(), theEngine.get());
+								if (!evt.isInitial() && change != null)
+									fire(change.getValue1(), change.getValue2(), evt);
 							}
-						}
-						completed[0] = false;
+						});
+						theTransformSub = theEngine.noInitChanges().act(evt -> {
+							BiTuple<T, T> change = theElement.transformationStateChanged(evt.getOldValue(), evt.getNewValue());
+							if (change != null)
+								fire(change.getValue1(), change.getValue2(), evt);
+						});
 					}
 				}
 
-				private T combineCache(XformOptions.XformCacheHandler<Object, T>[] caches, int valueIdx, Object value) {
-					Object[] composedValues = new Object[theComposed.size()];
-					for (int j = 0; j < composed.length; j++) {
-						if (j == valueIdx)
-							composedValues[j] = value;
-						else
-							composedValues[j] = theOptions.isCached() ? caches[j].getSourceCache() : composed[j].get();
+				private void fire(T oldValue, T newValue, Object cause) {
+					ObservableValueEvent<T> evt = createChangeEvent(oldValue, newValue, cause);
+					try (Transaction t = Causable.use(evt)) {
+						theObservers.forEach(//
+							obs -> obs.onNext(evt));
 					}
-					return combine(composedValues);
 				}
 			}).build();
 		}
 
-		@Override
-		public Object getIdentity() {
-			if (theIdentity == null) {
-				Object[] obsIds = new Object[theComposed.size() - 1];
-				for (int i = 0; i < obsIds.length; i++)
-					obsIds[i] = theComposed.get(i + 1).getIdentity();
-				theIdentity = Identifiable.wrap(theComposed.get(0).getIdentity(), theOperation, obsIds);
+		/** @return The source value being transformed */
+		protected ObservableValue<S> getSource() {
+			return theSource;
+		}
+
+		/** @return The transformation applied to the source value */
+		public Transformation<S, T> getTransformation() {
+			return theTransformation;
+		}
+
+		/** @return The engine driving the transformation */
+		protected Transformation.Engine<S, T> getEngine() {
+			return theEngine;
+		}
+
+		/**
+		 * Ensures that this value's state is up-to-date with any changes that may have occurred since the last poll, and returns the state
+		 * of this transformed value.
+		 *
+		 * @return A tuple containing the current transformed element and transformation state of the engine
+		 */
+		protected BiTuple<TransformedElement<S, T>, TransformationState> getState() {
+			Transformation.TransformationState state = theEngine.get();
+			if (!theObservers.isEmpty() || !theTransformation.isCached())
+				return new BiTuple<>(theElement, state);
+			long stamp = theSource.getStamp();
+			if (stamp == -1 || stamp != theSourceStamp) {
+				try (Transaction t = lock()) {
+					stamp = theSourceStamp;
+					if (stamp == -1 || stamp != theSourceStamp) {
+						theSourceStamp = stamp;
+						S source = theSource.get();
+						theCachedSource = source;
+						theElement.sourceChanged(theCachedSource, source, theEngine.get());
+					}
+				}
 			}
-			return theIdentity;
+			return new BiTuple<>(theElement, state);
+		}
+
+		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(theSource.getIdentity(), "transform", theTransformation);
 		}
 
 		@Override
 		public long getStamp() {
-			return Stamped.compositeStamp(theComposed, Stamped::getStamp);
+			return Stamped.compositeStamp(theSource.getStamp(), theEngine.getStamp());
 		}
 
 		@Override
@@ -902,87 +849,23 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 			return theType;
 		}
 
-		/** @return The observable values that compose this value */
-		public ObservableValue<?>[] getComposed() {
-			return theComposed.toArray(new ObservableValue[theComposed.size()]);
-		}
-
-		/**
-		 * @param index The index of the composed value
-		 * @return The cached value for the composed value
-		 */
-		protected Object getCachedComposedValue(int index) {
-			if (theComposedValues == null)
-				throw new IllegalStateException("Not cached");
-			getOrCompute(); // Make sure we're up-to-date
-			return theComposedValues[index];
-		}
-
-		/** @return The function used to map this observable's composed values into its return value */
-		public BiFunction<Object[], T, T> getFunction() {
-			return theFunction;
-		}
-
-		/** @return Options that determine the behavior of this value */
-		public XformDef getOptions() {
-			return theOptions;
+		@Override
+		public boolean isLockSupported() {
+			return theSource.isLockSupported() || theEngine.isLockSupported();
 		}
 
 		@Override
 		public T get() {
-			if (!theOptions.isCached()) {
-				Object[] composed = new Object[theComposed.size()];
-				for (int i = 0; i < composed.length; i++)
-					composed[i] = theComposed.get(i).get();
-				return combine(composed);
-			} else if (!theObservers.isEmpty())
-				return theValue; // Value is being maintained
-			else
-				return getOrCompute();
-		}
-
-		T getOrCompute() {
-			try (Transaction t = lock()) {
-				T value = theValue;
-				long newStamp = getStamp();
-				if (theCachedStamp != -1 && theCachedStamp == newStamp)
-					return value; // No changes, value is still valid
-				theCachedStamp = newStamp;
-				boolean reEval = theOptions.isReEvalOnUpdate();
-				for (int i = 0; i < theComposedValues.length; i++) {
-					Object newValue = theComposed.get(i).get();
-					if (!reEval)
-						reEval = theComposedValues[i] != newValue;
-					theComposedValues[i] = newValue;
-				}
-				if (reEval) {
-					value = combine(theComposedValues);
-					theValue = value;
-				}
-				return value;
-			}
-		}
-
-		/**
-		 * @param args The arguments to combine
-		 * @return The combined value
-		 */
-		protected T combine(Object[] args) {
-			if (args[0] == null && theOptions.isNullToNull())
-				return null;
-			return theFunction.apply(args.clone(), theValue);
+			BiTuple<TransformedElement<S, T>, TransformationState> state = getState();
+			return state.getValue1().getCurrentValue(state.getValue2());
 		}
 
 		@Override
 		public Observable<ObservableValueEvent<T>> noInitChanges() {
-			return new Observable<ObservableValueEvent<T>>() {
-				private Object theChangesIdentity;
-
+			class Changes extends AbstractIdentifiable implements Observable<ObservableValueEvent<T>> {
 				@Override
-				public Object getIdentity() {
-					if (theChangesIdentity == null)
-						theChangesIdentity = Identifiable.wrap(ComposedObservableValue.this.getIdentity(), "noInitChanges");
-					return theChangesIdentity;
+				public Object createIdentity() {
+					return Identifiable.wrap(TransformedObservableValue.this.getIdentity(), "noInitChanges");
 				}
 
 				@Override
@@ -992,19 +875,20 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 
 				@Override
 				public boolean isSafe() {
-					return true;
+					return theSource.isLockSupported() || theEngine.isLockSupported();
 				}
 
 				@Override
 				public Transaction lock() {
-					return Lockable.lockAll(theComposed);
+					return Lockable.lockAll(theSource, theEngine);
 				}
 
 				@Override
 				public Transaction tryLock() {
-					return Lockable.tryLockAll(theComposed);
+					return Lockable.tryLockAll(theSource, theEngine);
 				}
-			};
+			}
+			return new Changes();
 		}
 
 		@Override
@@ -1020,76 +904,6 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 		@Override
 		public String toString() {
 			return getIdentity().toString();
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableValue#combine(TypeToken, Function)}
-	 *
-	 * @param <S> The type of the source value
-	 * @param <T> The type of the combined value
-	 */
-	public class CombinedObservableValue<S, T> extends ComposedObservableValue<T> {
-		/**
-		 * @param source The source value to combine
-		 * @param type The type of the combined value
-		 * @param combination The definition of the combination operation
-		 */
-		public CombinedObservableValue(ObservableValue<S> source, TypeToken<T> type, Combination.CombinationDef<S, T> combination) {
-			super(type, (args, prevValue) -> {
-				Combination.CombinedValues<S> combined = new Combination.CombinedValues<S>() {
-					@Override
-					public S getElement() {
-						return (S) args[0];
-					}
-
-					@Override
-					public <X> X get(ObservableValue<X> arg) {
-						int index = combination.getArgIndex(arg);
-						return (X) args[index + 1];
-					}
-				};
-				return combination.getCombination().apply(combined, prevValue);
-			}, "combination", combination, makeArgs(source, combination));
-		}
-
-		/**
-		 * @param source The source value
-		 * @param combination The combination definition
-		 * @return An array containing the source value and all combined arguments
-		 */
-		protected static ObservableValue<?>[] makeArgs(ObservableValue<?> source, Combination.CombinationDef<?, ?> combination) {
-			return ArrayUtils.add(combination.getArgs().toArray(new ObservableValue[combination.getArgs().size()]), 0, source);
-		}
-
-		/** @return THe source value of this combination */
-		public ObservableValue<S> getSource() {
-			return (ObservableValue<S>) getComposed()[0];
-		}
-
-		@Override
-		public Combination.CombinationDef<S, T> getOptions() {
-			return (Combination.CombinationDef<S, T>) super.getOptions();
-		}
-
-		@Override
-		public int hashCode() {
-			return Objects.hash(getSource(), getOptions());
-		}
-
-		@Override
-		public boolean equals(Object obj) {
-			if (this == obj)
-				return true;
-			else if (!(obj instanceof CombinedObservableValue))
-				return false;
-			CombinedObservableValue<S, T> other = (CombinedObservableValue<S, T>) obj;
-			return getSource().equals(other.getSource()) && getOptions().equals(other.getOptions());
-		}
-
-		@Override
-		public String toString() {
-			return getSource() + "." + getOptions();
 		}
 	}
 

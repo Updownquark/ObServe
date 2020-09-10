@@ -6,12 +6,12 @@ import java.util.NoSuchElementException;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import org.observe.Equivalence;
 import org.observe.Observable;
 import org.observe.Subscription;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableMultiMapEvent;
 import org.observe.collect.CollectionChangeType;
-import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.DistinctDataFlow;
@@ -270,6 +270,11 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 	@Override
 	public Subscription onChange(Consumer<? super ObservableMultiMapEvent<? extends K, ? extends V>> action) {
 		return theMapListeners.add(action, true)::run;
+	}
+
+	@Override
+	public String toString() {
+		return entrySet().toString();
 	}
 
 	@Override
@@ -817,9 +822,9 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		void valueRemoved(ElementId id, K key, V value, TypeToken<K> keyType, TypeToken<V> valueType, int keyIndex, Object cause) {
 			if (!id.isPresent())
 				return; // This can happen when the last value for a key is removed
-			theValues.mutableElement(id).remove();
 			ValueElementId valueId = new ValueElementId(id, theValues.getElement(id).get());
 			int valueIndex = theValues.getElementsBefore(id);
+			theValues.mutableElement(id).remove();
 			if (!theMapListeners.isEmpty()) {
 				ObservableMultiMapEvent<K, V> event = new ObservableMultiMapEvent<>(//
 					theEntry.theExposedId, valueId, keyType, valueType, keyIndex, valueIndex, //

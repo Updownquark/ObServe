@@ -104,20 +104,20 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 
 				@Override
 				public ObservableCollection<? extends Edge<N, E>> getEdges() {
-					return source.getEdges().flow().map((TypeToken<ObservableGraph.Edge<N, E>>) source.getEdges().getType(),
-						e -> e.unsettable(), options -> options.cache(false)).unmodifiable().collectPassive();
+					return source.getEdges().flow().transform((TypeToken<ObservableGraph.Edge<N, E>>) source.getEdges().getType(),
+						tx -> tx.cache(false).map(ObservableGraph.Edge::unsettable)).unmodifiable().collectPassive();
 				}
 
 				@Override
 				public ObservableCollection<? extends Edge<N, E>> getOutward() {
-					return source.getEdges().flow().map((TypeToken<ObservableGraph.Edge<N, E>>) source.getOutward().getType(),
-						e -> e.unsettable(), options -> options.cache(false)).unmodifiable().collectPassive();
+					return source.getOutward().flow().transform((TypeToken<ObservableGraph.Edge<N, E>>) source.getOutward().getType(),
+						tx -> tx.cache(false).map(ObservableGraph.Edge::unsettable)).unmodifiable().collectPassive();
 				}
 
 				@Override
 				public ObservableCollection<? extends Edge<N, E>> getInward() {
-					return source.getEdges().flow().map((TypeToken<ObservableGraph.Edge<N, E>>) source.getOutward().getType(),
-						e -> e.unsettable(), options -> options.cache(false)).unmodifiable().collectPassive();
+					return source.getInward().flow().transform((TypeToken<ObservableGraph.Edge<N, E>>) source.getOutward().getType(),
+						tx -> tx.cache(false).map(ObservableGraph.Edge::unsettable)).unmodifiable().collectPassive();
 				}
 
 				@Override
@@ -271,8 +271,8 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 			@Override
 			public ObservableCollection<? extends ObservableGraph.Node<N, E>> getNodes() {
 				return source.getNodes().flow()
-					.map((TypeToken<ObservableGraph.Node<N, E>>) source.getNodes().getType(), n -> n.unsettable(),
-						options -> options.cache(false))
+					.transform((TypeToken<ObservableGraph.Node<N, E>>) source.getNodes().getType(), //
+						tx -> tx.cache(false).map(ObservableGraph.Node::unsettable))
 					.unmodifiable().collectPassive();
 			}
 
@@ -284,8 +284,8 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 			@Override
 			public ObservableCollection<? extends ObservableGraph.Edge<N, E>> getEdges() {
 				return source.getEdges().flow()
-					.map((TypeToken<ObservableGraph.Edge<N, E>>) source.getEdges().getType(), e -> e.unsettable(),
-						options -> options.cache(false))
+					.transform((TypeToken<ObservableGraph.Edge<N, E>>) source.getEdges().getType(), //
+						tx -> tx.cache(false).map(ObservableGraph.Edge::unsettable))
 					.unmodifiable().collectPassive();
 			}
 

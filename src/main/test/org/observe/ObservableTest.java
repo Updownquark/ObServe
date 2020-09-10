@@ -212,17 +212,20 @@ public class ObservableTest {
 	@Test
 	public void combine() {
 		int [] events = new int[1];
-		SimpleSettableValue<Integer> obs1 = new SimpleSettableValue<>(Integer.TYPE, false);
-		obs1.set(0, null);
-		SimpleSettableValue<Integer> obs2 = new SimpleSettableValue<>(Integer.TYPE, false);
-		obs2.set(1, null);
-		SimpleSettableValue<Integer> obs3 = new SimpleSettableValue<>(Integer.TYPE, false);
-		obs3.set(0, null);
+		SettableValue<Integer> obs1 = SettableValue.build(int.class).withValue(0).build();
+		SettableValue<Integer> obs2 = SettableValue.build(int.class).withValue(1).build();
+		SettableValue<Integer> obs3 = SettableValue.build(int.class).withValue(0).build();
 		int [] received = new int[] {0};
-		obs1.combine((arg1, arg2, arg3) -> arg1 * arg2 + arg3, obs2, obs3).changes().act(event -> {
+		obs1.<Integer> transform(tx -> tx.combineWith(obs2).combineWith(obs3).build((o1, cv) -> {
+			Integer v2 = cv.get(obs2);
+			Integer v3 = cv.get(obs3);
+			return o1 * v2 + v3;
+		})).changes()
+		.act(event -> {
 			events[0]++;
 			received[0] = event.getNewValue();
 		});
+		assertEquals(0, received[0]);
 		for(int i = 1; i < 10; i++) {
 			obs1.set(i + 3, null);
 			obs2.set(i * 10, null);

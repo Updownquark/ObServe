@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -18,6 +19,7 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.observe.Equivalence;
 import org.observe.Observable;
 import org.observe.Subscription;
 import org.observe.XformOptions;
@@ -855,7 +857,7 @@ public class ObservableCollectionActiveManagers2 {
 				theElementId = theRefreshObservables.putEntry(refresh, this, false).getElementId();
 				elements = new BetterTreeSet<>(false, RefreshingElement::compareTo);
 				theSub = theListening.withConsumer(r -> {
-					try (Transaction t = Lockable.lockAll(Lockable.lockable(theLock, ElementRefreshingCollectionManager.this, true),
+					try (Transaction t = Lockable.lockAll(Lockable.lockable(theLock, ElementRefreshingCollectionManager.this),
 						Lockable.lockable(theParent, false, null))) {
 						RefreshingElement setting = (RefreshingElement) theSettingElement.get();
 						if (setting != null && elements.contains(setting))
@@ -881,14 +883,14 @@ public class ObservableCollectionActiveManagers2 {
 		private final Function<? super T, ? extends Observable<?>> theRefresh;
 		private final BetterMap<Observable<?>, RefreshHolder> theRefreshObservables;
 		private WeakListening theListening;
-		private final ReentrantReadWriteLock theLock;
+		private final ReentrantLock theLock;
 		Supplier<DerivedCollectionElement<? extends T>> theSettingElement;
 
 		ElementRefreshingCollectionManager(ActiveCollectionManager<E, ?, T> parent, Function<? super T, ? extends Observable<?>> refresh) {
 			theParent = parent;
 			theRefresh = refresh;
 			theRefreshObservables = BetterHashMap.build().unsafe().buildMap();
-			theLock = new ReentrantReadWriteLock();
+			theLock = new ReentrantLock();
 			theSettingElement = () -> null;
 		}
 
@@ -925,7 +927,7 @@ public class ObservableCollectionActiveManagers2 {
 			if (write)
 				return theParent.lock(write, cause);
 			else
-				return Lockable.lockAll(Lockable.lockable(theParent, write, cause), Lockable.lockable(theLock, this, false));
+				return Lockable.lockAll(Lockable.lockable(theParent, write, cause), Lockable.lockable(theLock, this));
 		}
 
 		@Override
@@ -937,11 +939,11 @@ public class ObservableCollectionActiveManagers2 {
 			if (write)
 				return theParent.tryLock(write, cause);
 			else
-				return Lockable.tryLockAll(Lockable.lockable(theParent, write, cause), Lockable.lockable(theLock, this, false));
+				return Lockable.tryLockAll(Lockable.lockable(theParent, write, cause), Lockable.lockable(theLock, this));
 		}
 
-		Transaction lockRefresh(boolean exclusive) {
-			return Lockable.lock(theLock, this, exclusive);
+		Transaction lockRefresh() {
+			return Lockable.lock(theLock, this);
 		}
 
 		@Override
@@ -1017,7 +1019,7 @@ public class ObservableCollectionActiveManagers2 {
 		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
 			theListening = listening;
 			theParent.begin(fromStart, (parentEl, cause) -> {
-				try (Transaction t = lockRefresh(false)) {
+				try (Transaction t = lockRefresh()) {
 					onElement.accept(new RefreshingElement(parentEl), cause);
 				}
 			}, listening);
@@ -1068,7 +1070,7 @@ public class ObservableCollectionActiveManagers2 {
 					theParentEl.setListener(new CollectionElementListener<T>() {
 						@Override
 						public void update(T oldValue, T newValue, Object cause) {
-							try (Transaction t = lockRefresh(false)) {
+							try (Transaction t = lockRefresh()) {
 								ObservableCollectionActiveManagers.update(theListener, oldValue, newValue, cause);
 								updated(newValue);
 							}
@@ -1076,7 +1078,7 @@ public class ObservableCollectionActiveManagers2 {
 
 						@Override
 						public void removed(T value, Object cause) {
-							try (Transaction t = lockRefresh(false)) {
+							try (Transaction t = lockRefresh()) {
 								if (theCurrentHolder != null) { // Remove from old refresh if non-null
 									theCurrentHolder.remove(theElementId);
 									theElementId = null;

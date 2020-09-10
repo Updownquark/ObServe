@@ -189,5 +189,5 @@ public class FactoringFlatMapCollectionLink extends AbstractFlatMappedCollection
 		return ObservableCollection.of(TypeTokens.get().INT, factors);
 	}
 
-	private static Map<Integer, ObservableCollection<Integer>> CACHED_FACTORIZATION = new ConcurrentHashMap<>();
+	private static final Map<Integer, ObservableCollection<Integer>> CACHED_FACTORIZATION = new ConcurrentHashMap<>();
 }

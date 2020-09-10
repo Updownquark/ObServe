@@ -10,7 +10,7 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <T> The compile-time type of the observable's value
  */
-public class ObservableValueEvent<T> extends Causable {
+public class ObservableValueEvent<T> extends Causable implements ValueChangeEvent<T> {
 	private final boolean isInitial;
 	private final T theOldValue;
 	private final T theNewValue;
@@ -33,17 +33,17 @@ public class ObservableValueEvent<T> extends Causable {
 		theNewValue = newValue;
 	}
 
-	/** @return Whether this represents the population of the initial value of an observable value in response to subscription */
+	@Override
 	public boolean isInitial() {
 		return isInitial;
 	}
 
-	/** @return The old value of the observable */
+	@Override
 	public T getOldValue() {
 		return theOldValue;
 	}
 
-	/** @return The new value in the observable */
+	@Override
 	public T getNewValue() {
 		return theNewValue;
 	}

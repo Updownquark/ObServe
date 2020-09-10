@@ -7,6 +7,7 @@ import java.util.Iterator;
 import java.util.Spliterator;
 import java.util.function.Supplier;
 
+import org.observe.Equivalence;
 import org.observe.ObservableValue;
 import org.observe.util.TypeTokens;
 import org.qommons.collect.BetterSortedList;
@@ -33,9 +34,12 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSe
 		public <P> TypeToken<? extends ObservableSortedSet> createCompoundType(TypeToken<P> param) {
 			return new TypeToken<ObservableSortedSet<P>>() {}.where(new TypeParameter<P>() {}, param);
 		}
-		});
+	});
 	/** This class's wildcard {@link TypeToken} */
 	static TypeToken<ObservableSortedSet<?>> TYPE = TYPE_KEY.parameterized();
+
+	@Override
+	Equivalence.ComparatorEquivalence<? super E> equivalence();
 
 	@Override
 	default Iterator<E> iterator() {

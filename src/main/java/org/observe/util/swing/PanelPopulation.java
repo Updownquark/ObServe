@@ -71,6 +71,7 @@ import javax.swing.tree.TreeSelectionModel;
 
 import org.jdesktop.swingx.JXCollapsiblePane;
 import org.jdesktop.swingx.JXPanel;
+import org.observe.Equivalence;
 import org.observe.Observable;
 import org.observe.ObservableAction;
 import org.observe.ObservableValue;
@@ -82,7 +83,6 @@ import org.observe.Subscription;
 import org.observe.TypedValueContainer;
 import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.DefaultObservableCollection;
-import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
 import org.observe.config.ObservableConfig;
 import org.observe.util.SafeObservableCollection;
@@ -767,6 +767,13 @@ public class PanelPopulation {
 
 		A confirm(String alertTitle, Function<List<? extends R>, String> alertText, boolean confirmType);
 
+		/**
+		 * @param alertTitle The title for the alert dialog
+		 * @param alertPreText The beginning of the question to use to confirm the action on the items
+		 * @param postText The end of the question to use to confirm the action on the items
+		 * @param confirmType True for OK/Cancel, false for Yes/No
+		 * @return This action
+		 */
 		A confirmForItems(String alertTitle, String alertPreText, String postText, boolean confirmType);
 
 		A modifyButton(Consumer<ButtonEditor<?>> buttonMod);
@@ -864,8 +871,8 @@ public class PanelPopulation {
 
 		default P withSelection(ObservableCollection<F> selection, Function<? super F, ? extends F> parent) {
 			return withSelection(selection.flow()
-				.map(TypeTokens.get().keyFor(BetterList.class).getCompoundType(selection.getType()), //
-					s -> pathTo(s, parent, getRoot().get()), opts -> opts.cache(false).withReverse(path -> path.get(path.size() - 1)))//
+				.<BetterList<F>> transform(TypeTokens.get().keyFor(BetterList.class).getCompoundType(selection.getType()), //
+					tx -> tx.cache(false).map(s -> pathTo(s, parent, getRoot().get())).withReverse(path -> path.get(path.size() - 1)))//
 				.collectPassive());
 		}
 

@@ -1211,6 +1211,8 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			else
 				element.set(op.value);
 			error = false;
+			if (msg != null)
+				throw new AssertionError("Expected failure with " + msg);
 		} catch (UnsupportedOperationException | IllegalArgumentException e) {
 			if (msg == null)
 				throw new AssertionError("Unexpected operation exception", e);

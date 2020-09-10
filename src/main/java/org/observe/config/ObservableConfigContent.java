@@ -11,6 +11,7 @@ import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import org.observe.Equivalence;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
@@ -18,7 +19,6 @@ import org.observe.Observer;
 import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.collect.CollectionChangeType;
-import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionEvent;
 import org.observe.config.ObservableConfig.ObservableConfigEvent;

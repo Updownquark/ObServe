@@ -8,6 +8,7 @@ import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import org.observe.Equivalence;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
@@ -16,7 +17,6 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.CollectionSubscription;
 import org.observe.collect.DefaultObservableCollection;
-import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionEvent;
 import org.observe.collect.ObservableSet;
@@ -715,8 +715,9 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 			} else
 				theEntries = entries.flow().distinct().collect();
 			theKeySet = theEntries.flow()
-				.mapEquivalent(keyType, Map.Entry::getKey, key -> new SimpleMapEntry<>(key, null, false),
-					opts -> opts.withEquivalence(keyEquivalence).cache(false).reEvalOnUpdate(false).fireIfUnchanged(false))
+				.transformEquivalent(keyType,
+					tx -> tx.cache(false).reEvalOnUpdate(false).fireIfUnchanged(false)//
+						.map(Map.Entry::getKey).withEquivalence(keyEquivalence).withReverse(key -> new SimpleMapEntry<>(key, null, false)))
 				.collectPassive();
 		}
 
@@ -1090,7 +1091,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 
 	/**
 	 * Implements {@link ObservableMap#unmodifiable(ObservableMap)}
-	 * 
+	 *
 	 * @param <K> The key type of the map
 	 * @param <V> The value type of the map
 	 */

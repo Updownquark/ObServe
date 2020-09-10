@@ -48,7 +48,8 @@ public class ObservableDemoGui extends JPanel {
 	private void initObservables() {
 		theCategoryNames = ObservableCollection.build(TypeTokens.get().STRING).distinct().build();
 		theCategories = theCategoryNames.flow()
-			.map(TypeTokens.get().of(ValueCategory.class), ValueCategory::new, opts -> opts.cache(true).reEvalOnUpdate(false)).collect();
+			.transform(TypeTokens.get().of(ValueCategory.class), tx -> tx.cache(true).reEvalOnUpdate(false).map(ValueCategory::new))
+			.collect();
 	}
 
 	private void initComponents() {
@@ -63,7 +64,7 @@ public class ObservableDemoGui extends JPanel {
 		ObservableCollection<Integer> selectedValues = ObservableCollection.build(int.class).safe(false).build();
 		SettableValue<Integer> newValue = SettableValue.build(Integer.class).safe(false).withValue(0).build();
 
-		JTree valueTree = new JTree(new ObservableTreeModel("Values") {
+		JTree valueTree = new JTree(new ObservableTreeModel<Object>("Values") {
 			@Override
 			public void valueForPathChanged(TreePath path, Object newVal) {}
 
@@ -86,7 +87,7 @@ public class ObservableDemoGui extends JPanel {
 
 		ObservableMultiMap<Long, Integer> mapByMod5 = valuesOfSelectedCategory.flow()
 			.groupBy(TypeTokens.get().LONG, v -> Long.valueOf(v % 5), (k, v) -> v).gather();
-		JTree groupedValueTree = new JTree(new ObservableTreeModel("Grouped Values") {
+		JTree groupedValueTree = new JTree(new ObservableTreeModel<Object>("Grouped Values") {
 			@Override
 			public boolean isLeaf(Object node) {
 				return node instanceof Integer;

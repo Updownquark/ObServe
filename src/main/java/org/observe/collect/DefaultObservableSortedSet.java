@@ -3,6 +3,7 @@ package org.observe.collect;
 import java.util.Comparator;
 import java.util.function.BiFunction;
 
+import org.observe.Equivalence;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.Transaction;
@@ -72,7 +73,7 @@ public class DefaultObservableSortedSet<E> extends DefaultObservableCollection<E
 			BetterList<E> backing = getBacking();
 			if (backing == null)
 				backing = BetterTreeSet.<E> buildTreeSet(getSorting()).withDescription(getDescription()).withLocker(this::getLocker)
-					.build();
+				.build();
 			else if (!(backing instanceof BetterSortedSet))
 				throw new IllegalStateException("An ObservableSortedSet must be backed by an instance of BetterSortedSet");
 			return new DefaultObservableSortedSet<>(getType(), (BetterSortedSet<E>) backing, getElementSource(), getSourceElements());
@@ -123,6 +124,11 @@ public class DefaultObservableSortedSet<E> extends DefaultObservableCollection<E
 	@Override
 	public CollectionElement<E> search(Comparable<? super E> search, BetterSortedList.SortedSearchFilter filter) {
 		return getValues().search(search, filter);
+	}
+
+	@Override
+	public Equivalence.ComparatorEquivalence<? super E> equivalence() {
+		return (Equivalence.ComparatorEquivalence<? super E>) super.equivalence();
 	}
 
 	@Override

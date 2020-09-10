@@ -1,4 +1,4 @@
-package org.observe.collect;
+package org.observe;
 
 import java.util.Collection;
 import java.util.Comparator;
@@ -194,6 +194,11 @@ public interface Equivalence<E> {
 
 		public ComparatorEquivalence<E> reverse() {
 			return new ComparatorEquivalence<>(type, nullable, BetterSortedSet.ReversedSortedSet.reverse(compare));
+		}
+
+		@Override
+		public String toString() {
+			return "equivalence(" + compare + ")";
 		}
 	}
 

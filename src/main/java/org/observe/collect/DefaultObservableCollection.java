@@ -7,6 +7,7 @@ import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import org.observe.Equivalence;
 import org.observe.Subscription;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;

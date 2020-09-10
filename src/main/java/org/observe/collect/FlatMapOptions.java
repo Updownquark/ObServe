@@ -6,7 +6,6 @@ import java.util.function.BiFunction;
 import java.util.function.Supplier;
 
 import org.observe.XformOptions;
-import org.observe.collect.FlowOptions.MapReverse;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.qommons.LambdaUtils;
 import org.qommons.TriFunction;
@@ -31,11 +30,18 @@ public interface FlatMapOptions<S, V, X> extends XformOptions {
 	public class FlatMapDef<S, V, X> extends XformOptions.XformDef {
 		private final TriFunction<? super S, ? super V, ? super X, ? extends X> theMap;
 		private final FlatMapReverse<S, V, X> theReverse;
+		private final boolean isPropagatingUpdatesToParent;
 
 		FlatMapDef(SimpleFlatMapOptions<S, V, X> options, TriFunction<? super S, ? super V, ? super X, ? extends X> map) {
 			super(options);
 			theMap = map;
 			theReverse = options.theReverse;
+			isPropagatingUpdatesToParent = options.isPropagatingUpdateToParent;
+		}
+
+		/** @return Whether operations on the result that do not affect the source values should fire updates in the source */
+		public boolean isPropagatingUpdatesToParent() {
+			return isPropagatingUpdatesToParent;
 		}
 
 		@Override
@@ -85,7 +91,11 @@ public interface FlatMapOptions<S, V, X> extends XformOptions {
 	@Override
 	FlatMapOptions<S, V, X> fireIfUnchanged(boolean fire);
 
-	@Override
+	/**
+	 * @param propagate Whether an operation on the result that does not affect the source value should cause an update event in the source.
+	 *        Default is true. This option requires {@link #cache(boolean) caching}.
+	 * @return This option set
+	 */
 	FlatMapOptions<S, V, X> propagateUpdateToParent(boolean propagate);
 
 	@Override
@@ -254,7 +264,7 @@ public interface FlatMapOptions<S, V, X> extends XformOptions {
 
 
 	/**
-	 * A result of {@link MapReverse#canReverse(Supplier, Object)}
+	 * A result of {@link FlatMapOptions.FlatMapReverse#canReverse(Supplier, Supplier, Object)}
 	 *
 	 * @param <S> The source type of the flow
 	 * @param <V> The type of the mapped/secondary flow(s)
@@ -712,6 +722,7 @@ public interface FlatMapOptions<S, V, X> extends XformOptions {
 	 * @param <X> The type of the target stream
 	 */
 	public class SimpleFlatMapOptions<S, V, X> extends XformOptions.SimpleXformOptions implements FlatMapOptions<S, V, X> {
+		private boolean isPropagatingUpdateToParent = true;
 		private FlatMapReverse<S, V, X> theReverse;
 
 		@Override
@@ -734,7 +745,7 @@ public interface FlatMapOptions<S, V, X> extends XformOptions {
 
 		@Override
 		public FlatMapOptions<S, V, X> propagateUpdateToParent(boolean propagate) {
-			super.propagateUpdateToParent(propagate);
+			isPropagatingUpdateToParent = propagate;
 			return this;
 		}
 

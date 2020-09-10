@@ -20,13 +20,13 @@ import javax.swing.JComboBox;
 import javax.swing.JList;
 import javax.swing.plaf.basic.ComboPopup;
 
+import org.observe.Equivalence;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.CollectionChangeType;
-import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.SafeObservableCollection;
 import org.observe.util.TypeTokens;

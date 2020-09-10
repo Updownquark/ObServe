@@ -2,6 +2,7 @@ package org.observe.assoc.impl;
 
 import java.util.Comparator;
 
+import org.observe.Equivalence;
 import org.observe.Observable;
 import org.observe.assoc.ObservableSortedMultiMap;
 import org.observe.collect.ObservableCollection;
@@ -38,6 +39,11 @@ implements ObservableSortedMultiMap<K, V> {
 	}
 
 	@Override
+	protected DistinctSortedDataFlow<S, ?, K> getActiveKeyFlow() {
+		return (DistinctSortedDataFlow<S, ?, K>) super.getActiveKeyFlow();
+	}
+
+	@Override
 	public ObservableSortedSet<K> keySet() {
 		return (ObservableSortedSet<K>) super.keySet();
 	}
@@ -49,6 +55,11 @@ implements ObservableSortedMultiMap<K, V> {
 
 	/** Implements {@link DefaultActiveSortedMultiMap#keySet()} */
 	protected class SortedKeySet extends KeySet implements ObservableSortedSet<K> {
+		@Override
+		public Equivalence.ComparatorEquivalence<? super K> equivalence() {
+			return getActiveKeyFlow().equivalence();
+		}
+
 		@Override
 		public Comparator<? super K> comparator() {
 			return DefaultActiveSortedMultiMap.this.comparator();

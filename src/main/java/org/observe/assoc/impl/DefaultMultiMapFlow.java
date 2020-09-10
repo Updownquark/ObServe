@@ -174,7 +174,7 @@ public class DefaultMultiMapFlow<S, K0, V0, K, V> implements MultiMapFlow<K, V> 
 			// This is annoying and kind of hacky, but there's no actual passive value flow instance we can use otherwise
 			// It should be safe though, because the flow should never be collected
 			CollectionDataFlow<?, ?, V2> hackValueFlow = valueMap
-				.apply(theSource.flow().map(theValueFlow.getTargetType(), s -> (V) s, opts -> opts.cache(false)));
+				.apply(theSource.flow().transform(theValueFlow.getTargetType(), tx -> tx.cache(false).map(s -> (V) s)));
 			passive = hackValueFlow.supportsPassive();
 			passivePreferred = passive && hackValueFlow.prefersPassive();
 		}

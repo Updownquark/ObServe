@@ -3,8 +3,8 @@ package org.observe.util;
 import java.util.Collection;
 import java.util.function.Consumer;
 
+import org.observe.Equivalence;
 import org.observe.Subscription;
-import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionEvent;
 import org.qommons.Transaction;

@@ -6,10 +6,10 @@ import java.util.NavigableMap;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import org.observe.Equivalence;
 import org.observe.Subscription;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.DefaultObservableCollection;
-import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSortedSet;
@@ -167,7 +167,7 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 				.withBacking((BetterList<Map.Entry<K, V>>) (BetterList<?>) getBacking())//
 				.withDescription(getDescription())//
 				.withElementSource(getElementSource()).withSourceElements(getSourceElements())//
-					.withLocker(this::getLocker)//
+				.withLocker(this::getLocker)//
 				.sortBy((entry1, entry2) -> compare.compare(entry1.getKey(), entry2.getKey()))//
 				.build());
 		}
@@ -180,8 +180,17 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 	 * @param <V> The value type of the map
 	 */
 	class ObservableSortedEntrySet<K, V> extends ObservableMap.ObservableEntrySet<K, V> implements ObservableSortedSet<Map.Entry<K, V>> {
+		private final Equivalence.ComparatorEquivalence<? super Map.Entry<K, V>> theEquivalence;
+
 		public ObservableSortedEntrySet(ObservableSortedMap<K, V> map) {
 			super(map);
+			theEquivalence = Equivalence.of((Class<Map.Entry<? extends K, ?>>) (Class<?>) Map.Entry.class,
+				(entry1, entry2) -> getMap().comparator().compare(entry1.getKey(), entry2.getKey()), true);
+		}
+
+		@Override
+		public Equivalence.ComparatorEquivalence<? super Entry<K, V>> equivalence() {
+			return theEquivalence;
 		}
 
 		@Override

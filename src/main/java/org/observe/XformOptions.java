@@ -37,13 +37,6 @@ public interface XformOptions {
 	XformOptions fireIfUnchanged(boolean fire);
 
 	/**
-	 * @param propagate Whether an operation on the result that does not affect the source value should cause an update event in the source.
-	 *        Default is true. This option requires {@link #cache(boolean) caching}.
-	 * @return This option set
-	 */
-	XformOptions propagateUpdateToParent(boolean propagate);
-
-	/**
 	 * @param manyToOne Whether the mapping may produce the same output from different source values
 	 * @return This builder
 	 */
@@ -67,9 +60,6 @@ public interface XformOptions {
 	/** @return Whether the result should fire an update as a result of a source event that does not affect the result value */
 	boolean isFireIfUnchanged();
 
-	/** @return Whether operations on the result that do not affect the source values should fire updates in the source */
-	boolean isPropagatingUpdatesToParent();
-
 	/** @return Whether the mapping may produce the same output from different source values */
 	boolean isManyToOne();
 
@@ -82,13 +72,12 @@ public interface XformOptions {
 		private boolean isCached;
 		private boolean reEvalOnUpdate;
 		private boolean fireIfUnchanged;
-		private boolean propagateUpdateToParent;
 		private boolean isManyToOne;
 		private boolean isOneToMany;
 
 		/** Creates the options */
 		public SimpleXformOptions() {
-			this(null);
+			this((XformOptions) null);
 		}
 
 		/**
@@ -101,14 +90,31 @@ public interface XformOptions {
 				isCached = options.isCached();
 				reEvalOnUpdate = options.isReEvalOnUpdate();
 				fireIfUnchanged = options.isFireIfUnchanged();
-				propagateUpdateToParent = options.isPropagatingUpdatesToParent();
 				isManyToOne = options.isManyToOne();
 				isOneToMany = options.isOneToMany();
 			} else {
 				isCached = true;
 				reEvalOnUpdate = true;
 				fireIfUnchanged = true;
-				propagateUpdateToParent = true;
+			}
+		}
+
+		/**
+		 * Copies a set of options
+		 *
+		 * @param options The options to copy
+		 */
+		public SimpleXformOptions(XformDef options) {
+			if (options != null) {
+				isCached = options.isCached();
+				reEvalOnUpdate = options.isReEvalOnUpdate();
+				fireIfUnchanged = options.isFireIfUnchanged();
+				isManyToOne = options.isManyToOne();
+				isOneToMany = options.isOneToMany();
+			} else {
+				isCached = true;
+				reEvalOnUpdate = true;
+				fireIfUnchanged = true;
 			}
 		}
 
@@ -142,12 +148,6 @@ public interface XformOptions {
 		}
 
 		@Override
-		public XformOptions propagateUpdateToParent(boolean propagate) {
-			propagateUpdateToParent = propagate;
-			return this;
-		}
-
-		@Override
 		public XformOptions manyToOne(boolean manyToOne) {
 			isManyToOne = manyToOne;
 			return this;
@@ -175,11 +175,6 @@ public interface XformOptions {
 		}
 
 		@Override
-		public boolean isPropagatingUpdatesToParent() {
-			return propagateUpdateToParent;
-		}
-
-		@Override
 		public boolean isManyToOne() {
 			return isManyToOne;
 		}
@@ -196,7 +191,6 @@ public interface XformOptions {
 		private final boolean isCached;
 		private final boolean reEvalOnUpdate;
 		private final boolean fireIfUnchanged;
-		private boolean propagateUpdateToParent;
 		private final boolean isManyToOne;
 		private final boolean isOneToMany;
 
@@ -206,11 +200,8 @@ public interface XformOptions {
 			isCached = options.isCached();
 			reEvalOnUpdate = options.isReEvalOnUpdate();
 			fireIfUnchanged = options.isFireIfUnchanged();
-			propagateUpdateToParent = options.isPropagatingUpdatesToParent();
 			isManyToOne = options.isManyToOne();
 			isOneToMany = options.isOneToMany();
-			if (!propagateUpdateToParent && !isCached)
-				throw new IllegalStateException("Caching must be enabled to prevent parent update propagation");
 		}
 
 		/** @return Whether null inputs should be mapped to null outputs without calling the mapping function */
@@ -233,10 +224,6 @@ public interface XformOptions {
 			return fireIfUnchanged;
 		}
 
-		/** @return Whether operations on the result that do not affect the source values should fire updates in the source */
-		public boolean isPropagatingUpdatesToParent() {
-			return propagateUpdateToParent;
-		}
 
 		/** @return Whether the mapping may produce the same output from different source values */
 		public boolean isManyToOne() {
@@ -246,6 +233,11 @@ public interface XformOptions {
 		/** @return Whether the reverse mapping may produce the same source value from different mapped values */
 		public boolean isOneToMany() {
 			return isOneToMany;
+		}
+
+		/** @return An options set with the same configuration as this definition */
+		public XformOptions toOptions() {
+			return new SimpleXformOptions(this);
 		}
 
 		/**
@@ -258,7 +250,7 @@ public interface XformOptions {
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(isCached, reEvalOnUpdate, fireIfUnchanged, propagateUpdateToParent, isManyToOne, isOneToMany);
+			return Objects.hash(isCached, reEvalOnUpdate, fireIfUnchanged, isManyToOne, isOneToMany);
 		}
 
 		@Override
@@ -272,7 +264,6 @@ public interface XformOptions {
 				&& isCached == other.isCached//
 				&& reEvalOnUpdate == other.reEvalOnUpdate//
 				&& fireIfUnchanged == other.fireIfUnchanged//
-				&& propagateUpdateToParent == other.propagateUpdateToParent//
 				&& isManyToOne == other.isManyToOne//
 				&& isOneToMany == other.isOneToMany;
 		}
@@ -284,8 +275,6 @@ public interface XformOptions {
 			str.append("re-eval=").append(reEvalOnUpdate).append(", fire-on-update=").append(fireIfUnchanged);
 			if (isNullToNull)
 				str.append(", null-to-null");
-			if (!propagateUpdateToParent)
-				str.append(", no-parent-updates");
 			if (isManyToOne)
 				str.append(", many-to-one");
 			if (isOneToMany)

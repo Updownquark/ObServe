@@ -141,7 +141,7 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 
 	@Override
 	public ObservableMultiEntry<K, V> watch(K key) {
-		FilterMapResult<K, K0> reversedKey = theKeyManager.reverse(key, true);
+		FilterMapResult<K, K0> reversedKey = theKeyManager.reverse(key, false, true);
 		if (!reversedKey.isAccepted())
 			return new PassivelyDerivedMultiEntry(key, null);
 		else
@@ -155,7 +155,7 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 			CollectionElement<K> keyEl=keySet().getElement(key, true);
 			if(keyEl!=null)
 				return getEntryById(keyEl.getElementId());
-			FilterMapResult<K, K0> reversedKey = theKeyManager.reverse(key, true);
+			FilterMapResult<K, K0> reversedKey = theKeyManager.reverse(key, true, false);
 			if(reversedKey.isAccepted())
 				return entryFor(theSourceMap.getOrPutEntry(reversedKey.result, k0->{
 					Iterable<? extends V> newValues=value.apply(theKeyManager.map().get().apply(k0));
@@ -170,7 +170,7 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 								@Override
 								public boolean hasNext() {
 									while (!hasNext && source.hasNext()) {
-										FilterMapResult<V, V0> reversedValue = theValueManager.reverse(source.next(), false);
+										FilterMapResult<V, V0> reversedValue = theValueManager.reverse(source.next(), true, false);
 										if (reversedValue.isAccepted()) {
 											next = reversedValue.result;
 											hasNext = true;
@@ -218,7 +218,7 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 	public ObservableCollection<V> get(Object key) {
 		if (!theKeySet.belongs(key))
 			return theValueFlow.apply(theSourceMap.get(NULL_KEY).flow()).collectPassive();
-		FilterMapResult<K, K0> reversedKey = theKeyManager.reverse((K) key, true);
+		FilterMapResult<K, K0> reversedKey = theKeyManager.reverse((K) key, false, true);
 		if (!reversedKey.isAccepted())
 			return theValueFlow.apply(theSourceMap.get(NULL_KEY).flow()).collectPassive();
 		return theValueFlow.apply(theSourceMap.get(reversedKey.result).flow()).collectPassive();
@@ -298,13 +298,13 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 		public boolean belongs(Object o) {
 			if (!(TypeTokens.get().isInstance(theValueManager.getTargetType(), o)))
 				return false;
-			FilterMapResult<V, V0> reversedValue = theValueManager.reverse((V) o, true);
+			FilterMapResult<V, V0> reversedValue = theValueManager.reverse((V) o, false, true);
 			return reversedValue.isAccepted();
 		}
 
 		@Override
 		public CollectionElement<V> getElement(V value, boolean first) {
-			FilterMapResult<V, V0> reversedValue = theValueManager.reverse(value, true);
+			FilterMapResult<V, V0> reversedValue = theValueManager.reverse(value, false, true);
 			if (!reversedValue.isAccepted())
 				return null;
 			return elementFor(theSourceValues.getElement(reversedValue.result, first ^ theValueManager.isReversed()));
@@ -353,7 +353,7 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 
 		@Override
 		public String canAdd(V value, ElementId after, ElementId before) {
-			FilterMapResult<V, V0> reversedValue = theValueManager.reverse(value, true);
+			FilterMapResult<V, V0> reversedValue = theValueManager.reverse(value, true, true);
 			if (!reversedValue.isAccepted())
 				return reversedValue.getRejectReason();
 			boolean reversed = theKeyManager.isReversed();
@@ -365,7 +365,7 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 		@Override
 		public CollectionElement<V> addElement(V value, ElementId after, ElementId before, boolean first)
 			throws UnsupportedOperationException, IllegalArgumentException {
-			FilterMapResult<V, V0> reversedValue = theValueManager.reverse(value, true);
+			FilterMapResult<V, V0> reversedValue = theValueManager.reverse(value, true, false);
 			reversedValue.throwIfRejected();
 			boolean reversed = theKeyManager.isReversed();
 			return elementFor(theSourceValues.addElement(reversedValue.result, //
@@ -453,7 +453,7 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 
 			@Override
 			public String isAcceptable(V value) {
-				FilterMapResult<V, V0> reversed = getValueManager().reverse(value, false);
+				FilterMapResult<V, V0> reversed = getValueManager().reverse(value, true, true);
 				if (reversed.getRejectReason() != null)
 					return reversed.getRejectReason();
 				return getSourceEl().isAcceptable(reversed.result);
@@ -461,7 +461,7 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 
 			@Override
 			public void set(V value) throws UnsupportedOperationException, IllegalArgumentException {
-				FilterMapResult<V, V0> reversed = getValueManager().reverse(value, false);
+				FilterMapResult<V, V0> reversed = getValueManager().reverse(value, true, false);
 				reversed.throwIfRejected();
 				getSourceEl().set(reversed.result);
 			}

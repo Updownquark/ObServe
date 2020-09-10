@@ -7,7 +7,7 @@ import java.util.Map;
 import java.util.TreeMap;
 
 import org.junit.Assert;
-import org.observe.collect.Equivalence;
+import org.observe.Equivalence;
 import org.observe.collect.FlowOptions;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;

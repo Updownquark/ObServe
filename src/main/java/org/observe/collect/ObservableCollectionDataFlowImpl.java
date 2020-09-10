@@ -2,29 +2,25 @@ package org.observe.collect;
 
 import java.util.Collection;
 import java.util.Comparator;
-import java.util.IdentityHashMap;
-import java.util.Map;
+import java.util.List;
 import java.util.Objects;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
-import org.observe.Combination.ReversibleCombinationDef;
-import org.observe.Combination.ReversibleCombinationPrecursor;
+import org.observe.Equivalence;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
-import org.observe.XformOptions;
+import org.observe.Transformation;
+import org.observe.Transformation.ReversibleTransformationPrecursor;
 import org.observe.assoc.ObservableMultiMap.MultiMapFlow;
 import org.observe.assoc.ObservableSortedMultiMap.SortedMultiMapFlow;
 import org.observe.assoc.impl.AddKeyHolder;
 import org.observe.assoc.impl.DefaultMultiMapFlow;
 import org.observe.assoc.impl.DefaultSortedMultiMapFlow;
 import org.observe.collect.FlatMapOptions.FlatMapDef;
-import org.observe.collect.FlowOptions.MapDef;
-import org.observe.collect.FlowOptions.MapOptions;
-import org.observe.collect.FlowOptions.ReverseQueryResult;
 import org.observe.collect.FlowOptions.SimpleUniqueOptions;
 import org.observe.collect.FlowOptions.UniqueOptions;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
@@ -40,6 +36,8 @@ import org.observe.util.TypeTokens;
 import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.LambdaUtils;
+import org.qommons.Lockable;
+import org.qommons.QommonsUtils;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
@@ -213,7 +211,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		/**
-		 * @param source The intermiediate value
+		 * @param source The intermediate value
 		 * @return The mapped result value
 		 */
 		public T mapIntermediate(I source) {
@@ -645,19 +643,10 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public <X> CollectionDataFlow<E, T, X> map(TypeToken<X> target, BiFunction<? super T, ? super X, ? extends X> map,
-			Consumer<MapOptions<T, X>> options) {
-			MapOptions<T, X> mapOptions = new MapOptions<>();
-			if (options != null)
-				options.accept(mapOptions);
-			return new MapOp<>(theSource, this, target, map, new MapDef<>(mapOptions));
-		}
-
-		@Override
-		public <X> CollectionDataFlow<E, T, X> combine(TypeToken<X> targetType,
-			Function<ReversibleCombinationPrecursor<T, X>, ReversibleCombinationDef<T, X>> combination) {
-			ReversibleCombinationDef<T, X> def = combination.apply(new ReversibleCombinationPrecursor<>());
-			return new CombinedCollectionOp<>(theSource, this, targetType, def);
+		public <X> CollectionDataFlow<E, T, X> transform(TypeToken<X> targetType,
+			Function<Transformation.ReversibleTransformationPrecursor<T, X, ?>, Transformation<T, X>> combination) {
+			Transformation<T, X> def = combination.apply(new ReversibleTransformationPrecursor<>());
+			return new TransformedCollectionOp<>(theSource, this, targetType, def, null);
 		}
 
 		@Override
@@ -745,7 +734,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		private <K> CollectionDataFlow<E, ?, T> gatherValues(AddKeyHolder.Default<K> addKey, BiFunction<K, T, T> reverse) {
-			return map(getTargetType(), v -> v, opts -> opts.withReverse(v -> {
+			return transform(getTargetType(), tx -> tx.map(v -> v).withReverse(v -> {
 				if (addKey.get() != null)
 					return reverse.apply(addKey.get(), v);
 				else
@@ -953,75 +942,14 @@ public class ObservableCollectionDataFlowImpl {
 	}
 
 	/**
-	 * Implements {@link CollectionDataFlow#map(TypeToken, Function, Consumer)}
-	 *
-	 * @param <E> The type of the source collection
-	 * @param <I> The target type of this flow's parent flow
-	 * @param <T> The type of values produced by this flow
-	 */
-	protected static class MapOp<E, I, T> extends AbstractDataFlow<E, I, T> {
-		private final BiFunction<? super I, ? super T, ? extends T> theMap;
-		private final MapDef<I, T> theOptions;
-
-		/**
-		 * @param source The source collection
-		 * @param parent This flow's parent (not null)
-		 * @param target The type of this flow
-		 * @param map The mapping function to produce this flow's values from its parent's
-		 * @param options The mapping options governing certain aspects of this flow's behavior, e.g. caching
-		 */
-		protected MapOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, I> parent, TypeToken<T> target,
-			BiFunction<? super I, ? super T, ? extends T> map, MapDef<I, T> options) {
-			super(source, parent, target, mapEquivalence(parent.getTargetType(), parent.equivalence(), target, map, options));
-			theMap = map;
-			theOptions = options;
-		}
-
-		@Override
-		protected Object createIdentity() {
-			return Identifiable.wrap(getParent().getIdentity(), "map", theMap, theOptions);
-		}
-
-		@Override
-		public boolean supportsPassive() {
-			if (theOptions.isCached())
-				return false;
-			return getParent().supportsPassive();
-		}
-
-		@Override
-		public PassiveCollectionManager<E, ?, T> managePassive() {
-			return new ObservableCollectionPassiveManagers.PassiveMappedCollectionManager<>(getParent().managePassive(), getTargetType(),
-				LambdaUtils.printableFn(src -> theMap.apply(src, null), theMap::toString), //
-				equivalence(), theOptions);
-		}
-
-		@Override
-		public ActiveCollectionManager<E, ?, T> manageActive() {
-			return new ObservableCollectionActiveManagers.ActiveMappedCollectionManager<>(getParent().manageActive(), getTargetType(),
-				theMap, equivalence(), theOptions);
-		}
-	}
-
-	private static <I, T> Equivalence<? super T> mapEquivalence(TypeToken<I> srcType, Equivalence<? super I> equivalence,
-		TypeToken<T> targetType, BiFunction<? super I, ? super T, ? extends T> map, MapDef<I, T> options) {
-		if (options.getEquivalence() != null)
-			return options.getEquivalence();
-		else if (srcType.equals(targetType))
-			return (Equivalence<? super T>) equivalence;
-		else
-			return Equivalence.DEFAULT;
-	}
-
-	/**
 	 * Defines a combination of a single source collection with one or more observable values
 	 *
 	 * @param <E> The type of elements in the source collection
 	 * @param <I> Intermediate type
 	 * @param <T> The type of elements in the resulting collection
 	 */
-	public static class CombinedCollectionOp<E, I, T> extends AbstractDataFlow<E, I, T> {
-		private final ReversibleCombinationDef<I, T> theDef;
+	public static class TransformedCollectionOp<E, I, T> extends AbstractDataFlow<E, I, T> {
+		private final Transformation<I, T> theDef;
 
 		/**
 		 * @param source The source collection
@@ -1029,11 +957,13 @@ public class ObservableCollectionDataFlowImpl {
 		 * @param target The type of this flow
 		 * @param def The combination definition used to produce this flow's values from its parent's and to govern certain aspects of this
 		 *        flow's behavior, e.g. caching
+		 * @param equivalence The equivalence for this flow, or null to use the transformation's {@link Transformation#equivalence()
+		 *        equivalence}
 		 */
-		protected CombinedCollectionOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, I> parent, TypeToken<T> target,
-			ReversibleCombinationDef<I, T> def) {
-			super(source, parent, target,
-				parent.getTargetType().equals(target) ? (Equivalence<? super T>) parent.equivalence() : Equivalence.DEFAULT);
+		protected TransformedCollectionOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, I> parent, TypeToken<T> target,
+			Transformation<I, T> def, Equivalence<? super T> equivalence) {
+			super(source, parent, target, equivalence != null ? equivalence
+				: (parent.getTargetType().equals(target) ? (Equivalence<? super T>) parent.equivalence() : Equivalence.DEFAULT));
 			theDef = def;
 		}
 
@@ -1056,13 +986,13 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public PassiveCollectionManager<E, ?, T> managePassive() {
-			return new ObservableCollectionPassiveManagers.PassiveCombinedCollectionManager<>(getParent().managePassive(), getTargetType(),
-				theDef);
+			return new ObservableCollectionPassiveManagers.PassiveTransformedCollectionManager<>(getParent().managePassive(),
+				getTargetType(), theDef);
 		}
 
 		@Override
 		public ActiveCollectionManager<E, ?, T> manageActive() {
-			return new ObservableCollectionActiveManagers.ActiveCombinedCollectionManager<>(getParent().manageActive(), getTargetType(),
+			return new ObservableCollectionActiveManagers.ActiveTransformedCollectionManager<>(getParent().manageActive(), getTargetType(),
 				theDef);
 		}
 	}
@@ -1133,13 +1063,15 @@ public class ObservableCollectionDataFlowImpl {
 	 * @param <I> The type of the source element to set values of
 	 * @param <T> The type of the values to set in the source elements
 	 */
-	public interface FlowElementSetter<I, T> extends FlowOptions.MapReverse<I, T> {
+	public interface FlowElementSetter<I, T> extends Transformation.TransformReverse<I, T> {
 		/**
+		 * Called prior to {@link DerivedCollectionElement#set(Object)}
+		 *
 		 * @param element The source element
 		 * @param newValue The new mapped value
-		 * @return The value to set in the source element
+		 * @return The action to call after the set operation
 		 */
-		I reverse(DerivedCollectionElement<? extends I> element, T newValue);
+		Runnable preSet(DerivedCollectionElement<? extends I> element, T newValue);
 	}
 
 	private static class FlattenedValuesOp<E, I, T> extends AbstractDataFlow<E, I, T> {
@@ -1177,43 +1109,35 @@ public class ObservableCollectionDataFlowImpl {
 				}
 
 				@Override
-				public ReverseQueryResult<ObservableValue<? extends T>> canReverse(
-					Supplier<? extends ObservableValue<? extends T>> previousSource, T newValue) {
-					if (previousSource == null)
-						return ReverseQueryResult.reject(StdMsg.UNSUPPORTED_OPERATION);
-					ObservableValue<? extends T> sourceValue = previousSource.get();
-					if (!(sourceValue instanceof SettableValue))
-						return ReverseQueryResult.reject(StdMsg.UNSUPPORTED_OPERATION);
-					if (!TypeTokens.get().isInstance(sourceValue.getType(), newValue))
-						return ReverseQueryResult.reject(StdMsg.BAD_TYPE);
-					String msg = ((SettableValue<T>) sourceValue).isAcceptable(newValue);
-					if (msg != null)
-						return ReverseQueryResult.reject(msg);
-					return ReverseQueryResult.value(sourceValue);
+				public String isEnabled(Transformation.TransformationValues<ObservableValue<? extends T>, T> transformValues) {
+					ObservableValue<? extends T> value = transformValues.getCurrentSource();
+					if (!(value instanceof SettableValue))
+						return StdMsg.UNSUPPORTED_OPERATION;
+					else
+						return ((SettableValue<? extends T>) value).isEnabled().get();
 				}
 
 				@Override
-				public ObservableValue<? extends T> reverse(Supplier<? extends ObservableValue<? extends T>> previousSource, T newValue) {
-					if (previousSource == null)
-						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-					ObservableValue<? extends T> sourceValue = previousSource.get();
+				public org.observe.Transformation.ReverseQueryResult<ObservableValue<? extends T>> reverse(T newValue,
+					Transformation.TransformationValues<ObservableValue<? extends T>, T> transformValues, boolean add, boolean test) {
+					ObservableValue<? extends T> sourceValue = transformValues.getCurrentSource();
 					if (!(sourceValue instanceof SettableValue))
-						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+						return Transformation.ReverseQueryResult.reject(StdMsg.UNSUPPORTED_OPERATION);
 					if (!TypeTokens.get().isInstance(sourceValue.getType(), newValue))
-						throw new IllegalArgumentException(StdMsg.BAD_TYPE);
-					((SettableValue<T>) sourceValue).set(newValue, null);
-					return sourceValue;
+						return Transformation.ReverseQueryResult.reject(StdMsg.BAD_TYPE);
+					if(test){
+						String msg = ((SettableValue<T>) sourceValue).isAcceptable(newValue);
+						if (msg != null)
+							return Transformation.ReverseQueryResult.reject(msg);
+					} else
+						((SettableValue<T>) sourceValue).set(newValue, null);
+					return Transformation.ReverseQueryResult.value(sourceValue);
 				}
 
 				@Override
-				public ObservableValue<? extends T> reverse(DerivedCollectionElement<? extends ObservableValue<? extends T>> element,
-					T newValue) {
+				public Runnable preSet(DerivedCollectionElement<? extends ObservableValue<? extends T>> element, T newValue) {
 					settingElement.accept(element);
-					try {
-						return reverse(element::get, newValue);
-					} finally {
-						settingElement.clear();
-					}
+					return settingElement::clear;
 				}
 
 				@Override
@@ -1234,27 +1158,29 @@ public class ObservableCollectionDataFlowImpl {
 			ActiveCollectionManager<E, ?, T> manager = getParent()//
 				.map(valueType, theMap)//
 				.refreshEach(LambdaUtils.printableFn(ObservableValue::noInitChanges, "noInitChanges", "ObservableValue.noInitChanges"))//
-				.map(getTargetType(), //
-					LambdaUtils.printableFn(obs -> obs == null ? null : obs.get(), () -> "flatten"), //
-					options -> options//
-					.withReverse(new RefreshingMapReverse()).propagateUpdateToParent(false))//
+				.transform(getTargetType(), tx -> {
+					return tx.map(LambdaUtils.printableFn(obs -> obs == null ? null : obs.get(), () -> "flatten"))
+						.withReverse(new RefreshingMapReverse());
+				})//
 				.manageActive();
-			if (manager instanceof AbstractMappingManager//
-				&& ((AbstractMappingManager<?, ?, ?>) manager)
-				.getParent() instanceof ObservableCollectionActiveManagers2.ElementRefreshingCollectionManager) {
-				/* There is a very narrow condition in which a child collection calls set on a settable element of this manager,
-				 * but the element refresh affects more than just the desired element, which may result in re-ordering in the child
-				 * collection and removal of the element that the set operation was called on.
-				 *
-				 * This is a violation of the set contract, so we have to punch a few holes here to prevent this.
-				 * Basically, we ensure that when set is called on an element in the mapped manager, it notifies the refreshEach manager
-				 * that that particular element should be taken care of first.
-				 * This should always result in the target element being preserved, though other affected elements may be reordered.
-				 */
-				ObservableCollectionActiveManagers2.ElementRefreshingCollectionManager<E, ObservableValue<? extends T>> refresh;
-				refresh = (ObservableCollectionActiveManagers2.ElementRefreshingCollectionManager<E, ObservableValue<? extends T>>) //
-					((AbstractMappingManager<?, ?, ?>) manager).getParent();
-				refresh.withSettingElement(settingElement);
+			if (manager instanceof AbstractMappingManager) {
+				((AbstractMappingManager<E, ?, I>) manager).propagateUpdatesToParent = false;
+				if (((AbstractMappingManager<?, ?, ?>) manager)
+					.getParent() instanceof ObservableCollectionActiveManagers2.ElementRefreshingCollectionManager) {
+					/* There is a very narrow condition in which a child collection calls set on a settable element of this manager,
+					 * but the element refresh affects more than just the desired element, which may result in re-ordering in the child
+					 * collection and removal of the element that the set operation was called on.
+					 *
+					 * This is a violation of the set contract, so we have to punch a few holes here to prevent this.
+					 * Basically, we ensure that when set is called on an element in the mapped manager, it notifies the refreshEach manager
+					 * that that particular element should be taken care of first.
+					 * This should always result in the target element being preserved, though other affected elements may be reordered.
+					 */
+					ObservableCollectionActiveManagers2.ElementRefreshingCollectionManager<E, ObservableValue<? extends T>> refresh;
+					refresh = (ObservableCollectionActiveManagers2.ElementRefreshingCollectionManager<E, ObservableValue<? extends T>>) //
+						((AbstractMappingManager<?, ?, ?>) manager).getParent();
+					refresh.withSettingElement(settingElement);
+				}
 			}
 			return manager;
 		}
@@ -1334,14 +1260,20 @@ public class ObservableCollectionDataFlowImpl {
 	}
 
 	static abstract class AbstractMappingManager<E, I, T> implements CollectionOperation<E, I, T> {
-		private final CollectionOperation<E, ?, I> theParent;
+		final CollectionOperation<E, ?, I> theParent;
 		private final TypeToken<T> theTargetType;
-		private final XformOptions.XformDef theOptions;
+		final Transformation.Engine<I, T> theEngine;
+		/**
+		 * This boolean is a back door for FlattenedValuesOp to allow it to avoid firing events to the collection made of ObservableValues
+		 */
+		boolean propagateUpdatesToParent;
 
-		protected AbstractMappingManager(CollectionOperation<E, ?, I> parent, TypeToken<T> targetType, XformOptions.XformDef options) {
+		protected AbstractMappingManager(CollectionOperation<E, ?, I> parent, TypeToken<T> targetType,
+			Transformation<I, T> transformation) {
 			theParent = parent;
 			theTargetType = targetType;
-			theOptions = options;
+			theEngine = transformation.createEngine(theParent.equivalence());
+			propagateUpdatesToParent = true;
 		}
 
 		protected CollectionOperation<E, ?, I> getParent() {
@@ -1353,164 +1285,98 @@ public class ObservableCollectionDataFlowImpl {
 			return theTargetType;
 		}
 
-		protected XformOptions.XformDef getOptions() {
-			return theOptions;
+		protected Transformation.Engine<I, T> getEngine() {
+			return theEngine;
+		}
+
+		protected Transformation<I, T> getTransformation() {
+			return theEngine.getTransformation();
 		}
 
 		@Override
 		public boolean isLockSupported() {
-			return theParent.isLockSupported();
+			return theParent.isLockSupported() || theEngine.isLockSupported();
 		}
 
 		@Override
 		public Transaction lock(boolean write, Object cause) {
-			return theParent.lock(write, cause);
+			return Lockable.lockAll(Lockable.lockable(theParent, write, cause), theEngine);
 		}
 
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
-			return theParent.tryLock(write, cause);
+			return Lockable.tryLockAll(Lockable.lockable(theParent, write, cause), theEngine);
 		}
 
 		@Override
 		public boolean isContentControlled() {
-			return !isReversible() || theOptions.isOneToMany() || theParent.isContentControlled();
+			return !isReversible() || theEngine.getTransformation().isOneToMany() || theParent.isContentControlled();
 		}
 
-		protected abstract T map(I value, T previousValue);
+		protected boolean isReversible() {
+			return theEngine.getTransformation() instanceof Transformation.ReversibleTransformation;
+		}
 
-		protected abstract boolean isReversible();
+		@Override
+		public Object getIdentity() {
+			return theEngine.getTransformation().getIdentity();
+		}
 
-		protected abstract ReverseQueryResult<I> canReverse(Supplier<? extends I> previousSource, T newValue);
-
-		protected abstract I reverse(AbstractMappedElement preSourceEl, T value);
-
-		protected abstract boolean isReverseStateful();
+		@Override
+		public Equivalence<? super T> equivalence() {
+			return theEngine.getTransformation().equivalence();
+		}
 
 		protected abstract void doParentMultiSet(Collection<AbstractMappedElement> elements, I newValue);
 
 		protected void setElementsValue(Collection<?> elements, T newValue) throws UnsupportedOperationException, IllegalArgumentException {
-			if (isReversible() && isReverseStateful()) {
-				// Since the reversal depends on the previous value of each individual element here, we can't really do anything in bulk
-				// Don't perform the operation on the same parent value twice, even if it exists in multiple elements
-				Map<I, I> parentValues = new IdentityHashMap<>();
+			List<Transformation.TransformedElement<I, T>> txElements = QommonsUtils.map(elements,
+				el -> ((AbstractMappedElement) el).transformElement, false);
+			List<I> sourceValues = theEngine.setElementsValue(txElements, newValue);
+			if (!propagateUpdatesToParent) { // Don't notify the parent
+			} else if (sourceValues.size() == 1)
+				doParentMultiSet((Collection<AbstractMappedElement>) elements, sourceValues.get(0));
+			else {
+				int i = 0;
 				for (AbstractMappedElement el : (Collection<AbstractMappedElement>) elements) {
-					I parentValue = el.getParentValue();
-					I newParentValue = parentValues.computeIfAbsent(parentValue, pv -> {
-						return reverse(el, newValue);
-					});
-					if (theOptions.isPropagatingUpdatesToParent() || !getParent().equivalence().elementEquals(parentValue, newParentValue))
-						el.setParent(newParentValue);
-				}
-				return;
-			}
-			if (theOptions.isCached()) {
-				I oldSource = null;
-				boolean first = true, allUpdates = true, allIdenticalUpdates = true;
-				for (AbstractMappedElement el : (Collection<AbstractMappedElement>) elements) {
-					boolean elementUpdate = equivalence().elementEquals(el.getValue(), newValue);
-					allUpdates &= elementUpdate;
-					allIdenticalUpdates &= allUpdates;
-					if (!allUpdates)
-						break;
-					if (allIdenticalUpdates) {
-						I elOldValue = el.getCachedSource();
-						if (first) {
-							oldSource = elOldValue;
-							first = false;
-						} else
-							allIdenticalUpdates &= theParent.equivalence().elementEquals(oldSource, elOldValue);
-					}
-				}
-				if (allUpdates && !theOptions.isPropagatingUpdatesToParent())
-					return;
-				else if (allIdenticalUpdates) {
-					doParentMultiSet((Collection<AbstractMappedElement>) elements, oldSource);
-					return;
-				} else if (allUpdates) {
-					for (AbstractMappedElement el : (Collection<AbstractMappedElement>) elements)
-						el.setParent(el.getCachedSource());
-					return;
+					I sourceVal = sourceValues.get(i);
+					el.setParent(sourceVal);
+					i++;
 				}
 			}
-			if (isReversible()) {
-				I reversed = reverse(null, newValue);
-				if (!equivalence().elementEquals(map(reversed, newValue), newValue))
-					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
-				doParentMultiSet((Collection<AbstractMappedElement>) elements, reversed);
-			} else
-				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 		}
 
 		protected abstract class AbstractMappedElement {
-			abstract T getValue();
+			protected final Transformation.TransformedElement<I, T> transformElement;
 
-			abstract I getParentValue();
+			AbstractMappedElement(Supplier<I> sourceValue) {
+				transformElement = theEngine.createElement(sourceValue);
+			}
 
-			abstract I getCachedSource();
+			protected abstract String isParentEnabled();
 
 			protected abstract String isParentAcceptable(I value);
 
 			abstract void setParent(I parentValue);
 
-			public T mapForElement(I source, T value) {
-				return map(source, value);
-			}
-
-			public I reverseForElement(T source) {
-				return reverse(this, source);
-			}
-
 			protected String isEnabledLocal() {
-				// If updates on this element may not have an effect on the source, then such an operation can't be prevented by the source
-				if (isReversible() && !theOptions.isPropagatingUpdatesToParent())
-					return null;
-				// If we're caching, updates are enabled even without a reverse map
-				if (!isReversible() && !theOptions.isCached())
-					return StdMsg.UNSUPPORTED_OPERATION;
-				return null;
-			}
-
-			protected String isAcceptable(T value) {
-				String msg = null;
-				I reversed;
-				if (isReversible() && isReverseStateful()) {
-					ReverseQueryResult<I> result = canReverse(this::getCachedSource, value);
-					if (result.getError() != null)
-						return result.getError();
-					reversed = result.getReversed();
-				} else {
-					if (theOptions.isCached() && equivalence().elementEquals(getValue(), value)) {
-						reversed = getCachedSource();
-					} else {
-						if (!isReversible())
-							return StdMsg.UNSUPPORTED_OPERATION;
-						reversed = reverseForElement(value);
-						if (!equivalence().elementEquals(mapForElement(reversed, value), value))
-							return StdMsg.ILLEGAL_ELEMENT;
-					}
-				}
-				// If the element reverse is set, it should get the final word on the error message
-				if (msg == null
-					&& (theOptions.isPropagatingUpdatesToParent() || !getParent().equivalence().elementEquals(getCachedSource(), reversed)))
-					msg = isParentAcceptable(reversed);
+				String msg = transformElement.isEnabled(theEngine.get());
+				if (msg == null && propagateUpdatesToParent)
+					msg = isParentEnabled();
 				return msg;
 			}
 
+			protected String isAcceptable(T value) {
+				org.observe.Transformation.ReverseQueryResult<I> rq = transformElement.set(value, //
+					theEngine.get(), true);
+				if (rq.getError() != null)
+					return rq.getError();
+				return propagateUpdatesToParent ? isParentAcceptable(rq.getReversed()) : null;
+			}
+
 			protected void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
-				I reversed;
-				if (isReversible() && isReverseStateful()) {
-					reversed = reverse(this, value);
-				} else if (theOptions.isCached() && equivalence().elementEquals(getValue(), value))
-					reversed = getCachedSource();
-				else if (!isReversible())
-					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-				else {
-					reversed = reverseForElement(value);
-					if (!equivalence().elementEquals(mapForElement(reversed, value), value))
-						throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
-				}
-				if (theOptions.isPropagatingUpdatesToParent() || !getParent().equivalence().elementEquals(getCachedSource(), reversed))
+				I reversed = transformElement.set(value, theEngine.get(), false).getReversed();
+				if (propagateUpdatesToParent)
 					setParent(reversed);
 			}
 		}

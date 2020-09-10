@@ -1,24 +1,15 @@
 package org.observe.collect;
 
 import java.util.Collection;
-import java.util.IdentityHashMap;
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
-import org.observe.Combination;
-import org.observe.Combination.ReversibleCombinationDef;
+import org.observe.Equivalence;
 import org.observe.Observable;
 import org.observe.ObservableValue;
-import org.observe.ObservableValueEvent;
-import org.observe.Observer;
-import org.observe.Subscription;
-import org.observe.XformOptions;
-import org.observe.collect.FlowOptions.MapDef;
-import org.observe.collect.FlowOptions.ReverseQueryResult;
+import org.observe.Transformation;
+import org.observe.Transformation.TransformationState;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.AbstractMappingManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionOperation;
@@ -26,7 +17,6 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
 import org.observe.collect.ObservableCollectionDataFlowImpl.MapWithParent;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ModFilterer;
 import org.qommons.BiTuple;
-import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.Lockable;
@@ -51,7 +41,7 @@ public class ObservableCollectionPassiveManagers {
 	 * @param <I> An intermediate type
 	 * @param <T> The type of the derived collection that this manager can power
 	 */
-	public static interface PassiveCollectionManager<E, I, T> extends CollectionOperation<E, I, T> {
+	public static interface PassiveCollectionManager<E, I, T> extends CollectionOperation<E, I, T>, Stamped {
 		/** @return Whether this manager is the result of an odd number of {@link CollectionDataFlow#reverse() reverse} operations */
 		boolean isReversed();
 
@@ -65,20 +55,22 @@ public class ObservableCollectionPassiveManagers {
 
 		/**
 		 * @param dest The filter-map structure whose source is the value to convert
-		 * @param forAdd Whether this operation is a precursor to inserting the value into the collection
+		 * @param forAdd Whether this operation should return an error if the value cannot be an element in the collection
+		 * @param test True if the value will be discarded after this operation, false if it may be kept as part of the collection
 		 * @return The filter-mapped result (typically the same instance as <code>dest</code>)
 		 */
-		FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest, boolean forAdd);
+		FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest, boolean forAdd, boolean test);
 
 		/**
 		 * A shortcut for reversing a value
 		 *
 		 * @param dest The value to convert
-		 * @param forAdd Whether this operation is a precursor to inserting the value into the collection
+		 * @param forAdd Whether this operation should return an error if the value cannot be an element in the collection
+		 * @param test True if the value will be discarded after this operation, false if it may be kept as part of the collection
 		 * @return The filter-mapped result
 		 */
-		default FilterMapResult<T, E> reverse(T dest, boolean forAdd) {
-			return reverse(new FilterMapResult<>(dest), forAdd);
+		default FilterMapResult<T, E> reverse(T dest, boolean forAdd, boolean test) {
+			return reverse(new FilterMapResult<>(dest), forAdd, test);
 		}
 
 		/** @return Whether this manager may disallow some remove operations */
@@ -175,6 +167,11 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
+		public long getStamp() {
+			return theSource.getStamp();
+		}
+
+		@Override
 		public TypeToken<E> getTargetType() {
 			return theSource.getType();
 		}
@@ -205,7 +202,7 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
-		public FilterMapResult<E, E> reverse(FilterMapResult<E, E> dest, boolean forAdd) {
+		public FilterMapResult<E, E> reverse(FilterMapResult<E, E> dest, boolean forAdd, boolean test) {
 			dest.result = dest.source;
 			return dest;
 		}
@@ -256,6 +253,9 @@ public class ObservableCollectionPassiveManagers {
 
 		@Override
 		public Equivalence<? super T> equivalence() {
+			Equivalence<? super T> equiv = theParent.equivalence();
+			if (equiv instanceof Equivalence.ComparatorEquivalence)
+				return ((Equivalence.ComparatorEquivalence<? super T>) equiv).reverse();
 			return theParent.equivalence();
 		}
 
@@ -272,6 +272,11 @@ public class ObservableCollectionPassiveManagers {
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return theParent.tryLock(write, cause);
+		}
+
+		@Override
+		public long getStamp() {
+			return theParent.getStamp();
 		}
 
 		@Override
@@ -295,8 +300,8 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
-		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest, boolean forAdd) {
-			return theParent.reverse(dest, forAdd);
+		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest, boolean forAdd, boolean test) {
+			return theParent.reverse(dest, forAdd, test);
 		}
 
 		@Override
@@ -367,6 +372,11 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
+		public long getStamp() {
+			return theParent.getStamp();
+		}
+
+		@Override
 		public boolean isContentControlled() {
 			return theParent.isContentControlled();
 		}
@@ -387,8 +397,8 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
-		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest, boolean forAdd) {
-			return theParent.reverse(dest, forAdd);
+		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest, boolean forAdd, boolean test) {
+			return theParent.reverse(dest, forAdd, test);
 		}
 
 		@Override
@@ -417,15 +427,21 @@ public class ObservableCollectionPassiveManagers {
 		}
 	}
 
-	private static abstract class AbstractPassiveMappingManager<E, I, T> extends AbstractMappingManager<E, I, T>
+	static class PassiveTransformedCollectionManager<E, I, T> extends AbstractMappingManager<E, I, T>
 	implements PassiveCollectionManager<E, I, T> {
-		AbstractPassiveMappingManager(PassiveCollectionManager<E, ?, I> parent, TypeToken<T> targetType, XformOptions.XformDef options) {
-			super(parent, targetType, options);
+		PassiveTransformedCollectionManager(PassiveCollectionManager<E, ?, I> parent, TypeToken<T> targetType,
+			Transformation<I, T> transformation) {
+			super(parent, targetType, transformation);
 		}
 
 		@Override
 		protected PassiveCollectionManager<E, ?, I> getParent() {
 			return (PassiveCollectionManager<E, ?, I>) super.getParent();
+		}
+
+		@Override
+		public long getStamp() {
+			return Stamped.compositeStamp(getParent().getStamp(), getTransformation().createEngine(getParent().equivalence()).getStamp());
 		}
 
 		@Override
@@ -435,8 +451,15 @@ public class ObservableCollectionPassiveManagers {
 
 		@Override
 		protected void doParentMultiSet(Collection<AbstractMappedElement> elements, I newValue) {
-			getParent().setValue(elements.stream().map(el -> ((PassiveMappedElement) el).getParentEl()).collect(Collectors.toList()),
+			getParent().setValue(elements.stream().map(el -> ((TransformedElement) el).getParentEl()).collect(Collectors.toList()),
 				newValue);
+		}
+
+		@Override
+		public ObservableValue<? extends Function<? super E, ? extends T>> map() {
+			return getParent().map().transform(null, tx -> tx.combineWith(getEngine()).combine((parentMap, state) -> {
+				return new TransformedMap(parentMap, state);
+			}));
 		}
 
 		@Override
@@ -447,19 +470,19 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
-		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest, boolean forAdd) {
-			if (!isReversible())
-				return dest.reject(StdMsg.UNSUPPORTED_OPERATION, true);
-			T value = dest.source;
-			ReverseQueryResult<I> qr = canReverse(null, value);
-			if (qr.getError() != null)
-				return dest.reject(qr.getError(), true);
+		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest, boolean forAdd, boolean test) {
+			I reversed;
+			if(!forAdd || test){
+				org.observe.Transformation.ReverseQueryResult<I> qr=getEngine().reverse(dest.source, forAdd, test);
+				if(qr.getError()!=null)
+					return dest.reject(qr.getError(), true);
+				reversed=qr.getReversed();
+			} else
+				reversed = getEngine().reverse(dest.source, true, false).getReversed();
 			FilterMapResult<I, E> intermediate = (FilterMapResult<I, E>) dest;
-			intermediate.source = qr.getReversed();
+			intermediate.source = reversed;
 			intermediate.result=null;
-			if (intermediate.isAccepted() && !equivalence().elementEquals(map(intermediate.source, null), value))
-				return dest.reject(StdMsg.ILLEGAL_ELEMENT, true);
-			return (FilterMapResult<T, E>) getParent().reverse(intermediate, forAdd);
+			return (FilterMapResult<T, E>) getParent().reverse(intermediate, forAdd, test);
 		}
 
 		@Override
@@ -469,34 +492,16 @@ public class ObservableCollectionPassiveManagers {
 
 		@Override
 		public BiTuple<T, T> map(E oldSource, E newSource, Function<? super E, ? extends T> map) {
-			if (oldSource == newSource) {
-				if (!getOptions().isFireIfUnchanged())
-					return null;
-				if (!getOptions().isReEvalOnUpdate()) {
-					T newDest = map.apply(newSource);
-					return new BiTuple<>(newDest, newDest);
-				}
-			}
-			MapWithParent<E, I, T> mwp = (MapWithParent<E, I, T>) map;
-			BiTuple<I, I> interm = getParent().map(oldSource, newSource, mwp.getParentMap());
+			TransformedMap cm = (TransformedMap) map;
+			BiTuple<I, I> interm = getParent().map(oldSource, newSource, cm.getParentMap());
 			if (interm == null)
 				return null;
-			if (interm.getValue1() == interm.getValue2()) {
-				if (!getOptions().isFireIfUnchanged())
-					return null;
-				if (!getOptions().isReEvalOnUpdate()) {
-					T newDest = mwp.mapIntermediate(interm.getValue2());
-					return new BiTuple<>(newDest, newDest);
-				}
-			}
-			T v1 = mwp.mapIntermediate(interm.getValue1());
-			T v2 = mwp.mapIntermediate(interm.getValue2());
-			return new BiTuple<>(v1, v2);
+			return getEngine().createElement(interm::getValue1).sourceChanged(interm.getValue1(), interm.getValue2(), cm.theState);
 		}
 
 		@Override
 		public boolean isManyToOne() {
-			return getOptions().isManyToOne() || getParent().isManyToOne();
+			return getTransformation().isManyToOne() || getParent().isManyToOne();
 		}
 
 		@Override
@@ -505,13 +510,18 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
-		public abstract PassiveMappedElement map(MutableCollectionElement<E> source, Function<? super E, ? extends T> map);
+		public TransformedElement map(MutableCollectionElement<E> source, Function<? super E, ? extends T> map) {
+			return new TransformedElement(source, map);
+		}
 
-		protected abstract class PassiveMappedElement extends AbstractMappedElement implements MutableCollectionElement<T> {
+		protected class TransformedElement extends AbstractMappedElement implements MutableCollectionElement<T> {
 			private final MutableCollectionElement<I> theParentEl;
+			private final TransformedMap theTransformedMap;
 
-			protected PassiveMappedElement(MutableCollectionElement<I> parentEl) {
-				theParentEl = parentEl;
+			protected TransformedElement(MutableCollectionElement<E> sourceEl, Function<? super E, ? extends T> map) {
+				super(() -> ((MapWithParent<E, I, T>) map).getParentMap().apply(sourceEl.get()));
+				theTransformedMap = (TransformedMap) map;
+				theParentEl = getParent().map(sourceEl, theTransformedMap.getParentMap());
 			}
 
 			protected MutableCollectionElement<I> getParentEl() {
@@ -525,7 +535,7 @@ public class ObservableCollectionPassiveManagers {
 
 			@Override
 			public T get() {
-				return mapForElement(theParentEl.get(), null);
+				return transformElement.getCurrentValue(getEngine().get());
 			}
 
 			@Override
@@ -559,18 +569,8 @@ public class ObservableCollectionPassiveManagers {
 			}
 
 			@Override
-			T getValue() {
-				return mapForElement(theParentEl.get(), null);
-			}
-
-			@Override
-			I getParentValue() {
-				return theParentEl.get();
-			}
-
-			@Override
-			I getCachedSource() {
-				throw new IllegalStateException();
+			protected String isParentEnabled() {
+				return theParentEl.isEnabled();
 			}
 
 			@Override
@@ -585,20 +585,16 @@ public class ObservableCollectionPassiveManagers {
 
 			@Override
 			public String canAdd(T value, boolean before) {
-				String msg = canReverse();
-				if (msg != null)
-					return msg;
-				I intermVal = reverseForElement(value);
-				return theParentEl.canAdd(intermVal, before);
+				Transformation.ReverseQueryResult<I> rq = getEngine().reverse(value, true, true);
+				if (rq.getError() != null)
+					return rq.getError();
+				return theParentEl.canAdd(rq.getReversed(), before);
 			}
 
 			@Override
 			public ElementId add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-				String msg = canReverse();
-				if (msg != null)
-					throw new UnsupportedOperationException(msg);
-				I intermVal = reverseForElement(value);
-				return theParentEl.add(intermVal, before);
+				I reversed = getEngine().reverse(value, true, false).getReversed();
+				return theParentEl.add(reversed, before);
 			}
 
 			@Override
@@ -606,402 +602,18 @@ public class ObservableCollectionPassiveManagers {
 				return theParentEl.toString();
 			}
 		}
-	}
 
-	static class PassiveMappedCollectionManager<E, I, T> extends AbstractPassiveMappingManager<E, I, T> {
-		private final Function<? super I, ? extends T> theMap;
-		private final Equivalence<? super T> theEquivalence;
+		class TransformedMap extends MapWithParent<E, I, T> {
+			private final Transformation.TransformationState theState;
 
-		PassiveMappedCollectionManager(PassiveCollectionManager<E, ?, I> parent, TypeToken<T> targetType,
-			Function<? super I, ? extends T> map, Equivalence<? super T> equivalence, MapDef<I, T> options) {
-			super(parent, targetType, options);
-			theMap = map;
-			theEquivalence = equivalence;
-		}
-
-		@Override
-		protected MapDef<I, T> getOptions() {
-			return (MapDef<I, T>) super.getOptions();
-		}
-
-		@Override
-		public Object getIdentity() {
-			return Identifiable.wrap(getParent().getIdentity(), "map", theMap, getOptions());
-		}
-
-		@Override
-		public Equivalence<? super T> equivalence() {
-			return theEquivalence;
-		}
-
-		@Override
-		public ObservableValue<Function<? super E, T>> map() {
-			return getParent().map().map(parentMap -> new MapWithParent<>(parentMap, theMap));
-		}
-
-		@Override
-		protected boolean isReversible() {
-			return getOptions().getReverse() != null;
-		}
-
-		@Override
-		protected T map(I value, T previousValue) {
-			return theMap.apply(value);
-		}
-
-		@Override
-		protected ReverseQueryResult<I> canReverse(Supplier<? extends I> previousSource, T newValue) {
-			return getOptions().getReverse().canReverse(previousSource, newValue);
-		}
-
-		@Override
-		protected I reverse(AbstractMappedElement preSourceEl, T value) {
-			return getOptions().getReverse().reverse(null, value);
-		}
-
-		@Override
-		protected boolean isReverseStateful() {
-			return false;
-		}
-
-		@Override
-		public MappedElement map(MutableCollectionElement<E> source, Function<? super E, ? extends T> map) {
-			return new MappedElement(source, map);
-		}
-
-		class MappedElement extends PassiveMappedElement {
-			MappedElement(MutableCollectionElement<E> source, Function<? super E, ? extends T> map) {
-				super(getParent().map(source, ((MapWithParent<E, I, I>) map).getParentMap()));
-			}
-		}
-	}
-
-	static class PassiveCombinedCollectionManager<E, I, T> extends AbstractPassiveMappingManager<E, I, T> {
-		PassiveCombinedCollectionManager(PassiveCollectionManager<E, ?, I> parent, TypeToken<T> targetType,
-			ReversibleCombinationDef<I, T> def) {
-			super(parent, targetType, def);
-		}
-
-		@Override
-		protected ReversibleCombinationDef<I, T> getOptions() {
-			return (ReversibleCombinationDef<I, T>) super.getOptions();
-		}
-
-		@Override
-		protected boolean isReversible() {
-			return getOptions().getReverse() != null;
-		}
-
-		@Override
-		protected T map(I value, T previousValue) {
-			return getOptions().getCombination().apply(new Combination.CombinedValues<I>() {
-				@Override
-				public I getElement() {
-					return value;
-				}
-
-				@Override
-				public <X> X get(ObservableValue<X> arg) {
-					return arg.get();
-				}
-			}, previousValue);
-		}
-
-		@Override
-		protected ReverseQueryResult<I> canReverse(Supplier<? extends I> previousSource, T newValue) {
-			return ReverseQueryResult.value(reverse(null, newValue));
-		}
-
-		@Override
-		protected I reverse(AbstractMappedElement preSourceEl, T value) {
-			Supplier<I> pv = preSourceEl::getParentValue;
-			return getOptions().getReverse().apply(new Combination.CombinedValues<T>() {
-				@Override
-				public T getElement() {
-					return value;
-				}
-
-				@Override
-				public <X> X get(ObservableValue<X> arg) {
-					return arg.get();
-				}
-			}, pv);
-		}
-
-		@Override
-		protected boolean isReverseStateful() {
-			return false;
-		}
-
-		@Override
-		public Object getIdentity() {
-			return Identifiable.wrap(getParent().getIdentity(), "map", getOptions());
-		}
-
-		@Override
-		public Equivalence<? super T> equivalence() {
-			if (getTargetType().equals(getParent().getTargetType()))
-				return (Equivalence<? super T>) getParent().equivalence();
-			else
-				return Equivalence.DEFAULT;
-		}
-
-		@Override
-		public boolean isLockSupported() {
-			return true;
-		}
-
-		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return Lockable.lockAll(Lockable.lockable(getParent(), write, cause), getOptions().getArgs());
-		}
-
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return Lockable.tryLockAll(Lockable.lockable(getParent(), write, cause), getOptions().getArgs());
-		}
-
-		private Transaction lockArgs() {
-			return Lockable.lockAll(getOptions().getArgs());
-		}
-
-		@Override
-		public ObservableValue<? extends Function<? super E, ? extends T>> map() {
-			ObservableValue<? extends Function<? super E, ? extends I>> parentMap = getParent().map();
-			return new ObservableValue<Function<? super E, T>>() {
-				/** Can't imagine why this would ever be used, but we'll fill it out I guess */
-				private TypeToken<Function<? super E, T>> theType;
-
-				@Override
-				public Object getIdentity() {
-					return Identifiable.wrap(parentMap.getIdentity(), "combine", getOptions().getIdentity());
-				}
-
-				@Override
-				public long getStamp() {
-					return parentMap.getStamp() ^ Stamped.compositeStamp(getOptions().getArgs(), Stamped::getStamp);
-				}
-
-				@Override
-				public TypeToken<Function<? super E, T>> getType() {
-					if (theType == null)
-						theType = functionType((TypeToken<E>) parentMap.getType().resolveType(Function.class.getTypeParameters()[0]),
-							getTargetType());
-					return theType;
-				}
-
-				@Override
-				public Transaction lock() {
-					Transaction parentLock = parentMap.lock();
-					Transaction valueLock = lockArgs();
-					return () -> {
-						valueLock.close();
-						parentLock.close();
-					};
-				}
-
-				@Override
-				public Function<? super E, T> get() {
-					Function<? super E, ? extends I> parentMapVal = parentMap.get();
-					Map<ObservableValue<?>, ObservableValue<?>> values = new IdentityHashMap<>();
-					for (ObservableValue<?> v : getOptions().getArgs())
-						values.put(v, v);
-
-					return new CombinedMap(parentMapVal, null, values);
-				}
-
-				@Override
-				public Observable<ObservableValueEvent<Function<? super E, T>>> changes() {
-					Observable<? extends ObservableValueEvent<? extends Function<? super E, ? extends I>>> parentChanges = parentMap
-						.changes();
-					return new Observable<ObservableValueEvent<Function<? super E, T>>>() {
-						@Override
-						public Object getIdentity() {
-							return Identifiable.wrap(parentMap.changes().getIdentity(), "combine", getOptions().getIdentity());
-						}
-
-						@Override
-						public boolean isSafe() {
-							return false;
-						}
-
-						@Override
-						public Subscription subscribe(Observer<? super ObservableValueEvent<Function<? super E, T>>> observer) {
-							CombinedMap[] currentMap = new PassiveCombinedCollectionManager.CombinedMap[1];
-							Subscription parentSub = parentChanges
-								.act(new Consumer<ObservableValueEvent<? extends Function<? super E, ? extends I>>>() {
-									@Override
-									public void accept(ObservableValueEvent<? extends Function<? super E, ? extends I>> parentEvt) {
-										if (parentEvt.isInitial()) {
-											currentMap[0] = new CombinedMap(parentEvt.getNewValue(), null, new IdentityHashMap<>());
-											ObservableValueEvent<Function<? super E, T>> evt = createInitialEvent(currentMap[0], null);
-											try (Transaction t = Causable.use(evt)) {
-												observer.onNext(evt);
-											}
-											return;
-										}
-										try (Transaction valueLock = lockArgs()) {
-											CombinedMap oldMap = currentMap[0];
-											currentMap[0] = new CombinedMap(parentEvt.getNewValue(), null, oldMap.theValues);
-											ObservableValueEvent<Function<? super E, T>> evt2 = createChangeEvent(oldMap, currentMap[0],
-												parentEvt);
-											try (Transaction evtT = Causable.use(evt2)) {
-												observer.onNext(evt2);
-											}
-										}
-									}
-								});
-							Subscription[] argSubs = new Subscription[getOptions().getArgs().size()];
-							int a = 0;
-							for (ObservableValue<?> arg : getOptions().getArgs()) {
-								int argIndex = a++;
-								argSubs[argIndex] = arg.changes().act(new Consumer<ObservableValueEvent<?>>() {
-									@Override
-									public void accept(ObservableValueEvent<?> argEvent) {
-										if (argEvent.isInitial()) {
-											((Map<ObservableValue<?>, SimpleSupplier>) currentMap[0].theValues).put(arg,
-												new SimpleSupplier(argEvent.getNewValue()));
-											return;
-										}
-										try (Transaction t = lock()) {
-											CombinedMap oldMap = currentMap[0];
-											Map<ObservableValue<?>, SimpleSupplier> newValues = new IdentityHashMap<>(
-												(Map<ObservableValue<?>, SimpleSupplier>) oldMap.theValues);
-											newValues.put(arg, new SimpleSupplier(argEvent.getNewValue()));
-											currentMap[0] = new CombinedMap(oldMap.getParentMap(), null, newValues);
-											ObservableValueEvent<Function<? super E, T>> evt = createChangeEvent(oldMap, currentMap[0],
-												argEvent);
-											try (Transaction evtT = Causable.use(evt)) {
-												observer.onNext(evt);
-											}
-										}
-									}
-								});
-							}
-							return () -> {
-								try (Transaction t = lock()) {
-									for (int i = 0; i < argSubs.length; i++)
-										argSubs[i].unsubscribe();
-									parentSub.unsubscribe();
-								}
-							};
-						}
-
-						@Override
-						public Transaction lock() {
-							return Lockable.lockAll(getOptions().getArgs());
-						}
-
-						@Override
-						public Transaction tryLock() {
-							return Lockable.tryLockAll(getOptions().getArgs());
-						}
-					};
-				}
-
-				@Override
-				public Observable<ObservableValueEvent<Function<? super E, T>>> noInitChanges() {
-					return changes().noInit();
-				}
-			};
-		}
-
-		@Override
-		public boolean isRemoveFiltered() {
-			return false;
-		}
-
-		@Override
-		public CombinedElement map(MutableCollectionElement<E> element, Function<? super E, ? extends T> map) {
-			return new CombinedElement(element, map);
-		}
-
-		class SimpleSupplier implements Supplier<Object> {
-			final Object value;
-
-			SimpleSupplier(Object value) {
-				this.value = value;
-			}
-
-			@Override
-			public Object get() {
-				return value;
-			}
-		}
-
-		class CombinedElement extends PassiveMappedElement {
-			private final CombinedMap theCombinedMap;
-
-			CombinedElement(MutableCollectionElement<E> source, Function<? super E, ? extends T> map) {
-				super(getParent().map(source, ((CombinedMap) map).getParentMap()));
-				theCombinedMap = (CombinedMap) map;
-			}
-
-			@Override
-			public T mapForElement(I source, T value) {
-				return theCombinedMap.mapIntermediate(source);
-			}
-
-			@Override
-			public I reverseForElement(T source) {
-				return theCombinedMap.reverse(source, new Supplier<I>() {
-					boolean hasSource;
-					I sourceVal;
-
-					@Override
-					public I get() {
-						if (!hasSource) {
-							sourceVal = getParentValue();
-							hasSource = true;
-						}
-						return sourceVal;
-					}
-				});
-			}
-		}
-
-		class CombinedMap extends MapWithParent<E, I, T> {
-			final Map<ObservableValue<?>, ? extends Supplier<?>> theValues;
-
-			CombinedMap(Function<? super E, ? extends I> parentMap, Function<? super I, ? extends T> map,
-				Map<ObservableValue<?>, ? extends Supplier<?>> values) {
-				super(parentMap, map);
-				theValues = values;
+			TransformedMap(Function<? super E, ? extends I> parentMap, TransformationState state) {
+				super(parentMap, null);
+				theState = state;
 			}
 
 			@Override
 			public T mapIntermediate(I interm) {
-				return getOptions().getCombination().apply(new Combination.CombinedValues<I>() {
-					@Override
-					public I getElement() {
-						return interm;
-					}
-
-					@Override
-					public <X> X get(ObservableValue<X> arg) {
-						Supplier<?> holder = theValues.get(arg);
-						if (holder == null)
-							throw new IllegalArgumentException("Unrecognized value: " + arg);
-						return (X) holder.get();
-					}
-				}, null);
-			}
-
-			I reverse(T dest, Supplier<I> prevSource) {
-				return getOptions().getReverse().apply(new Combination.CombinedValues<T>() {
-					@Override
-					public T getElement() {
-						return dest;
-					}
-
-					@Override
-					public <X> X get(ObservableValue<X> arg) {
-						Supplier<?> holder = theValues.get(arg);
-						if (holder == null)
-							throw new IllegalArgumentException("Unrecognized value: " + arg);
-						return (X) holder.get();
-					}
-				}, prevSource);
+				return getEngine().map(interm, theState);
 			}
 		}
 	}
@@ -1046,6 +658,11 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
+		public long getStamp() {
+			return theParent.getStamp();
+		}
+
+		@Override
 		public boolean isContentControlled() {
 			return theParent.isContentControlled();
 		}
@@ -1066,8 +683,8 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
-		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest, boolean forAdd) {
-			return theParent.reverse(dest, forAdd);
+		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest, boolean forAdd, boolean test) {
+			return theParent.reverse(dest, forAdd, test);
 		}
 
 		@Override
@@ -1136,6 +753,11 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
+		public long getStamp() {
+			return theParent.getStamp();
+		}
+
+		@Override
 		public boolean isContentControlled() {
 			return !theFilter.isEmpty() || theParent.isContentControlled();
 		}
@@ -1159,13 +781,13 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
-		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest, boolean forAdd) {
+		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest, boolean forAdd, boolean test) {
 			if (forAdd) {
 				dest.maybeReject(theFilter.canAdd(dest.source), true);
 				if (!dest.isAccepted())
 					return dest;
 			}
-			return theParent.reverse(dest, forAdd);
+			return theParent.reverse(dest, forAdd, test);
 		}
 
 		@Override

@@ -273,16 +273,16 @@ public interface TableContentControl {
 	public static <E> ObservableCollection<FilteredValue<E>> applyRowControl(ObservableCollection<E> values,
 		Supplier<? extends Collection<? extends ValueRenderer<? super E>>> render, ObservableValue<? extends TableContentControl> filter,
 			Observable<?> until) {
-		return values.flow().combine((TypeToken<FilteredValue<E>>) (TypeToken<?>) TypeTokens.get().of(FilteredValue.class), //
-			combine -> combine.with(filter).build((cv, old) -> {
+		return values.flow().transform((TypeToken<FilteredValue<E>>) (TypeToken<?>) TypeTokens.get().of(FilteredValue.class), //
+			combine -> combine.combineWith(filter).build((x, cv) -> {
 				Collection<? extends ValueRenderer<? super E>> renders = render.get();
 				FilteredValue<E> v;
-				if (old != null) {
-					v = old;
-					v.setValue(cv.getElement());
+				if (cv.hasPreviousResult()) {
+					v = cv.getPreviousResult();
+					v.setValue(x);
 					v.columnsChanged(renders.size());
 				} else
-					v = new FilteredValue<>(cv.getElement(), renders.size());
+					v = new FilteredValue<>(x, renders.size());
 				TableContentControl f = cv.get(filter);
 				int i = 0;
 				v.isFiltered=false;

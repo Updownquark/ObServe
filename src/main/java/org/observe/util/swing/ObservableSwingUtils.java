@@ -63,13 +63,13 @@ import javax.swing.event.ListDataListener;
 import javax.swing.event.ListSelectionListener;
 import javax.swing.text.JTextComponent;
 
+import org.observe.Equivalence;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.collect.CollectionChangeEvent;
-import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
 import org.observe.config.ObservableConfig;
 import org.observe.util.SafeObservableCollection;
@@ -420,7 +420,7 @@ public class ObservableSwingUtils {
 			safeValues = (SafeObservableCollection<? extends T>) availableValues;
 		else
 			safeValues = new SafeObservableCollection<>(availableValues, EventQueue::isDispatchThread, EventQueue::invokeLater, safeUntil);
-		ObservableCollection<TB> buttons = safeValues.flow().map(buttonType, (value, button) -> {
+		ObservableCollection<TB> buttons = safeValues.flow().transform(buttonType, tx -> tx.map((value, button) -> {
 			if (button == null)
 				button = buttonCreator.apply(value);
 			render.accept(button, value);
@@ -432,7 +432,7 @@ public class ObservableSwingUtils {
 			else
 				button.setToolTipText(null);
 			return button;
-		}, null).collectActive(safeUntil);
+		})).collectActive(safeUntil);
 		withButtons.accept(buttons);
 
 		int[] currentSelection = new int[] { -1 };

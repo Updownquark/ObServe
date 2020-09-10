@@ -2,7 +2,6 @@ package org.observe;
 
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.BiConsumer;
@@ -11,10 +10,13 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
-import org.observe.XformOptions.SimpleXformOptions;
-import org.observe.XformOptions.XformDef;
+import org.observe.Transformation.ReverseQueryResult;
+import org.observe.Transformation.TransformationState;
+import org.observe.Transformation.TransformedElement;
 import org.observe.util.TypeTokens;
+import org.qommons.BiTuple;
 import org.qommons.Identifiable;
+import org.qommons.LambdaUtils;
 import org.qommons.Lockable;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
@@ -226,6 +228,40 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	}
 
 	/**
+	 * <p>
+	 * Transforms this value into a derived value, potentially including other sources as well. This method satisfies both mapping and
+	 * combination use cases.
+	 * </p>
+	 * <p>
+	 * If dynamic {@link #getType() types} are important, it is preferred to use {@link #transform(TypeToken, Function)}. If no target type
+	 * is supplied (as with this method), one will be inferred, but this is not always reliable, especially with lambdas.
+	 * </p>
+	 *
+	 * @param <R> The type of the combined value
+	 * @param combination Determines how this value an any other arguments are to be combined
+	 * @return The transformed value
+	 */
+	default <R> SettableValue<R> transformReversible(
+		Function<Transformation.ReversibleTransformationPrecursor<T, R, ?>, Transformation.ReversibleTransformation<T, R>> combination) {
+		return transformReversible(null, combination);
+	}
+
+	/**
+	 * Transforms this value into a derived value, potentially including other sources as well. This method satisfies both mapping and
+	 * combination use cases.
+	 *
+	 * @param <R> The type of the combined value
+	 * @param type The type of the combined value
+	 * @param combination Determines how this value an any other arguments are to be combined
+	 * @return The transformed value
+	 */
+	default <R> SettableValue<R> transformReversible(TypeToken<R> type,
+		Function<Transformation.ReversibleTransformationPrecursor<T, R, ?>, Transformation.ReversibleTransformation<T, R>> combination) {
+		Transformation.ReversibleTransformation<T, R> def = combination.apply(new Transformation.ReversibleTransformationPrecursor<>());
+		return new TransformedSettableValue<>(type, this, def);
+	}
+
+	/**
 	 * @param <R> The type of the new settable value to create
 	 * @param function The function to map this value to another
 	 * @param reverse The function to map the other value to this one
@@ -245,51 +281,11 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	 */
 	default <R> SettableValue<R> map(TypeToken<R> type, Function<? super T, ? extends R> function, Function<? super R, ? extends T> reverse,
 		Consumer<XformOptions> options) {
-		if(type==null || function==null)
-			throw new NullPointerException();
-		SimpleXformOptions xform = new SimpleXformOptions();
-		if (options != null)
-			options.accept(xform);
-		SettableValue<T> root = this;
-		return new ComposedSettableValue<R>(type, args -> {
-			return function.apply((T) args[0]);
-		}, "map", new XformDef(xform), this) {
-			@Override
-			public <V extends R> R set(V value, Object cause) throws IllegalArgumentException {
-				T reversed;
-				if(value==null && xform.isNullToNull())
-					reversed=null;
-				else
-					reversed= reverse.apply(value);
-				T old;
-				if (!getOptions().isPropagatingUpdatesToParent()) {
-					old = root.get();
-					if (!Objects.equals(reversed, old))
-						root.set(reversed, cause);
-				} else
-					old = root.set(reversed, cause);
-				return function.apply(old);
-			}
-
-			@Override
-			public <V extends R> String isAcceptable(V value) {
-				T reversed;
-				if(value==null && xform.isNullToNull())
-					reversed=null;
-				else
-					reversed= reverse.apply(value);
-				if (!getOptions().isPropagatingUpdatesToParent() && Objects.equals(reversed, root.get()))
-					return null;
-				return root.isAcceptable(reversed);
-			}
-
-			@Override
-			public ObservableValue<String> isEnabled() {
-				if (!getOptions().isPropagatingUpdatesToParent())
-					return ALWAYS_ENABLED;
-				return root.isEnabled();
-			}
-		};
+		return transformReversible(type, tx -> {
+			if (options != null)
+				options.accept(tx);
+			return tx.map(function).withReverse(reverse);
+		});
 	}
 
 	/**
@@ -302,55 +298,13 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	 */
 	default <R> SettableValue<R> map(TypeToken<R> type, Function<? super T, ? extends R> function,
 		BiFunction<? super T, ? super R, ? extends T> reverse, Consumer<XformOptions> options) {
-		if (type == null || function == null)
-			throw new NullPointerException();
-		SimpleXformOptions xform = new SimpleXformOptions();
-		if (options != null)
-			options.accept(xform);
-		SettableValue<T> root = this;
-		return new ComposedSettableValue<R>(type, args -> {
-			return function.apply((T) args[0]);
-		}, "map", new XformDef(xform), this) {
-			@Override
-			public <V extends R> R set(V value, Object cause) throws IllegalArgumentException {
-				T reversed;
-				if(value==null && xform.isNullToNull())
-					reversed=null;
-				else
-					reversed= reverse.apply(root.get(), value);
-				if (!Objects.equals(reversed, function.apply(reversed)))
-					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
-				T old;
-				if (!getOptions().isPropagatingUpdatesToParent()) {
-					old = root.get();
-					if (!Objects.equals(reversed, old))
-						root.set(reversed, cause);
-				} else
-					old = root.set(reversed, cause);
-				return function.apply(old);
-			}
-
-			@Override
-			public <V extends R> String isAcceptable(V value) {
-				T reversed;
-				if(value==null && xform.isNullToNull())
-					reversed=null;
-				else
-					reversed= reverse.apply(root.get(), value);
-				if (!Objects.equals(value, function.apply(reversed)))
-					return StdMsg.ILLEGAL_ELEMENT;
-				if (!getOptions().isPropagatingUpdatesToParent() && Objects.equals(reversed, root.get()))
-					return null;
-				return root.isAcceptable(reversed);
-			}
-
-			@Override
-			public ObservableValue<String> isEnabled() {
-				if (!getOptions().isPropagatingUpdatesToParent())
-					return ALWAYS_ENABLED;
-				return root.isEnabled();
-			}
-		};
+		return transformReversible(type, tx -> {
+			if (options != null)
+				options.accept(tx);
+			return tx.map(function).replaceSourceWith((r, rtx) -> {
+				return reverse.apply(rtx.getCurrentSource(), r);
+			});
+		});
 	}
 
 	/**
@@ -364,60 +318,11 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	 */
 	default <F> SettableValue<F> asFieldEditor(TypeToken<F> fieldType, Function<? super T, ? extends F> getter,
 		BiConsumer<? super T, ? super F> setter, Consumer<XformOptions> options) {
-		if (fieldType == null || getter == null)
-			throw new NullPointerException();
-		XformOptions xform = new SimpleXformOptions().nullToNull(true);
-		if (options != null)
-			options.accept(xform);
-		SettableValue<T> outer = this;
-		class FieldEditorValue extends ComposedSettableValue<F> {
-			FieldEditorValue() {
-				super(fieldType, args -> getter.apply((T) args[0]), getter.toString(), new XformDef(xform), outer);
-			}
-
-			@Override
-			public <V extends F> F set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
-				T v = outer.get();
-				F old;
-				if(v==null && xform.isNullToNull())
-					old=null;
-				else
-					old = getter.apply(v);
-				setter.accept(v, value);
-				if (getOptions().isPropagatingUpdatesToParent())
-					outer.set(v, cause);
-				return old;
-			}
-
-			@Override
-			public <V extends F> String isAcceptable(V value) {
-				T v = outer.get();
-				if (v == null)
-					return "Nothing selected";
-				else
-					return null; // No data here
-			}
-
-			@Override
-			public ObservableValue<String> isEnabled() {
-				return outer.map(v -> v == null ? "Nothing selected" : null);
-			}
-		}
-		return new FieldEditorValue();
-	}
-
-	/**
-	 * A more flexible and elegant reversible (settable) combination method
-	 *
-	 * @param <R> The type of the combined value
-	 * @param type The type of the combined value
-	 * @param combination Determines how this value an any other arguments are to be combined
-	 * @return The combined value
-	 */
-	default <R> SettableValue<R> combineReversible(TypeToken<R> type,
-		Function<Combination.ReversibleCombinationPrecursor<T, R>, Combination.ReversibleCombinationDef<T, R>> combination) {
-		Combination.ReversibleCombinationDef<T, R> def = combination.apply(new Combination.ReversibleCombinationPrecursor<>());
-		return new CombinedSettableValue<>(this, type, def);
+		return transformReversible(fieldType, tx -> {
+			if (options != null)
+				options.accept(tx);
+			return tx.map(getter).modifySource(setter);
+		});
 	}
 
 	/**
@@ -468,56 +373,14 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	default <U, R> SettableValue<R> combine(TypeToken<R> type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
 		BiFunction<? super R, ? super U, String> accept, BiFunction<? super R, ? super U, ? extends T> reverse,
 		Consumer<XformOptions> options) {
-		SimpleXformOptions xform = new SimpleXformOptions();
-		if (options != null)
-			options.accept(xform);
-		SettableValue<T> root = this;
-		return new ComposedSettableValue<R>(type, args -> {
-			return function.apply((T) args[0], (U) args[1]);
-		}, "combine", new XformDef(xform), this, arg) {
-			@Override
-			public <V extends R> R set(V value, Object cause) throws IllegalArgumentException {
-				U argVal = arg.get();
-				String msg = accept.apply(value, argVal);
-				if (StdMsg.UNSUPPORTED_OPERATION.equals(msg))
-					throw new UnsupportedOperationException(msg);
-				else if (msg != null)
-					throw new IllegalArgumentException(msg);
-				T reversed = reverse.apply(value, argVal);
-				if (!Objects.equals(value, function.apply(reversed, argVal)))
-					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
-				T old;
-				if (!getOptions().isPropagatingUpdatesToParent()) {
-					old = root.get();
-					if (!Objects.equals(reversed, old))
-						root.set(reversed, cause);
-				} else
-					old = root.set(reversed, cause);
-				return function.apply(old, argVal);
-			}
-
-			@Override
-			public <V extends R> String isAcceptable(V value) {
-				U argVal = arg.get();
-				String ret = accept.apply(value, argVal);
-				if (ret == null) {
-					T reversed = reverse.apply(value, argVal);
-					if (!Objects.equals(value, function.apply(reversed, argVal)))
-						return StdMsg.ILLEGAL_ELEMENT;
-					if (!getOptions().isPropagatingUpdatesToParent() && Objects.equals(reversed, root.get()))
-						return null;
-					return root.isAcceptable(reversed);
-				}
-				return ret;
-			}
-
-			@Override
-			public ObservableValue<String> isEnabled() {
-				if (!getOptions().isPropagatingUpdatesToParent())
-					return ALWAYS_ENABLED;
-				return root.isEnabled();
-			}
-		};
+		return transformReversible(type, tx -> {
+			if (options != null)
+				options.accept(tx);
+			return tx.combineWith(arg).combine(function).replaceSource(reverse,
+				accept == null ? null : rvrs -> rvrs.rejectWith((r, rtx) -> {
+					return accept.apply(r, rtx.get(arg));
+				}, false, false));
+		});
 	}
 
 	/**
@@ -554,49 +417,11 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	default <U, V, R> SettableValue<R> combine(TypeToken<R> type, TriFunction<? super T, ? super U, ? super V, R> function,
 		ObservableValue<U> arg2, ObservableValue<V> arg3, TriFunction<? super R, ? super U, ? super V, ? extends T> reverse,
 		Consumer<XformOptions> options) {
-		SimpleXformOptions xform = new SimpleXformOptions();
-		if (options != null)
-			options.accept(xform);
-		SettableValue<T> root = this;
-		return new ComposedSettableValue<R>(type, args -> {
-			return function.apply((T) args[0], (U) args[1], (V) args[2]);
-		}, "combine", new XformDef(xform), this, arg2, arg3) {
-			@Override
-			public <V2 extends R> R set(V2 value, Object cause) throws IllegalArgumentException {
-				U arg2V = arg2.get();
-				V arg3V = arg3.get();
-				T reversed = reverse.apply(value, arg2V, arg3V);
-				if (!Objects.equals(reversed, function.apply(reversed, arg2V, arg3V)))
-					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
-				T old;
-				if (!getOptions().isPropagatingUpdatesToParent()) {
-					old = root.get();
-					if (!Objects.equals(reversed, old))
-						root.set(reversed, cause);
-				} else
-					old = root.set(reversed, cause);
-				return function.apply(old, arg2V, arg3V);
-			}
-
-			@Override
-			public <V2 extends R> String isAcceptable(V2 value) {
-				U arg2V = arg2.get();
-				V arg3V = arg3.get();
-				T reversed = reverse.apply(value, arg2V, arg3V);
-				if (!Objects.equals(value, function.apply(reversed, arg2V, arg3V)))
-					return StdMsg.ILLEGAL_ELEMENT;
-				if (!getOptions().isPropagatingUpdatesToParent() && Objects.equals(reversed, root.get()))
-					return null;
-				return root.isAcceptable(reversed);
-			}
-
-			@Override
-			public ObservableValue<String> isEnabled() {
-				if (!getOptions().isPropagatingUpdatesToParent())
-					return ALWAYS_ENABLED;
-				return root.isEnabled();
-			}
-		};
+		return transformReversible(type, tx -> {
+			if (options != null)
+				options.accept(tx);
+			return tx.combineWith(arg2).combineWith(arg3).combine(function).withReverse(reverse);
+		});
 	}
 
 	@Override
@@ -783,178 +608,95 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	}
 
 	/**
-	 * Implements the SettableValue.combine methods
-	 *
-	 * @param <T> The type of the value
-	 */
-	abstract class ComposedSettableValue<T> extends ComposedObservableValue<T> implements SettableValue<T> {
-		public ComposedSettableValue(Function<Object[], T> function, String operation, XformDef options, ObservableValue<?>[] composed) {
-			super(function, operation, options, composed);
-		}
-
-		public ComposedSettableValue(TypeToken<T> type, Function<Object[], T> function, String operation, XformDef options,
-			ObservableValue<?>... composed) {
-			super(type, function, operation, options, composed);
-		}
-
-		@Override
-		public boolean isLockSupported() {
-			return super.isLockSupported();
-		}
-
-		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return Lockable.lockAll(null, //
-				() -> Arrays.asList(getComposed()), val -> {
-					if (val instanceof Transactable)
-						return Lockable.lockable((Transactable) val, write, cause);
-					else
-						return val;
-				});
-		}
-
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return Lockable.tryLockAll(null, //
-				() -> Arrays.asList(getComposed()), val -> {
-					if (val instanceof Transactable)
-						return Lockable.lockable((Transactable) val, write, cause);
-					else
-						return val;
-				});
-		}
-	}
-
-	/**
-	 * Implements {@link SettableValue#combineReversible(TypeToken, Function)}
+	 * Implements {@link SettableValue#transformReversible(TypeToken, Function)}
 	 *
 	 * @param <S> The type of the source value
 	 * @param <T> The type of the combined value
 	 */
-	public class CombinedSettableValue<S, T> extends CombinedObservableValue<S, T> implements SettableValue<T> {
+	public class TransformedSettableValue<S, T> extends TransformedObservableValue<S, T> implements SettableValue<T> {
 		/**
-		 * @param source The source value to combine
 		 * @param type The type of the combined value
+		 * @param source The source value to combine
 		 * @param combination The definition of the combination operation
 		 */
-		public CombinedSettableValue(SettableValue<S> source, TypeToken<T> type, Combination.ReversibleCombinationDef<S, T> combination) {
-			super(source, type, combination);
+		public TransformedSettableValue(TypeToken<T> type, SettableValue<S> source,
+			Transformation.ReversibleTransformation<S, T> combination) {
+			super(type, source, combination);
 		}
 
 		@Override
-		public SettableValue<S> getSource() {
+		protected SettableValue<S> getSource() {
 			return (SettableValue<S>) super.getSource();
 		}
 
 		@Override
-		public Combination.ReversibleCombinationDef<S, T> getOptions() {
-			return (Combination.ReversibleCombinationDef<S, T>) super.getOptions();
-		}
-
-		@Override
-		public boolean isLockSupported() {
-			return super.isLockSupported();
-		}
-
-		@Override
 		public Transaction lock(boolean write, Object cause) {
-			return Lockable.lockAll(//
-				Lockable.lockable(getSource(), write, cause), getOptions().getArgs());
+			return Lockable.lockAll(Lockable.lockable(getSource(), write, cause), getEngine());
 		}
 
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
-			return Lockable.tryLockAll(//
-				Lockable.lockable(getSource(), write, cause), getOptions().getArgs());
+			return Lockable.tryLockAll(Lockable.lockable(getSource(), write, cause), getEngine());
 		}
 
 		@Override
 		public ObservableValue<String> isEnabled() {
-			if (getOptions().getReverse() == null)
-				return ObservableValue.of("Not reversible");
-			return getSource().isEnabled();
+			return transform(TypeTokens.get().STRING, tx -> tx.cache(true).map(LambdaUtils.printableFn(__ -> {
+				BiTuple<TransformedElement<S, T>, TransformationState> state = getState();
+				return state.getValue1().isEnabled(state.getValue2());
+			}, "enabled", "enabled")));
 		}
 
 		@Override
 		public <V extends T> String isAcceptable(V value) {
-			if (getOptions().getReverse() == null)
-				return "Not reversible";
-			try (Transaction t = lock(false, null)) {
-				Object[] argValues = new Object[getOptions().getArgs().size()];
-				int i = 0;
-				for (ObservableValue<?> arg : getOptions().getArgs())
-					argValues[i++] = arg.get();
-				S sourceVal = getOptions().getReverse().apply(new Combination.CombinedValues<T>() {
-					@Override
-					public T getElement() {
-						return value;
-					}
-
-					@Override
-					public <X> X get(ObservableValue<X> arg) {
-						return (X) argValues[getOptions().getArgIndex(arg)];
-					}
-				}, new Supplier<S>() {
-					boolean hasValue;
-					S sourceValue;
-
-					@Override
-					public S get() {
-						if (!hasValue) {
-							hasValue = true;
-							sourceValue = getOptions().isCached() ? (S) getCachedComposedValue(0) : getSource().get();
-						}
-						return sourceValue;
-					}
-				});
-				return getSource().isAcceptable(sourceVal);
+			try (Transaction t = lock()) {
+				BiTuple<TransformedElement<S, T>, TransformationState> state = getState();
+				ReverseQueryResult<S> rq = state.getValue1().set(value, state.getValue2(), true);
+				if (rq.getError() != null)
+					return rq.getError();
+				return getSource().isAcceptable(rq.getReversed());
 			}
 		}
 
 		@Override
 		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
-			if (getOptions().getReverse() == null)
-				throw new UnsupportedOperationException("Not reversible");
-			try (Transaction t = lock(true, null)) {
-				Object[] argValues = new Object[getOptions().getArgs().size()];
-				int i = 0;
-				for (ObservableValue<?> arg : getOptions().getArgs())
-					argValues[i++] = arg.get();
-				S sourceVal = getOptions().getReverse().apply(new Combination.CombinedValues<T>() {
+			try (Transaction t = lock()) {
+				BiTuple<TransformedElement<S, T>, TransformationState> state = getState();
+				S source = state.getValue1().set(value, state.getValue2(), false).getReversed();
+				T prevResult = getTransformation().isCached() ? get() : null;
+				S oldSource = getSource().set(source, cause);
+				return getTransformation().getCombination().apply(oldSource, new Transformation.TransformationValues<S, T>() {
 					@Override
-					public T getElement() {
-						return value;
+					public boolean isSourceChange() {
+						return false;
 					}
 
 					@Override
-					public <X> X get(ObservableValue<X> arg) {
-						return (X) argValues[getOptions().getArgIndex(arg)];
+					public S getCurrentSource() {
+						return oldSource;
 					}
-				}, new Supplier<S>() {
-					boolean hasValue;
-					S sourceValue;
 
 					@Override
-					public S get() {
-						if (!hasValue) {
-							hasValue = true;
-							sourceValue = getOptions().isCached() ? (S) getCachedComposedValue(0) : getSource().get();
-						}
-						return sourceValue;
+					public boolean hasPreviousResult() {
+						return getTransformation().isCached();
+					}
+
+					@Override
+					public T getPreviousResult() {
+						return prevResult;
+					}
+
+					@Override
+					public boolean has(ObservableValue<?> arg) {
+						return getTransformation().hasArg(arg);
+					}
+
+					@Override
+					public <V2> V2 get(ObservableValue<V2> arg) throws IllegalArgumentException {
+						int index = getTransformation().getArgIndex(arg);
+						return state.getValue2().get(index);
 					}
 				});
-				S oldValue = getSource().set(sourceVal, cause);
-				return getOptions().getCombination().apply(new Combination.CombinedValues<S>() {
-					@Override
-					public S getElement() {
-						return oldValue;
-					}
-
-					@Override
-					public <X> X get(ObservableValue<X> arg) {
-						return (X) argValues[getOptions().getArgIndex(arg)];
-					}
-				}, value);
 			}
 		}
 	}

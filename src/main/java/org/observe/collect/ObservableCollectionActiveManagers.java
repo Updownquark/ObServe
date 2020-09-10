@@ -2,21 +2,12 @@ package org.observe.collect;
 
 import java.util.Collection;
 import java.util.Comparator;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.function.BiFunction;
 import java.util.function.Function;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
-import org.observe.Combination;
-import org.observe.Combination.ReversibleCombinationDef;
-import org.observe.ObservableValue;
+import org.observe.Equivalence;
 import org.observe.ObservableValueEvent;
-import org.observe.XformOptions;
-import org.observe.collect.FlowOptions.MapDef;
-import org.observe.collect.FlowOptions.ReverseQueryResult;
-import org.observe.collect.ObservableCollection.CollectionDataFlow;
+import org.observe.Transformation;
 import org.observe.collect.ObservableCollectionDataFlowImpl.AbstractMappingManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionOperation;
 import org.observe.collect.ObservableCollectionDataFlowImpl.FlowElementSetter;
@@ -25,9 +16,7 @@ import org.observe.collect.ObservableCollectionImpl.ActiveDerivedCollection;
 import org.observe.util.WeakListening;
 import org.qommons.BiTuple;
 import org.qommons.Identifiable;
-import org.qommons.Lockable;
 import org.qommons.QommonsUtils;
-import org.qommons.Ternian;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
@@ -648,7 +637,11 @@ public class ObservableCollectionActiveManagers {
 
 		@Override
 		public Equivalence<? super T> equivalence() {
-			return theParent.equivalence();
+			Equivalence<? super T> equiv = theParent.equivalence();
+			if (equiv instanceof Equivalence.ComparatorEquivalence)
+				return ((Equivalence.ComparatorEquivalence<? super T>) equiv).reverse();
+			else
+				return equiv;
 		}
 
 		@Override
@@ -1407,11 +1400,15 @@ public class ObservableCollectionActiveManagers {
 		}
 	}
 
-	static abstract class AbstractActiveMappingManager<E, I, T> extends AbstractMappingManager<E, I, T>
+	static class ActiveTransformedCollectionManager<E, I, T> extends AbstractMappingManager<E, I, T>
 	implements ActiveCollectionManager<E, I, T> {
-		protected AbstractActiveMappingManager(ActiveCollectionManager<E, ?, I> parent, TypeToken<T> targetType,
-			XformOptions.XformDef options) {
-			super(parent, targetType, options);
+		// Need to keep track of these to update them when the combined values change
+		private final BetterSortedSet<TransformedElement> theElements;
+
+		ActiveTransformedCollectionManager(ActiveCollectionManager<E, ?, I> parent, TypeToken<T> targetType, Transformation<I, T> def) {
+			super(parent, targetType, def);
+
+			theElements = new BetterTreeSet<>(false, TransformedElement::compareTo);
 		}
 
 		@Override
@@ -1420,93 +1417,30 @@ public class ObservableCollectionActiveManagers {
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return getParent().isLockSupported();
-		}
-
-		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return getParent().lock(write, cause);
-		}
-
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return getParent().tryLock(write, cause);
-		}
-
-		@Override
 		public boolean clear() {
 			return getParent().clear();
 		}
 
-		@Override
-		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
-			if (!isReversible() || getOptions().isManyToOne())
-				return null;
-			ReverseQueryResult<I> qr = canReverse(null, value);
-			if (qr.getError() != null)
-				return null;
-			I reversed = qr.getReversed();
-			if (!equivalence().elementEquals(map(reversed, value), value))
-				return null;
-			Comparable<DerivedCollectionElement<I>> pef = getParent().getElementFinder(reversed);
-			if (pef == null)
-				return null;
-			return el -> pef.compareTo(((ActiveMappedElement) el).getParentEl());
+		protected TransformedElement map(DerivedCollectionElement<I> parentEl, boolean synthetic) {
+			return new TransformedElement(parentEl, synthetic);
 		}
 
-		protected abstract ActiveMappedElement map(DerivedCollectionElement<I> parentEl,
-			boolean synthetic);
-
 		@Override
-		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl,
-			BetterCollection<?> sourceCollection) {
+		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
 			return QommonsUtils.map2(getParent().getElementsBySource(sourceEl, sourceCollection), el -> map(el, true));
 		}
 
 		@Override
-		public BetterList<ElementId> getSourceElements(DerivedCollectionElement<T> localElement,
-			BetterCollection<?> sourceCollection) {
-			return getParent().getSourceElements(((ActiveMappedElement) localElement).getParentEl(), sourceCollection);
+		public BetterList<ElementId> getSourceElements(DerivedCollectionElement<T> localElement, BetterCollection<?> sourceCollection) {
+			return getParent().getSourceElements(((TransformedElement) localElement).getParentEl(), sourceCollection);
 		}
 
 		@Override
 		public DerivedCollectionElement<T> getEquivalentElement(DerivedCollectionElement<?> flowEl) {
-			if (!(flowEl instanceof AbstractActiveMappingManager.ActiveMappedElement))
+			if (!(flowEl instanceof ActiveTransformedCollectionManager.TransformedElement))
 				return null;
-			DerivedCollectionElement<I> found = getParent().getEquivalentElement(((ActiveMappedElement) flowEl).getParentEl());
+			DerivedCollectionElement<I> found = getParent().getEquivalentElement(((TransformedElement) flowEl).getParentEl());
 			return found == null ? null : map(found, true);
-		}
-
-		@Override
-		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
-			if (!isReversible())
-				return StdMsg.UNSUPPORTED_OPERATION;
-			ReverseQueryResult<I> qr = canReverse(null, toAdd);
-			if (qr.getError() != null)
-				return qr.getError();
-			I reversed = qr.getReversed();
-			if (!equivalence().elementEquals(map(reversed, toAdd), toAdd))
-				return StdMsg.ILLEGAL_ELEMENT;
-			return getParent().canAdd(reversed, strip(after), strip(before));
-		}
-
-		@Override
-		public DerivedCollectionElement<T> addElement(T value, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before,
-			boolean first) {
-			if (!isReversible())
-				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-			ReverseQueryResult<I> qr = canReverse(null, value);
-			if (StdMsg.UNSUPPORTED_OPERATION.equals(qr.getError()))
-				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-			else if (qr.getError() != null)
-				throw new IllegalArgumentException(qr.getError());
-			I reversed = qr.getReversed();
-			if (!equivalence().elementEquals(map(reversed, value), value))
-				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
-			DerivedCollectionElement<I> parentEl = getParent().addElement(reversed, strip(after),
-				strip(before), first);
-			return parentEl == null ? null : map(parentEl, true);
 		}
 
 		@Override
@@ -1522,74 +1456,121 @@ public class ObservableCollectionActiveManagers {
 
 		@Override
 		protected void doParentMultiSet(Collection<AbstractMappedElement> elements, I newValue) {
-			getParent().setValues(elements.stream().map(el -> ((ActiveMappedElement) el).getParentEl()).collect(Collectors.toList()),
+			getParent().setValues(elements.stream().map(el -> ((TransformedElement) el).getParentEl()).collect(Collectors.toList()),
 				newValue);
 		}
 
 		private DerivedCollectionElement<I> strip(DerivedCollectionElement<T> el) {
-			return el == null ? null : ((ActiveMappedElement) el).getParentEl();
+			return el == null ? null : ((TransformedElement) el).getParentEl();
 		}
 
-		protected abstract class ActiveMappedElement extends AbstractMappedElement
-		implements DerivedCollectionElement<T> {
-			private final DerivedCollectionElement<I> theParentEl;
-			CollectionElementListener<T> theListener;
-			T theValue;
-			final XformOptions.XformCacheHandler<I, T> theCacheHandler;
+		@Override
+		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
+			if (!isReversible() || getTransformation().isManyToOne())
+				return null;
+			Transformation.ReverseQueryResult<I> qr = getEngine().reverse(value, false, true);
+			if (qr.getError() != null)
+				return null;
+			I reversed = qr.getReversed();
+			Comparable<DerivedCollectionElement<I>> pef = getParent().getElementFinder(reversed);
+			if (pef == null)
+				return null;
+			return el -> pef.compareTo(((TransformedElement) el).getParentEl());
+		}
 
-			ActiveMappedElement(DerivedCollectionElement<I> parentEl, boolean synthetic) {
+		@Override
+		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
+			if (!isReversible())
+				return StdMsg.UNSUPPORTED_OPERATION;
+			Transformation.ReverseQueryResult<I> qr = getEngine().reverse(toAdd, true, true);
+			if (qr.getError() != null)
+				return qr.getError();
+			I reversed = qr.getReversed();
+			return getParent().canAdd(reversed, strip(after), strip(before));
+		}
+
+		@Override
+		public DerivedCollectionElement<T> addElement(T value, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before,
+			boolean first) {
+			if (!isReversible())
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+			Transformation.ReverseQueryResult<I> qr = getEngine().reverse(value, true, false);
+			if (StdMsg.UNSUPPORTED_OPERATION.equals(qr.getError()))
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+			else if (qr.getError() != null)
+				throw new IllegalArgumentException(qr.getError());
+			I reversed = qr.getReversed();
+			DerivedCollectionElement<I> parentEl = getParent().addElement(reversed, strip(after), strip(before), first);
+			return parentEl == null ? null : map(parentEl, true);
+		}
+
+		@Override
+		public void setValues(Collection<DerivedCollectionElement<T>> elements, T newValue)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			Runnable postSet = null;
+			if (theEngine.getTransformation() instanceof Transformation.ReversibleTransformation) {
+				Transformation.ReversibleTransformation<I, T> reversible = (Transformation.ReversibleTransformation<I, T>) theEngine
+					.getTransformation();
+				if (reversible.getReverse() instanceof FlowElementSetter) {
+					TransformedElement first = (TransformedElement) elements.iterator().next();
+					postSet = ((FlowElementSetter<I, T>) reversible.getReverse()).preSet(first.getParentEl(), newValue);
+				}
+			}
+			try {
+				setElementsValue(elements, newValue);
+			} finally {
+				if (postSet != null)
+					postSet.run();
+			}
+		}
+
+		@Override
+		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
+			listening.withConsumer((ObservableValueEvent<Transformation.TransformationState> evt) -> {
+				try (Transaction t = getParent().lock(false, null)) {
+					// The order of update here may be different than the order in the derived collection
+					// It's a lot of work to keep the elements in order (since the order may change),
+					// so we'll just let order of addition be good enough
+					for (TransformedElement el : theElements)
+						el.updated(evt);
+				}
+			}, action -> getEngine().noInitChanges().act(action));
+			getParent().begin(fromStart, (parentEl, cause) -> {
+				try (Transaction t = getEngine().lock()) {
+					TransformedElement el = new TransformedElement(parentEl, false);
+					onElement.accept(el, cause);
+				}
+			}, listening);
+		}
+
+		private class TransformedElement extends AbstractMappedElement implements DerivedCollectionElement<T> {
+			private final DerivedCollectionElement<I> theParentEl;
+			private final ElementId theStoredId;
+			CollectionElementListener<T> theListener;
+
+			TransformedElement(DerivedCollectionElement<I> parentEl, boolean synthetic) {
+				super(parentEl::get);
 				theParentEl = parentEl;
 				if (!synthetic) {
-					theCacheHandler = getOptions().createCacheHandler(new XformOptions.XformCacheHandlingInterface<I, T>() {
-						@Override
-						public BiFunction<? super I, ? super T, ? extends T> map() {
-							return ActiveMappedElement.this::mapForElement;
-						}
-
-						@Override
-						public Transaction lock() {
-							// No need to lock, as modifications only come from one source
-							return Transaction.NONE;
-						}
-
-						@Override
-						public T getDestCache() {
-							return theValue;
-						}
-
-						@Override
-						public void setDestCache(T value) {
-							theValue = value;
-						}
-					});
-					theCacheHandler.initialize(parentEl::get);
-					if (getOptions().isCached())
-						theValue = mapForElement(theCacheHandler.getSourceCache(), null);
 					theParentEl.setListener(new CollectionElementListener<I>() {
 						@Override
 						public void update(I oldSource, I newSource, Object cause) {
-							BiTuple<T, T> values = theCacheHandler.handleSourceChange(oldSource, newSource);
+							BiTuple<T, T> values = transformElement.sourceChanged(oldSource, newSource, getEngine().get());
 							if (values != null)
 								ObservableCollectionActiveManagers.update(theListener, values.getValue1(), values.getValue2(), cause);
 						}
 
 						@Override
 						public void removed(I value, Object cause) {
-							T val = getOptions().isCached() ? theValue : mapForElement(value, null);
-							ActiveMappedElement.this.removed();
+							T val = transformElement.getCurrentValue(value, getEngine().get());
+							theElements.mutableElement(theStoredId).remove();
 							ObservableCollectionActiveManagers.removed(theListener, val, cause);
 							theListener = null;
-							theCacheHandler.initialize(null);
 						}
 					});
-				} else {
-					theCacheHandler = null;
-					if (getOptions().isCached())
-						theValue = mapForElement(parentEl.get(), null);
 				}
+				theStoredId = synthetic ? null : theElements.addElement(this, false).getElementId();
 			}
-
-			protected void removed() {}
 
 			protected DerivedCollectionElement<I> getParentEl() {
 				return theParentEl;
@@ -1601,18 +1582,8 @@ public class ObservableCollectionActiveManagers {
 			}
 
 			@Override
-			T getValue() {
-				return getOptions().isCached() ? theValue : mapForElement(theParentEl.get(), null);
-			}
-
-			@Override
-			I getCachedSource() {
-				return theCacheHandler.getSourceCache();
-			}
-
-			@Override
-			I getParentValue() {
-				return theParentEl.get();
+			protected String isParentEnabled() {
+				return theParentEl.isEnabled();
 			}
 
 			@Override
@@ -1627,12 +1598,12 @@ public class ObservableCollectionActiveManagers {
 
 			@Override
 			public int compareTo(DerivedCollectionElement<T> o) {
-				return theParentEl.compareTo(((ActiveMappedElement) o).theParentEl);
+				return theParentEl.compareTo(((TransformedElement) o).theParentEl);
 			}
 
 			@Override
 			public T get() {
-				return getValue();
+				return transformElement.getCurrentValue(getEngine().get());
 			}
 
 			@Override
@@ -1647,7 +1618,20 @@ public class ObservableCollectionActiveManagers {
 
 			@Override
 			public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
-				super.set(value);
+				Runnable postSet = null;
+				if (theEngine.getTransformation() instanceof Transformation.ReversibleTransformation) {
+					Transformation.ReversibleTransformation<I, T> reversible = (Transformation.ReversibleTransformation<I, T>) theEngine
+						.getTransformation();
+					if (reversible.getReverse() instanceof FlowElementSetter) {
+						postSet = ((FlowElementSetter<I, T>) reversible.getReverse()).preSet(theParentEl, value);
+					}
+				}
+				try {
+					super.set(value);
+				} finally {
+					if (postSet != null)
+						postSet.run();
+				}
 			}
 
 			@Override
@@ -1657,332 +1641,13 @@ public class ObservableCollectionActiveManagers {
 
 			@Override
 			public void remove() throws UnsupportedOperationException {
-				theParentEl.remove();
-			}
-		}
-	}
-
-	/**
-	 * An {@link ActiveCollectionManager active manager} produced by a {@link CollectionDataFlow#map(TypeToken, Function) mapping} operation
-	 *
-	 * @param <E> The type of the source collection
-	 * @param <I> The type of the parent flow
-	 * @param <T> The type of this manager
-	 */
-	public static class ActiveMappedCollectionManager<E, I, T> extends AbstractActiveMappingManager<E, I, T> {
-		private final BiFunction<? super I, ? super T, ? extends T> theMap;
-		private final Equivalence<? super T> theEquivalence;
-
-		/**
-		 * @param parent The parent manager
-		 * @param targetType The type of this manager
-		 * @param map The mapping function to produce this manager's values from the source values
-		 * @param equivalence The equivalence for this manager
-		 * @param options The mapping options governing some of the manager's behavior, e.g. caching
-		 */
-		public ActiveMappedCollectionManager(ActiveCollectionManager<E, ?, I> parent, TypeToken<T> targetType,
-			BiFunction<? super I, ? super T, ? extends T> map, Equivalence<? super T> equivalence, MapDef<I, T> options) {
-			super(parent, targetType, options);
-			theMap = map;
-			theEquivalence = equivalence;
-		}
-
-		@Override
-		protected MapDef<I, T> getOptions() {
-			return (MapDef<I, T>) super.getOptions();
-		}
-
-		@Override
-		protected MappedElement map(DerivedCollectionElement<I> parentEl, boolean synthetic) {
-			return new MappedElement(parentEl, synthetic);
-		}
-
-		@Override
-		protected boolean isReversible() {
-			return getOptions().getReverse() != null;
-		}
-
-		@Override
-		protected boolean isReverseStateful() {
-			return getOptions().getReverse() != null && getOptions().getReverse().isStateful();
-		}
-
-		@Override
-		protected ReverseQueryResult<I> canReverse(Supplier<? extends I> previousSource, T newValue) {
-			return getOptions().getReverse().canReverse(previousSource, newValue);
-		}
-
-		@Override
-		protected I reverse(AbstractMappedElement preSourceEl, T value) {
-			FlowOptions.MapReverse<I, T> reverse = getOptions().getReverse();
-			if (reverse instanceof FlowElementSetter)
-				return ((FlowElementSetter<I, T>) reverse).reverse(((MappedElement) preSourceEl).getParentEl(), value);
-			else
-				return getOptions().getReverse().reverse(preSourceEl::getParentValue, value);
-		}
-
-		@Override
-		protected T map(I value, T previousValue) {
-			return theMap.apply(value, previousValue);
-		}
-
-		@Override
-		public Object getIdentity() {
-			return Identifiable.wrap(getParent().getIdentity(), "map", theMap, getOptions());
-		}
-
-		@Override
-		public Equivalence<? super T> equivalence() {
-			return theEquivalence;
-		}
-
-		@Override
-		public void setValues(Collection<DerivedCollectionElement<T>> elements, T newValue)
-			throws UnsupportedOperationException, IllegalArgumentException {
-			setElementsValue(elements, newValue);
-		}
-
-		@Override
-		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
-			getParent().begin(fromStart, (parentEl, cause) -> {
-				onElement.accept(new MappedElement(parentEl, false), cause);
-			}, listening);
-		}
-
-		/**
-		 * A {@link DerivedCollectionElement} implementation for {@link ActiveMappedCollectionManager}
-		 */
-		public class MappedElement extends ActiveMappedElement {
-			MappedElement(DerivedCollectionElement<I> parentEl, boolean synthetic) {
-				super(parentEl, synthetic);
+				theParentEl.remove(); // The parent will call the listener to remove the stored ID
 			}
 
-			@Override
-			public String toString() {
-				return String.valueOf(get());
-			}
-		}
-	}
-
-	static class ActiveCombinedCollectionManager<E, I, T> extends AbstractActiveMappingManager<E, I, T> {
-		private final Map<ObservableValue<?>, XformOptions.XformCacheHandler<Object, Void>> theArgs;
-
-		// Need to keep track of these to update them when the combined values change
-		private final BetterSortedSet<CombinedElement> theElements;
-
-		ActiveCombinedCollectionManager(ActiveCollectionManager<E, ?, I> parent, TypeToken<T> targetType,
-			ReversibleCombinationDef<I, T> def) {
-			super(parent, targetType, def);
-			theArgs = new HashMap<>();
-			for (ObservableValue<?> arg : def.getArgs())
-				theArgs.put(arg, getOptions().createCacheHandler(new XformOptions.XformCacheHandlingInterface<Object, Void>() {
-					@Override
-					public BiFunction<? super Object, ? super Void, ? extends Void> map() {
-						return (v, o) -> null;
-					}
-
-					@Override
-					public Transaction lock() {
-						// Should not be called, though
-						return ActiveCombinedCollectionManager.this.lock(true, null);
-					}
-
-					@Override
-					public Void getDestCache() {
-						return null;
-					}
-
-					@Override
-					public void setDestCache(Void value) {}
-				}));
-
-			theElements = new BetterTreeSet<>(false, CombinedElement::compareTo);
-		}
-
-		@Override
-		protected ReversibleCombinationDef<I, T> getOptions() {
-			return (ReversibleCombinationDef<I, T>) super.getOptions();
-		}
-
-		@Override
-		protected CombinedElement map(DerivedCollectionElement<I> parentEl, boolean synthetic) {
-			return new CombinedElement(parentEl, synthetic);
-		}
-
-		@Override
-		protected boolean isReversible() {
-			return getOptions().getReverse() != null;
-		}
-
-		@Override
-		protected ReverseQueryResult<I> canReverse(Supplier<? extends I> previousSource, T newValue) {
-			return ReverseQueryResult.value(reverse(null, newValue));
-		}
-
-		@Override
-		protected I reverse(AbstractMappedElement preSourceEl, T value) {
-			Supplier<I> ps = getOptions().isCached() ? preSourceEl::getCachedSource : preSourceEl::getParentValue;
-			return getOptions().getReverse().apply(new Combination.CombinedValues<T>() {
-				@Override
-				public T getElement() {
-					return value;
-				}
-
-				@Override
-				public <V> V get(ObservableValue<V> arg) {
-					return getArgValue(arg);
-				}
-			}, ps);
-		}
-
-		@Override
-		protected boolean isReverseStateful() {
-			return false;
-		}
-
-		@Override
-		protected T map(I value, T previousValue) {
-			return getOptions().getCombination().apply(new Combination.CombinedValues<I>() {
-				@Override
-				public I getElement() {
-					return value;
-				}
-
-				@Override
-				public <V> V get(ObservableValue<V> arg) {
-					return getArgValue(arg);
-				}
-			}, previousValue);
-		}
-
-		@Override
-		public Object getIdentity() {
-			return Identifiable.wrap(getParent().getIdentity(), "combine", getOptions());
-		}
-
-		@Override
-		public Equivalence<? super T> equivalence() {
-			if (getTargetType().equals(getParent().getTargetType()))
-				return (Equivalence<? super T>) getParent().equivalence();
-			else
-				return Equivalence.DEFAULT;
-		}
-
-		@Override
-		public boolean isLockSupported() {
-			return true;
-		}
-
-		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return Lockable.lockAll(Lockable.lockable(getParent(), write, cause), getOptions().getArgs());
-		}
-
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return Lockable.tryLockAll(Lockable.lockable(getParent(), write, cause), getOptions().getArgs());
-		}
-
-		private Transaction lockArgs() {
-			return Lockable.lockAll(getOptions().getArgs());
-		}
-
-		@Override
-		public void setValues(Collection<DerivedCollectionElement<T>> elements, T newValue)
-			throws UnsupportedOperationException, IllegalArgumentException {
-			setElementsValue(elements, newValue);
-		}
-
-		@Override
-		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
-			for (Map.Entry<ObservableValue<?>, XformOptions.XformCacheHandler<Object, Void>> arg : theArgs.entrySet()) {
-				XformOptions.XformCacheHandler<Object, Void> holder = arg.getValue();
-				listening.withConsumer((ObservableValueEvent<?> evt) -> {
-					if (evt.isInitial()) {
-						holder.initialize(evt::getNewValue);
-						return;
-					}
-					Object oldValue = getOptions().isCached() ? holder.getSourceCache() : evt.getOldValue();
-					Ternian update = holder.isSourceUpdate(evt.getOldValue(), evt.getNewValue());
-					if (update == Ternian.NONE)
-						return; // No change, no event
-					try (Transaction t = lock(false, null)) {
-						// The old values are not needed if we're caching each element value
-						Object[] source = getOptions().isCached() ? null : new Object[1];
-						Combination.CombinedValues<I> oldValues = getOptions().isCached() ? null : getCopy(source, arg.getKey(), oldValue);
-						// The order of update here may be different than the order in the derived collection
-						// It's a lot of work to keep the elements in order (since the order may change),
-						// so we'll just let order of addition be good enough
-						for (CombinedElement el : theElements)
-							el.updated(src -> {
-								source[0] = src;
-								return oldValues;
-							}, evt, update.value);
-					}
-				}, action -> arg.getKey().changes().act(action));
-			}
-			getParent().begin(fromStart, (parentEl, cause) -> {
-				try (Transaction t = lockArgs()) {
-					CombinedElement el = new CombinedElement(parentEl, false);
-					onElement.accept(el, cause);
-				}
-			}, listening);
-		}
-
-		private <V> V getArgValue(ObservableValue<V> arg) {
-			XformOptions.XformCacheHandler<Object, Void> holder = theArgs.get(arg);
-			if (holder == null)
-				throw new IllegalArgumentException("Unrecognized value: " + arg);
-			if (getOptions().isCached())
-				return (V) holder.getSourceCache();
-			else
-				return arg.get();
-		}
-
-		private Combination.CombinedValues<I> getCopy(Object[] source, ObservableValue<?> replaceArg, Object value) {
-			Map<ObservableValue<?>, Object> theValues = new HashMap<>();
-			for (Map.Entry<ObservableValue<?>, XformOptions.XformCacheHandler<Object, Void>> holder : theArgs.entrySet()) {
-				if (holder.getKey() == replaceArg)
-					theValues.put(holder.getKey(), value);
-				else if (getOptions().isCached())
-					theValues.put(holder.getKey(), holder.getValue().getSourceCache());
-				else
-					theValues.put(holder.getKey(), holder.getKey().get());
-			}
-			return new Combination.CombinedValues<I>() {
-				@Override
-				public I getElement() {
-					return (I) source[0];
-				}
-
-				@Override
-				public <X> X get(ObservableValue<X> arg) {
-					return (X) theValues.get(arg);
-				}
-			};
-		}
-
-		private class CombinedElement extends ActiveMappedElement {
-			private final ElementId theStoredId;
-
-			CombinedElement(DerivedCollectionElement<I> parentEl, boolean synthetic) {
-				super(parentEl, synthetic);
-				theStoredId = synthetic ? null : theElements.addElement(this, false).getElementId();
-			}
-
-			void updated(Function<I, Combination.CombinedValues<I>> oldValues, Object cause, boolean isUpdate) {
-				I parentValue = getOptions().isCached() ? theCacheHandler.getSourceCache() : getParentEl().get();
-				Function<? super I, ? extends T> oldMap = oldSrc -> getOptions().getCombination()//
-					.apply(//
-						oldValues.apply(oldSrc), null);
-				BiTuple<T, T> values = theCacheHandler.handleSourceChange(parentValue, oldMap, parentValue, isUpdate);
+			void updated(ObservableValueEvent<Transformation.TransformationState> cause) {
+				BiTuple<T, T> values = transformElement.transformationStateChanged(cause.getOldValue(), cause.getNewValue());
 				if (values != null)
 					ObservableCollectionActiveManagers.update(theListener, values.getValue1(), values.getValue2(), cause);
-			}
-
-			@Override
-			protected void removed() {
-				theElements.mutableElement(theStoredId).remove();
 			}
 
 			@Override

@@ -517,7 +517,7 @@ implements TableBuilder<R, P> {
 			});
 			filtered = TableContentControl.applyRowControl(theSafeRows, () -> renderers, theFilter.refresh(columnChanges), until);
 			model = new ObservableTableModel<>(
-				filtered.flow().map(theRows.getType(), f -> f.value, opts -> opts.withFieldSetReverse(FilteredValue::setValue, null))
+				filtered.flow().transform(theRows.getType(), tx -> tx.map(f -> f.value).modifySource(FilteredValue::setValue))
 				.collectActive(until), //
 				true, safeColumns, true);
 		} else {

@@ -5,6 +5,7 @@ import java.util.Collection;
 import java.util.Iterator;
 import java.util.Spliterator;
 
+import org.observe.Equivalence;
 import org.observe.ObservableValue;
 import org.observe.collect.ObservableSetImpl.ConstantObservableSet;
 import org.observe.util.TypeTokens;
