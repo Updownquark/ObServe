@@ -137,18 +137,18 @@ public class ObservableChainTester implements Testable {
 	 */
 	@Test
 	public void superTest() {
-		Duration testDuration = Duration.ofMinutes(20);
+		Duration testDuration = Duration.ofMinutes(10);
 		int maxFailures = 1;
 		System.out.println(
 			"Executing up to " + QommonsUtils.printTimeLength(testDuration.toMillis()) + " of tests with max " + maxFailures + " failures");
 		TestHelper.createTester(getClass())//
-		.withRandomCases(-1)//
+		.withRandomCases(-1)// No case number limit
 		.withMaxCaseDuration(Duration.ofMinutes(3)) // Since we're using progress interval checking, this can be pretty long
 		.withMaxTotalDuration(testDuration)//
-		.withMaxProgressInterval(Duration.ofSeconds(10))//
+		.withMaxProgressInterval(Duration.ofSeconds(10))// If a proess doesn't make any progress in 10s, something's wrong
 		.withMaxFailures(maxFailures)//
-		.withConcurrency(max -> max - 1)//
-		.withPersistenceDir(new File("src/main/test/org/observe/supertest"), false)//
+		.withConcurrency(max -> max - 1)// Use all but 1 of the system's CPUs
+		.withPersistenceDir(new File("src/main/test/org/observe/supertest"), false)// Where to write the failure file
 		.withPlacemarks("Transaction", "Modification").withDebug(true)//
 		.execute()//
 		.printResults().throwErrorIfFailed();
