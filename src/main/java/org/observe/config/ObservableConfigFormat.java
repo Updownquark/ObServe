@@ -1096,6 +1096,14 @@ public interface ObservableConfigFormat<E> {
 			return theType;
 		}
 
+		public ObservableConfigFormat<K> getKeyFormat() {
+			return (ObservableConfigFormat<K>) getFields().get(0).format;
+		}
+
+		public ObservableConfigFormat<V> getValueFormat() {
+			return (ObservableConfigFormat<V>) getFields().get(1).format;
+		}
+
 		@Override
 		protected MapEntry<K, V> create(ObservableConfigParseSession session, QuickMap<String, Object> fieldValues, ObservableConfig config,
 			Observable<?> until, ObservableConfigParseContext<MapEntry<K, V>> ctx) {
@@ -1408,7 +1416,7 @@ public interface ObservableConfigFormat<E> {
 	}
 
 	static <E, C extends Collection<? extends E>> ObservableConfigFormat<C> ofCollection(TypeToken<C> collectionType,
-		ObservableConfigFormat<E> elementFormat, ObservableConfigFormatSet fieldParser, String parentName, String childName) {
+		ObservableConfigFormat<E> elementFormat, String parentName, String childName) {
 		if (!TypeTokens.getRawType(collectionType).isAssignableFrom(ObservableCollection.class))
 			throw new IllegalArgumentException("This class can only produce instances of " + ObservableCollection.class.getName()
 				+ ", which is not compatible with type " + collectionType);
@@ -1434,8 +1442,7 @@ public interface ObservableConfigFormat<E> {
 			public C parse(ObservableConfigParseContext<C> ctx) throws ParseException {
 				if (ctx.getPreviousValue() == null) {
 					return (C) new ObservableConfigTransform.ObservableConfigValues<>(ctx.getSession(), ctx.getRoot(), ctx.getConfig(),
-						() -> ctx.getConfig(true), elementType, elementFormat, childName, fieldParser, ctx.getUntil(), false,
-						ctx.findReferences());
+						() -> ctx.getConfig(true), elementType, elementFormat, childName, ctx.getUntil(), false, ctx.findReferences());
 				} else {
 					((ObservableConfigTransform.ObservableConfigValues<E>) ctx.getPreviousValue()).onChange(ctx.getChange());
 					return ctx.getPreviousValue();

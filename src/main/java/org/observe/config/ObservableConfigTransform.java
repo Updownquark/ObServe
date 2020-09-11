@@ -16,10 +16,13 @@ import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.assoc.ObservableMap;
+import org.observe.assoc.ObservableMapEvent;
 import org.observe.assoc.ObservableMultiMap;
+import org.observe.assoc.ObservableMultiMapEvent;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionEvent;
+import org.observe.collect.ObservableSet;
 import org.observe.config.ObservableConfig.ObservableConfigEvent;
 import org.observe.config.ObservableConfigFormat.EntityConfigFormat;
 import org.observe.config.ObservableConfigFormat.MapEntry;
@@ -27,6 +30,7 @@ import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
+import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
 import org.qommons.Stamped;
 import org.qommons.Transactable;
@@ -39,8 +43,12 @@ import org.qommons.collect.BetterSortedMap;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ListenerList;
+import org.qommons.collect.MapEntryHandle;
+import org.qommons.collect.MultiEntryHandle;
+import org.qommons.collect.MultiEntryValueHandle;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.collect.MutableMapEntryHandle;
 import org.qommons.tree.BetterTreeMap;
 
 import com.google.common.reflect.TypeToken;
@@ -170,7 +178,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 
 	protected abstract void onChange(ObservableConfigEvent parentChange);
 
-	static class ObservableConfigValue<E> extends ObservableConfigTransform implements SettableValue<E> {
+	protected static class ObservableConfigValue<E> extends ObservableConfigTransform implements SettableValue<E> {
 		private final TypeToken<E> theType;
 		private final ObservableConfigFormat<E> theFormat;
 
@@ -340,7 +348,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		}
 	}
 
-	static abstract class ObservableConfigBackedCollection<E> extends ObservableConfigTransform {
+	protected static abstract class ObservableConfigBackedCollection<E> extends ObservableConfigTransform {
 		final TypeToken<E> theType;
 		private final ObservableConfigFormat<E> theFormat;
 		private final String theChildName;
@@ -851,11 +859,14 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 
 		ObservableConfigValues(ObservableConfigParseSession session, ObservableConfig root,
 			ObservableValue<? extends ObservableConfig> collectionElement, Runnable ceCreate, TypeToken<E> type,
-			ObservableConfigFormat<E> format, String childName, ObservableConfigFormatSet fieldParser, Observable<?> until, boolean listen,
-			Observable<?> findRefs) {
+			ObservableConfigFormat<E> format, String childName, Observable<?> until, boolean listen, Observable<?> findRefs) {
 			theBacking = new Backing<>(session, root, collectionElement, ceCreate, type, format, childName, until, listen, findRefs);
 
 			init(theBacking.getCollection());
+		}
+
+		protected Backing<E> getBacking() {
+			return theBacking;
 		}
 
 		protected void onChange(ObservableConfigEvent collectionChange) {
@@ -1047,26 +1058,228 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		}
 	}
 
-	static class ObservableConfigMap<K, V> extends ObservableConfigBackedCollection<MapEntry<K, V>> implements ObservableMap<K, V> {
+	static class ObservableConfigMap<K, V> implements ObservableMap<K, V> {
+		private final ObservableConfigValues<MapEntry<K, V>> theCollection;
+		private final ObservableMap<K, V> theWrapped;
+
 		ObservableConfigMap(ObservableConfigParseSession session, ObservableConfig root,
 			ObservableValue<? extends ObservableConfig> collectionElement, Runnable ceCreate, String keyName, String valueName,
 			TypeToken<K> keyType, TypeToken<V> valueType, ObservableConfigFormat<K> keyFormat, ObservableConfigFormat<V> valueFormat,
 			Observable<?> until, boolean listen, Observable<?> findRefs) {
-			super(session, root, collectionElement, ceCreate, MapEntry.TYPE_KEY.getCompoundType(keyType, valueType), //
+			theCollection = new ObservableConfigValues<>(session, root, collectionElement, ceCreate,
+				MapEntry.TYPE_KEY.<MapEntry<K, V>> getCompoundType(keyType, valueType), //
 				new ObservableConfigFormat.EntryFormat<>(true, keyName, valueName, keyType, valueType, keyFormat, valueFormat), valueName,
 				until, listen, findRefs);
+			theWrapped = theCollection.flow()
+				.groupBy(keyType, //
+					LambdaUtils.printableFn(entry -> entry.key, "key", null), //
+					LambdaUtils.printableBiFn((key, entry) -> {
+						entry.key = key;
+						return entry;
+					}, "setKey", null))//
+				.withValues(values -> values.transform(valueType, tx -> {
+					return tx.cache(false).map(LambdaUtils.printableFn(entry -> entry.value, "value", null))//
+						.modifySource(LambdaUtils.printableBiConsumer((entry, value) -> entry.value = value, () -> "setValue", null), //
+							rvrs -> rvrs.createWith(LambdaUtils.printableFn(value -> new MapEntry<>(null, value), "createEntry", null)));
+				})).gatherActive(until).singleMap(true);
+		}
+
+		protected void onChange(ObservableConfigEvent change) {
+			theCollection.onChange(change);
+		}
+
+		@Override
+		public Object getIdentity() {
+			return theWrapped.getIdentity();
+		}
+
+		@Override
+		public TypeToken<K> getKeyType() {
+			return theWrapped.getKeyType();
+		}
+
+		@Override
+		public TypeToken<V> getValueType() {
+			return theWrapped.getValueType();
+		}
+
+		@Override
+		public TypeToken<java.util.Map.Entry<K, V>> getEntryType() {
+			return theWrapped.getEntryType();
+		}
+
+		@Override
+		public Equivalence<? super V> equivalence() {
+			return theWrapped.equivalence();
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return theCollection.getBacking().isLockSupported();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return theCollection.getBacking().lock(write, cause);
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, Object cause) {
+			return theCollection.getBacking().tryLock(write, cause);
+		}
+
+		@Override
+		public ObservableSet<K> keySet() {
+			return theWrapped.keySet();
+		}
+
+		@Override
+		public MapEntryHandle<K, V> getEntry(K key) {
+			return theWrapped.getEntry(key);
+		}
+
+		@Override
+		public MapEntryHandle<K, V> getOrPutEntry(K key, Function<? super K, ? extends V> value, ElementId after, ElementId before,
+			boolean first, Runnable added) {
+			return theWrapped.getOrPutEntry(key, value, after, before, first, added);
+		}
+
+		@Override
+		public MapEntryHandle<K, V> getEntryById(ElementId entryId) {
+			return theWrapped.getEntryById(entryId);
+		}
+
+		@Override
+		public MutableMapEntryHandle<K, V> mutableEntry(ElementId entryId) {
+			return theWrapped.mutableEntry(entryId);
+		}
+
+		@Override
+		public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action) {
+			return theWrapped.onChange(action);
 		}
 	}
 
-	static class ObservableConfigMultiMap<K, V> extends ObservableConfigBackedCollection<MapEntry<K, V>>
-	implements ObservableMultiMap<K, V> {
+	static class ObservableConfigMultiMap<K, V> implements ObservableMultiMap<K, V> {
+		private final ObservableConfigValues<MapEntry<K, V>> theCollection;
+		private final ObservableMultiMap<K, V> theWrapped;
+
 		ObservableConfigMultiMap(ObservableConfigParseSession session, ObservableConfig root,
 			ObservableValue<? extends ObservableConfig> collectionElement, Runnable ceCreate, String keyName, String valueName,
 			TypeToken<K> keyType, TypeToken<V> valueType, ObservableConfigFormat<K> keyFormat, ObservableConfigFormat<V> valueFormat,
 			Observable<?> until, boolean listen, Observable<?> findRefs) {
-			super(session, root, collectionElement, ceCreate, MapEntry.TYPE_KEY.getCompoundType(keyType, valueType), //
+			theCollection = new ObservableConfigValues<>(session, root, collectionElement, ceCreate,
+				MapEntry.TYPE_KEY.<MapEntry<K, V>> getCompoundType(keyType, valueType), //
 				new ObservableConfigFormat.EntryFormat<>(true, keyName, valueName, keyType, valueType, keyFormat, valueFormat), valueName,
 				until, listen, findRefs);
+			theWrapped = theCollection.flow()
+				.groupBy(keyType, //
+					LambdaUtils.printableFn(entry -> entry.key, "key", null), //
+					LambdaUtils.printableBiFn((key, entry) -> {
+						entry.key = key;
+						return entry;
+					}, "setKey", null))//
+				.withValues(values -> values.transform(valueType, tx -> {
+					return tx.cache(false).map(LambdaUtils.printableFn(entry -> entry.value, "value", null))//
+						.modifySource(LambdaUtils.printableBiConsumer((entry, value) -> entry.value = value, () -> "setValue", null), //
+							rvrs -> rvrs.createWith(LambdaUtils.printableFn(value -> new MapEntry<>(null, value), "createEntry", null)));
+				})).gatherActive(until);
+		}
+
+		protected void onChange(ObservableConfigEvent change) {
+			theCollection.onChange(change);
+		}
+
+		@Override
+		public Object getIdentity() {
+			return theWrapped.getIdentity();
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return theCollection.getBacking().isLockSupported();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return theCollection.getBacking().lock(write, cause);
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, Object cause) {
+			return theCollection.getBacking().tryLock(write, cause);
+		}
+
+		@Override
+		public long getStamp() {
+			return theWrapped.getStamp();
+		}
+
+		@Override
+		public TypeToken<K> getKeyType() {
+			return theWrapped.getKeyType();
+		}
+
+		@Override
+		public TypeToken<V> getValueType() {
+			return theWrapped.getValueType();
+		}
+
+		@Override
+		public TypeToken<MultiEntryHandle<K, V>> getEntryType() {
+			return theWrapped.getEntryType();
+		}
+
+		@Override
+		public TypeToken<MultiEntryValueHandle<K, V>> getEntryValueType() {
+			return theWrapped.getEntryValueType();
+		}
+
+		@Override
+		public ObservableSet<K> keySet() {
+			return theWrapped.keySet();
+		}
+
+		@Override
+		public MultiEntryHandle<K, V> getEntryById(ElementId keyId) {
+			return theWrapped.getEntryById(keyId);
+		}
+
+		@Override
+		public MultiEntryHandle<K, V> getOrPutEntry(K key, Function<? super K, ? extends Iterable<? extends V>> value, ElementId afterKey,
+			ElementId beforeKey, boolean first, Runnable added) {
+			return theWrapped.getOrPutEntry(key, value, afterKey, beforeKey, first, added);
+		}
+
+		@Override
+		public int valueSize() {
+			return theWrapped.valueSize();
+		}
+
+		@Override
+		public boolean clear() {
+			return theWrapped.clear();
+		}
+
+		@Override
+		public ObservableMultiEntry<K, V> watchById(ElementId keyId) {
+			return theWrapped.watchById(keyId);
+		}
+
+		@Override
+		public ObservableMultiEntry<K, V> watch(K key) {
+			return theWrapped.watch(key);
+		}
+
+		@Override
+		public Subscription onChange(Consumer<? super ObservableMultiMapEvent<? extends K, ? extends V>> action) {
+			return theWrapped.onChange(action);
+		}
+
+		@Override
+		public MultiMapFlow<K, V> flow() {
+			return theWrapped.flow();
 		}
 	}
+
 }

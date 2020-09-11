@@ -782,8 +782,8 @@ public class ObservableConfig implements Transactable, Stamped {
 		public ObservableCollection<T> buildCollection(Consumer<ObservableCollection<T>> preReturnGet) {
 			return build(findRefs -> new ObservableConfigTransform.ObservableConfigValues<>(new ObservableConfigParseSession(),
 				ObservableConfig.this, //
-				getDescendant(thePath != null), createDescendant(thePath != null)::get, theType, getFormat(), getChildName(),
-				getFormatSet(), getUntil(), true, findRefs), preReturnGet);
+				getDescendant(thePath != null), createDescendant(thePath != null)::get, theType, getFormat(), getChildName(), getUntil(),
+				true, findRefs), preReturnGet);
 		}
 
 		public SyncValueSet<T> buildEntitySet(Consumer<SyncValueSet<T>> preReturnGet) {
