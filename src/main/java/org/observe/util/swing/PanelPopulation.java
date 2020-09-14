@@ -864,14 +864,14 @@ public class PanelPopulation {
 		P withCellTooltip(Function<? super ModelCell<BetterList<F>, F>, String> tooltip);
 
 		default P withSelection(SettableValue<F> selection, Function<? super F, ? extends F> parent, boolean enforceSingleSelection) {
-			return withSelection(selection.map(TypeTokens.get().keyFor(BetterList.class).getCompoundType(selection.getType()), //
+			return withSelection(selection.map(TypeTokens.get().keyFor(BetterList.class).parameterized(selection.getType()), //
 				s -> pathTo(s, parent, getRoot().get()), //
 				path -> path == null ? null : path.get(path.size() - 1), null), enforceSingleSelection);
 		}
 
 		default P withSelection(ObservableCollection<F> selection, Function<? super F, ? extends F> parent) {
 			return withSelection(selection.flow()
-				.<BetterList<F>> transform(TypeTokens.get().keyFor(BetterList.class).getCompoundType(selection.getType()), //
+				.<BetterList<F>> transform(TypeTokens.get().keyFor(BetterList.class).parameterized(selection.getType()), //
 					tx -> tx.cache(false).map(s -> pathTo(s, parent, getRoot().get())).withReverse(path -> path.get(path.size() - 1)))//
 				.collectPassive());
 		}
@@ -1615,7 +1615,8 @@ public class PanelPopulation {
 		SimpleFieldEditor(String fieldName, E editor, Supplier<Transactable> lock) {
 			super(editor, lock);
 			theFieldName = fieldName == null ? null : ObservableValue.of(fieldName);
-			theSettableTooltip = new SimpleSettableValue<>(ObservableValue.TYPE_KEY.getCompoundType(String.class), true);
+			theSettableTooltip = new SimpleSettableValue<>(TypeTokens.get().keyFor(ObservableValue.class).parameterized(String.class),
+				true);
 			theTooltip = ObservableValue.flatten(theSettableTooltip);
 		}
 

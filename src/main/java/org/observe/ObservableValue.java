@@ -30,7 +30,6 @@ import org.qommons.Transaction;
 import org.qommons.TriFunction;
 import org.qommons.collect.ListenerList;
 
-import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
 
 /**
@@ -41,17 +40,8 @@ import com.google.common.reflect.TypeToken;
  * @param <T> The compile-time type of this observable's value
  */
 public interface ObservableValue<T> extends java.util.function.Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable {
-	/** This class's type key */
-	@SuppressWarnings("rawtypes")
-	static TypeTokens.TypeKey<ObservableValue> TYPE_KEY = TypeTokens.get().keyFor(ObservableValue.class)
-	.enableCompoundTypes(new TypeTokens.UnaryCompoundTypeCreator<ObservableValue>() {
-		@Override
-		public <P> TypeToken<? extends ObservableValue> createCompoundType(TypeToken<P> param) {
-			return new TypeToken<ObservableValue<P>>() {}.where(new TypeParameter<P>() {}, param);
-		}
-	});
 	/** This class's wildcard {@link TypeToken} */
-	static TypeToken<ObservableValue<?>> TYPE = TYPE_KEY.parameterized();
+	static TypeToken<ObservableValue<?>> TYPE = TypeTokens.get().keyFor(ObservableValue.class).wildCard();
 
 	/** @return The current value of this observable */
 	@Override

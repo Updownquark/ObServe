@@ -38,7 +38,6 @@ import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.MutableMapEntryHandle;
 import org.qommons.collect.SimpleMapEntry;
 
-import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
 
 /**
@@ -48,31 +47,11 @@ import com.google.common.reflect.TypeToken;
  * @param <V> The type of values this map stores
  */
 public interface ObservableMap<K, V> extends BetterMap<K, V> {
-	/** This class's type key */
-	@SuppressWarnings("rawtypes")
-	static TypeTokens.TypeKey<ObservableMap> TYPE_KEY = TypeTokens.get().keyFor(ObservableMap.class)
-	.enableCompoundTypes(new TypeTokens.BinaryCompoundTypeCreator<ObservableMap>() {
-		@Override
-		public <P1, P2> TypeToken<? extends ObservableMap> createCompoundType(TypeToken<P1> param1, TypeToken<P2> param2) {
-			return new TypeToken<ObservableMap<P1, P2>>() {}.where(new TypeParameter<P1>() {}, param1).where(new TypeParameter<P2>() {},
-				param2);
-		}
-	});
 	/** This class's wildcard {@link TypeToken} */
-	static TypeToken<ObservableMap<?, ?>> TYPE = TYPE_KEY.parameterized();
+	static TypeToken<ObservableMap<?, ?>> TYPE = TypeTokens.get().keyFor(ObservableMap.class).wildCard();
 
-	/** This type key for {@link java.util.Map.Entry} */
-	@SuppressWarnings("rawtypes")
-	static TypeTokens.TypeKey<Map.Entry> ENTRY_KEY = TypeTokens.get().keyFor(Map.Entry.class)
-	.enableCompoundTypes(new TypeTokens.BinaryCompoundTypeCreator<Map.Entry>() {
-		@Override
-		public <P1, P2> TypeToken<? extends Map.Entry> createCompoundType(TypeToken<P1> param1, TypeToken<P2> param2) {
-			return new TypeToken<Map.Entry<P1, P2>>() {}.where(new TypeParameter<P1>() {}, param1).where(new TypeParameter<P2>() {},
-				param2);
-		}
-	});
-	/** This wildcard {@link TypeToken} for {@link java.util.Map.Entry} */
-	static TypeToken<Map.Entry<?, ?>> ENTRY_TYPE = ENTRY_KEY.parameterized();
+	/** The wildcard {@link java.util.Map.Entry Map.Entry} {@link TypeToken} */
+	static TypeToken<Map.Entry<?, ?>> ENTRY_TYPE = TypeTokens.get().keyFor(Map.Entry.class).wildCard();
 
 	/** @return The type of keys this map uses */
 	TypeToken<K> getKeyType();
@@ -91,7 +70,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 	 * @return The entry type for the map
 	 */
 	static <K, V> TypeToken<Map.Entry<K, V>> buildEntryType(TypeToken<K> keyType, TypeToken<V> valueType) {
-		return ENTRY_KEY.getCompoundType(keyType, valueType);
+		return TypeTokens.get().keyFor(Map.Entry.class).parameterized(keyType, valueType);
 	}
 
 	@Override
@@ -717,7 +696,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 			theKeySet = theEntries.flow()
 				.transformEquivalent(keyType,
 					tx -> tx.cache(false).reEvalOnUpdate(false).fireIfUnchanged(false)//
-						.map(Map.Entry::getKey).withEquivalence(keyEquivalence).withReverse(key -> new SimpleMapEntry<>(key, null, false)))
+					.map(Map.Entry::getKey).withEquivalence(keyEquivalence).withReverse(key -> new SimpleMapEntry<>(key, null, false)))
 				.collectPassive();
 		}
 

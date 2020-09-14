@@ -50,7 +50,6 @@ import org.qommons.collect.SimpleMapEntry;
 import org.qommons.collect.SimpleMultiEntry;
 import org.qommons.tree.BetterTreeMap;
 
-import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
 
 /**
@@ -60,44 +59,14 @@ import com.google.common.reflect.TypeToken;
  * @param <V> The type of values stored in this map
  */
 public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
-	/** This class's type key */
-	@SuppressWarnings("rawtypes")
-	static TypeTokens.TypeKey<ObservableMultiMap> TYPE_KEY = TypeTokens.get().keyFor(ObservableMultiMap.class)
-	.enableCompoundTypes(new TypeTokens.BinaryCompoundTypeCreator<ObservableMultiMap>() {
-		@Override
-		public <P1, P2> TypeToken<? extends ObservableMultiMap> createCompoundType(TypeToken<P1> param1, TypeToken<P2> param2) {
-			return new TypeToken<ObservableMultiMap<P1, P2>>() {}.where(new TypeParameter<P1>() {}, param1)
-				.where(new TypeParameter<P2>() {}, param2);
-		}
-	});
 	/** This class's wildcard {@link TypeToken} */
-	static TypeToken<ObservableMultiMap<?, ?>> TYPE = TYPE_KEY.parameterized();
+	static TypeToken<ObservableMap<?, ?>> TYPE = TypeTokens.get().keyFor(ObservableMap.class).wildCard();
 
-	/** This type key for {@link MultiEntryHandle} */
-	@SuppressWarnings("rawtypes")
-	static TypeTokens.TypeKey<MultiEntryHandle> ENTRY_KEY = TypeTokens.get().keyFor(MultiEntryHandle.class)
-	.enableCompoundTypes(new TypeTokens.BinaryCompoundTypeCreator<MultiEntryHandle>() {
-		@Override
-		public <P1, P2> TypeToken<? extends MultiEntryHandle> createCompoundType(TypeToken<P1> param1, TypeToken<P2> param2) {
-			return new TypeToken<MultiEntryHandle<P1, P2>>() {}.where(new TypeParameter<P1>() {}, param1)
-				.where(new TypeParameter<P2>() {}, param2);
-		}
-	});
-	/** This wildcard {@link TypeToken} for {@link MultiEntryHandle} */
-	static TypeToken<MultiEntryHandle<?, ?>> ENTRY_TYPE = ENTRY_KEY.parameterized();
+	/** The wildcard {@link MultiEntryHandle} {@link TypeToken} */
+	static TypeToken<MultiEntryHandle<?, ?>> ENTRY_TYPE = TypeTokens.get().keyFor(MultiEntryHandle.class).wildCard();
 
-	/** This type key for {@link MultiEntryValueHandle} */
-	@SuppressWarnings("rawtypes")
-	static TypeTokens.TypeKey<MultiEntryValueHandle> VALUE_ENTRY_KEY = TypeTokens.get().keyFor(MultiEntryValueHandle.class)
-	.enableCompoundTypes(new TypeTokens.BinaryCompoundTypeCreator<MultiEntryValueHandle>() {
-		@Override
-		public <P1, P2> TypeToken<? extends MultiEntryValueHandle> createCompoundType(TypeToken<P1> param1, TypeToken<P2> param2) {
-			return new TypeToken<MultiEntryValueHandle<P1, P2>>() {}.where(new TypeParameter<P1>() {}, param1)
-				.where(new TypeParameter<P2>() {}, param2);
-		}
-	});
-	/** This wildcard {@link TypeToken} for {@link MultiEntryValueHandle} */
-	static TypeToken<MultiEntryValueHandle<?, ?>> VALUE_ENTRY_TYPE = VALUE_ENTRY_KEY.parameterized();
+	/** The wildcard {@link MultiEntryValueHandle} {@link TypeToken} */
+	static TypeToken<MultiEntryValueHandle<?, ?>> VALUE_ENTRY_TYPE = TypeTokens.get().keyFor(MultiEntryValueHandle.class).wildCard();
 
 	/**
 	 * Returned By {@link ObservableMultiMap#get(Object)}, a collection that also reports info on the searched key
@@ -191,7 +160,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 	 * @return The entry type for the map
 	 */
 	static <K, V> TypeToken<MultiEntryHandle<K, V>> buildEntryType(TypeToken<K> keyType, TypeToken<V> valueType) {
-		return ENTRY_KEY.getCompoundType(keyType, valueType);
+		return TypeTokens.get().keyFor(MultiEntryHandle.class).parameterized(keyType, valueType);
 	}
 
 	/**
@@ -202,7 +171,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 	 * @return The entry type for the map
 	 */
 	static <K, V> TypeToken<MultiEntryValueHandle<K, V>> buildValueEntryType(TypeToken<K> keyType, TypeToken<V> valueType) {
-		return VALUE_ENTRY_KEY.getCompoundType(keyType, valueType);
+		return TypeTokens.get().keyFor(MultiEntryValueHandle.class).parameterized(keyType, valueType);
 	}
 
 	@Override
@@ -536,7 +505,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 			return mapFlow
 				.withValues(entries -> entries.transform(theValueType, //
 					tx -> tx.map(valueMap)
-						.modifySource(valueSet, //
+					.modifySource(valueSet, //
 						rvrs -> rvrs.createWith(addition))//
 					.withEquivalence(theValueEquivalence)))//
 				.gatherActive(until);

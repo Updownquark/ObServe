@@ -43,7 +43,6 @@ import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.tree.BetterTreeList;
 
-import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
 
 /**
@@ -81,17 +80,8 @@ import com.google.common.reflect.TypeToken;
  * @param <E> The type of element in the collection
  */
 public interface ObservableCollection<E> extends BetterList<E>, TypedValueContainer<E> {
-	/** This class's type key */
-	@SuppressWarnings("rawtypes")
-	static TypeTokens.TypeKey<ObservableCollection> TYPE_KEY = TypeTokens.get().keyFor(ObservableCollection.class)
-	.enableCompoundTypes(new TypeTokens.UnaryCompoundTypeCreator<ObservableCollection>() {
-		@Override
-		public <P> TypeToken<? extends ObservableCollection> createCompoundType(TypeToken<P> param) {
-			return new TypeToken<ObservableCollection<P>>() {}.where(new TypeParameter<P>() {}, param);
-		}
-	});
 	/** This class's wildcard {@link TypeToken} */
-	static TypeToken<ObservableCollection<?>> TYPE = TYPE_KEY.parameterized();
+	static TypeToken<ObservableCollection<?>> TYPE = TypeTokens.get().keyFor(ObservableCollection.class).wildCard();
 
 	// Additional contract methods
 

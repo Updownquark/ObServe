@@ -578,7 +578,8 @@ public class ObservableConfig implements Transactable, Stamped {
 		} else {
 			ObservableConfigPath last = path.getLast();
 			TypeToken<ObservableConfig> type = (TypeToken<ObservableConfig>) getType();
-			TypeToken<ObservableCollection<ObservableConfig>> collType = ObservableCollection.TYPE_KEY.getCompoundType(type);
+			TypeToken<ObservableCollection<ObservableConfig>> collType = TypeTokens.get().keyFor(ObservableCollection.class)
+				.parameterized(type);
 			ObservableValue<? extends ObservableConfig> descendant = observeDescendant(path.getParent());
 			ObservableCollection<ObservableConfig> emptyChildren = ObservableCollection.of(type);
 			children = ObservableCollection.flattenValue(descendant.map(collType,

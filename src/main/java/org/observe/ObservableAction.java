@@ -16,17 +16,8 @@ import com.google.common.reflect.TypeToken;
  * @param <T> The type of value the action produces
  */
 public interface ObservableAction<T> extends TypedValueContainer<T> {
-	/** This class's type key */
-	@SuppressWarnings("rawtypes")
-	static TypeTokens.TypeKey<ObservableAction> TYPE_KEY = TypeTokens.get().keyFor(ObservableAction.class)
-	.enableCompoundTypes(new TypeTokens.UnaryCompoundTypeCreator<ObservableAction>() {
-		@Override
-		public <P> TypeToken<? extends ObservableAction> createCompoundType(TypeToken<P> param) {
-			return new TypeToken<ObservableAction<P>>() {}.where(new TypeParameter<P>() {}, param);
-		}
-	});
 	/** This class's wildcard {@link TypeToken} */
-	static TypeToken<ObservableAction<?>> TYPE = TYPE_KEY.parameterized();
+	static TypeToken<ObservableAction<?>> TYPE = TypeTokens.get().keyFor(ObservableAction.class).wildCard();
 
 	/**
 	 * @param cause An object that may have caused the action (e.g. a user event)

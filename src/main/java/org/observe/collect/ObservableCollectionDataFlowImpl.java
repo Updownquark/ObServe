@@ -1100,7 +1100,8 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public ActiveCollectionManager<E, ?, T> manageActive() {
-			TypeToken<ObservableValue<? extends T>> valueType = ObservableValue.TYPE_KEY.getCompoundType(getTargetType());
+			TypeToken<ObservableValue<? extends T>> valueType = TypeTokens.get().keyFor(ObservableValue.class)
+				.parameterized(getTargetType());
 			ValueHolder<DerivedCollectionElement<? extends ObservableValue<? extends T>>> settingElement = new ValueHolder<>();
 			class RefreshingMapReverse implements FlowElementSetter<ObservableValue<? extends T>, T> {
 				@Override

@@ -43,7 +43,6 @@ import org.qommons.collect.QuickSet;
 import org.qommons.collect.QuickSet.QuickMap;
 import org.qommons.io.Format;
 
-import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
 
 public interface ObservableConfigFormat<E> {
@@ -1052,16 +1051,6 @@ public interface ObservableConfigFormat<E> {
 	}
 
 	static class MapEntry<K, V> {
-		@SuppressWarnings("rawtypes")
-		static TypeTokens.TypeKey<MapEntry> TYPE_KEY = TypeTokens.get().keyFor(MapEntry.class)
-		.enableCompoundTypes(new TypeTokens.BinaryCompoundTypeCreator<MapEntry>() {
-			@Override
-			public <P1, P2> TypeToken<? extends MapEntry> createCompoundType(TypeToken<P1> param1, TypeToken<P2> param2) {
-				return new TypeToken<MapEntry<P1, P2>>() {}.where(new TypeParameter<P1>() {}, param1).where(new TypeParameter<P2>() {},
-					param2);
-			}
-		});
-
 		K key;
 		V value;
 
@@ -1077,7 +1066,7 @@ public interface ObservableConfigFormat<E> {
 		public EntryFormat(boolean compressed, String keyName, String valueName, TypeToken<K> keyType, TypeToken<V> valueType,
 			ObservableConfigFormat<K> keyFormat, ObservableConfigFormat<V> valueFormat) {
 			super(createFields(compressed, keyName, valueName, keyType, valueType, keyFormat, valueFormat), Collections.emptyList());
-			theType = MapEntry.TYPE_KEY.getCompoundType(keyType, valueType);
+			theType = TypeTokens.get().keyFor(MapEntry.class).parameterized(keyType, valueType);
 		}
 
 		private static <K, V> QuickMap<String, ComponentField<MapEntry<K, V>, ?>> createFields(boolean compressed, String keyName,

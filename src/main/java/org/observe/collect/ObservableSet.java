@@ -11,7 +11,6 @@ import org.observe.collect.ObservableSetImpl.ConstantObservableSet;
 import org.observe.util.TypeTokens;
 import org.qommons.collect.BetterSet;
 
-import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
 
 /**
@@ -22,17 +21,8 @@ import com.google.common.reflect.TypeToken;
  * @param <E> The type of element in the set
  */
 public interface ObservableSet<E> extends ObservableCollection<E>, BetterSet<E> {
-	/** This class's type key */
-	@SuppressWarnings("rawtypes")
-	static TypeTokens.TypeKey<ObservableSet> TYPE_KEY = TypeTokens.get().keyFor(ObservableSet.class)
-	.enableCompoundTypes(new TypeTokens.UnaryCompoundTypeCreator<ObservableSet>() {
-		@Override
-		public <P> TypeToken<? extends ObservableSet> createCompoundType(TypeToken<P> param) {
-			return new TypeToken<ObservableSet<P>>() {}.where(new TypeParameter<P>() {}, param);
-		}
-	});
 	/** This class's wildcard {@link TypeToken} */
-	static TypeToken<ObservableSet<?>> TYPE = TYPE_KEY.parameterized();
+	static TypeToken<ObservableSet<?>> TYPE = TypeTokens.get().keyFor(ObservableSet.class).wildCard();
 
 	@Override
 	default Iterator<E> iterator() {

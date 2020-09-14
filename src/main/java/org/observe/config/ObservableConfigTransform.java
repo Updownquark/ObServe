@@ -1067,7 +1067,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 			TypeToken<K> keyType, TypeToken<V> valueType, ObservableConfigFormat<K> keyFormat, ObservableConfigFormat<V> valueFormat,
 			Observable<?> until, boolean listen, Observable<?> findRefs) {
 			theCollection = new ObservableConfigValues<>(session, root, collectionElement, ceCreate,
-				MapEntry.TYPE_KEY.<MapEntry<K, V>> getCompoundType(keyType, valueType), //
+				TypeTokens.get().keyFor(MapEntry.class).<MapEntry<K, V>> parameterized(keyType, valueType), //
 				new ObservableConfigFormat.EntryFormat<>(true, keyName, valueName, keyType, valueType, keyFormat, valueFormat), valueName,
 				until, listen, findRefs);
 			theWrapped = theCollection.flow()
@@ -1158,6 +1158,21 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action) {
 			return theWrapped.onChange(action);
 		}
+
+		@Override
+		public int hashCode() {
+			return theWrapped.hashCode();
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return theWrapped.equals(obj);
+		}
+
+		@Override
+		public String toString() {
+			return theWrapped.toString();
+		}
 	}
 
 	static class ObservableConfigMultiMap<K, V> implements ObservableMultiMap<K, V> {
@@ -1169,7 +1184,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 			TypeToken<K> keyType, TypeToken<V> valueType, ObservableConfigFormat<K> keyFormat, ObservableConfigFormat<V> valueFormat,
 			Observable<?> until, boolean listen, Observable<?> findRefs) {
 			theCollection = new ObservableConfigValues<>(session, root, collectionElement, ceCreate,
-				MapEntry.TYPE_KEY.<MapEntry<K, V>> getCompoundType(keyType, valueType), //
+				TypeTokens.get().keyFor(MapEntry.class).<MapEntry<K, V>> parameterized(keyType, valueType), //
 				new ObservableConfigFormat.EntryFormat<>(true, keyName, valueName, keyType, valueType, keyFormat, valueFormat), valueName,
 				until, listen, findRefs);
 			theWrapped = theCollection.flow()
@@ -1280,6 +1295,20 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		public MultiMapFlow<K, V> flow() {
 			return theWrapped.flow();
 		}
-	}
 
+		@Override
+		public int hashCode() {
+			return theWrapped.hashCode();
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return theWrapped.equals(obj);
+		}
+
+		@Override
+		public String toString() {
+			return theWrapped.toString();
+		}
+	}
 }

@@ -24,7 +24,6 @@ import org.qommons.TriFunction;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 
-import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
 
 /**
@@ -33,17 +32,8 @@ import com.google.common.reflect.TypeToken;
  * @param <T> The type of the value
  */
 public interface SettableValue<T> extends ObservableValue<T>, Transactable {
-	/** This class's type key */
-	@SuppressWarnings("rawtypes")
-	static TypeTokens.TypeKey<SettableValue> TYPE_KEY = TypeTokens.get().keyFor(SettableValue.class)
-	.enableCompoundTypes(new TypeTokens.UnaryCompoundTypeCreator<SettableValue>() {
-		@Override
-		public <P> TypeToken<? extends SettableValue> createCompoundType(TypeToken<P> param) {
-			return new TypeToken<SettableValue<P>>() {}.where(new TypeParameter<P>() {}, param);
-		}
-	});
 	/** This class's wildcard {@link TypeToken} */
-	static TypeToken<SettableValue<?>> TYPE = TYPE_KEY.parameterized();
+	static TypeToken<SettableValue<?>> TYPE = TypeTokens.get().keyFor(SettableValue.class).wildCard();
 
 	/** TypeToken for String.class */
 	TypeToken<String> STRING_TYPE = TypeTokens.get().of(String.class);

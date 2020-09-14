@@ -23,7 +23,6 @@ import org.qommons.Transaction;
 import org.qommons.collect.ListenerList;
 import org.qommons.threading.QommonsTimer;
 
-import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
 
 /**
@@ -32,17 +31,8 @@ import com.google.common.reflect.TypeToken;
  * @param <T> The type of values this observable provides
  */
 public interface Observable<T> extends Lockable, Identifiable {
-	/** This class's type key */
-	@SuppressWarnings("rawtypes")
-	static TypeTokens.TypeKey<Observable> TYPE_KEY = TypeTokens.get().keyFor(Observable.class)
-	.enableCompoundTypes(new TypeTokens.UnaryCompoundTypeCreator<Observable>() {
-		@Override
-		public <P> TypeToken<? extends Observable> createCompoundType(TypeToken<P> param) {
-			return new TypeToken<Observable<P>>() {}.where(new TypeParameter<P>() {}, param);
-		}
-	});
 	/** This class's wildcard {@link TypeToken} */
-	static TypeToken<Observable<?>> TYPE = TYPE_KEY.parameterized();
+	static TypeToken<Observable<?>> TYPE = TypeTokens.get().keyFor(Observable.class).wildCard();
 
 	/**
 	 * Subscribes to this observable such that the given observer will be notified of any new values on this observable.
