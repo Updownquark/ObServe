@@ -81,15 +81,24 @@ public class CategoryRenderStrategy<R, C> {
 		}
 
 		public CategoryMutationStrategy asText(Format<C> format) {
-			return withEditor(ObservableCellEditor.createTextEditor(format));
+			withEditor(ObservableCellEditor.createTextEditor(format));
+			if (isRenderDefault)
+				formatText(format::format);
+			return this;
 		}
 
 		public CategoryMutationStrategy asText(Format<C> format, Consumer<ObservableTextField<C>> textField) {
-			return withEditor(ObservableCellEditor.createTextEditor(format, textField));
+			withEditor(ObservableCellEditor.createTextEditor(format, textField));
+			if (isRenderDefault)
+				formatText(format::format);
+			return this;
 		}
 
 		public CategoryMutationStrategy asCombo(Function<? super C, String> renderer, ObservableCollection<? extends C> options) {
-			return withEditor(ObservableCellEditor.createComboEditor(renderer, options));
+			withEditor(ObservableCellEditor.createComboEditor(renderer, options));
+			if (isRenderDefault)
+				formatText(renderer);
+			return this;
 		}
 
 		public CategoryMutationStrategy asCheck() {
@@ -121,10 +130,14 @@ public class CategoryRenderStrategy<R, C> {
 
 		public CategoryMutationStrategy asButtonCell(Function<? super C, String> renderer,
 			Function<? super ModelCell<R, ? extends C>, ? extends C> action) {
+			if (isRenderDefault)
+				formatText(renderer);
 			return withEditor(ObservableCellEditor.createButtonCellEditor(renderer, action));
 		}
 
 		public CategoryMutationStrategy asButton(Function<? super C, String> renderer, Function<? super C, ? extends C> action) {
+			if (isRenderDefault)
+				formatText(renderer);
 			return withEditor(ObservableCellEditor.createButtonEditor(renderer, action));
 		}
 
@@ -310,6 +323,7 @@ public class CategoryRenderStrategy<R, C> {
 	private String theHeaderTooltip;
 	private BiFunction<? super R, ? super C, String> theTooltip;
 	private ObservableCellRenderer<R, C> theRenderer;
+	private boolean isRenderDefault;
 	private CellDecorator<R, C> theDecorator;
 	private AddRowRenderer theAddRow;
 	private int theMinWidth;
@@ -326,6 +340,7 @@ public class CategoryRenderStrategy<R, C> {
 		theType = type;
 		theAccessor = accessor;
 		theMutator = new CategoryMutationStrategy();
+		isRenderDefault = true;
 		theRenderer = new ObservableCellRenderer.DefaultObservableCellRenderer<>(this::printDefault);
 		theMinWidth = thePrefWidth = theMaxWidth = -1;
 		isResizable = true;
@@ -414,6 +429,7 @@ public class CategoryRenderStrategy<R, C> {
 	}
 
 	public CategoryRenderStrategy<R, C> withRenderer(ObservableCellRenderer<R, C> renderer) {
+		isRenderDefault = false;
 		theRenderer = renderer;
 		if (theRenderer != null)
 			theRenderer.decorate(theDecorator);

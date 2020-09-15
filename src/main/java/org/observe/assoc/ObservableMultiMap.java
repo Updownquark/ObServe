@@ -663,7 +663,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		public int getElementsBefore(ElementId id) {
 			MultiEntryValueHandle<K, V> handle = getElement(id).get();
 			MultiEntryHandle<K, V> entry = getMap().getEntryById(handle.getKeyId());
-			int before = getElements(entry.getValues(), id, true);
+			int before = getElements(entry.getValues(), handle.getElementId(), true);
 			CollectionElement<K> keyEl = getMap().keySet().getAdjacentElement(entry.getElementId(), false);
 			while (keyEl != null) {
 				before += getMap().getEntryById(keyEl.getElementId()).getValues().size();
@@ -676,7 +676,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		public int getElementsAfter(ElementId id) {
 			MultiEntryValueHandle<K, V> handle = getElement(id).get();
 			MultiEntryHandle<K, V> entry = getMap().getEntryById(handle.getKeyId());
-			int after = getElements(entry.getValues(), id, false);
+			int after = getElements(entry.getValues(), handle.getElementId(), false);
 			CollectionElement<K> keyEl = getMap().keySet().getAdjacentElement(entry.getElementId(), true);
 			while (keyEl != null) {
 				after += getMap().getEntryById(keyEl.getElementId()).getValues().size();

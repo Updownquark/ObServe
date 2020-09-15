@@ -85,10 +85,11 @@ public class TypeTokens {
 		 * @throws IllegalArgumentException If this is not a one-parameter type
 		 */
 		public <P, C extends T> TypeToken<C> parameterized(TypeToken<P> parameter) {
+			TypeParameter<P> tp = new TypeParameter<P>() {};
 			return parameterized(//
 				new Type[] { parameter.getType() }, //
 				new TypeToken[] { parameter }, //
-				paramTypes -> TypeToken.of(new ParameterizedTypeImpl(clazz, paramTypes)).where(new TypeParameter<P>() {}, parameter)//
+				paramTypes -> TypeToken.of(new ParameterizedTypeImpl(clazz, paramTypes)).where(tp, parameter)//
 				);
 		}
 
@@ -102,11 +103,12 @@ public class TypeTokens {
 		 * @throws IllegalArgumentException If this is not a two-parameter type
 		 */
 		public <P1, P2, C extends T> TypeToken<C> parameterized(TypeToken<P1> param1, TypeToken<P2> param2) {
+			TypeParameter<P1> tp1 = new TypeParameter<P1>() {};
+			TypeParameter<P2> tp2 = new TypeParameter<P2>() {};
 			return parameterized(//
 				new Type[] { param1.getType(), param2.getType() }, //
 				new TypeToken[] { param1, param2 },
-				paramTypes -> TypeToken.of(new ParameterizedTypeImpl(clazz, paramTypes)).where(new TypeParameter<P1>() {}, param1)//
-				.where(new TypeParameter<P2>() {}, param2)//
+				paramTypes -> TypeToken.of(new ParameterizedTypeImpl(clazz, paramTypes)).where(tp1, param1).where(tp2, param2)//
 				);
 		}
 
@@ -122,12 +124,14 @@ public class TypeTokens {
 		 * @throws IllegalArgumentException If this is not a three-parameter type
 		 */
 		public <P1, P2, P3, C extends T> TypeToken<C> parameterized(TypeToken<P1> param1, TypeToken<P2> param2, TypeToken<P3> param3) {
+			TypeParameter<P1> tp1 = new TypeParameter<P1>() {};
+			TypeParameter<P2> tp2 = new TypeParameter<P2>() {};
+			TypeParameter<P3> tp3 = new TypeParameter<P3>() {};
 			return parameterized(//
 				new Type[] { param1.getType(), param2.getType(), param3.getType() }, //
 				new TypeToken[] { param1, param2, param3 },
-				paramTypes -> TypeToken.of(new ParameterizedTypeImpl(clazz, paramTypes)).where(new TypeParameter<P1>() {}, param1)//
-				.where(new TypeParameter<P2>() {}, param2)//
-				.where(new TypeParameter<P3>() {}, param3)//
+				paramTypes -> TypeToken.of(new ParameterizedTypeImpl(clazz, paramTypes)).where(tp1, param1).where(tp2, param2).where(tp3,
+					param3)//
 				);
 		}
 
@@ -146,13 +150,15 @@ public class TypeTokens {
 		 */
 		public <P1, P2, P3, P4, C extends T> TypeToken<C> parameterized(TypeToken<P1> param1, TypeToken<P2> param2, TypeToken<P3> param3,
 			TypeToken<P4> param4) {
+			TypeParameter<P1> tp1 = new TypeParameter<P1>() {};
+			TypeParameter<P2> tp2 = new TypeParameter<P2>() {};
+			TypeParameter<P3> tp3 = new TypeParameter<P3>() {};
+			TypeParameter<P4> tp4 = new TypeParameter<P4>() {};
 			return parameterized(//
 				new Type[] { param1.getType(), param2.getType(), param3.getType(), param4.getType() }, //
 				new TypeToken[] { param1, param2, param3, param4 },
-				paramTypes -> TypeToken.of(new ParameterizedTypeImpl(clazz, paramTypes)).where(new TypeParameter<P1>() {}, param1)//
-				.where(new TypeParameter<P2>() {}, param2)//
-				.where(new TypeParameter<P3>() {}, param3)//
-				.where(new TypeParameter<P4>() {}, param4)//
+				paramTypes -> TypeToken.of(new ParameterizedTypeImpl(clazz, paramTypes)).where(tp1, param1).where(tp2, param2)
+					.where(tp3, param3).where(tp4, param4)//
 				);
 		}
 
@@ -173,14 +179,16 @@ public class TypeTokens {
 		 */
 		public <P1, P2, P3, P4, P5, C extends T> TypeToken<C> parameterized(TypeToken<P1> param1, TypeToken<P2> param2,
 			TypeToken<P3> param3, TypeToken<P4> param4, TypeToken<P5> param5) {
+			TypeParameter<P1> tp1 = new TypeParameter<P1>() {};
+			TypeParameter<P2> tp2 = new TypeParameter<P2>() {};
+			TypeParameter<P3> tp3 = new TypeParameter<P3>() {};
+			TypeParameter<P4> tp4 = new TypeParameter<P4>() {};
+			TypeParameter<P5> tp5 = new TypeParameter<P5>() {};
 			return parameterized(//
 				new Type[] { param1.getType(), param2.getType(), param3.getType(), param4.getType(), param5.getType() }, //
 				new TypeToken[] { param1, param2, param3, param4, param5 },
-				paramTypes -> TypeToken.of(new ParameterizedTypeImpl(clazz, paramTypes)).where(new TypeParameter<P1>() {}, param1)//
-				.where(new TypeParameter<P2>() {}, param2)//
-				.where(new TypeParameter<P3>() {}, param3)//
-				.where(new TypeParameter<P4>() {}, param4)//
-				.where(new TypeParameter<P5>() {}, param5)//
+				paramTypes -> TypeToken.of(new ParameterizedTypeImpl(clazz, paramTypes)).where(tp1, param1).where(tp2, param2)
+					.where(tp3, param3).where(tp4, param4).where(tp5, param5)//
 				);
 		}
 

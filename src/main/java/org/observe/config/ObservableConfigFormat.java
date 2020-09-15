@@ -53,7 +53,7 @@ public interface ObservableConfigFormat<E> {
 	public static ObservableConfigFormat<Integer> INT = ofQommonFormat(Format.INT, () -> 0);
 	public static ObservableConfigFormat<Boolean> BOOLEAN = ofQommonFormat(Format.BOOLEAN, () -> false);
 	public static ObservableConfigFormat<Duration> DURATION = ofQommonFormat(Format.DURATION, () -> Duration.ZERO);
-	public static ObservableConfigFormat<Instant> DATE = ofQommonFormat(Format.date("ddMMyyyy HH:mm:ss.SSS"), () -> Instant.now());
+	public static ObservableConfigFormat<Instant> DATE = ofQommonFormat(Format.date("ddMMyyyy HH:mm:ss.SSS"), () -> null);
 
 	void format(ObservableConfigParseSession session, E value, E previousValue, ObservableConfig config, Consumer<E> acceptedValue,
 		Observable<?> until) throws IllegalArgumentException;
@@ -1073,7 +1073,7 @@ public interface ObservableConfigFormat<E> {
 			String valueName, //
 			TypeToken<K> keyType, TypeToken<V> valueType, //
 			ObservableConfigFormat<K> keyFormat, ObservableConfigFormat<V> valueFormat) {
-			QuickMap<String, ComponentField<MapEntry<K, V>, ?>> fields = QuickSet.of("key").createMap();
+			QuickMap<String, ComponentField<MapEntry<K, V>, ?>> fields = QuickSet.of("key", "value").createMap();
 			fields.put("key", new ComponentField<>(keyName, keyType, 0, e -> e.key, (e, k, change) -> e.key = k, keyFormat, keyName));
 			fields.put("value", new ComponentField<>(compressed ? null : valueName, valueType, 0, e -> e.value,
 				(e, v, change) -> e.value = v, valueFormat, valueName));

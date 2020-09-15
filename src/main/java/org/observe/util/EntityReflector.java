@@ -1592,7 +1592,7 @@ public class EntityReflector<E> {
 				Object[] idValues = new Object[p.getReflector().getIdFields().size()];
 				int i = 0;
 				for (int id : p.getReflector().getIdFields())
-					idValues[i++] = ((EntityReflector<Object>) p.getReflector()).getFields().get(id).get(args[0]);
+					idValues[i++] = ((EntityReflector<Object>) p.getReflector()).getFields().get(id).get(proxy);
 				return Objects.hash(idValues);
 			}
 		};
