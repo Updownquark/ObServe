@@ -95,7 +95,7 @@ public class ObservableConfigFormatSet {
 	}
 
 	public <T> ObservableConfigFormat<T> getConfigFormat(TypeToken<T> type, String configName) {
-		Class<T> raw = TypeTokens.getRawType(TypeTokens.get().unwrap(type));
+		Class<T> raw = TypeTokens.get().unwrap(TypeTokens.getRawType(type));
 		ObservableConfigFormat<T> format = (ObservableConfigFormat<T>) theFormatCache.get(type);
 		if (format != null)
 			return format;

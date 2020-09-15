@@ -706,7 +706,7 @@ public class ObservableConfigTest {
 		}
 	}
 
-	interface TestEntity {
+	public interface TestEntity {
 		int getA();
 
 		TestEntity setA(int a);
@@ -724,7 +724,7 @@ public class ObservableConfigTest {
 		}
 	}
 
-	interface TestEntity2 {
+	public interface TestEntity2 {
 		String getText();
 
 		void setText(String text);
@@ -736,13 +736,13 @@ public class ObservableConfigTest {
 		SyncValueSet<TestEntity4> getListedEntities();
 	}
 
-	interface TestEntity3 {
+	public interface TestEntity3 {
 		int getD();
 
 		int setD(int d);
 	}
 
-	interface TestEntity4 {
+	public interface TestEntity4 {
 		int getE();
 
 		int setE(int e);
@@ -752,7 +752,7 @@ public class ObservableConfigTest {
 		double setX(double x);
 	}
 
-	interface TestEntity5 extends TestEntity4 {
+	public interface TestEntity5 extends TestEntity4 {
 		double getF();
 
 		TestEntity5 setF(double f);

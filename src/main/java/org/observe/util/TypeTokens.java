@@ -158,7 +158,7 @@ public class TypeTokens {
 				new Type[] { param1.getType(), param2.getType(), param3.getType(), param4.getType() }, //
 				new TypeToken[] { param1, param2, param3, param4 },
 				paramTypes -> TypeToken.of(new ParameterizedTypeImpl(clazz, paramTypes)).where(tp1, param1).where(tp2, param2)
-					.where(tp3, param3).where(tp4, param4)//
+				.where(tp3, param3).where(tp4, param4)//
 				);
 		}
 
@@ -188,7 +188,7 @@ public class TypeTokens {
 				new Type[] { param1.getType(), param2.getType(), param3.getType(), param4.getType(), param5.getType() }, //
 				new TypeToken[] { param1, param2, param3, param4, param5 },
 				paramTypes -> TypeToken.of(new ParameterizedTypeImpl(clazz, paramTypes)).where(tp1, param1).where(tp2, param2)
-					.where(tp3, param3).where(tp4, param4).where(tp5, param5)//
+				.where(tp3, param3).where(tp4, param4).where(tp5, param5)//
 				);
 		}
 
@@ -497,7 +497,7 @@ public class TypeTokens {
 			return type;
 		else if (type == Boolean.class)
 			return (Class<T>) boolean.class;
-		else if (type == int.class)
+		else if (type == Integer.class)
 			return (Class<T>) int.class;
 		else if (type == Long.class)
 			return (Class<T>) long.class;
