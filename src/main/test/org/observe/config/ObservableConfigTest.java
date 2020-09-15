@@ -706,6 +706,7 @@ public class ObservableConfigTest {
 		}
 	}
 
+	@SuppressWarnings("javadoc")
 	public interface TestEntity {
 		int getA();
 
@@ -724,6 +725,7 @@ public class ObservableConfigTest {
 		}
 	}
 
+	@SuppressWarnings("javadoc")
 	public interface TestEntity2 {
 		String getText();
 
@@ -736,12 +738,14 @@ public class ObservableConfigTest {
 		SyncValueSet<TestEntity4> getListedEntities();
 	}
 
+	@SuppressWarnings("javadoc")
 	public interface TestEntity3 {
 		int getD();
 
 		int setD(int d);
 	}
 
+	@SuppressWarnings("javadoc")
 	public interface TestEntity4 {
 		int getE();
 
@@ -752,6 +756,7 @@ public class ObservableConfigTest {
 		double setX(double x);
 	}
 
+	@SuppressWarnings("javadoc")
 	public interface TestEntity5 extends TestEntity4 {
 		double getF();
 

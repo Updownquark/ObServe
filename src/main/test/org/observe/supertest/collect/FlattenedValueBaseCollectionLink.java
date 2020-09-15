@@ -12,6 +12,7 @@ import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.ObservableChainTester;
 import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
+import org.observe.util.TypeTokens;
 import org.qommons.TestHelper;
 import org.qommons.TestHelper.RandomAction;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
@@ -43,7 +44,8 @@ public class FlattenedValueBaseCollectionLink<T> extends BaseCollectionLink<T> {
 			for (int i = 0; i < collectionCount; i++)
 				collections.add(ObservableCollection.build(collectionType).build());
 			SettableValue<ObservableCollection<X>> collectionValue = SettableValue
-				.build(ObservableCollection.TYPE_KEY.<ObservableCollection<X>> getCompoundType(collectionType)).safe(false).build();
+				.build(TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<X>> parameterized(collectionType))
+				.safe(false).build();
 			int collectionIdx = getRandomCollectionIndex(collections.size(), helper);
 			ObservableCollection<X> initCollection = collectionIdx == collections.size() ? null : collections.get(collectionIdx);
 			collectionValue.set(initCollection, null);

@@ -7,7 +7,9 @@ import java.util.List;
 import org.junit.Assert;
 import org.junit.Test;
 
+/** Tests for the org.observe.util.swing package */
 public class ObservableSwingUtilsTests {
+	/** Tests {@link ObservableSwingUtils#fitBoundsToGraphicsEnv(int, int, int, int, List)} */
 	@Test
 	public void testBoundsFitting() {
 		int x = 0, y = 0, w = 1000, h = 1000;
