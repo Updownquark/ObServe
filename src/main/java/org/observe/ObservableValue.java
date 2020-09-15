@@ -206,6 +206,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 	 * @param <R> The type for the combined value
 	 * @param transform Determines how this value and any other arguments are to be combined
 	 * @return The transformed value
+	 * @see Transformation for help using the API
 	 */
 	default <R> ObservableValue<R> transform(Function<Transformation.TransformationPrecursor<T, R, ?>, Transformation<T, R>> transform) {
 		return transform(null, transform);
@@ -219,6 +220,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 	 * @param targetType The type for the transformed value
 	 * @param transform Determines how this value and any other arguments are to be combined
 	 * @return The transformed value
+	 * @see Transformation for help using the API
 	 */
 	default <R> ObservableValue<R> transform(TypeToken<R> targetType, //
 		Function<Transformation.TransformationPrecursor<T, R, ?>, Transformation<T, R>> transform) {

@@ -846,6 +846,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		 * @param target The target type of the transformed flow
 		 * @param transform Configures the transformation
 		 * @return The transformed flow
+		 * @see Transformation for help using the API
 		 */
 		<X> CollectionDataFlow<E, T, X> transform(TypeToken<X> target, //
 			Function<ReversibleTransformationPrecursor<T, X, ?>, Transformation<T, X>> transform);
@@ -869,6 +870,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		 * @param combination The function to create the combination definition
 		 * @return A data flow capable of producing a collection whose elements are each some combination of the source element and the
 		 *         dynamic value of the observable
+		 * @see Transformation for help using the API
 		 */
 		default <X> CollectionDataFlow<E, T, X> combine(TypeToken<X> targetType,
 			Function<ReversibleTransformationPrecursor<T, X, ?>, Transformation<T, X>> combination) {
@@ -1151,6 +1153,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		 * @param target The type of the transformed values
 		 * @param transform Defines the transformation from source to target values and the reverse
 		 * @return The transformed flow
+		 * @see Transformation for help using the API
 		 */
 		<X> DistinctDataFlow<E, T, X> transformEquivalent(TypeToken<X> target, //
 			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ReversibleTransformation<T, X>> transform);
@@ -1238,6 +1241,14 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		<X> DistinctSortedDataFlow<E, T, X> transformEquivalent(TypeToken<X> target,
 			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ReversibleTransformation<T, X>> transform);
 
+		/**
+		 * @param <X> The compile-time transformed type
+		 * @param target The runtime transformed type
+		 * @param transform A function to transform elements in this flow to transformed elements
+		 * @param compare The comparator to compare the target values with--should reflect the order of this flow's comparator
+		 * @return The transformed flow
+		 * @see Transformation for help using the API
+		 */
 		<X> DistinctSortedDataFlow<E, T, X> transformEquivalent(TypeToken<X> target,
 			Function<? super ReversibleTransformationPrecursor<T, X, ?>, Transformation<T, X>> transform, Comparator<? super X> compare);
 

@@ -230,6 +230,7 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	 * @param <R> The type of the combined value
 	 * @param combination Determines how this value an any other arguments are to be combined
 	 * @return The transformed value
+	 * @see Transformation for help using the API
 	 */
 	default <R> SettableValue<R> transformReversible(
 		Function<Transformation.ReversibleTransformationPrecursor<T, R, ?>, Transformation.ReversibleTransformation<T, R>> combination) {
@@ -244,6 +245,7 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	 * @param type The type of the combined value
 	 * @param combination Determines how this value an any other arguments are to be combined
 	 * @return The transformed value
+	 * @see Transformation for help using the API
 	 */
 	default <R> SettableValue<R> transformReversible(TypeToken<R> type,
 		Function<Transformation.ReversibleTransformationPrecursor<T, R, ?>, Transformation.ReversibleTransformation<T, R>> combination) {
