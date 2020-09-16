@@ -20,6 +20,7 @@ import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.DistinctDataFlow;
 import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
+import org.observe.collect.ObservableCollectionBuilder;
 import org.observe.collect.ObservableCollectionEvent;
 import org.observe.collect.ObservableCollectionImpl.ReversedObservableCollection;
 import org.observe.collect.ObservableSet;
@@ -375,18 +376,18 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 
 		private final TypeToken<K> theKeyType;
 		private final TypeToken<V> theValueType;
-		private final DefaultObservableCollection.Builder<MapEntry<K, V>, ?> theBackingBuilder;
+		private final ObservableCollectionBuilder<MapEntry<K, V>, ?> theBackingBuilder;
 		private Equivalence<? super K> theKeyEquivalence;
 		private Equivalence<? super V> theValueEquivalence;
 		private String theDescription;
 
-		Builder(DefaultObservableCollection.Builder<MapEntry<K, V>, ?> backingBuilder, //
+		Builder(ObservableCollectionBuilder<MapEntry<K, V>, ?> backingBuilder, //
 			TypeToken<K> keyType, TypeToken<V> valueType, String defaultDescrip) {
 			theKeyType = keyType;
 			theValueType = valueType;
 			if (backingBuilder == null)
-				backingBuilder = (DefaultObservableCollection.Builder<MapEntry<K, V>, ?>) // Type hackery for performance reasons
-				(DefaultObservableCollection.Builder<?, ?>) //
+				backingBuilder = (ObservableCollectionBuilder<MapEntry<K, V>, ?>) // Type hackery for performance reasons
+				(ObservableCollectionBuilder<?, ?>) //
 				DefaultObservableCollection.build(INNER_ENTRY_TYPE);
 			theBackingBuilder = backingBuilder;
 			theKeyEquivalence = Equivalence.DEFAULT;
@@ -468,7 +469,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 			return theValueType;
 		}
 
-		protected DefaultObservableCollection.Builder<MapEntry<K, V>, ?> getBackingBuilder() {
+		protected ObservableCollectionBuilder<MapEntry<K, V>, ?> getBackingBuilder() {
 			return theBackingBuilder;
 		}
 

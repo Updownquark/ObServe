@@ -15,7 +15,6 @@ import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ValueStoredCollection;
-import org.qommons.tree.BetterTreeSet;
 
 import com.google.common.reflect.TypeToken;
 
@@ -26,67 +25,12 @@ import com.google.common.reflect.TypeToken;
  */
 public class DefaultObservableSortedSet<E> extends DefaultObservableCollection<E> implements ObservableSortedSet<E> {
 	/**
-	 * Builds an {@link ObservableSortedSet}
-	 *
-	 * @param <E> The type of elements in the set
-	 * @param <B> The sub-type of the builder
-	 */
-	public static class Builder<E, B extends Builder<E, B>> extends DefaultObservableCollection.SetBuilder<E, B> {
-		/**
-		 * @param type The type of elements in the set
-		 * @param initDescrip The initial (default) description for the set
-		 * @param sorting The sorting for the set
-		 */
-		protected Builder(TypeToken<E> type, String initDescrip, Comparator<? super E> sorting) {
-			super(type, initDescrip);
-			super.sortBy(sorting);
-		}
-
-		/**
-		 * @param toCopy The collection builder to copy
-		 * @param sorting The sorting for the set
-		 */
-		protected Builder(DefaultObservableCollection.Builder<E, ?> toCopy, Comparator<? super E> sorting) {
-			super(toCopy);
-			super.sortBy(sorting);
-		}
-
-		@Override
-		public B withBacking(BetterList<E> backing) {
-			if (backing != null && !(backing instanceof BetterSortedSet))
-				throw new IllegalStateException("An ObservableSortedSet must be backed by an instance of BetterSortedSet");
-			return (B) this;
-		}
-
-		@Override
-		public B withEquivalence(Equivalence<? super E> equivalence) {
-			throw new UnsupportedOperationException("Equivalence for sorted sets is defined by the comparator");
-		}
-
-		@Override
-		public DefaultObservableCollection.Builder<E, ?> sortBy(Comparator<? super E> sorting) {
-			return new DefaultObservableCollection.Builder<>(this);
-		}
-
-		@Override
-		public ObservableSortedSet<E> build() {
-			BetterList<E> backing = getBacking();
-			if (backing == null)
-				backing = BetterTreeSet.<E> buildTreeSet(getSorting()).withDescription(getDescription()).withLocker(this::getLocker)
-				.build();
-			else if (!(backing instanceof BetterSortedSet))
-				throw new IllegalStateException("An ObservableSortedSet must be backed by an instance of BetterSortedSet");
-			return new DefaultObservableSortedSet<>(getType(), (BetterSortedSet<E>) backing, getElementSource(), getSourceElements());
-		}
-	}
-
-	/**
 	 * @param type The type of elements in the set
 	 * @param sorting The sorting for the set
 	 * @return A builder to build a new sorted set
 	 */
-	public static <E> Builder<E, ?> build(TypeToken<E> type, Comparator<? super E> sorting) {
-		return new Builder<>(type, "observable-sorted-set", sorting);
+	public static <E> ObservableCollectionBuilder.DistinctSortedBuilder<E, ?> build(TypeToken<E> type, Comparator<? super E> sorting) {
+		return new ObservableCollectionBuilder.DistinctSortedBuilderImpl<>(type, "observable-sorted-set", sorting);
 	}
 
 	/**

@@ -8,10 +8,10 @@ import java.util.function.Function;
 import org.observe.Equivalence;
 import org.observe.Observable;
 import org.observe.Subscription;
-import org.observe.collect.DefaultObservableCollection;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
+import org.observe.collect.ObservableCollectionBuilder;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.util.TypeTokens;
 import org.qommons.Transaction;
@@ -155,7 +155,7 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 	 * @param <V> The value type for the map
 	 */
 	class Builder<K, V> extends ObservableMultiMap.Builder<K, V> {
-		Builder(DefaultObservableCollection.Builder<MapEntry<K, V>, ?> backingBuilder, TypeToken<K> keyType, TypeToken<V> valueType,
+		Builder(ObservableCollectionBuilder<MapEntry<K, V>, ?> backingBuilder, TypeToken<K> keyType, TypeToken<V> valueType,
 			Comparator<? super K> sorting, String defaultDescrip) {
 			super(backingBuilder, keyType, valueType, defaultDescrip);
 			super.withKeyEquivalence(Equivalence.of(TypeTokens.getRawType(keyType), sorting, true));

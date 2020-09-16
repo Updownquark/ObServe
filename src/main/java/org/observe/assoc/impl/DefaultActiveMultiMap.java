@@ -17,7 +17,7 @@ import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.DistinctDataFlow;
 import org.observe.collect.ObservableCollectionActiveManagers;
 import org.observe.collect.ObservableCollectionActiveManagers.ActiveCollectionManager;
-import org.observe.collect.ObservableCollectionActiveManagers.ActiveSetManager;
+import org.observe.collect.ObservableCollectionActiveManagers.ActiveValueStoredManager;
 import org.observe.collect.ObservableCollectionActiveManagers.CollectionElementListener;
 import org.observe.collect.ObservableCollectionActiveManagers.DerivedCollectionElement;
 import org.observe.collect.ObservableCollectionActiveManagers.ElementAccepter;
@@ -58,7 +58,7 @@ import com.google.common.reflect.TypeToken;
  * @param <V> The value type of the map
  */
 public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMultiMap<S, K, V> {
-	private final ActiveSetManager<S, ?, K> theKeyManager;
+	private final ActiveValueStoredManager<S, ?, K> theKeyManager;
 	private final ActiveCollectionManager<S, ?, V> theValueManager;
 
 	private final WeakListening.Builder theWeakListening;
@@ -171,7 +171,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 	}
 
 	/** @return The key manager for this map */
-	protected ActiveSetManager<S, ?, K> getKeyManager() {
+	protected ActiveValueStoredManager<S, ?, K> getKeyManager() {
 		return theKeyManager;
 	}
 

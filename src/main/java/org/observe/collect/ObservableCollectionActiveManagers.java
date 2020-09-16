@@ -270,7 +270,7 @@ public class ObservableCollectionActiveManagers {
 	 * @param <I> An intermediate type
 	 * @param <T> The type of the derived collection that this manager can power
 	 */
-	public static interface ActiveSetManager<E, I, T> extends ActiveCollectionManager<E, I, T> {
+	public static interface ActiveValueStoredManager<E, I, T> extends ActiveCollectionManager<E, I, T> {
 		/**
 		 * @param element The element to check the structure's consistency at
 		 * @return Whether the collection's storage appears to be consistent at the given element

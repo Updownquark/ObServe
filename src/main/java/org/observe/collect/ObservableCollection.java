@@ -25,7 +25,7 @@ import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableSortedMultiMap;
 import org.observe.collect.FlowOptions.UniqueOptions;
 import org.observe.collect.ObservableCollectionActiveManagers.ActiveCollectionManager;
-import org.observe.collect.ObservableCollectionActiveManagers.ActiveSetManager;
+import org.observe.collect.ObservableCollectionActiveManagers.ActiveValueStoredManager;
 import org.observe.collect.ObservableCollectionPassiveManagers.PassiveCollectionManager;
 import org.observe.util.ObservableUtils;
 import org.observe.util.TypeTokens;
@@ -617,7 +617,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 	 * @param type The type for the collection
 	 * @return A builder for a new, empty, mutable, observable collection
 	 */
-	static <E> DefaultObservableCollection.Builder<E, ?> build(TypeToken<E> type) {
+	static <E> ObservableCollectionBuilder<E, ?> build(TypeToken<E> type) {
 		return DefaultObservableCollection.build(type);
 	}
 
@@ -626,7 +626,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 	 * @param type The type for the collection
 	 * @return A builder for a new, empty, mutable, observable collection
 	 */
-	static <E> DefaultObservableCollection.Builder<E, ?> build(Class<E> type) {
+	static <E> ObservableCollectionBuilder<E, ?> build(Class<E> type) {
 		return build(TypeTokens.get().of(type));
 	}
 
@@ -1177,7 +1177,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		}
 
 		@Override
-		ActiveSetManager<E, ?, T> manageActive();
+		ActiveValueStoredManager<E, ?, T> manageActive();
 
 		@Override
 		ObservableSet<T> collectPassive();
@@ -1187,18 +1187,105 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 	}
 
 	/**
+	 * A data flow that produces a sorted collection
+	 *
+	 * @param <E> The type of the source collection
+	 * @param <I> Intermediate type
+	 * @param <T> The type of collection this flow may build
+	 */
+	interface SortedDataFlow<E, I, T> extends CollectionDataFlow<E, I, T>{
+		Comparator<? super T> comparator();
+
+		@Override
+		Equivalence.ComparatorEquivalence<? super T> equivalence();
+
+		@Override
+		SortedDataFlow<E, T, T> reverse();
+
+		@Override
+		default <X> SortedDataFlow<E, ?, X> filter(Class<X> type) {
+			return (SortedDataFlow<E, ?, X>) CollectionDataFlow.super.filter(type);
+		}
+
+		@Override
+		SortedDataFlow<E, T, T> filter(Function<? super T, String> filter);
+
+		@Override
+		<X> SortedDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include);
+
+		@Override
+		SortedDataFlow<E, T, T> refresh(Observable<?> refresh);
+
+		@Override
+		SortedDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh);
+
+		@Override
+		DistinctSortedDataFlow<E, T, T> distinct(Consumer<UniqueOptions> options);
+
+		default <X> SortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+			Function<? super X, ? extends T> reverse) {
+			return transformEquivalent(target, tx -> tx.map(map).withReverse(reverse));
+		}
+
+		/**
+		 * @param <X> The type for the mapped flow
+		 * @param target The type for the mapped flow
+		 * @param map The mapping function to produce values from each source element
+		 * @param compare The comparator to source the mapped values in the same order as the corresponding source values
+		 * @return The mapped flow
+		 */
+		default <X> SortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+			Comparator<? super X> compare) {
+			return transformEquivalent(target, tx -> tx.map(map), compare);
+		}
+
+		<X> SortedDataFlow<E, T, X> transformEquivalent(TypeToken<X> target,
+			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ReversibleTransformation<T, X>> transform);
+
+		/**
+		 * @param <X> The compile-time transformed type
+		 * @param target The runtime transformed type
+		 * @param transform A function to transform elements in this flow to transformed elements
+		 * @param compare The comparator to compare the target values with--should reflect the order of this flow's comparator
+		 * @return The transformed flow
+		 * @see Transformation for help using the API
+		 */
+		<X> SortedDataFlow<E, T, X> transformEquivalent(TypeToken<X> target,
+			Function<? super ReversibleTransformationPrecursor<T, X, ?>, Transformation<T, X>> transform, Comparator<? super X> compare);
+
+		@Override
+		default SortedDataFlow<E, T, T> unmodifiable() {
+			return filterMod(options -> options.unmodifiable(StdMsg.UNSUPPORTED_OPERATION, true));
+		}
+
+		@Override
+		default SortedDataFlow<E, T, T> unmodifiable(boolean allowUpdates) {
+			return filterMod(options -> options.unmodifiable(StdMsg.UNSUPPORTED_OPERATION, allowUpdates));
+		}
+
+		@Override
+		SortedDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options);
+
+		@Override
+		default ObservableSortedCollection<T> collect() {
+			return (ObservableSortedCollection<T>) CollectionDataFlow.super.collect();
+		}
+
+		@Override
+		ObservableSortedCollection<T> collectPassive();
+
+		@Override
+		ObservableSortedCollection<T> collectActive(Observable<?> until);
+	}
+
+	/**
 	 * A data flow that produces a sorted set
 	 *
 	 * @param <E> The type of the source collection
 	 * @param <I> Intermediate type
 	 * @param <T> The type of collection this flow may build
 	 */
-	interface DistinctSortedDataFlow<E, I, T> extends DistinctDataFlow<E, I, T> {
-		Comparator<? super T> comparator();
-
-		@Override
-		Equivalence.ComparatorEquivalence<? super T> equivalence();
-
+	interface DistinctSortedDataFlow<E, I, T> extends DistinctDataFlow<E, I, T>, SortedDataFlow<E, I, T> {
 		@Override
 		DistinctSortedDataFlow<E, T, T> reverse();
 
@@ -1225,13 +1312,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 			return (DistinctSortedDataFlow<E, T, X>) DistinctDataFlow.super.mapEquivalent(target, map, reverse);
 		}
 
-		/**
-		 * @param <X> The type for the mapped flow
-		 * @param target The type for the mapped flow
-		 * @param map The mapping function to produce values from each source element
-		 * @param compare The comparator to source the mapped values in the same order as the corresponding source values
-		 * @return The mapped flow
-		 */
+		@Override
 		default <X> DistinctSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
 			Comparator<? super X> compare) {
 			return transformEquivalent(target, tx -> tx.map(map), compare);
@@ -1241,14 +1322,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		<X> DistinctSortedDataFlow<E, T, X> transformEquivalent(TypeToken<X> target,
 			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ReversibleTransformation<T, X>> transform);
 
-		/**
-		 * @param <X> The compile-time transformed type
-		 * @param target The runtime transformed type
-		 * @param transform A function to transform elements in this flow to transformed elements
-		 * @param compare The comparator to compare the target values with--should reflect the order of this flow's comparator
-		 * @return The transformed flow
-		 * @see Transformation for help using the API
-		 */
+		@Override
 		<X> DistinctSortedDataFlow<E, T, X> transformEquivalent(TypeToken<X> target,
 			Function<? super ReversibleTransformationPrecursor<T, X, ?>, Transformation<T, X>> transform, Comparator<? super X> compare);
 

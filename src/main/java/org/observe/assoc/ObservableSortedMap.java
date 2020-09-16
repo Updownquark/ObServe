@@ -7,11 +7,14 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.observe.Equivalence;
+import org.observe.Equivalence.ComparatorEquivalence;
 import org.observe.Subscription;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.DefaultObservableCollection;
 import org.observe.collect.ObservableCollection;
+import org.observe.collect.ObservableCollectionBuilder;
 import org.observe.collect.ObservableSet;
+import org.observe.collect.ObservableSortedCollection;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.util.TypeTokens;
 import org.qommons.Identifiable;
@@ -140,10 +143,16 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 	 * @param <V> The value type for the map
 	 * @param <B> The sub-type of the builder
 	 */
-	class Builder<K, V, B extends Builder<K, V, B>> extends ObservableMap.Builder<K, V, B> {
+	class Builder<K, V, B extends Builder<K, V, B>> extends ObservableMap.Builder<K, V, B>
+	implements ObservableCollectionBuilder.SortedBuilder<K, B> {
 		Builder(TypeToken<K> keyType, TypeToken<V> valueType, Comparator<? super K> sorting, String initDescrip) {
 			super(keyType, valueType, initDescrip);
-			sortBy(sorting);
+			super.withEquivalence(Equivalence.of(TypeTokens.getRawType(getType()), sorting, true));
+		}
+
+		@Override
+		protected Equivalence.ComparatorEquivalence<? super K> getEquivalence() {
+			return (ComparatorEquivalence<? super K>) super.getEquivalence();
 		}
 
 		@Override
@@ -157,6 +166,16 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 				throw new IllegalArgumentException("Comparator cannot be null");
 			super.sortBy(sorting);
 			return (B) this;
+		}
+
+		@Override
+		public DistinctSortedBuilder<K, ?> distinct() {
+			return new ObservableCollectionBuilder.DistinctSortedBuilderImpl<>(this, getEquivalence().comparator());
+		}
+
+		@Override
+		public ObservableSortedCollection<K> build() {
+			return new ObservableCollectionBuilder.SortedBuilderImpl<>(this, getEquivalence().comparator()).build();
 		}
 
 		@Override

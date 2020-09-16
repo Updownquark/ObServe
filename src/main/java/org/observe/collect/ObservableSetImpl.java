@@ -22,7 +22,7 @@ import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.DistinctDataFlow;
 import org.observe.collect.ObservableCollection.ModFilterBuilder;
 import org.observe.collect.ObservableCollectionActiveManagers.ActiveCollectionManager;
-import org.observe.collect.ObservableCollectionActiveManagers.ActiveSetManager;
+import org.observe.collect.ObservableCollectionActiveManagers.ActiveValueStoredManager;
 import org.observe.collect.ObservableCollectionActiveManagers.CollectionElementListener;
 import org.observe.collect.ObservableCollectionActiveManagers.DerivedCollectionElement;
 import org.observe.collect.ObservableCollectionActiveManagers.ElementAccepter;
@@ -204,7 +204,7 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public ActiveSetManager<E, ?, T> manageActive() {
+		public ActiveValueStoredManager<E, ?, T> manageActive() {
 			return new ActiveSetMgrPlaceholder<>(getParent().manageActive());
 		}
 
@@ -226,7 +226,7 @@ public class ObservableSetImpl {
 		}
 	}
 
-	private static class ActiveSetMgrPlaceholder<E, I, T> implements ActiveSetManager<E, I, T> {
+	static class ActiveSetMgrPlaceholder<E, I, T> implements ActiveValueStoredManager<E, I, T> {
 		private final ActiveCollectionManager<E, I, T> theWrapped;
 
 		ActiveSetMgrPlaceholder(ActiveCollectionManager<E, I, T> wrapped) {
@@ -379,7 +379,7 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public ActiveSetManager<E, ?, T> manageActive() {
+		public ActiveValueStoredManager<E, ?, T> manageActive() {
 			DistinctManager<E, T> mgr = new DistinctManager<>(getParent().manageActive(), equivalence(), isAlwaysUsingFirst,
 				isPreservingSourceOrder);
 			Debug.DebugData d = Debug.d().debug(this);
@@ -460,7 +460,7 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public ActiveSetManager<E, ?, T> manageActive() {
+		public ActiveValueStoredManager<E, ?, T> manageActive() {
 			return new ActiveSetMgrPlaceholder<>(super.manageActive());
 		}
 
@@ -546,8 +546,8 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public ActiveSetManager<E, ?, E> manageActive() {
-			return new DistinctBaseManager<>(getSource());
+		public ActiveValueStoredManager<E, ?, E> manageActive() {
+			return new ValueStoredBaseManager<>(getSource());
 		}
 
 		@Override
@@ -561,37 +561,39 @@ public class ObservableSetImpl {
 		}
 	}
 
-	static class DistinctBaseManager<E> extends ObservableCollectionActiveManagers.BaseCollectionManager<E>
-	implements ActiveSetManager<E, E, E> {
-		DistinctBaseManager(ObservableSet<E> source) {
+	static class ValueStoredBaseManager<E> extends ObservableCollectionActiveManagers.BaseCollectionManager<E>
+	implements ActiveValueStoredManager<E, E, E> {
+		ValueStoredBaseManager(ObservableCollection<E> source) {
 			super(source);
+			if (!(source instanceof ValueStoredCollection))
+				throw new IllegalArgumentException(
+					"This manager can only be used with " + ValueStoredCollection.class.getSimpleName() + " implementations");
 		}
 
-		@Override
-		protected ObservableSet<E> getSource() {
-			return (ObservableSet<E>) super.getSource();
+		protected ValueStoredCollection<E> getVSCSource() {
+			return (ValueStoredCollection<E>) getSource();
 		}
 
 		@Override
 		public boolean isConsistent(DerivedCollectionElement<E> element) {
-			return getSource().isConsistent(((BaseDerivedElement) element).getElementId());
+			return getVSCSource().isConsistent(((BaseDerivedElement) element).getElementId());
 		}
 
 		@Override
 		public boolean checkConsistency() {
-			return getSource().checkConsistency();
+			return getVSCSource().checkConsistency();
 		}
 
 		@Override
 		public <X> boolean repair(DerivedCollectionElement<E> element,
 			org.observe.collect.ObservableCollectionDataFlowImpl.RepairListener<E, X> listener) {
-			return getSource().repair(((BaseDerivedElement) element).getElementId(),
+			return getVSCSource().repair(((BaseDerivedElement) element).getElementId(),
 				listener == null ? null : new BaseRepairListener<>(listener));
 		}
 
 		@Override
 		public <X> boolean repair(org.observe.collect.ObservableCollectionDataFlowImpl.RepairListener<E, X> listener) {
-			return getSource().repair(listener == null ? null : new BaseRepairListener<>(listener));
+			return getVSCSource().repair(listener == null ? null : new BaseRepairListener<>(listener));
 		}
 
 		private class BaseRepairListener<X> implements ValueStoredCollection.RepairListener<E, X> {
@@ -624,7 +626,7 @@ public class ObservableSetImpl {
 	 * @param <E> The type of the source collection
 	 * @param <T> The type of the derived set
 	 */
-	public static class DistinctManager<E, T> implements ActiveSetManager<E, T, T> {
+	public static class DistinctManager<E, T> implements ActiveValueStoredManager<E, T, T> {
 		private final ActiveCollectionManager<E, ?, T> theParent;
 		private final BetterMap<T, UniqueElement> theElementsByValue;
 		private final Equivalence<? super T> theEquivalence;
@@ -1439,13 +1441,13 @@ public class ObservableSetImpl {
 		 * @param flow The active manager to drive this set
 		 * @param until The observable to terminate this derived set
 		 */
-		public ActiveDerivedSet(ActiveSetManager<?, ?, T> flow, Observable<?> until) {
+		public ActiveDerivedSet(ActiveValueStoredManager<?, ?, T> flow, Observable<?> until) {
 			super(flow, until);
 		}
 
 		@Override
-		protected ActiveSetManager<?, ?, T> getFlow() {
-			return (ActiveSetManager<?, ?, T>) super.getFlow();
+		protected ActiveValueStoredManager<?, ?, T> getFlow() {
+			return (ActiveValueStoredManager<?, ?, T>) super.getFlow();
 		}
 
 		@Override

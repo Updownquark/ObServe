@@ -5,12 +5,9 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.Spliterator;
-import java.util.function.Supplier;
 
-import org.observe.Equivalence;
 import org.observe.ObservableValue;
 import org.observe.util.TypeTokens;
-import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BetterTreeSet;
@@ -24,12 +21,9 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <E> The type of element in the set
  */
-public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSet<E> {
+public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableSortedCollection<E>, BetterSortedSet<E> {
 	/** This class's wildcard {@link TypeToken} */
 	static TypeToken<ObservableSortedSet<?>> TYPE = TypeTokens.get().keyFor(ObservableSortedSet.class).wildCard();
-
-	@Override
-	Equivalence.ComparatorEquivalence<? super E> equivalence();
 
 	@Override
 	default Iterator<E> iterator() {
@@ -38,7 +32,7 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSe
 
 	@Override
 	default Spliterator<E> spliterator() {
-		return BetterSortedSet.super.spliterator();
+		return ObservableSet.super.spliterator();
 	}
 
 	@Override
@@ -114,18 +108,6 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSe
 		return BetterSortedSet.super.last();
 	}
 
-	/**
-	 * Returns a value at or adjacent to another value
-	 *
-	 * @param search The search to find the target value
-	 * @param filter The filter to direct and filter the search
-	 * @param def Produces a default value in the case that no element of this set matches the given search
-	 * @return An observable value with the result of the operation
-	 */
-	default ObservableElement<E> observeRelative(Comparable<? super E> search, BetterSortedList.SortedSearchFilter filter, Supplier<? extends E> def) {
-		return new ObservableSortedSetImpl.RelativeFinder<>(this, search, filter);
-	}
-
 	@Override
 	default ObservableSortedSet<E> reverse() {
 		return new ObservableSortedSetImpl.ReversedSortedSet<>(this);
@@ -139,6 +121,41 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSe
 	@Override
 	default Iterator<E> descendingIterator() {
 		return reverse().iterator();
+	}
+
+	@Override
+	default ObservableSortedSet<E> subSequence(E fromElement, boolean fromInclusive, E toElement, boolean toInclusive) {
+		return subSet(fromElement, fromInclusive, toElement, toInclusive);
+	}
+
+	@Override
+	default ObservableSortedSet<E> subSequence(Comparable<? super E> from, Comparable<? super E> to) {
+		return subSet(from, to);
+	}
+
+	@Override
+	default ObservableSortedSet<E> headSequence(E toElement, boolean inclusive) {
+		return headSet(toElement, inclusive);
+	}
+
+	@Override
+	default ObservableSortedSet<E> tailSequence(E fromElement, boolean inclusive) {
+		return tailSet(fromElement, inclusive);
+	}
+
+	@Override
+	default ObservableSortedSet<E> subSequence(E fromElement, E toElement) {
+		return subSet(fromElement, toElement);
+	}
+
+	@Override
+	default ObservableSortedSet<E> headSequence(E toElement) {
+		return headSet(toElement);
+	}
+
+	@Override
+	default ObservableSortedSet<E> tailSequence(E fromElement) {
+		return tailSet(fromElement);
 	}
 
 	/**
@@ -243,7 +260,7 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSe
 	 * @param compare The comparator to use to sort the set's values
 	 * @return A builder to create a new, empty, mutable observable sorted set
 	 */
-	static <E> DefaultObservableSortedSet.Builder<E, ?> build(TypeToken<E> type, Comparator<? super E> compare) {
+	static <E> ObservableCollectionBuilder.DistinctSortedBuilder<E, ?> build(TypeToken<E> type, Comparator<? super E> compare) {
 		return DefaultObservableSortedSet.build(type, compare);
 	}
 
@@ -253,7 +270,7 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSe
 	 * @param compare The comparator to use to sort the set's values
 	 * @return A builder to create a new, empty, mutable observable sorted set
 	 */
-	static <E> DefaultObservableSortedSet.Builder<E, ?> build(Class<E> type, Comparator<? super E> compare) {
+	static <E> ObservableCollectionBuilder.DistinctSortedBuilder<E, ?> build(Class<E> type, Comparator<? super E> compare) {
 		return build(TypeTokens.get().of(type), compare);
 	}
 

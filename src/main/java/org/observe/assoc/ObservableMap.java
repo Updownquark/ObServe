@@ -18,6 +18,7 @@ import org.observe.collect.CollectionChangeType;
 import org.observe.collect.CollectionSubscription;
 import org.observe.collect.DefaultObservableCollection;
 import org.observe.collect.ObservableCollection;
+import org.observe.collect.ObservableCollectionBuilder;
 import org.observe.collect.ObservableCollectionEvent;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.SettableElement;
@@ -465,7 +466,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 	 * @param <V> The value type for the map
 	 * @param <B> The sub-type of the builder
 	 */
-	class Builder<K, V, B extends Builder<K, V, B>> extends DefaultObservableCollection.Builder<K, B> {
+	class Builder<K, V, B extends Builder<K, V, B>> extends ObservableCollectionBuilder.CollectionBuilderImpl<K, B> {
 		private final TypeToken<V> theValueType;
 
 		Builder(TypeToken<K> keyType, TypeToken<V> valueType, String initDescrip) {
@@ -479,7 +480,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 
 		public ObservableMap<K, V> buildMap() {
 			Comparator<? super K> compare = getSorting();
-			DefaultObservableCollection.Builder<Map.Entry<K, V>, ?> entryBuilder = DefaultObservableCollection
+			ObservableCollectionBuilder<Map.Entry<K, V>, ?> entryBuilder = DefaultObservableCollection
 				.build(buildEntryType(getType(), theValueType))//
 				.withBacking((BetterList<Map.Entry<K, V>>) (BetterList<?>) getBacking())//
 				.withDescription(getDescription())//

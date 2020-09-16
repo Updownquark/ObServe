@@ -21,7 +21,7 @@ import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.DistinctDataFlow;
 import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
 import org.observe.collect.ObservableCollection.ModFilterBuilder;
-import org.observe.collect.ObservableCollectionActiveManagers.ActiveSetManager;
+import org.observe.collect.ObservableCollectionActiveManagers.ActiveValueStoredManager;
 import org.observe.collect.ObservableCollectionPassiveManagers.PassiveCollectionManager;
 import org.observe.collect.ObservableSetImpl.DistinctBaseFlow;
 import org.observe.util.TypeTokens;
@@ -30,10 +30,8 @@ import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollections;
-import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSet;
 import org.qommons.collect.BetterSortedList;
-import org.qommons.collect.BetterSortedList.SortedSearchFilter;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
@@ -47,96 +45,12 @@ public class ObservableSortedSetImpl {
 	private ObservableSortedSetImpl() {}
 
 	/**
-	 * Implements {@link ObservableSortedSet#observeRelative(Comparable, SortedSearchFilter, java.util.function.Supplier)}
-	 *
-	 * @param <E> The type of elements in the collection
-	 */
-	public static class RelativeFinder<E> extends ObservableCollectionImpl.AbstractObservableElementFinder<E> {
-		private final Comparable<? super E> theSearch;
-		private final BetterSortedList.SortedSearchFilter theFilter;
-
-		/**
-		 * @param set The sorted set to search
-		 * @param search The search comparable
-		 * @param filter The search filter
-		 */
-		public RelativeFinder(ObservableSortedSet<E> set, Comparable<? super E> search, BetterSortedList.SortedSearchFilter filter) {
-			super(set, (el1, el2) -> {
-				int comp1 = search.compareTo(el1.get());
-				int comp2 = search.compareTo(el2.get());
-				if (comp1 == 0) {
-					if (comp2 == 0)
-						return 0;
-					else
-						return -1;
-				} else if (comp2 == 0)
-					return 1;
-				// Neither are a perfect match.
-				// From here on, it's safe to assume filter.less.value is non-null because otherwise one or the other element
-				// would not have passed the test method.
-				// Keep in mind that the comparisons were based on the search value first, so the signs here are a bit counterintuitive
-				else if (comp1 > 0) {
-					if (comp2 > 0)
-						return -el1.getElementId().compareTo(el2.getElementId());// Both less, so take the greater of the two
-					else
-						return filter.less.value ? -1 : 1;
-				} else {
-					if (comp2 > 0)
-						return filter.less.value ? 1 : -1;
-					else
-						return el1.getElementId().compareTo(el2.getElementId());// Both greater, so take the lesser of the two
-				}
-			}, () -> null, null);
-			theSearch = search;
-			theFilter = filter;
-		}
-
-		@Override
-		protected ObservableSortedSet<E> getCollection() {
-			return (ObservableSortedSet<E>) super.getCollection();
-		}
-
-		@Override
-		protected boolean useCachedMatch(E value) {
-			return false; // Can't use cached values for this
-		}
-
-		@Override
-		protected Object createIdentity() {
-			return Identifiable.wrap(getCollection().getIdentity(), "find", theSearch, theFilter);
-		}
-
-		@Override
-		protected boolean find(Consumer<? super CollectionElement<? extends E>> onElement) {
-			CollectionElement<E> el = getCollection().search(theSearch, theFilter);
-			if (el == null)
-				return false;
-			onElement.accept(el);
-			return true;
-		}
-
-		@Override
-		protected boolean test(E value) {
-			// Keep in mind that the comparisons were based on the search value first, so the signs here are a bit counterintuitive
-			switch (theFilter) {
-			case Less:
-				return theSearch.compareTo(value) >= 0;
-			case OnlyMatch:
-				return theSearch.compareTo(value) == 0;
-			case Greater:
-				return theSearch.compareTo(value) <= 0;
-			default:
-				return true;
-			}
-		}
-	}
-
-	/**
 	 * Implements {@link ObservableSortedSet#subSet(Comparable, Comparable)}
 	 *
 	 * @param <E> The type of elements in the set
 	 */
-	public static class ObservableSubSet<E> extends BetterSortedSet.BetterSubSet<E> implements ObservableSortedSet<E> {
+	public static class ObservableSubSet<E> extends ObservableSortedCollectionImpl.ObservableSubSequence<E>
+		implements ObservableSortedSet<E> {
 		/**
 		 * @param set The super set
 		 * @param from The lower bound of this sub-set
@@ -152,33 +66,13 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public TypeToken<E> getType() {
-			return getWrapped().getType();
+		public boolean add(E value) {
+			return ObservableSortedSet.super.add(value);
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return getWrapped().isLockSupported();
-		}
-
-		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return getWrapped().lock(write, cause);
-		}
-
-		@Override
-		public Equivalence.ComparatorEquivalence<? super E> equivalence() {
-			return getWrapped().equivalence();
-		}
-
-		@Override
-		public E[] toArray() {
-			return ObservableSortedSet.super.toArray();
-		}
-
-		@Override
-		public void setValue(Collection<ElementId> elements, E value) {
-			getWrapped().setValue(BetterList.of(elements.stream().map(BetterSortedSet.BetterSubSet::unwrap)), value);
+		public ObservableSortedSet<E> subSequence(Comparable<? super E> from, Comparable<? super E> to) {
+			return subSet(from, to);
 		}
 
 		@Override
@@ -433,7 +327,7 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public ActiveSetManager<E, ?, T> manageActive() {
+		public ActiveValueStoredManager<E, ?, T> manageActive() {
 			return super.manageActive();
 		}
 
@@ -533,7 +427,7 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public ActiveSetManager<E, ?, T> manageActive() {
+		public ActiveValueStoredManager<E, ?, T> manageActive() {
 			return new ObservableSetImpl.DistinctManager<>(
 				new ObservableCollectionActiveManagers.ActiveEquivalenceSwitchedManager<>(getParent().manageActive(), equivalence()),
 				equivalence(), isAlwaysUsingFirst, false);
@@ -614,12 +508,17 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
+		public DistinctSortedDataFlow<E, T, T> distinct(Consumer<UniqueOptions> options) {
+			return (DistinctSortedDataFlow<E, T, T>) super.distinct(options);
+		}
+
+		@Override
 		public DistinctSortedDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options) {
 			return new DistinctSortedDataFlowWrapper<>(getSource(), super.filterMod(options), equivalence());
 		}
 
 		@Override
-		public ActiveSetManager<E, ?, T> manageActive() {
+		public ActiveValueStoredManager<E, ?, T> manageActive() {
 			return super.manageActive();
 		}
 
@@ -704,6 +603,11 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
+		public DistinctSortedDataFlow<E, E, E> distinct(Consumer<UniqueOptions> options) {
+			return (DistinctSortedDataFlow<E, E, E>) super.distinct(options);
+		}
+
+		@Override
 		public DistinctSortedDataFlow<E, E, E> filterMod(Consumer<ModFilterBuilder<E>> options) {
 			return new DistinctSortedDataFlowWrapper<>(getSource(), super.filterMod(options), comparator());
 		}
@@ -714,7 +618,7 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public ActiveSetManager<E, ?, E> manageActive() {
+		public ActiveValueStoredManager<E, ?, E> manageActive() {
 			return super.manageActive();
 		}
 
@@ -812,7 +716,7 @@ public class ObservableSortedSetImpl {
 		 * @param compare The comparator by which this set's values will be sorted
 		 * @param until The observable to terminate this derived set
 		 */
-		public ActiveDerivedSortedSet(ActiveSetManager<?, ?, T> flow, Comparator<? super T> compare, Observable<?> until) {
+		public ActiveDerivedSortedSet(ActiveValueStoredManager<?, ?, T> flow, Comparator<? super T> compare, Observable<?> until) {
 			super(flow, until);
 			theEquivalence = flow.equivalence() instanceof Equivalence.ComparatorEquivalence
 				? (Equivalence.ComparatorEquivalence<? super T>) flow.equivalence()

@@ -84,6 +84,7 @@ import org.observe.TypedValueContainer;
 import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.DefaultObservableCollection;
 import org.observe.collect.ObservableCollection;
+import org.observe.collect.ObservableCollectionBuilder;
 import org.observe.config.ObservableConfig;
 import org.observe.util.SafeObservableCollection;
 import org.observe.util.TypeTokens;
@@ -411,12 +412,12 @@ public class PanelPopulation {
 		}
 
 		default <T> ObservableCollection<T> getOrDeclareCollection(String name, Class<T> type,
-			Function<DefaultObservableCollection.Builder<T, ?>, ? extends ObservableCollection<T>> builder) {
+			Function<ObservableCollectionBuilder<T, ?>, ? extends ObservableCollection<T>> builder) {
 			return getOrDeclareCollection(name, TypeTokens.get().of(type), builder);
 		}
 
 		<T> ObservableCollection<T> getOrDeclareCollection(String name, TypeToken<T> type,
-			Function<DefaultObservableCollection.Builder<T, ?>, ? extends ObservableCollection<T>> builder);
+			Function<ObservableCollectionBuilder<T, ?>, ? extends ObservableCollection<T>> builder);
 
 		default <T> ObservableValue<? extends T> getValue(String name, Class<T> type) {
 			return getValue(name, TypeTokens.get().of(type));
@@ -1091,7 +1092,7 @@ public class PanelPopulation {
 
 		@Override
 		public <T> ObservableCollection<T> getOrDeclareCollection(String name, TypeToken<T> type,
-			Function<DefaultObservableCollection.Builder<T, ?>, ? extends ObservableCollection<T>> builder) {
+			Function<ObservableCollectionBuilder<T, ?>, ? extends ObservableCollection<T>> builder) {
 			Transactable lock = theLock.get();
 			CollectionLockingStrategy locking = lock == null ? new FastFailLockingStrategy() : new RRWLockingStrategy(lock);
 			return this.getOrDeclare(name, ObservableCollection.class, type, () -> builder.apply(//
