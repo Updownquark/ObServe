@@ -37,6 +37,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.IntSupplier;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -2559,13 +2560,15 @@ public class PanelPopulation {
 							}
 						});
 					}
+					IntSupplier length = getEditor().getOrientation() == JSplitPane.VERTICAL_SPLIT ? getEditor()::getHeight
+						: getEditor()::getWidth;
 					getEditor().addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, evt -> {
 						if (callbackLock[0])
 							return;
 						callbackLock[0] = true;
 						try {
 							if (divProp != null)
-								divProp.set(getEditor().getDividerLocation() * 1.0 / getEditor().getWidth(), evt);
+								divProp.set(getEditor().getDividerLocation() * 1.0 / length.getAsInt(), evt);
 							else
 								divLoc.set(getEditor().getDividerLocation(), evt);
 						} finally {
