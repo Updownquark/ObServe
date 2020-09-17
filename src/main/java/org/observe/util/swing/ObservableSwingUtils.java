@@ -78,6 +78,7 @@ import org.qommons.Causable;
 import org.qommons.Causable.CausableKey;
 import org.qommons.LambdaUtils;
 import org.qommons.Transaction;
+import org.qommons.TriFunction;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.ListenerList;
 import org.xml.sax.SAXException;
@@ -448,7 +449,7 @@ public class ObservableSwingUtils {
 					button.setToolTipText(null);
 			}
 		};
-		BiConsumer<T, Object>[] listener = new BiConsumer[1];
+		TriFunction<T, Integer, Object, Boolean>[] listener = new TriFunction[1];
 		subs.add(ObservableComboBoxModel.<T> hookUpComboData(safeValues, selected, index -> {
 			if (index >= 0)
 				buttons.get(index).setSelected(true);
@@ -466,7 +467,7 @@ public class ObservableSwingUtils {
 				return;
 			int index = buttons.indexOf(button);
 			if (index >= 0 && listener[0] != null)
-				listener[0].accept(safeValues.get(index), evt);
+				listener[0].apply(safeValues.get(index), index, evt);
 		};
 		for (TB button : buttons) {
 			group.add(button);

@@ -1231,11 +1231,11 @@ public class PanelPopulation {
 			else
 				observableValues = ObservableCollection.of(value.getType(), availableValues);
 			SimpleComboEditor<F, ?> fieldPanel = new SimpleComboEditor<>(fieldName, new JComboBox<>(), getLock());
+			if (modify != null)
+				modify.accept(fieldPanel);
 			Subscription sub = ObservableComboBoxModel.comboFor(fieldPanel.getEditor(), fieldPanel.getTooltip(), fieldPanel::getTooltip,
 				observableValues, value);
 			getUntil().take(1).act(__ -> sub.unsubscribe());
-			if (modify != null)
-				modify.accept(fieldPanel);
 			doAdd(fieldPanel);
 			return (P) this;
 		}
@@ -1980,7 +1980,6 @@ public class PanelPopulation {
 
 	static class SimpleComboEditor<F, P extends SimpleComboEditor<F, P>> extends SimpleFieldEditor<JComboBox<F>, P>
 	implements ComboEditor<F, P> {
-		private ObservableCellRenderer<F, F> theRenderer;
 		private Function<? super F, String> theValueTooltip;
 
 		SimpleComboEditor(String fieldName, JComboBox<F> editor, Supplier<Transactable> lock) {
@@ -1989,7 +1988,7 @@ public class PanelPopulation {
 
 		@Override
 		public P renderWith(ObservableCellRenderer<F, F> renderer) {
-			theRenderer = renderer;
+			getEditor().setRenderer(renderer);
 			return (P) this;
 		}
 
@@ -2002,14 +2001,6 @@ public class PanelPopulation {
 		@Override
 		public String getTooltip(F value) {
 			return theValueTooltip == null ? null : theValueTooltip.apply(value);
-		}
-
-		@Override
-		protected Component getOrCreateComponent(Observable<?> until) {
-			super.getOrCreateComponent(until);
-			if (theRenderer != null)
-				getEditor().setRenderer(theRenderer);
-			return super.getOrCreateComponent(until);
 		}
 	}
 

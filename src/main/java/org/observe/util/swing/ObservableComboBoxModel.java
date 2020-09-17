@@ -1,14 +1,15 @@
 package org.observe.util.swing;
 
+import java.awt.Component;
 import java.awt.EventQueue;
+import java.awt.Point;
 import java.awt.event.ItemEvent;
 import java.awt.event.ItemListener;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionAdapter;
-import java.awt.event.MouseMotionListener;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.function.BiConsumer;
+import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.IntConsumer;
@@ -18,6 +19,7 @@ import javax.accessibility.AccessibleContext;
 import javax.swing.ComboBoxModel;
 import javax.swing.JComboBox;
 import javax.swing.JList;
+import javax.swing.ListCellRenderer;
 import javax.swing.plaf.basic.ComboPopup;
 
 import org.observe.Equivalence;
@@ -31,6 +33,9 @@ import org.observe.collect.ObservableCollection;
 import org.observe.util.SafeObservableCollection;
 import org.observe.util.TypeTokens;
 import org.qommons.Transaction;
+import org.qommons.TriFunction;
+import org.qommons.collect.CollectionElement;
+import org.qommons.collect.ElementId;
 
 /**
  * A combo box model backed by an {@link ObservableCollection}
@@ -68,7 +73,7 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 	 * @return The subscription to {@link Subscription#unsubscribe() unsubscribe} to to cease listening
 	 */
 	public static <T> Subscription comboFor(JComboBox<T> comboBox, String descrip, ObservableCollection<? extends T> availableValues,
-		SettableValue<? super T> selected) {
+		SettableValue<T> selected) {
 		return comboFor(comboBox, descrip, null, availableValues, selected);
 	}
 
@@ -84,7 +89,7 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 	 * @return The subscription to {@link Subscription#unsubscribe() unsubscribe} to to cease listening
 	 */
 	public static <T> Subscription comboFor(JComboBox<T> comboBox, String descrip, Function<? super T, String> valueTooltip,
-		ObservableCollection<? extends T> availableValues, SettableValue<? super T> selected) {
+		ObservableCollection<? extends T> availableValues, SettableValue<T> selected) {
 		return comboFor(comboBox, ObservableValue.of(TypeTokens.get().STRING, descrip), valueTooltip, availableValues, selected);
 	}
 
@@ -100,7 +105,7 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 	 * @return The subscription to {@link Subscription#unsubscribe() unsubscribe} to to cease listening
 	 */
 	public static <T> Subscription comboFor(JComboBox<T> comboBox, ObservableValue<String> descrip,
-		Function<? super T, String> valueTooltip, ObservableCollection<? extends T> availableValues, SettableValue<? super T> selected) {
+		Function<? super T, String> valueTooltip, ObservableCollection<? extends T> availableValues, SettableValue<T> selected) {
 		List<Subscription> subs = new LinkedList<>();
 		SafeObservableCollection<? extends T> safeValues;
 		if (availableValues instanceof SafeObservableCollection)
@@ -147,7 +152,9 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 				if (!callbackLock[0]) {
 					callbackLock[0] = true;
 					try {
-						listener.accept((T) evt.getItem(), evt);
+						if (!listener.apply((T) evt.getItem(), comboBox.getSelectedIndex(), evt)) {
+							EventQueue.invokeLater(popup::show);
+						}
 					} finally {
 						callbackLock[0] = false;
 					}
@@ -159,12 +166,40 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 		}, checkEnabled));
 		subs.add(selected.isEnabled().changes().act(evt -> ObservableSwingUtils.onEQ(() -> checkEnabled.accept(evt.getNewValue()))));
 
+		ListCellRenderer<? super T> oldRenderer = comboBox.getRenderer();
+		comboBox.setRenderer(new ListCellRenderer<T>() {
+			@Override
+			public Component getListCellRendererComponent(JList<? extends T> list, T value, int index, boolean isSelected,
+				boolean cellHasFocus) {
+				Component rendered = oldRenderer.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+				if (index >= 0) {
+					String enabled = selected.isAcceptable(value);
+					rendered.setEnabled(enabled == null);
+				}
+				return rendered;
+			}
+		});
+
 		if (popup != null) {
 			JList<T> popupList = popup.getList();
-			MouseMotionListener popupMouseListener = new MouseMotionAdapter() {
+			ToolTipHelper toolTipHelper = new ToolTipHelper(popupList);
+			class PopupMouseListener extends MouseMotionAdapter {
+				private Point lastHover;
+
 				@Override
 				public void mouseMoved(MouseEvent e) {
-					int index = popupList.locationToIndex(e.getPoint());
+					lastHover = e.getPoint();
+					_showToolTip();
+				}
+
+				void showToolTip() {
+					if (lastHover == null || !popupList.isShowing())
+						return;
+					_showToolTip();
+				}
+
+				private void _showToolTip() {
+					int index = popupList.locationToIndex(lastHover);
 					if (index < 0) {
 						popupList.setToolTipText(null);
 						return;
@@ -173,9 +208,15 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 					String tooltip = selected.isAcceptable(item);
 					if (tooltip == null && valueTooltip != null)
 						tooltip = valueTooltip.apply(item);
+					System.out.println("Setting tooltip to " + tooltip);
+					String oldToolTip = popupList.getToolTipText();
 					popupList.setToolTipText(tooltip);
+					if (tooltip != null && !Objects.equals(oldToolTip, tooltip))
+						toolTipHelper.setTooltipVisible(true);
 				}
 			};
+			PopupMouseListener popupMouseListener = new PopupMouseListener();
+			subs.add(availableValues.simpleChanges().act(__ -> popupMouseListener.showToolTip()));
 			popupList.addMouseMotionListener(popupMouseListener);
 			subs.add(() -> ObservableSwingUtils.onEQ(() -> popupList.removeMouseMotionListener(popupMouseListener)));
 		}
@@ -192,22 +233,35 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 	 * @param checkEnabled Called to update the enablement of the widget(s)
 	 * @return A subscription to stop all listening
 	 */
-	public static <T> Subscription hookUpComboData(SafeObservableCollection<? extends T> availableValues, SettableValue<? super T> selected,
-		IntConsumer setSelected, Function<BiConsumer<T, Object>, Subscription> acceptSelected, Consumer<String> checkEnabled) {
+	public static <T> Subscription hookUpComboData(SafeObservableCollection<? extends T> availableValues, SettableValue<T> selected,
+		IntConsumer setSelected, Function<TriFunction<T, Integer, Object, Boolean>, Subscription> acceptSelected,
+		Consumer<String> checkEnabled) {
 		List<Subscription> subs = new LinkedList<>();
 		boolean[] callbackLock = new boolean[1];
+		ElementId[] currentSelectedElement = new ElementId[1];
 		Object[] currentSelected = new Object[1];
-		subs.add(acceptSelected.apply((item, cause) -> {
-			currentSelected[0] = item;
+		subs.add(acceptSelected.apply((item, idx, cause) -> {
 			if (!callbackLock[0]) {
 				callbackLock[0] = true;
 				try {
+					if (selected.isAcceptable(item) != null) {
+						if (currentSelectedElement[0] == null)
+							setSelected.accept(-1);
+						else if (currentSelectedElement[0].isPresent())
+							setSelected.accept(availableValues.getElementsBefore(currentSelectedElement[0]));
+						return false;
+					}
+					currentSelectedElement[0] = availableValues.getElement(idx).getElementId();
+					currentSelected[0] = item;
 					selected.set(item, cause);
 				} finally {
 					callbackLock[0] = false;
 				}
-			} else
+			} else {
+				currentSelected[0] = item;
 				checkEnabled.accept(selected.isEnabled().get());
+			}
+			return true;
 		}));
 		subs.add(selected.changes().act(evt -> {
 			if (callbackLock[0])
@@ -218,14 +272,18 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 				String enabled = selected.isEnabled().get();
 				callbackLock[0] = true;
 				try (Transaction avT = availableValues.lock(false, null)) {
-					int index = availableValues.indexOf(evt.getNewValue());
-					if (index >= 0 && index < availableValues.size()) {
-						currentSelected[0] = availableValues.get(index);
-						setSelected.accept(index);
-					} else {
-						currentSelected[0] = null;
-						setSelected.accept(-1);
-					}
+					CollectionElement<? extends T> found = availableValues.belongs(evt.getNewValue()) //
+						? ((ObservableCollection<T>) availableValues).getElement(evt.getNewValue(), true)//
+							: null;
+						if (found != null) {
+							currentSelectedElement[0] = found.getElementId();
+							currentSelected[0] = found.get();
+							setSelected.accept(availableValues.getElementsBefore(found.getElementId()));
+						} else {
+							currentSelectedElement[0] = null;
+							currentSelected[0] = null;
+							setSelected.accept(-1);
+						}
 				} finally {
 					callbackLock[0] = false;
 				}
@@ -245,8 +303,10 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 						callbackLock[0] = true;
 						try {
 							setSelected.accept(change.index);
-							if (selected.isAcceptable(change.newValue) == null)
+							if (selected.isAcceptable(change.newValue) == null) {
+								currentSelected[0] = change.newValue;
 								selected.set(change.newValue, evt);
+							}
 						} finally {
 							callbackLock[0] = false;
 						}

@@ -584,12 +584,32 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 	}
 
 	/**
+	 * @param <E> The type for the collection
+	 * @param type The type for the collection
+	 * @param values The values to be in the immutable collection
+	 * @return An immutable collection with the given values
+	 */
+	static <E> ObservableCollection<E> of(Class<E> type, E... values) {
+		return of(type, BetterList.of(values));
+	}
+
+	/**
 	 * @param <E> The type for the root collection
 	 * @param type The type for the root collection
 	 * @param values The values to be in the immutable collection
 	 * @return An immutable collection with the given values
 	 */
 	static <E> ObservableCollection<E> of(TypeToken<E> type, Collection<? extends E> values) {
+		return of(type, BetterList.of(values));
+	}
+
+	/**
+	 * @param <E> The type for the root collection
+	 * @param type The type for the root collection
+	 * @param values The values to be in the immutable collection
+	 * @return An immutable collection with the given values
+	 */
+	static <E> ObservableCollection<E> of(Class<E> type, Collection<? extends E> values) {
 		return of(type, BetterList.of(values));
 	}
 
@@ -601,6 +621,16 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 	 */
 	static <E> ObservableCollection<E> of(TypeToken<E> type, BetterList<? extends E> values) {
 		return new ObservableCollectionImpl.ConstantCollection<>(type, values);
+	}
+
+	/**
+	 * @param <E> The type for the collection
+	 * @param type The type for the collection
+	 * @param values The values to be in the collection
+	 * @return An immutable observable collection with the given contents
+	 */
+	static <E> ObservableCollection<E> of(Class<E> type, BetterList<? extends E> values) {
+		return of(TypeTokens.get().of(type), values);
 	}
 
 	/**

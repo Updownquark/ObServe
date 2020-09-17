@@ -1,4 +1,4 @@
-package org.observe;
+package org.observe.util.swing;
 
 import java.util.List;
 
@@ -8,6 +8,7 @@ import javax.swing.JScrollPane;
 import javax.swing.JTree;
 import javax.swing.tree.TreePath;
 
+import org.observe.SettableValue;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSet;

@@ -4,7 +4,6 @@ import java.awt.Color;
 import java.awt.event.ActionEvent;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
-import java.awt.event.InputEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.text.ParseException;
@@ -14,7 +13,6 @@ import java.util.function.Function;
 
 import javax.swing.AbstractAction;
 import javax.swing.KeyStroke;
-import javax.swing.ToolTipManager;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.text.AbstractDocument;
@@ -33,6 +31,7 @@ import org.qommons.io.SpinnerFormat;
 
 public class ObservableTextEditor<E> {
 	private final JTextComponent theComponent;
+	private final ToolTipHelper theToolTipHelper;
 	private final Consumer<Boolean> theEnabledSetter;
 	private final Consumer<String> theTooltipSetter;
 
@@ -68,6 +67,7 @@ public class ObservableTextEditor<E> {
 	public ObservableTextEditor(JTextComponent component, SettableValue<E> value, Format<E> format, Observable<?> until, //
 		Consumer<Boolean> enabled, Consumer<String> tooltip) {
 		theComponent = component;
+		theToolTipHelper = new ToolTipHelper(component);
 		theEnabledSetter = enabled;
 		theTooltipSetter = tooltip;
 		theValue = value;
@@ -404,7 +404,7 @@ public class ObservableTextEditor<E> {
 	public void redisplayErrorTooltip() {
 		if (theError != null) {
 			theTooltipSetter.accept(theError);
-			setTooltipVisible(true);
+			theToolTipHelper.setTooltipVisible(true);
 		}
 	}
 
@@ -412,7 +412,7 @@ public class ObservableTextEditor<E> {
 	public void redisplayWarningTooltip() {
 		if (theWarningMsg != null) {
 			theTooltipSetter.accept(theWarningMsg);
-			setTooltipVisible(true);
+			theToolTipHelper.setTooltipVisible(true);
 		}
 	}
 
@@ -493,7 +493,7 @@ public class ObservableTextEditor<E> {
 			redisplayWarningTooltip();
 		else {
 			if (prevError)
-				setTooltipVisible(false);
+				theToolTipHelper.setTooltipVisible(false);
 			if (disabled != null)
 				theTooltipSetter.accept(disabled);
 			else
@@ -502,29 +502,6 @@ public class ObservableTextEditor<E> {
 		if (theStatusChange != null) {
 			theStateStamp++;
 			theStatusChange.onNext(null);
-		}
-	}
-
-	private long toolTipLastDisplayed = 0;
-
-	private void setTooltipVisible(boolean visible) {
-		// Super hacky, but not sure how else to do this. Swing's tooltip system doesn't have many hooks into it.
-		// This won't work right if the tooltip is already displayed or dismissed due to user interaction within the dismiss delay,
-		// but will start working correctly again after the dismiss delay elapses
-		// Overall, this approach may be somewhat flawed, but it's about the best I can do,
-		// the potential negative consequences are small, and I think it's a very good feature
-		long now = System.currentTimeMillis();
-		boolean displayed = (now - toolTipLastDisplayed) < ToolTipManager.sharedInstance().getDismissDelay();
-		if (visible == displayed) {
-			// Tooltip is visible or invisible according to the parameter already
-		} else {
-			if (visible)
-				toolTipLastDisplayed = now;
-			else
-				toolTipLastDisplayed = 0;
-			KeyEvent ke = new KeyEvent(theComponent, KeyEvent.KEY_PRESSED, System.currentTimeMillis(), InputEvent.CTRL_MASK, KeyEvent.VK_F1,
-				KeyEvent.CHAR_UNDEFINED);
-			theComponent.dispatchEvent(ke);
 		}
 	}
 
