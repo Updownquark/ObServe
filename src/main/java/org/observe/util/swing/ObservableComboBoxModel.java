@@ -182,7 +182,6 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 
 		if (popup != null) {
 			JList<T> popupList = popup.getList();
-			ToolTipHelper toolTipHelper = new ToolTipHelper(popupList);
 			class PopupMouseListener extends MouseMotionAdapter {
 				private Point lastHover;
 
@@ -208,11 +207,10 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 					String tooltip = selected.isAcceptable(item);
 					if (tooltip == null && valueTooltip != null)
 						tooltip = valueTooltip.apply(item);
-					System.out.println("Setting tooltip to " + tooltip);
 					String oldToolTip = popupList.getToolTipText();
 					popupList.setToolTipText(tooltip);
 					if (tooltip != null && !Objects.equals(oldToolTip, tooltip))
-						toolTipHelper.setTooltipVisible(true);
+						ObservableSwingUtils.setTooltipVisible(popupList, true);
 				}
 			};
 			PopupMouseListener popupMouseListener = new PopupMouseListener();

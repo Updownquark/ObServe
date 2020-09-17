@@ -31,7 +31,6 @@ import org.qommons.io.SpinnerFormat;
 
 public class ObservableTextEditor<E> {
 	private final JTextComponent theComponent;
-	private final ToolTipHelper theToolTipHelper;
 	private final Consumer<Boolean> theEnabledSetter;
 	private final Consumer<String> theTooltipSetter;
 
@@ -67,7 +66,6 @@ public class ObservableTextEditor<E> {
 	public ObservableTextEditor(JTextComponent component, SettableValue<E> value, Format<E> format, Observable<?> until, //
 		Consumer<Boolean> enabled, Consumer<String> tooltip) {
 		theComponent = component;
-		theToolTipHelper = new ToolTipHelper(component);
 		theEnabledSetter = enabled;
 		theTooltipSetter = tooltip;
 		theValue = value;
@@ -404,7 +402,7 @@ public class ObservableTextEditor<E> {
 	public void redisplayErrorTooltip() {
 		if (theError != null) {
 			theTooltipSetter.accept(theError);
-			theToolTipHelper.setTooltipVisible(true);
+			ObservableSwingUtils.setTooltipVisible(theComponent, true);
 		}
 	}
 
@@ -412,7 +410,7 @@ public class ObservableTextEditor<E> {
 	public void redisplayWarningTooltip() {
 		if (theWarningMsg != null) {
 			theTooltipSetter.accept(theWarningMsg);
-			theToolTipHelper.setTooltipVisible(true);
+			ObservableSwingUtils.setTooltipVisible(theComponent, true);
 		}
 	}
 
@@ -493,7 +491,7 @@ public class ObservableTextEditor<E> {
 			redisplayWarningTooltip();
 		else {
 			if (prevError)
-				theToolTipHelper.setTooltipVisible(false);
+				ObservableSwingUtils.setTooltipVisible(theComponent, false);
 			if (disabled != null)
 				theTooltipSetter.accept(disabled);
 			else
