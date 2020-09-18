@@ -106,6 +106,7 @@ public interface XformOptions {
 		 */
 		public SimpleXformOptions(XformDef options) {
 			if (options != null) {
+				isNullToNull = options.isNullToNull();
 				isCached = options.isCached();
 				reEvalOnUpdate = options.isReEvalOnUpdate();
 				fireIfUnchanged = options.isFireIfUnchanged();

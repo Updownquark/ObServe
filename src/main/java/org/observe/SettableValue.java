@@ -311,6 +311,7 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	default <F> SettableValue<F> asFieldEditor(TypeToken<F> fieldType, Function<? super T, ? extends F> getter,
 		BiConsumer<? super T, ? super F> setter, Consumer<XformOptions> options) {
 		return transformReversible(fieldType, tx -> {
+			tx.nullToNull(true);
 			if (options != null)
 				options.accept(tx);
 			return tx.map(getter).modifySource(setter);
