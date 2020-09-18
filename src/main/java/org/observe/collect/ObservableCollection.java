@@ -1044,19 +1044,25 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 
 		/**
 		 * <p>
-		 * Determines if this flow supports building passive collections via {@link #collect()}.
+		 * Determines if this flow supports building passive collections via {@link #collectPassive()}.
 		 * </p>
 		 *
 		 * <p>
-		 * A passive collection does not need to keep track of its own data, but rather performs per-access and per-operation
+		 * A passive collection does not need to keep close track of its own data, but rather performs per-access and per-operation
 		 * transformations that delegate to the base collection. Because a passive collection maintains fewer resources, it may be more
-		 * suitable for collections of unknown size derived by light-weight operations, where building the derived collection of elements
-		 * would be largely wasted.
+		 * suitable for collections of large or unknown size derived by light-weight operations, where building the derived collection of
+		 * elements would be largely wasted. Passive collections also keep no subscriptions to either their source collection or to any
+		 * sources of change in the flow except when the passive collection itself is subscribed to. This allows them to be created and
+		 * handed off without any accountability.
 		 * </p>
 		 * <p>
 		 * On the other hand, because active collections maintain all their elements at the ready, access is generally cheaper. And because
 		 * the elements are maintained dynamically regardless of the number of subscriptions on the derived collection, multiple
-		 * subscriptions may be cheaper.
+		 * subscriptions may be cheaper. Because they maintain subscriptions to the source and flow all the time, actively-derived
+		 * collections are best created using the {@link #collectActive(Observable)} method with an observable to tell the collection it is
+		 * not needed anymore. Actively-derived collections are created in such a way that they may be garbage collected if no strong
+		 * references to them exist and no subscriptions to them remain. If this happens, the subscriptions to the source and flow will be
+		 * released.
 		 * </p>
 		 * <p>
 		 * Many flow operations are active by nature, in that the operation is not stateless and requires extra book-keeping by the derived
@@ -1066,7 +1072,8 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		 * <p>
 		 * In particular, passively-derived collections always have elements that are one-to-one with the elements in the source collection.
 		 * Elements also cannot be arbitrarily reordered, though they can be ordered in {@link PassiveCollectionManager#isReversed()
-		 * reverse} from the source. In general, operations which satisfy these requirements can be passive.
+		 * reverse} from the source. In general, operations which satisfy these requirements can be passive. Any flow can be collected
+		 * actively.
 		 * </p>
 		 *
 		 * @return Whether this data flow is capable of producing a passive collection
@@ -1075,24 +1082,31 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 
 		/**
 		 * @return Whether this data flow not only {@link #supportsPassive() supports passive} collection building, but will default to this
-		 *         if collected using {@link #collect()}
+		 *         if collected using the general {@link #collect()} method.
 		 */
 		default boolean prefersPassive() {
 			return supportsPassive();
 		}
 
-		/** @return A collection manager to be used by the active derived collection produced by {@link #collectActive(Observable)} */
+		/**
+		 * This is called internally by the API and will not typically be used externally
+		 *
+		 * @return A collection manager to be used by the active derived collection produced by {@link #collectActive(Observable)}
+		 */
 		ActiveCollectionManager<E, ?, T> manageActive();
 
 		/**
+		 * This is called internally by the API and will not typically be used externally
+		 *
 		 * @return A collection manager to be used by the passive derived collection produced by {@link #collectPassive()}. Will be null if
-		 *         this collection is not {@link #supportsPassive() passive}.
+		 *         this collection is not {@link #supportsPassive() passive}
 		 */
 		PassiveCollectionManager<E, ?, T> managePassive();
 
 		/**
-		 * @return A heavy-weight collection derived via this flow from the source collection
+		 * @return A collection derived via this flow from the source collection
 		 * @see #supportsPassive()
+		 * @see #prefersPassive()
 		 */
 		default ObservableCollection<T> collect() {
 			if (prefersPassive())
@@ -1108,9 +1122,10 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		ObservableCollection<T> collectPassive() throws UnsupportedOperationException;
 
 		/**
-		 * @param until An observable that will kill the collection when it fires. May be used to control the release of unneeded resources
-		 *        instead of relying on the garbage collector to dispose of them in its own time.
-		 * @return An {@link #supportsPassive() actively-managed} collection derived via this flow from the source collection.
+		 * @param until An observable that will kill the collection and release all its subscriptions and resources when it fires. May be
+		 *        used to control the release of unneeded resources instead of relying on the garbage collector to dispose of them in its
+		 *        own time.
+		 * @return An {@link #supportsPassive() actively-managed} collection derived via this flow from the source collection
 		 */
 		ObservableCollection<T> collectActive(Observable<?> until);
 	}
