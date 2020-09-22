@@ -332,49 +332,52 @@ public interface ObservableConfigFormat<E> {
 			ObservableConfig c = ctx.getConfig(false);
 			if (c == null || "true".equals(c.get("null")))
 				return null;
-			class DelayedExecution {
-				boolean delayed;
-				T value;
-				ParseException thrown;
-			}
-			DelayedExecution exec = new DelayedExecution();
-			ctx.findReferences().act(__ -> {
-				QuickMap<String, Object> fieldValues = theFields.keySet().createMap();
-				T previousValue = ctx.getPreviousValue();
-				QuickMap<String, Object> preFieldValues = previousValue == null ? null : theFields.keySet().createMap();
-				boolean usePreValue = previousValue != null;
-				for (int f = 0; f < theFields.keySize(); f++) {
-					Object preValue;
-					if (previousValue != null)
-						preFieldValues.put(f, preValue = theFields.get(f).field.apply(previousValue));
-					else
-						preValue = null;
-					Object fieldValue;
-					try {
-						fieldValue = ((ObservableConfigFormat<Object>) theFields.get(f).format)
-							.parse(ctx.forChild(theFields.keySet().get(f), preValue, null).withRefFinding(Observable.constant(null)));
-					} catch (ParseException e) {
-						if (exec.delayed)
-							e.printStackTrace();
-						exec.thrown = e;
-						return;
-					}
-					fieldValues.put(f, fieldValue);
-					if (usePreValue && !Objects.equals(preValue, fieldValue))
-						usePreValue = false;
-				}
-				if (usePreValue)
-					exec.value = previousValue;
-				else
-					exec.value = theRetriever.apply(fieldValues.unmodifiable());
-				c.withParsedItem(ctx.getSession(), exec.value);
-				if (exec.delayed)
-					ctx.linkedReference(exec.value);
-			});
+			DelayedExecution<T> exec = new DelayedExecution<>();
+			parse(ctx, c, exec);
+			if (exec.thrown != null)
+				throw exec.thrown;
+			else if (exec.found)
+				return exec.value;
+			ctx.findReferences().act(__ -> parse(ctx, c, exec));
 			if (exec.thrown != null)
 				throw exec.thrown;
 			exec.delayed = true;
 			return exec.value;
+		}
+
+		private void parse(ObservableConfigParseContext<T> ctx, ObservableConfig c, DelayedExecution<T> exec) {
+			QuickMap<String, Object> fieldValues = theFields.keySet().createMap();
+			T previousValue = ctx.getPreviousValue();
+			QuickMap<String, Object> preFieldValues = previousValue == null ? null : theFields.keySet().createMap();
+			boolean usePreValue = previousValue != null;
+			for (int f = 0; f < theFields.keySize(); f++) {
+				Object preValue;
+				if (previousValue != null)
+					preFieldValues.put(f, preValue = theFields.get(f).field.apply(previousValue));
+				else
+					preValue = null;
+				Object fieldValue;
+				try {
+					fieldValue = ((ObservableConfigFormat<Object>) theFields.get(f).format).parse(//
+						ctx.forChild(theFields.keySet().get(f), preValue, null).withRefFinding(Observable.constant(null)));
+				} catch (ParseException e) {
+					if (exec.delayed)
+						e.printStackTrace();
+					exec.thrown = e;
+					return;
+				}
+				fieldValues.put(f, fieldValue);
+				if (usePreValue && !Objects.equals(preValue, fieldValue))
+					usePreValue = false;
+			}
+			exec.found = true;
+			if (usePreValue)
+				exec.value = previousValue;
+			else
+				exec.value = theRetriever.apply(fieldValues.unmodifiable());
+			c.withParsedItem(ctx.getSession(), exec.value);
+			if (exec.delayed)
+				ctx.linkedReference(exec.value);
 		}
 
 		@Override
@@ -382,6 +385,13 @@ public interface ObservableConfigFormat<E> {
 			Observable<?> until) {
 			return source;
 		}
+	}
+
+	class DelayedExecution<T> {
+		boolean delayed;
+		boolean found;
+		T value;
+		ParseException thrown;
 	}
 
 	public static class ReferenceFormatBuilder<T> {
@@ -461,12 +471,7 @@ public interface ObservableConfigFormat<E> {
 
 		@Override
 		public T parse(ObservableConfigParseContext<T> ctx) throws ParseException {
-			class DelayedExecution {
-				boolean delayed;
-				T value;
-				ParseException thrown;
-			}
-			DelayedExecution exec = new DelayedExecution();
+			DelayedExecution<T> exec = new DelayedExecution<>();
 			ctx.findReferences().act(__ -> {
 				ObservableConfig parent = ctx.getRoot();
 				while (parent != null) {
@@ -1057,6 +1062,11 @@ public interface ObservableConfigFormat<E> {
 		MapEntry(K key, V value) {
 			this.key = key;
 			this.value = value;
+		}
+
+		@Override
+		public String toString() {
+			return key + "=" + value;
 		}
 	}
 

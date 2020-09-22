@@ -1060,7 +1060,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 
 	static class ObservableConfigMap<K, V> implements ObservableMap<K, V> {
 		private final ObservableConfigValues<MapEntry<K, V>> theCollection;
-		private final ObservableMap<K, V> theWrapped;
+		private ObservableMap<K, V> theWrapped;
 
 		ObservableConfigMap(ObservableConfigParseSession session, ObservableConfig root,
 			ObservableValue<? extends ObservableConfig> collectionElement, Runnable ceCreate, String keyName, String valueName,
@@ -1070,18 +1070,21 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 				TypeTokens.get().keyFor(MapEntry.class).<MapEntry<K, V>> parameterized(keyType, valueType), //
 				new ObservableConfigFormat.EntryFormat<>(true, keyName, valueName, keyType, valueType, keyFormat, valueFormat), valueName,
 				until, listen, findRefs);
-			theWrapped = theCollection.flow()
-				.groupBy(keyType, //
-					LambdaUtils.printableFn(entry -> entry.key, "key", null), //
-					LambdaUtils.printableBiFn((key, entry) -> {
-						entry.key = key;
-						return entry;
-					}, "setKey", null))//
-				.withValues(values -> values.transform(valueType, tx -> {
-					return tx.cache(false).map(LambdaUtils.printableFn(entry -> entry.value, "value", null))//
-						.modifySource(LambdaUtils.printableBiConsumer((entry, value) -> entry.value = value, () -> "setValue", null), //
-							rvrs -> rvrs.createWith(LambdaUtils.printableFn(value -> new MapEntry<>(null, value), "createEntry", null)));
-				})).gatherActive(until).singleMap(true);
+			findRefs.act(__ -> {
+				theWrapped = theCollection.flow()
+					.groupBy(keyType, //
+						LambdaUtils.printableFn(entry -> entry.key, "key", null), //
+						LambdaUtils.printableBiFn((key, entry) -> {
+							entry.key = key;
+							return entry;
+						}, "setKey", null))//
+					.withValues(values -> values.transform(valueType, tx -> {
+						return tx.cache(false).map(LambdaUtils.printableFn(entry -> entry.value, "value", null))//
+							.modifySource(LambdaUtils.printableBiConsumer((entry, value) -> entry.value = value, () -> "setValue", null), //
+								rvrs -> rvrs
+								.createWith(LambdaUtils.printableFn(value -> new MapEntry<>(null, value), "createEntry", null)));
+					})).gatherActive(until).singleMap(true);
+			});
 		}
 
 		protected void onChange(ObservableConfigEvent change) {
@@ -1177,7 +1180,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 
 	static class ObservableConfigMultiMap<K, V> implements ObservableMultiMap<K, V> {
 		private final ObservableConfigValues<MapEntry<K, V>> theCollection;
-		private final ObservableMultiMap<K, V> theWrapped;
+		private ObservableMultiMap<K, V> theWrapped;
 
 		ObservableConfigMultiMap(ObservableConfigParseSession session, ObservableConfig root,
 			ObservableValue<? extends ObservableConfig> collectionElement, Runnable ceCreate, String keyName, String valueName,
@@ -1187,18 +1190,21 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 				TypeTokens.get().keyFor(MapEntry.class).<MapEntry<K, V>> parameterized(keyType, valueType), //
 				new ObservableConfigFormat.EntryFormat<>(true, keyName, valueName, keyType, valueType, keyFormat, valueFormat), valueName,
 				until, listen, findRefs);
-			theWrapped = theCollection.flow()
-				.groupBy(keyType, //
-					LambdaUtils.printableFn(entry -> entry.key, "key", null), //
-					LambdaUtils.printableBiFn((key, entry) -> {
-						entry.key = key;
-						return entry;
-					}, "setKey", null))//
-				.withValues(values -> values.transform(valueType, tx -> {
-					return tx.cache(false).map(LambdaUtils.printableFn(entry -> entry.value, "value", null))//
-						.modifySource(LambdaUtils.printableBiConsumer((entry, value) -> entry.value = value, () -> "setValue", null), //
-							rvrs -> rvrs.createWith(LambdaUtils.printableFn(value -> new MapEntry<>(null, value), "createEntry", null)));
-				})).gatherActive(until);
+			findRefs.act(__ -> {
+				theWrapped = theCollection.flow()
+					.groupBy(keyType, //
+						LambdaUtils.printableFn(entry -> entry.key, "key", null), //
+						LambdaUtils.printableBiFn((key, entry) -> {
+							entry.key = key;
+							return entry;
+						}, "setKey", null))//
+					.withValues(values -> values.transform(valueType, tx -> {
+						return tx.cache(false).map(LambdaUtils.printableFn(entry -> entry.value, "value", null))//
+							.modifySource(LambdaUtils.printableBiConsumer((entry, value) -> entry.value = value, () -> "setValue", null), //
+								rvrs -> rvrs
+									.createWith(LambdaUtils.printableFn(value -> new MapEntry<>(null, value), "createEntry", null)));
+					})).gatherActive(until);
+			});
 		}
 
 		protected void onChange(ObservableConfigEvent change) {

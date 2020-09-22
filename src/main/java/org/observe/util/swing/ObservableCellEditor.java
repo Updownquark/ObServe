@@ -106,7 +106,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 		// Default margins for the text field don't fit into the rendered cell
 		Insets defMargin = field.getMargin();
 		boolean[] editing = new boolean[1];
-		ObservableCellEditor<M, C> editor = new DefaultObservableCellEditor<M, C>(field, value, (e, c, f, tt, vtt) -> {
+		ObservableCellEditor<M, C> editor = new DefaultObservableCellEditor<>(field, value, (e, c, f, tt, vtt) -> {
 			if (c instanceof JTable) {
 				Insets margin = field.getMargin();
 				if (margin.top != 0 || margin.bottom != 0) {

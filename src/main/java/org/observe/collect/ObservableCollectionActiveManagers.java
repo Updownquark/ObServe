@@ -1501,7 +1501,8 @@ public class ObservableCollectionActiveManagers {
 			else if (qr.getError() != null)
 				throw new IllegalArgumentException(qr.getError());
 			I reversed = qr.getReversed();
-			DerivedCollectionElement<I> parentEl = getParent().addElement(reversed, strip(after), strip(before), first);
+			DerivedCollectionElement<I> parentEl = getParent().addElement(reversed, //
+				strip(after), strip(before), first);
 			return parentEl == null ? null : map(parentEl, true);
 		}
 
