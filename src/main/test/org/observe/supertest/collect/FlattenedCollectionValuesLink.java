@@ -77,7 +77,7 @@ public class FlattenedCollectionValuesLink<S, T> extends AbstractMappedCollectio
 	 */
 	public FlattenedCollectionValuesLink(String path, ObservableCollectionLink<?, S> sourceLink, ObservableCollectionTestDef<T> def,
 		TestHelper helper, BetterSortedMap<S, SettableValue<T>> buckets) {
-		super(path, sourceLink, def, helper, sourceLink.getDef().checkOldValues);
+		super(path, sourceLink, def, helper, sourceLink.getDef().checkOldValues, true);
 		theBuckets = buckets;
 	}
 
