@@ -159,7 +159,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 
 	private final Map<ObservableValue<?>, Integer> theArgs;
 	private final BiFunction<? super S, ? super TransformationValues<? extends S, ? extends T>, ? extends T> theCombination;
-	private Equivalence<? super T> theResultEquivalence;
+	private final Equivalence<? super T> theResultEquivalence;
 
 	/**
 	 * @param options The transformation options to copy into this definition
@@ -193,8 +193,8 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 	 * <li>If {@link #isFireIfUnchanged() fire-if-unchanged} is false, this operation will not fire update operations if a source or
 	 * environment change produces 2 equivalent values</li>
 	 * <li>For {@link Transformation.SourceReplacingReverse source-replacing} reversible operations, if
-	 * {@link Transformation.SourceReplacingReverse#isInexactReversible() inexact-reversible} is false (the default) and a result value is
-	 * given for a reverse operation that is not equivalent the transformation of the reversed source value, the operation will be
+	 * {@link Transformation.MappingSourceReplacingReverse#isInexactReversible() inexact-reversible} is false (the default) and a result
+	 * value is given for a reverse operation that is not equivalent the transformation of the reversed source value, the operation will be
 	 * forbidden</li>
 	 * </ul>
 	 *
@@ -202,7 +202,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 	 * @return A new transformation that uses the given result equivalence
 	 * @see Equivalence#DEFAULT
 	 * @see Equivalence#ID
-	 * @see Equivalence#of(Class, java.util.Comparator, boolean)
+	 * @see Equivalence#sorted(Class, java.util.Comparator, boolean)
 	 */
 	public Transformation<S, T> withEquivalence(Equivalence<? super T> resultEquivalence) {
 		if (resultEquivalence.equals(equivalence()))
@@ -547,7 +547,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		 */
 		public ReversibleTransformation<S, T> replaceSourceWith(
 			BiFunction<? super T, ? super TransformationValues<? extends S, ? extends T>, ? extends S> reverse,
-			Function<SourceReplacingReverse<S, T>, SourceReplacingReverse<S, T>> configure) {
+			Function<? super SourceReplacingReverse<S, T>, ? extends SourceReplacingReverse<S, T>> configure) {
 			TriFunction<T, TransformationValues<? extends S, ? extends T>, Boolean, ? extends S> creator = LambdaUtils
 				.toTriFunction1And2(reverse);
 			SourceReplacingReverse<S, T> srr = new SourceReplacingReverse<>(this, reverse, null, null, creator, null, true, false);
@@ -652,14 +652,22 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 	 * @param <T> The target type of the transformed structure
 	 */
 	public static class SourceReplacingReverse<S, T> implements ConfigurableReverse<S, T> {
-		private final Transformation<S, T> theTransformation;
-		private final BiFunction<? super T, ? super TransformationValues<? extends S, ? extends T>, ? extends S> theReverse;
-		private final Function<? super TransformationValues<? extends S, ? extends T>, String> theEnabled;
-		private final BiFunction<? super T, ? super TransformationValues<? extends S, ? extends T>, String> theAcceptability;
-		private final TriFunction<? super T, ? super TransformationValues<? extends S, ? extends T>, Boolean, ? extends S> theCreator;
-		private final BiFunction<? super T, ? super TransformationValues<? extends S, ? extends T>, String> theAddAcceptability;
-		private final boolean isStateful;
-		private final boolean isInexactReversible;
+		@SuppressWarnings("javadoc")
+		protected final Transformation<S, T> theTransformation;
+		@SuppressWarnings("javadoc")
+		protected final BiFunction<? super T, ? super TransformationValues<? extends S, ? extends T>, ? extends S> theReverse;
+		@SuppressWarnings("javadoc")
+		protected final Function<? super TransformationValues<? extends S, ? extends T>, String> theEnabled;
+		@SuppressWarnings("javadoc")
+		protected final BiFunction<? super T, ? super TransformationValues<? extends S, ? extends T>, String> theAcceptability;
+		@SuppressWarnings("javadoc")
+		protected final TriFunction<? super T, ? super TransformationValues<? extends S, ? extends T>, Boolean, ? extends S> theCreator;
+		@SuppressWarnings("javadoc")
+		protected final BiFunction<? super T, ? super TransformationValues<? extends S, ? extends T>, String> theAddAcceptability;
+		@SuppressWarnings("javadoc")
+		protected final boolean isStateful;
+		@SuppressWarnings("javadoc")
+		protected final boolean isInexactReversible;
 
 		/**
 		 * @param transformation The transformation producing result values that uses this reverse
@@ -670,7 +678,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		 *        value will actually be passed to the source structure (as opposed to just a test operation)
 		 * @param addAcceptability A function to approve or reject new result values for addition to the result structure
 		 * @param stateful Whether the reverse function depends on the previous source value
-		 * @param inexactReversible See {@link #allowInexactReverse(boolean)}
+		 * @param inexactReversible See {@link Transformation.MappingSourceReplacingReverse#allowInexactReverse(boolean)}
 		 */
 		public SourceReplacingReverse(Transformation<S, T> transformation,
 			BiFunction<? super T, ? super TransformationValues<? extends S, ? extends T>, ? extends S> reverse,
@@ -686,6 +694,10 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 			theCreator = create;
 			theAddAcceptability = addAcceptability;
 			isStateful = stateful;
+			if (inexactReversible && !transformation.getArgs().isEmpty()) {
+				throw new IllegalArgumentException(
+					"Inexact reversal is not supported with combination." + "It breaks equivalence-related contracts.");
+			}
 			isInexactReversible = inexactReversible;
 		}
 
@@ -789,36 +801,6 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 				isStateful, isInexactReversible);
 		}
 
-		/**
-		 * @return Whether this transformation allows setting some result values that cannot actually be the result of an operation on any
-		 *         source value
-		 */
-		public boolean isInexactReversible() {
-			return isInexactReversible;
-		}
-
-		/**
-		 * <p>
-		 * Determines whether the transformation will forbid setting result values that cannot actually be the result of an operation on any
-		 * source value. False by default.
-		 * </p>
-		 * <p>
-		 * For example, take a simple integer-typed value, mapped with a multiplication operation with 2, reversed by division with 2. If
-		 * this flag is false, then setting a value of 1 on the result would throw an error, since 1 cannot ever be the result of
-		 * <code>source*2</code> for any source. If the flag is true, such operations will be allowed, but the result will always be a
-		 * mapping of the source value and may not match the result value given in the operation. E.g. for the example above, the result
-		 * will be 0 after the operation, not 1.</code>
-		 *
-		 * @param allowInexactReverse Whether to allow inexact reversed values
-		 * @return A new transformation with the given setting
-		 */
-		public SourceReplacingReverse<S, T> allowInexactReverse(boolean allowInexactReverse) {
-			if (allowInexactReverse == isInexactReversible)
-				return this;
-			return new SourceReplacingReverse<>(theTransformation, theReverse, theEnabled, theAcceptability, theCreator,
-				theAddAcceptability, isStateful, allowInexactReverse);
-		}
-
 		@Override
 		public boolean isStateful() {
 			return isStateful;
@@ -856,7 +838,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 					return ReverseQueryResult.reject(msg);
 			}
 			S reversed = reverse.apply(newValue, transformValues);
-			if (!isInexactReversible()) {
+			if (!isInexactReversible) {
 				T reTransformed = theTransformation.getCombination().apply(reversed, new TransformationValues<S, T>() {
 					@Override
 					public boolean isSourceChange() {
@@ -896,7 +878,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(theReverse, theAcceptability, theCreator, theAddAcceptability, isStateful);
+			return Objects.hash(theReverse, theAcceptability, theCreator, theAddAcceptability, isStateful, isInexactReversible);
 		}
 
 		@Override
@@ -910,12 +892,123 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 				&& Objects.equals(theCreator, other.theCreator)//
 				&& isStateful == other.isStateful//
 				&& Objects.equals(theAcceptability, other.theAcceptability)//
-				&& Objects.equals(theAddAcceptability, other.theAddAcceptability);
+				&& Objects.equals(theAddAcceptability, other.theAddAcceptability)//
+				&& isInexactReversible == other.isInexactReversible;
 		}
 
 		@Override
 		public String toString() {
 			return theReverse.toString();
+		}
+	}
+
+	/**
+	 * A subclass of {@link Transformation.SourceReplacingReverse} for mapping operations (transformations with not external arguments).
+	 * Provides {@link #allowInexactReverse(boolean)}
+	 *
+	 * @param <S> The source type of the transformed structure
+	 * @param <T> The target type of the transformed structure
+	 */
+	public static class MappingSourceReplacingReverse<S, T> extends SourceReplacingReverse<S, T> {
+		/**
+		 * @see Transformation.SourceReplacingReverse#SourceReplacingReverse(Transformation, BiFunction, Function, BiFunction, TriFunction,
+		 *      BiFunction, boolean, boolean)
+		 */
+		public MappingSourceReplacingReverse(Transformation<S, T> transformation,
+			BiFunction<? super T, ? super TransformationValues<? extends S, ? extends T>, ? extends S> reverse,
+			Function<? super TransformationValues<? extends S, ? extends T>, String> enabled,
+			BiFunction<? super T, ? super TransformationValues<? extends S, ? extends T>, String> acceptability,
+			TriFunction<? super T, ? super TransformationValues<? extends S, ? extends T>, Boolean, ? extends S> create,
+			BiFunction<? super T, ? super TransformationValues<? extends S, ? extends T>, String> addAcceptability, boolean stateful,
+			boolean inexactReversible) {
+			super(transformation, reverse, enabled, acceptability, create, addAcceptability, stateful, inexactReversible);
+		}
+
+		MappingSourceReplacingReverse(SourceReplacingReverse<S, T> reverse) {
+			this(reverse.theTransformation, reverse.theReverse, reverse.theEnabled, reverse.theAcceptability, reverse.theCreator,
+				reverse.theAddAcceptability, reverse.isStateful, reverse.isInexactReversible);
+		}
+
+		/**
+		 * @return Whether this transformation allows setting some result values that cannot actually be the result of an operation on any
+		 *         source value
+		 */
+		public boolean isInexactReversible() {
+			return isInexactReversible;
+		}
+
+		/**
+		 * <p>
+		 * Determines whether the transformation will forbid setting result values that cannot actually be the result of an operation on any
+		 * source value. False by default.
+		 * </p>
+		 * <p>
+		 * For example, take a simple integer-typed value, mapped with a multiplication operation with 2, reversed by division with 2. If
+		 * this flag is false, then setting a value of 1 on the result would throw an error, since 1 cannot ever be the result of
+		 * <code>source*2</code> for any source. If the flag is true, such operations will be allowed, but the result will always be a
+		 * mapping of the source value and may not match the result value given in the operation. E.g. for the example above, the result
+		 * will be 0 after the operation, not 1.</code>
+		 * </p>
+		 * <p>
+		 * If this option is used, it is important that the mapping and reverse operations never vary. I.e. for any given source value, it
+		 * must always map to the same result value and vice versa. If the nature of the mapping can behave differently based on
+		 * environmental or other factors, use of this option can cause serious problems, especially when used in conjunction with
+		 * distinctness (e.g. {@link org.observe.collect.ObservableCollection.CollectionDataFlow#distinct()}).
+		 * </p>
+		 *
+		 * @param allowInexactReverse Whether to allow inexact reversed values
+		 * @return A new transformation with the given setting
+		 */
+		public MappingSourceReplacingReverse<S, T> allowInexactReverse(boolean allowInexactReverse) {
+			if (allowInexactReverse == isInexactReversible)
+				return this;
+			return new MappingSourceReplacingReverse<>(theTransformation, theReverse, theEnabled, theAcceptability, theCreator,
+				theAddAcceptability, isStateful, allowInexactReverse);
+		}
+
+		@Override
+		public MappingSourceReplacingReverse<S, T> disableWith(
+			Function<? super TransformationValues<? extends S, ? extends T>, String> enabled) {
+			return new MappingSourceReplacingReverse<>(super.disableWith(enabled));
+		}
+
+		@Override
+		public MappingSourceReplacingReverse<S, T> rejectWith(Function<? super T, String> acceptance) {
+			return new MappingSourceReplacingReverse<>(super.rejectWith(acceptance));
+		}
+
+		@Override
+		public MappingSourceReplacingReverse<S, T> rejectWith(BiFunction<? super S, ? super T, String> acceptance) {
+			return new MappingSourceReplacingReverse<>(super.rejectWith(acceptance));
+		}
+
+		@Override
+		public MappingSourceReplacingReverse<S, T> createWith(Function<? super T, ? extends S> creator) {
+			return new MappingSourceReplacingReverse<>(super.createWith(creator));
+		}
+
+		@Override
+		public MappingSourceReplacingReverse<S, T> rejectAddWith(Function<? super T, String> addAcceptance) {
+			return new MappingSourceReplacingReverse<>(super.rejectAddWith(addAcceptance));
+		}
+
+		@Override
+		public MappingSourceReplacingReverse<S, T> rejectWith(
+			BiFunction<? super T, ? super TransformationValues<? extends S, ? extends T>, String> acceptance, boolean forAddToo,
+			boolean stateful) {
+			return new MappingSourceReplacingReverse<>(super.rejectWith(acceptance, forAddToo, stateful));
+		}
+
+		@Override
+		public MappingSourceReplacingReverse<S, T> createWith(
+			TriFunction<? super T, ? super TransformationValues<? extends S, ? extends T>, Boolean, ? extends S> creator) {
+			return new MappingSourceReplacingReverse<>(super.createWith(creator));
+		}
+
+		@Override
+		public MappingSourceReplacingReverse<S, T> rejectAddWith(
+			BiFunction<? super T, ? super TransformationValues<? extends S, ? extends T>, String> acceptance) {
+			return new MappingSourceReplacingReverse<>(super.rejectAddWith(acceptance));
 		}
 	}
 
@@ -1275,6 +1368,26 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		}
 
 		/**
+		 * Supports reverse by supplying new source values for set or addition operations
+		 *
+		 * @param reverse The function to create source values from result and environment values
+		 * @param configure Optional function to further configure the reverse operation
+		 * @return The reversible transformation
+		 */
+		public ReversibleTransformation<S, T> replaceMappingSourceWith(
+			BiFunction<? super T, ? super TransformationValues<? extends S, ? extends T>, ? extends S> reverse,
+			Function<? super MappingSourceReplacingReverse<S, T>, ? extends SourceReplacingReverse<S, T>> configure) {
+			TriFunction<T, TransformationValues<? extends S, ? extends T>, Boolean, ? extends S> creator = LambdaUtils
+				.toTriFunction1And2(reverse);
+			MappingSourceReplacingReverse<S, T> srr = new MappingSourceReplacingReverse<>(this, reverse, null, null, creator, null, true,
+				false);
+			SourceReplacingReverse<S, T> srr2 = srr;
+			if (configure != null)
+				srr2 = configure.apply(srr);
+			return withReverse(srr2);
+		}
+
+		/**
 		 * Supports reverse by supplying new source values from result values for set or addition operations
 		 *
 		 * @param reverse The function to create new source values from result values
@@ -1282,15 +1395,16 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		 * @return The reversible transformation
 		 */
 		public ReversibleTransformation<S, T> replaceSource(Function<? super T, ? extends S> reverse, //
-			Function<SourceReplacingReverse<S, T>, SourceReplacingReverse<S, T>> configure) {
+			Function<? super MappingSourceReplacingReverse<S, T>, ? extends SourceReplacingReverse<S, T>> configure) {
 			BiFunction<T, TransformationValues<? extends S, ? extends T>, S> reverse2 = LambdaUtils.toBiFunction1(reverse);
 			TriFunction<T, TransformationValues<? extends S, ? extends T>, Boolean, S> creator = LambdaUtils.toTriFunction1(reverse);
-			SourceReplacingReverse<S, T> srr = new SourceReplacingReverse<>(this, reverse2,
+			MappingSourceReplacingReverse<S, T> srr = new MappingSourceReplacingReverse<>(this, reverse2,
 				LambdaUtils.printableFn(tx -> tx.getCurrentSource() == null ? "No source value" : null, "Non-null source", null), null,
 				creator, null, false, false);
+			SourceReplacingReverse<S, T> srr2 = srr;
 			if (configure != null)
-				srr = configure.apply(srr);
-			return withReverse(srr);
+				srr2 = configure.apply(srr);
+			return withReverse(srr2);
 		}
 
 		/**
