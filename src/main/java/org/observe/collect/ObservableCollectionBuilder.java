@@ -5,7 +5,7 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 
 import org.observe.Equivalence;
-import org.observe.Equivalence.ComparatorEquivalence;
+import org.observe.Equivalence.SortedEquivalence;
 import org.observe.util.TypeTokens;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
@@ -332,7 +332,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 		 */
 		public SortedBuilderImpl(CollectionBuilderImpl<E, ?> toCopy, Comparator<? super E> sorting) {
 			super(toCopy);
-			super.withEquivalence(Equivalence.of(TypeTokens.getRawType(getType()), sorting, true));
+			super.withEquivalence(Equivalence.DEFAULT.sorted(TypeTokens.getRawType(getType()), sorting, true));
 		}
 
 		/**
@@ -342,7 +342,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 		 */
 		public SortedBuilderImpl(TypeToken<E> type, String initDescrip, Comparator<? super E> sorting) {
 			super(type, initDescrip);
-			super.withEquivalence(Equivalence.of(TypeTokens.getRawType(getType()), sorting, true));
+			super.withEquivalence(Equivalence.DEFAULT.sorted(TypeTokens.getRawType(getType()), sorting, true));
 		}
 
 		@Override
@@ -358,8 +358,8 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 		}
 
 		@Override
-		protected Equivalence.ComparatorEquivalence<? super E> getEquivalence() {
-			return (ComparatorEquivalence<? super E>) super.getEquivalence();
+		protected Equivalence.SortedEquivalence<? super E> getEquivalence() {
+			return (SortedEquivalence<? super E>) super.getEquivalence();
 		}
 
 		@Override

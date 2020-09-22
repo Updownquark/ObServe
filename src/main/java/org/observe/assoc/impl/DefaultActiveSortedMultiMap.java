@@ -56,7 +56,7 @@ implements ObservableSortedMultiMap<K, V> {
 	/** Implements {@link DefaultActiveSortedMultiMap#keySet()} */
 	protected class SortedKeySet extends KeySet implements ObservableSortedSet<K> {
 		@Override
-		public Equivalence.ComparatorEquivalence<? super K> equivalence() {
+		public Equivalence.SortedEquivalence<? super K> equivalence() {
 			return getActiveKeyFlow().equivalence();
 		}
 

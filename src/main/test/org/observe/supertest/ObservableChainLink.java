@@ -2,6 +2,7 @@ package org.observe.supertest;
 
 import java.util.List;
 
+import org.observe.supertest.collect.ObservableCollectionLink;
 import org.qommons.TestHelper;
 import org.qommons.Transactable;
 
@@ -12,6 +13,17 @@ import org.qommons.Transactable;
  * @param <T> The type of this link's value, collection, etc.
  */
 public interface ObservableChainLink<S, T> extends Transactable {
+	/**
+	 * Boolean flags that may be queried against an {@link ObservableCollectionLink} via {@link ObservableCollectionLink#is(ChainLinkFlag)}
+	 */
+	enum ChainLinkFlag {
+		/**
+		 * Whether reverse operations against the collection should result in an element value identical to the one added/or set in the
+		 * operation
+		 */
+		INEXACT_REVERSIBLE;
+	}
+
 	/** @return A string identifying this link within the test case chain */
 	String getPath();
 
@@ -49,6 +61,20 @@ public interface ObservableChainLink<S, T> extends Transactable {
 
 	/** @return A string representation of this link's content data */
 	String printValue();
+
+	/**
+	 * @param flag The flag to check
+	 * @return Whether operations against this structure match the specification of the given flag
+	 */
+	default boolean is(ChainLinkFlag flag) {
+		if (getSourceLink() != null)
+			return getSourceLink().is(flag);
+		switch (flag) {
+		case INEXACT_REVERSIBLE:
+			return false;
+		}
+		throw new IllegalStateException(flag.name());
+	}
 
 	/** @return The current modification set */
 	int getModSet();

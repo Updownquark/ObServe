@@ -69,6 +69,7 @@ public class MappedCollectionLink<S, T> extends AbstractMappedCollectionLink<S, 
 			boolean reEvalOnUpdate = needsUpdateReeval || helper.getBoolean();
 			boolean oneToMany = variableMap || transform.isOneToMany();
 			boolean manyToOne = variableMap || transform.isManyToOne();
+			boolean allowInexactReversible = withReverse ? helper.getBoolean(0.1) : false;
 			TypeToken<X> type = (TypeToken<X>) transform.getType().getType();
 			Function<T, X> map = LambdaUtils.printableFn(src -> txValue.get().map(src), () -> txValue.get().toString());
 			Function<X, T> reverse = LambdaUtils.printableFn(dest -> txValue.get().reverse(dest), () -> txValue.get().reverseName());
@@ -83,12 +84,12 @@ public class MappedCollectionLink<S, T> extends AbstractMappedCollectionLink<S, 
 				derivedOneStepFlow = ((ObservableCollection.DistinctDataFlow<?, ?, T>) oneStepFlow).transformEquivalent(//
 					type, tx -> {
 						opts.accept(tx);
-						return tx.map(map).withReverse(reverse);
+						return tx.map(map).replaceSource(reverse, rvrs -> rvrs.allowInexactReverse(allowInexactReversible));
 					});
 				derivedMultiStepFlow = ((ObservableCollection.DistinctDataFlow<?, ?, T>) multiStepFlow).transformEquivalent(//
 					type, tx -> {
 						opts.accept(tx);
-						return tx.map(map).withReverse(reverse);
+						return tx.map(map).replaceSource(reverse, rvrs -> rvrs.allowInexactReverse(allowInexactReversible));
 					});
 			} else {
 				mapEquivalent = false;
@@ -96,7 +97,7 @@ public class MappedCollectionLink<S, T> extends AbstractMappedCollectionLink<S, 
 					opts.accept(tx);
 					MaybeReversibleMapping<T, X> def = tx.map(map);
 					if (withReverse)
-						return def.withReverse(reverse);
+						return def.replaceSource(reverse, rvrs -> rvrs.allowInexactReverse(allowInexactReversible));
 					else
 						return def;
 				});
@@ -104,7 +105,7 @@ public class MappedCollectionLink<S, T> extends AbstractMappedCollectionLink<S, 
 					opts.accept(tx);
 					MaybeReversibleMapping<T, X> def = tx.map(map);
 					if (withReverse)
-						return def.withReverse(reverse);
+						return def.replaceSource(reverse, rvrs -> rvrs.allowInexactReverse(allowInexactReversible));
 					else
 						return def;
 				});
@@ -141,7 +142,7 @@ public class MappedCollectionLink<S, T> extends AbstractMappedCollectionLink<S, 
 	public MappedCollectionLink(String path, ObservableCollectionLink<?, S> sourceLink, ObservableCollectionTestDef<T> def,
 		TestHelper helper, SimpleSettableValue<TypeTransformation<S, T>> mapValue, boolean mapVariable, boolean mapEquivalent,
 		boolean reversible, Transformation<S, T> options) {
-		super(path, sourceLink, def, helper, options.isCached());
+		super(path, sourceLink, def, helper, options.isCached(), isInexactReversible(options));
 		theMapValue = mapValue;
 		theCurrentMap = theMapValue.get();
 		isMapVariable = mapVariable;

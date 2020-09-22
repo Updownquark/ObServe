@@ -25,7 +25,6 @@ import org.qommons.collect.ElementId;
 import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MultiEntryHandle;
 import org.qommons.collect.MultiEntryValueHandle;
-import org.qommons.collect.MultiMap;
 
 import com.google.common.reflect.TypeToken;
 
@@ -158,7 +157,7 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		Builder(ObservableCollectionBuilder<MapEntry<K, V>, ?> backingBuilder, TypeToken<K> keyType, TypeToken<V> valueType,
 			Comparator<? super K> sorting, String defaultDescrip) {
 			super(backingBuilder, keyType, valueType, defaultDescrip);
-			super.withKeyEquivalence(Equivalence.of(TypeTokens.getRawType(keyType), sorting, true));
+			super.withKeyEquivalence(Equivalence.DEFAULT.sorted(TypeTokens.getRawType(keyType), sorting, true));
 		}
 
 		@Override
@@ -205,12 +204,36 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 	 */
 	class ObservableSortedMultiMapEntrySet<K, V> extends ObservableMultiMapEntrySet<K, V>
 	implements ObservableSortedSet<MultiEntryHandle<K, V>> {
-		private final Equivalence.ComparatorEquivalence<? super MultiEntryHandle<K, V>> theEquivalence;
+		private static class SimpleMultiEntry<K, V> implements MultiEntryHandle<K, V> {
+			private final K key;
+
+			SimpleMultiEntry(K key) {
+				this.key = key;
+			}
+
+			@Override
+			public ElementId getElementId() {
+				return null;
+			}
+
+			@Override
+			public K getKey() {
+				return key;
+			}
+
+			@Override
+			public BetterCollection<V> getValues() {
+				return BetterCollection.empty();
+			}
+		}
+
+		private final Equivalence.SortedEquivalence<? super MultiEntryHandle<K, V>> theEquivalence;
 
 		public ObservableSortedMultiMapEntrySet(ObservableSortedMultiMap<K, V> map) {
 			super(map);
-			theEquivalence = Equivalence.of((Class<MultiMap.MultiEntry<? extends K, ?>>) (Class<?>) MultiMap.MultiEntry.class,
-				(entry1, entry2) -> getMap().comparator().compare(entry1.getKey(), entry2.getKey()), true);
+			Class<MultiEntryHandle<? extends K, ?>> type = (Class<MultiEntryHandle<? extends K, ?>>) (Class<?>) MultiEntryHandle.class;
+			theEquivalence = ((Equivalence.SortedEquivalence<K>) getMap().keySet().equivalence()).map(type, __ -> true,
+				k -> new SimpleMultiEntry<>(k), MultiEntryHandle::getKey);
 		}
 
 		@Override
@@ -219,7 +242,7 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		}
 
 		@Override
-		public Equivalence.ComparatorEquivalence<? super MultiEntryHandle<K, V>> equivalence() {
+		public Equivalence.SortedEquivalence<? super MultiEntryHandle<K, V>> equivalence() {
 			return theEquivalence;
 		}
 

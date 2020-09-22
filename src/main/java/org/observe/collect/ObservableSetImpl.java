@@ -35,7 +35,6 @@ import org.observe.collect.ObservableCollectionImpl.FlattenedValueCollection;
 import org.observe.collect.ObservableCollectionImpl.PassiveDerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.ReversedObservableCollection;
 import org.observe.collect.ObservableCollectionPassiveManagers.PassiveCollectionManager;
-import org.observe.util.TypeTokens;
 import org.observe.util.WeakListening;
 import org.qommons.Identifiable;
 import org.qommons.QommonsUtils;
@@ -162,24 +161,12 @@ public class ObservableSetImpl {
 		public <X> DistinctDataFlow<E, T, X> transformEquivalent(TypeToken<X> target,
 			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ReversibleTransformation<T, X>> transform) {
 			ReversibleTransformation<T, X> def = transform.apply(new ReversibleTransformationPrecursor<>());
-			Equivalence<X> mappedEquivalence = equivalence().<T, X> map(TypeTokens.getRawType(target), v -> {
-				Transformation.Engine<T, X> engine = def.createEngine(equivalence());
-				Transformation.ReverseQueryResult<T> rq = engine.reverse(v, false, true);
-				return rq.getError() == null;
-			}, v -> {
-				Transformation.Engine<T, X> engine = def.createEngine(equivalence());
-				return engine.map(v, engine.get());
-			}, v -> {
-				Transformation.Engine<T, X> engine = def.createEngine(equivalence());
-				Transformation.ReverseQueryResult<T> rq = engine.reverse(v, false, true);
-				return rq.getReversed();
-			});
-			return new DistinctTransformOp<>(getSource(), this, target, def, mappedEquivalence);
+			return new DistinctTransformOp<>(getSource(), this, target, def);
 		}
 
 		@Override
 		public DistinctDataFlow<E, T, T> distinct(Consumer<UniqueOptions> options) {
-			options.accept(new FlowOptions.SimpleUniqueOptions(equivalence() instanceof Equivalence.ComparatorEquivalence));
+			options.accept(new FlowOptions.SimpleUniqueOptions(equivalence() instanceof Equivalence.SortedEquivalence));
 			return this; // No-op
 		}
 
@@ -403,11 +390,10 @@ public class ObservableSetImpl {
 		 * @param parent The parent flow
 		 * @param target The type of this flow
 		 * @param def The transform definition of this flow
-		 * @param equivalence The equivalence for the transformed operation
 		 */
 		public DistinctTransformOp(ObservableCollection<E> source, DistinctDataFlow<E, ?, I> parent, TypeToken<T> target,
-			Transformation<I, T> def, Equivalence<? super T> equivalence) {
-			super(source, parent, target, def, equivalence);
+			Transformation<I, T> def) {
+			super(source, parent, target, def);
 		}
 
 		@Override
@@ -429,19 +415,7 @@ public class ObservableSetImpl {
 		public <X> DistinctDataFlow<E, T, X> transformEquivalent(TypeToken<X> target,
 			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ReversibleTransformation<T, X>> transform) {
 			ReversibleTransformation<T, X> def = transform.apply(new ReversibleTransformationPrecursor<>());
-			Equivalence<X> mappedEquivalence = equivalence().<T, X> map(TypeTokens.getRawType(target), v -> {
-				Transformation.Engine<T, X> engine = def.createEngine(equivalence());
-				Transformation.ReverseQueryResult<T> rq = engine.reverse(v, false, true);
-				return rq.getError() == null;
-			}, v -> {
-				Transformation.Engine<T, X> engine = def.createEngine(equivalence());
-				return engine.map(v, engine.get());
-			}, v -> {
-				Transformation.Engine<T, X> engine = def.createEngine(equivalence());
-				Transformation.ReverseQueryResult<T> rq = engine.reverse(v, false, true);
-				return rq.getReversed();
-			});
-			return new DistinctTransformOp<>(getSource(), this, target, def, mappedEquivalence);
+			return new DistinctTransformOp<>(getSource(), this, target, def);
 		}
 
 		@Override
@@ -510,19 +484,7 @@ public class ObservableSetImpl {
 		public <X> DistinctDataFlow<E, E, X> transformEquivalent(TypeToken<X> target,
 			Function<? super ReversibleTransformationPrecursor<E, X, ?>, ReversibleTransformation<E, X>> transform) {
 			ReversibleTransformation<E, X> def = transform.apply(new ReversibleTransformationPrecursor<>());
-			Equivalence<X> mappedEquivalence = equivalence().<E, X> map(TypeTokens.getRawType(target), v -> {
-				Transformation.Engine<E, X> engine = def.createEngine(equivalence());
-				Transformation.ReverseQueryResult<E> rq = engine.reverse(v, false, true);
-				return rq.getError() == null;
-			}, v -> {
-				Transformation.Engine<E, X> engine = def.createEngine(equivalence());
-				return engine.map(v, engine.get());
-			}, v -> {
-				Transformation.Engine<E, X> engine = def.createEngine(equivalence());
-				Transformation.ReverseQueryResult<E> rq = engine.reverse(v, false, true);
-				return rq.getReversed();
-			});
-			return new DistinctTransformOp<>(getSource(), this, target, def, mappedEquivalence);
+			return new DistinctTransformOp<>(getSource(), this, target, def);
 		}
 
 		@Override

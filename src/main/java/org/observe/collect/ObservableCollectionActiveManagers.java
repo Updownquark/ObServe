@@ -638,8 +638,8 @@ public class ObservableCollectionActiveManagers {
 		@Override
 		public Equivalence<? super T> equivalence() {
 			Equivalence<? super T> equiv = theParent.equivalence();
-			if (equiv instanceof Equivalence.ComparatorEquivalence)
-				return ((Equivalence.ComparatorEquivalence<? super T>) equiv).reverse();
+			if (equiv instanceof Equivalence.SortedEquivalence)
+				return ((Equivalence.SortedEquivalence<? super T>) equiv).reverse();
 			else
 				return equiv;
 		}
@@ -1405,8 +1405,9 @@ public class ObservableCollectionActiveManagers {
 		// Need to keep track of these to update them when the combined values change
 		private final BetterSortedSet<TransformedElement> theElements;
 
-		ActiveTransformedCollectionManager(ActiveCollectionManager<E, ?, I> parent, TypeToken<T> targetType, Transformation<I, T> def) {
-			super(parent, targetType, def);
+		ActiveTransformedCollectionManager(ActiveCollectionManager<E, ?, I> parent, TypeToken<T> targetType, Transformation<I, T> def,
+			Equivalence<? super T> equivalence) {
+			super(parent, targetType, def, equivalence);
 
 			theElements = new BetterTreeSet<>(false, TransformedElement::compareTo);
 		}

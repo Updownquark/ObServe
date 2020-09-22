@@ -7,7 +7,9 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 
 import org.observe.util.TypeTokens;
+import org.qommons.BiTuple;
 import org.qommons.Identifiable;
+import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
@@ -65,6 +67,41 @@ public interface Equivalence<E> {
 	 */
 	<E2 extends E, V> BetterMap<E2, V> createMap();
 
+	/**
+	 * @param <E2> The type of the instance to test
+	 * @param instance The value to test
+	 * @return An instance of this equivalence's set that corresponds to the given value
+	 */
+	<E2 extends E> E2 getSetMember(E2 instance);
+
+	/**
+	 * Creates an equivalence object based on a conceptual sorted sub-set of instances of this set
+	 *
+	 * @param <E2> The type of values that belong in the sub-set
+	 * @param type The type of values that belong in the sub-set
+	 * @param compare The comparator defining the sub-set
+	 * @param nullable Whether null values are allowed in the sub-set
+	 * @return The comparator-based equivalence
+	 */
+	default <E2 extends E> SortedEquivalence<E2> sorted(Class<E2> type, Comparator<? super E2> compare, boolean nullable) {
+		if (type.isPrimitive())
+			type = TypeTokens.get().wrap(type);
+		return new ComparatorEquivalence<>(this, type, nullable, compare);
+	}
+
+	/**
+	 * @param <T> The type of values in the mapped set
+	 * @param type The type of values in the mapped set
+	 * @param filter A filter that determines what values of the mapped type are allowed in the mapped set
+	 * @param map The mapping function of this equivalence set's values to the mapped set value
+	 * @param reverse The mapping function of the mapped set's values to this set's value
+	 * @return An equivalence set of objects that are the result of a mapping function applied to values in this equivalence set
+	 */
+	default <E2 extends E, T> Equivalence<T> map(Class<T> type, Predicate<? super T> filter, Function<? super E2, ? extends T> map,
+		Function<? super T, ? extends E2> reverse) {
+		return new MappedEquivalence<>(this, type, filter, map, reverse);
+	}
+
 	/** The default {@link Object#equals(Object)} implementation of equivalence. Used by most java collections. */
 	Equivalence<Object> DEFAULT=new Equivalence<Object>() {
 		@Override
@@ -85,6 +122,11 @@ public interface Equivalence<E> {
 		@Override
 		public <E2, V> BetterMap<E2, V> createMap() {
 			return BetterHashMap.build().unsafe().buildMap();
+		}
+
+		@Override
+		public <E2> E2 getSetMember(E2 instance) {
+			return instance;
 		}
 
 		@Override
@@ -116,55 +158,84 @@ public interface Equivalence<E> {
 		}
 
 		@Override
+		public <E2> E2 getSetMember(E2 instance) {
+			return instance;
+		}
+
+		@Override
 		public String toString() {
 			return "Identity equivalence";
 		}
 	};
 
 	/**
-	 * Creates an equivalence object based on a conceptual sorted set
-	 *
-	 * @param <E> The type of values that belong in the set
-	 * @param type The type of values that belong in the set
-	 * @param compare The comparator defining the set
-	 * @param nullable Whether null values are allowed in the set
-	 * @return The comparator-based equivalence
-	 */
-	static <E> ComparatorEquivalence<E> of(Class<E> type, Comparator<? super E> compare, boolean nullable) {
-		if (type.isPrimitive())
-			type = TypeTokens.get().wrap(type);
-		return new ComparatorEquivalence<>(type, nullable, compare);
-	}
-
-	/**
-	 * Implements {@link Equivalence#of(Class, Comparator, boolean)}
+	 * Equivalence based on sorting of values
 	 *
 	 * @param <E> The type of values in the set
 	 */
-	class ComparatorEquivalence<E> implements Equivalence<E> {
+	interface SortedEquivalence<E> extends Equivalence<E> {
+		/** @return The comparator defining the set */
+		Comparator<? super E> comparator();
+
+		/** @return The type of values that belong in the set */
+		Class<E> getType();
+
+		/** @return Whether null values are allowed in the set */
+		boolean isNullable();
+
+		/** @return An equivalence identical to this equivalence, but whose sorting is reversed */
+		SortedEquivalence<E> reverse();
+
+		@Override
+		default <E2 extends E, T> SortedEquivalence<T> map(Class<T> type, Predicate<? super T> filter,
+			Function<? super E2, ? extends T> map, Function<? super T, ? extends E2> reverse) {
+			return new MappedComparatorEquivalence<>(this, type, filter, map, reverse);
+		}
+	}
+
+	/**
+	 * Implements {@link Equivalence#sorted(Class, Comparator, boolean)}
+	 *
+	 * @param <E> The type of values in the set
+	 */
+	class ComparatorEquivalence<E> implements SortedEquivalence<E> {
+		private final Equivalence<? super E> theParentEquivalence;
 		private final Class<E> type;
 		private final boolean nullable;
 		private final Comparator<? super E> compare;
 
-		ComparatorEquivalence(Class<E> type, boolean nullable, Comparator<? super E> compare) {
+		ComparatorEquivalence(Equivalence<? super E> parent, Class<E> type, boolean nullable, Comparator<? super E> compare) {
+			theParentEquivalence = parent;
 			if (type.isPrimitive())
 				type = TypeTokens.get().wrap(type);
 			this.type = type;
 			this.nullable = nullable;
-			this.compare = compare;
+			if (parent == DEFAULT || parent == ID)
+				this.compare = compare;
+			else
+				this.compare = LambdaUtils.printableComparator((o1, o2) -> {
+					o1 = theParentEquivalence.getSetMember(o1);
+					o2 = theParentEquivalence.getSetMember(o2);
+					return compare.compare(o1, o2);
+				}, compare::toString, compare);
 		}
 
-		/** @return The type of values that belong in the set */
+		/** @return The equivalence that this sub-set is based on */
+		public Equivalence<? super E> getParentEquivalence() {
+			return theParentEquivalence;
+		}
+
+		@Override
 		public Class<E> getType() {
 			return type;
 		}
 
-		/** @return Whether null values are allowed in the set */
+		@Override
 		public boolean isNullable() {
 			return nullable;
 		}
 
-		/** @return The comparator defining the set */
+		@Override
 		public Comparator<? super E> comparator() {
 			return compare;
 		}
@@ -192,27 +263,20 @@ public interface Equivalence<E> {
 			return new BetterTreeMap<>(false, compare);
 		}
 
-		public ComparatorEquivalence<E> reverse() {
-			return new ComparatorEquivalence<>(type, nullable, BetterSortedSet.ReversedSortedSet.reverse(compare));
+		@Override
+		public <E2 extends E> E2 getSetMember(E2 instance) {
+			return instance;
+		}
+
+		@Override
+		public SortedEquivalence<E> reverse() {
+			return new ComparatorEquivalence<>(theParentEquivalence, type, nullable, BetterSortedSet.ReversedSortedSet.reverse(compare));
 		}
 
 		@Override
 		public String toString() {
 			return "equivalence(" + compare + ")";
 		}
-	}
-
-	/**
-	 * @param <T> The type of values in the mapped set
-	 * @param type The type of values in the mapped set
-	 * @param filter A filter that determines what values of the mapped type are allowed in the mapped set
-	 * @param map The mapping function of this equivalence set's values to the mapped set value
-	 * @param reverse The mapping function of the mapped set's values to this set's value
-	 * @return An equivalence set of objects that are the result of a mapping function applied to values in this equivalence set
-	 */
-	default <E2 extends E, T> Equivalence<T> map(Class<T> type, Predicate<? super T> filter, Function<? super E2, ? extends T> map,
-		Function<? super T, ? extends E2> reverse) {
-		return new MappedEquivalence<>(this, type, filter, map, reverse);
 	}
 
 	/**
@@ -238,6 +302,27 @@ public interface Equivalence<E> {
 			theFilter = filter;
 			theMap = map;
 			theReverse = reverse;
+		}
+
+		/** @return The type of values in the set */
+		public Class<T> getType() {
+			return theType;
+		}
+
+		protected Equivalence<E> getWrapped() {
+			return theWrapped;
+		}
+
+		protected Predicate<? super T> getFilter() {
+			return theFilter;
+		}
+
+		protected Function<? super E2, ? extends T> getMap() {
+			return theMap;
+		}
+
+		protected Function<? super T, ? extends E2> getReverse() {
+			return theReverse;
 		}
 
 		@Override
@@ -269,12 +354,71 @@ public interface Equivalence<E> {
 		}
 
 		@Override
+		public <T2 extends T> T2 getSetMember(T2 instance) {
+			if (theFilter != null && !theFilter.test(instance))
+				return null;
+			E2 reversed = theReverse.apply(instance);
+			return (T2) theMap.apply(reversed);
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(theWrapped, theType, theFilter, theMap, theReverse);
+		}
+
+		@Override
 		public boolean equals(Object o) {
 			if (!(o instanceof MappedEquivalence))
 				return false;
 			MappedEquivalence<?, ?, ?> equiv = (MappedEquivalence<?, ?, ?>) o;
 			return equiv.theWrapped.equals(theWrapped) && equiv.theType.equals(theType) && Objects.equals(equiv.theFilter, theFilter)
 				&& equiv.theReverse.equals(theReverse);
+		}
+
+		@Override
+		public String toString() {
+			return theWrapped + ".map(" + theMap + ")";
+		}
+	}
+
+	/**
+	 * Implements {@link Equivalence.SortedEquivalence#map(Class, Predicate, Function, Function)}
+	 *
+	 * @param <E> The type of the wrapped equivalence
+	 * @param <E2> The sub-type of source values that can be mapped to values in this equivalence
+	 * @param <T> The type of values in this equivalence
+	 */
+	class MappedComparatorEquivalence<E, E2 extends E, T> extends MappedEquivalence<E, E2, T> implements SortedEquivalence<T> {
+		private final Comparator<T> theSorting;
+
+		MappedComparatorEquivalence(SortedEquivalence<E> wrapped, Class<T> type, Predicate<? super T> filter,
+			Function<? super E2, ? extends T> map, Function<? super T, ? extends E2> reverse) {
+			super(wrapped, type, filter, map, reverse);
+			theSorting = LambdaUtils.printableComparator((t1, t2) -> {
+				E2 e1 = reverse.apply(t1);
+				E2 e2 = reverse.apply(t2);
+				return wrapped.comparator().compare(e1, e2);
+			}, () -> wrapped.comparator() + ".map(" + map + ")", new BiTuple<>(wrapped.comparator(), map));
+		}
+
+		@Override
+		protected SortedEquivalence<E> getWrapped() {
+			return (org.observe.Equivalence.SortedEquivalence<E>) super.getWrapped();
+		}
+
+		@Override
+		public Comparator<? super T> comparator() {
+			return theSorting;
+		}
+
+		@Override
+		public boolean isNullable() {
+			return true;
+		}
+
+		@Override
+		public SortedEquivalence<T> reverse() {
+			return getWrapped().reverse().map(getType(), getFilter(), getMap(), getReverse());
 		}
 	}
 
@@ -529,6 +673,21 @@ public interface Equivalence<E> {
 			theWrapped.clear();
 		}
 
+		@Override
+		public int hashCode() {
+			return BetterSet.hashCode(this);
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return BetterSet.equals(this, obj);
+		}
+
+		@Override
+		public String toString() {
+			return BetterSet.toString(this);
+		}
+
 		private class MappedRepairListener<X> implements ValueStoredCollection.RepairListener<E, X> {
 			private final ValueStoredCollection.RepairListener<T2, X> theWrappedListener;
 
@@ -687,6 +846,21 @@ public interface Equivalence<E> {
 		@Override
 		public MutableMapEntryHandle<T2, V> mutableEntry(ElementId entryId) {
 			return mutableHandleFor(theWrapped.mutableEntry(entryId));
+		}
+
+		@Override
+		public int hashCode() {
+			return BetterMap.hashCode(this);
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return BetterMap.equals(this, obj);
+		}
+
+		@Override
+		public String toString() {
+			return entrySet().toString();
 		}
 	}
 }

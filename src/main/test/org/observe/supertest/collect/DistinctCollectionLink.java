@@ -57,7 +57,7 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> im
 				false);
 			CollectionDataFlow<?, ?, T> oneStepFlow = sourceCL.getCollection().flow();
 			CollectionDataFlow<?, ?, T> multiStepFlow = sourceCL.getDef().multiStepFlow;
-			if (oneStepFlow.equivalence() instanceof Equivalence.ComparatorEquivalence) {
+			if (oneStepFlow.equivalence() instanceof Equivalence.SortedEquivalence) {
 				oneStepFlow = oneStepFlow.withEquivalence(Equivalence.DEFAULT);
 				multiStepFlow = multiStepFlow.withEquivalence(Equivalence.DEFAULT);
 			}

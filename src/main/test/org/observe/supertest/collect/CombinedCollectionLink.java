@@ -20,6 +20,7 @@ import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.ObservableChainTester;
 import org.observe.supertest.TestValueType;
 import org.observe.supertest.TypeTransformation;
+import org.qommons.LambdaUtils;
 import org.qommons.TestHelper;
 import org.qommons.TestHelper.RandomAction;
 import org.qommons.Transactable;
@@ -67,13 +68,13 @@ public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLin
 				values.get(i).set(valueSupplier.apply(helper), null);
 			Function<List<V>, V> valueCombination = getValueCombination(transform.getValueType());
 
-			BiFunction<S, Transformation.TransformationValues<? extends S, ? extends T>, T> map = (s, cv) -> {
+			BiFunction<S, Transformation.TransformationValues<? extends S, ? extends T>, T> map = LambdaUtils.printableBiFn((s, cv) -> {
 				List<V> valueList = (List<V>) Arrays.asList(new Object[values.size()]);
 				for (int i = 0; i < values.size(); i++)
 					valueList.set(i, cv.get(values.get(i)));
 				V combinedV = valueCombination.apply(valueList);
 				return transform.map(s, combinedV);
-			};
+			}, transform::toString, null);
 			BiFunction<T, Transformation.TransformationValues<? extends S, ? extends T>, S> reverse = (s, cv) -> {
 				List<V> valueList = (List<V>) Arrays.asList(new Object[values.size()]);
 				for (int i = 0; i < values.size(); i++)
@@ -135,7 +136,7 @@ public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLin
 	public CombinedCollectionLink(String path, ObservableCollectionLink<?, S> sourceLink, ObservableCollectionTestDef<T> def,
 		TestHelper helper, BiTypeTransformation<S, V, T> operation, List<SettableValue<V>> values, Function<List<V>, V> valueCombination,
 		Function<TestHelper, V> valueSupplier, Transformation<S, T> options) {
-		super(path, sourceLink, def, helper, options.isCached());
+		super(path, sourceLink, def, helper, options.isCached(), isInexactReversible(options));
 		theOperation = operation;
 		theValues = values;
 		theValueCombination = valueCombination;

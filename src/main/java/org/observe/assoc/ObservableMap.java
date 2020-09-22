@@ -688,8 +688,8 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 		public DefaultObservableMap(TypeToken<K> keyType, TypeToken<V> valueType, Equivalence<? super K> keyEquivalence,
 			ObservableCollection<Map.Entry<K, V>> entries) {
 			theValueType = valueType;
-			if (keyEquivalence instanceof Equivalence.ComparatorEquivalence) {
-				Comparator<? super K> compare = ((Equivalence.ComparatorEquivalence<? super K>) keyEquivalence).comparator();
+			if (keyEquivalence instanceof Equivalence.SortedEquivalence) {
+				Comparator<? super K> compare = ((Equivalence.SortedEquivalence<? super K>) keyEquivalence).comparator();
 				theEntries = entries.flow().distinctSorted((entry1, entry2) -> compare.compare(entry1.getKey(), entry2.getKey()), true)
 					.collect();
 			} else

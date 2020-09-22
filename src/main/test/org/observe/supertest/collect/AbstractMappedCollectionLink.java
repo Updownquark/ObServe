@@ -1,5 +1,7 @@
 package org.observe.supertest.collect;
 
+import org.observe.Transformation;
+import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.OperationRejection;
 import org.qommons.TestHelper;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
@@ -12,6 +14,7 @@ import org.qommons.collect.MutableCollectionElement.StdMsg;
  */
 public abstract class AbstractMappedCollectionLink<S, T> extends OneToOneCollectionLink<S, T> {
 	private final boolean isCached;
+	private final boolean isInexactReversible;
 
 	/**
 	 * @param path The path for this link
@@ -19,11 +22,33 @@ public abstract class AbstractMappedCollectionLink<S, T> extends OneToOneCollect
 	 * @param def The collection definition for this link
 	 * @param helper The randomness for this link
 	 * @param cached Whether source and mapped values are cached by the collection
+	 * @param inexactReversible Whether the reverse operation allows operations that do not satisfy the condition
+	 *        map(reverse(target))==target
 	 */
 	public AbstractMappedCollectionLink(String path, ObservableCollectionLink<?, S> sourceLink, ObservableCollectionTestDef<T> def,
-		TestHelper helper, boolean cached) {
+		TestHelper helper, boolean cached, boolean inexactReversible) {
 		super(path, sourceLink, def, helper);
 		isCached = cached;
+		isInexactReversible = inexactReversible;
+	}
+
+	static boolean isInexactReversible(Transformation<?, ?> options) {
+		if (!(options instanceof Transformation.ReversibleTransformation))
+			return false;
+		Transformation.ReversibleTransformation<?, ?> reversible = (Transformation.ReversibleTransformation<?, ?>) options;
+		if (!(reversible.getReverse() instanceof Transformation.MappingSourceReplacingReverse))
+			return false;
+		return ((Transformation.MappingSourceReplacingReverse<?, ?>) reversible.getReverse()).isInexactReversible();
+	}
+
+	@Override
+	public boolean is(ObservableChainLink.ChainLinkFlag flag) {
+		switch (flag) {
+		case INEXACT_REVERSIBLE:
+			return isInexactReversible;
+		default:
+			return super.is(flag);
+		}
 	}
 
 	@Override
@@ -54,7 +79,7 @@ public abstract class AbstractMappedCollectionLink<S, T> extends OneToOneCollect
 		if (!isReversible()) {
 			rejection.reject(StdMsg.UNSUPPORTED_OPERATION);
 			return null;
-		} else if (!getCollection().equivalence().elementEquals(map(reverse(value)), value)) {
+		} else if (!isInexactReversible && !getCollection().equivalence().elementEquals(map(reverse(value)), value)) {
 			rejection.reject(StdMsg.ILLEGAL_ELEMENT);
 			return null;
 		}
@@ -99,10 +124,12 @@ public abstract class AbstractMappedCollectionLink<S, T> extends OneToOneCollect
 				return;
 			}
 			S reversed = reverse(derivedOp.getValue());
-			T reMapped = map(reversed);
-			if (!getCollection().equivalence().elementEquals(reMapped, derivedOp.getValue())) {
-				rejection.reject(StdMsg.ILLEGAL_ELEMENT);
-				return;
+			if (!isInexactReversible) {
+				T reMapped = map(reversed);
+				if (!getCollection().equivalence().elementEquals(reMapped, derivedOp.getValue())) {
+					rejection.reject(StdMsg.ILLEGAL_ELEMENT);
+					return;
+				}
 			}
 			break;
 		}

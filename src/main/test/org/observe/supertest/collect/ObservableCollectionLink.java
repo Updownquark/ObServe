@@ -8,6 +8,7 @@ import static org.observe.supertest.CollectionOpType.set;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
@@ -349,7 +350,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			}).or(.2, () -> { // removeAll
 				int length = (int) helper.getDouble(0, 25, 100); // Tend smaller
 				List<T> values = new ArrayList<>(length);
-				BetterSet<T> valueSet = getCollection().equivalence().createSet();
+				Set<T> valueSet = new HashSet<>();
 				for (int i = 0; i < length; i++) {
 					T value = theSupplier.apply(helper);
 					values.add(value);
@@ -861,7 +862,8 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 				throw new AssertionError("Rejection with " + msg + " was expected to generate an error");
 		} else if (msg != null && !error) {
 			Assert.assertEquals(StdMsg.ELEMENT_EXISTS, msg);
-			if (!modify.contains(op.value))
+			// If inexact reverse is allowed, the exact value may not be present even though it cannot be added
+			if (!is(ChainLinkFlag.INEXACT_REVERSIBLE) && !modify.contains(op.value))
 				throw new AssertionError("Rejection with " + msg + " was expected to generate an error");
 		}
 		if (error)
@@ -872,7 +874,8 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			Assert.assertEquals(preModSize, modify.size());
 		} else {
 			Assert.assertNull(msg);
-			Assert.assertTrue(getCollection().equivalence().elementEquals(op.value, element.get()));
+			if (!is(ObservableChainLink.ChainLinkFlag.INEXACT_REVERSIBLE))
+				Assert.assertTrue(getCollection().equivalence().elementEquals(op.value, element.get()));
 			if(!isComposite())
 				Assert.assertEquals(1, added);
 			if(added>1){
@@ -1237,7 +1240,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		Assert.assertEquals(preModSize, modify.size());
 		if (msg != null)
 			Assert.assertEquals(oldValue, element.get());
-		else
+		else if (!is(ObservableChainLink.ChainLinkFlag.INEXACT_REVERSIBLE))
 			Assert.assertEquals(op.value, element.get());
 	}
 

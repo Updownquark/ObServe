@@ -254,8 +254,8 @@ public class ObservableCollectionPassiveManagers {
 		@Override
 		public Equivalence<? super T> equivalence() {
 			Equivalence<? super T> equiv = theParent.equivalence();
-			if (equiv instanceof Equivalence.ComparatorEquivalence)
-				return ((Equivalence.ComparatorEquivalence<? super T>) equiv).reverse();
+			if (equiv instanceof Equivalence.SortedEquivalence)
+				return ((Equivalence.SortedEquivalence<? super T>) equiv).reverse();
 			return theParent.equivalence();
 		}
 
@@ -430,8 +430,8 @@ public class ObservableCollectionPassiveManagers {
 	static class PassiveTransformedCollectionManager<E, I, T> extends AbstractMappingManager<E, I, T>
 	implements PassiveCollectionManager<E, I, T> {
 		PassiveTransformedCollectionManager(PassiveCollectionManager<E, ?, I> parent, TypeToken<T> targetType,
-			Transformation<I, T> transformation) {
-			super(parent, targetType, transformation);
+			Transformation<I, T> transformation, Equivalence<? super T> equivalence) {
+			super(parent, targetType, transformation, equivalence);
 		}
 
 		@Override

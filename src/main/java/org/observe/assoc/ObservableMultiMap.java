@@ -491,10 +491,10 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 			BiConsumer<MapEntry<K, V>, V> valueSet = LambdaUtils.printableBiConsumer((element, newValue) -> element.value = newValue,
 				() -> "value-set", null);
 			Function<V, MapEntry<K, V>> addition = LambdaUtils.printableFn(value -> new MapEntry<>(value), "addition", null);
-			if (theKeyEquivalence instanceof Equivalence.ComparatorEquivalence) {
+			if (theKeyEquivalence instanceof Equivalence.SortedEquivalence) {
 				mapFlow = backing.flow().groupSorted(
 					entries -> entries.transform(theKeyType, tx -> tx.map(keyMap).modifySource(keySet))//
-					.distinctSorted(((Equivalence.ComparatorEquivalence<K>) theKeyEquivalence).comparator(), true), //
+					.distinctSorted(((Equivalence.SortedEquivalence<K>) theKeyEquivalence).comparator(), true), //
 					keyReverse);
 			} else {
 				mapFlow = backing.flow()

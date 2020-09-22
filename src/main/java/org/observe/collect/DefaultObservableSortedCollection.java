@@ -51,7 +51,7 @@ public class DefaultObservableSortedCollection<E> extends DefaultObservableColle
 	public DefaultObservableSortedCollection(TypeToken<E> type, BetterSortedList<E> list,
 		BiFunction<ElementId, BetterCollection<?>, ElementId> elementSource,
 		BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> sourceElements) {
-		super(type, list, elementSource, sourceElements, Equivalence.of(TypeTokens.getRawType(type), list.comparator(), false));
+		super(type, list, elementSource, sourceElements, Equivalence.DEFAULT.sorted(TypeTokens.getRawType(type), list.comparator(), false));
 	}
 
 	@Override
@@ -70,8 +70,8 @@ public class DefaultObservableSortedCollection<E> extends DefaultObservableColle
 	}
 
 	@Override
-	public Equivalence.ComparatorEquivalence<? super E> equivalence() {
-		return (Equivalence.ComparatorEquivalence<? super E>) super.equivalence();
+	public Equivalence.SortedEquivalence<? super E> equivalence() {
+		return (Equivalence.SortedEquivalence<? super E>) super.equivalence();
 	}
 
 	@Override

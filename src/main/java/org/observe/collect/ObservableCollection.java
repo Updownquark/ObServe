@@ -882,12 +882,37 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 			Function<ReversibleTransformationPrecursor<T, X, ?>, Transformation<T, X>> transform);
 
 		/**
+		 * Transforms each value in this flow to a new value by some function, possibly including other values. This operation may produce
+		 * an {@link #supportsPassive() active or passive} flow depending on the options selected on the builder.
+		 *
+		 * @param <X> The target type of the transformed flow
+		 * @param target The target type of the transformed flow
+		 * @param transform Configures the transformation
+		 * @return The transformed flow
+		 * @see Transformation for help using the API
+		 */
+		default <X> CollectionDataFlow<E, T, X> transform(Class<X> target, //
+			Function<ReversibleTransformationPrecursor<T, X, ?>, Transformation<T, X>> transform) {
+			return transform(TypeTokens.get().of(target), transform);
+		}
+
+		/**
 		 * @param <X> The type to map to
 		 * @param target The type to map to
 		 * @param map The mapping function to apply to each element
 		 * @return The mapped flow
 		 */
 		default <X> CollectionDataFlow<E, T, X> map(TypeToken<X> target, Function<? super T, ? extends X> map) {
+			return transform(target, tx -> tx.map(map));
+		}
+
+		/**
+		 * @param <X> The type to map to
+		 * @param target The type to map to
+		 * @param map The mapping function to apply to each element
+		 * @return The mapped flow
+		 */
+		default <X> CollectionDataFlow<E, T, X> map(Class<X> target, Function<? super T, ? extends X> map) {
 			return transform(target, tx -> tx.map(map));
 		}
 
@@ -916,12 +941,34 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		<X> CollectionDataFlow<E, ?, X> flattenValues(TypeToken<X> target, Function<? super T, ? extends ObservableValue<? extends X>> map);
 
 		/**
+		 * @param target The target type
+		 * @param map A function that produces observable values from each element of the source
+		 * @return A {@link #supportsPassive() active} flow capable of producing a collection that is the value of the observable values
+		 *         mapped to each element of the source.
+		 */
+		default <X> CollectionDataFlow<E, ?, X> flattenValues(Class<X> target,
+			Function<? super T, ? extends ObservableValue<? extends X>> map) {
+			return flattenValues(TypeTokens.get().of(target), map);
+		}
+
+		/**
 		 * @param target The type of values in the flattened result
 		 * @param map The function to produce {@link ObservableCollection.CollectionDataFlow data flows} from each element in this flow
 		 * @return A flow containing each element in the data flow produced by the map of each element in this flow
 		 */
 		<X> CollectionDataFlow<E, ?, X> flatMap(TypeToken<X> target,
 			Function<? super T, ? extends CollectionDataFlow<?, ?, ? extends X>> map);
+
+		/**
+		 *
+		 * @param target The type of values in the flattened result
+		 * @param map The function to produce {@link ObservableCollection.CollectionDataFlow data flows} from each element in this flow
+		 * @return A flow containing each element in the data flow produced by the map of each element in this flow
+		 */
+		default <X> CollectionDataFlow<E, ?, X> flatMap(Class<X> target,
+			Function<? super T, ? extends CollectionDataFlow<?, ?, ? extends X>> map) {
+			return flatMap(TypeTokens.get().of(target), map);
+		}
 
 		/**
 		 * @param target The type of values in the flattened result
@@ -977,7 +1024,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		 *        false, the produced collection may be able to fire fewer events because elements that are added earlier in the collection
 		 *        can be ignored if they are already represented.
 		 * @return A {@link #supportsPassive() active} flow capable of producing a sorted set ordered by the given comparator that excludes
-		 *         duplicate elements according to the comparator's {@link Equivalence#of(Class, Comparator, boolean) equivalence}.
+		 *         duplicate elements according to the comparator's {@link Equivalence#sorted(Class, Comparator, boolean) equivalence}.
 		 */
 		DistinctSortedDataFlow<E, T, T> distinctSorted(Comparator<? super T> compare, boolean alwaysUseFirst);
 
@@ -1023,6 +1070,19 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		 * @param <K> The key type for the map
 		 * @param keyType The key type for the map
 		 * @param keyMap The function to produce keys from this flow's values
+		 * @param reverse A function to produce a value for this flow from a given key and value. Supplying this function allows additions
+		 *        into the gathered multi-map.
+		 * @return A multi-map flow that may be used to produce a multi-map of this flow's values, categorized by the given key mapping
+		 */
+		default <K> ObservableMultiMap.MultiMapFlow<K, T> groupBy(Class<K> keyType, Function<? super T, ? extends K> keyMap,
+			BiFunction<K, T, T> reverse) {
+			return groupBy(TypeTokens.get().of(keyType), keyMap, reverse);
+		}
+
+		/**
+		 * @param <K> The key type for the map
+		 * @param keyType The key type for the map
+		 * @param keyMap The function to produce keys from this flow's values
 		 * @param keySorting The ordering for the key set
 		 * @param reverse A function to produce a value for this flow from a given key and value. Supplying this function allows additions
 		 *        into the gathered multi-map.
@@ -1032,6 +1092,21 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		default <K> ObservableSortedMultiMap.SortedMultiMapFlow<K, T> groupBy(TypeToken<K> keyType, Function<? super T, ? extends K> keyMap,
 			Comparator<? super K> keySorting, BiFunction<K, T, T> reverse) {
 			return groupSorted(flow -> flow.map(keyType, keyMap).distinctSorted(keySorting, false), reverse);
+		}
+
+		/**
+		 * @param <K> The key type for the map
+		 * @param keyType The key type for the map
+		 * @param keyMap The function to produce keys from this flow's values
+		 * @param keySorting The ordering for the key set
+		 * @param reverse A function to produce a value for this flow from a given key and value. Supplying this function allows additions
+		 *        into the gathered multi-map.
+		 * @return A sorted multi-map flow that may be used to produce a multi-map of this flow's values, categorized by the given key
+		 *         mapping
+		 */
+		default <K> ObservableSortedMultiMap.SortedMultiMapFlow<K, T> groupBy(Class<K> keyType, Function<? super T, ? extends K> keyMap,
+			Comparator<? super K> keySorting, BiFunction<K, T, T> reverse) {
+			return groupBy(TypeTokens.get().of(keyType), keyMap, keySorting, reverse);
 		}
 
 		<K> ObservableMultiMap.MultiMapFlow<K, T> groupBy(Function<? super CollectionDataFlow<E, I, T>, DistinctDataFlow<E, ?, K>> keyFlow,
@@ -1242,7 +1317,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		Comparator<? super T> comparator();
 
 		@Override
-		Equivalence.ComparatorEquivalence<? super T> equivalence();
+		Equivalence.SortedEquivalence<? super T> equivalence();
 
 		@Override
 		SortedDataFlow<E, T, T> reverse();

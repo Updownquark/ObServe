@@ -646,7 +646,7 @@ public class ObservableCollectionDataFlowImpl {
 		public <X> CollectionDataFlow<E, T, X> transform(TypeToken<X> targetType,
 			Function<Transformation.ReversibleTransformationPrecursor<T, X, ?>, Transformation<T, X>> combination) {
 			Transformation<T, X> def = combination.apply(new ReversibleTransformationPrecursor<>());
-			return new TransformedCollectionOp<>(theSource, this, targetType, def, null);
+			return new TransformedCollectionOp<>(theSource, this, targetType, def);
 		}
 
 		@Override
@@ -687,7 +687,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public DistinctDataFlow<E, T, T> distinct(Consumer<UniqueOptions> options) {
-			SimpleUniqueOptions uo = new SimpleUniqueOptions(equivalence() instanceof Equivalence.ComparatorEquivalence);
+			SimpleUniqueOptions uo = new SimpleUniqueOptions(equivalence() instanceof Equivalence.SortedEquivalence);
 			options.accept(uo);
 			return new ObservableSetImpl.DistinctOp<>(theSource, this, equivalence(), uo.isUseFirst(), uo.isPreservingSourceOrder());
 		}
@@ -957,14 +957,44 @@ public class ObservableCollectionDataFlowImpl {
 		 * @param target The type of this flow
 		 * @param def The combination definition used to produce this flow's values from its parent's and to govern certain aspects of this
 		 *        flow's behavior, e.g. caching
-		 * @param equivalence The equivalence for this flow, or null to use the transformation's {@link Transformation#equivalence()
-		 *        equivalence}
 		 */
 		protected TransformedCollectionOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, I> parent, TypeToken<T> target,
-			Transformation<I, T> def, Equivalence<? super T> equivalence) {
-			super(source, parent, target, equivalence != null ? equivalence
-				: (parent.getTargetType().equals(target) ? (Equivalence<? super T>) parent.equivalence() : Equivalence.DEFAULT));
+			Transformation<I, T> def) {
+			super(source, parent, target, transformEquivalence(parent.equivalence(), TypeTokens.getRawType(target), def));
 			theDef = def;
+		}
+
+		private static <I, T> Equivalence<? super T> transformEquivalence(Equivalence<? super I> sourceEquivalence, Class<T> target,
+			Transformation<I, T> def) {
+			if (def instanceof Transformation.ReversibleTransformation) {
+				Transformation.TransformReverse<I, T> reverse = ((Transformation.ReversibleTransformation<I, T>) def).getReverse();
+				if (reverse instanceof Transformation.MappingSourceReplacingReverse
+					&& ((Transformation.MappingSourceReplacingReverse<I, T>) reverse).isInexactReversible()) {
+					// Inexact reversibility has some interesting consequences, especially if further links, particularly distinct links,
+					// are derived from inexact-reversible transformations
+					// E.g. take a simple integer x2 inexact transform derived with distinctness.
+					// If 1 is added to the distinct collection, the actual value that will be added is 0 ( 1 / 2 )
+					// This difference must be handled correctly and this is done though the peculiar mapping equivalence.
+					Function<? super I, ? extends T> map = LambdaUtils.printableFn(v -> {
+						Transformation.Engine<I, T> engine = def.createEngine(sourceEquivalence);
+						return engine.map(v, engine.get());
+					}, def::toString, def);
+					Equivalence<T> mappedEquivalence = sourceEquivalence.map(target, //
+						LambdaUtils.printablePred(v -> {
+							Transformation.Engine<I, T> engine = def.createEngine(sourceEquivalence);
+							Transformation.ReverseQueryResult<I> rq = engine.reverse(v, false, true);
+							return rq.getError() == null;
+						}, def + ".filter", def), map, //
+						LambdaUtils.printableFn(v -> {
+							Transformation.Engine<I, T> engine = def.createEngine(sourceEquivalence);
+							Transformation.ReverseQueryResult<I> rq = engine.reverse(v, false, true);
+							return rq.getReversed();
+						}, reverse::toString, reverse));
+					return mappedEquivalence;
+				} else
+					return def.equivalence();
+			} else
+				return def.equivalence();
 		}
 
 		@Override
@@ -987,13 +1017,13 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public PassiveCollectionManager<E, ?, T> managePassive() {
 			return new ObservableCollectionPassiveManagers.PassiveTransformedCollectionManager<>(getParent().managePassive(),
-				getTargetType(), theDef);
+				getTargetType(), theDef, equivalence());
 		}
 
 		@Override
 		public ActiveCollectionManager<E, ?, T> manageActive() {
 			return new ObservableCollectionActiveManagers.ActiveTransformedCollectionManager<>(getParent().manageActive(), getTargetType(),
-				theDef);
+				theDef, equivalence());
 		}
 	}
 
@@ -1264,17 +1294,19 @@ public class ObservableCollectionDataFlowImpl {
 		final CollectionOperation<E, ?, I> theParent;
 		private final TypeToken<T> theTargetType;
 		final Transformation.Engine<I, T> theEngine;
+		private final Equivalence<? super T> theEquivalence;
 		/**
 		 * This boolean is a back door for FlattenedValuesOp to allow it to avoid firing events to the collection made of ObservableValues
 		 */
 		boolean propagateUpdatesToParent;
 
 		protected AbstractMappingManager(CollectionOperation<E, ?, I> parent, TypeToken<T> targetType,
-			Transformation<I, T> transformation) {
+			Transformation<I, T> transformation, Equivalence<? super T> equivalence) {
 			theParent = parent;
 			theTargetType = targetType;
 			theEngine = transformation.createEngine(theParent.equivalence());
 			propagateUpdatesToParent = true;
+			theEquivalence = equivalence;
 		}
 
 		protected CollectionOperation<E, ?, I> getParent() {
@@ -1325,7 +1357,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public Equivalence<? super T> equivalence() {
-			return theEngine.getTransformation().equivalence();
+			return theEquivalence;
 		}
 
 		protected abstract void doParentMultiSet(Collection<AbstractMappedElement> elements, I newValue);

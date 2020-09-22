@@ -29,7 +29,7 @@ public interface ObservableSortedCollection<E> extends ObservableCollection<E>, 
 	static TypeToken<ObservableSortedCollection<?>> TYPE = TypeTokens.get().keyFor(ObservableSortedCollection.class).wildCard();
 
 	@Override
-	Equivalence.ComparatorEquivalence<? super E> equivalence();
+	Equivalence.SortedEquivalence<? super E> equivalence();
 
 	@Override
 	default Iterator<E> iterator() {
