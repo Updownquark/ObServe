@@ -298,6 +298,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 
 		@Override
 		protected void initConfig(ObservableConfig parent, Object cause, Observable<?> findRefs) {
+			E oldValue = theValue;
 			try {
 				theValue = theFormat
 					.parse(ObservableConfigFormat.ctxFor(getSession(), parent, getParent(), () -> getParent(true, null), null, getUntil(),
@@ -305,6 +306,9 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 			} catch (ParseException e) {
 				e.printStackTrace();
 				theValue = null;
+			}
+			if (oldValue != theValue) {
+				fire(createChangeEvent(oldValue, theValue, cause));
 			}
 		}
 
@@ -1202,7 +1206,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 						return tx.cache(false).map(LambdaUtils.printableFn(entry -> entry.value, "value", null))//
 							.modifySource(LambdaUtils.printableBiConsumer((entry, value) -> entry.value = value, () -> "setValue", null), //
 								rvrs -> rvrs
-									.createWith(LambdaUtils.printableFn(value -> new MapEntry<>(null, value), "createEntry", null)));
+								.createWith(LambdaUtils.printableFn(value -> new MapEntry<>(null, value), "createEntry", null)));
 					})).gatherActive(until);
 			});
 		}

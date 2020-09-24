@@ -787,18 +787,25 @@ implements TableBuilder<R, P> {
 				}
 				Transferable rowTransfer = null;
 				if (theRowSource != null) {
-					Transferable[] rowTs = new Transferable[selectedRows.size()];
-					ElementId[] rowIds = new ElementId[rowTs.length];
+					List<Transferable> rowTs = new ArrayList<>(selectedRows.size());
+					ElementId[] rowIds = new ElementId[selectedRows.size()];
 					int r = 0;
 					for (int i = theTable.getSelectionModel().getMinSelectionIndex(); i <= theTable.getSelectionModel()
 						.getMaxSelectionIndex(); i++) {
 						if (theTable.getSelectionModel().isSelectedIndex(i)) {
-							rowTs[r] = theRowSource.createTransferable(selectedRows.get(r));
+							Transferable rowTr = theRowSource.createTransferable(selectedRows.get(r));
+							if (rowTr != null)
+								rowTs.add(rowTr);
 							rowIds[r] = theSafeRows.getElement(i).getElementId();
 							r++;
 						}
 					}
-					rowTransfer = new RowTransferable(rowTs.length == 1 ? rowTs[0] : new Dragging.AndTransferable(rowTs), rowIds);
+					if (rowTs.isEmpty())
+						rowTransfer = new RowTransferable(null, rowIds);
+					else
+						rowTransfer = new RowTransferable(
+							rowTs.size() == 1 ? rowTs.get(0) : new Dragging.AndTransferable(rowTs.toArray(new Transferable[rowTs.size()])),
+								rowIds);
 				}
 				if (rowTransfer != null && columnTransfer != null)
 					return new Dragging.OrTransferable(rowTransfer, columnTransfer);
