@@ -380,9 +380,9 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 			theElements = new BetterTreeMap<>(false, ElementId::compareTo);
 			theListeners = ListenerList.build().allowReentrant().withFastSize(false).build();
 
-			init(until, listen, findRefs);
-
 			theCollection = createCollection();
+
+			init(until, listen, findRefs);
 		}
 
 		@Override

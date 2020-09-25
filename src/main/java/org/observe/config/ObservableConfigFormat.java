@@ -806,7 +806,9 @@ public interface ObservableConfigFormat<E> {
 				for (int i = 0; i < theFields.keySize(); i++) {
 					if (theFields.get(i).childName == null) {
 						Object fieldValue = previousValue == null ? null : theFields.get(i).getter.apply(previousValue);
-						formatField(session, (ComponentField<E, Object>) theFields.get(i), fieldValue, config, fv -> {}, until);
+						formatField(session, value, (ComponentField<E, Object>) theFields.get(i), fieldValue, fieldValue, config, fv -> {},
+							until,
+							null);
 					} else {
 						ObservableConfig cfg = config.getChild(theFields.get(i).childName);
 						if (cfg != null)
@@ -827,7 +829,7 @@ public interface ObservableConfigFormat<E> {
 				for (int i = 0; i < theFields.keySize(); i++) {
 					ComponentField<E, ?> field = theFields.get(i);
 					Object fieldValue = field.getter.apply(value);
-					formatField(session, (ComponentField<E, Object>) field, fieldValue, config, fv -> {}, until);
+					formatField(session, value, (ComponentField<E, Object>) field, fieldValue, fieldValue, config, fv -> {}, until, null);
 				}
 				config.withParsedItem(session, value);
 			}
@@ -853,10 +855,10 @@ public interface ObservableConfigFormat<E> {
 				}
 				if (ctx.getChange() == null) {
 					for (int i = 0; i < theFields.keySize(); i++)
-						parseUpdatedField(ctx, c, i, null);
+						parseUpdatedField(ctx, ctx.getPreviousValue(), c, i, null);
 				} else if (ctx.getChange().relativePath.isEmpty()) {
 					if (theDefaultComponent != null)
-						parseUpdatedField(ctx, c, theDefaultComponent.index, null);
+						parseUpdatedField(ctx, ctx.getPreviousValue(), c, theDefaultComponent.index, null);
 				} else {
 					ObservableConfigEvent change = ctx.getChange();
 					ObservableConfig child = change.relativePath.get(0);
@@ -865,14 +867,14 @@ public interface ObservableConfigFormat<E> {
 						if (fieldIdx >= 0) {
 							ObservableConfigEvent childChange = change.asFromChild();
 							try (Transaction ct = Causable.use(childChange)) {
-								parseUpdatedField(ctx, c, fieldIdx, childChange);
+								parseUpdatedField(ctx, ctx.getPreviousValue(), c, fieldIdx, childChange);
 							}
 						}
 						fieldIdx = theFieldsByChildName.keyIndexTolerant(change.oldName);
 						if (fieldIdx >= 0)
-							parseUpdatedField(ctx, c, fieldIdx, null);
+							parseUpdatedField(ctx, ctx.getPreviousValue(), c, fieldIdx, null);
 					} else if (fieldIdx >= 0)
-						parseUpdatedField(ctx, c, fieldIdx, change);
+						parseUpdatedField(ctx, ctx.getPreviousValue(), c, fieldIdx, change);
 				}
 				return ctx.getPreviousValue();
 			}
@@ -981,7 +983,8 @@ public interface ObservableConfigFormat<E> {
 						theFields.get(i).format.parse(ctxFor(session, config, fieldConfig, supply, null,
 							until, null, findReferences, fv -> fieldValues.put(fi, fv))));
 				else
-					formatField(session, (ComponentField<E, Object>) theFields.get(i), fieldValues.get(i), config, f -> {}, until);
+					formatField(session, null, (ComponentField<E, Object>) theFields.get(i), null, fieldValues.get(i), config, f -> {},
+						until, ctx.getChange());
 			}
 			E value = create(session, fieldValues, config, until, ctx);
 			config.withParsedItem(session, value);
@@ -991,8 +994,8 @@ public interface ObservableConfigFormat<E> {
 		protected abstract E create(ObservableConfigParseSession session, QuickMap<String, Object> fieldValues, ObservableConfig config,
 			Observable<?> until, ObservableConfigParseContext<E> ctx);
 
-		protected <F> void formatField(ObservableConfigParseSession session, ComponentField<E, F> field, F fieldValue,
-			ObservableConfig entityConfig, Consumer<F> onFieldValue, Observable<?> until) {
+		protected <F> void formatField(ObservableConfigParseSession session, E value, ComponentField<E, F> field, F previousValue,
+			F fieldValue, ObservableConfig entityConfig, Consumer<F> onFieldValue, Observable<?> until, Object cause) {
 			boolean[] added = new boolean[1];
 			if (fieldValue != null || field.childName == null) {
 				ObservableConfig fieldConfig;
@@ -1013,7 +1016,7 @@ public interface ObservableConfigFormat<E> {
 			}
 		}
 
-		private <F> void parseUpdatedField(ObservableConfigParseContext<E> ctx, ObservableConfig entityConfig, int fieldIdx,
+		protected <F> void parseUpdatedField(ObservableConfigParseContext<E> ctx, E value, ObservableConfig entityConfig, int fieldIdx,
 			ObservableConfigEvent change) throws ParseException {
 			ComponentField<? super E, F> field = (ComponentField<? super E, F>) theFields.get(fieldIdx);
 			F oldValue = field.getter.apply(ctx.getPreviousValue());
@@ -1268,6 +1271,7 @@ public interface ObservableConfigFormat<E> {
 					});
 				}
 			}
+			Object[] created = new Object[1];
 			E instance = entityType.create(new EntityReflector.ObservableEntityInstanceBacking<E>() {
 				@Override
 				public Object get(int fieldIndex) {
@@ -1276,9 +1280,10 @@ public interface ObservableConfigFormat<E> {
 
 				@Override
 				public void set(int fieldIndex, Object newValue) {
+					Object oldValue = fieldValues.get(fieldIndex);
 					fieldValues.put(fieldIndex, newValue);
-					formatField(session, (ComponentField<E, Object>) getFields().get(fieldIndex), newValue, config,
-						v -> fieldValues.put(fieldIndex, v), until);
+					formatField(session, (E) created[0], (ComponentField<E, Object>) getFields().get(fieldIndex), oldValue, newValue,
+						config, v -> fieldValues.put(fieldIndex, v), until, null);
 				}
 
 				@Override
@@ -1316,6 +1321,7 @@ public interface ObservableConfigFormat<E> {
 					return SettableValue.ALWAYS_ENABLED; // No enablement mechanism
 				}
 			});
+			created[0] = instance;
 			entityType.associate(instance, "until", until);
 			return instance;
 		}
@@ -1406,6 +1412,41 @@ public interface ObservableConfigFormat<E> {
 			else
 				fieldValues.put(fieldIndex, id);
 			return true;
+		}
+
+		@Override
+		protected <F> void formatField(ObservableConfigParseSession session, E value, ComponentField<E, F> field, F previousValue,
+			F fieldValue, ObservableConfig entityConfig, Consumer<F> onFieldValue, Observable<?> until, Object cause) {
+			super.formatField(session, value, field, previousValue, fieldValue, entityConfig, onFieldValue, until, cause);
+			if (value != null) {
+				Object key = field.setter;
+				ListenerList<Consumer<FieldChange<?>>> listeners = (ListenerList<Consumer<FieldChange<?>>>) entityType.getAssociated(value,
+					key);
+				if (listeners != null) {
+					FieldChange<F> change = new FieldChange<>(previousValue, fieldValue, cause);
+					listeners.forEach(//
+						l -> l.accept(change));
+				}
+			}
+		}
+
+		@Override
+		protected <F> void parseUpdatedField(ObservableConfigParseContext<E> ctx, E value, ObservableConfig entityConfig, int fieldIdx,
+			ObservableConfigEvent change) throws ParseException {
+			ComponentField<E, F> field = (ComponentField<E, F>) getFields().get(fieldIdx);
+			F oldValue = value == null ? null : field.getter.apply(value);
+			super.parseUpdatedField(ctx, value, entityConfig, fieldIdx, change);
+			if (value != null) {
+				F newValue = value == null ? null : field.getter.apply(value);
+				Object key = field.setter;
+				ListenerList<Consumer<FieldChange<?>>> listeners = (ListenerList<Consumer<FieldChange<?>>>) entityType.getAssociated(value,
+					key);
+				if (listeners != null) {
+					FieldChange<F> fieldChange = new FieldChange<>(oldValue, newValue, change);
+					listeners.forEach(//
+						l -> l.accept(fieldChange));
+				}
+			}
 		}
 
 		@Override

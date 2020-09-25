@@ -2260,11 +2260,36 @@ public class EntityReflector<E> {
 	 * @param fieldIndex The {@link EntityReflector.ReflectedField#getFieldIndex() index} of the field to watch
 	 * @return A {@link SettableValue} representing the value of the given field in the entity
 	 */
-	public ObservableField<? extends E, ?> observeField(E entity, int fieldIndex) {
+	public ObservableField<? super E, ?> observeField(E entity, int fieldIndex) {
 		EntityInstanceBacking backing = getHandler(entity).theBacking;
 		if (!(backing instanceof ObservableEntityInstanceBacking))
 			throw new UnsupportedOperationException("Observation is not supported by this entity's backing");
 		return ((ObservableEntityInstanceBacking<E>) backing).observeField(entity, theFields.get(fieldIndex));
+	}
+
+	/**
+	 * @param <E> The type of the entity
+	 * @param <F> The type of the field
+	 * @param entity The entity whose field value to observe
+	 * @param getter The getter for the field to observe
+	 * @return The observable value for the field of the given entity
+	 * @throws IllegalArgumentException If the given entity is not governed by an instance of this class
+	 * @throws UnsupportedOperationException If the entity's backing does not support observation
+	 */
+	public static <E, F> ObservableField<? extends E, F> observeField(E entity, Function<? super E, ? extends F> getter)
+		throws IllegalArgumentException, UnsupportedOperationException {
+		if (!Proxy.isProxyClass(entity.getClass()))
+			throw new IllegalArgumentException(entity.getClass() + " instance is not an entity");
+		InvocationHandler proxyHandler = Proxy.getInvocationHandler(entity);
+		if (!(proxyHandler instanceof EntityReflector.ProxyMethodHandler))
+			throw new IllegalArgumentException(entity.getClass() + " instance is not an entity");
+		EntityReflector<E>.ProxyMethodHandler handler = (EntityReflector<E>.ProxyMethodHandler) proxyHandler;
+		EntityInstanceBacking backing = getHandler(entity).theBacking;
+		if (!(backing instanceof ObservableEntityInstanceBacking))
+			throw new UnsupportedOperationException("Observation is not supported by this entity's backing");
+		int fieldIndex = handler.getReflector().getField(getter).getFieldIndex();
+		return (ObservableField<? extends E, F>) ((ObservableEntityInstanceBacking<E>) backing).observeField(entity,
+			handler.getReflector().getFields().get(fieldIndex));
 	}
 
 	@Override
