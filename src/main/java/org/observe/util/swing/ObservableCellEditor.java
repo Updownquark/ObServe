@@ -123,19 +123,16 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			if (field.isSelectAllOnFocus())
 				field.selectAll();
 			return commit -> {
-				filter[0] = null;
 				if (commit) {
-					if (!field.isDirty()) {
-						editing[0] = false;
-						return true;
+					if (!field.isDirty()) { // No need to check the error or anything
 					} else if (field.getEditError() != null) {
 						field.redisplayErrorTooltip();
 						return false;
 					} else {
-						editing[0] = false;
 						field.flushEdits(null);
 					}
 				}
+				filter[0] = null;
 				editing[0] = false;
 				return true;
 			};
