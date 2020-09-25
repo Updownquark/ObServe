@@ -186,6 +186,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 
 		private E theValue;
 		private final ValueHolder<E> theModifyingValue;
+		private boolean isSetting;
 
 		private Object theIdentity;
 		private Object theChangesIdentity;
@@ -269,6 +270,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 				throw new UnsupportedOperationException("Not connected");
 			Object[] oldValue = new Object[1];
 			try (Transaction t = lock(true, cause)) {
+				isSetting = true;
 				getParent(true, parent -> {
 					try (Transaction parentT = parent.lock(true, cause)) {
 						E oldV = theValue;
@@ -278,6 +280,8 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 						theModifyingValue.clear();
 					}
 				});
+			} finally {
+				isSetting = false;
 			}
 			return (E) oldValue[0];
 		}
@@ -298,17 +302,17 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 
 		@Override
 		protected void initConfig(ObservableConfig parent, Object cause, Observable<?> findRefs) {
-			E oldValue = theValue;
-			try {
-				theValue = theFormat
-					.parse(ObservableConfigFormat.ctxFor(getSession(), parent, getParent(), () -> getParent(true, null), null, getUntil(),
-						theValue, findRefs, v -> theValue = v));
-			} catch (ParseException e) {
-				e.printStackTrace();
-				theValue = null;
-			}
-			if (oldValue != theValue) {
-				fire(createChangeEvent(oldValue, theValue, cause));
+			if (!isSetting) {
+				E oldValue = theValue;
+				try {
+					theValue = theFormat.parse(ObservableConfigFormat.ctxFor(getSession(), parent, getParent(), () -> getParent(true, null),
+						null, getUntil(), theValue, findRefs, v -> theValue = v));
+				} catch (ParseException e) {
+					e.printStackTrace();
+					theValue = null;
+				}
+				if (oldValue != theValue)
+					fire(createChangeEvent(oldValue, theValue, cause));
 			}
 		}
 
