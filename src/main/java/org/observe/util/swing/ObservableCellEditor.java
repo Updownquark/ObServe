@@ -31,6 +31,7 @@ import javax.swing.tree.TreeCellEditor;
 
 import org.observe.Observable;
 import org.observe.SettableValue;
+import org.observe.SimpleObservable;
 import org.observe.SimpleSettableValue;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
@@ -147,7 +148,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 	}
 
 	public static <M, C> ObservableCellEditor<M, C> createComboEditor(Function<? super C, String> renderer,
-		ObservableCollection<? extends C> options) {
+		BiFunction<? super ModelCell<? extends M, ? extends C>, Observable<?>, ObservableCollection<? extends C>> options) {
 		Function<C, String>[] filter = new Function[1];
 		String[] tooltip = new String[1];
 		Function<? super C, String>[] valueToolTip = new Function[1];
@@ -162,11 +163,14 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			}
 		});
 		Subscription[] editSub = new Subscription[1];
-		ObservableCellEditor<M, C> editor = new DefaultObservableCellEditor<>(combo, value, (e, c, f, tt, vtt) -> {
+		SimpleObservable<Void> until = SimpleObservable.build().safe(false).build();
+		ObservableCellEditor<M, C>[] editor = new ObservableCellEditor[1];
+		editor[0] = new DefaultObservableCellEditor<>(combo, value, (e, c, f, tt, vtt) -> {
 			filter[0] = f;
 			tooltip[0] = tt;
 			valueToolTip[0] = vtt;
-			editSub[0] = ObservableComboBoxModel.comboFor(combo, tt, vtt, options, value);
+			ObservableCollection<? extends C> cellOptions = options.apply(editor[0].getEditingCell(), until);
+			editSub[0] = ObservableComboBoxModel.comboFor(combo, tt, vtt, cellOptions, value);
 			return commit -> {
 				filter[0] = null;
 				if (combo.isEditable()) // Just copying from DefaultCellEditor, not currently editable here, so just for posterity
@@ -175,14 +179,15 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 					editSub[0].unsubscribe();
 					editSub[0] = null;
 				}
+				until.onNext(null);
 				return true;
 			};
 		}, editWithClicks(2));
 		value.noInitChanges().act(evt -> {
 			if (editSub[0] != null)
-				editor.stopCellEditing();
+				editor[0].stopCellEditing();
 		});
-		return editor;
+		return editor[0];
 	}
 
 	public static <M> ObservableCellEditor<M, Boolean> createCheckBoxEditor() {

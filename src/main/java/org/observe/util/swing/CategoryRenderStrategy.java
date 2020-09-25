@@ -9,6 +9,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
+import org.observe.Observable;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
 import org.qommons.collect.MutableCollectionElement;
@@ -95,6 +96,11 @@ public class CategoryRenderStrategy<R, C> {
 		}
 
 		public CategoryMutationStrategy asCombo(Function<? super C, String> renderer, ObservableCollection<? extends C> options) {
+			return asCombo(renderer, (__, ___) -> options);
+		}
+
+		public CategoryMutationStrategy asCombo(Function<? super C, String> renderer,
+			BiFunction<? super ModelCell<? extends R, ? extends C>, Observable<?>, ObservableCollection<? extends C>> options) {
 			withEditor(ObservableCellEditor.createComboEditor(renderer, options));
 			if (isRenderDefault)
 				formatText(renderer);
