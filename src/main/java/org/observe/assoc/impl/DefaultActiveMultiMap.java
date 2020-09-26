@@ -224,7 +224,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 					return found;
 			}
 			ObservableCollectionActiveManagers.DerivedCollectionElement<V> afterEl = getValueElement(afterKey, false);
-			ObservableCollectionActiveManagers.DerivedCollectionElement<V> beforeEl = getValueElement(afterKey, true);
+			ObservableCollectionActiveManagers.DerivedCollectionElement<V> beforeEl = getValueElement(beforeKey, true);
 			isNeedingNewKey = true;
 			ElementId newKeyId = null;
 			getAddKey().accept(key);
