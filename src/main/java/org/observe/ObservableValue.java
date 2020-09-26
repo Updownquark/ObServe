@@ -760,12 +760,18 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 					}
 					try (Transaction t = Lockable.lockAll(theSource, theEngine)) {
 						theSourceSub = theSource.changes().act(evt -> {
-							try (Transaction t2 = evt.isInitial() ? Transaction.NONE : theEngine.lock()) {
+							try (Transaction t2 = theEngine.lock()) {
 								if (getTransformation().isCached())
 									theCachedSource = evt.getNewValue();
-								BiTuple<T, T> change = theElement.sourceChanged(evt.getOldValue(), evt.getNewValue(), theEngine.get());
-								if (!evt.isInitial() && change != null)
-									fire(change.getValue1(), change.getValue2(), evt);
+								if (evt.isInitial()) {
+									// This call just makes sure the internal state is up-to-date,
+									// we don't have to do anything with the return values
+									getState();
+								} else {
+									BiTuple<T, T> change = theElement.sourceChanged(evt.getOldValue(), evt.getNewValue(), theEngine.get());
+									if (!evt.isInitial() && change != null)
+										fire(change.getValue1(), change.getValue2(), evt);
+								}
 							}
 						});
 						theTransformSub = theEngine.noInitChanges().act(evt -> {
