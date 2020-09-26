@@ -984,7 +984,7 @@ public interface ObservableConfigFormat<E> {
 							until, null, findReferences, fv -> fieldValues.put(fi, fv))));
 				else
 					formatField(session, null, (ComponentField<E, Object>) theFields.get(i), null, fieldValues.get(i), config, f -> {},
-						until, ctx.getChange());
+						until, ctx == null ? null : ctx.getChange());
 			}
 			E value = create(session, fieldValues, config, until, ctx);
 			config.withParsedItem(session, value);
