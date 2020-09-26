@@ -131,4 +131,30 @@ public class EntityReflectorTest {
 		d1.setString("blah");
 		Assert.assertEquals("blah", d1.toString());
 	}
+
+	@SuppressWarnings("javadoc")
+	public interface E extends Identified, NamedEntity {}
+
+	/**
+	 * Tests the ability to override Object methods such as {@link Object#equals(Object) equals()} and {@link Object#toString() toString()}
+	 */
+	@Test
+	public void testNamedEntityObjectOverride() {
+		EntityReflector<E> eRef = EntityReflector.build(TypeTokens.get().of(E.class), true).build();
+
+		QuickMap<String, Object> e1Fields = eRef.getFields().keySet().createMap();
+		E e1 = eRef.newInstance(new EntityReflector.EntityInstanceBacking() {
+			@Override
+			public Object get(int fieldIndex) {
+				return e1Fields.get(fieldIndex);
+			}
+
+			@Override
+			public void set(int fieldIndex, Object newValue) {
+				e1Fields.put(fieldIndex, newValue);
+			}
+		});
+		e1.setName("blah");
+		Assert.assertEquals("blah", e1.toString());
+	}
 }

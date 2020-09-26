@@ -32,6 +32,7 @@ import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.SettableValue;
 import org.observe.Subscription;
+import org.observe.config.ParentReference;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
@@ -939,6 +940,7 @@ public class EntityReflector<E> {
 		private final Method theMethod;
 		/** Methods in super interfaces of this method's entity that this method overrides */
 		protected MethodInterpreter<? super E, ? super R>[] theSuperMethods;
+		private SuperPath theDefaultSuper;
 		private final Class<?>[] theParameters;
 		private final Invokable<E, R> theInvokable;
 
@@ -960,6 +962,19 @@ public class EntityReflector<E> {
 
 		void setSuper(int superIndex, MethodInterpreter<? super E, ? super R> superMethod) {
 			theSuperMethods[superIndex] = superMethod;
+			if (theDefaultSuper == null || overrides(theSuperMethods[theDefaultSuper.index], superMethod))
+				theDefaultSuper = new SuperPath(superIndex,
+					superMethod instanceof SuperDelegateMethod ? superMethod.theDefaultSuper : null);
+		}
+
+		private static boolean overrides(MethodInterpreter<?, ?> target, MethodInterpreter<?, ?> override) {
+			while (target instanceof SuperDelegateMethod)
+				target = target.theSuperMethods[target.theDefaultSuper.index];
+			if (!(target instanceof ObjectMethodWrapper))
+				return false;
+			while (override instanceof SuperDelegateMethod)
+				override = override.theSuperMethods[override.theDefaultSuper.index];
+			return !(override instanceof ObjectMethodWrapper);
 		}
 
 		/** @return The reflector that this method belongs to */
@@ -996,16 +1011,21 @@ public class EntityReflector<E> {
 		 * Called when the method is invoked
 		 *
 		 * @param proxy The entity instance that this method is being invoked on
+		 * @param declaringClass The declaring class of the method that was called
 		 * @param path The path to the target super method to invoke
 		 * @param args The arguments with which the method was called
 		 * @param backing The backing of the entity
 		 * @return The return value of the method
 		 * @throws Throwable If the method throws an exception
 		 */
-		protected R invoke(E proxy, SuperPath path, Object[] args, EntityInstanceBacking backing) throws Throwable {
+		protected R invoke(E proxy, Class<?> declaringClass, SuperPath path, Object[] args, EntityInstanceBacking backing)
+			throws Throwable {
 			if (path == null)
 				return invokeLocal(proxy, args, backing);
-			return (R) theSuperMethods[path.index].invoke(proxy, path.parent, args, superBacking(backing, proxy, path, args));
+			if (declaringClass == Object.class)
+				path = theDefaultSuper;
+			return (R) theSuperMethods[path.index].invoke(proxy, declaringClass, path.parent, args,
+				superBacking(backing, proxy, path, args));
 		}
 
 		EntityInstanceBacking superBacking(EntityInstanceBacking backing, E proxy, SuperPath path, Object[] args) {
@@ -1031,8 +1051,8 @@ public class EntityReflector<E> {
 					&& ((FieldGetter<E, R>) MethodInterpreter.this).getField().getFieldIndex() == fieldIndex)
 					return theBacking.get(fieldIndex);
 				try {
-					return getReflector().theSuperFieldGetters.get(thePath.index).get(fieldIndex).invoke(theProxy, null, NO_ARGS,
-						theBacking);
+					MethodInterpreter<? super E, ?> superGetter = getReflector().theSuperFieldGetters.get(thePath.index).get(fieldIndex);
+					return superGetter.invoke(theProxy, superGetter.getReflector().theRawType, null, NO_ARGS, theBacking);
 				} catch (RuntimeException | Error e) {
 					throw e;
 				} catch (Throwable e) {
@@ -1048,8 +1068,8 @@ public class EntityReflector<E> {
 					return;
 				}
 				try {
-					getReflector().theSuperFieldSetters.get(thePath.index).get(fieldIndex).invoke(theProxy, null, new Object[] { newValue },
-						theBacking);
+					MethodInterpreter<? super E, ?> superSetter = getReflector().theSuperFieldSetters.get(thePath.index).get(fieldIndex);
+					superSetter.invoke(theProxy, superSetter.getReflector().theRawType, null, new Object[] { newValue }, theBacking);
 				} catch (RuntimeException | Error e) {
 					throw e;
 				} catch (Throwable e) {
@@ -1173,13 +1193,20 @@ public class EntityReflector<E> {
 	 * @param <F> The type of the field
 	 */
 	public static class FieldGetter<E, F> extends FieldRelatedMethod<E, F, F> {
+		private final boolean isParentReference;
 		FieldGetter(EntityReflector<E> reflector, Method method, ReflectedField<E, F> field) {
 			super(reflector, method, field);
+			isParentReference = method.getAnnotation(ParentReference.class) != null;
 		}
 
 		@Override
 		protected F invokeLocal(E proxy, Object[] args, EntityInstanceBacking backing) {
 			return (F) backing.get(getField().getFieldIndex());
+		}
+
+		/** @return Whether this getter is tagged with {@link ParentReference @ParentReference} */
+		public boolean isParentReference() {
+			return isParentReference;
 		}
 	}
 
@@ -1409,7 +1436,8 @@ public class EntityReflector<E> {
 		}
 
 		@Override
-		protected R invoke(E proxy, SuperPath path, Object[] args, EntityInstanceBacking backing) throws Throwable {
+		protected R invoke(E proxy, Class<?> declaringClass, SuperPath path, Object[] args, EntityInstanceBacking backing)
+			throws Throwable {
 			BetterSet<MethodInvocation> invocations = null;
 			ElementId invocation = null;
 			if (path != null) {
@@ -1424,7 +1452,7 @@ public class EntityReflector<E> {
 						invocations.mutableElement(invocation).remove();
 				}
 			} else
-				return super.invoke(proxy, path, args, backing);
+				return super.invoke(proxy, declaringClass, path, args, backing);
 		}
 	}
 
@@ -1601,13 +1629,21 @@ public class EntityReflector<E> {
 			@Override
 			protected String invokeLocal(Object proxy, Object[] args, EntityInstanceBacking backing) {
 				EntityReflector<?>.ProxyMethodHandler p = getHandler(proxy);
-				StringBuilder str = new StringBuilder(p.getReflector().theRawType.getSimpleName()).append(": ");
+				StringBuilder str = new StringBuilder(p.getReflector().theRawType.getSimpleName());
+				boolean hasPrintedField = false;
 				for (int i = 0; i < p.getReflector().theFields.keySet().size(); i++) {
-					if (i > 0)
+					if (p.getReflector().getFields().get(i).getGetter().isParentReference())
+						continue; // Avoid stack overflows
+					if (hasPrintedField)
 						str.append(", ");
+					else
+						str.append('{');
+					hasPrintedField = true;
 					str.append(p.getReflector().theFields.keySet().get(i)).append("=")
 					.append(((EntityReflector<Object>) p.getReflector()).getFields().get(i).get(proxy));
 				}
+				if (hasPrintedField)
+					str.append('}');
 				return str.toString();
 			}
 		};
@@ -1802,10 +1838,10 @@ public class EntityReflector<E> {
 		theIdFields = idFields.isEmpty() ? Collections.emptySet() : Collections.unmodifiableSet(idFields);
 
 		Map<Class<?>, SuperPath> superPaths = new HashMap<>();
+		theSuperPaths = Collections.unmodifiableMap(superPaths);
 		MiscAttributes attrs = new MiscAttributes();
 		populateMethods(theType, superPaths, fields, methods, //
 			customMethods == null ? Collections.emptyMap() : customMethods, attrs, messages);
-		theSuperPaths = Collections.unmodifiableMap(superPaths);
 		theFields = fields.unmodifiable();
 		theMethods = BetterCollections.unmodifiableSortedSet(methods);
 		for (EntityReflector<? super E> superRef : theSupers)
@@ -2050,10 +2086,10 @@ public class EntityReflector<E> {
 		} else {
 			IntList superIndexes = new IntList();
 			for (int i = 0; i < theSupers.size(); i++) {
-				populateSuperMethods(fields, methods, theSupers.get(i), i, errors);
 				superIndexes.add(i);
 				populateSuperPaths(superPaths, theSupers.get(i), superIndexes);
 				superIndexes.clear();
+				populateSuperMethods(fields, methods, theSupers.get(i), i, errors);
 			}
 		}
 	}
@@ -2404,17 +2440,18 @@ public class EntityReflector<E> {
 			if (interpreter == null)
 				throw new IllegalStateException("Method " + method + " not found!");
 			SuperPath path;
-			if (getSuper().isEmpty() || method.getDeclaringClass() == theRawType)
+			Class<?> dc = method.getDeclaringClass();
+			if (getSuper().isEmpty() || dc == theRawType)
 				path = null;
 			else
-				path = theSuperPaths.get(method.getDeclaringClass());
-			return interpreter.invoke((E) proxy, path, args, theBacking);
+				path = theSuperPaths.get(dc);
+			return interpreter.invoke((E) proxy, dc, path, args, theBacking);
 		}
 
 		protected <T> T invokeOnType(E proxy, MethodInterpreter<? super E, T> method, Object[] args) throws Throwable {
 			if (method.getReflector() != getReflector())
 				method = findMethodFromSuper(method);
-			return ((MethodInterpreter<E, T>) method).invoke(proxy, null, args, theBacking);
+			return ((MethodInterpreter<E, T>) method).invoke(proxy, theRawType, null, args, theBacking);
 		}
 	}
 
