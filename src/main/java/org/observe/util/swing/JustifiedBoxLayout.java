@@ -110,6 +110,24 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 	}
 
 	/**
+	 * Sets this layout's {@link #setMainAlignment(Alignment) main alignment} to {@link Alignment#LEADING}
+	 *
+	 * @return This layout
+	 */
+	public JustifiedBoxLayout mainLeading() {
+		return setMainAlignment(Alignment.LEADING);
+	}
+
+	/**
+	 * Sets this layout's {@link #setMainAlignment(Alignment) main alignment} to {@link Alignment#TRAILING}
+	 *
+	 * @return This layout
+	 */
+	public JustifiedBoxLayout mainTrailing() {
+		return setMainAlignment(Alignment.TRAILING);
+	}
+
+	/**
 	 * Sets this layout's {@link #setCrossAlignment(Alignment) cross alignment} to {@link Alignment#JUSTIFIED}
 	 *
 	 * @return This layout
@@ -125,6 +143,24 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 	 */
 	public JustifiedBoxLayout crossCenter() {
 		return setCrossAlignment(Alignment.CENTER);
+	}
+
+	/**
+	 * Sets this layout's {@link #setCrossAlignment(Alignment) main alignment} to {@link Alignment#LEADING}
+	 *
+	 * @return This layout
+	 */
+	public JustifiedBoxLayout crossLeading() {
+		return setCrossAlignment(Alignment.LEADING);
+	}
+
+	/**
+	 * Sets this layout's {@link #setCrossAlignment(Alignment) main alignment} to {@link Alignment#TRAILING}
+	 *
+	 * @return This layout
+	 */
+	public JustifiedBoxLayout crossTrailing() {
+		return setCrossAlignment(Alignment.TRAILING);
 	}
 
 	/**
