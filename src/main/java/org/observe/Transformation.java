@@ -1168,6 +1168,8 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 					if (msg != null)
 						return ReverseQueryResult.reject(msg);
 				}
+				if (!test)
+					theModifier.accept(newValue, transformValues);
 				// No source change
 				return ReverseQueryResult.value(transformValues.getCurrentSource());
 			} else if (theCreator == null)
