@@ -1326,7 +1326,7 @@ public interface ObservableConfigFormat<E> {
 			return instance;
 		}
 
-		private static <E, E2 extends E> boolean tryPopulateNewId(EntityConfiguredValueType<E2> entityType,
+		private <E2 extends E> boolean tryPopulateNewId(EntityConfiguredValueType<E2> entityType,
 			QuickMap<String, Object> fieldValues, ObservableConfig config, ObservableConfigParseSession session) {
 			if (config.getParent() == null)
 				return true;
@@ -1407,10 +1407,15 @@ public interface ObservableConfigFormat<E> {
 			}
 			if (distinctValue)
 				return true; // The given value is fine
-			if (fieldType == int.class)
+			if (fieldType == int.class) {
+				((ObservableConfigFormat<Integer>) getFields().get(idField.getName()).format).format(session, (int) id, //
+					(Integer) currentValue, config, __ -> {}, Observable.empty());
 				fieldValues.put(fieldIndex, (int) id);
-			else
+			} else {
+				((ObservableConfigFormat<Long>) getFields().get(idField.getName()).format).format(session, id, //
+					(Long) currentValue, config, __ -> {}, Observable.empty());
 				fieldValues.put(fieldIndex, id);
+			}
 			return true;
 		}
 
