@@ -4,6 +4,7 @@ import java.awt.Component;
 import java.awt.Dialog;
 import java.awt.Dialog.ModalityType;
 import java.awt.Frame;
+import java.awt.Image;
 import java.awt.LayoutManager;
 import java.awt.Rectangle;
 import java.awt.Window;
@@ -46,6 +47,7 @@ public class WindowPopulation {
 		private final Observable<?> theUntil;
 		private final SimpleObservable<Object> theDisposeOnClose;
 		private ObservableValue<String> theTitle;
+		private ObservableValue<? extends Image> theIcon;
 		private SettableValue<Integer> theX;
 		private SettableValue<Integer> theY;
 		private SettableValue<Integer> theWidth;
@@ -75,6 +77,12 @@ public class WindowPopulation {
 		@Override
 		public P withTitle(ObservableValue<String> title) {
 			theTitle = title;
+			return (P) this;
+		}
+
+		@Override
+		public P withIcon(ObservableValue<? extends Image> icon) {
+			theIcon = icon;
 			return (P) this;
 		}
 
@@ -143,6 +151,9 @@ public class WindowPopulation {
 				else
 					System.err.println(
 						"Title configured, but window type " + theWindow.getClass().getName() + " is not a recognized titled window");
+			}
+			if (theIcon != null) {
+				theIcon.changes().takeUntil(theUntil).act(evt -> theWindow.setIconImage(evt.getNewValue()));
 			}
 			SettableValue<Integer> x = theX;
 			SettableValue<Integer> y = theY;

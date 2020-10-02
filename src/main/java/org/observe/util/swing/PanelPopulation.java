@@ -922,8 +922,18 @@ public class PanelPopulation {
 		default P withTitle(String title) {
 			return withTitle(ObservableValue.of(TypeTokens.get().STRING, title));
 		}
-
 		P withTitle(ObservableValue<String> title);
+
+		default P withIcon(Class<?> clazz, String location) {
+			ImageIcon icon = ObservableSwingUtils.getIcon(clazz, location);
+			if (icon != null)
+				withIcon(icon.getImage());
+			return (P) this;
+		}
+		default P withIcon(Image icon) {
+			return withIcon(ObservableValue.of(TypeTokens.get().of(Image.class), icon));
+		}
+		P withIcon(ObservableValue<? extends Image> icon);
 
 		P withX(SettableValue<Integer> x);
 		P withY(SettableValue<Integer> y);

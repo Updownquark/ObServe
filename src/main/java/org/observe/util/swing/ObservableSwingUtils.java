@@ -1043,13 +1043,16 @@ public class ObservableSwingUtils {
 		return new ObservableUiBuilder();
 	}
 
-	public static class ObservableUiBuilder {
+	public static class ObservableUiBuilder extends WindowPopulation.DefaultWindowBuilder<JFrame, ObservableUiBuilder> {
 		private File theDefaultConfigLocation;
 		private String theConfigName;
-		private String theTitle;
+		private List<File> theOldConfigLocations;
+		private List<String> theOldConfigNames;
 		private Consumer<ObservableConfig> theConfigInit;
 
-		ObservableUiBuilder() {}
+		public ObservableUiBuilder() {
+			super(new JFrame(), Observable.empty(), true);
+		}
 
 		public ObservableUiBuilder withConfigAt(String configLocation) {
 			return withConfigAt(new File(configLocation));
@@ -1065,8 +1068,21 @@ public class ObservableSwingUtils {
 			return this;
 		}
 
-		public ObservableUiBuilder withTitle(String title) {
-			theTitle = title;
+		public ObservableUiBuilder withOldConfigAt(String configLocation) {
+			return withOldConfigAt(new File(configLocation));
+		}
+
+		public ObservableUiBuilder withOldConfigAt(File configLocation) {
+			if (theOldConfigLocations == null)
+				theOldConfigLocations = new LinkedList<>();
+			theOldConfigLocations.add(configLocation);
+			return this;
+		}
+
+		public ObservableUiBuilder withOldConfig(String configName) {
+			if (theOldConfigNames == null)
+				theOldConfigNames = new LinkedList<>();
+			theOldConfigNames.add(configName);
 			return this;
 		}
 
@@ -1092,6 +1108,32 @@ public class ObservableSwingUtils {
 			}
 			if (configFileLoc == null)
 				configFileLoc = "./" + configName + ".config";
+			if (!new File(configFileLoc).exists() && (theOldConfigNames != null || theOldConfigLocations != null)) {
+				if (theOldConfigNames != null) {
+					configFileLoc = System.getProperty(configName + ".config");
+					if ((configFileLoc == null || !new File(configFileLoc).canWrite()) && theDefaultConfigLocation != null)
+						configFileLoc = theDefaultConfigLocation.getPath();
+					if (configFileLoc == null)
+						configFileLoc = "./" + configName + ".config";
+					boolean found = false;
+					for (String oldConfigName : theOldConfigNames) {
+						String oldConfigLoc = System.getProperty(oldConfigName + ".config");
+						if (oldConfigLoc != null && new File(oldConfigLoc).exists()) {
+							new File(oldConfigLoc).renameTo(new File(configFileLoc));
+							found = true;
+							break;
+						}
+					}
+					if (!found) {
+						for (File oldConfigLoc : theOldConfigLocations) {
+							if (oldConfigLoc.exists()) {
+								oldConfigLoc.renameTo(new File(configFileLoc));
+								break;
+							}
+						}
+					}
+				}
+			}
 			ObservableConfig config = ObservableConfig.createRoot("config");
 			ObservableConfig.XmlEncoding encoding = ObservableConfig.XmlEncoding.DEFAULT;
 			File configFile = new File(configFileLoc);
@@ -1131,11 +1173,7 @@ public class ObservableSwingUtils {
 
 		private JFrame _build(ObservableConfig config, Function<ObservableConfig, Component> app) {
 			Component ui = app.apply(config);
-			PanelPopulation.WindowBuilder<JFrame, ?> populator = WindowPopulation.populateWindow(null, null, true, true);
-			populator.withBounds(config).withContent(ui);
-			if (theTitle != null)
-				populator.withTitle(theTitle);
-			return populator.run(null).getWindow();
+			return withBounds(config).withContent(ui).run(null).getWindow();
 		}
 	}
 
