@@ -1098,8 +1098,14 @@ public class ObservableSwingUtils {
 
 		public JFrame build(Function<ObservableConfig, Component> app) {
 			String configName = theConfigName;
-			if (configName == null && theDefaultConfigLocation == null)
-				throw new IllegalStateException("No configuration set to initialize configuration");
+			if (configName == null) {
+				if (theDefaultConfigLocation == null)
+					throw new IllegalStateException("No configuration set to initialize configuration");
+				else if (!theDefaultConfigLocation.exists())
+					throw new IllegalStateException("Config file does not exist");
+				else if (theDefaultConfigLocation.isDirectory())
+					throw new IllegalStateException("Config file is not a file");
+			}
 			String configFileLoc = null;
 			if (configName != null)
 				configFileLoc = System.getProperty(configName + ".config");
@@ -1146,6 +1152,8 @@ public class ObservableSwingUtils {
 					System.err.println("Could not read config file " + configFileLoc);
 					e.printStackTrace();
 				}
+				if (configName != null)
+					config.setName(configName);
 			} else {
 				if (configName != null)
 					config.setName(configName);
