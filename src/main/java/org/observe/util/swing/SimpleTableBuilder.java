@@ -849,6 +849,10 @@ implements TableBuilder<R, P> {
 
 		@Override
 		public boolean canImport(TransferSupport support) {
+			TableContentControl filter = theFilter.get();
+			if (filter != null && filter.getRowSorting() != null) {
+				return false; // Can't drag into the table when row-sorted
+			}
 			try (Transaction rowT = theRows.lock(true, support); Transaction colT = theColumns.lock(false, null)) {
 				int rowIndex;
 				boolean beforeRow;
