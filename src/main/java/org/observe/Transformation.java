@@ -247,8 +247,10 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 	 */
 	public int getArgIndex(ObservableValue<?> arg) throws IllegalArgumentException {
 		Integer index = theArgs.get(arg);
-		if (index == null)
+		if (index == null) {
+			theArgs.get(arg); // Debugging
 			throw new IllegalArgumentException("Unrecognized argument: " + arg);
+		}
 		return index.intValue();
 	}
 
