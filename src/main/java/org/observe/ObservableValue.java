@@ -632,6 +632,8 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 
 		@Override
 		public boolean equals(Object obj) {
+			if (obj instanceof Identifiable)
+				obj = ((Identifiable) obj).getIdentity();
 			return getIdentity().equals(obj);
 		}
 
