@@ -7,8 +7,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Set;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -18,6 +21,7 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
+import org.qommons.ArrayUtils;
 import org.qommons.Named;
 import org.qommons.StringUtils;
 import org.qommons.TimeUtils;
@@ -137,6 +141,14 @@ public interface TableContentControl {
 	List<String> getRowSorting();
 
 	List<String> getColumnSorting();
+
+	default TableContentControl or(TableContentControl other) {
+		return new OrFilter(this, other);
+	}
+
+	public static TableContentControl of(String category, Predicate<CharSequence> filter) {
+		return new PredicateFilter(category, filter);
+	}
 
 	public static final Pattern INT_RANGE_PATTERN = Pattern.compile("(?<i1>\\d+)\\-(?<i2>\\d+)");
 
@@ -954,14 +966,50 @@ public interface TableContentControl {
 		}
 
 		@Override
+		public TableContentControl or(TableContentControl other) {
+			return new OrFilter(ArrayUtils.add(theContent, other));
+		}
+
+		@Override
 		public String toString() {
+			Set<String> printed = new HashSet<>();
 			StringBuilder str = new StringBuilder();
 			for (int i = 0; i < theContent.length; i++) {
-				if (i > 0)
-					str.append(' ');
-				str.append(theContent[i]);
+				String contentStr = theContent[i].toString();
+				if (printed.add(contentStr)) {
+					if (i > 0)
+						str.append(' ');
+					str.append(theContent[i]);
+				}
 			}
 			return str.toString();
+		}
+	}
+
+	public static class PredicateFilter implements TableContentControl {
+		private final String theCategory;
+		private final Predicate<CharSequence> theFilter;
+
+		public PredicateFilter(String category, Predicate<CharSequence> filter) {
+			theCategory = category;
+			theFilter = filter;
+		}
+
+		@Override
+		public int[][] findMatches(ValueRenderer<?> category, CharSequence text) {
+			if (!theCategory.equals(category.getName()))
+				return NO_MATCH;
+			return theFilter.test(text) ? new int[][] { { 0, text.length() } } : NO_MATCH;
+		}
+
+		@Override
+		public List<String> getRowSorting() {
+			return null;
+		}
+
+		@Override
+		public List<String> getColumnSorting() {
+			return null;
 		}
 	}
 
