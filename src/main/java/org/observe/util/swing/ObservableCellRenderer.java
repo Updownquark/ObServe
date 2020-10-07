@@ -316,7 +316,7 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 		}
 	}
 
-	public static <M, C, R extends JLabel> DefaultObservableCellRenderer<M, C> formatted(BiFunction<? super M, ? super C, String> format) {
+	public static <M, C> DefaultObservableCellRenderer<M, C> formatted(BiFunction<? super M, ? super C, String> format) {
 		class BiFormattedCellRenderer extends DefaultObservableCellRenderer<M, C> {
 			public BiFormattedCellRenderer() {
 				super((m, c) -> format.apply(m.get(), c));
@@ -330,7 +330,7 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 		return new BiFormattedCellRenderer();
 	}
 
-	public static <M, C, R extends JLabel> DefaultObservableCellRenderer<M, C> formatted(Function<? super C, String> format) {
+	public static <M, C> DefaultObservableCellRenderer<M, C> formatted(Function<? super C, String> format) {
 		class BiFormattedCellRenderer extends DefaultObservableCellRenderer<M, C> {
 			public BiFormattedCellRenderer() {
 				super((m, c) -> format.apply(c));
