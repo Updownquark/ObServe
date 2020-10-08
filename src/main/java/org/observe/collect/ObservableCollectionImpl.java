@@ -438,7 +438,7 @@ public final class ObservableCollectionImpl {
 			for (ChangeValue<E> elChange : tracker.elements)
 				elements.add(new CollectionChangeEvent.ElementChange<>(elChange.newValue, elChange.oldValue, elChange.index));
 			CollectionChangeEvent<E> evt = new CollectionChangeEvent<>(tracker.type, elements, cause);
-			try (Transaction t = CollectionChangeEvent.use(evt)) {
+			try (Transaction t = evt.use()) {
 				observer.onNext(evt);
 			}
 		}
@@ -598,7 +598,7 @@ public final class ObservableCollectionImpl {
 											return;
 										ObservableValueEvent<String> event = createChangeEvent(theOldMessage, message, cause);
 										theOldMessage = message;
-										try (Transaction evtT = Causable.use(event)) {
+										try (Transaction evtT = event.use()) {
 											observer.onNext(event);
 										}
 									}
@@ -692,7 +692,7 @@ public final class ObservableCollectionImpl {
 								event = createInitialEvent(theOldElement, theOldValue, null);
 							} else
 								event = createInitialEvent(null, null, null);
-							try (Transaction evtT = Causable.use(event)) {
+							try (Transaction evtT = event.use()) {
 								observer.onNext(event);
 							}
 						}
@@ -716,7 +716,7 @@ public final class ObservableCollectionImpl {
 							ObservableElementEvent<E> event = createChangeEvent(theOldElement, theOldValue, newElement, newValue, cause);
 							theOldElement = newElement;
 							theOldValue = newValue;
-							try (Transaction evtT = Causable.use(event)) {
+							try (Transaction evtT = event.use()) {
 								observer.onNext(event);
 							}
 						}
@@ -1001,7 +1001,7 @@ public final class ObservableCollectionImpl {
 								theCurrentElement = element;
 								theLastMatch = element == null ? null : element.getElementId();
 								ObservableElementEvent<E> evt = createChangeEvent(oldId, oldVal, newId, newVal, cause);
-								try (Transaction evtT = Causable.use(evt)) {
+								try (Transaction evtT = evt.use()) {
 									observer.onNext(evt);
 								}
 							}
@@ -1017,7 +1017,7 @@ public final class ObservableCollectionImpl {
 						ElementId initId = listener.theCurrentElement == null ? null : listener.theCurrentElement.getElementId();
 						E initVal = listener.theCurrentElement == null ? theDefault.get() : listener.theCurrentElement.get();
 						ObservableElementEvent<E> evt = createInitialEvent(initId, initVal, null);
-						try (Transaction evtT = Causable.use(evt)) {
+						try (Transaction evtT = evt.use()) {
 							observer.onNext(evt);
 						}
 						return new Subscription() {
@@ -1033,7 +1033,7 @@ public final class ObservableCollectionImpl {
 								ElementId endId = listener.theCurrentElement == null ? null : listener.theCurrentElement.getElementId();
 								E endVal = listener.theCurrentElement == null ? theDefault.get() : listener.theCurrentElement.get();
 								ObservableElementEvent<E> evt2 = createChangeEvent(endId, endVal, endId, endVal, null);
-								try (Transaction evtT = Causable.use(evt2)) {
+								try (Transaction evtT = evt2.use()) {
 									observer.onCompleted(evt2);
 								}
 							}
@@ -1210,7 +1210,7 @@ public final class ObservableCollectionImpl {
 									if (!Objects.equals(oldValue[0], newValue)) {
 										ObservableValueEvent<String> evt = createChangeEvent(oldValue[0], newValue, collEvt);
 										oldValue[0] = newValue;
-										try (Transaction evtT = Causable.use(evt)) {
+										try (Transaction evtT = evt.use()) {
 											observer.onNext(evt);
 										}
 									}
@@ -1883,7 +1883,7 @@ public final class ObservableCollectionImpl {
 					return counts.init(theLeft, theRight, null, false, c -> {
 						satisfied[0] = theSatisfiedCheck.test(counts);
 						ObservableValueEvent<Boolean> evt = createInitialEvent(satisfied[0], null);
-						try (Transaction t = ObservableValueEvent.use(evt)) {
+						try (Transaction t = evt.use()) {
 							observer.onNext(evt);
 						}
 					});
@@ -2068,7 +2068,7 @@ public final class ObservableCollectionImpl {
 					theSize--;
 				ObservableCollectionEvent<E> reversed = new ObservableCollectionEvent<>(evt.getElementId().reverse(), getType(), index,
 					evt.getType(), evt.getOldValue(), evt.getNewValue(), evt);
-				try (Transaction t = ObservableCollectionEvent.use(reversed)) {
+				try (Transaction t = reversed.use()) {
 					theObserver.accept(reversed);
 				}
 			}
@@ -2509,7 +2509,7 @@ public final class ObservableCollectionImpl {
 							ObservableCollectionEvent<? extends T> evt2 = new ObservableCollectionEvent<>(mapId(el.getElementId()),
 								getType(), index++, CollectionChangeType.set, evt.getOldValue().apply(sourceVal),
 								currentMap[0].apply(sourceVal), evt);
-							try (Transaction evtT = Causable.use(evt2)) {
+							try (Transaction evtT = evt2.use()) {
 								observer.accept(evt2);
 							}
 							el = theSource.getAdjacentElement(el.getElementId(), !isReversed);
@@ -2555,7 +2555,7 @@ public final class ObservableCollectionImpl {
 								}
 								ObservableCollectionEvent<? extends T> evt2 = new ObservableCollectionEvent<>(mapId(evt.getElementId()),
 									getType(), index, evt.getType(), oldValue, newValue, evt);
-								try (Transaction evtT = Causable.use(evt2)) {
+								try (Transaction evtT = evt2.use()) {
 									observer.accept(evt2);
 								}
 							}
@@ -2739,7 +2739,7 @@ public final class ObservableCollectionImpl {
 		}
 
 		void fireListeners(ObservableCollectionEvent<T> event) {
-			try (Transaction t = ObservableCollectionEvent.use(event)) {
+			try (Transaction t = event.use()) {
 				theListeners.forEach(//
 					listener -> listener.accept(event));
 			}
@@ -3058,7 +3058,7 @@ public final class ObservableCollectionImpl {
 			if (isEmpty())
 				return;
 			Causable cause = Causable.simpleCause(null);
-			try (Transaction cst = Causable.use(cause); Transaction t = lock(true, cause)) {
+			try (Transaction cst = cause.use(); Transaction t = lock(true, cause)) {
 				if (!theFlow.clear()) {
 					new ArrayList<>(theDerivedElements).forEach(el -> {
 						if (el.element.canRemove() == null)
@@ -3413,7 +3413,7 @@ public final class ObservableCollectionImpl {
 											CollectionChangeEvent<E> clearEvt = new CollectionChangeEvent<>(CollectionChangeType.remove, //
 												elements, collEvt);
 											debug(s -> s.append("clear: ").append(clearEvt));
-											try (Transaction evtT = Causable.use(clearEvt)) {
+											try (Transaction evtT = clearEvt.use()) {
 												observer.onNext(clearEvt);
 											}
 										}
@@ -3436,7 +3436,7 @@ public final class ObservableCollectionImpl {
 										CollectionChangeEvent<E> populateEvt = new CollectionChangeEvent<>(CollectionChangeType.add, //
 											elements, collEvt);
 										debug(s -> s.append("populate: ").append(populateEvt));
-										try (Transaction evtT = Causable.use(populateEvt)) {
+										try (Transaction evtT = populateEvt.use()) {
 											observer.onNext(populateEvt);
 										}
 										changes = new CollectionChangesObservable<>(collection);

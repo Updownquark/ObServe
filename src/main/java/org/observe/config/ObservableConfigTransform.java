@@ -28,7 +28,6 @@ import org.observe.config.ObservableConfigFormat.EntityConfigFormat;
 import org.observe.config.ObservableConfigFormat.MapEntry;
 import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.TypeTokens;
-import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
@@ -334,7 +333,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		}
 
 		private void fire(ObservableValueEvent<E> event) {
-			try (Transaction t = Causable.use(event)) {
+			try (Transaction t = event.use()) {
 				theListeners.forEach(//
 					listener -> listener.onNext(event));
 			}
@@ -439,7 +438,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 							el.get().modifying = null;
 						} else {
 							ObservableConfigEvent childChange = collectionChange.asFromChild();
-							try (Transaction ct = Causable.use(childChange)) {
+							try (Transaction ct = childChange.use()) {
 								newValue = theFormat.parse(ObservableConfigFormat.ctxFor(getSession(), getRoot(), //
 									ObservableValue.of(el.get().getConfig()), () -> collectionChange.eventTarget.addChild(theChildName),
 									childChange, getUntil(), el.get().get(), Observable.constant(null), null));
@@ -481,7 +480,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		}
 
 		private void fire(ObservableCollectionEvent<E> event) {
-			try (Transaction t = Causable.use(event)) {
+			try (Transaction t = event.use()) {
 				theListeners.forEach(//
 					listener -> listener.accept(event));
 			}

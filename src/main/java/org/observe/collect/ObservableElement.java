@@ -5,7 +5,6 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
-import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.Transaction;
 import org.qommons.collect.CollectionElement;
@@ -157,7 +156,7 @@ public interface ObservableElement<T> extends ObservableValue<T> {
 					@Override
 					public Subscription subscribe(Observer<? super ObservableElementEvent<T>> observer) {
 						ObservableElementEvent<T> event = createInitialEvent(null, null, null);
-						try (Transaction t = Causable.use(event)) {
+						try (Transaction t = event.use()) {
 							observer.onNext(event);
 						}
 						return Subscription.NONE;

@@ -5,7 +5,6 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Function;
 
 import org.observe.util.TypeTokens;
-import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
@@ -137,7 +136,7 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 			if (!theListeners.isEmpty()) {
 				ObservableValueEvent<T>[] evt = new ObservableValueEvent[] { createChangeEvent(oldValue, value, cause) };
 				LinkedList<Transaction> finishers = new LinkedList<>();
-				finishers.add(Causable.use(evt[0]));
+				finishers.add(evt[0].use());
 				try {
 					theListeners.forEach(//
 						listener -> {
@@ -154,7 +153,7 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 								// also have not been told of the now-vetoed value
 								oldStamp[0] = listener.lastUpdated;
 								evt[0] = createChangeEvent(listener.knownValue, value, cause);
-								finishers.add(Causable.use(evt[0]));
+								finishers.add(evt[0].use());
 							}
 							listener.lastUpdated = newStamp;
 							listener.knownValue = value;
@@ -201,12 +200,12 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 			isAlive = false;
 			long stamp = theStamp;
 			ObservableValueEvent<T> completeEvt = createChangeEvent(theValue, theValue, cause);
-			try (Transaction evtT = Causable.use(completeEvt)) {
+			try (Transaction evtT = completeEvt.use()) {
 				theListeners.forEach(//
 					listener -> {
 						if (listener.lastUpdated < stamp) {
 							ObservableValueEvent<T> changeEvt = createChangeEvent(listener.knownValue, theValue, completeEvt);
-							try (Transaction cet = Causable.use(changeEvt)) {
+							try (Transaction cet = changeEvt.use()) {
 								listener.observer.onNext(changeEvt);
 							}
 							listener.lastUpdated = stamp;

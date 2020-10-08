@@ -26,7 +26,6 @@ import org.observe.collect.ObservableCollectionEvent;
 import org.observe.collect.ObservableSet;
 import org.observe.util.TypeTokens;
 import org.observe.util.WeakListening;
-import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.Lockable;
 import org.qommons.Transactable;
@@ -414,7 +413,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 			if (!theKeySetListeners.isEmpty()) {
 				ObservableCollectionEvent<K> keyEvent = new ObservableCollectionEvent<>(theExposedId, getKeyType(),
 					keyIndex, CollectionChangeType.remove, key, key, cause);
-				try (Transaction evtT = Causable.use(keyEvent)) {
+				try (Transaction evtT = keyEvent.use()) {
 					theKeySetListeners.forEach(//
 						listener -> listener.accept(keyEvent));
 				}
@@ -432,7 +431,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 							V v = value.get().get();
 							ObservableCollectionEvent<V> event = new ObservableCollectionEvent<>(value.getElementId(), valueType, index--, //
 								CollectionChangeType.remove, v, v, cause);
-							try (Transaction evtT = Causable.use(event)) {
+							try (Transaction evtT = event.use()) {
 								listeners.forEach(//
 									listener -> listener.accept(event));
 							}
@@ -445,7 +444,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 							V v = value.get().get();
 							ObservableCollectionEvent<V> event = new ObservableCollectionEvent<>(value.getElementId(), valueType, index++, //
 								CollectionChangeType.add, null, v, cause);
-							try (Transaction evtT = Causable.use(event)) {
+							try (Transaction evtT = event.use()) {
 								listeners.forEach(//
 									listener -> listener.accept(event));
 							}
@@ -454,7 +453,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 					if (!theKeySetListeners.isEmpty()) {
 						ObservableCollectionEvent<K> keyEvent = new ObservableCollectionEvent<>(theExposedId, getKeyType(), //
 							theActiveEntries.getElementsBefore(activeEntryId), CollectionChangeType.set, oldKey, newKey, cause);
-						try (Transaction evtT = Causable.use(keyEvent)) {
+						try (Transaction evtT = keyEvent.use()) {
 							theKeySetListeners.forEach(//
 								listener -> listener.accept(keyEvent));
 						}
@@ -769,7 +768,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 				ObservableMultiMapEvent<K, V> mapEvent = new ObservableMultiMapEvent<>(theEntry.theExposedId, addedId, keyType, valueType,
 					keyIndex, valueIndex, //
 					CollectionChangeType.add, key, null, val, cause);
-				try (Transaction evtT = Causable.use(mapEvent)) {
+				try (Transaction evtT = mapEvent.use()) {
 					theMapListeners.forEach(//
 						listener -> listener.accept(mapEvent));
 				}
@@ -777,7 +776,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 			if (newKey) {
 				ObservableCollectionEvent<K> keyEvent = new ObservableCollectionEvent<>(theEntry.theExposedId, keyType, keyIndex, //
 					CollectionChangeType.add, null, key, cause);
-				try (Transaction evtT = Causable.use(keyEvent)) {
+				try (Transaction evtT = keyEvent.use()) {
 					theKeySetListeners.forEach(//
 						listener -> listener.accept(keyEvent));
 				}
@@ -786,7 +785,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 			if (valueListeners != null) {
 				ObservableCollectionEvent<V> valueEvent = new ObservableCollectionEvent<>(addedId, valueType, valueIndex,
 					CollectionChangeType.add, null, val, cause);
-				try (Transaction evtT = Causable.use(valueEvent)) {
+				try (Transaction evtT = valueEvent.use()) {
 					valueListeners.forEach(//
 						listener -> listener.accept(valueEvent));
 				}
@@ -803,7 +802,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 				ObservableMultiMapEvent<K, V> event = new ObservableMultiMapEvent<>(//
 					theEntry.theExposedId, valueId, getKeyType(), valueType, theActiveEntries.getElementsBefore(theEntry.activeEntryId),
 					valueIndex, CollectionChangeType.set, key, oldValue, newValue, cause);
-				try (Transaction evtT = Causable.use(event)) {
+				try (Transaction evtT = event.use()) {
 					theMapListeners.forEach(//
 						listener -> listener.accept(event));
 				}
@@ -812,7 +811,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 			if (valueListeners != null) {
 				ObservableCollectionEvent<V> valueEvent = new ObservableCollectionEvent<>(valueId, valueType, valueIndex,
 					CollectionChangeType.set, oldValue, newValue, cause);
-				try (Transaction evtT = Causable.use(valueEvent)) {
+				try (Transaction evtT = valueEvent.use()) {
 					valueListeners.forEach(//
 						listener -> listener.accept(valueEvent));
 				}
@@ -829,7 +828,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 				ObservableMultiMapEvent<K, V> event = new ObservableMultiMapEvent<>(//
 					theEntry.theExposedId, valueId, keyType, valueType, keyIndex, valueIndex, //
 					CollectionChangeType.remove, key, value, value, cause);
-				try (Transaction evtT = Causable.use(event)) {
+				try (Transaction evtT = event.use()) {
 					theMapListeners.forEach(//
 						listener -> listener.accept(event));
 				}
@@ -839,7 +838,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 			if (valueListeners != null) {
 				ObservableCollectionEvent<V> valueEvent = new ObservableCollectionEvent<>(valueId, getValueType(), valueIndex,
 					CollectionChangeType.remove, value, value, cause);
-				try (Transaction evtT = Causable.use(valueEvent)) {
+				try (Transaction evtT = valueEvent.use()) {
 					valueListeners.forEach(//
 						listener -> listener.accept(valueEvent));
 				}
@@ -862,7 +861,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 						ObservableMultiMapEvent<K, V> event = new ObservableMultiMapEvent<>(//
 							theEntry.theExposedId, valueId, keyType, valueType, keyIndex, valueIndex, //
 							CollectionChangeType.remove, key, val, val, cause);
-						try (Transaction evtT = Causable.use(event)) {
+						try (Transaction evtT = event.use()) {
 							theMapListeners.forEach(//
 								listener -> listener.accept(event));
 						}
@@ -870,7 +869,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 					if (valueListeners != null) {
 						ObservableCollectionEvent<V> valueEvent = new ObservableCollectionEvent<>(valueId, valueType, valueIndex--,
 							CollectionChangeType.remove, val, val, cause);
-						try (Transaction evtT = Causable.use(valueEvent)) {
+						try (Transaction evtT = valueEvent.use()) {
 							valueListeners.forEach(//
 								listener -> listener.accept(valueEvent));
 						}

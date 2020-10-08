@@ -104,7 +104,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			tCause = (Causable) cause;
 		} else {
 			tCause = Causable.simpleCause(cause);
-			causeFinish = Causable.use(tCause);
+			causeFinish = tCause.use();
 		}
 		if (write && tCause != null)
 			theTransactionCauses.add(tCause);
@@ -305,7 +305,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	}
 
 	void fire(ObservableCollectionEvent<E> evt) {
-		try (Transaction t = ObservableCollectionEvent.use(evt)) {
+		try (Transaction t = evt.use()) {
 			theObservers.forEach(//
 				listener -> listener.accept(evt));
 		}
@@ -346,7 +346,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 					// Correct the storage structure
 					boolean[] thisMoved = new boolean[1];
 					RepairOperation op = new RepairOperation(getCurrentCause());
-					try (Transaction opT = Causable.use(op); Transaction vt = lock(true, op)) {
+					try (Transaction opT = op.use(); Transaction vt = lock(true, op)) {
 						((ValueStoredCollection<E>) theValues).repair(valueEl.getElementId(),
 							new ValueStoredCollection.RepairListener<E, Void>() {
 							@Override
@@ -401,7 +401,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	}
 
 	/** A Causable representing a {@link ValueStoredCollection} repair operation */
-	static class RepairOperation extends Causable {
+	static class RepairOperation extends Causable.AbstractCausable {
 		RepairOperation(Object cause) {
 			super(cause);
 		}

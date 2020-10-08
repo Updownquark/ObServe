@@ -11,7 +11,7 @@ import org.qommons.Causable;
  *
  * @param <E> The type of element in the changed collection
  */
-public class CollectionChangeEvent<E> extends Causable {
+public class CollectionChangeEvent<E> extends Causable.AbstractCausable {
 	/**
 	 * Represents a change to a single element in a collection
 	 *
@@ -93,7 +93,7 @@ public class CollectionChangeEvent<E> extends Causable {
 	/**
 	 * Differs from the {@link #elements} field in that if this change's {@link #type} is {@link CollectionChangeType#remove}, the element
 	 * list is {@link #getElementsReversed() reversed}, since this is generally the order elements should be processed.
-	 * 
+	 *
 	 * @return The (possibly reversed) list of elements in this change
 	 */
 	public List<ElementChange<E>> getElements() {

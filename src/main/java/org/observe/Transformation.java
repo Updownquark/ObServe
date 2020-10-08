@@ -17,7 +17,6 @@ import java.util.function.Supplier;
 
 import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
-import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.Lockable;
@@ -2130,7 +2129,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 						StampedArgValues oldState = theCachedValues;
 						theCachedValues = newState;
 						ObservableValueEvent<TransformationState> evt = EngineImpl.this.createChangeEvent(oldState, newState, cause);
-						try (Transaction t = Causable.use(evt)) {
+						try (Transaction t = evt.use()) {
 							theChanges.forEach(//
 								l -> l.onNext(evt));
 						}

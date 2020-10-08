@@ -124,7 +124,7 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 			theStamp++;
 			theValue = value;
 			ObservableValueEvent<T> evt = createChangeEvent(old, value, cause);
-			try (Transaction evtT = ObservableValueEvent.use(evt)) {
+			try (Transaction evtT = evt.use()) {
 				theEventer.onNext(evt);
 			}
 			return old;

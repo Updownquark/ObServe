@@ -24,7 +24,6 @@ import org.observe.collect.ObservableSet;
 import org.observe.collect.SettableElement;
 import org.observe.util.ObservableUtils.SubscriptionCause;
 import org.observe.util.TypeTokens;
-import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
@@ -109,13 +108,13 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 		try (Transaction t = lock(false, null)) {
 			Subscription sub = onChange(action);
 			SubscriptionCause subCause = new SubscriptionCause();
-			try (Transaction ct = SubscriptionCause.use(subCause)) {
+			try (Transaction ct = subCause.use()) {
 				int index = forward ? 0 : size() - 1;
 				for (CollectionElement<Map.Entry<K, V>> entryEl : entrySet().elements()) {
 					ObservableMultiMapEvent<K, V> mapEvent = new ObservableMultiMapEvent<>(entryEl.getElementId(), entryEl.getElementId(),
 						getKeyType(), getValueType(), index, index, CollectionChangeType.add, entryEl.get().getKey(), null,
 						entryEl.get().getValue(), subCause);
-					try (Transaction mt = ObservableMultiMapEvent.use(mapEvent)) {
+					try (Transaction mt = mapEvent.use()) {
 						action.accept(mapEvent);
 					}
 					if (forward)
@@ -132,13 +131,13 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 				try (Transaction unsubT = lock(false, null)) {
 					sub.unsubscribe();
 					SubscriptionCause unsubCause = new SubscriptionCause();
-					try (Transaction ct = SubscriptionCause.use(unsubCause)) {
+					try (Transaction ct = unsubCause.use()) {
 						int index = !forward ? 0 : size() - 1;
 						for (CollectionElement<Map.Entry<K, V>> entryEl : entrySet().elements()) {
 							ObservableMultiMapEvent<K, V> mapEvent = new ObservableMultiMapEvent<>(entryEl.getElementId(),
 								entryEl.getElementId(), getKeyType(), getValueType(), index, index, CollectionChangeType.remove,
 								entryEl.get().getKey(), entryEl.get().getValue(), entryEl.get().getValue(), subCause);
-							try (Transaction mt = ObservableMultiMapEvent.use(mapEvent)) {
+							try (Transaction mt = mapEvent.use()) {
 								action.accept(mapEvent);
 							}
 							if (forward)
@@ -228,7 +227,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 									thePreviousElement = null;
 								else
 									thePreviousElement = evt.getElementId();
-								try (Transaction evtT = Causable.use(evt2)) {
+								try (Transaction evtT = evt2.use()) {
 									observer.onNext(evt2);
 								}
 							});
@@ -317,7 +316,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 										String newValue = get();
 										if (!Objects.equals(newValue, oldValue[0])) {
 											ObservableValueEvent<String> enabledEvt = createChangeEvent(oldValue[0], newValue, mapEvt);
-											try (Transaction evtT = Causable.use(enabledEvt)) {
+											try (Transaction evtT = enabledEvt.use()) {
 												observer.onNext(enabledEvt);
 											}
 										}
@@ -412,7 +411,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 							ObservableElementEvent<V> initEvt = new ObservableElementEvent<>(getType(), true, null,
 								entry == null ? null : entry.getElementId(), //
 									null, entry == null ? null : entry.getValue(), null);
-							try (Transaction evtT = Causable.use(initEvt)) {
+							try (Transaction evtT = initEvt.use()) {
 								observer.onNext(initEvt);
 							}
 							return changes.subscribe(observer);
@@ -665,7 +664,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 					oldEntry = new SimpleMapEntry<>(mapEvt.getKey(), mapEvt.getOldValue(), false);
 				ObservableCollectionEvent<Map.Entry<K, V>> entryEvt = new ObservableCollectionEvent<>(//
 					mapEvt.getElementId(), getType(), mapEvt.getIndex(), mapEvt.getType(), oldEntry, entry, mapEvt);
-				try (Transaction evtT = Causable.use(entryEvt)) {
+				try (Transaction evtT = entryEvt.use()) {
 					observer.accept(entryEvt);
 				}
 			});
@@ -884,7 +883,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 				V oldValue = ((MapEntry) evt.getNewValue()).getOldValue();
 				ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent<>(evt.getElementId(), getKeyType(), theValueType, evt.getIndex(),
 					evt.getType(), evt.getNewValue().getKey(), oldValue, evt.getNewValue().getValue(), evt);
-				try (Transaction t = Causable.use(mapEvent)) {
+				try (Transaction t = mapEvent.use()) {
 					action.accept(mapEvent);
 				}
 			});

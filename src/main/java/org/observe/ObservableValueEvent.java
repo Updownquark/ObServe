@@ -10,7 +10,7 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <T> The compile-time type of the observable's value
  */
-public class ObservableValueEvent<T> extends Causable implements ValueChangeEvent<T> {
+public class ObservableValueEvent<T> extends Causable.AbstractCausable implements ValueChangeEvent<T> {
 	private final boolean isInitial;
 	private final T theOldValue;
 	private final T theNewValue;

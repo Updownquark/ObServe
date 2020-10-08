@@ -33,7 +33,6 @@ import org.observe.config.ObservableConfigFormat.ReferenceFormat.FormattedField;
 import org.observe.util.EntityReflector;
 import org.observe.util.EntityReflector.FieldChange;
 import org.observe.util.TypeTokens;
-import org.qommons.Causable;
 import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
 import org.qommons.Transactable;
@@ -866,7 +865,7 @@ public interface ObservableConfigFormat<E> {
 					if (change.relativePath.size() == 1 && !change.oldName.equals(child.getName())) {
 						if (fieldIdx >= 0) {
 							ObservableConfigEvent childChange = change.asFromChild();
-							try (Transaction ct = Causable.use(childChange)) {
+							try (Transaction ct = childChange.use()) {
 								parseUpdatedField(ctx, ctx.getPreviousValue(), c, fieldIdx, childChange);
 							}
 						}
@@ -1038,7 +1037,7 @@ public interface ObservableConfigFormat<E> {
 					if (change.relativePath.isEmpty() || fieldConfig != change.relativePath.get(0)) {
 						ObservableConfigEvent childChange = change.asFromChild();
 						F newValue;
-						try (Transaction ct = Causable.use(childChange)) {
+						try (Transaction ct = childChange.use()) {
 							newValue = field.format
 								.parse(ctxFor(ctx.getSession(), entityConfig, fieldConfig, supply, childChange, ctx.getUntil(), oldValue,
 									ctx.findReferences(), fv -> field.setter.set(ctx.getPreviousValue(), fv, childChange)));

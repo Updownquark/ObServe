@@ -341,7 +341,7 @@ public class ObservableConfig implements Transactable, Stamped {
 		}
 	}
 
-	public static class ObservableConfigEvent extends Causable {
+	public static class ObservableConfigEvent extends Causable.AbstractCausable {
 		public final CollectionChangeType changeType;
 		public final ObservableConfig eventTarget;
 		public final List<ObservableConfig> relativePath;
@@ -929,7 +929,7 @@ public class ObservableConfig implements Transactable, Stamped {
 				};
 			} else {
 				Causable synCause = Causable.simpleCause(cause);
-				Transaction causeT = Causable.use(synCause);
+				Transaction causeT = synCause.use();
 				theRootCausable.accept(synCause);
 				return () -> {
 					causeT.close();
@@ -1165,7 +1165,7 @@ public class ObservableConfig implements Transactable, Stamped {
 		theModCount++;
 		if (!theListeners.isEmpty()) {
 			ObservableConfigEvent event = new ObservableConfigEvent(eventType, this, oldName, oldValue, relativePath, getCurrentCause());
-			try (Transaction t = Causable.use(event)) {
+			try (Transaction t = event.use()) {
 				theListeners.forEach(intL -> {
 					if (intL.path == null || intL.path.matches(relativePath)) {
 						if (relativePath.isEmpty() && eventType == CollectionChangeType.remove)

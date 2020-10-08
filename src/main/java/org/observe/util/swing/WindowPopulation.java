@@ -169,7 +169,7 @@ public class WindowPopulation {
 							return;
 						callbackLock = true;
 						Causable evt = Causable.simpleCause(e);
-						try (Transaction t = Causable.use(evt)) {
+						try (Transaction t = evt.use()) {
 							if (w != null && (w.get() == null || w.get() != theWindow.getWidth()))
 								w.set(theWindow.getWidth(), evt);
 							if (h != null && (h.get() == null || h.get() != theWindow.getHeight()))
@@ -185,7 +185,7 @@ public class WindowPopulation {
 							return;
 						callbackLock = true;
 						Causable evt = Causable.simpleCause(e);
-						try (Transaction t = Causable.use(evt)) {
+						try (Transaction t = evt.use()) {
 							if (x != null && (x.get() == null || x.get() != theWindow.getX()))
 								x.set(theWindow.getX(), evt);
 							if (y != null && (y.get() == null || y.get() != theWindow.getY()))

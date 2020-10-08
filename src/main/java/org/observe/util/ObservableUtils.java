@@ -18,7 +18,7 @@ public class ObservableUtils {
 	 * The {@link ObservableCollectionEvent#getCause() cause} for events fired for extant elements in the collection upon
 	 * {@link ObservableCollection#subscribe(Consumer, boolean) subscription}
 	 */
-	public static class SubscriptionCause extends Causable {
+	public static class SubscriptionCause extends Causable.AbstractCausable {
 		/** Creates a subscription cause */
 		public SubscriptionCause() {
 			super(null);
@@ -40,12 +40,12 @@ public class ObservableUtils {
 		int index = 0;
 		// Assume the collection is already read-locked
 		SubscriptionCause cause = new SubscriptionCause();
-		try (Transaction ct = SubscriptionCause.use(cause)) {
+		try (Transaction ct = cause.use()) {
 			CollectionElement<E> el = collection.getTerminalElement(forward);
 			while (el != null) {
 				ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), collection.getType(), index,
 					CollectionChangeType.add, null, el.get(), cause);
-				try (Transaction evtT = Causable.use(event)) {
+				try (Transaction evtT = event.use()) {
 					observer.accept(event);
 				}
 				el = collection.getAdjacentElement(el.getElementId(), forward);
@@ -69,13 +69,13 @@ public class ObservableUtils {
 			return;
 		int index = forward ? 0 : collection.size() - 1;
 		SubscriptionCause cause = new SubscriptionCause();
-		try (Transaction ct = SubscriptionCause.use(cause)) {
+		try (Transaction ct = cause.use()) {
 			CollectionElement<E> el = collection.getTerminalElement(forward);
 			while (el != null) {
 				E value = el.get();
 				ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), collection.getType(), index,
 					CollectionChangeType.remove, value, value, cause);
-				try (Transaction evtT = Causable.use(event)) {
+				try (Transaction evtT = event.use()) {
 					observer.accept(event);
 				}
 				el = collection.getAdjacentElement(el.getElementId(), forward);
@@ -143,7 +143,7 @@ public class ObservableUtils {
 				});
 			// The inner transaction is so that each c1 change is causably linked to a particular c2 change
 			ObservableCollectionLinkEvent linkEvt = new ObservableCollectionLinkEvent(c1, evt);
-			try (Transaction linkEvtT = Causable.use(linkEvt);
+			try (Transaction linkEvtT = linkEvt.use();
 				Transaction evtT = c2.lock(true, linkEvt)) {
 				isLinkChanging[0] = true;
 				try {
@@ -175,7 +175,7 @@ public class ObservableUtils {
 				k -> c2.lock(true, new ObservableCollectionLinkEvent(c2, evt.getRootCausable())));
 			// The inner transaction is so that each c2 change is causably linked to a particular c1 change
 			ObservableCollectionLinkEvent linkEvt = new ObservableCollectionLinkEvent(c2, evt);
-			try (Transaction linkEvtT = Causable.use(linkEvt);
+			try (Transaction linkEvtT = linkEvt.use();
 				Transaction evtT = c1.lock(true, linkEvt)) {
 				isLinkChanging[0] = true;
 				try {
@@ -206,7 +206,7 @@ public class ObservableUtils {
 	 * {@link ObservableUtils#link(ObservableCollection, ObservableCollection, Function, Function, boolean, boolean) linking} 2
 	 * {@link ObservableCollection}s
 	 */
-	public static class ObservableCollectionLinkEvent extends Causable {
+	public static class ObservableCollectionLinkEvent extends Causable.AbstractCausable {
 		private final ObservableCollection<?> theSource;
 
 		ObservableCollectionLinkEvent(ObservableCollection<?> source, Object cause) {

@@ -20,7 +20,6 @@ import org.observe.collect.ObservableSortedSet;
 import org.observe.collect.ObservableSortedSetImpl;
 import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.TypeTokens;
-import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.QommonsUtils;
 import org.qommons.Transactable;
@@ -249,7 +248,7 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 			ObservableMultiMapEvent<K, V> event = new ObservableMultiMapEvent<>(sourceEvt.getKeyElement(), sourceEvt.getElementId(), //
 				getKeyType(), getValueType(), sourceEvt.getKeyIndex(), sourceEvt.getIndex(), sourceEvt.getType(), //
 				theKeyManager.map().get().apply(sourceEvt.getKey()), oldValue, newValue, sourceEvt);
-			try (Transaction evtT = Causable.use(event)) {
+			try (Transaction evtT = event.use()) {
 				action.accept(event);
 			}
 		});

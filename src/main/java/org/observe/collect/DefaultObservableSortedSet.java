@@ -109,7 +109,7 @@ public class DefaultObservableSortedSet<E> extends DefaultObservableCollection<E
 	@Override
 	public <X> boolean repair(ElementId element, ValueStoredCollection.RepairListener<E, X> listener) {
 		RepairOperation op = new RepairOperation(getCurrentCause());
-		try (Transaction opT = Causable.use(op); Transaction t = lock(true, op)) {
+		try (Transaction opT = op.use(); Transaction t = lock(true, op)) {
 			return getValues().repair(element, new ObservableRepairListener<>(listener));
 		}
 	}
@@ -117,7 +117,7 @@ public class DefaultObservableSortedSet<E> extends DefaultObservableCollection<E
 	@Override
 	public <X> boolean repair(ValueStoredCollection.RepairListener<E, X> listener) {
 		RepairOperation op = new RepairOperation(getCurrentCause());
-		try (Transaction opT = Causable.use(op); Transaction t = lock(true, op)) {
+		try (Transaction opT = op.use(); Transaction t = lock(true, op)) {
 			return getValues().repair(new ObservableRepairListener<>(listener));
 		}
 	}
@@ -173,13 +173,13 @@ public class DefaultObservableSortedSet<E> extends DefaultObservableCollection<E
 		}
 	}
 
-	private static class RepairEvent<X> extends Causable {
+	private static class RepairEvent<X> extends Causable.AbstractCausable {
 		final Transaction finish;
 		X wrappedData;
 
 		RepairEvent(Object cause) {
 			super(cause);
-			finish = Causable.use(this);
+			finish = use();
 		}
 	}
 }

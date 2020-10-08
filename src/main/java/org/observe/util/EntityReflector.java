@@ -33,7 +33,6 @@ import org.observe.Observer;
 import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.config.ParentReference;
-import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.IntList;
@@ -2428,7 +2427,7 @@ public class EntityReflector<E> {
 				return;
 			EntityFieldChangeEvent<E, F> event = ((ObservableEntityInstanceBacking<E>) theBacking).createFieldChangeEvent(entity, field,
 				change.oldValue, change.newValue, change.cause);
-			try (Transaction t = Causable.use(event)) {
+			try (Transaction t = event.use()) {
 				listeners.forEach(//
 					l -> l.accept(event));
 			}

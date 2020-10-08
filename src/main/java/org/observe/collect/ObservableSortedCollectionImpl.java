@@ -24,7 +24,6 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.BaseCollectionDataFl
 import org.observe.collect.ObservableCollectionPassiveManagers.PassiveCollectionManager;
 import org.observe.collect.ObservableSetImpl.ActiveSetMgrPlaceholder;
 import org.observe.util.TypeTokens;
-import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.Transaction;
@@ -263,7 +262,7 @@ public class ObservableSortedCollectionImpl {
 					void fire(ObservableCollectionEvent<? extends E> evt, CollectionChangeType type, int index, E oldValue, E newValue) {
 						ObservableCollectionEvent<? extends E> evt2 = new ObservableCollectionEvent<>(wrap(evt.getElementId()), getType(),
 							index, type, oldValue, newValue, evt);
-						try (Transaction evtT = Causable.use(evt2)) {
+						try (Transaction evtT = evt2.use()) {
 							observer.accept(evt2);
 						}
 					}

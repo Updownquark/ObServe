@@ -374,7 +374,7 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 						size[0]--;
 					ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent<>(evt.getElementId().reverse(), theWrapped.getKeyType(),
 						theWrapped.getValueType(), index, evt.getType(), evt.getKey(), evt.getOldValue(), evt.getNewValue(), evt);
-					try (Transaction mt = ObservableMultiMapEvent.use(mapEvent)) {
+					try (Transaction mt = mapEvent.use()) {
 						action.accept(mapEvent);
 					}
 				});
@@ -446,7 +446,7 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 				int index = keySet().getElementsBefore(evt.getElementId());
 				ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent<>(evt.getElementId(), getSource().getKeyType(),
 					getSource().getValueType(), index, evt.getType(), evt.getKey(), evt.getOldValue(), evt.getNewValue(), evt);
-				try (Transaction t = ObservableMultiMapEvent.use(mapEvent)) {
+				try (Transaction t = mapEvent.use()) {
 					action.accept(mapEvent);
 				}
 			});

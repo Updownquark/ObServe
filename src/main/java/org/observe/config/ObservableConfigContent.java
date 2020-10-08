@@ -25,7 +25,6 @@ import org.observe.config.ObservableConfig.ObservableConfigEvent;
 import org.observe.config.ObservableConfig.ObservableConfigPath;
 import org.observe.config.ObservableConfig.ObservableConfigPathElement;
 import org.observe.util.TypeTokens;
-import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.Lockable;
@@ -101,7 +100,7 @@ public class ObservableConfigContent {
 							thePathElementStamps[pathIndex] = thePathElements[pathIndex].getStamp();
 							pathIndex++;
 						}
-						try (Transaction ct = childChange ? Causable.use(pathChange) : Transaction.NONE) {
+						try (Transaction ct = childChange ? pathChange.use() : Transaction.NONE) {
 							handleChange(pathIndex, pathChange, evt);
 						}
 					});
@@ -170,7 +169,7 @@ public class ObservableConfigContent {
 		}
 
 		private void fire(ObservableValueEvent<C> event) {
-			try (Transaction t = Causable.use(event)) {
+			try (Transaction t = event.use()) {
 				theListeners.forEach(//
 					listener -> listener.onNext(event));
 			}
@@ -943,7 +942,7 @@ public class ObservableConfigContent {
 					C oldValue = changeType == CollectionChangeType.add ? null : child;
 					ObservableCollectionEvent<C> collEvt = new ObservableCollectionEvent<>(child.getParentChildRef(), getType(), index,
 						changeType, oldValue, child, evt);
-					try (Transaction t = Causable.use(collEvt)) {
+					try (Transaction t = collEvt.use()) {
 						observer.accept(collEvt);
 					}
 				}

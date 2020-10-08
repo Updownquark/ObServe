@@ -147,7 +147,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 	 */
 	default void fireInitialEvent(T value, Object cause, Consumer<? super ObservableValueEvent<T>> action) {
 		ObservableValueEvent<T> evt = createInitialEvent(value, cause);
-		try (Transaction t = ObservableValueEvent.use(evt)) {
+		try (Transaction t = evt.use()) {
 			action.accept(evt);
 		}
 	}
@@ -160,7 +160,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 	 */
 	default void fireChangeEvent(T oldVal, T newVal, Object cause, Consumer<? super ObservableValueEvent<T>> action) {
 		ObservableValueEvent<T> evt = createChangeEvent(oldVal, newVal, cause);
-		try (Transaction t = ObservableValueEvent.use(evt)) {
+		try (Transaction t = evt.use()) {
 			action.accept(evt);
 		}
 	}
@@ -670,7 +670,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 		public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
 			try (Transaction t = theNoInitChanges.lock()) {
 				ObservableValueEvent<T> initEvent = theValue.createInitialEvent(theValue.get(), null);
-				try (Transaction eventT = Causable.use(initEvent)) {
+				try (Transaction eventT = initEvent.use()) {
 					observer.onNext(initEvent);
 				}
 				return theNoInitChanges.subscribe(observer);
@@ -786,7 +786,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 
 				private void fire(T oldValue, T newValue, Object cause) {
 					ObservableValueEvent<T> evt = createChangeEvent(oldValue, newValue, cause);
-					try (Transaction t = Causable.use(evt)) {
+					try (Transaction t = evt.use()) {
 						theObservers.forEach(//
 							obs -> obs.onNext(evt));
 					}
@@ -1018,7 +1018,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 					refireSub[0] = theRefresh.act(evt -> {
 						T value = get();
 						ObservableValueEvent<T> evt2 = createChangeEvent(value, value, evt);
-						try (Transaction t = ObservableValueEvent.use(evt2)) {
+						try (Transaction t = evt2.use()) {
 							observer.onNext(evt2);
 						}
 					});
@@ -1442,10 +1442,8 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 														else
 															toFire = retObs.createChangeEvent(innerOld, event2.getNewValue(),
 																event2.getCause());
-													if (toFire != null) {
-														try (Transaction t = ObservableValueEvent.use(toFire)) {
-															observer.onNext(toFire);
-														}
+													try (Transaction t = Causable.use(toFire)) {
+														observer.onNext(toFire);
 													}
 													old[0] = event2.getNewValue();
 												} finally {
@@ -1467,10 +1465,8 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 										else
 											toFire = retObs.createChangeEvent((T) old[0], newValue, event.getCause());
 									old[0] = newValue;
-									if (toFire != null) {
-										try (Transaction t = ObservableValueEvent.use(toFire)) {
-											observer.onNext(toFire);
-										}
+									try (Transaction t = Causable.use(toFire)) {
+										observer.onNext(toFire);
 									}
 								}
 							} finally {
@@ -1486,7 +1482,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 							try {
 								ObservableValueEvent<T> toFire = retObs.createChangeEvent(get(event.getOldValue()),
 									get(event.getNewValue()), event.getCause());
-								try (Transaction t = ObservableValueEvent.use(toFire)) {
+								try (Transaction t = toFire.use()) {
 									observer.onCompleted(toFire);
 								}
 							} finally {
@@ -1600,7 +1596,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
 				if (theValues.length == 0) {
 					ObservableValueEvent<T> evt = createInitialEvent(theDefault.get(), null);
-					try (Transaction t = ObservableValueEvent.use(evt)) {
+					try (Transaction t = evt.use()) {
 						observer.onNext(evt);
 					}
 					return Subscription.NONE;
@@ -1681,7 +1677,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 							if (toFire != null) {
 								hasFiredInit[0] = true;
 								lastValue[0] = toFire.getNewValue();
-								try (Transaction t = ObservableValueEvent.use(toFire)) {
+								try (Transaction t = toFire.use()) {
 									if (allComplete)
 										observer.onCompleted(toFire);
 									else
