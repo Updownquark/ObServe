@@ -1252,6 +1252,19 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		}
 
 		/**
+		 * @param <X> The type for the mapped flow
+		 * @param target The type for the mapped flow
+		 * @param map The mapping function for each source element's value
+		 * @param reverse The mapping function to recover source values from mapped values--required for equivalence
+		 * @return The mapped flow
+		 * @see #transformEquivalent(TypeToken, Function)
+		 */
+		default <X> DistinctDataFlow<E, T, X> mapEquivalent(Class<X> target, Function<? super T, ? extends X> map,
+			Function<? super X, ? extends T> reverse) {
+			return mapEquivalent(TypeTokens.get().of(target), map, reverse);
+		}
+
+		/**
 		 * <p>
 		 * Same as {@link #transform(TypeToken, Function)}, but with the additional assertion that the produced transformed values will be
 		 * one-to-one with the source values, such that the produced collection is unique in a similar way, without a need for an additional
@@ -1277,6 +1290,18 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		 */
 		<X> DistinctDataFlow<E, T, X> transformEquivalent(TypeToken<X> target, //
 			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ReversibleTransformation<T, X>> transform);
+
+		/**
+		 * @param <X> The type of the transformed values
+		 * @param target The type of the transformed values
+		 * @param transform Defines the transformation from source to target values and the reverse
+		 * @return The transformed flow
+		 * @see #transformEquivalent(TypeToken, Function)
+		 */
+		default <X> DistinctDataFlow<E, T, X> transformEquivalent(Class<X> target, //
+			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ReversibleTransformation<T, X>> transform) {
+			return transformEquivalent(TypeTokens.get().of(target), transform);
+		}
 
 		@Override
 		default DistinctDataFlow<E, T, T> unmodifiable() {
@@ -1347,6 +1372,10 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 			return transformEquivalent(target, tx -> tx.map(map).withReverse(reverse));
 		}
 
+		default <X> SortedDataFlow<E, T, X> mapEquivalent(Class<X> target, Function<? super T, ? extends X> map,
+			Function<? super X, ? extends T> reverse) {
+			return mapEquivalent(TypeTokens.get().of(target), map, reverse);
+		}
 		/**
 		 * @param <X> The type for the mapped flow
 		 * @param target The type for the mapped flow
@@ -1359,8 +1388,18 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 			return transformEquivalent(target, tx -> tx.map(map), compare);
 		}
 
+		default <X> SortedDataFlow<E, T, X> mapEquivalent(Class<X> target, Function<? super T, ? extends X> map,
+			Comparator<? super X> compare) {
+			return mapEquivalent(TypeTokens.get().of(target), map, compare);
+		}
+
 		<X> SortedDataFlow<E, T, X> transformEquivalent(TypeToken<X> target,
 			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ReversibleTransformation<T, X>> transform);
+
+		default <X> SortedDataFlow<E, T, X> transformEquivalent(Class<X> target,
+			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ReversibleTransformation<T, X>> transform) {
+			return transformEquivalent(TypeTokens.get().of(target), transform);
+		}
 
 		/**
 		 * @param <X> The compile-time transformed type
@@ -1372,6 +1411,11 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		 */
 		<X> SortedDataFlow<E, T, X> transformEquivalent(TypeToken<X> target,
 			Function<? super ReversibleTransformationPrecursor<T, X, ?>, Transformation<T, X>> transform, Comparator<? super X> compare);
+
+		default <X> SortedDataFlow<E, T, X> transformEquivalent(Class<X> target,
+			Function<? super ReversibleTransformationPrecursor<T, X, ?>, Transformation<T, X>> transform, Comparator<? super X> compare) {
+			return transformEquivalent(TypeTokens.get().of(target), transform, compare);
+		}
 
 		@Override
 		default SortedDataFlow<E, T, T> unmodifiable() {
@@ -1433,9 +1477,21 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		}
 
 		@Override
+		default <X> DistinctSortedDataFlow<E, T, X> mapEquivalent(Class<X> target, Function<? super T, ? extends X> map,
+			Function<? super X, ? extends T> reverse) {
+			return mapEquivalent(TypeTokens.get().of(target), map, reverse);
+		}
+
+		@Override
 		default <X> DistinctSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
 			Comparator<? super X> compare) {
 			return transformEquivalent(target, tx -> tx.map(map), compare);
+		}
+
+		@Override
+		default <X> DistinctSortedDataFlow<E, T, X> mapEquivalent(Class<X> target, Function<? super T, ? extends X> map,
+			Comparator<? super X> compare) {
+			return mapEquivalent(TypeTokens.get().of(target), map, compare);
 		}
 
 		@Override
@@ -1443,8 +1499,20 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ReversibleTransformation<T, X>> transform);
 
 		@Override
+		default <X> DistinctSortedDataFlow<E, T, X> transformEquivalent(Class<X> target,
+			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ReversibleTransformation<T, X>> transform) {
+			return transformEquivalent(TypeTokens.get().of(target), transform);
+		}
+
+		@Override
 		<X> DistinctSortedDataFlow<E, T, X> transformEquivalent(TypeToken<X> target,
 			Function<? super ReversibleTransformationPrecursor<T, X, ?>, Transformation<T, X>> transform, Comparator<? super X> compare);
+
+		@Override
+		default <X> DistinctSortedDataFlow<E, T, X> transformEquivalent(Class<X> target,
+			Function<? super ReversibleTransformationPrecursor<T, X, ?>, Transformation<T, X>> transform, Comparator<? super X> compare) {
+			return transformEquivalent(TypeTokens.get().of(target), transform, compare);
+		}
 
 		@Override
 		default DistinctSortedDataFlow<E, T, T> unmodifiable() {

@@ -98,6 +98,14 @@ public interface Observable<T> extends Lockable, Identifiable {
 	}
 
 	/**
+	 * @param type The type of values to filter
+	 * @return An observable that only fires values from this observable that are an instance of the given type
+	 */
+	default <X extends T> Observable<X> filter(Class<X> type) {
+		return filterMap(value -> type.isInstance(value) ? (X) value : null);
+	}
+
+	/**
 	 * @param <R> The type of the returned observable
 	 * @param func The map function
 	 * @return An observable that provides the values of this observable, mapped by the given function
