@@ -22,7 +22,6 @@ import org.observe.Transformation.TransformedElement;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
-import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.Lockable;
 import org.qommons.Stamped;
@@ -1442,8 +1441,10 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 														else
 															toFire = retObs.createChangeEvent(innerOld, event2.getNewValue(),
 																event2.getCause());
-													try (Transaction t = Causable.use(toFire)) {
-														observer.onNext(toFire);
+													if (toFire != null) {
+														try (Transaction t = toFire.use()) {
+															observer.onNext(toFire);
+														}
 													}
 													old[0] = event2.getNewValue();
 												} finally {
@@ -1465,8 +1466,10 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 										else
 											toFire = retObs.createChangeEvent((T) old[0], newValue, event.getCause());
 									old[0] = newValue;
-									try (Transaction t = Causable.use(toFire)) {
-										observer.onNext(toFire);
+									if (toFire != null) {
+										try (Transaction t = toFire.use()) {
+											observer.onNext(toFire);
+										}
 									}
 								}
 							} finally {
