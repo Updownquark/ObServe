@@ -16,7 +16,7 @@ public class EntityLoadRequest<E> {
 	private final EntityChange<E> theChange;
 	private final ObservableEntityType<E> theType;
 	private final BetterList<EntityIdentity<E>> theEntities;
-	private final Set<EntityValueAccess<? extends E, ?>> theFields;
+	private final Set<EntityValueAccess<E, ?>> theFields;
 
 	/**
 	 * Creates a request for information about entities as a response to a change in the data source
@@ -24,7 +24,7 @@ public class EntityLoadRequest<E> {
 	 * @param change The change being responded to
 	 * @param fields The set of fields requested about the entities in the change
 	 */
-	public EntityLoadRequest(EntityChange<E> change, Set<EntityValueAccess<? extends E, ?>> fields) {
+	public EntityLoadRequest(EntityChange<E> change, Set<EntityValueAccess<E, ?>> fields) {
 		theChange = change;
 		theType = change.getEntityType();
 		theEntities = QommonsUtils.map2(change.getEntities(), e -> change.getEntityType().fromSubId(e));
@@ -37,7 +37,7 @@ public class EntityLoadRequest<E> {
 	 * @param entity The entity to request information for
 	 * @param fields The set of fields for which values are requested
 	 */
-	public EntityLoadRequest(EntityIdentity<E> entity, Set<EntityValueAccess<? extends E, ?>> fields) {
+	public EntityLoadRequest(EntityIdentity<E> entity, Set<EntityValueAccess<E, ?>> fields) {
 		theChange = null;
 		theType = entity.getEntityType();
 		theEntities = BetterList.of(entity);
@@ -60,7 +60,7 @@ public class EntityLoadRequest<E> {
 	}
 
 	/** @return The fields for which values are being requested */
-	public Set<EntityValueAccess<? extends E, ?>> getFields() {
+	public Set<EntityValueAccess<E, ?>> getFields() {
 		return theFields;
 	}
 

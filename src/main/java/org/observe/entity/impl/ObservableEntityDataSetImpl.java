@@ -220,7 +220,8 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 			else {
 				Set<? extends EntityValueAccess<?, ?>> requiredFields = theResults.specifyDataRequirements(change, entities);
 				if (requiredFields != null && !requiredFields.isEmpty())
-					loadRequests.add(new EntityLoadRequest<>((EntityChange<Object>) change, (Set<EntityValueAccess<?, ?>>) requiredFields));
+					loadRequests
+					.add(new EntityLoadRequest<>((EntityChange<Object>) change, (Set<EntityValueAccess<Object, ?>>) requiredFields));
 				else
 					noLoadNeeded.add(change);
 			}
@@ -267,10 +268,10 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 			if (change.changeType == EntityChange.EntityChangeType.remove)
 				loadRequest = null;
 			else {
-				Set<? extends EntityValueAccess<? extends E, ?>> requiredFields = (Set<? extends EntityValueAccess<? extends E, ?>>) theResults
+				Set<? extends EntityValueAccess<E, ?>> requiredFields = (Set<? extends EntityValueAccess<E, ?>>) theResults
 					.specifyDataRequirements(change, entities);
 				if (requiredFields != null && !requiredFields.isEmpty())
-					loadRequest = new EntityLoadRequest<>(change, (Set<EntityValueAccess<? extends E, ?>>) requiredFields);
+					loadRequest = new EntityLoadRequest<>(change, (Set<EntityValueAccess<E, ?>>) requiredFields);
 				else
 					loadRequest = null;
 			}

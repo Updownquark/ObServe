@@ -9,6 +9,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
+import org.observe.Equivalence;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
@@ -31,6 +32,7 @@ import org.observe.entity.EntityOperationException;
 import org.observe.entity.EntityOperationVariable;
 import org.observe.entity.EntityQuery;
 import org.observe.entity.EntityQueryResult;
+import org.observe.entity.EntityUpdate;
 import org.observe.entity.EntityValueAccess;
 import org.observe.entity.ObservableEntity;
 import org.observe.entity.ObservableEntityFieldType;
@@ -76,7 +78,7 @@ class QueryResults<E> extends AbstractOperationResult<E, Object, Object> {
 			CollectionLockingStrategy locker = new RRWLockingStrategy(selection.getEntityType().getEntitySet());
 			TypeToken<ObservableEntity<? extends E>> type;
 			if (selection.getEntityType().getEntityType() != null)
-				type = ObservableEntity.TYPE_KEY.getCompoundType(selection.getEntityType().getEntityType());
+				type = TypeTokens.get().keyFor(ObservableEntity.class).parameterized(selection.getEntityType().getEntityType());
 			else
 				type = (TypeToken<ObservableEntity<? extends E>>) (TypeToken<?>) ObservableEntity.TYPE;
 			theRawResults = ObservableSortedSet.build(type, ObservableEntity::compareTo).withLocker(locker).build();
@@ -281,7 +283,7 @@ class QueryResults<E> extends AbstractOperationResult<E, Object, Object> {
 	}
 
 	private boolean isIdentity(EntityValueAccess<E, ?> field) {
-		if(field instanceof ObservableEntityFieldType)
+		if (field instanceof ObservableEntityFieldType)
 			return ((ObservableEntityFieldType<E, ?>) field).getIdIndex() >= 0;
 			else {
 				for (ObservableEntityFieldType<?, ?> f : ((EntityChainAccess<E, ?>) field).getFieldSequence()) {
@@ -504,8 +506,25 @@ class QueryResults<E> extends AbstractOperationResult<E, Object, Object> {
 				if (!getType().isAssignableFrom(subEntity))
 					throw new IllegalArgumentException("No such sub-entity " + subType);
 				QuickMap<String, Object> fieldValues = subEntity.getFields().keySet().createMap();
+				for (int f = 0; f < fieldValues.keySize(); f++) {
+					ObservableEntityFieldType<E, ?> field = theSelection.getEntityType().getFields()
+						.getIfPresent(fieldValues.keySet().get(f));
+					if (field == null)
+						fieldValues.put(f, EntityUpdate.NOT_SET);
+					else {
+						EntityCondition<E> fieldC = theSelection.getCondition(field);
+						while (fieldC instanceof EntityCondition.OrCondition)
+							fieldC = ((EntityCondition.OrCondition<E>) fieldC).getConditions().get(0);
+						if (fieldC == null)
+							fieldValues.put(f, EntityUpdate.NOT_SET);
+						else if (!(fieldC instanceof EntityCondition.LiteralCondition))
+							throw new IllegalStateException("Could not generate creator for selection " + getSelection());
+						else
+							fieldValues.put(f, ((EntityCondition.LiteralCondition<E, ?>) fieldC).getValue());
+					}
+				}
 				return new ConfigurableCreatorImpl<>(subEntity, true, QuickMap.empty(), fieldValues.unmodifiable(), //
-					subEntity.getFields().keySet().<EntityOperationVariable<E2>> createMap().unmodifiable(), QueryResults.this);
+					fieldValues.keySet().<EntityOperationVariable<E2>> createMap().unmodifiable(), QueryResults.this);
 			}
 		}
 
@@ -517,13 +536,19 @@ class QueryResults<E> extends AbstractOperationResult<E, Object, Object> {
 				if (!getOperation().getOrder().isEmpty())
 					flow = flow.distinctSorted(createComparator(query), false);
 				if (!withUpdates)
-					flow = flow.mapEquivalent(flow.getTargetType(), e -> e, e -> e, opts -> opts.cache(false).fireIfUnchanged(false));
+					flow = flow.transformEquivalent(flow.getTargetType(),
+						tx -> tx.cache(false).fireIfUnchanged(false).map(e -> e).withReverse(e -> e));
 				init(flow.collect());
 			}
 
 			@Override
 			protected ObservableSortedSet<ObservableEntity<? extends E>> getWrapped() throws IllegalStateException {
 				return (ObservableSortedSet<ObservableEntity<? extends E>>) super.getWrapped();
+			}
+
+			@Override
+			public Equivalence.SortedEquivalence<? super ObservableEntity<? extends E>> equivalence() {
+				return getWrapped().equivalence();
 			}
 
 			@Override

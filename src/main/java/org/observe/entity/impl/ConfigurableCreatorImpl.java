@@ -9,6 +9,7 @@ import org.observe.entity.ConfigurableCreator;
 import org.observe.entity.EntityCondition;
 import org.observe.entity.EntityOperationException;
 import org.observe.entity.EntityOperationVariable;
+import org.observe.entity.EntityUpdate;
 import org.observe.entity.ObservableEntityFieldType;
 import org.observe.entity.ObservableEntityType;
 import org.observe.entity.PreparedCreator;
@@ -156,5 +157,29 @@ implements ConfigurableCreator<E, E2>, EntityCreatorHelper<E, E2> {
 		return new PreparedCreatorImpl<>(this,
 			((ObservableEntityDataSetImpl) getEntityType().getEntitySet()).getImplementation().prepare(this),
 			getVariables().keySet().createMap(), theQuery);
+	}
+
+	@Override
+	public String toString() {
+		StringBuilder str = new StringBuilder("Create ").append(getEntityType().getName());
+		boolean first = true;
+		for (int f = 0; f < getEntityType().getFields().keySize(); f++) {
+			String fieldV = null;
+			if (getFieldValues().get(f) != EntityUpdate.NOT_SET)
+				fieldV = String.valueOf(getFieldValues().get(f));
+			else if (getFieldVariables().get(f) != null)
+				fieldV = getFieldValues().get(f).toString();
+			if (fieldV != null) {
+				if (first) {
+					first = false;
+					str.append('{');
+				} else
+					str.append(", ");
+				str.append(getType().getFields().keySet().get(f)).append('=').append(fieldV);
+			}
+		}
+		if (!first)
+			str.append('}');
+		return str.toString();
 	}
 }

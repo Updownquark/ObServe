@@ -35,6 +35,7 @@ import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.config.ObservableConfig;
 import org.observe.config.OperationResult;
+import org.observe.config.OperationResult.ResultStatus;
 import org.observe.entity.ConfigurableCreator;
 import org.observe.entity.EntityCollectionResult;
 import org.observe.entity.EntityCondition;
@@ -80,20 +81,20 @@ public class ObservableEntityExplorer extends JPanel {
 		theDataSet = dataSet;
 		TypeToken<ObservableEntityType<?>> oetType = new TypeToken<ObservableEntityType<?>>() {};
 		TypeToken<EntityTypeData<?>> oetHolderType = new TypeToken<EntityTypeData<?>>() {};
-		TypeToken<ObservableCollection<ObservableEntityType<?>>> oetListType = ObservableCollection.TYPE_KEY
-			.<ObservableCollection<ObservableEntityType<?>>> getCompoundType(oetType);
+		TypeToken<ObservableCollection<ObservableEntityType<?>>> oetListType = TypeTokens.get().keyFor(ObservableCollection.class)
+			.parameterized(oetType);
 		ObservableValue<ObservableCollection<ObservableEntityType<?>>> typeListValue = theDataSet.map(oetListType,
 			ds -> ObservableCollection.of(oetType, ds == null ? Collections.emptyList() : ds.getEntityTypes()));
 		theEntityTypes = ObservableCollection.flattenValue(typeListValue)//
 			.flow().distinctSorted(Named.DISTINCT_NUMBER_TOLERANT, false)//
-			.mapEquivalent(oetHolderType, (entity, holder) -> {
+			.transformEquivalent(oetHolderType, tx -> tx.cache(true).reEvalOnUpdate(false).map((entity, holder) -> {
 				if (holder != null) {
 					if (holder.entity == entity)
 						return holder;
 					holder.count.cancel(true);
 				}
 				return new EntityTypeData<>(entity);
-			}, holder -> holder.entity, opts -> opts.cache(true).reEvalOnUpdate(false))//
+			}).withReverse(holder -> holder.entity))//
 			.refreshEach(e -> Observable.or(e.count.watchStatus(), e.count.getResult().noInitChanges()))//
 			.collect();
 		theEventLog = ObservableCollection.build(Object.class).build();
@@ -505,6 +506,10 @@ public class ObservableEntityExplorer extends JPanel {
 			JOptionPane.showMessageDialog(this, e.getMessage(), "Query Failure", JOptionPane.ERROR_MESSAGE);
 			return;
 		}
+		results.whenDone(false, __ -> {
+			if (results.getStatus() == ResultStatus.FAILED)
+				results.getFailure().printStackTrace();
+		});
 		SimpleObservable<Void> close = SimpleObservable.build().safe(false).build();
 		EntityRowUpdater<ObservableEntity<? extends E>, E> updater = new EntityRowUpdater<ObservableEntity<? extends E>, E>() {
 			@Override
@@ -776,7 +781,7 @@ public class ObservableEntityExplorer extends JPanel {
 		else if (type == Instant.class)
 			return (Format<V>) SpinnerFormat.flexDate(Instant::now, "ddMMMyyyy", TimeZone.getDefault());
 		else if (type == Duration.class)
-			return (Format<V>) SpinnerFormat.flexDuration();
+			return (Format<V>) SpinnerFormat.flexDuration(false);
 		else
 			return null;
 		/* TODO More types, e.g.

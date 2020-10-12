@@ -12,6 +12,7 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.function.Consumer;
 
+import org.observe.Equivalence;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.Observer;
@@ -72,7 +73,6 @@ import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.QuickSet.QuickMap;
 import org.qommons.collect.RRWLockingStrategy;
 
-import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
 
 class ObservableEntityImpl<E> implements ObservableEntity<E> {
@@ -639,14 +639,6 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 			return String.valueOf(value);
 		}
 	}
-	@SuppressWarnings("rawtypes")
-	private static final TypeTokens.TypeKey<CollectionFieldElement> ELEMENT_TYPE = TypeTokens.get().keyFor(CollectionFieldElement.class)//
-	.enableCompoundTypes(new TypeTokens.UnaryCompoundTypeCreator<CollectionFieldElement>() {
-		@Override
-		public <P> TypeToken<? extends CollectionFieldElement> createCompoundType(TypeToken<P> param) {
-			return new TypeToken<CollectionFieldElement<P>>() {}.where(new TypeParameter<P>() {}, param);
-		}
-	});
 
 	<V, C extends Collection<V>> ObservableCollection<V> initCollection(ObservableEntityFieldType<E, C> field, BetterCollection<V> source) {
 		Class<C> raw=TypeTokens.getRawType(field.getFieldType());
@@ -697,8 +689,7 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 		}
 
 		protected void init() {
-			theElements = createCollection(
-				(TypeToken<CollectionFieldElement<V>>) (TypeToken<?>) ELEMENT_TYPE.getCompoundType(theField.getFieldType()),
+			theElements = createCollection(TypeTokens.get().keyFor(CollectionFieldElement.class).parameterized(theField.getFieldType()),
 				new RRWLockingStrategy(theType.getEntitySet()));
 			theValues = createValues(theElements);
 			for (CollectionElement<V> element : theSource.elements())
@@ -1154,7 +1145,7 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 
 		@Override
 		protected ObservableCollection<V> createValues(ObservableCollection<CollectionFieldElement<V>> elements) {
-			return elements.flow().map(getType(), el -> el.value, opts -> opts.cache(false).fireIfUnchanged(true)).collectPassive();
+			return elements.flow().transform(getType(), tx -> tx.cache(false).fireIfUnchanged(true).map(el -> el.value)).collectPassive();
 		}
 
 		@Override
@@ -1288,6 +1279,11 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 		}
 
 		@Override
+		public Equivalence.SortedEquivalence<? super V> equivalence() {
+			return getValues().equivalence();
+		}
+
+		@Override
 		protected ObservableSortedSet<V> getValues() {
 			return (ObservableSortedSet<V>) super.getValues();
 		}
@@ -1379,7 +1375,7 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 		}
 
 		@Override
-		public ObservableCollection<? extends V> getValues() {
+		public ObservableCollection<V> getValues() {
 			return theValues;
 		}
 
