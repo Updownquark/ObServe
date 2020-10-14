@@ -866,6 +866,18 @@ public class ObservableSwingUtils {
 				callbackLock[0] = false;
 			}
 		};
+		/* There is the potential for a cycle here, in the case where 2 similar tables or lists are created
+		 * with the same (or same-sourced) model and selection.
+		 * E.g. if a model update on one collection causes a selection update which causes a model update on a second collection,
+		 * an IllegalStateException will be thrown due to the attempted recursive modification.
+		 * I can't think of a great way to prevent the attempt from happening.
+		 * The ObservableCollection API provides the ability to determine if an element from one collection
+		 * is derived from another collection, but not if both collections are derived from a common source.
+		 * There are security issues even enabling such functionality, as it would require the ability to unroll all the sources of a
+		 * derived collection, which should not be possible.
+		 *
+		 * Since the attempt cannot be prevented and the functionality (having multiple tables with shared data and selection sources)
+		 * should not be disallowed, all I can think to do is catch and swallow the exception. */
 		ListDataListener modelListener = new ListDataListener() {
 			@Override
 			public void intervalRemoved(ListDataEvent e) {}
@@ -884,6 +896,8 @@ public class ObservableSwingUtils {
 				try {
 					if (e.getIndex0() <= selModel.getMinSelectionIndex() && e.getIndex1() >= selModel.getMinSelectionIndex())
 						selection.set(model.getElementAt(selModel.getMinSelectionIndex()), e);
+				} catch (ListenerList.ReentrantNotificationException ex) {
+					// See the cycle comment above
 				} finally {
 					callbackLock[0] = false;
 				}
@@ -909,8 +923,13 @@ public class ObservableSwingUtils {
 				} else if (evt.getOldValue() == evt.getNewValue()//
 					&& !selModel.isSelectionEmpty() && selModel.getMinSelectionIndex() == selModel.getMaxSelectionIndex()//
 					&& equivalence.elementEquals(model.getElementAt(selModel.getMinSelectionIndex()), evt.getNewValue())) {
-					if (update != null)
-						update.accept(selModel.getMaxSelectionIndex());
+					if (update != null) {
+						try {
+							update.accept(selModel.getMaxSelectionIndex());
+						} catch (ListenerList.ReentrantNotificationException ex) {
+							// See the cycle comment above
+						}
+					}
 					return;
 				}
 				for (int i = 0; i < model.getSize(); i++) {
