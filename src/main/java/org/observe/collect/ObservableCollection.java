@@ -83,6 +83,13 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 	/** This class's wildcard {@link TypeToken} */
 	static TypeToken<ObservableCollection<?>> TYPE = TypeTokens.get().keyFor(ObservableCollection.class).wildCard();
 
+	/**
+	 * It is illegal to attempt to modify a collection (or even fire an update event on it) as a result of a currently executing
+	 * modification (or update) to the collection. If such an attempt is made (and the implementation is able detect it), an
+	 * {@link IllegalStateException} will be thrown with this {@link IllegalStateException#getMessage() message}.
+	 */
+	String REENTRANT_EVENT_ERROR = "A collection may not be modified as a result of a change event";
+
 	// Additional contract methods
 
 	/** @return The type of elements in this collection */

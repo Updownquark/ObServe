@@ -63,10 +63,10 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 		Equivalence<? super E> equivalence) {
 		theType = type;
 		if (list instanceof ObservableCollection)
-			throw new UnsupportedOperationException("ObservableCollection is not supported here");
+			throw new UnsupportedOperationException("The backing for an ObservableCollection cannot be observable is not supported here");
 		theTransactionCauses = new LinkedList<>();
 		theValues = list;
-		theObservers = new org.qommons.collect.ListenerList<>("A collection may not be modified as a result of a change event");
+		theObservers = new org.qommons.collect.ListenerList<>(ObservableCollection.REENTRANT_EVENT_ERROR);
 		theElementSource = elementSource;
 		theSourceElements = sourceElements;
 		theEquivalence = equivalence == null ? Equivalence.DEFAULT : equivalence;
