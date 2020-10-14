@@ -171,7 +171,8 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 
 	private BetterList<ElementId> _getSourceElements(ElementId localId, BetterCollection<?> collection) {
 		flush();
-		return theCollection.getSourceElements(localId, collection);
+		ElementRef<E> ref = theSyntheticCollection.getElement(localId).get();
+		return theCollection.getSourceElements(ref.sourceId, collection);
 	}
 
 	@Override
