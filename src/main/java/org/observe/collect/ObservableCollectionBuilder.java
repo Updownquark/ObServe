@@ -346,6 +346,11 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 		}
 
 		@Override
+		protected Comparator<? super E> getSorting() {
+			return getEquivalence().comparator();
+		}
+
+		@Override
 		public B withBacking(BetterList<E> backing) {
 			if (backing != null && !(backing instanceof BetterSortedList))
 				throw new IllegalStateException("An ObservableSortedCollection must be backed by an instance of BetterSortedList");
