@@ -853,7 +853,7 @@ implements TableBuilder<R, P> {
 
 		@Override
 		public boolean canImport(TransferSupport support) {
-			TableContentControl filter = theFilter.get();
+			TableContentControl filter = theFilter == null ? null : theFilter.get();
 			if (filter != null && filter.getRowSorting() != null) {
 				return false; // Can't drag into the table when row-sorted
 			}
