@@ -62,6 +62,8 @@ import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
+import org.qommons.debug.Debug;
+import org.qommons.debug.Debug.DebugData;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -516,10 +518,12 @@ implements TableBuilder<R, P> {
 				}
 			});
 			filtered = TableContentControl.applyRowControl(theSafeRows, () -> renderers, theFilter.refresh(columnChanges), until);
-			model = new ObservableTableModel<>(
-				filtered.flow().transform(theRows.getType(), tx -> tx.map(f -> f.value).modifySource(FilteredValue::setValue))
-				.collectActive(until), //
-				true, safeColumns, true);
+			ObservableCollection<R> filteredValues = filtered.flow()
+				.transform(theRows.getType(), tx -> tx.map(f -> f.value).modifySource(FilteredValue::setValue)).collectActive(until);
+			DebugData d = Debug.d().debug(theRows);
+			if (d.isActive())
+				Debug.d().debug(filteredValues, true).merge(d);
+			model = new ObservableTableModel<>(filteredValues, true, safeColumns, true);
 		} else {
 			filtered = null;
 			model = new ObservableTableModel<>(theSafeRows, true, theColumns, true);
@@ -1008,12 +1012,8 @@ implements TableBuilder<R, P> {
 							moved = true;
 							if (theSafeRows.canMove(rowEl, after, before) != null)
 								continue;
-							boolean fromBefore = after != null && rowEl.compareTo(after) < 0;
 							ElementId newRowEl = theSafeRows.move(rowEl, after, before, true, null).getElementId();
-							if (fromBefore)
-								after = newRowEl;
-							else
-								before = newRowEl;
+							after = newRowEl;
 						}
 						if (moved)
 							return true;
