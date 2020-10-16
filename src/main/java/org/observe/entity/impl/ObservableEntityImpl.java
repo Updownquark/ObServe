@@ -663,7 +663,7 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 		if (!raw.isAssignableFrom(ObservableValueSet.class))
 			throw new IllegalStateException("Cannot satisfy value set of type " + raw.getName() + " for field " + field);
 		if (field.getValueTarget() == null)
-			throw new IllegalStateException("Cannot create an ObservableValueSets of type "
+			throw new IllegalStateException("Cannot create an ObservableValueSet of type "
 				+ field.getFieldType().resolveType(ObservableValueSet.class.getTypeParameters()[0])
 				+ "--ObservableValueSets can only be created for entities");
 		return new EntitySetImpl<>(field, (ObservableEntityType<V>) field.getValueTarget(), source);
