@@ -151,7 +151,7 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 	 * @return The observable for this value to use to fire its initial and change events
 	 */
 	protected SimpleObservable<ObservableValueEvent<T>> createEventer(Transactable lock, ListenerList.Builder listening) {
-		return new SimpleObservable<>(null, Identifiable.wrap(theIdentity, "noInitChanges"), true, __ -> lock, listening);
+		return new SimpleObservable<>(null, Identifiable.wrap(theIdentity, "noInitChanges"), null, true, __ -> lock, listening);
 	}
 
 	@Override

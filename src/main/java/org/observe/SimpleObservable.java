@@ -22,13 +22,15 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 
 	/** Builds {@link SimpleObservable}s */
 	public static class Builder {
-		private Object theIdentity;
 		private ListenerList.Builder theListening;
 		private boolean isInternalState;
 		private Function<Object, Transactable> theLock;
+		private Object theIdentity;
+		private String theDescription;
 
 		Builder() {
 			theListening = ListenerList.build();
+			theDescription = "observable";
 		}
 
 		/**
@@ -44,6 +46,24 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 				theLock = __ -> Transactable.NONE;
 				theListening = theListening.unsafe();
 			}
+			return this;
+		}
+
+		/**
+		 * @param description A description for the observable
+		 * @return This builder
+		 */
+		public Builder withDescription(String description) {
+			theDescription = description;
+			return this;
+		}
+
+		/**
+		 * @param identity The identity for the observable
+		 * @return This builder
+		 */
+		public Builder withIdentity(Object identity) {
+			theIdentity = identity;
 			return this;
 		}
 
@@ -102,7 +122,7 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 		 * @return The observable
 		 */
 		public <T> SimpleObservable<T> build(Consumer<? super Observer<? super T>> onSubscribe) {
-			return new SimpleObservable<>(onSubscribe, theIdentity, isInternalState, //
+			return new SimpleObservable<>(onSubscribe, theIdentity, theDescription, isInternalState, //
 				theLock != null ? theLock : o -> Transactable.transactable(new ReentrantReadWriteLock(), o), theListening);
 		}
 	}
@@ -133,31 +153,31 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 	 * @param safe Whether this observable is externally thread-safed
 	 */
 	public SimpleObservable(Consumer<? super Observer<? super T>> onSubscribe, boolean internalState, boolean safe) {
-		this(onSubscribe, null, internalState, safe ? new ReentrantReadWriteLock() : null, null);
+		this(onSubscribe, null, null, internalState, safe ? new ReentrantReadWriteLock() : null, null);
 	}
 
 	/**
 	 * @param onSubscribe The function to notify when a subscription is added to this observable
-	 * @param identity The identity for this observable
+	 * @param description A description of this observable's purpose
 	 * @param internalState Whether this observable is firing changes for some valued state
 	 * @param lock The lock for this observable
 	 * @param listening Listening options for this observable
 	 */
-	public SimpleObservable(Consumer<? super Observer<? super T>> onSubscribe, Object identity, boolean internalState,
+	SimpleObservable(Consumer<? super Observer<? super T>> onSubscribe, Object identity, String description, boolean internalState,
 		ReentrantReadWriteLock lock, ListenerList.Builder listening) {
-		this(onSubscribe, identity, internalState, o -> Transactable.transactable(lock, o), listening);
+		this(onSubscribe, identity, description, internalState, o -> Transactable.transactable(lock, o), listening);
 	}
 
 	/**
 	 * @param onSubscribe The function to notify when a subscription is added to this observable
-	 * @param identity The identity for this observable
+	 * @param description A description of this observable's purpose
 	 * @param internalState Whether this observable is firing changes for some valued state
 	 * @param lock The lock for this observable
 	 * @param listening Listening options for this observable
 	 */
-	SimpleObservable(Consumer<? super Observer<? super T>> onSubscribe, Object identity, boolean internalState,
+	SimpleObservable(Consumer<? super Observer<? super T>> onSubscribe, Object identity, String description, boolean internalState,
 		Function<Object, Transactable> lock, ListenerList.Builder listening) {
-		theIdentity = identity != null ? identity : Identifiable.baseId("observable", this);
+		theIdentity = identity != null ? identity : Identifiable.baseId(description != null ? description : "observable", this);
 		/* Java's ConcurrentLinkedQueue has a problem (for me) that makes the class unusable here.  As documented in fireNext() below, the
 		 * behavior of observables is advertised such that if a listener is added by a listener, the new listener will be added at the end
 		 * of the listeners and will be notified for the currently firing value.  ConcurrentLinkedQueue allows for this except when the

@@ -56,6 +56,7 @@ import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.debug.Debug;
+import org.qommons.debug.Debug.DebugData;
 import org.qommons.tree.BetterTreeSet;
 import org.qommons.tree.BinaryTreeNode;
 
@@ -169,10 +170,14 @@ public final class ObservableCollectionImpl {
 
 		/** The collection that this change observable watches */
 		protected final ObservableCollection<E> collection;
+		private boolean isFiring;
 
 		/** @param coll The collection for this change observable to watch */
 		protected CollectionChangesObservable(ObservableCollection<E> coll) {
 			collection = coll;
+			DebugData d=Debug.d().debug(coll);
+			if(d.isActive())
+				Debug.d().debug(this, true).merge(d);
 		}
 
 		@Override
@@ -204,6 +209,8 @@ public final class ObservableCollectionImpl {
 				currentCause[0] = null;
 			});
 			Subscription collSub = collection.onChange(evt -> {
+				if (isFiring)
+					throw new ListenerList.ReentrantNotificationException(ObservableCollection.REENTRANT_EVENT_ERROR);
 				Causable cause = evt.getRootCausable();
 				Map<Object, Object> data = cause.onFinish(key);
 				Object newTracker = data.compute(SESSION_TRACKER_PROPERTY,
@@ -247,7 +254,8 @@ public final class ObservableCollectionImpl {
 			StringBuilder s = new StringBuilder();
 			String debugName = data.getField("name", String.class);
 			if (debugName != null)
-				s.append(debugName).append(": ");
+				s.append(debugName).append('.');
+			s.append("simpleChanges(): ");
 			debugMsg.accept(s);
 			System.out.println(s.toString());
 		}
@@ -434,12 +442,17 @@ public final class ObservableCollectionImpl {
 			Observer<? super CollectionChangeEvent<E>> observer) {
 			if (tracker == null || tracker.elements.isEmpty())
 				return;
+			if (isFiring)
+				throw new ListenerList.ReentrantNotificationException(ObservableCollection.REENTRANT_EVENT_ERROR);
 			List<CollectionChangeEvent.ElementChange<E>> elements = new ArrayList<>(tracker.elements.size());
 			for (ChangeValue<E> elChange : tracker.elements)
 				elements.add(new CollectionChangeEvent.ElementChange<>(elChange.newValue, elChange.oldValue, elChange.index));
 			CollectionChangeEvent<E> evt = new CollectionChangeEvent<>(tracker.type, elements, cause);
+			isFiring = true;
 			try (Transaction t = evt.use()) {
 				observer.onNext(evt);
+			} finally {
+				isFiring = false;
 			}
 		}
 

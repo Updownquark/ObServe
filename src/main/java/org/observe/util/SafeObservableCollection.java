@@ -12,6 +12,7 @@ import org.observe.Subscription;
 import org.observe.collect.DefaultObservableCollection;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionEvent;
+import org.qommons.Identifiable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
@@ -20,6 +21,8 @@ import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement;
+import org.qommons.debug.Debug;
+import org.qommons.debug.Debug.DebugData;
 import org.qommons.threading.QommonsTimer;
 import org.qommons.tree.BetterTreeList;
 
@@ -54,6 +57,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	private final Consumer<Runnable> theEventThreadExecutor;
 
 	private final ListenerList<ObservableCollectionEvent<E>> theEventQueue;
+	private Object theIdentity;
 
 	/**
 	 * @param collection The backing collection
@@ -103,6 +107,16 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 			.map(theCollection.getType(), ref -> ref.value)// Allow caching so old and new values are consistent in update events
 			.withEquivalence(theCollection.equivalence())//
 			.collect());
+		DebugData d = Debug.d().debug(collection);
+		if (d.isActive())
+			Debug.d().debug(this, true).merge(d);
+	}
+
+	@Override
+	public Object getIdentity() {
+		if (theIdentity == null)
+			theIdentity = Identifiable.wrap(theCollection.getIdentity(), "safe");
+		return theIdentity;
 	}
 
 	/**

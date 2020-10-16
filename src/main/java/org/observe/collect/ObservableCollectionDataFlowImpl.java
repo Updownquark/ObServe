@@ -1352,7 +1352,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public Object getIdentity() {
-			return theEngine.getTransformation().getIdentity();
+			return Identifiable.wrap(theParent.getIdentity(), "xform", theEngine.getTransformation().getIdentity());
 		}
 
 		@Override

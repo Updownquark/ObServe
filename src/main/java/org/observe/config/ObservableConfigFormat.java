@@ -33,6 +33,8 @@ import org.observe.config.ObservableConfigFormat.ReferenceFormat.FormattedField;
 import org.observe.util.EntityReflector;
 import org.observe.util.EntityReflector.FieldChange;
 import org.observe.util.TypeTokens;
+import org.qommons.Identifiable;
+import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
 import org.qommons.Transactable;
@@ -384,6 +386,21 @@ public interface ObservableConfigFormat<E> {
 			Observable<?> until) {
 			return source;
 		}
+
+		@Override
+		public int hashCode() {
+			return theRetriever.hashCode();
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return obj instanceof ReferenceFormat && theRetriever.equals(((ReferenceFormat<?>) obj).theRetriever);
+		}
+
+		@Override
+		public String toString() {
+			return theRetriever.toString();
+		}
 	}
 
 	class DelayedExecution<T> {
@@ -427,7 +444,7 @@ public interface ObservableConfigFormat<E> {
 			if (theRetriever != null)
 				retriever = theRetriever;
 			else {
-				retriever = fieldValues -> {
+				retriever = LambdaUtils.printableFn(fieldValues -> {
 					Iterable<? extends T> retrieved = theMultiRetriever.apply(fieldValues);
 					for (T value : retrieved) {
 						boolean matches = true;
@@ -440,10 +457,18 @@ public interface ObservableConfigFormat<E> {
 						}
 					}
 					return theRetreiverDefault.get();
-				};
+				}, theMultiRetriever::toString, theMultiRetriever);
 			}
 			return new ReferenceFormat<>(fields, retriever);
 		}
+	}
+
+	static <T> ReferenceFormatBuilder<T> buildReferenceFormat(Iterable<? extends T> values, Supplier<? extends T> defaultValue) {
+		if (values instanceof Identifiable)
+			return buildReferenceFormat(LambdaUtils.printableFn(__ -> values, () -> ((Identifiable) values).getIdentity().toString(),
+				((Identifiable) values).getIdentity()), defaultValue);
+		else
+			return buildReferenceFormat(LambdaUtils.printableFn(__ -> values, values::toString, values), defaultValue);
 	}
 
 	static <T> ReferenceFormatBuilder<T> buildReferenceFormat(Function<QuickMap<String, Object>, ? extends T> retriever) {
