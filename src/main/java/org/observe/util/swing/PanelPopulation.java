@@ -101,7 +101,6 @@ import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.FastFailLockingStrategy;
-import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.RRWLockingStrategy;
 import org.qommons.io.Format;
@@ -2163,8 +2162,8 @@ public class PanelPopulation {
 				tab.tabEnd = oldTab.tabEnd;
 				theTabsByComponent.remove(oldTab.component);
 			} else
-				tab.tabEnd = new SimpleObservable<>(null, Identifiable.baseId("tab " + tabID, new BiTuple<>(this, tabID)), false, null,
-					ListenerList.build().unsafe());
+				tab.tabEnd = SimpleObservable.build().withIdentity(Identifiable.baseId("tab " + tabID, new BiTuple<>(this, tabID)))
+					.safe(false).build();
 			Observable<?> tabUntil = Observable.or(tab.tabEnd, theUntil);
 			tab.component = t.getComponent(tabUntil);
 			if (theTabsByComponent.put(tab.component, tab) != null)
