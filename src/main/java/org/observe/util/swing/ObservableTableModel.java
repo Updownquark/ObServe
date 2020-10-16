@@ -28,14 +28,12 @@ import javax.swing.table.TableColumn;
 import javax.swing.table.TableColumnModel;
 import javax.swing.table.TableModel;
 
-import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.CategoryRenderStrategy.CategoryKeyListener;
 import org.observe.util.swing.CategoryRenderStrategy.CategoryMouseListener;
 import org.qommons.Transaction;
-import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement;
 
 import com.google.common.reflect.TypeToken;
@@ -290,8 +288,6 @@ public class ObservableTableModel<R> implements TableModel {
 	public static <R> Subscription hookUp(JTable table, ObservableTableModel<R> model, TableRenderContext ctx) {
 		LinkedList<Subscription> subs = new LinkedList<>();
 		try (Transaction rowT = model.getRows().lock(false, null); Transaction colT = model.getColumns().lock(false, null)) {
-			SimpleObservable<Void> until = new SimpleObservable<>(null, null, false, null, ListenerList.build().unsafe());
-			subs.add(() -> until.onNext(null));
 			for (int c = 0; c < model.getColumnCount(); c++) {
 				CategoryRenderStrategy<? super R, ?> column = model.getColumn(c);
 				TableColumn tblColumn = table.getColumnModel().getColumn(c);
