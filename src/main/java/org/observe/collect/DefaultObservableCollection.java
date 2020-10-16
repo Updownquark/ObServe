@@ -131,8 +131,8 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 		return t == null ? null : addCause(t, write, cause);
 	}
 
-	Causable getCurrentCause() {
-		return theTransactionCauses.peekFirst();
+	Collection<Causable> getCurrentCauses() {
+		return theTransactionCauses;
 	}
 
 	@Override
@@ -248,7 +248,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			if (el == null)
 				return null;
 			ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), getType(),
-				theValues.getElementsBefore(el.getElementId()), CollectionChangeType.add, null, value, getCurrentCause());
+				theValues.getElementsBefore(el.getElementId()), CollectionChangeType.add, null, value, getCurrentCauses());
 			fire(event);
 			return el;
 		}
@@ -266,7 +266,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			E value = theValues.getElement(valueEl).get();
 			CollectionElement<E> el = theValues.move(valueEl, after, before, first, () -> {
 				ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(valueEl, getType(),
-					theValues.getElementsBefore(valueEl), CollectionChangeType.remove, value, value, getCurrentCause());
+					theValues.getElementsBefore(valueEl), CollectionChangeType.remove, value, value, getCurrentCauses());
 				fire(event);
 				if (afterRemove != null)
 					afterRemove.run();
@@ -274,7 +274,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			if (el.getElementId().equals(valueEl))
 				return getElement(valueEl);
 			ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), getType(),
-				theValues.getElementsBefore(el.getElementId()), CollectionChangeType.add, null, value, getCurrentCause());
+				theValues.getElementsBefore(el.getElementId()), CollectionChangeType.add, null, value, getCurrentCauses());
 			fire(event);
 			return el;
 		}
@@ -345,7 +345,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 					// A pure update on a value-stored collection may mean that the value has changed such that it needs to be moved
 					// Correct the storage structure
 					boolean[] thisMoved = new boolean[1];
-					RepairOperation op = new RepairOperation(getCurrentCause());
+					RepairOperation op = new RepairOperation(getCurrentCauses());
 					try (Transaction opT = op.use(); Transaction vt = lock(true, op)) {
 						((ValueStoredCollection<E>) theValues).repair(valueEl.getElementId(),
 							new ValueStoredCollection.RepairListener<E, Void>() {
@@ -375,7 +375,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 				}
 				valueEl.set(value);
 				fire(new ObservableCollectionEvent<>(getElementId(), getType(), getElementsBefore(getElementId()), CollectionChangeType.set,
-					old, value, getCurrentCause()));
+					old, value, getCurrentCauses()));
 			}
 
 			@Override
@@ -389,7 +389,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 					E old = get();
 					valueEl.remove();
 					fire(new ObservableCollectionEvent<>(getElementId(), getType(), getElementsBefore(getElementId()),
-						CollectionChangeType.remove, old, old, getCurrentCause()));
+						CollectionChangeType.remove, old, old, getCurrentCauses()));
 				}
 			}
 
@@ -402,8 +402,8 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 
 	/** A Causable representing a {@link ValueStoredCollection} repair operation */
 	static class RepairOperation extends Causable.AbstractCausable {
-		RepairOperation(Object cause) {
-			super(cause);
+		RepairOperation(Collection<?> causes) {
+			super(causes);
 		}
 	}
 

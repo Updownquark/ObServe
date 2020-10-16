@@ -1,5 +1,7 @@
 package org.observe.collect;
 
+import java.util.Collection;
+
 import org.observe.ObservableValueEvent;
 import org.qommons.collect.ElementId;
 
@@ -22,16 +24,30 @@ public class ObservableCollectionEvent<E> extends ObservableValueEvent<E> {
 	 * @param type The type of the change
 	 * @param oldValue The old value for the element ({@link CollectionChangeType#set}-type only)
 	 * @param newValue The new value for the element
-	 * @param cause The cause of the change
+	 * @param causes The causes of the change
 	 */
 	public ObservableCollectionEvent(ElementId elementId, TypeToken<E> valueType, int index, CollectionChangeType type, E oldValue,
-		E newValue, Object cause) {
-		super(valueType, type == CollectionChangeType.add, oldValue, newValue, cause);
+		E newValue, Object... causes) {
+		super(valueType, type == CollectionChangeType.add, oldValue, newValue, causes);
 		if (index < 0)
 			throw new IndexOutOfBoundsException("" + index);
 		theElementId = elementId;
 		theIndex = index;
 		theType = type;
+	}
+
+	/**
+	 * @param elementId The ID of the element that was changed
+	 * @param valueType The type of the value, for validation
+	 * @param index The index of the element in the collection
+	 * @param type The type of the change
+	 * @param oldValue The old value for the element ({@link CollectionChangeType#set}-type only)
+	 * @param newValue The new value for the element
+	 * @param causes The causes of the change
+	 */
+	public ObservableCollectionEvent(ElementId elementId, TypeToken<E> valueType, int index, CollectionChangeType type, E oldValue,
+		E newValue, Collection<?> causes) {
+		this(elementId, valueType, index, type, oldValue, newValue, causes.toArray());
 	}
 
 	/** @return The ID of the element that was changed */

@@ -88,7 +88,7 @@ public class DefaultObservableSortedCollection<E> extends DefaultObservableColle
 		});
 		if (addedCheck.get()) {
 			ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), getType(),
-				getValues().getElementsBefore(el.getElementId()), CollectionChangeType.add, null, value, getCurrentCause());
+				getValues().getElementsBefore(el.getElementId()), CollectionChangeType.add, null, value, getCurrentCauses());
 			fire(event);
 		}
 		return el;
@@ -106,7 +106,7 @@ public class DefaultObservableSortedCollection<E> extends DefaultObservableColle
 
 	@Override
 	public <X> boolean repair(ElementId element, ValueStoredCollection.RepairListener<E, X> listener) {
-		RepairOperation op = new RepairOperation(getCurrentCause());
+		RepairOperation op = new RepairOperation(getCurrentCauses());
 		try (Transaction opT = op.use(); Transaction t = lock(true, op)) {
 			return getValues().repair(element, new ObservableRepairListener<>(listener));
 		}
@@ -114,7 +114,7 @@ public class DefaultObservableSortedCollection<E> extends DefaultObservableColle
 
 	@Override
 	public <X> boolean repair(ValueStoredCollection.RepairListener<E, X> listener) {
-		RepairOperation op = new RepairOperation(getCurrentCause());
+		RepairOperation op = new RepairOperation(getCurrentCauses());
 		try (Transaction opT = op.use(); Transaction t = lock(true, op)) {
 			return getValues().repair(new ObservableRepairListener<>(listener));
 		}
@@ -129,7 +129,7 @@ public class DefaultObservableSortedCollection<E> extends DefaultObservableColle
 
 		@Override
 		public RepairEvent<X> removed(CollectionElement<E> element) {
-			RepairEvent<X> repair = new RepairEvent<>(getCurrentCause());
+			RepairEvent<X> repair = new RepairEvent<>(getCurrentCauses());
 			boolean success = false;
 			try {
 				ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(element.getElementId(), getType(),

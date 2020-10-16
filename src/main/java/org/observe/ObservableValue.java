@@ -1437,10 +1437,10 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 													ObservableValueEvent<T> toFire;
 													if (event.isInitial() && event2.isInitial())
 														toFire = withInitialEvent
-														? retObs.createInitialEvent(event2.getNewValue(), event2.getCause()) : null;
+															? retObs.createInitialEvent(event2.getNewValue(), event2.getCauses()) : null;
 														else
 															toFire = retObs.createChangeEvent(innerOld, event2.getNewValue(),
-																event2.getCause());
+															event2.getCauses());
 													if (toFire != null) {
 														try (Transaction t = toFire.use()) {
 															observer.onNext(toFire);
@@ -1462,9 +1462,9 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 									T newValue = get(event.getNewValue());
 									ObservableValueEvent<T> toFire;
 									if (event.isInitial())
-										toFire = withInitialEvent ? retObs.createInitialEvent(newValue, event.getCause()) : null;
+										toFire = withInitialEvent ? retObs.createInitialEvent(newValue, event.getCauses()) : null;
 										else
-											toFire = retObs.createChangeEvent((T) old[0], newValue, event.getCause());
+										toFire = retObs.createChangeEvent((T) old[0], newValue, event.getCauses());
 									old[0] = newValue;
 									if (toFire != null) {
 										try (Transaction t = toFire.use()) {
@@ -1484,7 +1484,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 							theLock.lock();
 							try {
 								ObservableValueEvent<T> toFire = retObs.createChangeEvent(get(event.getOldValue()),
-									get(event.getNewValue()), event.getCause());
+									get(event.getNewValue()), event.getCauses());
 								try (Transaction t = toFire.use()) {
 									observer.onCompleted(toFire);
 								}

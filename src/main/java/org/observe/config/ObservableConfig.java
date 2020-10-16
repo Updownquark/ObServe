@@ -370,7 +370,7 @@ public class ObservableConfig implements Transactable, Stamped {
 
 		public ObservableConfigEvent asFromChild() {
 			return new ObservableConfigEvent(changeType, relativePath.get(0), oldName, oldValue,
-				relativePath.subList(1, relativePath.size()), getCause());
+				relativePath.subList(1, relativePath.size()), getCauses());
 		}
 
 		@Override

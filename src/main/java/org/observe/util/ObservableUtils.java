@@ -15,13 +15,13 @@ import org.qommons.collect.CollectionElement;
 /** Utility methods for observables */
 public class ObservableUtils {
 	/**
-	 * The {@link ObservableCollectionEvent#getCause() cause} for events fired for extant elements in the collection upon
+	 * The {@link ObservableCollectionEvent#getCauses() cause} for events fired for extant elements in the collection upon
 	 * {@link ObservableCollection#subscribe(Consumer, boolean) subscription}
 	 */
 	public static class SubscriptionCause extends Causable.AbstractCausable {
 		/** Creates a subscription cause */
 		public SubscriptionCause() {
-			super(null);
+			super();
 		}
 	}
 

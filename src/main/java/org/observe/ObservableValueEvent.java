@@ -1,5 +1,7 @@
 package org.observe;
 
+import java.util.Collection;
+
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 
@@ -20,10 +22,10 @@ public class ObservableValueEvent<T> extends Causable.AbstractCausable implement
 	 * @param initial Whether this represents the population of the initial value of an observable value in response to subscription
 	 * @param oldValue The old value of the observable
 	 * @param newValue The new value in the observable
-	 * @param cause The cause of this event--typically another event or null
+	 * @param causes The causes of this event--typically other events
 	 */
-	protected ObservableValueEvent(TypeToken<T> type, boolean initial, T oldValue, T newValue, Object cause) {
-		super(cause);
+	protected ObservableValueEvent(TypeToken<T> type, boolean initial, T oldValue, T newValue, Object... causes) {
+		super(causes);
 		isInitial = initial;
 		if (oldValue != null && !TypeTokens.get().isInstance(type, oldValue))
 			throw new ClassCastException("Cannot cast " + oldValue.getClass().getName() + " to " + type);
@@ -31,6 +33,17 @@ public class ObservableValueEvent<T> extends Causable.AbstractCausable implement
 		if (newValue != null && !TypeTokens.get().isInstance(type, newValue))
 			throw new ClassCastException("Cannot cast " + newValue.getClass().getName() + " to " + type);
 		theNewValue = newValue;
+	}
+
+	/**
+	 * @param type The type of the observable whose value changed
+	 * @param initial Whether this represents the population of the initial value of an observable value in response to subscription
+	 * @param oldValue The old value of the observable
+	 * @param newValue The new value in the observable
+	 * @param causes The causes of this event--typically other events
+	 */
+	protected ObservableValueEvent(TypeToken<T> type, boolean initial, T oldValue, T newValue, Collection<?> causes) {
+		this(type, initial, oldValue, newValue, causes.toArray());
 	}
 
 	@Override

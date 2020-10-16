@@ -1552,7 +1552,7 @@ public final class ObservableCollectionImpl {
 				int index = 0;
 				while (el != null) {
 					value = update(value, new ObservableCollectionEvent<>(el.getElementId(), getCollection().getType(), index++, //
-						CollectionChangeType.add, null, el.get(), null));
+						CollectionChangeType.add, null, el.get()));
 					el = getCollection().getAdjacentElement(el.getElementId(), true);
 				}
 				return value;
@@ -3070,7 +3070,7 @@ public final class ObservableCollectionImpl {
 		public void clear() {
 			if (isEmpty())
 				return;
-			Causable cause = Causable.simpleCause(null);
+			Causable cause = Causable.simpleCause();
 			try (Transaction cst = cause.use(); Transaction t = lock(true, cause)) {
 				if (!theFlow.clear()) {
 					new ArrayList<>(theDerivedElements).forEach(el -> {

@@ -1917,7 +1917,7 @@ public class ObservableCollectionsTest {
 		tester.checkOps(0);
 		controller.add(9);
 		tester.check(9, 1);
-		Causable cause = Causable.simpleCause(null);
+		Causable cause = Causable.simpleCause();
 		try (Transaction t = cause.use()) {
 			Transaction trans = controller.lock(true, cause);
 			tester.checkOps(0);
@@ -1972,7 +1972,7 @@ public class ObservableCollectionsTest {
 		}
 		assertEquals(correctChanges[0], changeCount[0]);
 
-		Causable cause = Causable.simpleCause(null);
+		Causable cause = Causable.simpleCause();
 		try (Transaction t = cause.use(); Transaction trans = controller.lock(true, cause)) {
 			controller.clear();
 			correct.clear();
@@ -2017,7 +2017,7 @@ public class ObservableCollectionsTest {
 		refresh.onNext(null);
 		tester.checkOps(1);
 
-		Causable cause = Causable.simpleCause(null);
+		Causable cause = Causable.simpleCause();
 		try (Transaction t = cause.use()) {
 			Transaction trans = list.lock(true, cause);
 			refresh.onNext(cause);
@@ -2026,7 +2026,7 @@ public class ObservableCollectionsTest {
 		}
 		tester.checkOps(1);
 
-		cause = Causable.simpleCause(null);
+		cause = Causable.simpleCause();
 		try (Transaction t = cause.use()) {
 			Transaction trans = list.lock(true, cause);
 			for (int i = 0; i < 30; i++)
@@ -2077,7 +2077,7 @@ public class ObservableCollectionsTest {
 		correctChanges++;
 		assertEquals(correctChanges, changes[0]);
 
-		Causable cause = Causable.simpleCause(null);
+		Causable cause = Causable.simpleCause();
 		try (Transaction t = cause.use()) {
 			Transaction trans = list.lock(true, cause);
 			mult.set(3, cause);
@@ -2087,7 +2087,7 @@ public class ObservableCollectionsTest {
 		correctChanges++;
 		assertEquals(correctChanges, changes[0]);
 
-		cause = Causable.simpleCause(null);
+		cause = Causable.simpleCause();
 		try (Transaction t = cause.use()) {
 			Transaction trans = list.lock(true, cause);
 			for (int i = 0; i < 30; i++)

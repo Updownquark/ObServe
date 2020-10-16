@@ -52,10 +52,10 @@ public class CollectionChangeEvent<E> extends Causable.AbstractCausable {
 	/**
 	 * @param aType The common type of the changes
 	 * @param elements The changes, by element ID
-	 * @param cause The cause of the event
+	 * @param causes The causes of the event
 	 */
-	public CollectionChangeEvent(CollectionChangeType aType, List<ElementChange<E>> elements, Object cause) {
-		super(cause);
+	public CollectionChangeEvent(CollectionChangeType aType, List<ElementChange<E>> elements, Object... causes) {
+		super(causes);
 		type = aType;
 		this.elements = Collections.unmodifiableList(elements);
 	}
