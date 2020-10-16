@@ -3,6 +3,7 @@ package org.observe.util.swing;
 import java.awt.Component;
 import java.awt.Insets;
 import java.awt.event.ActionEvent;
+import java.awt.event.InputEvent;
 import java.awt.event.MouseEvent;
 import java.util.EventObject;
 import java.util.LinkedList;
@@ -382,6 +383,8 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 
 		@Override
 		public boolean isCellEditable(EventObject anEvent) {
+			if (anEvent instanceof InputEvent && ((InputEvent) anEvent).isConsumed())
+				return false;
 			return theEditTest.test(anEvent);
 		}
 
