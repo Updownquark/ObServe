@@ -42,11 +42,11 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.TimeZone;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -1334,10 +1334,6 @@ public class ObservableSwingUtils {
 				System.setErr(new HandlerPrintStream(System.err, true));
 			}
 
-			void start() {
-				/// TODO
-			}
-
 			synchronized void report(int b, boolean error) throws IOException {
 				startReport(error);
 				theBytes.write(b);
@@ -1452,218 +1448,223 @@ public class ObservableSwingUtils {
 
 			class HandlerPrintStream extends PrintStream {
 				private final PrintStream theSystemStream;
+				private final AtomicInteger isRecursive;
 
 				HandlerPrintStream(PrintStream systemStream, boolean error) {
 					super(new OutputStream() {
 						@Override
 						public void write(int b) throws IOException {
+							systemStream.write(b);
 							report(b, error);
 						}
 
 						@Override
 						public void write(byte[] b) throws IOException {
+							systemStream.write(b);
 							report(b, 0, b.length, error);
 						}
 
 						@Override
 						public void write(byte[] b, int off, int len) throws IOException {
+							systemStream.write(b, off, len);
 							report(b, off, len, error);
 						}
 					});
+					isRecursive = new AtomicInteger();
 					theSystemStream = systemStream;
 				}
-
-				@Override
-				public void flush() {
-					theSystemStream.flush();
-					super.flush();
-				}
-
-				@Override
-				public void close() {
-					theSystemStream.close();
-					super.close();
-				}
-
-				@Override
-				public boolean checkError() {
-					theSystemStream.checkError();
-					return super.checkError();
-				}
-
-				@Override
-				public void write(int b) {
-					theSystemStream.write(b);
-					super.write(b);
-				}
-
-				@Override
-				public void write(byte[] buf, int off, int len) {
-					theSystemStream.write(buf, off, len);
-					super.write(buf, off, len);
-				}
-
-				@Override
-				public void print(boolean b) {
-					theSystemStream.print(b);
-					super.print(b);
-				}
-
-				@Override
-				public void print(char c) {
-					theSystemStream.print(c);
-					super.print(c);
-				}
-
-				@Override
-				public void print(int i) {
-					theSystemStream.print(i);
-					super.print(i);
-				}
-
-				@Override
-				public void print(long l) {
-					theSystemStream.print(l);
-					super.print(l);
-				}
-
-				@Override
-				public void print(float f) {
-					theSystemStream.print(f);
-					super.print(f);
-				}
-
-				@Override
-				public void print(double d) {
-					theSystemStream.print(d);
-					super.print(d);
-				}
-
-				@Override
-				public void print(char[] s) {
-					theSystemStream.print(s);
-					super.print(s);
-				}
-
-				@Override
-				public void print(String s) {
-					theSystemStream.print(s);
-					super.print(s);
-				}
-
-				@Override
-				public void print(Object obj) {
-					theSystemStream.print(obj);
-					super.print(obj);
-				}
-
-				@Override
-				public void println() {
-					theSystemStream.println();
-					super.println();
-				}
-
-				@Override
-				public void println(boolean x) {
-					theSystemStream.println(x);
-					super.println(x);
-				}
-
-				@Override
-				public void println(char x) {
-					theSystemStream.println(x);
-					super.println(x);
-				}
-
-				@Override
-				public void println(int x) {
-					theSystemStream.println(x);
-					super.println(x);
-				}
-
-				@Override
-				public void println(long x) {
-					theSystemStream.println(x);
-					super.println(x);
-				}
-
-				@Override
-				public void println(float x) {
-					theSystemStream.println(x);
-					super.println(x);
-				}
-
-				@Override
-				public void println(double x) {
-					theSystemStream.println(x);
-					super.println(x);
-				}
-
-				@Override
-				public void println(char[] x) {
-					theSystemStream.println(x);
-					super.println(x);
-				}
-
-				@Override
-				public void println(String x) {
-					theSystemStream.println(x);
-					super.println(x);
-				}
-
-				@Override
-				public void println(Object x) {
-					theSystemStream.println(x);
-					super.println(x);
-				}
-
-				@Override
-				public PrintStream printf(String format, Object... args) {
-					theSystemStream.printf(format, args);
-					return super.printf(format, args);
-				}
-
-				@Override
-				public PrintStream printf(Locale l, String format, Object... args) {
-					theSystemStream.printf(l, format, args);
-					return super.printf(l, format, args);
-				}
-
-				@Override
-				public PrintStream format(String format, Object... args) {
-					theSystemStream.format(format, args);
-					return super.format(format, args);
-				}
-
-				@Override
-				public PrintStream format(Locale l, String format, Object... args) {
-					theSystemStream.format(l, format, args);
-					return super.format(l, format, args);
-				}
-
-				@Override
-				public PrintStream append(CharSequence csq) {
-					theSystemStream.append(csq);
-					return super.append(csq);
-				}
-
-				@Override
-				public PrintStream append(CharSequence csq, int start, int end) {
-					theSystemStream.append(csq, start, end);
-					return super.append(csq, start, end);
-				}
-
-				@Override
-				public PrintStream append(char c) {
-					theSystemStream.append(c);
-					return super.append(c);
-				}
-
-				@Override
-				public void write(byte[] b) throws IOException {
-					theSystemStream.write(b);
-					super.write(b);
-				}
+				//
+				// @Override
+				// public void flush() {
+				// theSystemStream.flush();
+				// super.flush();
+				// }
+				//
+				// @Override
+				// public void close() {
+				// theSystemStream.close();
+				// super.close();
+				// }
+				//
+				// @Override
+				// public boolean checkError() {
+				// theSystemStream.checkError();
+				// return super.checkError();
+				// }
+				//
+				// @Override
+				// public void write(int b) {
+				// theSystemStream.write(b);
+				// super.write(b);
+				// }
+				//
+				// @Override
+				// public void write(byte[] buf, int off, int len) {
+				// theSystemStream.write(buf, off, len);
+				// super.write(buf, off, len);
+				// }
+				//
+				// @Override
+				// public void print(boolean b) {
+				// theSystemStream.print(b);
+				// super.print(b);
+				// }
+				//
+				// @Override
+				// public void print(char c) {
+				// theSystemStream.print(c);
+				// super.print(c);
+				// }
+				//
+				// @Override
+				// public void print(int i) {
+				// theSystemStream.print(i);
+				// super.print(i);
+				// }
+				//
+				// @Override
+				// public void print(long l) {
+				// theSystemStream.print(l);
+				// super.print(l);
+				// }
+				//
+				// @Override
+				// public void print(float f) {
+				// theSystemStream.print(f);
+				// super.print(f);
+				// }
+				//
+				// @Override
+				// public void print(double d) {
+				// theSystemStream.print(d);
+				// super.print(d);
+				// }
+				//
+				// @Override
+				// public void print(char[] s) {
+				// theSystemStream.print(s);
+				// super.print(s);
+				// }
+				//
+				// @Override
+				// public void print(String s) {
+				// theSystemStream.print(s);
+				// super.print(s);
+				// }
+				//
+				// @Override
+				// public void print(Object obj) {
+				// theSystemStream.print(obj);
+				// super.print(obj);
+				// }
+				//
+				// @Override
+				// public void println() {
+				// theSystemStream.println();
+				// super.println();
+				// }
+				//
+				// @Override
+				// public void println(boolean x) {
+				// theSystemStream.println(x);
+				// super.println(x);
+				// }
+				//
+				// @Override
+				// public void println(char x) {
+				// theSystemStream.println(x);
+				// super.println(x);
+				// }
+				//
+				// @Override
+				// public void println(int x) {
+				// theSystemStream.println(x);
+				// super.println(x);
+				// }
+				//
+				// @Override
+				// public void println(long x) {
+				// theSystemStream.println(x);
+				// super.println(x);
+				// }
+				//
+				// @Override
+				// public void println(float x) {
+				// theSystemStream.println(x);
+				// super.println(x);
+				// }
+				//
+				// @Override
+				// public void println(double x) {
+				// theSystemStream.println(x);
+				// super.println(x);
+				// }
+				//
+				// @Override
+				// public void println(char[] x) {
+				// theSystemStream.println(x);
+				// super.println(x);
+				// }
+				//
+				// @Override
+				// public void println(String x) {
+				// theSystemStream.println(x);
+				// super.println(x);
+				// }
+				//
+				// @Override
+				// public void println(Object x) {
+				// theSystemStream.println(x);
+				// super.println(x);
+				// }
+				//
+				// @Override
+				// public PrintStream printf(String format, Object... args) {
+				// theSystemStream.printf(format, args);
+				// return super.printf(format, args);
+				// }
+				//
+				// @Override
+				// public PrintStream printf(Locale l, String format, Object... args) {
+				// theSystemStream.printf(l, format, args);
+				// return super.printf(l, format, args);
+				// }
+				//
+				// @Override
+				// public PrintStream format(String format, Object... args) {
+				// theSystemStream.format(format, args);
+				// return super.format(format, args);
+				// }
+				//
+				// @Override
+				// public PrintStream format(Locale l, String format, Object... args) {
+				// theSystemStream.format(l, format, args);
+				// return super.format(l, format, args);
+				// }
+				//
+				// @Override
+				// public PrintStream append(CharSequence csq) {
+				// theSystemStream.append(csq);
+				// return super.append(csq);
+				// }
+				//
+				// @Override
+				// public PrintStream append(CharSequence csq, int start, int end) {
+				// theSystemStream.append(csq, start, end);
+				// return super.append(csq, start, end);
+				// }
+				//
+				// @Override
+				// public PrintStream append(char c) {
+				// theSystemStream.append(c);
+				// return super.append(c);
+				// }
+				//
+				// @Override
+				// public void write(byte[] b) throws IOException {
+				// theSystemStream.write(b);
+				// super.write(b);
+				// }
 			}
 		}
 
