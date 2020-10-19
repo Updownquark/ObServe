@@ -1,10 +1,13 @@
 package org.observe;
 
+import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedList;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Function;
 
 import org.observe.util.TypeTokens;
+import org.qommons.CausalLock;
 import org.qommons.Identifiable;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
@@ -30,7 +33,7 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 	private final TypeToken<T> theType;
 	private final String theDescription;
 	private final boolean isNullable;
-	private final Transactable theLock;
+	private final CausalLock theLock;
 	private final ListenerList<ListenerHolder<T>> theListeners;
 	private final VSVChanges theChanges = new VSVChanges();
 	private volatile T theValue;
@@ -64,7 +67,7 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 		theType = type;
 		theDescription = description;
 		isNullable = nullable;
-		theLock = lock == null ? null : lock.apply(this);
+		theLock = lock == null ? null : new CausalLock(lock.apply(this));
 		if (theLock != null) {
 			// We secure this list ourselves, so no need for any thread-safety
 			listening.forEachSafe(false).allowReentrant().withFastSize(false).withSyncType(ListenerList.SynchronizationType.NONE);
@@ -120,6 +123,10 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 		return theStamp;
 	}
 
+	private Collection<?> getCurrentCauses() {
+		return theLock == null ? Collections.emptyList() : theLock.getCurrentCauses();
+	}
+
 	@Override
 	public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
 		String accept = isAcceptable(value);
@@ -134,7 +141,7 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 			T oldValue = theValue;
 			theValue = value;
 			if (!theListeners.isEmpty()) {
-				ObservableValueEvent<T>[] evt = new ObservableValueEvent[] { createChangeEvent(oldValue, value, cause) };
+				ObservableValueEvent<T>[] evt = new ObservableValueEvent[] { createChangeEvent(oldValue, value, getCurrentCauses()) };
 				LinkedList<Transaction> finishers = new LinkedList<>();
 				finishers.add(evt[0].use());
 				try {
@@ -152,7 +159,7 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 								// Since listeners are always added to the end, we may assume that all future listeners
 								// also have not been told of the now-vetoed value
 								oldStamp[0] = listener.lastUpdated;
-								evt[0] = createChangeEvent(listener.knownValue, value, cause);
+								evt[0] = createChangeEvent(listener.knownValue, value, getCurrentCauses());
 								finishers.add(evt[0].use());
 							}
 							listener.lastUpdated = newStamp;
@@ -196,10 +203,10 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 	protected void kill(Object cause) {
 		try (Transaction lock = theLock == null ? Transaction.NONE : theLock.lock(true, cause)) {
 			if (!isAlive)
-				throw new UnsupportedOperationException("This value is no already dead");
+				throw new UnsupportedOperationException("This value is already dead");
 			isAlive = false;
 			long stamp = theStamp;
-			ObservableValueEvent<T> completeEvt = createChangeEvent(theValue, theValue, cause);
+			ObservableValueEvent<T> completeEvt = createChangeEvent(theValue, theValue, getCurrentCauses());
 			try (Transaction evtT = completeEvt.use()) {
 				theListeners.forEach(//
 					listener -> {

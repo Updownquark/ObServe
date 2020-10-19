@@ -2,6 +2,7 @@ package org.observe;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -132,23 +133,23 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 	 *
 	 * @param oldVal The previous value of this observable
 	 * @param newVal The new value of this observable
-	 * @param cause The cause of the change
+	 * @param causes The causes of the change
 	 * @return The event to propagate
 	 */
-	default ObservableValueEvent<T> createChangeEvent(T oldVal, T newVal, Object cause) {
-		return ObservableValueEvent.createChangeEvent(this, oldVal, newVal, cause);
+	default ObservableValueEvent<T> createChangeEvent(T oldVal, T newVal, Object... causes) {
+		return ObservableValueEvent.createChangeEvent(this, oldVal, newVal, causes);
 	}
 
 	/**
-	 * @param value The initial value to fire the event for
-	 * @param cause The cause of the initial event
-	 * @param action The action to perform on the event
+	 * Creates an {@link ObservableValueEvent} to propagate a change to this observable's value
+	 *
+	 * @param oldVal The previous value of this observable
+	 * @param newVal The new value of this observable
+	 * @param causes The causes of the change
+	 * @return The event to propagate
 	 */
-	default void fireInitialEvent(T value, Object cause, Consumer<? super ObservableValueEvent<T>> action) {
-		ObservableValueEvent<T> evt = createInitialEvent(value, cause);
-		try (Transaction t = evt.use()) {
-			action.accept(evt);
-		}
+	default ObservableValueEvent<T> createChangeEvent(T oldVal, T newVal, Collection<?> causes) {
+		return ObservableValueEvent.createChangeEvent(this, oldVal, newVal, causes);
 	}
 
 	/**
@@ -922,7 +923,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 			theUntil = until;
 			theChanges = new Observable.ObservableTakenUntil<>(wrap.noInitChanges(), until, terminate, () -> {
 				T value = wrap.get();
-				return wrap.createChangeEvent(value, value, null);
+				return wrap.createChangeEvent(value, value);
 			});
 		}
 
@@ -1437,10 +1438,10 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 													ObservableValueEvent<T> toFire;
 													if (event.isInitial() && event2.isInitial())
 														toFire = withInitialEvent
-															? retObs.createInitialEvent(event2.getNewValue(), event2.getCauses()) : null;
+														? retObs.createInitialEvent(event2.getNewValue(), event2.getCauses()) : null;
 														else
 															toFire = retObs.createChangeEvent(innerOld, event2.getNewValue(),
-															event2.getCauses());
+																event2.getCauses());
 													if (toFire != null) {
 														try (Transaction t = toFire.use()) {
 															observer.onNext(toFire);
@@ -1464,7 +1465,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 									if (event.isInitial())
 										toFire = withInitialEvent ? retObs.createInitialEvent(newValue, event.getCauses()) : null;
 										else
-										toFire = retObs.createChangeEvent((T) old[0], newValue, event.getCauses());
+											toFire = retObs.createChangeEvent((T) old[0], newValue, event.getCauses());
 									old[0] = newValue;
 									if (toFire != null) {
 										try (Transaction t = toFire.use()) {

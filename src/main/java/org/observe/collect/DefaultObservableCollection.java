@@ -1,13 +1,13 @@
 package org.observe.collect;
 
 import java.util.Collection;
-import java.util.LinkedList;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 
 import org.observe.Equivalence;
 import org.observe.Subscription;
 import org.qommons.Causable;
+import org.qommons.CausalLock;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
@@ -33,8 +33,8 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	}
 
 	private final TypeToken<E> theType;
-	private final LinkedList<Causable> theTransactionCauses;
 	private final BetterList<E> theValues;
+	private final CausalLock theLock;
 	private final org.qommons.collect.ListenerList<Consumer<? super ObservableCollectionEvent<? extends E>>> theObservers;
 	private final BiFunction<ElementId, BetterCollection<?>, ElementId> theElementSource;
 	private final BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> theSourceElements;
@@ -63,9 +63,9 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 		Equivalence<? super E> equivalence) {
 		theType = type;
 		if (list instanceof ObservableCollection)
-			throw new UnsupportedOperationException("The backing for an ObservableCollection cannot be observable is not supported here");
-		theTransactionCauses = new LinkedList<>();
+			throw new UnsupportedOperationException("The backing for an ObservableCollection cannot be observable");
 		theValues = list;
+		theLock = new CausalLock(list);
 		theObservers = new org.qommons.collect.ListenerList<>(ObservableCollection.REENTRANT_EVENT_ERROR);
 		theElementSource = elementSource;
 		theSourceElements = sourceElements;
@@ -84,55 +84,21 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 
 	@Override
 	public boolean isLockSupported() {
-		return theValues.isLockSupported();
+		return theLock.isLockSupported();
 	}
 
 	@Override
 	public Transaction lock(boolean write, Object cause) {
-		Transaction t = theValues.lock(write, cause);
-		return addCause(t, write, cause);
-	}
-
-	private Transaction addCause(Transaction valueLock, boolean write, Object cause) {
-		Causable tCause;
-		Transaction causeFinish;
-		if (cause == null && !theTransactionCauses.isEmpty()) {
-			causeFinish = null;
-			tCause = null;
-		} else if (cause instanceof Causable) {
-			causeFinish = null;
-			tCause = (Causable) cause;
-		} else {
-			tCause = Causable.simpleCause(cause);
-			causeFinish = tCause.use();
-		}
-		if (write && tCause != null)
-			theTransactionCauses.add(tCause);
-		return new Transaction() {
-			private boolean isClosed;
-
-			@Override
-			public void close() {
-				if (isClosed)
-					return;
-				isClosed = true;
-				if (causeFinish != null)
-					causeFinish.close();
-				if (write && tCause != null)
-					theTransactionCauses.removeLastOccurrence(tCause);
-				valueLock.close();
-			}
-		};
+		return theLock.lock(write, cause);
 	}
 
 	@Override
 	public Transaction tryLock(boolean write, Object cause) {
-		Transaction t = theValues.tryLock(write, cause);
-		return t == null ? null : addCause(t, write, cause);
+		return theLock.tryLock(write, cause);
 	}
 
 	Collection<Causable> getCurrentCauses() {
-		return theTransactionCauses;
+		return theLock.getCurrentCauses();
 	}
 
 	@Override
@@ -248,7 +214,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			if (el == null)
 				return null;
 			ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), getType(),
-				theValues.getElementsBefore(el.getElementId()), CollectionChangeType.add, null, value, getCurrentCauses());
+				theValues.getElementsBefore(el.getElementId()), CollectionChangeType.add, null, value, theLock.getCurrentCauses());
 			fire(event);
 			return el;
 		}
@@ -266,7 +232,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			E value = theValues.getElement(valueEl).get();
 			CollectionElement<E> el = theValues.move(valueEl, after, before, first, () -> {
 				ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(valueEl, getType(),
-					theValues.getElementsBefore(valueEl), CollectionChangeType.remove, value, value, getCurrentCauses());
+					theValues.getElementsBefore(valueEl), CollectionChangeType.remove, value, value, theLock.getCurrentCauses());
 				fire(event);
 				if (afterRemove != null)
 					afterRemove.run();
@@ -274,7 +240,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			if (el.getElementId().equals(valueEl))
 				return getElement(valueEl);
 			ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), getType(),
-				theValues.getElementsBefore(el.getElementId()), CollectionChangeType.add, null, value, getCurrentCauses());
+				theValues.getElementsBefore(el.getElementId()), CollectionChangeType.add, null, value, theLock.getCurrentCauses());
 			fire(event);
 			return el;
 		}
@@ -345,7 +311,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 					// A pure update on a value-stored collection may mean that the value has changed such that it needs to be moved
 					// Correct the storage structure
 					boolean[] thisMoved = new boolean[1];
-					RepairOperation op = new RepairOperation(getCurrentCauses());
+					RepairOperation op = new RepairOperation(theLock.getCurrentCauses());
 					try (Transaction opT = op.use(); Transaction vt = lock(true, op)) {
 						((ValueStoredCollection<E>) theValues).repair(valueEl.getElementId(),
 							new ValueStoredCollection.RepairListener<E, Void>() {
@@ -375,7 +341,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 				}
 				valueEl.set(value);
 				fire(new ObservableCollectionEvent<>(getElementId(), getType(), getElementsBefore(getElementId()), CollectionChangeType.set,
-					old, value, getCurrentCauses()));
+					old, value, theLock.getCurrentCauses()));
 			}
 
 			@Override
@@ -389,7 +355,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 					E old = get();
 					valueEl.remove();
 					fire(new ObservableCollectionEvent<>(getElementId(), getType(), getElementsBefore(getElementId()),
-						CollectionChangeType.remove, old, old, getCurrentCauses()));
+						CollectionChangeType.remove, old, old, theLock.getCurrentCauses()));
 				}
 			}
 

@@ -370,10 +370,12 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 
 			@Override
 			public Subscription subscribe(Observer<Object> observer) {
-				Causable.CausableKey key = Causable.key(//
-					(root, values) -> observer.onNext(root));
-				Subscription sub = ObservableCollection.this.onChange(//
-					evt -> evt.getRootCausable().onFinish(key));
+				Causable.CausableKey key = Causable.key((root, values) -> {
+					observer.onNext(root);
+				});
+				Subscription sub = ObservableCollection.this.onChange(evt -> {
+					evt.getRootCausable().onFinish(key);
+				});
 				return sub;
 			}
 
