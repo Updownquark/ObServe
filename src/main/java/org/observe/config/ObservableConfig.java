@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.WeakHashMap;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -1260,6 +1261,18 @@ public class ObservableConfig implements Transactable, Stamped {
 				}
 			}
 		});
+	}
+
+	public static <E extends Exception> ObservableConfigPersistence<E> persistIf(ObservableConfigPersistence<E> persistence,
+		BooleanSupplier persist) {
+		return new ObservableConfigPersistence<E>() {
+			@Override
+			public void persist(ObservableConfig config) throws E {
+				if (!persist.getAsBoolean())
+					return;
+				persistence.persist(config);
+			}
+		};
 	}
 
 	public static ObservableConfigPersistence<IOException> toFile(File file, XmlEncoding encoding) {
