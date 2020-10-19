@@ -15,6 +15,7 @@ import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.MouseListener;
 import java.awt.event.MouseMotionListener;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
@@ -375,6 +376,36 @@ public class PanelPopulation {
 			}, interval, false).times(5).onEDT().runNextIn(interval);
 			return (P) this;
 		}
+
+		P onMouse(Consumer<MouseEvent> onMouse);
+
+		default P onClick(Consumer<MouseEvent> onClick) {
+			return onMouse(evt -> {
+				if (evt.getID() == MouseEvent.MOUSE_CLICKED)
+					onClick.accept(evt);
+			});
+		}
+
+		default P onHover(Consumer<MouseEvent> onClick) {
+			return onMouse(evt -> {
+				if (evt.getID() == MouseEvent.MOUSE_MOVED)
+					onClick.accept(evt);
+			});
+		}
+
+		default P onEnter(Consumer<MouseEvent> onClick) {
+			return onMouse(evt -> {
+				if (evt.getID() == MouseEvent.MOUSE_ENTERED)
+					onClick.accept(evt);
+			});
+		}
+
+		default P onExit(Consumer<MouseEvent> onClick) {
+			return onMouse(evt -> {
+				if (evt.getID() == MouseEvent.MOUSE_EXITED)
+					onClick.accept(evt);
+			});
+		}
 	}
 
 	public interface ValueCache {
@@ -450,7 +481,15 @@ public class PanelPopulation {
 		<T> ObservableCollection<? extends T> getSupplyCollection(String name, TypeToken<T> type);
 	}
 
-	public interface FieldEditor<E, P extends FieldEditor<E, P>> extends ComponentEditor<E, P> {
+	public interface Tooltipped<T extends Tooltipped<T>> {
+		default T withTooltip(String tooltip) {
+			return withTooltip(tooltip == null ? null : ObservableValue.of(tooltip));
+		}
+
+		T withTooltip(ObservableValue<String> tooltip);
+	}
+
+	public interface FieldEditor<E, P extends FieldEditor<E, P>> extends ComponentEditor<E, P>, Tooltipped<P> {
 		default P withFieldName(String fieldName) {
 			return withFieldName(fieldName == null ? null : ObservableValue.of(fieldName));
 		}
@@ -485,33 +524,29 @@ public class PanelPopulation {
 
 		P withPostButton(String buttonText, ObservableAction<?> action, Consumer<ButtonEditor<?>> modify);
 
-		default P withTooltip(String tooltip) {
-			return withTooltip(tooltip == null ? null : ObservableValue.of(tooltip));
-		}
-
-		P withTooltip(ObservableValue<String> tooltip);
-
 		P modifyFieldLabel(Consumer<ObservableSwingUtils.FontAdjuster<?>> font);
 
 		P withFont(Consumer<ObservableSwingUtils.FontAdjuster<?>> font);
 	}
 
-	public interface ButtonEditor<P extends ButtonEditor<P>> extends FieldEditor<JButton, P> {
+	public interface Iconized<I> {
+		default I withIcon(Class<?> resourceAnchor, String location, int width, int height) {
+			return withIcon(ObservableSwingUtils.getFixedIcon(resourceAnchor, location, width, height));
+		}
+
+		default I withIcon(Icon icon) {
+			return withIcon(icon == null ? null : ObservableValue.of(icon));
+		}
+
+		I withIcon(ObservableValue<? extends Icon> icon);
+	}
+
+	public interface ButtonEditor<P extends ButtonEditor<P>> extends FieldEditor<JButton, P>, Iconized<P> {
 		default P withText(String text) {
 			return withText(text == null ? null : ObservableValue.of(text));
 		}
 
 		P withText(ObservableValue<String> text);
-
-		default P withIcon(Class<?> resourceAnchor, String location, int width, int height) {
-			return withIcon(ObservableSwingUtils.getFixedIcon(resourceAnchor, location, width, height));
-		}
-
-		default P withIcon(Icon icon) {
-			return withIcon(icon == null ? null : ObservableValue.of(icon));
-		}
-
-		P withIcon(ObservableValue<? extends Icon> icon);
 
 		P disableWith(ObservableValue<String> disabled);
 	}
@@ -953,6 +988,8 @@ public class PanelPopulation {
 
 		P withVisible(SettableValue<Boolean> visible);
 
+		P withMenuBar(Consumer<MenuBarBuilder<?>> menuBar);
+
 		P withVContent(Consumer<PanelPopulator<?, ?>> content);
 
 		default P withHContent(String layoutType, Consumer<PanelPopulator<?, ?>> content) {
@@ -977,6 +1014,31 @@ public class PanelPopulation {
 
 		P withModality(ObservableValue<ModalityType> modality);
 	}
+
+	public interface UiAction<A extends UiAction<A>> extends Iconized<A>, Tooltipped<A> {
+		A visibleWhen(ObservableValue<Boolean> visible);
+
+		A decorate(Consumer<ComponentDecorator> decoration);
+
+		A disableWith(ObservableValue<String> disabled);
+
+		@Override
+		A withTooltip(ObservableValue<String> tooltip);
+
+		A withText(ObservableValue<String> text);
+	}
+
+	public interface MenuBuilder<M extends MenuBuilder<M>> extends UiAction<M> {
+		M withAction(String name, Consumer<Object> action, Consumer<UiAction<?>> ui);
+
+		M withSubMenu(String name, Consumer<MenuBuilder<?>> subMenu);
+	}
+
+	public interface MenuBarBuilder<M extends MenuBarBuilder<M>> {
+		M withMenu(String menuName, Consumer<MenuBuilder<?>> menu);
+	}
+
+	// public interface
 
 	// Drag and cut/copy/paste
 
@@ -1418,6 +1480,7 @@ public class PanelPopulation {
 		private boolean isFillH;
 		private boolean isFillV;
 		private ComponentDecorator theDecorator;
+		private Consumer<MouseEvent> theMouseListener;
 
 		private ObservableValue<Boolean> isVisible;
 
@@ -1478,9 +1541,50 @@ public class PanelPopulation {
 			return new SimpleAlert(getComponent(), title, message);
 		}
 
+		@Override
+		public P onMouse(Consumer<MouseEvent> onMouse) {
+			if (theMouseListener == null)
+				theMouseListener = onMouse;
+			else {
+				Consumer<MouseEvent> old = theMouseListener;
+				theMouseListener = event -> {
+					old.accept(event);
+					onMouse.accept(event);
+				};
+			}
+			return (P) this;
+		}
+
 		protected Component decorate(Component c) {
 			if (theDecorator != null)
 				theDecorator.decorate(c);
+			if (theMouseListener != null)
+				c.addMouseListener(new MouseListener() {
+					@Override
+					public void mouseClicked(MouseEvent e) {
+						theMouseListener.accept(e);
+					}
+
+					@Override
+					public void mousePressed(MouseEvent e) {
+						theMouseListener.accept(e);
+					}
+
+					@Override
+					public void mouseReleased(MouseEvent e) {
+						theMouseListener.accept(e);
+					}
+
+					@Override
+					public void mouseEntered(MouseEvent e) {
+						theMouseListener.accept(e);
+					}
+
+					@Override
+					public void mouseExited(MouseEvent e) {
+						theMouseListener.accept(e);
+					}
+				});
 			return c;
 		}
 
@@ -2163,7 +2267,7 @@ public class PanelPopulation {
 				theTabsByComponent.remove(oldTab.component);
 			} else
 				tab.tabEnd = SimpleObservable.build().withIdentity(Identifiable.baseId("tab " + tabID, new BiTuple<>(this, tabID)))
-					.safe(false).build();
+				.safe(false).build();
 			Observable<?> tabUntil = Observable.or(tab.tabEnd, theUntil);
 			tab.component = t.getComponent(tabUntil);
 			if (theTabsByComponent.put(tab.component, tab) != null)
@@ -3193,6 +3297,11 @@ public class PanelPopulation {
 				@Override
 				public Alert alert(String title, String message) {
 					return SimpleListBuilder.this.alert(title, message);
+				}
+
+				@Override
+				public P onMouse(Consumer<MouseEvent> onMouse) {
+					throw new UnsupportedOperationException();
 				}
 
 				@Override

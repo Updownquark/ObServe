@@ -3,6 +3,7 @@ package org.observe.util.swing;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Container;
+import java.awt.Desktop;
 import java.awt.EventQueue;
 import java.awt.Font;
 import java.awt.GraphicsConfiguration;
@@ -18,20 +19,33 @@ import java.awt.event.ComponentListener;
 import java.awt.event.MouseEvent;
 import java.beans.PropertyChangeListener;
 import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.PrintStream;
+import java.io.Writer;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.InvocationTargetException;
+import java.net.MalformedURLException;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.text.ParseException;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.TimeZone;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -79,10 +93,15 @@ import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.Causable.CausableKey;
 import org.qommons.LambdaUtils;
+import org.qommons.QommonsUtils;
+import org.qommons.QommonsUtils.TimePrecision;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
+import org.qommons.collect.CircularArrayList;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.ListenerList;
+import org.qommons.io.Format;
+import org.qommons.threading.QommonsTimer;
 import org.xml.sax.SAXException;
 
 import com.google.common.reflect.TypeToken;
@@ -1067,7 +1086,11 @@ public class ObservableSwingUtils {
 		private String theConfigName;
 		private List<File> theOldConfigLocations;
 		private List<String> theOldConfigNames;
+		private URL theErrorReportLink;
+		private BiConsumer<StringBuilder, Boolean> theErrorReportInstructions;
 		private Consumer<ObservableConfig> theConfigInit;
+		private boolean isCloseWithoutSaveEnabled;
+		private volatile boolean isClosingWithoutSave;
 
 		public ObservableUiBuilder() {
 			super(new JFrame(), Observable.empty(), true);
@@ -1107,6 +1130,73 @@ public class ObservableSwingUtils {
 
 		public ObservableUiBuilder withConfigInit(Consumer<ObservableConfig> configInit) {
 			theConfigInit = configInit;
+			return this;
+		}
+
+		public ObservableUiBuilder withErrorReporting(String link, BiConsumer<StringBuilder, Boolean> instructions) {
+			try {
+				return withErrorReporting(new URL(link), instructions);
+			} catch (MalformedURLException e) {
+				e.printStackTrace();
+				throw new IllegalArgumentException("Bad URL: " + link);
+			}
+		}
+
+		public ObservableUiBuilder withErrorReporting(URL link, BiConsumer<StringBuilder, Boolean> instructions) {
+			theErrorReportLink = link;
+			theErrorReportInstructions = instructions;
+			withMenuBar(bar -> bar.withMenu("File", fileMenu -> {
+				fileMenu.withAction("Report Error or Request Feature", __ -> {
+					if (theErrorReportInstructions != null) {
+						WindowPopulation.populateDialog(null, null, true)//
+						.withTitle("Report Error/Request Feature")//
+						.withVContent(content -> {
+							String gotoText = new StringBuilder().append("<html>Go to <a href=\"").append(theErrorReportLink)
+								.append("\">").append(theErrorReportLink).append("</a><br>").toString();
+							content.addLabel(null, ObservableValue.of(gotoText), Format.TEXT, label -> {
+								label.onClick(evt -> {
+									try {
+										Desktop.getDesktop().browse(theErrorReportLink.toURI());
+									} catch (IOException | URISyntaxException | RuntimeException e) {
+										JOptionPane.showMessageDialog(getWindow(),
+											"Unable to open browser. Go to " + theErrorReportLink, "Unable To Open Browser",
+											JOptionPane.ERROR_MESSAGE);
+										e.printStackTrace();
+									}
+								});
+							});
+							if (theErrorReportInstructions != null) {
+								StringBuilder msg = new StringBuilder("<html>");
+								theErrorReportInstructions.accept(msg, false);
+								content.addLabel(null, ObservableValue.of(msg.toString()), Format.TEXT, null);
+							}
+						}).run(getWindow());
+					} else {
+						try {
+							Desktop.getDesktop().browse(theErrorReportLink.toURI());
+						} catch (IOException | URISyntaxException | RuntimeException e) {
+							JOptionPane.showMessageDialog(getWindow(), "Unable to open browser. Go to " + theErrorReportLink,
+								"Unable To Open Browser", JOptionPane.ERROR_MESSAGE);
+							e.printStackTrace();
+						}
+					}
+				}, null);
+			}));
+			return this;
+		}
+
+		public ObservableUiBuilder enableCloseWithoutSave() {
+			isCloseWithoutSaveEnabled = true;
+			withMenuBar(bar -> bar.withMenu("File", fileMenu -> {
+				fileMenu.withAction("Close Without Save", __ -> {
+					if (JOptionPane.showConfirmDialog(getWindow(),
+						"<html>This will cause all changes since the app was opened to be discarded.<br>Close the app?",
+						"Exit Without Saving?", JOptionPane.OK_CANCEL_OPTION) != JOptionPane.OK_OPTION)
+						return;
+					isClosingWithoutSave = true;
+					System.exit(0);
+				}, null);
+			}));
 			return this;
 		}
 
@@ -1162,6 +1252,16 @@ public class ObservableSwingUtils {
 			ObservableConfig config = ObservableConfig.createRoot("config");
 			ObservableConfig.XmlEncoding encoding = ObservableConfig.XmlEncoding.DEFAULT;
 			File configFile = new File(configFileLoc);
+			if (theErrorReportLink != null || theErrorReportInstructions != null) {
+				String errorFileName;
+				int lastDot = configFile.getName().lastIndexOf('.');
+				if (lastDot >= 0)
+					errorFileName = configFile.getName().substring(0, lastDot) + ".errors.txt";
+				else
+					errorFileName = configFile.getName() + ".errors.txt";
+				File errorFile = new File(configFile.getParentFile(), errorFileName);
+				new SystemOutputHandler(configFile, errorFile);
+			}
 			if (configFile.exists()) {
 				try {
 					try (InputStream configStream = new BufferedInputStream(new FileInputStream(configFile))) {
@@ -1179,10 +1279,11 @@ public class ObservableSwingUtils {
 				if (theConfigInit != null)
 					theConfigInit.accept(config);
 			}
-			config.persistOnShutdown(ObservableConfig.toFile(configFile, encoding), ex -> {
-				System.err.println("Could not persist UI config");
-				ex.printStackTrace();
-			});
+			config.persistOnShutdown(ObservableConfig.persistIf(ObservableConfig.toFile(configFile, encoding), () -> !isClosingWithoutSave),
+				ex -> {
+					System.err.println("Could not persist UI config");
+					ex.printStackTrace();
+				});
 			if (EventQueue.isDispatchThread())
 				return _build(config, app);
 			else {
@@ -1195,6 +1296,374 @@ public class ObservableSwingUtils {
 					throw new IllegalStateException(e);
 				}
 				return frame[0];
+			}
+		}
+
+		static class SystemOutput {
+			final byte[] content;
+			final Instant time;
+			final boolean error;
+
+			SystemOutput(byte[] content, Instant time, boolean error) {
+				this.content = content;
+				this.time = time;
+				this.error = error;
+			}
+		}
+
+		class SystemOutputHandler {
+			private final File theConfigFile;
+			private final File theErrorFile;
+			private final ByteArrayOutputStream theBytes;
+			private final Duration theAccumulationTime;
+			private final Duration theErrorCascadeTolerance;
+			private final CircularArrayList<SystemOutput> theOutput;
+			private volatile Instant theLastWriteTime;
+			private volatile boolean theLastWriteError;
+			private volatile boolean isWritingError;
+
+			SystemOutputHandler(File configFile, File errorFile) {
+				theConfigFile = configFile;
+				theErrorFile = errorFile;
+				theBytes = new ByteArrayOutputStream(64 * 1028);
+				theAccumulationTime = Duration.ofSeconds(2);
+				theErrorCascadeTolerance = Duration.ofMillis(100);
+				theOutput = CircularArrayList.build().build();
+
+				System.setOut(new HandlerPrintStream(System.out, false));
+				System.setErr(new HandlerPrintStream(System.err, true));
+			}
+
+			void start() {
+				/// TODO
+			}
+
+			synchronized void report(int b, boolean error) throws IOException {
+				startReport(error);
+				theBytes.write(b);
+			}
+
+			synchronized void report(byte[] b, int off, int len, boolean error) throws IOException {
+				startReport(error);
+				theBytes.write(b, off, len);
+			}
+
+			private void startReport(boolean error) {
+				Instant now = Instant.now();
+				boolean timeDiff = !now.equals(theLastWriteTime);
+				if (timeDiff) {
+					if (!isWritingError) {
+						SystemOutput output = theOutput.peekFirst();
+						while (output != null && output.time.plus(theAccumulationTime).compareTo(now) < 0) {
+							theOutput.removeFirst();
+							output = theOutput.peekFirst();
+						}
+					}
+					theLastWriteTime = now;
+				}
+				if (theBytes.size() == 0) {//
+				} else if (error != theLastWriteError || timeDiff) {
+					byte[] output = theBytes.toByteArray();
+					theBytes.reset();
+					theOutput.add(new SystemOutput(output, now, error));
+				}
+				if (error) {
+					isWritingError = true;
+					QommonsTimer.getCommonInstance().doAfterInactivity(this, this::alertUser, theErrorCascadeTolerance);
+				}
+			}
+
+			private void alertUser() {
+				isWritingError = false;
+				try (OutputStream out = new BufferedOutputStream(new FileOutputStream(theErrorFile));
+					Writer writer = new OutputStreamWriter(out)) {
+					boolean lastLineEnd = true;
+					boolean lastError = false;
+					Instant lastTime = Instant.ofEpochMilli(0);
+					SystemOutput output = theOutput.pollFirst();
+					while (output != null) {
+						boolean timeDiff = !lastTime.equals(output.time);
+						if (lastError != output.error || (lastLineEnd && timeDiff)) {
+							writer.append('[').append(output.error ? "ERR" : "OUT").append(' ');
+							writer.append(QommonsUtils.printRelativeTime(output.time.toEpochMilli(), lastTime.toEpochMilli(),
+								TimePrecision.MILLIS, TimeZone.getDefault(), 0, null));
+							writer.append("] ");
+							writer.flush();
+						}
+						lastError = output.error;
+						lastTime = output.time;
+						out.write(output.content);
+						byte lastChar = output.content[output.content.length - 1];
+						lastLineEnd = lastChar == '\n' || lastChar == '\r';
+						output = theOutput.pollFirst();
+					}
+					WindowPopulation.populateDialog(null, null, true)//
+					.withTitle("Unhandled Application Error")//
+					.withVContent(content -> {
+						String title = getTitle();
+						if (title != null)
+							content.addLabel(null, ObservableValue.of(title + " has encountered an error."), Format.TEXT, null);
+						else
+							content.addLabel(null, ObservableValue.of("An error has been encountered."), Format.TEXT, null);
+						if (theErrorReportLink != null) {
+							String gotoText = new StringBuilder().append("<html>Go to <a href=\"").append(theErrorReportLink)
+								.append("\">").append(theErrorReportLink).append("</a><br>").toString();
+							content.addLabel(null, ObservableValue.of(gotoText), Format.TEXT, label -> {
+								label.onClick(evt -> {
+									try {
+										Desktop.getDesktop().browse(theErrorReportLink.toURI());
+									} catch (IOException | URISyntaxException | RuntimeException e) {
+										JOptionPane.showMessageDialog(getWindow(),
+											"Unable to open browser. Go to " + theErrorReportLink, "Unable To Open Browser",
+											JOptionPane.ERROR_MESSAGE);
+										e.printStackTrace();
+									}
+								});
+							});
+						} else
+							content.addLabel(null, ObservableValue.of("Please report it."), Format.TEXT, null);
+						content.addLabel(null,
+							ObservableValue.of("<html>Please attach the captured error output file: <a href=\"thisDoesntMatter.html\">"
+								+ theErrorFile.getPath() + "</a>"),
+							Format.TEXT, label -> {
+								label.onClick(evt -> {
+									try {// We don't have Java 9, but this hack seems to work
+										Desktop.getDesktop().browse(theErrorFile.getParentFile().toURI());
+									} catch (IOException | RuntimeException e) {
+										e.printStackTrace();
+									}
+								});
+							});
+						if (theErrorReportInstructions != null) {
+							StringBuilder msg = new StringBuilder("<html>");
+							theErrorReportInstructions.accept(msg, true);
+							content.addLabel(null, ObservableValue.of(msg.toString()), Format.TEXT, null);
+						}
+						String msg = "<html>You may want to consider backing up your data file (" + theConfigFile.getPath() + ")";
+						if (isCloseWithoutSaveEnabled)
+							msg += "<br>" + " or closing the app without saving your changes (File->Close Without Save)";
+						content.addLabel(null, ObservableValue.of(msg), Format.TEXT, null);
+					}).run(getWindow());
+				} catch (IOException e) {
+					System.err.println("Could not write error output");
+					e.printStackTrace();
+				}
+			}
+
+			class HandlerPrintStream extends PrintStream {
+				private final PrintStream theSystemStream;
+
+				HandlerPrintStream(PrintStream systemStream, boolean error) {
+					super(new OutputStream() {
+						@Override
+						public void write(int b) throws IOException {
+							report(b, error);
+						}
+
+						@Override
+						public void write(byte[] b) throws IOException {
+							report(b, 0, b.length, error);
+						}
+
+						@Override
+						public void write(byte[] b, int off, int len) throws IOException {
+							report(b, off, len, error);
+						}
+					});
+					theSystemStream = systemStream;
+				}
+
+				@Override
+				public void flush() {
+					theSystemStream.flush();
+					super.flush();
+				}
+
+				@Override
+				public void close() {
+					theSystemStream.close();
+					super.close();
+				}
+
+				@Override
+				public boolean checkError() {
+					theSystemStream.checkError();
+					return super.checkError();
+				}
+
+				@Override
+				public void write(int b) {
+					theSystemStream.write(b);
+					super.write(b);
+				}
+
+				@Override
+				public void write(byte[] buf, int off, int len) {
+					theSystemStream.write(buf, off, len);
+					super.write(buf, off, len);
+				}
+
+				@Override
+				public void print(boolean b) {
+					theSystemStream.print(b);
+					super.print(b);
+				}
+
+				@Override
+				public void print(char c) {
+					theSystemStream.print(c);
+					super.print(c);
+				}
+
+				@Override
+				public void print(int i) {
+					theSystemStream.print(i);
+					super.print(i);
+				}
+
+				@Override
+				public void print(long l) {
+					theSystemStream.print(l);
+					super.print(l);
+				}
+
+				@Override
+				public void print(float f) {
+					theSystemStream.print(f);
+					super.print(f);
+				}
+
+				@Override
+				public void print(double d) {
+					theSystemStream.print(d);
+					super.print(d);
+				}
+
+				@Override
+				public void print(char[] s) {
+					theSystemStream.print(s);
+					super.print(s);
+				}
+
+				@Override
+				public void print(String s) {
+					theSystemStream.print(s);
+					super.print(s);
+				}
+
+				@Override
+				public void print(Object obj) {
+					theSystemStream.print(obj);
+					super.print(obj);
+				}
+
+				@Override
+				public void println() {
+					theSystemStream.println();
+					super.println();
+				}
+
+				@Override
+				public void println(boolean x) {
+					theSystemStream.println(x);
+					super.println(x);
+				}
+
+				@Override
+				public void println(char x) {
+					theSystemStream.println(x);
+					super.println(x);
+				}
+
+				@Override
+				public void println(int x) {
+					theSystemStream.println(x);
+					super.println(x);
+				}
+
+				@Override
+				public void println(long x) {
+					theSystemStream.println(x);
+					super.println(x);
+				}
+
+				@Override
+				public void println(float x) {
+					theSystemStream.println(x);
+					super.println(x);
+				}
+
+				@Override
+				public void println(double x) {
+					theSystemStream.println(x);
+					super.println(x);
+				}
+
+				@Override
+				public void println(char[] x) {
+					theSystemStream.println(x);
+					super.println(x);
+				}
+
+				@Override
+				public void println(String x) {
+					theSystemStream.println(x);
+					super.println(x);
+				}
+
+				@Override
+				public void println(Object x) {
+					theSystemStream.println(x);
+					super.println(x);
+				}
+
+				@Override
+				public PrintStream printf(String format, Object... args) {
+					theSystemStream.printf(format, args);
+					return super.printf(format, args);
+				}
+
+				@Override
+				public PrintStream printf(Locale l, String format, Object... args) {
+					theSystemStream.printf(l, format, args);
+					return super.printf(l, format, args);
+				}
+
+				@Override
+				public PrintStream format(String format, Object... args) {
+					theSystemStream.format(format, args);
+					return super.format(format, args);
+				}
+
+				@Override
+				public PrintStream format(Locale l, String format, Object... args) {
+					theSystemStream.format(l, format, args);
+					return super.format(l, format, args);
+				}
+
+				@Override
+				public PrintStream append(CharSequence csq) {
+					theSystemStream.append(csq);
+					return super.append(csq);
+				}
+
+				@Override
+				public PrintStream append(CharSequence csq, int start, int end) {
+					theSystemStream.append(csq, start, end);
+					return super.append(csq, start, end);
+				}
+
+				@Override
+				public PrintStream append(char c) {
+					theSystemStream.append(c);
+					return super.append(c);
+				}
+
+				@Override
+				public void write(byte[] b) throws IOException {
+					theSystemStream.write(b);
+					super.write(b);
+				}
 			}
 		}
 
@@ -1341,9 +1810,8 @@ public class ObservableSwingUtils {
 				bestTopLeft = closest;
 
 			closest = getClosest(devB, x + width, y + height);
-			if (bestBottomRight == null
-				|| (Math.abs(x + width - closest.x) + Math.abs(y + height - closest.y)) < (Math.abs(x + width - bestBottomRight.x)
-					+ Math.abs(y + height - bestBottomRight.y)))
+			if (bestBottomRight == null || (Math.abs(x + width - closest.x)
+				+ Math.abs(y + height - closest.y)) < (Math.abs(x + width - bestBottomRight.x) + Math.abs(y + height - bestBottomRight.y)))
 				bestBottomRight = closest;
 		}
 		if (bestTopLeft.x == x && bestTopLeft.y == y//
