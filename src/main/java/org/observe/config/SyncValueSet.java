@@ -7,7 +7,7 @@ import com.google.common.reflect.TypeToken;
 public interface SyncValueSet<E> extends ObservableValueSet<E> {
 	@Override
 	default SyncValueCreator<E, E> create() {
-		return create(null);
+		return create(getType().getType());
 	}
 
 	@Override

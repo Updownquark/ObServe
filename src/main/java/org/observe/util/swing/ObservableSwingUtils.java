@@ -88,6 +88,7 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.ObservableCollection;
 import org.observe.config.ObservableConfig;
+import org.observe.config.SyncValueSet;
 import org.observe.util.SafeObservableCollection;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
@@ -100,6 +101,7 @@ import org.qommons.TriFunction;
 import org.qommons.collect.CircularArrayList;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.ListenerList;
+import org.qommons.config.QommonsConfig;
 import org.qommons.io.Format;
 import org.qommons.threading.QommonsTimer;
 import org.xml.sax.SAXException;
@@ -1131,6 +1133,38 @@ public class ObservableSwingUtils {
 		public ObservableUiBuilder withConfigInit(Consumer<ObservableConfig> configInit) {
 			theConfigInit = configInit;
 			return this;
+		}
+
+		/**
+		 * @param configInit The resource path to an initial XML configuration to populate
+		 * @return This builder
+		 */
+		public ObservableUiBuilder withConfigInit(Class<?> clazz, String configInit) {
+			return withConfigInit(config -> {
+				QommonsConfig initConfig;
+				try {
+					initConfig = QommonsConfig.fromXml(clazz.getResource(configInit));
+				} catch (IOException e) {
+					System.err.println("Could not find initial config");
+					e.printStackTrace();
+					return;
+				}
+				populate(config, initConfig);
+			});
+		}
+
+		private void populate(ObservableConfig config, QommonsConfig initConfig) {
+			config.setName(initConfig.getName());
+			config.setValue(initConfig.getValue());
+			SyncValueSet<? extends ObservableConfig> subConfigs = config.getAllContent();
+			int configIdx = 0;
+			for (QommonsConfig initSubConfig : initConfig.subConfigs()) {
+				if (configIdx < subConfigs.getValues().size())
+					populate(subConfigs.getValues().get(configIdx), initSubConfig);
+				else
+					populate(config.addChild(initSubConfig.getName()), initSubConfig);
+				configIdx++;
+			}
 		}
 
 		public ObservableUiBuilder withErrorReporting(String link, BiConsumer<StringBuilder, Boolean> instructions) {
