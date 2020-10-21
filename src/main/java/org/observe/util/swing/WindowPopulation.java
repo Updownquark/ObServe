@@ -85,8 +85,9 @@ public class WindowPopulation {
 			return theUntil;
 		}
 
-		public String getTitle() {
-			return theTitle == null ? null : theTitle.get();
+		@Override
+		public ObservableValue<String> getTitle() {
+			return theTitle;
 		}
 
 		@Override
@@ -99,6 +100,11 @@ public class WindowPopulation {
 		public P withIcon(ObservableValue<? extends Image> icon) {
 			theIcon = icon;
 			return (P) this;
+		}
+
+		@Override
+		public ObservableValue<? extends Image> getIcon() {
+			return theIcon;
 		}
 
 		@Override

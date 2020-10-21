@@ -4,6 +4,7 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Desktop;
+import java.awt.Dialog.ModalityType;
 import java.awt.EventQueue;
 import java.awt.Font;
 import java.awt.GraphicsConfiguration;
@@ -52,11 +53,14 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.IntConsumer;
 import java.util.function.Supplier;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import javax.swing.ButtonGroup;
 import javax.swing.ImageIcon;
 import javax.swing.JCheckBox;
 import javax.swing.JComponent;
+import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JList;
@@ -1234,12 +1238,57 @@ public class ObservableSwingUtils {
 			return this;
 		}
 
+		private static final Pattern VERSION_PATTERN = Pattern.compile("v?([0-9]+)\\.([0-9]+)\\.([0-9]+)");
+
+		public ObservableUiBuilder withAbout(Class<?> clazz, Supplier<String> latestRelease, Runnable upgrade) {
+			withMenuBar(bar -> bar.withMenu("Help", helpMenu -> helpMenu.withAction("About", __ -> {
+				WindowPopulation.populateDialog(
+					new JDialog(getWindow(), "About " + (getTitle() == null ? "" : getTitle().get()), ModalityType.MODELESS), null, true)//
+				.withVContent(content -> {
+					if (getTitle() != null)
+						content.addLabel(null, getTitle(), Format.TEXT, null);
+					Package pkg = clazz.getPackage();
+					String version = null;
+					while (pkg != null && (version = pkg.getImplementationVersion()) == null) {
+						int dotIdx = pkg.getName().lastIndexOf('.');
+						if (dotIdx < 0)
+							break;
+						pkg = Package.getPackage(pkg.getName().substring(0, dotIdx));
+					}
+					if (version != null)
+						content.addLabel(null, ObservableValue.of("Version: " + version), Format.TEXT, null);
+					String latest = latestRelease == null ? null : latestRelease.get();
+					if (latest != null && upgrade != null) {
+							content.addLabel(null, ObservableValue.of("Latest Version: " + latest), Format.TEXT, null);
+						Matcher vm = VERSION_PATTERN.matcher(version);
+						Matcher lm = VERSION_PATTERN.matcher(latest);
+						if (vm.matches() && lm.matches()) {
+							int comp = Integer.compare(Integer.parseInt(vm.group(1)), Integer.parseInt(lm.group(1)));
+							if (comp == 0)
+								comp = Integer.compare(Integer.parseInt(vm.group(2)), Integer.parseInt(lm.group(2)));
+							if (comp == 0)
+								comp = Integer.compare(Integer.parseInt(vm.group(3)), Integer.parseInt(lm.group(3)));
+							if (comp < 0) {
+								content.addButton("Upgrade", ___ -> upgrade.run(), null);
+							}
+						}
+					}
+				}).run(getWindow());
+			}, null)));
+			return this;
+		}
+
 		public ObservableUiBuilder systemLandF() {
 			ObservableSwingUtils.systemLandF();
 			return this;
 		}
 
 		public JFrame build(Function<ObservableConfig, Component> app) {
+			build((config, onBuilt) -> onBuilt.accept(app.apply(config)));
+			return getWindow();
+		}
+
+		public void build(BiConsumer<ObservableConfig, Consumer<Component>> app) {
 			String configName = theConfigName;
 			if (configName == null) {
 				if (theDefaultConfigLocation == null)
@@ -1318,19 +1367,19 @@ public class ObservableSwingUtils {
 					System.err.println("Could not persist UI config");
 					ex.printStackTrace();
 				});
-			if (EventQueue.isDispatchThread())
-				return _build(config, app);
-			else {
-				JFrame[] frame = new JFrame[1];
-				try {
-					EventQueue.invokeAndWait(() -> {
-						frame[0] = _build(config, app);
-					});
-				} catch (InvocationTargetException | InterruptedException e) {
-					throw new IllegalStateException(e);
+			app.accept(config, ui -> {
+				if (EventQueue.isDispatchThread())
+					_build(config, ui);
+				else {
+					try {
+						EventQueue.invokeAndWait(() -> {
+							_build(config, ui);
+						});
+					} catch (InvocationTargetException | InterruptedException e) {
+						throw new IllegalStateException(e);
+					}
 				}
-				return frame[0];
-			}
+			});
 		}
 
 		static class SystemOutput {
@@ -1430,7 +1479,7 @@ public class ObservableSwingUtils {
 					WindowPopulation.populateDialog(null, null, true)//
 					.withTitle("Unhandled Application Error")//
 					.withVContent(content -> {
-						String title = getTitle();
+						String title = getTitle() == null ? null : getTitle().get();
 						if (title != null)
 							content.addLabel(null, ObservableValue.of(title + " has encountered an error."), Format.TEXT, null);
 						else
@@ -1458,7 +1507,19 @@ public class ObservableSwingUtils {
 							Format.TEXT, label -> {
 								label.onClick(evt -> {
 									try {// We don't have Java 9, but this hack seems to work
-										Desktop.getDesktop().browse(theErrorFile.getParentFile().toURI());
+										// For some reason, I was encountering theErrorFile.getParentFile()==null
+										// So I had to work around it
+										// getPath() was also not returning parents
+										// String path = theErrorFile.toString();
+										// JOptionPane.showMessageDialog(null, path);
+										// int lastSlash = path.lastIndexOf('/');
+										// if (lastSlash < 0 || lastSlash < path.lastIndexOf('\\'))
+										// lastSlash = path.lastIndexOf('\\');
+										// if (lastSlash < 0)
+										// return; // ??
+										// String parentPath = path.substring(0, lastSlash);
+										// Desktop.getDesktop().browse(new File(parentPath).toURI());
+										Desktop.getDesktop().browse(theErrorFile.getAbsoluteFile().getParentFile().toURI());
 									} catch (IOException | RuntimeException e) {
 										e.printStackTrace();
 									}
@@ -1702,8 +1763,7 @@ public class ObservableSwingUtils {
 			}
 		}
 
-		private JFrame _build(ObservableConfig config, Function<ObservableConfig, Component> app) {
-			Component ui = app.apply(config);
+		private JFrame _build(ObservableConfig config, Component ui) {
 			return withBounds(config).withContent(ui).run(null).getWindow();
 		}
 	}

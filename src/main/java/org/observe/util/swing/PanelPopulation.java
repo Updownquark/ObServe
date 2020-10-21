@@ -957,6 +957,7 @@ public class PanelPopulation {
 			return withTitle(ObservableValue.of(TypeTokens.get().STRING, title));
 		}
 		P withTitle(ObservableValue<String> title);
+		ObservableValue<String> getTitle();
 
 		default P withIcon(Class<?> clazz, String location) {
 			ImageIcon icon = ObservableSwingUtils.getIcon(clazz, location);
@@ -968,6 +969,7 @@ public class PanelPopulation {
 			return withIcon(ObservableValue.of(TypeTokens.get().of(Image.class), icon));
 		}
 		P withIcon(ObservableValue<? extends Image> icon);
+		ObservableValue<? extends Image> getIcon();
 
 		P withX(SettableValue<Integer> x);
 		P withY(SettableValue<Integer> y);
