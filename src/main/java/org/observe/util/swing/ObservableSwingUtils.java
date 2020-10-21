@@ -1259,7 +1259,7 @@ public class ObservableSwingUtils {
 						content.addLabel(null, ObservableValue.of("Version: " + version), Format.TEXT, null);
 					String latest = latestRelease == null ? null : latestRelease.get();
 					if (latest != null && upgrade != null) {
-							content.addLabel(null, ObservableValue.of("Latest Version: " + latest), Format.TEXT, null);
+						content.addLabel(null, ObservableValue.of("Latest Version: " + latest), Format.TEXT, null);
 						Matcher vm = VERSION_PATTERN.matcher(version);
 						Matcher lm = VERSION_PATTERN.matcher(latest);
 						if (vm.matches() && lm.matches()) {
@@ -1367,19 +1367,25 @@ public class ObservableSwingUtils {
 					System.err.println("Could not persist UI config");
 					ex.printStackTrace();
 				});
-			app.accept(config, ui -> {
-				if (EventQueue.isDispatchThread())
-					_build(config, ui);
-				else {
-					try {
-						EventQueue.invokeAndWait(() -> {
-							_build(config, ui);
-						});
-					} catch (InvocationTargetException | InterruptedException e) {
-						throw new IllegalStateException(e);
+			Runnable buildApp = () -> {
+				app.accept(config, ui -> {
+					if (EventQueue.isDispatchThread())
+						_build(config, ui);
+					else {
+						try {
+							EventQueue.invokeAndWait(() -> {
+								_build(config, ui);
+							});
+						} catch (InvocationTargetException | InterruptedException e) {
+							throw new IllegalStateException(e);
+						}
 					}
-				}
-			});
+				});
+			};
+			if (EventQueue.isDispatchThread())
+				buildApp.run();
+			else
+				EventQueue.invokeLater(buildApp);
 		}
 
 		static class SystemOutput {
@@ -1453,6 +1459,14 @@ public class ObservableSwingUtils {
 			}
 
 			private void alertUser() {
+				if (!EventQueue.isDispatchThread()) {
+					try {
+						EventQueue.invokeAndWait(this::alertUser);
+					} catch (InvocationTargetException | InterruptedException e) {
+						e.printStackTrace(System.out);
+					}
+					return;
+				}
 				isWritingError = false;
 				try (OutputStream out = new BufferedOutputStream(new FileOutputStream(theErrorFile));
 					Writer writer = new OutputStreamWriter(out)) {
