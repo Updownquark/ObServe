@@ -15,6 +15,7 @@ import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.Window;
 import java.awt.event.ActionListener;
+import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.event.ComponentListener;
 import java.awt.event.MouseEvent;
@@ -92,6 +93,7 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.ObservableCollection;
 import org.observe.config.ObservableConfig;
+import org.observe.config.ObservableConfig.ObservableConfigPersistence;
 import org.observe.config.SyncValueSet;
 import org.observe.util.SafeObservableCollection;
 import org.observe.util.TypeTokens;
@@ -102,10 +104,13 @@ import org.qommons.QommonsUtils;
 import org.qommons.QommonsUtils.TimePrecision;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
+import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.CircularArrayList;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.ListenerList;
 import org.qommons.config.QommonsConfig;
+import org.qommons.io.FileBackups;
+import org.qommons.io.FileUtils;
 import org.qommons.io.Format;
 import org.qommons.threading.QommonsTimer;
 import org.xml.sax.SAXException;
@@ -1097,6 +1102,7 @@ public class ObservableSwingUtils {
 		private Consumer<ObservableConfig> theConfigInit;
 		private boolean isCloseWithoutSaveEnabled;
 		private volatile boolean isClosingWithoutSave;
+		private Consumer<FileBackups.Builder> theBackups;
 
 		public ObservableUiBuilder() {
 			super(new JFrame(), Observable.empty(), true);
@@ -1131,6 +1137,11 @@ public class ObservableSwingUtils {
 			if (theOldConfigNames == null)
 				theOldConfigNames = new LinkedList<>();
 			theOldConfigNames.add(configName);
+			return this;
+		}
+
+		public ObservableUiBuilder withBackups(Consumer<FileBackups.Builder> backups) {
+			theBackups = backups;
 			return this;
 		}
 
@@ -1345,36 +1356,67 @@ public class ObservableSwingUtils {
 				File errorFile = new File(configFile.getParentFile(), errorFileName);
 				new SystemOutputHandler(configFile, errorFile);
 			}
+			FileBackups backups;
+			if (theBackups != null) {
+				FileBackups.Builder backupBuilder = FileBackups.build(FileUtils.better(configFile));
+				theBackups.accept(backupBuilder);
+				backups = backupBuilder.build();
+			} else
+				backups = null;
 			if (configFile.exists()) {
 				try {
 					try (InputStream configStream = new BufferedInputStream(new FileInputStream(configFile))) {
 						ObservableConfig.readXml(config, configStream, encoding);
 					}
 				} catch (IOException | SAXException e) {
-					System.err.println("Could not read config file " + configFileLoc);
-					e.printStackTrace();
+					if (backups == null) {
+						System.err.println("Could not read config file " + configFileLoc);
+						e.printStackTrace();
+					} else {
+						System.out.println("Could not read config file " + configFileLoc);
+						e.printStackTrace(System.out);
+						restoreBackup(config, backups, () -> build2(config, configFile, backups, app), null);
+					}
 				}
 				if (configName != null)
 					config.setName(configName);
+				build2(config, configFile, backups, app);
 			} else {
-				if (configName != null)
-					config.setName(configName);
-				if (theConfigInit != null)
-					theConfigInit.accept(config);
-			}
-			config.persistOnShutdown(ObservableConfig.persistIf(ObservableConfig.toFile(configFile, encoding), () -> !isClosingWithoutSave),
-				ex -> {
-					System.err.println("Could not persist UI config");
-					ex.printStackTrace();
+				restoreBackup(config, backups, () -> build2(config, configFile, backups, app), () -> {
+					if (configName != null)
+						config.setName(configName);
+					if (theConfigInit != null)
+						theConfigInit.accept(config);
+					build2(config, configFile, backups, app);
 				});
+			}
+		}
+
+		private void build2(ObservableConfig config, File configFile, FileBackups backups,
+			BiConsumer<ObservableConfig, Consumer<Component>> app) {
+			ObservableConfigPersistence<IOException> actuallyPersist = ObservableConfig.toFile(configFile,
+				ObservableConfig.XmlEncoding.DEFAULT);
+			config.persistOnShutdown(new ObservableConfig.ObservableConfigPersistence<IOException>() {
+				@Override
+				public void persist(ObservableConfig config2) throws IOException {
+					if (isClosingWithoutSave)
+						return;
+					if (backups != null)
+						backups.saveLatest(true);
+					actuallyPersist.persist(config2);
+				}
+			}, ex -> {
+				System.err.println("Could not persist UI config");
+				ex.printStackTrace();
+			});
 			Runnable buildApp = () -> {
 				app.accept(config, ui -> {
 					if (EventQueue.isDispatchThread())
-						_build(config, ui);
+						build3(config, ui);
 					else {
 						try {
 							EventQueue.invokeAndWait(() -> {
-								_build(config, ui);
+								build3(config, ui);
 							});
 						} catch (InvocationTargetException | InterruptedException e) {
 							throw new IllegalStateException(e);
@@ -1386,6 +1428,50 @@ public class ObservableSwingUtils {
 				buildApp.run();
 			else
 				EventQueue.invokeLater(buildApp);
+		}
+
+		private void restoreBackup(ObservableConfig config, FileBackups backups, Runnable onBackup, Runnable onNoBackup) {
+			BetterSortedSet<Instant> backupTimes = backups == null ? null : backups.getBackups();
+			if (backupTimes == null || backupTimes.isEmpty()) {
+				if (onNoBackup != null)
+					onNoBackup.run();
+				return;
+			}
+			SettableValue<Instant> selectedBackup = SettableValue.build(Instant.class).safe(false).build();
+			Format<Instant> dateFormat = Format.flexibleDate("MMM dd yyyy", TimeZone.getDefault());
+			JFrame[] frame = new JFrame[1];
+			boolean[] backedUp = new boolean[1];
+			frame[0] = WindowPopulation.populateWindow(null, null, true, false)//
+				.withTitle(getTitle().get() == null ? "Backup" : getTitle().get() + " Backup").withIcon(getIcon())//
+				.withVContent(content -> {
+					content.addLabel(null, "Your configuration is missing or has been corrupted", null)//
+					.addLabel(null, "Please choose a backup to restore", null)//
+					.addTable(ObservableCollection.of(TypeTokens.get().of(Instant.class), backupTimes.reverse()), table -> {
+						table.fill().withColumn("Date", String.class, t -> dateFormat.format(t), col -> col.withWidths(100, 250, 500))//
+						.withSelection(selectedBackup, true);
+					}).addButton("Backup", __ -> {
+						try {
+							populate(config,
+								QommonsConfig.fromXml(QommonsConfig.getRootElement(backups.getBackup(selectedBackup.get()).read())));
+							backedUp[0] = true;
+						} catch (IOException e) {
+							e.printStackTrace();
+						}
+						frame[0].setVisible(false);
+					}, btn -> btn.disableWith(selectedBackup.map(t -> t == null ? "Select a Backup" : null)));
+				}).run(null).getWindow();
+			frame[0].addComponentListener(new ComponentAdapter() {
+				@Override
+				public void componentHidden(ComponentEvent e) {
+					if (backedUp[0]) {
+						if (onBackup != null)
+							onBackup.run();
+					} else {
+						if (onNoBackup != null)
+							onNoBackup.run();
+					}
+				}
+			});
 		}
 
 		static class SystemOutput {
@@ -1777,7 +1863,7 @@ public class ObservableSwingUtils {
 			}
 		}
 
-		private JFrame _build(ObservableConfig config, Component ui) {
+		private JFrame build3(ObservableConfig config, Component ui) {
 			return withBounds(config).withContent(ui).run(null).getWindow();
 		}
 	}

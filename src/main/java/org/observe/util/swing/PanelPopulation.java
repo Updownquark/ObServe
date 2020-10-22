@@ -197,6 +197,10 @@ public class PanelPopulation {
 		<F> P addTextArea(String fieldName, SettableValue<F> field, Format<F> format,
 			Consumer<FieldEditor<ObservableTextArea<F>, ?>> modify);
 
+		default P addLabel(String fieldName, String label, Consumer<FieldEditor<JLabel, ?>> modify) {
+			return addLabel(fieldName, ObservableValue.of(label), Format.TEXT, modify);
+		}
+
 		<F> P addLabel(String fieldName, ObservableValue<F> field, Format<F> format, Consumer<FieldEditor<JLabel, ?>> modify);
 
 		P addIcon(String fieldName, ObservableValue<Icon> icon, Consumer<FieldEditor<JLabel, ?>> modify);
