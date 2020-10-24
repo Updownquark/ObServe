@@ -209,7 +209,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 	 * @see Transformation for help using the API
 	 */
 	default <R> ObservableValue<R> transform(Function<Transformation.TransformationPrecursor<T, R, ?>, Transformation<T, R>> transform) {
-		return transform(null, transform);
+		return transform((TypeToken<R>) null, transform);
 	}
 
 	/**
@@ -235,6 +235,21 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 			otherArgs.put(arg, i - 1);
 		}
 		return new TransformedObservableValue<>(targetType, this, def);
+	}
+
+	/**
+	 * Transforms this value into a derived value, potentially including other sources as well. This method satisfies both mapping and
+	 * combination use cases.
+	 *
+	 * @param <R> The type for the combined value
+	 * @param targetType The type for the transformed value
+	 * @param transform Determines how this value and any other arguments are to be combined
+	 * @return The transformed value
+	 * @see Transformation for help using the API
+	 */
+	default <R> ObservableValue<R> transform(Class<R> targetType, //
+		Function<Transformation.TransformationPrecursor<T, R, ?>, Transformation<T, R>> transform) {
+		return transform(targetType == null ? null : TypeTokens.get().of(targetType), transform);
 	}
 
 	/**
@@ -270,6 +285,24 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 	 */
 	default <R> ObservableValue<R> map(TypeToken<R> type, Function<? super T, R> function) {
 		return map(type, function, null);
+	}
+
+	/**
+	 * <p>
+	 * Composes this observable into another observable that depends on this one
+	 * </p>
+	 * <p>
+	 * This method is supported for compatibility, but {@link #transform(TypeToken, Function)} is a more flexible method for combining
+	 * values
+	 * </p>
+	 *
+	 * @param <R> The type of the new observable
+	 * @param type The run-time type of the new observable
+	 * @param function The function to apply to this observable's value
+	 * @return The new observable whose value is a function of this observable's value
+	 */
+	default <R> ObservableValue<R> map(Class<R> type, Function<? super T, R> function) {
+		return map(type == null ? null : TypeTokens.get().of(type), function);
 	}
 
 	/**

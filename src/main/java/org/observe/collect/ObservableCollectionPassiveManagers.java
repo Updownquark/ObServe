@@ -457,7 +457,7 @@ public class ObservableCollectionPassiveManagers {
 
 		@Override
 		public ObservableValue<? extends Function<? super E, ? extends T>> map() {
-			return getParent().map().transform(null, tx -> tx.combineWith(getEngine()).combine((parentMap, state) -> {
+			return getParent().map().transform(tx -> tx.combineWith(getEngine()).combine((parentMap, state) -> {
 				return new TransformedMap(parentMap, state);
 			}));
 		}

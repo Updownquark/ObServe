@@ -234,7 +234,7 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	 */
 	default <R> SettableValue<R> transformReversible(
 		Function<Transformation.ReversibleTransformationPrecursor<T, R, ?>, Transformation.ReversibleTransformation<T, R>> combination) {
-		return transformReversible(null, combination);
+		return transformReversible((TypeToken<R>) null, combination);
 	}
 
 	/**
@@ -251,6 +251,21 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 		Function<Transformation.ReversibleTransformationPrecursor<T, R, ?>, Transformation.ReversibleTransformation<T, R>> combination) {
 		Transformation.ReversibleTransformation<T, R> def = combination.apply(new Transformation.ReversibleTransformationPrecursor<>());
 		return new TransformedSettableValue<>(type, this, def);
+	}
+
+	/**
+	 * Transforms this value into a derived value, potentially including other sources as well. This method satisfies both mapping and
+	 * combination use cases.
+	 *
+	 * @param <R> The type of the combined value
+	 * @param type The type of the combined value
+	 * @param combination Determines how this value an any other arguments are to be combined
+	 * @return The transformed value
+	 * @see Transformation for help using the API
+	 */
+	default <R> SettableValue<R> transformReversible(Class<R> type,
+		Function<Transformation.ReversibleTransformationPrecursor<T, R, ?>, Transformation.ReversibleTransformation<T, R>> combination) {
+		return transformReversible(type == null ? null : TypeTokens.get().of(type), combination);
 	}
 
 	/**
