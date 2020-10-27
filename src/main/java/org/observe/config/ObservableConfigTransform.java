@@ -408,7 +408,8 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 
 		@Override
 		protected void onChange(ObservableConfigEvent collectionChange) {
-			if (collectionChange.relativePath.isEmpty() || collectionChange.eventTarget != getParent(false, null))
+			if (collectionChange == null || collectionChange.relativePath.isEmpty()
+				|| collectionChange.eventTarget != getParent(false, null))
 				return; // Doesn't affect us
 			boolean elementChange = collectionChange.relativePath.size() == 1;
 			ObservableConfig config = collectionChange.relativePath.get(0);
