@@ -104,6 +104,7 @@ import org.qommons.QommonsUtils;
 import org.qommons.QommonsUtils.TimePrecision;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
+import org.qommons.ValueHolder;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.CircularArrayList;
 import org.qommons.collect.CollectionUtils;
@@ -1103,9 +1104,14 @@ public class ObservableSwingUtils {
 		private boolean isCloseWithoutSaveEnabled;
 		private volatile boolean isClosingWithoutSave;
 		private Consumer<FileBackups.Builder> theBackups;
+		private ValueHolder<String> theLatestVersion;
 
 		public ObservableUiBuilder() {
 			super(new JFrame(), Observable.empty(), true);
+		}
+
+		protected void withLatestVersion(String latestVersion) {
+			theLatestVersion = new ValueHolder<>(latestVersion);
 		}
 
 		public ObservableUiBuilder withConfigAt(String configLocation) {
@@ -1253,8 +1259,10 @@ public class ObservableSwingUtils {
 
 		public ObservableUiBuilder withAbout(Class<?> clazz, Supplier<String> latestRelease, Runnable upgrade) {
 			withMenuBar(bar -> bar.withMenu("Help", helpMenu -> helpMenu.withAction("About", __ -> {
-				WindowPopulation.populateDialog(
-					new JDialog(getWindow(), "About " + (getTitle() == null ? "" : getTitle().get()), ModalityType.MODELESS), null, true)//
+				WindowPopulation
+				.populateDialog(
+					new JDialog(getWindow(), "About " + (getTitle() == null ? "" : getTitle().get()), ModalityType.MODELESS), null,
+					true)//
 				.withVContent(content -> {
 					if (getTitle() != null)
 						content.addLabel(null, getTitle(), Format.TEXT, null);
@@ -1266,21 +1274,31 @@ public class ObservableSwingUtils {
 							break;
 						pkg = Package.getPackage(pkg.getName().substring(0, dotIdx));
 					}
-					if (version != null)
-						content.addLabel(null, ObservableValue.of("Version: " + version), Format.TEXT, null);
-					String latest = latestRelease == null ? null : latestRelease.get();
+					content.addLabel(null, ObservableValue.of("Version: " + (version == null ? "Unknown" : version)), Format.TEXT,
+						null);
+						String latest;
+						if (theLatestVersion != null)
+							latest = theLatestVersion.get();
+						else if (latestRelease == null)
+							latest = null;
+						else {
+							latest = latestRelease.get();
+							theLatestVersion = new ValueHolder<>(latest);
+						}
 					if (latest != null && upgrade != null) {
 						content.addLabel(null, ObservableValue.of("Latest Version: " + latest), Format.TEXT, null);
-						Matcher vm = VERSION_PATTERN.matcher(version);
-						Matcher lm = VERSION_PATTERN.matcher(latest);
-						if (vm.matches() && lm.matches()) {
-							int comp = Integer.compare(Integer.parseInt(vm.group(1)), Integer.parseInt(lm.group(1)));
-							if (comp == 0)
-								comp = Integer.compare(Integer.parseInt(vm.group(2)), Integer.parseInt(lm.group(2)));
-							if (comp == 0)
-								comp = Integer.compare(Integer.parseInt(vm.group(3)), Integer.parseInt(lm.group(3)));
-							if (comp < 0) {
-								content.addButton("Upgrade", ___ -> upgrade.run(), null);
+						if (version != null) {
+							Matcher vm = VERSION_PATTERN.matcher(version);
+							Matcher lm = VERSION_PATTERN.matcher(latest);
+							if (vm.matches() && lm.matches()) {
+								int comp = Integer.compare(Integer.parseInt(vm.group(1)), Integer.parseInt(lm.group(1)));
+								if (comp == 0)
+									comp = Integer.compare(Integer.parseInt(vm.group(2)), Integer.parseInt(lm.group(2)));
+								if (comp == 0)
+									comp = Integer.compare(Integer.parseInt(vm.group(3)), Integer.parseInt(lm.group(3)));
+								if (comp < 0) {
+									content.addButton("Upgrade", ___ -> upgrade.run(), null);
+								}
 							}
 						}
 					}
