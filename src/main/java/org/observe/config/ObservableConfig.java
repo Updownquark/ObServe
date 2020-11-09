@@ -1328,6 +1328,8 @@ public class ObservableConfig implements Transactable, Stamped {
 		}
 
 		public String encode(String xmlName) {
+			if (xmlName.length() == 0)
+				return emptyContent;
 			MapEntryHandle<String, String> found = null;
 			int i;
 			for (i = 0; i < xmlName.length() && found == null; i++) {
@@ -1355,6 +1357,8 @@ public class ObservableConfig implements Transactable, Stamped {
 		}
 
 		public String decode(String xmlName) {
+			if (emptyContent.equals(xmlName))
+				return "";
 			int len = xmlName.length() - Math.min(encodingPrefix.length(), encodingReplacement.length());
 			int c;
 			for (c = 0; c < len; c++) {
@@ -1469,7 +1473,7 @@ public class ObservableConfig implements Transactable, Stamped {
 						String attName = attributes.getLocalName(a);
 						if (attName == null || attName.length() == 0)
 							attName = attributes.getQName(a);
-						cfg.set(encoding.decode(attName), attributes.getValue(a));
+						cfg.set(encoding.decode(attName), encoding.decode(attributes.getValue(a)));
 					}
 				}
 
