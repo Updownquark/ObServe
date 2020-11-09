@@ -769,6 +769,11 @@ public interface ObservableConfigFormat<E> {
 				this.format = format;
 				this.childName = childName;
 			}
+
+			@Override
+			public String toString() {
+				return name;
+			}
 		}
 		private final QuickMap<String, ComponentField<E, ?>> theFields;
 		private final List<EntitySubFormat<? extends E>> theSubFormats;
