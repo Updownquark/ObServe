@@ -2686,26 +2686,30 @@ public class PanelPopulation {
 						}
 					});
 					if (divProp != null) {
-						divProp.noInitChanges().takeUntil(until).act(evt -> {
+						divProp.changes().takeUntil(until).act(evt -> {
 							if (callbackLock[0])
 								return;
-							callbackLock[0] = true;
-							try {
-								getEditor().setDividerLocation(evt.getNewValue());
-							} finally {
-								callbackLock[0] = false;
-							}
+							EventQueue.invokeLater(() -> {
+								callbackLock[0] = true;
+								try {
+									getEditor().setDividerLocation(evt.getNewValue());
+								} finally {
+									callbackLock[0] = false;
+								}
+							});
 						});
 					} else {
-						divLoc.noInitChanges().takeUntil(until).act(evt -> {
+						divLoc.changes().takeUntil(until).act(evt -> {
 							if (callbackLock[0])
 								return;
-							callbackLock[0] = true;
-							try {
-								getEditor().setDividerLocation(evt.getNewValue());
-							} finally {
-								callbackLock[0] = false;
-							}
+							EventQueue.invokeLater(() -> {
+								callbackLock[0] = true;
+								try {
+									getEditor().setDividerLocation(evt.getNewValue());
+								} finally {
+									callbackLock[0] = false;
+								}
+							});
 						});
 					}
 				} else if (theDivLocation >= 0 || !Double.isNaN(theDivProportion)) {
