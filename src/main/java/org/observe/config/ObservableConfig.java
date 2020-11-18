@@ -1028,10 +1028,10 @@ public class ObservableConfig implements Transactable, Stamped {
 			if (!child.theParentContentRef.isPresent())
 				throw new NoSuchElementException("Config has already been removed");
 
-			child.remove();
+			child._remove(false);
 			if (afterRemove != null)
 				afterRemove.run();
-			return addChild(after, before, first, child.getName(), newChild -> newChild.copyFrom(child, true));
+			return addChild(after, before, first, child.getName(), newChild -> newChild._copyFrom(child, true, true));
 		}
 	}
 
@@ -1078,12 +1078,19 @@ public class ObservableConfig implements Transactable, Stamped {
 		try (Transaction t = Lockable.lockAll(//
 			Lockable.lockable(source, false, null), //
 			Lockable.lockable(this, true, null))) {
-			_copyFrom(source, removeExtras);
+			_copyFrom(source, removeExtras, false);
 		}
 		return this;
 	}
 
-	private void _copyFrom(ObservableConfig source, boolean removeExtras) {
+	private void _copyFrom(ObservableConfig source, boolean removeExtras, boolean withParsedItems) {
+		if (source.theParsedItems != null && withParsedItems) {
+			for (Map.Entry<ObservableConfigParseSession, WeakReference<Object>> pi : source.theParsedItems.entrySet()) {
+				Object value = pi.getValue().get();
+				if (value != null)
+					withParsedItem(pi.getKey(), value);
+			}
+		}
 		if (!Objects.equals(theValue, source.theValue))
 			setValue(source.theValue);
 		List<ObservableConfig> children = new ArrayList<>(theContent.size());
@@ -1097,7 +1104,7 @@ public class ObservableConfig implements Transactable, Stamped {
 			@Override
 			public ObservableConfig added(ObservableConfig o, int mIdx, int retIdx) {
 				ObservableConfig before = retIdx == children.size() ? null : children.get(retIdx);
-				return addChild(null, before, false, o.getName(), newChild -> newChild._copyFrom(o, removeExtras));
+				return addChild(null, before, false, o.getName(), newChild -> newChild._copyFrom(o, removeExtras, withParsedItems));
 			}
 
 			@Override
@@ -1111,15 +1118,19 @@ public class ObservableConfig implements Transactable, Stamped {
 
 			@Override
 			public ObservableConfig set(ObservableConfig o1, int idx1, int incMod, ObservableConfig o2, int idx2, int retIdx) {
-				o1._copyFrom(source, removeExtras);
+				o1._copyFrom(source, removeExtras, withParsedItems);
 				return o1;
 			}
 		});
 	}
 
 	public void remove() {
+		_remove(true);
+	}
+
+	private void _remove(boolean withParsedItems) {
 		Map<?, ?> parsedItems = theParsedItems;
-		if (parsedItems != null)
+		if (parsedItems != null && withParsedItems)
 			parsedItems.clear();
 		try (Transaction t = lock(true, null)) {
 			if (!theParentContentRef.isPresent())
