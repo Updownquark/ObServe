@@ -661,6 +661,8 @@ implements TableBuilder<R, P> {
 		if (theSelectionValue != null)
 			ObservableSwingUtils.syncSelection(table, model.getRowModel(), table::getSelectionModel, model.getRows().equivalence(),
 				theSelectionValue, until, index -> {
+					if (index >= getRows().size())
+						return;
 					MutableCollectionElement<R> el = (MutableCollectionElement<R>) getRows()
 						.mutableElement(getRows().getElement(index).getElementId());
 					if (el.isAcceptable(el.get()) == null)
