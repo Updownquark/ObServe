@@ -1434,15 +1434,17 @@ public interface ObservableConfigFormat<E> {
 					id = Math.max(id, idVal.longValue() + 1);
 				}
 			}
-			if (distinctValue)
+			ComponentField<E, ?> field = getFields().get(idField.getName());
+			// The child check is to make sure the ID is actually persisted and not defaulted
+			if (distinctValue && config.getChild(field.childName) != null)
 				return true; // The given value is fine
 			if (fieldType == int.class) {
-				((ObservableConfigFormat<Integer>) getFields().get(idField.getName()).format).format(session, (int) id, //
-					(Integer) currentValue, config, __ -> {}, Observable.empty());
+				((ObservableConfigFormat<Integer>) field.format).format(session, (int) id, //
+					(Integer) currentValue, config.getChild(field.childName, true, null), __ -> {}, Observable.empty());
 				fieldValues.put(fieldIndex, (int) id);
 			} else {
-				((ObservableConfigFormat<Long>) getFields().get(idField.getName()).format).format(session, id, //
-					(Long) currentValue, config, __ -> {}, Observable.empty());
+				((ObservableConfigFormat<Long>) field.format).format(session, id, //
+					(Long) currentValue, config.getChild(field.childName, true, null), __ -> {}, Observable.empty());
 				fieldValues.put(fieldIndex, id);
 			}
 			return true;
