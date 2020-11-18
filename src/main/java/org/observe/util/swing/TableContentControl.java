@@ -26,6 +26,7 @@ import org.qommons.ArrayUtils;
 import org.qommons.Named;
 import org.qommons.StringUtils;
 import org.qommons.TimeUtils;
+import org.qommons.TimeUtils.ParsedDuration;
 import org.qommons.TimeUtils.ParsedTime;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.io.Format;
@@ -193,19 +194,20 @@ public interface TableContentControl {
 				String category = split[i].substring(0, colonIndex);
 				if (colonIndex < split[i].length() - 1) {
 					String catFilter = split[i].substring(colonIndex + 1);
-					filters.add(new CategoryFilter(category, _parseFilterElement(catFilter)));
+					for (TableContentControl filterEl : _parseFilterElement(catFilter))
+						filters.add(new CategoryFilter(category, filterEl));
 					if (category.equalsIgnoreCase("sort"))
 						filters.add(new RowSorter(Arrays.asList(catFilter.split(","))));
 					else if (category.equalsIgnoreCase("columns"))
 						filters.add(new ColumnSorter(Arrays.asList(catFilter.split(","))));
 					else
-						filters.add(_parseFilterElement(split[i]));
+						filters.addAll(_parseFilterElement(split[i]));
 				} else if (category.equalsIgnoreCase("sort") || category.equalsIgnoreCase("columns")) {
 					// If the user enters "sort:" or "columns:", we'll assume they're preparing to sort and not searching for that text
 				} else
-					filters.add(_parseFilterElement(split[i]));
+					filters.addAll(_parseFilterElement(split[i]));
 			} else
-				filters.add(_parseFilterElement(split[i]));
+				filters.addAll(_parseFilterElement(split[i]));
 		}
 		if (filters.isEmpty())
 			return DEFAULT;
@@ -215,7 +217,7 @@ public interface TableContentControl {
 			return new OrFilter(filters.toArray(new TableContentControl[filters.size()]));
 	}
 
-	public static TableContentControl _parseFilterElement(String filterText) {
+	public static List<TableContentControl> _parseFilterElement(String filterText) {
 		ArrayList<TableContentControl> filters = new ArrayList<>();
 		filters.add(new SimpleFilter(filterText));
 		Matcher m = INT_RANGE_PATTERN.matcher(filterText);
@@ -255,6 +257,30 @@ public interface TableContentControl {
 				}
 			}
 		}
+		int dashIdx = -1;
+		for (int i = 0; i < filterText.length(); i++) {
+			if (filterText.charAt(i) == '-') {
+				dashIdx = i;
+				break;
+			}
+		}
+		if (dashIdx <= 0) {
+			ParsedDuration duration;
+			try {
+				duration = TimeUtils.parseDuration(filterText);
+			} catch (ParseException e) {
+				duration = null;
+			}
+			if (duration != null)
+				filters.add(new DurationFilter(duration));
+		}
+		if (dashIdx > 0) {
+			try {
+				ParsedDuration minDuration = TimeUtils.parseDuration(filterText.subSequence(0, dashIdx));
+				ParsedDuration maxDuration = TimeUtils.parseDuration(filterText.subSequence(dashIdx + 1, filterText.length()));
+				filters.add(new DurationRangeFilter(minDuration, maxDuration));
+			} catch (ParseException e) {}
+		}
 		int starIndex = filterText.indexOf('*');
 		if (starIndex >= 0 && starIndex < filterText.length() - 1) {
 			ArrayList<String> sequence = new ArrayList<>();
@@ -277,10 +303,7 @@ public interface TableContentControl {
 				// Ignore
 			}
 		}
-		if (filters.size() == 1)
-			return filters.get(0);
-		filters.trimToSize();
-		return new OrFilter(filters.toArray(new TableContentControl[filters.size()]));
+		return filters;
 	}
 
 	public static <E> ObservableCollection<FilteredValue<E>> applyRowControl(ObservableCollection<E> values,
@@ -906,6 +929,86 @@ public interface TableContentControl {
 		@Override
 		public String toString() {
 			return new StringBuilder().append(theMinTime).append('-').append(theMaxTime).toString();
+		}
+	}
+
+	public static class DurationFilter implements TableContentControl {
+		private final TimeUtils.ParsedDuration theDuration;
+
+		public DurationFilter(ParsedDuration duration) {
+			theDuration = duration;
+		}
+
+		@Override
+		public int[][] findMatches(ValueRenderer<?> category, CharSequence text) {
+			if (!category.searchGeneral())
+				return null;
+			TimeUtils.ParsedDuration duration;
+			try {
+				duration = TimeUtils.parseDuration(text);
+			} catch (ParseException e) {
+				return NO_MATCH;
+			}
+			if (theDuration.compareTo(duration) == 0) {
+				return new int[][] { { 0, text.length() } };
+			}
+			return NO_MATCH;
+		}
+
+		@Override
+		public List<String> getRowSorting() {
+			return null;
+		}
+
+		@Override
+		public List<String> getColumnSorting() {
+			return null;
+		}
+
+		@Override
+		public String toString() {
+			return theDuration.toString();
+		}
+	}
+
+	public static class DurationRangeFilter implements TableContentControl {
+		private final TimeUtils.ParsedDuration theMinDuration;
+		private final TimeUtils.ParsedDuration theMaxDuration;
+
+		public DurationRangeFilter(ParsedDuration minDuration, ParsedDuration maxDuration) {
+			theMinDuration = minDuration;
+			theMaxDuration = maxDuration;
+		}
+
+		@Override
+		public int[][] findMatches(ValueRenderer<?> category, CharSequence text) {
+			if (!category.searchGeneral())
+				return null;
+			TimeUtils.ParsedDuration duration;
+			try {
+				duration = TimeUtils.parseDuration(text);
+			} catch (ParseException e) {
+				return NO_MATCH;
+			}
+			if (theMinDuration.compareTo(duration) <= 0 && theMaxDuration.compareTo(duration) >= 0) {
+				return new int[][] { { 0, text.length() } };
+			}
+			return NO_MATCH;
+		}
+
+		@Override
+		public List<String> getRowSorting() {
+			return null;
+		}
+
+		@Override
+		public List<String> getColumnSorting() {
+			return null;
+		}
+
+		@Override
+		public String toString() {
+			return new StringBuilder().append(theMinDuration).append('-').append(theMaxDuration).toString();
 		}
 	}
 
