@@ -113,6 +113,9 @@ public interface ConfigurableValueCreator<E, E2 extends E> extends ValueCreator<
 	class CopyImpl {
 		static <E, E2 extends E> void copy(ConfigurableValueCreator<E, E2> creator, E template) {
 			for (ConfiguredValueField<E2, ?> field : creator.getType().getFields().allValues()) {
+				if (field.getOwnerType() instanceof EntityConfiguredValueType
+					&& ((EntityConfiguredValueType<E2>) field.getOwnerType()).getIdFields().contains(field.getIndex()))
+					continue; // Don't copy ID fields
 				copyField(creator, field, template);
 			}
 		}

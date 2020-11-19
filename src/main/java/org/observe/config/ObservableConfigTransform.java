@@ -88,7 +88,8 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		findRefs.act(__ -> initialized[0] = true);
 		theParent.changes().takeUntil(until).act(//
 			evt -> {
-				if (evt.isInitial()) {} else if (evt.getNewValue() == evt.getOldValue()) {
+				if (evt.isInitial()) {//
+				} else if (evt.getNewValue() == evt.getOldValue()) {
 					return;
 				} else
 					theStamp++;
@@ -274,7 +275,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 					try (Transaction parentT = parent.lock(true, cause)) {
 						E oldV = theValue;
 						oldValue[0] = oldV;
-						theFormat.format(getSession(), value, oldV, parent, theModifyingValue, getUntil());
+						theFormat.format(getSession(), value, oldV, __ -> parent, theModifyingValue, getUntil());
 					} finally {
 						theModifyingValue.clear();
 					}
@@ -568,7 +569,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 				theElementObservable = SimpleObservable.build().withLock(theConfig.getLocker()).build();
 
 				if (value != null && value.isPresent()) {
-					theFormat.format(getSession(), value.get(), null, config, v -> theValue = v,
+					theFormat.format(getSession(), value.get(), null, __ -> config, v -> theValue = v,
 						Observable.or(getUntil(), theElementObservable));
 				} else {
 					E val;
@@ -622,7 +623,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 						throw new IllegalArgumentException(StdMsg.ELEMENT_REMOVED);
 					modifying = new ValueHolder<>(value);
 					theFormat.format(//
-						getSession(), value, get(), theConfig, v -> {}, Observable.or(getUntil(), theElementObservable));
+						getSession(), value, get(), __ -> theConfig, v -> {}, Observable.or(getUntil(), theElementObservable));
 				}
 			}
 
