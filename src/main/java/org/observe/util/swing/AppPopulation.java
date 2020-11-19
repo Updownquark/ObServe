@@ -70,7 +70,7 @@ public class AppPopulation {
 		private boolean isCloseWithoutSaveEnabled;
 		private volatile boolean isClosingWithoutSave;
 		private Consumer<FileBackups.Builder> theBackups;
-		private AboutMenuBuilder<?> theAboutMenu;
+		private AboutDialogBuilder<?> theAboutDialog;
 
 		public ObservableUiBuilder() {
 			super(new JFrame(), Observable.empty(), true);
@@ -219,20 +219,20 @@ public class AppPopulation {
 
 		private static final Pattern VERSION_PATTERN = Pattern.compile("v?([0-9]+)\\.([0-9]+)\\.([0-9]+)");
 
-		public ObservableUiBuilder withAbout(Class<?> appClass, Consumer<AboutMenuBuilder<?>> about) {
-			if (theAboutMenu == null) {
-				theAboutMenu = new AboutMenuBuilder<>(this, appClass, new JDialog(), Observable.empty(), false)//
+		public ObservableUiBuilder withAbout(Class<?> appClass, Consumer<AboutDialogBuilder<?>> about) {
+			if (theAboutDialog == null) {
+				theAboutDialog = new AboutDialogBuilder<>(this, appClass, new JDialog(), Observable.empty(), false)//
 					.withTitle("About " + (getTitle() == null ? "" : getTitle().get()))//
 					.modal(true);
 			}
-			about.accept(theAboutMenu);
+			about.accept(theAboutDialog);
 			boolean[] first = new boolean[] { true };
 			withMenuBar(bar -> bar.withMenu("Help", helpMenu -> helpMenu.withAction("About", __ -> {
 				if (first[0]) {
-					theAboutMenu.run(getWindow());
+					theAboutDialog.run(getWindow());
 					first[0] = false;
 				} else
-					theAboutMenu.getWindow().setVisible(true);
+					theAboutDialog.getWindow().setVisible(true);
 			}, null)));
 			return this;
 		}
@@ -422,7 +422,7 @@ public class AppPopulation {
 			});
 		}
 
-		public static class AboutMenuBuilder<A extends AboutMenuBuilder<A>> extends WindowPopulation.DefaultDialogBuilder<JDialog, A> {
+		public static class AboutDialogBuilder<A extends AboutDialogBuilder<A>> extends WindowPopulation.DefaultDialogBuilder<JDialog, A> {
 			private final Class<?> theAppClass;
 			private final SettableValue<String> theCurrentVersion;
 			private Supplier<Version> theLatestReleaseGetter;
@@ -430,7 +430,7 @@ public class AppPopulation {
 			private final ObservableValue<Version> theLatestVersionValue;
 			private final SettableValue<Consumer<Version>> theUpgrader;
 
-			AboutMenuBuilder(ObservableUiBuilder app, Class<?> appClass, JDialog dialog, Observable<?> until, boolean disposeOnClose) {
+			AboutDialogBuilder(ObservableUiBuilder app, Class<?> appClass, JDialog dialog, Observable<?> until, boolean disposeOnClose) {
 				super(dialog, until, disposeOnClose);
 				theAppClass = appClass;
 				theCurrentVersion = SettableValue.build(String.class).safe(false).build();
@@ -479,6 +479,15 @@ public class AppPopulation {
 						}
 					});
 				});
+				if ("true".equals(System.getProperty("show.app.version"))) {
+					EventQueue.invokeLater(() -> {
+						if (theLatestReleaseGetter != null)
+							theLatestRelease = theLatestReleaseGetter.get();
+						else
+							theLatestRelease = null;
+						run(app.getWindow());
+					});
+				}
 			}
 
 			private static String wrap(String str) {
