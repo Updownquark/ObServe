@@ -1,5 +1,6 @@
 package org.observe.util.swing;
 
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.Desktop;
 import java.awt.EventQueue;
@@ -220,13 +221,18 @@ public class AppPopulation {
 
 		public ObservableUiBuilder withAbout(Class<?> appClass, Consumer<AboutMenuBuilder<?>> about) {
 			if (theAboutMenu == null) {
-				theAboutMenu = new AboutMenuBuilder<>(appClass, new JDialog(), Observable.empty(), false)//
+				theAboutMenu = new AboutMenuBuilder<>(this, appClass, new JDialog(), Observable.empty(), false)//
 					.withTitle("About " + (getTitle() == null ? "" : getTitle().get()))//
-					.modal(false);
+					.modal(true);
 			}
 			about.accept(theAboutMenu);
+			boolean[] first = new boolean[] { true };
 			withMenuBar(bar -> bar.withMenu("Help", helpMenu -> helpMenu.withAction("About", __ -> {
-				theAboutMenu.run(getWindow());
+				if (first[0]) {
+					theAboutMenu.run(getWindow());
+					first[0] = false;
+				} else
+					theAboutMenu.getWindow().setVisible(true);
 			}, null)));
 			return this;
 		}
@@ -419,16 +425,16 @@ public class AppPopulation {
 		public static class AboutMenuBuilder<A extends AboutMenuBuilder<A>> extends WindowPopulation.DefaultDialogBuilder<JDialog, A> {
 			private final Class<?> theAppClass;
 			private final SettableValue<String> theCurrentVersion;
-			private Supplier<String> theLatestReleaseGetter;
-			private String theLatestRelease;
-			private final ObservableValue<String> theLatestVersionValue;
-			private final SettableValue<Consumer<String>> theUpgrader;
+			private Supplier<Version> theLatestReleaseGetter;
+			private Version theLatestRelease;
+			private final ObservableValue<Version> theLatestVersionValue;
+			private final SettableValue<Consumer<Version>> theUpgrader;
 
-			AboutMenuBuilder(Class<?> appClass, JDialog dialog, Observable<?> until, boolean disposeOnClose) {
+			AboutMenuBuilder(ObservableUiBuilder app, Class<?> appClass, JDialog dialog, Observable<?> until, boolean disposeOnClose) {
 				super(dialog, until, disposeOnClose);
 				theAppClass = appClass;
 				theCurrentVersion = SettableValue.build(String.class).safe(false).build();
-				theUpgrader = SettableValue.build(TypeTokens.get().keyFor(Consumer.class).<Consumer<String>> parameterized(String.class))
+				theUpgrader = SettableValue.build(TypeTokens.get().keyFor(Consumer.class).<Consumer<Version>> parameterized(Version.class))
 					.safe(false).build();
 				SimpleObservable<Object> shown = SimpleObservable.build().safe(false).build();
 				shown.act(__ -> {
@@ -437,8 +443,8 @@ public class AppPopulation {
 					else
 						theLatestRelease = null;
 				});
-				theLatestVersionValue = ObservableValue.of(TypeTokens.get().STRING, () -> theLatestRelease, () -> 1, // Hopefully nobody
-																														// asks
+				theLatestVersionValue = ObservableValue.of(TypeTokens.get().of(Version.class), () -> theLatestRelease, //
+					() -> 1, // Hopefully nobody asks for the stamp
 					shown);
 				getWindow().addComponentListener(new ComponentAdapter() {
 					@Override
@@ -448,17 +454,74 @@ public class AppPopulation {
 				});
 
 				withVContent(content -> {
-					content.addLabel(null, theCurrentVersion.map(String.class, v -> "Version: " + (v == null ? "Unknown" : v)), Format.TEXT,
+					content.addLabel("Current Version:", theCurrentVersion.map(String.class, v -> (v == null ? "Unknown" : v)), Format.TEXT,
 						label -> label.visibleWhen(theCurrentVersion.map(v -> v != null)));
-					content.addLabel(null, theLatestVersionValue, Format.TEXT,
-						label -> label.visibleWhen(theLatestVersionValue.map(v -> v != null)));
-					content.addButton("Upgrade", __ -> {
-						theUpgrader.get().accept(theLatestRelease);
-					}, btn -> btn.visibleWhen(theUpgrader
-						.transform(tx -> tx.combineWith(theCurrentVersion).combineWith(theLatestVersionValue).combine((u, cv, lv) -> {
-							return u != null && cv != null && lv != null;
-						}))));
+					content.addVPanel(lvp -> lvp.fill().visibleWhen(theLatestVersionValue.map(v -> v != null))
+						.decorate(deco -> deco.withTitledBorder("Latest Version", Color.black))//
+						.addLabel(null, theLatestVersionValue.map(v -> v == null ? "" : v.name), Format.TEXT, label -> label.fill())//
+						.addLabel(null, theLatestVersionValue.map(v -> v == null ? "" : v.title), Format.TEXT, label -> label.fill())//
+						.addTextArea(null,
+							SettableValue.asSettable(theLatestVersionValue.map(v -> v == null ? "" : wrap(v.description)), d -> null),
+							Format.TEXT, label -> label.fill().fillV().modifyEditor(ed -> ed.asHtml().setEditable(false)))//
+						.addButton("Upgrade", __ -> {
+							theUpgrader.get().accept(theLatestRelease);
+						}, btn -> btn.visibleWhen(theUpgrader
+							.transform(tx -> tx.combineWith(theCurrentVersion).combineWith(theLatestVersionValue).combine((u, cv, lv) -> {
+								return u != null && cv != null && lv != null;
+							}))))//
+						);
 				});
+				theLatestVersionValue.noInitChanges().act(__ -> {
+					EventQueue.invokeLater(() -> {
+						if (getWindow().isVisible()) {
+							getWindow().pack();
+							getWindow().setLocationRelativeTo(app.getWindow());
+						}
+					});
+				});
+			}
+
+			private static String wrap(String str) {
+				if (str == null || str.length() <= WRAP_LENGTH) {
+					return str;
+				}
+				StringBuilder s = new StringBuilder("<html>");
+				int start = 0;
+				int newLine = str.indexOf('\n');
+				while (newLine >= 0) {
+					wrap(str.substring(start, newLine), s);
+					s.append("<br>");
+					start = newLine + 1;
+					newLine = str.indexOf('\n', start);
+				}
+				wrap(str.substring(start), s);
+				return s.toString();
+			}
+
+			private static int WRAP_LENGTH = 80;
+
+			private static void wrap(String str, StringBuilder into) {
+				if (str.length() <= WRAP_LENGTH) {
+					into.append(str);
+				}
+				int start = 0;
+				while (str.length() - start > WRAP_LENGTH) {
+					int c = start + WRAP_LENGTH;
+					int i;
+					for (i = 0; i < 15; i++) {
+						if (Character.isWhitespace(str.charAt(c - i)))
+							break;
+					}
+					if (i < 15) {
+						into.append(str.substring(start, c - i));
+						start = c - i + 1;
+					} else {
+						into.append(str.substring(start, c));
+						start = c;
+					}
+					into.append("<br>");
+				}
+				into.append(str.substring(start));
 			}
 
 			public A withCurrentVersionFromManifest() {
@@ -479,12 +542,12 @@ public class AppPopulation {
 				return (A) this;
 			}
 
-			public A withLatestVersion(Supplier<String> latestVersion) {
+			public A withLatestVersion(Supplier<Version> latestVersion) {
 				theLatestReleaseGetter = latestVersion;
 				return (A) this;
 			}
 
-			public A withUpgrade(Consumer<String> upgrade) {
+			public A withUpgrade(Consumer<Version> upgrade) {
 				theUpgrader.set(upgrade, null);
 				return (A) this;
 			}
@@ -689,4 +752,15 @@ public class AppPopulation {
 		}
 	}
 
+	public static class Version {
+		public final String name;
+		public final String title;
+		public final String description;
+
+		public Version(String name, String title, String description) {
+			this.name = name;
+			this.title = title;
+			this.description = description;
+		}
+	}
 }

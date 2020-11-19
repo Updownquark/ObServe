@@ -349,9 +349,9 @@ public class WindowPopulation {
 
 		@Override
 		public P run(Component relativeTo) {
-			super.run(relativeTo);
 			if (theModality != null)
 				theModality.changes().takeUntil(getUntil()).act(evt -> getWindow().setModalityType(evt.getNewValue()));
+			super.run(relativeTo);
 			return (P) this;
 		}
 	}
