@@ -276,6 +276,7 @@ public class EntityArguments<E> {
 		}
 	}
 
+	/** @return The underlying command-line arg parser */
 	public ArgumentParsing2.ArgumentParser getParser() {
 		return theParser;
 	}
