@@ -1911,7 +1911,7 @@ public class EntityReflector<E> {
 		if (clazz == null)
 			return;
 		for (Method m : clazz.getDeclaredMethods()) {
-			if (m.isSynthetic())
+			if (m.isSynthetic() || Modifier.isStatic(m.getModifiers()))
 				continue;
 
 			MethodInterpreter<E, ?> method = null; // Shouldn't have to initialize this, but the continues seem to be confusing the compiler
