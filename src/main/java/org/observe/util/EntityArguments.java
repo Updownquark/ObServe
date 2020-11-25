@@ -112,9 +112,22 @@ public class EntityArguments<E> {
 		boolean create() default false;
 	}
 
+	/**
+	 * <p>
+	 * Maybe specified on any field getter with the name of a static method in the interface. The signature of the targeted method must be
+	 * <code>boolean methodName(Type arg)</code> where "Type" is the type (or a super type) of the argument type. The parameter name doesn't
+	 * matter.
+	 * </p>
+	 *
+	 * <p>
+	 * This works for collection fields too. A field of type List&lt;String> may be validated, for example using a method
+	 * <code>boolean checkString(String arg)</code>.
+	 * </p>
+	 */
 	@Retention(RetentionPolicy.RUNTIME)
 	@Target(ElementType.METHOD)
 	public static @interface CheckValue {
+		/** The name of the static method in the entity class to use to validate the values of this field */
 		String value();
 	}
 
