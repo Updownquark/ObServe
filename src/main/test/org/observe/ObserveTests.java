@@ -6,6 +6,7 @@ import org.junit.runners.Suite.SuiteClasses;
 import org.observe.assoc.ObservableAssocTest;
 import org.observe.collect.ObservableCollectionsTest;
 import org.observe.config.ObservableConfigTest;
+import org.observe.util.EntityArgumentsTest;
 import org.observe.util.EntityReflectorTest;
 import org.observe.util.swing.ObservableSwingUtilsTests;
 import org.qommons.QommonsTests;
@@ -19,6 +20,7 @@ import org.qommons.QommonsTests;
 	ObservableCollectionsTest.class, //
 	ObservableAssocTest.class, //
 	EntityReflectorTest.class, //
+	EntityArgumentsTest.class, //
 	ObservableConfigTest.class, //
 	ObservableSwingUtilsTests.class
 })
