@@ -9,13 +9,12 @@ import java.util.Arrays;
 import java.util.regex.Matcher;
 
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
-import org.observe.util.EntityArguments.Bound;
-import org.observe.util.EntityArguments.CheckValue;
-import org.observe.util.EntityArguments.Default;
+import org.observe.util.EntityArguments.Argument;
+import org.observe.util.EntityArguments.Arguments;
+import org.observe.util.EntityArguments.Flag;
 import org.observe.util.EntityArguments.Pattern;
-import org.observe.util.EntityArguments.Required;
+import org.qommons.ArgumentParsing2;
 import org.qommons.collect.BetterList;
 
 /** Tests {@link EntityArguments} */
@@ -29,26 +28,29 @@ public class EntityArgumentsTest {
 
 	@SuppressWarnings("javadoc")
 	public interface TestArgs {
+		@Flag
+		boolean isFlag();
+
 		Boolean isBoolArg();
 
-		@Default("20")
+		@Argument(defaultValue = "20")
 		int getIntArg();
 
 		BetterList<Long> getLongArg();
 
-		@Bound(min = "0.0", max = "100.0")
+		@Argument(minValue = "0.0", maxValue = "100.0")
 		BetterList<Double> getDoubleArg();
 
-		@Required
+		@Argument(required = true)
 		TestEnum getEnumArg();
 
-		@Default("12/25/2020 12:30am")
+		@Argument(defaultValue = "12/25/2020 12:30am")
 		Instant getTimeArg();
 
-		@Default("1m")
+		@Argument(defaultValue = "1m")
 		Duration getDurationArg();
 
-		@CheckValue("lengthLessEqual5")
+		@Argument(validate = "lengthLessEqual5")
 		String getStringArg();
 
 		@Pattern("(\\d+)\\-(\\d+)")
@@ -56,32 +58,76 @@ public class EntityArgumentsTest {
 
 		File getFileArg();
 
+		BetterList<Integer> getMultiIntArg();
+
 		static boolean lengthLessEqual5(String s) {
 			return s.length() <= 5;
 		}
 	}
 
-	private EntityArguments<TestArgs> theParser;
+	@SuppressWarnings("javadoc")
+	@Arguments(singleValuePattern = "singleValuePattern", multiValuePattern = "multiValuePattern")
+	public interface SplitTestArgs {
+		ArgumentParsing2.ArgumentPattern.ValuePattern singleValuePattern = ArgumentParsing2.SPLIT_VALUE_PATTERN;
+		ArgumentParsing2.ArgumentPattern.ValuePattern notSplitValuePattern = ArgumentParsing2.DEFAULT_VALUE_PATTERN;
+		ArgumentParsing2.ArgumentPattern.ValuePattern multiValuePattern = ArgumentParsing2.SPLIT_MULTI_VALUE_PATTERN;
 
-	/** Builds the parser */
-	@Before
-	public void setup() {
-		theParser = new EntityArguments<>(TestArgs.class);
-		theParser.getParser().printHelpOnEmpty(false).printHelpOnError(false);
+		@Flag
+		boolean isFlag();
+
+		@Argument(argPattern = "notSplitValuePattern")
+		Boolean isBoolArg();
+
+		@Argument(defaultValue = "20")
+		int getIntArg();
+
+		BetterList<Long> getLongArg();
+
+		@Argument(minValue = "0.0", maxValue = "100.0")
+		BetterList<Double> getDoubleArg();
+
+		@Argument(required = true)
+		TestEnum getEnumArg();
+
+		@Argument(defaultValue = "12/25/2020 12:30am")
+		Instant getTimeArg();
+
+		@Argument(defaultValue = "1m")
+		Duration getDurationArg();
+
+		@Argument(validate = "lengthLessEqual5")
+		String getStringArg();
+
+		@Pattern("(\\d+)\\-(\\d+)")
+		Matcher getPatternArg();
+
+		File getFileArg();
+
+		BetterList<Integer> getMultiIntArg();
+
+		static boolean lengthLessEqual5(String s) {
+			return s.length() <= 5;
+		}
 	}
+
 
 	/** Tests basic parsing of valid argument sets */
 	@Test
 	public void testArgumentParsing() {
+		EntityArguments<TestArgs> parser = new EntityArguments<>(TestArgs.class);
+		parser.getParser().printHelpOnEmpty(false).printHelpOnError(false);
+
 		// Round 1
-		TestArgs args = theParser.parse("--bool-arg=false", "--long-arg=5", "--long-arg=6", "--enum-arg=One", "--string-arg=str",
+		TestArgs args = parser.parse("--flag", "--long-arg=5", "--long-arg=6", "--enum-arg=One", "--string-arg=str",
 			"--pattern-arg=5-10");
+		Assert.assertTrue(args.isFlag());
 		Assert.assertEquals(Arrays.asList(5L, 6L), args.getLongArg());
 		Assert.assertEquals(TestEnum.One, args.getEnumArg());
 		Assert.assertEquals("str", args.getStringArg());
-		Assert.assertEquals("5", args.getPatternArg().group(1));
-		Assert.assertEquals("10", args.getPatternArg().group(2));
-		Assert.assertFalse(args.isBoolArg());
+		Matcher match = args.getPatternArg();
+		Assert.assertEquals("5", match.group(1));
+		Assert.assertEquals("10", match.group(2));
+		Assert.assertNull(args.isBoolArg());
 		Assert.assertEquals(0, args.getDoubleArg().size());
 		Assert.assertNull(args.getFileArg());
 		Assert.assertEquals(20, args.getIntArg());
@@ -93,16 +139,62 @@ public class EntityArgumentsTest {
 		Assert.assertEquals(Duration.ofSeconds(60), args.getDurationArg());
 
 		// Round 2
-		args = theParser.parse("--double-arg=50.5", "--double-arg=60.5", "--double-arg=70.5", "--enum-arg=File", "--bool-arg=true",
-			"--file-arg=/home/user/something");
+		args = parser.parse("--double-arg=50.5", "--double-arg=60.5", "--double-arg=70.5", "--enum-arg=File", "--bool-arg=true",
+			"--file-arg=/home/user/something", "--multi-int-arg=10,20,30");
+		Assert.assertFalse(args.isFlag());
 		Assert.assertEquals(0, args.getLongArg().size());
 		Assert.assertEquals(Arrays.asList(50.5, 60.5, 70.5), args.getDoubleArg());
 		Assert.assertEquals(TestEnum.File, args.getEnumArg());
 		Assert.assertTrue(args.isBoolArg());
 		Assert.assertEquals(new File("/home/user/something"), args.getFileArg());
+		Assert.assertEquals(Arrays.asList(10, 20, 30), args.getMultiIntArg());
 
 		// Round 3
-		args = theParser.parse("--enum-arg=Three", "--duration-arg=30s");
+		args = parser.parse("--enum-arg=Three", "--duration-arg=30s");
+		Assert.assertEquals(TestEnum.Three, args.getEnumArg());
+		Assert.assertEquals(Duration.ofSeconds(30), args.getDurationArg());
+	}
+
+	/** Tests basic parsing of valid argument sets */
+	@Test
+	public void testSplitArgumentParsing() {
+		EntityArguments<SplitTestArgs> parser = new EntityArguments<>(SplitTestArgs.class);
+		parser.getParser().printHelpOnEmpty(false).printHelpOnError(false);
+
+		// Round 1
+		SplitTestArgs args = parser.parse("--flag", "--long-arg", "5", "--long-arg", "6", "--enum-arg", "One", "--string-arg", "str",
+			"--pattern-arg", "5-10");
+		Assert.assertTrue(args.isFlag());
+		Assert.assertEquals(Arrays.asList(5L, 6L), args.getLongArg());
+		Assert.assertEquals(TestEnum.One, args.getEnumArg());
+		Assert.assertEquals("str", args.getStringArg());
+		Matcher match = args.getPatternArg();
+		Assert.assertEquals("5", match.group(1));
+		Assert.assertEquals("10", match.group(2));
+		Assert.assertNull(args.isBoolArg());
+		Assert.assertEquals(0, args.getDoubleArg().size());
+		Assert.assertNull(args.getFileArg());
+		Assert.assertEquals(20, args.getIntArg());
+		try {
+			Assert.assertEquals(DATE_FORMAT.parse("25Dec2020 00:30:00").toInstant(), args.getTimeArg());
+		} catch (ParseException e) {
+			throw new IllegalStateException(e);
+		}
+		Assert.assertEquals(Duration.ofSeconds(60), args.getDurationArg());
+
+		// Round 2
+		args = parser.parse("--double-arg", "50.5", "--double-arg", "60.5", "--double-arg", "70.5", "--enum-arg", "File", "--bool-arg=true",
+			"--file-arg", "/home/user/something", "--multi-int-arg", "10,20,30");
+		Assert.assertFalse(args.isFlag());
+		Assert.assertEquals(0, args.getLongArg().size());
+		Assert.assertEquals(Arrays.asList(50.5, 60.5, 70.5), args.getDoubleArg());
+		Assert.assertEquals(TestEnum.File, args.getEnumArg());
+		Assert.assertTrue(args.isBoolArg());
+		Assert.assertEquals(new File("/home/user/something"), args.getFileArg());
+		Assert.assertEquals(Arrays.asList(10, 20, 30), args.getMultiIntArg());
+
+		// Round 3
+		args = parser.parse("--enum-arg", "Three", "--duration-arg", "30s");
 		Assert.assertEquals(TestEnum.Three, args.getEnumArg());
 		Assert.assertEquals(Duration.ofSeconds(30), args.getDurationArg());
 	}
@@ -110,10 +202,13 @@ public class EntityArgumentsTest {
 	/** Tests parsing of bad arguments or argument sets that violate configured requirements */
 	@Test
 	public void testErrorCases() {
+		EntityArguments<TestArgs> parser = new EntityArguments<>(TestArgs.class);
+		parser.getParser().printHelpOnEmpty(false).printHelpOnError(false);
+
 		String message = null;
 		try {
 			message = "Missing enum-arg";
-			theParser.parse("--bool-arg=false");
+			parser.parse("--bool-arg=false");
 			Assert.assertTrue(message, false);
 		} catch (IllegalArgumentException e) {
 			System.out.println(message + ": " + e.getMessage());
@@ -121,7 +216,7 @@ public class EntityArgumentsTest {
 
 		try {
 			message = "int-arg specified twice";
-			theParser.parse("--enum-arg=One", "--int-arg=0", "--int-arg=1");
+			parser.parse("--enum-arg=One", "--int-arg=0", "--int-arg=1");
 			Assert.assertTrue(message, false);
 		} catch (IllegalArgumentException e) {
 			System.out.println(message + ": " + e.getMessage());
@@ -129,7 +224,7 @@ public class EntityArgumentsTest {
 
 		try {
 			message = "Bad time arg";
-			theParser.parse("--enum-arg=One", "--time-arg=0");
+			parser.parse("--enum-arg=One", "--time-arg=0");
 			Assert.assertTrue(message, false);
 		} catch (IllegalArgumentException e) {
 			System.out.println(message + ": " + e.getMessage());
@@ -137,7 +232,7 @@ public class EntityArgumentsTest {
 
 		try {
 			message = "Bad duration arg";
-			theParser.parse("--enum-arg=One", "--duration-arg=x");
+			parser.parse("--enum-arg=One", "--duration-arg=x");
 			Assert.assertTrue(message, false);
 		} catch (IllegalArgumentException e) {
 			System.out.println(message + ": " + e.getMessage());
@@ -145,7 +240,7 @@ public class EntityArgumentsTest {
 
 		try {
 			message = "Bad pattern arg";
-			theParser.parse("--enum-arg=One", "--pattern-arg=0");
+			parser.parse("--enum-arg=One", "--pattern-arg=0");
 			Assert.assertTrue(message, false);
 		} catch (IllegalArgumentException e) {
 			System.out.println(message + ": " + e.getMessage());
@@ -155,24 +250,27 @@ public class EntityArgumentsTest {
 	/** Tests parsing of arguments that violate value constraints */
 	@Test
 	public void testConstraints() {
+		EntityArguments<TestArgs> parser = new EntityArguments<>(TestArgs.class);
+		parser.getParser().printHelpOnEmpty(false).printHelpOnError(false);
+
 		String message = null;
 		try {
 			message = "string-arg too long";
-			theParser.parse("--enum-arg=One", "--string-arg=something");
+			parser.parse("--enum-arg=One", "--string-arg=something");
 			Assert.assertTrue(message, false);
 		} catch (IllegalArgumentException e) {
 			System.out.println(message + ": " + e.getMessage());
 		}
 		try {
 			message = "double-arg too small";
-			theParser.parse("--enum-arg=One", "--double-arg=-1.0");
+			parser.parse("--enum-arg=One", "--double-arg=-1.0");
 			Assert.assertTrue(message, false);
 		} catch (IllegalArgumentException e) {
 			System.out.println(message + ": " + e.getMessage());
 		}
 		try {
 			message = "double-arg too large";
-			theParser.parse("--enum-arg=One", "--double-arg=101");
+			parser.parse("--enum-arg=One", "--double-arg=101");
 			Assert.assertTrue(message, false);
 		} catch (IllegalArgumentException e) {
 			System.out.println(message + ": " + e.getMessage());

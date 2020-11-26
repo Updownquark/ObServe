@@ -17,8 +17,7 @@ import java.util.regex.Matcher;
 
 import org.observe.util.EntityReflector.ReflectedField;
 import org.qommons.ArgumentParsing2;
-import org.qommons.ArgumentParsing2.Arguments;
-import org.qommons.ArgumentParsing2.ValuedArgumentBuilder;
+import org.qommons.ArgumentParsing2.ArgumentPattern;
 import org.qommons.ArgumentParsing2.ValuedArgumentSetBuilder;
 import org.qommons.LambdaUtils;
 import org.qommons.StringUtils;
@@ -32,45 +31,84 @@ import org.qommons.io.BetterFile;
  * @param <E> The type of the entity to parse
  */
 public class EntityArguments<E> {
-	/** May be used to describe a field/argument */
+	/** May be specified on the entity interface to configure parser-wide settings */
 	@Retention(RetentionPolicy.RUNTIME)
-	@Target({ ElementType.TYPE, ElementType.METHOD })
-	public static @interface Description {
+	@Target({ ElementType.TYPE })
+	public @interface Arguments {
+		/** */
+		String description() default "";
+
+		/**
+		 * The name of a field in the entity type containing the {@link org.qommons.ArgumentParsing2.ArgumentPattern.FlagPattern argument
+		 * pattern} to use for {@link Flag flag} arguments by default
+		 */
+		String flagPattern() default "";
+
+		/**
+		 * The name of a field in the entity type containing the {@link org.qommons.ArgumentParsing2.ArgumentPattern.ValuePattern argument
+		 * pattern} to use for single-valued arguments by default
+		 */
+		String singleValuePattern() default "";
+
+		/**
+		 * The name of a field in the entity type containing the {@link org.qommons.ArgumentParsing2.ArgumentPattern.ValuePattern argument
+		 * pattern} to use for multi-valued arguments by default
+		 */
+		String multiValuePattern() default "";
+	}
+
+	/** My be specified on a field getter to configure some general argument settings */
+	@Retention(RetentionPolicy.RUNTIME)
+	@Target({ ElementType.METHOD })
+	public @interface Argument {
 		/** @return The description for the field */
-		String value();
-	}
-	/** My be specified on a field getter to require the argument in the command-line arguments */
-	@Retention(RetentionPolicy.RUNTIME)
-	@Target(ElementType.METHOD)
-	public static @interface Required {}
+		String description() default "";
 
-	/** May be specified on collection-type field getters to bound the number of values that may be specified */
-	@Retention(RetentionPolicy.RUNTIME)
-	@Target(ElementType.METHOD)
-	public static @interface Times {
+		/** My be specified on a field getter to require the argument in the command-line arguments */
+		boolean required() default false;
+
 		/** @return The minimum number of values that must be specified for the field */
-		int min() default 0;
+		int minTimes() default 0;
+
 		/** @return The maximum number of values that may be specified for the field */
-		int max() default Integer.MAX_VALUE;
-	}
+		int maxTimes() default Integer.MAX_VALUE;
 
-	/** Allows a default value to be specified for a field */
-	@Retention(RetentionPolicy.RUNTIME)
-	@Target(ElementType.METHOD)
-	public static @interface Default {
 		/** @return The default value for the field, specified in the same format as a command-line argument */
-		String value();
+		String defaultValue() default "";
+
+		/** @return The minimum value for the field, specified in the same format as a command-line argument */
+		String minValue() default "";
+
+		/** @return The maximum value for the field, specified in the same format as a command-line argument */
+		String maxValue() default "";
+
+		/**
+		 * The name of a field in the entity type containing the {@link org.qommons.ArgumentParsing2.ArgumentPattern argument pattern} to
+		 * use for this argument
+		 */
+		String argPattern() default "";
+
+		/**
+		 * <p>
+		 * Maybe specified on any field getter with the name of a static method in the interface. The signature of the targeted method must
+		 * be <code>boolean methodName(Type arg)</code> where "Type" is the type (or a super type) of the argument type. The parameter name
+		 * doesn't matter.
+		 * </p>
+		 *
+		 * <p>
+		 * This works for collection fields too. A field of type List&lt;String> may be validated, for example using a method
+		 * <code>boolean checkString(String arg)</code>.
+		 * </p>
+		 *
+		 * @return The name of the static method in the entity class to use to validate the values of this field
+		 */
+		String validate() default "";
 	}
 
-	/** Specifies a range for a comparable-typed field */
+	/** Marks a boolean field as a flag field, as opposed to a boolean-valued field */
 	@Retention(RetentionPolicy.RUNTIME)
-	@Target(ElementType.METHOD)
-	public static @interface Bound {
-		/** @return The minimum value for the field, specified in the same format as a command-line argument */
-		String min();
-		/** @return The maximum value for the field, specified in the same format as a command-line argument */
-		String max();
-	}
+	@Target({ ElementType.METHOD })
+	public @interface Flag {}
 
 	/** Specifies the pattern to be used for a {@link Matcher}-type field */
 	@Retention(RetentionPolicy.RUNTIME)
@@ -83,7 +121,7 @@ public class EntityArguments<E> {
 	/** Specifies the time zone to use for {@link Instant}-typed fields */
 	@Retention(RetentionPolicy.RUNTIME)
 	@Target(ElementType.METHOD)
-	public static @interface TimeZone {
+	public static @interface TimeField {
 		/** The ID of the time zone to use for the field. If not recognized, GMT will be used. */
 		String value();
 	}
@@ -112,25 +150,6 @@ public class EntityArguments<E> {
 		boolean create() default false;
 	}
 
-	/**
-	 * <p>
-	 * Maybe specified on any field getter with the name of a static method in the interface. The signature of the targeted method must be
-	 * <code>boolean methodName(Type arg)</code> where "Type" is the type (or a super type) of the argument type. The parameter name doesn't
-	 * matter.
-	 * </p>
-	 *
-	 * <p>
-	 * This works for collection fields too. A field of type List&lt;String> may be validated, for example using a method
-	 * <code>boolean checkString(String arg)</code>.
-	 * </p>
-	 */
-	@Retention(RetentionPolicy.RUNTIME)
-	@Target(ElementType.METHOD)
-	public static @interface CheckValue {
-		/** The name of the static method in the entity class to use to validate the values of this field */
-		String value();
-	}
-
 	private final EntityReflector<E> theEntityType;
 	private final ArgumentParsing2.ArgumentParser theParser;
 	private final QuickMap<String, String> theArgNames;
@@ -144,76 +163,139 @@ public class EntityArguments<E> {
 	public EntityArguments(EntityReflector<E> entityType) {
 		theEntityType = entityType;
 		theArgNames = theEntityType.getFields().keySet().createMap();
+		Arguments argsAnn = TypeTokens.getRawType(entityType.getType()).getAnnotation(Arguments.class);
 		ArgumentParsing2.ParserBuilder builder = ArgumentParsing2.build();
-		Description parserDescrip = TypeTokens.getRawType(entityType.getType()).getAnnotation(Description.class);
-		if (parserDescrip != null)
-			builder.withDescription(parserDescrip.value());
+		ArgumentParsing2.ArgumentPattern.FlagPattern flagPattern = ArgumentParsing2.DEFAULT_FLAG_PATTERN;
+		ArgumentParsing2.ArgumentPattern.ValuePattern svPattern = ArgumentParsing2.DEFAULT_VALUE_PATTERN;
+		ArgumentParsing2.ArgumentPattern.ValuePattern mvPattern = ArgumentParsing2.DEFAULT_MULTI_VALUE_PATTERN;
+		if (argsAnn != null) {
+			if (argsAnn.description().length() > 0)
+				builder.withDescription(argsAnn.description());
+			if (argsAnn.flagPattern().length() > 0)
+				flagPattern = (ArgumentParsing2.ArgumentPattern.FlagPattern) getArgPattern(argsAnn.flagPattern(), 'f');
+			if (argsAnn.singleValuePattern().length() > 0)
+				svPattern = (ArgumentParsing2.ArgumentPattern.ValuePattern) getArgPattern(argsAnn.singleValuePattern(), 's');
+			if (argsAnn.multiValuePattern().length() > 0)
+				mvPattern = (ArgumentParsing2.ArgumentPattern.ValuePattern) getArgPattern(argsAnn.multiValuePattern(), 'm');
+		}
 		for (int f = 0; f < theEntityType.getFields().keySize(); f++) {
 			ReflectedField<E, ?> field = theEntityType.getFields().get(f);
 			Class<?> fieldType = TypeTokens.getRawType(field.getType());
 			Class<?> argType;
-			boolean multi;
+			boolean multi, flag;
 			if (fieldType.isAssignableFrom(BetterList.class)) {
+				flag = false;
 				multi = true;
 				argType = TypeTokens.getRawType(field.getType().resolveType(Collection.class.getTypeParameters()[0]));
 			} else {
 				multi = false;
+				flag = TypeTokens.get().isBoolean(field.getType()) && field.getGetter().getMethod().getAnnotation(Flag.class) != null;
 				argType = fieldType;
 			}
-			builder.forValuePattern(p -> addArgument(p, TypeTokens.get().unwrap(argType), field, multi));
+			ArgumentParsing2.ArgumentPattern pattern;
+			if (flag)
+				pattern = flagPattern;
+			else if (multi)
+				pattern = mvPattern;
+			else
+				pattern = svPattern;
+			Argument argAnn = field.getGetter().getMethod().getAnnotation(Argument.class);
+			if (argAnn != null && argAnn.argPattern().length() > 0)
+				pattern = getArgPattern(argAnn.argPattern(), flag ? 'f' : (multi ? 'm' : 's'));
+			if (flag) {
+				String argName = StringUtils.parseByCase(field.getName(), true).toKebabCase();
+				theArgNames.put(field.getFieldIndex(), argName);
+				builder.forFlagPattern((ArgumentParsing2.ArgumentPattern.FlagPattern) pattern, p -> p.add(argName, arg -> {
+					if (argAnn != null && argAnn.description().length() > 0)
+						arg.withDescription(argAnn.description());
+				}));
+			} else
+				builder.forValuePattern((ArgumentParsing2.ArgumentPattern.ValuePattern) pattern,
+					p -> addArgument(p, TypeTokens.get().unwrap(argType), field, multi, argAnn));
 		}
 		theParser = builder.build();
 	}
 
+	private ArgumentParsing2.ArgumentPattern getArgPattern(String argPattern, char type) {
+		// Lookup static field from annotation value
+		ArgumentParsing2.ArgumentPattern pattern;
+		try {
+			pattern = (ArgumentPattern) TypeTokens.getRawType(theEntityType.getType()).getDeclaredField(argPattern).get(null);
+		} catch (IllegalAccessException e) {
+			throw new IllegalArgumentException("Could not access field " + theEntityType.getType().toString() + "." + argPattern, e);
+		} catch (NoSuchFieldException e) {
+			throw new IllegalArgumentException("No such field " + theEntityType.getType().toString() + "." + argPattern);
+		} catch (SecurityException e) {
+			throw new IllegalArgumentException("Could not access field " + theEntityType.getType().toString() + "." + argPattern, e);
+		} catch (ClassCastException e) {
+			throw new IllegalArgumentException(
+				"Field " + theEntityType.getType().toString() + "." + argPattern + " is not an ArgumentPattern");
+		}
+		if (pattern == null)
+			throw new IllegalArgumentException("Field " + theEntityType.getType().toString() + "." + argPattern + " is null");
+		switch (type) {
+		case 'f':
+			if (!(pattern instanceof ArgumentParsing2.ArgumentPattern.FlagPattern))
+				throw new IllegalArgumentException(argPattern + " is not a flag pattern");
+			break;
+		case 's':
+			if (!(pattern instanceof ArgumentParsing2.ArgumentPattern.ValuePattern))
+				throw new IllegalArgumentException(argPattern + " is not a value pattern");
+			else if (((ArgumentParsing2.ArgumentPattern.ValuePattern) pattern).isMultiValued())
+				throw new IllegalArgumentException(argPattern + " is not a single-valued pattern");
+			break;
+		case 'm':
+			if (!(pattern instanceof ArgumentParsing2.ArgumentPattern.ValuePattern))
+				throw new IllegalArgumentException(argPattern + " is not a value pattern");
+			else if (((ArgumentParsing2.ArgumentPattern.ValuePattern) pattern).isMultiValued())
+				throw new IllegalArgumentException(argPattern + " is not a multi-valued pattern");
+			break;
+		default:
+			throw new IllegalStateException("Unrecognized pattern type: " + type);
+		}
+		return pattern;
+	}
+
 	@SuppressWarnings("rawtypes")
-	private <T> void addArgument(ValuedArgumentSetBuilder builder, Class<T> type, ReflectedField<E, ?> field, boolean multi) {
+	private <T> void addArgument(ValuedArgumentSetBuilder builder, Class<T> type, ReflectedField<E, ?> field, boolean multi,
+		Argument argAnn) {
 		String argName = StringUtils.parseByCase(field.getName(), true).toKebabCase();
 		theArgNames.put(field.getFieldIndex(), argName);
-		Description descrip = field.getGetter().getMethod().getAnnotation(Description.class);
-		Default def = field.getGetter().getMethod().getAnnotation(Default.class);
 		boolean required;
-		if (field.getGetter().getMethod().getAnnotation(Required.class) != null)
+		if (argAnn != null && argAnn.required())
 			required = true;
-		else if (def != null)
+		else if (argAnn != null && argAnn.defaultValue().length() > 0)
 			required = false;
 		else
 			required = field.getType().isPrimitive();
-		Bound bound = field.getGetter().getMethod().getAnnotation(Bound.class);
-		Times times = field.getGetter().getMethod().getAnnotation(Times.class);
-		CheckValue check = field.getGetter().getMethod().getAnnotation(CheckValue.class);
 		int index = field.getFieldIndex();
-		if (times != null && !multi)
-			throw new IllegalArgumentException(
-				"Can't specify " + Times.class.getName() + " for a non-collection type field: " + field.getName());
 		if (type == boolean.class)
-			builder.addBooleanArgument(argName, ab -> configureArg(ab, descrip, required, def, bound, times, check, multi, index));
+			builder.addBooleanArgument(argName, ab -> configureArg(ab, argAnn, required, multi, index));
 		else if (type == int.class)
-			builder.addIntArgument(argName, ab -> configureArg(ab, descrip, required, def, bound, times, check, multi, index));
+			builder.addIntArgument(argName, ab -> configureArg(ab, argAnn, required, multi, index));
 		else if (type == long.class)
-			builder.addLongArgument(argName, ab -> configureArg(ab, descrip, required, def, bound, times, check, multi, index));
+			builder.addLongArgument(argName, ab -> configureArg(ab, argAnn, required, multi, index));
 		else if (type == double.class)
-			builder.addDoubleArgument(argName, ab -> configureArg(ab, descrip, required, def, bound, times, check, multi, index));
+			builder.addDoubleArgument(argName, ab -> configureArg(ab, argAnn, required, multi, index));
 		else if (type == String.class)
-			builder.addStringArgument(argName, ab -> configureArg(ab, descrip, required, def, bound, times, check, multi, index));
+			builder.addStringArgument(argName, ab -> configureArg(ab, argAnn, required, multi, index));
 		else if (Enum.class.isAssignableFrom(type))
-			builder.addEnumArgument(argName, (Class<Enum>) type,
-				ab -> configureArg(ab, descrip, required, def, bound, times, check, multi, index));
+			builder.addEnumArgument(argName, (Class<Enum>) type, ab -> configureArg(ab, argAnn, required, multi, index));
 		else if (type == Matcher.class) {
-			Pattern pattern = field.getGetter().getMethod().getAnnotation(Pattern.class);
-			if (pattern == null)
+			Pattern patternAnn = field.getGetter().getMethod().getAnnotation(Pattern.class);
+			if (patternAnn == null)
 				throw new IllegalArgumentException(
 					"Matcher field " + field.getName() + " present with no " + Pattern.class.getName() + " annotation specified");
-			builder.addPatternArgument(argName, pattern.value(),
-				ab -> configureArg(ab, descrip, required, def, bound, times, check, multi, index));
+			builder.addPatternArgument(argName, patternAnn.value(), ab -> configureArg(ab, argAnn, required, multi, index));
 		} else if (type == Instant.class) {
-			TimeZone timeZone = field.getGetter().getMethod().getAnnotation(TimeZone.class);
+			TimeField timeZone = field.getGetter().getMethod().getAnnotation(TimeField.class);
 			builder.addInstantArgument(argName, ab -> {
 				if (timeZone != null)
 					ab.withTimeZone(timeZone.value());
-				configureArg(ab, descrip, required, def, bound, times, check, multi, index);
+				configureArg(ab, argAnn, required, multi, index);
 			});
 		} else if (type == Duration.class)
-			builder.addDurationArgument(argName, ab -> configureArg(ab, descrip, required, def, bound, times, check, multi, index));
+			builder.addDurationArgument(argName, ab -> configureArg(ab, argAnn, required, multi, index));
 		else if (type == File.class) {
 			FileField fileField = field.getGetter().getMethod().getAnnotation(FileField.class);
 			builder.addFileArgument(argName, ab -> {
@@ -223,7 +305,7 @@ public class EntityArguments<E> {
 					ab.mustExist(fileField.mustExist());
 					ab.create(fileField.create());
 				}
-				configureArg(ab, descrip, required, def, bound, times, check, multi, index);
+				configureArg(ab, argAnn, required, multi, index);
 			});
 		} else if (type == BetterFile.class) {
 			FileField fileField = field.getGetter().getMethod().getAnnotation(FileField.class);
@@ -234,42 +316,49 @@ public class EntityArguments<E> {
 					ab.mustExist(fileField.mustExist());
 					ab.create(fileField.create());
 				}
-				configureArg(ab, descrip, required, def, bound, times, check, multi, index);
+				configureArg(ab, argAnn, required, multi, index);
 			});
 		} else
 			throw new IllegalArgumentException("Unrecognized argument field type: " + type.getName() + " (" + field.getName() + ")");
 	}
 
-	private <T> void configureArg(ValuedArgumentBuilder<T, ?> ab, Description descrip, boolean required, Default def, Bound bound,
-		Times times, CheckValue check, boolean multi, int index) {
-		if (descrip != null)
-			ab.withDescription(descrip.value());
-		if (multi) {
-			if (times != null)
-				ab.times(times.min(), times.max());
+	private <T> void configureArg(ArgumentParsing2.ValuedArgumentBuilder<T, ?> ab, Argument argAnn, boolean required, boolean multi,
+		int index) {
+		if (multi && argAnn != null) {
+			if (argAnn.minTimes() > 0 || argAnn.maxTimes() < Integer.MAX_VALUE)
+				ab.times(argAnn.minTimes(), argAnn.maxTimes());
 			else if (required)
 				ab.times(1, Integer.MAX_VALUE);
-		} else {
+		} else if (!multi) {
 			if (required)
 				ab.required();
 			else
 				ab.optional();
 		}
-		if (def != null)
-			ab.parseDefaultValue(def.value());
-		if (bound != null)
-			ab.constrain(tb -> tb.parseBetween(bound.min(), bound.max()));
-		if (check != null) {
+		if (argAnn != null && argAnn.defaultValue().length() > 0)
+			ab.parseDefaultValue(argAnn.defaultValue());
+		if (argAnn != null) {
+			if (argAnn.minValue().length() > 0) {
+				if (argAnn.maxValue().length() > 0) {
+					ab.constrain(tb -> tb.parseBetween(argAnn.minValue(), argAnn.maxValue()));
+				} else {
+					ab.constrain(tb -> tb.parseGte(argAnn.minValue()));
+				}
+			} else if (argAnn.maxValue().length() > 0) {
+				ab.constrain(tb -> tb.parseLte(argAnn.maxValue()));
+			}
+		}
+		if (argAnn != null && argAnn.validate().length() > 0) {
 			Method checkMethod[] = new Method[1];
 			for (Method m : TypeTokens.getRawType(theEntityType.getType()).getDeclaredMethods()) {
-				if (Modifier.isStatic(m.getModifiers()) && m.getName().equals(check.value()) && m.getReturnType() == boolean.class
+				if (Modifier.isStatic(m.getModifiers()) && m.getName().equals(argAnn.validate()) && m.getReturnType() == boolean.class
 					&& m.getParameterTypes().length == 1 && TypeTokens.get().wrap(m.getParameterTypes()[0])
 					.isAssignableFrom(TypeTokens.get().wrap(ab.getArgument().getType()))) {
 					checkMethod[0] = m;
 					break;
 				}
 			}
-			String filterName = theEntityType.getType() + "." + check.value() + "(" + ab.getArgument().getType().getName() + ")";
+			String filterName = theEntityType.getType() + "." + argAnn.validate() + "(" + ab.getArgument().getType().getName() + ")";
 			if (checkMethod[0] == null)
 				throw new IllegalArgumentException(
 					"No such check method matching boolean " + filterName + " for field " + theEntityType.getFields().keySet().get(index));
@@ -307,11 +396,13 @@ public class EntityArguments<E> {
 	 * @return The entity representation of the parsed arguments
 	 */
 	public E parse(Collection<String> args) {
-		Arguments parsedArgs=theParser.parse(args);
-		QuickMap<String, Object> fieldValues=theEntityType.getFields().keySet().createMap();
-		for(int a=0;a<fieldValues.keySize();a++){
-			Class<?> type=TypeTokens.getRawType(theEntityType.getFields().get(a).getType());
-			if(type.isAssignableFrom(BetterList.class))
+		ArgumentParsing2.Arguments parsedArgs = theParser.parse(args);
+		QuickMap<String, Object> fieldValues = theEntityType.getFields().keySet().createMap();
+		for (int a = 0; a < fieldValues.keySize(); a++) {
+			Class<?> type = TypeTokens.getRawType(theEntityType.getFields().get(a).getType());
+			if (theParser.getArgument(theArgNames.get(a)).getPattern() instanceof ArgumentParsing2.ArgumentPattern.FlagPattern)
+				fieldValues.put(a, parsedArgs.has(theArgNames.get(a)));
+			else if (type.isAssignableFrom(BetterList.class))
 				fieldValues.put(a, parsedArgs.getAll(theArgNames.get(a)));
 			else
 				fieldValues.put(a, parsedArgs.get(theArgNames.get(a)));
