@@ -14,6 +14,7 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.observe.util.EntityArguments.Argument;
 import org.observe.util.EntityArguments.Arguments;
+import org.observe.util.EntityArguments.FileField;
 import org.observe.util.EntityArguments.Flag;
 import org.observe.util.EntityArguments.Pattern;
 import org.qommons.ArgumentParsing2;
@@ -58,7 +59,10 @@ public class EntityArgumentsTest {
 		@Pattern("(\\d+)\\-(\\d+)")
 		Matcher getPatternArg();
 
-		File getFileArg();
+		File getFileArg1();
+
+		@FileField(relativeToField="fileArg1")
+		File getFileArg2();
 
 		BetterList<Integer> getMultiIntArg();
 
@@ -110,7 +114,10 @@ public class EntityArgumentsTest {
 		@Pattern("(\\d+)\\-(\\d+)")
 		Matcher getPatternArg();
 
-		File getFileArg();
+		File getFileArg1();
+
+		@FileField(relativeToField = "fileArg1")
+		File getFileArg2();
 
 		BetterList<Integer> getMultiIntArg();
 
@@ -138,7 +145,7 @@ public class EntityArgumentsTest {
 		Assert.assertEquals("10", match.group(2));
 		Assert.assertNull(args.isBoolArg());
 		Assert.assertEquals(0, args.getDoubleArg().size());
-		Assert.assertNull(args.getFileArg());
+		Assert.assertNull(args.getFileArg1());
 		Assert.assertEquals(20, args.getIntArg());
 		try {
 			Assert.assertEquals(DATE_FORMAT.parse("25Dec2020 00:30:00").toInstant(), args.getTimeArg());
@@ -149,13 +156,14 @@ public class EntityArgumentsTest {
 
 		// Round 2
 		args = parser.parse("--double-arg=50.5", "--double-arg=60.5", "--double-arg=70.5", "--enum-arg=File", "--bool-arg=true",
-			"--file-arg=/home/user/something", "--multi-int-arg=10,20,30");
+			"--file-arg1=/home/user/something", "--file-arg2=1/2/3", "--multi-int-arg=10,20,30");
 		Assert.assertFalse(args.isFlag());
 		Assert.assertEquals(0, args.getLongArg().size());
 		Assert.assertEquals(Arrays.asList(50.5, 60.5, 70.5), args.getDoubleArg());
 		Assert.assertEquals(TestEnum.File, args.getEnumArg());
 		Assert.assertTrue(args.isBoolArg());
-		Assert.assertEquals(new File("/home/user/something"), args.getFileArg());
+		Assert.assertEquals(new File("/home/user/something"), args.getFileArg1());
+		Assert.assertEquals(new File("/home/user/something/1/2/3"), args.getFileArg2());
 		Assert.assertEquals(Arrays.asList(10, 20, 30), args.getMultiIntArg());
 
 		// Round 3
@@ -189,7 +197,7 @@ public class EntityArgumentsTest {
 		Assert.assertEquals("10", match.group(2));
 		Assert.assertNull(args.isBoolArg());
 		Assert.assertEquals(0, args.getDoubleArg().size());
-		Assert.assertNull(args.getFileArg());
+		Assert.assertNull(args.getFileArg1());
 		Assert.assertEquals(20, args.getIntArg());
 		try {
 			Assert.assertEquals(DATE_FORMAT.parse("25Dec2020 00:30:00").toInstant(), args.getTimeArg());
@@ -200,13 +208,14 @@ public class EntityArgumentsTest {
 
 		// Round 2
 		args = parser.parse("--double-arg", "50.5", "--double-arg", "60.5", "--double-arg", "70.5", "--enum-arg", "File", "--bool-arg=true",
-			"--file-arg", "/home/user/something", "--multi-int-arg", "10,20,30");
+			"--file-arg1", "/home/user/something", "--file-arg2", "1/2/3", "--multi-int-arg", "10,20,30");
 		Assert.assertFalse(args.isFlag());
 		Assert.assertEquals(0, args.getLongArg().size());
 		Assert.assertEquals(Arrays.asList(50.5, 60.5, 70.5), args.getDoubleArg());
 		Assert.assertEquals(TestEnum.File, args.getEnumArg());
 		Assert.assertTrue(args.isBoolArg());
-		Assert.assertEquals(new File("/home/user/something"), args.getFileArg());
+		Assert.assertEquals(new File("/home/user/something"), args.getFileArg1());
+		Assert.assertEquals(new File("/home/user/something/1/2/3"), args.getFileArg2());
 		Assert.assertEquals(Arrays.asList(10, 20, 30), args.getMultiIntArg());
 
 		// Round 3

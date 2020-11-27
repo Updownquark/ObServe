@@ -162,6 +162,14 @@ public class EntityArguments<E> {
 
 		/** @return Whether to create the file or directory if it does not exist */
 		boolean create() default false;
+
+		/** @return The path relative to which this field will be evaluated */
+		String relativeTo() default "";
+
+		/**
+		 * @return The name of another file-typed field in this entity whose value will be used as the root out of which to parse this field
+		 */
+		String relativeToField() default "";
 	}
 
 	private final EntityReflector<E> theEntityType;
@@ -357,6 +365,16 @@ public class EntityArguments<E> {
 						ab.directory(fileField.type() == FileType.Directory);
 					ab.mustExist(fileField.mustExist());
 					ab.create(fileField.create());
+					if (fileField.relativeTo().length() > 0)
+						ab.relativeTo(fileField.relativeTo());
+					if (fileField.relativeToField().length() > 0) {
+						int relIndex = theEntityType.getFields().keySet().indexOfTolerant(fileField.relativeToField());
+						if (relIndex < 0)
+							throw new IllegalArgumentException(
+								"Unrecognized field: " + fileField.relativeToField() + " as relativeToField for field " + field.getName());
+						String relArgName = StringUtils.parseByCase(fileField.relativeToField(), true).toKebabCase();
+						ab.relativeToFileArg(relArgName);
+					}
 				}
 				configureArg(ab, argAnn, required, multi, index);
 			});
