@@ -1,6 +1,8 @@
 package org.observe.util;
 
 import java.io.File;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.time.Duration;
@@ -60,8 +62,15 @@ public class EntityArgumentsTest {
 
 		BetterList<Integer> getMultiIntArg();
 
+		@Argument(parseWith = "parseURL")
+		URL getUrlArg();
+
 		static boolean lengthLessEqual5(String s) {
 			return s.length() <= 5;
+		}
+
+		static URL parseURL(String text) throws MalformedURLException {
+			return new URL(text);
 		}
 	}
 
@@ -150,9 +159,16 @@ public class EntityArgumentsTest {
 		Assert.assertEquals(Arrays.asList(10, 20, 30), args.getMultiIntArg());
 
 		// Round 3
-		args = parser.parse("--enum-arg=Three", "--duration-arg=30s");
+		URL url;
+		try {
+			url = new URL("https://www.someserver.com/somepage");
+		} catch (MalformedURLException e) {
+			throw new IllegalStateException(e);
+		}
+		args = parser.parse("--enum-arg=Three", "--duration-arg=30s", "--url-arg=" + url);
 		Assert.assertEquals(TestEnum.Three, args.getEnumArg());
 		Assert.assertEquals(Duration.ofSeconds(30), args.getDurationArg());
+		Assert.assertEquals(url, args.getUrlArg());
 	}
 
 	/** Tests basic parsing of valid argument sets */

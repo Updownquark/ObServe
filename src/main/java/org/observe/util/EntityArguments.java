@@ -90,13 +90,27 @@ public class EntityArguments<E> {
 
 		/**
 		 * <p>
-		 * Maybe specified on any field getter with the name of a static method in the interface. The signature of the targeted method must
-		 * be <code>boolean methodName(Type arg)</code> where "Type" is the type (or a super type) of the argument type. The parameter name
-		 * doesn't matter.
+		 * May be specified on any field getter with the name of a static method in the entity interface. The signature of the targeted
+		 * method must be <code>T methodName(String text)<code> or <code>T methodName(String text, {@link Arguments} args)<code>. The
+		 * parameter names don't matter and any exception can be thrown.</p>
+		 * <p>
+		 * This works for collection fields too. A field of type List&lt;Date> may be parsed, for example, by a method
+		 * <code>boolean parseDate(String arg)</code>.
+		 * </p>
+		 *
+		 * @return The name of the static method in the entity class to use to parse the values of this field
+		 */
+		String parseWith() default "";
+
+		/**
+		 * <p>
+		 * Maybe specified on any field getter with the name of a static method in the entity interface. The signature of the targeted
+		 * method must be <code>boolean methodName(Type arg)</code> where "Type" is the type (or a super type) of the argument type. The
+		 * parameter name doesn't matter and any exception can be thrown.
 		 * </p>
 		 *
 		 * <p>
-		 * This works for collection fields too. A field of type List&lt;String> may be validated, for example using a method
+		 * This works for collection fields too. A field of type List&lt;String> may be validated, for example, using a method
 		 * <code>boolean checkString(String arg)</code>.
 		 * </p>
 		 *
@@ -269,7 +283,46 @@ public class EntityArguments<E> {
 		else
 			required = field.getType().isPrimitive();
 		int index = field.getFieldIndex();
-		if (type == boolean.class)
+		if (argAnn != null && argAnn.parseWith().length() > 0) {
+			Method parseMethod[] = new Method[1];
+			boolean[] withArgs = new boolean[1];
+			for (Method m : TypeTokens.getRawType(theEntityType.getType()).getDeclaredMethods()) {
+				if (Modifier.isStatic(m.getModifiers()) && m.getName().equals(argAnn.parseWith())
+					&& TypeTokens.get().wrap(type).isAssignableFrom(TypeTokens.get().wrap(m.getReturnType()))
+					&& m.getParameterTypes().length >= 1 && m.getParameterTypes().length <= 2 && m.getParameterTypes()[0] == String.class) {
+					if (m.getParameterTypes().length == 1) {
+						parseMethod[0] = m;
+						break;
+					} else if (m.getParameterTypes()[1] == ArgumentParsing2.Arguments.class) {
+						withArgs[0] = true;
+						parseMethod[0] = m;
+						break;
+					}
+				}
+			}
+			String parserName = theEntityType.getType() + "." + argAnn.parseWith() + "(String";
+			if (withArgs[0])
+				parserName += ", Arguments";
+			parserName += ")";
+			if (parseMethod[0] == null)
+				throw new IllegalArgumentException("No such parse method matching " + type.getName() + " " + parserName + " for field "
+					+ theEntityType.getFields().keySet().get(index));
+			builder.addArgument(argName, type, (text, args) -> {
+				try {
+					if (withArgs[0])
+						return (T) parseMethod[0].invoke(null, text, args);
+					else
+						return (T) parseMethod[0].invoke(null, text);
+				} catch (InvocationTargetException e) {
+					if (e.getTargetException() instanceof RuntimeException)
+						throw (RuntimeException) e.getTargetException();
+					else
+						throw new IllegalStateException(e.getTargetException());
+				} catch (IllegalAccessException | IllegalArgumentException e) {
+					throw new IllegalStateException(e);
+				}
+			}, ab -> configureArg(ab, argAnn, required, multi, index));
+		} else if (type == boolean.class)
 			builder.addBooleanArgument(argName, ab -> configureArg(ab, argAnn, required, multi, index));
 		else if (type == int.class)
 			builder.addIntArgument(argName, ab -> configureArg(ab, argAnn, required, multi, index));
