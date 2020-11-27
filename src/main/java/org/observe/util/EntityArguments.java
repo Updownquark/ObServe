@@ -167,7 +167,8 @@ public class EntityArguments<E> {
 		String relativeTo() default "";
 
 		/**
-		 * @return The name of another file-typed field in this entity whose value will be used as the root out of which to parse this field
+		 * @return The name of another file-typed field in this entity whose value will be used as the base folder out of which to parse
+		 *         this field
 		 */
 		String relativeToField() default "";
 	}
