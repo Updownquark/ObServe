@@ -52,7 +52,6 @@ public class ObservableTableModel<R> implements TableModel {
 	private final ObservableListModel<R> theRowModel;
 	private final ObservableListModel<? extends CategoryRenderStrategy<? super R, ?>> theColumnModel;
 	private final ListDataListener theRowModelListener;
-	private final ListDataListener theColumnModelListener;
 
 	private final List<TableModelListener> theListeners;
 
@@ -123,22 +122,6 @@ public class ObservableTableModel<R> implements TableModel {
 			@Override
 			public void contentsChanged(ListDataEvent e) {
 				fireRowChange(e.getIndex0(), e.getIndex1(), TableModelEvent.UPDATE);
-			}
-		};
-		theColumnModelListener = new ListDataListener() {
-			@Override
-			public void intervalAdded(ListDataEvent e) {
-				fireColumnChange();
-			}
-
-			@Override
-			public void intervalRemoved(ListDataEvent e) {
-				fireColumnChange();
-			}
-
-			@Override
-			public void contentsChanged(ListDataEvent e) {
-				fireColumnChange();
 			}
 		};
 	}
@@ -237,7 +220,6 @@ public class ObservableTableModel<R> implements TableModel {
 			theListeners.add(l);
 			if (wasEmpty) {
 				theRowModel.addListDataListener(theRowModelListener);
-				theColumnModel.addListDataListener(theColumnModelListener);
 			}
 		});
 	}
@@ -247,20 +229,12 @@ public class ObservableTableModel<R> implements TableModel {
 		ObservableSwingUtils.onEQ(() -> {
 			if (theListeners.remove(l) && theListeners.isEmpty()) {
 				theRowModel.removeListDataListener(theRowModelListener);
-				theColumnModel.removeListDataListener(theColumnModelListener);
 			}
 		});
 	}
 
 	void fireRowChange(int index0, int index1, int eventType) {
 		TableModelEvent tableEvt = new TableModelEvent(this, index0, index1, TableModelEvent.ALL_COLUMNS, eventType);
-		for (TableModelListener listener : theListeners) {
-			listener.tableChanged(tableEvt);
-		}
-	}
-
-	void fireColumnChange() {
-		TableModelEvent tableEvt = new TableModelEvent(ObservableTableModel.this, TableModelEvent.HEADER_ROW);
 		for (TableModelListener listener : theListeners) {
 			listener.tableChanged(tableEvt);
 		}
@@ -320,10 +294,19 @@ public class ObservableTableModel<R> implements TableModel {
 			table.addPropertyChangeListener("columnModel", colModelListener);
 			ListDataListener columnListener = new ListDataListener() {
 				@Override
-				public void intervalRemoved(ListDataEvent e) {}
+				public void intervalAdded(ListDataEvent e) {
+					for (int i = e.getIndex0(); i <= e.getIndex1(); i++) {
+						TableColumn column = new TableColumn(i);
+						hookUp(table, column, i, model.getColumnModel().getElementAt(i), model, ctx);
+						table.getColumnModel().addColumn(column);
+					}
+				}
 
 				@Override
-				public void intervalAdded(ListDataEvent e) {}
+				public void intervalRemoved(ListDataEvent e) {
+					for (int i = e.getIndex1(); i >= e.getIndex0(); i--)
+						table.getColumnModel().removeColumn(table.getColumnModel().getColumn(i));
+				}
 
 				@Override
 				public void contentsChanged(ListDataEvent e) {
@@ -557,6 +540,7 @@ public class ObservableTableModel<R> implements TableModel {
 
 	private static <R, C> void hookUp(JTable table, TableColumn tblColumn, int columnIndex,
 		CategoryRenderStrategy<? super R, ? extends C> column, ObservableTableModel<R> model, TableRenderContext ctx) {
+		tblColumn.setHeaderValue(column.getName());
 		if (column.getIdentifier() != null)
 			tblColumn.setIdentifier(column.getIdentifier());
 		else
