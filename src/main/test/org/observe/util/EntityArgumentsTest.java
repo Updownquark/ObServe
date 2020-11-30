@@ -81,9 +81,9 @@ public class EntityArgumentsTest {
 	@SuppressWarnings("javadoc")
 	@Arguments(singleValuePattern = "singleValuePattern", multiValuePattern = "multiValuePattern")
 	public interface SplitTestArgs {
-		ArgumentParsing2.ArgumentPattern.ValuePattern singleValuePattern = ArgumentParsing2.SPLIT_VALUE_PATTERN;
-		ArgumentParsing2.ArgumentPattern.ValuePattern notSplitValuePattern = ArgumentParsing2.DEFAULT_VALUE_PATTERN;
-		ArgumentParsing2.ArgumentPattern.ValuePattern multiValuePattern = ArgumentParsing2.SPLIT_MULTI_VALUE_PATTERN;
+		ArgumentParsing2.ArgumentPattern singleValuePattern = ArgumentParsing2.SPLIT_VALUE_PATTERN;
+		ArgumentParsing2.ArgumentPattern notSplitValuePattern = ArgumentParsing2.DEFAULT_VALUE_PATTERN;
+		ArgumentParsing2.ArgumentPattern multiValuePattern = ArgumentParsing2.SPLIT_MULTI_VALUE_PATTERN;
 
 		@Flag
 		boolean isFlag();
@@ -130,7 +130,7 @@ public class EntityArgumentsTest {
 	/** Tests basic parsing of valid argument sets */
 	@Test
 	public void testArgumentParsing() {
-		EntityArguments<TestArgs> parser = new EntityArguments<>(TestArgs.class);
+		EntityArguments<TestArgs> parser = new EntityArguments<>(TestArgs.class).initParser();
 		parser.getParser().printHelpOnEmpty(false).printHelpOnError(false);
 
 		// Round 1
@@ -182,7 +182,7 @@ public class EntityArgumentsTest {
 	/** Tests basic parsing of valid argument sets */
 	@Test
 	public void testSplitArgumentParsing() {
-		EntityArguments<SplitTestArgs> parser = new EntityArguments<>(SplitTestArgs.class);
+		EntityArguments<SplitTestArgs> parser = new EntityArguments<>(SplitTestArgs.class).initParser();
 		parser.getParser().printHelpOnEmpty(false).printHelpOnError(false);
 
 		// Round 1
@@ -227,7 +227,7 @@ public class EntityArgumentsTest {
 	/** Tests parsing of bad arguments or argument sets that violate configured requirements */
 	@Test
 	public void testErrorCases() {
-		EntityArguments<TestArgs> parser = new EntityArguments<>(TestArgs.class);
+		EntityArguments<TestArgs> parser = new EntityArguments<>(TestArgs.class).initParser();
 		parser.getParser().printHelpOnEmpty(false).printHelpOnError(false);
 
 		String message = null;
@@ -275,7 +275,7 @@ public class EntityArgumentsTest {
 	/** Tests parsing of arguments that violate value constraints */
 	@Test
 	public void testConstraints() {
-		EntityArguments<TestArgs> parser = new EntityArguments<>(TestArgs.class);
+		EntityArguments<TestArgs> parser = new EntityArguments<>(TestArgs.class).initParser();
 		parser.getParser().printHelpOnEmpty(false).printHelpOnError(false);
 
 		String message = null;
