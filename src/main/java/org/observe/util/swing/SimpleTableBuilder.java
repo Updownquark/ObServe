@@ -55,6 +55,7 @@ import org.observe.util.swing.TableContentControl.FilteredValue;
 import org.observe.util.swing.TableContentControl.ValueRenderer;
 import org.qommons.ArrayUtils;
 import org.qommons.IntList;
+import org.qommons.LambdaUtils;
 import org.qommons.StringUtils;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
@@ -519,7 +520,9 @@ implements TableBuilder<R, P> {
 			});
 			filtered = TableContentControl.applyRowControl(theSafeRows, () -> renderers, theFilter.refresh(columnChanges), until);
 			ObservableCollection<R> filteredValues = filtered.flow()
-				.transform(theRows.getType(), tx -> tx.map(f -> f.value).modifySource(FilteredValue::setValue)).collectActive(until);
+				.transform(theRows.getType(),
+					tx -> tx.map(LambdaUtils.printableFn(f -> f.value, "value", null)).modifySource(FilteredValue::setValue))
+				.collectActive(until);
 			DebugData d = Debug.d().debug(theRows);
 			if (d.isActive())
 				Debug.d().debug(filteredValues, true).merge(d);

@@ -15,6 +15,7 @@ import java.util.function.Supplier;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
+import org.qommons.LambdaUtils;
 import org.qommons.Lockable;
 import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
@@ -94,7 +95,7 @@ public interface Observable<T> extends Lockable, Identifiable {
 	 * @return An observable that provides the same values as this observable minus those that the filter function returns false for
 	 */
 	default Observable<T> filter(Function<? super T, Boolean> func) {
-		return filterMap(value -> (value != null && func.apply(value)) ? value : null);
+		return filterMap(LambdaUtils.printableFn(value -> (value != null && func.apply(value)) ? value : null, func::toString, func));
 	}
 
 	/**
@@ -102,7 +103,8 @@ public interface Observable<T> extends Lockable, Identifiable {
 	 * @return An observable that only fires values from this observable that are an instance of the given type
 	 */
 	default <X extends T> Observable<X> filter(Class<X> type) {
-		return filterMap(value -> type.isInstance(value) ? (X) value : null);
+		return filterMap(
+			LambdaUtils.printableFn(v -> type.isInstance(type) ? type.cast(v) : null, () -> "instanceof " + type.getName(), null));
 	}
 
 	/**
@@ -111,7 +113,7 @@ public interface Observable<T> extends Lockable, Identifiable {
 	 * @return An observable that provides the values of this observable, mapped by the given function
 	 */
 	default <R> Observable<R> map(Function<? super T, R> func) {
-		return new ComposedObservable<>(args -> func.apply((T) args[0]), "map", this);
+		return new ComposedObservable<>(LambdaUtils.printableFn(args -> func.apply((T) args[0]), func::toString, func), "map", this);
 	}
 
 	/**
@@ -135,14 +137,6 @@ public interface Observable<T> extends Lockable, Identifiable {
 	}
 
 	/**
-	 * @param type The type to filter on
-	 * @return An observable that provides all of this observable's values that are also an instance of the given type
-	 */
-	default <R> Observable<R> filterMap(Class<R> type) {
-		return filterMap(v -> type.isInstance(type) ? type.cast(v) : null);
-	}
-
-	/**
 	 * @param <V> The type of the other observable to be combined with this one
 	 * @param <R> The type of the returned observable
 	 * @param other The other observable to compose
@@ -150,7 +144,8 @@ public interface Observable<T> extends Lockable, Identifiable {
 	 * @return A new observable whose values are the specified combination of this observable and the others'
 	 */
 	default <V, R> Observable<R> combine(Observable<V> other, BiFunction<? super T, ? super V, R> func) {
-		return new ComposedObservable<>(args -> func.apply((T) args[0], (V) args[1]), "combine", this, other);
+		return new ComposedObservable<>(LambdaUtils.printableFn(args -> func.apply((T) args[0], (V) args[1]), func::toString, func),
+			"combine", this, other);
 	}
 
 	/**

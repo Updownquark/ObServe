@@ -403,7 +403,7 @@ public interface ObservableConfigFormat<E> {
 
 		@Override
 		public String toString() {
-			return theRetriever.toString();
+			return "from " + theRetriever.toString();
 		}
 	}
 

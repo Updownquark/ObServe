@@ -473,7 +473,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public String toString() {
-			return "changes(" + collection + ")";
+			return "changes(" + collection.getIdentity() + ")";
 		}
 	}
 
