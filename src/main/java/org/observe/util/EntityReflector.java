@@ -36,6 +36,7 @@ import org.observe.config.ParentReference;
 import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.IntList;
+import org.qommons.MethodRetrievingHandler;
 import org.qommons.QommonsUtils;
 import org.qommons.Stamped;
 import org.qommons.StringUtils;
@@ -203,7 +204,7 @@ public class EntityReflector<E> {
 		public <R> Builder<E> withCustomMethod(Function<? super E, R> method, BiFunction<? super E, Object[], R> implementation) {
 			if (theProxyHandler == null) {
 				theProxyHandler = new MethodRetrievingHandler();
-				theProxy = (E) Proxy.newProxyInstance(ObservableEntityUtils.class.getClassLoader(), new Class[] { theRawType },
+				theProxy = (E) Proxy.newProxyInstance(TypeTokens.getRawType(theType).getClassLoader(), new Class[] { theRawType },
 					theProxyHandler);
 			}
 			Method m;

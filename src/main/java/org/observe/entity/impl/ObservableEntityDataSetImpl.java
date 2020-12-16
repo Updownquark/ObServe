@@ -59,9 +59,8 @@ import org.observe.entity.PreparedUpdate;
 import org.observe.entity.SimpleFieldConstraint;
 import org.observe.util.EntityReflector;
 import org.observe.util.EntityReflector.ReflectedField;
-import org.observe.util.MethodRetrievingHandler;
-import org.observe.util.ObservableEntityUtils;
 import org.observe.util.TypeTokens;
+import org.qommons.MethodRetrievingHandler;
 import org.qommons.QommonsUtils;
 import org.qommons.Stamped;
 import org.qommons.StringUtils;
@@ -1094,7 +1093,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 			Class<E> type = theTypeBuilder.theJavaType;
 			if (type == null)
 				throw new IllegalStateException("This method can only be used with a java-typed entity");
-			Method method = ObservableEntityUtils.getField(type, fieldGetter);
+			Method method = MethodRetrievingHandler.getField(type, fieldGetter);
 			if (method == null)
 				throw new IllegalArgumentException(fieldGetter + " is not a getter method for a " + type.getName() + " field");
 			String name = method.getName();
