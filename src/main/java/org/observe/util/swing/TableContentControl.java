@@ -23,6 +23,7 @@ import org.observe.ObservableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
+import org.qommons.LambdaUtils;
 import org.qommons.Named;
 import org.qommons.StringUtils;
 import org.qommons.TimeUtils;
@@ -133,6 +134,11 @@ public interface TableContentControl {
 			if (comp == 0)
 				comp = Integer.compare(thisMin, thatMin);
 			return comp;
+		}
+
+		@Override
+		public String toString() {
+			return String.valueOf(value);
 		}
 	}
 
@@ -310,7 +316,7 @@ public interface TableContentControl {
 		Supplier<? extends Collection<? extends ValueRenderer<? super E>>> render, ObservableValue<? extends TableContentControl> filter,
 			Observable<?> until) {
 		return values.flow().transform((TypeToken<FilteredValue<E>>) (TypeToken<?>) TypeTokens.get().of(FilteredValue.class), //
-			combine -> combine.combineWith(filter).build((x, cv) -> {
+			combine -> combine.combineWith(filter).build(LambdaUtils.printableBiFn((x, cv) -> {
 				Collection<? extends ValueRenderer<? super E>> renders = render.get();
 				FilteredValue<E> v;
 				if (cv.hasPreviousResult()) {
@@ -332,7 +338,8 @@ public interface TableContentControl {
 					i++;
 				}
 				return v;
-			})).filter(fv -> fv.hasMatch() ? null : "No match").sorted((fv1, fv2)->{
+			}, "toFilterValue", null))).filter(LambdaUtils.printableFn(fv -> fv.hasMatch() ? null : "No match", "match", null))//
+			.sorted(LambdaUtils.printableComparator((fv1, fv2) -> {
 				int comp=fv1.compareTo(fv2);
 				if(comp!=0)
 					return comp;
@@ -355,12 +362,12 @@ public interface TableContentControl {
 					}
 				}
 				return 0;
-			}).collectActive(until);
+			}, () -> "rowSorting")).collectActive(until);
 	}
 
 	public static <R, C extends CategoryRenderStrategy<? super R, ?>> ObservableCollection<C> applyColumnControl(
 		ObservableCollection<C> columns, ObservableValue<? extends TableContentControl> filter, Observable<?> until) {
-		return columns.flow().refresh(filter.noInitChanges()).sorted((c1, c2) -> {
+		return columns.flow().refresh(filter.noInitChanges()).sorted(LambdaUtils.printableComparator((c1, c2) -> {
 			List<String> columnSorting = filter.get().getColumnSorting();
 			if (columnSorting == null)
 				return 0;
@@ -374,7 +381,7 @@ public interface TableContentControl {
 					return 1;
 			}
 			return 0;
-		}).collectActive(until);
+		}, () -> "sortedColumns")).collectActive(until);
 	}
 
 	public static final TableContentControl DEFAULT = new TableContentControl() {
