@@ -992,6 +992,12 @@ public class PanelPopulation {
 			return withSize(boundsConfig);
 		}
 
+		default P withSize(int width, int height) {
+			withWidth(SettableValue.build(int.class).safe(false).withValue(width).build());
+			withHeight(SettableValue.build(int.class).safe(false).withValue(height).build());
+			return (P) this;
+		}
+
 		P withVisible(SettableValue<Boolean> visible);
 
 		P withMenuBar(Consumer<MenuBarBuilder<?>> menuBar);
