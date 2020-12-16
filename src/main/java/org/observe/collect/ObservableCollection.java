@@ -1009,7 +1009,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		 * @return A {@link #supportsPassive() active} flow capable of producing a collection whose elements are sorted by the given comparison
 		 *         scheme.
 		 */
-		CollectionDataFlow<E, T, T> sorted(Comparator<? super T> compare);
+		SortedDataFlow<E, T, T> sorted(Comparator<? super T> compare);
 
 		/**
 		 * @return A {@link #supportsPassive() active} flow capable of producing a set that excludes duplicate elements according to its

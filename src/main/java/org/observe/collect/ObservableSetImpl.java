@@ -5,9 +5,11 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.function.BiPredicate;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -26,6 +28,7 @@ import org.observe.collect.ObservableCollectionActiveManagers.ActiveValueStoredM
 import org.observe.collect.ObservableCollectionActiveManagers.CollectionElementListener;
 import org.observe.collect.ObservableCollectionActiveManagers.DerivedCollectionElement;
 import org.observe.collect.ObservableCollectionActiveManagers.ElementAccepter;
+import org.observe.collect.ObservableCollectionBuilder.DataControlAutoRefresher;
 import org.observe.collect.ObservableCollectionDataFlowImpl.BaseCollectionDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
 import org.observe.collect.ObservableCollectionDataFlowImpl.RepairListener;
@@ -46,6 +49,8 @@ import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterMap;
 import org.qommons.collect.BetterSet;
 import org.qommons.collect.CollectionElement;
+import org.qommons.collect.CollectionUtils.AdjustmentOrder;
+import org.qommons.collect.CollectionUtils.CollectionSynchronizerE;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
@@ -61,10 +66,12 @@ import com.google.common.reflect.TypeToken;
 
 /** Holds default implementation methods and classes for {@link ObservableSet} and {@link DistinctDataFlow} methods */
 public class ObservableSetImpl {
-	private ObservableSetImpl() {}
+	private ObservableSetImpl() {
+	}
 
 	/**
 	 * Implements {@link ObservableSet#reverse()}
+	 *
 	 * @param <E> The type of the set
 	 */
 	public static class ReversedSet<E> extends ReversedObservableCollection<E> implements ObservableSet<E> {
@@ -119,8 +126,8 @@ public class ObservableSetImpl {
 	}
 
 	/**
-	 * An abstract {@link DistinctDataFlow} implementation returning default {@link DistinctDataFlow} implementations for most
-	 * operations that should produce one
+	 * An abstract {@link DistinctDataFlow} implementation returning default {@link DistinctDataFlow} implementations for most operations
+	 * that should produce one
 	 *
 	 * @param <E> The type of the source collection
 	 * @param <T> The type of this flow
@@ -879,8 +886,7 @@ public class ObservableSetImpl {
 			theAccepter = onElement;
 			theParent.begin(fromStart, (parentEl, cause) -> {
 				T value = parentEl.get();
-				theElementsByValue
-				.computeIfAbsent(value, //
+				theElementsByValue.computeIfAbsent(value, //
 					v -> createUniqueElement(v))//
 				.addParent(parentEl, cause);
 			}, listening);
@@ -1090,8 +1096,7 @@ public class ObservableSetImpl {
 
 					@Override
 					public void removed(T value, Object innerCause) {
-						theParentElements
-						.mutableEntry(//
+						theParentElements.mutableEntry(//
 							node.getElementId())//
 						.remove();
 						if (theParentElements.isEmpty()) {
@@ -1132,7 +1137,8 @@ public class ObservableSetImpl {
 			 * @param newValue The source element's new value
 			 * @param cause The cause of the change
 			 */
-			protected void parentUpdated(BinaryTreeEntry<DerivedCollectionElement<T>, T> node, T oldValue, T newValue, Object cause) {}
+			protected void parentUpdated(BinaryTreeEntry<DerivedCollectionElement<T>, T> node, T oldValue, T newValue, Object cause) {
+			}
 
 			/**
 			 * Called after a source element has been removed or if the element's value has been changed such that it must be moved to a
@@ -1142,7 +1148,8 @@ public class ObservableSetImpl {
 			 * @param value The source element's previously-reported value
 			 * @param cause The cause of the removal
 			 */
-			protected void parentRemoved(BinaryTreeEntry<DerivedCollectionElement<T>, T> parentEl, T value, Object cause) {}
+			protected void parentRemoved(BinaryTreeEntry<DerivedCollectionElement<T>, T> parentEl, T value, Object cause) {
+			}
 
 			/**
 			 * @return The element ID of the map entry where this distinct element is stored in the manager's
@@ -1570,10 +1577,64 @@ public class ObservableSetImpl {
 
 		@Override
 		public <X> boolean repair(RepairListener<E, X> listener) {
-			ObservableSet<E> wrapped=getWrapped().get();
-			if(wrapped==null)
+			ObservableSet<E> wrapped = getWrapped().get();
+			if (wrapped == null)
 				throw new NoSuchElementException();
 			return wrapped.repair(listener);
+		}
+	}
+
+	public static class DataControlledSetImpl<E, V> extends ObservableCollectionImpl.DataControlledCollectionImpl<E, V>
+	implements DataControlledCollection.Set<E, V> {
+		public DataControlledSetImpl(ObservableSet<E> backing, Supplier<? extends List<? extends V>> backingData,
+			DataControlAutoRefresher autoRefresh, boolean refreshOnAccess, BiPredicate<? super E, ? super V> equals,
+			CollectionSynchronizerE<E, ? super V, ?> synchronizer, AdjustmentOrder adjustmentOrder) {
+			super(backing, backingData, autoRefresh, refreshOnAccess, equals, synchronizer, adjustmentOrder);
+		}
+
+		@Override
+		protected ObservableSet<E> getWrapped() throws IllegalStateException {
+			return (ObservableSet<E>) super.getWrapped();
+		}
+
+		@Override
+		public DataControlledSetImpl<E, V> setMaxRefreshFrequency(long frequency) {
+			super.setMaxRefreshFrequency(frequency);
+			return this;
+		}
+
+		@Override
+		public boolean isConsistent(ElementId element) {
+			try (Transaction t = lock(false, null)) {
+				return getWrapped().isConsistent(element);
+			}
+		}
+
+		@Override
+		public boolean checkConsistency() {
+			try (Transaction t = lock(false, null)) {
+				return getWrapped().checkConsistency();
+			}
+		}
+
+		@Override
+		public <X> boolean repair(ElementId element, RepairListener<E, X> listener) {
+			try (Transaction t = lock(false, null)) {
+				return getWrapped().repair(element, listener);
+			}
+		}
+
+		@Override
+		public <X> boolean repair(RepairListener<E, X> listener) {
+			try (Transaction t = lock(false, null)) {
+				return getWrapped().repair(listener);
+			}
+		}
+
+		@Override
+		public CollectionElement<E> getOrAdd(E value, ElementId after, ElementId before, boolean first, Runnable added) {
+			refresh();
+			return getWrapped().getOrAdd(value, after, before, first, added);
 		}
 	}
 }

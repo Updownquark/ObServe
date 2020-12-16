@@ -1,8 +1,15 @@
 package org.observe.collect;
 
+import java.time.Duration;
+import java.util.Arrays;
 import java.util.Comparator;
+import java.util.List;
+import java.util.Objects;
 import java.util.function.BiFunction;
+import java.util.function.BiPredicate;
+import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 import org.observe.Equivalence;
 import org.observe.Equivalence.SortedEquivalence;
@@ -12,9 +19,15 @@ import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.CollectionLockingStrategy;
+import org.qommons.collect.CollectionUtils;
+import org.qommons.collect.CollectionUtils.CollectionSynchronizerE;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.FastFailLockingStrategy;
+import org.qommons.collect.ListenerList;
 import org.qommons.collect.StampedLockingStrategy;
+import org.qommons.ex.ExFunction;
+import org.qommons.threading.QommonsTimer;
+import org.qommons.threading.QommonsTimer.TaskHandle;
 import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BetterTreeSet;
 import org.qommons.tree.RedBlackNodeList;
@@ -148,6 +161,80 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 
 	/** @return A new, empty collection build with these settings */
 	ObservableCollection<E> build();
+
+	/**
+	 * Creates a builder for an observable collection whose data is controlled
+	 *
+	 * @param <V> The type of the backing data
+	 * @param data The data source for the collection
+	 * @return A builder for a data-controlled collection
+	 */
+	<V> DataControlledCollectionBuilder<E, V, ?> withData(Supplier<? extends List<? extends V>> data);
+
+	public interface DataControlAutoRefresher {
+		Runnable add(DataControlledCollection<?, ?> collection);
+	}
+
+	interface DataControlledCollectionBuilder<E, V, B extends DataControlledCollectionBuilder<E, V, B>> {
+		B withEquals(BiPredicate<? super E, ? super V> equals);
+
+		B withOrder(CollectionUtils.AdjustmentOrder adjustmentOrder);
+
+		B withMaxRefreshFrequency(long frequency);
+
+		B refreshOnAccess(boolean refresh);
+
+		B autoRefreshWith(DataControlAutoRefresher refresher);
+
+		default B autoRefreshEvery(Duration frequency) {
+			return autoRefreshWith(new DefaultDataControlAutoRefresher(frequency));
+		}
+
+		DataControlledCollection<E, V> build(CollectionUtils.CollectionSynchronizerE<E, ? super V, ?> synchronizer);
+
+		default <X extends Throwable> DataControlledCollection<E, V> build(ExFunction<? super V, ? extends E, ? extends X> map,
+			Consumer<CollectionUtils.SimpleCollectionSynchronizer<E, ? super V, X, ?>> synchronizer) {
+			CollectionUtils.SimpleCollectionSynchronizer<E, ? super V, X, ?> sync = CollectionUtils.simpleSyncE(map);
+			if (synchronizer != null)
+				synchronizer.accept(sync);
+			return build(sync);
+		}
+	}
+
+	interface DataControlledSortedCollectionBuilder<E, V, B extends DataControlledSortedCollectionBuilder<E, V, B>>
+	extends DataControlledCollectionBuilder<E, V, B> {
+		@Override
+		DataControlledCollection.Sorted<E, V> build(CollectionSynchronizerE<E, ? super V, ?> synchronizer);
+
+		@Override
+		default <X extends Throwable> DataControlledCollection.Sorted<E, V> build(ExFunction<? super V, ? extends E, ? extends X> map,
+			Consumer<CollectionUtils.SimpleCollectionSynchronizer<E, ? super V, X, ?>> synchronizer) {
+			return (DataControlledCollection.Sorted<E, V>) DataControlledCollectionBuilder.super.build(map, synchronizer);
+		}
+	}
+
+	interface DataControlledSetBuilder<E, V, B extends DataControlledSetBuilder<E, V, B>> extends DataControlledCollectionBuilder<E, V, B> {
+		@Override
+		DataControlledCollection.Set<E, V> build(CollectionSynchronizerE<E, ? super V, ?> synchronizer);
+
+		@Override
+		default <X extends Throwable> DataControlledCollection.Set<E, V> build(ExFunction<? super V, ? extends E, ? extends X> map,
+			Consumer<CollectionUtils.SimpleCollectionSynchronizer<E, ? super V, X, ?>> synchronizer) {
+			return (DataControlledCollection.Set<E, V>) DataControlledCollectionBuilder.super.build(map, synchronizer);
+		}
+	}
+
+	interface DataControlledSortedSetBuilder<E, V, B extends DataControlledSortedSetBuilder<E, V, B>>
+	extends DataControlledSetBuilder<E, V, B>, DataControlledSortedCollectionBuilder<E, V, B> {
+		@Override
+		DataControlledCollection.SortedSet<E, V> build(CollectionSynchronizerE<E, ? super V, ?> synchronizer);
+
+		@Override
+		default <X extends Throwable> DataControlledCollection.SortedSet<E, V> build(ExFunction<? super V, ? extends E, ? extends X> map,
+			Consumer<CollectionUtils.SimpleCollectionSynchronizer<E, ? super V, X, ?>> synchronizer) {
+			return (DataControlledCollection.SortedSet<E, V>) DataControlledSortedCollectionBuilder.super.build(map, synchronizer);
+		}
+	}
 
 	/**
 	 * Default implementation of {@link ObservableCollectionBuilder}
@@ -316,6 +403,97 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 			}
 			return new DefaultObservableCollection<>(theType, backing, theElementSource, theSourceElements, theEquivalence);
 		}
+
+		@Override
+		public <V> DataControlledCollectionBuilder<E, V, ?> withData(Supplier<? extends List<? extends V>> data) {
+			return new DataControlledCollectionBuilderImpl<>(build(), data);
+		}
+	}
+
+	public static class DataControlledCollectionBuilderImpl<E, V, B extends DataControlledCollectionBuilder<E, V, B>>
+	implements DataControlledCollectionBuilder<E, V, B> {
+		private final ObservableCollection<E> theBackingCollection;
+		private final Supplier<? extends List<? extends V>> theBackingData;
+		private DataControlAutoRefresher theAutoRefresh;
+		private boolean isRefreshingOnAccess;
+		private BiPredicate<? super E, ? super V> theEqualsTester;
+		private CollectionUtils.AdjustmentOrder theAdjustmentOrder;
+		private long theMaxRefreshFrequency;
+
+		public DataControlledCollectionBuilderImpl(ObservableCollection<E> backingCollection,
+			Supplier<? extends List<? extends V>> backingData) {
+			theBackingCollection = backingCollection;
+			theBackingData = backingData;
+			theEqualsTester = Objects::equals;
+			theAdjustmentOrder = theBackingCollection.isContentControlled() ? CollectionUtils.AdjustmentOrder.AddLast
+				: CollectionUtils.AdjustmentOrder.RightOrder;
+			isRefreshingOnAccess = true;
+		}
+
+		protected BiPredicate<? super E, ? super V> getEqualsTester() {
+			return theEqualsTester;
+		}
+
+		protected CollectionUtils.AdjustmentOrder getAdjustmentOrder() {
+			return theAdjustmentOrder;
+		}
+
+		protected long getMaxRefreshFrequency() {
+			return theMaxRefreshFrequency;
+		}
+
+		protected ObservableCollection<E> getBackingCollection() {
+			return theBackingCollection;
+		}
+
+		protected Supplier<? extends List<? extends V>> getBackingData() {
+			return theBackingData;
+		}
+
+		protected DataControlAutoRefresher getAutoRefresh() {
+			return theAutoRefresh;
+		}
+
+		protected boolean isRefreshingOnAccess() {
+			return isRefreshingOnAccess;
+		}
+
+		@Override
+		public B withEquals(BiPredicate<? super E, ? super V> equals) {
+			theEqualsTester = equals;
+			return (B) this;
+		}
+
+		@Override
+		public B withOrder(CollectionUtils.AdjustmentOrder adjustmentOrder) {
+			theAdjustmentOrder = adjustmentOrder;
+			return (B) this;
+		}
+
+		@Override
+		public B withMaxRefreshFrequency(long frequency) {
+			theMaxRefreshFrequency = frequency;
+			return (B) this;
+		}
+
+		@Override
+		public B autoRefreshWith(DataControlAutoRefresher refresher) {
+			theAutoRefresh = refresher;
+			return (B) this;
+		}
+
+		@Override
+		public B refreshOnAccess(boolean refresh) {
+			isRefreshingOnAccess = refresh;
+			return (B) this;
+		}
+
+		@Override
+		public DataControlledCollection<E, V> build(CollectionUtils.CollectionSynchronizerE<E, ? super V, ?> synchronizer) {
+			return new ObservableCollectionImpl.DataControlledCollectionImpl<>(theBackingCollection, theBackingData, theAutoRefresh,
+				isRefreshingOnAccess, theEqualsTester, synchronizer, theAdjustmentOrder)//
+				.setMaxRefreshFrequency(theMaxRefreshFrequency);
+		}
 	}
 
 	/**
@@ -383,6 +561,31 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 			return new DefaultObservableSortedCollection<>(getType(), (BetterSortedList<E>) backing, getElementSource(),
 				getSourceElements());
 		}
+
+		@Override
+		public <V> DataControlledSortedCollectionBuilder<E, V, ?> withData(Supplier<? extends List<? extends V>> data) {
+			return new DataControlledSortedCollectionBuilderImpl<>(build(), data);
+		}
+	}
+
+	public static class DataControlledSortedCollectionBuilderImpl<E, V, B extends DataControlledSortedCollectionBuilder<E, V, B>>
+	extends DataControlledCollectionBuilderImpl<E, V, B> implements DataControlledSortedCollectionBuilder<E, V, B> {
+		public DataControlledSortedCollectionBuilderImpl(ObservableSortedCollection<E> backingCollection,
+			Supplier<? extends List<? extends V>> backingData) {
+			super(backingCollection, backingData);
+		}
+
+		@Override
+		protected ObservableSortedCollection<E> getBackingCollection() {
+			return (ObservableSortedCollection<E>) super.getBackingCollection();
+		}
+
+		@Override
+		public DataControlledCollection.Sorted<E, V> build(CollectionSynchronizerE<E, ? super V, ?> synchronizer) {
+			return new ObservableSortedCollectionImpl.DataControlledSortedCollectionImpl<>(getBackingCollection(), getBackingData(),
+				getAutoRefresh(), isRefreshingOnAccess(), getEqualsTester(), synchronizer, getAdjustmentOrder())//
+				.setMaxRefreshFrequency(getMaxRefreshFrequency());
+		}
 	}
 
 	/**
@@ -406,6 +609,30 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 		@Override
 		public ObservableSet<E> build() {
 			return super.build().flow().distinct().collect();
+		}
+
+		@Override
+		public <V> DataControlledSetBuilder<E, V, ?> withData(Supplier<? extends List<? extends V>> data) {
+			return new DataControlledSetBuilderImpl<>(build(), data);
+		}
+	}
+
+	public static class DataControlledSetBuilderImpl<E, V, B extends DataControlledSetBuilder<E, V, B>>
+	extends DataControlledCollectionBuilderImpl<E, V, B> implements DataControlledSetBuilder<E, V, B> {
+		public DataControlledSetBuilderImpl(ObservableSet<E> backingCollection, Supplier<? extends List<? extends V>> backingData) {
+			super(backingCollection, backingData);
+		}
+
+		@Override
+		protected ObservableSet<E> getBackingCollection() {
+			return (ObservableSet<E>) super.getBackingCollection();
+		}
+
+		@Override
+		public DataControlledCollection.Set<E, V> build(CollectionSynchronizerE<E, ? super V, ?> synchronizer) {
+			return new ObservableSetImpl.DataControlledSetImpl<>(getBackingCollection(), getBackingData(), getAutoRefresh(),
+				isRefreshingOnAccess(), getEqualsTester(), synchronizer, getAdjustmentOrder())//
+				.setMaxRefreshFrequency(getMaxRefreshFrequency());
 		}
 	}
 
@@ -453,6 +680,169 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 			else if (!(backing instanceof BetterSortedSet))
 				throw new IllegalStateException("An ObservableSortedCollection must be backed by an instance of BetterSortedList");
 			return new DefaultObservableSortedSet<>(getType(), (BetterSortedSet<E>) backing, getElementSource(), getSourceElements());
+		}
+
+		@Override
+		public <V> DataControlledSortedSetBuilder<E, V, ?> withData(Supplier<? extends List<? extends V>> data) {
+			return new DataControlledSortedSetBuilderImpl<>(build(), data);
+		}
+	}
+
+	public static class DataControlledSortedSetBuilderImpl<E, V, B extends DataControlledSortedSetBuilder<E, V, B>>
+	extends DataControlledCollectionBuilderImpl<E, V, B> implements DataControlledSortedSetBuilder<E, V, B> {
+		public DataControlledSortedSetBuilderImpl(ObservableSortedSet<E> backingCollection,
+			Supplier<? extends List<? extends V>> backingData) {
+			super(backingCollection, backingData);
+		}
+
+		@Override
+		protected ObservableSortedSet<E> getBackingCollection() {
+			return (ObservableSortedSet<E>) super.getBackingCollection();
+		}
+
+		@Override
+		public DataControlledCollection.SortedSet<E, V> build(CollectionSynchronizerE<E, ? super V, ?> synchronizer) {
+			return new ObservableSortedSetImpl.DataControlledSortedSetImpl<>(getBackingCollection(), getBackingData(), getAutoRefresh(),
+				isRefreshingOnAccess(), getEqualsTester(), synchronizer, getAdjustmentOrder())//
+				.setMaxRefreshFrequency(getMaxRefreshFrequency());
+		}
+	}
+
+	public static class DefaultDataControlAutoRefresher implements DataControlAutoRefresher {
+		private static class CollectionRefresher {
+			final DataControlledCollection<?, ?> collection;
+			final QommonsTimer.TaskHandle taskHandle;
+
+			CollectionRefresher(DataControlledCollection<?, ?> collection, TaskHandle taskHandle) {
+				this.collection = collection;
+				this.taskHandle = taskHandle;
+			}
+		}
+
+		private final QommonsTimer theTimer;
+		private final ListenerList<CollectionRefresher> theRefreshers;
+		private Duration theFrequency;
+		private boolean isInitRefresh;
+		private boolean isActive;
+		private boolean isClosed;
+		private double theAdaptive;
+
+		public DefaultDataControlAutoRefresher(Duration frequency) {
+			this(QommonsTimer.getCommonInstance(), frequency);
+		}
+
+		public DefaultDataControlAutoRefresher(QommonsTimer timer, Duration frequency) {
+			theTimer = timer;
+			theRefreshers = ListenerList.build().build();
+			theFrequency = frequency;
+			isActive = true;
+			isInitRefresh = true;
+		}
+
+		public boolean isActive() {
+			return isActive;
+		}
+
+		public DefaultDataControlAutoRefresher setActive(boolean active) {
+			synchronized (this) {
+				if (active == isActive)
+					return this;
+				isActive = active;
+			}
+			theRefreshers.forEach(r -> r.taskHandle.setActive(active));
+			return this;
+		}
+
+		public double getAdaptive() {
+			return theAdaptive;
+		}
+
+		public DefaultDataControlAutoRefresher setAdaptive(double adaptive) {
+			theAdaptive = adaptive;
+			return this;
+		}
+
+		public boolean isInitRefresh() {
+			return isInitRefresh;
+		}
+
+		public DefaultDataControlAutoRefresher setInitRefresh(boolean initRefresh) {
+			isInitRefresh = initRefresh;
+			return this;
+		}
+
+		public Duration getFrequency() {
+			return theFrequency;
+		}
+
+		public DefaultDataControlAutoRefresher setFrequency(Duration frequency) {
+			theFrequency = frequency;
+			theRefreshers.forEach(r -> {
+				long maxRefresh = r.collection.getMaxRefreshFrequency();
+				Duration collFreq;
+				if (maxRefresh > 0) { // Don't try to refresh more often than the max refresh
+					collFreq = Duration.ofMillis(maxRefresh);
+					if (frequency.compareTo(collFreq) > 0)
+						collFreq = frequency;
+				} else
+					collFreq = frequency;
+				r.taskHandle.setFrequency(collFreq, false);
+			});
+			return this;
+		}
+
+		public void refreshAll() {
+			theRefreshers.forEach(r -> r.collection.refresh());
+		}
+
+		public boolean isClosed() {
+			return isClosed;
+		}
+
+		public void close() {
+			for (ListenerList.Element<CollectionRefresher> node = theRefreshers.poll(0); node != null; node = theRefreshers.poll(0)) {
+				node.get().taskHandle.setActive(false);
+			}
+		}
+
+		@Override
+		public Runnable add(DataControlledCollection<?, ?> collection) {
+			QommonsTimer.TaskHandle[] handle = new QommonsTimer.TaskHandle[1];
+			long[] refreshTimes = new long[4];
+			Arrays.fill(refreshTimes, -1);
+			handle[0] = theTimer.build(() -> {
+				if (theAdaptive > 0) {
+					System.arraycopy(refreshTimes, 1, refreshTimes, 0, refreshTimes.length - 1);
+					refreshTimes[refreshTimes.length - 1] = -1;
+					int refreshes = 0;
+					long totalRefresh = 0;
+					for (long rt : refreshTimes) {
+						if (rt < 0)
+							break;
+						refreshes++;
+						totalRefresh += rt;
+					}
+					long now = System.currentTimeMillis();
+					collection.refresh();
+					refreshTimes[refreshes] = System.currentTimeMillis() - now;
+					totalRefresh += refreshTimes[refreshes];
+					long maxFreq = Math.max(theFrequency.toMillis(),
+						Math.max(collection.getMaxRefreshFrequency(), (long) Math.ceil(totalRefresh / (refreshes + 1) * theAdaptive)));
+					// System.out.println("Adaptive frequency for " + collection.getIdentity() + " to " + maxFreq);
+					handle[0].setFrequency(Duration.ofMillis(maxFreq), false);
+				} else
+					collection.refresh();
+			}, theFrequency, false);
+			Runnable remove = theRefreshers.add(new CollectionRefresher(collection, handle[0]), true);
+			if (isActive) {
+				handle[0].setActive(true);
+				if (isInitRefresh)
+					handle[0].runImmediately();
+			}
+			return () -> {
+				remove.run();
+				handle[0].setActive(false);
+			};
 		}
 	}
 }

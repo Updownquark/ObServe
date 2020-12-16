@@ -2,9 +2,12 @@ package org.observe.collect;
 
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 import org.observe.Equivalence;
 import org.observe.Equivalence.SortedEquivalence;
@@ -20,6 +23,7 @@ import org.observe.collect.ObservableCollection.DistinctDataFlow;
 import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
 import org.observe.collect.ObservableCollection.ModFilterBuilder;
 import org.observe.collect.ObservableCollectionActiveManagers.ActiveValueStoredManager;
+import org.observe.collect.ObservableCollectionBuilder.DataControlAutoRefresher;
 import org.observe.collect.ObservableCollectionPassiveManagers.PassiveCollectionManager;
 import org.observe.collect.ObservableSetImpl.DistinctBaseFlow;
 import org.observe.util.TypeTokens;
@@ -31,6 +35,8 @@ import org.qommons.collect.BetterSet;
 import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.CollectionElement;
+import org.qommons.collect.CollectionUtils.AdjustmentOrder;
+import org.qommons.collect.CollectionUtils.CollectionSynchronizerE;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.tree.BetterTreeSet;
@@ -39,7 +45,8 @@ import com.google.common.reflect.TypeToken;
 
 /** Holds default implementation methods and classes for {@link ObservableSortedSet} and {@link DistinctSortedDataFlow} methods */
 public class ObservableSortedSetImpl {
-	private ObservableSortedSetImpl() {}
+	private ObservableSortedSetImpl() {
+	}
 
 	/**
 	 * Implements {@link ObservableSortedSet#subSet(Comparable, Comparable)}
@@ -780,6 +787,26 @@ public class ObservableSortedSetImpl {
 			if (wrapped == null)
 				return false;
 			return wrapped.repair(listener);
+		}
+	}
+
+	public static class DataControlledSortedSetImpl<E, V> extends ObservableSortedCollectionImpl.DataControlledSortedCollectionImpl<E, V>
+	implements DataControlledCollection.SortedSet<E, V> {
+		protected DataControlledSortedSetImpl(ObservableSortedSet<E> backing, Supplier<? extends List<? extends V>> backingData,
+			DataControlAutoRefresher autoRefresh, boolean refreshOnAccess, BiPredicate<? super E, ? super V> equals,
+			CollectionSynchronizerE<E, ? super V, ?> synchronizer, AdjustmentOrder adjustmentOrder) {
+			super(backing, backingData, autoRefresh, refreshOnAccess, equals, synchronizer, adjustmentOrder);
+		}
+
+		@Override
+		protected ObservableSortedSet<E> getWrapped() throws IllegalStateException {
+			return (ObservableSortedSet<E>) super.getWrapped();
+		}
+
+		@Override
+		public DataControlledSortedSetImpl<E, V> setMaxRefreshFrequency(long frequency) {
+			super.setMaxRefreshFrequency(frequency);
+			return this;
 		}
 	}
 }

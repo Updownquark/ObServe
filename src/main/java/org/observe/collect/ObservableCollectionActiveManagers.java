@@ -739,7 +739,7 @@ public class ObservableCollectionActiveManagers {
 	 * @param <E> The type of the source collection
 	 * @param <T> The type of this manager
 	 */
-	protected static class SortedManager<E, T> implements ActiveCollectionManager<E, T, T> {
+	protected static class SortedManager<E, T> implements ActiveValueStoredManager<E, T, T> {
 		private final ActiveCollectionManager<E, ?, T> theParent;
 		private final Comparator<? super T> theCompare;
 		// Need to keep track of the values to enforce the set-does-not-reorder policy
@@ -791,6 +791,50 @@ public class ObservableCollectionActiveManagers {
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return structureAffectedTryPassLockThroughToParent(theParent, write, cause);
+		}
+
+		@Override
+		public boolean isConsistent(DerivedCollectionElement<T> element) {
+			return theValues.isConsistent(((SortedElement) element).theValueNode.getElementId(), theTupleCompare, false);
+		}
+
+		@Override
+		public boolean checkConsistency() {
+			return theValues.checkConsistency(theTupleCompare, false);
+		}
+
+		@Override
+		public <X> boolean repair(DerivedCollectionElement<T> element, RepairListener<T, X> listener) {
+			return theValues.repair(((SortedElement) element).theValueNode.getElementId(), theTupleCompare, false,
+				new SMRepairListener<>(listener));
+		}
+
+		@Override
+		public <X> boolean repair(RepairListener<T, X> listener) {
+			return theValues.repair(theTupleCompare, false, new SMRepairListener<>(listener));
+		}
+
+		static class SMRepairListener<T, X> implements ValueStoredCollection.RepairListener<BiTuple<T, DerivedCollectionElement<T>>, X> {
+			private final RepairListener<T, X> theWrapped;
+
+			SMRepairListener(RepairListener<T, X> wrapped) {
+				theWrapped = wrapped;
+			}
+
+			@Override
+			public X removed(CollectionElement<BiTuple<T, DerivedCollectionElement<T>>> element) {
+				return theWrapped.removed(element.get().getValue2());
+			}
+
+			@Override
+			public void disposed(BiTuple<T, DerivedCollectionElement<T>> value, X data) {
+				theWrapped.disposed(value.getValue1(), data);
+			}
+
+			@Override
+			public void transferred(CollectionElement<BiTuple<T, DerivedCollectionElement<T>>> element, X data) {
+				theWrapped.transferred(element.get().getValue2(), data);
+			}
 		}
 
 		@Override

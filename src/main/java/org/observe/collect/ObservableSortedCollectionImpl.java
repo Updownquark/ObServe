@@ -2,9 +2,12 @@ package org.observe.collect;
 
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 import org.observe.Equivalence;
 import org.observe.Equivalence.SortedEquivalence;
@@ -20,6 +23,7 @@ import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
 import org.observe.collect.ObservableCollection.ModFilterBuilder;
 import org.observe.collect.ObservableCollection.SortedDataFlow;
 import org.observe.collect.ObservableCollectionActiveManagers.ActiveValueStoredManager;
+import org.observe.collect.ObservableCollectionBuilder.DataControlAutoRefresher;
 import org.observe.collect.ObservableCollectionDataFlowImpl.BaseCollectionDataFlow;
 import org.observe.collect.ObservableCollectionPassiveManagers.PassiveCollectionManager;
 import org.observe.collect.ObservableSetImpl.ActiveSetMgrPlaceholder;
@@ -35,6 +39,8 @@ import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.BetterSortedList.SortedSearchFilter;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.CollectionElement;
+import org.qommons.collect.CollectionUtils.AdjustmentOrder;
+import org.qommons.collect.CollectionUtils.CollectionSynchronizerE;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.tree.BetterTreeSet;
@@ -43,7 +49,8 @@ import com.google.common.reflect.TypeToken;
 
 /** Holds default implementation methods and classes for {@link ObservableSortedCollection} and {@link SortedDataFlow} methods */
 public class ObservableSortedCollectionImpl {
-	private ObservableSortedCollectionImpl() {}
+	private ObservableSortedCollectionImpl() {
+	}
 
 	/**
 	 * Implements {@link ObservableSortedCollection#observeRelative(Comparable, SortedSearchFilter, java.util.function.Supplier)}
@@ -356,8 +363,8 @@ public class ObservableSortedCollectionImpl {
 	}
 
 	/**
-	 * An abstract {@link DistinctSortedDataFlow} implementation returning default {@link DistinctSortedDataFlow} implementations for most
-	 * operations that should produce one
+	 * An abstract {@link SortedDataFlow} implementation returning default {@link SortedDataFlow} implementations for most operations that
+	 * should produce one
 	 *
 	 * @param <E> The type of the source collection
 	 * @param <T> The type of this flow
@@ -477,25 +484,19 @@ public class ObservableSortedCollectionImpl {
 	}
 
 	/**
-	 * Implements {@link CollectionDataFlow#distinctSorted(Comparator, boolean)}
+	 * Implements {@link CollectionDataFlow#sorted(Comparator)}
 	 *
 	 * @param <E> The type of the source collection
 	 * @param <T> The type of this flow
 	 */
 	public static class SortedOp<E, T> extends SortedDataFlowWrapper<E, T> {
-		private final boolean isAlwaysUsingFirst;
-
 		/**
 		 * @param source The source collection
 		 * @param parent The parent flow
 		 * @param compare The comparator to order this flow's elements
-		 * @param alwaysUseFirst Whether to always use the earliest element in a category of equivalent values to represent the group in
-		 *        this flow
 		 */
-		protected SortedOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, Comparator<? super T> compare,
-			boolean alwaysUseFirst) {
+		protected SortedOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, Comparator<? super T> compare) {
 			super(source, parent, compare);
-			isAlwaysUsingFirst = alwaysUseFirst;
 		}
 
 		@Override
@@ -505,9 +506,7 @@ public class ObservableSortedCollectionImpl {
 
 		@Override
 		public ActiveValueStoredManager<E, ?, T> manageActive() {
-			return new ObservableSetImpl.DistinctManager<>(
-				new ObservableCollectionActiveManagers.ActiveEquivalenceSwitchedManager<>(getParent().manageActive(), equivalence()),
-				equivalence(), isAlwaysUsingFirst, false);
+			return new ObservableCollectionActiveManagers.SortedManager<>(getParent().manageActive(), comparator());
 		}
 	}
 
@@ -1006,6 +1005,78 @@ public class ObservableSortedCollectionImpl {
 			if (wrapped == null)
 				return false;
 			return wrapped.repair(listener);
+		}
+	}
+
+	public static class DataControlledSortedCollectionImpl<E, V> extends ObservableCollectionImpl.DataControlledCollectionImpl<E, V>
+	implements DataControlledCollection.Sorted<E, V> {
+		public DataControlledSortedCollectionImpl(ObservableSortedCollection<E> backing, Supplier<? extends List<? extends V>> backingData,
+			DataControlAutoRefresher autoRefresh, boolean refreshOnAccess, BiPredicate<? super E, ? super V> equals,
+			CollectionSynchronizerE<E, ? super V, ?> synchronizer, AdjustmentOrder adjustmentOrder) {
+			super(backing, backingData, autoRefresh, refreshOnAccess, equals, synchronizer, adjustmentOrder);
+		}
+
+		@Override
+		protected ObservableSortedCollection<E> getWrapped() throws IllegalStateException {
+			return (ObservableSortedCollection<E>) super.getWrapped();
+		}
+
+		@Override
+		public DataControlledSortedCollectionImpl<E, V> setMaxRefreshFrequency(long frequency) {
+			super.setMaxRefreshFrequency(frequency);
+			return this;
+		}
+
+		@Override
+		public Equivalence.ComparatorEquivalence<? super E> equivalence() {
+			return (Equivalence.ComparatorEquivalence<? super E>) super.equivalence();
+		}
+
+		@Override
+		public Comparator<? super E> comparator() {
+			return getWrapped().comparator();
+		}
+
+		@Override
+		public CollectionElement<E> search(Comparable<? super E> search, SortedSearchFilter filter) {
+			try (Transaction t = lock(false, null)) {
+				return getWrapped().search(search, filter);
+			}
+		}
+
+		@Override
+		public int indexFor(Comparable<? super E> search) {
+			try (Transaction t = lock(false, null)) {
+				return getWrapped().indexFor(search);
+			}
+		}
+
+		@Override
+		public boolean isConsistent(ElementId element) {
+			try (Transaction t = lock(false, null)) {
+				return getWrapped().isConsistent(element);
+			}
+		}
+
+		@Override
+		public boolean checkConsistency() {
+			try (Transaction t = lock(false, null)) {
+				return getWrapped().checkConsistency();
+			}
+		}
+
+		@Override
+		public <X> boolean repair(ElementId element, RepairListener<E, X> listener) {
+			try (Transaction t = lock(false, null)) {
+				return getWrapped().repair(element, listener);
+			}
+		}
+
+		@Override
+		public <X> boolean repair(RepairListener<E, X> listener) {
+			try (Transaction t = lock(false, null)) {
+				return getWrapped().repair(listener);
+			}
 		}
 	}
 }

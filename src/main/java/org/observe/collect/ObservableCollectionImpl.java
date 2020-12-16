@@ -11,6 +11,7 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -29,6 +30,7 @@ import org.observe.collect.ObservableCollectionActiveManagers.DerivedCollectionE
 import org.observe.collect.ObservableCollectionActiveManagers.ElementAccepter;
 import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
 import org.observe.collect.ObservableCollectionPassiveManagers.PassiveCollectionManager;
+import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.ObservableUtils;
 import org.observe.util.TypeTokens;
 import org.observe.util.WeakListening;
@@ -51,12 +53,14 @@ import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.CollectionElement;
+import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.debug.Debug;
 import org.qommons.debug.Debug.DebugData;
+import org.qommons.ex.CheckedExceptionWrapper;
 import org.qommons.tree.BetterTreeSet;
 import org.qommons.tree.BinaryTreeNode;
 
@@ -64,7 +68,8 @@ import com.google.common.reflect.TypeToken;
 
 /** Holds default implementation methods and classes for {@link ObservableCollection} */
 public final class ObservableCollectionImpl {
-	private ObservableCollectionImpl() {}
+	private ObservableCollectionImpl() {
+	}
 
 	/** Cached TypeToken of {@link String} */
 	public static final TypeToken<String> STRING_TYPE = TypeToken.of(String.class);
@@ -175,8 +180,8 @@ public final class ObservableCollectionImpl {
 		/** @param coll The collection for this change observable to watch */
 		protected CollectionChangesObservable(ObservableCollection<E> coll) {
 			collection = coll;
-			DebugData d=Debug.d().debug(coll);
-			if(d.isActive())
+			DebugData d = Debug.d().debug(coll);
+			if (d.isActive())
 				Debug.d().debug(this, true).merge(d);
 		}
 
@@ -213,11 +218,10 @@ public final class ObservableCollectionImpl {
 					throw new ListenerList.ReentrantNotificationException(ObservableCollection.REENTRANT_EVENT_ERROR);
 				Causable cause = evt.getRootCausable();
 				Map<Object, Object> data = cause.onFinish(key);
-				Object newTracker = data.compute(SESSION_TRACKER_PROPERTY,
-					(k, tracker) -> {
-						tracker = accumulate((SessionChangeTracker<E>) tracker, evt, observer);
-						return tracker;
-					});
+				Object newTracker = data.compute(SESSION_TRACKER_PROPERTY, (k, tracker) -> {
+					tracker = accumulate((SessionChangeTracker<E>) tracker, evt, observer);
+					return tracker;
+				});
 				if (newTracker == null) {
 					currentData[0] = null;
 					currentCause[0] = null;
@@ -2093,7 +2097,8 @@ public final class ObservableCollectionImpl {
 	 *
 	 * @param <T> The type of elements in the collection
 	 */
-	public static interface DerivedCollection<T> extends ObservableCollection<T> {}
+	public static interface DerivedCollection<T> extends ObservableCollection<T> {
+	}
 
 	/**
 	 * A derived collection, {@link ObservableCollection.CollectionDataFlow#collect() collected} from a
@@ -2979,9 +2984,9 @@ public final class ObservableCollectionImpl {
 		public ElementId getEquivalentElement(ElementId equivalentEl) {
 			if (!(equivalentEl instanceof DerivedElementHolder))
 				return null;
-			DerivedElementHolder<?> holder=(DerivedElementHolder<?>) equivalentEl;
-			ElementId local=theDerivedElements.getEquivalentElement(holder.treeNode.getElementId());
-			if(local==null)
+			DerivedElementHolder<?> holder = (DerivedElementHolder<?>) equivalentEl;
+			ElementId local = theDerivedElements.getEquivalentElement(holder.treeNode.getElementId());
+			if (local == null)
 				return equivalentEl;
 			DerivedCollectionElement<T> found = theFlow.getEquivalentElement(holder.element);
 			return found == null ? null : idFromSynthetic(found);
@@ -3028,6 +3033,7 @@ public final class ObservableCollectionImpl {
 				return element.element.toString();
 			}
 		};
+
 		@Override
 		public String canAdd(T value, ElementId after, ElementId before) {
 			return theFlow.canAdd(value, //
@@ -3104,6 +3110,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		protected void finalize() throws Throwable {
+			// TODO Move this functionality to java.lang.ref.Cleanable, BUT ONLY when JDK 8 is no longer supported
 			super.finalize();
 			theWeakListening.unsubscribe();
 		}
@@ -3134,7 +3141,8 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
-			return () -> {};
+			return () -> {
+			};
 		}
 
 		@Override
@@ -3317,8 +3325,8 @@ public final class ObservableCollectionImpl {
 			ObservableCollection<? extends E> current = getWrapped().get();
 			if (current == null)
 				return null;
-			if (equivalentEl instanceof FlattenedValueCollection.FlattenedElementId){
-				if(((FlattenedElementId) equivalentEl).theCollection==current)
+			if (equivalentEl instanceof FlattenedValueCollection.FlattenedElementId) {
+				if (((FlattenedElementId) equivalentEl).theCollection == current)
 					return new FlattenedElementId(current, ((FlattenedElementId) equivalentEl).theSourceEl);
 				else
 					equivalentEl = ((FlattenedElementId) equivalentEl).theSourceEl;
@@ -3830,6 +3838,161 @@ public final class ObservableCollectionImpl {
 					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 				getElement().remove();
 			}
+		}
+	}
+
+	public static class DataControlledCollectionImpl<E, V> extends ObservableCollectionWrapper<E>
+	implements DataControlledCollection<E, V> {
+		private final ObservableCollection<E> theBacking;
+		private long theMaxRefreshFrequency;
+		private final Supplier<? extends List<? extends V>> theBackingData;
+		private final ObservableCollectionBuilder.DataControlAutoRefresher theAutoRefresh;
+		private boolean isRefreshOnAccess;
+		private final BiPredicate<? super E, ? super V> theEqualsTester;
+		private final CollectionUtils.CollectionSynchronizerE<E, ? super V, ?> theSynchronizer;
+		private final CollectionUtils.AdjustmentOrder theAdjustmentOrder;
+
+		private volatile long theLastRefresh;
+		private final AtomicInteger theListeningCount;
+		private volatile Runnable theAutoRefreshTerminate;
+
+		public DataControlledCollectionImpl(ObservableCollection<E> backing, Supplier<? extends List<? extends V>> backingData,
+			ObservableCollectionBuilder.DataControlAutoRefresher autoRefresh, boolean refreshOnAccess,
+			BiPredicate<? super E, ? super V> equals, CollectionUtils.CollectionSynchronizerE<E, ? super V, ?> synchronizer,
+			CollectionUtils.AdjustmentOrder adjustmentOrder) {
+			theBacking = backing;
+			theBackingData = backingData;
+			theAutoRefresh = autoRefresh;
+			isRefreshOnAccess = refreshOnAccess;
+			theEqualsTester = equals;
+			theSynchronizer = synchronizer;
+			theAdjustmentOrder = adjustmentOrder;
+			theListeningCount = theAutoRefresh == null ? null : new AtomicInteger();
+
+			init(backing// TODO Maybe one day add capability for callers to affect the backing data
+				.flow().unmodifiable(false).collectPassive());
+		}
+
+		@Override
+		public long getMaxRefreshFrequency() {
+			return theMaxRefreshFrequency;
+		}
+
+		@Override
+		public DataControlledCollectionImpl<E, V> setMaxRefreshFrequency(long frequency) {
+			theMaxRefreshFrequency = frequency;
+			return this;
+		}
+
+		@Override
+		public boolean refresh() throws CheckedExceptionWrapper {
+			long now;
+			if (theMaxRefreshFrequency > 0) {
+				now = System.currentTimeMillis();
+				if (now - theLastRefresh < theMaxRefreshFrequency)
+					return false;
+			} else
+				now = 0;
+			Transaction lock = getWrapped().tryLock(true, null);
+			if (lock == null)
+				return false;
+			theLastRefresh = now;
+			try {
+				doRefresh();
+			} finally {
+				lock.close();
+			}
+			return true;
+		}
+
+		private void doRefresh() {
+			List<? extends V> backing = theBackingData.get();
+			try (Transaction t2 = backing instanceof Transactable ? ((Transactable) backing).lock(false, null) : Transaction.NONE) {
+				CollectionUtils.synchronize(theBacking, backing, theEqualsTester)//
+				.adjust(theSynchronizer, theAdjustmentOrder);
+			} catch (RuntimeException | Error e) {
+				throw e;
+			} catch (Throwable e) {
+				throw new CheckedExceptionWrapper(e);
+			}
+		}
+
+		@Override
+		public int size() {
+			if (isRefreshOnAccess)
+				refresh();
+			return getWrapped().size();
+		}
+
+		@Override
+		public boolean isEmpty() {
+			if (isRefreshOnAccess)
+				refresh();
+			return getWrapped().isEmpty();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			if (!isRefreshOnAccess)
+				return getWrapped().lock(write, cause);
+			else if (write) {
+				Transaction lock = super.lock(true, cause);
+				doRefresh();
+				return lock;
+			} else {
+				refresh();
+				return super.lock(false, cause);
+			}
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, Object cause) {
+			if (!isRefreshOnAccess)
+				return getWrapped().tryLock(write, cause);
+			else if (write) {
+				Transaction lock = super.tryLock(true, cause);
+				if (lock == null)
+					return null;
+				doRefresh();
+				return lock;
+			} else {
+				refresh();
+				return super.tryLock(false, cause);
+			}
+		}
+
+		@Override
+		public long getStamp() {
+			if (isRefreshOnAccess)
+				refresh();
+			return getWrapped().getStamp();
+		}
+
+		@Override
+		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
+			if (isRefreshOnAccess)
+				refresh();
+			if (theListeningCount == null)
+				return super.onChange(observer);
+			// If unsubscription and subscription happen in rapid succession,
+			// it may be necessary to ensure the operations don't trample each other
+			// This synchronization only occurs on the first subscription and the last unsubscription
+			if (theListeningCount.getAndIncrement() == 0) {
+				synchronized (this) {
+					theAutoRefreshTerminate = theAutoRefresh.add(this);
+				}
+			}
+			Subscription sub = super.onChange(observer);
+			return () -> {
+				sub.unsubscribe();
+				if (theListeningCount.decrementAndGet() == 0) {
+					synchronized (this) {
+						Runnable terminate = theAutoRefreshTerminate;
+						theAutoRefreshTerminate = null;
+						terminate.run();
+					}
+				}
+			};
 		}
 	}
 }

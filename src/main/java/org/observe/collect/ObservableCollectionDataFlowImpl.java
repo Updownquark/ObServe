@@ -27,6 +27,7 @@ import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.DistinctDataFlow;
 import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
 import org.observe.collect.ObservableCollection.ModFilterBuilder;
+import org.observe.collect.ObservableCollection.SortedDataFlow;
 import org.observe.collect.ObservableCollectionActiveManagers.ActiveCollectionManager;
 import org.observe.collect.ObservableCollectionActiveManagers.DerivedCollectionElement;
 import org.observe.collect.ObservableCollectionImpl.ActiveDerivedCollection;
@@ -681,8 +682,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public CollectionDataFlow<E, T, T> sorted(Comparator<? super T> compare) {
-			return new SortedDataFlow<>(theSource, this, theEquivalence, compare);
+		public SortedDataFlow<E, T, T> sorted(Comparator<? super T> compare) {
+			return new ObservableSortedCollectionImpl.SortedOp<>(theSource, this, compare);
 		}
 
 		@Override
@@ -752,42 +753,6 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public ObservableCollection<T> collectActive(Observable<?> until) {
 			return new ActiveDerivedCollection<>(manageActive(), until);
-		}
-	}
-
-	private static class SortedDataFlow<E, T> extends AbstractDataFlow<E, T, T> {
-		private final Comparator<? super T> theCompare;
-
-		SortedDataFlow(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, Equivalence<? super T> equivalence,
-			Comparator<? super T> compare) {
-			super(source, parent, parent.getTargetType(), equivalence);
-			theCompare = compare;
-		}
-
-		/** @return The comparator used to re-order element values */
-		@SuppressWarnings("unused")
-		protected Comparator<? super T> getCompare() {
-			return theCompare;
-		}
-
-		@Override
-		protected Object createIdentity() {
-			return Identifiable.wrap(getParent().getIdentity(), "sorted", theCompare);
-		}
-
-		@Override
-		public boolean supportsPassive() {
-			return false;
-		}
-
-		@Override
-		public PassiveCollectionManager<E, ?, T> managePassive() {
-			return null;
-		}
-
-		@Override
-		public ActiveCollectionManager<E, ?, T> manageActive() {
-			return new ObservableCollectionActiveManagers.SortedManager<>(getParent().manageActive(), theCompare);
 		}
 	}
 
