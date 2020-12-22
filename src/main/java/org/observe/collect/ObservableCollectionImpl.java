@@ -23,6 +23,7 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
+import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollectionActiveManagers.ActiveCollectionManager;
 import org.observe.collect.ObservableCollectionActiveManagers.CollectionElementListener;
@@ -3851,6 +3852,7 @@ public final class ObservableCollectionImpl {
 		private final BiPredicate<? super E, ? super V> theEqualsTester;
 		private final CollectionUtils.CollectionSynchronizerE<E, ? super V, ?> theSynchronizer;
 		private final CollectionUtils.AdjustmentOrder theAdjustmentOrder;
+		private final SettableValue<Boolean> isRefreshing;
 
 		private volatile long theLastRefresh;
 		private final AtomicInteger theListeningCount;
@@ -3868,6 +3870,7 @@ public final class ObservableCollectionImpl {
 			theSynchronizer = synchronizer;
 			theAdjustmentOrder = adjustmentOrder;
 			theListeningCount = theAutoRefresh == null ? null : new AtomicInteger();
+			isRefreshing = SettableValue.build(boolean.class).withLock(backing).withValue(false).safe(false).build();
 
 			init(backing// TODO Maybe one day add capability for callers to affect the backing data
 				.flow().unmodifiable(false).collectPassive());
@@ -3906,15 +3909,33 @@ public final class ObservableCollectionImpl {
 		}
 
 		private void doRefresh() {
-			List<? extends V> backing = theBackingData.get();
-			try (Transaction t2 = backing instanceof Transactable ? ((Transactable) backing).lock(false, null) : Transaction.NONE) {
-				CollectionUtils.synchronize(theBacking, backing, theEqualsTester)//
-				.adjust(theSynchronizer, theAdjustmentOrder);
-			} catch (RuntimeException | Error e) {
-				throw e;
-			} catch (Throwable e) {
-				throw new CheckedExceptionWrapper(e);
+			// if (getIdentity().toString().contains(".tar"))
+			// BreakpointHere.breakpoint();
+			isRefreshing.set(true, null);
+			try {
+				// System.out.println("Refreshing " + getIdentity());
+				List<? extends V> backing = theBackingData.get();
+				if (backing == null) {
+					theBacking.clear();
+					return;
+				}
+				try (Transaction t2 = backing instanceof Transactable ? ((Transactable) backing).lock(false, null) : Transaction.NONE) {
+					CollectionUtils.synchronize(theBacking, backing, theEqualsTester)//
+					.adjust(theSynchronizer, theAdjustmentOrder);
+				} catch (RuntimeException | Error e) {
+					throw e;
+				} catch (Throwable e) {
+					throw new CheckedExceptionWrapper(e);
+				}
+			} finally {
+				// System.out.println("Done refreshing " + getIdentity());
+				isRefreshing.set(false, null);
 			}
+		}
+
+		@Override
+		public ObservableValue<Boolean> isRefreshing() {
+			return isRefreshing.unsettable();
 		}
 
 		@Override

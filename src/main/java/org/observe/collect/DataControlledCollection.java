@@ -1,8 +1,18 @@
 package org.observe.collect;
 
+import java.util.Collections;
+
+import org.observe.ObservableValue;
 import org.qommons.ex.CheckedExceptionWrapper;
 
+import com.google.common.reflect.TypeToken;
+
 public interface DataControlledCollection<E, V> extends ObservableCollection<E> {
+	public static <E, V> DataControlledCollection<E, V> empty(TypeToken<E> type) {
+		return new ObservableCollectionBuilder.DataControlledCollectionBuilderImpl<>(ObservableCollection.of(type),
+			Collections::<V> emptyList).build(v -> null, null);
+	}
+
 	long getMaxRefreshFrequency();
 	DataControlledCollection<E, V> setMaxRefreshFrequency(long frequency);
 
@@ -19,6 +29,8 @@ public interface DataControlledCollection<E, V> extends ObservableCollection<E> 
 	 * @throws CheckedExceptionWrapper If the configured adjustment throws a checked exception
 	 */
 	boolean refresh();
+
+	ObservableValue<Boolean> isRefreshing();
 
 	public interface Set<E, V> extends DataControlledCollection<E, V>, ObservableSet<E> {
 		@Override
