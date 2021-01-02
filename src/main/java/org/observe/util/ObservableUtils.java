@@ -44,7 +44,7 @@ public class ObservableUtils {
 			CollectionElement<E> el = collection.getTerminalElement(forward);
 			while (el != null) {
 				ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), collection.getType(), index,
-					CollectionChangeType.add, null, el.get(), cause);
+					CollectionChangeType.add, false, null, el.get(), cause);
 				try (Transaction evtT = event.use()) {
 					observer.accept(event);
 				}
@@ -74,7 +74,7 @@ public class ObservableUtils {
 			while (el != null) {
 				E value = el.get();
 				ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), collection.getType(), index,
-					CollectionChangeType.remove, value, value, cause);
+					CollectionChangeType.remove, false, value, value, cause);
 				try (Transaction evtT = event.use()) {
 					observer.accept(event);
 				}

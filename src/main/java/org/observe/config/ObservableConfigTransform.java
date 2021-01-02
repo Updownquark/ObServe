@@ -394,7 +394,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 					cveIter.remove();
 					cve.dispose();
 					fire(new ObservableCollectionEvent<>(cve.getElementId(), theType, theElements.size(), CollectionChangeType.remove,
-						cve.get(), cve.get(), cause));
+						false, cve.get(), cve.get(), cause));
 				}
 			}
 			if (collectionElement != null) {
@@ -402,7 +402,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 					ConfigElement cve = createElement(child, null, findRefs);
 					cve.theElement = theElements.putEntry(child.getParentChildRef(), cve, false).getElementId();
 					fire(new ObservableCollectionEvent<>(cve.getElementId(), theType, theElements.size() - 1, CollectionChangeType.add,
-						null, cve.get(), cause));
+						false, null, cve.get(), cause));
 				}
 			}
 		}
@@ -430,8 +430,8 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 					theElements.mutableEntry(el.getElementId()).remove();
 					el.get().dispose();
 					fire(new ObservableCollectionEvent<>(el.getElementId(), theType,
-						theElements.keySet().getElementsBefore(el.getElementId()), CollectionChangeType.remove, el.get().get(),
-						el.get().get(), collectionChange));
+						theElements.keySet().getElementsBefore(el.getElementId()), CollectionChangeType.remove, collectionChange.isMove,
+						el.get().get(), el.get().get(), collectionChange));
 				} else {
 					try {
 						E newValue;
@@ -451,7 +451,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 						if (newValue != oldValue)
 							el.get()._set(newValue);
 						fire(new ObservableCollectionEvent<>(el.getElementId(), theType,
-							theElements.keySet().getElementsBefore(el.getElementId()), CollectionChangeType.set, oldValue, newValue,
+							theElements.keySet().getElementsBefore(el.getElementId()), CollectionChangeType.set, false, oldValue, newValue,
 							collectionChange));
 					} catch (ParseException e) {
 						e.printStackTrace();
@@ -477,8 +477,9 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 				newElId = theElements.putEntry(config.getParentChildRef(), newEl, null, el.getElementId(), false).getElementId();
 			newEl.theElement = newElId;
 			incrementStamp();
+			boolean move = cause instanceof ObservableConfigEvent && ((ObservableConfigEvent) cause).isMove;
 			fire(new ObservableCollectionEvent<>(newElId, theType, theElements.keySet().getElementsBefore(newElId),
-				CollectionChangeType.add, null, newEl.get(), cause));
+				CollectionChangeType.add, move, null, newEl.get(), cause));
 		}
 
 		private void fire(ObservableCollectionEvent<E> event) {

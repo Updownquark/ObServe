@@ -88,7 +88,7 @@ public class DefaultObservableSortedCollection<E> extends DefaultObservableColle
 		});
 		if (addedCheck.get()) {
 			ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), getType(),
-				getValues().getElementsBefore(el.getElementId()), CollectionChangeType.add, null, value, getCurrentCauses());
+				getValues().getElementsBefore(el.getElementId()), CollectionChangeType.add, false, null, value, getCurrentCauses());
 			fire(event);
 		}
 		return el;
@@ -132,8 +132,11 @@ public class DefaultObservableSortedCollection<E> extends DefaultObservableColle
 			RepairEvent<X> repair = new RepairEvent<>(getCurrentCauses());
 			boolean success = false;
 			try {
+				// We can't set the move boolean here because it's only for atomic moves
+				// --moves of a single element from one place to another.
+				// This operation may remove multiple elements before re-adding them in the appropriate position
 				ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(element.getElementId(), getType(),
-					getValues().getElementsBefore(element.getElementId()), CollectionChangeType.remove, element.get(), element.get(),
+					getValues().getElementsBefore(element.getElementId()), CollectionChangeType.remove, false, element.get(), element.get(),
 					repair);
 				fire(event);
 				repair.wrappedData = theWrapped == null ? null : theWrapped.removed(element);
@@ -159,7 +162,7 @@ public class DefaultObservableSortedCollection<E> extends DefaultObservableColle
 		public void transferred(CollectionElement<E> element, RepairEvent<X> data) {
 			try {
 				ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(element.getElementId(), getType(),
-					getValues().getElementsBefore(element.getElementId()), CollectionChangeType.add, null, element.get(), data);
+					getValues().getElementsBefore(element.getElementId()), CollectionChangeType.add, false, null, element.get(), data);
 				fire(event);
 				if (theWrapped != null) {
 					theWrapped.transferred(element, data.wrappedData);

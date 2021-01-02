@@ -22,14 +22,16 @@ public class ObservableMapEvent<K, V> extends ObservableCollectionEvent<V> {
 	 * @param valueType The value type of the map
 	 * @param index The index in the entry's value collection of the element that was added/removed/changed
 	 * @param type The type of the change (addition/removal/change)
+	 * @param move Whether this event represents either the removal of an entry in preparation for a move, or the re-addition of an entry
+	 *        that was just removed in the same move operation
 	 * @param key The key under which a value was added/removed/changed
 	 * @param oldValue The value of the element before the change (for change type of {@link CollectionChangeType#set set} only)
 	 * @param newValue The value of the element after the change
 	 * @param cause The cause of the change
 	 */
 	public ObservableMapEvent(ElementId elementId, TypeToken<K> keyType, TypeToken<V> valueType, int index, CollectionChangeType type,
-		K key, V oldValue, V newValue, Object cause) {
-		super(elementId, valueType, index, type, oldValue, newValue, cause);
+		boolean move, K key, V oldValue, V newValue, Object cause) {
+		super(elementId, valueType, index, type, move, oldValue, newValue, cause);
 		theKey = TypeTokens.get().cast(keyType, key);
 	}
 

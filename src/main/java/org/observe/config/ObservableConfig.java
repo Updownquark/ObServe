@@ -343,15 +343,17 @@ public class ObservableConfig implements Transactable, Stamped {
 
 	public static class ObservableConfigEvent extends Causable.AbstractCausable {
 		public final CollectionChangeType changeType;
+		public final boolean isMove;
 		public final ObservableConfig eventTarget;
 		public final List<ObservableConfig> relativePath;
 		public final String oldName;
 		public final String oldValue;
 
-		public ObservableConfigEvent(CollectionChangeType changeType, ObservableConfig eventTarget, String oldName, String oldValue,
-			List<ObservableConfig> relativePath, Object cause) {
+		public ObservableConfigEvent(CollectionChangeType changeType, boolean move, ObservableConfig eventTarget, String oldName,
+			String oldValue, List<ObservableConfig> relativePath, Object cause) {
 			super(cause);
 			this.changeType = changeType;
+			this.isMove = move;
 			this.eventTarget = eventTarget;
 			this.relativePath = relativePath;
 			this.oldName = oldName;
@@ -369,7 +371,7 @@ public class ObservableConfig implements Transactable, Stamped {
 		}
 
 		public ObservableConfigEvent asFromChild() {
-			return new ObservableConfigEvent(changeType, relativePath.get(0), oldName, oldValue,
+			return new ObservableConfigEvent(changeType, isMove, relativePath.get(0), oldName, oldValue,
 				relativePath.subList(1, relativePath.size()), getCauses());
 		}
 
@@ -1001,23 +1003,28 @@ public class ObservableConfig implements Transactable, Stamped {
 
 	public ObservableConfig addChild(ObservableConfig after, ObservableConfig before, boolean first, String name,
 		Consumer<ObservableConfig> preAddMod) {
+		return addChild(after, before, first, name, preAddMod, false);
+	}
+
+	protected ObservableConfig addChild(ObservableConfig after, ObservableConfig before, boolean first, String name,
+		Consumer<ObservableConfig> preAddMod, boolean move) {
 		try (Transaction t = lock(true, null)) {
 			ObservableConfig child = createChild(name, __ -> theLocking);
 			child.theParent = this;
 			if (preAddMod != null)
 				preAddMod.accept(child);
-			addChild(child, after, before, first);
+			addChild(child, after, before, first, move);
 			return child;
 		}
 	}
 
-	protected void addChild(ObservableConfig child, ObservableConfig after, ObservableConfig before, boolean first) {
+	protected void addChild(ObservableConfig child, ObservableConfig after, ObservableConfig before, boolean first, boolean move) {
 		ElementId el = theContent.addElement(child, //
 			after == null ? null : Objects.requireNonNull(after.theParentContentRef),
 				before == null ? null : Objects.requireNonNull(before.theParentContentRef), //
 					first).getElementId();
 		child.initialize(this, el);
-		fire(CollectionChangeType.add, Arrays.asList(child), child.getName(), null);
+		fire(CollectionChangeType.add, move, Arrays.asList(child), child.getName(), null);
 	}
 
 	public ObservableConfig moveChild(ObservableConfig child, ObservableConfig after, ObservableConfig before, boolean first,
@@ -1028,10 +1035,10 @@ public class ObservableConfig implements Transactable, Stamped {
 			if (!child.theParentContentRef.isPresent())
 				throw new NoSuchElementException("Config has already been removed");
 
-			child._remove(false);
+			child._remove(true);
 			if (afterRemove != null)
 				afterRemove.run();
-			return addChild(after, before, first, child.getName(), newChild -> newChild._copyFrom(child, true, true));
+			return addChild(after, before, first, child.getName(), newChild -> newChild._copyFrom(child, true, true), true);
 		}
 	}
 
@@ -1043,7 +1050,7 @@ public class ObservableConfig implements Transactable, Stamped {
 		try (Transaction t = lock(true, null)) {
 			String oldName = theName;
 			theName = name;
-			fire(CollectionChangeType.set, Collections.emptyList(), oldName, theValue);
+			fire(CollectionChangeType.set, false, Collections.emptyList(), oldName, theValue);
 		}
 		return this;
 	}
@@ -1052,14 +1059,14 @@ public class ObservableConfig implements Transactable, Stamped {
 		try (Transaction t = lock(true, null)) {
 			String oldValue = theValue;
 			theValue = value;
-			fire(CollectionChangeType.set, //
+			fire(CollectionChangeType.set, false, //
 				Collections.emptyList(), theName, oldValue);
 		}
 		return this;
 	}
 
 	protected void update() {
-		fire(CollectionChangeType.set, //
+		fire(CollectionChangeType.set, false, //
 			Collections.emptyList(), theName, theValue);
 	}
 
@@ -1104,7 +1111,7 @@ public class ObservableConfig implements Transactable, Stamped {
 			@Override
 			public ObservableConfig added(ObservableConfig o, int mIdx, int retIdx) {
 				ObservableConfig before = retIdx == children.size() ? null : children.get(retIdx);
-				return addChild(null, before, false, o.getName(), newChild -> newChild._copyFrom(o, removeExtras, withParsedItems));
+				return addChild(null, before, false, o.getName(), newChild -> newChild._copyFrom(o, removeExtras, withParsedItems), false);
 			}
 
 			@Override
@@ -1125,18 +1132,18 @@ public class ObservableConfig implements Transactable, Stamped {
 	}
 
 	public void remove() {
-		_remove(true);
+		_remove(false);
 	}
 
-	private void _remove(boolean withParsedItems) {
+	private void _remove(boolean move) {
 		Map<?, ?> parsedItems = theParsedItems;
-		if (parsedItems != null && withParsedItems)
+		if (parsedItems != null && !move)
 			parsedItems.clear();
 		try (Transaction t = lock(true, null)) {
 			if (!theParentContentRef.isPresent())
 				return;
 			theParent.theContent.mutableElement(theParentContentRef).remove();
-			fire(CollectionChangeType.remove, Collections.emptyList(), theName, theValue);
+			fire(CollectionChangeType.remove, move, Collections.emptyList(), theName, theValue);
 		}
 		theParent = null;
 		theParentContentRef = null;
@@ -1167,15 +1174,18 @@ public class ObservableConfig implements Transactable, Stamped {
 		return theRootCausable == null ? null : theRootCausable.get();
 	}
 
-	protected void fire(CollectionChangeType eventType, List<ObservableConfig> relativePath, String oldName, String oldValue) {
-		_fire(eventType, relativePath, oldName, oldValue, //
+	protected void fire(CollectionChangeType eventType, boolean move, List<ObservableConfig> relativePath, String oldName,
+		String oldValue) {
+		_fire(eventType, move, relativePath, oldName, oldValue, //
 			getCurrentCause());
 	}
 
-	private void _fire(CollectionChangeType eventType, List<ObservableConfig> relativePath, String oldName, String oldValue, Object cause) {
+	private void _fire(CollectionChangeType eventType, boolean move, List<ObservableConfig> relativePath, String oldName, String oldValue,
+		Object cause) {
 		theModCount++;
 		if (!theListeners.isEmpty()) {
-			ObservableConfigEvent event = new ObservableConfigEvent(eventType, this, oldName, oldValue, relativePath, getCurrentCause());
+			ObservableConfigEvent event = new ObservableConfigEvent(eventType, move, this, oldName, oldValue, relativePath,
+				getCurrentCause());
 			try (Transaction t = event.use()) {
 				theListeners.forEach(intL -> {
 					if (intL.path == null || intL.path.matches(relativePath)) {
@@ -1195,7 +1205,7 @@ public class ObservableConfig implements Transactable, Stamped {
 		else
 			fireWithParent = eventType == CollectionChangeType.remove && relativePath.isEmpty(); // Means this config was just removed
 		if (fireWithParent)
-			theParent.fire(eventType, //
+			theParent.fire(eventType, move, //
 				addToList(this, relativePath), oldName, oldValue);
 	}
 
@@ -1539,7 +1549,7 @@ public class ObservableConfig implements Transactable, Stamped {
 					if (!Objects.equals(contentStr, cfg.getValue()))
 						cfg.setValue(contentStr);
 					if (!theStack.isEmpty())
-						theStack.getLast().addChild(cfg, null, null, false);
+						theStack.getLast().addChild(cfg, null, null, false, false);
 					hasContent = true;
 				}
 			});

@@ -1123,7 +1123,7 @@ class ObservableEntityImpl<E> implements ObservableEntity<E> {
 					break;
 				}
 				ObservableCollectionEvent<V> valueChange = new ObservableCollectionEvent<>(elChange.getElementId(), theValueType,
-					elChange.getIndex(), elChange.getType(), oldValue, elChange.getNewValue().value, elChange);
+					elChange.getIndex(), elChange.getType(), elChange.isMove(), oldValue, elChange.getNewValue().value, elChange);
 				try (Transaction t = Causable.use(valueChange)) {
 					observer.accept(valueChange);
 				}

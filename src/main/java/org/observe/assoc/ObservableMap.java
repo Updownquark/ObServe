@@ -112,7 +112,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 				int index = forward ? 0 : size() - 1;
 				for (CollectionElement<Map.Entry<K, V>> entryEl : entrySet().elements()) {
 					ObservableMultiMapEvent<K, V> mapEvent = new ObservableMultiMapEvent<>(entryEl.getElementId(), entryEl.getElementId(),
-						getKeyType(), getValueType(), index, index, CollectionChangeType.add, entryEl.get().getKey(), null,
+						getKeyType(), getValueType(), index, index, CollectionChangeType.add, false, entryEl.get().getKey(), null,
 						entryEl.get().getValue(), subCause);
 					try (Transaction mt = mapEvent.use()) {
 						action.accept(mapEvent);
@@ -135,7 +135,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 						int index = !forward ? 0 : size() - 1;
 						for (CollectionElement<Map.Entry<K, V>> entryEl : entrySet().elements()) {
 							ObservableMultiMapEvent<K, V> mapEvent = new ObservableMultiMapEvent<>(entryEl.getElementId(),
-								entryEl.getElementId(), getKeyType(), getValueType(), index, index, CollectionChangeType.remove,
+								entryEl.getElementId(), getKeyType(), getValueType(), index, index, CollectionChangeType.remove, false,
 								entryEl.get().getKey(), entryEl.get().getValue(), entryEl.get().getValue(), subCause);
 							try (Transaction mt = mapEvent.use()) {
 								action.accept(mapEvent);
@@ -663,7 +663,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 				else
 					oldEntry = new SimpleMapEntry<>(mapEvt.getKey(), mapEvt.getOldValue(), false);
 				ObservableCollectionEvent<Map.Entry<K, V>> entryEvt = new ObservableCollectionEvent<>(//
-					mapEvt.getElementId(), getType(), mapEvt.getIndex(), mapEvt.getType(), oldEntry, entry, mapEvt);
+					mapEvt.getElementId(), getType(), mapEvt.getIndex(), mapEvt.getType(), mapEvt.isMove(), oldEntry, entry, mapEvt);
 				try (Transaction evtT = entryEvt.use()) {
 					observer.accept(entryEvt);
 				}
@@ -882,7 +882,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 			return theEntries.onChange(evt -> {
 				V oldValue = ((MapEntry) evt.getNewValue()).getOldValue();
 				ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent<>(evt.getElementId(), getKeyType(), theValueType, evt.getIndex(),
-					evt.getType(), evt.getNewValue().getKey(), oldValue, evt.getNewValue().getValue(), evt);
+					evt.getType(), evt.isMove(), evt.getNewValue().getKey(), oldValue, evt.getNewValue().getValue(), evt);
 				try (Transaction t = mapEvent.use()) {
 					action.accept(mapEvent);
 				}

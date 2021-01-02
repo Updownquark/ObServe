@@ -213,28 +213,14 @@ public class ObservableSortedCollectionImpl {
 						int inRange = isInRange(evt.getNewValue());
 						int oldInRange = evt.getType() == CollectionChangeType.set ? isInRange(evt.getOldValue()) : 0;
 						CollectionElement<ElementId> presentEl;
-						if (inRange < 0) {
-							switch (evt.getType()) {
-							case add:
-								break;
-							case remove:
-								break;
-							case set:
-								if (oldInRange == 0) {
-									presentEl = thePresentElements.getElement(evt.getElementId(), true);// Get by value
-									int index = thePresentElements.getElementsBefore(presentEl.getElementId());
-									thePresentElements.mutableElement(presentEl.getElementId()).remove();
-									fire(evt, CollectionChangeType.remove, index, evt.getOldValue(), evt.getOldValue());
-								}
-							}
-						} else if (inRange > 0) {
+						if (inRange != 0) {
 							switch (evt.getType()) {
 							case set:
 								if (oldInRange == 0) {
 									presentEl = thePresentElements.getElement(evt.getElementId(), true);// Get by value
 									int index = thePresentElements.getElementsBefore(presentEl.getElementId());
 									thePresentElements.mutableElement(presentEl.getElementId()).remove();
-									fire(evt, CollectionChangeType.remove, index, evt.getOldValue(), evt.getOldValue());
+									fire(evt, CollectionChangeType.remove, false, index, evt.getOldValue(), evt.getOldValue());
 								}
 								break;
 							default:
@@ -244,31 +230,32 @@ public class ObservableSortedCollectionImpl {
 							case add:
 								presentEl = thePresentElements.addElement(evt.getElementId(), false);
 								int index = thePresentElements.getElementsBefore(presentEl.getElementId());
-								fire(evt, evt.getType(), index, null, evt.getNewValue());
+								fire(evt, evt.getType(), evt.isMove(), index, null, evt.getNewValue());
 								break;
 							case remove:
 								presentEl = thePresentElements.getElement(evt.getElementId(), true);// Get by value
 								index = thePresentElements.getElementsBefore(presentEl.getElementId());
 								thePresentElements.mutableElement(presentEl.getElementId()).remove();
-								fire(evt, evt.getType(), index, evt.getOldValue(), evt.getNewValue());
+								fire(evt, evt.getType(), evt.isMove(), index, evt.getOldValue(), evt.getNewValue());
 								break;
 							case set:
 								if (oldInRange != 0) {
 									presentEl = thePresentElements.addElement(evt.getElementId(), false);
 									index = thePresentElements.getElementsBefore(presentEl.getElementId());
-									fire(evt, CollectionChangeType.add, index, null, evt.getNewValue());
+									fire(evt, CollectionChangeType.add, evt.isMove(), index, null, evt.getNewValue());
 								} else {
 									presentEl = thePresentElements.getElement(evt.getElementId(), true);// Get by value
 									index = thePresentElements.getElementsBefore(presentEl.getElementId());
-									fire(evt, CollectionChangeType.set, index, evt.getOldValue(), evt.getNewValue());
+									fire(evt, CollectionChangeType.set, evt.isMove(), index, evt.getOldValue(), evt.getNewValue());
 								}
 							}
 						}
 					}
 
-					void fire(ObservableCollectionEvent<? extends E> evt, CollectionChangeType type, int index, E oldValue, E newValue) {
+					void fire(ObservableCollectionEvent<? extends E> evt, CollectionChangeType type, boolean move, int index, E oldValue,
+						E newValue) {
 						ObservableCollectionEvent<? extends E> evt2 = new ObservableCollectionEvent<>(wrap(evt.getElementId()), getType(),
-							index, type, oldValue, newValue, evt);
+							index, type, move, oldValue, newValue, evt);
 						try (Transaction evtT = evt2.use()) {
 							observer.accept(evt2);
 						}

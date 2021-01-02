@@ -214,7 +214,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			if (el == null)
 				return null;
 			ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), getType(),
-				theValues.getElementsBefore(el.getElementId()), CollectionChangeType.add, null, value, theLock.getCurrentCauses());
+				theValues.getElementsBefore(el.getElementId()), CollectionChangeType.add, false, null, value, theLock.getCurrentCauses());
 			fire(event);
 			return el;
 		}
@@ -232,7 +232,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			E value = theValues.getElement(valueEl).get();
 			CollectionElement<E> el = theValues.move(valueEl, after, before, first, () -> {
 				ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(valueEl, getType(),
-					theValues.getElementsBefore(valueEl), CollectionChangeType.remove, value, value, theLock.getCurrentCauses());
+					theValues.getElementsBefore(valueEl), CollectionChangeType.remove, true, value, value, theLock.getCurrentCauses());
 				fire(event);
 				if (afterRemove != null)
 					afterRemove.run();
@@ -240,7 +240,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			if (el.getElementId().equals(valueEl))
 				return getElement(valueEl);
 			ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), getType(),
-				theValues.getElementsBefore(el.getElementId()), CollectionChangeType.add, null, value, theLock.getCurrentCauses());
+				theValues.getElementsBefore(el.getElementId()), CollectionChangeType.add, true, null, value, theLock.getCurrentCauses());
 			fire(event);
 			return el;
 		}
@@ -319,20 +319,24 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 							public Void removed(CollectionElement<E> element) {
 								if (element.getElementId().equals(valueEl.getElementId()))
 									thisMoved[0] = true;
+								// We can't set the move boolean here because it's only for atomic moves
+								// --moves of a single element from one place to another.
+								// This operation may remove multiple elements before re-adding them in the appropriate position
 								fire(new ObservableCollectionEvent<>(element.getElementId(), getType(),
-									theValues.getElementsBefore(element.getElementId()), CollectionChangeType.remove, element.get(),
-									element.get(), op));
+									theValues.getElementsBefore(element.getElementId()), CollectionChangeType.remove, false,
+									element.get(), element.get(), op));
 								return null;
 							}
 
 							@Override
-							public void disposed(E oldValue, Void data) {}
+							public void disposed(E oldValue, Void data) {
+							}
 
 							@Override
 							public void transferred(CollectionElement<E> element, Void data) {
 								fire(new ObservableCollectionEvent<>(element.getElementId(), getType(),
-									theValues.getElementsBefore(element.getElementId()), CollectionChangeType.add, null, element.get(),
-									op));
+									theValues.getElementsBefore(element.getElementId()), CollectionChangeType.add, false, null,
+									element.get(), op));
 							}
 						});
 					}
@@ -341,7 +345,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 				}
 				valueEl.set(value);
 				fire(new ObservableCollectionEvent<>(getElementId(), getType(), getElementsBefore(getElementId()), CollectionChangeType.set,
-					old, value, theLock.getCurrentCauses()));
+					false, old, value, theLock.getCurrentCauses()));
 			}
 
 			@Override
@@ -355,7 +359,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 					E old = get();
 					valueEl.remove();
 					fire(new ObservableCollectionEvent<>(getElementId(), getType(), getElementsBefore(getElementId()),
-						CollectionChangeType.remove, old, old, theLock.getCurrentCauses()));
+						CollectionChangeType.remove, false, old, old, theLock.getCurrentCauses()));
 				}
 			}
 
