@@ -171,27 +171,76 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 	 */
 	<V> DataControlledCollectionBuilder<E, V, ?> withData(Supplier<? extends List<? extends V>> data);
 
+	/** Refreshes {@link DataControlledCollection}s periodically in the background */
 	public interface DataControlAutoRefresher {
+		/**
+		 * @param collection The collection to refresh in the background
+		 * @return A Runnable to {@link Runnable#run() call} to stop refreshing the collection
+		 */
 		Runnable add(DataControlledCollection<?, ?> collection);
 	}
 
+	/**
+	 * Builds a {@link DataControlledCollection}
+	 *
+	 * @param <E> The type of the values in the collection
+	 * @param <V> The type of the source data
+	 * @param <B> The sub-type of this builder
+	 */
 	interface DataControlledCollectionBuilder<E, V, B extends DataControlledCollectionBuilder<E, V, B>> {
+		/**
+		 * @param equals An equals tester to preserve elements still present in the collection after refresh
+		 * @return This builder
+		 */
 		B withEquals(BiPredicate<? super E, ? super V> equals);
 
+		/**
+		 * @param adjustmentOrder The adjustment order for refreshes
+		 * @see org.qommons.collect.CollectionUtils.CollectionAdjustment#adjust(CollectionSynchronizerE,
+		 *      org.qommons.collect.CollectionUtils.AdjustmentOrder)
+		 * @return This refresher
+		 */
 		B withOrder(CollectionUtils.AdjustmentOrder adjustmentOrder);
 
+		/**
+		 * @param frequency The maximum refresh frequency for the collection
+		 * @see DataControlledCollection#setMaxRefreshFrequency(long)
+		 * @return This builder
+		 */
 		B withMaxRefreshFrequency(long frequency);
 
+		/**
+		 * @param refresh Whether the collection should synchronously refresh each time it is accessed
+		 * @return This builder
+		 */
 		B refreshOnAccess(boolean refresh);
 
+		/**
+		 * @param refresher The asynchronous auto-refresher for the collection
+		 * @return This builder
+		 */
 		B autoRefreshWith(DataControlAutoRefresher refresher);
 
+		/**
+		 * @param frequency The frequency with which to asynchronously auto-refresh the collection
+		 * @return This builder
+		 */
 		default B autoRefreshEvery(Duration frequency) {
 			return autoRefreshWith(new DefaultDataControlAutoRefresher(frequency));
 		}
 
+		/**
+		 * @param synchronizer The synchronizer to perform the refresh operation between the collection and the source data
+		 * @return The data-controlled collection
+		 */
 		DataControlledCollection<E, V> build(CollectionUtils.CollectionSynchronizerE<E, ? super V, ?> synchronizer);
 
+		/**
+		 * @param <X> The type of exception that may be thrown by the synchronization operation
+		 * @param map Produces values for the collection from source data values
+		 * @param synchronizer Allows customization of the synchronization behavior between collection elements and source values
+		 * @return The data-controlled collection
+		 */
 		default <X extends Throwable> DataControlledCollection<E, V> build(ExFunction<? super V, ? extends E, ? extends X> map,
 			Consumer<CollectionUtils.SimpleCollectionSynchronizer<E, ? super V, X, ?>> synchronizer) {
 			CollectionUtils.SimpleCollectionSynchronizer<E, ? super V, X, ?> sync = CollectionUtils.simpleSyncE(map);
@@ -201,6 +250,13 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 		}
 	}
 
+	/**
+	 * Builds a {@link DataControlledCollection.Sorted data controlled sorted collection}
+	 *
+	 * @param <E> The type of the values in the collection
+	 * @param <V> The type of the source data
+	 * @param <B> The sub-type of this builder
+	 */
 	interface DataControlledSortedCollectionBuilder<E, V, B extends DataControlledSortedCollectionBuilder<E, V, B>>
 	extends DataControlledCollectionBuilder<E, V, B> {
 		@Override
@@ -213,6 +269,13 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 		}
 	}
 
+	/**
+	 * Builds a {@link DataControlledCollection.Set data controlled set}
+	 *
+	 * @param <E> The type of the values in the set
+	 * @param <V> The type of the source data
+	 * @param <B> The sub-type of this builder
+	 */
 	interface DataControlledSetBuilder<E, V, B extends DataControlledSetBuilder<E, V, B>> extends DataControlledCollectionBuilder<E, V, B> {
 		@Override
 		DataControlledCollection.Set<E, V> build(CollectionSynchronizerE<E, ? super V, ?> synchronizer);
@@ -224,6 +287,13 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 		}
 	}
 
+	/**
+	 * Builds a {@link DataControlledCollection.SortedSet data controlled sorted set}
+	 *
+	 * @param <E> The type of the values in the set
+	 * @param <V> The type of the source data
+	 * @param <B> The sub-type of this builder
+	 */
 	interface DataControlledSortedSetBuilder<E, V, B extends DataControlledSortedSetBuilder<E, V, B>>
 	extends DataControlledSetBuilder<E, V, B>, DataControlledSortedCollectionBuilder<E, V, B> {
 		@Override
@@ -410,6 +480,13 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 		}
 	}
 
+	/**
+	 * Default implementation of {@link DataControlledCollectionBuilder}
+	 *
+	 * @param <E> The type of the values in the collection
+	 * @param <V> The type of the source data
+	 * @param <B> The sub-type of this builder
+	 */
 	public static class DataControlledCollectionBuilderImpl<E, V, B extends DataControlledCollectionBuilder<E, V, B>>
 	implements DataControlledCollectionBuilder<E, V, B> {
 		private final ObservableCollection<E> theBackingCollection;
@@ -420,6 +497,10 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 		private CollectionUtils.AdjustmentOrder theAdjustmentOrder;
 		private long theMaxRefreshFrequency;
 
+		/**
+		 * @param backingCollection The observable collection providing the observable functionality
+		 * @param backingData Supplies backing data for each refresh
+		 */
 		public DataControlledCollectionBuilderImpl(ObservableCollection<E> backingCollection,
 			Supplier<? extends List<? extends V>> backingData) {
 			theBackingCollection = backingCollection;
@@ -430,30 +511,41 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 			isRefreshingOnAccess = true;
 		}
 
+		/** @return The equals tester to preserve elements that are still present on refresh */
 		protected BiPredicate<? super E, ? super V> getEqualsTester() {
 			return theEqualsTester;
 		}
 
+		/**
+		 * @return Affects the synchronization between existing data and backing data on refresh
+		 * @see org.qommons.collect.CollectionUtils.CollectionAdjustment#adjust(CollectionSynchronizerE,
+		 *      org.qommons.collect.CollectionUtils.AdjustmentOrder)
+		 */
 		protected CollectionUtils.AdjustmentOrder getAdjustmentOrder() {
 			return theAdjustmentOrder;
 		}
 
+		/** @return The initial {@link DataControlledCollection#setMaxRefreshFrequency(long) max refresh frequency} */
 		protected long getMaxRefreshFrequency() {
 			return theMaxRefreshFrequency;
 		}
 
+		/** @return The observable collection to provide the observable functionality */
 		protected ObservableCollection<E> getBackingCollection() {
 			return theBackingCollection;
 		}
 
+		/** @return The supplier of backing data for each refresh */
 		protected Supplier<? extends List<? extends V>> getBackingData() {
 			return theBackingData;
 		}
 
+		/** @return The auto-refresher */
 		protected DataControlAutoRefresher getAutoRefresh() {
 			return theAutoRefresh;
 		}
 
+		/** @return Whether the collection should be refreshed synchronously each time it is accessed */
 		protected boolean isRefreshingOnAccess() {
 			return isRefreshingOnAccess;
 		}
@@ -568,8 +660,19 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 		}
 	}
 
+	/**
+	 * Default implementation of {@link DataControlledSortedCollectionBuilder}
+	 *
+	 * @param <E> The type of the values in the collection
+	 * @param <V> The type of the source data
+	 * @param <B> The sub-type of this builder
+	 */
 	public static class DataControlledSortedCollectionBuilderImpl<E, V, B extends DataControlledSortedCollectionBuilder<E, V, B>>
 	extends DataControlledCollectionBuilderImpl<E, V, B> implements DataControlledSortedCollectionBuilder<E, V, B> {
+		/**
+		 * @param backingCollection The observable collection providing the observable functionality
+		 * @param backingData Supplies backing data for each refresh
+		 */
 		public DataControlledSortedCollectionBuilderImpl(ObservableSortedCollection<E> backingCollection,
 			Supplier<? extends List<? extends V>> backingData) {
 			super(backingCollection, backingData);
@@ -617,8 +720,19 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 		}
 	}
 
+	/**
+	 * Default implementation of {@link DataControlledSetBuilder}
+	 *
+	 * @param <E> The type of the values in the set
+	 * @param <V> The type of the source data
+	 * @param <B> The sub-type of this builder
+	 */
 	public static class DataControlledSetBuilderImpl<E, V, B extends DataControlledSetBuilder<E, V, B>>
 	extends DataControlledCollectionBuilderImpl<E, V, B> implements DataControlledSetBuilder<E, V, B> {
+		/**
+		 * @param backingCollection The observable collection providing the observable functionality
+		 * @param backingData Supplies backing data for each refresh
+		 */
 		public DataControlledSetBuilderImpl(ObservableSet<E> backingCollection, Supplier<? extends List<? extends V>> backingData) {
 			super(backingCollection, backingData);
 		}
@@ -688,8 +802,19 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 		}
 	}
 
+	/**
+	 * Default implementation of {@link DataControlledSortedSetBuilder}
+	 *
+	 * @param <E> The type of the values in the set
+	 * @param <V> The type of the source data
+	 * @param <B> The sub-type of this builder
+	 */
 	public static class DataControlledSortedSetBuilderImpl<E, V, B extends DataControlledSortedSetBuilder<E, V, B>>
 	extends DataControlledCollectionBuilderImpl<E, V, B> implements DataControlledSortedSetBuilder<E, V, B> {
+		/**
+		 * @param backingCollection The observable collection providing the observable functionality
+		 * @param backingData Supplies backing data for each refresh
+		 */
 		public DataControlledSortedSetBuilderImpl(ObservableSortedSet<E> backingCollection,
 			Supplier<? extends List<? extends V>> backingData) {
 			super(backingCollection, backingData);
@@ -708,6 +833,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 		}
 	}
 
+	/** Default {@link DataControlAutoRefresher} implementation */
 	public static class DefaultDataControlAutoRefresher implements DataControlAutoRefresher {
 		private static class CollectionRefresher {
 			final DataControlledCollection<?, ?> collection;
@@ -727,10 +853,15 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 		private boolean isClosed;
 		private double theAdaptive;
 
+		/** @param frequency Global auto-refresh frequency */
 		public DefaultDataControlAutoRefresher(Duration frequency) {
 			this(QommonsTimer.getCommonInstance(), frequency);
 		}
 
+		/**
+		 * @param timer The timer to auto-refresh with
+		 * @param frequency Global auto-refresh frequency
+		 */
 		public DefaultDataControlAutoRefresher(QommonsTimer timer, Duration frequency) {
 			theTimer = timer;
 			theRefreshers = ListenerList.build().build();
@@ -739,10 +870,17 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 			isInitRefresh = true;
 		}
 
+		/** @return Whether this auto-refresher is currently active */
 		public boolean isActive() {
 			return isActive;
 		}
 
+		/**
+		 * Activates or temporarily deactivates this auto-refresher
+		 *
+		 * @param active Whether this auto-refresher should be currently active
+		 * @return This refresher
+		 */
 		public DefaultDataControlAutoRefresher setActive(boolean active) {
 			synchronized (this) {
 				if (active == isActive)
@@ -753,28 +891,49 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 			return this;
 		}
 
+		/**
+		 * @return The adaptivity setting for this refresher
+		 * @see #setAdaptive(double)
+		 */
 		public double getAdaptive() {
 			return theAdaptive;
 		}
 
+		/**
+		 * @param adaptive the adaptivity setting for this refresher. If greater than zero, this refresher will scale back refresh
+		 *        frequencies for individual collections based on the amount of time it takes to refresh them. E.g. if a particular
+		 *        collection takes 1s to perform a refresh operation and the refresher's adaptivity is 2.0, the refresher will wait a
+		 *        minimum of 2 seconds between refreshers (e.g. the frequency will be ~3s, 1s for the operation and 2s waiting).
+		 * @return This refresher
+		 */
 		public DefaultDataControlAutoRefresher setAdaptive(double adaptive) {
 			theAdaptive = adaptive;
 			return this;
 		}
 
+		/** @return Whether this refresher will refresh each collection as it is {@link #add(DataControlledCollection) added} */
 		public boolean isInitRefresh() {
 			return isInitRefresh;
 		}
 
+		/**
+		 * @param initRefresh Whether this refresher should refresh each collection as it is {@link #add(DataControlledCollection) added}
+		 * @return This refresher
+		 */
 		public DefaultDataControlAutoRefresher setInitRefresh(boolean initRefresh) {
 			isInitRefresh = initRefresh;
 			return this;
 		}
 
+		/** @return The global auto-refresh frequency with which this refresher refreshes its collections */
 		public Duration getFrequency() {
 			return theFrequency;
 		}
 
+		/**
+		 * @param frequency The global auto-refresh frequency with which this refresher should refresh its collections
+		 * @return This refresher
+		 */
 		public DefaultDataControlAutoRefresher setFrequency(Duration frequency) {
 			theFrequency = frequency;
 			theRefreshers.forEach(r -> {
@@ -791,15 +950,19 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 			return this;
 		}
 
+		/** Causes asynchronous refresh ASAP of all collections managed by this refresher */
 		public void refreshAll() {
-			theRefreshers.forEach(r -> r.collection.refresh());
+			theRefreshers.forEach(r -> r.taskHandle.runImmediately());
 		}
 
+		/** @return Whether this refresher has been {@link #close() closed} */
 		public boolean isClosed() {
 			return isClosed;
 		}
 
+		/** Closes this refresher, ceasing all refresh activity and disabling {@link #add(DataControlledCollection)} */
 		public void close() {
+			isClosed = true;
 			for (ListenerList.Element<CollectionRefresher> node = theRefreshers.poll(0); node != null; node = theRefreshers.poll(0)) {
 				node.get().taskHandle.setActive(false);
 			}
@@ -807,6 +970,8 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 
 		@Override
 		public Runnable add(DataControlledCollection<?, ?> collection) {
+			if (isClosed)
+				throw new IllegalStateException("This refresher is closed");
 			QommonsTimer.TaskHandle[] handle = new QommonsTimer.TaskHandle[1];
 			long[] refreshTimes = new long[4];
 			Arrays.fill(refreshTimes, -1);

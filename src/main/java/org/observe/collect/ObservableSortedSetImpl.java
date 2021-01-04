@@ -777,8 +777,23 @@ public class ObservableSortedSetImpl {
 		}
 	}
 
+	/**
+	 * Default {@link DataControlledCollection.SortedSet data controlled sorted set} implementation
+	 *
+	 * @param <E> The type of the collection values
+	 * @param <V> The type of the source data
+	 */
 	public static class DataControlledSortedSetImpl<E, V> extends ObservableSortedCollectionImpl.DataControlledSortedCollectionImpl<E, V>
 	implements DataControlledCollection.SortedSet<E, V> {
+		/**
+		 * @param backing The collection to control all the observable functionality
+		 * @param backingData Supplies backing data for refresh operations
+		 * @param autoRefresh The asynchronous auto refresher for this collection
+		 * @param refreshOnAccess Whether this collection should refresh synchronously each time it is accessed
+		 * @param equals The equals tester to preserve elements between refreshes
+		 * @param synchronizer The synchronizer to perform the refresh operation
+		 * @param adjustmentOrder The adjustment order for the synchronization
+		 */
 		protected DataControlledSortedSetImpl(ObservableSortedSet<E> backing, Supplier<? extends List<? extends V>> backingData,
 			DataControlAutoRefresher autoRefresh, boolean refreshOnAccess, BiPredicate<? super E, ? super V> equals,
 			CollectionSynchronizerE<E, ? super V, ?> synchronizer, AdjustmentOrder adjustmentOrder) {

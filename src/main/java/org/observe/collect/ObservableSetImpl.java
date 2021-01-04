@@ -1584,8 +1584,23 @@ public class ObservableSetImpl {
 		}
 	}
 
+	/**
+	 * Default {@link DataControlledCollection.Set data controlled set} implementation
+	 *
+	 * @param <E> The type of the collection values
+	 * @param <V> The type of the source data
+	 */
 	public static class DataControlledSetImpl<E, V> extends ObservableCollectionImpl.DataControlledCollectionImpl<E, V>
 	implements DataControlledCollection.Set<E, V> {
+		/**
+		 * @param backing The set to control all the observable functionality
+		 * @param backingData Supplies backing data for refresh operations
+		 * @param autoRefresh The asynchronous auto refresher for this collection
+		 * @param refreshOnAccess Whether this collection should refresh synchronously each time it is accessed
+		 * @param equals The equals tester to preserve elements between refreshes
+		 * @param synchronizer The synchronizer to perform the refresh operation
+		 * @param adjustmentOrder The adjustment order for the synchronization
+		 */
 		public DataControlledSetImpl(ObservableSet<E> backing, Supplier<? extends List<? extends V>> backingData,
 			DataControlAutoRefresher autoRefresh, boolean refreshOnAccess, BiPredicate<? super E, ? super V> equals,
 			CollectionSynchronizerE<E, ? super V, ?> synchronizer, AdjustmentOrder adjustmentOrder) {

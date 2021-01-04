@@ -3846,6 +3846,12 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
+	/**
+	 * Default {@link DataControlledCollection} implementation
+	 * 
+	 * @param <E> The type of the collection values
+	 * @param <V> The type of the source data
+	 */
 	public static class DataControlledCollectionImpl<E, V> extends ObservableCollectionWrapper<E>
 	implements DataControlledCollection<E, V> {
 		private final ObservableCollection<E> theBacking;
@@ -3862,6 +3868,15 @@ public final class ObservableCollectionImpl {
 		private final AtomicInteger theListeningCount;
 		private volatile Runnable theAutoRefreshTerminate;
 
+		/**
+		 * @param backing The collection to control all the observable functionality
+		 * @param backingData Supplies backing data for refresh operations
+		 * @param autoRefresh The asynchronous auto refresher for this collection
+		 * @param refreshOnAccess Whether this collection should refresh synchronously each time it is accessed
+		 * @param equals The equals tester to preserve elements between refreshes
+		 * @param synchronizer The synchronizer to perform the refresh operation
+		 * @param adjustmentOrder The adjustment order for the synchronization
+		 */
 		public DataControlledCollectionImpl(ObservableCollection<E> backing, Supplier<? extends List<? extends V>> backingData,
 			ObservableCollectionBuilder.DataControlAutoRefresher autoRefresh, boolean refreshOnAccess,
 			BiPredicate<? super E, ? super V> equals, CollectionUtils.CollectionSynchronizerE<E, ? super V, ?> synchronizer,
