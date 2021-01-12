@@ -607,7 +607,11 @@ public class PanelPopulation {
 
 	public interface TabEditor<P extends TabEditor<P>> {
 		default P setName(String name) {
-			return setName(ObservableValue.of(name));
+			if (getName() instanceof SettableValue)
+				((SettableValue<String>) getName()).set(name, null);
+			else
+				setName(ObservableValue.of(name));
+			return (P) this;
 		}
 
 		P setName(ObservableValue<String> name);
@@ -617,6 +621,14 @@ public class PanelPopulation {
 		P selectOn(Observable<?> select);
 
 		P onSelect(Consumer<ObservableValue<Boolean>> onSelect);
+
+		P remove();
+
+		P select();
+
+		P setRemovable(boolean removable);
+
+		P onRemove(Consumer<Object> onRemove);
 	}
 
 	public interface SplitPane<P extends SplitPane<P>> extends ComponentEditor<JSplitPane, P> {
@@ -762,6 +774,8 @@ public class PanelPopulation {
 		P dragSourceRow(Consumer<? super Dragging.TransferSource<R>> source);
 
 		P dragAcceptRow(Consumer<? super Dragging.TransferAccepter<R>> accept);
+
+		P withMouseListener(ObservableTableModel.RowMouseListener<? super R> listener);
 
 		P scrollable(boolean scrollable);
 	}
@@ -1001,6 +1015,8 @@ public class PanelPopulation {
 		P withVisible(SettableValue<Boolean> visible);
 
 		P withMenuBar(Consumer<MenuBarBuilder<?>> menuBar);
+
+		P disposeOnClose(boolean dispose);
 
 		P withVContent(Consumer<PanelPopulator<?, ?>> content);
 
@@ -2223,6 +2239,10 @@ public class PanelPopulation {
 			Component component;
 			boolean visible;
 			SimpleObservable<Void> tabEnd;
+			boolean isRemovable;
+			ObservableValue<String> theName;
+			Observable<?> until;
+			Consumer<Object> onRemove;
 
 			Tab(Object id, SimpleTabEditor<?> tab) {
 				this.id = id;
@@ -2269,9 +2289,10 @@ public class PanelPopulation {
 		P withTabImpl(Object tabID, Component tabComponent, Consumer<TabEditor<?>> tabModifier, AbstractComponentEditor<?, ?> panel) {
 			if (tabID == null)
 				throw new NullPointerException();
-			SimpleTabEditor<?> t = new SimpleTabEditor<>(tabID, tabComponent);
+			SimpleTabEditor<?> t = new SimpleTabEditor<>(this, tabID, tabComponent);
 			tabModifier.accept(t);
 			Tab tab = new Tab(tabID, t);
+			tab.onRemove = t.onRemove;
 			Tab oldTab = theTabs.put(tabID, tab);
 			if (oldTab != null) {
 				oldTab.tabEnd.onNext(null);
@@ -2281,6 +2302,7 @@ public class PanelPopulation {
 				tab.tabEnd = SimpleObservable.build().withIdentity(Identifiable.baseId("tab " + tabID, new BiTuple<>(this, tabID)))
 				.safe(false).build();
 			Observable<?> tabUntil = Observable.or(tab.tabEnd, theUntil);
+			tab.until = tabUntil;
 			tab.component = t.getComponent(tabUntil);
 			if (theTabsByComponent.put(tab.component, tab) != null)
 				throw new IllegalStateException("Duplicate tab components (" + tabID + ")");
@@ -2302,11 +2324,17 @@ public class PanelPopulation {
 				}
 			} else
 				getEditor().add(tab.component);
+			tab.theName = t.getName();
+			if (tab.theName != null)
+				t.theName.changes().takeUntil(tabUntil).act(evt -> {
+					getEditor().setTitleAt(getTabIndex(tabID), evt.getNewValue());
+				});
 			if (t.getSelection() != null) {
 				t.getSelection().takeUntil(tabUntil).act(__ -> ObservableSwingUtils.onEQ(() -> {
 					getEditor().setSelectedComponent(tab.component);
 				}));
 			}
+			setRemovable(tabID, t.isRemovable);
 			return (P) this;
 		}
 
@@ -2342,6 +2370,18 @@ public class PanelPopulation {
 			return null;
 		}
 
+		private int getTabIndex(Object tabId) {
+			int t = 0;
+			for (Object tabId2 : theTabs.keySet()) {
+				if (tabId2.equals(tabId))
+					break;
+				t++;
+			}
+			if (t == theTabs.size())
+				return -1;
+			return t;
+		}
+
 		@Override
 		protected Component createFieldNameLabel(Observable<?> until) {
 			return null;
@@ -2374,7 +2414,7 @@ public class PanelPopulation {
 							selectedTab.tab.getOnSelect().set(true, evt);
 					}
 				};
-				getEditor().setSelectedIndex(-1);
+				getEditor().setSelectedIndex(0);
 				initialized[0] = true;
 				theSelectedTabId.changes().takeUntil(until).act(evt -> {
 					Object tabID = evt.getNewValue();
@@ -2400,17 +2440,82 @@ public class PanelPopulation {
 			});
 			return c;
 		}
+
+		boolean remove(Object tabId, Object cause) {
+			Tab found = theTabs.remove(tabId);
+			if (found == null)
+				return false;
+			getEditor().remove(found.component);
+			found.tabEnd.onNext(null);
+			if (found.onRemove != null)
+				found.onRemove.accept(cause);
+			return true;
+		}
+
+		boolean select(Object tabId) {
+			Tab found = theTabs.get(tabId);
+			if (found == null)
+				return false;
+			getEditor().setSelectedComponent(found.component);
+			return true;
+		}
+
+		void setRemovable(Object tabId, boolean removable) {
+			Tab found = theTabs.get(tabId);
+			if (found == null)
+				return;
+			if (found.isRemovable == removable)
+				return;
+			found.isRemovable = removable;
+			int t = getTabIndex(tabId);
+			if (t < 0)
+				return; // Maybe removed already
+			if (getEditor().getTabCount() <= t)
+				return; // ??
+			JComponent tabC = (JComponent) getEditor().getTabComponentAt(t);
+			if (removable) {
+				if (tabC == null) {
+					tabC = new JPanel(new JustifiedBoxLayout(false));
+					JLabel title = new JLabel(getEditor().getTitleAt(t));
+					if (found.theName != null)
+						found.theName.changes().takeUntil(found.until).act(evt -> {
+							title.setText(evt.getNewValue());
+						});
+					tabC.add(title);
+					getEditor().setTabComponentAt(t, tabC);
+				}
+				JLabel removeLabel = new JLabel(ObservableSwingUtils.getFixedIcon(null, "/icons/redX.png", 6, 6));
+				tabC.add(removeLabel);
+				removeLabel.addMouseListener(new MouseAdapter() {
+					@Override
+					public void mouseClicked(MouseEvent e) {
+						remove(tabId, e);
+					}
+				});
+			} else if (tabC != null) {
+				for (int c = tabC.getComponentCount() - 1; c >= 0; c--) {
+					if (tabC instanceof JLabel) {
+						tabC.remove(c);
+						break;
+					}
+				}
+			}
+		}
 	}
 
 	static class SimpleTabEditor<P extends SimpleTabEditor<P>> implements TabEditor<P> {
+		private final SimpleTabPaneEditor<?> theTabs;
 		@SuppressWarnings("unused")
 		private final Object theID;
 		private final Component theComponent;
 		private ObservableValue<String> theName;
 		private Observable<?> theSelection;
 		private SettableValue<Boolean> theOnSelect;
+		private boolean isRemovable;
+		private Consumer<Object> onRemove;
 
-		public SimpleTabEditor(Object id, Component component) {
+		public SimpleTabEditor(SimpleTabPaneEditor<?> tabs, Object id, Component component) {
+			theTabs = tabs;
 			theID = id;
 			theComponent = component;
 		}
@@ -2440,6 +2545,31 @@ public class PanelPopulation {
 			if (theOnSelect == null)
 				theOnSelect = SettableValue.build(boolean.class).safe(false).nullable(false).withValue(false).build();
 			onSelect.accept(theOnSelect);
+			return (P) this;
+		}
+
+		@Override
+		public P remove() {
+			theTabs.remove(theID, null);
+			return (P) this;
+		}
+
+		@Override
+		public P select() {
+			theTabs.select(theID);
+			return (P) this;
+		}
+
+		@Override
+		public P setRemovable(boolean removable) {
+			isRemovable = removable;
+			theTabs.setRemovable(theID, removable);
+			return (P) this;
+		}
+
+		@Override
+		public P onRemove(Consumer<Object> onRemove) {
+			this.onRemove = onRemove;
 			return (P) this;
 		}
 

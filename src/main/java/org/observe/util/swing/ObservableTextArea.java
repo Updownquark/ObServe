@@ -1,6 +1,7 @@
 package org.observe.util.swing;
 
 import java.awt.Color;
+import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
@@ -22,6 +23,8 @@ import org.qommons.io.SpinnerFormat;
 
 public class ObservableTextArea<E> extends JEditorPane {
 	private final ObservableTextEditor<E> theEditor;
+	private boolean isWordWrapped;
+	private int theRows;
 
 	private String theEmptyText;
 
@@ -53,6 +56,7 @@ public class ObservableTextArea<E> extends JEditorPane {
 					repaint();
 			}
 		});
+		isWordWrapped = true;
 	}
 
 	/** @return The value controlled by this text field */
@@ -178,6 +182,28 @@ public class ObservableTextArea<E> extends JEditorPane {
 		return this;
 	}
 
+	public ObservableTextArea<E> withWordWrap(boolean wordWrap) {
+		isWordWrapped = wordWrap;
+		return this;
+	}
+
+	public ObservableTextArea<E> withRows(int rows) {
+		Graphics2D g = (Graphics2D) getGraphics();
+		if (g == null) {
+			theRows = rows;
+			repaint();
+			return this;
+		}
+		_withRows(rows, g);
+		return this;
+	}
+
+	private void _withRows(int rows, Graphics2D g) {
+		int h = (int) Math.ceil(g.getFont().getLineMetrics("Mgp!q", g.getFontRenderContext()).getHeight());
+		setPreferredSize(new Dimension(getPreferredSize().width, h * rows));
+		setMinimumSize(new Dimension(getMinimumSize().width, h * rows));
+	}
+
 	/** @return The text to display (grayed) when the text field's text is empty */
 	public String getEmptyText() {
 		return theEmptyText;
@@ -205,6 +231,12 @@ public class ObservableTextArea<E> extends JEditorPane {
 	@Override
 	protected void paintComponent(Graphics g) {
 		super.paintComponent(g);
+		if (theRows > 0) {
+			_withRows(theRows, (Graphics2D) g);
+			theRows = 0;
+			invalidate();
+			revalidate();
+		}
 
 		if (!this.hasFocus() && getText().length() == 0 && theEmptyText != null) {
 			int height = getHeight();
@@ -224,7 +256,6 @@ public class ObservableTextArea<E> extends JEditorPane {
 			g.setFont(prev);
 			g.setColor(prevColor);
 		}
-
 	}
 
 	/** @return Whether the user has entered text to change this field's value */
@@ -268,5 +299,10 @@ public class ObservableTextArea<E> extends JEditorPane {
 	/** Re-displays the warning message from this text field as a tooltip */
 	public void redisplayWarningTooltip() {
 		theEditor.redisplayWarningTooltip();
+	}
+
+	@Override
+	public boolean getScrollableTracksViewportWidth() {
+		return isWordWrapped || super.getScrollableTracksViewportWidth();
 	}
 }

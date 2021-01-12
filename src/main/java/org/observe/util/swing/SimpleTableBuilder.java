@@ -45,6 +45,7 @@ import org.observe.util.swing.Dragging.SimpleTransferAccepter;
 import org.observe.util.swing.Dragging.SimpleTransferSource;
 import org.observe.util.swing.Dragging.TransferAccepter;
 import org.observe.util.swing.Dragging.TransferSource;
+import org.observe.util.swing.ObservableTableModel.RowMouseListener;
 import org.observe.util.swing.PanelPopulation.AbstractComponentEditor;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.observe.util.swing.PanelPopulation.SimpleHPanel;
@@ -82,6 +83,7 @@ implements TableBuilder<R, P> {
 	private ObservableValue<? extends TableContentControl> theFilter;
 	private Dragging.SimpleTransferSource<R> theDragSource;
 	private Dragging.SimpleTransferAccepter<R> theDragAccepter;
+	private List<ObservableTableModel.RowMouseListener<? super R>> theMouseListeners;
 	private int theAdaptiveMinRowHeight;
 	private int theAdaptivePrefRowHeight;
 	private int theAdaptiveMaxRowHeight;
@@ -193,6 +195,14 @@ implements TableBuilder<R, P> {
 	public List<R> getSelection() {
 		return ObservableSwingUtils.getSelection(((ObservableTableModel<R>) getEditor().getModel()).getRowModel(),
 			getEditor().getSelectionModel(), null);
+	}
+
+	@Override
+	public P withMouseListener(RowMouseListener<? super R> listener) {
+		if(theMouseListeners==null)
+			theMouseListeners=new ArrayList<>();
+		theMouseListeners.add(listener);
+		return (P) this;
 	}
 
 	@Override
@@ -533,6 +543,10 @@ implements TableBuilder<R, P> {
 		}
 		JTable table = getEditor();
 		table.setModel(model);
+		if(theMouseListeners!=null) {
+			for(ObservableTableModel.RowMouseListener<? super R> listener : theMouseListeners)
+				model.addMouseListener(listener);
+		}
 		Subscription sub = ObservableTableModel.hookUp(table, model, //
 			filtered == null ? null : new ObservableTableModel.TableRenderContext() {
 			@Override

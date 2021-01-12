@@ -71,6 +71,8 @@ public class AppPopulation {
 		private volatile boolean isClosingWithoutSave;
 		private Consumer<FileBackups.Builder> theBackups;
 		private AboutDialogBuilder<?> theAboutDialog;
+		private Duration thePersistFrequency;
+		private boolean isPersistingOnMod;
 
 		public ObservableUiBuilder() {
 			super(new JFrame(), Observable.empty(), true);
@@ -105,6 +107,16 @@ public class AppPopulation {
 			if (theOldConfigNames == null)
 				theOldConfigNames = new LinkedList<>();
 			theOldConfigNames.add(configName);
+			return this;
+		}
+
+		public ObservableUiBuilder saveEvery(Duration frequency) {
+			thePersistFrequency = frequency;
+			return this;
+		}
+
+		public ObservableUiBuilder saveOnMod(boolean save) {
+			isPersistingOnMod = save;
 			return this;
 		}
 
@@ -357,6 +369,32 @@ public class AppPopulation {
 				System.err.println("Could not persist UI config");
 				ex.printStackTrace();
 			});
+			if (isPersistingOnMod) {
+				if (thePersistFrequency == null) {
+					config.persistOnChange(actuallyPersist, ex -> {
+						System.err.println("Could not persist UI config");
+						ex.printStackTrace();
+					});
+				} else {
+					Object key = new Object();
+					config.watch(config.buildPath(ObservableConfig.ANY_NAME).multi(true).build()).act(__ -> {
+						QommonsTimer.getCommonInstance().doAfterInactivity(key, () -> {
+							try {
+								actuallyPersist.persist(config);
+							} catch (IOException ex) {
+								System.err.println("Could not persist UI config");
+								ex.printStackTrace();
+							}
+						}, thePersistFrequency);
+					});
+				}
+			} else if (thePersistFrequency != null) {
+				// Don't back up except at shutdown
+				config.persistEvery(thePersistFrequency, actuallyPersist, ex -> {
+					System.err.println("Could not persist UI config");
+					ex.printStackTrace();
+				});
+			}
 			Runnable buildApp = () -> {
 				app.accept(config, ui -> {
 					if (EventQueue.isDispatchThread())

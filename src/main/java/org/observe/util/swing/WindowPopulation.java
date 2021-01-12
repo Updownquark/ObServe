@@ -56,7 +56,7 @@ public class WindowPopulation {
 	static class DefaultWindowBuilder<W extends Window, P extends DefaultWindowBuilder<W, P>> implements WindowBuilder<W, P> {
 		private final W theWindow;
 		private final Observable<?> theUntil;
-		private final SimpleObservable<Object> theDisposeOnClose;
+		private final SimpleObservable<Object> theDispose;
 		private ObservableValue<String> theTitle;
 		private ObservableValue<? extends Image> theIcon;
 		private SettableValue<Integer> theX;
@@ -65,15 +65,13 @@ public class WindowPopulation {
 		private SettableValue<Integer> theHeight;
 		private SettableValue<Boolean> isVisible;
 
+		private boolean isDisposeOnClose;
+
 		DefaultWindowBuilder(W window, Observable<?> until, boolean disposeOnClose) {
 			theWindow = window;
-			if (disposeOnClose) {
-				theDisposeOnClose = SimpleObservable.build().safe(false).build();
-				theUntil = Observable.or(until.takeUntil(theDisposeOnClose), theDisposeOnClose);
-			} else {
-				theDisposeOnClose = null;
-				theUntil = until;
-			}
+			isDisposeOnClose = disposeOnClose;
+			theDispose = SimpleObservable.build().safe(false).build();
+			theUntil = Observable.or(until.takeUntil(theDispose), theDispose);
 		}
 
 		@Override
@@ -149,6 +147,12 @@ public class WindowPopulation {
 			} else
 				System.err.println("WARNING: menu bars supported only for " + JFrame.class.getName()
 					+ " instances: not for for window of type " + theWindow.getClass().getName());
+			return (P) this;
+		}
+
+		@Override
+		public P disposeOnClose(boolean dispose) {
+			isDisposeOnClose = dispose;
 			return (P) this;
 		}
 
@@ -303,23 +307,24 @@ public class WindowPopulation {
 				theWindow.addComponentListener(boundsListener);
 			}
 			SettableValue<Boolean> visible = isVisible;
-			if (visible != null || theDisposeOnClose != null) {
-				theWindow.addComponentListener(new ComponentAdapter() {
-					@Override
-					public void componentShown(ComponentEvent e) {
-						if (visible != null && !visible.get())
-							visible.set(true, e);
-					}
+			theWindow.addComponentListener(new ComponentAdapter() {
+				@Override
+				public void componentShown(ComponentEvent e) {
+					if (visible != null && !visible.get())
+						visible.set(true, e);
+				}
 
-					@Override
-					public void componentHidden(ComponentEvent e) {
-						if (visible != null && visible.get())
-							visible.set(false, e);
-						if (theDisposeOnClose != null)
-							theDisposeOnClose.onNext(e);
+				@Override
+				public void componentHidden(ComponentEvent e) {
+					if (visible != null && visible.get())
+						visible.set(false, e);
+					if (isDisposeOnClose) {
+						if (theDispose != null)
+							theDispose.onNext(e);
+						System.exit(0);
 					}
-				});
-			}
+				}
+			});
 			theUntil.take(1).act(__ -> {
 				if (theWindow.isVisible())
 					theWindow.setVisible(false);

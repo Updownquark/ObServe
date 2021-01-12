@@ -156,7 +156,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			@Override
 			public Component getListCellRendererComponent(JList<?> list, Object option, int index, boolean isSelected,
 				boolean cellHasFocus) {
-				String text = renderer.apply((C) option);
+				String text = renderer == null ? String.valueOf(option) : renderer.apply((C) option);
 				return super.getListCellRendererComponent(list, text, index, isSelected, cellHasFocus);
 			}
 		});

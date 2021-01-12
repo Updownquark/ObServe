@@ -228,6 +228,8 @@ public class CategoryRenderStrategy<R, C> {
 		void mouseEntered(ModelCell<? extends R, ? extends C> cell, MouseEvent e);
 
 		void mouseExited(ModelCell<? extends R, ? extends C> cell, MouseEvent e);
+
+		void mouseMoved(ModelCell<? extends R, ? extends C> cell, MouseEvent e);
 	}
 
 	/**
@@ -252,6 +254,10 @@ public class CategoryRenderStrategy<R, C> {
 
 		@Override
 		public void mouseExited(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {}
+
+		@Override
+		public void mouseMoved(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {
+		}
 	}
 
 	public interface CategoryKeyListener<R, C> {
@@ -294,6 +300,10 @@ public class CategoryRenderStrategy<R, C> {
 
 		@Override
 		public final void mouseExited(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {}
+
+		@Override
+		public final void mouseMoved(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {
+		}
 	}
 
 	public class AddRowRenderer extends CategoryRenderStrategy<R, C> {
