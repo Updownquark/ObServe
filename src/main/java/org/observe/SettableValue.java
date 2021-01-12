@@ -334,6 +334,25 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	}
 
 	/**
+	 * Same as {@link #asFieldEditor(TypeToken, Function, BiConsumer, Consumer)}, but accepts a Class type
+	 *
+	 * @param fieldType The type of the field
+	 * @param getter The getter for the field
+	 * @param setter The setter for the field
+	 * @param options Options for the returned value--may be null
+	 * @return The field value
+	 */
+	default <F> SettableValue<F> asFieldEditor(Class<F> fieldType, Function<? super T, ? extends F> getter,
+		BiConsumer<? super T, ? super F> setter, Consumer<XformOptions> options) {
+		return transformReversible(fieldType, tx -> {
+			tx.nullToNull(true);
+			if (options != null)
+				options.accept(tx);
+			return tx.map(getter).modifySource(setter);
+		});
+	}
+
+	/**
 	 * Composes this settable value with another observable value
 	 *
 	 * @param <U> The type of the value to compose this value with
