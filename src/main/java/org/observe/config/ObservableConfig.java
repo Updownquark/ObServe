@@ -11,7 +11,6 @@ import java.lang.ref.WeakReference;
 import java.text.ParseException;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collections;
 import java.util.HashMap;
@@ -345,12 +344,12 @@ public class ObservableConfig implements Transactable, Stamped {
 		public final CollectionChangeType changeType;
 		public final boolean isMove;
 		public final ObservableConfig eventTarget;
-		public final List<ObservableConfig> relativePath;
+		public final BetterList<ObservableConfig> relativePath;
 		public final String oldName;
 		public final String oldValue;
 
 		public ObservableConfigEvent(CollectionChangeType changeType, boolean move, ObservableConfig eventTarget, String oldName,
-			String oldValue, List<ObservableConfig> relativePath, Object cause) {
+			String oldValue, BetterList<ObservableConfig> relativePath, Object cause) {
 			super(cause);
 			this.changeType = changeType;
 			this.isMove = move;
@@ -647,6 +646,7 @@ public class ObservableConfig implements Transactable, Stamped {
 		private ObservableConfigFormatSet theFormatSet;
 		private Observable<?> theUntil;
 		private ObservableConfigPath thePath;
+		private ObservableConfigParseSession theSession;
 
 		ObservableConfigValueBuilder(TypeToken<T> type) {
 			theType = type;
@@ -694,6 +694,17 @@ public class ObservableConfig implements Transactable, Stamped {
 			return this;
 		}
 
+		public ObservableConfigValueBuilder<T> withSession(ObservableConfigParseSession session) {
+			theSession = session;
+			return this;
+		}
+
+		public ObservableConfigParseSession getSession() {
+			if (theSession == null)
+				theSession = new ObservableConfigParseSession();
+			return theSession;
+		}
+
 		protected ObservableConfigFormatSet getFormatSet() {
 			if (theFormatSet == null)
 				theFormatSet = new ObservableConfigFormatSet();
@@ -739,7 +750,7 @@ public class ObservableConfig implements Transactable, Stamped {
 		}
 
 		protected ObservableConfigFormat.ObservableConfigParseContext<T> getParseContext(Observable<?> until, Observable<?> findRefs) {
-			return ObservableConfigFormat.ctxFor(new ObservableConfigParseSession(), ObservableConfig.this, getDescendant(false),
+			return ObservableConfigFormat.ctxFor(getSession(), ObservableConfig.this, getDescendant(false),
 				createDescendant(false)::get, null, until, null, findRefs, null);
 		}
 
@@ -777,13 +788,13 @@ public class ObservableConfig implements Transactable, Stamped {
 
 		public SettableValue<T> buildValue(Consumer<SettableValue<T>> preReturnGet) {
 			return build(
-				findRefs -> new ObservableConfigTransform.ObservableConfigValue<>(new ObservableConfigParseSession(), ObservableConfig.this,
+				findRefs -> new ObservableConfigTransform.ObservableConfigValue<>(getSession(), ObservableConfig.this,
 					getDescendant(false), createDescendant(false)::get, getUntil(), theType, getFormat(), true, findRefs),
 				preReturnGet);
 		}
 
 		public ObservableCollection<T> buildCollection(Consumer<ObservableCollection<T>> preReturnGet) {
-			return build(findRefs -> new ObservableConfigTransform.ObservableConfigValues<>(new ObservableConfigParseSession(),
+			return build(findRefs -> new ObservableConfigTransform.ObservableConfigValues<>(getSession(),
 				ObservableConfig.this, //
 				getDescendant(thePath != null), createDescendant(thePath != null)::get, theType, getFormat(), getChildName(), getUntil(),
 				true, findRefs), preReturnGet);
@@ -793,7 +804,7 @@ public class ObservableConfig implements Transactable, Stamped {
 			ObservableConfigFormat<T> entityFormat = getFormat();
 			if (!(entityFormat instanceof ObservableConfigFormat.EntityConfigFormat))
 				throw new IllegalStateException("Format for " + theType + " is not entity-enabled");
-			return build(findRefs -> new ObservableConfigTransform.ObservableConfigEntityValues<>(new ObservableConfigParseSession(),
+			return build(findRefs -> new ObservableConfigTransform.ObservableConfigEntityValues<>(getSession(),
 				ObservableConfig.this, //
 				getDescendant(thePath != null), createDescendant(thePath != null)::get,
 				(ObservableConfigFormat.EntityConfigFormat<T>) entityFormat, getChildName(), getUntil(), true, findRefs), preReturnGet);
@@ -1024,7 +1035,7 @@ public class ObservableConfig implements Transactable, Stamped {
 				before == null ? null : Objects.requireNonNull(before.theParentContentRef), //
 					first).getElementId();
 		child.initialize(this, el);
-		fire(CollectionChangeType.add, move, Arrays.asList(child), child.getName(), null);
+		fire(CollectionChangeType.add, move, BetterList.of(child), child.getName(), null);
 	}
 
 	public ObservableConfig moveChild(ObservableConfig child, ObservableConfig after, ObservableConfig before, boolean first,
@@ -1050,7 +1061,7 @@ public class ObservableConfig implements Transactable, Stamped {
 		try (Transaction t = lock(true, null)) {
 			String oldName = theName;
 			theName = name;
-			fire(CollectionChangeType.set, false, Collections.emptyList(), oldName, theValue);
+			fire(CollectionChangeType.set, false, BetterList.empty(), oldName, theValue);
 		}
 		return this;
 	}
@@ -1060,14 +1071,14 @@ public class ObservableConfig implements Transactable, Stamped {
 			String oldValue = theValue;
 			theValue = value;
 			fire(CollectionChangeType.set, false, //
-				Collections.emptyList(), theName, oldValue);
+				BetterList.empty(), theName, oldValue);
 		}
 		return this;
 	}
 
 	protected void update() {
 		fire(CollectionChangeType.set, false, //
-			Collections.emptyList(), theName, theValue);
+			BetterList.empty(), theName, theValue);
 	}
 
 	public ObservableConfig set(String path, String value) {
@@ -1143,7 +1154,7 @@ public class ObservableConfig implements Transactable, Stamped {
 			if (!theParentContentRef.isPresent())
 				return;
 			theParent.theContent.mutableElement(theParentContentRef).remove();
-			fire(CollectionChangeType.remove, move, Collections.emptyList(), theName, theValue);
+			fire(CollectionChangeType.remove, move, BetterList.empty(), theName, theValue);
 		}
 		theParent = null;
 		theParentContentRef = null;
@@ -1174,13 +1185,14 @@ public class ObservableConfig implements Transactable, Stamped {
 		return theRootCausable == null ? null : theRootCausable.get();
 	}
 
-	protected void fire(CollectionChangeType eventType, boolean move, List<ObservableConfig> relativePath, String oldName,
+	protected void fire(CollectionChangeType eventType, boolean move, BetterList<ObservableConfig> relativePath, String oldName,
 		String oldValue) {
 		_fire(eventType, move, relativePath, oldName, oldValue, //
 			getCurrentCause());
 	}
 
-	private void _fire(CollectionChangeType eventType, boolean move, List<ObservableConfig> relativePath, String oldName, String oldValue,
+	private void _fire(CollectionChangeType eventType, boolean move, BetterList<ObservableConfig> relativePath, String oldName,
+		String oldValue,
 		Object cause) {
 		theModCount++;
 		if (!theListeners.isEmpty()) {
@@ -1209,12 +1221,12 @@ public class ObservableConfig implements Transactable, Stamped {
 				addToList(this, relativePath), oldName, oldValue);
 	}
 
-	private static List<ObservableConfig> addToList(ObservableConfig c, List<ObservableConfig> list) {
+	private static BetterList<ObservableConfig> addToList(ObservableConfig c, List<ObservableConfig> list) {
 		ObservableConfig[] array = new ObservableConfig[list.size() + 1];
 		array[0] = c;
 		for (int i = 0; i < list.size(); i++)
 			array[i + 1] = list.get(i);
-		return Arrays.asList(array);
+		return BetterList.of(array);
 	}
 
 	private static class InternalObservableConfigListener {

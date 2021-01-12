@@ -1051,7 +1051,7 @@ public interface ObservableConfigFormat<E> {
 									ctx.findReferences(), fv -> field.setter.set(ctx.getPreviousValue(), fv, childChange)));
 						}
 						if (newValue != oldValue)
-							field.setter.set(ctx.getPreviousValue(), newValue, childChange);
+							field.setter.set(ctx.getPreviousValue(), newValue, change);
 						return; // The update does not actually affect the field value
 					}
 					change = change.asFromChild();
