@@ -2484,7 +2484,7 @@ public class PanelPopulation {
 					tabC.add(title);
 					getEditor().setTabComponentAt(t, tabC);
 				}
-				JLabel removeLabel = new JLabel(ObservableSwingUtils.getFixedIcon(null, "/icons/redX.png", 6, 6));
+				JLabel removeLabel = new JLabel(ObservableSwingUtils.getFixedIcon(null, "/icons/redX.png", 8, 8));
 				tabC.add(removeLabel);
 				removeLabel.addMouseListener(new MouseAdapter() {
 					@Override
