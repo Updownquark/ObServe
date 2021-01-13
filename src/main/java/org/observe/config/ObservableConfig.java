@@ -647,6 +647,7 @@ public class ObservableConfig implements Transactable, Stamped {
 		private Observable<?> theUntil;
 		private ObservableConfigPath thePath;
 		private ObservableConfigParseSession theSession;
+		private Observable<?> theBuiltNotifier;
 
 		ObservableConfigValueBuilder(TypeToken<T> type) {
 			theType = type;
@@ -696,6 +697,16 @@ public class ObservableConfig implements Transactable, Stamped {
 
 		public ObservableConfigValueBuilder<T> withSession(ObservableConfigParseSession session) {
 			theSession = session;
+			return this;
+		}
+
+		/**
+		 * @param built An observable that must fire after this and all related structures have been built. This will signal reference
+		 *        formats to retrieve their values
+		 * @return This builder
+		 */
+		public ObservableConfigValueBuilder<T> withBuiltNotifier(Observable<?> built) {
+			theBuiltNotifier = built;
 			return this;
 		}
 
@@ -755,11 +766,17 @@ public class ObservableConfig implements Transactable, Stamped {
 		}
 
 		protected <T, E extends Exception> T build(ExFunction<Observable<?>, T, E> build, Consumer<T> preRefs) throws E {
-			SimpleObservable<Void> findRefs = new SimpleObservable<>();
-			T built = build.apply(findRefs);
+			Observable<?> builtNotifier = theBuiltNotifier;
+			SimpleObservable<Void> findRefs;
+			if (builtNotifier == null) {
+				builtNotifier = findRefs = new SimpleObservable<>();
+			} else
+				findRefs = null;
+			T built = build.apply(builtNotifier);
 			if (preRefs != null)
 				preRefs.accept(built);
-			findRefs.onNext(null);
+			if (findRefs != null)
+				findRefs.onNext(null);
 			return built;
 		}
 

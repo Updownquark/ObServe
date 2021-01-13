@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiFunction;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -290,10 +291,13 @@ public interface ObservableConfigFormat<E> {
 		}
 
 		private final QuickMap<String, FormattedField<? super T, ?>> theFields;
+		private final BooleanSupplier isRetrieverReady;
 		private final Function<QuickMap<String, Object>, ? extends T> theRetriever;
 
-		ReferenceFormat(QuickMap<String, FormattedField<? super T, ?>> fields, Function<QuickMap<String, Object>, ? extends T> retriever) {
+		ReferenceFormat(QuickMap<String, FormattedField<? super T, ?>> fields, Function<QuickMap<String, Object>, ? extends T> retriever,
+			BooleanSupplier retrieverReady) {
 			theFields = fields;
+			isRetrieverReady = retrieverReady;
 			theRetriever = retriever;
 		}
 
@@ -357,6 +361,10 @@ public interface ObservableConfigFormat<E> {
 		}
 
 		private void parse(ObservableConfigParseContext<T> ctx, ObservableConfig c, DelayedExecution<T> exec) {
+			if (isRetrieverReady != null && !isRetrieverReady.getAsBoolean()) {
+				exec.found = false;
+				return;
+			}
 			QuickMap<String, Object> fieldValues = theFields.keySet().createMap();
 			T previousValue = ctx.getPreviousValue();
 			QuickMap<String, Object> preFieldValues = previousValue == null ? null : theFields.keySet().createMap();
@@ -418,6 +426,7 @@ public interface ObservableConfigFormat<E> {
 		private final Function<QuickMap<String, Object>, ? extends T> theRetriever;
 		private final Function<QuickMap<String, Object>, ? extends Iterable<? extends T>> theMultiRetriever;
 		private final Supplier<? extends T> theRetreiverDefault;
+		private BooleanSupplier isRetrieverReady;
 		private final Map<String, FormattedField<? super T, ?>> theFields;
 
 		ReferenceFormatBuilder(Function<QuickMap<String, Object>, ? extends T> retriever) {
@@ -441,6 +450,11 @@ public interface ObservableConfigFormat<E> {
 			return this;
 		}
 
+		public ReferenceFormatBuilder<T> withRetrieverReady(BooleanSupplier retrieverReady) {
+			isRetrieverReady = retrieverReady;
+			return this;
+		}
+
 		public ReferenceFormat<T> build() {
 			QuickMap<String, FormattedField<? super T, ?>> fields = QuickMap.of(theFields, StringUtils.DISTINCT_NUMBER_TOLERANT)
 				.unmodifiable();
@@ -450,6 +464,7 @@ public interface ObservableConfigFormat<E> {
 			else {
 				retriever = LambdaUtils.printableFn(fieldValues -> {
 					Iterable<? extends T> retrieved = theMultiRetriever.apply(fieldValues);
+					// TODO Null check
 					for (T value : retrieved) {
 						boolean matches = true;
 						for (int f = 0; matches && f < fields.keySize(); f++) {
@@ -463,7 +478,7 @@ public interface ObservableConfigFormat<E> {
 					return theRetreiverDefault.get();
 				}, theMultiRetriever::toString, theMultiRetriever);
 			}
-			return new ReferenceFormat<>(fields, retriever);
+			return new ReferenceFormat<>(fields, retriever, isRetrieverReady);
 		}
 	}
 
