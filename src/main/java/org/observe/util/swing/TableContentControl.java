@@ -11,7 +11,6 @@ import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
-import java.util.TimeZone;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
@@ -243,7 +242,7 @@ public interface TableContentControl {
 		}
 		ParsedTime time;
 		try {
-			time = TimeUtils.parseFlexFormatTime(filterText, TimeZone.getDefault(), false, false);
+			time = TimeUtils.parseFlexFormatTime(filterText, false, false, null);
 		} catch (ParseException e) {
 			throw new IllegalStateException(e); // Shouldn't happen
 		}
@@ -254,7 +253,7 @@ public interface TableContentControl {
 				ParsedTime maxTime;
 				int maxStart = time.toString().length() + 1;
 				try {
-					maxTime = TimeUtils.parseFlexFormatTime(filterText.substring(maxStart), TimeZone.getDefault(), true, false);
+					maxTime = TimeUtils.parseFlexFormatTime(filterText.substring(maxStart), true, false, null);
 				} catch (ParseException e) {
 					throw new IllegalStateException(e); // Shouldn't happen
 				}
@@ -854,7 +853,7 @@ public interface TableContentControl {
 				if (Character.isDigit(text.charAt(i))) {
 					TimeUtils.ParsedTime time;
 					try {
-						time = TimeUtils.parseFlexFormatTime(text.subSequence(i, text.length()), TimeZone.getDefault(), false, false);
+						time = TimeUtils.parseFlexFormatTime(text.subSequence(i, text.length()), false, false, null);
 					} catch (ParseException e) {
 						throw new IllegalStateException();
 					}
@@ -905,7 +904,7 @@ public interface TableContentControl {
 				if (Character.isDigit(text.charAt(i))) {
 					TimeUtils.ParsedTime time;
 					try {
-						time = TimeUtils.parseFlexFormatTime(text.subSequence(i, text.length()), TimeZone.getDefault(), false, false);
+						time = TimeUtils.parseFlexFormatTime(text.subSequence(i, text.length()), false, false, null);
 					} catch (ParseException e) {
 						throw new IllegalStateException();
 					}

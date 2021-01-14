@@ -375,8 +375,18 @@ public class ObservableTextEditor<E> {
 		isInternallyChanging = true;
 		try {
 			theValue.set(parsed, cause);
-			if (maybeReformat && reformatOnCommit)
-				setText(theFormat.format(parsed));
+			if (maybeReformat && reformatOnCommit) {
+				int selStart = theComponent.getSelectionStart();
+				int selEnd = theComponent.getSelectionStart();
+				int length = theComponent.getText().length();
+				String newText = theFormat.format(parsed);
+				setText(newText);
+				if (newText.length() == length) {
+					// Preserve selection
+					theComponent.setSelectionStart(selStart);
+					theComponent.setSelectionEnd(selEnd);
+				}
+			}
 			return true;
 		} catch (IllegalArgumentException | UnsupportedOperationException e) {
 			setErrorState(e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName(), (String) null);

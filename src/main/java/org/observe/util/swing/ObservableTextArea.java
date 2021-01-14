@@ -42,7 +42,7 @@ public class ObservableTextArea<E> extends JEditorPane {
 				ObservableTextArea.this.setText(text);
 				return this;
 			}
-		};
+		}.setSelectAllOnFocus(false);
 		addFocusListener(new FocusAdapter() {
 			@Override
 			public void focusGained(FocusEvent e) {
