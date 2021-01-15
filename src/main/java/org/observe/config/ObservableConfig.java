@@ -1164,15 +1164,15 @@ public class ObservableConfig implements Transactable, Stamped {
 	}
 
 	private void _remove(boolean move) {
-		Map<?, ?> parsedItems = theParsedItems;
-		if (parsedItems != null && !move)
-			parsedItems.clear();
 		try (Transaction t = lock(true, null)) {
 			if (!theParentContentRef.isPresent())
 				return;
 			theParent.theContent.mutableElement(theParentContentRef).remove();
 			fire(CollectionChangeType.remove, move, BetterList.empty(), theName, theValue);
 		}
+		Map<?, ?> parsedItems = theParsedItems;
+		if (parsedItems != null && !move)
+			parsedItems.clear();
 		theParent = null;
 		theParentContentRef = null;
 	}
