@@ -569,6 +569,17 @@ public interface ObservableConfigFormat<E> {
 	}
 
 	public interface EntityConfigFormat<E> extends ObservableConfigFormat<E> {
+		Object ENTITY_CONFIG_KEY = new Object() {
+			@Override
+			public String toString() {
+				return "EntityConfig";
+			}
+		};
+
+		static ObservableConfig getConfig(Object entity) {
+			return (ObservableConfig) EntityReflector.getReflector(entity).getAssociated(entity, ENTITY_CONFIG_KEY);
+		}
+
 		EntityConfiguredValueType<E> getEntityType();
 
 		<F> ObservableConfigFormat<F> getFieldFormat(ConfiguredValueField<E, F> field);
@@ -1344,6 +1355,7 @@ public interface ObservableConfigFormat<E> {
 				}
 			});
 			created[0] = instance;
+			entityType.associate(instance, EntityConfigFormat.ENTITY_CONFIG_KEY, config);
 			entityType.associate(instance, "until", until);
 			return instance;
 		}
