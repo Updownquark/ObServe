@@ -2356,6 +2356,16 @@ public class EntityReflector<E> {
 		return ((ProxyMethodHandler) Proxy.getInvocationHandler(proxy)).getAssociated(key);
 	}
 
+	/**
+	 * @param <E> The type of the entity
+	 * @param proxy The entity instance
+	 * @return The reflector managing the entity
+	 */
+	public static <E> EntityReflector<E> getReflector(E proxy) {
+		EntityReflector<E>.ProxyMethodHandler handler = getHandler(proxy);
+		return handler.getReflector();
+	}
+
 	static <E> EntityReflector<E>.ProxyMethodHandler getHandler(E proxy) {
 		return (EntityReflector<E>.ProxyMethodHandler) Proxy.getInvocationHandler(proxy);
 	}
