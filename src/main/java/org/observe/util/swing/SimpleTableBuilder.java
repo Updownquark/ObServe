@@ -98,6 +98,10 @@ implements TableBuilder<R, P> {
 		isScrollable = true;
 	}
 
+	protected ObservableCollection<R> getActualRows() {
+		return ((ObservableTableModel<R>) getEditor().getModel()).getRows();
+	}
+
 	@Override
 	public String getItemName() {
 		if (theItemName == null)
@@ -213,16 +217,18 @@ implements TableBuilder<R, P> {
 			if (el == null) {
 				el = theRows.addElement(value, false);
 				if (el == null) {
-					// Couldn't add value? Not sure what do to here, but for now we'll tell the dev to fix it.
-					System.err.println("Could not add value " + value);
-					return;
+					return; // Maybe a product of inability to add the value
 				}
 			}
 			// Assuming here that the action is only called on the EDT,
 			// meaning the above add operation has now been propagated to the list model and the selection model
 			// It also means that the row model is sync'd with the collection, so we can use the index from the collection here
-			int index = theRows.getElementsBefore(el.getElementId());
-			getEditor().getSelectionModel().setSelectionInterval(index, index);
+			ObservableCollection<R> rows = getActualRows();
+			CollectionElement<R> displayedRow = rows.getElementsBySource(el.getElementId(), theRows).peekFirst();
+			if (displayedRow != null) {
+				int index = rows.getElementsBefore(displayedRow.getElementId());
+				getEditor().getSelectionModel().setSelectionInterval(index, index);
+			}
 		}, action -> {
 			action.allowForMultiple(true).allowForEmpty(true).allowForAnyEnabled(true)//
 			.modifyButton(button -> button.withIcon(PanelPopulation.getAddIcon(16)).withTooltip("Add new " + getItemName()));
@@ -308,8 +314,12 @@ implements TableBuilder<R, P> {
 				copied = theRows.addElement(copy, toCopy.getElementId(), null, true);
 			else
 				copied = theRows.addElement(copy, false);
-			if (copied != null)
-				newSelection.add(theRows.getElementsBefore(copied.getElementId()));
+			if (copied != null) {
+				ObservableCollection<R> rows = getActualRows();
+				CollectionElement<R> rowEl = rows.getElementsBySource(copied.getElementId(), theRows).peekFirst();
+				if (rowEl != null)
+					newSelection.add(rows.getElementsBefore(rowEl.getElementId()));
+			}
 		}
 		selModel.setValueIsAdjusting(true);
 		selModel.clearSelection();
