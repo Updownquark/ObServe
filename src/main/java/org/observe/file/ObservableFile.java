@@ -3,6 +3,7 @@ package org.observe.file;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.ref.WeakReference;
 import java.text.ParseException;
 import java.time.Duration;
 import java.util.List;
@@ -14,6 +15,7 @@ import org.observe.collect.DataControlledCollection;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionBuilder;
 import org.observe.collect.ObservableCollectionBuilder.DataControlAutoRefresher;
+import org.observe.util.TypeTokens;
 import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.StampedLockingStrategy;
 import org.qommons.ex.ExConsumer;
@@ -93,7 +95,7 @@ public class ObservableFile implements BetterFile {
 			synchronized (ObservableFile.class) {
 				if (DEFAULT_FILE_REFRESHER == null) {
 					DEFAULT_FILE_REFRESHER = new ObservableFileSet(//
-						new ObservableCollectionBuilder.DefaultDataControlAutoRefresher(Duration.ofSeconds(1)).setAdaptive(10), null);
+						new ObservableCollectionBuilder.DefaultDataControlAutoRefresher(Duration.ofSeconds(1)), null);
 					DEFAULT_FILE_REFRESHER.theLocking = new StampedLockingStrategy(DEFAULT_FILE_REFRESHER);
 				}
 			}
@@ -114,7 +116,7 @@ public class ObservableFile implements BetterFile {
 	private final ObservableFileSet theFileSet;
 	private ObservableFile theParent;
 	private final BetterFile theFile;
-	private ObservableCollection<ObservableFile> theContents;
+	private WeakReference<DataControlledCollection<? extends ObservableFile, ?>> theContents;
 
 	private volatile long theCachedLastModified;
 	private volatile long theCachedSize;
@@ -123,6 +125,8 @@ public class ObservableFile implements BetterFile {
 		theFileSet = fileSet;
 		theParent = parent;
 		theFile = file;
+		theCachedLastModified = getLastModified();
+		theCachedSize = length();
 	}
 
 	boolean checkChanged() {
@@ -205,26 +209,26 @@ public class ObservableFile implements BetterFile {
 	}
 
 	@Override
-	public ObservableCollection<? extends ObservableFile> listFiles() {
+	public DataControlledCollection<? extends ObservableFile, ?> listFiles() {
 		if (!isDirectory()) {
-			return ObservableCollection.of(ObservableFile.class);
+			return DataControlledCollection.empty(TypeTokens.get().of(ObservableFile.class));
 		}
-		if (theContents == null) {
+		DataControlledCollection<? extends ObservableFile, ?> contents = theContents == null ? null : theContents.get();
+		if (contents == null) {
 			synchronized (this) {
-				if (theContents == null) {
-					theContents = ObservableCollection.build(ObservableFile.class).withLocker(theFileSet.getLocking())
+				contents = theContents == null ? null : theContents.get();
+				if (contents == null) {
+					contents = ObservableCollection.build(ObservableFile.class).withLocker(theFileSet.getLocking())
 						.withDescription("Directory content of " + getPath())//
 						.withData(() -> theFile.listFiles()).refreshOnAccess(false).autoRefreshWith(theFileSet.getRefresher())
 						.withEquals((f1, f2) -> f1.getName().equals(f2.getName())).withMaxRefreshFrequency(5)//
-						.build(f -> {
-							ObservableFile of = new ObservableFile(theFileSet, this, f);
-							of.checkChanged();
-							return of;
-						}, adjustment -> adjustment.commonUsesLeft((of, f) -> of.checkChanged()));
+						.build(f -> new ObservableFile(theFileSet, this, f), //
+							adjustment -> adjustment.commonUsesLeft((of, f) -> of.checkChanged()));
+					theContents = new WeakReference<>(contents);
 				}
 			}
 		}
-		return theContents;
+		return contents;
 	}
 
 	@Override
