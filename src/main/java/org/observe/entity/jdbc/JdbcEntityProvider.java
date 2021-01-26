@@ -1,6 +1,5 @@
 package org.observe.entity.jdbc;
 
-import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
@@ -22,7 +21,6 @@ import java.util.TreeMap;
 import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.observe.config.OperationResult;
@@ -52,9 +50,12 @@ import org.observe.entity.ObservableEntityProvider;
 import org.observe.entity.ObservableEntityType;
 import org.observe.entity.PreparedCreator;
 import org.observe.entity.PreparedDeletion;
-import org.observe.entity.PreparedOperation;
 import org.observe.entity.PreparedQuery;
 import org.observe.entity.PreparedUpdate;
+import org.observe.entity.jdbc.JdbcEntityProvider.EntryColumn;
+import org.observe.entity.jdbc.JdbcEntityProvider.ReferenceColumn;
+import org.observe.entity.jdbc.JdbcEntityProvider.SerialColumn;
+import org.observe.entity.jdbc.JdbcEntityProvider.TableNaming;
 import org.observe.entity.jdbc.JdbcEntitySupport.JdbcColumn;
 import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
@@ -80,46 +81,30 @@ import com.google.common.reflect.TypeToken;
 
 /** An observable entity provider implementation backed by a JDBC-accessed relational database */
 public class JdbcEntityProvider implements ObservableEntityProvider {
-	public interface SqlAction<T> {
-		T execute(Statement stmt, BooleanSupplier canceled) throws SQLException, EntityOperationException;
-	}
-
-	public interface PreparedSqlAction<T> {
-		T execute(PreparedStatement stmt, QuickMap<String, Object> variableValues, BooleanSupplier canceled)
-			throws SQLException, EntityOperationException;
-	}
-
-	public interface PreparedSqlOperation<E, T> {
-		T execute(PreparedOperation<E> operation) throws SQLException, EntityOperationException;
-
-		OperationResult<T> executeAsync(PreparedOperation<E> operation, Function<SQLException, EntityOperationException> sqlError);
-
-		void dispose();
-	}
-
-	public interface ConnectionPool {
-		<T> T connect(SqlAction<T> action) throws SQLException, EntityOperationException;
-
-		<T> OperationResult<T> connectAsync(SqlAction<T> action, Function<SQLException, EntityOperationException> sqlError);
-
-		<E, T> PreparedSqlOperation<E, T> prepare(String sql, PreparedSqlAction<T> action) throws SQLException;
-	}
-
 	static final BooleanSupplier ALWAYS_FALSE = () -> false;
 
 	protected static class TableNaming<E> {
 		private final ObservableEntityType<E> theType;
+		private final List<TableNaming<? super E>> theSupers;
+		private final List<TableNaming<? extends E>> theExtensions;
 		private final String theTableName;
 		private final Column<?>[] theColumns;
 		private final QuickMap<String, Integer> theFieldsByColumn;
 
 		protected TableNaming(ObservableEntityType<E> type, String tableName, Column<?>[] columns) {
 			theType = type;
+			theSupers = new ArrayList<>(type.getSupers().size());
+			theExtensions = new ArrayList<>(3);
 			theTableName = tableName;
 			theColumns = columns;
 			theFieldsByColumn = QuickSet.of(Arrays.stream(theColumns).map(Column::getName).collect(Collectors.toList())).createMap();
 			for (int c = 0; c < theColumns.length; c++)
 				theFieldsByColumn.put(theColumns[c].getName(), c);
+		}
+
+		void addSuper(TableNaming<?> superNaming) {
+			theSupers.add((TableNaming<? super E>) superNaming);
+			((TableNaming<? super E>) superNaming).theExtensions.add(this);
 		}
 
 		protected ObservableEntityType<E> getType() {
@@ -131,6 +116,9 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 		}
 
 		protected Column<?> getColumn(int fieldIndex) {
+			if (theColumns[fieldIndex] == null)
+				throw new IllegalArgumentException(
+					"Column[" + fieldIndex + "] (" + theType.getFields().get(fieldIndex).getName() + ") is inherited");
 			return theColumns[fieldIndex];
 		}
 
@@ -140,6 +128,18 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 
 		public <F> Column<F> getColumn(ObservableEntityFieldType<E, F> field) {
 			return (Column<F>) theColumns[field.getIndex()];
+		}
+
+		public TableNaming<? super E> getSuper(int superIndex) {
+			return theSupers.get(superIndex);
+		}
+
+		public int getExtensionCount() {
+			return theExtensions.size();
+		}
+
+		public TableNaming<? extends E> getExtension(int index) {
+			return theExtensions.get(index);
 		}
 
 		@Override
@@ -431,6 +431,8 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 			}
 			for (ObservableEntityType<?> type : entitySet.getEntityTypes()) {
 				TableNaming<?> naming = theTableNaming.get(type.getName());
+				for (ObservableEntityType<?> superType : type.getSupers())
+					naming.addSuper(theTableNaming.get(superType.getName()));
 				createTableLinks(type, naming);
 			}
 		}
@@ -618,7 +620,7 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 				try (ResultSet rs = stmt.getGeneratedKeys()) {
 					if (!rs.next())
 						throw new EntityOperationException("No generated key set?");
-					entity = buildEntity(theType, rs, theNaming, Collections.emptyMap());
+					entity = buildEntity(theType, rs, theNaming, false, Collections.emptyMap());
 					if (rs.next())
 						System.err.println("Multiple generated key sets?");
 				}
@@ -693,12 +695,18 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 
 		CollectionQueryAction(EntityQuery<E> query) {
 			theQuery = query;
-			theNaming = (TableNaming<E>) theTableNaming.get(query.getEntityType().getName());
+			ObservableEntityType<E> type = query.getEntityType();
+			theNaming = (TableNaming<E>) theTableNaming.get(type.getName());
 			StringBuilder sql = new StringBuilder();
-			sql.append("SELECT * FROM ");
-			if (theSchemaName != null)
-				sql.append(theSchemaName).append('.');
-			sql.append(theNaming.getTableName());
+			sql.append("SELECT ");
+			// if (type.getSupers().isEmpty() && theNaming.getExtensionCount() == 0) {
+			sql.append('*');
+			// } else {
+			// boolean[] first = new boolean[] { true };
+			// addFields(theNaming, sql, first, true, false);
+			// }
+			sql.append(" FROM ");
+			addTableName(theNaming, sql, null);
 			theJoins = new HashMap<>();
 			if (query.getSelection() instanceof EntityCondition.All) {//
 			} else {
@@ -709,13 +717,56 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 			theQuerySql = sql.toString();
 		}
 
+		private <E2> void addTableName(TableNaming<E2> naming, StringBuilder sql, Boolean fromBelow) {
+			if (fromBelow == null) { // First table
+			} else if (fromBelow) {// Super table
+				sql.append(" INNER JOIN ");
+			} else {
+				sql.append(" LEFT JOIN ");
+			}
+			if (theSchemaName != null)
+				sql.append(theSchemaName).append('.');
+			sql.append(naming.getTableName()).append(" AS ").append(naming.getType().getName());
+			if (!Boolean.TRUE.equals(fromBelow)) {
+				for (int s = 0; s < naming.getType().getSupers().size(); s++)
+					addTableName(naming.getSuper(s), sql, true);
+			}
+			if (!Boolean.FALSE.equals(fromBelow)) {
+				for (int s = 0; s < naming.getExtensionCount(); s++)
+					addTableName(naming.getExtension(s), sql, false);
+			}
+		}
+
+		private <E2> void addFields(TableNaming<E2> naming, StringBuilder sql, boolean[] first, boolean withSupers, boolean withSubs) {
+			ObservableEntityType<E2> type = naming.getType();
+			for (int c = 0; c < type.getFields().keySize(); c++) {
+				ObservableEntityFieldType<E2, ?> field = type.getFields().get(c);
+				if (field.getIdIndex() < 0 && !field.getOverrides().isEmpty())
+					continue;
+				else if (!(naming.getColumn(c) instanceof SerialColumn))
+					continue;
+				((SerialColumn<?>) naming.getColumn(c)).forEachColumn(col -> {
+					if (first[0])
+						first[0] = false;
+					else
+						sql.append(", ");
+					sql.append(col.getName()).append(" AS ").append(type.getName()).append('.').append(col.getName());
+				});
+			}
+			if (withSupers) {
+				for (int s = 0; s < type.getSupers().size(); s++)
+					addFields(naming.getSuper(s), sql, first, true, false);
+			}
+		}
+
 		@Override
 		public Iterable<SimpleEntity<? extends E>> execute(Statement stmt, BooleanSupplier canceled)
 			throws SQLException, EntityOperationException {
 			List<SimpleEntity<? extends E>> entities = new ArrayList<>();
 			try (ResultSet rs = stmt.executeQuery(theQuerySql)) {
 				while (rs.next())
-					entities.add(buildEntity(theQuery.getEntityType(), rs, theNaming, theJoins));
+					entities.add(buildEntity(theQuery.getEntityType(), rs, theNaming,
+						!theNaming.getType().getSupers().isEmpty() || theNaming.getExtensionCount() > 0, theJoins));
 			}
 			return entities;
 		}
@@ -1281,7 +1332,6 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 		}
 
 		private <E> Fulfillment<E> satisfy(EntityLoadRequest<E> loadRequest, Statement stmt) throws SQLException {
-			// TODO Support non-serial columns
 			TableNaming<E> naming = (TableNaming<E>) theTableNaming.get(loadRequest.getType().getName());
 			StringBuilder sql = new StringBuilder();
 			sql.append("SELECT ");
@@ -1332,7 +1382,7 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 
 				try (ResultSet rs = stmt.executeQuery(sql.toString())) {
 					while (rs.next()) {
-						SimpleEntity<E> entity = buildEntity(loadRequest.getType(), rs, naming, joins);
+						SimpleEntity<E> entity = buildEntity(loadRequest.getType(), rs, naming, false, joins);
 						CollectionElement<EntityIdentity<E>> requested = loadRequest.getEntities().getElement(entity.getIdentity(), true);
 						if (requested == null)
 							continue;
@@ -1344,6 +1394,7 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 					results[i] = new SimpleEntity<>(loadRequest.getEntities().get(i));
 			}
 			// TODO Check for missing results and do a secondary, identity-based query for the missing ones
+			// Non-serial fields
 			for (EntityValueAccess<? extends E, ?> field : loadRequest.getFields()) {
 				if (!(field instanceof ObservableEntityFieldType)
 					|| naming.getColumn((ObservableEntityFieldType<E, ?>) field) instanceof SerialColumn)
@@ -1564,9 +1615,12 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 
 	protected <E> TableNaming<E> generateNaming(ObservableEntityType<E> type) {
 		Column<?>[] columns = new Column[type.getFields().keySize()];
-		for (int c = 0; c < columns.length; c++)
+		for (int c = 0; c < columns.length; c++) {
+			if (type.getFields().get(c).getIdIndex() < 0 && !type.getFields().get(c).getOverrides().isEmpty())
+				continue;
 			columns[c] = generateColumn(type.getFields().get(c).getName(), type.getFields().get(c), type.getFields().get(c).getFieldType(),
 				false);
+		}
 		return new TableNaming<>(type, sqlIfyName(type.getName()), columns);
 	}
 
@@ -1616,7 +1670,7 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 		return ((SerialColumn<F>) naming.getColumn(field)).deserialize(rs, column + 1);
 	}
 
-	private <E> SimpleEntity<E> buildEntity(ObservableEntityType<E> type, ResultSet results, TableNaming<E> naming,
+	private <E> SimpleEntity<E> buildEntity(ObservableEntityType<E> type, ResultSet results, TableNaming<E> naming, boolean qualified,
 		Map<String, Join<?, ?, ?>> joins) throws SQLException {
 		EntityIdentity.Builder<E> idBuilder = type.buildId();
 		ResultSetMetaData rsmd = results.getMetaData();

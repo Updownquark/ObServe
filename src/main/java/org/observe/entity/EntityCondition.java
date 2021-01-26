@@ -113,7 +113,7 @@ public abstract class EntityCondition<E> implements Comparable<EntityCondition<E
 	 * @param entity The entity to test
 	 * @param varValues The values of all variables in this condition
 	 * @return null if this condition matches the given entity with the given variable values, or the most specific condition that is
-	 *         voilated
+	 *         violated
 	 */
 	public abstract EntityCondition<E> test(ObservableEntity<? extends E> entity, QuickMap<String, Object> varValues);
 

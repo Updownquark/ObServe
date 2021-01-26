@@ -16,7 +16,7 @@ import org.qommons.threading.ElasticExecutor;
 import org.qommons.threading.ElasticExecutor.TaskExecutor;
 import org.qommons.tree.BetterTreeList;
 
-public class DefaultConnectionPool implements JdbcEntityProvider.ConnectionPool {
+public class DefaultConnectionPool implements ConnectionPool {
 	private class SynchronousConnection {
 		final CollectionElement<Connection> connection;
 

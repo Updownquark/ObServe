@@ -681,7 +681,7 @@ public class JdbcEntitySupport {
 		builder.supportColumnType(TypeTokens.get().BOOLEAN, JdbcTypeSupport.BOOLEAN);
 		builder.supportColumnType(TypeTokens.get().of(Instant.class), JdbcTypeSupport.INSTANT);
 		builder.supportColumnType(TypeTokens.get().of(Duration.class), JdbcTypeSupport.DURATION);
-		builder.supportColumnType(TypeTokens.get().keyFor(Collection.class).parameterized(), JdbcTypeSupport.COLLECTION);
+		builder.supportColumnType(TypeTokens.get().keyFor(Collection.class).wildCard(), JdbcTypeSupport.COLLECTION);
 
 		DEFAULT = builder;
 	}
