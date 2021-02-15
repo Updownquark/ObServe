@@ -2685,7 +2685,7 @@ public final class ObservableCollectionImpl {
 		public ActiveDerivedCollection(ActiveCollectionManager<?, ?, T> flow, Observable<?> until) {
 			theFlow = flow;
 			theDerivedElements = new BetterTreeSet<>(false, (e1, e2) -> e1.element.compareTo(e2.element));
-			theListeners = new ListenerList<>(null);
+			theListeners = new ListenerList<>("Reentrancy not allowed");
 			theListenerCount = new AtomicInteger();
 			theEquivalence = flow.equivalence();
 			theModCount = new AtomicLong();
@@ -2906,6 +2906,8 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public MutableCollectionElement<T> mutableElement(ElementId id) {
+			if (id == null)
+				throw new NullPointerException();
 			DerivedElementHolder<T> el = (DerivedElementHolder<T>) id;
 			class DerivedMutableCollectionElement implements MutableCollectionElement<T> {
 				@Override
@@ -3848,7 +3850,7 @@ public final class ObservableCollectionImpl {
 
 	/**
 	 * Default {@link DataControlledCollection} implementation
-	 * 
+	 *
 	 * @param <E> The type of the collection values
 	 * @param <V> The type of the source data
 	 */

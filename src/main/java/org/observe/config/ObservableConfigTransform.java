@@ -198,7 +198,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 			theType = type;
 			theFormat = format;
 
-			theListeners = ListenerList.build().allowReentrant().withFastSize(false).build();
+			theListeners = ListenerList.build().withFastSize(false).build();
 			theModifyingValue = new ValueHolder<>();
 
 			init(until == null ? Observable.empty() : until, listen, findRefs);

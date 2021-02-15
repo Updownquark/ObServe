@@ -44,7 +44,8 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 					.withSyncType(ListenerList.SynchronizationType.ELEMENT);
 			} else {
 				theLock = __ -> Transactable.NONE;
-				theListening = theListening.unsafe();
+				// Just 'cause we don't worry about thread safety doesn't mean we can be reentrant
+				theListening = theListening.unsafe().reentrancyError("Reentrancy not allowed");
 			}
 			return this;
 		}

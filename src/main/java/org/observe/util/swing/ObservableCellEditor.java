@@ -545,7 +545,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 
 		public static <C> SettableValue<C> createEditorValue(Function<C, String>[] filter) {
 			return new SimpleSettableValue<>((TypeToken<C>) TypeTokens.get().OBJECT, true, null,
-				opts -> opts.forEachSafe(false).allowReentrant()).filterAccept(v -> {
+				opts -> opts.forEachSafe(false)).filterAccept(v -> {
 					if (filter[0] != null)
 						return filter[0].apply(v);
 					else

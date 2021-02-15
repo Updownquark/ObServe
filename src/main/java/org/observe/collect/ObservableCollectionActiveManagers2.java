@@ -1818,7 +1818,7 @@ public class ObservableCollectionActiveManagers2 {
 								wasPriorityNotified = true;
 								priorityUpdateReceiver.valueUpdated(oldValue, newValue, cause);
 							}
-							if (priorityUpdateReceiver != FlattenedElement.this)
+							if (priorityUpdateReceiver != FlattenedElement.this && theElementId.isPresent())
 								valueUpdated(oldValue, newValue, cause);
 						}
 					}

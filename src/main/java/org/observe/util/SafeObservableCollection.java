@@ -71,7 +71,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 		isOnEventThread = onEventThread;
 		theEventThreadExecutor = eventThreadExec;
 
-		theEventQueue = ListenerList.build().allowReentrant().forEachSafe(false).withInUse(inUse -> {
+		theEventQueue = ListenerList.build().forEachSafe(false).withInUse(inUse -> {
 			if (inUse)
 				theEventThreadExecutor.accept(() -> _flush(true));
 		}).build();
