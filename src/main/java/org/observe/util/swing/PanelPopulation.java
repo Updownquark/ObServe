@@ -191,6 +191,8 @@ public class PanelPopulation {
 	}
 
 	public interface PanelPopulator<C extends Container, P extends PanelPopulator<C, P>> extends ComponentEditor<C, P> {
+		Observable<?> getUntil();
+
 		<F> P addTextField(String fieldName, SettableValue<F> field, Format<F> format,
 			Consumer<FieldEditor<ObservableTextField<F>, ?>> modify);
 
@@ -1226,6 +1228,7 @@ public class PanelPopulation {
 	}
 
 	interface PartialPanelPopulatorImpl<C extends Container, P extends PartialPanelPopulatorImpl<C, P>> extends PanelPopulator<C, P> {
+		@Override
 		Observable<?> getUntil();
 
 		void doAdd(AbstractComponentEditor<?, ?> field, Component fieldLabel, Component postLabel, boolean scrolled);
@@ -1477,7 +1480,8 @@ public class PanelPopulation {
 			theCLS = new RRWLockingStrategy(lock);
 		}
 
-		protected Observable<?> getUntil() {
+		@Override
+		public Observable<?> getUntil() {
 			return theUntil;
 		}
 
