@@ -481,7 +481,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 	}
 
 	/**
-	 * Default implementation of {@link DataControlledCollectionBuilder}
+	 * Default implementation of {@link ObservableCollectionBuilder.DataControlledCollectionBuilder}
 	 *
 	 * @param <E> The type of the values in the collection
 	 * @param <V> The type of the source data
@@ -582,7 +582,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 
 		@Override
 		public DataControlledCollection<E, V> build(CollectionUtils.CollectionSynchronizerE<E, ? super V, ?> synchronizer) {
-			return new ObservableCollectionImpl.DataControlledCollectionImpl<>(theBackingCollection, theBackingData, theAutoRefresh,
+			return new ObservableCollectionImpl.DataControlledCollectionImpl<E, V>(theBackingCollection, theBackingData, theAutoRefresh,
 				isRefreshingOnAccess, theEqualsTester, synchronizer, theAdjustmentOrder)//
 				.setMaxRefreshFrequency(theMaxRefreshFrequency);
 		}
@@ -661,7 +661,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 	}
 
 	/**
-	 * Default implementation of {@link DataControlledSortedCollectionBuilder}
+	 * Default implementation of {@link ObservableCollectionBuilder.DataControlledSortedCollectionBuilder}
 	 *
 	 * @param <E> The type of the values in the collection
 	 * @param <V> The type of the source data
@@ -685,7 +685,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 
 		@Override
 		public DataControlledCollection.Sorted<E, V> build(CollectionSynchronizerE<E, ? super V, ?> synchronizer) {
-			return new ObservableSortedCollectionImpl.DataControlledSortedCollectionImpl<>(getBackingCollection(), getBackingData(),
+			return new ObservableSortedCollectionImpl.DataControlledSortedCollectionImpl<E, V>(getBackingCollection(), getBackingData(),
 				getAutoRefresh(), isRefreshingOnAccess(), getEqualsTester(), synchronizer, getAdjustmentOrder())//
 				.setMaxRefreshFrequency(getMaxRefreshFrequency());
 		}
@@ -721,7 +721,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 	}
 
 	/**
-	 * Default implementation of {@link DataControlledSetBuilder}
+	 * Default implementation of {@link ObservableCollectionBuilder.DataControlledSetBuilder}
 	 *
 	 * @param <E> The type of the values in the set
 	 * @param <V> The type of the source data
@@ -744,7 +744,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 
 		@Override
 		public DataControlledCollection.Set<E, V> build(CollectionSynchronizerE<E, ? super V, ?> synchronizer) {
-			return new ObservableSetImpl.DataControlledSetImpl<>(getBackingCollection(), getBackingData(), getAutoRefresh(),
+			return new ObservableSetImpl.DataControlledSetImpl<E, V>(getBackingCollection(), getBackingData(), getAutoRefresh(),
 				isRefreshingOnAccess(), getEqualsTester(), synchronizer, getAdjustmentOrder())//
 				.setMaxRefreshFrequency(getMaxRefreshFrequency());
 		}
@@ -803,7 +803,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 	}
 
 	/**
-	 * Default implementation of {@link DataControlledSortedSetBuilder}
+	 * Default implementation of {@link ObservableCollectionBuilder.DataControlledSortedSetBuilder}
 	 *
 	 * @param <E> The type of the values in the set
 	 * @param <V> The type of the source data
@@ -827,7 +827,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 
 		@Override
 		public DataControlledCollection.SortedSet<E, V> build(CollectionSynchronizerE<E, ? super V, ?> synchronizer) {
-			return new ObservableSortedSetImpl.DataControlledSortedSetImpl<>(getBackingCollection(), getBackingData(), getAutoRefresh(),
+			return new ObservableSortedSetImpl.DataControlledSortedSetImpl<E, V>(getBackingCollection(), getBackingData(), getAutoRefresh(),
 				isRefreshingOnAccess(), getEqualsTester(), synchronizer, getAdjustmentOrder())//
 				.setMaxRefreshFrequency(getMaxRefreshFrequency());
 		}
