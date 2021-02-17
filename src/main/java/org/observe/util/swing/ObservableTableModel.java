@@ -6,25 +6,20 @@ import java.awt.event.KeyListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionListener;
-import java.beans.PropertyChangeListener;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.function.Function;
 
 import javax.swing.JTable;
 import javax.swing.ListModel;
-import javax.swing.event.ChangeEvent;
 import javax.swing.event.ListDataEvent;
 import javax.swing.event.ListDataListener;
-import javax.swing.event.ListSelectionEvent;
-import javax.swing.event.TableColumnModelEvent;
-import javax.swing.event.TableColumnModelListener;
 import javax.swing.event.TableModelEvent;
 import javax.swing.event.TableModelListener;
 import javax.swing.table.TableCellRenderer;
 import javax.swing.table.TableColumn;
-import javax.swing.table.TableColumnModel;
 import javax.swing.table.TableModel;
 
 import org.observe.Subscription;
@@ -274,40 +269,34 @@ public class ObservableTableModel<R> implements TableModel {
 			for (int c = 0; c < model.getColumnCount(); c++) {
 				CategoryRenderStrategy<? super R, ?> column = model.getColumn(c);
 				TableColumn tblColumn = table.getColumnModel().getColumn(c);
-				hookUp(table, tblColumn, c, column, model, ctx);
+				hookUp(table, tblColumn, column, model, ctx);
 			}
-			TableColumnModelListener colListener = new TableColumnModelListener() {
-				@Override
-				public void columnAdded(TableColumnModelEvent e) {
-					hookUp(table, table.getColumnModel().getColumn(e.getToIndex()), e.getToIndex(), model.getColumn(e.getToIndex()), model,
-						ctx);
-				}
-
-				@Override
-				public void columnRemoved(TableColumnModelEvent e) {}
-
-				@Override
-				public void columnMoved(TableColumnModelEvent e) {}
-
-				@Override
-				public void columnSelectionChanged(ListSelectionEvent e) {}
-
-				@Override
-				public void columnMarginChanged(ChangeEvent e) {}
-			};
-			PropertyChangeListener colModelListener = evt -> {
-				((TableColumnModel) evt.getOldValue()).removeColumnModelListener(colListener);
-				((TableColumnModel) evt.getNewValue()).addColumnModelListener(colListener);
-			};
-			table.getColumnModel().addColumnModelListener(colListener);
-			table.addPropertyChangeListener("columnModel", colModelListener);
 			ListDataListener columnListener = new ListDataListener() {
 				@Override
 				public void intervalAdded(ListDataEvent e) {
+					// TableColumnModel has no addColumn model that takes an index--it always appends to the end
+					// Adding the column causes the table to immediately ask the model for data for that column,
+					// and if the column is not actually the last one, the model will give the wrong data.
+					// Moving the column in the model doesn't tell the table that the column's data is bad,
+					// so this cannot be easily corrected.
+					// At the moment, the best solution I can find is to remove all the columns after the ones to be added, then re-add
+					// them.
+					int afterColumnCount = table.getColumnModel().getColumnCount() - e.getIndex1() - 1;
+					List<TableColumn> afterColumns = afterColumnCount == 0 ? Collections.emptyList() : new ArrayList<>(afterColumnCount);
+					for (int i = table.getColumnModel().getColumnCount() - 1; i >= e.getIndex0(); i--) {
+						TableColumn column = table.getColumnModel().getColumn(i);
+						afterColumns.add(column);
+						table.getColumnModel().removeColumn(column);
+					}
 					for (int i = e.getIndex0(); i <= e.getIndex1(); i++) {
 						TableColumn column = new TableColumn(i);
-						hookUp(table, column, i, model.getColumnModel().getElementAt(i), model, ctx);
+						CategoryRenderStrategy<? super R, ?> category = model.getColumnModel().getElementAt(i);
+						hookUp(table, column, category, model, ctx);
 						table.getColumnModel().addColumn(column);
+					}
+					for (int i = afterColumns.size() - 1; i >= 0; i--) {
+						afterColumns.get(i).setModelIndex(table.getColumnModel().getColumnCount());
+						table.getColumnModel().addColumn(afterColumns.get(i));
 					}
 				}
 
@@ -320,13 +309,11 @@ public class ObservableTableModel<R> implements TableModel {
 				@Override
 				public void contentsChanged(ListDataEvent e) {
 					for (int i = e.getIndex0(); i <= e.getIndex1(); i++)
-						hookUp(table, table.getColumnModel().getColumn(i), i, model.theColumnModel.getElementAt(i), model, ctx);
+						hookUp(table, table.getColumnModel().getColumn(i), model.theColumnModel.getElementAt(i), model, ctx);
 				}
 			};
 			model.getColumnModel().addListDataListener(columnListener);
 			subs.add(() -> {
-				table.removePropertyChangeListener("columnModel", colModelListener);
-				table.getColumnModel().removeColumnModelListener(colListener);
 				model.getColumnModel().removeListDataListener(columnListener);
 			});
 			MouseAdapter ml = new MouseAdapter() {
@@ -613,8 +600,8 @@ public class ObservableTableModel<R> implements TableModel {
 		return Subscription.forAll(subs.toArray(new Subscription[subs.size()]));
 	}
 
-	private static <R, C> void hookUp(JTable table, TableColumn tblColumn, int columnIndex,
-		CategoryRenderStrategy<? super R, ? extends C> column, ObservableTableModel<R> model, TableRenderContext ctx) {
+	private static <R, C> void hookUp(JTable table, TableColumn tblColumn, CategoryRenderStrategy<? super R, ? extends C> column,
+		ObservableTableModel<R> model, TableRenderContext ctx) {
 		tblColumn.setHeaderValue(column.getName());
 		if (column.getIdentifier() != null)
 			tblColumn.setIdentifier(column.getIdentifier());
