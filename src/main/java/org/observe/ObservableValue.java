@@ -923,21 +923,6 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 			}
 			return new Changes();
 		}
-
-		@Override
-		public int hashCode() {
-			return getIdentity().hashCode();
-		}
-
-		@Override
-		public boolean equals(Object obj) {
-			return getIdentity().equals(obj);
-		}
-
-		@Override
-		public String toString() {
-			return getIdentity().toString();
-		}
 	}
 
 	/**
