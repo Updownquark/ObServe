@@ -418,7 +418,7 @@ public class ObservableConfig implements Transactable, Stamped {
 		theLocking = locking.apply(this);
 		theName = name;
 		theContent = BetterTreeList.<ObservableConfig> build().withLocker(theLocking).build();
-		theListeners = ListenerList.build().allowReentrant().build();
+		theListeners = ListenerList.build().build();
 	}
 
 	protected ObservableConfig initialize(ObservableConfig parent, ElementId parentContentRef) {
