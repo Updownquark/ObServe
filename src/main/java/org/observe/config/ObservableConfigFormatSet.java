@@ -3,6 +3,7 @@ package org.observe.config;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
@@ -22,6 +23,8 @@ import org.qommons.io.Format;
 import com.google.common.reflect.TypeToken;
 
 public class ObservableConfigFormatSet {
+	private static final ThreadLocal<Map<TypeToken<?>, String>> CYCLE_DETECTION = ThreadLocal.withInitial(LinkedHashMap::new);
+
 	public interface ConfigFormatGenerator<T> {
 		ObservableConfigFormat<T> formatFor(TypeToken<T> type);
 	}
@@ -57,6 +60,10 @@ public class ObservableConfigFormatSet {
 	}
 
 	public <E> EntityConfigFormat<E> getEntityFormat(TypeToken<E> type) {
+		Map<TypeToken<?>, String> cycles = CYCLE_DETECTION.get();
+		if (cycles.get(type) != null)
+			throw new IllegalArgumentException("Entity cycle detected: " + printCycle(cycles, type));
+		cycles.put(type, "");
 		ObservableConfigFormat<?> format = theFormatCache.get(type);
 		if (format == null) {
 			EntityReflector<E> reflector = (EntityReflector<E>) theReflectors.get(type);
@@ -71,6 +78,7 @@ public class ObservableConfigFormatSet {
 				this).build();
 			theFormatCache.putIfAbsent(type, format);
 		}
+		cycles.remove(type);
 		if (!(format instanceof EntityConfigFormat))
 			throw new IllegalArgumentException(type + " is not formatted as an entity");
 		return (EntityConfigFormat<E>) format;
@@ -136,6 +144,7 @@ public class ObservableConfigFormatSet {
 			theFormatCache.put(type, format);
 			return format;
 		} else {
+			System.out.println("Building entity format for " + type);
 			EntityReflector.Builder<T> builder = EntityReflector.build(type, false).withSupers(theReflectors);
 			builder.buildNoPrint();
 			if (!builder.getMessages().isEmpty()) {
@@ -155,6 +164,32 @@ public class ObservableConfigFormatSet {
 	}
 
 	public <T> ObservableConfigFormat<T> getConfigFormat(ConfiguredValueField<?, T> field) {
-		return getConfigFormat(field.getFieldType(), StringUtils.parseByCase(field.getName(), true).toKebabCase());
+		Map<TypeToken<?>, String> cycles = CYCLE_DETECTION.get();
+		TypeToken<?> entity = field.getOwnerType().getType();
+		String old = cycles.put(entity, field.getName());
+		try {
+			return getConfigFormat(field.getFieldType(), StringUtils.parseByCase(field.getName(), true).toKebabCase());
+		} finally {
+			if (old == null)
+				cycles.remove(entity);
+			else
+				cycles.put(entity, old);
+		}
+	}
+
+	private static String printCycle(Map<TypeToken<?>, String> cycles, TypeToken<?> terminal) {
+		StringBuilder str = new StringBuilder();
+		boolean print = false;
+		for (Map.Entry<TypeToken<?>, String> entry : cycles.entrySet()) {
+			if (!print && !entry.getKey().equals(terminal))
+				continue;
+			print = true;
+			str.append(entry.getKey());
+			if (!entry.getValue().isEmpty())
+				str.append('.').append(entry.getValue());
+			str.append(':');
+		}
+		str.append(terminal);
+		return str.toString();
 	}
 }
