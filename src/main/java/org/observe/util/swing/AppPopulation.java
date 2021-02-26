@@ -376,16 +376,29 @@ public class AppPopulation {
 						ex.printStackTrace();
 					});
 				} else {
-					Object key = new Object();
-					config.watch(config.buildPath(ObservableConfig.ANY_NAME).multi(true).build()).act(__ -> {
-						QommonsTimer.getCommonInstance().doAfterInactivity(key, () -> {
+					config.watch(config.buildPath(ObservableConfig.ANY_NAME).multi(true).build()).act(new Consumer<Object>() {
+						private long theLastPersist;
+						private final QommonsTimer.TaskHandle persistTask = QommonsTimer.getCommonInstance().build(() -> {
+							theLastPersist = System.currentTimeMillis();
 							try {
+								System.out.println("Persisting config");
 								actuallyPersist.persist(config);
 							} catch (IOException ex) {
 								System.err.println("Could not persist UI config");
 								ex.printStackTrace();
 							}
-						}, thePersistFrequency);
+						}, Duration.ofSeconds(1_000_000), false);
+
+						@Override
+						public void accept(Object __) {
+							long now = System.currentTimeMillis();
+							Duration sincePersist = Duration.ofMillis(now - theLastPersist);
+							if (sincePersist.compareTo(thePersistFrequency) >= 0) {
+								persistTask.runImmediately().setActive(false);
+							} else {
+								persistTask.runNextIn(thePersistFrequency.minus(sincePersist));
+							}
+						}
 					});
 				}
 			} else if (thePersistFrequency != null) {
