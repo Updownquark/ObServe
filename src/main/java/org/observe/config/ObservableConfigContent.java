@@ -225,6 +225,42 @@ public class ObservableConfigContent {
 			return changed;
 		}
 
+		String canResolvePath(int startIndex, boolean createIfAbsent) {
+			ObservableConfig parent = startIndex == 0 ? theRoot : thePathElements[startIndex - 1];
+			boolean resolved = true;
+			int i;
+			for (i = startIndex; i < thePathElements.length; i++) {
+				long stamp = parent.getStamp();
+				ObservableConfig child;
+				if (thePathElementStamps[i] == stamp) {
+					// No need to check--nothing's changed
+					child = thePathElements[i];
+					if (child == null && createIfAbsent) {
+						child = parent.getChild(thePath.getElements().get(i), false, null);
+						if (child == null)
+							return parent.canAddChild(null, null);
+						thePathElementStamps[i] = stamp;
+					}
+				} else {
+					child = parent.getChild(thePath.getElements().get(i), false, null);
+					if (child == null)
+						return parent.canAddChild(null, null);
+					thePathElementStamps[i] = stamp;
+					if (thePathElements[i] != child) {
+						thePathElements[i] = child;
+					}
+				}
+				if (child == null) {
+					resolved = false;
+					break;
+				} else
+					parent = child;
+			}
+			if (!resolved)
+				Arrays.fill(thePathElements, i, thePathElements.length, null);
+			return null;
+		}
+
 		@Override
 		public Observable<ObservableValueEvent<ObservableConfig>> noInitChanges() {
 			return new Observable<ObservableValueEvent<ObservableConfig>>() {
@@ -378,7 +414,7 @@ public class ObservableConfigContent {
 		@Override
 		public String set(String value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
 			try (Transaction t = theConfigChild.getRoot().lock(true, cause)) {
-				String msg = isAcceptable(value);
+				String msg = isValueAcceptable(value);
 				if (msg != null)
 					throw new IllegalArgumentException(msg);
 				theConfigChild.resolvePath(0, true);
@@ -388,13 +424,33 @@ public class ObservableConfigContent {
 			}
 		}
 
-		@Override
-		public String isAcceptable(String value) {
+		protected String isValueAcceptable(String value) {
 			return null;
 		}
 
 		@Override
+		public String isAcceptable(String value) {
+			String msg = isEnabled().get();
+			if (msg == null)
+				msg = isValueAcceptable(value);
+			return msg;
+		}
+
+		@Override
 		public ObservableValue<String> isEnabled() {
+			// We'll assume this doesn't change
+			try (Transaction t = theConfigChild.getRoot().lock(false, null)) {
+				String msg = theConfigChild.canResolvePath(0, true);
+				if (msg == null) {
+					ObservableConfig child = theConfigChild.get();
+					if (child == null)
+						msg = StdMsg.UNSUPPORTED_OPERATION;
+					if (msg == null)
+						msg = theConfigChild.get().canSetValue(theConfigChild.get().getValue());
+				}
+				if (msg != null)
+					return ObservableValue.of(msg);
+			}
 			return SettableValue.ALWAYS_ENABLED;
 		}
 	}
@@ -568,7 +624,10 @@ public class ObservableConfigContent {
 
 		@Override
 		public String canMove(ElementId valueEl, ElementId after, ElementId before) {
-			return null;
+			return getConfig().canMoveChild(//
+				getConfig().getContent().getElement(valueEl).get(), //
+				after == null ? null : getConfig().getContent().getElement(after).get(), //
+					before == null ? null : getConfig().getContent().getElement(before).get());
 		}
 
 		@Override
@@ -666,7 +725,7 @@ public class ObservableConfigContent {
 
 		@Override
 		public String canRemove() {
-			return null;
+			return theConfig.canRemove();
 		}
 
 		@Override
@@ -850,7 +909,10 @@ public class ObservableConfigContent {
 
 		@Override
 		public String canMove(ElementId valueEl, ElementId after, ElementId before) {
-			return null;
+			return getConfig().canMoveChild(//
+				getConfig().getContent().getElement(valueEl).get(), //
+				after == null ? null : getConfig().getContent().getElement(after).get(), //
+					before == null ? null : getConfig().getContent().getElement(before).get());
 		}
 
 		@Override
@@ -1060,7 +1122,12 @@ public class ObservableConfigContent {
 
 				@Override
 				public String canCreate() {
-					return null;
+					ObservableConfig afterChild = theAfter == null ? null : theChildren.getElement(theAfter).get();
+					ObservableConfig beforeChild = theBefore == null ? null : theChildren.getElement(theBefore).get();
+					try (Transaction t = theRoot.lock(true, null)) {
+						ObservableConfig parent = thePath.getParent() == null ? theRoot : theRoot.getChild(thePath.getParent(), true, null);
+						return parent.canAddChild(afterChild, beforeChild);
+					}
 				}
 
 				@Override

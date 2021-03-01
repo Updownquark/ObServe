@@ -589,6 +589,10 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 		return found;
 	}
 
+	default String canAddChild(ObservableConfig after, ObservableConfig before) {
+		return null;
+	}
+
 	default ObservableConfig addChild(String name) {
 		return addChild(name, null);
 	}
@@ -600,11 +604,19 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 	ObservableConfig addChild(ObservableConfig after, ObservableConfig before, boolean first, String name,
 		Consumer<ObservableConfig> preAddMod);
 
+	default String canMoveChild(ObservableConfig child, ObservableConfig after, ObservableConfig before) {
+		return null;
+	}
+
 	ObservableConfig moveChild(ObservableConfig child, ObservableConfig after, ObservableConfig before, boolean first,
 		Runnable afterRemove);
 
 	@Override
 	ObservableConfig setName(String name);
+
+	default String canSetValue(String value) {
+		return null;
+	}
 
 	ObservableConfig setValue(String value);
 
@@ -621,7 +633,15 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 
 	ObservableConfig copyFrom(ObservableConfig source, boolean removeExtras);
 
+	default String canRemove() {
+		return null;
+	}
+
 	void remove();
+
+	default ObservableConfig unmodifiable() {
+		return UnmodifiableObservableConfig.unmodifiable(this);
+	}
 
 	public static String toString(ObservableConfig config) {
 		StringWriter out = new StringWriter();

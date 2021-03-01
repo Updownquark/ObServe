@@ -807,7 +807,12 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 
 			@Override
 			public String canMove(ElementId valueEl, ElementId after, ElementId before) {
-				return null;
+				try (Transaction t = lock(false, null)) {
+					ObservableConfig valueConfig = theElements.getEntryById(valueEl).get().theConfig;
+					ObservableConfig afterConfig = after == null ? null : theElements.getEntryById(after).get().theConfig;
+					ObservableConfig beforeConfig = before == null ? null : theElements.getEntryById(before).get().theConfig;
+					return getParent().get().canMoveChild(valueConfig, afterConfig, beforeConfig);
+				}
 			}
 
 			@Override
@@ -899,7 +904,12 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 				return new OCBCCollection() {
 					@Override
 					public String canAdd(E value, ElementId after, ElementId before) {
-						return belongs(value) ? null : StdMsg.ILLEGAL_ELEMENT;
+						if (!belongs(value))
+							return StdMsg.ILLEGAL_ELEMENT;
+						ObservableConfig parent = getParent().get();
+						return parent.canAddChild(//
+							after == null ? null : parent.getContent().getElement(after).get(), //
+								before == null ? null : parent.getContent().getElement(before).get());
 					}
 
 					@Override
@@ -946,7 +956,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 
 				@Override
 				public String canRemove() {
-					return null;
+					return getParent().get().canRemove();
 				}
 
 				@Override
@@ -996,7 +1006,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 
 				@Override
 				public String canCreate() {
-					return null;
+					return getParent().get().canAddChild(null, null);
 				}
 
 				@Override
@@ -1062,7 +1072,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 
 			@Override
 			public String canRemove() {
-				return null;
+				return getParent().get().canRemove();
 			}
 
 			@Override
