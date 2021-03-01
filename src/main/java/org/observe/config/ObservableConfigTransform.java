@@ -567,7 +567,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 
 			public ConfigElement(ObservableConfig config, ValueHolder<E> value, Observable<?> findRefs) {
 				this.theConfig = config;
-				theElementObservable = SimpleObservable.build().withLock(theConfig.getLocker()).build();
+				theElementObservable = SimpleObservable.build().withLock(theConfig).build();
 
 				if (value != null && value.isPresent()) {
 					theFormat.format(getSession(), value.get(), null, __ -> config, v -> theValue = v,
@@ -786,7 +786,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 				ObservableConfig parent = getParent(false, null);
 				if (parent == null)
 					return BetterList.empty();
-				BetterList<CollectionElement<ObservableConfig>> configEls = parent._getContent().getElementsBySource(sourceEl,
+				BetterList<CollectionElement<ObservableConfig>> configEls = parent.getContent().getElementsBySource(sourceEl,
 					sourceCollection);
 				return QommonsUtils.map2(configEls, el -> theElements.get(el.getElementId()).immutable());
 			}

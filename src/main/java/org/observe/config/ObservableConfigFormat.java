@@ -29,8 +29,8 @@ import org.observe.assoc.ObservableMultiMap;
 import org.observe.collect.ObservableCollection;
 import org.observe.config.EntityConfiguredValueType.EntityConfiguredValueField;
 import org.observe.config.ObservableConfig.ObservableConfigEvent;
-import org.observe.config.ObservableConfig.ObservableConfigPathElement;
 import org.observe.config.ObservableConfigFormat.ReferenceFormat.FormattedField;
+import org.observe.config.ObservableConfigPath.ObservableConfigPathElement;
 import org.observe.util.EntityReflector;
 import org.observe.util.EntityReflector.FieldChange;
 import org.observe.util.TypeTokens;
@@ -306,7 +306,7 @@ public interface ObservableConfigFormat<E> {
 			Consumer<T> acceptedValue, Observable<?> until) throws IllegalArgumentException {
 			if (value == null) {
 				if (config.getConfig(false) != null) {
-					for (ObservableConfig child : config.getConfig(true)._getContent()) {
+					for (ObservableConfig child : config.getConfig(true).getContent()) {
 						if (child.getName().equals("null")) {
 							child.setValue("true");
 							child.getAllContent().getValues().clear();
@@ -699,7 +699,7 @@ public interface ObservableConfigFormat<E> {
 		public EntitySubFormat<T> build(String config) {
 			if (theFormat == null)
 				theFormat = theFormats.getEntityFormat(theType);
-			return new EntitySubFormat<>(ObservableConfig.parsePathElement(config), theFormat, theType, theValueFilter);
+			return new EntitySubFormat<>(ObservableConfigPath.parsePathElement(config), theFormat, theType, theValueFilter);
 		}
 
 		public EntitySubFormat<T> build(String configName, Function<PathElementBuilder, ObservableConfigPathElement> path) {
@@ -710,7 +710,7 @@ public interface ObservableConfigFormat<E> {
 	}
 
 	public class EntitySubFormat<E> {
-		final ObservableConfig.ObservableConfigPathElement configFilter;
+		final ObservableConfigPathElement configFilter;
 		final EntityConfigFormat<E> format;
 		final TypeToken<E> type;
 		final Class<E> rawType;
@@ -756,7 +756,7 @@ public interface ObservableConfigFormat<E> {
 		}
 
 		public ObservableConfigPathElement build() {
-			boolean multi = theName.equals(ObservableConfig.ANY_NAME);
+			boolean multi = theName.equals(ObservableConfigPath.ANY_NAME);
 			return new ObservableConfigPathElement(multi ? "" : theName, theAttributes, multi, false);
 		}
 	}
@@ -1699,7 +1699,7 @@ public interface ObservableConfigFormat<E> {
 			}
 
 			public SubFormat<T> build(String config, ObservableConfigFormat<T> format) {
-				return new SubFormat<>(ObservableConfig.parsePathElement(config), format, theType, theValueFilter);
+				return new SubFormat<>(ObservableConfigPath.parsePathElement(config), format, theType, theValueFilter);
 			}
 
 			public SubFormat<T> build(String configName, Function<PathElementBuilder, ObservableConfigPathElement> path,
@@ -1709,7 +1709,7 @@ public interface ObservableConfigFormat<E> {
 		}
 
 		public static class SubFormat<T> {
-			final ObservableConfig.ObservableConfigPathElement configFilter;
+			final ObservableConfigPathElement configFilter;
 			final ObservableConfigFormat<T> format;
 			final TypeToken<T> type;
 			final Class<T> rawType;
@@ -1724,7 +1724,7 @@ public interface ObservableConfigFormat<E> {
 				this.valueFilter = valueFilter;
 			}
 
-			public ObservableConfig.ObservableConfigPathElement getConfigFilter() {
+			public ObservableConfigPathElement getConfigFilter() {
 				return configFilter;
 			}
 

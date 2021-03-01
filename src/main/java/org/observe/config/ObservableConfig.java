@@ -7,21 +7,16 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringWriter;
 import java.io.Writer;
-import java.lang.ref.WeakReference;
 import java.text.ParseException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
-import java.util.List;
 import java.util.Map;
-import java.util.NoSuchElementException;
 import java.util.Objects;
-import java.util.WeakHashMap;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -44,27 +39,22 @@ import org.observe.config.ObservableConfigContent.FullObservableConfigContent;
 import org.observe.config.ObservableConfigContent.ObservableChildSet;
 import org.observe.config.ObservableConfigContent.ObservableConfigChild;
 import org.observe.config.ObservableConfigContent.SimpleObservableConfigContent;
+import org.observe.config.ObservableConfigPath.ObservableConfigPathElement;
 import org.observe.util.TypeTokens;
-import org.qommons.ArrayUtils;
 import org.qommons.Causable;
-import org.qommons.Identifiable;
-import org.qommons.Lockable;
+import org.qommons.Nameable;
 import org.qommons.Stamped;
 import org.qommons.StringUtils;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
-import org.qommons.ValueHolder;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.BetterSortedMap;
 import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.ElementId;
-import org.qommons.collect.ListenerList;
 import org.qommons.collect.MapEntryHandle;
-import org.qommons.collect.StampedLockingStrategy;
 import org.qommons.ex.ExFunction;
 import org.qommons.io.Format;
-import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BetterTreeMap;
 import org.xml.sax.Attributes;
 import org.xml.sax.SAXException;
@@ -84,261 +74,8 @@ import com.google.common.reflect.TypeToken;
  * configurable collections of child configurations as standard observable structures.
  * </p>
  */
-public class ObservableConfig implements Transactable, Stamped {
-	public static final char PATH_SEPARATOR = '/';
-	public static final String PATH_SEPARATOR_STR = "" + PATH_SEPARATOR;
-	public static final String EMPTY_PATH = "".intern();
-	public static final String ANY_NAME = "*".intern();
-	public static final String ANY_DEPTH = "**".intern();
+public interface ObservableConfig extends Nameable, Transactable, Stamped {
 	public static final TypeToken<ObservableConfig> TYPE = TypeTokens.get().of(ObservableConfig.class);
-
-	public static class ObservableConfigPath {
-		private final List<ObservableConfigPathElement> theElements;
-
-		protected ObservableConfigPath(List<ObservableConfigPathElement> elements) {
-			this.theElements = elements;
-		}
-
-		public List<ObservableConfigPathElement> getElements() {
-			return theElements;
-		}
-
-		public ObservableConfigPathElement getLastElement() {
-			return theElements.get(theElements.size() - 1);
-		}
-
-		public ObservableConfigPath getLast() {
-			if (theElements.size() == 1)
-				return this;
-			return new ObservableConfigPath(theElements.subList(theElements.size() - 1, theElements.size()));
-		}
-
-		public ObservableConfigPath getParent() {
-			if (theElements.size() == 1)
-				return null;
-			return new ObservableConfigPath(theElements.subList(0, theElements.size() - 1));
-		}
-
-		public boolean matches(List<ObservableConfig> path) {
-			Iterator<ObservableConfigPathElement> matcherIter = theElements.iterator();
-			Iterator<ObservableConfig> pathIter = path.iterator();
-			while (matcherIter.hasNext()) {
-				if (pathIter.hasNext()) {
-					if (!matcherIter.next().matches(pathIter.next()))
-						return false;
-				} else if (!matcherIter.next().isMultiDepth())
-					return false;
-			}
-			if (matcherIter.hasNext())
-				return false;
-			else if (pathIter.hasNext() && !getLastElement().isMultiDepth())
-				return false;
-			else
-				return true;
-		}
-
-		@Override
-		public int hashCode() {
-			return theElements.hashCode();
-		}
-
-		@Override
-		public boolean equals(Object obj) {
-			if (obj == this)
-				return true;
-			return obj instanceof ObservableConfigPath && theElements.equals(((ObservableConfigPath) obj).theElements);
-		}
-
-		@Override
-		public String toString() {
-			if (theElements.size() == 1)
-				return theElements.get(0).toString();
-			StringBuilder str = new StringBuilder();
-			boolean first = true;
-			for (ObservableConfigPathElement el : theElements) {
-				if (first)
-					first = false;
-				else
-					str.append(PATH_SEPARATOR);
-				str.append(el.toString());
-			}
-			return str.toString();
-		}
-	}
-
-	public static class ObservableConfigPathElement {
-		private final String theName;
-		private final Map<String, String> theAttributes;
-		private final boolean isMulti;
-		private final boolean isMultiDepth;
-
-		protected ObservableConfigPathElement(String name, Map<String, String> attributes, boolean multi, boolean multiDepth) {
-			theName = name;
-			theAttributes = attributes;
-			isMulti = multi || multiDepth;
-			isMultiDepth = multiDepth;
-		}
-
-		public String getName() {
-			return theName;
-		}
-
-		public Map<String, String> getAttributes() {
-			return theAttributes;
-		}
-
-		public boolean isMulti() {
-			return isMulti;
-		}
-
-		public boolean isMultiDepth() {
-			return isMultiDepth;
-		}
-
-		public boolean matches(ObservableConfig config) {
-			if (!isMulti && !theName.equals(config.getName()))
-				return false;
-			if (!theAttributes.isEmpty()) {
-				try (Transaction t = config.lock(false, null)) {
-					for (Map.Entry<String, String> attr : theAttributes.entrySet()) {
-						boolean found = false;
-						for (ObservableConfig child : config.theContent) {
-							if (!child.getName().equals(attr.getKey()))
-								continue;
-							if (attr.getValue() == null || attr.getValue().equals(child.getValue())) {
-								found = true;
-								break;
-							}
-						}
-						if (!found)
-							return false;
-					}
-				}
-			}
-			return true;
-		}
-
-		public boolean matchedBefore(ObservableConfig config, ObservableConfigEvent change) {
-			if (!theName.equals(ANY_NAME)) {
-				if (change.relativePath.size() == 1) {
-					if (!theName.equals(change.oldName))
-						return false;
-				} else if (!theName.equals(config.getName()))
-					return false;
-			}
-			if (!theAttributes.isEmpty()) {
-				try (Transaction t = config.lock(false, null)) {
-					for (Map.Entry<String, String> attr : theAttributes.entrySet()) {
-						boolean found = false;
-
-						if (change.relativePath.size() == 1 && change.oldName.equals(attr.getKey()))
-							found = attr.getValue() == null || attr.getValue().equals(change.oldValue);
-						if (!found) {
-							for (ObservableConfig child : config.theContent) {
-								if (!child.getName().equals(attr.getKey()))
-									continue;
-								if (attr.getValue() != null && !attr.getValue().equals(child.getValue()))
-									continue;
-							}
-						}
-						if (!found)
-							return false;
-					}
-				}
-			}
-			return true;
-		}
-
-		@Override
-		public int hashCode() {
-			return Objects.hash(theName, theAttributes, isMulti);
-		}
-
-		@Override
-		public boolean equals(Object obj) {
-			if (obj == this)
-				return true;
-			else if (!(obj instanceof ObservableConfigPathElement))
-				return false;
-			ObservableConfigPathElement other = (ObservableConfigPathElement) obj;
-			return theName.equals(other.theName) && Objects.equals(theAttributes, other.theAttributes) && isMulti == other.isMulti;
-		}
-
-		@Override
-		public String toString() {
-			if (theAttributes.isEmpty() && !isMulti)
-				return theName;
-			StringBuilder str = new StringBuilder(theName);
-			if (isMultiDepth)
-				str.append(ANY_DEPTH);
-			else if (isMulti)
-				str.append(ANY_NAME);
-			if (!theAttributes.isEmpty()) {
-				str.append('{');
-				boolean first = true;
-				for (Map.Entry<String, String> attr : theAttributes.entrySet()) {
-					if (first)
-						first = false;
-					else
-						str.append(',');
-					str.append(attr.getKey()).append('=').append(attr.getValue());
-				}
-				str.append('}');
-			}
-			return str.toString();
-		}
-	}
-
-	public static class ObservableConfigPathBuilder {
-		private final ObservableConfig theTarget;
-		private final List<ObservableConfigPathElement> thePath;
-		private final String theName;
-		private Map<String, String> theAttributes;
-		private boolean isMulti;
-		private boolean isMultiDepth;
-		private boolean isUsed;
-
-		protected ObservableConfigPathBuilder(ObservableConfig target, List<ObservableConfigPathElement> path, String name) {
-			theTarget = target;
-			thePath = path;
-			theName = name;
-		}
-
-		public ObservableConfigPathBuilder withAttribute(String attrName, String value) {
-			if (isUsed)
-				throw new IllegalStateException("This builder has already been used");
-			if (theAttributes == null)
-				theAttributes = new LinkedHashMap<>();
-			theAttributes.put(attrName, value);
-			return this;
-		}
-
-		public ObservableConfigPathBuilder multi(boolean deep) {
-			if (isUsed)
-				throw new IllegalStateException("This builder has already been used");
-			isMulti = true;
-			isMultiDepth = deep;
-			return this;
-		}
-
-		protected void seal() {
-			if (isUsed)
-				throw new IllegalStateException("This builder has already been used");
-			isUsed = true;
-			thePath.add(new ObservableConfigPathElement(theName,
-				theAttributes == null ? Collections.emptyMap() : Collections.unmodifiableMap(theAttributes), isMulti, isMultiDepth));
-		}
-
-		public ObservableConfigPathBuilder andThen(String name) {
-			seal();
-			return theTarget.buildPath(thePath, name);
-		}
-
-		public ObservableConfigPath build() {
-			seal();
-			return theTarget.createPath(thePath);
-		}
-	}
 
 	public static class ObservableConfigEvent extends Causable.AbstractCausable {
 		public final CollectionChangeType changeType;
@@ -363,7 +100,7 @@ public class ObservableConfig implements Transactable, Stamped {
 			StringBuilder str = new StringBuilder();
 			for (ObservableConfig p : relativePath) {
 				if (str.length() > 0)
-					str.append(PATH_SEPARATOR);
+					str.append(ObservableConfigPath.PATH_SEPARATOR);
 				str.append(p.getName());
 			}
 			return str.toString();
@@ -385,7 +122,7 @@ public class ObservableConfig implements Transactable, Stamped {
 				str.append(":-").append(relativePath.isEmpty() ? "this" : getRelativePathString());
 				break;
 			case set:
-				str.append(PATH_SEPARATOR).append(relativePath.isEmpty() ? "this" : getRelativePathString());
+				str.append(ObservableConfigPath.PATH_SEPARATOR).append(relativePath.isEmpty() ? "this" : getRelativePathString());
 				ObservableConfig changed = relativePath.isEmpty() ? eventTarget : relativePath.get(relativePath.size() - 1);
 				if (!oldName.equals(changed.getName()))
 					str.append(".name ").append(oldName).append("->").append(changed.getName());
@@ -400,221 +137,92 @@ public class ObservableConfig implements Transactable, Stamped {
 		void persist(ObservableConfig config) throws E;
 	}
 
-	private ObservableConfig theParent;
-	private ElementId theParentContentRef;
-	private final CollectionLockingStrategy theLocking;
-	private ValueHolder<Causable> theRootCausable;
-	private String theName;
-	private String theValue;
-	private final BetterList<ObservableConfig> theContent;
-	private final ListenerList<InternalObservableConfigListener> theListeners;
-	private long theModCount;
+	Object getParsedItem(ObservableConfigParseSession session);
 
-	private volatile WeakHashMap<ObservableConfigParseSession, WeakReference<Object>> theParsedItems;
+	ObservableConfig withParsedItem(ObservableConfigParseSession session, Object item);
 
-	protected ObservableConfig(String name, Function<Object, CollectionLockingStrategy> locking) {
-		if (name.length() == 0)
-			throw new IllegalArgumentException("Name must not be empty");
-		theLocking = locking.apply(this);
-		theName = name;
-		theContent = BetterTreeList.<ObservableConfig> build().withLocker(theLocking).build();
-		theListeners = ListenerList.build().build();
-	}
+	String getValue();
 
-	protected ObservableConfig initialize(ObservableConfig parent, ElementId parentContentRef) {
-		theParent = parent;
-		theParentContentRef = parentContentRef;
-		theRootCausable = parent == null ? new ValueHolder<>() : parent.theRootCausable;
-		return this;
-	}
+	ObservableConfig getParent();
 
-	public Object getParsedItem(ObservableConfigParseSession session) {
-		WeakHashMap<ObservableConfigParseSession, WeakReference<Object>> parsedItems = theParsedItems;
-		if (parsedItems == null)
-			return null;
-		WeakReference<Object> ref = parsedItems.get(session);
-		return ref == null ? null : ref.get();
-	}
-
-	public ObservableConfig withParsedItem(ObservableConfigParseSession session, Object item) {
-		WeakHashMap<ObservableConfigParseSession, WeakReference<Object>> parsedItems = theParsedItems;
-		if (parsedItems == null) {
-			synchronized (this) {
-				parsedItems = theParsedItems;
-				if (parsedItems == null) {
-					theParsedItems = parsedItems = new WeakHashMap<>(3); // Don't imagine there will ever be much in there
-				}
-			}
-		}
-		parsedItems.compute(session, (s, old) -> {
-			Object oldItem = old == null ? null : old.get();
-			if (oldItem == item)
-				return old;
-			else
-				return new WeakReference<>(item);
-		});
-		return this;
-	}
-
-	public String getName() {
-		return theName;
-	}
-
-	public String getValue() {
-		return theValue;
-	}
-
-	public ObservableConfig getParent() {
-		if (theParentContentRef != null && !theParentContentRef.isPresent())
-			return null;
+	default String getPath() {
+		ObservableConfig parent = getParent();
+		if (parent != null)
+			return parent.getPath() + ObservableConfigPath.PATH_SEPARATOR_STR + getName();
 		else
-			return theParent;
+			return getName();
 	}
 
-	public String getPath() {
-		if (theParent != null)
-			return theParent.getPath() + PATH_SEPARATOR_STR + theName;
-		else
-			return theName;
+	ElementId getParentChildRef();
+
+	default int getIndexInParent() {
+		ElementId pcr = getParentChildRef();
+		return pcr == null ? null : getParent().getAllContent().getValues().getElementsBefore(pcr);
 	}
 
-	public int getIndexInParent() {
-		return theParentContentRef == null ? null : theParent.theContent.getElementsBefore(theParentContentRef);
+	default Observable<ObservableConfigEvent> watch(String pathFilter) {
+		return watch(ObservableConfigPath.create(pathFilter));
 	}
 
-	public ElementId getParentChildRef() {
-		return theParentContentRef;
+	Observable<ObservableConfigEvent> watch(ObservableConfigPath path);
+
+	default ObservableCollection<ObservableConfig> getContent() {
+		return new FullObservableConfigContent(this);
 	}
 
-	protected CollectionLockingStrategy getLocker() {
-		return theLocking;
+	default SyncValueSet<? extends ObservableConfig> getAllContent() {
+		return getContent(ObservableConfigPath.ANY_NAME);
 	}
 
-	public ObservableConfigPathBuilder buildPath(String firstName) {
-		return buildPath(new LinkedList<>(), firstName);
+	default SyncValueSet<? extends ObservableConfig> getContent(String path) {
+		return getContent(ObservableConfigPath.create(path));
 	}
 
-	protected ObservableConfigPathBuilder buildPath(List<ObservableConfigPathElement> path, String name) {
-		List<ObservableConfigPathElement> finalPath = new ArrayList<>(path.size());
-		finalPath.addAll(path);
-		Map<String, String> properties = null;
-		// Quick check to avoid pattern checking on every single path, few of which will have attributes
-		if (name.length() > 0 && name.charAt(name.length() - 1) == '}') {
-			properties = new LinkedHashMap<>();
-			name = parsePathProperties(name, properties);
-		}
-		ObservableConfigPathBuilder builder = new ObservableConfigPathBuilder(this, finalPath, name);
-		if (properties != null) {
-			for (Map.Entry<String, String> property : properties.entrySet()) {
-				builder.withAttribute(property.getKey(), property.getValue());
-			}
-		}
-		return builder;
-	}
-
-	protected ObservableConfigPath createPath(List<ObservableConfigPathElement> path) {
-		return new ObservableConfigPath(Collections.unmodifiableList(path));
-	}
-
-	public ObservableConfigPath createPath(String path) {
-		if (path.length() == 0)
-			return null;
-		String[] split = parsePath(path);
-		ObservableConfigPathBuilder builder = null;
-		for (int i = 0; i < split.length; i++) {
-			boolean multi;
-			boolean deep = ANY_DEPTH.equals(split[i]);
-			String name;
-			if (deep) {
-				name = "";
-				multi = true;
-			} else {
-				multi = split[i].length() > 0 && split[i].charAt(split[i].length() - 1) == ANY_NAME.charAt(0);
-				if (multi)
-					name = split[i].substring(0, split[i].length() - 1);
-				else
-					name = split[i];
-			}
-			if (i == 0)
-				builder = buildPath(name);
-			else
-				builder = builder.andThen(name);
-			if (multi)
-				builder.multi(deep);
-		}
-		return builder.build();
-	}
-
-	protected TypeToken<? extends ObservableConfig> getType() {
-		return TYPE;
-	}
-
-	protected ObservableConfig createChild(String name, Function<Object, CollectionLockingStrategy> locking) {
-		return new ObservableConfig(name, locking);
-	}
-
-	public Observable<ObservableConfigEvent> watch(String pathFilter) {
-		return watch(createPath(pathFilter));
-	}
-
-	public Observable<ObservableConfigEvent> watch(ObservableConfigPath path) {
-		return new ObservableConfigChangesObservable(this, path);
-	}
-
-	public SyncValueSet<? extends ObservableConfig> getAllContent() {
-		return getContent(ANY_NAME);
-	}
-
-	public SyncValueSet<? extends ObservableConfig> getContent(String path) {
-		return getContent(createPath(path));
-	}
-
-	public SyncValueSet<? extends ObservableConfig> getContent(ObservableConfigPath path) {
-		ObservableCollection<? extends ObservableConfig> children;
+	default SyncValueSet<? extends ObservableConfig> getContent(ObservableConfigPath path) {
+		ObservableCollection<ObservableConfig> children;
 		if (path.getElements().size() == 1) {
 			if (path.getLastElement().isMulti())
-				children = new FullObservableConfigContent<>(this, getType());
+				children = new FullObservableConfigContent(this);
 			else
-				children = new SimpleObservableConfigContent<>(this, TYPE, path.getLastElement());
+				children = new SimpleObservableConfigContent(this, path.getLastElement());
 		} else {
 			ObservableConfigPath last = path.getLast();
-			TypeToken<ObservableConfig> type = (TypeToken<ObservableConfig>) getType();
 			TypeToken<ObservableCollection<ObservableConfig>> collType = TypeTokens.get().keyFor(ObservableCollection.class)
-				.parameterized(type);
+				.parameterized(TYPE);
 			ObservableValue<? extends ObservableConfig> descendant = observeDescendant(path.getParent());
-			ObservableCollection<ObservableConfig> emptyChildren = ObservableCollection.of(type);
+			ObservableCollection<ObservableConfig> emptyChildren = ObservableCollection.of(TYPE);
 			children = ObservableCollection.flattenValue(descendant.map(collType,
 				p -> (ObservableCollection<ObservableConfig>) (p == null ? emptyChildren : p.getContent(last).getValues()), //
 				opts -> opts.cache(true).reEvalOnUpdate(false).fireIfUnchanged(false)));
 		}
-		return new ObservableChildSet<>(this, path, children);
+		return new ObservableChildSet(this, path, children);
 	}
 
-	public ObservableValue<? extends ObservableConfig> observeDescendant(String path) {
-		return observeDescendant(createPath(path));
+	default ObservableValue<ObservableConfig> observeDescendant(String path) {
+		return observeDescendant(ObservableConfigPath.create(path));
 	}
 
-	public ObservableValue<? extends ObservableConfig> observeDescendant(ObservableConfigPath path) {
-		return new ObservableConfigChild<>(getType(), this, path);
+	default ObservableValue<ObservableConfig> observeDescendant(ObservableConfigPath path) {
+		return new ObservableConfigChild(this, path);
 	}
 
-	public SettableValue<String> observeValue() {
-		return observeValue(EMPTY_PATH);
+	default SettableValue<String> observeValue() {
+		return observeValue(ObservableConfigPath.EMPTY_PATH);
 	}
 
-	public SettableValue<String> observeValue(String path) {
-		return observeValue(createPath(path));
+	default SettableValue<String> observeValue(String path) {
+		return observeValue(ObservableConfigPath.create(path));
 	}
 
-	public SettableValue<String> observeValue(ObservableConfigPath path) {
+	default SettableValue<String> observeValue(ObservableConfigPath path) {
 		return new ObservableConfigContent.ObservableConfigValue(this, path);
 	}
 
-	public String get(String path) {
-		return get(createPath(path));
+	default String get(String path) {
+		return get(ObservableConfigPath.create(path));
 	}
 
-	public String get(ObservableConfigPath path) {
+	default String get(ObservableConfigPath path) {
 		ObservableConfig config = getChild(path, false, null);
 		return config == null ? null : config.getValue();
 	}
@@ -623,7 +231,7 @@ public class ObservableConfig implements Transactable, Stamped {
 	 * @param type The type of the value or element to produce
 	 * @return A builder with many options that allows the construction of a formatted value, collection, or entity set
 	 */
-	public <T> ObservableConfigValueBuilder<T> asValue(Class<T> type) {
+	default <T> ObservableConfigValueBuilder<T> asValue(Class<T> type) {
 		return asValue(TypeTokens.get().of(type));
 	}
 
@@ -631,8 +239,8 @@ public class ObservableConfig implements Transactable, Stamped {
 	 * @param type The type of the value or element to produce
 	 * @return A builder with many options that allows the construction of a formatted value, collection, or entity set
 	 */
-	public <T> ObservableConfigValueBuilder<T> asValue(TypeToken<T> type) {
-		return new ObservableConfigValueBuilder<>(type);
+	default <T> ObservableConfigValueBuilder<T> asValue(TypeToken<T> type) {
+		return new ObservableConfigValueBuilder<>(this, type);
 	}
 
 	/**
@@ -641,6 +249,7 @@ public class ObservableConfig implements Transactable, Stamped {
 	 * @param <T> The value type of the structure to create
 	 */
 	public class ObservableConfigValueBuilder<T> {
+		private final ObservableConfig theConfig;
 		private final TypeToken<T> theType;
 		private ObservableConfigFormat<T> theFormat;
 		private ObservableConfigFormatSet theFormatSet;
@@ -649,8 +258,13 @@ public class ObservableConfig implements Transactable, Stamped {
 		private ObservableConfigParseSession theSession;
 		private Observable<?> theBuiltNotifier;
 
-		ObservableConfigValueBuilder(TypeToken<T> type) {
+		ObservableConfigValueBuilder(ObservableConfig config, TypeToken<T> type) {
+			theConfig = config;
 			theType = type;
+		}
+
+		public ObservableConfig getConfig() {
+			return theConfig;
 		}
 
 		public ObservableConfigValueBuilder<T> withFormat(ObservableConfigFormat<T> format) {
@@ -682,7 +296,7 @@ public class ObservableConfig implements Transactable, Stamped {
 		public ObservableConfigValueBuilder<T> at(String path) {
 			if (path.length() == 0)
 				return this;
-			return at(createPath(path));
+			return at(ObservableConfigPath.create(path));
 		}
 
 		public ObservableConfigValueBuilder<T> at(ObservableConfigPath path) {
@@ -725,7 +339,7 @@ public class ObservableConfig implements Transactable, Stamped {
 		protected ObservableConfigFormat<T> getFormat() {
 			ObservableConfigFormat<T> format = theFormat;
 			if (format == null)
-				format = getFormatSet().getConfigFormat(theType, getName());
+				format = getFormatSet().getConfigFormat(theType, theConfig.getName());
 			return format;
 		}
 
@@ -734,24 +348,24 @@ public class ObservableConfig implements Transactable, Stamped {
 			if (thePath != null) {
 				if (parent) {
 					if (thePath.getElements().size() == 1)
-						descendant = ObservableValue.of(ObservableConfig.this);
+						descendant = ObservableValue.of(theConfig);
 					else
-						descendant = observeDescendant(thePath.getParent());
+						descendant = theConfig.observeDescendant(thePath.getParent());
 				} else
-					descendant = observeDescendant(thePath);
+					descendant = theConfig.observeDescendant(thePath);
 			} else
-				descendant = ObservableValue.of(ObservableConfig.this);
+				descendant = ObservableValue.of(theConfig);
 			return descendant;
 		}
 
 		protected Supplier<ObservableConfig> createDescendant(boolean parent) {
 			ObservableConfigPath path = parent ? thePath.getParent() : thePath;
-			return () -> getChild(path, true, null);
+			return () -> theConfig.getChild(path, true, null);
 		}
 
 		protected String getChildName() {
 			if (thePath == null)
-				return StringUtils.singularize(getName());
+				return StringUtils.singularize(theConfig.getName());
 			else
 				return thePath.getLastElement().getName();
 		}
@@ -761,7 +375,7 @@ public class ObservableConfig implements Transactable, Stamped {
 		}
 
 		protected ObservableConfigFormat.ObservableConfigParseContext<T> getParseContext(Observable<?> until, Observable<?> findRefs) {
-			return ObservableConfigFormat.ctxFor(getSession(), ObservableConfig.this, getDescendant(false),
+			return ObservableConfigFormat.ctxFor(getSession(), theConfig, getDescendant(false),
 				createDescendant(false)::get, null, until, null, findRefs, null);
 		}
 
@@ -805,14 +419,13 @@ public class ObservableConfig implements Transactable, Stamped {
 
 		public SettableValue<T> buildValue(Consumer<SettableValue<T>> preReturnGet) {
 			return build(
-				findRefs -> new ObservableConfigTransform.ObservableConfigValue<>(getSession(), ObservableConfig.this,
+				findRefs -> new ObservableConfigTransform.ObservableConfigValue<>(getSession(), theConfig,
 					getDescendant(false), createDescendant(false)::get, getUntil(), theType, getFormat(), true, findRefs),
 				preReturnGet);
 		}
 
 		public ObservableCollection<T> buildCollection(Consumer<ObservableCollection<T>> preReturnGet) {
-			return build(findRefs -> new ObservableConfigTransform.ObservableConfigValues<>(getSession(),
-				ObservableConfig.this, //
+			return build(findRefs -> new ObservableConfigTransform.ObservableConfigValues<>(getSession(), theConfig, //
 				getDescendant(thePath != null), createDescendant(thePath != null)::get, theType, getFormat(), getChildName(), getUntil(),
 				true, findRefs), preReturnGet);
 		}
@@ -821,8 +434,7 @@ public class ObservableConfig implements Transactable, Stamped {
 			ObservableConfigFormat<T> entityFormat = getFormat();
 			if (!(entityFormat instanceof ObservableConfigFormat.EntityConfigFormat))
 				throw new IllegalStateException("Format for " + theType + " is not entity-enabled");
-			return build(findRefs -> new ObservableConfigTransform.ObservableConfigEntityValues<>(getSession(),
-				ObservableConfig.this, //
+			return build(findRefs -> new ObservableConfigTransform.ObservableConfigEntityValues<>(getSession(), theConfig, //
 				getDescendant(thePath != null), createDescendant(thePath != null)::get,
 				(ObservableConfigFormat.EntityConfigFormat<T>) entityFormat, getChildName(), getUntil(), true, findRefs), preReturnGet);
 		}
@@ -900,7 +512,7 @@ public class ObservableConfig implements Transactable, Stamped {
 		protected ObservableConfigFormat<K> getKeyFormat() {
 			ObservableConfigFormat<K> format = theKeyFormat;
 			if (format == null)
-				format = theValueBuilder.getFormatSet().getConfigFormat(theKeyType, getName());
+				format = theValueBuilder.getFormatSet().getConfigFormat(theKeyType, theValueBuilder.getConfig().getName());
 			return format;
 		}
 
@@ -912,7 +524,8 @@ public class ObservableConfig implements Transactable, Stamped {
 		@Deprecated
 		public ObservableMap<K, V> buildMap(Consumer<ObservableMap<K, V>> preReturnGet) {
 			return theValueBuilder.build(
-				findRefs -> new ObservableConfigTransform.ObservableConfigMap<>(new ObservableConfigParseSession(), ObservableConfig.this, //
+				findRefs -> new ObservableConfigTransform.ObservableConfigMap<>(new ObservableConfigParseSession(),
+					theValueBuilder.getConfig(), //
 					theValueBuilder.getDescendant(true), theValueBuilder.createDescendant(true)::get, //
 					getKeyName(), theValueBuilder.getChildName(), theKeyType, theValueBuilder.theType, getKeyFormat(),
 					theValueBuilder.getFormat(), theValueBuilder.getUntil(), true, findRefs),
@@ -924,67 +537,22 @@ public class ObservableConfig implements Transactable, Stamped {
 		public ObservableMultiMap<K, V> buildMultiMap(Consumer<ObservableMultiMap<K, V>> preReturnGet) {
 			return theValueBuilder
 				.build(findRefs -> new ObservableConfigTransform.ObservableConfigMultiMap<>(new ObservableConfigParseSession(),
-					ObservableConfig.this, //
+					theValueBuilder.getConfig(), //
 					theValueBuilder.getDescendant(true), theValueBuilder.createDescendant(true)::get, //
 					getKeyName(), theValueBuilder.getChildName(), theKeyType, theValueBuilder.theType, getKeyFormat(),
 					theValueBuilder.getFormat(), theValueBuilder.getUntil(), true, findRefs), preReturnGet);
 		}
 	}
 
-	@Override
-	public boolean isLockSupported() {
-		return theContent.isLockSupported();
-	}
-
-	@Override
-	public Transaction lock(boolean write, Object cause) {
-		return withCause(theContent.lock(write, cause), cause);
-	}
-
-	@Override
-	public Transaction tryLock(boolean write, Object cause) {
-		return withCause(theContent.tryLock(write, cause), cause);
-	}
-
-	private Transaction withCause(Transaction t, Object cause) {
-		if (t == null || theRootCausable == null) // root causable can be null during initialization
-			return t;
-		boolean causeIsRoot = theRootCausable.get() == null;
-		if (causeIsRoot) {
-			if (cause instanceof Causable) {
-				theRootCausable.accept((Causable) cause);
-				return () -> {
-					theRootCausable.accept(null);
-					t.close();
-				};
-			} else {
-				Causable synCause = Causable.simpleCause(cause);
-				Transaction causeT = synCause.use();
-				theRootCausable.accept(synCause);
-				return () -> {
-					causeT.close();
-					theRootCausable.accept(null);
-					t.close();
-				};
-			}
-		} else
-			return t;
-	}
-
-	@Override
-	public long getStamp() {
-		return theModCount;
-	}
-
-	public ObservableConfig getChild(String path) {
+	default ObservableConfig getChild(String path) {
 		return getChild(path, false, null);
 	}
 
-	public ObservableConfig getChild(String path, boolean createIfAbsent, Consumer<ObservableConfig> preAddMod) {
-		return getChild(createPath(path), createIfAbsent, preAddMod);
+	default ObservableConfig getChild(String path, boolean createIfAbsent, Consumer<ObservableConfig> preAddMod) {
+		return getChild(ObservableConfigPath.create(path), createIfAbsent, preAddMod);
 	}
 
-	public ObservableConfig getChild(ObservableConfigPath path, boolean createIfAbsent, Consumer<ObservableConfig> preAddMod) {
+	default ObservableConfig getChild(ObservableConfigPath path, boolean createIfAbsent, Consumer<ObservableConfig> preAddMod) {
 		if (path == null)
 			throw new IllegalArgumentException("No path given");
 		try (Transaction t = lock(createIfAbsent, null)) {
@@ -999,19 +567,19 @@ public class ObservableConfig implements Transactable, Stamped {
 		}
 	}
 
-	protected ObservableConfig getChild(ObservableConfigPathElement el, boolean createIfAbsent, Consumer<ObservableConfig> preAddMod) {
+	default ObservableConfig getChild(ObservableConfigPathElement el, boolean createIfAbsent, Consumer<ObservableConfig> preAddMod) {
 		String pathName = el.getName();
-		if (pathName.equals(ANY_NAME) || pathName.equals(ANY_DEPTH))
+		if (pathName.equals(ObservableConfigPath.ANY_NAME) || pathName.equals(ObservableConfigPath.ANY_DEPTH))
 			throw new IllegalArgumentException("Variable paths not allowed for getChild");
-		ObservableConfig found = null;
-		for (ObservableConfig config : theContent) {
+		DefaultObservableConfig found = null;
+		for (ObservableConfig config : getContent()) {
 			if (el.matches(config)) {
-				found = config;
+				found = (DefaultObservableConfig) config;
 				break;
 			}
 		}
 		if (found == null && createIfAbsent) {
-			found = addChild(pathName, ch -> {
+			found = (DefaultObservableConfig) addChild(pathName, ch -> {
 				for (Map.Entry<String, String> attr : el.getAttributes().entrySet())
 					ch.addChild(attr.getKey(), atCh -> atCh.setValue(attr.getValue()));
 				if (preAddMod != null)
@@ -1021,84 +589,26 @@ public class ObservableConfig implements Transactable, Stamped {
 		return found;
 	}
 
-	public ObservableConfig addChild(String name) {
+	default ObservableConfig addChild(String name) {
 		return addChild(name, null);
 	}
 
-	public ObservableConfig addChild(String name, Consumer<ObservableConfig> preAddMod) {
+	default ObservableConfig addChild(String name, Consumer<ObservableConfig> preAddMod) {
 		return addChild(null, null, false, name, preAddMod);
 	}
 
-	public ObservableConfig addChild(ObservableConfig after, ObservableConfig before, boolean first, String name,
-		Consumer<ObservableConfig> preAddMod) {
-		return addChild(after, before, first, name, preAddMod, false);
-	}
+	ObservableConfig addChild(ObservableConfig after, ObservableConfig before, boolean first, String name,
+		Consumer<ObservableConfig> preAddMod);
 
-	protected ObservableConfig addChild(ObservableConfig after, ObservableConfig before, boolean first, String name,
-		Consumer<ObservableConfig> preAddMod, boolean move) {
-		try (Transaction t = lock(true, null)) {
-			ObservableConfig child = createChild(name, __ -> theLocking);
-			child.theParent = this;
-			if (preAddMod != null)
-				preAddMod.accept(child);
-			addChild(child, after, before, first, move);
-			return child;
-		}
-	}
+	ObservableConfig moveChild(ObservableConfig child, ObservableConfig after, ObservableConfig before, boolean first,
+		Runnable afterRemove);
 
-	protected void addChild(ObservableConfig child, ObservableConfig after, ObservableConfig before, boolean first, boolean move) {
-		ElementId el = theContent.addElement(child, //
-			after == null ? null : Objects.requireNonNull(after.theParentContentRef),
-				before == null ? null : Objects.requireNonNull(before.theParentContentRef), //
-					first).getElementId();
-		child.initialize(this, el);
-		fire(CollectionChangeType.add, move, BetterList.of(child), child.getName(), null);
-	}
+	@Override
+	ObservableConfig setName(String name);
 
-	public ObservableConfig moveChild(ObservableConfig child, ObservableConfig after, ObservableConfig before, boolean first,
-		Runnable afterRemove) {
-		try (Transaction t = lock(true, null)) {
-			if (child.getParent() != this)
-				throw new NoSuchElementException("Config is not a child of this config");
-			if (!child.theParentContentRef.isPresent())
-				throw new NoSuchElementException("Config has already been removed");
+	ObservableConfig setValue(String value);
 
-			child._remove(true);
-			if (afterRemove != null)
-				afterRemove.run();
-			return addChild(after, before, first, child.getName(), newChild -> newChild._copyFrom(child, true, true), true);
-		}
-	}
-
-	public ObservableConfig setName(String name) {
-		if (name == null)
-			throw new NullPointerException("Name must not be null");
-		else if (name.length() == 0)
-			throw new IllegalArgumentException("Name must not be empty");
-		try (Transaction t = lock(true, null)) {
-			String oldName = theName;
-			theName = name;
-			fire(CollectionChangeType.set, false, BetterList.empty(), oldName, theValue);
-		}
-		return this;
-	}
-
-	public ObservableConfig setValue(String value) {
-		try (Transaction t = lock(true, null)) {
-			String oldValue = theValue;
-			theValue = value;
-			fire(CollectionChangeType.set, false, //
-				BetterList.empty(), theName, oldValue);
-		}
-		return this;
-	}
-
-	protected void update() {
-		fire(CollectionChangeType.set, false, //
-			BetterList.empty(), theName, theValue);
-	}
-
-	public ObservableConfig set(String path, String value) {
+	default ObservableConfig set(String path, String value) {
 		ObservableConfig child = getChild(path, value != null, //
 			ch -> ch.setValue(value));
 		if (value == null) {
@@ -1109,182 +619,49 @@ public class ObservableConfig implements Transactable, Stamped {
 		return this;
 	}
 
-	public ObservableConfig copyFrom(ObservableConfig source, boolean removeExtras) {
-		try (Transaction t = Lockable.lockAll(//
-			Lockable.lockable(source, false, null), //
-			Lockable.lockable(this, true, null))) {
-			_copyFrom(source, removeExtras, false);
-		}
-		return this;
-	}
+	ObservableConfig copyFrom(ObservableConfig source, boolean removeExtras);
 
-	private void _copyFrom(ObservableConfig source, boolean removeExtras, boolean withParsedItems) {
-		if (source.theParsedItems != null && withParsedItems) {
-			for (Map.Entry<ObservableConfigParseSession, WeakReference<Object>> pi : source.theParsedItems.entrySet()) {
-				Object value = pi.getValue().get();
-				if (value != null)
-					withParsedItem(pi.getKey(), value);
-			}
-		}
-		if (!Objects.equals(theValue, source.theValue))
-			setValue(source.theValue);
-		List<ObservableConfig> children = new ArrayList<>(theContent.size());
-		children.addAll(theContent);
-		ArrayUtils.adjust(children, source.theContent, new ArrayUtils.DifferenceListener<ObservableConfig, ObservableConfig>() {
-			@Override
-			public boolean identity(ObservableConfig o1, ObservableConfig o2) {
-				return o1.getName().equals(o2.getName());
-			}
+	void remove();
 
-			@Override
-			public ObservableConfig added(ObservableConfig o, int mIdx, int retIdx) {
-				ObservableConfig before = retIdx == children.size() ? null : children.get(retIdx);
-				return addChild(null, before, false, o.getName(), newChild -> newChild._copyFrom(o, removeExtras, withParsedItems), false);
-			}
-
-			@Override
-			public ObservableConfig removed(ObservableConfig o, int oIdx, int incMod, int retIdx) {
-				if (removeExtras) {
-					o.remove();
-					return null;
-				} else
-					return o;
-			}
-
-			@Override
-			public ObservableConfig set(ObservableConfig o1, int idx1, int incMod, ObservableConfig o2, int idx2, int retIdx) {
-				o1._copyFrom(source, removeExtras, withParsedItems);
-				return o1;
-			}
-		});
-	}
-
-	public void remove() {
-		_remove(false);
-	}
-
-	private void _remove(boolean move) {
-		try (Transaction t = lock(true, null)) {
-			if (!theParentContentRef.isPresent())
-				return;
-			theParent.theContent.mutableElement(theParentContentRef).remove();
-			fire(CollectionChangeType.remove, move, BetterList.empty(), theName, theValue);
-		}
-		Map<?, ?> parsedItems = theParsedItems;
-		if (parsedItems != null && !move)
-			parsedItems.clear();
-		theParent = null;
-		theParentContentRef = null;
-	}
-
-	@Override
-	public String toString() {
+	public static String toString(ObservableConfig config) {
 		StringWriter out = new StringWriter();
 		try {
-			_writeXml(this, out, new XmlEncoding(":", ":", ""), 0, "", new XmlWriteHelper(), false);
+			new XmlWriteHelper()._writeXml(config, out, new XmlEncoding(":", ":", ""), 0, "", false);
 		} catch (IOException e) {
 			throw new IllegalStateException(e);
 		}
 		return out.toString();
 	}
 
-	public String printXml() {
+	default String printXml() {
 		StringWriter out = new StringWriter();
 		try {
-			_writeXml(this, out, new XmlEncoding(":", ":", ""), 0, "\t", new XmlWriteHelper(), true);
+			new XmlWriteHelper()._writeXml(this, out, new XmlEncoding(":", ":", ""), 0, "\t", true);
 		} catch (IOException e) {
 			throw new IllegalStateException(e);
 		}
 		return out.toString();
 	}
 
-	protected final Object getCurrentCause() {
-		return theRootCausable == null ? null : theRootCausable.get();
-	}
-
-	protected void fire(CollectionChangeType eventType, boolean move, BetterList<ObservableConfig> relativePath, String oldName,
-		String oldValue) {
-		_fire(eventType, move, relativePath, oldName, oldValue, //
-			getCurrentCause());
-	}
-
-	private void _fire(CollectionChangeType eventType, boolean move, BetterList<ObservableConfig> relativePath, String oldName,
-		String oldValue,
-		Object cause) {
-		theModCount++;
-		if (!theListeners.isEmpty()) {
-			ObservableConfigEvent event = new ObservableConfigEvent(eventType, move, this, oldName, oldValue, relativePath,
-				getCurrentCause());
-			try (Transaction t = event.use()) {
-				theListeners.forEach(intL -> {
-					if (intL.path == null || intL.path.matches(relativePath)) {
-						if (relativePath.isEmpty() && eventType == CollectionChangeType.remove)
-							intL.listener.onCompleted(event);
-						else
-							intL.listener.onNext(event);
-					}
-				});
-			}
-		}
-		boolean fireWithParent;
-		if (theParentContentRef == null)
-			fireWithParent = false;
-		else if (theParentContentRef.isPresent())
-			fireWithParent = true;
-		else
-			fireWithParent = eventType == CollectionChangeType.remove && relativePath.isEmpty(); // Means this config was just removed
-		if (fireWithParent)
-			theParent.fire(eventType, move, //
-				addToList(this, relativePath), oldName, oldValue);
-	}
-
-	private static BetterList<ObservableConfig> addToList(ObservableConfig c, List<ObservableConfig> list) {
-		ObservableConfig[] array = new ObservableConfig[list.size() + 1];
-		array[0] = c;
-		for (int i = 0; i < list.size(); i++)
-			array[i + 1] = list.get(i);
-		return BetterList.of(array);
-	}
-
-	private static class InternalObservableConfigListener {
-		final ObservableConfigPath path;
-		final Observer<? super ObservableConfigEvent> listener;
-
-		InternalObservableConfigListener(ObservableConfigPath path, Observer<? super ObservableConfigEvent> observer) {
-			this.path = path;
-			this.listener = observer;
-		}
-
-		@Override
-		public String toString() {
-			return path + ":" + listener;
-		}
-	}
-
-	/** Needed by ObservableConfigContent.* */
-	BetterList<ObservableConfig> _getContent() {
-		return theContent;
-	}
-
-	public <E extends Exception> Subscription persistOnShutdown(ObservableConfigPersistence<E> persistence,
+	default <E extends Exception> Subscription persistOnShutdown(ObservableConfigPersistence<E> persistence,
 		Consumer<? super Exception> onException) {
 		return persistWhen(Observable.onVmShutdown(), persistence, onException);
 	}
 
-	public <E extends Exception> Subscription persistEvery(Duration interval, ObservableConfigPersistence<E> persistence,
+	default <E extends Exception> Subscription persistEvery(Duration interval, ObservableConfigPersistence<E> persistence,
 		Consumer<? super Exception> onException) {
 		return persistWhen(Observable.<Void> every(Duration.ZERO, interval, null, d -> null, null), persistence, onException);
 	}
 
-	public <E extends Exception> Subscription persistOnChange(ObservableConfigPersistence<E> persistence,
+	default <E extends Exception> Subscription persistOnChange(ObservableConfigPersistence<E> persistence,
 		Consumer<? super Exception> onException) {
-		return persistWhen(watch(buildPath("").multi(true).build()), persistence, onException);
+		return persistWhen(watch(ObservableConfigPath.buildPath("").multi(true).build()), persistence, onException);
 	}
 
-	public <E extends Exception> Subscription persistWhen(Observable<?> observable, ObservableConfigPersistence<E> persistence,
+	default <E extends Exception> Subscription persistWhen(Observable<?> observable, ObservableConfigPersistence<E> persistence,
 		Consumer<? super Exception> onException) {
 		return observable.subscribe(new Observer<Object>() {
-			private long theLastStamp = theModCount;
+			private long theLastStamp = getStamp();
 
 			@Override
 			public <V> void onNext(V value) {
@@ -1297,13 +674,13 @@ public class ObservableConfig implements Transactable, Stamped {
 			}
 
 			private void tryPersist(boolean waitForLock) {
-				if (theModCount == theLastStamp)
+				if (getStamp() == theLastStamp)
 					return; // No changes, don't re-persist
 				Transaction lock = waitForLock ? lock(false, null) : tryLock(false, null);
 				if (lock == null)
 					return;
 				try {
-					theLastStamp = theModCount;
+					theLastStamp = getStamp();
 					persistence.persist(ObservableConfig.this);
 				} catch (Exception ex) {
 					onException.accept(ex);
@@ -1332,13 +709,11 @@ public class ObservableConfig implements Transactable, Stamped {
 	}
 
 	public static ObservableConfig createRoot(String name) {
-		return createRoot(name, null, v -> new StampedLockingStrategy(v));
+		return DefaultObservableConfig.createRoot(name);
 	}
 
 	public static ObservableConfig createRoot(String name, String value, Function<Object, CollectionLockingStrategy> locking) {
-		return new ObservableConfig(name, locking)//
-			.setValue(value)//
-			.initialize(null, null);
+		return DefaultObservableConfig.createRoot(name, value, locking);
 	}
 
 	public static class XmlEncoding {
@@ -1510,7 +885,7 @@ public class ObservableConfig implements Transactable, Stamped {
 						persistAttributes(config, attributes);
 						isRoot = false;
 					} else {
-						newConfig = theStack.getLast().createChild(name, __ -> theStack.getLast().getLocker());
+						newConfig = theStack.getLast().addChild(name);
 						persistAttributes(newConfig, attributes);
 					}
 					theStack.add(newConfig);
@@ -1577,8 +952,6 @@ public class ObservableConfig implements Transactable, Stamped {
 					}
 					if (!Objects.equals(contentStr, cfg.getValue()))
 						cfg.setValue(contentStr);
-					if (!theStack.isEmpty())
-						theStack.getLast().addChild(cfg, null, null, false, false);
 					hasContent = true;
 				}
 			});
@@ -1588,12 +961,12 @@ public class ObservableConfig implements Transactable, Stamped {
 	public static void writeXml(ObservableConfig config, Writer out, XmlEncoding encoding, String indent) throws IOException {
 		out.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\n");
 		try (Transaction t = config.lock(false, null)) {
-			_writeXml(config, out, encoding, 0, indent, new XmlWriteHelper(), true);
+			new XmlWriteHelper()._writeXml(config, out, encoding, 0, indent, true);
 		}
 		out.append('\n');
 	}
 
-	private static class XmlWriteHelper {
+	class XmlWriteHelper {
 		final Map<String, Integer> attrNames = new HashMap<>();
 		final BitSet childrenAsAttributes = new BitSet();
 		final StringBuilder escapeTemp = new StringBuilder();
@@ -1639,178 +1012,76 @@ public class ObservableConfig implements Transactable, Stamped {
 			escapeTemp.setLength(0);
 			return escaped;
 		}
-	}
 
-	private static void _writeXml(ObservableConfig config, Writer out, XmlEncoding encoding, int indentAmount, String indentStr,
-		XmlWriteHelper helper, boolean withChildren) throws IOException {
-		for (int i = 0; i < indentAmount; i++)
-			out.append(indentStr);
-		String xmlName = encoding.encode(config.getName());
-		out.append('<').append(xmlName);
+		private void _writeXml(ObservableConfig config, Writer out, XmlEncoding encoding, int indentAmount, String indentStr,
+			boolean withChildren) throws IOException {
+			for (int i = 0; i < indentAmount; i++)
+				out.append(indentStr);
+			String xmlName = encoding.encode(config.getName());
+			out.append('<').append(xmlName);
 
-		// See if any of the children should be attributes
-		String singular = StringUtils.singularize(config.getName());
-		int i = 0;
-		for (ObservableConfig child : config.theContent) {
-			boolean maybeAttr = child.mayBeAttribute();
-			if (maybeAttr && child.getName().equals(singular))
-				maybeAttr = false;
-			if (maybeAttr) {
-				Integer old = helper.attrNames.put(child.getName(), i);
-				if (old == null)
-					helper.childrenAsAttributes.set(i);
-				else
-					helper.childrenAsAttributes.clear(old);
-			}
-			i++;
-		}
-		helper.attrNames.clear();
-		if (!helper.childrenAsAttributes.isEmpty()) {
-			for (i = helper.childrenAsAttributes.nextSetBit(0); i >= 0; i = helper.childrenAsAttributes.nextSetBit(i + 1)) {
-				ObservableConfig child = config.theContent.get(i);
-				out.append(' ').append(encoding.encode(child.getName())).append("=\"").append(helper.escapeXml(child.getValue(), encoding))
-				.append('"');
-			}
-		}
-		if (withChildren)
-			withChildren = helper.childrenAsAttributes.cardinality() < config.theContent.size();
-		if (!withChildren && config.theValue == null) {
-			out.append(" />");
-			helper.childrenAsAttributes.clear();
-		} else {
-			out.append(">");
-			if (config.theValue != null)
-				out.append(helper.escapeXml(config.getValue(), encoding));
-			if (withChildren) {
-				i = 0;
-				BitSet copy = (BitSet) helper.childrenAsAttributes.clone();
-				helper.childrenAsAttributes.clear();
-				for (ObservableConfig child : config.theContent) {
-					if (!copy.get(i)) {
-						out.append('\n');
-						_writeXml(child, out, encoding, indentAmount + 1, indentStr, helper, true);
-					}
-					i++;
+			// See if any of the children should be attributes
+			String singular = StringUtils.singularize(config.getName());
+			int i = 0;
+			for (ObservableConfig child : config.getContent()) {
+				boolean maybeAttr = mayBeAttribute(child);
+				if (maybeAttr && child.getName().equals(singular))
+					maybeAttr = false;
+				if (maybeAttr) {
+					Integer old = attrNames.put(child.getName(), i);
+					if (old == null)
+						childrenAsAttributes.set(i);
+					else
+						childrenAsAttributes.clear(old);
 				}
+				i++;
+			}
+			attrNames.clear();
+			if (!childrenAsAttributes.isEmpty()) {
+				for (i = childrenAsAttributes.nextSetBit(0); i >= 0; i = childrenAsAttributes.nextSetBit(i + 1)) {
+					ObservableConfig child = config.getContent().get(i);
+					out.append(' ').append(encoding.encode(child.getName())).append("=\"").append(escapeXml(child.getValue(), encoding))
+					.append('"');
+				}
+			}
+			if (withChildren)
+				withChildren = childrenAsAttributes.cardinality() < config.getContent().size();
+			if (!withChildren && config.getValue() == null) {
+				out.append(" />");
+				childrenAsAttributes.clear();
+			} else {
+				out.append(">");
+				if (config.getValue() != null)
+					out.append(escapeXml(config.getValue(), encoding));
+				if (withChildren) {
+					i = 0;
+					BitSet copy = (BitSet) childrenAsAttributes.clone();
+					childrenAsAttributes.clear();
+					for (ObservableConfig child : config.getContent()) {
+						if (!copy.get(i)) {
+							out.append('\n');
+							_writeXml(child, out, encoding, indentAmount + 1, indentStr, true);
+						}
+						i++;
+					}
 
-				out.append('\n');
-				for (i = 0; i < indentAmount; i++)
-					out.append(indentStr);
-			} else
-				helper.childrenAsAttributes.clear();
-			out.append("</").append(xmlName).append('>');
+					out.append('\n');
+					for (i = 0; i < indentAmount; i++)
+						out.append(indentStr);
+				} else
+					childrenAsAttributes.clear();
+				out.append("</").append(xmlName).append('>');
+			}
 		}
-	}
 
-	protected boolean mayBeAttribute() {
-		if (theValue == null || theValue.length() == 0 || !theContent.isEmpty())
-			return false;
-		for (int c = 0; c < theValue.length(); c++)
-			if (theValue.charAt(c) < ' ' || theValue.charAt(c) > '~')
+		protected boolean mayBeAttribute(ObservableConfig config) {
+			String value = config.getValue();
+			if (value == null || value.length() == 0 || !config.getContent().isEmpty())
 				return false;
-		return true;
-	}
-
-	static String[] parsePath(String path) {
-		int pathSepIdx = path.indexOf(PATH_SEPARATOR);
-		if (pathSepIdx < 0)
-			return new String[] { path };
-		List<String> pathEls = new LinkedList<>();
-		int lastSep = -1;
-		while (pathSepIdx >= 0) {
-			pathEls.add(path.substring(lastSep + 1, pathSepIdx));
-			lastSep = pathSepIdx;
-			pathSepIdx = path.indexOf(PATH_SEPARATOR, pathSepIdx + 1);
-		}
-		pathEls.add(path.substring(lastSep + 1));
-		return pathEls.toArray(new String[pathEls.size()]);
-	}
-
-	public static ObservableConfigPathElement parsePathElement(String pathEl) {
-		boolean multi;
-		boolean deep = ANY_DEPTH.equals(pathEl);
-		String name;
-		if (deep) {
-			name = "";
-			multi = true;
-		} else {
-			multi = pathEl.length() > 0 && pathEl.charAt(pathEl.length() - 1) == ANY_NAME.charAt(0);
-			if (multi)
-				name = pathEl.substring(0, pathEl.length() - 1);
-			else
-				name = pathEl;
-		}
-		Map<String, String> properties = null;
-		// Quick check to avoid pattern checking on every single path, few of which will have attributes
-		if (name.length() > 0 && name.charAt(name.length() - 1) == '}') {
-			properties = new LinkedHashMap<>();
-			name = parsePathProperties(name, properties);
-		}
-		return new ObservableConfigPathElement(name, properties, multi, deep);
-	}
-
-	public static String parsePathProperties(String pathEl, Map<String, String> properties) {
-		if (pathEl.length() == 0 || pathEl.charAt(pathEl.length() - 1) != '}')
-			return pathEl;
-		int index = pathEl.indexOf('{');
-		int nameEnd = index;
-		if (index < 0)
-			return pathEl;
-		int nextIdx = pathEl.indexOf(',', index + 1);
-		if (nextIdx < 0)
-			nextIdx = pathEl.length() - 1; // '}'
-		while (nextIdx >= 0) {
-			int eqIdx = pathEl.indexOf('=', index + 1);
-			if (eqIdx < 0 || eqIdx > nextIdx)
-				return pathEl;
-			properties.put(pathEl.substring(index + 1, eqIdx).trim(), pathEl.substring(eqIdx + 1, nextIdx).trim());
-			if (nextIdx == pathEl.length() - 1)
-				break;
-			index = nextIdx;
-			nextIdx = pathEl.indexOf(',', index + 1);
-			if (nextIdx < 0)
-				nextIdx = pathEl.length() - 1; // '}'
-		}
-		String name = pathEl.substring(0, nameEnd).trim();
-		return name;
-	}
-
-	private static class ObservableConfigChangesObservable implements Observable<ObservableConfigEvent> {
-		private final ObservableConfig theConfig;
-		private final ObservableConfigPath thePath;
-		private Object theIdentity;
-
-		ObservableConfigChangesObservable(ObservableConfig config, ObservableConfigPath path) {
-			theConfig = config;
-			thePath = path;
-		}
-
-		@Override
-		public Object getIdentity() {
-			if (theIdentity == null)
-				theIdentity = Identifiable.wrap(theConfig, "watch", thePath);
-			return theIdentity;
-		}
-
-		@Override
-		public Subscription subscribe(Observer<? super ObservableConfigEvent> observer) {
-			return theConfig.theListeners.add(new InternalObservableConfigListener(thePath, observer), true)::run;
-		}
-
-		@Override
-		public boolean isSafe() {
-			return theConfig.isLockSupported();
-		}
-
-		@Override
-		public Transaction lock() {
-			return theConfig.lock(false, null);
-		}
-
-		@Override
-		public Transaction tryLock() {
-			return theConfig.tryLock(false, null);
+			for (int c = 0; c < value.length(); c++)
+				if (value.charAt(c) < ' ' || value.charAt(c) > '~')
+					return false;
+			return true;
 		}
 	}
-
 }

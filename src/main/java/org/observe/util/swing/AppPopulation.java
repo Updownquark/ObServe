@@ -44,6 +44,7 @@ import org.observe.SimpleObservable;
 import org.observe.collect.ObservableCollection;
 import org.observe.config.ObservableConfig;
 import org.observe.config.ObservableConfig.ObservableConfigPersistence;
+import org.observe.config.ObservableConfigPath;
 import org.observe.config.SyncValueSet;
 import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
@@ -58,7 +59,6 @@ import org.qommons.threading.QommonsTimer;
 import org.xml.sax.SAXException;
 
 public class AppPopulation {
-
 	public static class ObservableUiBuilder extends WindowPopulation.DefaultWindowBuilder<JFrame, ObservableUiBuilder> {
 		private File theDefaultConfigLocation;
 		private String theConfigName;
@@ -376,7 +376,8 @@ public class AppPopulation {
 						ex.printStackTrace();
 					});
 				} else {
-					config.watch(config.buildPath(ObservableConfig.ANY_NAME).multi(true).build()).act(new Consumer<Object>() {
+					config.watch(ObservableConfigPath.buildPath(ObservableConfigPath.ANY_NAME).multi(true).build())
+						.act(new Consumer<Object>() {
 						private long theLastPersist;
 						private final QommonsTimer.TaskHandle persistTask = QommonsTimer.getCommonInstance().build(() -> {
 							theLastPersist = System.currentTimeMillis();
