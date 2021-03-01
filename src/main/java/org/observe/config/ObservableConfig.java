@@ -166,9 +166,7 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 
 	Observable<ObservableConfigEvent> watch(ObservableConfigPath path);
 
-	default ObservableCollection<ObservableConfig> getContent() {
-		return new FullObservableConfigContent(this);
-	}
+	BetterList<ObservableConfig> getContent();
 
 	default SyncValueSet<? extends ObservableConfig> getAllContent() {
 		return getContent(ObservableConfigPath.ANY_NAME);
