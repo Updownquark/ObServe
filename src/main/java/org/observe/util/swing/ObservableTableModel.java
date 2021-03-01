@@ -281,7 +281,7 @@ public class ObservableTableModel<R> implements TableModel {
 					// so this cannot be easily corrected.
 					// At the moment, the best solution I can find is to remove all the columns after the ones to be added, then re-add
 					// them.
-					int afterColumnCount = table.getColumnModel().getColumnCount() - e.getIndex1() - 1;
+					int afterColumnCount = table.getColumnModel().getColumnCount() - e.getIndex0();
 					List<TableColumn> afterColumns = afterColumnCount == 0 ? Collections.emptyList() : new ArrayList<>(afterColumnCount);
 					for (int i = table.getColumnModel().getColumnCount() - 1; i >= e.getIndex0(); i--) {
 						TableColumn column = table.getColumnModel().getColumn(i);
