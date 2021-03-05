@@ -49,8 +49,8 @@ import org.observe.util.swing.ObservableTableModel.RowMouseListener;
 import org.observe.util.swing.PanelPopulation.AbstractComponentEditor;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.observe.util.swing.PanelPopulation.SimpleHPanel;
-import org.observe.util.swing.PanelPopulation.SimpleTableAction;
-import org.observe.util.swing.PanelPopulation.TableAction;
+import org.observe.util.swing.PanelPopulation.SimpleDataAction;
+import org.observe.util.swing.PanelPopulation.DataAction;
 import org.observe.util.swing.PanelPopulation.TableBuilder;
 import org.observe.util.swing.TableContentControl.FilteredValue;
 import org.observe.util.swing.TableContentControl.ValueRenderer;
@@ -210,7 +210,7 @@ implements TableBuilder<R, P> {
 	}
 
 	@Override
-	public P withAdd(Supplier<? extends R> creator, Consumer<TableAction<R, ?>> actionMod) {
+	public P withAdd(Supplier<? extends R> creator, Consumer<DataAction<R, ?>> actionMod) {
 		return withMultiAction(values -> {
 			R value = creator.get();
 			CollectionElement<R> el = findElement(value);
@@ -256,7 +256,7 @@ implements TableBuilder<R, P> {
 	}
 
 	@Override
-	public P withRemove(Consumer<? super List<? extends R>> deletion, Consumer<TableAction<R, ?>> actionMod) {
+	public P withRemove(Consumer<? super List<? extends R>> deletion, Consumer<DataAction<R, ?>> actionMod) {
 		String single = getItemName();
 		String plural = StringUtils.pluralize(single);
 		if(deletion==null){
@@ -274,7 +274,7 @@ implements TableBuilder<R, P> {
 	}
 
 	@Override
-	public P withCopy(Function<? super R, ? extends R> copier, Consumer<TableAction<R, ?>> actionMod) {
+	public P withCopy(Function<? super R, ? extends R> copier, Consumer<DataAction<R, ?>> actionMod) {
 		return withMultiAction(values -> {
 			try (Transaction t = theRows.lock(true, null)) {
 				if (theSafeRows.hasQueuedEvents()) { // If there are queued changes, we can't rely on indexes we get back from the model
@@ -329,7 +329,7 @@ implements TableBuilder<R, P> {
 	}
 
 	@Override
-	public P withMove(boolean up, Consumer<TableAction<R, ?>> actionMod) {
+	public P withMove(boolean up, Consumer<DataAction<R, ?>> actionMod) {
 		((ObservableCollection<CategoryRenderStrategy<? super R, ?>>) theColumns)
 		.add(new CategoryRenderStrategy<>(up ? "\u2191" : "\u2193", TypeTokens.get().OBJECT, v -> null)
 			.withHeaderTooltip("Move row " + (up ? "up" : "down")).decorateAll(deco -> deco.withIcon(PanelPopulation.getMoveIcon(up, 16)))//
@@ -366,7 +366,7 @@ implements TableBuilder<R, P> {
 	}
 
 	@Override
-	public P withMoveToEnd(boolean up, Consumer<TableAction<R, ?>> actionMod) {
+	public P withMoveToEnd(boolean up, Consumer<DataAction<R, ?>> actionMod) {
 		return withMultiAction(values -> {
 			try (Transaction t = theRows.lock(true, null)) {
 				if (theSafeRows.hasQueuedEvents()) { // If there are queued changes, we can't rely on indexes we get back from the model
@@ -429,8 +429,8 @@ implements TableBuilder<R, P> {
 	}
 
 	@Override
-	public P withMultiAction(Consumer<? super List<? extends R>> action, Consumer<TableAction<R, ?>> actionMod) {
-		SimpleTableAction<R, ?> ta = new SimpleTableAction<>(this, action, this::getSelection);
+	public P withMultiAction(Consumer<? super List<? extends R>> action, Consumer<DataAction<R, ?>> actionMod) {
+		SimpleDataAction<R, ?> ta = new SimpleDataAction<>(this, action, this::getSelection);
 		actionMod.accept(ta);
 		theActions.add(ta);
 		return (P) this;
@@ -702,8 +702,8 @@ implements TableBuilder<R, P> {
 			ListSelectionListener selListener = e -> {
 				List<R> selection = selectionGetter.get();
 				for (Object action : theActions) {
-					if (action instanceof SimpleTableAction)
-						((SimpleTableAction<R, ?>) action).updateSelection(selection, e);
+					if (action instanceof SimpleDataAction)
+						((SimpleDataAction<R, ?>) action).updateSelection(selection, e);
 				}
 			};
 			ListDataListener dataListener = new ListDataListener() {
@@ -720,16 +720,16 @@ implements TableBuilder<R, P> {
 						&& e.getIndex1() <= selModel.getMaxSelectionIndex()) {
 						List<R> selection = selectionGetter.get();
 						for (Object action : theActions) {
-							if (action instanceof SimpleTableAction)
-								((SimpleTableAction<R, ?>) action).updateSelection(selection, e);
+							if (action instanceof SimpleDataAction)
+								((SimpleDataAction<R, ?>) action).updateSelection(selection, e);
 						}
 					}
 				}
 			};
 			List<R> selection = selectionGetter.get();
 			for (Object action : theActions) {
-				if (action instanceof SimpleTableAction)
-					((SimpleTableAction<R, ?>) action).updateSelection(selection, null);
+				if (action instanceof SimpleDataAction)
+					((SimpleDataAction<R, ?>) action).updateSelection(selection, null);
 			}
 
 			PropertyChangeListener selModelListener = evt -> {
@@ -747,8 +747,8 @@ implements TableBuilder<R, P> {
 			SimpleHPanel<JPanel> buttonPanel = new SimpleHPanel<>(null,
 				new JPanel(new JustifiedBoxLayout(false).setMainAlignment(JustifiedBoxLayout.Alignment.LEADING)), theLock, until);
 			for (Object action : theActions) {
-				if (action instanceof SimpleTableAction)
-					((SimpleTableAction<R, ?>) action).addButton(buttonPanel);
+				if (action instanceof SimpleDataAction)
+					((SimpleDataAction<R, ?>) action).addButton(buttonPanel);
 				else if (action instanceof Consumer)
 					buttonPanel.addHPanel(null, "box", (Consumer<PanelPopulator<JPanel, ?>>) action);
 			}

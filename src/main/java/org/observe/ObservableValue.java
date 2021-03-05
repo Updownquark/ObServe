@@ -484,8 +484,30 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 	 * @param value The value to wrap
 	 * @return An observable that always returns the given value
 	 */
+	public static <X> ObservableValue<X> of(Class<X> type, X value) {
+		return new ConstantObservableValue<>(TypeTokens.get().of(type), value);
+	}
+
+	/**
+	 * @param <X> The compile-time type of the value to wrap
+	 * @param type The run-time type of the value to wrap
+	 * @param value The value to wrap
+	 * @return An observable that always returns the given value
+	 */
 	public static <X> ObservableValue<X> of(TypeToken<X> type, X value) {
 		return new ConstantObservableValue<>(type, value);
+	}
+
+	/**
+	 * @param <X> The compile-time type of the value to wrap
+	 * @param type The run-time type of the value to wrap
+	 * @param value Supplies the value for the observable
+	 * @param stamp The stamp for the synthetic value
+	 * @param changes The observable that signals that the value may have changed
+	 * @return An observable that supplies the value of the given supplier, firing change events when the given observable fires
+	 */
+	public static <X> ObservableValue<X> of(Class<X> type, Supplier<? extends X> value, LongSupplier stamp, Observable<?> changes) {
+		return of(TypeTokens.get().of(type), value, stamp, changes);
 	}
 
 	/**

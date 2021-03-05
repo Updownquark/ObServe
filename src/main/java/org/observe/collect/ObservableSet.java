@@ -142,6 +142,24 @@ public interface ObservableSet<E> extends ObservableCollection<E>, BetterSet<E> 
 	}
 
 	/**
+	 * @param <E> The type for the set
+	 * @param type The type for the set
+	 * @return The builder for the set
+	 */
+	static <E> ObservableCollectionBuilder.DistinctBuilder<E, ?> build(TypeToken<E> type) {
+		return ObservableCollection.build(type).distinct();
+	}
+
+	/**
+	 * @param <E> The type for the set
+	 * @param type The type for the set
+	 * @return The builder for the set
+	 */
+	static <E> ObservableCollectionBuilder.DistinctBuilder<E, ?> build(Class<E> type) {
+		return build(TypeTokens.get().of(type));
+	}
+
+	/**
 	 * Turns an observable value containing an observable set into the contents of the value
 	 *
 	 * @param collectionObservable The observable value

@@ -42,6 +42,7 @@ import java.util.function.IntSupplier;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
+import javax.swing.AbstractButton;
 import javax.swing.Action;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -53,8 +54,10 @@ import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
+import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JRadioButton;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
@@ -66,6 +69,7 @@ import javax.swing.JTree;
 import javax.swing.ListSelectionModel;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
 import javax.swing.event.ChangeListener;
 import javax.swing.tree.TreeCellRenderer;
 import javax.swing.tree.TreePath;
@@ -277,7 +281,7 @@ public class PanelPopulation {
 		//
 		// P addMultiple(String fieldName, Consumer<PanelPopulator<JPanel, ?>> panel);
 
-		default P addButton(String buttonText, Consumer<Object> action, Consumer<ButtonEditor<?>> modify) {
+		default P addButton(String buttonText, Consumer<Object> action, Consumer<ButtonEditor<JButton, ?>> modify) {
 			return addButton(buttonText, new ObservableAction<Void>() {
 				@Override
 				public TypeToken<Void> getType() {
@@ -297,7 +301,7 @@ public class PanelPopulation {
 			}, modify);
 		}
 
-		P addButton(String buttonText, ObservableAction<?> action, Consumer<ButtonEditor<?>> modify);
+		P addButton(String buttonText, ObservableAction<?> action, Consumer<ButtonEditor<JButton, ?>> modify);
 
 		<R> P addList(ObservableCollection<R> rows, Consumer<ListBuilder<R, ?>> list);
 
@@ -508,7 +512,7 @@ public class PanelPopulation {
 
 		P withPostLabel(ObservableValue<String> postLabel);
 
-		default P withPostButton(String buttonText, Consumer<Object> action, Consumer<ButtonEditor<?>> modify) {
+		default P withPostButton(String buttonText, Consumer<Object> action, Consumer<ButtonEditor<JButton, ?>> modify) {
 			return withPostButton(buttonText, new ObservableAction<Void>() {
 				@Override
 				public TypeToken<Void> getType() {
@@ -528,7 +532,7 @@ public class PanelPopulation {
 			}, modify);
 		}
 
-		P withPostButton(String buttonText, ObservableAction<?> action, Consumer<ButtonEditor<?>> modify);
+		P withPostButton(String buttonText, ObservableAction<?> action, Consumer<ButtonEditor<JButton, ?>> modify);
 
 		P modifyFieldLabel(Consumer<ObservableSwingUtils.FontAdjuster<?>> font);
 
@@ -547,7 +551,7 @@ public class PanelPopulation {
 		I withIcon(ObservableValue<? extends Icon> icon);
 	}
 
-	public interface ButtonEditor<P extends ButtonEditor<P>> extends FieldEditor<JButton, P>, Iconized<P> {
+	public interface ButtonEditor<B extends AbstractButton, P extends ButtonEditor<B, P>> extends FieldEditor<B, P>, Iconized<P> {
 		default P withText(String text) {
 			return withText(text == null ? null : ObservableValue.of(text));
 		}
@@ -683,31 +687,35 @@ public class PanelPopulation {
 		P withHeader(Consumer<PanelPopulator<JPanel, ?>> header);
 	}
 
-	public interface ListWidgetBuilder<R, C extends Component, P extends ListWidgetBuilder<R, C, P>> extends ComponentEditor<C, P> {
+	public interface CollectionWidgetBuilder<R, C extends Component, P extends CollectionWidgetBuilder<R, C, P>>
+	extends ComponentEditor<C, P> {
 		P withSelection(SettableValue<R> selection, boolean enforceSingleSelection);
 
 		P withSelection(ObservableCollection<R> selection);
 
 		List<R> getSelection();
 
-		P withAdd(Supplier<? extends R> creator, Consumer<TableAction<R, ?>> actionMod);
+		P withRemove(Consumer<? super List<? extends R>> deletion, Consumer<DataAction<R, ?>> actionMod);
 
-		P withRemove(Consumer<? super List<? extends R>> deletion, Consumer<TableAction<R, ?>> actionMod);
-
-		P withCopy(Function<? super R, ? extends R> copier, Consumer<TableAction<R, ?>> actionMod);
-
-		default P withAction(Consumer<? super R> action, Consumer<TableAction<R, ?>> actionMod) {
+		default P withAction(Consumer<? super R> action, Consumer<DataAction<R, ?>> actionMod) {
 			return withMultiAction(values -> {
 				for (R value : values)
 					action.accept(value);
 			}, actionMod);
 		}
 
-		P withMultiAction(Consumer<? super List<? extends R>> action, Consumer<TableAction<R, ?>> actionMod);
+		P withMultiAction(Consumer<? super List<? extends R>> action, Consumer<DataAction<R, ?>> actionMod);
 
 		P withItemName(String itemName);
 
 		String getItemName();
+	}
+
+	public interface ListWidgetBuilder<R, C extends Component, P extends ListWidgetBuilder<R, C, P>>
+	extends CollectionWidgetBuilder<R, C, P> {
+		P withAdd(Supplier<? extends R> creator, Consumer<DataAction<R, ?>> actionMod);
+
+		P withCopy(Function<? super R, ? extends R> copier, Consumer<DataAction<R, ?>> actionMod);
 
 		ObservableCollection<? extends R> getRows();
 	}
@@ -763,9 +771,9 @@ public class PanelPopulation {
 
 		P withIndexColumn(String columnName, Consumer<CategoryRenderStrategy<R, Integer>> column);
 
-		P withMove(boolean up, Consumer<TableAction<R, ?>> actionMod);
+		P withMove(boolean up, Consumer<DataAction<R, ?>> actionMod);
 
-		P withMoveToEnd(boolean up, Consumer<TableAction<R, ?>> actionMod);
+		P withMoveToEnd(boolean up, Consumer<DataAction<R, ?>> actionMod);
 
 		P withTableOption(Consumer<? super PanelPopulator<?, ?>> panel);
 
@@ -782,7 +790,7 @@ public class PanelPopulation {
 		P scrollable(boolean scrollable);
 	}
 
-	public interface TableAction<R, A extends TableAction<R, A>> {
+	public interface DataAction<R, A extends DataAction<R, A>> {
 		List<R> getActionItems();
 
 		/**
@@ -832,7 +840,7 @@ public class PanelPopulation {
 		 */
 		A confirmForItems(String alertTitle, String alertPreText, String postText, boolean confirmType);
 
-		A modifyButton(Consumer<ButtonEditor<?>> buttonMod);
+		A modifyButton(Consumer<ButtonEditor<?, ?>> buttonMod);
 	}
 
 	public static class ActionEnablement<E> implements Function<E, String> {
@@ -904,7 +912,7 @@ public class PanelPopulation {
 		}
 	}
 
-	public interface TreeEditor<F, P extends TreeEditor<F, P>> extends ComponentEditor<JTree, P> {
+	public interface TreeEditor<F, P extends TreeEditor<F, P>> extends CollectionWidgetBuilder<BetterList<F>, JTree, P> {
 		ObservableValue<? extends F> getRoot();
 
 		default P renderWith(Function<? super F, String> format) {
@@ -931,10 +939,6 @@ public class PanelPopulation {
 					tx -> tx.cache(false).map(s -> pathTo(s, parent, getRoot().get())).withReverse(path -> path.get(path.size() - 1)))//
 				.collectPassive());
 		}
-
-		P withSelection(SettableValue<BetterList<F>> selection, boolean enforceSingleSelection);
-
-		P withSelection(ObservableCollection<BetterList<F>> selection);
 
 		P withLeafTest(Predicate<? super F> leafTest);
 
@@ -1371,8 +1375,9 @@ public class PanelPopulation {
 		}
 
 		@Override
-		default P addButton(String buttonText, ObservableAction<?> action, Consumer<ButtonEditor<?>> modify) {
-			SimpleButtonEditor<?> field = new SimpleButtonEditor<>(null, buttonText, action, getLock(), false).withText(buttonText);
+		default P addButton(String buttonText, ObservableAction<?> action, Consumer<ButtonEditor<JButton, ?>> modify) {
+			SimpleButtonEditor<JButton, ?> field = new SimpleButtonEditor<>(null, new JButton(), buttonText, action, getLock(), false)
+				.withText(buttonText);
 			if (modify != null)
 				modify.accept(field);
 			doAdd(field);
@@ -1756,7 +1761,7 @@ public class PanelPopulation {
 		private ObservableValue<String> theTooltip;
 		private SettableValue<ObservableValue<String>> theSettableTooltip;
 		private ObservableValue<String> thePostLabel;
-		private SimpleButtonEditor<?> thePostButton;
+		private SimpleButtonEditor<JButton, ?> thePostButton;
 		private Consumer<FontAdjuster<?>> theFont;
 
 		SimpleFieldEditor(String fieldName, E editor, Supplier<Transactable> lock) {
@@ -1784,12 +1789,12 @@ public class PanelPopulation {
 		}
 
 		@Override
-		public P withPostButton(String buttonText, ObservableAction<?> action, Consumer<ButtonEditor<?>> modify) {
+		public P withPostButton(String buttonText, ObservableAction<?> action, Consumer<ButtonEditor<JButton, ?>> modify) {
 			if (thePostLabel != null) {
 				System.err.println("A field can only have one post component");
 				thePostLabel = null;
 			}
-			thePostButton = new SimpleButtonEditor<>(null, buttonText, action, getLock(), true);
+			thePostButton = new SimpleButtonEditor<>(null, new JButton(), buttonText, action, getLock(), true);
 			if (modify != null)
 				modify.accept(thePostButton);
 			return (P) this;
@@ -2018,16 +2023,17 @@ public class PanelPopulation {
 		}
 	}
 
-	static class SimpleButtonEditor<P extends SimpleButtonEditor<P>> extends SimpleFieldEditor<JButton, P> implements ButtonEditor<P> {
+	static class SimpleButtonEditor<B extends AbstractButton, P extends SimpleButtonEditor<B, P>> extends SimpleFieldEditor<B, P>
+	implements ButtonEditor<B, P> {
 		private final ObservableAction<?> theAction;
 		private ObservableValue<String> theText;
 		private ObservableValue<? extends Icon> theIcon;
 		private ObservableValue<String> theDisablement;
 		private final boolean isPostButton;
 
-		SimpleButtonEditor(String fieldName, String buttonText, ObservableAction<?> action, Supplier<Transactable> lock,
+		SimpleButtonEditor(String fieldName, B button, String buttonText, ObservableAction<?> action, Supplier<Transactable> lock,
 			boolean postButton) {
-			super(fieldName, new JButton(), lock);
+			super(fieldName, button, lock);
 			theAction = action;
 			theText = ObservableValue.of(TypeTokens.get().STRING, buttonText);
 			isPostButton = postButton;
@@ -3130,7 +3136,7 @@ public class PanelPopulation {
 
 	static class SimpleListBuilder<R, P extends SimpleListBuilder<R, P>> extends SimpleFieldEditor<LittleList<R>, P>
 	implements ListBuilder<R, P> {
-		class ListItemAction<A extends SimpleTableAction<R, A>> extends SimpleTableAction<R, A> {
+		class ListItemAction<A extends SimpleDataAction<R, A>> extends SimpleDataAction<R, A> {
 			private final List<R> theActionItems;
 
 			ListItemAction(Consumer<? super List<? extends R>> action, Supplier<List<R>> selectedValues) {
@@ -3180,7 +3186,7 @@ public class PanelPopulation {
 		}
 
 		@Override
-		public P withAdd(Supplier<? extends R> creator, Consumer<TableAction<R, ?>> actionMod) {
+		public P withAdd(Supplier<? extends R> creator, Consumer<DataAction<R, ?>> actionMod) {
 			throw new UnsupportedOperationException("Not implemented yet");
 		}
 
@@ -3204,7 +3210,7 @@ public class PanelPopulation {
 		}
 
 		@Override
-		public P withRemove(Consumer<? super List<? extends R>> deletion, Consumer<TableAction<R, ?>> actionMod) {
+		public P withRemove(Consumer<? super List<? extends R>> deletion, Consumer<DataAction<R, ?>> actionMod) {
 			return withMultiAction(deletion, action -> {
 				action.allowForMultiple(false).withTooltip(items -> "Remove selected " + getItemName())//
 				.modifyButton(button -> button.withIcon(getRemoveIcon(8)));
@@ -3214,7 +3220,7 @@ public class PanelPopulation {
 		}
 
 		@Override
-		public P withCopy(Function<? super R, ? extends R> copier, Consumer<TableAction<R, ?>> actionMod) {
+		public P withCopy(Function<? super R, ? extends R> copier, Consumer<DataAction<R, ?>> actionMod) {
 			return withMultiAction(values -> {
 				try (Transaction t = getEditor().getModel().getWrapped().lock(true, null)) {
 					if (getEditor().getModel().getPendingUpdates() > 0) {
@@ -3266,7 +3272,7 @@ public class PanelPopulation {
 		}
 
 		@Override
-		public P withMultiAction(Consumer<? super List<? extends R>> action, Consumer<TableAction<R, ?>> actionMod) {
+		public P withMultiAction(Consumer<? super List<? extends R>> action, Consumer<DataAction<R, ?>> actionMod) {
 			if(theActions==null)
 				theActions = new ArrayList<>();
 			ListItemAction<?>[] tableAction = new ListItemAction[1];
@@ -3322,7 +3328,7 @@ public class PanelPopulation {
 		}
 
 		private LittleList.ItemAction<R> itemActionFor(ListItemAction<?> tableAction, Observable<?> until) {
-			class ItemAction<P extends ItemAction<P>> implements LittleList.ItemAction<R>, ButtonEditor<P> {
+			class ItemAction<P extends ItemAction<P>> implements LittleList.ItemAction<R>, ButtonEditor<JButton, P> {
 				private Action theAction;
 				private boolean isEnabled;
 				private ComponentDecorator theDecorator;
@@ -3379,7 +3385,7 @@ public class PanelPopulation {
 				}
 
 				@Override
-				public P withPostButton(String buttonText, ObservableAction<?> action, Consumer<ButtonEditor<?>> modify) {
+				public P withPostButton(String buttonText, ObservableAction<?> action, Consumer<ButtonEditor<JButton, ?>> modify) {
 					return (P) this;
 				}
 
@@ -3489,8 +3495,8 @@ public class PanelPopulation {
 		}
 	}
 
-	static class SimpleTableAction<R, A extends SimpleTableAction<R, A>> implements TableAction<R, A> {
-		private final ListWidgetBuilder<R, ?, ?> theTable;
+	static class SimpleDataAction<R, A extends SimpleDataAction<R, A>> implements DataAction<R, A> {
+		private final CollectionWidgetBuilder<R, ?, ?> theWidget;
 		final Consumer<? super List<? extends R>> theAction;
 		final Supplier<List<R>> theSelectedValues;
 		private Function<? super R, String> theEnablement;
@@ -3502,10 +3508,11 @@ public class PanelPopulation {
 		ObservableAction<?> theObservableAction;
 		SettableValue<String> theEnabledString;
 		SettableValue<String> theTooltipString;
-		Consumer<ButtonEditor<?>> theButtonMod;
+		Consumer<ButtonEditor<?, ?>> theButtonMod;
 
-		SimpleTableAction(ListWidgetBuilder<R, ?, ?> table, Consumer<? super List<? extends R>> action, Supplier<List<R>> selectedValues) {
-			theTable = table;
+		SimpleDataAction(CollectionWidgetBuilder<R, ?, ?> widget, Consumer<? super List<? extends R>> action,
+			Supplier<List<R>> selectedValues) {
+			theWidget = widget;
 			theAction = action;
 			theSelectedValues = selectedValues;
 			theEnabledString = new SimpleSettableValue<>(String.class, true);
@@ -3530,6 +3537,10 @@ public class PanelPopulation {
 				}
 			};
 			multipleAllowed = true;
+		}
+
+		public String isEnabled() {
+			return theEnabledString.get();
 		}
 
 		@Override
@@ -3632,9 +3643,9 @@ public class PanelPopulation {
 
 					@Override
 					public Void act(Object cause) throws IllegalStateException {
-						List<? extends R> selected = theTable.getSelection();
+						List<? extends R> selected = theWidget.getSelection();
 						String text = alertText.apply(selected);
-						if (!theTable.alert(alertTitle, text).confirm(confirmType))
+						if (!theWidget.alert(alertTitle, text).confirm(confirmType))
 							return null;
 						action.act(cause);
 						return null;
@@ -3659,23 +3670,23 @@ public class PanelPopulation {
 
 					@Override
 					public Void act(Object cause) throws IllegalStateException {
-						List<? extends R> selected = theTable.getSelection();
+						List<? extends R> selected = theWidget.getSelection();
 						StringBuilder text = new StringBuilder();
 						if (alertPreText != null && !alertPreText.isEmpty())
 							text.append(alertPreText);
 						if (selected.isEmpty())
-							text.append("no ").append(StringUtils.pluralize(theTable.getItemName()));
+							text.append("no ").append(StringUtils.pluralize(theWidget.getItemName()));
 						else if (selected.size() == 1) {
-							if (theTable instanceof SimpleTableBuilder && ((SimpleTableBuilder<R, ?>) theTable).getNameFunction() != null)
-								text.append(theTable.getItemName()).append(" \"")
-								.append(((SimpleTableBuilder<R, ?>) theTable).getNameFunction().apply(selected.get(0))).append('"');
+							if (theWidget instanceof SimpleTableBuilder && ((SimpleTableBuilder<R, ?>) theWidget).getNameFunction() != null)
+								text.append(theWidget.getItemName()).append(" \"")
+								.append(((SimpleTableBuilder<R, ?>) theWidget).getNameFunction().apply(selected.get(0))).append('"');
 							else
-								text.append("1 ").append(theTable.getItemName());
+								text.append("1 ").append(theWidget.getItemName());
 						} else
-							text.append(selected.size()).append(' ').append(StringUtils.pluralize(theTable.getItemName()));
+							text.append(selected.size()).append(' ').append(StringUtils.pluralize(theWidget.getItemName()));
 						if (alertPostText != null && !alertPostText.isEmpty())
 							text.append(alertPostText);
-						if (!theTable.alert(alertTitle, text.toString()).confirm(confirmType))
+						if (!theWidget.alert(alertTitle, text.toString()).confirm(confirmType))
 							return null;
 						action.act(cause);
 						return null;
@@ -3690,11 +3701,11 @@ public class PanelPopulation {
 		}
 
 		@Override
-		public A modifyButton(Consumer<ButtonEditor<?>> buttonMod) {
+		public A modifyButton(Consumer<ButtonEditor<?, ?>> buttonMod) {
 			if (theButtonMod == null)
 				theButtonMod = buttonMod;
 			else {
-				Consumer<ButtonEditor<?>> oldButtonMod = theButtonMod;
+				Consumer<ButtonEditor<?, ?>> oldButtonMod = theButtonMod;
 				theButtonMod = field -> {
 					oldButtonMod.accept(field);
 					buttonMod.accept(field);
@@ -3712,7 +3723,7 @@ public class PanelPopulation {
 			if (!zeroAllowed && selectedValues.isEmpty())
 				theEnabledString.set("Nothing selected", cause);
 			else if (!multipleAllowed && selectedValues.size() > 1)
-				theEnabledString.set("Multiple " + StringUtils.pluralize(theTable.getItemName()) + " selected", cause);
+				theEnabledString.set("Multiple " + StringUtils.pluralize(theWidget.getItemName()) + " selected", cause);
 			else {
 				StringBuilder message = null;
 				if (theMultiEnablement != null) {
@@ -3743,7 +3754,7 @@ public class PanelPopulation {
 					} else if (allowedCount > 1 && !multipleAllowed) {
 						error = true;
 						if (messages.isEmpty())
-							messages.add("Multiple " + StringUtils.pluralize(theTable.getItemName()) + " selected");
+							messages.add("Multiple " + StringUtils.pluralize(theWidget.getItemName()) + " selected");
 					}
 					if (error) {
 						message = new StringBuilder("<html>");
@@ -3781,11 +3792,14 @@ public class PanelPopulation {
 		private final ObservableValue<? extends F> theRoot;
 		private JScrollPane theComponent;
 
+		private String theItemName;
+
 		private ObservableCellRenderer<BetterList<F>, F> theRenderer;
 		private Function<? super ModelCell<BetterList<F>, F>, String> theValueTooltip;
 		private SettableValue<BetterList<F>> theSingleSelection;
 		private boolean isSingleSelection;
 		private ObservableCollection<BetterList<F>> theMultiSelection;
+		private List<SimpleDataAction<BetterList<F>, ?>> theActions;
 
 		private JPanel thePanel;
 
@@ -3793,6 +3807,7 @@ public class PanelPopulation {
 			Function<? super F, ? extends ObservableCollection<? extends F>> children) {
 			super(new JTree(new PPTreeModel<F>(root, children)), lock);
 			theRoot = root;
+			theActions = new ArrayList<>();
 		}
 
 		static class PPTreeModel<F> extends ObservableTreeModel<F> {
@@ -3821,6 +3836,37 @@ public class PanelPopulation {
 			public void setLeafTest(Predicate<? super F> leafTest) {
 				theLeafTest = leafTest;
 			}
+		}
+
+		@Override
+		public List<BetterList<F>> getSelection() {
+			TreePath[] selection = getEditor().getSelectionPaths();
+			return BetterList.of(Arrays.stream(selection)//
+				.map(path -> (BetterList<F>) BetterList.of(path.getPath())));
+		}
+
+		@Override
+		public P withRemove(Consumer<? super List<? extends BetterList<F>>> deletion, Consumer<DataAction<BetterList<F>, ?>> actionMod) {
+			throw new UnsupportedOperationException("Not yet implemented");
+		}
+
+		@Override
+		public P withMultiAction(Consumer<? super List<? extends BetterList<F>>> action, Consumer<DataAction<BetterList<F>, ?>> actionMod) {
+			SimpleDataAction<BetterList<F>, ?> ta = new SimpleDataAction<>(this, action, this::getSelection);
+			actionMod.accept(ta);
+			theActions.add(ta);
+			return (P) this;
+		}
+
+		@Override
+		public P withItemName(String itemName) {
+			theItemName = itemName;
+			return (P) this;
+		}
+
+		@Override
+		public String getItemName() {
+			return theItemName;
 		}
 
 		@Override
@@ -3895,6 +3941,35 @@ public class PanelPopulation {
 				ObservableTreeModel.syncSelection(getEditor(), theSingleSelection, false, Equivalence.DEFAULT, until);
 				if (isSingleSelection)
 					getEditor().getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
+			}
+			if (!theActions.isEmpty()) {
+				JPopupMenu popup = new JPopupMenu();
+				SimpleDataAction<BetterList<F>, ?>[] actions = theActions.toArray(new SimpleDataAction[theActions.size()]);
+				JMenuItem[] actionMenuItems = new JMenuItem[actions.length];
+				for (int a = 0; a < actions.length; a++) {
+					actionMenuItems[a] = new JMenuItem();
+					actions[a].theButtonMod
+						.accept(new SimpleButtonEditor(null, actionMenuItems[a], null, actions[a].theObservableAction, getLock(), false));
+				}
+				getEditor().getSelectionModel().addTreeSelectionListener(evt -> {
+					List<BetterList<F>> selection = getSelection();
+					for (SimpleDataAction<BetterList<F>, ?> action : actions)
+						action.updateSelection(selection, evt);
+				});
+				getEditor().addMouseListener(new MouseAdapter() {
+					@Override
+					public void mouseClicked(MouseEvent evt) {
+						if (!SwingUtilities.isRightMouseButton(evt))
+							return;
+						popup.removeAll();
+						for (int a = 0; a < actions.length; a++) {
+							if (actions[a].isEnabled() == null)
+								popup.add(actionMenuItems[a]);
+						}
+						if (popup.getComponentCount() > 0)
+							popup.show(getEditor(), evt.getX(), evt.getY());
+					}
+				});
 			}
 			theComponent = new JScrollPane(decorate(getEditor()));
 			return theComponent;

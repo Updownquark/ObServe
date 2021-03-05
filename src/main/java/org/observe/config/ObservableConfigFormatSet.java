@@ -144,7 +144,7 @@ public class ObservableConfigFormatSet {
 			theFormatCache.put(type, format);
 			return format;
 		} else {
-			System.out.println("Building entity format for " + type);
+			// System.out.println("Building entity format for " + type);
 			EntityReflector.Builder<T> builder = EntityReflector.build(type, false).withSupers(theReflectors);
 			builder.buildNoPrint();
 			if (!builder.getMessages().isEmpty()) {

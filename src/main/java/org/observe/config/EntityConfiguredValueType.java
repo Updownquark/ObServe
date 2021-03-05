@@ -1,5 +1,6 @@
 package org.observe.config;
 
+import java.beans.Transient;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -198,6 +199,15 @@ public class EntityConfiguredValueType<E> implements ConfiguredValueType<E> {
 				return true;
 			for (EntityConfiguredValueField<? super E, ? super F> override : theOverrides)
 				if (override.isParentReference())
+					return true;
+			return false;
+		}
+
+		public boolean isTransient() {
+			if (theField.getGetter().getMethod().getAnnotation(Transient.class) != null)
+				return true;
+			for (EntityConfiguredValueField<? super E, ? super F> override : theOverrides)
+				if (override.isTransient())
 					return true;
 			return false;
 		}

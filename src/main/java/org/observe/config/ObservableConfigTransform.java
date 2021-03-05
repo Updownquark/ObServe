@@ -415,6 +415,8 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 			boolean elementChange = collectionChange.relativePath.size() == 1;
 			ObservableConfig config = collectionChange.relativePath.get(0);
 			if (elementChange && collectionChange.changeType == CollectionChangeType.add) {
+				if (!collectionChange.relativePath.getFirst().getName().equals(theChildName))
+					return; // Not the right name
 				ConfigElement newEl;
 				if (theNewElement != null)
 					newEl = theNewElement;
@@ -423,9 +425,21 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 				initialize(newEl, thePreAddAction, collectionChange);
 			} else {
 				CollectionElement<ConfigElement> el = theElements.getEntry(config.getParentChildRef());
-				if (el == null) // Must be a different child
-					return;
-				if (collectionChange.relativePath.size() == 1 && collectionChange.changeType == CollectionChangeType.remove) {
+				if (el == null) {
+					if (elementChange && collectionChange.relativePath.getFirst().getName().equals(theChildName)
+						&& !collectionChange.oldName.equals(theChildName)) {
+						// Renamed config to be relevant to us
+						ConfigElement newEl;
+						if (theNewElement != null)
+							newEl = theNewElement;
+						else
+							newEl = createElement(config, null, Observable.constant(null));
+						initialize(newEl, thePreAddAction, collectionChange);
+					} else // Must be a different child
+						return;
+				} else if (elementChange && (//
+				!collectionChange.relativePath.getFirst().getName().equals(theChildName)// Renamed to be irrelevant to us
+					|| collectionChange.changeType == CollectionChangeType.remove)) {
 					incrementStamp();
 					theElements.mutableEntry(el.getElementId()).remove();
 					el.get().dispose();

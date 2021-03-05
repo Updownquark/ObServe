@@ -30,11 +30,7 @@ public abstract class AbstractObservableConfig implements ObservableConfig {
 
 	@Override
 	public AbstractObservableConfig getParent() {
-		ElementId pcr = getParentChildRef();
-		if (pcr != null && !pcr.isPresent())
-			return null;
-		else
-			return theParent;
+		return theParent;
 	}
 
 	@Override
@@ -166,7 +162,7 @@ public abstract class AbstractObservableConfig implements ObservableConfig {
 	private void _remove(boolean move) {
 		try (Transaction t = lock(true, null)) {
 			ElementId pcr = getParentChildRef();
-			if (!pcr.isPresent())
+			if (pcr == null || !pcr.isPresent())
 				return;
 			doRemove(move);
 		}

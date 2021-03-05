@@ -482,6 +482,18 @@ public interface ObservableConfigFormat<E> {
 		}
 	}
 
+	public static class NullFormat implements ObservableConfigFormat<Object> {
+		@Override
+		public void format(ObservableConfigParseSession session, Object value, Object previousValue, ConfigGetter config,
+			Consumer<Object> acceptedValue, Observable<?> until) throws IllegalArgumentException {
+		}
+
+		@Override
+		public Object parse(ObservableConfigParseContext<Object> ctx) throws ParseException {
+			return ctx.getPreviousValue();
+		}
+	}
+
 	static <T> ReferenceFormatBuilder<T> buildReferenceFormat(Iterable<? extends T> values, Supplier<? extends T> defaultValue) {
 		if (values instanceof Identifiable)
 			return buildReferenceFormat(LambdaUtils.printableFn(__ -> values, () -> ((Identifiable) values).getIdentity().toString(),
@@ -659,7 +671,9 @@ public interface ObservableConfigFormat<E> {
 			QuickMap<String, ObservableConfigFormat<?>> formats = theFieldFormats.copy();
 			for (int i = 0; i < formats.keySize(); i++) {
 				if (formats.get(i) == null) {
-					if (theEntityType.getFields().get(i).isParentReference())
+					if (theEntityType.getFields().get(i).isTransient())
+						formats.put(i, new NullFormat());
+					else if (theEntityType.getFields().get(i).isParentReference())
 						formats.put(i, new ParentReferenceFormat<>(theEntityType.getFields().get(i).getFieldType()));
 					else
 						formats.put(i, theFormatSet.getConfigFormat(theEntityType.getFields().get(i)));

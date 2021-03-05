@@ -446,13 +446,29 @@ public class EntityReflector<E> {
 		 * @return This field's value in the given entity
 		 */
 		public F get(E entity) {
-			EntityReflector<E>.ProxyMethodHandler p = (EntityReflector<E>.ProxyMethodHandler) Proxy.getInvocationHandler(entity);
-			try {
-				return p.invokeOnType(entity, theGetter, NO_ARGS);
-			} catch (RuntimeException | Error e) {
-				throw e;
-			} catch (Throwable e) {
-				throw new IllegalStateException(e);
+			InvocationHandler handler = Proxy.isProxyClass(entity.getClass()) ? Proxy.getInvocationHandler(entity) : null;
+			if (handler instanceof EntityReflector.ProxyMethodHandler) {
+				EntityReflector<E>.ProxyMethodHandler p = (EntityReflector<E>.ProxyMethodHandler) handler;
+				try {
+					return p.invokeOnType(entity, theGetter, NO_ARGS);
+				} catch (RuntimeException | Error e) {
+					throw e;
+				} catch (Throwable e) {
+					throw new IllegalStateException(e);
+				}
+			} else {
+				try {
+					return (F) theGetter.getMethod().invoke(entity, NO_ARGS);
+				} catch (IllegalAccessException | IllegalArgumentException e) {
+					throw new IllegalStateException(e);
+				} catch (InvocationTargetException e) {
+					if (e.getTargetException() instanceof RuntimeException)
+						throw (RuntimeException) e.getTargetException();
+					else if (e.getTargetException() instanceof Error)
+						throw (Error) e.getTargetException();
+					else
+						throw new IllegalStateException(e.getTargetException());
+				}
 			}
 		}
 
@@ -463,13 +479,29 @@ public class EntityReflector<E> {
 		public void set(E entity, F value) {
 			if (theSetter == null)
 				throw new UnsupportedOperationException("No setter found for field " + theReflector.getType() + "." + theName);
-			EntityReflector<E>.ProxyMethodHandler p = (EntityReflector<E>.ProxyMethodHandler) Proxy.getInvocationHandler(entity);
-			try {
-				p.invokeOnType(entity, theSetter, new Object[] { value });
-			} catch (RuntimeException | Error e) {
-				throw e;
-			} catch (Throwable e) {
-				throw new IllegalStateException(e);
+			InvocationHandler handler = Proxy.isProxyClass(entity.getClass()) ? Proxy.getInvocationHandler(entity) : null;
+			if (handler instanceof EntityReflector.ProxyMethodHandler) {
+				EntityReflector<E>.ProxyMethodHandler p = (EntityReflector<E>.ProxyMethodHandler) handler;
+				try {
+					p.invokeOnType(entity, theSetter, new Object[] { value });
+				} catch (RuntimeException | Error e) {
+					throw e;
+				} catch (Throwable e) {
+					throw new IllegalStateException(e);
+				}
+			} else {
+				try {
+					theSetter.getMethod().invoke(entity, new Object[] { value });
+				} catch (IllegalAccessException | IllegalArgumentException e) {
+					throw new IllegalStateException(e);
+				} catch (InvocationTargetException e) {
+					if (e.getTargetException() instanceof RuntimeException)
+						throw (RuntimeException) e.getTargetException();
+					else if (e.getTargetException() instanceof Error)
+						throw (Error) e.getTargetException();
+					else
+						throw new IllegalStateException(e.getTargetException());
+				}
 			}
 		}
 

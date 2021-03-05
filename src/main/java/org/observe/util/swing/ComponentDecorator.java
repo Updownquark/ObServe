@@ -2,7 +2,12 @@ package org.observe.util.swing;
 
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Cursor;
 import java.awt.Font;
+import java.awt.font.TextAttribute;
+import java.text.AttributedCharacterIterator.Attribute;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.function.Function;
 
 import javax.swing.AbstractButton;
@@ -26,6 +31,7 @@ public class ComponentDecorator {
 	private Integer theVAlign;
 	private Icon theIcon;
 	private Boolean isEnabled;
+	private Cursor theCursor;
 
 	public Border getBorder() {
 		return theBorder;
@@ -95,6 +101,12 @@ public class ComponentDecorator {
 		return deriveFont(font -> font.deriveFont(style, size));
 	}
 
+	public ComponentDecorator deriveFont(Attribute attr, Object value) {
+		Map<Attribute, Object> attrs = new HashMap<>(1);
+		attrs.put(attr, value);
+		return deriveFont(font -> font.deriveFont(attrs));
+	}
+
 	public ComponentDecorator withFontStyle(int style) {
 		return deriveFont(font -> font.deriveFont(style));
 	}
@@ -109,6 +121,22 @@ public class ComponentDecorator {
 
 	public ComponentDecorator bold(boolean bold) {
 		return withFontStyle(bold ? Font.BOLD : Font.PLAIN);
+	}
+
+	public ComponentDecorator underline() {
+		return underline(true);
+	}
+
+	public ComponentDecorator underline(boolean underline) {
+		return deriveFont(TextAttribute.UNDERLINE, underline ? TextAttribute.UNDERLINE_ON : -1);
+	}
+
+	public ComponentDecorator strikethrough() {
+		return strikethrough(true);
+	}
+
+	public ComponentDecorator strikethrough(boolean strikethrough) {
+		return deriveFont(TextAttribute.STRIKETHROUGH, strikethrough ? TextAttribute.STRIKETHROUGH_ON : false);
 	}
 
 	public ComponentDecorator alignH(int align) {
@@ -142,6 +170,15 @@ public class ComponentDecorator {
 
 	public ComponentDecorator enabled(Boolean enabled) {
 		isEnabled = enabled;
+		return this;
+	}
+
+	public ComponentDecorator withCursor(int cursor) {
+		return withCursor(Cursor.getPredefinedCursor(cursor));
+	}
+
+	public ComponentDecorator withCursor(Cursor cursor) {
+		theCursor = cursor;
 		return this;
 	}
 
@@ -188,6 +225,8 @@ public class ComponentDecorator {
 		else if (c instanceof AbstractButton)
 			((JButton) c).setIcon(theIcon);
 
+		c.setCursor(theCursor == null ? Cursor.getDefaultCursor() : theCursor);
+
 		return c;
 	}
 
@@ -228,6 +267,9 @@ public class ComponentDecorator {
 				cd.alignV(0);
 			else
 				cd.alignV(1);
+
+			if (c.getCursor() != Cursor.getDefaultCursor())
+				cd.theCursor = c.getCursor();
 		}
 		return cd;
 	}
