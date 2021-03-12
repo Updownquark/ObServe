@@ -99,6 +99,12 @@ class DefaultInteractiveTestSuite implements InteractiveTestSuite {
 				s = s.getParent();
 			}
 		}
+		for (InteractiveTestOrSuite tos : theContent) {
+			if (tos instanceof InteractiveTestSuite && tos.getName().equals(suiteName)) {
+				suite.accept((InteractiveTestSuite) tos);
+				return;
+			}
+		}
 		DefaultInteractiveTestSuite newSuite = new DefaultInteractiveTestSuite(this, suiteName, sequential, theLocker);
 		theContent.add(newSuite);
 		if (configLocation != null)
@@ -140,7 +146,11 @@ class DefaultInteractiveTestSuite implements InteractiveTestSuite {
 	public List<TestResult> execute(InteractiveTest test, UserInteraction ui, Consumer<TestingState> state) {
 		DefaultTesting testing = new DefaultTesting(getEnv(), ui, state);
 		setTesting(testing);
-		return new DefaultTesting(getEnv(), ui, state).testTo(this, test).getFailuresSoFar();
+		try {
+			return new DefaultTesting(getEnv(), ui, state).testTo(this, test).getFailuresSoFar();
+		} finally {
+			setTesting(null);
+		}
 	}
 
 	void setTesting(DefaultTesting testing) {

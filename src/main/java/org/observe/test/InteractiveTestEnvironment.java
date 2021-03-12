@@ -1,7 +1,11 @@
 package org.observe.test;
 
+import java.awt.Image;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+
+import javax.swing.ImageIcon;
 
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
@@ -92,4 +96,21 @@ public interface InteractiveTestEnvironment {
 	 * @throws IOException If the resource could not be found or read
 	 */
 	InputStream getResource(String location) throws IOException;
+
+	/**
+	 * @param location The location of the resource
+	 * @return The image at the given location
+	 * @throws IOException If the image could not be found or read
+	 */
+	default Image getImage(String location) throws IOException {
+		ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+		try (InputStream in = getResource(location)) {
+			int read = in.read();
+			while (read >= 0) {
+				bytes.write(read);
+				read = in.read();
+			}
+		}
+		return new ImageIcon(bytes.toByteArray()).getImage();
+	}
 }

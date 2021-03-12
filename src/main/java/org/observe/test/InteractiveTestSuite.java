@@ -19,7 +19,7 @@ public interface InteractiveTestSuite extends InteractiveTestOrSuite {
 	void addTestCase(InteractiveTest test, String configLocation);
 
 	/**
-	 * Adds a sub-suite to this test suite
+	 * Modifies or adds a sub-suite to this test suite. If a suite with the given name does not already exist, one will be created.
 	 *
 	 * @param suiteName The name for the test suite
 	 * @param configLocation The location of the XML configuration for the suite--may be null

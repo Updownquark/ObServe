@@ -208,6 +208,12 @@ public class DefaultInteractiveTestService extends DefaultInteractiveTestSuite i
 			}
 
 			URLConnection conn = resource.openConnection();
+			switch (resource.getProtocol()) {
+			case "file":
+			case "classpath":
+			case "jar":
+				return new BufferedInputStream(conn.getInputStream());
+			}
 			long size = conn.getContentLengthLong();
 			if (size >= theTestResourceCacheSizeLimit)
 				return new BufferedInputStream(conn.getInputStream());

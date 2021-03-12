@@ -14,7 +14,7 @@ public interface InteractiveTest extends InteractiveTestOrSuite {
 	String getStatusMessage();
 	/** @return The estimated length of the test in any unit consistent with {@link #getEstimatedProgress()} */
 	double getEstimatedLength();
-	/** @return The estimatd amount of the test that has been completed, in any unit consistent with {@link #getEstimatedLength()} */
+	/** @return The estimated amount of the test that has been completed, in any unit consistent with {@link #getEstimatedLength()} */
 	double getEstimatedProgress();
 
 	/**
@@ -58,10 +58,21 @@ public interface InteractiveTest extends InteractiveTestOrSuite {
 	 * @throws Exception If the task throws any exception
 	 */
 	default <T> T onEQ(ExSupplier<T, ?> task) throws Exception {
+		class UnsafeSupplier {
+			T get() {
+				try {
+					return task.get();
+				} catch (RuntimeException | Error e) {
+					throw e;
+				} catch (Throwable e) {
+					throw new CheckedExceptionWrapper(e);
+				}
+			}
+		}
 		Object[] value = new Object[1];
 		try {
 			EventQueue.invokeAndWait(() -> {
-				value[0] = task.unsafe().get();
+				value[0] = new UnsafeSupplier().get();
 			});
 		} catch (InvocationTargetException e) {
 			Throwable toThrow = e.getTargetException();
@@ -69,7 +80,7 @@ public interface InteractiveTest extends InteractiveTestOrSuite {
 				toThrow = ((CheckedExceptionWrapper) toThrow).getCause();
 			StackTraceElement[] stack = Thread.currentThread().getStackTrace();
 			toThrow.setStackTrace(//
-				QommonsUtils.patchStackTraces(e.getStackTrace(), stack, InteractiveTesting.class.getName(), "onEQ"));
+				QommonsUtils.patchStackTraces(toThrow.getStackTrace(), stack, UnsafeSupplier.class.getName(), "get"));
 			if (toThrow instanceof Exception)
 				throw (Exception) toThrow;
 			else if (toThrow instanceof Error)

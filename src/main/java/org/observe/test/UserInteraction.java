@@ -7,26 +7,38 @@ import org.observe.config.OperationResult;
 /** Allows tests to interact with the user */
 public interface UserInteraction {
 	/**
+	 * Asks the user to wait on the test
+	 *
+	 * @param title The title of the dialog
+	 * @param message The message in the dialog
+	 * @param images The images to display in the dialog
+	 * @return A result that the code can use to close the dialog
+	 * @throws TestCanceledException If the test has been canceled
+	 */
+	OperationResult<Void> userWait(String title, String message, Image... images) throws TestCanceledException;
+
+	/**
 	 * Asks the user to do something, e.g. press a button
 	 *
 	 * @param title The title of the dialog
 	 * @param message The message in the dialog
-	 * @param image The image to display in the dialog
-	 * @return A result that the user can use to wait on the user to close the dialog or observe when it is closed
+	 * @param images The images to display in the dialog
+	 * @return A result that the user can use to wait on the user to close the dialog, observe when it is closed, or close it itself
 	 * @throws TestCanceledException If the test has been canceled
 	 */
-	OperationResult<Void> instructUser(String title, String message, Image image) throws TestCanceledException;
+	OperationResult<Void> instructUser(String title, String message, Image... images) throws TestCanceledException;
 
 	/**
 	 * Asks the user a yes/no question
 	 *
 	 * @param title The title of the dialog
 	 * @param question The message in the dialog
-	 * @param image The image to display in the dialog
-	 * @return A result that the user can use to wait on the user to close the dialog or observe when it is closed
+	 * @param images The images to display in the dialog
+	 * @return A result that the user can use to wait on the user to close the dialog, observe when it is closed (and the user's response),
+	 *         or close it itself
 	 * @throws TestCanceledException If the test has been canceled
 	 */
-	OperationResult<Boolean> confirm(String title, String question, Image image) throws TestCanceledException;
+	OperationResult<Boolean> confirm(String title, String question, Image... images) throws TestCanceledException;
 
 	/**
 	 * Closes any user interactions currently active and throws a {@link TestCanceledException} from any current or future user interaction

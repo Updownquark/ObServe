@@ -133,7 +133,7 @@ class DefaultTesting implements InteractiveTesting, TestingState {
 		for (InteractiveTestOrSuite tos : suite.getContent()) {
 			if (!isTesting)
 				break;
-			if (suite.isSequential() || tos == test) {
+			if (test == null || suite.isSequential() || tos == test) {
 				execute(tos);
 			}
 			if (isTesting && tos == test)
@@ -195,7 +195,7 @@ class DefaultTesting implements InteractiveTesting, TestingState {
 			isTesting = false;
 		} catch (Exception e) {
 			e.printStackTrace();
-			fail(e.getMessage(), true);
+			fail(e.getMessage() == null ? e.toString() : e.getMessage(), true);
 		} finally {
 			if (!isInSequential()) {
 				Causable cause = Causable.simpleCause();
