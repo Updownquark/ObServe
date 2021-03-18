@@ -290,7 +290,8 @@ public class DefaultInteractiveTestingPanel extends JPanel {
 			if (parent == null)
 				return theDefaultDialog;
 			else
-				return theWindowDialogs.computeIfAbsent(SwingUtilities.getWindowAncestor(parent), w -> createDialog(w));
+				return theWindowDialogs.computeIfAbsent(
+					parent instanceof Window ? (Window) parent : SwingUtilities.getWindowAncestor(parent), w -> createDialog(w));
 		}
 
 		private JPanel getImagePanel(JDialog dialog) {
