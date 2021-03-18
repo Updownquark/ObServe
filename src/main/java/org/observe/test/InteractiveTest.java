@@ -2,6 +2,7 @@ package org.observe.test;
 
 import java.awt.EventQueue;
 import java.lang.reflect.InvocationTargetException;
+import java.util.function.BooleanSupplier;
 
 import org.qommons.QommonsUtils;
 import org.qommons.ex.CheckedExceptionWrapper;
@@ -102,5 +103,22 @@ public interface InteractiveTest extends InteractiveTestOrSuite {
 			task.run();
 			return null;
 		});
+	}
+
+	/**
+	 * Blocks until a condition is met or the user cancels the test.
+	 * 
+	 * @param condition Checks a condition that will cause this method to exit. It should execute fairly quickly, at least in the case of a
+	 *        negative.
+	 * @param testing The current state of testing
+	 */
+	default void waitFor(BooleanSupplier condition, InteractiveTesting testing) {
+		while (!condition.getAsBoolean()//
+			&& testing.isTesting()) {
+			try {
+				Thread.sleep(50);
+			} catch (InterruptedException e) {
+			}
+		}
 	}
 }

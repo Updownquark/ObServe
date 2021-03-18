@@ -24,7 +24,7 @@ import org.qommons.ex.ExConsumer;
 
 import com.google.common.reflect.TypeToken;
 
-class DefaultTesting implements InteractiveTesting, TestingState {
+class DefaultTesting implements InteractiveTesting {
 	private final WrappedEnv theEnv;
 	private final UserInteraction theUI;
 	private final Consumer<TestingState> theUpdate;
@@ -107,6 +107,11 @@ class DefaultTesting implements InteractiveTesting, TestingState {
 	@Override
 	public TestStage getCurrentStage() {
 		return theStage;
+	}
+
+	@Override
+	public boolean isTesting() {
+		return isTesting;
 	}
 
 	@Override

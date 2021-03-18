@@ -18,6 +18,9 @@ public interface TestingState {
 	/** @return The stage of the current test */
 	TestStage getCurrentStage();
 
+	/** @return Whether testing is currently occurring */
+	boolean isTesting();
+
 	/** @return The list of test failures that have occurred so far in this testing session */
 	List<TestResult> getFailuresSoFar();
 }

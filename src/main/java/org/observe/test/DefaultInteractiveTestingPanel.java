@@ -1,14 +1,17 @@
 package org.observe.test;
 
 import java.awt.Color;
+import java.awt.Component;
 import java.awt.Dialog.ModalityType;
 import java.awt.EventQueue;
 import java.awt.Image;
+import java.awt.Window;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.text.DecimalFormat;
 import java.time.Instant;
 import java.util.TimeZone;
+import java.util.WeakHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.swing.ImageIcon;
@@ -206,81 +209,108 @@ public class DefaultInteractiveTestingPanel extends JPanel {
 		}, theService.getName() + " Executor").start();
 	}
 
+	private final WeakHashMap<Window, JDialog> theWindowDialogs = new WeakHashMap<>();
+
 	private class SwingUI implements UserInteraction {
-		private final JDialog theDialog;
+		private final JDialog theDefaultDialog;
 		private final SettableValue<String> theMessage;
 		private final SettableValue<String> theYesLabel;
 		private final SettableValue<String> theNoLabel;
 		private final SettableValue<Boolean> theYesVisible;
 		private final SettableValue<Boolean> theNoVisible;
-		private final JPanel theImagePanel;
-		private boolean hasBeenDisplayed;
 		private volatile boolean isCanceled;
 
+		private JDialog theCurrentDialog;
 		private volatile UIResult<?> theCurrentResult;
 		private AtomicInteger isClosing;
 
 		SwingUI() {
-			theDialog = new JDialog(SwingUtilities.getWindowAncestor(DefaultInteractiveTestingPanel.this), theService.getName(),
-				ModalityType.MODELESS);
 			isClosing = new AtomicInteger();
-			theDialog.addComponentListener(new ComponentAdapter() {
-				@Override
-				public void componentHidden(ComponentEvent e) {
-					if (isClosing.get() == 0) {
-						JOptionPane.showMessageDialog(DefaultInteractiveTestingPanel.this, "Please choose an option", "Choose An Option",
-							JOptionPane.ERROR_MESSAGE);
-						theDialog.setVisible(true);
-					} else
-						isClosing.getAndDecrement();
-				}
-			});
-
 			theMessage = SettableValue.build(String.class).safe(false).withValue("").build();
 			theYesLabel = SettableValue.build(String.class).safe(false).withValue("Yes").build();
 			theNoLabel = SettableValue.build(String.class).safe(false).withValue("No").build();
 			theYesVisible = SettableValue.build(boolean.class).safe(false).withValue(false).build();
 			theNoVisible = SettableValue.build(boolean.class).safe(false).withValue(false).build();
-			theImagePanel = new JPanel(new JustifiedBoxLayout(true).mainCenter());
 
-			PanelPopulation.populateVPanel(theDialog.getContentPane(), Observable.empty())//
+			theDefaultDialog = createDialog(SwingUtilities.getWindowAncestor(DefaultInteractiveTestingPanel.this));
+		}
+
+		private JDialog createDialog(Window owner) {
+			JDialog dialog = new JDialog(owner, theService.getName(), ModalityType.MODELESS);
+			dialog.addComponentListener(new ComponentAdapter() {
+				@Override
+				public void componentHidden(ComponentEvent e) {
+					if (isClosing.get() == 0) {
+						JOptionPane.showMessageDialog(DefaultInteractiveTestingPanel.this, "Please choose an option", "Choose An Option",
+							JOptionPane.ERROR_MESSAGE);
+						dialog.setVisible(true);
+					} else {
+						isClosing.getAndDecrement();
+						theCurrentDialog = null;
+					}
+				}
+			});
+
+			JPanel imagePanel = new JPanel(new JustifiedBoxLayout(true).mainCenter());
+			imagePanel.setName("Images");
+			PanelPopulation.populateVPanel(dialog.getContentPane(), Observable.empty())//
 			.addLabel(null, theMessage, Format.TEXT, lbl -> lbl.fill())//
-			.addComponent(null, theImagePanel, lbl -> lbl.fill())//
+			.addComponent(null, imagePanel, lbl -> lbl.fill())//
 			.addHPanel(null, new JustifiedBoxLayout(false).mainCenter(), buttons -> {
 				buttons.fill()//
 				.addButton(null, __ -> {
 					((UIResult<Object>) theCurrentResult).fulfilled(true);
 					theCurrentResult = null;
 					isClosing.getAndIncrement();
-					theDialog.setVisible(false);
+					dialog.setVisible(false);
 				}, btn -> btn.withText(theYesLabel).visibleWhen(theYesVisible))//
 				.addButton(null, __ -> {
 					((UIResult<Object>) theCurrentResult).fulfilled(false);
 					theCurrentResult = null;
 					isClosing.getAndIncrement();
-					theDialog.setVisible(false);
+					dialog.setVisible(false);
 				}, btn -> btn.withText(theNoLabel).visibleWhen(theNoVisible))//
 				.addButton("Cancel Testing", __ -> {
 					isCanceled = true;
 					((UIResult<Object>) theCurrentResult).failed(new TestCanceledException());
 					theCurrentResult = null;
 					isClosing.getAndIncrement();
-					theDialog.setVisible(false);
+					dialog.setVisible(false);
 				}, null)//
 				;
 			})//
 			;
+
+			dialog.pack();
+			dialog.setLocationRelativeTo(owner);
+			return dialog;
+		}
+
+		private JDialog getDialog(Component parent) {
+			if (parent == null)
+				return theDefaultDialog;
+			else
+				return theWindowDialogs.computeIfAbsent(SwingUtilities.getWindowAncestor(parent), w -> createDialog(w));
+		}
+
+		private JPanel getImagePanel(JDialog dialog) {
+			for (Component c : dialog.getContentPane().getComponents()) {
+				if (c instanceof JPanel && c.getName().equals("Images"))
+					return (JPanel) c;
+			}
+			throw new IllegalStateException("No images panel!");
 		}
 
 		void focusDialog() {
-			if (theDialog.isVisible()) {
-				theDialog.requestFocus();
-				theDialog.toFront();
+			if (theCurrentDialog != null && theCurrentDialog.isVisible()) {
+				theCurrentDialog.requestFocus();
+				theCurrentDialog.toFront();
 			}
 		}
 
 		@Override
-		public OperationResult<Void> userWait(String title, String message, Image... images) throws TestCanceledException {
+		public OperationResult<Void> userWait(String title, String message, Component parent, Image... images)
+			throws TestCanceledException {
 			if (EventQueue.isDispatchThread())
 				throw new IllegalStateException("This UI cannot be called from the EDT--it should be called from the testing thread");
 			if (isCanceled)
@@ -288,29 +318,28 @@ public class DefaultInteractiveTestingPanel extends JPanel {
 			UIResult<Void> result = new UIResult<>();
 			theCurrentResult = result;
 			EventQueue.invokeLater(() -> {
-				theDialog.setTitle(title);
+				JDialog dialog = getDialog(parent);
+				dialog.setTitle(title);
 				theMessage.set("<html>" + message.replaceAll("\n", "<br>"), null);
-				theImagePanel.removeAll();
+				JPanel imagePanel = getImagePanel(dialog);
+				imagePanel.removeAll();
 				if (images != null) {
 					for (Image image : images) {
 						if (image != null)
-							theImagePanel.add(new JLabel(new ImageIcon(image)));
+							imagePanel.add(new JLabel(new ImageIcon(image)));
 					}
 				}
 				theYesVisible.set(false, null);
 				theNoVisible.set(false, null);
-				theDialog.pack();
-				if (!hasBeenDisplayed) {
-					theDialog.setLocationRelativeTo(DefaultInteractiveTestingPanel.this);
-					hasBeenDisplayed = true;
-				}
-				theDialog.setVisible(true);
+				dialog.pack();
+				dialog.setVisible(true);
 			});
 			return result;
 		}
 
 		@Override
-		public OperationResult<Void> instructUser(String title, String message, Image... images) throws TestCanceledException {
+		public OperationResult<Void> instructUser(String title, String message, Component parent, Image... images)
+			throws TestCanceledException {
 			if (EventQueue.isDispatchThread())
 				throw new IllegalStateException("This UI cannot be called from the EDT--it should be called from the testing thread");
 			if (isCanceled)
@@ -318,30 +347,29 @@ public class DefaultInteractiveTestingPanel extends JPanel {
 			UIResult<Void> result = new UIResult<>();
 			theCurrentResult = result;
 			EventQueue.invokeLater(() -> {
-				theDialog.setTitle(title);
+				JDialog dialog = getDialog(parent);
+				dialog.setTitle(title);
 				theMessage.set("<html>" + message.replaceAll("\n", "<br>"), null);
-				theImagePanel.removeAll();
+				JPanel imagePanel = getImagePanel(dialog);
+				imagePanel.removeAll();
 				if (images != null) {
 					for (Image image : images) {
 						if (image != null)
-							theImagePanel.add(new JLabel(new ImageIcon(image)));
+							imagePanel.add(new JLabel(new ImageIcon(image)));
 					}
 				}
 				theYesLabel.set("OK", null);
 				theYesVisible.set(true, null);
 				theNoVisible.set(false, null);
-				theDialog.pack();
-				if (!hasBeenDisplayed) {
-					theDialog.setLocationRelativeTo(DefaultInteractiveTestingPanel.this);
-					hasBeenDisplayed = true;
-				}
-				theDialog.setVisible(true);
+				dialog.pack();
+				dialog.setVisible(true);
 			});
 			return result;
 		}
 
 		@Override
-		public OperationResult<Boolean> confirm(String title, String question, Image... images) throws TestCanceledException {
+		public OperationResult<Boolean> confirm(String title, String question, Component parent, Image... images)
+			throws TestCanceledException {
 			if (EventQueue.isDispatchThread())
 				throw new IllegalStateException("This UI cannot be called from the EDT--it should be called from the testing thread");
 			if (isCanceled)
@@ -349,25 +377,23 @@ public class DefaultInteractiveTestingPanel extends JPanel {
 			UIResult<Boolean> result = new UIResult<>();
 			theCurrentResult = result;
 			EventQueue.invokeLater(() -> {
-				theDialog.setTitle(title);
+				JDialog dialog = getDialog(parent);
+				dialog.setTitle(title);
 				theMessage.set("<html>" + question.replaceAll("\n", "<br>"), null);
-				theImagePanel.removeAll();
+				JPanel imagePanel = getImagePanel(dialog);
+				imagePanel.removeAll();
 				if (images != null) {
 					for (Image image : images) {
 						if (image != null)
-							theImagePanel.add(new JLabel(new ImageIcon(image)));
+							imagePanel.add(new JLabel(new ImageIcon(image)));
 					}
 				}
 				theYesLabel.set("Yes", null);
 				theNoLabel.set("No", null);
 				theYesVisible.set(true, null);
 				theNoVisible.set(true, null);
-				theDialog.pack();
-				if (!hasBeenDisplayed) {
-					theDialog.setLocationRelativeTo(DefaultInteractiveTestingPanel.this);
-					hasBeenDisplayed = true;
-				}
-				theDialog.setVisible(true);
+				dialog.pack();
+				dialog.setVisible(true);
 			});
 			return result;
 		}
@@ -376,9 +402,9 @@ public class DefaultInteractiveTestingPanel extends JPanel {
 		public void cancel() {
 			isCanceled = true;
 			EventQueue.invokeLater(() -> {
-				if (theDialog.isVisible()) {
+				if (theCurrentDialog != null && theCurrentDialog.isVisible()) {
 					isClosing.getAndIncrement();
-					theDialog.setVisible(false);
+					theCurrentDialog.setVisible(false);
 				}
 				if (theCurrentResult != null)
 					theCurrentResult.failed(new TestCanceledException());
@@ -389,9 +415,9 @@ public class DefaultInteractiveTestingPanel extends JPanel {
 		public void reset() {
 			isCanceled = false;
 			EventQueue.invokeLater(() -> {
-				if (theDialog.isVisible()) {
+				if (theCurrentDialog != null && theCurrentDialog.isVisible()) {
 					isClosing.getAndIncrement();
-					theDialog.setVisible(false);
+					theCurrentDialog.setVisible(false);
 				}
 			});
 		}
@@ -416,9 +442,9 @@ public class DefaultInteractiveTestingPanel extends JPanel {
 			public synchronized AsyncResult<T> cancel(boolean mayInterruptIfRunning) {
 				super.cancel(mayInterruptIfRunning);
 				EventQueue.invokeLater(() -> {
-					if (theDialog.isVisible()) {
+					if (theDefaultDialog.isVisible()) {
 						isClosing.getAndIncrement();
-						theDialog.setVisible(false);
+						theDefaultDialog.setVisible(false);
 					}
 				});
 				return this;

@@ -5,7 +5,7 @@ import org.qommons.Causable;
 import org.qommons.ex.ExConsumer;
 
 /** The interface for a {@link InteractiveTest test} to interact with the framework and the user */
-public interface InteractiveTesting {
+public interface InteractiveTesting extends TestingState {
 	/** @return The global testing environment */
 	InteractiveTestEnvironment getEnv();
 
