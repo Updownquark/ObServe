@@ -17,15 +17,21 @@ import org.qommons.collect.CollectionUtils.ElementSyncAction;
 import org.qommons.collect.CollectionUtils.ElementSyncInput;
 import org.qommons.collect.ElementId;
 
+/** An abstract {@link ObservableConfig} class that takes care of some common implementation */
 public abstract class AbstractObservableConfig implements ObservableConfig {
 	private AbstractObservableConfig theParent;
 
 	private volatile WeakHashMap<ObservableConfigParseSession, WeakReference<Object>> theParsedItems;
 
+	/** @param parent The parent for this config element */
 	protected void initialize(AbstractObservableConfig parent) {
 		theParent=parent;
 	}
 
+	/**
+	 * @param name The name of the child to create
+	 * @return The new child
+	 */
 	protected abstract AbstractObservableConfig createChild(String name);
 
 	@Override
@@ -81,6 +87,14 @@ public abstract class AbstractObservableConfig implements ObservableConfig {
 		}
 	}
 
+	/**
+	 * @param child The child to add
+	 * @param after The element to add the config after (or null to add it at the beginning)
+	 * @param before The element to add the config before (or null to add it at the end)
+	 * @param first Whether to prefer adding the child toward the beginning of the sequence between <code>after</code> and
+	 *        <code>before</code>
+	 * @param move Whether the addition is the last step in a move operation of a child from one position in this parent to another
+	 */
 	protected abstract void addChild(AbstractObservableConfig child, ObservableConfig after, ObservableConfig before, boolean first,
 		boolean move);
 
@@ -173,7 +187,14 @@ public abstract class AbstractObservableConfig implements ObservableConfig {
 		_postRemove();
 	}
 
+	/**
+	 * Removes this config element from its parent
+	 *
+	 * @param move Whether this is the first step in a movement operation of this child from one position to another in its parent's
+	 *        children
+	 */
 	protected abstract void doRemove(boolean move);
 
+	/** Called after a remove operation */
 	protected abstract void _postRemove();
 }

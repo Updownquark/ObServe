@@ -50,6 +50,7 @@ import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.BetterSortedMap;
+import org.qommons.collect.CollectionElement;
 import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MapEntryHandle;
@@ -75,16 +76,42 @@ import com.google.common.reflect.TypeToken;
  * </p>
  */
 public interface ObservableConfig extends Nameable, Transactable, Stamped {
+	/** {@link TypeToken}&lt;ObservableConfig> */
 	public static final TypeToken<ObservableConfig> TYPE = TypeTokens.get().of(ObservableConfig.class);
 
+	/** Fired from {@link ObservableConfig#watch(ObservableConfigPath)} when content at or beneath the watched config is modified */
 	public static class ObservableConfigEvent extends Causable.AbstractCausable {
+		/**
+		 * The type of the change, whether a config element was {@link CollectionChangeType#add added}, {@link CollectionChangeType#remove
+		 * removed}, or {@link CollectionChangeType#set changed}
+		 */
 		public final CollectionChangeType changeType;
+		/**
+		 * Whether this event is one part of an operation in which a config element is being moved from one position to another under the
+		 * same parent
+		 */
 		public final boolean isMove;
+		/** The config element that the event is being fired on (may not be the same as the element being added/removed/changed) */
 		public final ObservableConfig eventTarget;
+		/** The child path, relative to this element, of the actual element being added/removed/changed */
 		public final BetterList<ObservableConfig> relativePath;
+		/** The name of the target element before this change */
 		public final String oldName;
+		/** The value of the target element before this change */
 		public final String oldValue;
 
+		/**
+		 * @param changeType Whether this event is one part of an operation in which a config element is being moved from one position to
+		 *        another under the same parent
+		 * @param move Whether this event is one part of an operation in which a config element is being moved from one position to another
+		 *        under the same parent
+		 * @param eventTarget The config element that the event is being fired on (may not be the same as the element being
+		 *        added/removed/changed)
+		 * @param oldName The name of the target element before this change
+		 * @param oldValue The value of the target element before this change
+		 * @param relativePath The child path, relative to this element, of the actual element being added/removed/changed
+		 * @param cause The cause of this event
+		 */
 		public ObservableConfigEvent(CollectionChangeType changeType, boolean move, ObservableConfig eventTarget, String oldName,
 			String oldValue, BetterList<ObservableConfig> relativePath, Object cause) {
 			super(cause);
@@ -96,6 +123,7 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 			this.oldValue = oldValue;
 		}
 
+		/** @return A string representation of the path of the element that was added/removed/changed relative to the event target */
 		public String getRelativePathString() {
 			StringBuilder str = new StringBuilder();
 			for (ObservableConfig p : relativePath) {
@@ -106,6 +134,7 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 			return str.toString();
 		}
 
+		/** @return This event, as an event on the first element in the {@link #relativePath} */
 		public ObservableConfigEvent asFromChild() {
 			return new ObservableConfigEvent(changeType, isMove, relativePath.get(0), oldName, oldValue,
 				relativePath.subList(1, relativePath.size()), getCauses());
@@ -133,18 +162,39 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 		}
 	}
 
+	/**
+	 * A means of storing observable configuration to persistence
+	 *
+	 * @param <E> The type of exception that may be thrown if persistence fails for any reason
+	 */
 	public static interface ObservableConfigPersistence<E extends Exception> {
+		/**
+		 * @param config The configuration to persist
+		 * @throws E If persistence fails
+		 */
 		void persist(ObservableConfig config) throws E;
 	}
 
+	/**
+	 * @param session The session with which a parsed item may be associated
+	 * @return The item parsed from this config in the given session (or null if no such item)
+	 */
 	Object getParsedItem(ObservableConfigParseSession session);
 
+	/**
+	 * @param session The session to store a parsed item (to be retrieved with {@link #getParsedItem(ObservableConfigParseSession)})
+	 * @param item The item to store for the session
+	 * @return This config element
+	 */
 	ObservableConfig withParsedItem(ObservableConfigParseSession session, Object item);
 
+	/** @return The value text associated with this config element */
 	String getValue();
 
+	/** @return This config element's parent, or null if this element is a root */
 	ObservableConfig getParent();
 
+	/** @return A string representation of this config element relative to its root */
 	default String getPath() {
 		ObservableConfig parent = getParent();
 		if (parent != null)
@@ -153,29 +203,54 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 			return getName();
 	}
 
+	/**
+	 * @return The {@link CollectionElement#getElementId() element ID} of this child in its {@link #getParent() parent}'s
+	 *         {@link #getContent() content}
+	 */
 	ElementId getParentChildRef();
 
+	/** @return The index of this child in its {@link #getParent() parent}'s {@link #getContent() content}, or -1 if this is a root */
 	default int getIndexInParent() {
 		ElementId pcr = getParentChildRef();
-		return pcr == null ? null : getParent().getAllContent().getValues().getElementsBefore(pcr);
+		return pcr == null ? -1 : getParent().getAllContent().getValues().getElementsBefore(pcr);
 	}
 
+	/**
+	 * @param pathFilter The path to filter events
+	 * @return An observable that notifies listeners of any event in this config element or any of its descendants that match the given
+	 *         filter
+	 */
 	default Observable<ObservableConfigEvent> watch(String pathFilter) {
 		return watch(ObservableConfigPath.create(pathFilter));
 	}
 
-	Observable<ObservableConfigEvent> watch(ObservableConfigPath path);
+	/**
+	 * @param pathFilter The path to filter events
+	 * @return An observable that notifies listeners of any event in this config element or any of its descendants that match the given
+	 *         filter
+	 */
+	Observable<ObservableConfigEvent> watch(ObservableConfigPath pathFilter);
 
+	/** @return This config element's children */
 	BetterList<ObservableConfig> getContent();
 
+	/** @return This config element's children as an {@link SyncValueSet#create() addable} value set */
 	default SyncValueSet<? extends ObservableConfig> getAllContent() {
 		return getContent(ObservableConfigPath.ANY_NAME);
 	}
 
+	/**
+	 * @param path The path to filter content
+	 * @return All descendants of this config element matching the given path
+	 */
 	default SyncValueSet<? extends ObservableConfig> getContent(String path) {
 		return getContent(ObservableConfigPath.create(path));
 	}
 
+	/**
+	 * @param path The path to filter content
+	 * @return All descendants of this config element matching the given path
+	 */
 	default SyncValueSet<? extends ObservableConfig> getContent(ObservableConfigPath path) {
 		ObservableCollection<ObservableConfig> children;
 		if (path.getElements().size() == 1) {
@@ -196,30 +271,55 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 		return new ObservableChildSet(this, path, children);
 	}
 
+	/**
+	 * @param path The path of the descendant to observe
+	 * @return A value of the first descendant of this config element matching the given path, or null if no match
+	 */
 	default ObservableValue<ObservableConfig> observeDescendant(String path) {
 		return observeDescendant(ObservableConfigPath.create(path));
 	}
 
+	/**
+	 * @param path The path of the descendant to observe
+	 * @return A value of the first descendant of this config element matching the given path, or null if no match
+	 */
 	default ObservableValue<ObservableConfig> observeDescendant(ObservableConfigPath path) {
 		return new ObservableConfigChild(this, path);
 	}
 
+	/** @return This config element's {@link #getValue()}, as a {@link SettableValue} */
 	default SettableValue<String> observeValue() {
 		return observeValue(ObservableConfigPath.EMPTY_PATH);
 	}
 
+	/**
+	 * @param path The path of the element whose value to observe
+	 * @return The {@link #getValue() value} of the first descendant of this config element matching the given path, or null if no match
+	 */
 	default SettableValue<String> observeValue(String path) {
 		return observeValue(ObservableConfigPath.create(path));
 	}
 
+	/**
+	 * @param path The path of the element whose value to observe
+	 * @return The {@link #getValue() value} of the first descendant of this config element matching the given path, or null if no match
+	 */
 	default SettableValue<String> observeValue(ObservableConfigPath path) {
 		return new ObservableConfigContent.ObservableConfigValue(this, path);
 	}
 
+	/**
+	 * @param path The path of the element whose value to get
+	 * @return The value of the first descendant of this config matching the given path, or null if no match
+	 */
 	default String get(String path) {
 		return get(ObservableConfigPath.create(path));
 	}
 
+	/**
+	 * @param path The path of the element whose value to get
+	 * @return The value of the first descendant of this config matching the given path, or null if no match
+	 */
 	default String get(ObservableConfigPath path) {
 		ObservableConfig config = getChild(path, false, null);
 		return config == null ? null : config.getValue();
@@ -261,52 +361,92 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 			theType = type;
 		}
 
+		/** @return The config element that this value builder observes */
 		public ObservableConfig getConfig() {
 			return theConfig;
 		}
 
+		/**
+		 * @param format The format to use to persist and format the value from config
+		 * @return This builder
+		 */
 		public ObservableConfigValueBuilder<T> withFormat(ObservableConfigFormat<T> format) {
 			theFormat = format;
 			return this;
 		}
 
+		/**
+		 * @param format The format to use to persist and format the value from text
+		 * @param defaultValue The value to use when the configuration is missing
+		 * @return This builder
+		 */
 		public ObservableConfigValueBuilder<T> withFormat(Format<T> format, Supplier<? extends T> defaultValue) {
 			theFormat = ObservableConfigFormat.ofQommonFormat(format, defaultValue);
 			return this;
 		}
 
+		/**
+		 * @param formatSet The format set to use for required format dependencies
+		 * @return This builder
+		 */
 		public ObservableConfigValueBuilder<T> withFormatSet(ObservableConfigFormatSet formatSet) {
 			theFormatSet = formatSet;
 			return this;
 		}
 
-		public ObservableConfigValueBuilder<T> withHierarchicalFormat(
+		/**
+		 * @param format Builds a {@link ObservableConfigFormat.HeterogeneousFormat heterogenous format}
+		 * @return This builder
+		 */
+		public ObservableConfigValueBuilder<T> withHeterogenousFormat(
 			Function<ObservableConfigFormat.HeterogeneousFormat.Builder<T>, ObservableConfigFormat.HeterogeneousFormat<T>> format) {
 			theFormat = format.apply(ObservableConfigFormat.heterogeneous(theType));
 			return this;
 		}
 
+		/**
+		 * @param format Configures an entity format from its default
+		 * @return This builder
+		 */
 		public ObservableConfigValueBuilder<T> asEntity(Consumer<ObservableConfigFormat.EntityFormatBuilder<T>> format) {
 			theFormat = getFormatSet().buildEntityFormat(theType, format);
 			return this;
 		}
 
+		/**
+		 * @param path The path of the value(s) for this value builder
+		 * @return This builder
+		 */
 		public ObservableConfigValueBuilder<T> at(String path) {
 			if (path.length() == 0)
 				return this;
 			return at(ObservableConfigPath.create(path));
 		}
 
+		/**
+		 * @param path The path of the value(s) for this value builder
+		 * @return This builder
+		 */
 		public ObservableConfigValueBuilder<T> at(ObservableConfigPath path) {
 			thePath = path;
 			return this;
 		}
 
+		/**
+		 * @param until An observable that, when fired once, will release all resources and listeners accumulated on the value built by this
+		 *        builder
+		 * @return This builder
+		 */
 		public ObservableConfigValueBuilder<T> until(Observable<?> until) {
 			theUntil = until;
 			return this;
 		}
 
+		/**
+		 * @param session The parse session to associate built values with
+		 * @return This builder
+		 * @see ObservableConfig#getParsedItem(ObservableConfigParseSession)
+		 */
 		public ObservableConfigValueBuilder<T> withSession(ObservableConfigParseSession session) {
 			theSession = session;
 			return this;
@@ -322,18 +462,21 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 			return this;
 		}
 
+		/** @return The parse session associated with this builder */
 		public ObservableConfigParseSession getSession() {
 			if (theSession == null)
 				theSession = new ObservableConfigParseSession();
 			return theSession;
 		}
 
+		/** @return The format set associated with this builder */
 		protected ObservableConfigFormatSet getFormatSet() {
 			if (theFormatSet == null)
 				theFormatSet = new ObservableConfigFormatSet();
 			return theFormatSet;
 		}
 
+		/** @return The format that will be used to parse and persist values from config */
 		protected ObservableConfigFormat<T> getFormat() {
 			ObservableConfigFormat<T> format = theFormat;
 			if (format == null)
@@ -341,6 +484,10 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 			return format;
 		}
 
+		/**
+		 * @param parent Whether the value should be the parent of the target descendant
+		 * @return The descendant that shall be the root of the value parsed by this builder
+		 */
 		protected ObservableValue<? extends ObservableConfig> getDescendant(boolean parent) {
 			ObservableValue<? extends ObservableConfig> descendant;
 			if (thePath != null) {
@@ -356,11 +503,16 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 			return descendant;
 		}
 
+		/**
+		 * @param parent Whether to create the parent of the descendant, or the actual descendant
+		 * @return A supplier that can create the parent or descendant if it does not exist
+		 */
 		protected Supplier<ObservableConfig> createDescendant(boolean parent) {
 			ObservableConfigPath path = parent ? thePath.getParent() : thePath;
 			return () -> theConfig.getChild(path, true, null);
 		}
 
+		/** @return The name of the child element(s) to be created for this builder's data structure value */
 		protected String getChildName() {
 			if (thePath == null)
 				return StringUtils.singularize(theConfig.getName());
@@ -368,23 +520,38 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 				return thePath.getLastElement().getName();
 		}
 
+		/** @return The until value configured for this builder */
 		protected Observable<?> getUntil() {
 			return theUntil == null ? Observable.empty() : theUntil;
 		}
 
+		/**
+		 * @param until The until value
+		 * @param findRefs The find refs observable which parsers can register with for post-parse actions (e.g. reference finding)
+		 * @return The context
+		 */
 		protected ObservableConfigFormat.ObservableConfigParseContext<T> getParseContext(Observable<?> until, Observable<?> findRefs) {
 			return ObservableConfigFormat.ctxFor(getSession(), theConfig, getDescendant(false),
 				createDescendant(false)::get, null, until, null, findRefs, null);
 		}
 
-		protected <T, E extends Exception> T build(ExFunction<Observable<?>, T, E> build, Consumer<T> preRefs) throws E {
+		/**
+		 * @param <V> The type to build
+		 * @param <E> The type of exception that may be thrown by the builder
+		 * @param build Accepts an observable that will be fired after the build function (to be used e.g. for reference finding) and parses
+		 *        the value
+		 * @param preRefs Accepts the value before reference-finding
+		 * @return The built value
+		 * @throws E If an error occurs parsing the value
+		 */
+		protected <V, E extends Exception> V build(ExFunction<Observable<?>, V, E> build, Consumer<V> preRefs) throws E {
 			Observable<?> builtNotifier = theBuiltNotifier;
 			SimpleObservable<Void> findRefs;
 			if (builtNotifier == null) {
 				builtNotifier = findRefs = new SimpleObservable<>();
 			} else
 				findRefs = null;
-			T built = build.apply(builtNotifier);
+			V built = build.apply(builtNotifier);
 			if (preRefs != null)
 				preRefs.accept(built);
 			if (findRefs != null)
@@ -392,6 +559,13 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 			return built;
 		}
 
+		/**
+		 * Parses the value as configured in the builder
+		 *
+		 * @param preReturnGet Accepts the value before the reference-finding step (may be used for satisfying internal references)
+		 * @return The built value
+		 * @throws ParseException If an exception occurs parsing the value
+		 */
 		public T parse(Consumer<T> preReturnGet) throws ParseException {
 			ObservableConfigFormat<T> format = getFormat();
 			// If the format is simple, we can just parse the value and then forget about it.
@@ -406,6 +580,12 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 			}
 		}
 
+		/**
+		 * Parses the value and immediately disconnects it from this structure, so that changes on either side to not flow to the other
+		 *
+		 * @return The parsed value
+		 * @throws ParseException If an exception occurs parsing the value
+		 */
 		public T parseDisconnected() throws ParseException {
 			SimpleObservable<Void> until = new SimpleObservable<>();
 			SimpleObservable<Void> findRefs = new SimpleObservable<>();
@@ -415,6 +595,12 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 			return value;
 		}
 
+		/**
+		 * Parses the value as configured in the builder, as a {@link SettableValue}
+		 *
+		 * @param preReturnGet Accepts the value before the reference-finding step (may be used for satisfying internal references)
+		 * @return The built value
+		 */
 		public SettableValue<T> buildValue(Consumer<SettableValue<T>> preReturnGet) {
 			return build(
 				findRefs -> new ObservableConfigTransform.ObservableConfigValue<>(getSession(), theConfig,
@@ -422,12 +608,24 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 				preReturnGet);
 		}
 
+		/**
+		 * Parses a collection of values as configured in the builder
+		 *
+		 * @param preReturnGet Accepts the collection before the reference-finding step (may be used for satisfying internal references)
+		 * @return The built value
+		 */
 		public ObservableCollection<T> buildCollection(Consumer<ObservableCollection<T>> preReturnGet) {
 			return build(findRefs -> new ObservableConfigTransform.ObservableConfigValues<>(getSession(), theConfig, //
 				getDescendant(thePath != null), createDescendant(thePath != null)::get, theType, getFormat(), getChildName(), getUntil(),
 				true, findRefs), preReturnGet);
 		}
 
+		/**
+		 * Parses an entity set of values as configured in the builder
+		 *
+		 * @param preReturnGet Accepts the entity set before the reference-finding step (may be used for satisfying internal references)
+		 * @return The built value
+		 */
 		public SyncValueSet<T> buildEntitySet(Consumer<SyncValueSet<T>> preReturnGet) {
 			ObservableConfigFormat<T> entityFormat = getFormat();
 			if (!(entityFormat instanceof ObservableConfigFormat.EntityConfigFormat))
@@ -437,11 +635,22 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 				(ObservableConfigFormat.EntityConfigFormat<T>) entityFormat, getChildName(), getUntil(), true, findRefs), preReturnGet);
 		}
 
+		/**
+		 * @param <K> The key type for the map
+		 * @param keyType The key type for the map
+		 * @return A map builder with this builder's settings
+		 */
 		public <K> ObservableConfigMapBuilder<K, T> asMap(TypeToken<K> keyType) {
 			return new ObservableConfigMapBuilder<>(this, keyType);
 		}
 	}
 
+	/**
+	 * Similar to a {@link ObservableConfigValueBuilder value builder} for parsing map structures from config
+	 *
+	 * @param <K> The key type of the map to parse
+	 * @param <V> The value type of the map to parse
+	 */
 	public class ObservableConfigMapBuilder<K, V> {
 		private final ObservableConfigValueBuilder<V> theValueBuilder;
 		private final TypeToken<K> theKeyType;
@@ -453,22 +662,39 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 			theKeyType = keyType;
 		}
 
+		/**
+		 * @param format The format to parse and persist the key from config
+		 * @return This builder
+		 */
 		public ObservableConfigMapBuilder<K, V> withKeyFormat(ObservableConfigFormat<K> format) {
 			theKeyFormat = checkFormat(format);
 			return this;
 		}
 
+		/**
+		 * @param format The format to parse and persist the key from text
+		 * @param defaultValue The key value to use if the key config is missing
+		 * @return This builder
+		 */
 		public ObservableConfigMapBuilder<K, V> withKeyFormat(Format<K> format, Supplier<? extends K> defaultValue) {
 			theKeyFormat = ObservableConfigFormat.ofQommonFormat(format, defaultValue);
 			return this;
 		}
 
+		/**
+		 * @param formatSet The format set to use for required format dependencies
+		 * @return This builder
+		 */
 		public ObservableConfigMapBuilder<K, V> withFormatSet(ObservableConfigFormatSet formatSet) {
 			theValueBuilder.withFormatSet(formatSet);
 			return this;
 		}
 
-		public ObservableConfigMapBuilder<K, V> withHierarchicalFormat(
+		/**
+		 * @param format Builds a {@link ObservableConfigFormat.HeterogeneousFormat heterogenous format} for the map key
+		 * @return This builder
+		 */
+		public ObservableConfigMapBuilder<K, V> withHeterogenousFormat(
 			Function<ObservableConfigFormat.HeterogeneousFormat.Builder<K>, ObservableConfigFormat.HeterogeneousFormat<K>> format) {
 			theKeyFormat = checkFormat(format.apply(ObservableConfigFormat.heterogeneous(theKeyType)));
 			return this;
@@ -487,26 +713,44 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 			return format;
 		}
 
+		/**
+		 * @param path The path of the value(s) for this value builder
+		 * @return This builder
+		 */
 		public ObservableConfigMapBuilder<K, V> at(String path) {
 			theValueBuilder.at(path);
 			return this;
 		}
 
+		/**
+		 * @param path The path of the value(s) for this value builder
+		 * @return This builder
+		 */
 		public ObservableConfigMapBuilder<K, V> at(ObservableConfigPath path) {
 			theValueBuilder.at(path);
 			return this;
 		}
 
+		/**
+		 * @param until An observable that, when fired once, will release all resources and listeners accumulated on the value built by this
+		 *        builder
+		 * @return This builder
+		 */
 		public ObservableConfigMapBuilder<K, V> until(Observable<?> until) {
 			theValueBuilder.until(until);
 			return this;
 		}
 
+		/**
+		 * @param keyName The name of the key config to be created for each entry
+		 * @return This builder
+		 */
 		public ObservableConfigMapBuilder<K, V> withKeyName(String keyName) {
 			theKeyName = keyName;
 			return this;
 		}
 
+		/** @return The format to parse and persist key values from config */
 		protected ObservableConfigFormat<K> getKeyFormat() {
 			ObservableConfigFormat<K> format = theKeyFormat;
 			if (format == null)
@@ -514,12 +758,17 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 			return format;
 		}
 
+		/** @return The name of the key config to be created for each entry */
 		protected String getKeyName() {
 			return theKeyName == null ? "key" : theKeyName;
 		}
 
-		/** @deprecated Not yet implemented */
-		@Deprecated
+		/**
+		 * Parses a map of key-value pairs as configured in the builder
+		 *
+		 * @param preReturnGet Accepts the map before the reference-finding step (may be used for satisfying internal references)
+		 * @return The built value
+		 */
 		public ObservableMap<K, V> buildMap(Consumer<ObservableMap<K, V>> preReturnGet) {
 			return theValueBuilder.build(
 				findRefs -> new ObservableConfigTransform.ObservableConfigMap<>(new ObservableConfigParseSession(),
@@ -530,8 +779,12 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 				preReturnGet);
 		}
 
-		/** @deprecated Not yet implemented */
-		@Deprecated
+		/**
+		 * Parses a multi-map of key/values as configured in the builder
+		 *
+		 * @param preReturnGet Accepts the multi-map before the reference-finding step (may be used for satisfying internal references)
+		 * @return The built value
+		 */
 		public ObservableMultiMap<K, V> buildMultiMap(Consumer<ObservableMultiMap<K, V>> preReturnGet) {
 			return theValueBuilder
 				.build(findRefs -> new ObservableConfigTransform.ObservableConfigMultiMap<>(new ObservableConfigParseSession(),
@@ -734,12 +987,22 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 		return DefaultObservableConfig.createRoot(name, value, locking);
 	}
 
+	/**
+	 * Tells {@link ObservableConfig#readXml(ObservableConfig, InputStream, XmlEncoding)} and
+	 * {@link ObservableConfig#writeXml(ObservableConfig, Writer, XmlEncoding, String)} how to store and read names and values that are not
+	 * XML-compatible
+	 */
 	public static class XmlEncoding {
+		/** Default encoding */
 		public static final XmlEncoding DEFAULT = new XmlEncoding("::", "::", "__", Collections.emptyMap()); // TODO
 
+		/** The prefix to use before characters that are not XML-compatible */
 		public final String encodingPrefix;
+		/** The prefix to use before replaced sequences in XML */
 		public final String encodingReplacement;
+		/** The string to use in XML to represent a null string */
 		public final String emptyContent;
+		/** The set of values to replace in XML */
 		public final BetterSortedMap<String, String> namedReplacements;
 		private final StringBuilder str;
 
@@ -968,6 +1231,8 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 							contentStr = null;
 						theIgnorableContent.setLength(0);
 					}
+					if (encoding.emptyContent.equals(contentStr))
+						contentStr = null;
 					if (!Objects.equals(contentStr, cfg.getValue()))
 						cfg.setValue(contentStr);
 					hasContent = true;
@@ -976,6 +1241,13 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 		}
 	}
 
+	/**
+	 * @param config The root config element to persist
+	 * @param out The writer to write the XML to
+	 * @param encoding The endcoding structure to determine how to write XML-incompatible names and values
+	 * @param indent The indent of each XML hierarchy level
+	 * @throws IOException If the writer throws an exception
+	 */
 	public static void writeXml(ObservableConfig config, Writer out, XmlEncoding encoding, String indent) throws IOException {
 		out.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\n");
 		try (Transaction t = config.lock(false, null)) {
@@ -984,6 +1256,7 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 		out.append('\n');
 	}
 
+	/** Utility class used by {@link ObservableConfig#writeXml(ObservableConfig, Writer, XmlEncoding, String)} */
 	class XmlWriteHelper {
 		final Map<String, Integer> attrNames = new HashMap<>();
 		final BitSet childrenAsAttributes = new BitSet();
@@ -1071,6 +1344,8 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 				out.append(">");
 				if (config.getValue() != null)
 					out.append(escapeXml(config.getValue(), encoding));
+				else
+					out.append(encoding.emptyContent);
 				if (withChildren) {
 					i = 0;
 					BitSet copy = (BitSet) childrenAsAttributes.clone();
