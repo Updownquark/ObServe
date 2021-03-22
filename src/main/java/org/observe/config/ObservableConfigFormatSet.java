@@ -22,6 +22,7 @@ import org.qommons.io.Format;
 
 import com.google.common.reflect.TypeToken;
 
+/** A set of formats to be used for persisting/parsing complex types like entities, collections, maps, etc. */
 public class ObservableConfigFormatSet {
 	private static final ThreadLocal<Map<TypeToken<?>, String>> CYCLE_DETECTION = ThreadLocal.withInitial(LinkedHashMap::new);
 
@@ -38,6 +39,7 @@ public class ObservableConfigFormatSet {
 	private final Map<TypeToken<?>, EntityReflector<?>> theReflectors;
 	private final Map<TypeToken<?>, EntityConfiguredValueType<?>> theEntityTypes;
 
+	/** Creates a new format set */
 	public ObservableConfigFormatSet() {
 		theFormats = new ConcurrentHashMap<>();
 		theFormatCache = new ConcurrentHashMap<>();

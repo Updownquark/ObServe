@@ -795,14 +795,30 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 		}
 	}
 
+	/**
+	 * @param path The path of the descendant to get
+	 * @return The first descendant of this config element matching the given path
+	 */
 	default ObservableConfig getChild(String path) {
 		return getChild(path, false, null);
 	}
 
+	/**
+	 * @param path The path of the descendant to get
+	 * @param createIfAbsent Whether to create an element matching the given path if one does not already exist
+	 * @param preAddMod Accepts the new config element for modification before it is added to the structure
+	 * @return The first descendant of this config element matching the given path
+	 */
 	default ObservableConfig getChild(String path, boolean createIfAbsent, Consumer<ObservableConfig> preAddMod) {
 		return getChild(ObservableConfigPath.create(path), createIfAbsent, preAddMod);
 	}
 
+	/**
+	 * @param path The path of the descendant to get
+	 * @param createIfAbsent Whether to create an element matching the given path if one does not already exist
+	 * @param preAddMod Accepts the new config element for modification before it is added to the structure
+	 * @return The first descendant of this config element matching the given path
+	 */
 	default ObservableConfig getChild(ObservableConfigPath path, boolean createIfAbsent, Consumer<ObservableConfig> preAddMod) {
 		if (path == null)
 			throw new IllegalArgumentException("No path given");
@@ -818,6 +834,12 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 		}
 	}
 
+	/**
+	 * @param el A path element for the child
+	 * @param createIfAbsent Whether to create an element matching the given path element if one does not already exist
+	 * @param preAddMod Accepts the new config element for modification before it is added to the structure
+	 * @return The first child of this config element matching the given path element
+	 */
 	default ObservableConfig getChild(ObservableConfigPathElement el, boolean createIfAbsent, Consumer<ObservableConfig> preAddMod) {
 		String pathName = el.getName();
 		if (pathName.equals(ObservableConfigPath.ANY_NAME) || pathName.equals(ObservableConfigPath.ANY_DEPTH))
@@ -840,37 +862,86 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 		return found;
 	}
 
+	/**
+	 * @param after The child after which to add the element (or null to have no lower bound)
+	 * @param before The child before which to add the element (or null to have no upper bound)
+	 * @return null If such a child can be added to this config, or a reaon why it can't
+	 */
 	default String canAddChild(ObservableConfig after, ObservableConfig before) {
 		return null;
 	}
 
+	/**
+	 * @param name The name of the child to add
+	 * @return The new child
+	 */
 	default ObservableConfig addChild(String name) {
 		return addChild(name, null);
 	}
 
+	/**
+	 * @param name The name of the child to add
+	 * @param preAddMod Accepts the new child for modification before it is added to the structure
+	 * @return The new child
+	 */
 	default ObservableConfig addChild(String name, Consumer<ObservableConfig> preAddMod) {
 		return addChild(null, null, false, name, preAddMod);
 	}
 
+	/**
+	 * @param after The child after which to add the element (or null to have no lower bound)
+	 * @param before The child before which to add the element (or null to have no upper bound)
+	 * @param first Whether to prefer adding to the beginning or end of the given range
+	 * @param name The name for the new child
+	 * @param preAddMod Accepts the new child for modification before it is added to the structure
+	 * @return The new child
+	 */
 	ObservableConfig addChild(ObservableConfig after, ObservableConfig before, boolean first, String name,
 		Consumer<ObservableConfig> preAddMod);
 
+	/**
+	 * @param child The child to move
+	 * @param after The child after which to move the element (or null to have no lower bound)
+	 * @param before The child before which to move the element (or null to have no upper bound)
+	 * @return null If the child can be moved into the given range, or a reason why it can't
+	 */
 	default String canMoveChild(ObservableConfig child, ObservableConfig after, ObservableConfig before) {
 		return null;
 	}
 
+	/**
+	 * @param child The child to move
+	 * @param after The child after which to move the element (or null to have no lower bound)
+	 * @param before The child before which to move the element (or null to have no upper bound)
+	 * @param first Whether to prefer moving the child toward the beginning of the given movement range
+	 * @param afterRemove Executes after removing the child from the structure, but before re-adding it
+	 * @return The moved config element
+	 */
 	ObservableConfig moveChild(ObservableConfig child, ObservableConfig after, ObservableConfig before, boolean first,
 		Runnable afterRemove);
 
 	@Override
 	ObservableConfig setName(String name);
 
+	/**
+	 * @param value The value to set
+	 * @return null if the given value can be set as this config element's value, or a reason why it can't
+	 */
 	default String canSetValue(String value) {
 		return null;
 	}
 
+	/**
+	 * @param value The value to set for this config element
+	 * @return This config element
+	 */
 	ObservableConfig setValue(String value);
 
+	/**
+	 * @param path The path of the descendant to set the value of
+	 * @param value The value to set for the descendant
+	 * @return This config
+	 */
 	default ObservableConfig set(String path, String value) {
 		ObservableConfig child = getChild(path, value != null, //
 			ch -> ch.setValue(value));
@@ -882,18 +953,32 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 		return this;
 	}
 
+	/**
+	 * @param source The config element whose hierarchical information to copy
+	 * @param removeExtras Whether information in this config element which is absent from <code>source</code> should be removed
+	 * @return This config element
+	 */
 	ObservableConfig copyFrom(ObservableConfig source, boolean removeExtras);
 
+	/** @return null if this config element can be removed from its parent, or a reason why it can't */
 	default String canRemove() {
 		return null;
 	}
 
+	/** Removes this config element from its parent */
 	void remove();
 
+	/** @return An unmodifiable dynamic view of this config element */
 	default ObservableConfig unmodifiable() {
 		return UnmodifiableObservableConfig.unmodifiable(this);
 	}
 
+	/**
+	 * A canned {@link Object#toString()} implementation for {@link ObservableConfig} implementations
+	 *
+	 * @param config The config element
+	 * @return A string representation of the element
+	 */
 	public static String toString(ObservableConfig config) {
 		StringWriter out = new StringWriter();
 		try {
@@ -904,6 +989,7 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 		return out.toString();
 	}
 
+	/** @return An XML representation of this config element as a string */
 	default String printXml() {
 		StringWriter out = new StringWriter();
 		try {
@@ -914,21 +1000,55 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 		return out.toString();
 	}
 
+	/**
+	 * Registers a shutdown hook which will store this config element to persistence
+	 *
+	 * @param <E> The type of exception that the persistence may throw
+	 * @param persistence The persistence to use to persist the configuration
+	 * @param onException The listener for persistence failure
+	 * @return A subscription to cancel the shutdown hook
+	 */
 	default <E extends Exception> Subscription persistOnShutdown(ObservableConfigPersistence<E> persistence,
 		Consumer<? super Exception> onException) {
 		return persistWhen(Observable.onVmShutdown(), persistence, onException);
 	}
 
+	/**
+	 * Stores the config to persistence on an interval
+	 *
+	 * @param <E> The type of exception that the persistence may throw
+	 * @param interval The interval on which to persist the config
+	 * @param persistence The persistence to use to persist the configuration
+	 * @param onException The listener for persistence failure
+	 * @return A subscription to cancel the shutdown hook
+	 */
 	default <E extends Exception> Subscription persistEvery(Duration interval, ObservableConfigPersistence<E> persistence,
 		Consumer<? super Exception> onException) {
 		return persistWhen(Observable.<Void> every(Duration.ZERO, interval, null, d -> null, null), persistence, onException);
 	}
 
+	/**
+	 * Causes this config element to be persisted every time anything changes
+	 *
+	 * @param <E> The type of exception that the persistence may throw
+	 * @param persistence The persistence to use to persist the configuration
+	 * @param onException The listener for persistence failure
+	 * @return A subscription to stop persisting
+	 */
 	default <E extends Exception> Subscription persistOnChange(ObservableConfigPersistence<E> persistence,
 		Consumer<? super Exception> onException) {
 		return persistWhen(watch(ObservableConfigPath.buildPath("").multi(true).build()), persistence, onException);
 	}
 
+	/**
+	 * Persists a config element whenever an event occurs
+	 *
+	 * @param <E> The type of exception that the persistence may throw
+	 * @param observable The event to persist on
+	 * @param persistence The persistence to use to persist the configuration
+	 * @param onException The listener for persistence failure
+	 * @return A subscription to stop persisting
+	 */
 	default <E extends Exception> Subscription persistWhen(Observable<?> observable, ObservableConfigPersistence<E> persistence,
 		Consumer<? super Exception> onException) {
 		return observable.subscribe(new Observer<Object>() {
@@ -955,19 +1075,40 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 					persistence.persist(ObservableConfig.this);
 				} catch (Exception ex) {
 					onException.accept(ex);
+				} finally {
+					lock.close();
 				}
 			}
 		});
 	}
 
+	/**
+	 * A factory method to create a persistence operator for storing config in XML to a file
+	 *
+	 * @param file The file to persist to
+	 * @param encoding The XML encoding to use for XML persistence
+	 * @return The persistence operation to use
+	 */
 	public static ObservableConfigPersistence<IOException> toFile(File file, XmlEncoding encoding) {
 		return toWriter(() -> new BufferedWriter(new FileWriter(file)), encoding);
 	}
 
+	/** Creates a {@link Writer} */
 	public interface WriterSupplier {
+		/**
+		 * @return The writer to store character data
+		 * @throws IOException If the writer cannot be created
+		 */
 		Writer createWriter() throws IOException;
 	}
 
+	/**
+	 * A factory method to create a persistence operator for storing config to a generic writable resource
+	 *
+	 * @param writer Creates a writer to store configuration data
+	 * @param encoding The XML encoding to use to persist the data
+	 * @return The persistence operation to use
+	 */
 	public static ObservableConfigPersistence<IOException> toWriter(WriterSupplier writer, XmlEncoding encoding) {
 		return new ObservableConfig.ObservableConfigPersistence<IOException>() {
 			@Override
@@ -979,10 +1120,21 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 		};
 	}
 
+	/**
+	 * @param name The name for the root element
+	 * @return A thread-safe, empty {@link ObservableConfig} object with the given name
+	 */
 	public static ObservableConfig createRoot(String name) {
 		return DefaultObservableConfig.createRoot(name);
 	}
 
+	/**
+	 * @param name The name for the root element
+	 * @param value The value for the element
+	 * @param locking Creates a locking strategy for the config (from an owner object)
+	 * @return An empty {@link ObservableConfig} object with the given name and value, whose concurrent access is managed by the given
+	 *         locking strategy
+	 */
 	public static ObservableConfig createRoot(String name, String value, Function<Object, CollectionLockingStrategy> locking) {
 		return DefaultObservableConfig.createRoot(name, value, locking);
 	}
@@ -1006,6 +1158,12 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 		public final BetterSortedMap<String, String> namedReplacements;
 		private final StringBuilder str;
 
+		/**
+		 * @param encodingPrefix The prefix to use before characters that are not XML-compatible
+		 * @param encodingReplacement The prefix to use before replaced sequences in XML
+		 * @param emptyContent The string to use in XML to represent a null string
+		 * @param replacements The set of values to replace in XML
+		 */
 		public XmlEncoding(String encodingPrefix, String encodingReplacement, String emptyContent, Map<String, String> replacements) {
 			this.encodingPrefix = encodingPrefix;
 			this.encodingReplacement = encodingReplacement;
@@ -1017,6 +1175,12 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 			str = new StringBuilder();
 		}
 
+		/**
+		 * @param encodingPrefix The prefix to use before characters that are not XML-compatible
+		 * @param encodingReplacement The prefix to use before replaced sequences in XML
+		 * @param emptyContent The string to use in XML to represent a null string
+		 * @param replacements Key/values to replace in XML
+		 */
 		public XmlEncoding(String encodingPrefix, String encodingReplacement, String emptyContent, String... replacements) {
 			this(encodingPrefix, encodingReplacement, emptyContent, mapify(replacements));
 		}
@@ -1033,6 +1197,10 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 			return Collections.unmodifiableMap(map);
 		}
 
+		/**
+		 * @param xmlName The config element name to encode
+		 * @return The encoded XML element or attribute name
+		 */
 		public String encode(String xmlName) {
 			if (xmlName.length() == 0)
 				return emptyContent;
@@ -1062,6 +1230,10 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 			return encoded;
 		}
 
+		/**
+		 * @param xmlName The XML element or attribute name to decode
+		 * @return The decoded config element name
+		 */
 		public String decode(String xmlName) {
 			if (emptyContent.equals(xmlName))
 				return "";

@@ -424,6 +424,10 @@ public class ObservableConfigContent {
 			}
 		}
 
+		/**
+		 * @param value The value to set
+		 * @return null if the given value is acceptable for the target config's value, or a reason why it isn't
+		 */
 		protected String isValueAcceptable(String value) {
 			return null;
 		}

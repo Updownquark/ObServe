@@ -356,6 +356,11 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		}
 	}
 
+	/**
+	 * Represents a collection of some kind backed by {@link ObservableConfig}
+	 * 
+	 * @param <E> The type of the collection
+	 */
 	protected static abstract class ObservableConfigBackedCollection<E> extends ObservableConfigTransform {
 		final TypeToken<E> theType;
 		private final ObservableConfigFormat<E> theFormat;
@@ -438,7 +443,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 					} else // Must be a different child
 						return;
 				} else if (elementChange && (//
-				!collectionChange.relativePath.getFirst().getName().equals(theChildName)// Renamed to be irrelevant to us
+					!collectionChange.relativePath.getFirst().getName().equals(theChildName)// Renamed to be irrelevant to us
 					|| collectionChange.changeType == CollectionChangeType.remove)) {
 					incrementStamp();
 					theElements.mutableEntry(el.getElementId()).remove();

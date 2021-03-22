@@ -7,8 +7,8 @@ import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 
 /**
- * A ConfigurableValueCreator without asynchronous capabilities
- * 
+ * A {@link ConfigurableValueCreator} without asynchronous capabilities
+ *
  * @param <E> The type of the value set
  * @param <E2> The sub-type of the value to create
  */

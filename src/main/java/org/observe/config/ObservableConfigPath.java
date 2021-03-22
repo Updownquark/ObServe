@@ -12,39 +12,54 @@ import java.util.Objects;
 import org.observe.config.ObservableConfig.ObservableConfigEvent;
 import org.qommons.Transaction;
 
+/** Represents a pattern matching a particular descendant or set of descendants of an {@link ObservableConfig} */
 public class ObservableConfigPath {
+	/** Separates elements in a path string */
 	public static final char PATH_SEPARATOR = '/';
+	/** Separates elements in a path string */
 	public static final String PATH_SEPARATOR_STR = "" + PATH_SEPARATOR;
+	/** The empty string */
 	public static final String EMPTY_PATH = "".intern();
+	/** Matches any child (or all children) of a config element */
 	public static final String ANY_NAME = "*".intern();
+	/** Matches any descendant (or all descendants) of a config element */
 	public static final String ANY_DEPTH = "**".intern();
 
 	private final List<ObservableConfigPathElement> theElements;
 
+	/** @param elements The elements of the path */
 	protected ObservableConfigPath(List<ObservableConfigPathElement> elements) {
 		this.theElements = elements;
 	}
 
+	/** @return The elements of the path */
 	public List<ObservableConfigPathElement> getElements() {
 		return theElements;
 	}
 
+	/** @return The last element of the path */
 	public ObservableConfigPathElement getLastElement() {
 		return theElements.get(theElements.size() - 1);
 	}
 
+	/** @return A config path containing only the last element of this path */
 	public ObservableConfigPath getLast() {
 		if (theElements.size() == 1)
 			return this;
 		return new ObservableConfigPath(theElements.subList(theElements.size() - 1, theElements.size()));
 	}
 
+	/** @return A config path containing all but the last element of this path */
 	public ObservableConfigPath getParent() {
 		if (theElements.size() == 1)
 			return null;
 		return new ObservableConfigPath(theElements.subList(0, theElements.size() - 1));
 	}
 
+	/**
+	 * @param path A path of {@link ObservableConfig}s to match
+	 * @return Whether the given config sequence matches this path
+	 */
 	public boolean matches(List<ObservableConfig> path) {
 		Iterator<ObservableConfigPathElement> matcherIter = theElements.iterator();
 		Iterator<ObservableConfig> pathIter = path.iterator();
@@ -91,10 +106,19 @@ public class ObservableConfigPath {
 		return str.toString();
 	}
 
+	/**
+	 * @param firstName The name of the first element in the path
+	 * @return A builder for the path
+	 */
 	public static ObservableConfigPathBuilder buildPath(String firstName) {
 		return buildPath(new LinkedList<>(), firstName);
 	}
 
+	/**
+	 * @param path Previous elements in the path
+	 * @param name The name of the next element in the path
+	 * @return The builder for the next element of the path
+	 */
 	protected static ObservableConfigPathBuilder buildPath(List<ObservableConfigPathElement> path, String name) {
 		List<ObservableConfigPathElement> finalPath = new ArrayList<>(path.size());
 		finalPath.addAll(path);
@@ -113,10 +137,18 @@ public class ObservableConfigPath {
 		return builder;
 	}
 
+	/**
+	 * @param path The elements in the path
+	 * @return The path
+	 */
 	protected static ObservableConfigPath createPath(List<ObservableConfigPathElement> path) {
 		return new ObservableConfigPath(Collections.unmodifiableList(path));
 	}
 
+	/**
+	 * @param path The path string to parse
+	 * @return The path represented by the given string
+	 */
 	public static ObservableConfigPath create(String path) {
 		if (path.length() == 0)
 			return null;
@@ -146,12 +178,19 @@ public class ObservableConfigPath {
 		return builder.build();
 	}
 
+	/** An element in a {@link ObservableConfigPath} */
 	public static class ObservableConfigPathElement {
 		private final String theName;
 		private final Map<String, String> theAttributes;
 		private final boolean isMulti;
 		private final boolean isMultiDepth;
 
+		/**
+		 * @param name The name for the element
+		 * @param attributes The attribute/value pairs for the element
+		 * @param multi Whether this element is intended to match multiple siblings
+		 * @param multiDepth Whether this element is intended to match any descendant of the parent
+		 */
 		protected ObservableConfigPathElement(String name, Map<String, String> attributes, boolean multi, boolean multiDepth) {
 			theName = name;
 			theAttributes = attributes;
@@ -159,22 +198,30 @@ public class ObservableConfigPath {
 			isMultiDepth = multiDepth;
 		}
 
+		/** @return The name for the element */
 		public String getName() {
 			return theName;
 		}
 
+		/** @return The attribute/value pairs for the element */
 		public Map<String, String> getAttributes() {
 			return theAttributes;
 		}
 
+		/** @return Whether this element is intended to match multiple siblings */
 		public boolean isMulti() {
 			return isMulti;
 		}
 
+		/** @return Whether this element is intended to match any descendant of the parent */
 		public boolean isMultiDepth() {
 			return isMultiDepth;
 		}
 
+		/**
+		 * @param config The config to test
+		 * @return Whether the given config element may be a match for this path element
+		 */
 		public boolean matches(ObservableConfig config) {
 			if (!isMulti && !theName.equals(config.getName()))
 				return false;
@@ -198,6 +245,11 @@ public class ObservableConfigPath {
 			return true;
 		}
 
+		/**
+		 * @param config The config to test
+		 * @param change The config change representing a change event that just occurred
+		 * @return Whether the given config element may have been a match for this element before the given event
+		 */
 		public boolean matchedBefore(ObservableConfig config, ObservableConfigEvent change) {
 			if (!theName.equals(ObservableConfigPath.ANY_NAME)) {
 				if (change.relativePath.size() == 1) {
@@ -270,6 +322,7 @@ public class ObservableConfigPath {
 		}
 	}
 
+	/** Builds an {@link ObservableConfigPath} */
 	public static class ObservableConfigPathBuilder {
 		private final List<ObservableConfigPathElement> thePath;
 		private final String theName;
@@ -278,11 +331,22 @@ public class ObservableConfigPath {
 		private boolean isMultiDepth;
 		private boolean isUsed;
 
+		/**
+		 * @param path Previous path elements
+		 * @param name The name of the config element
+		 */
 		protected ObservableConfigPathBuilder(List<ObservableConfigPathElement> path, String name) {
 			thePath = path;
 			theName = name;
 		}
 
+		/**
+		 * Causes the path element to only match config elements with a given child
+		 *
+		 * @param attrName The name of the attribute/child
+		 * @param value The value for the child
+		 * @return This builder
+		 */
 		public ObservableConfigPathBuilder withAttribute(String attrName, String value) {
 			if (isUsed)
 				throw new IllegalStateException("This builder has already been used");
@@ -292,6 +356,12 @@ public class ObservableConfigPath {
 			return this;
 		}
 
+		/**
+		 * Causes the path element to be a matcher for multiple elements
+		 *
+		 * @param deep Whether to match any descendant as opposed to just any sibling of the parent
+		 * @return This builder
+		 */
 		public ObservableConfigPathBuilder multi(boolean deep) {
 			if (isUsed)
 				throw new IllegalStateException("This builder has already been used");
@@ -300,6 +370,7 @@ public class ObservableConfigPath {
 			return this;
 		}
 
+		/** Prevents further configuration */
 		protected void seal() {
 			if (isUsed)
 				throw new IllegalStateException("This builder has already been used");
@@ -308,11 +379,16 @@ public class ObservableConfigPath {
 				theAttributes == null ? Collections.emptyMap() : Collections.unmodifiableMap(theAttributes), isMulti, isMultiDepth));
 		}
 
+		/**
+		 * @param name The name for the child
+		 * @return A builder for a child path element
+		 */
 		public ObservableConfigPathBuilder andThen(String name) {
 			seal();
 			return buildPath(thePath, name);
 		}
 
+		/** @return The config path */
 		public ObservableConfigPath build() {
 			seal();
 			return createPath(thePath);
@@ -334,6 +410,12 @@ public class ObservableConfigPath {
 		return pathEls.toArray(new String[pathEls.size()]);
 	}
 
+	/**
+	 * Parses an element from a path string
+	 *
+	 * @param pathEl The string representing an {@link ObservableConfigPathElement}
+	 * @return The path element
+	 */
 	public static ObservableConfigPathElement parsePathElement(String pathEl) {
 		boolean multi;
 		boolean deep = ObservableConfigPath.ANY_DEPTH.equals(pathEl);
@@ -357,6 +439,11 @@ public class ObservableConfigPath {
 		return new ObservableConfigPathElement(name, properties, multi, deep);
 	}
 
+	/**
+	 * @param pathEl The path element to parse properties from
+	 * @param properties The properties map to populate
+	 * @return The name of the config element configured for the path element
+	 */
 	public static String parsePathProperties(String pathEl, Map<String, String> properties) {
 		if (pathEl.length() == 0 || pathEl.charAt(pathEl.length() - 1) != '}')
 			return pathEl;

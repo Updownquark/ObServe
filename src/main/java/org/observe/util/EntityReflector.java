@@ -59,9 +59,34 @@ import com.google.common.reflect.Invokable;
 import com.google.common.reflect.TypeToken;
 
 /**
+ * <p>
  * A utility for reflectively compiling a public interface's fields with getters and setters. Especially, this class's
  * {@link #newInstance(EntityInstanceBacking) newInstance} method allows the caller to easily create new instances of the target interface
  * backed by a custom data set.
+ * </p>
+ *
+ * <p>
+ * This class can be used to create proxy-backed instances of entity interfaces for which all non-static methods (and methods of
+ * super-interfaces) are one of:
+ * <ul>
+ * <li>A getter of the form <code>type getXXX()</code></li>
+ * <li>A setter of the form <code>R setXXX(type value)</code> for a field that also has a getter. R may be:
+ * <ul>
+ * <li>void</li>
+ * <li>type (the type of the field), in which case the return value will be the previous value of the field</li>
+ * <li>the entity type, in which case the return value will be the entity</li>
+ * </ul>
+ * </li>
+ * <li>A default method</li>
+ * <li>A method with the same signature (exclusive of name) as an {@link Object} method, and tagged with @{@link ObjectMethodOverride}</li>
+ * <li>{@link Identifiable#getIdentity()}--an identity will be provided unless the method is defaulted</li>
+ * </ul>
+ * </p>
+ * <p>
+ * This class supports @{@link Cached} getters, observability of fields (if the {@link EntityInstanceBacking} is an instance of
+ * {@link ObservableEntityInstanceBacking}), and entity-associated data (via {@link #associate(Object, Object, Object)} and
+ * {@link #getAssociated(Object, Object)})
+ * </p>
  *
  * @param <E> The type of interface entity this reflector is for
  */

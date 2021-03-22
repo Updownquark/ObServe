@@ -48,14 +48,27 @@ import org.qommons.io.Format;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * A format that knows how to persist values to and parse them from {@link ObservableConfig} elements
+ *
+ * @param <E> The type of value to persist/parse
+ */
 public interface ObservableConfigFormat<E> {
+	/** Persists text ({@link String}s) */
 	public static ObservableConfigFormat<String> TEXT = ofQommonFormat(Format.TEXT, () -> null);
+	/** Persists {@link Double}s */
 	public static ObservableConfigFormat<Double> DOUBLE = ofQommonFormat(Format.doubleFormat("0.############E0"), () -> 0.0);
+	/** Persists {@link Float}s */
 	public static ObservableConfigFormat<Float> FLOAT = ofQommonFormat(Format.floatFormat("0.########E0"), () -> 0.0f);
+	/** Persists {@link Long}s */
 	public static ObservableConfigFormat<Long> LONG = ofQommonFormat(Format.LONG, () -> 0L);
+	/** Persists {@link Integer}s */
 	public static ObservableConfigFormat<Integer> INT = ofQommonFormat(Format.INT, () -> 0);
+	/** Persists {@link Boolean}s */
 	public static ObservableConfigFormat<Boolean> BOOLEAN = ofQommonFormat(Format.BOOLEAN, () -> false);
+	/** Persists {@link Duration}s */
 	public static ObservableConfigFormat<Duration> DURATION = ofQommonFormat(Format.DURATION, () -> Duration.ZERO);
+	/** Persists {@link Instant}s */
 	public static ObservableConfigFormat<Instant> DATE = ofQommonFormat(Format.date("ddMMyyyy HH:mm:ss.SSS"), () -> null);
 
 	interface ConfigGetter {
@@ -511,9 +524,15 @@ public interface ObservableConfigFormat<E> {
 		return new ReferenceFormatBuilder<>(retriever, defaultValue);
 	}
 
+	/**
+	 * Not actually a persisting format, but facilitates the @{@link ParentReference} annotation's functionality
+	 *
+	 * @param <T> The type of the parent value
+	 */
 	public class ParentReferenceFormat<T> implements ObservableConfigFormat<T> {
 		private final TypeToken<T> theType;
 
+		/** @param type The type of the parent value */
 		public ParentReferenceFormat(TypeToken<T> type) {
 			theType = type;
 		}
@@ -580,6 +599,11 @@ public interface ObservableConfigFormat<E> {
 		<F> EntityConfigCreator<E> with(Function<? super E, F> fieldGetter, F value) throws IllegalArgumentException;
 	}
 
+	/**
+	 * Persists/parses entity structures from config. This format will work for types administrable by {@link EntityReflector}.
+	 *
+	 * @param <E> The type of the entity
+	 */
 	public interface EntityConfigFormat<E> extends ObservableConfigFormat<E> {
 		Object ENTITY_CONFIG_KEY = new Object() {
 			@Override
