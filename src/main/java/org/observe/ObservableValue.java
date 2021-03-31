@@ -149,7 +149,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 	 * @return The event to propagate
 	 */
 	default ObservableValueEvent<T> createChangeEvent(T oldVal, T newVal, Collection<?> causes) {
-		return ObservableValueEvent.createChangeEvent(this, oldVal, newVal, causes);
+		return ObservableValueEvent.createChangeEvent(this, oldVal, newVal, causes.toArray());
 	}
 
 	/**

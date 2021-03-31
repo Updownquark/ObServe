@@ -72,11 +72,11 @@ public class ObservableValueEvent<T> extends Causable.AbstractCausable implement
 	 * @param <T> The type of the observable value
 	 * @param observable The observable value to populate the value for
 	 * @param value The current value of the observable
-	 * @param cause The cause of the event (typically null for initial events)
+	 * @param causes The cause of the event (typically empty for initial events)
 	 * @return The event to fire
 	 */
-	public static <T> ObservableValueEvent<T> createInitialEvent(ObservableValue<T> observable, T value, Object cause) {
-		return new ObservableValueEvent<>(observable.getType(), true, null, value, cause);
+	public static <T> ObservableValueEvent<T> createInitialEvent(ObservableValue<T> observable, T value, Object... causes) {
+		return new ObservableValueEvent<>(observable.getType(), true, null, value, causes);
 	}
 
 	/**
@@ -86,10 +86,10 @@ public class ObservableValueEvent<T> extends Causable.AbstractCausable implement
 	 * @param observable The observable value to populate the value for
 	 * @param oldValue The value of the observable before the change
 	 * @param newValue The value of the observable after the change (current)
-	 * @param cause The cause of the event (may be null)
+	 * @param causes The causes of the event (may be empty)
 	 * @return The event to fire
 	 */
-	public static <T> ObservableValueEvent<T> createChangeEvent(ObservableValue<T> observable, T oldValue, T newValue, Object cause) {
-		return new ObservableValueEvent<>(observable.getType(), false, oldValue, newValue, cause);
+	public static <T> ObservableValueEvent<T> createChangeEvent(ObservableValue<T> observable, T oldValue, T newValue, Object... causes) {
+		return new ObservableValueEvent<>(observable.getType(), false, oldValue, newValue, causes);
 	}
 }
