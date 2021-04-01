@@ -582,7 +582,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 
 		@Override
 		public DataControlledCollection<E, V> build(CollectionUtils.CollectionSynchronizerE<E, ? super V, ?> synchronizer) {
-			return new ObservableCollectionImpl.DataControlledCollectionImpl<E, V>(theBackingCollection, theBackingData, theAutoRefresh,
+			return new ObservableCollectionImpl.DataControlledCollectionImpl<>(theBackingCollection, theBackingData, theAutoRefresh,
 				isRefreshingOnAccess, theEqualsTester, synchronizer, theAdjustmentOrder)//
 				.setMaxRefreshFrequency(theMaxRefreshFrequency);
 		}
@@ -685,7 +685,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 
 		@Override
 		public DataControlledCollection.Sorted<E, V> build(CollectionSynchronizerE<E, ? super V, ?> synchronizer) {
-			return new ObservableSortedCollectionImpl.DataControlledSortedCollectionImpl<E, V>(getBackingCollection(), getBackingData(),
+			return new ObservableSortedCollectionImpl.DataControlledSortedCollectionImpl<>(getBackingCollection(), getBackingData(),
 				getAutoRefresh(), isRefreshingOnAccess(), getEqualsTester(), synchronizer, getAdjustmentOrder())//
 				.setMaxRefreshFrequency(getMaxRefreshFrequency());
 		}
@@ -744,7 +744,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 
 		@Override
 		public DataControlledCollection.Set<E, V> build(CollectionSynchronizerE<E, ? super V, ?> synchronizer) {
-			return new ObservableSetImpl.DataControlledSetImpl<E, V>(getBackingCollection(), getBackingData(), getAutoRefresh(),
+			return new ObservableSetImpl.DataControlledSetImpl<>(getBackingCollection(), getBackingData(), getAutoRefresh(),
 				isRefreshingOnAccess(), getEqualsTester(), synchronizer, getAdjustmentOrder())//
 				.setMaxRefreshFrequency(getMaxRefreshFrequency());
 		}
@@ -827,7 +827,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 
 		@Override
 		public DataControlledCollection.SortedSet<E, V> build(CollectionSynchronizerE<E, ? super V, ?> synchronizer) {
-			return new ObservableSortedSetImpl.DataControlledSortedSetImpl<E, V>(getBackingCollection(), getBackingData(), getAutoRefresh(),
+			return new ObservableSortedSetImpl.DataControlledSortedSetImpl<>(getBackingCollection(), getBackingData(), getAutoRefresh(),
 				isRefreshingOnAccess(), getEqualsTester(), synchronizer, getAdjustmentOrder())//
 				.setMaxRefreshFrequency(getMaxRefreshFrequency());
 		}

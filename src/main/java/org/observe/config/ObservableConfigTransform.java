@@ -25,6 +25,7 @@ import org.observe.collect.ObservableCollectionEvent;
 import org.observe.collect.ObservableSet;
 import org.observe.config.ObservableConfig.ObservableConfigEvent;
 import org.observe.config.ObservableConfigFormat.EntityConfigFormat;
+import org.observe.config.ObservableConfigFormat.Impl;
 import org.observe.config.ObservableConfigFormat.MapEntry;
 import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.TypeTokens;
@@ -65,6 +66,13 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 	private boolean _isConnected;
 	private ObservableValue<Boolean> isConnected;
 
+	/**
+	 * @param session The session with which to associate config-backed values
+	 * @param root The root config to parse under
+	 * @param parent The parent config backing the structure
+	 * @param ceCreate Creates the parent config if it does not exist
+	 * @param until The until observable to release resources and listeners for config-backed structures
+	 */
 	public ObservableConfigTransform(ObservableConfigParseSession session, ObservableConfig root,
 		ObservableValue<? extends ObservableConfig> parent, Runnable ceCreate, Observable<?> until) {
 		theSession = session;
@@ -81,6 +89,13 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		}
 	}
 
+	/**
+	 * Begins the dynamic attachment of the config-backed structure to the config itself
+	 *
+	 * @param until The until value to stop listening for parent changes
+	 * @param listen Whether to listen to the parent for changes
+	 * @param findRefs The reference finder observable of the parsing context
+	 */
 	protected void init(Observable<?> until, boolean listen, Observable<?> findRefs) {
 		_isConnected = true;
 		until.take(1).act(__ -> _isConnected = false);
@@ -104,30 +119,41 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 			});
 	}
 
+	/** @return Whether this structure should associate itself with its session in its config */
 	protected boolean publishSelf() {
 		return true;
 	}
 
+	/** @return Whether this structure is connected to its config, watching for changes */
 	public ObservableValue<Boolean> isConnected() {
 		return isConnected;
 	}
 
+	/** @return The session with which this structure and its elements are associated in the config structure */
 	public ObservableConfigParseSession getSession() {
 		return theSession;
 	}
 
+	/** @return The root config under which this structure is parsed */
 	protected ObservableConfig getRoot() {
 		return theRoot;
 	}
 
+	/** Increments this structure's stamp, indicating that it has changed */
 	protected void incrementStamp() {
 		theStamp++;
 	}
 
+	/** @return The parent config backing the structure */
 	protected ObservableValue<? extends ObservableConfig> getParent() {
 		return theParent;
 	}
 
+	/**
+	 * @param createIfAbsent Whether to create the parent config if it does not exist
+	 * @param parentAction The action to perform on the parent (if it exists or createIfAbsent is true)
+	 * @return The current (or new) parent config backing the structure
+	 */
 	protected ObservableConfig getParent(boolean createIfAbsent, Consumer<ObservableConfig> parentAction) {
 		if (!createIfAbsent && parentAction == null) {
 			return theParent.get();
@@ -150,6 +176,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		}
 	}
 
+	/** @return The until observable to release all resources and listeners */
 	protected Observable<?> getUntil() {
 		return theUntil;
 	}
@@ -174,11 +201,24 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		return theStamp;
 	}
 
+	/**
+	 * Initializes this structure from configuration
+	 *
+	 * @param parent The parent config of the structure
+	 * @param cause The cause of the change (an initial or change event on the {@link #getParent() parent} value)
+	 * @param findRefs The find refs observable
+	 */
 	protected abstract void initConfig(ObservableConfig parent, Object cause, Observable<?> findRefs);
 
+	/** @param parentChange The change event on the parent that may cause the structure or one of its elements to change */
 	protected abstract void onChange(ObservableConfigEvent parentChange);
 
-	protected static class ObservableConfigValue<E> extends ObservableConfigTransform implements SettableValue<E> {
+	/**
+	 * A {@link SettableValue} backed by an {@link ObservableConfig}
+	 *
+	 * @param <E> The type of the value
+	 */
+	static class ObservableConfigValue<E> extends ObservableConfigTransform implements SettableValue<E> {
 		private final TypeToken<E> theType;
 		private final ObservableConfigFormat<E> theFormat;
 
@@ -191,7 +231,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		private Object theIdentity;
 		private Object theChangesIdentity;
 
-		public ObservableConfigValue(ObservableConfigParseSession session, ObservableConfig root,
+		ObservableConfigValue(ObservableConfigParseSession session, ObservableConfig root,
 			ObservableValue<? extends ObservableConfig> parent, Runnable ceCreate, Observable<?> until, TypeToken<E> type,
 			ObservableConfigFormat<E> format, boolean listen, Observable<?> findRefs) {
 			super(session, root, parent, ceCreate, until);
@@ -358,10 +398,10 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 
 	/**
 	 * Represents a collection of some kind backed by {@link ObservableConfig}
-	 * 
+	 *
 	 * @param <E> The type of the collection
 	 */
-	protected static abstract class ObservableConfigBackedCollection<E> extends ObservableConfigTransform {
+	static abstract class ObservableConfigBackedCollection<E> extends ObservableConfigTransform {
 		final TypeToken<E> theType;
 		private final ObservableConfigFormat<E> theFormat;
 		private final String theChildName;
@@ -374,7 +414,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		Consumer<? super ConfigElement> thePreAddAction;
 		E theMovingValue;
 
-		public ObservableConfigBackedCollection(ObservableConfigParseSession session, ObservableConfig root,
+		ObservableConfigBackedCollection(ObservableConfigParseSession session, ObservableConfig root,
 			ObservableValue<? extends ObservableConfig> collectionElement, Runnable ceCreate, TypeToken<E> type,
 			ObservableConfigFormat<E> format, String childName, Observable<?> until, boolean listen, Observable<?> findRefs) {
 			super(session, root, collectionElement, ceCreate, until);
@@ -986,6 +1026,11 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		}
 	}
 
+	/**
+	 * A config-backed {@link SyncValueSet} implementation
+	 * 
+	 * @param <E> The type of value in the set
+	 */
 	static class ObservableConfigEntityValues<E> extends ObservableConfigBackedCollection<E> implements SyncValueSet<E> {
 		ObservableConfigEntityValues(ObservableConfigParseSession session, ObservableConfig root,
 			ObservableValue<? extends ObservableConfig> collectionElement, Runnable ceCreate, EntityConfigFormat<E> format,
@@ -1101,6 +1146,12 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		}
 	}
 
+	/**
+	 * A config-backed {@link ObservableMap} implementation
+	 * 
+	 * @param <K> The key type of the map
+	 * @param <V> The value type of the map
+	 */
 	static class ObservableConfigMap<K, V> implements ObservableMap<K, V> {
 		private final ObservableConfigValues<MapEntry<K, V>> theCollection;
 		private ObservableMap<K, V> theWrapped;
@@ -1111,7 +1162,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 			Observable<?> until, boolean listen, Observable<?> findRefs) {
 			theCollection = new ObservableConfigValues<>(session, root, collectionElement, ceCreate,
 				TypeTokens.get().keyFor(MapEntry.class).<MapEntry<K, V>> parameterized(keyType, valueType), //
-				new ObservableConfigFormat.EntryFormat<>(true, keyName, valueName, keyType, valueType, keyFormat, valueFormat), valueName,
+				new Impl.EntryFormat<>(true, keyName, valueName, keyType, valueType, keyFormat, valueFormat), valueName,
 				until, listen, findRefs);
 			findRefs.act(__ -> {
 				theWrapped = theCollection.flow()
@@ -1221,6 +1272,12 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		}
 	}
 
+	/**
+	 * A config-backed {@link ObservableMultiMap} implementation
+	 * 
+	 * @param <K> The key type of the map
+	 * @param <V> The value type of the map
+	 */
 	static class ObservableConfigMultiMap<K, V> implements ObservableMultiMap<K, V> {
 		private final ObservableConfigValues<MapEntry<K, V>> theCollection;
 		private ObservableMultiMap<K, V> theWrapped;
@@ -1231,7 +1288,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 			Observable<?> until, boolean listen, Observable<?> findRefs) {
 			theCollection = new ObservableConfigValues<>(session, root, collectionElement, ceCreate,
 				TypeTokens.get().keyFor(MapEntry.class).<MapEntry<K, V>> parameterized(keyType, valueType), //
-				new ObservableConfigFormat.EntryFormat<>(true, keyName, valueName, keyType, valueType, keyFormat, valueFormat), valueName,
+				new Impl.EntryFormat<>(true, keyName, valueName, keyType, valueType, keyFormat, valueFormat), valueName,
 				until, listen, findRefs);
 			findRefs.act(__ -> {
 				theWrapped = theCollection.flow()

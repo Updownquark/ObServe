@@ -39,6 +39,7 @@ import org.observe.config.ObservableConfigContent.FullObservableConfigContent;
 import org.observe.config.ObservableConfigContent.ObservableChildSet;
 import org.observe.config.ObservableConfigContent.ObservableConfigChild;
 import org.observe.config.ObservableConfigContent.SimpleObservableConfigContent;
+import org.observe.config.ObservableConfigFormat.Impl;
 import org.observe.config.ObservableConfigPath.ObservableConfigPathElement;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
@@ -570,7 +571,7 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 			ObservableConfigFormat<T> format = getFormat();
 			// If the format is simple, we can just parse the value and then forget about it.
 			// Otherwise, we need to maintain the connection to update the value when configuration changes
-			if (format instanceof ObservableConfigFormat.SimpleConfigFormat)
+			if (format instanceof Impl.SimpleConfigFormat)
 				return build(findRefs -> format.parse(getParseContext(getUntil(), findRefs)), preReturnGet);
 			else {
 				T built = buildValue(null).get();
@@ -701,7 +702,7 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 		}
 
 		private <K2 extends K> ObservableConfigFormat<K2> checkFormat(ObservableConfigFormat<K2> format) {
-			if (format == null || format instanceof ObservableConfigFormat.SimpleConfigFormat)
+			if (format == null || format instanceof Impl.SimpleConfigFormat)
 				return format;
 			else if (format instanceof ObservableConfigFormat.HeterogeneousFormat) {
 				for (ObservableConfigFormat.HeterogeneousFormat.SubFormat<? extends K> subFormat//

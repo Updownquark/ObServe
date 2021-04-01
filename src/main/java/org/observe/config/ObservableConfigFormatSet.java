@@ -26,41 +26,52 @@ import com.google.common.reflect.TypeToken;
 public class ObservableConfigFormatSet {
 	private static final ThreadLocal<Map<TypeToken<?>, String>> CYCLE_DETECTION = ThreadLocal.withInitial(LinkedHashMap::new);
 
-	public interface ConfigFormatGenerator<T> {
-		ObservableConfigFormat<T> formatFor(TypeToken<T> type);
-	}
-
-	public static <T> ConfigFormatGenerator<T> generate(ObservableConfigFormat<T> format) {
-		return type -> format;
-	}
-
-	private final Map<Class<?>, ConfigFormatGenerator<?>> theFormats;
 	private final Map<TypeToken<?>, ObservableConfigFormat<?>> theFormatCache;
 	private final Map<TypeToken<?>, EntityReflector<?>> theReflectors;
-	private final Map<TypeToken<?>, EntityConfiguredValueType<?>> theEntityTypes;
 
 	/** Creates a new format set */
 	public ObservableConfigFormatSet() {
-		theFormats = new ConcurrentHashMap<>();
 		theFormatCache = new ConcurrentHashMap<>();
 		theReflectors = new ConcurrentHashMap<>();
-		theEntityTypes = new ConcurrentHashMap<>();
 	}
 
+	/**
+	 * @param <T> The type to parse
+	 * @param type the class to parse
+	 * @param format The format to use for given type
+	 * @param defaultValue The value to use for the given type when the config does not exist or is value-less
+	 * @return This format set
+	 */
 	public <T> ObservableConfigFormatSet forSimpleType(Class<T> type, Format<T> format, Supplier<? extends T> defaultValue) {
 		theFormatCache.put(TypeTokens.get().of(type), ObservableConfigFormat.ofQommonFormat(format, defaultValue));
 		return this;
 	}
 
+	/**
+	 * @param <T> The type to parse
+	 * @param type The type to parse
+	 * @param format The format to use for the given type
+	 * @return This format set
+	 */
 	public <T> ObservableConfigFormatSet withFormat(TypeToken<T> type, ObservableConfigFormat<T> format) {
 		theFormatCache.put(type, format);
 		return this;
 	}
 
+	/**
+	 * @param <E> The entity type
+	 * @param type The entity type
+	 * @return The configured entity type for the given java type
+	 */
 	public <E> EntityConfiguredValueType<E> getEntityType(TypeToken<E> type) {
 		return getEntityFormat(type).getEntityType();
 	}
 
+	/**
+	 * @param <E> The entity type
+	 * @param type The entity type
+	 * @return The format to use for the given entity type
+	 */
 	public <E> EntityConfigFormat<E> getEntityFormat(TypeToken<E> type) {
 		Map<TypeToken<?>, String> cycles = CYCLE_DETECTION.get();
 		if (cycles.get(type) != null)
@@ -86,6 +97,12 @@ public class ObservableConfigFormatSet {
 		return (EntityConfigFormat<E>) format;
 	}
 
+	/**
+	 * @param <E> The entity type
+	 * @param type The entity type
+	 * @param build Configures the format for the given entity type
+	 * @return The format to use for the given entity type
+	 */
 	public <E> EntityConfigFormat<E> buildEntityFormat(TypeToken<E> type, Consumer<EntityFormatBuilder<E>> build) {
 		EntityReflector<E> reflector = (EntityReflector<E>) theReflectors.get(type);
 		if (reflector == null) {
@@ -104,17 +121,17 @@ public class ObservableConfigFormatSet {
 		return format;
 	}
 
+	/**
+	 * @param <T> The type to format
+	 * @param type The type to format
+	 * @param configName The name of the config element to parse from/format to
+	 * @return The format to use
+	 */
 	public <T> ObservableConfigFormat<T> getConfigFormat(TypeToken<T> type, String configName) {
 		Class<T> raw = TypeTokens.get().unwrap(TypeTokens.getRawType(type));
 		ObservableConfigFormat<T> format = (ObservableConfigFormat<T>) theFormatCache.get(type);
 		if (format != null)
 			return format;
-		ConfigFormatGenerator<T> gen = (ConfigFormatGenerator<T>) theFormats.get(raw);
-		if (gen != null) {
-			format = gen.formatFor(type);
-			theFormatCache.put(type, format);
-			return format;
-		}
 		if (raw == String.class)
 			return (ObservableConfigFormat<T>) ObservableConfigFormat.TEXT;
 		else if (raw == double.class)
@@ -165,6 +182,11 @@ public class ObservableConfigFormatSet {
 		}
 	}
 
+	/**
+	 * @param <T> The type of the field
+	 * @param field The field to get the format for
+	 * @return The format to use for the given entity field
+	 */
 	public <T> ObservableConfigFormat<T> getConfigFormat(ConfiguredValueField<?, T> field) {
 		Map<TypeToken<?>, String> cycles = CYCLE_DETECTION.get();
 		TypeToken<?> entity = field.getOwnerType().getType();
