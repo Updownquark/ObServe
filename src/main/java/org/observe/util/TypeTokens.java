@@ -8,6 +8,8 @@ import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.lang.reflect.TypeVariable;
 import java.lang.reflect.WildcardType;
+import java.text.ParseException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -85,7 +87,8 @@ public class TypeTokens {
 		 * @throws IllegalArgumentException If this is not a one-parameter type
 		 */
 		public <P, C extends T> TypeToken<C> parameterized(TypeToken<P> parameter) {
-			TypeParameter<P> tp = new TypeParameter<P>() {};
+			TypeParameter<P> tp = new TypeParameter<P>() {
+			};
 			return parameterized(//
 				new Type[] { parameter.getType() }, //
 				new TypeToken[] { parameter }, //
@@ -103,8 +106,10 @@ public class TypeTokens {
 		 * @throws IllegalArgumentException If this is not a two-parameter type
 		 */
 		public <P1, P2, C extends T> TypeToken<C> parameterized(TypeToken<P1> param1, TypeToken<P2> param2) {
-			TypeParameter<P1> tp1 = new TypeParameter<P1>() {};
-			TypeParameter<P2> tp2 = new TypeParameter<P2>() {};
+			TypeParameter<P1> tp1 = new TypeParameter<P1>() {
+			};
+			TypeParameter<P2> tp2 = new TypeParameter<P2>() {
+			};
 			return parameterized(//
 				new Type[] { param1.getType(), param2.getType() }, //
 				new TypeToken[] { param1, param2 },
@@ -124,14 +129,16 @@ public class TypeTokens {
 		 * @throws IllegalArgumentException If this is not a three-parameter type
 		 */
 		public <P1, P2, P3, C extends T> TypeToken<C> parameterized(TypeToken<P1> param1, TypeToken<P2> param2, TypeToken<P3> param3) {
-			TypeParameter<P1> tp1 = new TypeParameter<P1>() {};
-			TypeParameter<P2> tp2 = new TypeParameter<P2>() {};
-			TypeParameter<P3> tp3 = new TypeParameter<P3>() {};
+			TypeParameter<P1> tp1 = new TypeParameter<P1>() {
+			};
+			TypeParameter<P2> tp2 = new TypeParameter<P2>() {
+			};
+			TypeParameter<P3> tp3 = new TypeParameter<P3>() {
+			};
 			return parameterized(//
 				new Type[] { param1.getType(), param2.getType(), param3.getType() }, //
-				new TypeToken[] { param1, param2, param3 },
-				paramTypes -> TypeToken.of(new ParameterizedTypeImpl(clazz, paramTypes)).where(tp1, param1).where(tp2, param2).where(tp3,
-					param3)//
+				new TypeToken[] { param1, param2, param3 }, paramTypes -> TypeToken.of(new ParameterizedTypeImpl(clazz, paramTypes))
+				.where(tp1, param1).where(tp2, param2).where(tp3, param3)//
 				);
 		}
 
@@ -150,15 +157,18 @@ public class TypeTokens {
 		 */
 		public <P1, P2, P3, P4, C extends T> TypeToken<C> parameterized(TypeToken<P1> param1, TypeToken<P2> param2, TypeToken<P3> param3,
 			TypeToken<P4> param4) {
-			TypeParameter<P1> tp1 = new TypeParameter<P1>() {};
-			TypeParameter<P2> tp2 = new TypeParameter<P2>() {};
-			TypeParameter<P3> tp3 = new TypeParameter<P3>() {};
-			TypeParameter<P4> tp4 = new TypeParameter<P4>() {};
+			TypeParameter<P1> tp1 = new TypeParameter<P1>() {
+			};
+			TypeParameter<P2> tp2 = new TypeParameter<P2>() {
+			};
+			TypeParameter<P3> tp3 = new TypeParameter<P3>() {
+			};
+			TypeParameter<P4> tp4 = new TypeParameter<P4>() {
+			};
 			return parameterized(//
 				new Type[] { param1.getType(), param2.getType(), param3.getType(), param4.getType() }, //
-				new TypeToken[] { param1, param2, param3, param4 },
-				paramTypes -> TypeToken.of(new ParameterizedTypeImpl(clazz, paramTypes)).where(tp1, param1).where(tp2, param2)
-				.where(tp3, param3).where(tp4, param4)//
+				new TypeToken[] { param1, param2, param3, param4 }, paramTypes -> TypeToken.of(new ParameterizedTypeImpl(clazz, paramTypes))
+				.where(tp1, param1).where(tp2, param2).where(tp3, param3).where(tp4, param4)//
 				);
 		}
 
@@ -179,11 +189,16 @@ public class TypeTokens {
 		 */
 		public <P1, P2, P3, P4, P5, C extends T> TypeToken<C> parameterized(TypeToken<P1> param1, TypeToken<P2> param2,
 			TypeToken<P3> param3, TypeToken<P4> param4, TypeToken<P5> param5) {
-			TypeParameter<P1> tp1 = new TypeParameter<P1>() {};
-			TypeParameter<P2> tp2 = new TypeParameter<P2>() {};
-			TypeParameter<P3> tp3 = new TypeParameter<P3>() {};
-			TypeParameter<P4> tp4 = new TypeParameter<P4>() {};
-			TypeParameter<P5> tp5 = new TypeParameter<P5>() {};
+			TypeParameter<P1> tp1 = new TypeParameter<P1>() {
+			};
+			TypeParameter<P2> tp2 = new TypeParameter<P2>() {
+			};
+			TypeParameter<P3> tp3 = new TypeParameter<P3>() {
+			};
+			TypeParameter<P4> tp4 = new TypeParameter<P4>() {
+			};
+			TypeParameter<P5> tp5 = new TypeParameter<P5>() {
+			};
 			return parameterized(//
 				new Type[] { param1.getType(), param2.getType(), param3.getType(), param4.getType(), param5.getType() }, //
 				new TypeToken[] { param1, param2, param3, param4, param5 },
@@ -198,7 +213,7 @@ public class TypeTokens {
 		 * @throws IllegalArgumentException If the number of parameters does not match this type's parameter count
 		 */
 		public <C extends T> TypeToken<C> parameterized(Type... parameters) {
-			if (parameters.length != typeParameters)
+			if (typeParameters == 0 || parameters.length != typeParameters)
 				throw new IllegalArgumentException("Type " + clazz.getName() + " has " + typeParameters
 					+ " parameters; cannot be parameterized with " + Arrays.toString(parameters));
 			TypeToken<?>[] paramTokens = new TypeToken[parameters.length];
@@ -213,7 +228,7 @@ public class TypeTokens {
 		 * @throws IllegalArgumentException If the number of parameters does not match this type's parameter count
 		 */
 		public <C extends T> TypeToken<C> parameterized(TypeToken<?>... parameters) {
-			if (parameters.length != typeParameters)
+			if (typeParameters == 0 || parameters.length != typeParameters)
 				throw new IllegalArgumentException("Type " + clazz.getName() + " has " + typeParameters
 					+ " parameters; cannot be parameterized with " + Arrays.toString(parameters));
 			Type[] paramTypes = new Type[parameters.length];
@@ -269,7 +284,23 @@ public class TypeTokens {
 		}
 	}
 
+	/**
+	 * May be {@link TypeTokens#addClassRetriever(TypeRetriever) added} to {@link TypeTokens} to enable retrieval of non-Class types or
+	 * types that may not be retrievable by the {@link TypeTokens} class using {@link Class#forName(String)}
+	 */
+	public interface TypeRetriever {
+		/**
+		 * Retrieves the type if it is recognized. Null should be returned if the name is not recognized. Instances of this interface should
+		 * never throw exceptions.
+		 *
+		 * @param typeName The name of the type to retrieve
+		 * @return The type with the given name, or null if this retriever does not recognize the given type
+		 */
+		Type getType(String typeName);
+	}
+
 	private final ConcurrentHashMap<Class<?>, TypeKey<?>> TYPES;
+	private final List<TypeRetriever> theClassRetrievers;
 
 	/** TypeToken&lt;String> */
 	public final TypeToken<String> STRING;
@@ -301,6 +332,7 @@ public class TypeTokens {
 	/** Creates a new instance */
 	protected TypeTokens() {
 		TYPES = new ConcurrentHashMap<>();
+		theClassRetrievers = new ArrayList<>(5);
 
 		STRING = of(String.class);
 		BOOLEAN = of(Boolean.class);
@@ -357,6 +389,23 @@ public class TypeTokens {
 				.parameterized(((ParameterizedType) type).getActualTypeArguments());
 		else
 			return TypeToken.of(type);
+	}
+
+	/**
+	 * @param classRetriever The class retriever to retrieve classes by name (for {@link #parseType(String)}
+	 * @return This instance
+	 */
+	public TypeTokens addClassRetriever(TypeRetriever classRetriever) {
+		theClassRetrievers.add(classRetriever);
+		return this;
+	}
+
+	/**
+	 * @param classRetriever The class retriever (added with {@link #addClassRetriever(TypeRetriever)}) to remove
+	 * @return Whether the class retriever was found in the list
+	 */
+	public boolean removeClassRetriever(TypeRetriever classRetriever) {
+		return theClassRetrievers.remove(classRetriever);
 	}
 
 	/**
@@ -789,7 +838,7 @@ public class TypeTokens {
 		if (!raw.isInterface()) {
 			Class<X> c = (Class<X>) raw;
 			TypeToken<X> t = type;
-			while (raw != Object.class) {
+			while (c != Object.class) {
 				decomposed.add(t);
 				c = (Class<X>) c.getSuperclass();
 				t = (TypeToken<X>) t.getSupertype(c);
@@ -944,7 +993,9 @@ public class TypeTokens {
 			dimCount--;
 		}
 		for (int i = 0; i < dimCount; i++) {
-			type = (TypeToken<X>) new TypeToken<X[]>() {}.where(new TypeParameter<X>() {}, type);
+			type = (TypeToken<X>) new TypeToken<X[]>() {
+			}.where(new TypeParameter<X>() {
+			}, type);
 		}
 		return type;
 	}
@@ -974,6 +1025,161 @@ public class TypeTokens {
 	 */
 	public <X> TypeToken<? super X> getSuperWildcard(TypeToken<X> type) {
 		return (TypeToken<? super X>) TypeToken.of(new WildcardTypeImpl(new Type[] { type.getType() }, new Type[0]));
+	}
+
+	/**
+	 * Parses a type from a string
+	 *
+	 * @param typeName The string to parse
+	 * @return The parsed type
+	 * @throws ParseException If the string cannot be parsed as a type
+	 */
+	public TypeToken<?> parseType(String typeName) throws ParseException {
+		return parseType(typeName, 0);
+	}
+
+	/**
+	 * Parses a type from a string
+	 *
+	 * @param typeName The string to parse
+	 * @param offset The offset to add to the {@link ParseException#getErrorOffset() error offset} if a {@link ParseException} must be
+	 *        thrown
+	 * @return The parsed type
+	 * @throws ParseException If the string cannot be parsed as a type
+	 */
+	public TypeToken<?> parseType(String typeName, int offset) throws ParseException {
+		StringBuilder name = new StringBuilder();
+		List<TypeToken<?>> componentTypes = null;
+		int componentStart = 0, depth = 0, firstComponentStart = -1;
+		boolean wasWS = false;
+		Boolean extendsOrSuper = null;
+		int array = 0;
+		for (int c = 0; c < typeName.length(); c++) {
+			switch (typeName.charAt(c)) {
+			case '<':
+				if (name.length() == 0)
+					throw new ParseException("Unexpected '" + typeName.charAt(c) + "'", offset + c);
+				if (depth == 0) {
+					if (componentTypes != null)
+						throw new ParseException("Unexpected '" + typeName.charAt(c) + "'", offset + c);
+					componentStart = c + 1;
+				}
+				depth++;
+				break;
+			case '[':
+				if (name.length() == 0)
+					throw new ParseException("Unexpected '" + typeName.charAt(c) + "'", offset + c);
+				if (depth == 0) {
+					array++;
+				}
+				depth++;
+				break;
+			case '>':
+			case ']':
+				if (depth == 0)
+					throw new ParseException("Unexpected '" + typeName.charAt(c) + "'", offset + c);
+				depth--;
+				if (depth == 0 && array == 0) {
+					if (componentTypes == null)
+						componentTypes = new ArrayList<>(4);
+					componentTypes.add(//
+						parseType(//
+							typeName.substring(componentStart, c), offset + componentStart));
+				}
+				break;
+			case ',':
+				if (depth == 0) {
+					throw new ParseException("Unexpected '" + typeName.charAt(c) + "'", offset + c);
+				} else if (depth == 1) {
+					if (componentTypes == null)
+						componentTypes = new ArrayList<>(4);
+					componentTypes.add(//
+						parseType(//
+							typeName.substring(componentStart, c), offset + componentStart));
+					componentStart = c + 1;
+				}
+				break;
+			case '?':
+				if (depth == 0) {
+					for (c++; c < typeName.length(); c++) {
+						if (typeName.charAt(c) != ' ')
+							break;
+					}
+					if (typeName.regionMatches(c, "extends", 0, "extends".length())) {
+						extendsOrSuper = Boolean.TRUE;
+						c += "extends".length();
+					} else if (typeName.regionMatches(c, "super", 0, "super".length())) {
+						extendsOrSuper = Boolean.FALSE;
+						c += "super".length();
+					} else
+						throw new ParseException("Expected 'extends' or 'super' after '?'", c);
+				}
+				break;
+			case ' ':
+				break;
+			default:
+				if (depth == 0) {
+					if (array > 0)
+						throw new ParseException("Unexpected content after array specification", offset + c);
+					if ((wasWS || componentTypes != null) && name.length() > 0)
+						throw new ParseException("Unexpected content after whitespace/component types", offset + c);
+					name.append(typeName.charAt(c));
+				}
+				break;
+			}
+			wasWS = typeName.charAt(c) == ' ';
+			if (wasWS) {
+				wasWS = true;
+				if (componentStart == c)
+					componentStart++;
+			}
+		}
+		Type baseType = parseClass(name.toString(), offset);
+		TypeToken<?> type;
+		if (componentTypes != null) {
+			if (!(baseType instanceof Class))
+				throw new ParseException("Only Class types may be parameterized, not " + baseType.getClass().getName() + " instances",
+					firstComponentStart);
+			type = keyFor((Class<?>) baseType).parameterized(componentTypes.toArray(new TypeToken[componentTypes.size()]));
+		} else
+			type = of(baseType);
+		if (array > 0)
+			type = getArrayType(type, array);
+		if (extendsOrSuper != null) {
+			type = extendsOrSuper ? getExtendsWildcard(type) : getSuperWildcard(type);
+		}
+		return type;
+	}
+
+	private Type parseClass(String typeName, int offset) throws ParseException {
+		switch (typeName) {
+		case "boolean":
+			return boolean.class;
+		case "char":
+			return char.class;
+		case "byte":
+			return byte.class;
+		case "short":
+			return short.class;
+		case "int":
+			return int.class;
+		case "long":
+			return long.class;
+		case "float":
+			return float.class;
+		case "double":
+			return double.class;
+		}
+		for (TypeRetriever retriever : theClassRetrievers) {
+			Type found = retriever.getType(typeName);
+			if (found != null)
+				return found;
+		}
+		try {
+			return Class.forName(typeName);
+		} catch (ClassNotFoundException e) {
+			throw new ParseException("No such class found: " + typeName, offset);
+		}
 	}
 
 	private static class ParameterizedTypeImpl implements ParameterizedType {
@@ -1017,9 +1223,9 @@ public class TypeTokens {
 
 		@Override
 		public String toString() {
-			StringBuilder str = new StringBuilder(theOwnerType.toString());
+			StringBuilder str = new StringBuilder(theOwnerType.getTypeName());
 			str.append('<');
-			StringUtils.print(str, ", ", Arrays.asList(theTypeArgs), StringBuilder::append);
+			StringUtils.print(str, ", ", Arrays.asList(theTypeArgs), (s, type) -> s.append(type.getTypeName()));
 			str.append('>');
 			return str.toString();
 		}
@@ -1046,6 +1252,39 @@ public class TypeTokens {
 		@Override
 		public Type[] getLowerBounds() {
 			return theLowerBounds;
+		}
+
+		@Override
+		public int hashCode() {
+			return Arrays.hashCode(theLowerBounds) * 3 + Arrays.hashCode(theUpperBounds);
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return obj instanceof WildcardType//
+				&& Arrays.equals(theLowerBounds, ((WildcardType) obj).getLowerBounds())//
+				&& Arrays.equals(theUpperBounds, ((WildcardType) obj).getUpperBounds());
+		}
+
+		@Override
+		public String toString() {
+			StringBuilder str = new StringBuilder();
+			str.append('?');
+			if (theUpperBounds.length > 0)
+				str.append(" extends ");
+			for (int i = 0; i < theUpperBounds.length; i++) {
+				if (i > 0)
+					str.append(", ");
+				str.append(theUpperBounds[i]);
+			}
+			if (theLowerBounds.length > 0)
+				str.append(" super ");
+			for (int i = 0; i < theLowerBounds.length; i++) {
+				if (i > 0)
+					str.append(", ");
+				str.append(theLowerBounds[i]);
+			}
+			return str.toString();
 		}
 	}
 
