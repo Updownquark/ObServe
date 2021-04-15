@@ -1725,6 +1725,8 @@ public class CsvEntitySet implements AutoCloseable {
 			long totalEntries = theFile.length() / theEntrySize;
 			if (totalEntries > 1)
 				theFile.seek(totalEntries / 2 * theEntrySize);
+			else
+				theFile.seek(0);
 			if (totalEntries > 0) {
 				readNext();
 				System.arraycopy(theLastEntry.bytes, 0, theLastSeek, 0, theLastSeek.length);
@@ -1741,29 +1743,30 @@ public class CsvEntitySet implements AutoCloseable {
 
 		boolean seek(QuickMap<String, Object> entityId) throws IOException {
 			long totalEntries = theFile.length() / theEntrySize;
-			if (setSeek(entityId))
+			if (setSeek(entityId)) {
 				return totalEntries > 0 && Arrays.equals(theLastEntry.bytes, theSeekEntry.bytes);
-				if (totalEntries == 0)
-					return false;
-				long min = 0, max = totalEntries - 1;
-				long position = theFile.getFilePointer() / theEntrySize - 1;
-				while (min <= max) {
-					int comp = theSerializer.compare(theSeekEntry.reset(), theLastEntry.reset());
-					if (comp == 0)
-						return true;
-					else if (comp < 0)
-						max = position - 1;
-					else
-						min = position + 1;
-					if (max < min)
-						break;
-					position = (min + max) / 2;
-					long seek = position * theEntrySize;
-					if (theFile.getFilePointer() != seek)
-						theFile.seek(seek);
-					readNext();
-				}
+			}
+			if (totalEntries == 0)
 				return false;
+			long min = 0, max = totalEntries - 1;
+			long position = theFile.getFilePointer() / theEntrySize - 1;
+			while (min <= max) {
+				int comp = theSerializer.compare(theSeekEntry.reset(), theLastEntry.reset());
+				if (comp == 0)
+					return true;
+				else if (comp < 0)
+					max = position - 1;
+				else
+					min = position + 1;
+				if (max < min)
+					break;
+				position = (min + max) / 2;
+				long seek = position * theEntrySize;
+				if (theFile.getFilePointer() != seek)
+					theFile.seek(seek);
+				readNext();
+			}
+			return false;
 		}
 
 		int getFileIndex() {

@@ -136,11 +136,11 @@ public class CsvEntitySetTest {
 	public void testBasicRandom() {
 		TestHelper.createTester(CsvEntityTestable.class).revisitKnownFailures(true).withDebug(true).withFailurePersistence(true)
 		.withMaxProgressInterval(Duration.ofSeconds(10))//
-		.withRandomCases(500).withPlacemarks("action").execute().throwErrorIfFailed();
+		.withRandomCases(3).withPlacemarks("action").execute().throwErrorIfFailed();
 	}
 
 	static class CsvEntityTestable implements Testable {
-		private static final int OPS = 1_000_000;
+		private static final int OPS = 10_000;
 		private static final int PROGRESS = OPS / 100;
 		private static final int PERCENT = OPS / 10;
 
@@ -211,6 +211,7 @@ public class CsvEntitySetTest {
 						try (EntityIterator iter = entitySet[0].get("test1")) {
 							for (QuickMap<String, Object> retrieved = iter.getNext(); retrieved != null; retrieved = iter.getNext()) {
 								Long id = (Long) retrieved.get("id");
+								helper.placemark();
 								Assert.assertTrue(iterated.add(id));
 								Assert.assertEquals(existing.get(id), retrieved);
 							}
@@ -225,13 +226,11 @@ public class CsvEntitySetTest {
 						if (helper.isReproducing())
 							System.out.println("Removing " + id + ": " + (existing.size() - 1));
 						try {
-							Assert.assertTrue(
-								entitySet[0].delete("test1", entitySet[0].getEntityType("test1").create(false)//
-									.with("id", id)));
+							Assert.assertTrue(entitySet[0].delete("test1", entitySet[0].getEntityType("test1").create(false)//
+								.with("id", id)));
 							existing.remove(id);
-							Assert.assertNull(
-								entitySet[0].get("test1", entitySet[0].getEntityType("test1").create(false)//
-									.with("id", id)));
+							Assert.assertNull(entitySet[0].get("test1", entitySet[0].getEntityType("test1").create(false)//
+								.with("id", id)));
 							Assert.assertEquals(existing.size(), entitySet[0].count("test1"));
 						} catch (IOException | TextParseException e) {
 							throw new CheckedExceptionWrapper(e);
@@ -244,9 +243,8 @@ public class CsvEntitySetTest {
 						if (helper.isReproducing())
 							System.out.println("Not removing " + id);
 						try {
-							Assert.assertFalse(
-								entitySet[0].delete("test1", entitySet[0].getEntityType("test1").create(false)//
-									.with("id", id)));
+							Assert.assertFalse(entitySet[0].delete("test1", entitySet[0].getEntityType("test1").create(false)//
+								.with("id", id)));
 							Assert.assertEquals(existing.size(), entitySet[0].count("test1"));
 						} catch (IOException e) {
 							throw new CheckedExceptionWrapper(e);
@@ -259,8 +257,7 @@ public class CsvEntitySetTest {
 							System.out.println("Renaming " + entity.getKey());
 						String newName = helper.getAlphaNumericString(5, 10);
 						try {
-							Assert.assertTrue(entitySet[0].update("test1",
-								entitySet[0].getEntityType("test1").create(true)//
+							Assert.assertTrue(entitySet[0].update("test1", entitySet[0].getEntityType("test1").create(true)//
 								.with("id", entity.getKey())//
 								.with("name", newName)//
 								, false));
@@ -282,8 +279,7 @@ public class CsvEntitySetTest {
 						for (int j = 0; j < valueSize; j++)
 							newValues.add(helper.getAnyInt());
 						try {
-							Assert.assertTrue(entitySet[0].update("test1",
-								entitySet[0].getEntityType("test1").create(true)//
+							Assert.assertTrue(entitySet[0].update("test1", entitySet[0].getEntityType("test1").create(true)//
 								.with("id", entity.getKey())//
 								.with("values", newValues)//
 								, false));
@@ -305,8 +301,7 @@ public class CsvEntitySetTest {
 						int newValue = helper.getAnyInt();
 						values.add(index, newValue);
 						try {
-							Assert.assertTrue(entitySet[0].update("test1",
-								entitySet[0].getEntityType("test1").create(true)//
+							Assert.assertTrue(entitySet[0].update("test1", entitySet[0].getEntityType("test1").create(true)//
 								.with("id", entity.getKey())//
 								.with("values", values)//
 								, false));
@@ -328,8 +323,7 @@ public class CsvEntitySetTest {
 						int index = helper.getInt(0, values.size());
 						values.remove(index);
 						try {
-							Assert.assertTrue(entitySet[0].update("test1",
-								entitySet[0].getEntityType("test1").create(true)//
+							Assert.assertTrue(entitySet[0].update("test1", entitySet[0].getEntityType("test1").create(true)//
 								.with("id", entity.getKey())//
 								.with("values", values)//
 								, false));
@@ -352,8 +346,7 @@ public class CsvEntitySetTest {
 						int newValue = helper.getAnyInt();
 						values.set(index, newValue);
 						try {
-							Assert.assertTrue(entitySet[0].update("test1",
-								entitySet[0].getEntityType("test1").create(true)//
+							Assert.assertTrue(entitySet[0].update("test1", entitySet[0].getEntityType("test1").create(true)//
 								.with("id", entity.getKey())//
 								.with("name", CsvEntitySet.NO_UPDATE)//
 								.with("values", values)//
