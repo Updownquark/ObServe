@@ -35,8 +35,24 @@ public class CsvEntitySetTest {
 		return directory;
 	}
 
-	static CsvEntitySet createSimpleEntitySet(File directory) throws IOException {
-		CsvEntitySet entitySet = new CsvEntitySet(directory);
+	/**
+	 * @param directory The directory to create the entity set in
+	 * @return The new entity set
+	 * @throws IOException If the entity set could not be created
+	 */
+	public static CsvEntitySet createSimpleEntitySet(File directory) throws IOException {
+		CsvEntitySet entitySet = new CsvEntitySet(directory, directory);
+		return initSimpleEntitySet(entitySet);
+	}
+
+	/**
+	 * Initializes an entity set with an entity type
+	 * 
+	 * @param entitySet The entity set
+	 * @return The entity set
+	 * @throws IOException If the entity type could not be added
+	 */
+	public static CsvEntitySet initSimpleEntitySet(CsvEntitySet entitySet) throws IOException {
 		entitySet.addEntityType("test1", BetterHashMap.build().<String, TypeToken<?>> buildMap()//
 			.with("id", TypeTokens.get().LONG)//
 			.with("name", TypeTokens.get().STRING)//
@@ -47,13 +63,23 @@ public class CsvEntitySetTest {
 		return entitySet;
 	}
 
-	static void addTestEntity(CsvEntitySet entitySet, int type, int id) throws IOException {
-		Assert.assertFalse(entitySet.update("test" + type, entitySet.getEntityType("test" + type).getFields().keySet().createMap()//
+	/**
+	 * Adds an entity to the "type1" entity type
+	 * 
+	 * @param entitySet The entity set to add the entity to
+	 * @param id The ID for the new entity
+	 * @return The new entity
+	 * @throws IOException If the entity could not be added
+	 */
+	public static QuickMap<String, Object> addTestEntity(CsvEntitySet entitySet, int id) throws IOException {
+		QuickMap<String, Object> entity = entitySet.getEntityType("test1").create(false)//
 			.with("id", (long) id)//
 			.with("name", "Entity " + id)//
 			.with("values", BetterTreeList.build().safe(false).build()//
 				.with(id, (id + 1) * 2, (id + 1) * 3, (id + 1) * 4, (id + 1) * 5))//
-			, true));
+			;
+		Assert.assertFalse(entitySet.update("test1", entity, true));
+		return entity;
 	}
 
 	/** Tests basic CRUD functionality */
@@ -64,11 +90,11 @@ public class CsvEntitySetTest {
 		try {
 			entitySet = createSimpleEntitySet(dir);
 			for (int i = 0; i < 5; i++)
-				addTestEntity(entitySet, 1, i * 10);
+				addTestEntity(entitySet, i * 10);
 
 			entitySet.close();
 			entitySet = null;
-			entitySet = new CsvEntitySet(dir);
+			entitySet = new CsvEntitySet(dir, dir);
 			EntityIterator getter = entitySet.get("test1");
 			for (int i = 0; i < 5; i++) {
 				QuickMap<String, Object> entity = getter.getNext();
@@ -83,7 +109,7 @@ public class CsvEntitySetTest {
 			Assert.assertNull(getter.getNext());
 			getter.close();
 
-			addTestEntity(entitySet, 1, 35);
+			addTestEntity(entitySet, 35);
 			Assert.assertTrue(entitySet.delete("test1", entitySet.getEntityType("test1").getFields().keySet().createMap()//
 				.with("id", 40L)));
 			Assert.assertNull(entitySet.get("test1", entitySet.getEntityType("test1").getFields().keySet().createMap()//

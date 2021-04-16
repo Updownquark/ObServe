@@ -21,10 +21,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import org.qommons.AbstractCharSequence;
-import org.qommons.ArrayUtils;
 import org.qommons.BiTuple;
 import org.qommons.Named;
 import org.qommons.QommonsUtils;
@@ -69,6 +70,8 @@ import com.google.common.reflect.TypeToken;
  * All fields, including non-scalar ones, occupy a single column in a single row in the CSV, formatted to text. Newlines, commas, etc. in
  * formatted values are handled by this class.
  * </p>
+ *
+ * TODO Synchronize everything--this class does NOT handle concurrency.
  */
 public class CsvEntitySet implements AutoCloseable {
 	/** UTF-8, the char set for the CSV files */
@@ -209,7 +212,7 @@ public class CsvEntitySet implements AutoCloseable {
 
 		EntityFormat using() throws IOException {
 			if (index == null)
-				index = new EntityIndex(this, new File(theDirectory, theName + "/" + theName + ".index"));
+				index = new EntityIndex(this, new File(theIndexDirectory, theName + ".index"));
 			return this;
 		}
 
@@ -410,14 +413,6 @@ public class CsvEntitySet implements AutoCloseable {
 			return theHeader;
 		}
 
-		void checkHeader(String[] line, File file, CsvParser fileParser) throws TextParseException {
-			for (int f = 0; f < line.length; f++) {
-				if (!line[f].replaceAll(" ", "").equalsIgnoreCase(theHeader[f].replaceAll(" ", ""))) {
-					fileParser.throwParseException(f, 0, "Bad " + theName + " file " + file.getName() + " header");
-				}
-			}
-		}
-
 		EntityFormat rename(String newName) {
 			return new EntityFormat(newName, theFields, theIdFieldCount, theFieldFormats, theFieldOrder, theHeader);
 		}
@@ -517,24 +512,27 @@ public class CsvEntitySet implements AutoCloseable {
 		}
 	}
 
-	private final File theDirectory;
+	private final File theEntityDirectory;
+	private final File theIndexDirectory;
 	private final Map<String, EntityFormat> theEntityFormats;
 	private CsvEntityFormatSet theFormats;
 	private long theTargetFileSize;
 
 	/**
-	 * @param directory The parent directory in which entities of all types are kept
+	 * @param entityDirectory The parent directory in which entities of all types are kept
+	 * @param indexDirectory The directory in which indexes are kept
 	 * @throws IOException If an error occurs scanning the directory for entity types
 	 */
-	public CsvEntitySet(File directory) throws IOException {
-		theDirectory = directory;
+	public CsvEntitySet(File entityDirectory, File indexDirectory) throws IOException {
+		theEntityDirectory = entityDirectory;
+		theIndexDirectory = indexDirectory;
 		theEntityFormats = new LinkedHashMap<>();
 		theFormats = new CsvEntityFormatSet();
 		theTargetFileSize = 10 * 1024 * 1024;
 
 		// Scan the directory for entities and parse the header info
-		if (theDirectory.isDirectory()) {
-			for (File entityDir : theDirectory.listFiles()) {
+		if (theEntityDirectory.isDirectory()) {
+			for (File entityDir : theEntityDirectory.listFiles()) {
 				File[] entityFiles = getEntityFiles(entityDir);
 				if (entityFiles.length > 0) {
 					try (Reader reader = new BufferedReader(new FileReader(entityFiles[0]))) {
@@ -551,14 +549,24 @@ public class CsvEntitySet implements AutoCloseable {
 				}
 			}
 		} else {
-			theDirectory.mkdirs();
+			theEntityDirectory.mkdirs();
 		}
 	}
 
 	@Override
-	public void close() throws IOException {
+	public synchronized void close() throws IOException {
 		for (EntityFormat format : theEntityFormats.values())
 			format.close();
+	}
+
+	/** @return The directory in which entity data is kept */
+	public File getEntityDirectory() {
+		return theEntityDirectory;
+	}
+
+	/** @return The directory in which entity index data is kept */
+	public File getIndexDirectory() {
+		return theIndexDirectory;
 	}
 
 	/** @return The size to which to grow files in this entity set */
@@ -621,9 +629,9 @@ public class CsvEntitySet implements AutoCloseable {
 		if (format == null) {
 			throw new IllegalArgumentException("No such type found: " + typeName);
 		}
-		File entityDir = new File(theDirectory, typeName);
+		File entityDir = new File(theEntityDirectory, typeName);
 		File[] entityFiles = getEntityFiles(entityDir);
-		return new EntityGetterImpl(format.using(), entityFiles, 0);
+		return new EntityGetterImpl(format.using(), entityFiles);
 	}
 
 	/**
@@ -654,7 +662,7 @@ public class CsvEntitySet implements AutoCloseable {
 		if (format == null) {
 			throw new IllegalArgumentException("No such type found: " + typeName);
 		}
-		File entityDir = new File(theDirectory, typeName);
+		File entityDir = new File(theEntityDirectory, typeName);
 		File[] entityFiles = getEntityFiles(entityDir);
 		if (entityFiles.length == 0) {
 			return null;
@@ -662,7 +670,8 @@ public class CsvEntitySet implements AutoCloseable {
 		if (!format.getIndex().seek(entityId))
 			return null;
 		int fileIndex = format.getIndex().getFileIndex();
-		try (EntityGetterImpl getter = new EntityGetterImpl(format, new File[] { entityFiles[fileIndex] }, fileIndex)) {
+		File file = getFile(typeName, fileIndex);
+		try (EntityGetterImpl getter = new EntityGetterImpl(format, new File[] { file }, fileIndex)) {
 			if (getter.seek(entityId)) {
 				return getter.getLast();
 			}
@@ -682,7 +691,7 @@ public class CsvEntitySet implements AutoCloseable {
 		if (format == null) {
 			throw new IllegalArgumentException("No such type found: " + typeName);
 		}
-		File entityDir = new File(theDirectory, typeName);
+		File entityDir = new File(theEntityDirectory, typeName);
 		File[] entityFiles = getEntityFiles(entityDir);
 		if (entityFiles.length == 0) {
 			return false;
@@ -691,20 +700,19 @@ public class CsvEntitySet implements AutoCloseable {
 			return false;
 		int fileIndex = format.getIndex().getFileIndex();
 		boolean found = false, deleteFile = false;
-		try (EntityGetterImpl getter = new EntityGetterImpl(format, new File[] { entityFiles[fileIndex] }, fileIndex)) {
+		File file = getFile(typeName, fileIndex);
+		try (EntityGetterImpl getter = new EntityGetterImpl(format, new File[] { file }, fileIndex)) {
 			found = getter.seek(entityId);
 			if (found) {
 				getter.delete();
-				if (getter.getEntriesParsed() == 0 && getIdealFileCount(entityFiles) < entityFiles.length
-					&& getter.getNextGoodId() == null) {
+				if (getter.getEntriesParsed() == 0 && getter.getNextGoodId() == null) {
 					deleteFile = true;
 				}
 			}
 		}
 		if (deleteFile) {
 			if (!entityFiles[fileIndex].delete()) {
-				System.err
-				.println(getClass().getSimpleName() + " WARNING: Unable to delete entity file " + entityFiles[fileIndex].getPath());
+				System.err.println(getClass().getSimpleName() + " WARNING: Unable to delete entity file " + file.getPath());
 			}
 			fileRemoved(entityFiles[fileIndex]);
 		}
@@ -725,11 +733,11 @@ public class CsvEntitySet implements AutoCloseable {
 		if (format == null) {
 			throw new IllegalArgumentException("No such type found: " + typeName);
 		}
-		File entityDir = new File(theDirectory, typeName);
+		File entityDir = new File(theEntityDirectory, typeName);
 		File[] entityFiles = getEntityFiles(entityDir);
 		if (entityFiles.length > 0 && format.getIndex().seek(entity)) {
 			int fileIndex = format.getIndex().getFileIndex();
-			File file = entityFiles[fileIndex];
+			File file = getFile(typeName, fileIndex);
 			try (EntityGetterImpl getter = new EntityGetterImpl(format, new File[] { file }, fileIndex)) {
 				boolean found = getter.seek(entity);
 				if (!found)
@@ -744,13 +752,15 @@ public class CsvEntitySet implements AutoCloseable {
 		int fileIndex;
 		if (entityFiles.length < getIdealFileCount(entityFiles)) {
 			// Need to add a new file
-			file = new File(entityDir, StringUtils.getNewItemName(Arrays.asList(entityFiles),
-				f -> f.getName().substring(0, f.getName().length() - 4), typeName, StringUtils.SIMPLE_DUPLICATES) + ".csv");
+			Set<Integer> existingFileIndexes = Arrays.stream(entityFiles).map(f -> getFileIndex(typeName, f.getName()))
+				.collect(Collectors.toSet());
+			for (fileIndex = 0; existingFileIndexes.contains(fileIndex); fileIndex++) {
+			}
+			file = getFile(typeName, fileIndex);
 			try (Writer writer = new FileWriter(file)) {
 				format.writeHeader(writer);
 			}
 			fileAdded(file);
-			fileIndex = ArrayUtils.indexOf(getEntityFiles(entityDir), file);
 		} else {
 			fileIndex = -1;
 			file = null;
@@ -758,8 +768,8 @@ public class CsvEntitySet implements AutoCloseable {
 			for (int f = 0; f < entityFiles.length; f++) {
 				long len = entityFiles[f].length();
 				if (len < minSize) {
-					fileIndex = f;
 					file = entityFiles[f];
+					fileIndex = getFileIndex(typeName, file.getName());
 					minSize = len;
 				}
 			}
@@ -787,17 +797,20 @@ public class CsvEntitySet implements AutoCloseable {
 			throw new IllegalArgumentException("Type already exists: " + typeName);
 		}
 		EntityFormat format = new EntityFormat(typeName, fields, idFields);
-		File entityDir = new File(theDirectory, typeName);
+		File entityDir = new File(theEntityDirectory, typeName);
 		if (!entityDir.exists() && !entityDir.mkdir()) {
 			throw new IOException("Could not create entity directory " + entityDir.getPath());
 		}
 		schemaChanged();
 		theEntityFormats.put(typeName, format);
-		File file = new File(entityDir, typeName + ".csv");
-		try (Writer writer = new FileWriter(file)) {
-			format.writeHeader(writer);
+		File[] entityFiles = getEntityFiles(entityDir);
+		if (entityFiles.length == 0) {
+			File file = new File(entityDir, typeName + "_0.csv");
+			try (Writer writer = new FileWriter(file)) {
+				format.writeHeader(writer);
+			}
+			fileAdded(file);
 		}
-		fileAdded(file);
 		return format;
 	}
 
@@ -809,7 +822,7 @@ public class CsvEntitySet implements AutoCloseable {
 		if (!theEntityFormats.containsKey(entity.getName())) {
 			throw new IllegalArgumentException("No such entity: " + entity.getName());
 		}
-		removeFile(new File(theDirectory, entity.getName()));
+		removeFile(new File(theEntityDirectory, entity.getName()));
 		schemaChanged();
 		theEntityFormats.remove(entity.getName());
 		entity.getIndex().deleteIndex();
@@ -833,7 +846,7 @@ public class CsvEntitySet implements AutoCloseable {
 			throw new IllegalArgumentException("An entity named " + newName + " already exists");
 		}
 		schemaChanged();
-		renameTypeFile(new File(theDirectory, entity.getName()), entity.getName(), newName);
+		renameTypeFile(new File(theEntityDirectory, entity.getName()), entity.getName(), newName);
 		EntityFormat newFormat = entity.rename(newName);
 		theEntityFormats.remove(entity.getName());
 		theEntityFormats.put(newName, newFormat);
@@ -1100,21 +1113,17 @@ public class CsvEntitySet implements AutoCloseable {
 		fileRenamed(oldFile, newFile);
 	}
 
-	private static File[] getEntityFiles(File entityDir) {
+	private static File[] getEntityFiles(File entityDir) throws IOException {
+		if (!entityDir.exists() && !entityDir.mkdirs())
+			throw new IOException("Could not create entity directory " + entityDir.getPath());
+		else if (!entityDir.isDirectory())
+			throw new IllegalArgumentException(entityDir.getPath() + " is not a directory");
 		File[] files = entityDir.listFiles((dir, name) -> {
-			if (!name.startsWith(entityDir.getName()) || !name.endsWith(".csv")) {
+			if (!name.startsWith(entityDir.getName()) || !name.endsWith(".csv") || name.charAt(entityDir.getName().length()) != '_') {
 				return false;
 			}
 			int i;
-			for (i = entityDir.getName().length(); i < name.length() - 4; i++) {
-				if (name.charAt(i) != ' ') {
-					break;
-				}
-			}
-			if (i == name.length()) {
-				return false;
-			}
-			for (; i < name.length() - 4; i++) {
+			for (i = entityDir.getName().length() + 1; i < name.length() - 4; i++) {
 				if (name.charAt(i) < '0' || name.charAt(i) > '9') {
 					return false;
 				}
@@ -1127,6 +1136,25 @@ public class CsvEntitySet implements AutoCloseable {
 		return files;
 	}
 
+	/**
+	 * @param entityName The name of the entity type
+	 * @param fileName The name of the entity file
+	 * @return The file index of the file
+	 */
+	protected static int getFileIndex(String entityName, String fileName) {
+		return Integer.parseInt(fileName.substring(entityName.length() + 1, fileName.length() - 4));
+	}
+
+	/**
+	 * @param entityName The name of the entity type
+	 * @param fileIndex The index of the entity file
+	 * @return The entity file at the given index
+	 */
+	protected File getFile(String entityName, int fileIndex) {
+		return new File(theEntityDirectory,
+			new StringBuilder(entityName).append('/').append(entityName).append('_').append(fileIndex).append(".csv").toString());
+	}
+
 	private int getIdealFileCount(File[] entityFiles) {
 		long totalSize = 0;
 		for (File f : entityFiles) {
@@ -1135,7 +1163,14 @@ public class CsvEntitySet implements AutoCloseable {
 		return Math.max(1, (int) Math.round(totalSize * 1.0 / theTargetFileSize));
 	}
 
-	private EntityFormat parseHeader(String typeName, String[] header, CsvParser parser) throws TextParseException {
+	/**
+	 * @param typeName The name of the entity type
+	 * @param header The columns of the first CSV line of the entity file
+	 * @param parser The CSV parser that parsed the line
+	 * @return The entity format parsed from the header
+	 * @throws TextParseException If the header could not be parsed
+	 */
+	protected EntityFormat parseHeader(String typeName, String[] header, CsvParser parser) throws TextParseException {
 		Map<String, TypeToken<?>> fields = new LinkedHashMap<>();
 		List<String> ids = new ArrayList<>(header.length);
 		for (int f = 0; f < header.length; f++) {
@@ -1163,20 +1198,28 @@ public class CsvEntitySet implements AutoCloseable {
 		return new EntityFormat(typeName, fields, ids);
 	}
 
+	void checkHeader(EntityFormat entity, String[] line, String file, CsvParser fileParser) throws TextParseException {
+		for (int f = 0; f < line.length; f++) {
+			if (!line[f].replaceAll(" ", "").equalsIgnoreCase(entity.getHeader()[f].replaceAll(" ", ""))) {
+				fileParser.throwParseException(f, 0, "Bad " + entity.getName() + " file " + file + " header");
+			}
+		}
+	}
+
 	interface Reformatter {
 		BiTuple<QuickMap<String, Object>, String[]> reformat(QuickMap<String, Object> identity, String[] line);
 	}
 
 	private void reformat(EntityFormat oldFormat, EntityFormat newFormat, Reformatter reformatter, boolean idChange, boolean requestNonIds)
 		throws IOException {
-		File[] entityFiles = getEntityFiles(new File(theDirectory, oldFormat.getName()));
+		File[] entityFiles = getEntityFiles(new File(theEntityDirectory, oldFormat.getName()));
 		oldFormat.getIndex().goToBeginning();
 		File tempIndexFile = idChange ? File.createTempFile(newFormat.getName(), "index") : null;
 		EntityIndex newIndex = idChange ? new EntityIndex(newFormat, tempIndexFile) : null;
 		newFormat.getIndex().goToBeginning();
 		EntityGetterImpl[] getters = new EntityGetterImpl[entityFiles.length];
 		for (int i = 0; i < entityFiles.length; i++) {
-			getters[i] = new EntityGetterImpl(oldFormat, new File[] { entityFiles[i] }, i);
+			getters[i] = new EntityGetterImpl(oldFormat, new File[] { entityFiles[i] });
 			getters[i].setNewHeader(newFormat.getHeader());
 		}
 		int[] newFieldIndexes = new int[newFormat.getFields().keySize()];
@@ -1210,19 +1253,22 @@ public class CsvEntitySet implements AutoCloseable {
 		for (int i = 0; i < getters.length; i++)
 			getters[i].close();
 		if (tempIndexFile != null) {
-			tempIndexFile.renameTo(new File(theDirectory, newFormat.getName() + "/" + newFormat.getName() + ".index"));
+			tempIndexFile.renameTo(new File(theEntityDirectory, newFormat.getName() + "/" + newFormat.getName() + ".index"));
 			tempIndexFile.delete();
 		}
 	}
 
+	// Methods for subclasses
+
 	/**
 	 * @param format The entity format to iterate through entities for
-	 * @param file The entity file to iterate through
+	 * @param entityFile The entity file to iterate through
+	 * @param fileIndex The index of the entity file
 	 * @return An entity getter that allows subclasses to iterate through all entities in a specific file
+	 * @throws IOException If an exception occurs initializing the entity iterator
 	 */
-	protected EntityGetterImpl iterate(EntityFormat format, File file) {
-		return new EntityGetterImpl(format, new File[] { file }, //
-			ArrayUtils.indexOf(getEntityFiles(new File(theDirectory, format.getName())), file));
+	protected EntityGetterImpl iterate(EntityFormat format, File entityFile, int fileIndex) throws IOException {
+		return new EntityGetterImpl(format, new File[] { entityFile }, fileIndex);
 	}
 
 	/**
@@ -1271,6 +1317,27 @@ public class CsvEntitySet implements AutoCloseable {
 				fileParser.throwParseException(f, e.getErrorOffset(), e.getMessage(), e);
 			}
 		}
+	}
+
+	/**
+	 * Updates this entity set's index for external modifications
+	 * 
+	 * @param format The entity type for which an entity has been added or removed
+	 * @param entity The new entity or the one that was deleted
+	 * @param add Whether the change was an addition or a deletion
+	 * @param fileIndex The index of the file containing the entity
+	 * @throws IOException If the index could not be updated
+	 */
+	protected void updateIndex(EntityFormat format, QuickMap<String, Object> entity, boolean add, int fileIndex) throws IOException {
+		boolean found = format.getIndex().seek(entity);
+		if (!add && !found) {
+			System.err.println("WARNING: Deleted of " + format.getName() + " not found: " + entity);
+			return;
+		}
+		if (add)
+			format.getIndex().insert(fileIndex);
+		else
+			format.getIndex().delete();
 	}
 
 	interface ByteConsumer {
@@ -1711,6 +1778,8 @@ public class CsvEntitySet implements AutoCloseable {
 
 		EntityIndex(EntityFormat entity, File indexFile) throws IOException {
 			theIndexFile = indexFile;
+			if (!indexFile.getParentFile().exists() && !indexFile.getParentFile().mkdirs())
+				throw new IOException("Could not create index directory " + indexFile.getParentFile().getPath());
 			theFile = new RandomAccessFile(indexFile, "rw");
 			theSerializer = new IdSerializer(entity);
 			theLastEntry = new ByteArrayIO(theSerializer.size);
@@ -1905,7 +1974,7 @@ public class CsvEntitySet implements AutoCloseable {
 	protected class EntityGetterImpl implements EntityIterator {
 		private final EntityFormat theFormat;
 		private final File[] theFiles;
-		private final int theFileIndexOffset;
+		private final int theFileIndexOverride;
 		private String[] theNewHeader;
 
 		private int theFileIndex;
@@ -1921,10 +1990,16 @@ public class CsvEntitySet implements AutoCloseable {
 
 		private int theEntriesParsed;
 
-		EntityGetterImpl(EntityFormat format, File[] files, int fileIndexOffset) {
+		EntityGetterImpl(EntityFormat format, File[] files) {
+			this(format, files, -1);
+		}
+
+		EntityGetterImpl(EntityFormat format, File[] files, int fileIndexOverride) {
 			theFormat = format;
 			theFiles = files;
-			theFileIndexOffset = fileIndexOffset;
+			theFileIndexOverride = fileIndexOverride;
+			if (fileIndexOverride >= 0 && files.length > 1)
+				throw new IllegalStateException("File index override doesn't work with multi-file iteration");
 		}
 
 		EntityGetterImpl setNewHeader(String[] header) {
@@ -2017,7 +2092,8 @@ public class CsvEntitySet implements AutoCloseable {
 				theLastLine[f] = ((Format<Object>) theFormat.getFieldFormat(fieldIndex)).format(entity.get(fieldIndex));
 			}
 			theFormat.getIndex().seek(entity);
-			theFormat.getIndex().insert(theFileIndexOffset + theFileIndex - 1);
+			theFormat.getIndex().insert(
+				theFileIndexOverride >= 0 ? theFileIndexOverride : getFileIndex(theFormat.getName(), theFiles[theFileIndex - 1].getName()));
 			flush();
 			theLastLine = temp;
 		}
@@ -2087,7 +2163,8 @@ public class CsvEntitySet implements AutoCloseable {
 				} catch (IOException e) {
 					theFileParser = null;
 					try {
-						theFileData.close();
+						if (theFileData != null)
+							theFileData.close();
 					} catch (IOException e2) { // Just swallow this one
 					} finally {
 						theFileReader = null;
@@ -2164,7 +2241,7 @@ public class CsvEntitySet implements AutoCloseable {
 						}
 					}
 					if (theLastLine != null) {
-						theFormat.checkHeader(theLastLine, theFiles[theFileIndex - 1], theFileParser);
+						checkHeader(theFormat, theLastLine, theFiles[theFileIndex - 1].getPath(), theFileParser);
 						if (theNewHeader != null) {
 							write();
 							theLastLine = theNewHeader;
@@ -2203,7 +2280,8 @@ public class CsvEntitySet implements AutoCloseable {
 			try {
 				flush();
 			} finally {
-				theFileData.transfer();
+				if (theFileData != null)
+					theFileData.transfer();
 				theFileReader = null;
 				theFileWriter = null;
 				theFileData = null;
