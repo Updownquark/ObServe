@@ -10,6 +10,8 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
+import org.observe.ObservableValue;
+import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSet;
 import org.observe.ds.ComponentController;
@@ -27,6 +29,7 @@ import org.qommons.collect.BetterHashSet;
 import org.qommons.collect.BetterSet;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
+import org.qommons.collect.ListenerList;
 import org.qommons.collect.RRWLockingStrategy;
 
 /**
@@ -41,7 +44,9 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 	private final Map<Service<?>, List<DefaultComponent<C>>> theServiceProviders;
 	private final Map<Service<?>, List<DefaultDependency<C, ?>>> theDependents;
 
-	private boolean isInitialized;
+	private final ListenerList<Runnable> theScheduledTasks;
+
+	private SettableValue<Boolean> isInitialized;
 
 	/** @param lock The lock to facilitate thread safety */
 	public DefaultDependencyService(Transactable lock) {
@@ -52,6 +57,8 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 
 		theServiceProviders = new LinkedHashMap<>();
 		theDependents = new LinkedHashMap<>();
+		theScheduledTasks = ListenerList.build().build();
+		isInitialized = SettableValue.build(boolean.class).withLock(new RRWLockingStrategy(lock)).withValue(false).build();
 	}
 
 	@Override
@@ -72,15 +79,15 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 	}
 
 	@Override
-	public boolean isInitialized() {
-		return isInitialized;
+	public ObservableValue<Boolean> isInitialized() {
+		return isInitialized.unsettable();
 	}
 
 	/** To be called after the initial round of components have been defined */
 	public void postInit() {
 		Causable cause = Causable.simpleCause(this);
 		try (Transaction causeT = cause.use(); Transaction t = theComponents.lock(true, cause)) {
-			if (isInitialized)
+			if (isInitialized.get())
 				throw new IllegalStateException("This service has already finished initializing");
 			if (isActivating)
 				throw new IllegalStateException(
@@ -93,11 +100,19 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 					else
 						comp.setStage(ComponentStage.Complete, cause);
 				}
-				isInitialized = true;
+				isInitialized.set(true, null);
 			} finally {
 				isActivating = false;
 			}
 		}
+	}
+
+	@Override
+	public void schedule(Runnable task) {
+		if (isActivating)
+			theScheduledTasks.add(task, true);
+		else
+			task.run();
 	}
 
 	@Override
@@ -116,7 +131,7 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 			theComponents.add(component);
 			if (component.isAvailable().get())
 				activate(component, cause);
-			if (isInitialized)
+			if (isInitialized.get())
 				component.setStage((!component.isAvailable().get() || component.getUnsatisfied() > 0) ? ComponentStage.Unsatisfied
 					: ComponentStage.Complete, cause);
 		}
@@ -173,6 +188,15 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 			} while (somethingSatisfied);
 		} finally {
 			isActivating = false;
+		}
+		ListenerList.Element<Runnable> task = theScheduledTasks.poll(0);
+		while (task != null) {
+			try {
+				task.get().run();
+			} catch (RuntimeException e) {
+				e.printStackTrace();
+			}
+			task = theScheduledTasks.poll(0);
 		}
 	}
 
@@ -270,7 +294,7 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 				boolean wasSatisfied = dep.getRealOwner().getUnsatisfied() == 0;
 				if (dep.remove(component, cause) && wasSatisfied && dep.getRealOwner().getUnsatisfied() > 0) {
 					unsatisfied(dep.getRealOwner(), cause);
-					dep.getRealOwner().setStage(isInitialized ? ComponentStage.Unsatisfied : ComponentStage.Defined, cause);
+					dep.getRealOwner().setStage(isInitialized.get() ? ComponentStage.Unsatisfied : ComponentStage.Defined, cause);
 				}
 			}
 		}

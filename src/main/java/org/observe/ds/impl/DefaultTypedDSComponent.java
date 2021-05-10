@@ -10,9 +10,10 @@ import org.observe.ds.ComponentController;
 import org.observe.ds.ComponentStage;
 import org.observe.ds.DSComponent;
 import org.observe.ds.Dependency;
+import org.observe.ds.DependencyService;
 import org.observe.ds.Service;
 
-class DefaultTypedDSComponent<C> extends DefaultComponent<C> implements TypedDSComponent<C> {
+class DefaultTypedDSComponent<C> extends DefaultComponent<C> implements TypedDSComponent<C>, TypedComponentController<C> {
 	DefaultTypedDSComponent(DefaultDependencyService<C> service, String name,
 		Function<? super ComponentController<C>, ? extends C> supplier, Consumer<? super C> disposer,
 		Map<Service<?>, Function<? super C, ?>> provided, Map<Service<?>, ? extends DefaultDependency<C, ?>> dependencies,
@@ -100,6 +101,11 @@ class DefaultTypedDSComponent<C> extends DefaultComponent<C> implements TypedDSC
 		}
 
 		@Override
+		public DependencyService<C> getDependencyService() {
+			return theWrapped.getDependencyService();
+		}
+
+		@Override
 		public C getComponentValue() {
 			return theWrapped.getComponentValue();
 		}
@@ -132,6 +138,11 @@ class DefaultTypedDSComponent<C> extends DefaultComponent<C> implements TypedDSC
 		@Override
 		public String getName() {
 			return theWrapped.getName();
+		}
+
+		@Override
+		public String toString() {
+			return theWrapped.toString();
 		}
 	}
 }

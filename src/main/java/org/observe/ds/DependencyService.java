@@ -2,6 +2,7 @@ package org.observe.ds;
 
 import java.util.function.Function;
 
+import org.observe.ObservableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSet;
 
@@ -36,7 +37,15 @@ public interface DependencyService<C> extends AutoCloseable {
 	 *         components may have {@link DSComponent#getStage() stages} of {@link ComponentStage#Defined} and
 	 *         {@link ComponentStage#Satisfied}, as opposed to {@link ComponentStage#Unsatisfied} and {@link ComponentStage#Complete}.
 	 */
-	boolean isInitialized();
+	ObservableValue<Boolean> isInitialized();
+
+	/**
+	 * Schedules a task to run. Actions that involve injecting new components or changing availability of components cannot be performed as
+	 * a result of a change to a component, so this method schedules those tasks to be run when they can be.
+	 *
+	 * @param task The task to run when component changes may be made
+	 */
+	void schedule(Runnable task);
 
 	/** Causes all components in this service to be deactivated and removed */
 	@Override

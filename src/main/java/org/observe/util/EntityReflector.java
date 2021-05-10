@@ -1216,7 +1216,7 @@ public class EntityReflector<E> {
 		@Override
 		public String toString() {
 			StringBuilder str = new StringBuilder().append(theReflector.getType()).append('.').append(theMethod.getName()).append('(');
-			StringUtils.conversational(", ", null).print(str, theParameters, (s, p) -> s.append(p.getName()));
+			StringUtils.print(", ", Arrays.asList(theParameters), p -> p.getName());
 			str.append(')');
 			return str.toString();
 		}
@@ -1428,8 +1428,11 @@ public class EntityReflector<E> {
 	 * @param <R> The return type of the method
 	 */
 	public static class CachedMethod<E, R> extends DefaultMethod<E, R> {
-		CachedMethod(EntityReflector<E> reflector, Method method, MethodHandle handle) {
-			super(reflector, method, handle);
+		private final DefaultMethod<E, R> theDefaultMethod;
+
+		CachedMethod(DefaultMethod<E, R> defaultMethod) {
+			super(defaultMethod.getReflector(), defaultMethod.getMethod(), defaultMethod.theHandle);
+			theDefaultMethod = defaultMethod;
 		}
 
 		@Override
@@ -1437,11 +1440,16 @@ public class EntityReflector<E> {
 			EntityReflector<E>.ProxyMethodHandler handler = getHandler(proxy);
 			ValueHolder<R> holder = (ValueHolder<R>) handler.getAssociated(this);
 			if (holder == null) {
-				R value = super.invokeLocal(proxy, args, backing);
+				R value = theDefaultMethod.invokeLocal(proxy, args, backing);
 				holder = new ValueHolder<>(value);
 				handler.associate(this, value);
 			}
 			return holder.get();
+		}
+
+		/** @return The default method that this cached method fronts */
+		public MethodInterpreter<E, R> getDefaultMethod() {
+			return theDefaultMethod;
 		}
 	}
 
@@ -1548,7 +1556,7 @@ public class EntityReflector<E> {
 			theObjectMethod = objectMethod;
 		}
 
-		/** @return The default method interpreter (see {@link EntityReflector#DEFAULT_METHODS}) */
+		/** @return The default method interpreter (see {@link EntityReflector#OBJECT_METHODS}) */
 		public MethodInterpreter<Object, R> getObjectMethod() {
 			return theObjectMethod;
 		}
@@ -1597,31 +1605,31 @@ public class EntityReflector<E> {
 	}
 
 	/** Default implementation of {@link Object#equals(Object)} for entities when not overridden using @{@link ObjectMethodOverride} */
-	public static MethodInterpreter<Object, Boolean> DEFAULT_EQUALS;
+	public static MethodInterpreter<Object, Boolean> OBJECT_EQUALS;
 	/** Default implementation of {@link Object#hashCode()} for entities when not overridden using @{@link ObjectMethodOverride} */
-	public static MethodInterpreter<Object, Integer> DEFAULT_HASH_CODE;
+	public static MethodInterpreter<Object, Integer> OBJECT_HASH_CODE;
 	/** Default implementation of {@link Object#toString()} for entities when not overridden using @{@link ObjectMethodOverride} */
-	public static MethodInterpreter<Object, String> DEFAULT_TO_STRING;
+	public static MethodInterpreter<Object, String> OBJECT_TO_STRING;
 	/** Default implementation of {@link Object#notify()} for entities */
-	public static MethodInterpreter<Object, Void> DEFAULT_NOTIFY;
+	public static MethodInterpreter<Object, Void> OBJECT_NOTIFY;
 	/** Default implementation of {@link Object#notifyAll()} for entities */
-	public static MethodInterpreter<Object, Void> DEFAULT_NOTIFY_ALL;
+	public static MethodInterpreter<Object, Void> OBJECT_NOTIFY_ALL;
 	/** Default implementation of {@link Object#wait()} for entities */
-	public static MethodInterpreter<Object, Void> DEFAULT_WAIT0;
+	public static MethodInterpreter<Object, Void> OBJECT_WAIT0;
 	/** Default implementation of {@link Object#wait(long)} for entities */
-	public static MethodInterpreter<Object, Void> DEFAULT_WAIT1;
+	public static MethodInterpreter<Object, Void> OBJECT_WAIT1;
 	/** Default implementation of {@link Object#wait(long, int)} for entities */
-	public static MethodInterpreter<Object, Void> DEFAULT_WAIT2;
+	public static MethodInterpreter<Object, Void> OBJECT_WAIT2;
 	/** Default implementation of {@link Object#finalize()} for entities */
-	public static MethodInterpreter<Object, Void> DEFAULT_FINALIZE;
+	public static MethodInterpreter<Object, Void> OBJECT_FINALIZE;
 	/** Default implementation of {@link Object#clone()} for entities */
-	public static MethodInterpreter<Object, Object> DEFAULT_CLONE;
+	public static MethodInterpreter<Object, Object> OBJECT_CLONE;
 	/** Default implementation of {@link Object#getClass()} for entities */
-	public static MethodInterpreter<Object, Class<?>> DEFAULT_GET_CLASS; // Does this get delegated to here?
+	public static MethodInterpreter<Object, Class<?>> OBJECT_GET_CLASS; // Does this get delegated to here?
 	/** Default implementation of {@link Identifiable#getIdentity()} for entities when not implemented in the entity type */
-	public static MethodInterpreter<Identifiable, Object> DEFAULT_GET_IDENTITY;
+	public static MethodInterpreter<Identifiable, Object> OBJECT_GET_IDENTITY;
 	/** All default methods implementations for entities */
-	public static final Map<Method, MethodInterpreter<Object, ?>> DEFAULT_METHODS;
+	public static final Map<Method, MethodInterpreter<Object, ?>> OBJECT_METHODS;
 
 	static {
 		Method equals, hashCode, toString, notify, notifyAll, wait0, wait1, wait2, finalize, clone, getClass, getIdentity;
@@ -1642,7 +1650,7 @@ public class EntityReflector<E> {
 			throw new IllegalStateException("Could not find Object methods!", e);
 		}
 		Map<Method, MethodInterpreter<Object, ?>> defaultObjectMethods = new LinkedHashMap<>();
-		DEFAULT_EQUALS = new MethodInterpreter<Object, Boolean>(null, TypeTokens.get().OBJECT, equals) {
+		OBJECT_EQUALS = new MethodInterpreter<Object, Boolean>(null, TypeTokens.get().OBJECT, equals) {
 			@Override
 			protected Boolean invokeLocal(Object proxy, Object[] args, EntityInstanceBacking backing) {
 				if (proxy == args[0])
@@ -1667,8 +1675,8 @@ public class EntityReflector<E> {
 				return true;
 			}
 		};
-		defaultObjectMethods.put(equals, DEFAULT_EQUALS);
-		DEFAULT_HASH_CODE = new MethodInterpreter<Object, Integer>(null, TypeTokens.get().OBJECT, hashCode) {
+		defaultObjectMethods.put(equals, OBJECT_EQUALS);
+		OBJECT_HASH_CODE = new MethodInterpreter<Object, Integer>(null, TypeTokens.get().OBJECT, hashCode) {
 			@Override
 			protected Integer invokeLocal(Object proxy, Object[] args, EntityInstanceBacking backing) {
 				EntityReflector<?>.ProxyMethodHandler p = getHandler(proxy);
@@ -1681,8 +1689,8 @@ public class EntityReflector<E> {
 				return Objects.hash(idValues);
 			}
 		};
-		defaultObjectMethods.put(hashCode, DEFAULT_HASH_CODE);
-		DEFAULT_TO_STRING = new MethodInterpreter<Object, String>(null, TypeTokens.get().OBJECT, toString) {
+		defaultObjectMethods.put(hashCode, OBJECT_HASH_CODE);
+		OBJECT_TO_STRING = new MethodInterpreter<Object, String>(null, TypeTokens.get().OBJECT, toString) {
 			@Override
 			protected String invokeLocal(Object proxy, Object[] args, EntityInstanceBacking backing) {
 				EntityReflector<?>.ProxyMethodHandler p = getHandler(proxy);
@@ -1704,24 +1712,24 @@ public class EntityReflector<E> {
 				return str.toString();
 			}
 		};
-		defaultObjectMethods.put(toString, DEFAULT_TO_STRING);
-		DEFAULT_NOTIFY = new MethodInterpreter<Object, Void>(null, TypeTokens.get().OBJECT, notify) {
+		defaultObjectMethods.put(toString, OBJECT_TO_STRING);
+		OBJECT_NOTIFY = new MethodInterpreter<Object, Void>(null, TypeTokens.get().OBJECT, notify) {
 			@Override
 			protected Void invokeLocal(Object proxy, Object[] args, EntityInstanceBacking backing) {
 				Proxy.getInvocationHandler(proxy).notify();
 				return null;
 			}
 		};
-		defaultObjectMethods.put(notify, DEFAULT_NOTIFY);
-		DEFAULT_NOTIFY_ALL = new MethodInterpreter<Object, Void>(null, TypeTokens.get().OBJECT, notifyAll) {
+		defaultObjectMethods.put(notify, OBJECT_NOTIFY);
+		OBJECT_NOTIFY_ALL = new MethodInterpreter<Object, Void>(null, TypeTokens.get().OBJECT, notifyAll) {
 			@Override
 			protected Void invokeLocal(Object proxy, Object[] args, EntityInstanceBacking backing) {
 				Proxy.getInvocationHandler(proxy).notifyAll();
 				return null;
 			}
 		};
-		defaultObjectMethods.put(notifyAll, DEFAULT_NOTIFY_ALL);
-		DEFAULT_WAIT0 = new MethodInterpreter<Object, Void>(null, TypeTokens.get().OBJECT, wait0) {
+		defaultObjectMethods.put(notifyAll, OBJECT_NOTIFY_ALL);
+		OBJECT_WAIT0 = new MethodInterpreter<Object, Void>(null, TypeTokens.get().OBJECT, wait0) {
 			@Override
 			protected Void invokeLocal(Object proxy, Object[] args, EntityInstanceBacking backing) throws InterruptedException {
 				InvocationHandler handler = Proxy.getInvocationHandler(proxy);
@@ -1729,8 +1737,8 @@ public class EntityReflector<E> {
 				return null;
 			}
 		};
-		defaultObjectMethods.put(wait0, DEFAULT_WAIT0);
-		DEFAULT_WAIT1 = new MethodInterpreter<Object, Void>(null, TypeTokens.get().OBJECT, wait1) {
+		defaultObjectMethods.put(wait0, OBJECT_WAIT0);
+		OBJECT_WAIT1 = new MethodInterpreter<Object, Void>(null, TypeTokens.get().OBJECT, wait1) {
 			@Override
 			protected Void invokeLocal(Object proxy, Object[] args, EntityInstanceBacking backing) throws InterruptedException {
 				InvocationHandler handler = Proxy.getInvocationHandler(proxy);
@@ -1738,8 +1746,8 @@ public class EntityReflector<E> {
 				return null;
 			}
 		};
-		defaultObjectMethods.put(wait1, DEFAULT_WAIT1);
-		DEFAULT_WAIT2 = new MethodInterpreter<Object, Void>(null, TypeTokens.get().OBJECT, wait2) {
+		defaultObjectMethods.put(wait1, OBJECT_WAIT1);
+		OBJECT_WAIT2 = new MethodInterpreter<Object, Void>(null, TypeTokens.get().OBJECT, wait2) {
 			@Override
 			protected Void invokeLocal(Object proxy, Object[] args, EntityInstanceBacking backing) throws InterruptedException {
 				InvocationHandler handler = Proxy.getInvocationHandler(proxy);
@@ -1747,35 +1755,35 @@ public class EntityReflector<E> {
 				return null;
 			}
 		};
-		defaultObjectMethods.put(wait2, DEFAULT_WAIT2);
-		DEFAULT_FINALIZE = new MethodInterpreter<Object, Void>(null, TypeTokens.get().OBJECT, finalize) {
+		defaultObjectMethods.put(wait2, OBJECT_WAIT2);
+		OBJECT_FINALIZE = new MethodInterpreter<Object, Void>(null, TypeTokens.get().OBJECT, finalize) {
 			@Override
 			protected Void invokeLocal(Object proxy, Object[] args, EntityInstanceBacking backing) {
 				return null;
 			}
 		};
-		defaultObjectMethods.put(finalize, DEFAULT_FINALIZE);
-		DEFAULT_CLONE = new MethodInterpreter<Object, Object>(null, TypeTokens.get().OBJECT, clone) {
+		defaultObjectMethods.put(finalize, OBJECT_FINALIZE);
+		OBJECT_CLONE = new MethodInterpreter<Object, Object>(null, TypeTokens.get().OBJECT, clone) {
 			@Override
 			protected Object invokeLocal(Object proxy, Object[] args, EntityInstanceBacking backing) throws CloneNotSupportedException {
 				throw new CloneNotSupportedException("Cannot clone proxies");
 			}
 		};
-		defaultObjectMethods.put(clone, DEFAULT_CLONE);
-		DEFAULT_GET_CLASS = new MethodInterpreter<Object, Class<?>>(null, TypeTokens.get().OBJECT, getClass) {
+		defaultObjectMethods.put(clone, OBJECT_CLONE);
+		OBJECT_GET_CLASS = new MethodInterpreter<Object, Class<?>>(null, TypeTokens.get().OBJECT, getClass) {
 			@Override
 			protected Class<?> invokeLocal(Object proxy, Object[] args, EntityInstanceBacking backing) {
 				return getHandler(proxy).getReflector().theRawType;
 			}
 		};
-		defaultObjectMethods.put(getClass, DEFAULT_GET_CLASS);
-		DEFAULT_GET_IDENTITY = new MethodInterpreter<Identifiable, Object>(null, TypeTokens.get().of(Identifiable.class), getIdentity) {
+		defaultObjectMethods.put(getClass, OBJECT_GET_CLASS);
+		OBJECT_GET_IDENTITY = new MethodInterpreter<Identifiable, Object>(null, TypeTokens.get().of(Identifiable.class), getIdentity) {
 			@Override
 			protected Object invokeLocal(Identifiable proxy, Object[] args, EntityInstanceBacking backing) throws Throwable {
 				return ((EntityReflector<Identifiable>.IdentifiableProxyMethodHandler) getHandler(proxy)).getIdentity(proxy);
 			}
 		};
-		DEFAULT_METHODS = Collections.unmodifiableMap(defaultObjectMethods);
+		OBJECT_METHODS = Collections.unmodifiableMap(defaultObjectMethods);
 	}
 
 	private final List<EntityReflector<? super E>> theSupers;
@@ -1916,8 +1924,8 @@ public class EntityReflector<E> {
 			throw new IllegalStateException("Could not find Object.equals(Object)", e);
 		}
 		MethodInterpreter<E, ?> hashCode = getInterpreter(Object::hashCode);
-		boolean equalOverride = equals != DEFAULT_EQUALS;
-		boolean hashCodeOverride = hashCode != DEFAULT_HASH_CODE;
+		boolean equalOverride = equals != OBJECT_EQUALS;
+		boolean hashCodeOverride = hashCode != OBJECT_HASH_CODE;
 		if (Identifiable.class.isAssignableFrom(theRawType)) {
 			isIdentifiable = true;
 			if (equalOverride)
@@ -1993,25 +2001,26 @@ public class EntityReflector<E> {
 							continue;
 						}
 					}
-					if (m.getAnnotation(Cached.class) != null) {
-						String fieldName = theGetterFilter.apply(m);
-						ReflectedField<? super E, ?> field = fieldName == null ? null : fields.get(fieldName);
-						if (field != null) {
-							method = new CachedFieldGetter<>(this, m, (ReflectedField<E, ?>) field, handle);
-						} else if (m.getParameterCount() > 0) {
-							errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.WARNING, m,
-								"Cached Default methods cannot have parameters"));
-							method = new DefaultMethod<>(this, m, handle);
-						} else if (m.getReturnType() == void.class) {
-							errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.WARNING, m,
-								"Cached Default methods cannot return void"));
-							method = new DefaultMethod<>(this, m, handle);
-						} else
-							method = new CachedMethod<>(this, m, handle);
-					} else
-						method = new DefaultMethod<>(this, m, handle);
+					String fieldName = theGetterFilter.apply(m);
+					ReflectedField<? super E, ?> field = fieldName == null ? null : fields.get(fieldName);
+					if (field != null)
+						method = new CachedFieldGetter<>(this, m, (ReflectedField<E, ?>) field, handle);
+					else {
+						DefaultMethod<E, ?> defaultMethod = new DefaultMethod<>(this, m, handle);
+						method = defaultMethod;
+						if (m.getAnnotation(Cached.class) != null) {
+							if (m.getParameterCount() > 0) {
+								errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.WARNING, m,
+									"Cached Default methods cannot have parameters"));
+							} else if (m.getReturnType() == void.class) {
+								errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.WARNING, m,
+									"Cached Default methods cannot return void"));
+							} else
+								method = new CachedMethod<>(defaultMethod);
+						}
+					}
 				} else {
-					MethodInterpreter<Object, ?> objectMethod = DEFAULT_METHODS.get(m);
+					MethodInterpreter<Object, ?> objectMethod = OBJECT_METHODS.get(m);
 					if (objectMethod != null) {
 						method = new ObjectMethodWrapper<>(this, objectMethod);
 					} else if (m.getDeclaringClass() == Object.class) {
@@ -2167,10 +2176,11 @@ public class EntityReflector<E> {
 					subMethod = new FieldSetter<>(this, superMethod.get().getMethod(),
 						fields.get(((FieldSetter<?, ?>) superMethod.get()).getField().getName()),
 						((FieldSetter<?, ?>) superMethod.get()).getSetterReturnType());
-				else if (superMethod.get() instanceof CachedMethod)
-					subMethod = new CachedMethod<>(this, superMethod.get().getMethod(),
+				else if (superMethod.get() instanceof CachedMethod) {
+					DefaultMethod<E, ?> subDefault = new DefaultMethod<>(this, superMethod.get().getMethod(),
 						((CachedMethod<E, ?>) superMethod.get()).getHandle());
-				else
+					subMethod = new CachedMethod<>(subDefault);
+				} else
 					subMethod = new SuperDelegateMethod<>(this, superMethod.get().getMethod());
 				subMethod.setElement(methods.addElement(subMethod, false).getElementId());
 			}
@@ -2301,6 +2311,54 @@ public class EntityReflector<E> {
 		if (!(method instanceof FieldGetter))
 			throw new IllegalArgumentException(method + " is not a field getter");
 		return ((FieldGetter<E, F>) method).getField();
+	}
+
+	/**
+	 * Retrieves the value from a default-ed method of the entity. This will only work if the default method's value does not depend on any
+	 * field values of the entity.
+	 *
+	 * @param <F> The type of the field
+	 * @param fieldGetter Function to invoke the method
+	 * @return The default value of the method
+	 * @throws IllegalArgumentException If the method is not default-ed,
+	 */
+	public <F> F getDefaultValue(Function<? super E, F> fieldGetter) throws IllegalArgumentException {
+		Method invoked;
+		synchronized (this) {
+			theProxyHandler.reset(m -> {
+				String fieldName = theGetterFilter.apply(m);
+				return fieldName != null && theFields.keySet().contains(fieldName);
+			}, true);
+			fieldGetter.apply(theProxy);
+			invoked = theProxyHandler.getInvoked();
+		}
+		if (invoked == null) {
+			throw new IllegalArgumentException("No " + theType + " method invoked");
+		}
+		MethodInterpreter<? super E, F> method = (MethodInterpreter<? super E, F>) getInterpreter(invoked);
+		if (method instanceof CachedMethod)
+			method = ((CachedMethod<? super E, F>) method).getDefaultMethod();
+		if (!(method instanceof DefaultMethod))
+			throw new IllegalArgumentException(method + " is not default-ed");
+		else if (method.getMethod().getParameterCount() > 0)
+			throw new IllegalArgumentException("Cannot get stateless default value for methods with parameters: " + method);
+		try {
+			return method.invokeLocal(theProxy, NO_ARGS, new EntityInstanceBacking() {
+				@Override
+				public void set(int fieldIndex, Object newValue) {
+					throw new IllegalArgumentException("No default value available without actual entity");
+				}
+
+				@Override
+				public Object get(int fieldIndex) {
+					throw new IllegalArgumentException("No default value available without actual entity");
+				}
+			});
+		} catch (IllegalArgumentException e) {
+			throw e;
+		} catch (Throwable e) {
+			throw new IllegalArgumentException("Could not invoke default method " + method.getName(), e);
+		}
 	}
 
 	/**

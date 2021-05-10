@@ -15,6 +15,9 @@ import org.qommons.Named;
  * @param <C> The type of the component value
  */
 public interface DSComponent<C> extends Named {
+	/** @return The dependency service that owns this component */
+	DependencyService<C> getDependencyService();
+
 	/** @return The value of this component, or null if it is not active */
 	C getComponentValue();
 

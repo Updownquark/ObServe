@@ -11,6 +11,7 @@ import org.observe.ds.ComponentController;
 import org.observe.ds.ComponentStage;
 import org.observe.ds.DSComponent;
 import org.observe.ds.Dependency;
+import org.observe.ds.DependencyService;
 import org.observe.ds.Service;
 import org.qommons.Causable;
 import org.qommons.Transaction;
@@ -42,6 +43,11 @@ class DefaultComponent<C> implements ComponentController<C> {
 		isAvailable = SettableValue.build(boolean.class).withLock(service.getComponents()).withValue(available).build();
 
 		reset(available);
+	}
+
+	@Override
+	public DefaultDependencyService<C> getDependencyService() {
+		return theService;
 	}
 
 	@Override
@@ -152,9 +158,9 @@ class DefaultComponent<C> implements ComponentController<C> {
 			}
 		}
 		if (available && theUnsatisfied == 0)
-			setStage(theService.isInitialized() ? ComponentStage.Complete : ComponentStage.Satisfied, null);
+			setStage(theService.isInitialized().get() ? ComponentStage.Complete : ComponentStage.Satisfied, null);
 		else
-			setStage(theService.isInitialized() ? ComponentStage.Unsatisfied : ComponentStage.Defined, null);
+			setStage(theService.isInitialized().get() ? ComponentStage.Unsatisfied : ComponentStage.Defined, null);
 	}
 
 	@Override
@@ -205,7 +211,7 @@ class DefaultComponent<C> implements ComponentController<C> {
 			if (dynamic)
 				theDynamicUnsatisfied--;
 			if (theUnsatisfied == 0)
-				setStage(theService.isInitialized() ? ComponentStage.Complete : ComponentStage.Satisfied, cause);
+				setStage(theService.isInitialized().get() ? ComponentStage.Complete : ComponentStage.Satisfied, cause);
 		} else {
 			theUnsatisfied++;
 			if (dynamic)
@@ -219,7 +225,7 @@ class DefaultComponent<C> implements ComponentController<C> {
 
 	void dependencyModified(Object cause) {
 		if (theUnsatisfied == 0)
-			setStage(theService.isInitialized() ? ComponentStage.Complete : ComponentStage.Satisfied, cause);
+			setStage(theService.isInitialized().get() ? ComponentStage.Complete : ComponentStage.Satisfied, cause);
 	}
 
 	static class DefaultComponentWrapper<C> implements DSComponent<C> {
@@ -227,6 +233,11 @@ class DefaultComponent<C> implements ComponentController<C> {
 
 		DefaultComponentWrapper(DefaultComponent<C> component) {
 			theComponent = component;
+		}
+
+		@Override
+		public DependencyService<C> getDependencyService() {
+			return theComponent.getDependencyService();
 		}
 
 		@Override
