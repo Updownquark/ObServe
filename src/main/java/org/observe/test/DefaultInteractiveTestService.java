@@ -59,7 +59,7 @@ public class DefaultInteractiveTestService extends DefaultInteractiveTestSuite i
 					locUrl = QommonsConfig.toUrl(loc);
 				} catch (IOException e) {
 					System.err.println(getClass().getName() + ": Could not resolve test resource location " + loc);
-					e.printStackTrace();
+					System.err.println(e);
 					continue;
 				}
 				addTestResourceLocation(locUrl);

@@ -463,8 +463,7 @@ public class EntityArguments<E> {
 			throw new IllegalArgumentException("Unrecognized argument field type: " + type.getName() + " (" + field.getName() + ")");
 	}
 
-	private <T> void configureArg(ArgumentParsing2.ValuedArgumentBuilder<T, ?> ab, Argument argAnn, boolean required, boolean multi,
-		int index) {
+	private <T> void configureArg(ArgumentParsing2.ArgumentBuilder<T, ?> ab, Argument argAnn, boolean required, boolean multi, int index) {
 		if (multi && argAnn != null) {
 			if (argAnn.minTimes() > 0 || argAnn.maxTimes() < Integer.MAX_VALUE)
 				ab.times(argAnn.minTimes(), argAnn.maxTimes());

@@ -95,10 +95,15 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 			isActivating = true;
 			try {
 				for (DefaultComponent<C> comp : theComponents) {
-					if (!comp.isAvailable().get() || comp.getUnsatisfied() > 0)
-						comp.setStage(ComponentStage.Unsatisfied, cause);
-					else
-						comp.setStage(ComponentStage.Complete, cause);
+					try {
+						if (!comp.isAvailable().get() || comp.getUnsatisfied() > 0)
+							comp.setStage(ComponentStage.Unsatisfied, cause);
+						else
+							comp.setStage(ComponentStage.Complete, cause);
+					} catch (RuntimeException | Error e) {
+						System.err.println("Error initializing component " + comp.getName());
+						e.printStackTrace();
+					}
 				}
 				isInitialized.set(true, null);
 			} finally {
