@@ -49,41 +49,39 @@ import org.observe.config.SyncValueSet;
 import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
 import org.qommons.QommonsUtils.TimePrecision;
+import org.qommons.TimeUtils;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.CircularArrayList;
 import org.qommons.config.QommonsConfig;
 import org.qommons.io.FileBackups;
 import org.qommons.io.FileUtils;
 import org.qommons.io.Format;
+import org.qommons.io.SpinnerFormat;
 import org.qommons.threading.QommonsTimer;
 import org.xml.sax.SAXException;
 
 public class AppPopulation {
 	public static class ObservableUiBuilder extends WindowPopulation.DefaultWindowBuilder<JFrame, ObservableUiBuilder> {
-		private File theDefaultConfigLocation;
+		private File theConfigDir;
 		private String theConfigName;
-		private List<File> theOldConfigLocations;
 		private List<String> theOldConfigNames;
 		private URL theErrorReportLink;
 		private BiConsumer<StringBuilder, Boolean> theErrorReportInstructions;
 		private Consumer<ObservableConfig> theConfigInit;
 		private boolean isCloseWithoutSaveEnabled;
 		private volatile boolean isClosingWithoutSave;
-		private Consumer<FileBackups.Builder> theBackups;
 		private AboutDialogBuilder<?> theAboutDialog;
-		private Duration thePersistFrequency;
-		private boolean isPersistingOnMod;
 
 		public ObservableUiBuilder() {
 			super(new JFrame(), Observable.empty(), true);
 		}
 
-		public ObservableUiBuilder withConfigAt(String configLocation) {
-			return withConfigAt(new File(configLocation));
+		public ObservableUiBuilder withConfigDir(String configLocation) {
+			return withConfigDir(new File(configLocation));
 		}
 
-		public ObservableUiBuilder withConfigAt(File configLocation) {
-			theDefaultConfigLocation = configLocation;
+		public ObservableUiBuilder withConfigDir(File configLocation) {
+			theConfigDir = configLocation;
 			return this;
 		}
 
@@ -92,36 +90,10 @@ public class AppPopulation {
 			return this;
 		}
 
-		public ObservableUiBuilder withOldConfigAt(String configLocation) {
-			return withOldConfigAt(new File(configLocation));
-		}
-
-		public ObservableUiBuilder withOldConfigAt(File configLocation) {
-			if (theOldConfigLocations == null)
-				theOldConfigLocations = new LinkedList<>();
-			theOldConfigLocations.add(configLocation);
-			return this;
-		}
-
 		public ObservableUiBuilder withOldConfig(String configName) {
 			if (theOldConfigNames == null)
 				theOldConfigNames = new LinkedList<>();
 			theOldConfigNames.add(configName);
-			return this;
-		}
-
-		public ObservableUiBuilder saveEvery(Duration frequency) {
-			thePersistFrequency = frequency;
-			return this;
-		}
-
-		public ObservableUiBuilder saveOnMod(boolean save) {
-			isPersistingOnMod = save;
-			return this;
-		}
-
-		public ObservableUiBuilder withBackups(Consumer<FileBackups.Builder> backups) {
-			theBackups = backups;
 			return this;
 		}
 
@@ -260,153 +232,158 @@ public class AppPopulation {
 		}
 
 		public void build(BiConsumer<ObservableConfig, Consumer<Component>> app) {
+			ObservableConfig config = ObservableConfig.createRoot("config");
 			String configName = theConfigName;
-			if (configName == null) {
-				if (theDefaultConfigLocation == null)
-					throw new IllegalStateException("No configuration set to initialize configuration");
-				else if (!theDefaultConfigLocation.exists())
-					throw new IllegalStateException("Config file does not exist");
-				else if (theDefaultConfigLocation.isDirectory())
-					throw new IllegalStateException("Config file is not a file");
-			}
-			String configFileLoc = null;
-			if (configName != null)
-				configFileLoc = System.getProperty(configName + ".config");
-			if (configFileLoc == null && theDefaultConfigLocation != null) {
-				configFileLoc = theDefaultConfigLocation.getPath();
-			}
-			if (configFileLoc == null)
-				configFileLoc = "./" + configName + ".config";
-			if (!new File(configFileLoc).exists() && (theOldConfigNames != null || theOldConfigLocations != null)) {
-				if (theOldConfigNames != null) {
-					configFileLoc = System.getProperty(configName + ".config");
-					if ((configFileLoc == null || !new File(configFileLoc).canWrite()) && theDefaultConfigLocation != null)
-						configFileLoc = theDefaultConfigLocation.getPath();
-					if (configFileLoc == null)
-						configFileLoc = "./" + configName + ".config";
+			if (configName != null) {
+				File configDir = theConfigDir;
+				if (configDir == null) {
+					String configProp = System.getProperty(configName + ".config");
+					if (configProp != null)
+						configDir = new File(configProp);
+					else
+						configDir = new File(configName).getAbsoluteFile();
+				}
+				if (!configDir.exists() && !configDir.mkdirs())
+					throw new IllegalStateException("Could not create config directory " + configDir.getPath());
+				else if (!configDir.isDirectory())
+					throw new IllegalStateException("Not a directory: " + configDir.getPath());
+				File configFile = new File(configDir, configName + ".xml");
+				FileBackups backups = new FileBackups(FileUtils.better(configFile));
+
+				if (!configFile.exists() && theOldConfigNames != null) {
 					boolean found = false;
 					for (String oldConfigName : theOldConfigNames) {
-						String oldConfigLoc = System.getProperty(oldConfigName + ".config");
-						if (oldConfigLoc != null && new File(oldConfigLoc).exists()) {
-							new File(oldConfigLoc).renameTo(new File(configFileLoc));
+						File oldConfigFile = new File(configDir, oldConfigName);
+						if (oldConfigFile.exists()) {
+							if (!oldConfigFile.renameTo(configFile)) {
+								System.err.println("Could not rename " + oldConfigFile.getPath() + " to " + configFile.getPath());
+							}
+							backups.renamedFrom(FileUtils.better(oldConfigFile));
 							found = true;
 							break;
 						}
-					}
-					if (!found) {
-						for (File oldConfigLoc : theOldConfigLocations) {
-							if (oldConfigLoc.exists()) {
-								oldConfigLoc.renameTo(new File(configFileLoc));
+						if (!found) {
+							oldConfigFile = new File(configDir.getParentFile(), oldConfigName + "/" + oldConfigName + ".xml");
+							if (oldConfigFile.exists()) {
+								if (!oldConfigFile.renameTo(configFile)) {
+									System.err.println("Could not rename " + oldConfigFile.getPath() + " to " + configFile.getPath());
+								}
+								backups.renamedFrom(FileUtils.better(oldConfigFile));
+								found = true;
 								break;
 							}
 						}
 					}
 				}
-			}
-			ObservableConfig config = ObservableConfig.createRoot("config");
-			ObservableConfig.XmlEncoding encoding = ObservableConfig.XmlEncoding.DEFAULT;
-			File configFile = new File(configFileLoc);
-			if (theErrorReportLink != null || theErrorReportInstructions != null) {
-				String errorFileName;
-				int lastDot = configFile.getName().lastIndexOf('.');
-				if (lastDot >= 0)
-					errorFileName = configFile.getName().substring(0, lastDot) + ".errors.txt";
-				else
-					errorFileName = configFile.getName() + ".errors.txt";
-				File errorFile = new File(configFile.getParentFile(), errorFileName);
-				new SystemOutputHandler(configFile, errorFile);
-			}
-			FileBackups backups;
-			if (theBackups != null) {
-				FileBackups.Builder backupBuilder = FileBackups.build(FileUtils.better(configFile));
-				theBackups.accept(backupBuilder);
-				backups = backupBuilder.build();
-			} else
-				backups = null;
-			if (configFile.exists()) {
-				try {
-					try (InputStream configStream = new BufferedInputStream(new FileInputStream(configFile))) {
-						ObservableConfig.readXml(config, configStream, encoding);
-					}
-				} catch (IOException | SAXException e) {
-					if (backups == null) {
-						System.err.println("Could not read config file " + configFileLoc);
-						e.printStackTrace();
-					} else {
-						System.out.println("Could not read config file " + configFileLoc);
+
+				if (theErrorReportLink != null || theErrorReportInstructions != null) {
+					String errorFileName;
+					int lastDot = configFile.getName().lastIndexOf('.');
+					if (lastDot >= 0)
+						errorFileName = configFile.getName().substring(0, lastDot) + ".errors.txt";
+					else
+						errorFileName = configFile.getName() + ".errors.txt";
+					File errorFile = new File(configFile.getParentFile(), errorFileName);
+					new SystemOutputHandler(configFile, errorFile);
+				}
+
+				ObservableConfig.XmlEncoding encoding = ObservableConfig.XmlEncoding.DEFAULT;
+				boolean loaded = false;
+				if (configFile.exists()) {
+					try {
+						try (InputStream configStream = new BufferedInputStream(new FileInputStream(configFile))) {
+							ObservableConfig.readXml(config, configStream, encoding);
+						}
+						config.setName(configName);
+						loaded = true;
+					} catch (IOException | SAXException e) {
+						System.out.println("Could not read config file " + configFile.getPath());
 						e.printStackTrace(System.out);
-						restoreBackup(config, backups, () -> build2(config, configFile, backups, app), null);
 					}
 				}
-				if (configName != null)
-					config.setName(configName);
-				build2(config, configFile, backups, app);
-			} else {
-				restoreBackup(config, backups, () -> build2(config, configFile, backups, app), () -> {
-					if (configName != null)
-						config.setName(configName);
-					if (theConfigInit != null)
-						theConfigInit.accept(config);
+				withMenuBar(mb -> mb.withMenu("File", menu -> menu.withAction("Backup...", __ -> {
+					restoreBackup(false, null, backups, () -> {
+						WindowPopulation.populateDialog(null, null, true)//
+							.withTitle("Backup Restored")//
+							.modal(true)//
+							.withVContent(content -> {
+								content.addLabel(null, "Please restart the " + getTitle(), null);
+							}).run(getWindow());
+						isClosingWithoutSave = true;
+						System.exit(0);
+					}, () -> {
+					});
+				}, null)));
+				if (loaded)
 					build2(config, configFile, backups, app);
+				else if (!backups.getBackups().isEmpty()) {
+					restoreBackup(true, config, backups, () -> {
+						config.setName(configName);
+						build2(config, configFile, backups, app);
+					}, () -> {
+						config.setName(configName);
+						if (theConfigInit != null)
+							theConfigInit.accept(config);
+						build2(config, configFile, backups, app);
+					});
+				}
+			} else {
+				boolean[] printed = new boolean[1];
+				config.watch(ObservableConfigPath.buildPath(ObservableConfigPath.ANY_NAME).multi(true).build()).act(__ -> {
+					if (!printed[0]) {
+						System.out.println("WARNING: This application has not configured config persistence");
+						printed[0] = true;
+					}
 				});
+				if (theErrorReportLink != null || theErrorReportInstructions != null) {
+					File errorFile = new File("App.errors.txt");
+					new SystemOutputHandler(null, errorFile);
+				}
+				build2(config, null, null, app);
 			}
 		}
 
 		private void build2(ObservableConfig config, File configFile, FileBackups backups,
 			BiConsumer<ObservableConfig, Consumer<Component>> app) {
-			ObservableConfigPersistence<IOException> actuallyPersist = ObservableConfig.toFile(configFile,
-				ObservableConfig.XmlEncoding.DEFAULT);
-			config.persistOnShutdown(new ObservableConfig.ObservableConfigPersistence<IOException>() {
-				@Override
-				public void persist(ObservableConfig config2) throws IOException {
-					if (isClosingWithoutSave)
-						return;
-					if (backups != null)
-						backups.saveLatest(true);
-					actuallyPersist.persist(config2);
-				}
-			}, ex -> {
-				System.err.println("Could not persist UI config");
-				ex.printStackTrace();
-			});
-			if (isPersistingOnMod) {
-				if (thePersistFrequency == null) {
-					config.persistOnChange(actuallyPersist, ex -> {
-						System.err.println("Could not persist UI config");
-						ex.printStackTrace();
-					});
-				} else {
-					config.watch(ObservableConfigPath.buildPath(ObservableConfigPath.ANY_NAME).multi(true).build())
-						.act(new Consumer<Object>() {
-						private long theLastPersist;
-						private final QommonsTimer.TaskHandle persistTask = QommonsTimer.getCommonInstance().build(() -> {
-							theLastPersist = System.currentTimeMillis();
-							try {
-								System.out.println("Persisting config");
-								actuallyPersist.persist(config);
-							} catch (IOException ex) {
-								System.err.println("Could not persist UI config");
-								ex.printStackTrace();
+			if (configFile != null) {
+				ObservableConfigPersistence<IOException> actuallyPersist = ObservableConfig.toFile(configFile,
+					ObservableConfig.XmlEncoding.DEFAULT);
+				boolean[] persistenceQueued = new boolean[1];
+				ObservableConfigPersistence<IOException> persist = new ObservableConfig.ObservableConfigPersistence<IOException>() {
+					@Override
+					public void persist(ObservableConfig config2) throws IOException {
+						try {
+							if (persistenceQueued[0] && !isClosingWithoutSave) {
+								actuallyPersist.persist(config2);
+								backups.fileChanged();
 							}
-						}, Duration.ofSeconds(1_000_000), false);
-
-						@Override
-						public void accept(Object __) {
-							long now = System.currentTimeMillis();
-							Duration sincePersist = Duration.ofMillis(now - theLastPersist);
-							if (sincePersist.compareTo(thePersistFrequency) >= 0) {
-								persistTask.runImmediately().setActive(false);
-							} else {
-								persistTask.runNextIn(thePersistFrequency.minus(sincePersist));
-							}
+						} finally {
+							persistenceQueued[0] = false;
 						}
-					});
-				}
-			} else if (thePersistFrequency != null) {
-				// Don't back up except at shutdown
-				config.persistEvery(thePersistFrequency, actuallyPersist, ex -> {
+					}
+				};
+				config.persistOnShutdown(persist, ex -> {
 					System.err.println("Could not persist UI config");
 					ex.printStackTrace();
+				});
+				QommonsTimer timer = QommonsTimer.getCommonInstance();
+				Object key = new Object() {
+					@Override
+					public String toString() {
+						return config.getName() + " persistence";
+					}
+				};
+				Duration persistDelay = Duration.ofSeconds(2);
+				config.watch(ObservableConfigPath.buildPath(ObservableConfigPath.ANY_NAME).multi(true).build()).act(__ -> {
+					persistenceQueued[0] = true;
+					timer.doAfterInactivity(key, () -> {
+						try {
+							persist.persist(config);
+						} catch (IOException ex) {
+							System.err.println("Could not persist UI config");
+							ex.printStackTrace();
+						}
+					}, persistDelay);
 				});
 			}
 			Runnable buildApp = () -> {
@@ -430,7 +407,8 @@ public class AppPopulation {
 				EventQueue.invokeLater(buildApp);
 		}
 
-		private void restoreBackup(ObservableConfig config, FileBackups backups, Runnable onBackup, Runnable onNoBackup) {
+		private void restoreBackup(boolean fromError, ObservableConfig config, FileBackups backups, Runnable onBackup,
+			Runnable onNoBackup) {
 			BetterSortedSet<Instant> backupTimes = backups == null ? null : backups.getBackups();
 			if (backupTimes == null || backupTimes.isEmpty()) {
 				if (onNoBackup != null)
@@ -438,24 +416,36 @@ public class AppPopulation {
 				return;
 			}
 			SettableValue<Instant> selectedBackup = SettableValue.build(Instant.class).safe(false).build();
-			Format<Instant> dateFormat = Format.flexibleDate("MMM dd yyyy", TimeZone.getDefault());
+			Format<Instant> PAST_DATE_FORMAT = SpinnerFormat.flexDate(Instant::now, "EEE MMM dd, yyyy",
+				opts -> opts.withMaxResolution(TimeUtils.DateElementType.Second).withEvaluationType(TimeUtils.RelativeTimeEvaluation.PAST));
 			JFrame[] frame = new JFrame[1];
 			boolean[] backedUp = new boolean[1];
-			frame[0] = WindowPopulation.populateWindow(null, null, true, false)//
+			frame[0] = WindowPopulation.populateWindow(null, null, false, false)//
 				.withTitle(getTitle().get() == null ? "Backup" : getTitle().get() + " Backup").withIcon(getIcon())//
 				.withVContent(content -> {
-					content.addLabel(null, "Your configuration is missing or has been corrupted", null)//
-					.addLabel(null, "Please choose a backup to restore", null)//
+					if (fromError)
+						content.addLabel(null, "Your configuration is missing or has been corrupted", null);
+					TimeUtils.RelativeTimeFormat durationFormat = TimeUtils.relativeFormat();
+					content.addLabel(null, "Please choose a backup to restore", null)//
 					.addTable(ObservableCollection.of(TypeTokens.get().of(Instant.class), backupTimes.reverse()), table -> {
-						table.fill().withColumn("Date", String.class, t -> dateFormat.format(t), col -> col.withWidths(100, 250, 500))//
+						table.fill()
+						.withColumn("Date", Instant.class, t -> t,
+							col -> col.formatText(PAST_DATE_FORMAT::format).withWidths(100, 250, 500))//
+						.withColumn("Age", Instant.class, t -> t,
+							col -> col.formatText(t -> durationFormat.print(t)).withWidths(100, 250, 500))//
 						.withSelection(selectedBackup, true);
 					}).addButton("Backup", __ -> {
+						isClosingWithoutSave = true;
 						try {
-							populate(config,
-								QommonsConfig.fromXml(QommonsConfig.getRootElement(backups.getBackup(selectedBackup.get()).read())));
+							backups.restore(selectedBackup.get());
+							if (config != null)
+								populate(config, QommonsConfig
+									.fromXml(QommonsConfig.getRootElement(backups.getBackup(selectedBackup.get()).read())));
 							backedUp[0] = true;
 						} catch (IOException e) {
 							e.printStackTrace();
+						} finally {
+							isCloseWithoutSaveEnabled = false;
 						}
 						frame[0].setVisible(false);
 					}, btn -> btn.disableWith(selectedBackup.map(t -> t == null ? "Select a Backup" : null)));
@@ -772,10 +762,12 @@ public class AppPopulation {
 							theErrorReportInstructions.accept(msg, true);
 							content.addLabel(null, ObservableValue.of(msg.toString()), Format.TEXT, null);
 						}
-						String msg = "<html>You may want to consider backing up your data file (" + theConfigFile.getPath() + ")";
-						if (isCloseWithoutSaveEnabled)
-							msg += "<br>" + " or closing the app without saving your changes (File->Close Without Save)";
-						content.addLabel(null, ObservableValue.of(msg), Format.TEXT, null);
+						if (theConfigFile != null) {
+							String msg = "<html>You may want to consider backing up your data file (" + theConfigFile.getPath() + ")";
+							if (isCloseWithoutSaveEnabled)
+								msg += "<br>" + " or closing the app without saving your changes (File->Close Without Save)";
+							content.addLabel(null, ObservableValue.of(msg), Format.TEXT, null);
+						}
 					}).run(getWindow());
 				} catch (IOException e) {
 					System.err.println("Could not write error output");
