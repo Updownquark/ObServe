@@ -33,11 +33,13 @@ public interface DependencyService<C> extends AutoCloseable {
 	ObservableSet<Service<?>> getServices();
 
 	/**
+	 * TODO
+	 * 
 	 * @return Whether this service has been initialized, meaning the initial set of components has completed loading. This affects whether
 	 *         components may have {@link DSComponent#getStage() stages} of {@link ComponentStage#Defined} and
 	 *         {@link ComponentStage#Satisfied}, as opposed to {@link ComponentStage#Unsatisfied} and {@link ComponentStage#Complete}.
 	 */
-	ObservableValue<Boolean> isInitialized();
+	ObservableValue<DependencyServiceStage> getStage();
 
 	/**
 	 * Schedules a task to run. Actions that involve injecting new components or changing availability of components cannot be performed as

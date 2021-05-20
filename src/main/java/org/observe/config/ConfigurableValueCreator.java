@@ -14,6 +14,17 @@ import org.qommons.collect.ElementId;
  */
 public interface ConfigurableValueCreator<E, E2 extends E> extends ValueCreator<E, E2> {
 	/**
+	 * A value that may be used with implementations of this class as placeholders for entity fields that have not been explicitly set by
+	 * the user
+	 */
+	public static final Object NOT_SET = new Object() {
+		@Override
+		public String toString() {
+			return "Not_Set";
+		}
+	};
+
+	/**
 	 * @return The {@link ConfiguredValueField#getIndex() indexes} of fields that must be set in this creator before the value can be
 	 *         created
 	 */

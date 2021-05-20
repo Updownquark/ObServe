@@ -24,7 +24,7 @@ package org.observe.ds;
 public enum ComponentStage {
 	/**
 	 * The component has been defined in the framework, but has some required dependencies that are not satisfied--initial stage, before the
-	 * initial set of components has been completely defined.
+	 * initial set of components has been completely defined and the service has been initialized.
 	 */
 	Defined,
 	/**
@@ -32,7 +32,8 @@ public enum ComponentStage {
 	 * themselves at least {@link #PreSatisfied pre-satisfied}. Required dynamic dependencies, if present, shall be satisfied shortly.
 	 *
 	 * Components that are pre-satisfied may be presented to components that are themselves {@link #Satisfied}, therefore any component with
-	 * dynamic dependencies that reaches this stage must behave and perform its essential capabilities before
+	 * dynamic dependencies that reaches this stage must behave and perform its essential capabilities before it is completely
+	 * {@link #Satisfied}.
 	 */
 	PreSatisfied,
 	/**
@@ -40,7 +41,10 @@ public enum ComponentStage {
 	 * pre-satisfied}. Dependencies with variable multiplicities may have additional providers added after this.
 	 */
 	Satisfied,
-	/** Same as {@link #Satisfied}, but after the initial set of components have been completely defined */
+	/**
+	 * Same as {@link #Satisfied}, but after the initial set of components have been completely defined and the service has finished
+	 * initializing
+	 */
 	Complete,
 	/** The component has unsatisfied required dependencies and the initial set of components has been completely defined */
 	Unsatisfied,

@@ -20,6 +20,7 @@ import org.observe.ds.DSComponent;
 import org.observe.ds.DSComponent.Builder;
 import org.observe.ds.Dependency;
 import org.observe.ds.DependencyService;
+import org.observe.ds.DependencyServiceStage;
 import org.observe.ds.Service;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
@@ -46,7 +47,7 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 
 	private final ListenerList<Runnable> theScheduledTasks;
 
-	private SettableValue<Boolean> isInitialized;
+	private SettableValue<DependencyServiceStage> theStage;
 
 	/** @param lock The lock to facilitate thread safety */
 	public DefaultDependencyService(Transactable lock) {
@@ -58,7 +59,8 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 		theServiceProviders = new LinkedHashMap<>();
 		theDependents = new LinkedHashMap<>();
 		theScheduledTasks = ListenerList.build().build();
-		isInitialized = SettableValue.build(boolean.class).withLock(new RRWLockingStrategy(lock)).withValue(false).build();
+		theStage = SettableValue.build(DependencyServiceStage.class).withLock(new RRWLockingStrategy(lock))
+			.withValue(DependencyServiceStage.Uninitialized).build();
 	}
 
 	@Override
@@ -79,21 +81,59 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 	}
 
 	@Override
-	public ObservableValue<Boolean> isInitialized() {
-		return isInitialized.unsettable();
+	public ObservableValue<DependencyServiceStage> getStage() {
+		return theStage.unsettable();
 	}
 
 	/** To be called after the initial round of components have been defined */
-	public void postInit() {
+	public void init() {
 		Causable cause = Causable.simpleCause(this);
 		try (Transaction causeT = cause.use(); Transaction t = theComponents.lock(true, cause)) {
-			if (isInitialized.get())
+			switch (theStage.get()) {
+			case Initialized:
 				throw new IllegalStateException("This service has already finished initializing");
+			case Initializing:
+				throw new IllegalStateException("Recursive init call");
+			default:
+				break;
+			}
 			if (isActivating)
-				throw new IllegalStateException(
-					"Component availability cannot be changed as a result of changes to the dependency service");
+				throw new IllegalStateException("Illegal initialization call inside activate");
+			theStage.set(DependencyServiceStage.Initializing, cause);
 			isActivating = true;
 			try {
+				BetterSet<DefaultDependency<C, ?>> componentPath = BetterHashSet.build().unsafe().buildSet();
+				boolean progress = true;
+				while (progress) {
+					progress = false;
+					for (DefaultComponent<C> comp : theComponents) {
+						if (comp.getStage().get() != ComponentStage.Defined)
+							continue;
+						boolean allSatisified = true;
+						for (Service<?> dep : comp.getDependencies().keySet()) {
+							for (DefaultComponent<C> provider : theServiceProviders.getOrDefault(dep, Collections.emptyList())) {
+								if (provider.getStage().get() == ComponentStage.Defined) {
+									allSatisified = false;
+									break;
+								}
+							}
+							if (!allSatisified)
+								break;
+						}
+						if (allSatisified) {
+							progress = true;
+							if (comp.preInit(cause))
+								satisfied(comp, componentPath, cause);
+						}
+					}
+				}
+				for (DefaultComponent<C> comp : theComponents) {
+					if (comp.getStage().get() == ComponentStage.Defined) {
+						if (comp.preInit(cause))
+							satisfied(comp, componentPath, cause);
+					}
+				}
+				theStage.set(DependencyServiceStage.PreInitialized, cause);
 				for (DefaultComponent<C> comp : theComponents) {
 					try {
 						if (!comp.isAvailable().get() || comp.getUnsatisfied() > 0)
@@ -105,10 +145,11 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 						e.printStackTrace();
 					}
 				}
-				isInitialized.set(true, null);
 			} finally {
 				isActivating = false;
 			}
+			runScheduledTasks();
+			theStage.set(DependencyServiceStage.Initialized, cause);
 		}
 	}
 
@@ -118,6 +159,18 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 			theScheduledTasks.add(task, true);
 		else
 			task.run();
+	}
+
+	private void runScheduledTasks() {
+		ListenerList.Element<Runnable> task = theScheduledTasks.poll(0);
+		while (task != null) {
+			try {
+				task.get().run();
+			} catch (RuntimeException e) {
+				e.printStackTrace();
+			}
+			task = theScheduledTasks.poll(0);
+		}
 	}
 
 	@Override
@@ -133,10 +186,12 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 	void built(DefaultComponent<C> component) {
 		Causable cause = Causable.simpleCause(component);
 		try (Transaction causeT = cause.use(); Transaction t = theComponents.lock(true, cause)) {
+			if (isActivating)
+				throw new IllegalStateException("Cannot inject components during initialization or activation");
 			theComponents.add(component);
 			if (component.isAvailable().get())
 				activate(component, cause);
-			if (isInitialized.get())
+			if (theStage.get() != DependencyServiceStage.Uninitialized)
 				component.setStage((!component.isAvailable().get() || component.getUnsatisfied() > 0) ? ComponentStage.Unsatisfied
 					: ComponentStage.Complete, cause);
 		}
@@ -163,10 +218,10 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 			for (DefaultDependency<C, ?> dep : (Collection<DefaultDependency<C, ?>>) component.getDependencies().values())
 				theDependents.computeIfAbsent(dep.getTarget(), __ -> new ArrayList<>()).add(dep);
 
-			boolean somethingSatisfied;
+			boolean somethingSatisfied = getStage().get() != DependencyServiceStage.Uninitialized;
 			BetterSet<DefaultDependency<C, ?>> componentPath = BetterHashSet.build().unsafe().buildSet();
 			boolean wasSatisfied = false;
-			do {
+			while (somethingSatisfied) {
 				somethingSatisfied = false;
 				// Attempt to satisfy the component's dependencies with satisfied provider components
 				for (DefaultDependency<C, ?> dep : (Collection<DefaultDependency<C, ?>>) component.getDependencies().values()) {
@@ -190,19 +245,11 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 						satisfied(component, componentPath, cause);
 					}
 				}
-			} while (somethingSatisfied);
+			}
 		} finally {
 			isActivating = false;
 		}
-		ListenerList.Element<Runnable> task = theScheduledTasks.poll(0);
-		while (task != null) {
-			try {
-				task.get().run();
-			} catch (RuntimeException e) {
-				e.printStackTrace();
-			}
-			task = theScheduledTasks.poll(0);
-		}
+		runScheduledTasks();
 	}
 
 	private boolean isInSatisfiedDynamicCycle(DefaultComponent<C> component, BetterSet<DefaultDependency<C, ?>> componentPath) {
@@ -255,7 +302,7 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 				if (dep.satisfy(component, cause)) {
 					somethingSatisfied = true;
 				}
-				if (!wasActive) {
+				if (!wasActive && getStage().get() != DependencyServiceStage.Uninitialized) {
 					if (dep.getRealOwner().getUnsatisfied() == 0)
 						satisfied(dep.getRealOwner(), componentPath, cause);
 					else if (dep.getRealOwner().getUnsatisfied() == dep.getRealOwner().getDynamicUnsatisfied()
@@ -299,7 +346,9 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 				boolean wasSatisfied = dep.getRealOwner().getUnsatisfied() == 0;
 				if (dep.remove(component, cause) && wasSatisfied && dep.getRealOwner().getUnsatisfied() > 0) {
 					unsatisfied(dep.getRealOwner(), cause);
-					dep.getRealOwner().setStage(isInitialized.get() ? ComponentStage.Unsatisfied : ComponentStage.Defined, cause);
+					dep.getRealOwner().setStage(
+						theStage.get() == DependencyServiceStage.Uninitialized ? ComponentStage.Defined : ComponentStage.Unsatisfied,
+							cause);
 				}
 			}
 		}

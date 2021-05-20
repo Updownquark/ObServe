@@ -12,6 +12,7 @@ import org.observe.ds.ComponentStage;
 import org.observe.ds.DSComponent;
 import org.observe.ds.Dependency;
 import org.observe.ds.DependencyService;
+import org.observe.ds.DependencyServiceStage;
 import org.observe.ds.Service;
 import org.qommons.Causable;
 import org.qommons.Transaction;
@@ -157,10 +158,19 @@ class DefaultComponent<C> implements ComponentController<C> {
 					theDynamicUnsatisfied++;
 			}
 		}
-		if (available && theUnsatisfied == 0)
-			setStage(theService.isInitialized().get() ? ComponentStage.Complete : ComponentStage.Satisfied, null);
+		if (!available)
+			setStage(ComponentStage.Unsatisfied, null);
+		else if (theService.getStage().get() == DependencyServiceStage.Uninitialized)
+			setStage(ComponentStage.Defined, null);
 		else
-			setStage(theService.isInitialized().get() ? ComponentStage.Unsatisfied : ComponentStage.Defined, null);
+			setStage(theUnsatisfied == 0 ? ComponentStage.Complete : ComponentStage.Unsatisfied, null);
+	}
+
+	boolean preInit(Object cause) {
+		if (!isAvailable.get())
+			return false;
+		setStage(theUnsatisfied == 0 ? ComponentStage.Satisfied : ComponentStage.Unsatisfied, cause);
+		return theUnsatisfied == 0;
 	}
 
 	@Override
@@ -211,7 +221,7 @@ class DefaultComponent<C> implements ComponentController<C> {
 			if (dynamic)
 				theDynamicUnsatisfied--;
 			if (theUnsatisfied == 0)
-				setStage(theService.isInitialized().get() ? ComponentStage.Complete : ComponentStage.Satisfied, cause);
+				nowSatisfied(cause);
 		} else {
 			theUnsatisfied++;
 			if (dynamic)
@@ -225,7 +235,22 @@ class DefaultComponent<C> implements ComponentController<C> {
 
 	void dependencyModified(Object cause) {
 		if (theUnsatisfied == 0)
-			setStage(theService.isInitialized().get() ? ComponentStage.Complete : ComponentStage.Satisfied, cause);
+			nowSatisfied(cause);
+	}
+
+	void nowSatisfied(Object cause) {
+		switch (theService.getStage().get()) {
+		case Uninitialized:
+			break;
+		case Initializing:
+		case PreInitialized:
+			if (getStage().get() != ComponentStage.Defined)
+				setStage(ComponentStage.Satisfied, cause);
+			break;
+		case Initialized:
+			setStage(ComponentStage.Complete, cause);
+			break;
+		}
 	}
 
 	static class DefaultComponentWrapper<C> implements DSComponent<C> {
