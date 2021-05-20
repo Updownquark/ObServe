@@ -277,6 +277,11 @@ public class ObservableFile implements BetterFile {
 	}
 
 	@Override
+	public StringBuilder toUrl(StringBuilder str) {
+		return theFile.toUrl(str);
+	}
+
+	@Override
 	public int hashCode() {
 		return theFile.hashCode();
 	}
