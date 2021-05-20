@@ -38,7 +38,7 @@ public class ObservableConfigTest {
 	@Before
 	public void initConfig() {
 		theConfig = ObservableConfig.createRoot("root");
-		theEncoding = new XmlEncoding(":x", ":xx", " ", "blah", "test");
+		theEncoding = XmlEncoding.DEFAULT;
 	}
 
 	/**
@@ -62,7 +62,7 @@ public class ObservableConfigTest {
 		Assert.assertEquals("config", theConfig.getName());
 		Assert.assertEquals("root", theConfig.get("rootAttr"));
 		Assert.assertEquals("This is some\ntext", theConfig.get("element2"));
-		Assert.assertEquals("\n", theConfig.get("elemenblaht3"));
+		Assert.assertEquals("\n", theConfig.get("element3"));
 		Assert.assertEquals("", theConfig.get("element4"));
 	}
 
@@ -470,7 +470,7 @@ public class ObservableConfigTest {
 	public void superTest() throws IOException, SAXException {
 		TestHelper.createTester(ObservableConfigSuperTester.class)//
 		.revisitKnownFailures(true).withFailurePersistence(true)//
-		.withPlacemarks("modify").withRandomCases(100).withMaxFailures(1)//
+		.withPlacemarks("modify").withRandomCases(100).withMaxFailures(1).withMaxCaseDuration(Duration.ofSeconds(10))//
 		.withDebug(BreakpointHere.isDebugEnabled() != null)//
 		.execute().throwErrorIfFailed();
 	}
@@ -486,7 +486,7 @@ public class ObservableConfigTest {
 		private final ObservableCollectionTester<TestEntity2> tester2;
 
 		public ObservableConfigSuperTester() {
-			theEncoding = new XmlEncoding(":x", ":xx", " ", "blah", "test");
+			theEncoding = XmlEncoding.DEFAULT;
 			// Use unsafe locking for performance--we're not doing anything thread-unsafe here
 			theConfig = ObservableConfig.createRoot("test", null, __ -> new FastFailLockingStrategy());
 			try {
@@ -529,6 +529,8 @@ public class ObservableConfigTest {
 
 				try (Transaction t = theConfig.lock(true, null)) {
 					helper.doAction(1, () -> { // Add element
+						if (helper.isReproducing())
+							System.out.println("\tAdd entity");
 						int index = helper.getInt(0, testEntities.getValues().size());
 						ElementId after = index == 0 ? null : testEntities.getValues().getElement(index - 1).getElementId();
 						String randomString = randomString(helper);
@@ -543,12 +545,16 @@ public class ObservableConfigTest {
 					}).or(1, () -> { // Remove element
 						if (testEntities.getValues().isEmpty())
 							return;
+						if (helper.isReproducing())
+							System.out.println("\tRemove entity");
 						int index = helper.getInt(0, testEntities.getValues().size() - 1);
 						testEntities.getValues().remove(index);
 						((TestEntity2Tester) expected.remove(index)).dispose();
 					}).or(1, () -> {// Modify text
 						if (testEntities.getValues().isEmpty())
 							return;
+						if (helper.isReproducing())
+							System.out.println("\tModify text");
 						int index = helper.getInt(0, testEntities.getValues().size() - 1);
 						TestEntity2 modify = testEntities.getValues().get(index);
 						String randomString = randomString(helper);
@@ -558,6 +564,8 @@ public class ObservableConfigTest {
 					}).or(1, () -> {// Modify entity field.d
 						if (testEntities.getValues().isEmpty())
 							return;
+						if (helper.isReproducing())
+							System.out.println("\tModify d");
 						int index = helper.getInt(0, testEntities.getValues().size() - 1);
 						TestEntity2 modify = testEntities.getValues().get(index);
 						int newD = helper.getAnyInt();
@@ -567,6 +575,8 @@ public class ObservableConfigTest {
 					}).or(1, () -> {// Add text
 						if (testEntities.getValues().isEmpty())
 							return;
+						if (helper.isReproducing())
+							System.out.println("\tAdd text");
 						int index = helper.getInt(0, testEntities.getValues().size() - 1);
 						TestEntity2 modify = testEntities.getValues().get(index);
 						int textIndex = helper.getInt(0, modify.getTexts().size());
@@ -577,6 +587,8 @@ public class ObservableConfigTest {
 					}).or(1, () -> {// Remove text
 						if (testEntities.getValues().isEmpty())
 							return;
+						if (helper.isReproducing())
+							System.out.println("\tRemove text");
 						int index = helper.getInt(0, testEntities.getValues().size() - 1);
 						TestEntity2 modify = testEntities.getValues().get(index);
 						if (modify.getTexts().isEmpty())
@@ -587,6 +599,8 @@ public class ObservableConfigTest {
 					}).or(1, () -> {// Update text
 						if (testEntities.getValues().isEmpty())
 							return;
+						if (helper.isReproducing())
+							System.out.println("\tUpdate text");
 						int index = helper.getInt(0, testEntities.getValues().size() - 1);
 						TestEntity2 modify = testEntities.getValues().get(index);
 						if (modify.getTexts().isEmpty())
@@ -599,6 +613,8 @@ public class ObservableConfigTest {
 					}).or(1, () -> {// Add listed entity
 						if (testEntities.getValues().isEmpty())
 							return;
+						if (helper.isReproducing())
+							System.out.println("\tAdd listed");
 						int index = helper.getInt(0, testEntities.getValues().size() - 1);
 						TestEntity2 modify = testEntities.getValues().get(index);
 						int leIndex = helper.getInt(0, modify.getListedEntities().getValues().size());
@@ -625,6 +641,8 @@ public class ObservableConfigTest {
 					}).or(1, () -> {// Remove listed entity
 						if (testEntities.getValues().isEmpty())
 							return;
+						if (helper.isReproducing())
+							System.out.println("\tRemove listed");
 						int index = helper.getInt(0, testEntities.getValues().size() - 1);
 						TestEntity2 modify = testEntities.getValues().get(index);
 						if (modify.getListedEntities().getValues().isEmpty())
@@ -639,6 +657,8 @@ public class ObservableConfigTest {
 						TestEntity2 modify = testEntities.getValues().get(index);
 						if (modify.getListedEntities().getValues().isEmpty())
 							return;
+						if (helper.isReproducing())
+							System.out.println("\tRemove listed");
 						int leIndex = helper.getInt(0, modify.getListedEntities().getValues().size() - 1);
 						int newE = helper.getAnyInt();
 						modify.getListedEntities().getValues().get(leIndex).setE(newE);
@@ -651,6 +671,8 @@ public class ObservableConfigTest {
 						TestEntity2 modify = testEntities.getValues().get(index);
 						if (modify.getListedEntities().getValues().isEmpty())
 							return;
+						if (helper.isReproducing())
+							System.out.println("\tModify listed.x");
 						int leIndex = helper.getInt(0, modify.getListedEntities().getValues().size() - 1);
 						double newX = helper.getAnyDouble();
 						TestEntity4 listedEntity = modify.getListedEntities().getValues().get(leIndex);
@@ -675,6 +697,8 @@ public class ObservableConfigTest {
 						int leIndex = helper.getInt(0, modify.getListedEntities().getValues().size() - 1);
 						if (!(modify.getListedEntities().getValues().get(leIndex) instanceof TestEntity5))
 							return;
+						if (helper.isReproducing())
+							System.out.println("\tModify listed.f");
 						double newF = helper.getAnyDouble();
 						((TestEntity5) modify.getListedEntities().getValues().get(leIndex)).setF(newF);
 						if (!checkEquals(newF, ((TestEntity5) modify.getListedEntities().getValues().get(leIndex)).getF()))
@@ -682,14 +706,13 @@ public class ObservableConfigTest {
 								newF * 1E-12);
 						((TestEntity5) expected.get(index).getListedEntities().getValues().get(leIndex)).setF(newF);
 					}).or(.05, () -> { // Persist/depersist
+						if (helper.isReproducing())
+							System.out.println("\tPersist/depersist");
 						StringWriter writer = new StringWriter();
 						try {
 							ObservableConfig.writeXml(theConfig, writer, theEncoding, "\t");
 							theConfig.getAllContent().getValues().clear();
 							ObservableConfig.readXml(theConfig, new ByteArrayInputStream(writer.toString().getBytes("UTF-8")), theEncoding);
-							// Some edge whitespace information may be lost
-							for (TestEntity2 te2tester : expected)
-								((TestEntity2Tester) te2tester).trim();
 						} catch (IOException | SAXException e) {
 							throw new IllegalStateException(e);
 						}
@@ -860,11 +883,12 @@ public class ObservableConfigTest {
 
 		@Override
 		public String toString() {
-			StringBuilder str = new StringBuilder("TestEntity2: ");
+			StringBuilder str = new StringBuilder("TestEntity2{");
 			str.append("entityField=").append(theEntityField).append(", ");
 			str.append("listedEntities=").append(theListedEntities).append(", ");
 			str.append("text=").append(theText).append(", ");
 			str.append("texts=").append(theTexts);
+			str.append('}');
 			return str.toString();
 		}
 
@@ -946,7 +970,7 @@ public class ObservableConfigTest {
 
 			@Override
 			public String toString() {
-				return "TestEntity3: d=" + theD;
+				return "TestEntity3{d=" + theD + "}";
 			}
 		};
 	}
@@ -999,7 +1023,7 @@ public class ObservableConfigTest {
 
 			@Override
 			public String toString() {
-				return "TestEntity4: e=" + theE + ", x=" + theX;
+				return "TestEntity4{e=" + theE + ", x=" + theX + "}";
 			}
 		};
 		class TestEntity5Tester extends TestEntity4Tester implements TestEntity5 {
@@ -1030,7 +1054,7 @@ public class ObservableConfigTest {
 
 			@Override
 			public String toString() {
-				return "TestEntity5: e=" + getE() + ", f=" + theF;
+				return "TestEntity5{e=" + getE() + ", f=" + theF + "}";
 			}
 		}
 		return entity instanceof TestEntity5 ? new TestEntity5Tester() : new TestEntity4Tester();
@@ -1048,7 +1072,7 @@ public class ObservableConfigTest {
 			if (diff < 1E-200) { // Differences between tiny numbers can't be treated the same way
 				if (diff > Math.abs(d1))
 					return false;
-			} else if (diff > Math.abs(d1) * 1E-12)
+			} else if (diff > Math.abs(d1) * 1E-10)
 				return false;
 		}
 		return true;

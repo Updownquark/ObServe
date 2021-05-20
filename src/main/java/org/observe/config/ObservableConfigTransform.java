@@ -55,8 +55,8 @@ import com.google.common.reflect.TypeToken;
 
 /** A super class for observable structures backed by an {@link ObservableConfig} */
 public abstract class ObservableConfigTransform implements Transactable, Stamped {
+	private final Transactable theLock;
 	private final ObservableConfigParseSession theSession;
-	private final ObservableConfig theRoot;
 	private final ObservableValue<? extends ObservableConfig> theParent;
 	private final Runnable theParentCreate;
 	private final Observable<?> theUntil;
@@ -67,16 +67,16 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 	private ObservableValue<Boolean> isConnected;
 
 	/**
+	 * @param lock The lock to power this structure's transactionality
 	 * @param session The session with which to associate config-backed values
-	 * @param root The root config to parse under
 	 * @param parent The parent config backing the structure
 	 * @param ceCreate Creates the parent config if it does not exist
 	 * @param until The until observable to release resources and listeners for config-backed structures
 	 */
-	public ObservableConfigTransform(ObservableConfigParseSession session, ObservableConfig root,
+	public ObservableConfigTransform(Transactable lock, ObservableConfigParseSession session,
 		ObservableValue<? extends ObservableConfig> parent, Runnable ceCreate, Observable<?> until) {
+		theLock = lock;
 		theSession = session;
-		theRoot = root;
 		theParent = parent;
 		theParentCreate = ceCreate;
 		if (until == null) {
@@ -129,14 +129,14 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		return isConnected;
 	}
 
+	/** @return The lock powering this structure's transactionality */
+	protected Transactable getLock() {
+		return theLock;
+	}
+
 	/** @return The session with which this structure and its elements are associated in the config structure */
 	public ObservableConfigParseSession getSession() {
 		return theSession;
-	}
-
-	/** @return The root config under which this structure is parsed */
-	protected ObservableConfig getRoot() {
-		return theRoot;
 	}
 
 	/** Increments this structure's stamp, indicating that it has changed */
@@ -158,11 +158,12 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		if (!createIfAbsent && parentAction == null) {
 			return theParent.get();
 		}
-		Transaction parentLock = theRoot.lock(createIfAbsent, null);
+		Transaction parentLock = lock(createIfAbsent, null);
 		try {
 			ObservableConfig parent = theParent.get();
 			while (parent == null && createIfAbsent) {
-				parentLock.close();
+				if (parentLock != null)
+					parentLock.close();
 				parentLock = null;
 				theParentCreate.run();
 				parent = theParent.get();
@@ -188,12 +189,12 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 
 	@Override
 	public Transaction lock(boolean write, Object cause) {
-		return theRoot.lock(write, cause);
+		return theLock.lock(write, cause);
 	}
 
 	@Override
 	public Transaction tryLock(boolean write, Object cause) {
-		return theRoot.tryLock(write, cause);
+		return theLock.tryLock(write, cause);
 	}
 
 	@Override
@@ -231,10 +232,10 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		private Object theIdentity;
 		private Object theChangesIdentity;
 
-		ObservableConfigValue(ObservableConfigParseSession session, ObservableConfig root,
+		ObservableConfigValue(Transactable lock, ObservableConfigParseSession session,
 			ObservableValue<? extends ObservableConfig> parent, Runnable ceCreate, Observable<?> until, TypeToken<E> type,
 			ObservableConfigFormat<E> format, boolean listen, Observable<?> findRefs) {
-			super(session, root, parent, ceCreate, until);
+			super(lock, session, parent, ceCreate, until);
 			theType = type;
 			theFormat = format;
 
@@ -345,8 +346,9 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 			if (!isSetting) {
 				E oldValue = theValue;
 				try {
-					theValue = theFormat.parse(ObservableConfigFormat.ctxFor(getSession(), parent, getParent(), () -> getParent(true, null),
-						null, getUntil(), theValue, findRefs, v -> theValue = v));
+					theValue = theFormat
+						.parse(ObservableConfigFormat.ctxFor(getLock(), getSession(), getParent(), () -> getParent(true, null),
+							null, getUntil(), theValue, findRefs, v -> theValue = v));
 				} catch (ParseException e) {
 					e.printStackTrace();
 					theValue = null;
@@ -361,7 +363,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 			E oldValue = theValue;
 			if (!theModifyingValue.isPresent()) {
 				try {
-					theValue = theFormat.parse(ObservableConfigFormat.ctxFor(getSession(), getRoot(), getParent(),
+					theValue = theFormat.parse(ObservableConfigFormat.ctxFor(getLock(), getSession(), getParent(),
 						() -> getParent(true, null), parentChange, getUntil(), theValue, Observable.constant(null), null));
 					fire(createChangeEvent(oldValue, theValue, parentChange));
 				} catch (ParseException e) {
@@ -414,10 +416,10 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		Consumer<? super ConfigElement> thePreAddAction;
 		E theMovingValue;
 
-		ObservableConfigBackedCollection(ObservableConfigParseSession session, ObservableConfig root,
+		ObservableConfigBackedCollection(Transactable lock, ObservableConfigParseSession session,
 			ObservableValue<? extends ObservableConfig> collectionElement, Runnable ceCreate, TypeToken<E> type,
 			ObservableConfigFormat<E> format, String childName, Observable<?> until, boolean listen, Observable<?> findRefs) {
-			super(session, root, collectionElement, ceCreate, until);
+			super(lock, session, collectionElement, ceCreate, until);
 			theType = type;
 			theFormat = format;
 			theChildName = childName;
@@ -500,7 +502,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 						} else {
 							ObservableConfigEvent childChange = collectionChange.asFromChild();
 							try (Transaction ct = childChange.use()) {
-								newValue = theFormat.parse(ObservableConfigFormat.ctxFor(getSession(), getRoot(), //
+								newValue = theFormat.parse(ObservableConfigFormat.ctxFor(getLock(), getSession(), //
 									ObservableValue.of(el.get().getConfig()), () -> collectionChange.eventTarget.addChild(theChildName),
 									childChange, getUntil(), el.get().get(), Observable.constant(null), null));
 							}
@@ -635,7 +637,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 					E val;
 
 					try {
-						val = theFormat.parse(ObservableConfigFormat.ctxFor(getSession(), getRoot(), //
+						val = theFormat.parse(ObservableConfigFormat.ctxFor(getLock(), getSession(), //
 							ObservableValue.of(this.theConfig), () -> this.theConfig.getParent().addChild(theChildName), null,
 							Observable.or(getUntil(), theElementObservable), theMovingValue, findRefs, this::_set));
 						theMovingValue = null;
@@ -935,10 +937,10 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 	static class ObservableConfigValues<E> extends ObservableCollectionWrapper<E> {
 		private final Backing<E> theBacking;
 
-		ObservableConfigValues(ObservableConfigParseSession session, ObservableConfig root,
+		ObservableConfigValues(Transactable lock, ObservableConfigParseSession session,
 			ObservableValue<? extends ObservableConfig> collectionElement, Runnable ceCreate, TypeToken<E> type,
 			ObservableConfigFormat<E> format, String childName, Observable<?> until, boolean listen, Observable<?> findRefs) {
-			theBacking = new Backing<>(session, root, collectionElement, ceCreate, type, format, childName, until, listen, findRefs);
+			theBacking = new Backing<>(lock, session, collectionElement, ceCreate, type, format, childName, until, listen, findRefs);
 
 			init(theBacking.getCollection());
 		}
@@ -952,10 +954,10 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		}
 
 		static class Backing<E> extends ObservableConfigBackedCollection<E> {
-			Backing(ObservableConfigParseSession session, ObservableConfig root,
+			Backing(Transactable lock, ObservableConfigParseSession session,
 				ObservableValue<? extends ObservableConfig> collectionElement, Runnable ceCreate, TypeToken<E> type,
 				ObservableConfigFormat<E> format, String childName, Observable<?> until, boolean listen, Observable<?> findRefs) {
-				super(session, root, collectionElement, ceCreate, type, format, childName, until, listen, findRefs);
+				super(lock, session, collectionElement, ceCreate, type, format, childName, until, listen, findRefs);
 			}
 
 			@Override
@@ -1028,14 +1030,14 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 
 	/**
 	 * A config-backed {@link SyncValueSet} implementation
-	 * 
+	 *
 	 * @param <E> The type of value in the set
 	 */
 	static class ObservableConfigEntityValues<E> extends ObservableConfigBackedCollection<E> implements SyncValueSet<E> {
-		ObservableConfigEntityValues(ObservableConfigParseSession session, ObservableConfig root,
+		ObservableConfigEntityValues(Transactable lock, ObservableConfigParseSession session,
 			ObservableValue<? extends ObservableConfig> collectionElement, Runnable ceCreate, EntityConfigFormat<E> format,
 			String childName, Observable<?> until, boolean listen, Observable<?> findRefs) {
-			super(session, root, collectionElement, ceCreate, format.getEntityType().getType(), format, childName, until, listen, findRefs);
+			super(lock, session, collectionElement, ceCreate, format.getEntityType().getType(), format, childName, until, listen, findRefs);
 		}
 
 		@Override
@@ -1148,7 +1150,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 
 	/**
 	 * A config-backed {@link ObservableMap} implementation
-	 * 
+	 *
 	 * @param <K> The key type of the map
 	 * @param <V> The value type of the map
 	 */
@@ -1156,11 +1158,11 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		private final ObservableConfigValues<MapEntry<K, V>> theCollection;
 		private ObservableMap<K, V> theWrapped;
 
-		ObservableConfigMap(ObservableConfigParseSession session, ObservableConfig root,
+		ObservableConfigMap(Transactable lock, ObservableConfigParseSession session,
 			ObservableValue<? extends ObservableConfig> collectionElement, Runnable ceCreate, String keyName, String valueName,
 			TypeToken<K> keyType, TypeToken<V> valueType, ObservableConfigFormat<K> keyFormat, ObservableConfigFormat<V> valueFormat,
 			Observable<?> until, boolean listen, Observable<?> findRefs) {
-			theCollection = new ObservableConfigValues<>(session, root, collectionElement, ceCreate,
+			theCollection = new ObservableConfigValues<>(lock, session, collectionElement, ceCreate,
 				TypeTokens.get().keyFor(MapEntry.class).<MapEntry<K, V>> parameterized(keyType, valueType), //
 				new Impl.EntryFormat<>(true, keyName, valueName, keyType, valueType, keyFormat, valueFormat), valueName,
 				until, listen, findRefs);
@@ -1274,7 +1276,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 
 	/**
 	 * A config-backed {@link ObservableMultiMap} implementation
-	 * 
+	 *
 	 * @param <K> The key type of the map
 	 * @param <V> The value type of the map
 	 */
@@ -1282,11 +1284,11 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		private final ObservableConfigValues<MapEntry<K, V>> theCollection;
 		private ObservableMultiMap<K, V> theWrapped;
 
-		ObservableConfigMultiMap(ObservableConfigParseSession session, ObservableConfig root,
+		ObservableConfigMultiMap(Transactable lock, ObservableConfigParseSession session,
 			ObservableValue<? extends ObservableConfig> collectionElement, Runnable ceCreate, String keyName, String valueName,
 			TypeToken<K> keyType, TypeToken<V> valueType, ObservableConfigFormat<K> keyFormat, ObservableConfigFormat<V> valueFormat,
 			Observable<?> until, boolean listen, Observable<?> findRefs) {
-			theCollection = new ObservableConfigValues<>(session, root, collectionElement, ceCreate,
+			theCollection = new ObservableConfigValues<>(lock, session, collectionElement, ceCreate,
 				TypeTokens.get().keyFor(MapEntry.class).<MapEntry<K, V>> parameterized(keyType, valueType), //
 				new Impl.EntryFormat<>(true, keyName, valueName, keyType, valueType, keyFormat, valueFormat), valueName,
 				until, listen, findRefs);

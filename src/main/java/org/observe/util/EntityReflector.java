@@ -2002,7 +2002,7 @@ public class EntityReflector<E> {
 						}
 					}
 					String fieldName = theGetterFilter.apply(m);
-					ReflectedField<? super E, ?> field = fieldName == null ? null : fields.get(fieldName);
+					ReflectedField<? super E, ?> field = fieldName == null ? null : fields.getIfPresent(fieldName);
 					if (field != null)
 						method = new CachedFieldGetter<>(this, m, (ReflectedField<E, ?>) field, handle);
 					else {
@@ -2248,6 +2248,14 @@ public class EntityReflector<E> {
 	 */
 	public boolean isIdentifiable() {
 		return isIdentifiable;
+	}
+
+	/**
+	 * @param value The value to test
+	 * @return Whether the given value is an instance of this class
+	 */
+	public boolean isInstance(E value) {
+		return value != null && Proxy.isProxyClass(value.getClass()) && getReflector(value) == this;
 	}
 
 	/** @return All of this reflector's method interpreters */

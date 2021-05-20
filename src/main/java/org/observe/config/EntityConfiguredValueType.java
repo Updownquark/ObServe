@@ -74,6 +74,14 @@ public class EntityConfiguredValueType<E> implements ConfiguredValueType<E> {
 	}
 
 	/**
+	 * @param value The value to test
+	 * @return Whether the value is an instance of this entity type
+	 */
+	public boolean isInstance(E value) {
+		return theReflector.isInstance(value);
+	}
+
+	/**
 	 * @param subType The type token of the sub type to get
 	 * @return The entity type extending this of the given type
 	 */

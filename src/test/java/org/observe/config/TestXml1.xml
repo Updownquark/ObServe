@@ -5,6 +5,6 @@
 	<element2 attr2="attr2Value">
 		This is some&#10;text
 	</element2>
-	<elemen:xtestt3>&#10;</elemen:xtestt3>
-	<element4> </element4>
+	<element3>__&#10;__</element3>
+	<element4>__</element4>
 </config>

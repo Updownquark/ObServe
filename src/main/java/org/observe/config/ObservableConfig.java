@@ -15,6 +15,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -53,6 +54,9 @@ import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.BetterSortedMap;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.CollectionLockingStrategy;
+import org.qommons.collect.CollectionUtils;
+import org.qommons.collect.CollectionUtils.ElementSyncAction;
+import org.qommons.collect.CollectionUtils.ElementSyncInput;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MapEntryHandle;
 import org.qommons.ex.ExFunction;
@@ -532,8 +536,8 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 		 * @return The context
 		 */
 		protected ObservableConfigFormat.ObservableConfigParseContext<T> getParseContext(Observable<?> until, Observable<?> findRefs) {
-			return ObservableConfigFormat.ctxFor(getSession(), theConfig, getDescendant(false),
-				createDescendant(false)::get, null, until, null, findRefs, null);
+			return ObservableConfigFormat.ctxFor(theConfig, getSession(), getDescendant(false), createDescendant(false)::get, null, until,
+				null, findRefs, null);
 		}
 
 		/**
@@ -604,7 +608,7 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 		 */
 		public SettableValue<T> buildValue(Consumer<SettableValue<T>> preReturnGet) {
 			return build(
-				findRefs -> new ObservableConfigTransform.ObservableConfigValue<>(getSession(), theConfig,
+				findRefs -> new ObservableConfigTransform.ObservableConfigValue<>(theConfig, getSession(),
 					getDescendant(false), createDescendant(false)::get, getUntil(), theType, getFormat(), true, findRefs),
 				preReturnGet);
 		}
@@ -616,7 +620,7 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 		 * @return The built value
 		 */
 		public ObservableCollection<T> buildCollection(Consumer<ObservableCollection<T>> preReturnGet) {
-			return build(findRefs -> new ObservableConfigTransform.ObservableConfigValues<>(getSession(), theConfig, //
+			return build(findRefs -> new ObservableConfigTransform.ObservableConfigValues<>(theConfig, getSession(), //
 				getDescendant(thePath != null), createDescendant(thePath != null)::get, theType, getFormat(), getChildName(), getUntil(),
 				true, findRefs), preReturnGet);
 		}
@@ -631,7 +635,7 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 			ObservableConfigFormat<T> entityFormat = getFormat();
 			if (!(entityFormat instanceof ObservableConfigFormat.EntityConfigFormat))
 				throw new IllegalStateException("Format for " + theType + " is not entity-enabled");
-			return build(findRefs -> new ObservableConfigTransform.ObservableConfigEntityValues<>(getSession(), theConfig, //
+			return build(findRefs -> new ObservableConfigTransform.ObservableConfigEntityValues<>(theConfig, getSession(), //
 				getDescendant(thePath != null), createDescendant(thePath != null)::get,
 				(ObservableConfigFormat.EntityConfigFormat<T>) entityFormat, getChildName(), getUntil(), true, findRefs), preReturnGet);
 		}
@@ -772,9 +776,8 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 		 */
 		public ObservableMap<K, V> buildMap(Consumer<ObservableMap<K, V>> preReturnGet) {
 			return theValueBuilder.build(
-				findRefs -> new ObservableConfigTransform.ObservableConfigMap<>(new ObservableConfigParseSession(),
-					theValueBuilder.getConfig(), //
-					theValueBuilder.getDescendant(true), theValueBuilder.createDescendant(true)::get, //
+				findRefs -> new ObservableConfigTransform.ObservableConfigMap<>(theValueBuilder.getConfig(),
+					new ObservableConfigParseSession(), theValueBuilder.getDescendant(true), theValueBuilder.createDescendant(true)::get, //
 					getKeyName(), theValueBuilder.getChildName(), theKeyType, theValueBuilder.theType, getKeyFormat(),
 					theValueBuilder.getFormat(), theValueBuilder.getUntil(), true, findRefs),
 				preReturnGet);
@@ -788,9 +791,8 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 		 */
 		public ObservableMultiMap<K, V> buildMultiMap(Consumer<ObservableMultiMap<K, V>> preReturnGet) {
 			return theValueBuilder
-				.build(findRefs -> new ObservableConfigTransform.ObservableConfigMultiMap<>(new ObservableConfigParseSession(),
-					theValueBuilder.getConfig(), //
-					theValueBuilder.getDescendant(true), theValueBuilder.createDescendant(true)::get, //
+				.build(findRefs -> new ObservableConfigTransform.ObservableConfigMultiMap<>(theValueBuilder.getConfig(),
+					new ObservableConfigParseSession(), theValueBuilder.getDescendant(true), theValueBuilder.createDescendant(true)::get, //
 					getKeyName(), theValueBuilder.getChildName(), theKeyType, theValueBuilder.theType, getKeyFormat(),
 					theValueBuilder.getFormat(), theValueBuilder.getUntil(), true, findRefs), preReturnGet);
 		}
@@ -1232,32 +1234,42 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 		}
 
 		/**
-		 * @param xmlName The XML element or attribute name to decode
-		 * @return The decoded config element name
+		 * @param xmlText The XML element name, attribute name, or element text content to decode
+		 * @param name Whether the text represents an element or attribute name in XML
+		 * @param element Whether the text represents an element's name or text content
+		 * @return The decoded text
 		 */
-		public String decode(String xmlName) {
-			if (emptyContent.equals(xmlName))
+		public String decode(String xmlText, boolean name, boolean element) {
+			if ((name || element) && emptyContent.equals(xmlText))
 				return "";
-			int len = xmlName.length() - Math.min(encodingPrefix.length(), encodingReplacement.length());
+			if (element && !name) {
+				if (xmlText.isEmpty())
+					return null;
+				if (xmlText.startsWith(emptyContent))
+					xmlText = xmlText.substring(emptyContent.length());
+				if (xmlText.endsWith(emptyContent))
+					xmlText = xmlText.substring(0, xmlText.length() - emptyContent.length());
+			}
+			int len = xmlText.length() - Math.min(encodingPrefix.length(), encodingReplacement.length());
 			int c;
 			for (c = 0; c < len; c++) {
-				if (matches(xmlName, encodingReplacement, c)//
-					|| matches(xmlName, encodingPrefix, c))
+				if (matches(xmlText, encodingReplacement, c)//
+					|| matches(xmlText, encodingPrefix, c))
 					break;
 			}
 			if (c == len)
-				return xmlName;
+				return xmlText;
 
-			str.append(xmlName, 0, c);
+			str.append(xmlText, 0, c);
 			for (; c < len; c++) {
-				if (matches(xmlName, encodingReplacement, c)) {
+				if (matches(xmlText, encodingReplacement, c)) {
 					str.append(encodingPrefix);
 					c += encodingReplacement.length() - 1;
-				} else if (matches(xmlName, encodingPrefix, c)) {
+				} else if (matches(xmlText, encodingPrefix, c)) {
 					c += encodingPrefix.length();
 					boolean found = false;
 					for (Map.Entry<String, String> replacement : namedReplacements.entrySet()) {
-						if (matches(xmlName, replacement.getValue(), c)) {
+						if (matches(xmlText, replacement.getValue(), c)) {
 							str.append(replacement.getKey());
 							c += replacement.getValue().length() - 1;
 							found = true;
@@ -1267,10 +1279,10 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 					if (!found)
 						str.append(encodingPrefix);
 				} else {
-					str.append(xmlName.charAt(c));
+					str.append(xmlText.charAt(c));
 				}
 			}
-			str.append(xmlName, c, xmlName.length());
+			str.append(xmlText, c, xmlText.length());
 			String decoded = str.toString();
 			str.setLength(0);
 			return decoded;
@@ -1318,106 +1330,143 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 			throw new IllegalStateException(e);
 		}
 
-		try (Transaction t = config.lock(true, null)) {
-			parser.parse(in, new DefaultHandler() {
-				private boolean isRoot = true;
-				private final LinkedList<ObservableConfig> theStack = new LinkedList<>();
-				private final ArrayList<StringBuilder> theContentStack = new ArrayList<>();
-				private boolean hasContent;
-				private final StringBuilder theIgnorableContent = new StringBuilder();
+		class ParsedConfig {
+			final String name;
+			String value;
+			List<ParsedConfig> children;
 
-				@Override
-				public void startElement(String uri, String localName, String qName, Attributes attributes) throws SAXException {
-					theIgnorableContent.setLength(0);
-					hasContent = false;
+			ParsedConfig(String name) {
+				this.name = name;
+			}
 
-					ObservableConfig newConfig;
-					String name = encoding.decode((localName != null && localName.length() > 0) ? localName : qName);
-					if (isRoot) {
-						newConfig = config;
-						config.setName(name);
-						persistAttributes(config, attributes);
-						isRoot = false;
-					} else {
-						newConfig = theStack.getLast().addChild(name);
-						persistAttributes(newConfig, attributes);
-					}
-					theStack.add(newConfig);
-					if (theContentStack.size() < theStack.size())
-						theContentStack.add(new StringBuilder());
-				}
+			ParsedConfig addChild(String childName) {
+				ParsedConfig child = new ParsedConfig(childName);
+				if (children == null)
+					children = new ArrayList<>(5);
+				children.add(child);
+				return child;
+			}
 
-				private void persistAttributes(ObservableConfig cfg, Attributes attributes) {
-					for (int a = 0; a < attributes.getLength(); a++) {
-						String attName = attributes.getLocalName(a);
-						if (attName == null || attName.length() == 0)
-							attName = attributes.getQName(a);
-						cfg.set(encoding.decode(attName), encoding.decode(attributes.getValue(a)));
-					}
-				}
+			void set(String attributeName, String attributeValue) {
+				addChild(attributeName).value = attributeValue;
+			}
 
-				@Override
-				public void characters(char[] ch, int start, int length) throws SAXException {
-					StringBuilder content = theContentStack.get(theStack.size() - 1);
-					for (int i = 0; i < length; i++) {
-						char c = ch[start + i];
-						if (Character.isWhitespace(c)) {
-							if (!hasContent)
-								theIgnorableContent.append(c);
-						} else {
-							if (theIgnorableContent.length() > 0) {
-								if (content.length() > 0)
-									content.append(theIgnorableContent);
-								theIgnorableContent.setLength(0);
-							}
-							content.append(c);
+			void pushTo(ObservableConfig oc) {
+				if (!oc.getName().equals(name))
+					oc.setName(name);
+				if (!Objects.equals(oc.getValue(), value))
+					oc.setValue(value);
+				if (children != null) {
+					List<ObservableConfig> content = new ArrayList<>(oc.getContent().size());
+					content.addAll(oc.getContent());
+					CollectionUtils.synchronize(content, children, (c, pc) -> oc.getName().equals(pc.name))//
+					.adjust(new CollectionUtils.CollectionSynchronizer<ObservableConfig, ParsedConfig>() {
+						@Override
+						public boolean getOrder(ElementSyncInput<ObservableConfig, ParsedConfig> element) {
+							// Shouldn't be called, since all left-only elements are removed,
+							// but if it is, we want to remove the old config before we add the new one
+							return true;
 						}
-					}
-				}
 
-				@Override
-				public void ignorableWhitespace(char[] ch, int start, int length) throws SAXException {
-					// It seems this doesn't actually ever happen in practice, it just goes to the characters() method
-					// But this is what should happen if it is called
-					if (!hasContent)
-						theIgnorableContent.append(ch, start, length);
-				}
+						@Override
+						public ElementSyncAction leftOnly(ElementSyncInput<ObservableConfig, ParsedConfig> element) {
+							element.getLeftValue().remove();
+							return element.remove();
+						}
 
-				@Override
-				public void endElement(String uri, String localName, String qName) throws SAXException {
-					ObservableConfig cfg = theStack.removeLast();
-					StringBuilder content = theContentStack.get(theStack.size());
-					String contentStr;
-					if (!hasContent && content.length() == 0) { // If there's no content but there is whitespace, use it as the content
-						if (theIgnorableContent.length() > 0) {
-							contentStr = theIgnorableContent.toString();
-							theIgnorableContent.setLength(0);
-							if (contentStr.equals(encoding.emptyContent))
-								contentStr = ""; // No way to distinguish <el></el> from <el /> so this is the best we can do
-						} else
-							contentStr = null;
-					} else { // If there's actual content, ignore the whitespace
-						if (content.length() > 0) {
-							contentStr = content.toString();
-							content.setLength(0);
-						} else
-							contentStr = null;
-						theIgnorableContent.setLength(0);
-					}
-					if (encoding.emptyContent.equals(contentStr))
-						contentStr = null;
-					if (!Objects.equals(contentStr, cfg.getValue()))
-						cfg.setValue(contentStr);
-					hasContent = true;
+						@Override
+						public ElementSyncAction rightOnly(ElementSyncInput<ObservableConfig, ParsedConfig> element) {
+							return element.useValue(oc.addChild(element.getRightValue().name, element.getRightValue()::pushTo));
+						}
+
+						@Override
+						public ElementSyncAction common(ElementSyncInput<ObservableConfig, ParsedConfig> element) {
+							element.getRightValue().pushTo(element.getLeftValue());
+							return element.preserve();
+						}
+					}, CollectionUtils.AdjustmentOrder.RightOrder);
+					// To save memory, clear out the parsed config when we're done with it
+					children = null;
 				}
-			});
+			}
+		}
+		class ConfigParser extends DefaultHandler {
+			ParsedConfig theRoot;
+			private final LinkedList<ParsedConfig> theStack = new LinkedList<>();
+			private final ArrayList<StringBuilder> theContentStack = new ArrayList<>();
+			private final BitSet hasElementContent = new BitSet();
+
+			@Override
+			public void startElement(String uri, String localName, String qName, Attributes attributes) throws SAXException {
+				ParsedConfig newConfig;
+				String name = encoding.decode((localName != null && localName.length() > 0) ? localName : qName, true, true);
+				if (theRoot == null) {
+					theRoot = newConfig = new ParsedConfig(name);
+					persistAttributes(newConfig, attributes);
+				} else {
+					newConfig = theStack.getLast().addChild(name);
+					persistAttributes(newConfig, attributes);
+				}
+				theStack.add(newConfig);
+				if (theContentStack.size() < theStack.size())
+					theContentStack.add(new StringBuilder());
+				hasElementContent.set(theStack.size(), false);
+			}
+
+			private void persistAttributes(ParsedConfig cfg, Attributes attributes) {
+				for (int a = 0; a < attributes.getLength(); a++) {
+					String attName = attributes.getLocalName(a);
+					if (attName == null || attName.length() == 0)
+						attName = attributes.getQName(a);
+					cfg.set(encoding.decode(attName, true, false), encoding.decode(attributes.getValue(a), false, false));
+				}
+			}
+
+			@Override
+			public void characters(char[] ch, int start, int length) throws SAXException {
+				if (hasElementContent.get(theStack.size() - 1))
+					return; // We only pay attention to the first set of content
+				StringBuilder content = theContentStack.get(theStack.size() - 1);
+				for (int i = 0; i < length; i++) {
+					char c = ch[start + i];
+					if (content.length() > 0 || !Character.isWhitespace(c))
+						content.append(c);
+				}
+			}
+
+			@Override
+			public void ignorableWhitespace(char[] ch, int start, int length) throws SAXException {
+				// It seems this doesn't actually ever happen in practice, it just goes to the characters() method
+				// But this is what should happen if it is called
+				characters(ch, start, length);
+			}
+
+			@Override
+			public void endElement(String uri, String localName, String qName) throws SAXException {
+				ParsedConfig cfg = theStack.removeLast();
+				StringBuilder contentSB = theContentStack.get(theStack.size());
+				int i = contentSB.length() - 1;
+				while (i >= 0 && Character.isWhitespace(contentSB.charAt(i)))
+					i--;
+				String content = i < 0 ? "" : contentSB.substring(0, i + 1);
+				contentSB.setLength(0);
+				content = encoding.decode(content, false, true);
+				cfg.value = content;
+				if (!theStack.isEmpty())
+					hasElementContent.set(theStack.size() - 1, true);
+			}
+		}
+		ConfigParser handler = new ConfigParser();
+		parser.parse(in, handler);
+		try (Transaction t = config.lock(true, null)) {
+			handler.theRoot.pushTo(config);
 		}
 	}
 
 	/**
 	 * @param config The root config element to persist
 	 * @param out The writer to write the XML to
-	 * @param encoding The endcoding structure to determine how to write XML-incompatible names and values
+	 * @param encoding The encoding structure to determine how to write XML-incompatible names and values
 	 * @param indent The indent of each XML hierarchy level
 	 * @throws IOException If the writer throws an exception
 	 */
@@ -1435,12 +1484,14 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 		final BitSet childrenAsAttributes = new BitSet();
 		final StringBuilder escapeTemp = new StringBuilder();
 
-		String escapeXml(String xmlValue, XmlEncoding encoding) {
-			if (xmlValue.length() == 0)
+		String escapeXml(String xmlValue, XmlEncoding encoding, boolean element) {
+			if (element && xmlValue.length() == 0)
 				return encoding.emptyContent;
 			int c;
 			for (c = 0; c < xmlValue.length(); c++) {
 				char ch = xmlValue.charAt(c);
+				if (element && (c == 0 || c == xmlValue.length() - 1) && Character.isWhitespace(ch))
+					break;
 				if (ch == '<')
 					break;
 				else if (ch == '&')
@@ -1454,6 +1505,8 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 			}
 			if (c == xmlValue.length())
 				return xmlValue;
+			if (element && Character.isWhitespace(xmlValue.charAt(0)))
+				escapeTemp.append(encoding.emptyContent);
 			escapeTemp.append(xmlValue, 0, c);
 			for (; c < xmlValue.length(); c++) {
 				char ch = xmlValue.charAt(c);
@@ -1472,6 +1525,8 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 				} else
 					escapeTemp.append(ch);
 			}
+			if (element && Character.isWhitespace(xmlValue.charAt(xmlValue.length() - 1)))
+				escapeTemp.append(encoding.emptyContent);
 			String escaped = escapeTemp.toString();
 			escapeTemp.setLength(0);
 			return escaped;
@@ -1504,7 +1559,8 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 			if (!childrenAsAttributes.isEmpty()) {
 				for (i = childrenAsAttributes.nextSetBit(0); i >= 0; i = childrenAsAttributes.nextSetBit(i + 1)) {
 					ObservableConfig child = config.getContent().get(i);
-					out.append(' ').append(encoding.encode(child.getName())).append("=\"").append(escapeXml(child.getValue(), encoding))
+					out.append(' ').append(encoding.encode(child.getName())).append("=\"")
+					.append(escapeXml(child.getValue(), encoding, false))
 					.append('"');
 				}
 			}
@@ -1516,9 +1572,7 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 			} else {
 				out.append(">");
 				if (config.getValue() != null)
-					out.append(escapeXml(config.getValue(), encoding));
-				else
-					out.append(encoding.emptyContent);
+					out.append(escapeXml(config.getValue(), encoding, true));
 				if (withChildren) {
 					i = 0;
 					BitSet copy = (BitSet) childrenAsAttributes.clone();
