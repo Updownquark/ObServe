@@ -128,6 +128,14 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 			this.oldValue = oldValue;
 		}
 
+		/** @return The config that actually changed */
+		public ObservableConfig getChangeTarget() {
+			if (relativePath.isEmpty())
+				return eventTarget;
+			else
+				return relativePath.getLast();
+		}
+
 		/** @return A string representation of the path of the element that was added/removed/changed relative to the event target */
 		public String getRelativePathString() {
 			StringBuilder str = new StringBuilder();
@@ -512,9 +520,9 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 		 * @param parent Whether to create the parent of the descendant, or the actual descendant
 		 * @return A supplier that can create the parent or descendant if it does not exist
 		 */
-		protected Supplier<ObservableConfig> createDescendant(boolean parent) {
+		protected Function<Boolean, ObservableConfig> createDescendant(boolean parent) {
 			ObservableConfigPath path = parent ? thePath.getParent() : thePath;
-			return () -> theConfig.getChild(path, true, null);
+			return trivial -> theConfig.getChild(path, true, child -> child.setTrivial(trivial));
 		}
 
 		/** @return The name of the child element(s) to be created for this builder's data structure value */
@@ -536,8 +544,8 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 		 * @return The context
 		 */
 		protected ObservableConfigFormat.ObservableConfigParseContext<T> getParseContext(Observable<?> until, Observable<?> findRefs) {
-			return ObservableConfigFormat.ctxFor(theConfig, getSession(), getDescendant(false), createDescendant(false)::get, null, until,
-				null, findRefs, null);
+			return ObservableConfigFormat.ctxFor(theConfig, getSession(), getDescendant(false),
+				trivial -> createDescendant(false).apply(trivial), null, until, null, findRefs, null);
 		}
 
 		/**
@@ -609,7 +617,7 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 		public SettableValue<T> buildValue(Consumer<SettableValue<T>> preReturnGet) {
 			return build(
 				findRefs -> new ObservableConfigTransform.ObservableConfigValue<>(theConfig, getSession(),
-					getDescendant(false), createDescendant(false)::get, getUntil(), theType, getFormat(), true, findRefs),
+					getDescendant(false), createDescendant(false)::apply, getUntil(), theType, getFormat(), true, findRefs),
 				preReturnGet);
 		}
 
@@ -621,7 +629,7 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 		 */
 		public ObservableCollection<T> buildCollection(Consumer<ObservableCollection<T>> preReturnGet) {
 			return build(findRefs -> new ObservableConfigTransform.ObservableConfigValues<>(theConfig, getSession(), //
-				getDescendant(thePath != null), createDescendant(thePath != null)::get, theType, getFormat(), getChildName(), getUntil(),
+				getDescendant(thePath != null), createDescendant(thePath != null)::apply, theType, getFormat(), getChildName(), getUntil(),
 				true, findRefs), preReturnGet);
 		}
 
@@ -636,7 +644,7 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 			if (!(entityFormat instanceof ObservableConfigFormat.EntityConfigFormat))
 				throw new IllegalStateException("Format for " + theType + " is not entity-enabled");
 			return build(findRefs -> new ObservableConfigTransform.ObservableConfigEntityValues<>(theConfig, getSession(), //
-				getDescendant(thePath != null), createDescendant(thePath != null)::get,
+				getDescendant(thePath != null), createDescendant(thePath != null)::apply,
 				(ObservableConfigFormat.EntityConfigFormat<T>) entityFormat, getChildName(), getUntil(), true, findRefs), preReturnGet);
 		}
 
@@ -777,7 +785,7 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 		public ObservableMap<K, V> buildMap(Consumer<ObservableMap<K, V>> preReturnGet) {
 			return theValueBuilder.build(
 				findRefs -> new ObservableConfigTransform.ObservableConfigMap<>(theValueBuilder.getConfig(),
-					new ObservableConfigParseSession(), theValueBuilder.getDescendant(true), theValueBuilder.createDescendant(true)::get, //
+					new ObservableConfigParseSession(), theValueBuilder.getDescendant(true), theValueBuilder.createDescendant(true)::apply, //
 					getKeyName(), theValueBuilder.getChildName(), theKeyType, theValueBuilder.theType, getKeyFormat(),
 					theValueBuilder.getFormat(), theValueBuilder.getUntil(), true, findRefs),
 				preReturnGet);
@@ -792,7 +800,7 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 		public ObservableMultiMap<K, V> buildMultiMap(Consumer<ObservableMultiMap<K, V>> preReturnGet) {
 			return theValueBuilder
 				.build(findRefs -> new ObservableConfigTransform.ObservableConfigMultiMap<>(theValueBuilder.getConfig(),
-					new ObservableConfigParseSession(), theValueBuilder.getDescendant(true), theValueBuilder.createDescendant(true)::get, //
+					new ObservableConfigParseSession(), theValueBuilder.getDescendant(true), theValueBuilder.createDescendant(true)::apply, //
 					getKeyName(), theValueBuilder.getChildName(), theKeyType, theValueBuilder.theType, getKeyFormat(),
 					theValueBuilder.getFormat(), theValueBuilder.getUntil(), true, findRefs), preReturnGet);
 		}
@@ -926,19 +934,43 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 	@Override
 	ObservableConfig setName(String name);
 
+	/** @return Whether this config may be trivial if it has no non-trivial content */
 	boolean mayBeTrivial();
 
+	/**
+	 * @param mayBeTrivial Whether this config may be trivial if it has no non-trivial content
+	 * @return This config
+	 */
 	ObservableConfig setTrivial(boolean mayBeTrivial);
 
+	/**
+	 * <p>
+	 * Triviality conveys that a config's existence has no meaning to the format that created it.
+	 * </p>
+	 * <p>
+	 * It may be useful for a format to create a config in order to obtain information about its place in the parsed item hierarchy, but may
+	 * not store any information in the config, including its presence or absence.
+	 * </p>
+	 * <p>
+	 * A configuration is trivial if it has been marked as {@link #setTrivial(boolean) maybe trivial} AND if it has no value or non-trivial
+	 * content.
+	 * </p>
+	 * <p>
+	 * Trivial configs may be ignored by most anything that did not create them. They are not persisted by default.
+	 * </p>
+	 * 
+	 * @return Whether this config is trivial.
+	 */
 	default boolean isTrivial() {
 		if (!mayBeTrivial())
 			return false;
 		else if (getValue() != null)
 			return false;
-		else if (!getContent().isEmpty())
-			return false;
-		else
-			return true;
+		for (ObservableConfig child : getContent()) {
+			if (!child.isTrivial())
+				return false;
+		}
+		return true;
 	}
 
 	/**
@@ -1497,6 +1529,7 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 	class XmlWriteHelper {
 		final Map<String, Integer> attrNames = new HashMap<>();
 		final BitSet childrenAsAttributes = new BitSet();
+		final BitSet trivialChildren = new BitSet();
 		final StringBuilder escapeTemp = new StringBuilder();
 
 		String escapeXml(String xmlValue, XmlEncoding encoding, boolean element) {
@@ -1549,6 +1582,7 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 
 		private void _writeXml(ObservableConfig config, Writer out, XmlEncoding encoding, int indentAmount, String indentStr,
 			boolean withChildren) throws IOException {
+			trivialChildren.clear();
 			for (int i = 0; i < indentAmount; i++)
 				out.append(indentStr);
 			String xmlName = encoding.encode(config.getName());
@@ -1558,9 +1592,15 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 			String singular = StringUtils.singularize(config.getName());
 			int i = 0;
 			for (ObservableConfig child : config.getContent()) {
-				boolean maybeAttr = mayBeAttribute(child);
+				boolean trivial = child.isTrivial();
+				if (trivial) {
+					child.isTrivial();
+				}
+				boolean maybeAttr = !trivial & mayBeAttribute(child);
 				if (maybeAttr && child.getName().equals(singular))
 					maybeAttr = false;
+				if (trivial)
+					trivialChildren.set(i);
 				if (maybeAttr) {
 					Integer old = attrNames.put(child.getName(), i);
 					if (old == null)
@@ -1580,7 +1620,7 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 				}
 			}
 			if (withChildren)
-				withChildren = childrenAsAttributes.cardinality() < config.getContent().size();
+				withChildren = childrenAsAttributes.cardinality() + trivialChildren.cardinality() < config.getContent().size();
 			if (!withChildren && config.getValue() == null) {
 				out.append(" />");
 				childrenAsAttributes.clear();
@@ -1590,10 +1630,11 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 					out.append(escapeXml(config.getValue(), encoding, true));
 				if (withChildren) {
 					i = 0;
-					BitSet copy = (BitSet) childrenAsAttributes.clone();
+					BitSet ignoreContent = (BitSet) childrenAsAttributes.clone();
+					ignoreContent.or(trivialChildren);
 					childrenAsAttributes.clear();
 					for (ObservableConfig child : config.getContent()) {
-						if (!copy.get(i) && !child.isTrivial()) {
+						if (!ignoreContent.get(i)) {
 							out.append('\n');
 							_writeXml(child, out, encoding, indentAmount + 1, indentStr, true);
 						}
@@ -1611,11 +1652,15 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 
 		protected boolean mayBeAttribute(ObservableConfig config) {
 			String value = config.getValue();
-			if (value == null || value.length() == 0 || !config.getContent().isEmpty())
+			if (value == null || value.length() == 0)
 				return false;
-			for (int c = 0; c < value.length(); c++)
+			for (ObservableConfig child : config.getContent())
+				if (!child.isTrivial())
+					return false;
+			for (int c = 0; c < value.length(); c++) {
 				if (value.charAt(c) < ' ' || value.charAt(c) > '~')
 					return false;
+			}
 			return true;
 		}
 	}

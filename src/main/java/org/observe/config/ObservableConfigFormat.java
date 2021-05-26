@@ -11,7 +11,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.function.BiFunction;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -75,9 +74,10 @@ public interface ObservableConfigFormat<E> {
 	interface ConfigGetter {
 		/**
 		 * @param createIfAbsent Whether to create the config (and any required ancestors) if it is not present
+		 * @param trivial Whether to mark the config as trivial if it must be created for this call
 		 * @return The config, or null if it does not exist (and createIfAbsent is false)
 		 */
-		ObservableConfig getConfig(boolean createIfAbsent);
+		ObservableConfig getConfig(boolean createIfAbsent, boolean trivial);
 
 		/**
 		 * @param childName The name of the child
@@ -85,10 +85,10 @@ public interface ObservableConfigFormat<E> {
 		 */
 		default ConfigGetter forChild(String childName) {
 			ConfigGetter parent = this;
-			return createIfAbsent -> {
+			return (createIfAbsent, trivial) -> {
 				if (createIfAbsent)
-					return parent.getConfig(true).getChild(childName, true, null);
-				ObservableConfig config = parent.getConfig(false);
+					return parent.getConfig(true, trivial).getChild(childName, true, child -> child.setTrivial(trivial));
+				ObservableConfig config = parent.getConfig(false, false);
 				return config == null ? null : config.getChild(childName);
 			};
 		}
@@ -158,7 +158,7 @@ public interface ObservableConfigFormat<E> {
 		 * @return The new mapped context
 		 */
 		<V> ObservableConfigParseContext<V> map(ObservableValue<? extends ObservableConfig> config,
-			Supplier<? extends ObservableConfig> create, ObservableConfigEvent change, V previousValue, Consumer<V> delayedAccept);
+			Function<Boolean, ? extends ObservableConfig> create, ObservableConfigEvent change, V previousValue, Consumer<V> delayedAccept);
 
 		/**
 		 * Creates a context with these settings but for a child element of this context's config
@@ -170,14 +170,14 @@ public interface ObservableConfigFormat<E> {
 		 * @param delayedAccept Will receive the new value after it is parsed
 		 * @return The new child context
 		 */
-		default <V> ObservableConfigParseContext<V> forChild(BiFunction<ObservableConfig, Boolean, ObservableConfig> child,
+		default <V> ObservableConfigParseContext<V> forChild(ConfigChildGetter child,
 			ObservableConfigEvent childChange, V previousValue, Consumer<V> delayedAccept) {
 			ObservableValue<? extends ObservableConfig> childConfig = getConfig().transform(ObservableConfig.class,
 				tx -> tx.cache(false).map(LambdaUtils.printableFn(c -> {
-					return child.apply(c, false);
+					return child.getChild(c, false, false);
 				}, child::toString, child)));
-			Supplier<? extends ObservableConfig> childCreate = LambdaUtils.printableSupplier(() -> {
-				return child.apply(getConfig(true), true);
+			Function<Boolean, ? extends ObservableConfig> childCreate = LambdaUtils.printableFn(trivial -> {
+				return child.getChild(getConfig(true, trivial), true, trivial);
 			}, () -> getConfig() + "." + child, null);
 			return map(childConfig, childCreate, childChange, previousValue, delayedAccept);
 		}
@@ -200,11 +200,11 @@ public interface ObservableConfigFormat<E> {
 				childChange = null;
 			else
 				childChange = getChange().asFromChild();
-			return forChild(LambdaUtils.printableBiFn((config, create) -> {
+			return forChild(new Impl.ConfigChildGetterWrapper((config, create, trivial) -> {
 				if (config == null && !create)
 					return null;
-				return config.getChild(childName, create, null);
-			}, childName, null), childChange, previousValue, delayedAccept);
+				return config.getChild(childName, create, child -> child.setTrivial(trivial));
+			}, () -> childName), childChange, previousValue, delayedAccept);
 		}
 
 		/**
@@ -217,7 +217,8 @@ public interface ObservableConfigFormat<E> {
 		 * @return The new child context
 		 */
 		default <V> ObservableConfigParseContext<V> forChild(ObservableConfig child, V previousValue, Consumer<V> delayedAccept) {
-			return forChild(LambdaUtils.constantBiFn(child, "child", null), null, previousValue, delayedAccept);
+			return forChild(new Impl.ConfigChildGetterWrapper((parent, create, trivial) -> child, () -> "child"), null, previousValue,
+				delayedAccept);
 		}
 
 		/**
@@ -228,6 +229,14 @@ public interface ObservableConfigFormat<E> {
 	}
 
 	/**
+	 * Used for creating {@link ObservableConfigParseContext#forChild(ConfigChildGetter, ObservableConfigEvent, Object, Consumer) mapped}
+	 * contexts
+	 */
+	interface ConfigChildGetter {
+		ObservableConfig getChild(ObservableConfig parent, boolean create, boolean trivial);
+	}
+
+	/**
 	 * Creates a context for config parsing
 	 *
 	 * @param <E> The type to parse
@@ -235,7 +244,8 @@ public interface ObservableConfigFormat<E> {
 	 * @param session The session to associate parsed values with
 	 * @param root The root config to parse under
 	 * @param config The dynamic config element to get information from
-	 * @param create Creates the target config if it does not exist
+	 * @param create Creates the target config if it does not exist. The argument is whether the new config should be trivial or not if it
+	 *        must be created.
 	 * @param change The config change event that is causing the need for re-parsing, or null if this is an initial parse request
 	 * @param until An observable that, when fired, will release all resources and listeners created by the parsing
 	 * @param previousValue The previous value associated with the config, or null for initial parsing
@@ -245,8 +255,8 @@ public interface ObservableConfigFormat<E> {
 	 * @return The context to pass to {@link #parse(ObservableConfigParseContext)}
 	 */
 	static <E> ObservableConfigParseContext<E> ctxFor(Transactable lock, ObservableConfigParseSession session,
-		ObservableValue<? extends ObservableConfig> config, Supplier<? extends ObservableConfig> create, ObservableConfigEvent change,
-		Observable<?> until, E previousValue, Observable<?> findReferences, Consumer<E> delayedAccept) {
+		ObservableValue<? extends ObservableConfig> config, Function<Boolean, ? extends ObservableConfig> create,
+		ObservableConfigEvent change, Observable<?> until, E previousValue, Observable<?> findReferences, Consumer<E> delayedAccept) {
 		return new Impl.DefaultOCParseContext<>(lock, session, config, create, change, until, previousValue, findReferences, delayedAccept);
 	}
 
@@ -836,10 +846,10 @@ public interface ObservableConfigFormat<E> {
 				Consumer<C> acceptedValue, Observable<?> until) {
 				// We don't support calling set on a field like this
 				// If this is from a copy event, we'll do the initial formatting
-				if (value != null && config.getConfig(false) == null) {
+				if (value != null && config.getConfig(false, true) == null) {
 					for (E v : value) {
-						ObservableConfig newChild = config.getConfig(true).addChild(childName);
-						elementFormat.format(session, v, null, __ -> newChild, __ -> {
+						ObservableConfig newChild = config.getConfig(true, true).addChild(childName);
+						elementFormat.format(session, v, null, (__, ___) -> newChild, __ -> {
 						}, until);
 					}
 				}
@@ -851,7 +861,8 @@ public interface ObservableConfigFormat<E> {
 			public C parse(ObservableConfigParseContext<C> ctx) throws ParseException {
 				if (ctx.getPreviousValue() == null) {
 					return (C) new ObservableConfigTransform.ObservableConfigValues<>(ctx.getLock(), ctx.getSession(), ctx.getConfig(),
-						() -> ctx.getConfig(true), elementType, elementFormat, childName, ctx.getUntil(), false, ctx.findReferences());
+						trivial -> ctx.getConfig(true, trivial), elementType, elementFormat, childName, ctx.getUntil(), false,
+						ctx.findReferences());
 				} else {
 					((ObservableConfigTransform.ObservableConfigValues<E>) ctx.getPreviousValue()).onChange(ctx.getChange());
 					return ctx.getPreviousValue();
@@ -880,10 +891,10 @@ public interface ObservableConfigFormat<E> {
 				Consumer<SyncValueSet<E>> acceptedValue, Observable<?> until) {
 				// We don't support calling set on a field like this
 				// In the case that the config is currently empty, this is trivial, and we'll support it for the sake of copying values
-				if (value != null && config.getConfig(false) == null) {
+				if (value != null && config.getConfig(false, true) == null) {
 					for (E v : value.getValues()) {
-						ObservableConfig newChild = config.getConfig(true).addChild(childName);
-						elementFormat.format(session, v, null, __ -> newChild, __ -> {
+						ObservableConfig newChild = config.getConfig(true, true).addChild(childName);
+						elementFormat.format(session, v, null, (__, ___) -> newChild, __ -> {
 						}, until);
 					}
 				}
@@ -895,7 +906,7 @@ public interface ObservableConfigFormat<E> {
 			public SyncValueSet<E> parse(ObservableConfigParseContext<SyncValueSet<E>> ctx) throws ParseException {
 				if (ctx.getPreviousValue() == null) {
 					return new ObservableConfigTransform.ObservableConfigEntityValues<>(ctx.getLock(), ctx.getSession(), ctx.getConfig(),
-						() -> ctx.getConfig(true), elementFormat, childName, ctx.getUntil(), false, ctx.findReferences());
+						trivial -> ctx.getConfig(true, trivial), elementFormat, childName, ctx.getUntil(), false, ctx.findReferences());
 				} else {
 					((ObservableConfigTransform.ObservableConfigEntityValues<E>) ctx.getPreviousValue()).onChange(ctx.getChange());
 					return ctx.getPreviousValue();
@@ -930,13 +941,13 @@ public interface ObservableConfigFormat<E> {
 				ConfigGetter config, Consumer<ObservableMap<K, V>> acceptedValue, Observable<?> until) throws IllegalArgumentException {
 				// We don't support calling set on a field like this
 				// In the case that the config is currently empty, this is trivial, and we'll support it for the sake of copying values
-				if (value != null && config.getConfig(false) == null) {
+				if (value != null && config.getConfig(false, true) == null) {
 					for (Map.Entry<K, V> entry : value.entrySet()) {
-						ObservableConfig newChild = config.getConfig(true).addChild(valueName);
+						ObservableConfig newChild = config.getConfig(true, true).addChild(valueName);
 						ObservableConfig keyChild = newChild.addChild(keyName);
-						keyFormat.format(session, entry.getKey(), null, __ -> keyChild, __ -> {
+						keyFormat.format(session, entry.getKey(), null, (__, ___) -> keyChild, __ -> {
 						}, until);
-						valueFormat.format(session, entry.getValue(), null, __ -> newChild, __ -> {
+						valueFormat.format(session, entry.getValue(), null, (__, ___) -> newChild, __ -> {
 						}, until);
 					}
 				}
@@ -948,8 +959,8 @@ public interface ObservableConfigFormat<E> {
 			public ObservableMap<K, V> parse(ObservableConfigParseContext<ObservableMap<K, V>> ctx) throws ParseException {
 				if (ctx.getPreviousValue() == null) {
 					return new ObservableConfigTransform.ObservableConfigMap<>(ctx.getLock(), ctx.getSession(), ctx.getConfig(),
-						() -> ctx.getConfig(true), keyName, valueName, keyType, valueType, keyFormat, valueFormat, ctx.getUntil(), false,
-						ctx.findReferences());
+						trivial -> ctx.getConfig(true, trivial), keyName, valueName, keyType, valueType, keyFormat, valueFormat,
+						ctx.getUntil(), false, ctx.findReferences());
 				} else {
 					((ObservableConfigTransform.ObservableConfigMap<K, V>) ctx.getPreviousValue()).onChange(ctx.getChange());
 					return ctx.getPreviousValue();
@@ -985,14 +996,14 @@ public interface ObservableConfigFormat<E> {
 					throws IllegalArgumentException {
 				// We don't support calling set on a field like this
 				// In the case that the config is currently empty, this is trivial, and we'll support it for the sake of copying values
-				if (value != null && config.getConfig(false) == null) {
+				if (value != null && config.getConfig(false, true) == null) {
 					for (MultiEntryHandle<K, V> entry : value.entrySet()) {
 						for (V v : entry.getValues()) {
-							ObservableConfig newChild = config.getConfig(true).addChild(valueName);
+							ObservableConfig newChild = config.getConfig(true, true).addChild(valueName);
 							ObservableConfig keyChild = newChild.addChild(keyName);
-							keyFormat.format(session, entry.getKey(), null, __ -> keyChild, __ -> {
+							keyFormat.format(session, entry.getKey(), null, (__, ___) -> keyChild, __ -> {
 							}, until);
-							valueFormat.format(session, v, null, __ -> newChild, __ -> {
+							valueFormat.format(session, v, null, (__, ___) -> newChild, __ -> {
 							}, until);
 						}
 					}
@@ -1004,8 +1015,8 @@ public interface ObservableConfigFormat<E> {
 			public ObservableMultiMap<K, V> parse(ObservableConfigParseContext<ObservableMultiMap<K, V>> ctx) throws ParseException {
 				if (ctx.getPreviousValue() == null) {
 					return new ObservableConfigTransform.ObservableConfigMultiMap<>(ctx.getLock(), ctx.getSession(), ctx.getConfig(),
-						() -> ctx.getConfig(true), keyName, valueName, keyType, valueType, keyFormat, valueFormat, ctx.getUntil(), false,
-						ctx.findReferences());
+						trivial -> ctx.getConfig(true, trivial), keyName, valueName, keyType, valueType, keyFormat, valueFormat,
+						ctx.getUntil(), false, ctx.findReferences());
 				} else {
 					((ObservableConfigTransform.ObservableConfigMultiMap<K, V>) ctx.getPreviousValue()).onChange(ctx.getChange());
 					return ctx.getPreviousValue();
@@ -1214,15 +1225,15 @@ public interface ObservableConfigFormat<E> {
 			if (value != null && format == null)
 				throw new IllegalArgumentException("No sub-format found for value " + value.getClass().getName() + " " + value);
 			if (value == null) {
-				if (config.getConfig(false) != null) {
-					config.getConfig(true).set("null", "true");
-					config.getConfig(true).getAllContent().getValues().clear();
+				if (config.getConfig(false, false) != null) {
+					config.getConfig(true, false).set("null", "true");
+					config.getConfig(true, false).getAllContent().getValues().clear();
 				}
 				acceptedValue.accept(null);
 				return;
 			} else {
-				config.getConfig(true).set("null", null);
-				format.moldConfig(config.getConfig(true));
+				config.getConfig(true, false).set("null", null);
+				format.moldConfig(config.getConfig(true, false));
 				((SubFormat<T>) format).format.format(session, value, format.applies(previousValue) ? previousValue : null, config,
 					acceptedValue, until);
 			}
@@ -1230,16 +1241,16 @@ public interface ObservableConfigFormat<E> {
 
 		@Override
 		public T parse(ObservableConfigParseContext<T> ctx) throws ParseException {
-			ObservableConfig c = ctx.getConfig(false);
+			ObservableConfig c = ctx.getConfig(false, false);
 			if (c == null || "true".equals(c.get("null")))
 				return null;
 			SubFormat<? extends T> format = formatFor(c);
 			if (format == null)
 				throw new ParseException("No sub-format found matching " + c, 0);
-			return ((SubFormat<T>) format).format.parse(ctx.forChild((config, create) -> {
+			return ((SubFormat<T>) format).format.parse(ctx.forChild((parent, create, trivial) -> {
 				if (create)
-					format.moldConfig(config);
-				return config;
+					format.moldConfig(parent);
+				return parent;
 			}, ctx.getChange(), format.applies(ctx.getPreviousValue()) ? ctx.getPreviousValue() : null, ctx::linkedReference));
 		}
 
@@ -1255,7 +1266,7 @@ public interface ObservableConfigFormat<E> {
 			private final Transactable theLock;
 			private final ObservableConfigParseSession theSession;
 			private final ObservableValue<? extends ObservableConfig> theConfig;
-			private final Supplier<? extends ObservableConfig> theCreate;
+			private final Function<Boolean, ? extends ObservableConfig> theCreate;
 			private final ObservableConfigEvent theChange;
 			private final Observable<?> theUntil;
 			private final E thePreviousValue;
@@ -1263,7 +1274,7 @@ public interface ObservableConfigFormat<E> {
 			private final Consumer<E> theDelayedAccept;
 
 			public DefaultOCParseContext(Transactable lock, ObservableConfigParseSession session,
-				ObservableValue<? extends ObservableConfig> config, Supplier<? extends ObservableConfig> create,
+				ObservableValue<? extends ObservableConfig> config, Function<Boolean, ? extends ObservableConfig> create,
 				ObservableConfigEvent change, Observable<?> until, E previousValue, Observable<?> findReferences,
 				Consumer<E> delayedAccept) {
 				theLock = lock;
@@ -1293,10 +1304,10 @@ public interface ObservableConfigFormat<E> {
 			}
 
 			@Override
-			public ObservableConfig getConfig(boolean createIfAbsent) {
+			public ObservableConfig getConfig(boolean createIfAbsent, boolean trivial) {
 				ObservableConfig c = theConfig.get();
 				if (c == null && createIfAbsent)
-					c = theCreate.get();
+					c = theCreate.apply(trivial);
 				return c;
 			}
 
@@ -1328,7 +1339,8 @@ public interface ObservableConfigFormat<E> {
 
 			@Override
 			public <V> ObservableConfigParseContext<V> map(ObservableValue<? extends ObservableConfig> config,
-				Supplier<? extends ObservableConfig> create, ObservableConfigEvent change, V previousValue, Consumer<V> delayedAccept) {
+				Function<Boolean, ? extends ObservableConfig> create, ObservableConfigEvent change, V previousValue,
+				Consumer<V> delayedAccept) {
 				return new DefaultOCParseContext<>(theLock, theSession, config, create, change, theUntil, previousValue, findReferences,
 					delayedAccept);
 			}
@@ -1337,6 +1349,43 @@ public interface ObservableConfigFormat<E> {
 			public ObservableConfigParseContext<E> withRefFinding(Observable<?> findRefs) {
 				return new DefaultOCParseContext<>(theLock, theSession, theConfig, theCreate, theChange, theUntil, thePreviousValue,
 					findRefs, theDelayedAccept);
+			}
+		}
+
+		static class ConfigChildGetterWrapper implements ConfigChildGetter {
+			private final ConfigChildGetter theWrapped;
+			private final Supplier<String> toString;
+
+			ConfigChildGetterWrapper(ConfigChildGetter wrapped, Supplier<String> toString) {
+				theWrapped = wrapped;
+				this.toString = toString;
+			}
+
+			@Override
+			public ObservableConfig getChild(ObservableConfig parent, boolean create, boolean trivial) {
+				return theWrapped.getChild(parent, create, trivial);
+			}
+
+			@Override
+			public int hashCode() {
+				return theWrapped.hashCode();
+			}
+
+			@Override
+			public boolean equals(Object obj) {
+				if (this == obj)
+					return true;
+				else if (obj instanceof ConfigChildGetterWrapper)
+					return equals(((ConfigChildGetterWrapper) obj).theWrapped);
+				else if (obj instanceof ConfigChildGetter)
+					return theWrapped.equals(obj);
+				else
+					return false;
+			}
+
+			@Override
+			public String toString() {
+				return toString.get();
 			}
 		}
 
@@ -1354,19 +1403,24 @@ public interface ObservableConfigFormat<E> {
 				Consumer<T> acceptedValue, Observable<?> until) {
 				acceptedValue.accept(value);
 				String formatted;
-				if (value == null)
-					formatted = null;
-				else if (value == ConfigurableValueCreator.NOT_SET)
+				if (value == ConfigurableValueCreator.NOT_SET) {
 					formatted = format.format(defaultValue == null ? null : defaultValue.get());
-				else
-					formatted = format.format(value);
-				if (!Objects.equals(formatted, config.getConfig(true).getValue()))
-					config.getConfig(true).setValue(formatted);
+					if (config.getConfig(false, true) != null)
+						config.getConfig(false, true).setTrivial(true);
+				} else {
+					config.getConfig(true, true);
+					if (value == null)
+						formatted = null;
+					else
+						formatted = format.format(value);
+				}
+				if (!Objects.equals(formatted, config.getConfig(true, false).getValue()))
+					config.getConfig(true, false).setValue(formatted);
 			}
 
 			@Override
 			public T parse(ObservableConfigParseContext<T> ctx) {
-				ObservableConfig config = ctx.getConfig(false);
+				ObservableConfig config = ctx.getConfig(false, false);
 				if (config == null)
 					return defaultValue == null ? null : defaultValue.get();
 				String value = config == null ? null : config.getValue();
@@ -1439,8 +1493,8 @@ public interface ObservableConfigFormat<E> {
 			public void format(ObservableConfigParseSession session, T value, T previousValue, ConfigGetter config,
 				Consumer<T> acceptedValue, Observable<?> until) throws IllegalArgumentException {
 				if (value == null) {
-					if (config.getConfig(false) != null) {
-						for (ObservableConfig child : config.getConfig(true).getContent()) {
+					if (config.getConfig(false, false) != null) {
+						for (ObservableConfig child : config.getConfig(true, false).getContent()) {
 							if (child.getName().equals("null")) {
 								child.setValue("true");
 								child.getAllContent().getValues().clear();
@@ -1451,7 +1505,7 @@ public interface ObservableConfigFormat<E> {
 					acceptedValue.accept(value);
 					return;
 				}
-				ObservableConfig nullConfig = config.getConfig(true).getChild("null");
+				ObservableConfig nullConfig = config.getConfig(true, false).getChild("null");
 				if (nullConfig != null)
 					nullConfig.remove();
 				boolean[] added = new boolean[1];
@@ -1459,7 +1513,7 @@ public interface ObservableConfigFormat<E> {
 					FormattedField<? super T, Object> field = (FormattedField<? super T, Object>) theFields.get(f);
 					Object fieldValue = field.field.apply(value);
 					Object preFieldValue = previousValue == null ? null : field.field.apply(previousValue);
-					ObservableConfig fieldConfig = config.getConfig(true).getChild(theFields.keySet().get(f), true, //
+					ObservableConfig fieldConfig = config.getConfig(true, false).getChild(theFields.keySet().get(f), true, //
 						child -> {
 							added[0] = true;
 							formatField(session, child, fieldValue, preFieldValue, field.format, until);
@@ -1468,18 +1522,18 @@ public interface ObservableConfigFormat<E> {
 						formatField(session, fieldConfig, fieldValue, preFieldValue, field.format, until);
 				}
 				acceptedValue.accept(value);
-				config.getConfig(true).withParsedItem(session, value);
+				config.getConfig(true, false).withParsedItem(session, value);
 			}
 
 			private <F> void formatField(ObservableConfigParseSession session, ObservableConfig child, F fieldValue, F preFieldValue,
 				ObservableConfigFormat<F> format, Observable<?> until) {
-				format.format(session, fieldValue, preFieldValue, __ -> child, f -> {
+				format.format(session, fieldValue, preFieldValue, (__, ___) -> child, f -> {
 				}, until);
 			}
 
 			@Override
 			public T parse(ObservableConfigParseContext<T> ctx) throws ParseException {
-				ObservableConfig c = ctx.getConfig(false);
+				ObservableConfig c = ctx.getConfig(false, false);
 				if (c == null || "true".equals(c.get("null")))
 					return null;
 				DelayedExecution<T> exec = new DelayedExecution<>();
@@ -1578,9 +1632,9 @@ public interface ObservableConfigFormat<E> {
 			public T parse(ObservableConfigParseContext<T> ctx) throws ParseException {
 				DelayedExecution<T> exec = new DelayedExecution<>();
 				// Even though this format doesn't persist anything, it needs the config to find the parent reference
-				ctx.getConfig(true).setTrivial(true);
+				ctx.getConfig(true, true).setTrivial(true);
 				ctx.findReferences().act(__ -> {
-					ObservableConfig parent = ctx.getConfig(false);
+					ObservableConfig parent = ctx.getConfig(true, true);
 					if (parent != null)
 						parent = parent.getParent();
 					while (parent != null) {
@@ -1616,10 +1670,14 @@ public interface ObservableConfigFormat<E> {
 			@Override
 			public void format(ObservableConfigParseSession session, Object value, Object previousValue, ConfigGetter config,
 				Consumer<Object> acceptedValue, Observable<?> until) throws IllegalArgumentException {
+				if (config.getConfig(false, true) != null)
+					config.getConfig(false, true).setTrivial(true);
 			}
 
 			@Override
 			public Object parse(ObservableConfigParseContext<Object> ctx) throws ParseException {
+				if (ctx.getConfig(false, true) != null)
+					ctx.getConfig(false, true).setTrivial(true);
 				return ctx.getPreviousValue();
 			}
 
@@ -1715,7 +1773,7 @@ public interface ObservableConfigFormat<E> {
 				Consumer<E> acceptedValue, Observable<?> until) {
 				if (value == null) {
 					acceptedValue.accept(null);
-					ObservableConfig c = config.getConfig(false);
+					ObservableConfig c = config.getConfig(false, false);
 					if (c != null) {
 						c.setName("null");
 						for (int i = 0; i < theFields.keySize(); i++) {
@@ -1732,7 +1790,7 @@ public interface ObservableConfigFormat<E> {
 						}
 					}
 				} else {
-					ObservableConfig c = config.getConfig(true);
+					ObservableConfig c = config.getConfig(true, false);
 					EntitySubFormat<? extends E> subFormat = formatFor(value);
 					if (subFormat != null) {
 						subFormat.moldConfig(c);
@@ -1754,7 +1812,7 @@ public interface ObservableConfigFormat<E> {
 
 			@Override
 			public E parse(ObservableConfigParseContext<E> ctx) throws ParseException {
-				ObservableConfig c = ctx.getConfig(false);
+				ObservableConfig c = ctx.getConfig(false, false);
 				if (c != null && "true".equalsIgnoreCase(c.get("null")))
 					return null;
 				else if (ctx.getPreviousValue() == null) {
@@ -1762,10 +1820,10 @@ public interface ObservableConfigFormat<E> {
 				} else {
 					EntitySubFormat<? extends E> subFormat = formatFor(c);
 					if (subFormat != null) {
-						return ((EntitySubFormat<E>) subFormat).format.parse(ctx.forChild((config, create) -> {
+						return ((EntitySubFormat<E>) subFormat).format.parse(ctx.forChild((parent, create, trivial) -> {
 							if (create)
-								subFormat.moldConfig(config);
-							return config;
+								subFormat.moldConfig(parent);
+							return parent;
 						}, ctx.getChange(), subFormat.applies(ctx.getPreviousValue()) ? ctx.getPreviousValue() : null,
 							ctx::linkedReference));
 					}
@@ -1841,7 +1899,7 @@ public interface ObservableConfigFormat<E> {
 						try {
 							SimpleObservable<Void> findRefs = SimpleObservable.build().safe(false).build();
 							E inst = createInstance(
-								ctxFor(config, session, ObservableValue.of(config), () -> config, null, until, null, findRefs, null),
+								ctxFor(config, session, ObservableValue.of(config), trivial -> config, null, until, null, findRefs, null),
 								theFieldValues.copy());
 							findRefs.onNext(null);
 							return inst;
@@ -1853,7 +1911,7 @@ public interface ObservableConfigFormat<E> {
 			}
 
 			E createInstance(ObservableConfigParseContext<E> ctx, QuickMap<String, Object> fieldValues) throws ParseException {
-				ObservableConfig config = ctx.getConfig(false);
+				ObservableConfig config = ctx.getConfig(false, false);
 				if (config != null) {
 					for (EntitySubFormat<? extends E> subFormat : theSubFormats) {
 						if (subFormat.configFilter.matches(config))
@@ -1879,9 +1937,9 @@ public interface ObservableConfigFormat<E> {
 						fieldValues.put(i, field.format.parse((ObservableConfigParseContext<Object>) fieldContext));
 					} else if (!field.format.isDefault(fieldValues.get(i))) {
 						if (config == null)
-							config = ctx.getConfig(true);
+							config = ctx.getConfig(true, false);
 						config.getChild(field.childName, true, fc -> {
-							field.format.format(ctx.getSession(), fieldValues.get(fi), null, cia -> fc, //
+							field.format.format(ctx.getSession(), fieldValues.get(fi), null, (cia, trivial) -> fc, //
 								v -> fieldValues.put(fi, v), ctx.getUntil());
 						});
 					}
@@ -1907,11 +1965,11 @@ public interface ObservableConfigFormat<E> {
 					} else {
 						fieldConfig = entityConfig.getChild(field.childName, true, fc -> {
 							added[0] = true;
-							field.format.format(session, fieldValue, fieldValue, __ -> fc, onFieldValue, until);
+							field.format.format(session, fieldValue, fieldValue, (__, ___) -> fc, onFieldValue, until);
 						});
 					}
 					if (!added[0])
-						field.format.format(session, fieldValue, fieldValue, __ -> fieldConfig, onFieldValue, until);
+						field.format.format(session, fieldValue, fieldValue, (__, ___) -> fieldConfig, onFieldValue, until);
 				} else {
 					ObservableConfig fieldConfig = entityConfig.getChild(field.childName);
 					if (fieldConfig != null)
@@ -2103,7 +2161,7 @@ public interface ObservableConfigFormat<E> {
 			@Override
 			protected E create(ObservableConfigParseContext<E> ctx, QuickMap<String, Object> fieldValues) {
 				if (!theEntityType.getIdFields().isEmpty()) {
-					ObservableConfig config = ctx.getConfig(false);
+					ObservableConfig config = ctx.getConfig(false, false);
 					if (config != null && !tryPopulateNewId(theEntityType, fieldValues, config, ctx.getSession()) && ctx != null) {
 						ctx.findReferences().act(__ -> {
 							tryPopulateNewId(theEntityType, fieldValues, config, ctx.getSession());
@@ -2122,7 +2180,7 @@ public interface ObservableConfigFormat<E> {
 						Object oldValue = fieldValues.get(fieldIndex);
 						fieldValues.put(fieldIndex, newValue);
 						formatField(ctx.getSession(), (E) created[0], (ComponentField<E, Object>) getFields().get(fieldIndex), oldValue,
-							newValue, ctx.getConfig(true), v -> fieldValues.put(fieldIndex, v), ctx.getUntil(), null);
+							newValue, ctx.getConfig(true, false), v -> fieldValues.put(fieldIndex, v), ctx.getUntil(), null);
 					}
 
 					@Override
@@ -2147,7 +2205,7 @@ public interface ObservableConfigFormat<E> {
 
 					@Override
 					public long getStamp(int fieldIndex) {
-						ObservableConfig config = ctx.getConfig(false);
+						ObservableConfig config = ctx.getConfig(false, false);
 						if (config == null)
 							return 0;
 						else if (getFields().get(fieldIndex).childName == null)
@@ -2171,7 +2229,7 @@ public interface ObservableConfigFormat<E> {
 					theEntityType.associate(instance, EntityConfigFormat.ENTITY_CONFIG_KEY, config);
 					theEntityType.associate(instance, "until", ctx.getUntil());
 				};
-				ObservableConfig config = ctx.getConfig(false);
+				ObservableConfig config = ctx.getConfig(false, false);
 				if (config != null)
 					register.accept(config);
 				else
@@ -2264,12 +2322,14 @@ public interface ObservableConfigFormat<E> {
 					return true; // The given value is fine
 				if (fieldType == int.class) {
 					((ObservableConfigFormat<Integer>) field.format).format(session, (int) id, //
-						(Integer) currentValue, cia -> config.getChild(field.childName, cia, null), __ -> {
+						(Integer) currentValue, (cia, trivial) -> config.getChild(field.childName, cia, child -> child.setTrivial(trivial)),
+						__ -> {
 						}, Observable.empty());
 					fieldValues.put(fieldIndex, (int) id);
 				} else {
 					((ObservableConfigFormat<Long>) field.format).format(session, id, //
-						(Long) currentValue, cia -> config.getChild(field.childName, cia, null), __ -> {
+						(Long) currentValue, (cia, trivial) -> config.getChild(field.childName, cia, child -> child.setTrivial(trivial)),
+						__ -> {
 						}, Observable.empty());
 					fieldValues.put(fieldIndex, id);
 				}

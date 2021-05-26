@@ -41,6 +41,7 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
+import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
 import org.observe.config.ObservableConfig;
 import org.observe.config.ObservableConfig.ObservableConfigPersistence;
@@ -379,7 +380,9 @@ public class AppPopulation {
 					}
 				};
 				Duration persistDelay = Duration.ofSeconds(2);
-				config.watch(ObservableConfigPath.buildPath(ObservableConfigPath.ANY_NAME).multi(true).build()).act(__ -> {
+				config.watch(ObservableConfigPath.buildPath(ObservableConfigPath.ANY_NAME).multi(true).build()).act(evt -> {
+					if (evt.changeType == CollectionChangeType.add && evt.getChangeTarget().isTrivial())
+						return;
 					persistenceQueued[0] = true;
 					timer.doAfterInactivity(key, () -> {
 						try {
@@ -451,7 +454,7 @@ public class AppPopulation {
 						} catch (IOException e) {
 							e.printStackTrace();
 						} finally {
-							isCloseWithoutSaveEnabled = false;
+							isClosingWithoutSave = false;
 						}
 						frame[0].setVisible(false);
 					}, btn -> btn.disableWith(selectedBackup.map(t -> t == null ? "Select a Backup" : null)));
