@@ -1,8 +1,5 @@
 package org.observe.ds.impl;
 
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.Reader;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -10,6 +7,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.observe.Observable;
@@ -19,18 +17,15 @@ import org.observe.collect.ObservableCollection;
 import org.observe.ds.ComponentController;
 import org.observe.ds.DSComponent;
 import org.observe.util.TypeTokens;
-import org.qommons.ArgumentParsing2;
 import org.qommons.Transactable;
 import org.qommons.collect.RRWLockingStrategy;
 import org.qommons.ex.CheckedExceptionWrapper;
-import org.qommons.io.BetterFile;
-import org.qommons.io.CsvParser;
-import org.qommons.io.TextParseException;
+import org.qommons.osgi.ComponentBasedExecutor;
 
 import com.google.common.reflect.Invokable;
 import com.google.common.reflect.TypeToken;
 
-public class AnnotatedDependencyService extends DefaultTypedDependencyService<Object> {
+public class AnnotatedDependencyService extends DefaultTypedDependencyService<Object> implements ComponentBasedExecutor {
 	static class ComponentMethod<T> {
 		private final Invokable<T, ?> theMethod;
 		private final boolean isConstructor;
@@ -200,6 +195,10 @@ public class AnnotatedDependencyService extends DefaultTypedDependencyService<Ob
 		}
 	}
 
+	public AnnotatedDependencyService() {
+		this(new RRWLockingStrategy(new ReentrantReadWriteLock(), "DS"));
+	}
+
 	public AnnotatedDependencyService(Transactable lock) {
 		super(lock);
 	}
@@ -210,6 +209,7 @@ public class AnnotatedDependencyService extends DefaultTypedDependencyService<Ob
 		return this;
 	}
 
+	@Override
 	public <T> ComponentController<Object> loadComponent(Class<T> componentType) {
 		ComponentMethod<T> constructor = null;
 		TypeToken<T> ct = TypeTokens.get().of(componentType);
@@ -231,7 +231,7 @@ public class AnnotatedDependencyService extends DefaultTypedDependencyService<Ob
 			builder.initiallyAvailable(true);
 		if (compAnn != null && compAnn.provides().length > 0) {
 			for (Class<?> service : compAnn.provides()) {
-				if (!service.isAssignableFrom(componentType)) 
+				if (!service.isAssignableFrom(componentType))
 					throw new IllegalArgumentException(componentType.getName()+" does not implement provided service "+service.getName());
 				provide(builder, service);
 			}
@@ -303,5 +303,21 @@ public class AnnotatedDependencyService extends DefaultTypedDependencyService<Ob
 			provide(builder, superC);
 		for (Class<?> intf : componentType.getInterfaces())
 			provide(builder, (Class<? super T>) intf);
+	}
+
+
+	@Override
+	public Object loadingComplete(Set<String> startComponents) {
+		if (!startComponents.isEmpty()) {
+			for (DefaultComponent<Object> component : getComponentControllers()) {
+				if (startComponents.contains(component.getName()))
+					component.setAvailable(true);
+			}
+		}
+		init();
+		String msg = printUnsatisfiedComponents();
+		if (msg != null)
+			System.out.println(msg);
+		return null;
 	}
 }

@@ -79,7 +79,7 @@ public class DSTesting {
 		Assert.assertEquals(ComponentStage.Satisfied, d.getStage().get());
 		Assert.assertEquals(ComponentStage.Satisfied, e.getStage().get());
 
-		dds.postInit();
+		dds.init();
 
 		Assert.assertEquals(ComponentStage.Complete, a.getStage().get());
 		Assert.assertEquals(ComponentStage.Complete, b.getStage().get());
@@ -144,7 +144,7 @@ public class DSTesting {
 
 			BetterSet<Dependency<String, ?>> path = BetterHashSet.build().unsafe().buildSet();
 			checkState(dds, false, path);
-			dds.postInit();
+			dds.init();
 			checkState(dds, true, path);
 
 			int ops = helper.getInt(10, 100);

@@ -6,6 +6,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -66,6 +67,11 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 	@Override
 	public Builder<C> inject(String componentName, Function<? super ComponentController<C>, ? extends C> component) {
 		return new DefaultComponentBuilder(componentName, component);
+	}
+
+	/** @return The controllers for all components in this service */
+	protected ObservableCollection<DefaultComponent<C>> getComponentControllers() {
+		return theComponents.flow().unmodifiable().collect();
 	}
 
 	@Override
@@ -151,6 +157,28 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 			runScheduledTasks();
 			theStage.set(DependencyServiceStage.Initialized, cause);
 		}
+	}
+
+	/** @return A message describing the status of all unsatisfied components in this service */
+	public String printUnsatisfiedComponents() {
+		StringBuilder str = new StringBuilder();
+		for (DSComponent<C> component : getComponents()) {
+			if (component.isAvailable().get() && !component.getStage().get().isActive()) {
+				str.append("Unsatisfied component: ").append(component.getName()).append('\n');
+				for (Entry<org.observe.ds.Service<?>, ? extends org.observe.ds.Dependency<C, ?>> dep : component.getDependencies()
+					.entrySet()) {
+					if (dep.getValue().getProviders().size() < dep.getValue().getMinimum()) {
+						str.append('\t').append(dep.getKey()).append(": ")//
+						.append(dep.getValue().getProviders().size()).append(" of ").append(dep.getValue().getMinimum()).append('\n');
+					}
+				}
+			}
+		}
+		if (str.length() == 0)
+			return null;
+		else if (str.charAt(str.length() - 1) == '\n')
+			str.deleteCharAt(str.length() - 1);
+		return str.toString();
 	}
 
 	@Override

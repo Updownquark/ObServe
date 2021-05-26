@@ -304,11 +304,11 @@ public class AppPopulation {
 				withMenuBar(mb -> mb.withMenu("File", menu -> menu.withAction("Backup...", __ -> {
 					restoreBackup(false, null, backups, () -> {
 						WindowPopulation.populateDialog(null, null, true)//
-							.withTitle("Backup Restored")//
-							.modal(true)//
-							.withVContent(content -> {
-								content.addLabel(null, "Please restart the " + getTitle(), null);
-							}).run(getWindow());
+						.withTitle("Backup Restored")//
+						.modal(true)//
+						.withVContent(content -> {
+							content.addLabel(null, "Please restart the " + getTitle(), null);
+						}).run(getWindow());
 						isClosingWithoutSave = true;
 						System.exit(0);
 					}, () -> {
@@ -326,6 +326,11 @@ public class AppPopulation {
 							theConfigInit.accept(config);
 						build2(config, configFile, backups, app);
 					});
+				} else {
+					config.setName(configName);
+					if (theConfigInit != null)
+						theConfigInit.accept(config);
+					build2(config, configFile, backups, app);
 				}
 			} else {
 				boolean[] printed = new boolean[1];
@@ -425,14 +430,15 @@ public class AppPopulation {
 				.withVContent(content -> {
 					if (fromError)
 						content.addLabel(null, "Your configuration is missing or has been corrupted", null);
-					TimeUtils.RelativeTimeFormat durationFormat = TimeUtils.relativeFormat();
+					TimeUtils.RelativeTimeFormat durationFormat = TimeUtils.relativeFormat()
+						.withMaxPrecision(TimeUtils.DurationComponentType.Second).withMaxElements(2).withMonthsAndYears();
 					content.addLabel(null, "Please choose a backup to restore", null)//
 					.addTable(ObservableCollection.of(TypeTokens.get().of(Instant.class), backupTimes.reverse()), table -> {
 						table.fill()
 						.withColumn("Date", Instant.class, t -> t,
-							col -> col.formatText(PAST_DATE_FORMAT::format).withWidths(100, 250, 500))//
+							col -> col.formatText(PAST_DATE_FORMAT::format).withWidths(80, 160, 500))//
 						.withColumn("Age", Instant.class, t -> t,
-							col -> col.formatText(t -> durationFormat.print(t)).withWidths(100, 250, 500))//
+							col -> col.formatText(t -> durationFormat.print(t)).withWidths(50, 90, 500))//
 						.withSelection(selectedBackup, true);
 					}).addButton("Backup", __ -> {
 						isClosingWithoutSave = true;
