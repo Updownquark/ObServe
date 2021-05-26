@@ -958,7 +958,7 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 	 * <p>
 	 * Trivial configs may be ignored by most anything that did not create them. They are not persisted by default.
 	 * </p>
-	 * 
+	 *
 	 * @return Whether this config is trivial.
 	 */
 	default boolean isTrivial() {
@@ -1652,7 +1652,8 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 
 		protected boolean mayBeAttribute(ObservableConfig config) {
 			String value = config.getValue();
-			if (value == null || value.length() == 0)
+			if (value == null || value.length() == 0//
+				|| value.length() > 100) // Keep attributes small
 				return false;
 			for (ObservableConfig child : config.getContent())
 				if (!child.isTrivial())
