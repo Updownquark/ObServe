@@ -28,7 +28,6 @@ import org.observe.assoc.ObservableMultiMap;
 import org.observe.collect.ObservableCollection;
 import org.observe.config.EntityConfiguredValueType.EntityConfiguredValueField;
 import org.observe.config.ObservableConfig.ObservableConfigEvent;
-import org.observe.config.ObservableConfigFormat.Impl.ReferenceFormat.FormattedField;
 import org.observe.config.ObservableConfigPath.ObservableConfigPathElement;
 import org.observe.config.ObservableConfigTransform.ObservableConfigMultiMap;
 import org.observe.util.EntityReflector;
@@ -287,7 +286,7 @@ public interface ObservableConfigFormat<E> {
 		private final Function<QuickMap<String, Object>, ? extends Iterable<? extends T>> theMultiRetriever;
 		private final Supplier<? extends T> theRetreiverDefault;
 		private BooleanSupplier isRetrieverReady;
-		private final Map<String, FormattedField<? super T, ?>> theFields;
+		private final Map<String, Impl.ReferenceFormat.FormattedField<? super T, ?>> theFields;
 
 		ReferenceFormatBuilder(Function<QuickMap<String, Object>, ? extends T> retriever) {
 			theRetriever = retriever;
@@ -314,7 +313,7 @@ public interface ObservableConfigFormat<E> {
 		 * @return This builder
 		 */
 		public <F> ReferenceFormatBuilder<T> withField(String childName, Function<? super T, F> field, ObservableConfigFormat<F> format) {
-			if (theFields.put(childName, new FormattedField<T, F>(field, format)) != null)
+			if (theFields.put(childName, new Impl.ReferenceFormat.FormattedField<T, F>(field, format)) != null)
 				throw new IllegalArgumentException("Multiple fields named " + childName + " are not supported");
 			return this;
 		}
@@ -330,8 +329,8 @@ public interface ObservableConfigFormat<E> {
 
 		/** @return The new reference format */
 		public ObservableConfigFormat<T> build() {
-			QuickMap<String, FormattedField<? super T, ?>> fields = QuickMap.of(theFields, StringUtils.DISTINCT_NUMBER_TOLERANT)
-				.unmodifiable();
+			QuickMap<String, Impl.ReferenceFormat.FormattedField<? super T, ?>> fields = QuickMap
+				.of(theFields, StringUtils.DISTINCT_NUMBER_TOLERANT).unmodifiable();
 			Function<QuickMap<String, Object>, ? extends T> retriever;
 			if (theRetriever != null)
 				retriever = theRetriever;
@@ -795,6 +794,7 @@ public interface ObservableConfigFormat<E> {
 
 	/**
 	 * Simple map entry value for formatting
+	 *
 	 * @param <K> The key type of the map entry
 	 * @param <V> the value type of the map entry
 	 */
@@ -839,7 +839,8 @@ public interface ObservableConfigFormat<E> {
 				if (value != null && config.getConfig(false) == null) {
 					for (E v : value) {
 						ObservableConfig newChild = config.getConfig(true).addChild(childName);
-						elementFormat.format(session, v, null, __ -> newChild, __ -> {}, until);
+						elementFormat.format(session, v, null, __ -> newChild, __ -> {
+						}, until);
 					}
 				}
 				// Otherwise, there's nothing to do
@@ -875,14 +876,15 @@ public interface ObservableConfigFormat<E> {
 	static <E> ObservableConfigFormat<SyncValueSet<E>> ofEntitySet(EntityConfigFormat<E> elementFormat, String childName) {
 		return new ObservableConfigFormat<SyncValueSet<E>>() {
 			@Override
-			public void format(ObservableConfigParseSession session, SyncValueSet<E> value, SyncValueSet<E> preValue,
-				ConfigGetter config, Consumer<SyncValueSet<E>> acceptedValue, Observable<?> until) {
+			public void format(ObservableConfigParseSession session, SyncValueSet<E> value, SyncValueSet<E> preValue, ConfigGetter config,
+				Consumer<SyncValueSet<E>> acceptedValue, Observable<?> until) {
 				// We don't support calling set on a field like this
 				// In the case that the config is currently empty, this is trivial, and we'll support it for the sake of copying values
 				if (value != null && config.getConfig(false) == null) {
 					for (E v : value.getValues()) {
 						ObservableConfig newChild = config.getConfig(true).addChild(childName);
-						elementFormat.format(session, v, null, __ -> newChild, __ -> {}, until);
+						elementFormat.format(session, v, null, __ -> newChild, __ -> {
+						}, until);
 					}
 				}
 				// Otherwise, there's nothing to do
@@ -932,8 +934,10 @@ public interface ObservableConfigFormat<E> {
 					for (Map.Entry<K, V> entry : value.entrySet()) {
 						ObservableConfig newChild = config.getConfig(true).addChild(valueName);
 						ObservableConfig keyChild = newChild.addChild(keyName);
-						keyFormat.format(session, entry.getKey(), null, __ -> keyChild, __ -> {}, until);
-						valueFormat.format(session, entry.getValue(), null, __ -> newChild, __ -> {}, until);
+						keyFormat.format(session, entry.getKey(), null, __ -> keyChild, __ -> {
+						}, until);
+						valueFormat.format(session, entry.getValue(), null, __ -> newChild, __ -> {
+						}, until);
 					}
 				}
 				// Otherwise, there's nothing to do
@@ -986,8 +990,10 @@ public interface ObservableConfigFormat<E> {
 						for (V v : entry.getValues()) {
 							ObservableConfig newChild = config.getConfig(true).addChild(valueName);
 							ObservableConfig keyChild = newChild.addChild(keyName);
-							keyFormat.format(session, entry.getKey(), null, __ -> keyChild, __ -> {}, until);
-							valueFormat.format(session, v, null, __ -> newChild, __ -> {}, until);
+							keyFormat.format(session, entry.getKey(), null, __ -> keyChild, __ -> {
+							}, until);
+							valueFormat.format(session, v, null, __ -> newChild, __ -> {
+							}, until);
 						}
 					}
 				}
@@ -1202,8 +1208,8 @@ public interface ObservableConfigFormat<E> {
 		}
 
 		@Override
-		public void format(ObservableConfigParseSession session, T value, T previousValue, ConfigGetter config,
-			Consumer<T> acceptedValue, Observable<?> until) throws IllegalArgumentException {
+		public void format(ObservableConfigParseSession session, T value, T previousValue, ConfigGetter config, Consumer<T> acceptedValue,
+			Observable<?> until) throws IllegalArgumentException {
 			SubFormat<? extends T> format = formatFor(value);
 			if (value != null && format == null)
 				throw new IllegalArgumentException("No sub-format found for value " + value.getClass().getName() + " " + value);
@@ -1244,8 +1250,8 @@ public interface ObservableConfigFormat<E> {
 	}
 
 	/** Implementations used by static factory methods in {@link ObservableConfigFormat} */
-	static class Impl{
-		static class DefaultOCParseContext<E> implements ObservableConfigFormat.ObservableConfigParseContext<E> {
+	static class Impl {
+		static class DefaultOCParseContext<E> implements ObservableConfigParseContext<E> {
 			private final Transactable theLock;
 			private final ObservableConfigParseSession theSession;
 			private final ObservableValue<? extends ObservableConfig> theConfig;
@@ -1321,14 +1327,14 @@ public interface ObservableConfigFormat<E> {
 			}
 
 			@Override
-			public <V> ObservableConfigFormat.ObservableConfigParseContext<V> map(ObservableValue<? extends ObservableConfig> config,
+			public <V> ObservableConfigParseContext<V> map(ObservableValue<? extends ObservableConfig> config,
 				Supplier<? extends ObservableConfig> create, ObservableConfigEvent change, V previousValue, Consumer<V> delayedAccept) {
 				return new DefaultOCParseContext<>(theLock, theSession, config, create, change, theUntil, previousValue, findReferences,
 					delayedAccept);
 			}
 
 			@Override
-			public ObservableConfigFormat.ObservableConfigParseContext<E> withRefFinding(Observable<?> findRefs) {
+			public ObservableConfigParseContext<E> withRefFinding(Observable<?> findRefs) {
 				return new DefaultOCParseContext<>(theLock, theSession, theConfig, theCreate, theChange, theUntil, thePreviousValue,
 					findRefs, theDelayedAccept);
 			}
@@ -1344,7 +1350,7 @@ public interface ObservableConfigFormat<E> {
 			}
 
 			@Override
-			public void format(ObservableConfigParseSession session, T value, T previousValue, ObservableConfigFormat.ConfigGetter config,
+			public void format(ObservableConfigParseSession session, T value, T previousValue, ConfigGetter config,
 				Consumer<T> acceptedValue, Observable<?> until) {
 				acceptedValue.accept(value);
 				String formatted;
@@ -1359,7 +1365,7 @@ public interface ObservableConfigFormat<E> {
 			}
 
 			@Override
-			public T parse(ObservableConfigFormat.ObservableConfigParseContext<T> ctx) {
+			public T parse(ObservableConfigParseContext<T> ctx) {
 				ObservableConfig config = ctx.getConfig(false);
 				if (config == null)
 					return defaultValue == null ? null : defaultValue.get();
@@ -1430,7 +1436,7 @@ public interface ObservableConfigFormat<E> {
 			}
 
 			@Override
-			public void format(ObservableConfigParseSession session, T value, T previousValue, ObservableConfigFormat.ConfigGetter config,
+			public void format(ObservableConfigParseSession session, T value, T previousValue, ConfigGetter config,
 				Consumer<T> acceptedValue, Observable<?> until) throws IllegalArgumentException {
 				if (value == null) {
 					if (config.getConfig(false) != null) {
@@ -1472,7 +1478,7 @@ public interface ObservableConfigFormat<E> {
 			}
 
 			@Override
-			public T parse(ObservableConfigFormat.ObservableConfigParseContext<T> ctx) throws ParseException {
+			public T parse(ObservableConfigParseContext<T> ctx) throws ParseException {
 				ObservableConfig c = ctx.getConfig(false);
 				if (c == null || "true".equals(c.get("null")))
 					return null;
@@ -1489,8 +1495,7 @@ public interface ObservableConfigFormat<E> {
 				return exec.value;
 			}
 
-			private void parse(ObservableConfigFormat.ObservableConfigParseContext<T> ctx, ObservableConfig c,
-				DelayedExecution<T> exec) {
+			private void parse(ObservableConfigParseContext<T> ctx, ObservableConfig c, DelayedExecution<T> exec) {
 				if (isRetrieverReady != null && !isRetrieverReady.getAsBoolean()) {
 					exec.found = false;
 					return;
@@ -1564,14 +1569,16 @@ public interface ObservableConfigFormat<E> {
 			}
 
 			@Override
-			public void format(ObservableConfigParseSession session, T value, T previousValue, ObservableConfigFormat.ConfigGetter config,
+			public void format(ObservableConfigParseSession session, T value, T previousValue, ConfigGetter config,
 				Consumer<T> acceptedValue, Observable<?> until) throws IllegalArgumentException {
 				// No need to persist at all
 			}
 
 			@Override
-			public T parse(ObservableConfigFormat.ObservableConfigParseContext<T> ctx) throws ParseException {
+			public T parse(ObservableConfigParseContext<T> ctx) throws ParseException {
 				DelayedExecution<T> exec = new DelayedExecution<>();
+				// Even though this format doesn't persist anything, it needs the config to find the parent reference
+				ctx.getConfig(true).setTrivial(true);
 				ctx.findReferences().act(__ -> {
 					ObservableConfig parent = ctx.getConfig(false);
 					if (parent != null)
@@ -1607,13 +1614,12 @@ public interface ObservableConfigFormat<E> {
 
 		static class NullFormat implements ObservableConfigFormat<Object> {
 			@Override
-			public void format(ObservableConfigParseSession session, Object value, Object previousValue,
-				ObservableConfigFormat.ConfigGetter config, Consumer<Object> acceptedValue, Observable<?> until)
-					throws IllegalArgumentException {
+			public void format(ObservableConfigParseSession session, Object value, Object previousValue, ConfigGetter config,
+				Consumer<Object> acceptedValue, Observable<?> until) throws IllegalArgumentException {
 			}
 
 			@Override
-			public Object parse(ObservableConfigFormat.ObservableConfigParseContext<Object> ctx) throws ParseException {
+			public Object parse(ObservableConfigParseContext<Object> ctx) throws ParseException {
 				return ctx.getPreviousValue();
 			}
 
@@ -1654,12 +1660,11 @@ public interface ObservableConfigFormat<E> {
 				}
 			}
 			private final QuickMap<String, ComponentField<E, ?>> theFields;
-			private final List<ObservableConfigFormat.EntitySubFormat<? extends E>> theSubFormats;
+			private final List<EntitySubFormat<? extends E>> theSubFormats;
 			private final QuickMap<String, ComponentField<E, ?>> theFieldsByChildName;
 			private final ComponentField<E, ?> theDefaultComponent;
 
-			AbstractComponentFormat(QuickMap<String, ComponentField<E, ?>> fields,
-				List<ObservableConfigFormat.EntitySubFormat<? extends E>> subFormats) {
+			AbstractComponentFormat(QuickMap<String, ComponentField<E, ?>> fields, List<EntitySubFormat<? extends E>> subFormats) {
 				theFields = fields;
 				theSubFormats = subFormats;
 				Map<String, ComponentField<E, ?>> fcnReverse = new LinkedHashMap<>();
@@ -1687,26 +1692,26 @@ public interface ObservableConfigFormat<E> {
 				return Collections.emptySet();
 			}
 
-			private ObservableConfigFormat.EntitySubFormat<? extends E> formatFor(E value) {
+			private EntitySubFormat<? extends E> formatFor(E value) {
 				if (value == null)
 					return null;
-				for (ObservableConfigFormat.EntitySubFormat<? extends E> subFormat : theSubFormats)
+				for (EntitySubFormat<? extends E> subFormat : theSubFormats)
 					if (subFormat.applies(value))
 						return subFormat;
 				return null;
 			}
 
-			private ObservableConfigFormat.EntitySubFormat<? extends E> formatFor(ObservableConfig config) {
+			private EntitySubFormat<? extends E> formatFor(ObservableConfig config) {
 				if (config == null)
 					return null;
-				for (ObservableConfigFormat.EntitySubFormat<? extends E> subFormat : theSubFormats)
+				for (EntitySubFormat<? extends E> subFormat : theSubFormats)
 					if (subFormat.configFilter.matches(config))
 						return subFormat;
 				return null;
 			}
 
 			@Override
-			public void format(ObservableConfigParseSession session, E value, E previousValue, ObservableConfigFormat.ConfigGetter config,
+			public void format(ObservableConfigParseSession session, E value, E previousValue, ConfigGetter config,
 				Consumer<E> acceptedValue, Observable<?> until) {
 				if (value == null) {
 					acceptedValue.accept(null);
@@ -1716,8 +1721,8 @@ public interface ObservableConfigFormat<E> {
 						for (int i = 0; i < theFields.keySize(); i++) {
 							if (theFields.get(i).childName == null) {
 								Object fieldValue = previousValue == null ? null : theFields.get(i).getter.apply(previousValue);
-								formatField(session, value, (ComponentField<E, Object>) theFields.get(i), fieldValue, fieldValue, c, fv -> {},
-									until, null);
+								formatField(session, value, (ComponentField<E, Object>) theFields.get(i), fieldValue, fieldValue, c, fv -> {
+								}, until, null);
 							} else {
 								ObservableConfig cfg = c.getChild(theFields.get(i).childName);
 								if (cfg != null)
@@ -1728,11 +1733,11 @@ public interface ObservableConfigFormat<E> {
 					}
 				} else {
 					ObservableConfig c = config.getConfig(true);
-					ObservableConfigFormat.EntitySubFormat<? extends E> subFormat = formatFor(value);
+					EntitySubFormat<? extends E> subFormat = formatFor(value);
 					if (subFormat != null) {
 						subFormat.moldConfig(c);
-						((ObservableConfigFormat.EntitySubFormat<E>) subFormat).format.format(session, value, subFormat.applies(previousValue) ? previousValue : null,
-							config, acceptedValue, until);
+						((EntitySubFormat<E>) subFormat).format.format(session, value,
+							subFormat.applies(previousValue) ? previousValue : null, config, acceptedValue, until);
 						return;
 					}
 					acceptedValue.accept(value);
@@ -1740,27 +1745,29 @@ public interface ObservableConfigFormat<E> {
 					for (int i = 0; i < theFields.keySize(); i++) {
 						ComponentField<E, ?> field = theFields.get(i);
 						Object fieldValue = field.getter.apply(value);
-						formatField(session, value, (ComponentField<E, Object>) field, fieldValue, fieldValue, c, fv -> {}, until, null);
+						formatField(session, value, (ComponentField<E, Object>) field, fieldValue, fieldValue, c, fv -> {
+						}, until, null);
 					}
 					c.withParsedItem(session, value);
 				}
 			}
 
 			@Override
-			public E parse(ObservableConfigFormat.ObservableConfigParseContext<E> ctx) throws ParseException {
+			public E parse(ObservableConfigParseContext<E> ctx) throws ParseException {
 				ObservableConfig c = ctx.getConfig(false);
 				if (c != null && "true".equalsIgnoreCase(c.get("null")))
 					return null;
 				else if (ctx.getPreviousValue() == null) {
 					return createInstance(ctx, theFields.keySet().createMap().fill(ConfigurableValueCreator.NOT_SET));
 				} else {
-					ObservableConfigFormat.EntitySubFormat<? extends E> subFormat = formatFor(c);
+					EntitySubFormat<? extends E> subFormat = formatFor(c);
 					if (subFormat != null) {
-						return ((ObservableConfigFormat.EntitySubFormat<E>) subFormat).format.parse(ctx.forChild((config, create) -> {
+						return ((EntitySubFormat<E>) subFormat).format.parse(ctx.forChild((config, create) -> {
 							if (create)
 								subFormat.moldConfig(config);
 							return config;
-						}, ctx.getChange(), subFormat.applies(ctx.getPreviousValue()) ? ctx.getPreviousValue() : null, ctx::linkedReference));
+						}, ctx.getChange(), subFormat.applies(ctx.getPreviousValue()) ? ctx.getPreviousValue() : null,
+							ctx::linkedReference));
 					}
 
 					if (ctx.getChange() == null) {
@@ -1790,14 +1797,14 @@ public interface ObservableConfigFormat<E> {
 				}
 			}
 
-			public <E2 extends E> ObservableConfigFormat.ConfigCreator<E2> create(ObservableConfigParseSession session, TypeToken<E2> subType) {
+			public <E2 extends E> ConfigCreator<E2> create(ObservableConfigParseSession session, TypeToken<E2> subType) {
 				if (subType != null && !subType.equals(getType())) {
-					for (ObservableConfigFormat.EntitySubFormat<? extends E> subFormat : theSubFormats) {
+					for (EntitySubFormat<? extends E> subFormat : theSubFormats) {
 						if (subFormat.type.isAssignableFrom(subType))
-							return ((ObservableConfigFormat.EntitySubFormat<? super E2>) subFormat).format.create(session, subType);
+							return ((EntitySubFormat<? super E2>) subFormat).format.create(session, subType);
 					}
 				}
-				return (ObservableConfigFormat.ConfigCreator<E2>) new ObservableConfigFormat.ConfigCreator<E>() {
+				return (ConfigCreator<E2>) new ConfigCreator<E>() {
 					private final QuickMap<String, Object> theFieldValues = theFields.keySet().createMap()
 						.fill(ConfigurableValueCreator.NOT_SET);
 
@@ -1807,16 +1814,16 @@ public interface ObservableConfigFormat<E> {
 					}
 
 					@Override
-					public ObservableConfigFormat.ConfigCreator<E> with(String fieldName, Object value) throws IllegalArgumentException {
+					public ConfigCreator<E> with(String fieldName, Object value) throws IllegalArgumentException {
 						return with(theFields.get(fieldName), value);
 					}
 
 					@Override
-					public ObservableConfigFormat.ConfigCreator<E> with(int fieldIndex, Object value) throws IllegalArgumentException {
+					public ConfigCreator<E> with(int fieldIndex, Object value) throws IllegalArgumentException {
 						return with(theFields.get(fieldIndex), value);
 					}
 
-					private ObservableConfigFormat.ConfigCreator<E> with(ComponentField<E, ?> field, Object value) {
+					private ConfigCreator<E> with(ComponentField<E, ?> field, Object value) {
 						if (value == null) {
 							if (field.type.isPrimitive())
 								throw new IllegalArgumentException("Null value is not allowed for primitive field " + field);
@@ -1848,9 +1855,9 @@ public interface ObservableConfigFormat<E> {
 			E createInstance(ObservableConfigParseContext<E> ctx, QuickMap<String, Object> fieldValues) throws ParseException {
 				ObservableConfig config = ctx.getConfig(false);
 				if (config != null) {
-					for (ObservableConfigFormat.EntitySubFormat<? extends E> subFormat : theSubFormats) {
+					for (EntitySubFormat<? extends E> subFormat : theSubFormats) {
 						if (subFormat.configFilter.matches(config))
-							return ((ObservableConfigFormat.EntitySubFormat<E>) subFormat).format.parse(ctx);
+							return ((EntitySubFormat<E>) subFormat).format.parse(ctx);
 					}
 				}
 				for (int i = 0; i < fieldValues.keySize(); i++) {
@@ -1912,8 +1919,7 @@ public interface ObservableConfigFormat<E> {
 				}
 			}
 
-			protected <F> void parseUpdatedField(ObservableConfigParseContext<E> entityCtx, int fieldIdx)
-				throws ParseException {
+			protected <F> void parseUpdatedField(ObservableConfigParseContext<E> entityCtx, int fieldIdx) throws ParseException {
 				ComponentField<? super E, F> field = (ComponentField<? super E, F>) theFields.get(fieldIdx);
 				E entity = entityCtx.getPreviousValue();
 				F oldValue = entity == null ? null : field.getter.apply(entity);
@@ -1931,20 +1937,20 @@ public interface ObservableConfigFormat<E> {
 			}
 		}
 
-		static class EntryFormat<K, V> extends Impl.AbstractComponentFormat<ObservableConfigFormat.MapEntry<K, V>> {
-			private final TypeToken<ObservableConfigFormat.MapEntry<K, V>> theType;
+		static class EntryFormat<K, V> extends Impl.AbstractComponentFormat<MapEntry<K, V>> {
+			private final TypeToken<MapEntry<K, V>> theType;
 
 			EntryFormat(boolean compressed, String keyName, String valueName, TypeToken<K> keyType, TypeToken<V> valueType,
 				ObservableConfigFormat<K> keyFormat, ObservableConfigFormat<V> valueFormat) {
 				super(createFields(compressed, keyName, valueName, keyType, valueType, keyFormat, valueFormat), Collections.emptyList());
-				theType = TypeTokens.get().keyFor(ObservableConfigFormat.MapEntry.class).parameterized(keyType, valueType);
+				theType = TypeTokens.get().keyFor(MapEntry.class).parameterized(keyType, valueType);
 			}
 
-			private static <K, V> QuickMap<String, ComponentField<ObservableConfigFormat.MapEntry<K, V>, ?>> createFields(boolean compressed, String keyName,
+			private static <K, V> QuickMap<String, ComponentField<MapEntry<K, V>, ?>> createFields(boolean compressed, String keyName,
 				String valueName, //
 				TypeToken<K> keyType, TypeToken<V> valueType, //
 				ObservableConfigFormat<K> keyFormat, ObservableConfigFormat<V> valueFormat) {
-				QuickMap<String, ComponentField<ObservableConfigFormat.MapEntry<K, V>, ?>> fields = QuickSet.of("key", "value").createMap();
+				QuickMap<String, ComponentField<MapEntry<K, V>, ?>> fields = QuickSet.of("key", "value").createMap();
 				fields.put("key", new ComponentField<>(keyName, keyType, 0, e -> e.key, (e, k, change) -> e.key = k, keyFormat, keyName));
 				fields.put("value", new ComponentField<>(compressed ? null : valueName, valueType, 0, e -> e.value,
 					(e, v, change) -> e.value = v, valueFormat, valueName));
@@ -1952,7 +1958,7 @@ public interface ObservableConfigFormat<E> {
 			}
 
 			@Override
-			protected TypeToken<ObservableConfigFormat.MapEntry<K, V>> getType() {
+			protected TypeToken<MapEntry<K, V>> getType() {
 				return theType;
 			}
 
@@ -1971,11 +1977,11 @@ public interface ObservableConfigFormat<E> {
 
 			@Override
 			protected MapEntry<K, V> create(ObservableConfigParseContext<MapEntry<K, V>> ctx, QuickMap<String, Object> fieldValues) {
-				return new ObservableConfigFormat.MapEntry<>((K) fieldValues.get(0), (V) fieldValues.get(1));
+				return new MapEntry<>((K) fieldValues.get(0), (V) fieldValues.get(1));
 			}
 		}
 
-		static class EntityConfigFormatImpl<E> extends Impl.AbstractComponentFormat<E> implements ObservableConfigFormat.EntityConfigFormat<E> {
+		static class EntityConfigFormatImpl<E> extends Impl.AbstractComponentFormat<E> implements EntityConfigFormat<E> {
 			static class EntityFieldSetter<E, F> implements ComponentSetter<E, F> {
 				private final EntityConfiguredValueField<E, F> field;
 
@@ -2001,7 +2007,7 @@ public interface ObservableConfigFormat<E> {
 
 			private final EntityConfiguredValueType<E> theEntityType;
 
-			EntityConfigFormatImpl(EntityConfiguredValueType<E> entityType, List<ObservableConfigFormat.EntitySubFormat<? extends E>> subFormats,
+			EntityConfigFormatImpl(EntityConfiguredValueType<E> entityType, List<EntitySubFormat<? extends E>> subFormats,
 				QuickMap<String, ObservableConfigFormat<?>> fieldFormats, QuickMap<String, String> childNames) {
 				super(buildFields(entityType, fieldFormats, childNames), subFormats);
 				this.theEntityType = entityType;
@@ -2018,8 +2024,9 @@ public interface ObservableConfigFormat<E> {
 			private static <E, F> ComponentField<E, F> buildField(EntityConfiguredValueType<E> entityType,
 				QuickMap<String, ObservableConfigFormat<?>> fieldFormats, QuickMap<String, String> childNames, int index) {
 
-				return new ComponentField<>(fieldFormats.keySet().get(index), (TypeToken<F>) entityType.getFields().get(index).getFieldType(),
-					index, e -> (F) entityType.getFields().get(index).get(e),
+				return new ComponentField<>(fieldFormats.keySet().get(index),
+					(TypeToken<F>) entityType.getFields().get(index).getFieldType(), index,
+					e -> (F) entityType.getFields().get(index).get(e),
 					new EntityFieldSetter<>((EntityConfiguredValueField<E, F>) entityType.getFields().get(index)), //
 					(ObservableConfigFormat<F>) fieldFormats.get(index), childNames.get(index));
 			}
@@ -2040,18 +2047,18 @@ public interface ObservableConfigFormat<E> {
 			}
 
 			@Override
-			public <E2 extends E> ObservableConfigFormat.EntityConfigCreator<E2> create(ObservableConfigParseSession session, TypeToken<E2> subType) {
-				ObservableConfigFormat.ConfigCreator<E2> creator = super.create(session, subType);
-				if (creator instanceof ObservableConfigFormat.EntityConfigCreator)
-					return (ObservableConfigFormat.EntityConfigCreator<E2>) creator;
-				return new ObservableConfigFormat.EntityConfigCreator<E2>() {
+			public <E2 extends E> EntityConfigCreator<E2> create(ObservableConfigParseSession session, TypeToken<E2> subType) {
+				ConfigCreator<E2> creator = super.create(session, subType);
+				if (creator instanceof EntityConfigCreator)
+					return (EntityConfigCreator<E2>) creator;
+				return new EntityConfigCreator<E2>() {
 					@Override
 					public EntityConfiguredValueType<E2> getEntityType() {
 						return (EntityConfiguredValueType<E2>) theEntityType;
 					}
 
 					@Override
-					public ObservableConfigFormat.EntityConfigCreator<E2> with(int fieldIndex, Object value) throws IllegalArgumentException {
+					public EntityConfigCreator<E2> with(int fieldIndex, Object value) throws IllegalArgumentException {
 						creator.with(fieldIndex, value);
 						return this;
 					}
@@ -2062,20 +2069,20 @@ public interface ObservableConfigFormat<E> {
 					}
 
 					@Override
-					public ObservableConfigFormat.EntityConfigCreator<E2> with(String fieldName, Object value) throws IllegalArgumentException {
+					public EntityConfigCreator<E2> with(String fieldName, Object value) throws IllegalArgumentException {
 						creator.with(fieldName, value);
 						return this;
 					}
 
 					@Override
-					public <F> ObservableConfigFormat.EntityConfigCreator<E2> with(ConfiguredValueField<? super E2, F> field, F value)
+					public <F> EntityConfigCreator<E2> with(ConfiguredValueField<? super E2, F> field, F value)
 						throws IllegalArgumentException {
 						creator.with(field.getIndex(), value);
 						return this;
 					}
 
 					@Override
-					public <F> ObservableConfigFormat.EntityConfigCreator<E2> with(Function<? super E2, F> fieldGetter, F value) throws IllegalArgumentException {
+					public <F> EntityConfigCreator<E2> with(Function<? super E2, F> fieldGetter, F value) throws IllegalArgumentException {
 						ConfiguredValueField<? super E, F> field = theEntityType.getField((Function<E, F>) fieldGetter);
 						creator.with(field.getIndex(), value);
 						return this;
@@ -2161,7 +2168,7 @@ public interface ObservableConfigFormat<E> {
 				});
 				created[0] = instance;
 				Consumer<ObservableConfig> register = config -> {
-					theEntityType.associate(instance, ObservableConfigFormat.EntityConfigFormat.ENTITY_CONFIG_KEY, config);
+					theEntityType.associate(instance, EntityConfigFormat.ENTITY_CONFIG_KEY, config);
 					theEntityType.associate(instance, "until", ctx.getUntil());
 				};
 				ObservableConfig config = ctx.getConfig(false);
@@ -2172,8 +2179,8 @@ public interface ObservableConfigFormat<E> {
 				return instance;
 			}
 
-			private <E2 extends E> boolean tryPopulateNewId(EntityConfiguredValueType<E2> entityType,
-				QuickMap<String, Object> fieldValues, ObservableConfig config, ObservableConfigParseSession session) {
+			private <E2 extends E> boolean tryPopulateNewId(EntityConfiguredValueType<E2> entityType, QuickMap<String, Object> fieldValues,
+				ObservableConfig config, ObservableConfigParseSession session) {
 				if (config.getParent() == null)
 					return true;
 				Object parent = config.getParent().getParsedItem(session);
@@ -2257,11 +2264,13 @@ public interface ObservableConfigFormat<E> {
 					return true; // The given value is fine
 				if (fieldType == int.class) {
 					((ObservableConfigFormat<Integer>) field.format).format(session, (int) id, //
-						(Integer) currentValue, cia -> config.getChild(field.childName, cia, null), __ -> {}, Observable.empty());
+						(Integer) currentValue, cia -> config.getChild(field.childName, cia, null), __ -> {
+						}, Observable.empty());
 					fieldValues.put(fieldIndex, (int) id);
 				} else {
 					((ObservableConfigFormat<Long>) field.format).format(session, id, //
-						(Long) currentValue, cia -> config.getChild(field.childName, cia, null), __ -> {}, Observable.empty());
+						(Long) currentValue, cia -> config.getChild(field.childName, cia, null), __ -> {
+						}, Observable.empty());
 					fieldValues.put(fieldIndex, id);
 				}
 				return true;
@@ -2273,9 +2282,8 @@ public interface ObservableConfigFormat<E> {
 				super.formatField(session, value, field, previousValue, fieldValue, entityConfig, onFieldValue, until, cause);
 				if (value != null) {
 					Object key = field.setter;
-					ListenerList<Consumer<FieldChange<?>>> listeners = (ListenerList<Consumer<FieldChange<?>>>) theEntityType.getAssociated(
-						value,
-						key);
+					ListenerList<Consumer<FieldChange<?>>> listeners = (ListenerList<Consumer<FieldChange<?>>>) theEntityType
+						.getAssociated(value, key);
 					if (listeners != null) {
 						FieldChange<F> change = new FieldChange<>(previousValue, fieldValue, cause);
 						listeners.forEach(//
@@ -2285,8 +2293,7 @@ public interface ObservableConfigFormat<E> {
 			}
 
 			@Override
-			protected <F> void parseUpdatedField(ObservableConfigParseContext<E> entityCtx, int fieldIdx)
-				throws ParseException {
+			protected <F> void parseUpdatedField(ObservableConfigParseContext<E> entityCtx, int fieldIdx) throws ParseException {
 				ComponentField<E, F> field = (ComponentField<E, F>) getFields().get(fieldIdx);
 				E value = entityCtx.getPreviousValue();
 				F oldValue = value == null ? null : field.getter.apply(value);
@@ -2294,9 +2301,8 @@ public interface ObservableConfigFormat<E> {
 				if (value != null) {
 					F newValue = value == null ? null : field.getter.apply(value);
 					Object key = field.setter;
-					ListenerList<Consumer<FieldChange<?>>> listeners = (ListenerList<Consumer<FieldChange<?>>>) theEntityType.getAssociated(
-						value,
-						key);
+					ListenerList<Consumer<FieldChange<?>>> listeners = (ListenerList<Consumer<FieldChange<?>>>) theEntityType
+						.getAssociated(value, key);
 					if (listeners != null) {
 						ObservableConfigEvent fieldEvent;
 						if (entityCtx.getChange() == null) {

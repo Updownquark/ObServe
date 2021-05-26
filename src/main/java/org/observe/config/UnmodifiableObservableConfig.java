@@ -29,6 +29,16 @@ public class UnmodifiableObservableConfig extends AbstractObservableConfig {
 	}
 
 	@Override
+	public boolean mayBeTrivial() {
+		return theWrapped.mayBeTrivial();
+	}
+
+	@Override
+	public ObservableConfig setTrivial(boolean mayBeTrivial) {
+		throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+	}
+
+	@Override
 	public Transaction lock(boolean write, Object cause) {
 		return theWrapped.lock(false, cause);
 	}

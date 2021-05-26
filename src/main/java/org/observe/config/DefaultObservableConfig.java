@@ -27,6 +27,7 @@ class DefaultObservableConfig extends AbstractObservableConfig {
 	private ValueHolder<Causable> theRootCausable;
 	private String theName;
 	private String theValue;
+	private boolean mayBeTrivial;
 	private final BetterList<ObservableConfig> theContent;
 	private final ListenerList<InternalObservableConfigListener> theListeners;
 	private long theModCount;
@@ -49,6 +50,17 @@ class DefaultObservableConfig extends AbstractObservableConfig {
 	@Override
 	public String getName() {
 		return theName;
+	}
+
+	@Override
+	public boolean mayBeTrivial() {
+		return mayBeTrivial;
+	}
+
+	@Override
+	public DefaultObservableConfig setTrivial(boolean mayBeTrivial) {
+		this.mayBeTrivial = mayBeTrivial;
+		return this;
 	}
 
 	@Override

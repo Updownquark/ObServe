@@ -926,6 +926,21 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 	@Override
 	ObservableConfig setName(String name);
 
+	boolean mayBeTrivial();
+
+	ObservableConfig setTrivial(boolean mayBeTrivial);
+
+	default boolean isTrivial() {
+		if (!mayBeTrivial())
+			return false;
+		else if (getValue() != null)
+			return false;
+		else if (!getContent().isEmpty())
+			return false;
+		else
+			return true;
+	}
+
 	/**
 	 * @param value The value to set
 	 * @return null if the given value can be set as this config element's value, or a reason why it can't
@@ -1578,7 +1593,7 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 					BitSet copy = (BitSet) childrenAsAttributes.clone();
 					childrenAsAttributes.clear();
 					for (ObservableConfig child : config.getContent()) {
-						if (!copy.get(i)) {
+						if (!copy.get(i) && !child.isTrivial()) {
 							out.append('\n');
 							_writeXml(child, out, encoding, indentAmount + 1, indentStr, true);
 						}
