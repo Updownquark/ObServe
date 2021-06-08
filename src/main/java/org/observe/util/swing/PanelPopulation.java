@@ -58,6 +58,7 @@ import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
+import javax.swing.JProgressBar;
 import javax.swing.JRadioButton;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
@@ -302,6 +303,8 @@ public class PanelPopulation {
 		}
 
 		P addButton(String buttonText, ObservableAction<?> action, Consumer<ButtonEditor<JButton, ?>> modify);
+
+		P addProgressBar(String fieldName, Consumer<ProgressEditor<?>> progress);
 
 		<R> P addList(ObservableCollection<R> rows, Consumer<ListBuilder<R, ?>> list);
 
@@ -587,6 +590,24 @@ public class PanelPopulation {
 
 	public interface SteppedFieldEditor<E, F, P extends SteppedFieldEditor<E, F, P>> extends FieldEditor<E, P> {
 		P withStepSize(F stepSize);
+	}
+
+	public interface ProgressEditor<P extends ProgressEditor<P>> extends FieldEditor<JProgressBar, P> {
+		P withTaskLength(ObservableValue<Integer> length);
+
+		P withProgress(ObservableValue<Integer> progress);
+
+		default P withTaskLength(int length) {
+			return withTaskLength(ObservableValue.of(length));
+		}
+
+		P indeterminate(ObservableValue<Boolean> indeterminate);
+
+		default P indeterminate() {
+			return indeterminate(ObservableValue.of(true));
+		}
+
+		P withProgressText(ObservableValue<String> text);
 	}
 
 	public interface ToggleEditor<F, TB extends JToggleButton, P extends ToggleEditor<F, TB, P>> extends FieldEditor<Map<F, TB>, P> {
@@ -1381,6 +1402,14 @@ public class PanelPopulation {
 			if (modify != null)
 				modify.accept(field);
 			doAdd(field);
+			return (P) this;
+		}
+
+		@Override
+		default P addProgressBar(String fieldName, Consumer<ProgressEditor<?>> progress) {
+			SimpleProgressEditor<?> editor=new SimpleProgressEditor<>(fieldName, getLock());
+			progress.accept(editor);
+			doAdd(editor);
 			return (P) this;
 		}
 
@@ -2238,6 +2267,83 @@ public class PanelPopulation {
 		@Override
 		public Component getComponent() {
 			return decorate(thePanel);
+		}
+	}
+
+	static class SimpleProgressEditor<P extends SimpleProgressEditor<P>> extends SimpleFieldEditor<JProgressBar, P> implements ProgressEditor<P>{
+		private ObservableValue<Integer> theTaskLength;
+		private ObservableValue<Integer> theProgress;
+		private ObservableValue<Boolean> isIndeterminate;
+		private ObservableValue<String> theText;
+		private boolean isInitialized;
+
+		public SimpleProgressEditor(String fieldName, Supplier<Transactable> lock) {
+			super(fieldName, new JProgressBar(JProgressBar.HORIZONTAL), lock);
+		}
+
+		@Override
+		public P withTaskLength(ObservableValue<Integer> length) {
+			theTaskLength=length;
+			return (P) this;
+		}
+
+		@Override
+		public P withProgress(ObservableValue<Integer> progress) {
+			theProgress=progress;
+			if(theTaskLength==null)
+				theTaskLength=ObservableValue.of(100); //Assume it's a percentage
+			return (P) this;
+		}
+
+		@Override
+		public P indeterminate(ObservableValue<Boolean> indeterminate) {
+			isIndeterminate=indeterminate;
+			return (P) this;
+		}
+
+		@Override
+		public P indeterminate() {
+			if (theProgress == null)
+				withProgress(ObservableValue.of(0));
+			return ProgressEditor.super.indeterminate();
+		}
+
+		@Override
+		public P withProgressText(ObservableValue<String> text) {
+			theText=text;
+			return (P) this;
+		}
+
+		@Override
+		protected Component getOrCreateComponent(Observable<?> until) {
+			if (!isInitialized) {
+				isInitialized = true;
+				if (theProgress == null)
+					throw new IllegalStateException("No progress value set");
+				Observable.or(theTaskLength.noInitChanges(), theProgress.noInitChanges(), //
+					isIndeterminate == null ? Observable.empty() : isIndeterminate.noInitChanges(), //
+						theText == null ? Observable.empty() : theText.noInitChanges())//
+				.takeUntil(until)//
+				.act(__ -> updateProgress());
+				updateProgress();
+			}
+			return super.getOrCreateComponent(until);
+		}
+
+		void updateProgress() {
+			if ((isIndeterminate != null && Boolean.TRUE.equals(isIndeterminate.get()))//
+				|| theTaskLength.get() == null || theTaskLength.get() <= 0//
+				|| theProgress.get() == null || theProgress.get() < 0)
+				getEditor().setIndeterminate(true);
+			else {
+				getEditor().setMaximum(theTaskLength.get());
+				getEditor().setValue(theProgress.get());
+				getEditor().setIndeterminate(false);
+			}
+			String text = theText == null ? null : theText.get();
+			getEditor().setStringPainted(text != null);
+			if (text != null)
+				getEditor().setString(text);
 		}
 	}
 
@@ -3949,7 +4055,7 @@ public class PanelPopulation {
 				for (int a = 0; a < actions.length; a++) {
 					actionMenuItems[a] = new JMenuItem();
 					actions[a].theButtonMod
-						.accept(new SimpleButtonEditor(null, actionMenuItems[a], null, actions[a].theObservableAction, getLock(), false));
+					.accept(new SimpleButtonEditor(null, actionMenuItems[a], null, actions[a].theObservableAction, getLock(), false));
 				}
 				getEditor().getSelectionModel().addTreeSelectionListener(evt -> {
 					List<BetterList<F>> selection = getSelection();
