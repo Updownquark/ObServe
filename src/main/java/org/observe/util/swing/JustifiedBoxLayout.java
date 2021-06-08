@@ -33,6 +33,7 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 
 	private final Insets theMargin;
 	private int thePadding;
+	private boolean isShowingInvisible;
 
 	/**
 	 * @param vertical Whether the layout will align components in a column or a row
@@ -71,6 +72,20 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 	 */
 	public boolean isStretchingEqual() {
 		return isStretchingEqual;
+	}
+
+	/** @return Whether this layout allocates space to invisible components (false by default) */
+	public boolean isShowingInvisible() {
+		return isShowingInvisible;
+	}
+
+	/**
+	 * @param showingInvisible Whether this layout should allocate space to invisible components (false by default)
+	 * @return This layout
+	 */
+	public JustifiedBoxLayout setShowingInvisible(boolean showingInvisible) {
+		this.isShowingInvisible = showingInvisible;
+		return this;
 	}
 
 	/**
@@ -204,7 +219,7 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 		int cross = 0;
 		boolean first = true;
 		for (Component comp : parent.getComponents()) {
-			if (!comp.isVisible())
+			if (!isShowingInvisible && !comp.isVisible())
 				continue;
 			if (first)
 				first = false;
@@ -228,7 +243,7 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 		int cross = 0;
 		boolean first = true;
 		for (Component comp : parent.getComponents()) {
-			if (!comp.isVisible())
+			if (!isShowingInvisible && !comp.isVisible())
 				continue;
 			if (first)
 				first = false;
@@ -255,7 +270,7 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 		int cross = theCrossAlign == Alignment.JUSTIFIED ? 0 : Integer.MAX_VALUE;
 		boolean first = true;
 		for (Component comp : parent.getComponents()) {
-			if (!comp.isVisible())
+			if (!isShowingInvisible && !comp.isVisible())
 				continue;
 			if (first)
 				first = false;
@@ -289,7 +304,7 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 		boolean first = true;
 		List<Component> components = new ArrayList<>(parent.getComponentCount());
 		for (Component comp : parent.getComponents()) {
-			if (comp.isVisible())
+			if (isShowingInvisible || comp.isVisible())
 				components.add(comp);
 		}
 		int[] preferredMainSizes = new int[components.size()];
