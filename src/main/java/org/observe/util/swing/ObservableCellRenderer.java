@@ -166,6 +166,7 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 		private CellDecorator<M, C> theDecorator;
 		private ComponentDecorator theComponentDecorator;
 		private final BiFunction<? super Supplier<? extends M>, C, String> theTextRenderer;
+		private Runnable theRevert;
 
 		public DefaultObservableCellRenderer(BiFunction<? super Supplier<? extends M>, C, String> textRenderer) {
 			theTextRenderer = textRenderer;
@@ -178,6 +179,10 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 
 		@Override
 		public Component getCellRendererComponent(Component parent, ModelCell<M, C> cell, CellRenderContext ctx) {
+			if (theRevert != null) {
+				theRevert.run();
+				theRevert = null;
+			}
 			String rendered = renderAsText(cell::getModelValue, cell.getCellValue());
 			rendered = tryEmphasize(rendered, ctx);
 			Component c;
@@ -208,7 +213,7 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 				else
 					theComponentDecorator.reset();
 				theDecorator.decorate(cell, theComponentDecorator);
-				c = theComponentDecorator.decorate(c);
+				theRevert = theComponentDecorator.decorate(c);
 			}
 			return tryEmphasize(c, ctx);
 		}
@@ -227,6 +232,7 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 		private Function<? super ModelCell<? extends M, ? extends C>, String> theText;
 		private CellDecorator<M, C> theDecorator;
 		private ComponentDecorator theComponentDecorator;
+		private Runnable theRevert;
 
 		public CheckCellRenderer(Predicate<? super ModelCell<? extends M, ? extends C>> render) {
 			theRender = render;
@@ -262,6 +268,10 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 
 		@Override
 		public Component getCellRendererComponent(Component parent, ModelCell<M, C> cell, CellRenderContext ctx) {
+			if (theRevert != null) {
+				theRevert.run();
+				theRevert = null;
+			}
 			JCheckBox cb = theCheckBox;
 			if (theText != null)
 				cb.setText(theText.apply(cell));
@@ -272,7 +282,7 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 				else
 					theComponentDecorator.reset();
 				theDecorator.decorate(cell, theComponentDecorator);
-				cb = theComponentDecorator.decorate(cb);
+				theRevert = theComponentDecorator.decorate(cb);
 			}
 			return cb;
 		}
@@ -283,6 +293,7 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 		private final JButton theButton;
 		private CellDecorator<M, C> theDecorator;
 		private ComponentDecorator theComponentDecorator;
+		private Runnable theRevert;
 
 		public ButtonCellRenderer(Function<? super ModelCell<? extends M, ? extends C>, String> text) {
 			theText = text;
@@ -302,6 +313,10 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 
 		@Override
 		public Component getCellRendererComponent(Component parent, ModelCell<M, C> cell, CellRenderContext ctx) {
+			if (theRevert != null) {
+				theRevert.run();
+				theRevert = null;
+			}
 			JButton button = theButton;
 			button.setText(theText.apply(cell));
 			if (theDecorator != null) {
@@ -310,7 +325,7 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 				else
 					theComponentDecorator.reset();
 				theDecorator.decorate(cell, theComponentDecorator);
-				button = theComponentDecorator.decorate(button);
+				theRevert = theComponentDecorator.decorate(button);
 			}
 			return button;
 		}

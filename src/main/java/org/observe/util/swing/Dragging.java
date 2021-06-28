@@ -100,35 +100,45 @@ public class Dragging {
 		Object transform(E value, DataFlavor flavor) throws IOException;
 	}
 
-	public interface TransferAccepter<E> {
-		<E2> TransferAccepter<E> forType(TypeToken<E2> type, Predicate<? super E2> filter, Function<? super E2, ? extends E> map,
-			Consumer<? super TransferAccepter<E2>> accept);
+	public interface TransferAccepter<R, C, E> {
+		<E2> TransferAccepter<R, C, E> forType(TypeToken<E2> type, Predicate<? super E2> filter, Function<? super E2, ? extends E> map,
+			Consumer<? super TransferAccepter<R, C, E2>> accept);
 
-		TransferAccepter<E> draggable(boolean draggable);
+		default <E2> TransferAccepter<R, C, E> forType(Class<E2> type, Predicate<? super E2> filter, Function<? super E2, ? extends E> map,
+			Consumer<? super TransferAccepter<R, C, E2>> accept) {
+			return forType(TypeTokens.get().of(type), filter, map, accept);
+		}
 
-		TransferAccepter<E> pastable(boolean pastable);
+		TransferAccepter<R, C, E> draggable(boolean draggable);
 
-		TransferAccepter<E> appearance(Consumer<TransferAppearance<E>> appearance);
+		TransferAccepter<R, C, E> pastable(boolean pastable);
 
-		default TransferAccepter<E> fromFlavor(DataFlavor flavor, DataAccepterTransform<? extends E> data) {
+		TransferAccepter<R, C, E> appearance(Consumer<TransferAppearance<E>> appearance);
+
+		default TransferAccepter<R, C, E> fromFlavor(DataFlavor flavor, DataAccepterTransform<R, C, ? extends E> data) {
 			return fromFlavors(Arrays.asList(flavor), data);
 		}
 
-		TransferAccepter<E> fromFlavors(Collection<? extends DataFlavor> flavors, DataAccepterTransform<? extends E> data);
+		TransferAccepter<R, C, E> fromFlavors(Collection<? extends DataFlavor> flavors, DataAccepterTransform<R, C, ? extends E> data);
 
-		TransferAccepter<E> fromObject();
+		TransferAccepter<R, C, E> fromObject();
 
-		TransferAccepter<E> fromText(Function<? super CharSequence, ? extends E> fromString);
+		TransferAccepter<R, C, E> fromText(Function<? super CharSequence, ? extends E> fromString);
 
-		boolean canAccept(TransferSupport transfer, boolean withMulti);
+		boolean canAccept(ModelCell<? extends R, ? extends C> targetCell, TransferSupport transfer, boolean withMulti);
 
-		BetterList<E> accept(Transferable transferable, boolean withMulti) throws IOException;
+		BetterList<E> accept(ModelCell<? extends R, ? extends C> targetCell, Transferable transferable, boolean withMulti, boolean testOnly)
+			throws IOException;
 	}
 
-	public interface DataAccepterTransform<E> {
-		boolean canAccept(Object value, DataFlavor flavor);
+	public interface DataAccepterTransform<R, C, E> {
+		boolean canAccept(ModelCell<? extends R, ? extends C> targetCell, Object value, DataFlavor flavor);
 
-		E transform(Object value, DataFlavor flavor) throws IOException;
+		E transform(ModelCell<? extends R, ? extends C> targetCell, Object value, DataFlavor flavor, boolean testOnly) throws IOException;
+	}
+
+	public interface DataConsumer<R, C, E> {
+		boolean consume(ModelCell<? extends R, ? extends C> target, E incoming, boolean justTest);
 	}
 
 	static class SimpleTransferSource<E> implements TransferSource<E> {
@@ -388,10 +398,10 @@ public class Dragging {
 		}
 	}
 
-	static class SimpleTransferAccepter<E> implements TransferAccepter<E> {
+	static class SimpleTransferAccepter<R, C, E> implements TransferAccepter<R, C, E> {
 		private final TypeToken<E> theType;
-		private List<BiTuple<Set<DataFlavor>, DataAccepterTransform<? extends E>>> theFlavors;
-		private List<Filtered<E, ?>> theFiltered;
+		private List<BiTuple<Set<DataFlavor>, DataAccepterTransform<R, C, ? extends E>>> theFlavors;
+		private List<Filtered<R, C, E, ?>> theFiltered;
 		private Consumer<TransferAppearance<E>> theAppearance;
 		private boolean isDraggable;
 		private boolean isPastable;
@@ -403,30 +413,30 @@ public class Dragging {
 		}
 
 		@Override
-		public <E2> TransferAccepter<E> forType(TypeToken<E2> type, Predicate<? super E2> filter, Function<? super E2, ? extends E> map,
-			Consumer<? super TransferAccepter<E2>> accept) {
+		public <E2> TransferAccepter<R, C, E> forType(TypeToken<E2> type, Predicate<? super E2> filter,
+			Function<? super E2, ? extends E> map, Consumer<? super TransferAccepter<R, C, E2>> accept) {
 			if (theFiltered == null)
 				theFiltered = new ArrayList<>(3);
-			SimpleTransferAccepter<E2> accepter = new SimpleTransferAccepter<>(type);
+			SimpleTransferAccepter<R, C, E2> accepter = new SimpleTransferAccepter<>(type);
 			accept.accept(accepter);
 			theFiltered.add(new Filtered<>(filter, map, accepter));
 			return this;
 		}
 
 		@Override
-		public TransferAccepter<E> draggable(boolean draggable) {
+		public TransferAccepter<R, C, E> draggable(boolean draggable) {
 			isDraggable = draggable;
 			return this;
 		}
 
 		@Override
-		public TransferAccepter<E> pastable(boolean pastable) {
+		public TransferAccepter<R, C, E> pastable(boolean pastable) {
 			isPastable = pastable;
 			return this;
 		}
 
 		@Override
-		public TransferAccepter<E> appearance(Consumer<TransferAppearance<E>> appearance) {
+		public TransferAccepter<R, C, E> appearance(Consumer<TransferAppearance<E>> appearance) {
 			if (appearance == null)
 				theAppearance = null;
 			else if (theAppearance == null)
@@ -442,39 +452,42 @@ public class Dragging {
 		}
 
 		@Override
-		public TransferAccepter<E> fromFlavors(Collection<? extends DataFlavor> flavors, DataAccepterTransform<? extends E> data) {
+		public TransferAccepter<R, C, E> fromFlavors(Collection<? extends DataFlavor> flavors,
+			DataAccepterTransform<R, C, ? extends E> data) {
 			Set<DataFlavor> flavorSet = new LinkedHashSet<>(flavors);
 			theFlavors.add(new BiTuple<>(flavorSet, data));
 			return this;
 		}
 
 		@Override
-		public TransferAccepter<E> fromObject() {
-			return fromFlavor(new DataFlavor(TypeTokens.getRawType(theType), theType.toString()), new DataAccepterTransform<E>() {
+		public TransferAccepter<R, C, E> fromObject() {
+			return fromFlavor(new DataFlavor(TypeTokens.getRawType(theType), theType.toString()), new DataAccepterTransform<R, C, E>() {
 				@Override
-				public boolean canAccept(Object value, DataFlavor flavor) {
+				public boolean canAccept(ModelCell<? extends R, ? extends C> targetCell, Object value, DataFlavor flavor) {
 					if (value == null)
 						return !theType.isPrimitive();
 					return TypeTokens.get().isInstance(theType, value);
 				}
 
 				@Override
-				public E transform(Object value, DataFlavor flavor) throws IOException {
+				public E transform(ModelCell<? extends R, ? extends C> targetCell, Object value, DataFlavor flavor, boolean testOnly)
+					throws IOException {
 					return (E) value;
 				}
 			});
 		}
 
 		@Override
-		public TransferAccepter<E> fromText(Function<? super CharSequence, ? extends E> fromString) {
-			return fromFlavor(DataFlavor.getTextPlainUnicodeFlavor(), new DataAccepterTransform<E>() {
+		public TransferAccepter<R, C, E> fromText(Function<? super CharSequence, ? extends E> fromString) {
+			return fromFlavor(DataFlavor.getTextPlainUnicodeFlavor(), new DataAccepterTransform<R, C, E>() {
 				@Override
-				public boolean canAccept(Object value, DataFlavor flavor) {
+				public boolean canAccept(ModelCell<? extends R, ? extends C> targetCell, Object value, DataFlavor flavor) {
 					return true;
 				}
 
 				@Override
-				public E transform(Object value, DataFlavor flavor) throws IOException {
+				public E transform(ModelCell<? extends R, ? extends C> targetCell, Object value, DataFlavor flavor, boolean testOnly)
+					throws IOException {
 					StringWriter writer = new StringWriter();
 					char[] buffer = new char[1028];
 					int read = ((Reader) value).read(buffer);
@@ -488,19 +501,19 @@ public class Dragging {
 		}
 
 		@Override
-		public boolean canAccept(TransferSupport transfer, boolean withMulti) {
+		public boolean canAccept(ModelCell<? extends R, ? extends C> targetCell, TransferSupport transfer, boolean withMulti) {
 			if (transfer.isDrop()) {
 				if (!isDraggable)
 					return false;
 			} else if (!isPastable)
 				return false;
 			if (theFiltered != null) {
-				for (Filtered<E, ?> filtered : theFiltered) {
-					if (filtered.canAccept(transfer, withMulti))
+				for (Filtered<R, C, E, ?> filtered : theFiltered) {
+					if (filtered.canAccept(targetCell, transfer, withMulti))
 						return true;
 				}
 			}
-			for (BiTuple<Set<DataFlavor>, DataAccepterTransform<? extends E>> flavor : theFlavors) {
+			for (BiTuple<Set<DataFlavor>, DataAccepterTransform<R, C, ? extends E>> flavor : theFlavors) {
 				for (DataFlavor f : flavor.getValue1()) {
 					if (transfer.isDataFlavorSupported(f))
 						return true;
@@ -517,15 +530,16 @@ public class Dragging {
 		}
 
 		@Override
-		public BetterList<E> accept(Transferable transferable, boolean withMulti) throws IOException {
+		public BetterList<E> accept(ModelCell<? extends R, ? extends C> targetCell, Transferable transferable, boolean withMulti,
+			boolean testOnly) throws IOException {
 			if (theFiltered != null) {
-				for (Filtered<E, ?> filtered : theFiltered) {
-					BetterList<E> data = filtered.accept(transferable, withMulti);
+				for (Filtered<R, C, E, ?> filtered : theFiltered) {
+					BetterList<E> data = filtered.accept(targetCell, transferable, withMulti, testOnly);
 					if (data != null)
 						return data;
 				}
 			}
-			for (BiTuple<Set<DataFlavor>, DataAccepterTransform<? extends E>> flavor : theFlavors) {
+			for (BiTuple<Set<DataFlavor>, DataAccepterTransform<R, C, ? extends E>> flavor : theFlavors) {
 				for (DataFlavor f : flavor.getValue1()) {
 					DataFlavor f2;
 					boolean multi = false;
@@ -547,35 +561,35 @@ public class Dragging {
 					}
 					if (multi) {
 						BetterList<E> list = QommonsUtils.filterMapE((Collection<E>) data, //
-							d -> flavor.getValue2().canAccept(d, ((MultiFlavor) f2).single), //
-							d -> flavor.getValue2().transform(d, ((MultiFlavor) f2).single));
+							d -> flavor.getValue2().canAccept(targetCell, d, ((MultiFlavor) f2).single), //
+							d -> flavor.getValue2().transform(targetCell, d, ((MultiFlavor) f2).single, testOnly));
 						if (!list.isEmpty())
 							return list;
-					} else if (flavor.getValue2().canAccept(data, f2)) {
-						return BetterList.of(flavor.getValue2().transform(data, f2));
+					} else if (flavor.getValue2().canAccept(targetCell, data, f2)) {
+						return BetterList.of(flavor.getValue2().transform(targetCell, data, f2, testOnly));
 					}
 				}
 			}
 			return null;
 		}
 
-		static class Filtered<E, E2> {
+		static class Filtered<R, C, E, E2> {
 			private final Predicate<? super E2> theFilter;
 			private final Function<? super E2, ? extends E> theMap;
-			private final SimpleTransferAccepter<E2> theValue;
+			private final SimpleTransferAccepter<R, C, E2> theValue;
 
-			Filtered(Predicate<? super E2> filter, Function<? super E2, ? extends E> map, SimpleTransferAccepter<E2> value) {
+			Filtered(Predicate<? super E2> filter, Function<? super E2, ? extends E> map, SimpleTransferAccepter<R, C, E2> value) {
 				theFilter = filter;
 				theMap = map;
 				theValue = value;
 			}
 
-			boolean canAccept(TransferSupport transfer, boolean withMulti) {
-				if (!theValue.canAccept(transfer, withMulti))
+			boolean canAccept(ModelCell<? extends R, ? extends C> targetCell, TransferSupport transfer, boolean withMulti) {
+				if (!theValue.canAccept(targetCell, transfer, withMulti))
 					return false;
 				List<E2> data;
 				try {
-					data = theValue.accept(transfer.getTransferable(), withMulti);
+					data = theValue.accept(targetCell, transfer.getTransferable(), withMulti, true);
 				} catch (IOException e) {
 					throw new IllegalStateException("Badly advertised support", e);
 				}
@@ -595,8 +609,9 @@ public class Dragging {
 				return true;
 			}
 
-			BetterList<E> accept(Transferable transferable, boolean withMulti) throws IOException {
-				BetterList<E2> data = theValue.accept(transferable, withMulti);
+			BetterList<E> accept(ModelCell<? extends R, ? extends C> targetCell, Transferable transferable, boolean withMulti,
+				boolean testOnly) throws IOException {
+				BetterList<E2> data = theValue.accept(targetCell, transferable, withMulti, testOnly);
 				if (data == null)
 					return null;
 				return QommonsUtils.filterMap(data, theFilter, theMap);
@@ -661,20 +676,20 @@ public class Dragging {
 
 		@Override
 		public Object getTransferData(DataFlavor flavor) throws UnsupportedFlavorException, IOException {
-			if(theComponents.length==0)
+			if (theComponents.length == 0)
 				return null;
-			if(!(flavor instanceof MultiFlavor)){
-				if(theComponents.length==1)
+			if (!(flavor instanceof MultiFlavor)) {
+				if (theComponents.length == 1)
 					return theComponents[0].getTransferData(flavor);
 				throw new UnsupportedFlavorException(flavor);
 			}
-			DataFlavor single=((MultiFlavor) flavor).single;
-			for(Transferable c : theComponents){
-				if(!(c.isDataFlavorSupported(single)))
+			DataFlavor single = ((MultiFlavor) flavor).single;
+			for (Transferable c : theComponents) {
+				if (!(c.isDataFlavorSupported(single)))
 					throw new UnsupportedFlavorException(flavor);
 			}
-			List<Object> transferData=new ArrayList<>(theComponents.length);
-			for(Transferable c : theComponents)
+			List<Object> transferData = new ArrayList<>(theComponents.length);
+			for (Transferable c : theComponents)
 				transferData.add(c.getTransferData(single));
 			return Collections.unmodifiableList(transferData);
 		}

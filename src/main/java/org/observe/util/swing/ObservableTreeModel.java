@@ -1,6 +1,7 @@
 package org.observe.util.swing;
 
 import java.awt.EventQueue;
+import java.awt.event.MouseEvent;
 import java.beans.PropertyChangeListener;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -41,6 +42,81 @@ import com.google.common.reflect.TypeToken;
  * @param <T> The type of values in the tree
  */
 public abstract class ObservableTreeModel<T> implements TreeModel {
+	/**
+	 * A mouse listener for a tree
+	 *
+	 * @param <R> The type of the values in the tree
+	 */
+	public interface PathMouseListener<R> {
+		/**
+		 * @param path The row in the tree that the event occurred on
+		 * @param e The event
+		 */
+		void mouseClicked(ModelPath<? extends R> path, MouseEvent e);
+
+		/**
+		 * @param path The row in the tree that the event occurred on
+		 * @param e The event
+		 */
+		void mousePressed(ModelPath<? extends R> path, MouseEvent e);
+
+		/**
+		 * @param path The row in the tree that the event occurred on
+		 * @param e The event
+		 */
+		void mouseReleased(ModelPath<? extends R> path, MouseEvent e);
+
+		/**
+		 * @param path The row in the tree that the event occurred on
+		 * @param e The event
+		 */
+		void mouseEntered(ModelPath<? extends R> path, MouseEvent e);
+
+		/**
+		 * @param path The row in the tree that the event occurred on
+		 * @param e The event
+		 */
+		void mouseExited(ModelPath<? extends R> path, MouseEvent e);
+
+		/**
+		 * @param path The row in the tree that the event occurred on
+		 * @param e The event
+		 */
+		void mouseMoved(ModelPath<? extends R> path, MouseEvent e);
+	}
+
+	/**
+	 * A {@link PathMouseListener} with all its methods implemented, so only one (or a few) can be overridden instead of having to specify
+	 * empty methods
+	 *
+	 * @param <R> The type of values in the tree
+	 */
+	public static abstract class PathMouseAdapter<R> implements PathMouseListener<R> {
+		@Override
+		public void mouseClicked(ModelPath<? extends R> path, MouseEvent e) {
+		}
+
+		@Override
+		public void mousePressed(ModelPath<? extends R> path, MouseEvent e) {
+		}
+
+		@Override
+		public void mouseReleased(ModelPath<? extends R> path, MouseEvent e) {
+		}
+
+		@Override
+		public void mouseEntered(ModelPath<? extends R> path, MouseEvent e) {
+		}
+
+		@Override
+		public void mouseExited(ModelPath<? extends R> path, MouseEvent e) {
+		}
+
+		@Override
+		public void mouseMoved(ModelPath<? extends R> row, MouseEvent e) {
+		}
+	}
+
 	private final ObservableValue<? extends T> theRoot;
 	private TreeNode theRootNode;
 
@@ -64,6 +140,11 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 		theNodes.put(new IdentityKey<>(theRootNode.get()), theRootNode);
 
 		root.noInitChanges().act(evt -> rootChanged(evt.getNewValue()));
+	}
+
+	/** @return The observable value that is the root of this tree */
+	public ObservableValue<? extends T> observeRoot() {
+		return theRoot;
 	}
 
 	@Override
@@ -146,7 +227,7 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 		theListeners.clear();
 	}
 
-	private class TreeNode {
+	class TreeNode {
 		private final TreeNode theParent;
 		private final T theValue;
 		private final List<TreeNode> theChildNodes;
@@ -196,6 +277,8 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 						indexes[i] = i;
 						values[i] = theChildNodes.get(i).get();
 					}
+					if (indexes.length == 0)
+						indexes = null;
 					TreeModelEvent event = new TreeModelEvent(this, getPath(), indexes, values);
 					for (TreeModelListener listener : theListeners)
 						listener.treeNodesInserted(event);
@@ -300,6 +383,8 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 						indexes[i] = i;
 						values[i] = theChildNodes.get(i).get();
 					}
+					if (indexes.length == 0)
+						indexes = null;
 					TreeModelEvent event = new TreeModelEvent(this, getPath(), indexes, values);
 					for (TreeModelListener listener : theListeners)
 						listener.treeNodesRemoved(event);
@@ -346,6 +431,8 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 		private void changed(int[] indexes, Object[] values) {
 			// Swing expects indexes to be in ascending order
 			sort(indexes, values);
+			if (indexes.length == 0)
+				indexes = null;
 			TreeModelEvent event = new TreeModelEvent(this, getPath(), indexes, values);
 
 			for (TreeModelListener listener : theListeners)

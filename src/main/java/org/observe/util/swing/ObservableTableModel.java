@@ -626,6 +626,7 @@ public class ObservableTableModel<R> implements TableModel {
 		private final CategoryRenderStrategy<R, C> theColumn;
 		private final TableRenderContext theContext;
 		private ComponentDecorator theDecorator;
+		private Runnable theRevert;
 
 		private Component theLastRender;
 
@@ -638,6 +639,10 @@ public class ObservableTableModel<R> implements TableModel {
 		@Override
 		public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row,
 			int column) {
+			if (theRevert != null) {
+				theRevert.run();
+				theRevert = null;
+			}
 			if (theLastRender != null) {
 				theLastRender.setBackground(null);
 				theLastRender.setForeground(null);
@@ -659,7 +664,7 @@ public class ObservableTableModel<R> implements TableModel {
 				else
 					theDecorator.reset();
 				theColumn.getDecorator().decorate(cell, theDecorator);
-				theDecorator.decorate(c);
+				theRevert = theDecorator.decorate(c);
 				theDecorator.reset();
 			}
 			return c;

@@ -331,6 +331,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 		private Predicate<EventObject> theEditTest;
 		private CellDecorator<M, C> theDecorator;
 		private BiFunction<? super M, ? super C, String> theValueTooltip;
+		private Runnable theRevert;
 
 		private ModelCell<M, C> theEditingCell;
 
@@ -431,6 +432,10 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 
 		@Override
 		public <E extends M> Component getListCellEditorComponent(LittleList<E> list, E modelValue, int rowIndex, boolean selected) {
+			if (theRevert != null) {
+				theRevert.run();
+				theRevert = null;
+			}
 			if (theEditorSubscription != null) {
 				theEditorSubscription.uninstall(false);
 				theEditorSubscription = null;
@@ -473,7 +478,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			if (theDecorator != null) {
 				ComponentDecorator cd = new ComponentDecorator();
 				theDecorator.decorate(theEditingCell, cd);
-				cd.decorate(theEditorComponent);
+				theRevert = cd.decorate(theEditorComponent);
 			}
 			theEditorSubscription = theInstallation.install(this, list, valueFilter, tooltip, valueTooltip);
 			return theEditorComponent;
@@ -481,6 +486,10 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 
 		@Override
 		public Component getTableCellEditorComponent(JTable table, Object value, boolean isSelected, int row, int column) {
+			if (theRevert != null) {
+				theRevert.run();
+				theRevert = null;
+			}
 			if (theEditorSubscription != null) {
 				theEditorSubscription.uninstall(false);
 				theEditorSubscription = null;
@@ -519,7 +528,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			if (theDecorator != null) {
 				ComponentDecorator cd = new ComponentDecorator();
 				theDecorator.decorate(theEditingCell, cd);
-				cd.decorate(theEditorComponent);
+				theRevert = cd.decorate(theEditorComponent);
 			}
 			theEditorSubscription = theInstallation.install(this, table, valueFilter, tooltip, valueTooltip);
 			return theEditorComponent;
@@ -527,6 +536,10 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 
 		@Override
 		public Component getTreeCellEditorComponent(JTree tree, Object value, boolean isSelected, boolean expanded, boolean leaf, int row) {
+			if (theRevert != null) {
+				theRevert.run();
+				theRevert = null;
+			}
 			if (theEditorSubscription != null) {
 				theEditorSubscription.uninstall(false);
 				theEditorSubscription = null;
@@ -537,7 +550,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			if (theDecorator != null) {
 				ComponentDecorator cd = new ComponentDecorator();
 				theDecorator.decorate(theEditingCell, cd);
-				cd.decorate(theEditorComponent);
+				theRevert = cd.decorate(theEditorComponent);
 			}
 			theEditorSubscription = theInstallation.install(this, tree, null, null, null);
 			return theEditorComponent;

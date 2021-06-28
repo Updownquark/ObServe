@@ -6,7 +6,9 @@ import java.awt.Cursor;
 import java.awt.Font;
 import java.awt.font.TextAttribute;
 import java.text.AttributedCharacterIterator.Attribute;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
@@ -182,52 +184,93 @@ public class ComponentDecorator {
 		return this;
 	}
 
-	public <C extends Component> C decorate(C c) {
-		if (c instanceof JComponent && theBorder != null)
+	public <C extends Component> Runnable decorate(C c) {
+		List<Runnable> revert = new ArrayList<>();
+		if (c instanceof JComponent && theBorder != null) {
+			Border oldBorder = ((JComponent) c).getBorder();
 			((JComponent) c).setBorder(theBorder);
-		if (theBackground != null)
+			revert.add(() -> ((JComponent) c).setBorder(oldBorder));
+		}
+		if (theBackground != null) {
+			Color oldBG = c.getBackground();
 			c.setBackground(theBackground);
-		if (theForeground != null)
+			revert.add(() -> c.setBackground(oldBG));
+		}
+		if (theForeground != null) {
+			Color oldFG = c.getForeground();
 			c.setForeground(theForeground);
-		if (theFont != null)
+			revert.add(() -> c.setForeground(oldFG));
+		}
+		if (theFont != null) {
+			Font oldFont = c.getFont();
 			c.setFont(theFont.apply(c.getFont()));
+			revert.add(() -> c.setFont(oldFont));
+		}
 
 		if (theHAlign != null) {
 			int align = theHAlign;
 			int swingAlign = align < 0 ? SwingConstants.LEADING : (align > 0 ? SwingConstants.TRAILING : SwingConstants.CENTER);
-			if (c instanceof JLabel)
+			if (c instanceof JLabel) {
+				int oldAlign = ((JLabel) c).getHorizontalAlignment();
 				((JLabel) c).setHorizontalAlignment(swingAlign);
-			else if (c instanceof JTextField)
+				revert.add(() -> ((JLabel) c).setHorizontalAlignment(oldAlign));
+			} else if (c instanceof JTextField) {
+				int oldAlign = ((JTextField) c).getHorizontalAlignment();
 				((JTextField) c).setHorizontalAlignment(//
 					align < 0 ? JTextField.LEADING : (align > 0 ? JTextField.TRAILING : JLabel.CENTER));
-			else if (c instanceof JTextComponent)
+				revert.add(() -> ((JTextField) c).setHorizontalAlignment(oldAlign));
+			} else if (c instanceof JTextComponent) {
+				float oldAlign = ((JTextComponent) c).getAlignmentX();
 				((JTextComponent) c).setAlignmentX(//
 					align < 0 ? 0f : (align > 0 ? 1f : 0.5f));
-			else if (c instanceof AbstractButton)
+				revert.add(() -> ((JTextComponent) c).setAlignmentX(oldAlign));
+			} else if (c instanceof AbstractButton) {
+				float oldAlign = ((AbstractButton) c).getAlignmentX();
 				((AbstractButton) c).setAlignmentY(//
 					align < 0 ? 0f : (align > 0 ? 1f : 0.5f));
+				revert.add(() -> ((AbstractButton) c).setAlignmentX(oldAlign));
+			}
 		}
 		if (theVAlign != null) {
 			int align = theVAlign;
 			int swingAlign = align < 0 ? SwingConstants.LEADING : (align > 0 ? SwingConstants.TRAILING : SwingConstants.CENTER);
-			if (c instanceof JLabel)
+			if (c instanceof JLabel) {
+				int oldAlign = ((JLabel) c).getVerticalAlignment();
 				((JLabel) c).setVerticalAlignment(swingAlign);
-			else if (c instanceof JTextComponent)
+				revert.add(() -> ((JLabel) c).setVerticalAlignment(oldAlign));
+			} else if (c instanceof JTextComponent) {
+				float oldAlign = ((JTextComponent) c).getAlignmentY();
 				((JTextComponent) c).setAlignmentX(//
 					align < 0 ? 0f : (align > 0 ? 1f : 0.5f));
-			else if (c instanceof AbstractButton)
+				revert.add(() -> ((JTextComponent) c).setAlignmentY(oldAlign));
+			} else if (c instanceof AbstractButton) {
+				float oldAlign = ((AbstractButton) c).getAlignmentY();
 				((AbstractButton) c).setAlignmentX(//
 					align < 0 ? 0f : (align > 0 ? 1f : 0.5f));
+				revert.add(() -> ((AbstractButton) c).setAlignmentY(oldAlign));
+			}
 		}
 
-		if (c instanceof JLabel)
+		if (c instanceof JLabel) {
+			Icon oldIcon = ((JLabel) c).getIcon();
 			((JLabel) c).setIcon(theIcon);
-		else if (c instanceof AbstractButton)
+			revert.add(() -> ((JLabel) c).setIcon(oldIcon));
+		} else if (c instanceof AbstractButton) {
+			Icon oldIcon = ((JButton) c).getIcon();
 			((JButton) c).setIcon(theIcon);
+			revert.add(() -> ((JButton) c).setIcon(oldIcon));
+		}
 
-		c.setCursor(theCursor == null ? Cursor.getDefaultCursor() : theCursor);
+		if (theCursor != null) {
+			Cursor oldCursor = c.getCursor();
+			c.setCursor(theCursor);
+			revert.add(() -> c.setCursor(oldCursor));
+		}
 
-		return c;
+		return () -> {
+			for (Runnable r : revert)
+				r.run();
+		};
 	}
 
 	public static ComponentDecorator capture(Component c) {

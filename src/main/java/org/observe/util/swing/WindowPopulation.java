@@ -185,15 +185,18 @@ public class WindowPopulation {
 			theWindow.setLocationRelativeTo(relativeTo);
 			if (theTitle != null) {
 				if (theWindow instanceof Frame)
-					theTitle.changes().takeUntil(theUntil).act(evt -> ((Frame) theWindow).setTitle(evt.getNewValue()));
+					theTitle.changes().takeUntil(theUntil)
+					.act(evt -> ObservableSwingUtils.onEQ(() -> ((Frame) theWindow).setTitle(evt.getNewValue())));
 				else if (theWindow instanceof Dialog)
-					theTitle.changes().takeUntil(theUntil).act(evt -> ((Dialog) theWindow).setTitle(evt.getNewValue()));
+					theTitle.changes().takeUntil(theUntil)
+					.act(evt -> ObservableSwingUtils.onEQ(() -> ((Dialog) theWindow).setTitle(evt.getNewValue())));
 				else
 					System.err.println(
 						"Title configured, but window type " + theWindow.getClass().getName() + " is not a recognized titled window");
 			}
 			if (theIcon != null) {
-				theIcon.changes().takeUntil(theUntil).act(evt -> theWindow.setIconImage(evt.getNewValue()));
+				theIcon.changes().takeUntil(theUntil)
+					.act(evt -> ObservableSwingUtils.onEQ(() -> theWindow.setIconImage(evt.getNewValue())));
 			}
 			SettableValue<Integer> x = theX;
 			SettableValue<Integer> y = theY;

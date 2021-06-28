@@ -78,6 +78,7 @@ import javax.swing.tree.TreeSelectionModel;
 
 import org.jdesktop.swingx.JXCollapsiblePane;
 import org.jdesktop.swingx.JXPanel;
+import org.jdesktop.swingx.JXTreeTable;
 import org.observe.Equivalence;
 import org.observe.Observable;
 import org.observe.ObservableAction;
@@ -103,6 +104,7 @@ import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
+import org.qommons.ValueHolder;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.CollectionLockingStrategy;
@@ -312,6 +314,9 @@ public class PanelPopulation {
 
 		<F> P addTree(ObservableValue<? extends F> root, Function<? super F, ? extends ObservableCollection<? extends F>> children,
 			Consumer<TreeEditor<F, ?>> modify);
+
+		<F> P addTreeTable(ObservableValue<F> root, Function<? super F, ? extends ObservableCollection<? extends F>> children,
+			Consumer<TreeTableEditor<F, ?>> modify);
 
 		P addTabs(Consumer<TabPaneEditor<JTabbedPane, ?>> tabs);
 
@@ -732,21 +737,22 @@ public class PanelPopulation {
 		String getItemName();
 	}
 
-	public interface ListWidgetBuilder<R, C extends Component, P extends ListWidgetBuilder<R, C, P>>
-	extends CollectionWidgetBuilder<R, C, P> {
+	public interface ListWidgetBuilder<R, C extends Component, P extends ListWidgetBuilder<R, C, P>> {
 		P withAdd(Supplier<? extends R> creator, Consumer<DataAction<R, ?>> actionMod);
 
 		P withCopy(Function<? super R, ? extends R> copier, Consumer<DataAction<R, ?>> actionMod);
 
 		ObservableCollection<? extends R> getRows();
+
+		String getItemName();
 	}
 
 	public interface ListBuilder<R, P extends ListBuilder<R, P>>
-	extends ListWidgetBuilder<R, LittleList<R>, P>, FieldEditor<LittleList<R>, P> {
+	extends CollectionWidgetBuilder<R, LittleList<R>, P>, ListWidgetBuilder<R, LittleList<R>, P>, FieldEditor<LittleList<R>, P> {
 		P render(Consumer<CategoryRenderStrategy<R, R>> render);
 	}
 
-	public interface TableBuilder<R, P extends TableBuilder<R, P>> extends ListWidgetBuilder<R, JTable, P> {
+	public interface AbstractTableBuilder<R, C extends Component, P extends AbstractTableBuilder<R, C, P>> {
 		P withColumns(ObservableCollection<? extends CategoryRenderStrategy<? super R, ?>> columns);
 
 		P withColumn(CategoryRenderStrategy<? super R, ?> column);
@@ -764,6 +770,13 @@ public class PanelPopulation {
 			return withColumn(name, TypeTokens.get().of(type), accessor, column);
 		}
 
+		P withAdaptiveHeight(int minRows, int prefRows, int maxRows);
+
+		P scrollable(boolean scrollable);
+	}
+
+	public interface TableBuilder<R, P extends TableBuilder<R, P>>
+	extends CollectionWidgetBuilder<R, JTable, P>, ListWidgetBuilder<R, JTable, P>, AbstractTableBuilder<R, JTable, P> {
 		default P withNameColumn(Function<? super R, String> getName, BiConsumer<? super R, String> setName, boolean unique,
 			Consumer<CategoryRenderStrategy<R, String>> column) {
 			return withColumn("Name", String.class, getName, col -> {
@@ -792,23 +805,19 @@ public class PanelPopulation {
 
 		P withIndexColumn(String columnName, Consumer<CategoryRenderStrategy<R, Integer>> column);
 
-		P withMove(boolean up, Consumer<DataAction<R, ?>> actionMod);
-
-		P withMoveToEnd(boolean up, Consumer<DataAction<R, ?>> actionMod);
-
 		P withTableOption(Consumer<? super PanelPopulator<?, ?>> panel);
 
 		P withFiltering(ObservableValue<? extends TableContentControl> filter);
 
-		P withAdaptiveHeight(int minRows, int prefRows, int maxRows);
+		P withMove(boolean up, Consumer<DataAction<R, ?>> actionMod);
+
+		P withMoveToEnd(boolean up, Consumer<DataAction<R, ?>> actionMod);
 
 		P dragSourceRow(Consumer<? super Dragging.TransferSource<R>> source);
 
-		P dragAcceptRow(Consumer<? super Dragging.TransferAccepter<R>> accept);
+		P dragAcceptRow(Consumer<? super Dragging.TransferAccepter<R, R, R>> accept);
 
 		P withMouseListener(ObservableTableModel.RowMouseListener<? super R> listener);
-
-		P scrollable(boolean scrollable);
 	}
 
 	public interface DataAction<R, A extends DataAction<R, A>> {
@@ -843,6 +852,8 @@ public class PanelPopulation {
 		A allowWhenMulti(Function<? super List<? extends R>, String> filter, Consumer<ActionEnablement<List<? extends R>>> operation);
 
 		A withTooltip(Function<? super List<? extends R>, String> tooltip);
+
+		// A disableWith(Function<? super List<? extends R>, String> disabled);
 
 		A modifyAction(Function<? super ObservableAction<?>, ? extends ObservableAction<?>> actionMod);
 
@@ -933,20 +944,9 @@ public class PanelPopulation {
 		}
 	}
 
-	public interface TreeEditor<F, P extends TreeEditor<F, P>> extends CollectionWidgetBuilder<BetterList<F>, JTree, P> {
+	public interface AbstractTreeEditor<F, C extends Component, P extends AbstractTreeEditor<F, C, P>>
+	extends CollectionWidgetBuilder<BetterList<F>, C, P> {
 		ObservableValue<? extends F> getRoot();
-
-		default P renderWith(Function<? super F, String> format) {
-			return renderWith(ObservableCellRenderer.formatted(format));
-		}
-
-		P renderWith(ObservableCellRenderer<BetterList<F>, F> renderer);
-
-		default P withValueTooltip(Function<? super F, String> tooltip) {
-			return withCellTooltip(tooltip == null ? null : cell -> tooltip.apply(cell.getCellValue()));
-		}
-
-		P withCellTooltip(Function<? super ModelCell<BetterList<F>, F>, String> tooltip);
 
 		default P withSelection(SettableValue<F> selection, Function<? super F, ? extends F> parent, boolean enforceSingleSelection) {
 			return withSelection(selection.map(TypeTokens.get().keyFor(BetterList.class).parameterized(selection.getType()), //
@@ -975,6 +975,43 @@ public class PanelPopulation {
 			}
 			return BetterList.of(path);
 		}
+
+		boolean isVisible(List<? extends F> path);
+
+		boolean isExpanded(List<? extends F> path);
+	}
+
+	public interface TreeEditor<F, P extends TreeEditor<F, P>> extends AbstractTreeEditor<F, JTree, P> {
+		default P renderWith(Function<? super F, String> format) {
+			return renderWith(ObservableCellRenderer.formatted(format));
+		}
+
+		P renderWith(ObservableCellRenderer<BetterList<F>, F> renderer);
+
+		default P withValueTooltip(Function<? super F, String> tooltip) {
+			return withCellTooltip(tooltip == null ? null : cell -> tooltip.apply(cell.getCellValue()));
+		}
+
+		P withCellTooltip(Function<? super ModelCell<BetterList<F>, F>, String> tooltip);
+	}
+
+	public interface TreeTableEditor<F, P extends TreeTableEditor<F, P>>
+	extends AbstractTreeEditor<F, JXTreeTable, P>, AbstractTableBuilder<F, JXTreeTable, P> {
+		P withMouseListener(ObservableTreeModel.PathMouseListener<? super F> listener);
+
+		CategoryRenderStrategy<? super F, F> getTreeColumn();
+
+		default P withTreeColumn(String name, Consumer<CategoryRenderStrategy<? super F, F>> treeColumn) {
+			CategoryRenderStrategy<? super F, F> column = getTreeColumn();
+			if (column == null) {
+				column = new CategoryRenderStrategy<F, F>(name, (TypeToken<F>) getRoot().getType(), f -> f);
+				withTreeColumn(column);
+			}
+			treeColumn.accept(column);
+			return (P) this;
+		}
+
+		P withTreeColumn(CategoryRenderStrategy<? super F, F> column);
 	}
 
 	public interface Alert {
@@ -993,6 +1030,12 @@ public class PanelPopulation {
 		 * @return Whether the user clicked "Yes" or "OK"
 		 */
 		boolean confirm(boolean confirmType);
+
+		<T> T input(TypeToken<T> type, Format<T> format, T initial, Consumer<ObservableTextField<T>> modify);
+
+		default <T> T input(Class<T> type, Format<T> format, T initial, Consumer<ObservableTextField<T>> modify) {
+			return input(TypeTokens.get().of(type), format, initial, modify);
+		}
 	}
 
 	public interface WindowBuilder<W extends Window, P extends WindowBuilder<W, P>> {
@@ -1460,6 +1503,16 @@ public class PanelPopulation {
 			if (modify != null)
 				modify.accept(treeEditor);
 			doAdd(treeEditor, null, null, false);
+			return (P) this;
+		}
+
+		@Override
+		default <F> P addTreeTable(ObservableValue<F> root, Function<? super F, ? extends ObservableCollection<? extends F>> children,
+			Consumer<TreeTableEditor<F, ?>> modify) {
+			SimpleTreeTableBuilder<F, ?> treeTableEditor = new SimpleTreeTableBuilder<>(getLock(), root, children);
+			if (modify != null)
+				modify.accept(treeTableEditor);
+			doAdd(treeTableEditor, null, null, false);
 			return (P) this;
 		}
 
@@ -3851,26 +3904,32 @@ public class PanelPopulation {
 						}
 					}
 					boolean error = false;
-					if (!actWhenAnyEnabled && !messages.isEmpty()) {
+					if (!actWhenAnyEnabled && messages != null) {
 						error = true;
 					} else if (allowedCount == 0 && !zeroAllowed) {
 						error = true;
-						if (messages.isEmpty())
+						if (messages == null) {
+							messages = new LinkedHashSet<>();
 							messages.add("Nothing selected");
+						}
 					} else if (allowedCount > 1 && !multipleAllowed) {
 						error = true;
-						if (messages.isEmpty())
+						if (messages == null) {
+							messages = new LinkedHashSet<>();
 							messages.add("Multiple " + StringUtils.pluralize(theWidget.getItemName()) + " selected");
+						}
 					}
 					if (error) {
 						message = new StringBuilder("<html>");
 						boolean first = true;
-						for (String msg : messages) {
-							if (!first)
-								message.append("<br>");
-							else
-								first = false;
-							message.append(msg);
+						if (messages != null) {
+							for (String msg : messages) {
+								if (!first)
+									message.append("<br>");
+								else
+									first = false;
+								message.append(msg);
+							}
 						}
 					}
 				}
@@ -4012,6 +4071,16 @@ public class PanelPopulation {
 		}
 
 		@Override
+		public boolean isVisible(List<? extends F> path) {
+			return getEditor().isVisible(new TreePath(path.toArray()));
+		}
+
+		@Override
+		public boolean isExpanded(List<? extends F> path) {
+			return getEditor().isExpanded(new TreePath(path.toArray()));
+		}
+
+		@Override
 		protected Component getOrCreateComponent(Observable<?> until) {
 			if (theComponent != null)
 				return theComponent;
@@ -4054,8 +4123,14 @@ public class PanelPopulation {
 				JMenuItem[] actionMenuItems = new JMenuItem[actions.length];
 				for (int a = 0; a < actions.length; a++) {
 					actionMenuItems[a] = new JMenuItem();
-					actions[a].theButtonMod
-					.accept(new SimpleButtonEditor(null, actionMenuItems[a], null, actions[a].theObservableAction, getLock(), false));
+					SimpleDataAction<BetterList<F>, ?> action = actions[a];
+					if (action.theButtonMod != null) {
+						SimpleButtonEditor<?, ?> buttonEditor = new SimpleButtonEditor<>(null, actionMenuItems[a], null,
+							action.theObservableAction, getLock(), false);
+						action.theButtonMod.accept(buttonEditor);
+						buttonEditor.getOrCreateComponent(until);
+					}
+					actionMenuItems[a].addActionListener(evt -> action.theObservableAction.act(evt));
 				}
 				getEditor().getSelectionModel().addTreeSelectionListener(evt -> {
 					List<BetterList<F>> selection = getSelection();
@@ -4187,6 +4262,50 @@ public class PanelPopulation {
 			else
 				result = JOptionPane.showConfirmDialog(theComponent, theMessage, theTitle, ct, getJOptionType());
 			return (result == JOptionPane.OK_OPTION || result == JOptionPane.YES_OPTION);
+		}
+
+		@Override
+		public <T> T input(TypeToken<T> type, Format<T> format, T initial, Consumer<ObservableTextField<T>> modify) {
+			SimpleObservable<Void> until = SimpleObservable.build().safe(false).build();
+			SettableValue<T> value = SettableValue.build(type).safe(false).withValue(initial).build();
+			WindowBuilder<JDialog, ?> dialog = WindowPopulation.populateDialog(null, until, true)//
+				.modal(true).withTitle(theTitle);
+			if (theImage != null)
+				dialog.withIcon(theImage.getIcon().map(img -> ((ImageIcon) img).getImage()));
+			boolean[] provided = new boolean[1];
+			dialog.withVContent(panel -> {
+				if (theMessage != null)
+					panel.addLabel(null, theMessage, null);
+				ValueHolder<ObservableTextField<T>> field = new ValueHolder<>();
+				panel.addTextField(null, value, format, f -> f.fill().modifyEditor(field));
+				if (modify != null)
+					modify.accept(field.get());
+				panel.addHPanel(null, new JustifiedBoxLayout(false).mainCenter().crossJustified(), buttons -> {
+					buttons.addButton("OK", __ -> {
+						provided[0] = true;
+						dialog.getWindow().setVisible(false);
+					}, btn -> btn.disableWith(field.get().getErrorState()))//
+					.addButton("Cancel", __ -> dialog.getWindow().setVisible(false), null);
+				});
+			});
+			if (EventQueue.isDispatchThread())
+				dialog.run(theComponent);
+			else {
+				try {
+					EventQueue.invokeAndWait(() -> dialog.run(theComponent));
+				} catch (InvocationTargetException e) {
+					e.getTargetException().printStackTrace();
+					return null;
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+					return null;
+				}
+			}
+			until.onNext(null);
+			if (provided[0])
+				return value.get();
+			else
+				return null;
 		}
 
 		private int getJOptionType() {

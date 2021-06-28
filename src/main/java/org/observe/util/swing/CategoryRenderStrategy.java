@@ -34,7 +34,7 @@ public class CategoryRenderStrategy<R, C> {
 		private BiFunction<? super R, ? super C, String> theEditorTooltip;
 
 		private BiFunction<MutableCollectionElement<R>, ? super C, String> theValueFilter;
-		private Dragging.SimpleTransferAccepter<C> theDragAccepter;
+		private Dragging.SimpleTransferAccepter<R, C, C> theDragAccepter;
 
 		CategoryMutationStrategy() {}
 
@@ -200,14 +200,14 @@ public class CategoryRenderStrategy<R, C> {
 			return theEditability;
 		}
 
-		public CategoryMutationStrategy dragAccept(Consumer<Dragging.TransferAccepter<C>> accepter) {
+		public CategoryMutationStrategy dragAccept(Consumer<Dragging.TransferAccepter<R, C, C>> accepter) {
 			if (theDragAccepter == null)
 				theDragAccepter = new Dragging.SimpleTransferAccepter<>(theType);
 			accepter.accept(theDragAccepter);
 			return this;
 		}
 
-		public Dragging.TransferAccepter<C> getDragAccepter() {
+		public Dragging.TransferAccepter<R, C, C> getDragAccepter() {
 			return theDragAccepter;
 		}
 	}

@@ -8,6 +8,7 @@ import java.awt.Rectangle;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
 import java.awt.datatransfer.UnsupportedFlavorException;
+import java.awt.dnd.DnDConstants;
 import java.beans.PropertyChangeListener;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -47,10 +48,10 @@ import org.observe.util.swing.Dragging.TransferAccepter;
 import org.observe.util.swing.Dragging.TransferSource;
 import org.observe.util.swing.ObservableTableModel.RowMouseListener;
 import org.observe.util.swing.PanelPopulation.AbstractComponentEditor;
-import org.observe.util.swing.PanelPopulation.PanelPopulator;
-import org.observe.util.swing.PanelPopulation.SimpleHPanel;
-import org.observe.util.swing.PanelPopulation.SimpleDataAction;
 import org.observe.util.swing.PanelPopulation.DataAction;
+import org.observe.util.swing.PanelPopulation.PanelPopulator;
+import org.observe.util.swing.PanelPopulation.SimpleDataAction;
+import org.observe.util.swing.PanelPopulation.SimpleHPanel;
 import org.observe.util.swing.PanelPopulation.TableBuilder;
 import org.observe.util.swing.TableContentControl.FilteredValue;
 import org.observe.util.swing.TableContentControl.ValueRenderer;
@@ -82,7 +83,7 @@ implements TableBuilder<R, P> {
 	private List<Object> theActions;
 	private ObservableValue<? extends TableContentControl> theFilter;
 	private Dragging.SimpleTransferSource<R> theDragSource;
-	private Dragging.SimpleTransferAccepter<R> theDragAccepter;
+	private Dragging.SimpleTransferAccepter<R, R, R> theDragAccepter;
 	private List<ObservableTableModel.RowMouseListener<? super R>> theMouseListeners;
 	private int theAdaptiveMinRowHeight;
 	private int theAdaptivePrefRowHeight;
@@ -454,7 +455,7 @@ implements TableBuilder<R, P> {
 	}
 
 	@Override
-	public P dragAcceptRow(Consumer<? super TransferAccepter<R>> accept) {
+	public P dragAcceptRow(Consumer<? super TransferAccepter<R, R, R>> accept) {
 		if (theDragAccepter == null)
 			theDragAccepter = new SimpleTransferAccepter<>(theRows.getType());
 		// if (accept == null)
@@ -549,7 +550,7 @@ implements TableBuilder<R, P> {
 			model = new ObservableTableModel<>(filteredValues, true, safeColumns, true);
 		} else {
 			filtered = null;
-			model = new ObservableTableModel<>(theSafeRows, true, theColumns, true);
+			model = new ObservableTableModel<>(theSafeRows, true, theColumns, false);
 		}
 		JTable table = getEditor();
 		table.setModel(model);
@@ -787,9 +788,9 @@ implements TableBuilder<R, P> {
 	class TableBuilderTransferHandler extends TransferHandler {
 		private final JTable theTable;
 		private final Dragging.SimpleTransferSource<R> theRowSource;
-		private final Dragging.SimpleTransferAccepter<R> theRowAccepter;
+		private final Dragging.SimpleTransferAccepter<R, R, R> theRowAccepter;
 
-		TableBuilderTransferHandler(JTable table, SimpleTransferSource<R> rowSource, SimpleTransferAccepter<R> rowAccepter) {
+		TableBuilderTransferHandler(JTable table, SimpleTransferSource<R> rowSource, SimpleTransferAccepter<R, R, R> rowAccepter) {
 			theTable = table;
 			theRowSource = rowSource;
 			theRowAccepter = rowAccepter;
@@ -903,6 +904,7 @@ implements TableBuilder<R, P> {
 					beforeRow = true;
 				}
 				ElementId targetRow = theSafeRows.getElement(rowIndex).getElementId();
+				R rowValue = theSafeRows.getElement(targetRow).get();
 				ElementId after = beforeRow ? CollectionElement.getElementId(theSafeRows.getAdjacentElement(targetRow, false)) : targetRow;
 				ElementId before = beforeRow ? targetRow : CollectionElement.getElementId(theSafeRows.getAdjacentElement(targetRow, true));
 				// Support row move before anything else
@@ -928,10 +930,10 @@ implements TableBuilder<R, P> {
 					} catch (IOException | UnsupportedFlavorException e) {
 						e.printStackTrace();
 					}
-				} else if (theRowAccepter != null && theRowAccepter.canAccept(support, true)) {
+				} else if (theRowAccepter != null && theRowAccepter.canAccept(null, support, true)) {
 					BetterList<R> newRows;
 					try {
-						newRows = theRowAccepter.accept(support.getTransferable(), true);
+						newRows = theRowAccepter.accept(null, support.getTransferable(), true, true);
 					} catch (IOException e) {
 						newRows = null;
 						// Ignore
@@ -982,11 +984,14 @@ implements TableBuilder<R, P> {
 			C oldValue = column.getCategoryValue(rowEl.get());
 			if (!column.getMutator().isEditable(rowEl.get(), oldValue))
 				return false;
-			if (!column.getMutator().getDragAccepter().canAccept(support, false))
+			boolean selected = theTable.isRowSelected(rowIndex);
+			ModelCell<R, C> cell = new ModelCell.Default<>(rowEl::get, oldValue, rowIndex, theColumns.indexOf(column), selected, selected,
+				false, true);
+			if (!column.getMutator().getDragAccepter().canAccept(cell, support, false))
 				return false;
 			BetterList<C> newColValue;
 			try {
-				newColValue = column.getMutator().getDragAccepter().accept(support.getTransferable(), false);
+				newColValue = column.getMutator().getDragAccepter().accept(cell, support.getTransferable(), false, !doImport);
 			} catch (IOException e) {
 				return false;
 			}
@@ -995,6 +1000,7 @@ implements TableBuilder<R, P> {
 					theRows.mutableElement(rowEl.getElementId()), newColValue.getFirst()) != null)
 				return false;
 			if (doImport) {
+				support.setDropAction(DnDConstants.ACTION_COPY_OR_MOVE);
 				((CategoryRenderStrategy<R, C>) column).getMutator()//
 				.mutate(//
 					theRows.mutableElement(rowEl.getElementId()), newColValue.getFirst());
@@ -1050,10 +1056,10 @@ implements TableBuilder<R, P> {
 						e.printStackTrace();
 					}
 				}
-				if (theRowAccepter != null && theRowAccepter.canAccept(support, true)) {
+				if (theRowAccepter != null && theRowAccepter.canAccept(null, support, true)) {
 					BetterList<R> newRows;
 					try {
-						newRows = theRowAccepter.accept(support.getTransferable(), true);
+						newRows = theRowAccepter.accept(null, support.getTransferable(), true, false);
 					} catch (IOException e) {
 						newRows = null;
 						// Ignore
