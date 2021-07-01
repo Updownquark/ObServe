@@ -599,7 +599,7 @@ public class AppPopulation {
 						break;
 					pkg = Package.getPackage(pkg.getName().substring(0, dotIdx));
 				}
-				withCurrentVersion(version == null ? "Unknown" : version);
+				withCurrentVersion(version);
 				return (A) this;
 			}
 
