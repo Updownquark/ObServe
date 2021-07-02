@@ -20,6 +20,7 @@ import org.qommons.BiTuple;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.Lockable;
+import org.qommons.Lockable.CoreId;
 import org.qommons.Stamped;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
@@ -167,6 +168,11 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
+		public CoreId getCoreId() {
+			return theSource.getCoreId();
+		}
+
+		@Override
 		public long getStamp() {
 			return theSource.getStamp();
 		}
@@ -275,6 +281,11 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
+		public CoreId getCoreId() {
+			return theParent.getCoreId();
+		}
+
+		@Override
 		public long getStamp() {
 			return theParent.getStamp();
 		}
@@ -369,6 +380,11 @@ public class ObservableCollectionPassiveManagers {
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return theParent.tryLock(write, cause);
+		}
+
+		@Override
+		public CoreId getCoreId() {
+			return theParent.getCoreId();
 		}
 
 		@Override
@@ -658,6 +674,11 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
+		public CoreId getCoreId() {
+			return theParent.getCoreId();
+		}
+
+		@Override
 		public long getStamp() {
 			return theParent.getStamp();
 		}
@@ -750,6 +771,11 @@ public class ObservableCollectionPassiveManagers {
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return theParent.tryLock(write, cause);
+		}
+
+		@Override
+		public CoreId getCoreId() {
+			return theParent.getCoreId();
 		}
 
 		@Override

@@ -76,6 +76,11 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 		return noInitChanges().tryLock();
 	}
 
+	@Override
+	default CoreId getCoreId() {
+		return noInitChanges().getCoreId();
+	}
+
 	/** @return An observable that just reports this observable value's value in an observable without the event */
 	default Observable<T> value() {
 		class ValueObservable extends AbstractIdentifiable implements Observable<T> {
@@ -107,6 +112,11 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 			@Override
 			public Transaction tryLock() {
 				return ObservableValue.this.tryLock();
+			}
+
+			@Override
+			public CoreId getCoreId() {
+				return ObservableValue.this.getCoreId();
 			}
 
 			@Override
@@ -174,6 +184,11 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 			@Override
 			public TypeToken<T> getType() {
 				return getWrapped().getType();
+			}
+
+			@Override
+			public CoreId getCoreId() {
+				return getWrapped().getCoreId();
 			}
 
 			@Override
@@ -748,6 +763,11 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 		}
 
 		@Override
+		public CoreId getCoreId() {
+			return theNoInitChanges.getCoreId();
+		}
+
+		@Override
 		public Observable<ObservableValueEvent<T>> noInit() {
 			return theNoInitChanges;
 		}
@@ -942,6 +962,11 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 				public Transaction tryLock() {
 					return Lockable.tryLockAll(theSource, theEngine);
 				}
+
+				@Override
+				public CoreId getCoreId() {
+					return Lockable.getCoreId(theSource, theEngine);
+				}
 			}
 			return new Changes();
 		}
@@ -1082,6 +1107,11 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 				@Override
 				public Transaction tryLock() {
 					return Lockable.tryLockAll(theWrapped, theRefresh);
+				}
+
+				@Override
+				public CoreId getCoreId() {
+					return Lockable.getCoreId(theWrapped, theRefresh);
 				}
 			};
 		}
@@ -1281,6 +1311,11 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 				@Override
 				public Transaction tryLock() {
 					return theChanges.tryLock();
+				}
+
+				@Override
+				public CoreId getCoreId() {
+					return theChanges.getCoreId();
 				}
 
 				@Override
@@ -1556,6 +1591,14 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 			public Transaction tryLock() {
 				return Lockable.tryLock(theValue, theValue::get);
 			}
+
+			@Override
+			public CoreId getCoreId() {
+				// Best we can do is a snapshot
+				try (Transaction t = theValue.lock()) {
+					return Lockable.getCoreId(theValue, theValue.get());
+				}
+			}
 		}
 	}
 
@@ -1759,6 +1802,11 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 			@Override
 			public Transaction tryLock() {
 				return Lockable.tryLockAll(null, () -> Arrays.asList(theValues), ObservableValue::noInitChanges);
+			}
+
+			@Override
+			public CoreId getCoreId() {
+				return Lockable.getCoreId(null, () -> Arrays.asList(theValues), ObservableValue::noInitChanges);
 			}
 		}
 	}

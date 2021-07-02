@@ -10,6 +10,7 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionChangeType;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
+import org.qommons.Lockable.CoreId;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
 import org.qommons.collect.BetterCollections;
@@ -91,6 +92,11 @@ class DefaultObservableConfig extends AbstractObservableConfig {
 	@Override
 	public Transaction tryLock(boolean write, Object cause) {
 		return withCause(theContent.tryLock(write, cause), cause);
+	}
+
+	@Override
+	public CoreId getCoreId() {
+		return theContent.getCoreId();
 	}
 
 	private Transaction withCause(Transaction t, Object cause) {
@@ -296,6 +302,11 @@ class DefaultObservableConfig extends AbstractObservableConfig {
 		@Override
 		public Transaction tryLock() {
 			return theConfig.tryLock(false, null);
+		}
+
+		@Override
+		public CoreId getCoreId() {
+			return theConfig.getCoreId();
 		}
 	}
 }

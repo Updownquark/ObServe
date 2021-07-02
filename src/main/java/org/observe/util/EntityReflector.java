@@ -832,6 +832,11 @@ public class EntityReflector<E> {
 		}
 
 		@Override
+		public CoreId getCoreId() {
+			return theLock.getCoreId();
+		}
+
+		@Override
 		public long getStamp() {
 			return getBacking().getStamp(theField.getFieldIndex());
 		}
@@ -891,6 +896,11 @@ public class EntityReflector<E> {
 			@Override
 			public Transaction tryLock() {
 				return ObservableFieldImpl.this.tryLock(false, null);
+			}
+
+			@Override
+			public CoreId getCoreId() {
+				return ObservableFieldImpl.this.getCoreId();
 			}
 
 			@Override

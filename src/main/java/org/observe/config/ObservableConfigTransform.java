@@ -31,6 +31,7 @@ import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.TypeTokens;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
+import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
 import org.qommons.Stamped;
 import org.qommons.Transactable;
@@ -199,6 +200,11 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 	}
 
 	@Override
+	public CoreId getCoreId() {
+		return theLock.getCoreId();
+	}
+
+	@Override
 	public long getStamp() {
 		return theStamp;
 	}
@@ -296,6 +302,11 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 				@Override
 				public Transaction tryLock() {
 					return ObservableConfigValue.this.tryLock(false, null);
+				}
+
+				@Override
+				public CoreId getCoreId() {
+					return ObservableConfigValue.this.getCoreId();
 				}
 
 				@Override
@@ -764,6 +775,11 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 			@Override
 			public Transaction tryLock(boolean write, Object cause) {
 				return ObservableConfigBackedCollection.this.tryLock(write, cause);
+			}
+
+			@Override
+			public CoreId getCoreId() {
+				return ObservableConfigBackedCollection.this.getCoreId();
 			}
 
 			@Override
@@ -1333,6 +1349,11 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return theCollection.getBacking().tryLock(write, cause);
+		}
+
+		@Override
+		public CoreId getCoreId() {
+			return theCollection.getBacking().getCoreId();
 		}
 
 		@Override

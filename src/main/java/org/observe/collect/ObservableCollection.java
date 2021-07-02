@@ -393,6 +393,11 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 			public Transaction tryLock() {
 				return ObservableCollection.this.tryLock(false, null);
 			}
+
+			@Override
+			public CoreId getCoreId() {
+				return ObservableCollection.this.getCoreId();
+			}
 		}
 		return new SimpleChanges();
 	}
@@ -767,6 +772,11 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 			@Override
 			public Transaction tryLock() {
 				return Lockable.tryLockAll(Lockable.lockable(coll), coll);
+			}
+
+			@Override
+			public CoreId getCoreId() {
+				return Lockable.getCoreId(Lockable.lockable(coll), coll);
 			}
 		}
 		return new FoldedCollectionObservable();

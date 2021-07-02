@@ -302,6 +302,11 @@ public class WeakListening {
 			public Transaction tryLock() {
 				return observable.tryLock();
 			}
+
+			@Override
+			public CoreId getCoreId() {
+				return observable.getCoreId();
+			}
 		}
 		return new WeaklyListeningObservable();
 	}

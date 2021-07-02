@@ -145,6 +145,11 @@ public class ObservableFile implements BetterFile {
 	}
 
 	@Override
+	public FileDataSource getSource() {
+		return theFile.getSource();
+	}
+
+	@Override
 	public String getName() {
 		return theFile.getName();
 	}

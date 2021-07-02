@@ -10,6 +10,7 @@ import org.observe.collect.ObservableCollection.DistinctDataFlow;
 import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl;
 import org.qommons.Lockable;
+import org.qommons.Lockable.CoreId;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterMultiMap;
@@ -97,6 +98,12 @@ public abstract class AbstractDerivedObservableMultiMap<S, K, V> implements Obse
 	public Transaction tryLock(boolean write, Object cause) {
 		return Lockable.tryLockAll(//
 			Lockable.lockable(getKeyLocker(), write, cause), Lockable.lockable(getValueManager(), write, cause));
+	}
+
+	@Override
+	public CoreId getCoreId() {
+		return Lockable.getCoreId(//
+			Lockable.lockable(getKeyLocker(), false, null), Lockable.lockable(getValueManager(), false, null));
 	}
 
 	@Override

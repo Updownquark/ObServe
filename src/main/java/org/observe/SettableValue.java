@@ -1,7 +1,5 @@
 package org.observe;
 
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.BiConsumer;
@@ -89,6 +87,11 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	@Override
 	default Transaction tryLock() {
 		return tryLock(false, null);
+	}
+
+	@Override
+	default CoreId getCoreId() {
+		return ObservableValue.super.getCoreId();
 	}
 
 	/**
@@ -901,28 +904,58 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 
 		@Override
 		public Transaction lock(boolean write, Object cause) {
-			return Lockable.lockAll(getWrapped(), () -> {
+			return Transactable.writeLockWithOwner(getWrapped(), () -> {
 				ObservableValue<? extends T> value = getWrapped().get();
 				if (value == null)
-					return Collections.emptyList();
+					return null;
 				else if (value instanceof SettableValue)
-					return Arrays.asList(Lockable.lockable((SettableValue<? extends T>) value, write, cause));
+					return (SettableValue<? extends T>) value;
 				else
-					return Arrays.asList(value);
-			}, v -> v);
+					return new Transactable() {
+					@Override
+					public Transaction lock(boolean w, Object c) {
+						return value.lock();
+					}
+
+					@Override
+					public Transaction tryLock(boolean w, Object c) {
+						return value.tryLock();
+					}
+
+					@Override
+					public CoreId getCoreId() {
+						return value.getCoreId();
+					}
+					};
+			}, cause);
 		}
 
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
-			return Lockable.tryLockAll(getWrapped(), () -> {
+			return Transactable.tryWriteLockWithOwner(getWrapped(), () -> {
 				ObservableValue<? extends T> value = getWrapped().get();
 				if (value == null)
-					return Collections.emptyList();
+					return null;
 				else if (value instanceof SettableValue)
-					return Arrays.asList(Lockable.lockable((SettableValue<? extends T>) value, write, cause));
+					return (SettableValue<? extends T>) value;
 				else
-					return Arrays.asList(value);
-			}, v -> v);
+					return new Transactable() {
+					@Override
+					public Transaction lock(boolean w, Object c) {
+						return value.lock();
+					}
+
+					@Override
+					public Transaction tryLock(boolean w, Object c) {
+						return value.tryLock();
+					}
+
+					@Override
+					public CoreId getCoreId() {
+						return value.getCoreId();
+					}
+					};
+			}, cause);
 		}
 
 		@Override

@@ -44,6 +44,7 @@ import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.IdentityKey;
 import org.qommons.Lockable;
+import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
 import org.qommons.Ternian;
 import org.qommons.Transactable;
@@ -477,6 +478,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public CoreId getCoreId() {
+			return collection.getCoreId();
+		}
+
+		@Override
 		public String toString() {
 			return "changes(" + collection.getIdentity() + ")";
 		}
@@ -577,6 +583,11 @@ public final class ObservableCollectionImpl {
 						@Override
 						public Transaction tryLock() {
 							return theCollection.tryLock(false, null);
+						}
+
+						@Override
+						public CoreId getCoreId() {
+							return theCollection.getCoreId();
 						}
 
 						@Override
@@ -694,6 +705,11 @@ public final class ObservableCollectionImpl {
 				@Override
 				public Transaction tryLock() {
 					return theCollection.tryLock(false, null);
+				}
+
+				@Override
+				public CoreId getCoreId() {
+					return theCollection.getCoreId();
 				}
 
 				@Override
@@ -1073,8 +1089,12 @@ public final class ObservableCollectionImpl {
 				public Transaction tryLock() {
 					return theCollection.tryLock(false, null);
 				}
+
+				@Override
+				public CoreId getCoreId() {
+					return theCollection.getCoreId();
+				}
 			}
-			;
 			return new ElementChanges();
 		}
 
@@ -1249,6 +1269,11 @@ public final class ObservableCollectionImpl {
 						@Override
 						public Transaction tryLock() {
 							return getCollection().tryLock(false, null);
+						}
+
+						@Override
+						public CoreId getCoreId() {
+							return getCollection().getCoreId();
 						}
 					}
 					return new NoInitChanges();
@@ -1537,6 +1562,11 @@ public final class ObservableCollectionImpl {
 				@Override
 				public Transaction tryLock() {
 					return theCollection.tryLock(false, null);
+				}
+
+				@Override
+				public CoreId getCoreId() {
+					return theCollection.getCoreId();
 				}
 			};
 		}
@@ -1916,6 +1946,11 @@ public final class ObservableCollectionImpl {
 				public Transaction tryLock() {
 					return Lockable.tryLockAll(Lockable.lockable(theLeft), Lockable.lockable(theRight));
 				}
+
+				@Override
+				public CoreId getCoreId() {
+					return Lockable.getCoreId(Lockable.lockable(theLeft), Lockable.lockable(theRight));
+				}
 			};
 		}
 
@@ -2177,6 +2212,11 @@ public final class ObservableCollectionImpl {
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return Lockable.tryLockAll(Lockable.lockable(theSource, write, cause), Lockable.lockable(theFlow, write, cause));
+		}
+
+		@Override
+		public CoreId getCoreId() {
+			return Transactable.getCoreId(theSource, theFlow);
 		}
 
 		@Override
@@ -2835,6 +2875,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public CoreId getCoreId() {
+			return theFlow.getCoreId();
+		}
+
+		@Override
 		public long getStamp() {
 			return theModCount.get();
 		}
@@ -3202,20 +3247,27 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public Transaction lock(boolean write, Object cause) {
-			return Lockable.lock(theCollectionObservable, () -> Lockable.lockable(theCollectionObservable.get(), write, cause));
+			return Transactable.writeLockWithOwner(theCollectionObservable, theCollectionObservable::get, cause);
 		}
 
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
-			return Lockable.tryLock(theCollectionObservable, () -> Lockable.lockable(theCollectionObservable.get(), write, cause));
+			return Transactable.tryWriteLockWithOwner(theCollectionObservable, theCollectionObservable::get, cause);
+		}
+
+		@Override
+		public CoreId getCoreId() {
+			return Lockable.getCoreId(theCollectionObservable, () -> Lockable.lockable(theCollectionObservable.get(), false, null));
 		}
 
 		@Override
 		public long getStamp() {
 			long stamp = theCollectionObservable.getStamp();
 			ObservableCollection<? extends E> coll = theCollectionObservable.get();
-			if (coll != null)
-				stamp ^= Long.rotateRight(coll.getStamp(), 32);
+			if (coll != null) {
+				long collStamp = coll.getStamp();
+				stamp ^= Long.rotateRight(collStamp, 32);
+			}
 			return stamp;
 		}
 
@@ -3528,6 +3580,11 @@ public final class ObservableCollectionImpl {
 				@Override
 				public Transaction tryLock() {
 					return FlattenedValueCollection.this.tryLock(false, null);
+				}
+
+				@Override
+				public CoreId getCoreId() {
+					return FlattenedValueCollection.this.getCoreId();
 				}
 
 				@Override

@@ -4,6 +4,7 @@ import java.util.function.Consumer;
 
 import org.observe.Observable;
 import org.qommons.Identifiable;
+import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
@@ -46,6 +47,11 @@ public class UnmodifiableObservableConfig extends AbstractObservableConfig {
 	@Override
 	public Transaction tryLock(boolean write, Object cause) {
 		return theWrapped.tryLock(false, cause);
+	}
+
+	@Override
+	public CoreId getCoreId() {
+		return theWrapped.getCoreId();
 	}
 
 	@Override
@@ -274,6 +280,11 @@ public class UnmodifiableObservableConfig extends AbstractObservableConfig {
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return theBacking.tryLock(false, cause);
+		}
+
+		@Override
+		public CoreId getCoreId() {
+			return theBacking.getCoreId();
 		}
 
 		@Override

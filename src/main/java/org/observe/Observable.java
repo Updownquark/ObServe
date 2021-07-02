@@ -268,6 +268,11 @@ public interface Observable<T> extends Lockable, Identifiable {
 			}
 
 			@Override
+			public CoreId getCoreId() {
+				return CoreId.EMPTY;
+			}
+
+			@Override
 			public String toString() {
 				return "" + value;
 			}
@@ -317,6 +322,11 @@ public interface Observable<T> extends Lockable, Identifiable {
 		}
 
 		@Override
+		public CoreId getCoreId() {
+			return CoreId.EMPTY;
+		}
+
+		@Override
 		public String toString() {
 			return "empty";
 		}
@@ -355,6 +365,11 @@ public interface Observable<T> extends Lockable, Identifiable {
 			@Override
 			public Transaction tryLock() {
 				return Transaction.NONE;
+			}
+
+			@Override
+			public CoreId getCoreId() {
+				return CoreId.EMPTY;
 			}
 
 			@Override
@@ -428,6 +443,11 @@ public interface Observable<T> extends Lockable, Identifiable {
 		@Override
 		public Transaction tryLock() {
 			return theWrapped.tryLock();
+		}
+
+		@Override
+		public CoreId getCoreId() {
+			return theWrapped.getCoreId();
 		}
 
 		@Override
@@ -822,6 +842,11 @@ public interface Observable<T> extends Lockable, Identifiable {
 		}
 
 		@Override
+		public CoreId getCoreId() {
+			return Lockable.getCoreId(theComposed);
+		}
+
+		@Override
 		public int hashCode() {
 			return getIdentity().hashCode();
 		}
@@ -1155,6 +1180,11 @@ public interface Observable<T> extends Lockable, Identifiable {
 		public Transaction tryLock() {
 			return Lockable.tryLockAll(theObservables);
 		}
+
+		@Override
+		public CoreId getCoreId() {
+			return Lockable.getCoreId(theObservables);
+		}
 	};
 
 	/**
@@ -1229,6 +1259,11 @@ public interface Observable<T> extends Lockable, Identifiable {
 		public Transaction tryLock() {
 			return theWrapper.tryLock(); // Can't access the contents reliably
 		}
+
+		@Override
+		public CoreId getCoreId() {
+			return theWrapper.getCoreId(); // Can't access the contents reliably
+		}
 	}
 
 	/** Implements {@link Observable#onVmShutdown()} */
@@ -1270,6 +1305,26 @@ public interface Observable<T> extends Lockable, Identifiable {
 		@Override
 		public Transaction tryLock() {
 			return Transaction.NONE;
+		}
+
+		@Override
+		public CoreId getCoreId() {
+			return CoreId.EMPTY;
+		}
+
+		@Override
+		public int hashCode() {
+			return 0;
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return obj instanceof VmShutdownObservable;
+		}
+
+		@Override
+		public String toString() {
+			return "vmShutdown";
 		}
 	}
 
@@ -1317,21 +1372,8 @@ public interface Observable<T> extends Lockable, Identifiable {
 
 		@Override
 		public Object getIdentity() {
-			if (theIdentity == null) {
-				StringBuilder str = new StringBuilder("every(");
-				if (theInitDelay == null)
-					str.append("null");
-				else
-					QommonsUtils.printDuration(theInitDelay, str, true);
-				str.append(", ");
-				QommonsUtils.printDuration(theTask.getFrequency(), str, true);
-				str.append(", ");
-				if (theTask.getLastRun() == null)
-					str.append("null");
-				else
-					QommonsUtils.printDuration(Duration.between(Instant.now(), theTask.getLastRun()), str, true);
-				theIdentity = Identifiable.baseId(str.toString(), this);
-			}
+			if (theIdentity == null)
+				theIdentity = Identifiable.baseId(toString(), this);
 			return theIdentity;
 		}
 
@@ -1384,6 +1426,38 @@ public interface Observable<T> extends Lockable, Identifiable {
 		@Override
 		public Transaction tryLock() {
 			return Transaction.NONE;
+		}
+
+		@Override
+		public CoreId getCoreId() {
+			return CoreId.EMPTY;
+		}
+
+		@Override
+		public int hashCode() {
+			return getIdentity().hashCode();
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return obj instanceof Identifiable && getIdentity().equals(((Identifiable) obj).getIdentity());
+		}
+
+		@Override
+		public String toString() {
+			StringBuilder str = new StringBuilder("every(");
+			if (theInitDelay == null)
+				str.append("null");
+			else
+				QommonsUtils.printDuration(theInitDelay, str, true);
+			str.append(", ");
+			QommonsUtils.printDuration(theTask.getFrequency(), str, true);
+			str.append(", ");
+			if (theTask.getLastRun() == null)
+				str.append("null");
+			else
+				QommonsUtils.printDuration(Duration.between(Instant.now(), theTask.getLastRun()), str, true);
+			return str.toString();
 		}
 	}
 }

@@ -2173,6 +2173,11 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		}
 
 		@Override
+		public CoreId getCoreId() {
+			return Lockable.getCoreId(theTransformation.getArgs());
+		}
+
+		@Override
 		public long getStamp() {
 			return Stamped.compositeStamp(theTransformation.getArgs());
 		}
@@ -2220,6 +2225,11 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 				@Override
 				public Transaction tryLock() {
 					return EngineImpl.this.lock();
+				}
+
+				@Override
+				public CoreId getCoreId() {
+					return EngineImpl.this.getCoreId();
 				}
 
 				@Override

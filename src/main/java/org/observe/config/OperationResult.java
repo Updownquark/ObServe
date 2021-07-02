@@ -443,6 +443,12 @@ public interface OperationResult<T> {
 					OperationResult<? extends S> wrapped = theWrapped;
 					return wrapped == null ? null : wrapped.watchStatus().tryLock();
 				}
+
+				@Override
+				public CoreId getCoreId() {
+					OperationResult<? extends S> wrapped = theWrapped;
+					return wrapped == null ? CoreId.EMPTY : wrapped.watchStatus().getCoreId();
+				}
 			};
 		}
 	}

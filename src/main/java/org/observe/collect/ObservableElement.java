@@ -154,6 +154,11 @@ public interface ObservableElement<T> extends ObservableValue<T> {
 					}
 
 					@Override
+					public CoreId getCoreId() {
+						return CoreId.EMPTY;
+					}
+
+					@Override
 					public Subscription subscribe(Observer<? super ObservableElementEvent<T>> observer) {
 						ObservableElementEvent<T> event = createInitialEvent(null, null, null);
 						try (Transaction t = event.use()) {

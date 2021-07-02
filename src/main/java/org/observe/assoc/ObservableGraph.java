@@ -7,6 +7,7 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
+import org.qommons.Lockable.CoreId;
 import org.qommons.Transaction;
 import org.qommons.collect.Graph;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
@@ -330,6 +331,16 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 			@Override
 			public Transaction lock(boolean write, Object cause) {
 				return Transaction.NONE;
+			}
+
+			@Override
+			public Transaction tryLock(boolean write, Object cause) {
+				return Transaction.NONE;
+			}
+
+			@Override
+			public CoreId getCoreId() {
+				return CoreId.EMPTY;
 			}
 		};
 	}

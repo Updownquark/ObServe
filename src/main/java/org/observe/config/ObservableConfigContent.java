@@ -27,6 +27,7 @@ import org.observe.util.TypeTokens;
 import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.Lockable;
+import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
 import org.qommons.Stamped;
 import org.qommons.Transaction;
@@ -290,6 +291,11 @@ public class ObservableConfigContent {
 				public Transaction tryLock() {
 					return theRoot.tryLock(false, null);
 				}
+
+				@Override
+				public CoreId getCoreId() {
+					return theRoot.getCoreId();
+				}
 			};
 		}
 	}
@@ -378,6 +384,11 @@ public class ObservableConfigContent {
 				@Override
 				public Transaction tryLock() {
 					return theConfigChild.theRoot.tryLock(false, null);
+				}
+
+				@Override
+				public CoreId getCoreId() {
+					return theConfigChild.theRoot.getCoreId();
 				}
 
 				@Override
@@ -501,6 +512,11 @@ public class ObservableConfigContent {
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return theConfig.tryLock(write, cause);
+		}
+
+		@Override
+		public CoreId getCoreId() {
+			return theConfig.getCoreId();
 		}
 
 		@Override

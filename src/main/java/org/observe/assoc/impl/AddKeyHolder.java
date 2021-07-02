@@ -28,7 +28,7 @@ public interface AddKeyHolder<K> extends Consumer<K>, Lockable {
 
 	/**
 	 * Base implementation of {@link AddKeyHolder}
-	 * 
+	 *
 	 * @param <K> The key type of the map
 	 */
 	public static class Default<K> implements AddKeyHolder<K>, Supplier<K> {
@@ -81,11 +81,16 @@ public interface AddKeyHolder<K> extends Consumer<K>, Lockable {
 				else
 					return null;
 		}
+
+		@Override
+		public CoreId getCoreId() {
+			return new CoreId(theLock);
+		}
 	}
 
 	/**
 	 * Implements {@link AddKeyHolder#map(Function)}
-	 * 
+	 *
 	 * @param <K> The key type of the source key holder
 	 * @param <K2> The key type of the mapped key holder
 	 */
@@ -125,6 +130,11 @@ public interface AddKeyHolder<K> extends Consumer<K>, Lockable {
 		@Override
 		public Transaction tryLock() {
 			return theSource.tryLock();
+		}
+
+		@Override
+		public CoreId getCoreId() {
+			return theSource.getCoreId();
 		}
 	}
 }

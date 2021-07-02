@@ -40,6 +40,7 @@ import org.observe.collect.ObservableCollectionImpl.ReversedObservableCollection
 import org.observe.collect.ObservableCollectionPassiveManagers.PassiveCollectionManager;
 import org.observe.util.WeakListening;
 import org.qommons.Identifiable;
+import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
 import org.qommons.Ternian;
 import org.qommons.Transaction;
@@ -318,6 +319,11 @@ public class ObservableSetImpl {
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return theWrapped.tryLock(write, cause);
+		}
+
+		@Override
+		public CoreId getCoreId() {
+			return theWrapped.getCoreId();
 		}
 
 		@Override
@@ -646,12 +652,17 @@ public class ObservableSetImpl {
 
 		@Override
 		public Transaction lock(boolean write, Object cause) {
-			return ObservableCollectionActiveManagers.structureAffectedPassLockThroughToParent(theParent, write, cause);
+			return theParent.lock(write, cause);
 		}
 
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
-			return ObservableCollectionActiveManagers.structureAffectedTryPassLockThroughToParent(theParent, write, cause);
+			return theParent.tryLock(write, cause);
+		}
+
+		@Override
+		public CoreId getCoreId() {
+			return theParent.getCoreId();
 		}
 
 		@Override

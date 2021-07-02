@@ -7,6 +7,7 @@ import org.observe.Equivalence;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionEvent;
+import org.qommons.Lockable.CoreId;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
@@ -160,6 +161,11 @@ public abstract class ObservableCollectionWrapper<E> implements ObservableCollec
 	@Override
 	public Transaction tryLock(boolean write, Object cause) {
 		return getWrapped().tryLock(write, cause);
+	}
+
+	@Override
+	public CoreId getCoreId() {
+		return getWrapped().getCoreId();
 	}
 
 	@Override

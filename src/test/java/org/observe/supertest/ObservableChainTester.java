@@ -148,7 +148,7 @@ public class ObservableChainTester implements Testable {
 		.withMaxProgressInterval(Duration.ofSeconds(10))// If a proess doesn't make any progress in 10s, something's wrong
 		.withMaxFailures(maxFailures)//
 		.withConcurrency(max -> max - 1)// Use all but 1 of the system's CPUs
-		.withPersistenceDir(new File("src/main/test/org/observe/supertest"), false)// Where to write the failure file
+			.withPersistenceDir(new File("src/test/java/org/observe/supertest"), false)// Where to write the failure file
 		.withPlacemarks("Transaction", "Modification").withDebug(true)//
 		.execute()//
 		.printResults().throwErrorIfFailed();

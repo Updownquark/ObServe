@@ -253,6 +253,11 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 					}
 
 					@Override
+					public CoreId getCoreId() {
+						return ObservableMap.this.getCoreId();
+					}
+
+					@Override
 					protected Object createIdentity() {
 						return Identifiable.wrap(MapValueObservable.this.getIdentity(), "noInitChanges");
 					}
@@ -337,6 +342,11 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 							@Override
 							public Transaction tryLock() {
 								return ObservableMap.this.tryLock(false, null);
+							}
+
+							@Override
+							public CoreId getCoreId() {
+								return ObservableMap.this.getCoreId();
 							}
 
 							@Override
@@ -431,6 +441,11 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 					@Override
 					public Transaction tryLock() {
 						return changes.tryLock();
+					}
+
+					@Override
+					public CoreId getCoreId() {
+						return changes.getCoreId();
 					}
 				}
 				return new MapObservableWithInit();

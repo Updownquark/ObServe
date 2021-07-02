@@ -35,8 +35,10 @@ import org.observe.util.WeakListening;
 import org.qommons.BiTuple;
 import org.qommons.Identifiable;
 import org.qommons.Lockable;
+import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
 import org.qommons.Ternian;
+import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterHashMap;
@@ -263,14 +265,19 @@ public class ObservableCollectionActiveManagers2 {
 		@Override
 		public Transaction lock(boolean write, Object cause) {
 			return Lockable.lockAll(
-				Lockable.lockable(ObservableCollectionActiveManagers.structureAffectedPassLockThroughToParent(theParent), write, cause),
+				Lockable.lockable(theParent, write, cause),
 				Lockable.lockable(theFilter));
 		}
 
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return Lockable.tryLockAll(
-				Lockable.lockable(ObservableCollectionActiveManagers.structureAffectedPassLockThroughToParent(theParent), write, cause),
+				Lockable.lockable(theParent, write, cause), Lockable.lockable(theFilter));
+		}
+
+		@Override
+		public CoreId getCoreId() {
+			return Lockable.getCoreId(Lockable.lockable(theParent, false, null),
 				Lockable.lockable(theFilter));
 		}
 
@@ -463,6 +470,11 @@ public class ObservableCollectionActiveManagers2 {
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return theParent.tryLock(write, cause);
+		}
+
+		@Override
+		public CoreId getCoreId() {
+			return theParent.getCoreId();
 		}
 
 		@Override
@@ -670,6 +682,11 @@ public class ObservableCollectionActiveManagers2 {
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return Lockable.tryLockAll(Lockable.lockable(theParent, write, cause), theRefresh);
+		}
+
+		@Override
+		public CoreId getCoreId() {
+			return Lockable.getCoreId(Lockable.lockable(theParent, false, null), theRefresh);
 		}
 
 		@Override
@@ -940,6 +957,11 @@ public class ObservableCollectionActiveManagers2 {
 				return theParent.tryLock(write, cause);
 			else
 				return Lockable.tryLockAll(Lockable.lockable(theParent, write, cause), Lockable.lockable(theLock, this));
+		}
+
+		@Override
+		public CoreId getCoreId() {
+			return Lockable.getCoreId(Lockable.lockable(theParent, false, null), Lockable.lockable(theLock, this));
 		}
 
 		Transaction lockRefresh() {
@@ -1214,6 +1236,11 @@ public class ObservableCollectionActiveManagers2 {
 			/* No operations against this manager can affect the parent collection, but only its content collections */
 			return Lockable.tryLockAll(Lockable.lockable(theParent), () -> theOuterElements, //
 				oe -> Lockable.lockable(oe.manager, write, cause));
+		}
+
+		@Override
+		public CoreId getCoreId() {
+			return Transactable.getCoreId(theParent, () -> theOuterElements, oe -> oe.manager);
 		}
 
 		@Override
@@ -1657,7 +1684,7 @@ public class ObservableCollectionActiveManagers2 {
 			init[0] = false;
 		}
 
-		private class FlattenedHolder {
+		private class FlattenedHolder implements Transactable {
 			private final DerivedCollectionElement<I> theParentEl;
 			private final BetterTreeSet<FlattenedElement> theElements;
 			private final WeakListening.Builder theChildListening = theListening.child();
@@ -1755,6 +1782,35 @@ public class ObservableCollectionActiveManagers2 {
 			}
 
 			@Override
+			public Transaction lock(boolean write, Object cause) {
+				Transaction local = lockLocal();
+				Transaction flowLock = manager.lock(write, cause);
+				return () -> {
+					flowLock.close();
+					local.close();
+				};
+			}
+
+			@Override
+			public Transaction tryLock(boolean write, Object cause) {
+				Transaction local = lockLocal();
+				Transaction flowLock = manager.tryLock(write, cause);
+				if (flowLock == null) {
+					local.close();
+					return null;
+				}
+				return () -> {
+					flowLock.close();
+					local.close();
+				};
+			}
+
+			@Override
+			public CoreId getCoreId() {
+				return new CoreId(theLock).and(manager.getCoreId());
+			}
+
+			@Override
 			public String toString() {
 				return theParentEl.toString();
 			}
@@ -1813,7 +1869,7 @@ public class ObservableCollectionActiveManagers2 {
 					@Override
 					public void update(X oldValue, X newValue, Object cause) {
 						// Need to make sure that the flattened collection isn't firing at the same time as the child collection
-						try (Transaction parentT = theParent.lock(false, null); Transaction localT = lockLocal()) {
+						try (Transaction parentT = Transactable.writeLockWithOwner(theParent, () -> theHolder, null)) {
 							if (!wasPriorityNotified && priorityUpdateReceiver != null) {
 								wasPriorityNotified = true;
 								priorityUpdateReceiver.valueUpdated(oldValue, newValue, cause);

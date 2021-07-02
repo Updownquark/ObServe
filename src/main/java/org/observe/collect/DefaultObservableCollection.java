@@ -8,6 +8,7 @@ import org.observe.Equivalence;
 import org.observe.Subscription;
 import org.qommons.Causable;
 import org.qommons.CausalLock;
+import org.qommons.Lockable.CoreId;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
@@ -95,6 +96,11 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	@Override
 	public Transaction tryLock(boolean write, Object cause) {
 		return theLock.tryLock(write, cause);
+	}
+
+	@Override
+	public CoreId getCoreId() {
+		return theLock.getCoreId();
 	}
 
 	Collection<Causable> getCurrentCauses() {

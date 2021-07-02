@@ -267,6 +267,11 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 		return theLock == null ? Transaction.NONE : theLock.tryLock(false, null);
 	}
 
+	@Override
+	public CoreId getCoreId() {
+		return theLock == null ? CoreId.EMPTY : theLock.getCoreId();
+	}
+
 	/** @return An observable that fires events from this SimpleObservable but cannot be used to initiate events */
 	public Observable<T> readOnly() {
 		return new ReadOnlyObservable<>(this);
@@ -302,6 +307,11 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 		@Override
 		public Transaction tryLock() {
 			return theWrapped.tryLock();
+		}
+
+		@Override
+		public CoreId getCoreId() {
+			return theWrapped.getCoreId();
 		}
 
 		@Override

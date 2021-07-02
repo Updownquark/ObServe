@@ -275,6 +275,11 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 		}
 
 		@Override
+		public CoreId getCoreId() {
+			return theLock == null ? CoreId.EMPTY : theLock.getCoreId();
+		}
+
+		@Override
 		public String toString() {
 			return "simple value changes " + theValue;
 		}

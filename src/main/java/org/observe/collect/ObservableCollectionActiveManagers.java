@@ -16,8 +16,8 @@ import org.observe.collect.ObservableCollectionImpl.ActiveDerivedCollection;
 import org.observe.util.WeakListening;
 import org.qommons.BiTuple;
 import org.qommons.Identifiable;
+import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
-import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
@@ -358,61 +358,6 @@ public class ObservableCollectionActiveManagers {
 			listener.removed(value, cause);
 	}
 
-	static Transactable structureAffectedPassLockThroughToParent(CollectionOperation<?, ?, ?> parent) {
-		return new Transactable() {
-			@Override
-			public boolean isLockSupported() {
-				return parent.isLockSupported();
-			}
-
-			@Override
-			public Transaction lock(boolean write, Object cause) {
-				return structureAffectedPassLockThroughToParent(parent, write, cause);
-			}
-
-			@Override
-			public Transaction tryLock(boolean write, Object cause) {
-				return structureAffectedTryPassLockThroughToParent(parent, write, cause);
-			}
-		};
-	}
-
-	/**
-	 * This method is to be used by derived operations that affect the structure of the result. E.g. filtering, sorting, etc. where an
-	 * update from the parent collection may cause values to be added, removed, or moved in the derived collection.
-	 *
-	 * @param parent The parent operation
-	 * @param write Whether to obtain a write (exclusive) lock or a read (non-exclusive) lock
-	 * @param cause The cause of the lock
-	 * @return The parent lock to close to release it
-	 * @see Transactable#lock(boolean, Object)
-	 */
-	public static Transaction structureAffectedPassLockThroughToParent(CollectionOperation<?, ?, ?> parent, boolean write, Object cause) {
-		if (write) {
-			// If the caller is doing the modifications, we can prevent any potential updates that would affect the child's structure
-			// Because a write lock is always exclusive (no external modifications, even updates, may be performed while any write lock
-			// is held), we don't need to worry about updates from the parent
-			return parent.lock(true, cause);
-		} else {
-			// Because updates to the parent can affect this derived structure,
-			// we need to prevent updates from the parent even when the caller would allow updates
-			return parent.lock(false, cause);
-		}
-	}
-
-	static Transaction structureAffectedTryPassLockThroughToParent(CollectionOperation<?, ?, ?> parent, boolean write, Object cause) {
-		if (write) {
-			// If the caller is doing the modifications, we can prevent any potential updates that would affect the child's structure
-			// Because a write lock is always exclusive (no external modifications, even updates, may be performed while any write lock
-			// is held), we don't need to worry about updates from the parent
-			return parent.tryLock(true, cause);
-		} else {
-			// Because updates to the parent can affect this derived structure,
-			// we need to prevent updates from the parent even when the caller would allow updates
-			return parent.tryLock(false, cause);
-		}
-	}
-
 	static class BaseCollectionManager<E> implements ActiveCollectionManager<E, E, E> {
 		private final ObservableCollection<E> theSource;
 		private final BetterTreeMap<ElementId, CollectionElementListener<E>> theElementListeners;
@@ -444,6 +389,11 @@ public class ObservableCollectionActiveManagers {
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return theSource.tryLock(write, cause);
+		}
+
+		@Override
+		public CoreId getCoreId() {
+			return theSource.getCoreId();
 		}
 
 		@Override
@@ -660,6 +610,11 @@ public class ObservableCollectionActiveManagers {
 		}
 
 		@Override
+		public CoreId getCoreId() {
+			return theParent.getCoreId();
+		}
+
+		@Override
 		public boolean isContentControlled() {
 			return theParent.isContentControlled();
 		}
@@ -785,12 +740,17 @@ public class ObservableCollectionActiveManagers {
 
 		@Override
 		public Transaction lock(boolean write, Object cause) {
-			return structureAffectedPassLockThroughToParent(theParent, write, cause);
+			return theParent.lock(write, cause);
 		}
 
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
-			return structureAffectedTryPassLockThroughToParent(theParent, write, cause);
+			return theParent.tryLock(write, cause);
+		}
+
+		@Override
+		public CoreId getCoreId() {
+			return theParent.getCoreId();
 		}
 
 		@Override
@@ -1135,12 +1095,17 @@ public class ObservableCollectionActiveManagers {
 
 		@Override
 		public Transaction lock(boolean write, Object cause) {
-			return structureAffectedPassLockThroughToParent(theParent, write, cause);
+			return theParent.lock(write, cause);
 		}
 
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
-			return structureAffectedTryPassLockThroughToParent(theParent, write, cause);
+			return theParent.tryLock(write, cause);
+		}
+
+		@Override
+		public CoreId getCoreId() {
+			return theParent.getCoreId();
 		}
 
 		@Override
@@ -1376,6 +1341,11 @@ public class ObservableCollectionActiveManagers {
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return theParent.tryLock(write, cause);
+		}
+
+		@Override
+		public CoreId getCoreId() {
+			return theParent.getCoreId();
 		}
 
 		@Override

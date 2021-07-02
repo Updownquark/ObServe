@@ -38,6 +38,7 @@ import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.Lockable;
+import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
@@ -1304,6 +1305,11 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return Lockable.tryLockAll(Lockable.lockable(theParent, write, cause), theEngine);
+		}
+
+		@Override
+		public CoreId getCoreId() {
+			return theParent.getCoreId();
 		}
 
 		@Override

@@ -28,6 +28,7 @@ import org.observe.util.TypeTokens;
 import org.observe.util.WeakListening;
 import org.qommons.Identifiable;
 import org.qommons.Lockable;
+import org.qommons.Lockable.CoreId;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
@@ -908,6 +909,11 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		}
 
 		@Override
+		public CoreId getCoreId() {
+			return getValueManager().getCoreId();
+		}
+
+		@Override
 		public boolean belongs(Object o) {
 			return TypeTokens.get().isInstance(getValueManager().getTargetType(), o);
 		}
@@ -1229,6 +1235,11 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		}
 
 		@Override
+		public CoreId getCoreId() {
+			return DefaultActiveMultiMap.this.getCoreId();
+		}
+
+		@Override
 		public long getStamp() {
 			return DefaultActiveMultiMap.this.getStamp();
 		}
@@ -1496,6 +1507,11 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return DefaultActiveMultiMap.this.tryLock(write, cause);
+		}
+
+		@Override
+		public CoreId getCoreId() {
+			return DefaultActiveMultiMap.this.getCoreId();
 		}
 
 		@Override
