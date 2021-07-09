@@ -524,7 +524,7 @@ public class AppPopulation {
 							theUpgrader.get().accept(theLatestRelease);
 						}, btn -> btn.visibleWhen(theUpgrader
 							.transform(tx -> tx.combineWith(theCurrentVersion).combineWith(theLatestVersionValue).combine((u, cv, lv) -> {
-								return u != null && cv != null && lv != null;
+								return u != null && cv != null && lv != null && !cv.equals(lv.name);
 							}))))//
 						);
 				});
