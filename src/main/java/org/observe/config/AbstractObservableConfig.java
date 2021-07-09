@@ -55,7 +55,9 @@ public abstract class AbstractObservableConfig implements ObservableConfig {
 			synchronized (this) {
 				parsedItems = theParsedItems;
 				if (parsedItems == null) {
-					theParsedItems = parsedItems = new WeakHashMap<>(3); // Don't imagine there will ever be much in there
+					// Don't imagine there will ever be much in here.
+					// Typically a config will be used as a representation of a single value or structure
+					theParsedItems = parsedItems = new WeakHashMap<>(3);
 				}
 			}
 		}

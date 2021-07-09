@@ -198,6 +198,11 @@ public class EntityConfiguredValueType<E> implements ConfiguredValueType<E> {
 		}
 
 		@Override
+		public boolean isSettable(E entity) {
+			return theField.getSetter() != null;
+		}
+
+		@Override
 		public void set(E entity, F fieldValue) throws UnsupportedOperationException {
 			theField.set(entity, fieldValue);
 		}

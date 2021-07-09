@@ -2041,7 +2041,7 @@ public interface ObservableConfigFormat<E> {
 
 		static class EntityConfigFormatImpl<E> extends Impl.AbstractComponentFormat<E> implements EntityConfigFormat<E> {
 			static class EntityFieldSetter<E, F> implements ComponentSetter<E, F> {
-				private final EntityConfiguredValueField<E, F> field;
+				final EntityConfiguredValueField<E, F> field;
 
 				public EntityFieldSetter(EntityConfiguredValueField<E, F> field) {
 					this.field = field;
@@ -2049,17 +2049,102 @@ public interface ObservableConfigFormat<E> {
 
 				@Override
 				public void set(E entity, F fieldValue, ObservableConfigEvent change) {
-					ListenerList<Consumer<EntityReflector.FieldChange<F>>> listeners;
-					listeners = (ListenerList<Consumer<FieldChange<F>>>) field.getOwnerType().getAssociated(entity, this);
-					if (listeners == null) {
-						field.set(entity, fieldValue);
-					} else {
-						F oldValue = field.get(entity);
-						field.set(entity, fieldValue);
-						FieldChange<F> fieldChange = new FieldChange<>(oldValue, fieldValue, change);
+					((EntityConfigFormatImpl<E>.EntityConfigInstanceBacking) field.getOwnerType().getAssociated(entity,
+						EntityConfigFormatImpl.EntityConfigInstanceBacking.class))//
+					.invokeSet(field, fieldValue, change);
+				}
+			}
+
+			class EntityConfigInstanceBacking implements EntityReflector.ObservableEntityInstanceBacking<E> {
+				private final ObservableConfigParseContext<E> theContext;
+				private final QuickMap<String, Object> theFieldValues;
+				private QuickMap<String, ListenerList<? extends Consumer<EntityReflector.FieldChange<?>>>> theListeners;
+				private E theEntity;
+
+				EntityConfigInstanceBacking(ObservableConfigParseContext<E> ctx, QuickMap<String, Object> fieldValues) {
+					theContext = ctx;
+					theFieldValues = fieldValues;
+				}
+
+				void setEntity(E entity) {
+					theEntity = entity;
+					theEntityType.associate(theEntity, EntityConfigInstanceBacking.class, this);
+				}
+
+				<F> void invokeSet(EntityConfiguredValueField<E, F> field, F fieldValue, ObservableConfigEvent change) {
+					ListenerList<Consumer<FieldChange<F>>> listeners = theListeners == null ? null
+						: (ListenerList<Consumer<FieldChange<F>>>) theListeners.get(field.getIndex());
+					FieldChange<F> fieldChange;
+					if (listeners != null) {
+						F oldValue = field.get(theEntity);
+						fieldChange = new FieldChange<>(oldValue, fieldValue, change);
+					} else
+						fieldChange = null;
+					if (field.isSettable(theEntity))
+						field.set(theEntity, fieldValue);
+					else {
+						if (fieldValue != null && !TypeTokens.get().isInstance(field.getFieldType(), fieldValue))
+							throw new IllegalArgumentException(
+								"Cannot set field " + field + " with value " + fieldValue + ", type " + fieldValue.getClass());
+						theFieldValues.put(field.getIndex(), fieldValue);
+					}
+					if (fieldChange != null)
 						listeners.forEach(//
 							l -> l.accept(fieldChange));
+				}
+
+				@Override
+				public Object get(int fieldIndex) {
+					return theFieldValues.get(fieldIndex);
+				}
+
+				@Override
+				public void set(int fieldIndex, Object newValue) {
+					Object oldValue = theFieldValues.get(fieldIndex);
+					theFieldValues.put(fieldIndex, newValue);
+					formatField(theContext.getSession(), theEntity, (ComponentField<E, Object>) getFields().get(fieldIndex), oldValue,
+						newValue, theContext.getConfig(true, false), v -> theFieldValues.put(fieldIndex, v), theContext.getUntil(), null);
+				}
+
+				@Override
+				public Subscription addListener(E entity, int fieldIndex, Consumer<FieldChange<?>> listener) {
+					Object key = getFields().get(fieldIndex).setter;
+					try (Transaction t = getLock(fieldIndex).lock(false, null)) {
+						ListenerList<Consumer<FieldChange<?>>> listeners = (ListenerList<Consumer<FieldChange<?>>>) theEntityType
+							.getAssociated(entity, key);
+						if (listeners == null) {
+							listeners = ListenerList.build().build();
+							theEntityType.associate(entity, key, listeners);
+						}
+						return listeners.add(listener, true)::run;
 					}
+				}
+
+				@Override
+				public Transactable getLock(int fieldIndex) {
+					// If we ever try to support hierarchical locks or anything, this should be the field config's lock
+					return theContext.getLock();
+				}
+
+				@Override
+				public long getStamp(int fieldIndex) {
+					ObservableConfig config = theContext.getConfig(false, false);
+					if (config == null)
+						return 0;
+					else if (getFields().get(fieldIndex).childName == null)
+						return config.getStamp();
+					else
+						return config.getChild(getFields().get(fieldIndex).childName, true, null).getStamp();
+				}
+
+				@Override
+				public String isAcceptable(int fieldIndex, Object value) {
+					return null; // No filter mechanism available
+				}
+
+				@Override
+				public ObservableValue<String> isEnabled(int fieldIndex) {
+					return SettableValue.ALWAYS_ENABLED; // No enablement mechanism
 				}
 			}
 
@@ -2168,63 +2253,9 @@ public interface ObservableConfigFormat<E> {
 						});
 					}
 				}
-				Object[] created = new Object[1];
-				E instance = theEntityType.create(new EntityReflector.ObservableEntityInstanceBacking<E>() {
-					@Override
-					public Object get(int fieldIndex) {
-						return fieldValues.get(fieldIndex);
-					}
-
-					@Override
-					public void set(int fieldIndex, Object newValue) {
-						Object oldValue = fieldValues.get(fieldIndex);
-						fieldValues.put(fieldIndex, newValue);
-						formatField(ctx.getSession(), (E) created[0], (ComponentField<E, Object>) getFields().get(fieldIndex), oldValue,
-							newValue, ctx.getConfig(true, false), v -> fieldValues.put(fieldIndex, v), ctx.getUntil(), null);
-					}
-
-					@Override
-					public Subscription addListener(E entity, int fieldIndex, Consumer<FieldChange<?>> listener) {
-						Object key = getFields().get(fieldIndex).setter;
-						try (Transaction t = getLock(fieldIndex).lock(false, null)) {
-							ListenerList<Consumer<FieldChange<?>>> listeners = (ListenerList<Consumer<FieldChange<?>>>) theEntityType
-								.getAssociated(entity, key);
-							if (listeners == null) {
-								listeners = ListenerList.build().build();
-								theEntityType.associate(entity, key, listeners);
-							}
-							return listeners.add(listener, true)::run;
-						}
-					}
-
-					@Override
-					public Transactable getLock(int fieldIndex) {
-						// If we ever try to support hierarchical locks or anything, this should be the field config's lock
-						return ctx.getLock();
-					}
-
-					@Override
-					public long getStamp(int fieldIndex) {
-						ObservableConfig config = ctx.getConfig(false, false);
-						if (config == null)
-							return 0;
-						else if (getFields().get(fieldIndex).childName == null)
-							return config.getStamp();
-						else
-							return config.getChild(getFields().get(fieldIndex).childName, true, null).getStamp();
-					}
-
-					@Override
-					public String isAcceptable(int fieldIndex, Object value) {
-						return null; // No filter mechanism available
-					}
-
-					@Override
-					public ObservableValue<String> isEnabled(int fieldIndex) {
-						return SettableValue.ALWAYS_ENABLED; // No enablement mechanism
-					}
-				});
-				created[0] = instance;
+				EntityConfigInstanceBacking backing = new EntityConfigInstanceBacking(ctx, fieldValues);
+				E instance = theEntityType.create(backing);
+				backing.setEntity(instance);
 				Consumer<ObservableConfig> register = config -> {
 					theEntityType.associate(instance, EntityConfigFormat.ENTITY_CONFIG_KEY, config);
 					theEntityType.associate(instance, "until", ctx.getUntil());

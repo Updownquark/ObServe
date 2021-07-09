@@ -33,6 +33,12 @@ public interface ConfiguredValueField<E, F> {
 	F get(E entity);
 
 	/**
+	 * @param entity The entity to check
+	 * @return Whether this field can possibly be {@link #set(Object, Object) set} on the given entity
+	 */
+	boolean isSettable(E entity);
+
+	/**
 	 * @param entity The entity/value to set the value of this field in
 	 * @param fieldValue The value of this field to set in the given entity
 	 * @throws UnsupportedOperationException If the field cannot be set for any value-independent reason
