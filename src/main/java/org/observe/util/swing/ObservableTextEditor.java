@@ -375,6 +375,7 @@ public class ObservableTextEditor<E> {
 		isInternallyChanging = true;
 		try {
 			theValue.set(parsed, cause);
+			isDirty = false;
 			if (maybeReformat && reformatOnCommit) {
 				int selStart = theComponent.getSelectionStart();
 				int selEnd = theComponent.getSelectionStart();
