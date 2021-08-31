@@ -250,7 +250,7 @@ public class AppPopulation {
 					throw new IllegalStateException("Not a directory: " + configDir.getPath());
 				File configFile = new File(configDir, configName + ".xml");
 				if (!configFile.exists()) {
-					File oldConfigFile = new File(configFile.getParentFile(), configFile.getName());
+					File oldConfigFile = new File(configDir.getParentFile(), configName + ".config");
 					if (oldConfigFile.exists())
 						oldConfigFile.renameTo(configFile);
 				}
