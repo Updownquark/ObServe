@@ -5,11 +5,13 @@ import static org.observe.util.swing.TableContentControl.tryParseDouble;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.BitSet;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -717,6 +719,14 @@ public interface TableContentControl {
 			theMaxValue = (comp <= 0 ? maxValue : minValue);
 		}
 
+		public double getMinValue() {
+			return theMinValue;
+		}
+
+		public double getMaxValue() {
+			return theMaxValue;
+		}
+
 		@Override
 		public int[][] findMatches(ValueRenderer<?> category, CharSequence text) {
 			if (!category.searchGeneral())
@@ -751,6 +761,20 @@ public interface TableContentControl {
 		}
 
 		@Override
+		public int hashCode() {
+			return Objects.hash(theMinValue, theMaxValue);
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (obj == this)
+				return true;
+			else if (!(obj instanceof FloatRangeFilter))
+				return false;
+			return theMinValue == ((FloatRangeFilter) obj).theMinValue && theMaxValue == ((FloatRangeFilter) obj).theMaxValue;
+		}
+
+		@Override
 		public String toString() {
 			return new StringBuilder().append(theMinValue).append('-').append(theMaxValue).toString();
 		}
@@ -764,6 +788,14 @@ public interface TableContentControl {
 			int comp = StringUtils.compareNumberTolerant(low, high, true, true);
 			theLow = comp <= 0 ? low : high;
 			theHigh = comp <= 0 ? high : low;
+		}
+
+		public String getLow() {
+			return theLow;
+		}
+
+		public String getHigh() {
+			return theHigh;
 		}
 
 		@Override
@@ -832,6 +864,20 @@ public interface TableContentControl {
 		}
 
 		@Override
+		public int hashCode() {
+			return Objects.hash(theLow, theHigh);
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (obj == this)
+				return true;
+			else if (!(obj instanceof IntRangeFilter))
+				return false;
+			return theLow.equals(((IntRangeFilter) obj).theLow) && theHigh.equals(((IntRangeFilter) obj).theHigh);
+		}
+
+		@Override
 		public String toString() {
 			return new StringBuilder(theLow).append('-').append(theHigh).toString();
 		}
@@ -842,6 +888,10 @@ public interface TableContentControl {
 
 		public DateFilter(ParsedTime time) {
 			theTime = time;
+		}
+
+		public TimeUtils.ParsedTime getTime() {
+			return theTime;
 		}
 
 		@Override
@@ -881,6 +931,20 @@ public interface TableContentControl {
 		}
 
 		@Override
+		public int hashCode() {
+			return theTime.hashCode();
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (obj == this)
+				return true;
+			else if (!(obj instanceof DateFilter))
+				return false;
+			return theTime.equals(((DateFilter) obj).theTime);
+		}
+
+		@Override
 		public String toString() {
 			return theTime.toString();
 		}
@@ -893,6 +957,14 @@ public interface TableContentControl {
 		public DateRangeFilter(ParsedTime minTime, ParsedTime maxTime) {
 			theMinTime = minTime;
 			theMaxTime = maxTime;
+		}
+
+		public TimeUtils.ParsedTime getMinTime() {
+			return theMinTime;
+		}
+
+		public TimeUtils.ParsedTime getMaxTime() {
+			return theMaxTime;
 		}
 
 		@Override
@@ -933,6 +1005,20 @@ public interface TableContentControl {
 		}
 
 		@Override
+		public int hashCode() {
+			return Objects.hash(theMinTime, theMaxTime);
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (obj == this)
+				return true;
+			else if (!(obj instanceof DateRangeFilter))
+				return false;
+			return theMinTime.equals(((DateRangeFilter) obj).theMinTime) && theMaxTime.equals(((DateRangeFilter) obj).theMaxTime);
+		}
+
+		@Override
 		public String toString() {
 			return new StringBuilder().append(theMinTime).append('-').append(theMaxTime).toString();
 		}
@@ -943,6 +1029,10 @@ public interface TableContentControl {
 
 		public DurationFilter(ParsedDuration duration) {
 			theDuration = duration;
+		}
+
+		public TimeUtils.ParsedDuration getDuration() {
+			return theDuration;
 		}
 
 		@Override
@@ -972,6 +1062,20 @@ public interface TableContentControl {
 		}
 
 		@Override
+		public int hashCode() {
+			return theDuration.hashCode();
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (obj == this)
+				return true;
+			else if (!(obj instanceof DurationFilter))
+				return false;
+			return theDuration.equals(((DurationFilter) obj).theDuration);
+		}
+
+		@Override
 		public String toString() {
 			return theDuration.toString();
 		}
@@ -984,6 +1088,14 @@ public interface TableContentControl {
 		public DurationRangeFilter(ParsedDuration minDuration, ParsedDuration maxDuration) {
 			theMinDuration = minDuration;
 			theMaxDuration = maxDuration;
+		}
+
+		public TimeUtils.ParsedDuration getMinDuration() {
+			return theMinDuration;
+		}
+
+		public TimeUtils.ParsedDuration getMaxDuration() {
+			return theMaxDuration;
 		}
 
 		@Override
@@ -1013,6 +1125,21 @@ public interface TableContentControl {
 		}
 
 		@Override
+		public int hashCode() {
+			return Objects.hash(theMinDuration, theMaxDuration);
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (obj == this)
+				return true;
+			else if (!(obj instanceof DurationRangeFilter))
+				return false;
+			return theMinDuration.equals(((DurationRangeFilter) obj).theMinDuration)
+				&& theMaxDuration.equals(((DurationRangeFilter) obj).theMaxDuration);
+		}
+
+		@Override
 		public String toString() {
 			return new StringBuilder().append(theMinDuration).append('-').append(theMaxDuration).toString();
 		}
@@ -1023,6 +1150,10 @@ public interface TableContentControl {
 
 		public OrFilter(TableContentControl... filters) {
 			theContent = filters;
+		}
+
+		public TableContentControl[] getContent() {
+			return theContent.clone();
 		}
 
 		@Override
@@ -1081,6 +1212,36 @@ public interface TableContentControl {
 		}
 
 		@Override
+		public int hashCode() {
+			return Objects.hash((Object[]) theContent);
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (this == obj)
+				return true;
+			else if (!(obj instanceof OrFilter))
+				return false;
+			OrFilter other = (OrFilter) obj;
+			if (theContent.length != other.theContent.length)
+				return false;
+			BitSet filter = new BitSet(theContent.length);
+			for (int i = 0; i < theContent.length; i++) {
+				boolean found = false;
+				for (int j = filter.nextClearBit(0); j < theContent.length; j = filter.nextClearBit(j + 1)) {
+					if (theContent[i].equals(other.theContent[j])) {
+						found = true;
+						filter.set(j);
+						break;
+					}
+				}
+				if (!found)
+					return false;
+			}
+			return true;
+		}
+
+		@Override
 		public String toString() {
 			Set<String> printed = new HashSet<>();
 			StringBuilder str = new StringBuilder();
@@ -1105,6 +1266,14 @@ public interface TableContentControl {
 			theFilter = filter;
 		}
 
+		public String getCategory() {
+			return theCategory;
+		}
+
+		public Predicate<CharSequence> getFilter() {
+			return theFilter;
+		}
+
 		@Override
 		public int[][] findMatches(ValueRenderer<?> category, CharSequence text) {
 			if (!theCategory.equals(category.getName()))
@@ -1120,6 +1289,26 @@ public interface TableContentControl {
 		@Override
 		public List<String> getColumnSorting() {
 			return null;
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(theCategory, theFilter);
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (this == obj)
+				return true;
+			else if (!(obj instanceof PredicateFilter))
+				return false;
+			PredicateFilter other = (PredicateFilter) obj;
+			return theCategory.equals(other.theCategory) && theFilter.equals(other.theFilter);
+		}
+
+		@Override
+		public String toString() {
+			return theCategory + ":" + theFilter;
 		}
 	}
 
