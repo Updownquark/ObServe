@@ -298,12 +298,12 @@ public class ObservableSwingUtils {
 	 * Links up a check box's {@link JCheckBox#isSelected() selected} state to a settable boolean, such that the user's interaction with the
 	 * check box is reported by the value, and setting the value alters the check box.
 	 *
-	 * @param checkBox The check box to control observably
+	 * @param checkBox The toggle button or check box to control observably
 	 * @param descrip The description for the check box's tool tip when it is enabled
 	 * @param selected The settable, observable boolean to control the check box's selection
 	 * @return The subscription to {@link Subscription#unsubscribe() unsubscribe} to terminate the link
 	 */
-	public static Subscription checkFor(JCheckBox checkBox, String descrip, SettableValue<Boolean> selected) {
+	public static Subscription checkFor(JToggleButton checkBox, String descrip, SettableValue<Boolean> selected) {
 		return checkFor(checkBox, ObservableValue.of(TypeTokens.get().STRING, descrip), selected);
 	}
 
@@ -311,12 +311,12 @@ public class ObservableSwingUtils {
 	 * Links up a check box's {@link JCheckBox#isSelected() selected} state to a settable boolean, such that the user's interaction with the
 	 * check box is reported by the value, and setting the value alters the check box.
 	 *
-	 * @param checkBox The check box to control observably
+	 * @param checkBox The toggle button or check box to control observably
 	 * @param descrip The description for the check box's tool tip when it is enabled
 	 * @param selected The settable, observable boolean to control the check box's selection
 	 * @return The subscription to {@link Subscription#unsubscribe() unsubscribe} to terminate the link
 	 */
-	public static Subscription checkFor(JCheckBox checkBox, ObservableValue<String> descrip, SettableValue<Boolean> selected) {
+	public static Subscription checkFor(JToggleButton checkBox, ObservableValue<String> descrip, SettableValue<Boolean> selected) {
 		ActionListener action = evt -> {
 			selected.set(checkBox.isSelected(), evt);
 		};
