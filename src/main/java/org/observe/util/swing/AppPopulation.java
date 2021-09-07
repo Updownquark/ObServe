@@ -31,6 +31,7 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import javax.swing.JDialog;
@@ -524,7 +525,18 @@ public class AppPopulation {
 							theUpgrader.get().accept(theLatestRelease);
 						}, btn -> btn.visibleWhen(theUpgrader
 							.transform(tx -> tx.combineWith(theCurrentVersion).combineWith(theLatestVersionValue).combine((u, cv, lv) -> {
-								return u != null && cv != null && lv != null && !cv.equals(lv.name);
+								if (u == null || cv == null || lv == null)
+									return false;
+								Matcher cvM = VERSION_PATTERN.matcher(cv);
+								if (!cvM.matches())
+									return false;
+								Matcher lvM = VERSION_PATTERN.matcher(lv.name);
+								if (!lvM.matches())
+									return false;
+								return //
+								Integer.parseInt(cvM.group(1)) != Integer.parseInt(lvM.group(1))//
+									|| Integer.parseInt(cvM.group(2)) != Integer.parseInt(lvM.group(2))//
+									|| Integer.parseInt(cvM.group(3)) != Integer.parseInt(lvM.group(3));
 							}))))//
 						);
 				});
@@ -820,6 +832,9 @@ public class AppPopulation {
 		}
 	}
 
+	/** Pattern matcher for tag names of releases that represent version upgrades */
+	public static final Pattern VERSION_PATTERN = Pattern.compile(".*v?([0-9]+)\\.([0-9]+)\\.([0-9]+)");
+
 	public static class Version {
 		public final String name;
 		public final String title;
@@ -829,6 +844,11 @@ public class AppPopulation {
 			this.name = name;
 			this.title = title;
 			this.description = description;
+		}
+
+		@Override
+		public String toString() {
+			return name;
 		}
 	}
 }
