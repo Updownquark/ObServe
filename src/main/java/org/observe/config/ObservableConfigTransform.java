@@ -590,6 +590,10 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 					thePreAddAction = preAddAction;
 					parent.addChild(configAfter, configBefore, first, theChildName, cfg -> {
 						theNewElement = createElement(cfg, new ValueHolder<>(value.apply(cfg)), Observable.constant(null));
+						if (thePreAddAction != null) {
+							thePreAddAction.accept(theNewElement);
+							thePreAddAction = null;
+						}
 					});
 					cve[0] = theNewElement;
 					theNewElement = null;
