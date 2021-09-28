@@ -23,6 +23,7 @@ import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionEvent;
 import org.observe.collect.ObservableSet;
+import org.observe.config.EntityConfiguredValueType.EntityConfiguredValueField;
 import org.observe.config.ObservableConfig.ObservableConfigEvent;
 import org.observe.config.ObservableConfigFormat.EntityConfigFormat;
 import org.observe.config.ObservableConfigFormat.Impl;
@@ -1082,6 +1083,15 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 			if (!isConnected().get())
 				throw new UnsupportedOperationException("Not connected");
 			return new SimpleValueCreator<E, E2>(getFormat().create(getSession(), subType)) {
+				private ObservableConfig theTemplate;
+
+				@Override
+				public SyncValueCreator<E, E2> copy(E template) {
+					theTemplate = (ObservableConfig) getFormat().getEntityType().getAssociated(template,
+						EntityConfigFormat.ENTITY_CONFIG_KEY);
+					return this;
+				}
+
 				@Override
 				public String isEnabled(ConfiguredValueField<? super E2, ?> field) {
 					return null;
@@ -1100,6 +1110,12 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 				@Override
 				public CollectionElement<E> create(Consumer<? super E2> preAddAction) {
 					return add(cfg -> {
+						if (theTemplate != null) {
+							cfg.copyFrom(theTemplate, true);
+							for (EntityConfiguredValueField<E, ?> field : getFormat().getEntityType().getFields().allValues()) {
+								getFormat().getFieldFormat(field).postCopy(cfg.getChild(getFormat().getChildName(field)));
+							}
+						}
 						return createValue(cfg, getUntil());
 					}, getAfter(), getBefore(), isTowardBeginning(), element -> {
 						if (preAddAction != null)
@@ -1181,12 +1197,13 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		private ObservableMap<K, V> theWrapped;
 
 		ObservableConfigMap(Transactable lock, ObservableConfigParseSession session,
-			ObservableValue<? extends ObservableConfig> collectionElement, Consumer<Boolean> ceCreate, String keyName, String valueName,
-			TypeToken<K> keyType, TypeToken<V> valueType, ObservableConfigFormat<K> keyFormat, ObservableConfigFormat<V> valueFormat,
+			ObservableValue<? extends ObservableConfig> collectionElement, Consumer<Boolean> ceCreate, Impl.EntryFormat<K, V> entryFormat,
 			Observable<?> until, boolean listen, Observable<?> findRefs) {
+			TypeToken<K> keyType = entryFormat.getKeyField().type;
+			TypeToken<V> valueType = entryFormat.getValueField().type;
 			theCollection = new ObservableConfigValues<>(lock, session, collectionElement, ceCreate,
 				TypeTokens.get().keyFor(MapEntry.class).<MapEntry<K, V>> parameterized(keyType, valueType), //
-				new Impl.EntryFormat<>(true, keyName, valueName, keyType, valueType, keyFormat, valueFormat), valueName,
+				entryFormat, entryFormat.getValueField().childName,
 				until, listen, findRefs);
 			findRefs.act(__ -> {
 				theWrapped = theCollection.flow()
@@ -1307,13 +1324,13 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		private ObservableMultiMap<K, V> theWrapped;
 
 		ObservableConfigMultiMap(Transactable lock, ObservableConfigParseSession session,
-			ObservableValue<? extends ObservableConfig> collectionElement, Consumer<Boolean> ceCreate, String keyName, String valueName,
-			TypeToken<K> keyType, TypeToken<V> valueType, ObservableConfigFormat<K> keyFormat, ObservableConfigFormat<V> valueFormat,
+			ObservableValue<? extends ObservableConfig> collectionElement, Consumer<Boolean> ceCreate, Impl.EntryFormat<K, V> entryFormat,
 			Observable<?> until, boolean listen, Observable<?> findRefs) {
+			TypeToken<K> keyType = entryFormat.getKeyField().type;
+			TypeToken<V> valueType = entryFormat.getValueField().type;
 			theCollection = new ObservableConfigValues<>(lock, session, collectionElement, ceCreate,
 				TypeTokens.get().keyFor(MapEntry.class).<MapEntry<K, V>> parameterized(keyType, valueType), //
-				new Impl.EntryFormat<>(true, keyName, valueName, keyType, valueType, keyFormat, valueFormat), valueName,
-				until, listen, findRefs);
+				entryFormat, entryFormat.getValueField().childName, until, listen, findRefs);
 			findRefs.act(__ -> {
 				theWrapped = theCollection.flow()
 					.groupBy(keyType, //

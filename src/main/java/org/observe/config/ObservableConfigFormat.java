@@ -119,6 +119,9 @@ public interface ObservableConfigFormat<E> {
 	 */
 	boolean isDefault(E value);
 
+	/** @param copied The config that was just copied, to be adjusted by this format if needed */
+	void postCopy(ObservableConfig copied);
+
 	/**
 	 * Contains all context information that may be needed to parse values from config elements
 	 *
@@ -527,6 +530,12 @@ public interface ObservableConfigFormat<E> {
 		<F> ObservableConfigFormat<F> getFieldFormat(ConfiguredValueField<E, F> field);
 
 		/**
+		 * @param field The field to get configuration for
+		 * @return The name of the child configs that will be used to store the given field in entity configs
+		 */
+		String getChildName(ConfiguredValueField<E, ?> field);
+
+		/**
 		 * Creates a new entity
 		 *
 		 * @param <E2> The sub-type of entity to create
@@ -873,6 +882,14 @@ public interface ObservableConfigFormat<E> {
 			public boolean isDefault(C value) {
 				return value instanceof ObservableConfigTransform.ObservableConfigValue;
 			}
+
+			@Override
+			public void postCopy(ObservableConfig copied) {
+				for (ObservableConfig child : copied.getContent()) {
+					if (child.getName().equals(childName))
+						elementFormat.postCopy(child);
+				}
+			}
 		};
 	}
 
@@ -917,6 +934,14 @@ public interface ObservableConfigFormat<E> {
 			public boolean isDefault(SyncValueSet<E> value) {
 				return value instanceof ObservableConfigTransform.ObservableConfigEntityValues;
 			}
+
+			@Override
+			public void postCopy(ObservableConfig copied) {
+				for (ObservableConfig child : copied.getContent()) {
+					if (child.getName().equals(childName))
+						elementFormat.postCopy(child);
+				}
+			}
 		};
 	}
 
@@ -935,6 +960,7 @@ public interface ObservableConfigFormat<E> {
 	 */
 	static <K, V> ObservableConfigFormat<ObservableMap<K, V>> ofMap(TypeToken<K> keyType, TypeToken<V> valueType, String keyName,
 		String valueName, ObservableConfigFormat<K> keyFormat, ObservableConfigFormat<V> valueFormat) {
+		Impl.EntryFormat<K, V> entryFormat = new Impl.EntryFormat<>(true, keyName, valueName, keyType, valueType, keyFormat, valueFormat);
 		return new ObservableConfigFormat<ObservableMap<K, V>>() {
 			@Override
 			public void format(ObservableConfigParseSession session, ObservableMap<K, V> value, ObservableMap<K, V> previousValue,
@@ -959,8 +985,7 @@ public interface ObservableConfigFormat<E> {
 			public ObservableMap<K, V> parse(ObservableConfigParseContext<ObservableMap<K, V>> ctx) throws ParseException {
 				if (ctx.getPreviousValue() == null) {
 					return new ObservableConfigTransform.ObservableConfigMap<>(ctx.getLock(), ctx.getSession(), ctx.getConfig(),
-						trivial -> ctx.getConfig(true, trivial), keyName, valueName, keyType, valueType, keyFormat, valueFormat,
-						ctx.getUntil(), false, ctx.findReferences());
+						trivial -> ctx.getConfig(true, trivial), entryFormat, ctx.getUntil(), false, ctx.findReferences());
 				} else {
 					((ObservableConfigTransform.ObservableConfigMap<K, V>) ctx.getPreviousValue()).onChange(ctx.getChange());
 					return ctx.getPreviousValue();
@@ -970,6 +995,14 @@ public interface ObservableConfigFormat<E> {
 			@Override
 			public boolean isDefault(ObservableMap<K, V> value) {
 				return value instanceof ObservableConfigTransform.ObservableConfigMap;
+			}
+
+			@Override
+			public void postCopy(ObservableConfig copied) {
+				for (ObservableConfig child : copied.getContent()) {
+					if (child.getName().equals(valueName))
+						entryFormat.postCopy(child);
+				}
 			}
 		};
 	}
@@ -989,6 +1022,7 @@ public interface ObservableConfigFormat<E> {
 	 */
 	static <K, V> ObservableConfigFormat<ObservableMultiMap<K, V>> ofMultiMap(TypeToken<K> keyType, TypeToken<V> valueType, String keyName,
 		String valueName, ObservableConfigFormat<K> keyFormat, ObservableConfigFormat<V> valueFormat) {
+		Impl.EntryFormat<K, V> entryFormat = new Impl.EntryFormat<>(true, keyName, valueName, keyType, valueType, keyFormat, valueFormat);
 		return new ObservableConfigFormat<ObservableMultiMap<K, V>>() {
 			@Override
 			public void format(ObservableConfigParseSession session, ObservableMultiMap<K, V> value, ObservableMultiMap<K, V> previousValue,
@@ -1015,8 +1049,7 @@ public interface ObservableConfigFormat<E> {
 			public ObservableMultiMap<K, V> parse(ObservableConfigParseContext<ObservableMultiMap<K, V>> ctx) throws ParseException {
 				if (ctx.getPreviousValue() == null) {
 					return new ObservableConfigTransform.ObservableConfigMultiMap<>(ctx.getLock(), ctx.getSession(), ctx.getConfig(),
-						trivial -> ctx.getConfig(true, trivial), keyName, valueName, keyType, valueType, keyFormat, valueFormat,
-						ctx.getUntil(), false, ctx.findReferences());
+						trivial -> ctx.getConfig(true, trivial), entryFormat, ctx.getUntil(), false, ctx.findReferences());
 				} else {
 					((ObservableConfigTransform.ObservableConfigMultiMap<K, V>) ctx.getPreviousValue()).onChange(ctx.getChange());
 					return ctx.getPreviousValue();
@@ -1026,6 +1059,14 @@ public interface ObservableConfigFormat<E> {
 			@Override
 			public boolean isDefault(ObservableMultiMap<K, V> value) {
 				return value instanceof ObservableConfigMultiMap;
+			}
+
+			@Override
+			public void postCopy(ObservableConfig copied) {
+				for (ObservableConfig child : copied.getContent()) {
+					if (child.getName().equals(valueName))
+						entryFormat.postCopy(child);
+				}
 			}
 		};
 	}
@@ -1258,6 +1299,13 @@ public interface ObservableConfigFormat<E> {
 		public boolean isDefault(T value) {
 			return value == null;
 		}
+
+		@Override
+		public void postCopy(ObservableConfig copied) {
+			SubFormat<? extends T> format = formatFor(copied);
+			if (format != null)
+				((SubFormat<T>) format).format.postCopy(copied);
+		}
 	}
 
 	/** Implementations used by static factory methods in {@link ObservableConfigFormat} */
@@ -1444,6 +1492,10 @@ public interface ObservableConfigFormat<E> {
 			}
 
 			@Override
+			public void postCopy(ObservableConfig copied) {
+			}
+
+			@Override
 			public int hashCode() {
 				return format.hashCode() * 7 + defaultValue.hashCode();
 			}
@@ -1594,6 +1646,10 @@ public interface ObservableConfigFormat<E> {
 			}
 
 			@Override
+			public void postCopy(ObservableConfig copied) {
+			}
+
+			@Override
 			public int hashCode() {
 				return theRetriever.hashCode();
 			}
@@ -1664,6 +1720,10 @@ public interface ObservableConfigFormat<E> {
 			public boolean isDefault(T value) {
 				return value == null;
 			}
+
+			@Override
+			public void postCopy(ObservableConfig copied) {
+			}
 		}
 
 		static class NullFormat implements ObservableConfigFormat<Object> {
@@ -1684,6 +1744,10 @@ public interface ObservableConfigFormat<E> {
 			@Override
 			public boolean isDefault(Object value) {
 				return value == null;
+			}
+
+			@Override
+			public void postCopy(ObservableConfig copied) {
 			}
 		}
 
@@ -2028,9 +2092,27 @@ public interface ObservableConfigFormat<E> {
 				return (ObservableConfigFormat<V>) getFields().get(1).format;
 			}
 
+			public ComponentField<MapEntry<K, V>, K> getKeyField() {
+				return (ComponentField<MapEntry<K, V>, K>) getFields().get(0);
+			}
+
+			public ComponentField<MapEntry<K, V>, V> getValueField() {
+				return (ComponentField<MapEntry<K, V>, V>) getFields().get(1);
+			}
+
 			@Override
 			public boolean isDefault(MapEntry<K, V> value) {
 				return value != null;
+			}
+
+			@Override
+			public void postCopy(ObservableConfig copied) {
+				ObservableConfig keyConfig = copied.getChild(getKeyField().childName);
+				if (keyConfig != null)
+					getKeyFormat().postCopy(keyConfig);
+				ObservableConfig valueConfig = copied.getChild(getValueField().childName);
+				if (valueConfig != null)
+					getValueFormat().postCopy(valueConfig);
 			}
 
 			@Override
@@ -2190,6 +2272,11 @@ public interface ObservableConfigFormat<E> {
 			}
 
 			@Override
+			public String getChildName(ConfiguredValueField<E, ?> field) {
+				return getFields().get(field.getIndex()).childName;
+			}
+
+			@Override
 			public <E2 extends E> EntityConfigCreator<E2> create(ObservableConfigParseSession session, TypeToken<E2> subType) {
 				ConfigCreator<E2> creator = super.create(session, subType);
 				if (creator instanceof EntityConfigCreator)
@@ -2241,6 +2328,19 @@ public interface ObservableConfigFormat<E> {
 			@Override
 			public boolean isDefault(E value) {
 				return theEntityType.isInstance(value);
+			}
+
+			@Override
+			public void postCopy(ObservableConfig copied) {
+				for (AbstractComponentFormat.ComponentField<E, ?> field : getFields().allValues()) {
+					ObservableConfig fieldConfig = copied.getChild(field.childName);
+					if (fieldConfig == null)
+						continue;
+					if (theEntityType.getIdFields().contains(field.index))
+						fieldConfig.remove();
+					else
+						field.format.postCopy(fieldConfig);
+				}
 			}
 
 			@Override
