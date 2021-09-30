@@ -1155,12 +1155,14 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 
 			@Override
 			public String isEnabled() {
-				return StdMsg.UNSUPPORTED_OPERATION;
+				return null;
 			}
 
 			@Override
 			public String isAcceptable(E value) {
-				return StdMsg.UNSUPPORTED_OPERATION;
+				if (value == get())
+					return null;
+				return StdMsg.ILLEGAL_ELEMENT;
 			}
 
 			@Override
@@ -1171,7 +1173,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 						((ObservableCollection<ObservableConfig>) parent.getAllContent().getValues())
 						.mutableElement(getConfig().getParentChildRef()).set(getConfig());
 				} else
-					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+					throw new UnsupportedOperationException(StdMsg.ILLEGAL_ELEMENT);
 			}
 
 			@Override
