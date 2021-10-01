@@ -783,12 +783,11 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 		 * @return The built value
 		 */
 		public ObservableMap<K, V> buildMap(Consumer<ObservableMap<K, V>> preReturnGet) {
-			return theValueBuilder.build(
-				findRefs -> new ObservableConfigTransform.ObservableConfigMap<>(theValueBuilder.getConfig(),
-					new ObservableConfigParseSession(), theValueBuilder.getDescendant(true), theValueBuilder.createDescendant(true)::apply, //
-					getKeyName(), theValueBuilder.getChildName(), theKeyType, theValueBuilder.theType, getKeyFormat(),
-					theValueBuilder.getFormat(), theValueBuilder.getUntil(), true, findRefs),
-				preReturnGet);
+			return theValueBuilder.build(findRefs -> new ObservableConfigTransform.ObservableConfigMap<>(theValueBuilder.getConfig(),
+				new ObservableConfigParseSession(), theValueBuilder.getDescendant(true), theValueBuilder.createDescendant(true)::apply, //
+				new Impl.EntryFormat<>(true, getKeyName(), theValueBuilder.getChildName(), theKeyType, theValueBuilder.theType,
+					getKeyFormat(), theValueBuilder.getFormat()),
+				theValueBuilder.getUntil(), true, findRefs), preReturnGet);
 		}
 
 		/**
@@ -798,11 +797,11 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 		 * @return The built value
 		 */
 		public ObservableMultiMap<K, V> buildMultiMap(Consumer<ObservableMultiMap<K, V>> preReturnGet) {
-			return theValueBuilder
-				.build(findRefs -> new ObservableConfigTransform.ObservableConfigMultiMap<>(theValueBuilder.getConfig(),
-					new ObservableConfigParseSession(), theValueBuilder.getDescendant(true), theValueBuilder.createDescendant(true)::apply, //
-					getKeyName(), theValueBuilder.getChildName(), theKeyType, theValueBuilder.theType, getKeyFormat(),
-					theValueBuilder.getFormat(), theValueBuilder.getUntil(), true, findRefs), preReturnGet);
+			return theValueBuilder.build(findRefs -> new ObservableConfigTransform.ObservableConfigMultiMap<>(theValueBuilder.getConfig(),
+				new ObservableConfigParseSession(), theValueBuilder.getDescendant(true), theValueBuilder.createDescendant(true)::apply, //
+				new Impl.EntryFormat<>(true, getKeyName(), theValueBuilder.getChildName(), theKeyType, theValueBuilder.theType,
+					getKeyFormat(), theValueBuilder.getFormat()),
+				theValueBuilder.getUntil(), true, findRefs), preReturnGet);
 		}
 	}
 

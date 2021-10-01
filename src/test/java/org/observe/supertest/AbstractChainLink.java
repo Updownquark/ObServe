@@ -6,6 +6,7 @@ import java.util.List;
 import org.observe.Observable;
 import org.observe.SimpleObservable;
 import org.qommons.Lockable;
+import org.qommons.Lockable.CoreId;
 import org.qommons.TestHelper;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
@@ -33,6 +34,11 @@ public abstract class AbstractChainLink<S, T> implements ObservableChainLink<S, 
 		theDerivedLinks = new ArrayList<>();
 		theSiblingIndex = theSourceLink == null ? -1 : theSourceLink.getDerivedLinks().size(); // Assume we'll be added at the end
 		theDestruction = SimpleObservable.build().safe(false).build();
+	}
+
+	@Override
+	public CoreId getCoreId() {
+		return new CoreId(thePath);
 	}
 
 	@Override
