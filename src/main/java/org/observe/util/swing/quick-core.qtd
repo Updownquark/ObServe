@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<qonfig-def name="quick" root="quick" extends:observe="../observe-models.qtd">
+	<patterns>
+		<pattern name="variable">^[a-zA-Z_$][a-zA-Z_$0-9]*</pattern>
+		<pattern name="int">\d+</pattern> <!-- Positive integer -->
+		<pattern name="size">\d+(%|px)?</pattern>
+		<pattern name="position">\d+(%|px|xp)?</pattern>
+	</patterns>
+
+	<add-ons>
+		<add-on name="h-positionable">
+			<attribute name="left" type="position" specify="optional" />
+			<attribute name="right" type="position" specify="optional" />
+		</add-on>
+		<add-on name="v-positionable">
+			<attribute name="top" type="position" specify="optional" />
+			<attribute name="bottom" type="position" specify="optional" />
+		</add-on>
+		<add-on name="h-sizeable">
+			<attribute name="min-width" type="size" specify="optional" />
+			<attribute name="min-pref-width" type="size" specify="optional" />
+			<attribute name="pref-width" type="size" specify="optional" />
+			<attribute name="max-pref-width" type="size" specify="optional" />
+			<attribute name="max-width" type="size" specify="optional" />
+		</add-on>
+		<add-on name="v-sizeable">
+			<attribute name="min-height" type="size" specify="optional" />
+			<attribute name="min-pref-height" type="size" specify="optional" />
+			<attribute name="pref-height" type="size" specify="optional" />
+			<attribute name="max-pref-height" type="size" specify="optional" />
+			<attribute name="max-height" type="size" specify="optional" />
+		</add-on>
+		<add-on name="generic-sizeable">
+			<attribute name="min-length" type="size" specify="optional" />
+			<attribute name="min-pref-length" type="size" specify="optional" />
+			<attribute name="pref-length" type="size" specify="optional" />
+			<attribute name="max-pref-length" type="size" specify="optional" />
+			<attribute name="max-length" type="size" specify="optional" />
+		</add-on>
+	</add-ons>
+
+	<elements>
+		<element-def name="title">
+			<attribute name="title-value" type="string" specify="optional" />
+			<value type="string" specify="optional" />
+		</element-def>
+		<element-def name="head" ordered="true">
+			<child-def name="title" type="title" min="0" />
+			<child-def name="imports" type="imports" min="0" />
+			<child-def name="models" type="models" min="0" /> <!-- Don't know what you could do without models, but whatever -->
+		</element-def>
+
+		<element-def name="widget" abstract="true">
+			<attribute name="tooltip" type="string" specify="optional" />
+			<attribute name="tooltip-text" type="string" specify="optional" />
+			<attribute name="visible" type="string" specify="optional" />
+			<attribute name="onClick" type="string" specify="optional" />
+			<attribute name="onHover" type="string" specify="optional" />
+			<attribute name="onEnter" type="string" specify="optional" />
+			<attribute name="onExit" type="string" specify="optional" />
+		</element-def>
+
+		<element-def name="quick" ordered="true">
+			<child-def name="head" type="head" min="0" />
+			<child-def name="root" type="widget" min="1" />
+		</element-def>
+	</elements>
+</qonfig-def>

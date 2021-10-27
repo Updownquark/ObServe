@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+	GitHub URL https://github.com/Updownquark/Quick/releases/download/v1.0.0/quick.qtd
+	Local URL ../../../../core/src/main/resources/quick.dtd
+-->
+<qonfig-def extends:core="quick-core.qtd">
+	<add-ons>
+		<add-on name="orientation" />
+		<add-on name="horizontal" inherits="orientation" />
+		<add-on name="vertical" inherits="orientation" />
+
+		<add-on name="border-layout-region" />
+		<add-on name="inline-alignment" />
+		<add-on name="center" inherits="border-layout-region,inline-alignment" />
+		<add-on name="north" inherits="border-layout-region,v-sizeable" />
+		<add-on name="south" inherits="border-layout-region,v-sizeable" />
+		<add-on name="east" inherits="border-layout-region,h-sizeable" />
+		<add-on name="west" inherits="border-layout-region,h-sizeable" />
+
+		<!-- Layouts -->
+		<add-on name="layout" />
+
+		<add-on name="border-layout-child">
+			<attribute name="region" type="border-layout-region" default="center" />
+		</add-on>
+		<add-on name="border-layout" requires="box" inherits="layout">
+			<child-mod child="box.content" inherits="border-layout-child" />
+		</add-on>
+		<add-on name="leading" inherits="inline-alignment" />
+		<add-on name="trailing" inherits="inline-alignment" />
+		<add-on name="justify" inherits="inline-alignment" />
+		<add-on name="inline-layout" requires="box" inherits="layout">
+			<attribute name="orientation" type="orientation" />
+			<attribute name="main-align" type="inline-alignment" default="leading" />
+			<attribute name="cross-align" type="inline-alignment" default="justify" />
+			<!--<child-mod child="box.content" inherits="generic-sizeable" />-->
+		</add-on>
+
+		<add-on name="renderer-value-override" requires="value-widget">
+			<attribute name="value-widget.value" default="subject" specify="forbidden" />
+		</add-on>
+		<add-on name="single-rendering">
+			<child-def name="renderer" type="value-widget" inherits="renderer-value-override" min="0" />
+		</add-on>
+
+		<add-on name="tabular-widget" requires="multi-value-widget">
+			<attribute name="columns" type="string" specify="optional" />
+			<child-def name="column" type="column" min="0" max="inf" />
+		</add-on>
+
+		<add-on name="field" requires="widget">
+			<attribute name="field-name" type="string" specify="optional" />
+			<attribute name="fill" type="boolean" specify="optional" />
+		</add-on>
+
+		<add-on name="tab" requires="widget">
+			<attribute name="tab-id" type="string" specify="optional" />
+			<attribute name="tab-name" type="string" specify="optional" />
+			<attribute name="tab-name-value" type="string" specify="optional" />
+		</add-on>
+	</add-ons>
+
+	<elements>
+		<element-def name="spacer" extends="widget" inherits="v-sizeable,h-sizeable" />
+		<element-def name="button" extends="widget">
+			<attribute name="text" type="string" specify="optional" />
+			<attribute name="text-value" type="string" specify="optional" />
+			<attribute name="action" type="string" specify="required" />
+		</element-def>
+
+		<!-- Editors -->
+		<element-def name="value-widget" extends="widget" abstract="true" >
+			<attribute name="value" type="string" specify="required" />
+		</element-def>
+		<element-def name="file-button" extends="value-widget" />
+		<element-def name="text-widget" extends="value-widget" abstract="true">
+			<attribute name="format" type="string" specify="required" />
+		</element-def>
+		<element-def name="label" extends="text-widget">
+			<attribute name="text" type="string" specify="optional" />
+			<attribute name="value-widget.value" type="string" specify="optional" default="" />
+			<attribute name="text-widget.format" type="string" specify="optional" default="" />
+			<attribute name="icon" type="string" specify="optional" />
+			<attribute name="icon-ref" type="string" specify="optional" />
+		</element-def>
+		<element-def name="text-field" extends="text-widget" />
+		<element-def name="text-area" extends="text-widget">
+			<attribute name="rows" type="int" />
+		</element-def>
+		<element-def name="spinner" extends="text-field">
+			<attribute name="increment" type="string" specify="optional" />
+			<attribute name="increment-value" type="string" specify="optional" />
+		</element-def>
+		<element-def name="progress-bar" extends="value-widget">
+			<attribute name="max" type="string" specify="required" />
+		</element-def>
+		<element-def name="render-field-panel" extends="value-widget">
+			<attribute name="subject-name" type="variable" specify="required" />
+			<child-def name="field" type="value-widget" min="0" max="inf" />
+		</element-def>
+
+		<element-def name="collection-selector-widget" extends="value-widget" inherits="single-rendering" abstract="true">
+			<attribute name="values" type="string" specify="required" />
+		</element-def>
+		<element-def name="combo" extends="collection-selector-widget" />
+		<element-def name="radio-buttons" extends="collection-selector-widget" />
+		<element-def name="toggle-buttons" extends="collection-selector-widget" />
+
+		<element-def name="multi-value-widget" extends="widget">
+			<attribute name="selection" type="string" specify="optional" />
+		</element-def>
+		<element-def name="little-list" extends="multi-value-widget" inherits="single-rendering">
+			<attribute name="values" type="string" specify="required" />
+		</element-def>
+		<element-def name="big-list" inherits="single-rendering">
+		</element-def>
+		<element-def name="column" inherits="single-rendering">
+			<attribute name="name" type="string" />
+			<attribute name="value" type="string" specify="optional" /> <!-- Unspecified means to use the row value for the column value -->
+		</element-def>
+		<element-def name="value-action">
+			<attribute name="name" type="string" specify="optional" />
+			<attribute name="icon" type="string" specify="optional" />
+			<attribute name="action" type="string" specify="required" />
+			<attribute name="enabled" type="string" specify="optional" />
+		</element-def>
+		<element-def name="table" extends="multi-value-widget" inherits="tabular-widget">
+			<attribute name="rows" type="string" specify="required" />
+			<child-def name="action" type="value-action" min="0" max="inf" />
+		</element-def>
+		<element-def name="tree" extends="multi-value-widget" inherits="single-rendering">
+			<attribute name="root" type="string" specify="required" />
+			<attribute name="children" type="string" specify="required" />
+			<child-def name="action" type="value-action" min="0" max="inf" />
+		</element-def>
+		<element-def name="tree-table" extends="tree" inherits="tabular-widget" />
+
+		<!-- Containers -->
+		<element-def name="box" extends="widget">
+			<attribute name="layout" type="layout" specify="required" />
+			<child-def name="content" type="widget" min="0" max="inf" />
+		</element-def>
+		<element-def name="field-panel">
+			<child-def name="field" type="widget" inherits="field" />
+		</element-def>
+		<element-def name="singleton-container" extends="widget" abstract="true">
+			<child-def name="child" type="widget" />
+		</element-def>
+		<element-def name="scroll" extends="singleton-container" />
+		<element-def name="collapse-pane" extends="singleton-container">
+			<attribute name="collapsed" type="string" specify="optional"/>
+			<attribute name="init-collapsed" type="boolean" specify="optional" default="false" />
+		</element-def>
+		
+		<element-def name="tabs" extends="widget">
+			<attribute name="selected" type="string" specify="optional" />
+			<child-def name="tab" type="widget" inherits="tab" min="0" max="inf"/>
+		</element-def>
+		<element-def name="variable-tabs" extends="multi-value-widget" inherits="single-rendering" >
+			<attribute name="values" type="string" specify="required" />
+		</element-def>
+		<element-def name="split" extends="widget">
+			<attribute name="orientation" type="orientation" specify="required" />
+			<attribute name="split-position" type="position" specify="optional" />
+			<attribute name="split-position-value" type="string" specify="optional" />
+			<child-def name="content" type="widget" min="2" max="2" />
+		</element-def>
+	</elements>
+</qonfig-def>

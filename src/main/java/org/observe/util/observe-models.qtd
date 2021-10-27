@@ -1,0 +1,259 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<qonfig-def name="observe" root="models">
+	<patterns>
+		<pattern name="int">\d+</pattern> <!-- Positive integer -->
+		<pattern name="variable">^[a-zA-Z_$][a-zA-Z_$0-9]*</pattern>
+
+		<one-of name="vbl-or-int">
+			<pattern name="int" />
+			<pattern name="variable" />
+		</one-of>
+	</patterns>
+
+	<add-ons>
+		<add-on name="map-model-value" requires="abst-model-value">
+			<attribute name="key-type" type="string" specify="required" />
+		</add-on>
+		<add-on name="sorted">
+			<attribute name="sort-with" type="string" specify="optional" />
+		</add-on>
+
+		<add-on name="map-reverse-type" />
+		<add-on name="source-modifying-transform-reverse" inherits="map-reverse-type">
+			<attribute name="function" type="string" />
+			<attribute name="enabled" type="string" specify="optional" />
+			<attribute name="accept" type="string" specify="optional" />
+			<attribute name="add" type="string" specify="optional" />
+			<attribute name="add-accept" type="string" specify="optional" />
+		</add-on>
+		<add-on name="source-replacing-transform-reverse" inherits="source-modifying-transform-reverse">
+			<attribute name="stateful" type="boolean" specify="optional" default="true" />
+			<attribute name="inexact" type="boolean" specify="optional" default="false" />
+		</add-on>
+
+		<add-on name="abst-map-op">
+			<attribute name="cache" type="boolean" default="true" />
+			<attribute name="re-eval-on-update" type="boolean" default="true" />
+			<attribute name="fire-if-unchanged" type="boolean" default="true" />
+			<attribute name="null-to-null" type="boolean" default="false" />
+			<attribute name="many-to-one" type="boolean" default="false" />
+			<attribute name="one-to-many" type="boolean" default="false" />
+		</add-on>
+
+		<add-on name="flatten-reverse-type" />
+		<add-on name="flatten-replace-source" inherits="flatten-reverse-type">
+			<attribute name="function" type="string" />
+			<attribute name="accept" type="string" />
+		</add-on>
+		<add-on name="flatten-modify-source" inherits="flatten-replace-source">
+			<attribute name="add" type="string" />
+			<attribute name="add-accept" type="string" />
+		</add-on>
+
+		<add-on name="file-source-type" requires="file-source" />
+		<add-on name="native" inherits="file-source-type" />
+		<add-on name="sftp" inherits="file-source-type">
+			<attribute name="host" type="string" />
+			<attribute name="user" type="string" />
+			<attribute name="password" type="string" />
+			<attribute name="host-value" type="string" />
+			<attribute name="user-value" type="string" />
+			<attribute name="password-value" type="string" />
+			<attribute name="connecting-value" type="string" />
+		</add-on>
+		<add-on name="archive-type" requires="archive-method" />
+		<add-on name="zip" inherits="archive-type" />
+		<add-on name="tar" inherits="archive-type" />
+		<add-on name="gz" inherits="archive-type" />
+
+		<add-on name="format-type" requires="format" />
+		<add-on name="file" inherits="format-type">
+			<attribute name="file-source" type="string" specify="optional" />
+			<attribute name="working-dir" type="string" specify="optional" />
+			<attribute name="allow-empty" type="boolean" default="false" />
+		</add-on>
+		<add-on name="double" inherits="format-type">
+			<attribute name="sig-digs" type="int" />
+			<!-- TODO -->
+		</add-on>
+	</add-ons>
+
+	<elements>
+		<element-def name="import">
+			<attribute name="alias" type="variable" specify="required" />
+			<value type="string" specify="required" />
+		</element-def>
+		<element-def name="imports">
+			<child-def name="import" type="import" min="0" max="inf" />
+		</element-def>
+		
+		<!-- Values and transformations -->
+		<element-def name="abst-model-value" abstract="true">
+			<attribute name="type" type="string" specify="required" />
+			<attribute name="name" type="variable" specify="required" />
+		</element-def>
+		<element-def name="ext-model-value" extends="abst-model-value" abstract="true" />
+		<element-def name="ext-event" extends="ext-model-value" />
+		<element-def name="ext-action" extends="ext-model-value" />
+		<element-def name="ext-value" extends="ext-model-value" />
+		<element-def name="ext-list" extends="ext-model-value" />
+		<element-def name="ext-set" extends="ext-list" />
+		<element-def name="ext-sorted-set" extends="ext-set" inherits="sorted" />
+		<element-def name="ext-sorted-list" extends="ext-list" inherits="sorted" />
+		<element-def name="ext-map" extends="ext-model-value" inherits="map-model-value" />
+		<element-def name="ext-sorted-map" extends="ext-map" inherits="sorted" />
+		<element-def name="ext-multi-map" extends="ext-map" />
+		<element-def name="ext-sorted-multi-map" extends="ext-multi-map" inherits="sorted" />
+
+		<element-def name="int-model-value" extends="abst-model-value" abstract="true" />
+		<element-def name="constant" extends="int-model-value">
+			<value type="string" specify="required" />
+		</element-def>
+		<element-def name="value" extends="int-model-value">
+			<value type="string" specify="optional" default="" />
+		</element-def>
+		<element-def name="element">
+			<value type="string" specify="required" />
+		</element-def>
+		<element-def name="list" extends="int-model-value">
+			<child-def name="element" type="element" min="0" max="inf" />
+		</element-def>
+		<element-def name="set" extends="list" />
+		<element-def name="sorted-set" extends="set" inherits="sorted" />
+		<element-def name="sorted-list" extends="list" inherits="sorted" />
+		<element-def name="entry" extends="element">
+			<attribute name="key" type="string" />
+		</element-def>
+		<element-def name="map" extends="int-model-value" inherits="map-model-value">
+			<child-def name="entry" type="entry" min="0" max="inf" />
+		</element-def>
+		<element-def name="sorted-map" extends="map" inherits="sorted" />
+		<element-def name="multi-map" extends="ext-multi-map" />
+		<element-def name="sorted-multi-map" extends="multi-map" inherits="sorted" />
+
+		<element-def name="operation" abstract="true" />
+		<element-def name="modify-source" inherits="source-modifying-transform-reverse" />
+		<element-def name="replace-source" inherits="source-replacing-transform-reverse" />
+		<element-def name="map-reverse">
+			<attribute name="type" type="map-reverse-type" />
+		</element-def>
+		<element-def name="combine-with">
+			<value type="string" specify="required" />
+		</element-def>
+		<element-def name="map-to" extends="operation" inherits="abst-map-op">
+			<attribute name="equivalence" type="string" specify="optional" />
+			<attribute name="function" type="string" specify="required" />
+			<attribute name="cached" type="boolean" default="false" />
+			<attribute name="null-to-null" type="boolean" default="false" />
+			<attribute name="re-eval-on-update" type="boolean" default="false" />
+			<attribute name="fire-if-unchanged" type="boolean" default="false" />
+			<attribute name="many-to-one" type="boolean" default="false" />
+			<attribute name="one-to-many" type="boolean" default="false" />
+			<child-def name="combined-value" type="combine-with" min="0" max="inf" />
+			<child-def name="reverse" type="map-reverse" min="0" />
+		</element-def>
+		<element-def name="filter" extends="operation">
+			<attribute name="test" type="string" />
+		</element-def>
+		<element-def name="filter-by-type" extends="operation">
+			<attribute name="type" type="string" />
+		</element-def>
+		<element-def name="reverse" extends="operation" />
+		<element-def name="refresh" extends="operation">
+			<attribute name="on" type="string" />
+		</element-def>
+		<element-def name="refresh-each" extends="operation">
+			<attribute name="on" type="string" />
+		</element-def>
+		<element-def name="distinct" extends="operation">
+			<attribute name="sort-with" type="string" specify="optional" />
+			<attribute name="use-first" type="boolean" default="false" />
+			<attribute name="preserve-source-order" type="boolean" default="false" />
+		</element-def>
+		<element-def name="sort" extends="operation" inherits="sorted" />
+		<element-def name="with-equivalence" extends="operation">
+			<attribute name="equivalence" type="string" />
+		</element-def>
+		<element-def name="unmodifiable" extends="operation">
+			<attribute name="allow-updates" type="boolean" default="true" />
+		</element-def>
+		<element-def name="filter-mod" extends="operation">
+			<!-- Obviously, some of these are incompatible -->
+			<attribute name="no-add" type="string" specify="optional" />
+			<attribute name="no-remove" type="string" specify="optional" />
+			<attribute name="no-move" type="string" specify="optional" />
+			<attribute name="unmodifiable" type="string" specify="optional" />
+			<attribute name="filter-add" type="string" specify="optional" />
+			<attribute name="filter-remove" type="string" specify="optional" />
+		</element-def>
+		<element-def name="map-equivalent" extends="map-to" inherits="sorted">
+			<!-- For distinct flows, the reverse operation must be specified.
+				 For distinct sorted flows, either the reverse operation or a sorting function may be specified. -->
+		</element-def>
+		<element-def name="flatten-reverse">
+			<attribute name="type" type="flatten-reverse-type" />
+		</element-def>
+		<element-def name="flatten" extends="operation" inherits="abst-map-op">
+			<!-- This option requires caching, so the default will be the same as the cached attribute and cannot be specified here -->
+			<attribute name="propagate-update-to-parent" type="boolean" specify="optional" />
+		</element-def>
+		<element-def name="cross" extends="flatten">
+			<attribute name="with" type="string" />
+		</element-def>
+		<element-def name="where-contained" extends="operation">
+			<attribute name="filter" type="string" />
+			<attribute name="inclusive" type="boolean" default="true" />
+		</element-def>
+		<element-def name="group-by" extends="operation">
+			<child-def name="key" type="operation" />
+		</element-def>
+		<element-def name="no-init" extends="operation" />
+		<element-def name="skip" extends="operation">
+			<attribute name="times" type="int" specify="required" />
+		</element-def>
+		<element-def name="take" extends="operation">
+			<attribute name="times" type="int" specify="required" />
+		</element-def>
+		<element-def name="take-until" extends="operation">
+			<attribute name="until" type="string" specify="required" />
+		</element-def>
+		<element-def name="transform" extends="int-model-value">
+			<attribute name="source" type="string" specify="required" />
+			<!-- Type can be inferred from the transformation, but the user can specify that the result is a super-type instead -->
+			<attribute name="type" specify="optional" default="" />
+			<!-- Default of this attribute is whatever the flow prefers -->
+			<attribute name="active" type="boolean" specify="optional" />
+			<child-def name="op" type="operation" min="0" max="inf" /> <!-- Allow min=0 to facilitate aliases -->
+		</element-def>
+		<element-def name="archive-method">
+			<attribute name="type" type="archive-type" />
+		</element-def>
+		<element-def name="file-source" extends="int-model-value">
+			<attribute name="int-model-value.type" specify="forbidden" default="" />
+			<attribute name="type" type="file-source-type" default="native" />
+			<attribute name="max-archive-depth" type="vbl-or-int" default="10" />
+			<child-def name="archive" type="archive-method" min="0" max="inf" />
+		</element-def>
+		<element-def name="format" extends="int-model-value">
+			<attribute name="int-model-value.type" specify="forbidden" default="" />
+			<attribute name="type" type="format-type" />
+		</element-def>
+
+		<element-def name="abst-model" abstract="true">
+			<attribute name="name" type="string" specify="required" />
+			<child-def name="value" type="abst-model-value" min="0" max="inf" />
+		</element-def>
+		<element-def name="ext-model" extends="abst-model">
+			<child-mod child="abst-model.value" type="ext-model-value" />
+			<child-def name="sub-model" type="ext-model" min="0" max="inf" />
+		</element-def>
+		<element-def name="model" extends="abst-model">
+			<child-mod child="abst-model.value" type="int-model-value" />
+			<child-def name="sub-model" type="model" min="0" max="inf" />
+		</element-def>
+		<element-def name="models">
+			<child-def name="model" type="abst-model" min="0" max="inf" />
+		</element-def>
+	</elements>
+</qonfig-def>

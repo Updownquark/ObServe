@@ -381,6 +381,8 @@ public class PanelPopulation {
 
 		Alert alert(String title, String message);
 
+		P withLayoutConstraints(Object constraints);
+
 		ValueCache values();
 
 		default P grabFocus() {
@@ -1338,7 +1340,9 @@ public class PanelPopulation {
 		@Override
 		default <F> P addLabel(String fieldName, ObservableValue<F> field, Format<F> format, Consumer<FieldEditor<JLabel, ?>> modify) {
 			JLabel label = new JLabel();
-			field.changes().takeUntil(getUntil()).act(evt -> label.setText(format.format(evt.getNewValue())));
+			field.changes().takeUntil(getUntil()).act(evt -> {
+				label.setText(format.format(evt.getNewValue()));
+			});
 			SimpleFieldEditor<JLabel, ?> fieldPanel = new SimpleFieldEditor<>(fieldName, label, getLock());
 			fieldPanel.getTooltip().changes().takeUntil(getUntil()).act(evt -> fieldPanel.getEditor().setToolTipText(evt.getNewValue()));
 			if (field instanceof SettableValue) {
@@ -1557,6 +1561,7 @@ public class PanelPopulation {
 	static abstract class PanelPopulatorImpl<C extends Container, P extends PanelPopulatorImpl<C, P>> implements PanelPopulator<C, P> {
 		private final C theContainer;
 		private final Observable<?> theUntil;
+		private Object theLayoutConstraints;
 		private final ReentrantReadWriteLock theLock;
 		private final CollectionLockingStrategy theCLS;
 
@@ -1570,6 +1575,12 @@ public class PanelPopulation {
 		@Override
 		public Observable<?> getUntil() {
 			return theUntil;
+		}
+
+		@Override
+		public P withLayoutConstraints(Object constraints) {
+			theLayoutConstraints = constraints;
+			return (P) this;
 		}
 
 		protected ReentrantReadWriteLock getLock() {
@@ -1596,6 +1607,7 @@ public class PanelPopulation {
 		final Supplier<Transactable> theLock;
 		private final SimpleValueCache theValueCache;
 		private final E theEditor;
+		private Object theLayoutConstraints;
 		private boolean isFillH;
 		private boolean isFillV;
 		private ComponentDecorator theDecorator;
@@ -1622,6 +1634,16 @@ public class PanelPopulation {
 		public P visibleWhen(ObservableValue<Boolean> visible) {
 			isVisible = visible;
 			return (P) this;
+		}
+
+		@Override
+		public P withLayoutConstraints(Object constraints) {
+			theLayoutConstraints = constraints;
+			return (P) this;
+		}
+
+		Object getLayoutConstraints() {
+			return theLayoutConstraints;
 		}
 
 		@Override
@@ -1777,10 +1799,17 @@ public class PanelPopulation {
 			if (fieldLabel != null)
 				getContainer().add(fieldLabel, "align right");
 			StringBuilder constraints = new StringBuilder();
-			if (field.isFill())
+			if (field.getLayoutConstraints() != null)
+				constraints.append(field.getLayoutConstraints());
+			if (field.isFill()) {
+				if (constraints.length() > 0)
+					constraints.append(", ");
 				constraints.append("growx, pushx");
-			else if (fieldLabel == null && postLabel == null)
+			} else if (fieldLabel == null && postLabel == null) {
+				if (constraints.length() > 0)
+					constraints.append(", ");
 				constraints.append("align center");
+			}
 			if (field.isFillV()) {
 				if (constraints.length() > 0)
 					constraints.append(", ");
@@ -1984,23 +2013,26 @@ public class PanelPopulation {
 			if (fieldLabel != null)
 				getContainer().add(fieldLabel);
 			Component component = field.getOrCreateComponent(getUntil());
-			StringBuilder constraints = new StringBuilder();
+			Object constraints;
 			if ((field.isFill() || field.isFillV()) && getContainer().getLayout().getClass().getName().startsWith("net.mig")) {
+				StringBuilder constraintsStr = new StringBuilder();
 				if (field.isFill()) {
-					if (constraints.length() > 0)
-						constraints.append(", ");
-					constraints.append("growx, pushx");
+					if (constraintsStr.length() > 0)
+						constraintsStr.append(", ");
+					constraintsStr.append("growx, pushx");
 				}
 				if (field.isFillV()) {
-					if (constraints.length() > 0)
-						constraints.append(", ");
-					constraints.append("growy, pushy");
+					if (constraintsStr.length() > 0)
+						constraintsStr.append(", ");
+					constraintsStr.append("growy, pushy");
 				}
-			}
+				constraints = constraintsStr.toString();
+			} else
+				constraints = field.getLayoutConstraints();
 			if (scrolled)
-				getContainer().add(new JScrollPane(component), constraints.toString());
+				getContainer().add(new JScrollPane(component), constraints);
 			else
-				getContainer().add(component, constraints.toString());
+				getContainer().add(component, constraints);
 			if (postLabel != null)
 				getContainer().add(postLabel);
 			if (field.isVisible() != null) {
@@ -3578,6 +3610,11 @@ public class PanelPopulation {
 					isEnabled &= vis;
 					if (theAction != null)
 						theAction.putValue("visible", vis);
+					return (P) this;
+				}
+
+				@Override
+				public P withLayoutConstraints(Object constraints) {
 					return (P) this;
 				}
 

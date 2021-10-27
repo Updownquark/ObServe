@@ -160,8 +160,9 @@ implements TableBuilder<R, P> {
 	@Override
 	public P withColumn(CategoryRenderStrategy<? super R, ?> column) {
 		if (theColumns == null)
-			theColumns = ObservableCollection
-			.create(new TypeToken<CategoryRenderStrategy<? super R, ?>>() {}.where(new TypeParameter<R>() {}, theRows.getType()));
+			theColumns = ObservableCollection.create(new TypeToken<CategoryRenderStrategy<? super R, ?>>() {
+			}.where(new TypeParameter<R>() {
+			}, TypeTokens.get().wrap(theRows.getType())));
 		((ObservableCollection<CategoryRenderStrategy<? super R, ?>>) theColumns).add(column);
 		return (P) this;
 	}

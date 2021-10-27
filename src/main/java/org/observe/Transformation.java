@@ -671,6 +671,21 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		protected final boolean isInexactReversible;
 
 		/**
+		 * An abbreviated constructor
+		 * 
+		 * @param transformation The transformation producing result values that uses this reverse
+		 * @param reverse A function to produce source values from result value inputs
+		 * @param stateful Whether the reverse function depends on the previous source value
+		 * @param inexactReversible See {@link Transformation.MappingSourceReplacingReverse#allowInexactReverse(boolean)}
+		 */
+		public SourceReplacingReverse(Transformation<S, T> transformation,
+			BiFunction<? super T, ? super TransformationValues<? extends S, ? extends T>, ? extends S> reverse, boolean stateful,
+			boolean inexactReversible) {
+			this(transformation, reverse, //
+				null, null, null, null, stateful, inexactReversible);
+		}
+
+		/**
 		 * @param transformation The transformation producing result values that uses this reverse
 		 * @param reverse A function to produce source values from result value inputs
 		 * @param enabled An optional function to provide enablement for reverse operations
@@ -904,7 +919,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 	}
 
 	/**
-	 * A subclass of {@link Transformation.SourceReplacingReverse} for mapping operations (transformations with not external arguments).
+	 * A subclass of {@link Transformation.SourceReplacingReverse} for mapping operations (transformations with no external arguments).
 	 * Provides {@link #allowInexactReverse(boolean)}
 	 *
 	 * @param <S> The source type of the transformed structure

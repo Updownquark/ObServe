@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<qonfig-def extends:core="quick-core.qtd">
+	<add-ons>
+		<add-on name="quick" requires="core:quick">
+			<attribute name="look-and-feel" type="string" default="system" />
+		</add-on>
+	</add-ons>
+</qonfig-def>
