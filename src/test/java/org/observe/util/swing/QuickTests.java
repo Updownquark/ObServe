@@ -1,6 +1,5 @@
 package org.observe.util.swing;
 
-import java.awt.BorderLayout;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
@@ -10,8 +9,10 @@ import javax.swing.JFrame;
 
 import org.junit.Before;
 import org.junit.Test;
-import org.observe.util.ObservableModelSet;
+import org.observe.SettableValue;
+import org.observe.util.ModelTypes;
 import org.observe.util.ObservableModelQonfigParser;
+import org.observe.util.ObservableModelSet;
 import org.qommons.config.DefaultQonfigParser;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpreter;
@@ -34,7 +35,8 @@ public class QuickTests {
 	@Test
 	public void testSuperBasic() throws IOException, QonfigParseException, ParseException {
 		ObservableModelSet.ExternalModelSetBuilder extModels = ObservableModelSet.buildExternal();
-		extModels.addSubModel("extModel").withValue("value1", double.class, v -> v.safe(false).withValue(42.0).build());
+		extModels.addSubModel("extModel").with("value1", ModelTypes.Value.forType(double.class),
+			SettableValue.build(double.class).safe(false).withDescription("extModel.value1").withValue(42.0).build());
 		testQuick("super-basic.qml", extModels.build());
 	}
 
@@ -47,11 +49,9 @@ public class QuickTests {
 		}
 		QuickSwingParser.QuickDocument doc = theInterpreter.interpret(element, QuickSwingParser.QuickDocument.class);
 
-		JFrame frame = new JFrame(fileName);
+		JFrame frame = doc.createUI(extModels).createFrame();
 		frame.setSize(640, 480);
 		frame.setLocationRelativeTo(null);
-		frame.getContentPane().setLayout(new BorderLayout());
-		doc.install(frame, extModels, null);
 		frame.setVisible(true);
 
 		while (frame.isVisible()) {

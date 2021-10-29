@@ -11,6 +11,7 @@ import java.lang.reflect.WildcardType;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -20,6 +21,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
+import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
 
 import com.google.common.reflect.TypeParameter;
@@ -680,25 +682,61 @@ public class TypeTokens {
 	 * @return A function that takes an instance of the right type and returns it as an instance of the left type, throwing a
 	 *         {@link ClassCastException} if the value is neither null nor an instance of the left type, or a {@link NullPointerException}
 	 *         if the value is null and the left type is primitive
+	 * @throws IllegalArgumentException If values of the right type cannot be cast to the left type in general
 	 */
-	public <T, X> Function<T, X> getCast(TypeToken<T> left, TypeToken<X> right) {
+	public <T, X> Function<T, X> getCast(TypeToken<T> left, TypeToken<X> right) throws IllegalArgumentException {
+		return getCast(left, right, false);
+	}
+
+	/** Values to use for primitive types in place of null if <code>safe==true</code> for {@link #getCast(TypeToken, TypeToken, boolean)} */
+	public static final Map<Class<?>, Object> SAFE_VALUES = Collections.unmodifiableMap(QommonsUtils.<Class<?>, Object> buildMap(null)//
+		.with(boolean.class, false)//
+		.with(char.class, (char) 0)//
+		.with(byte.class, (byte) 0)//
+		.with(short.class, (short) 0)//
+		.with(int.class, 0)//
+		.with(long.class, 0L)//
+		.with(float.class, 0.0f)//
+		.with(double.class, 0.0)//
+		.get());
+
+	/**
+	 * @param <T> The compile-time type to cast to
+	 * @param <X> The compile-time type to cast from
+	 * @param left The type to cast to
+	 * @param right The type to cast from
+	 * @param safe For primitive right types, whether to use a safe value (0 or false) if the left value is null, as opposed to throwing a
+	 *        {@link NullPointerException}
+	 * @return A function that takes an instance of the right type and returns it as an instance of the left type, throwing a a
+	 *         {@link NullPointerException} if the right value is null and the left type is primitive
+	 * @throws IllegalArgumentException If values of the right type cannot be cast to the left type in general
+	 */
+	public <T, X> Function<T, X> getCast(TypeToken<T> left, TypeToken<X> right, boolean safe) throws IllegalArgumentException {
 		if (left.isAssignableFrom(right)) {
-			if (left.isPrimitive() && !right.isPrimitive())
+			if (left.isPrimitive() && !right.isPrimitive()) {
+				X safeValue = safe ? (X) SAFE_VALUES.get(getRawType(right)) : null;
 				return v -> {
-					if (v == null)
+					if (v == null) {
+						if (safeValue != null)
+							return safeValue;
 						throw new NullPointerException("Cannot cast null to primitive type " + left);
+					}
 					return (X) v;
 				};
-				else
-					return v -> (X) v;
+			} else
+				return v -> (X) v;
 		}
 		Class<?> primitiveRight = unwrap(getRawType(right));
 		Class<?> primitiveLeft = unwrap(getRawType(left));
 		Function<T, T> nullCheck;
 		if (left.isPrimitive() && !right.isPrimitive()) {
+			T safeValue = safe ? (T) SAFE_VALUES.get(primitiveLeft) : null;
 			nullCheck = v -> {
-				if (v == null)
+				if (v == null) {
+					if (safeValue != null)
+						return safeValue;
 					throw new NullPointerException("Cannot cast null to primitive type " + left);
+				}
 				return v;
 			};
 		} else {

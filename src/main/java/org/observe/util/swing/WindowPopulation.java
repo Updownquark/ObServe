@@ -22,6 +22,7 @@ import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.RootPaneContainer;
+import javax.swing.WindowConstants;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
@@ -65,13 +66,13 @@ public class WindowPopulation {
 		private SettableValue<Integer> theHeight;
 		private SettableValue<Boolean> isVisible;
 
-		private boolean isDisposeOnClose;
+		private int theCloseAction;
 
 		DefaultWindowBuilder(W window, Observable<?> until, boolean disposeOnClose) {
 			theWindow = window;
-			isDisposeOnClose = disposeOnClose;
 			theDispose = SimpleObservable.build().safe(false).build();
 			theUntil = Observable.or(until.takeUntil(theDispose), theDispose);
+			disposeOnClose(disposeOnClose);
 		}
 
 		@Override
@@ -151,8 +152,8 @@ public class WindowPopulation {
 		}
 
 		@Override
-		public P disposeOnClose(boolean dispose) {
-			isDisposeOnClose = dispose;
+		public P withCloseAction(int closeAction) {
+			theCloseAction = closeAction;
 			return (P) this;
 		}
 
@@ -196,7 +197,7 @@ public class WindowPopulation {
 			}
 			if (theIcon != null) {
 				theIcon.changes().takeUntil(theUntil)
-					.act(evt -> ObservableSwingUtils.onEQ(() -> theWindow.setIconImage(evt.getNewValue())));
+				.act(evt -> ObservableSwingUtils.onEQ(() -> theWindow.setIconImage(evt.getNewValue())));
 			}
 			SettableValue<Integer> x = theX;
 			SettableValue<Integer> y = theY;
@@ -310,6 +311,15 @@ public class WindowPopulation {
 				theWindow.addComponentListener(boundsListener);
 			}
 			SettableValue<Boolean> visible = isVisible;
+			boolean disposeOnClose;
+			switch (theCloseAction) {
+			case WindowConstants.DISPOSE_ON_CLOSE:
+			case WindowConstants.EXIT_ON_CLOSE:
+				disposeOnClose = true;
+				break;
+			default:
+				disposeOnClose = false;
+			}
 			theWindow.addComponentListener(new ComponentAdapter() {
 				@Override
 				public void componentShown(ComponentEvent e) {
@@ -321,7 +331,7 @@ public class WindowPopulation {
 				public void componentHidden(ComponentEvent e) {
 					if (visible != null && visible.get())
 						visible.set(false, e);
-					if (isDisposeOnClose) {
+					if (disposeOnClose) {
 						if (theDispose != null)
 							theDispose.onNext(e);
 						System.exit(0);

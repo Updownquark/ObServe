@@ -899,7 +899,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		 * @see Transformation for help using the API
 		 */
 		<X> CollectionDataFlow<E, T, X> transform(TypeToken<X> target, //
-			Function<ReversibleTransformationPrecursor<T, X, ?>, Transformation<T, X>> transform);
+			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ? extends Transformation<T, X>> transform);
 
 		/**
 		 * Transforms each value in this flow to a new value by some function, possibly including other values. This operation may produce
@@ -912,7 +912,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		 * @see Transformation for help using the API
 		 */
 		default <X> CollectionDataFlow<E, T, X> transform(Class<X> target, //
-			Function<ReversibleTransformationPrecursor<T, X, ?>, Transformation<T, X>> transform) {
+			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ? extends Transformation<T, X>> transform) {
 			return transform(TypeTokens.get().of(target), transform);
 		}
 
@@ -948,7 +948,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		 * @see Transformation for help using the API
 		 */
 		default <X> CollectionDataFlow<E, T, X> combine(TypeToken<X> targetType,
-			Function<ReversibleTransformationPrecursor<T, X, ?>, Transformation<T, X>> combination) {
+			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ? extends Transformation<T, X>> combination) {
 			return transform(targetType, combination);
 		}
 
@@ -1430,10 +1430,12 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		 * @see Transformation for help using the API
 		 */
 		<X> SortedDataFlow<E, T, X> transformEquivalent(TypeToken<X> target,
-			Function<? super ReversibleTransformationPrecursor<T, X, ?>, Transformation<T, X>> transform, Comparator<? super X> compare);
+			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ? extends Transformation<T, X>> transform,
+				Comparator<? super X> compare);
 
 		default <X> SortedDataFlow<E, T, X> transformEquivalent(Class<X> target,
-			Function<? super ReversibleTransformationPrecursor<T, X, ?>, Transformation<T, X>> transform, Comparator<? super X> compare) {
+			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ? extends Transformation<T, X>> transform,
+				Comparator<? super X> compare) {
 			return transformEquivalent(TypeTokens.get().of(target), transform, compare);
 		}
 
@@ -1526,11 +1528,13 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 
 		@Override
 		<X> DistinctSortedDataFlow<E, T, X> transformEquivalent(TypeToken<X> target,
-			Function<? super ReversibleTransformationPrecursor<T, X, ?>, Transformation<T, X>> transform, Comparator<? super X> compare);
+			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ? extends Transformation<T, X>> transform,
+				Comparator<? super X> compare);
 
 		@Override
 		default <X> DistinctSortedDataFlow<E, T, X> transformEquivalent(Class<X> target,
-			Function<? super ReversibleTransformationPrecursor<T, X, ?>, Transformation<T, X>> transform, Comparator<? super X> compare) {
+			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ? extends Transformation<T, X>> transform,
+				Comparator<? super X> compare) {
 			return transformEquivalent(TypeTokens.get().of(target), transform, compare);
 		}
 

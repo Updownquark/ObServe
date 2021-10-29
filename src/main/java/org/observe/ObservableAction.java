@@ -1,6 +1,7 @@
 package org.observe;
 
 import java.lang.reflect.Array;
+import java.util.Objects;
 import java.util.function.Function;
 
 import org.observe.collect.ObservableCollection;
@@ -28,6 +29,15 @@ public interface ObservableAction<T> extends TypedValueContainer<T> {
 
 	/** @return An observable whose value reports null if this value can be set directly, or a string describing why it cannot */
 	ObservableValue<String> isEnabled();
+
+	/**
+	 * @param <V> The type for the new action
+	 * @param map A function to produce values of the this action's type
+	 * @return The mapped action
+	 */
+	default <V> ObservableAction<V> map(Function<? super V, ? extends T> map) {
+		return new MappedObservableAction<>(this, map);
+	}
 
 	/**
 	 * @param disabled The disabled message to override the action with
@@ -159,6 +169,60 @@ public interface ObservableAction<T> extends TypedValueContainer<T> {
 		@Override
 		public ObservableValue<String> isEnabled() {
 			return SettableValue.ALWAYS_ENABLED;
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableAction#map(Function)}
+	 * 
+	 * @param <T> The type of the source action
+	 * @param <V> The type of the mapped action (this)
+	 */
+	class MappedObservableAction<T, V> implements ObservableAction<V> {
+		private final ObservableAction<T> theSource;
+		private final Function<? super V, ? extends T> theMap;
+
+		public MappedObservableAction(ObservableAction<T> source, Function<? super V, ? extends T> map) {
+			theSource = source;
+			theMap = map;
+		}
+
+		@Override
+		public TypeToken<V> getType() {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public V act(Object cause) throws IllegalStateException {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public ObservableValue<String> isEnabled() {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(theSource, theMap);
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (obj == this)
+				return true;
+			else if (!(obj instanceof MappedObservableAction))
+				return false;
+			MappedObservableAction<?, ?> other = (MappedObservableAction<?, ?>) obj;
+			return theSource.equals(other.theSource) && theMap.equals(other.theMap);
+		}
+
+		@Override
+		public String toString() {
+			return theSource.toString() + ".map(" + theMap + ")";
 		}
 	}
 

@@ -123,9 +123,9 @@ public class ObservableModelQonfigParser {
 		return SettableValue.asSettable(ObservableValue.of(value), __ -> "Literal value '" + text + "'");
 	}
 
-	public void configureInterpreter(QonfigInterpreter.Builder interpreter) {
-		interpreter = interpreter.forToolkit(TOOLKIT.get());
-		interpreter.createWith("imports", Void.class, (el, session) -> {
+	public QonfigInterpreter.Builder configureInterpreter(QonfigInterpreter.Builder interpreter) {
+		QonfigInterpreter.Builder observeInterpreter = interpreter.forToolkit(TOOLKIT.get());
+		observeInterpreter.createWith("imports", Void.class, (el, session) -> {
 			for (QonfigElement imp : el.getChildrenInRole("import"))
 				session.getInterpreter().interpret(imp, Void.class);
 			return null;
@@ -140,7 +140,7 @@ public class ObservableModelQonfigParser {
 			theImports.put(el.getAttributeText("alias"), type);
 			return null;
 		});
-		interpreter.createWith("models", ObservableModelSet.class, (el, session) -> {
+		observeInterpreter.createWith("models", ObservableModelSet.class, (el, session) -> {
 			ObservableModelSet.Builder builder = ObservableModelSet.build();
 			for (QonfigElement model : el.getChildrenInRole("model")) {
 				ObservableModelSet.Builder subModel = builder.createSubModel(model.getAttributeText("name"));
@@ -175,12 +175,12 @@ public class ObservableModelQonfigParser {
 			abstract <V> void build(ObservableModelSet.Builder model, String name, TypeToken<V> type, QonfigElement element, String path)
 				throws ParseException;
 		}
-		interpreter.createWith("constant", Void.class, new TypedModelThing<SettableValue>() {
+		observeInterpreter.createWith("constant", Void.class, new TypedModelThing<SettableValue>() {
 			@Override
 			<V> void build(ObservableModelSet.Builder model, String name, TypeToken<V> type, QonfigElement element, String path)
 				throws ParseException {
 				Function<ExternalModelSet, V> value = parseValue(model, type, element.getValue().toString());
-				model.withValue(name, type,
+				model.with(name, ModelTypes.Value.forType(type),
 					(modelSet, extModels) -> SettableValue
 					.asSettable(new ObservableValue.ConstantObservableValue<V>(type, value.apply(extModels)) {
 						private Object theIdentity;
@@ -202,7 +202,7 @@ public class ObservableModelQonfigParser {
 					value = parseValue(model, type, element.getValue().toString());
 				else
 					value = null;
-				model.withValue(name, type, (modelSet, extModels) -> {
+				model.with(name, ModelTypes.Value.forType(type), (modelSet, extModels) -> {
 					SettableValue.Builder<V> builder = SettableValue.build(type).safe(false);
 					builder.withDescription(path);
 					if (value != null)
@@ -238,7 +238,7 @@ public class ObservableModelQonfigParser {
 			abstract <V> void add(ObservableModelSet.Builder model, String name, TypeToken<V> type, QonfigElement element,
 				ValueGetter<? extends C> collection);
 		}
-		interpreter.createWith("list", Void.class, new CollectionCreator<ObservableCollection>() {
+		observeInterpreter.createWith("list", Void.class, new CollectionCreator<ObservableCollection>() {
 			@Override
 			<V> ObservableCollectionBuilder<V, ?> create(TypeToken<V> type, ModelSetInstance models) {
 				return ObservableCollection.build(type);
@@ -247,7 +247,7 @@ public class ObservableModelQonfigParser {
 			@Override
 			<V> void add(Builder model, String name, TypeToken<V> type, QonfigElement element,
 				ValueGetter<? extends ObservableCollection> collection) {
-				model.withCollection(name, type, (ValueGetter<ObservableCollection<V>>) collection);
+				model.with(name, ModelTypes.Collection.forType(type), (ValueGetter<ObservableCollection<V>>) collection);
 			}
 		}).createWith("set", Void.class, new CollectionCreator<ObservableSet>() {
 			@Override
@@ -258,7 +258,7 @@ public class ObservableModelQonfigParser {
 			@Override
 			<V> void add(Builder model, String name, TypeToken<V> type, QonfigElement element,
 				ValueGetter<? extends ObservableSet> collection) {
-				model.withSet(name, type, (ValueGetter<ObservableSet<V>>) collection);
+				model.with(name, ModelTypes.Set.forType(type), (ValueGetter<ObservableSet<V>>) collection);
 			}
 		}).createWith("sorted-set", Void.class, new CollectionCreator<ObservableSortedSet>() {
 			private Function<ModelSetInstance, Comparator<Object>> theComparator;
@@ -277,7 +277,7 @@ public class ObservableModelQonfigParser {
 			@Override
 			<V> void add(Builder model, String name, TypeToken<V> type, QonfigElement element,
 				ValueGetter<? extends ObservableSortedSet> collection) {
-				model.withSortedSet(name, type, (ValueGetter<ObservableSortedSet<V>>) collection);
+				model.with(name, ModelTypes.SortedSet.forType(type), (ValueGetter<ObservableSortedSet<V>>) collection);
 			}
 		}).createWith("sorted-list", Void.class, new CollectionCreator<ObservableSortedCollection>() {
 			private Function<ModelSetInstance, Comparator<Object>> theComparator;
@@ -296,7 +296,7 @@ public class ObservableModelQonfigParser {
 			@Override
 			<V> void add(Builder model, String name, TypeToken<V> type, QonfigElement element,
 				ValueGetter<? extends ObservableSortedCollection> collection) {
-				model.withSortedCollection(name, type, (ValueGetter<ObservableSortedCollection<V>>) collection);
+				model.with(name, ModelTypes.SortedCollection.forType(type), (ValueGetter<ObservableSortedCollection<V>>) collection);
 			}
 		});
 		abstract class BiTypedModelThing<T> implements QonfigInterpreter.QonfigValueCreator<Void> {
@@ -351,7 +351,7 @@ public class ObservableModelQonfigParser {
 			abstract <K, V> void add(ObservableModelSet.Builder model, String name, TypeToken<K> keyType, TypeToken<V> valueType,
 				QonfigElement element, ValueGetter<? extends M> map);
 		}
-		interpreter.createWith("map", Void.class, new MapCreator<ObservableMap>() {
+		observeInterpreter.createWith("map", Void.class, new MapCreator<ObservableMap>() {
 			@Override
 			<K, V> ObservableMap.Builder<K, V, ?> create(TypeToken<K> keyType, TypeToken<V> type, ModelSetInstance models) {
 				return ObservableMap.build(keyType, type);
@@ -360,10 +360,10 @@ public class ObservableModelQonfigParser {
 			@Override
 			<K, V> void add(ObservableModelSet.Builder model, String name, TypeToken<K> keyType, TypeToken<V> valueType,
 				QonfigElement element, ValueGetter<? extends ObservableMap> map) {
-				model.withMap(name, keyType, valueType, (ValueGetter<ObservableMap<K, V>>) map);
+				model.with(name, ModelTypes.Map.forType(keyType, valueType), (ValueGetter<ObservableMap<K, V>>) map);
 			}
 		});
-		interpreter.createWith("sorted-map", Void.class, new MapCreator<ObservableSortedMap>() {
+		observeInterpreter.createWith("sorted-map", Void.class, new MapCreator<ObservableSortedMap>() {
 			private Function<ModelSetInstance, Comparator<Object>> theComparator;
 
 			@Override
@@ -380,7 +380,7 @@ public class ObservableModelQonfigParser {
 			@Override
 			<K, V> void add(ObservableModelSet.Builder model, String name, TypeToken<K> keyType, TypeToken<V> valueType,
 				QonfigElement element, ValueGetter<? extends ObservableSortedMap> map) {
-				model.withSortedMap(name, keyType, valueType, (ValueGetter<ObservableSortedMap<K, V>>) map);
+				model.with(name, ModelTypes.SortedMap.forType(keyType, valueType), (ValueGetter<ObservableSortedMap<K, V>>) map);
 			}
 		});
 		abstract class MultiMapCreator<M extends ObservableMultiMap> extends BiTypedModelThing<M> {
@@ -416,7 +416,7 @@ public class ObservableModelQonfigParser {
 			abstract <K, V> void add(ObservableModelSet.Builder model, String name, TypeToken<K> keyType, TypeToken<V> valueType,
 				QonfigElement element, ValueGetter<? extends M> map);
 		}
-		interpreter.createWith("multi-map", Void.class, new MultiMapCreator<ObservableMultiMap>() {
+		observeInterpreter.createWith("multi-map", Void.class, new MultiMapCreator<ObservableMultiMap>() {
 			@Override
 			<K, V> ObservableMultiMap.Builder<K, V> create(TypeToken<K> keyType, TypeToken<V> type, ModelSetInstance models) {
 				return ObservableMultiMap.build(keyType, type);
@@ -425,10 +425,10 @@ public class ObservableModelQonfigParser {
 			@Override
 			<K, V> void add(ObservableModelSet.Builder model, String name, TypeToken<K> keyType, TypeToken<V> valueType,
 				QonfigElement element, ValueGetter<? extends ObservableMultiMap> map) {
-				model.withMultiMap(name, keyType, valueType, (ValueGetter<ObservableMultiMap<K, V>>) map);
+				model.with(name, ModelTypes.MultiMap.forType(keyType, valueType), (ValueGetter<ObservableMultiMap<K, V>>) map);
 			}
 		});
-		interpreter.createWith("sorted-multi-map", Void.class, new MultiMapCreator<ObservableSortedMultiMap>() {
+		observeInterpreter.createWith("sorted-multi-map", Void.class, new MultiMapCreator<ObservableSortedMultiMap>() {
 			private Function<ModelSetInstance, Comparator<Object>> theComparator;
 
 			@Override
@@ -445,7 +445,7 @@ public class ObservableModelQonfigParser {
 			@Override
 			<K, V> void add(ObservableModelSet.Builder model, String name, TypeToken<K> keyType, TypeToken<V> valueType,
 				QonfigElement element, ValueGetter<? extends ObservableSortedMultiMap> map) {
-				model.withSortedMultiMap(name, keyType, valueType, (ValueGetter<ObservableSortedMultiMap<K, V>>) map);
+				model.with(name, ModelTypes.SortedMultiMap.forType(keyType, valueType), (ValueGetter<ObservableSortedMultiMap<K, V>>) map);
 			}
 		});
 		abstract class ExtModelValidator<T> implements QonfigInterpreter.QonfigValueCreator<Void> {
@@ -479,73 +479,73 @@ public class ObservableModelQonfigParser {
 
 			protected abstract T getValue(ExternalModelSet extModels, String name, TypeToken<?> type);
 		}
-		interpreter.createWith("ext-event", Void.class, new ExtModelValidator<Observable>() {
+		observeInterpreter.createWith("ext-event", Void.class, new ExtModelValidator<Observable>() {
 			@Override
 			protected <V> void expect(Builder model, String name, TypeToken<V> type, ValueGetter<? extends Observable> valueGetter) {
-				model.withEvent(name, type, (ValueGetter<Observable<? extends V>>) valueGetter);
+				model.with(name, ModelTypes.Event.forType(type), (ValueGetter<Observable<? extends V>>) valueGetter);
 			}
 
 			@Override
 			protected Observable getValue(ExternalModelSet extModels, String name, TypeToken<?> type) {
-				return extModels.getEvent(name, type);
+				return extModels.get(name, ModelTypes.Event.forType(type));
 			}
 		});
-		interpreter.createWith("ext-value", Void.class, new ExtModelValidator<SettableValue>() {
+		observeInterpreter.createWith("ext-value", Void.class, new ExtModelValidator<SettableValue>() {
 			@Override
 			protected <V> void expect(Builder model, String name, TypeToken<V> type, ValueGetter<? extends SettableValue> valueGetter) {
-				model.withValue(name, type, (ValueGetter<SettableValue<V>>) valueGetter);
+				model.with(name, ModelTypes.Value.forType(type), (ValueGetter<SettableValue<V>>) valueGetter);
 			}
 
 			@Override
 			protected SettableValue getValue(ExternalModelSet extModels, String name, TypeToken<?> type) {
-				return extModels.getValue(name, type);
+				return extModels.get(name, ModelTypes.Value.forType(type));
 			}
 		});
-		interpreter.createWith("ext-list", Void.class, new ExtModelValidator<ObservableCollection>() {
+		observeInterpreter.createWith("ext-list", Void.class, new ExtModelValidator<ObservableCollection>() {
 			@Override
 			protected <V> void expect(Builder model, String name, TypeToken<V> type,
 				ValueGetter<? extends ObservableCollection> valueGetter) {
-				model.withCollection(name, type, (ValueGetter<ObservableCollection<V>>) valueGetter);
+				model.with(name, ModelTypes.Collection.forType(type), (ValueGetter<ObservableCollection<V>>) valueGetter);
 			}
 
 			@Override
 			protected ObservableCollection getValue(ExternalModelSet extModels, String name, TypeToken<?> type) {
-				return extModels.getCollection(name, type);
+				return extModels.get(name, ModelTypes.Collection.forType(type));
 			}
 		});
-		interpreter.createWith("ext-set", Void.class, new ExtModelValidator<ObservableSet>() {
+		observeInterpreter.createWith("ext-set", Void.class, new ExtModelValidator<ObservableSet>() {
 			@Override
 			protected <V> void expect(Builder model, String name, TypeToken<V> type, ValueGetter<? extends ObservableSet> valueGetter) {
-				model.withSet(name, type, (ValueGetter<ObservableSet<V>>) valueGetter);
+				model.with(name, ModelTypes.Set.forType(type), (ValueGetter<ObservableSet<V>>) valueGetter);
 			}
 
 			@Override
 			protected ObservableSet getValue(ExternalModelSet extModels, String name, TypeToken<?> type) {
-				return extModels.getSet(name, type);
+				return extModels.get(name, ModelTypes.Set.forType(type));
 			}
 		});
-		interpreter.createWith("ext-sorted-list", Void.class, new ExtModelValidator<ObservableSortedCollection>() {
+		observeInterpreter.createWith("ext-sorted-list", Void.class, new ExtModelValidator<ObservableSortedCollection>() {
 			@Override
 			protected <V> void expect(Builder model, String name, TypeToken<V> type,
 				ValueGetter<? extends ObservableSortedCollection> valueGetter) {
-				model.withSortedCollection(name, type, (ValueGetter<ObservableSortedCollection<V>>) valueGetter);
+				model.with(name, ModelTypes.SortedCollection.forType(type), (ValueGetter<ObservableSortedCollection<V>>) valueGetter);
 			}
 
 			@Override
 			protected ObservableSortedCollection getValue(ExternalModelSet extModels, String name, TypeToken<?> type) {
-				return extModels.getSortedCollection(name, type);
+				return extModels.get(name, ModelTypes.SortedCollection.forType(type));
 			}
 		});
-		interpreter.createWith("ext-sorted-set", Void.class, new ExtModelValidator<ObservableSortedSet>() {
+		observeInterpreter.createWith("ext-sorted-set", Void.class, new ExtModelValidator<ObservableSortedSet>() {
 			@Override
 			protected <V> void expect(Builder model, String name, TypeToken<V> type,
 				ValueGetter<? extends ObservableSortedSet> valueGetter) {
-				model.withSortedSet(name, type, (ValueGetter<ObservableSortedSet<V>>) valueGetter);
+				model.with(name, ModelTypes.SortedSet.forType(type), (ValueGetter<ObservableSortedSet<V>>) valueGetter);
 			}
 
 			@Override
 			protected ObservableSortedSet getValue(ExternalModelSet extModels, String name, TypeToken<?> type) {
-				return extModels.getSortedSet(name, type);
+				return extModels.get(name, ModelTypes.SortedSet.forType(type));
 			}
 		});
 		abstract class ExtBiTypedModelValidator<T> implements QonfigInterpreter.QonfigValueCreator<Void> {
@@ -576,82 +576,77 @@ public class ObservableModelQonfigParser {
 
 			protected abstract T getValue(ExternalModelSet extModels, String name, TypeToken<?> keyType, TypeToken<?> valueType);
 		}
-		interpreter.createWith("ext-map", Void.class, new ExtBiTypedModelValidator<ObservableMap>() {
+		observeInterpreter.createWith("ext-map", Void.class, new ExtBiTypedModelValidator<ObservableMap>() {
 			@Override
 			protected <K, V> void expect(Builder model, String name, TypeToken<K> keyType, TypeToken<V> valueType,
 				ValueGetter<? extends ObservableMap> valueGetter) {
-				model.withMap(name, keyType, valueType, (ValueGetter<ObservableMap<K, V>>) valueGetter);
+				model.with(name, ModelTypes.Map.forType(keyType, valueType), (ValueGetter<ObservableMap<K, V>>) valueGetter);
 			}
 
 			@Override
 			protected ObservableMap getValue(ExternalModelSet extModels, String name, TypeToken<?> keyType, TypeToken<?> valueType) {
-				return extModels.getMap(name, keyType, valueType);
+				return extModels.get(name, ModelTypes.Map.forType(keyType, valueType));
 			}
 		});
-		interpreter.createWith("ext-map", Void.class, new ExtBiTypedModelValidator<ObservableSortedMap>() {
+		observeInterpreter.createWith("ext-map", Void.class, new ExtBiTypedModelValidator<ObservableSortedMap>() {
 			@Override
 			protected <K, V> void expect(Builder model, String name, TypeToken<K> keyType, TypeToken<V> valueType,
 				ValueGetter<? extends ObservableSortedMap> valueGetter) {
-				model.withSortedMap(name, keyType, valueType, (ValueGetter<ObservableSortedMap<K, V>>) valueGetter);
+				model.with(name, ModelTypes.SortedMap.forType(keyType, valueType), (ValueGetter<ObservableSortedMap<K, V>>) valueGetter);
 			}
 
 			@Override
 			protected ObservableSortedMap getValue(ExternalModelSet extModels, String name, TypeToken<?> keyType, TypeToken<?> valueType) {
-				return extModels.getSortedMap(name, keyType, valueType);
+				return extModels.get(name, ModelTypes.SortedMap.forType(keyType, valueType));
 			}
 		});
-		interpreter.createWith("ext-multi-map", Void.class, new ExtBiTypedModelValidator<ObservableMultiMap>() {
+		observeInterpreter.createWith("ext-multi-map", Void.class, new ExtBiTypedModelValidator<ObservableMultiMap>() {
 			@Override
 			protected <K, V> void expect(Builder model, String name, TypeToken<K> keyType, TypeToken<V> valueType,
 				ValueGetter<? extends ObservableMultiMap> valueGetter) {
-				model.withMultiMap(name, keyType, valueType, (ValueGetter<ObservableMultiMap<K, V>>) valueGetter);
+				model.with(name, ModelTypes.MultiMap.forType(keyType, valueType), (ValueGetter<ObservableMultiMap<K, V>>) valueGetter);
 			}
 
 			@Override
 			protected ObservableMultiMap getValue(ExternalModelSet extModels, String name, TypeToken<?> keyType, TypeToken<?> valueType) {
-				return extModels.getMultiMap(name, keyType, valueType);
+				return extModels.get(name, ModelTypes.MultiMap.forType(keyType, valueType));
 			}
 		});
-		interpreter.createWith("ext-sorted-multi-map", Void.class, new ExtBiTypedModelValidator<ObservableSortedMultiMap>() {
+		observeInterpreter.createWith("ext-sorted-multi-map", Void.class, new ExtBiTypedModelValidator<ObservableSortedMultiMap>() {
 			@Override
 			protected <K, V> void expect(Builder model, String name, TypeToken<K> keyType, TypeToken<V> valueType,
 				ValueGetter<? extends ObservableSortedMultiMap> valueGetter) {
-				model.withSortedMultiMap(name, keyType, valueType, (ValueGetter<ObservableSortedMultiMap<K, V>>) valueGetter);
+				model.with(name, ModelTypes.SortedMultiMap.forType(keyType, valueType),
+					(ValueGetter<ObservableSortedMultiMap<K, V>>) valueGetter);
 			}
 
 			@Override
 			protected ObservableSortedMultiMap getValue(ExternalModelSet extModels, String name, TypeToken<?> keyType,
 				TypeToken<?> valueType) {
-				return extModels.getSortedMultiMap(name, keyType, valueType);
+				return extModels.get(name, ModelTypes.SortedMultiMap.forType(keyType, valueType));
 			}
 		});
-		interpreter.createWith("transform", Void.class, new QonfigInterpreter.QonfigValueCreator<Void>() {
+		observeInterpreter.createWith("transform", Void.class, new QonfigInterpreter.QonfigValueCreator<Void>() {
 			@Override
 			public Void createValue(QonfigElement element, QonfigInterpretingSession session) throws ParseException {
 				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.get("model");
 				String name = element.getAttributeText("name");
 				String sourceName = element.getAttributeText("source");
-				ValueContainer<?, ?> source = model.getThing(sourceName);
-				switch (source.getModelType()) {
-				case Event:
+				ValueContainer<?, ?> source = model.get(sourceName);
+				ModelType<?> type = source.getType().getModelType();
+				if (type == ModelTypes.Event)
 					transformEvent((ValueContainer<Object, Observable<Object>>) source, element, model, name);
-					break;
-				case Value:
+				else if (type == ModelTypes.Value)
 					transformValue((ValueContainer<Object, SettableValue<Object>>) source, element, model, name);
-					break;
-				case Collection:
-				case SortedCollection:
-				case Set:
-				case SortedSet:
+				else if (type == ModelTypes.Collection || type == ModelTypes.SortedCollection || type == ModelTypes.Set
+					|| type == ModelTypes.SortedSet)
 					transformCollection((ValueContainer<Object, ObservableCollection<Object>>) source, element, model, name);
-					break;
-				default:
-					throw new IllegalArgumentException("Transformation unsupported for source of type " + source.getModelType());
-				}
+				else
+					throw new IllegalArgumentException("Transformation unsupported for source of type " + source.getType().getModelType());
 				return null;
 			}
 		});
-		interpreter.createWith("file-source", Void.class, new QonfigInterpreter.QonfigValueCreator<Void>() {
+		observeInterpreter.createWith("file-source", Void.class, new QonfigInterpreter.QonfigValueCreator<Void>() {
 			@Override
 			public Void createValue(QonfigElement element, QonfigInterpretingSession session) throws ParseException {
 				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.get("model");
@@ -701,7 +696,7 @@ public class ObservableModelQonfigParser {
 							int finalZD = zipDepth;
 							maxZipDepth = models -> literal(finalZD, element.getAttributeText("max-archive-depth"));
 						} else {
-							maxZipDepth = model.getValue(element.getAttributeText("max-zip-depth"), TypeTokens.get().INT);
+							maxZipDepth = model.get(element.getAttributeText("max-zip-depth"), ModelTypes.Value.forType(Integer.class));
 						}
 					}
 					ValueGetter<SettableValue<FileDataSource>> root = source;
@@ -718,10 +713,11 @@ public class ObservableModelQonfigParser {
 							return aefs;
 						}).replaceSource(aefs -> null, rev -> rev.disableWith(tv -> "Not settable")));
 				}
-				model.withValue(name, TypeTokens.get().of(FileDataSource.class), source);
+				model.with(name, ModelTypes.Value.forType(FileDataSource.class), source);
 				return null;
 			}
 		});
+		return interpreter;
 	}
 
 	private TypeToken<?> parseType(String text) throws ParseException {
@@ -757,15 +753,18 @@ public class ObservableModelQonfigParser {
 		for (QonfigElement op : transform.getChildrenInRole("op")) {
 			switch (op.getType().getName()) {
 			case "no-init":
-				model.withEvent(name, source.getValueType(), (modelSet, extModels) -> source.get(modelSet).noInit());
+				model.with(name, ModelTypes.Event.forType(source.getType().getType(0)),
+					(modelSet, extModels) -> source.get(modelSet).noInit());
 				break;
 			case "skip":
 				int times = Integer.parseInt(op.getAttributeText("times"));
-				model.withEvent(name, source.getValueType(), (modelSet, extModels) -> source.get(modelSet).skip(times));
+				model.with(name, ModelTypes.Event.forType(source.getType().getType(0)),
+					(modelSet, extModels) -> source.get(modelSet).skip(times));
 				break;
 			case "take":
 				times = Integer.parseInt(op.getAttributeText("times"));
-				model.withEvent(name, source.getValueType(), (modelSet, extModels) -> source.get(modelSet).take(times));
+				model.with(name, ModelTypes.Event.forType(source.getType().getType(0)),
+					(modelSet, extModels) -> source.get(modelSet).take(times));
 				break;
 			case "take-until":
 				throw new UnsupportedOperationException("Not yet implemented");// TODO
@@ -804,7 +803,7 @@ public class ObservableModelQonfigParser {
 	private void transformValue(ValueContainer<Object, SettableValue<Object>> source, QonfigElement transform,
 		ObservableModelSet.Builder model, String name) {
 		ValueTransform transformFn = (v, models) -> v;
-		TypeToken<Object> currentType = source.getValueType();
+		TypeToken<Object> currentType = (TypeToken<Object>) source.getType().getType(0);
 		for (QonfigElement op : transform.getChildrenInRole("op")) {
 			ValueTransform prevTransformFn = transformFn;
 			switch (op.getType().getName()) {
@@ -863,7 +862,8 @@ public class ObservableModelQonfigParser {
 		}
 
 		ValueTransform finalTransform = transformFn;
-		model.withValue(name, currentType, (modelSet, extModel) -> finalTransform.transform(source.get(modelSet), modelSet));
+		model.with(name, ModelTypes.Value.forType(currentType),
+			(modelSet, extModel) -> finalTransform.transform(source.get(modelSet), modelSet));
 	}
 
 	private interface CollectionTransform {
@@ -874,7 +874,7 @@ public class ObservableModelQonfigParser {
 	private void transformCollection(ValueContainer<Object, ObservableCollection<Object>> source, QonfigElement transform,
 		ObservableModelSet.Builder model, String name) {
 		CollectionTransform transformFn = (src, models) -> src;
-		TypeToken<Object> currentType = source.getValueType();
+		TypeToken<Object> currentType = (TypeToken<Object>) source.getType().getType(0);
 		for (QonfigElement op : transform.getChildrenInRole("op")) {
 			CollectionTransform prevTransform = transformFn;
 			switch (op.getType().getName()) {
@@ -941,7 +941,7 @@ public class ObservableModelQonfigParser {
 		}
 		Boolean active = transform.getAttribute("active") == null ? null : (Boolean) transform.getAttribute("active");
 		CollectionTransform finalTransform = transformFn;
-		model.withCollection(name, currentType, (models, extModels) -> {
+		model.with(name, ModelTypes.Collection.forType(currentType), (models, extModels) -> {
 			ObservableCollection.CollectionDataFlow<Object, ?, Object> flow = finalTransform.transform(//
 				source.get(models).flow(), models);
 			if (active == null)
@@ -957,11 +957,11 @@ public class ObservableModelQonfigParser {
 		List<ValueContainer<?, ? extends SettableValue<?>>> combined = new ArrayList<>(op.getChildrenInRole("combined-value").size());
 		for (QonfigElement combine : op.getChildrenInRole("combined-value")) {
 			String name = combine.getValue().toString();
-			combined.add(model.getValue(name, null));
+			combined.add(model.get(name, ModelTypes.Value));
 		}
 		TypeToken<?>[] argTypes = new TypeToken[combined.size()];
 		for (int i = 0; i < argTypes.length; i++)
-			argTypes[i] = combined.get(i).getValueType();
+			argTypes[i] = combined.get(i).getType().getType(0);
 		MethodFinder<Object, TransformationValues<?, ?>, ?, Object> map = findMethod(TypeTokens.get().OBJECT);
 		map.withOption(argList(currentType).with(argTypes), (src, tv, __, args, models) -> {
 			args[0] = src;

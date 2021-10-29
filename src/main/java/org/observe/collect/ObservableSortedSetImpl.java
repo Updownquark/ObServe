@@ -287,7 +287,8 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public <X> DistinctSortedDataFlow<E, T, X> transformEquivalent(TypeToken<X> target,
-			Function<? super ReversibleTransformationPrecursor<T, X, ?>, Transformation<T, X>> transform, Comparator<? super X> compare) {
+			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ? extends Transformation<T, X>> transform,
+			Comparator<? super X> compare) {
 			Transformation<T, X> def = transform.apply(new ReversibleTransformationPrecursor<>());
 			return new DistinctSortedTransformOp<>(getSource(), this, target, def, compare);
 		}
@@ -437,7 +438,8 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public <X> DistinctSortedDataFlow<E, T, X> transformEquivalent(TypeToken<X> target,
-			Function<? super ReversibleTransformationPrecursor<T, X, ?>, Transformation<T, X>> transform, Comparator<? super X> compare) {
+			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ? extends Transformation<T, X>> transform,
+			Comparator<? super X> compare) {
 			Transformation<T, X> def = transform.apply(new ReversibleTransformationPrecursor<>());
 			return new DistinctSortedTransformOp<>(getSource(), this, target, def, compare);
 		}
@@ -529,7 +531,8 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public <X> DistinctSortedDataFlow<E, E, X> transformEquivalent(TypeToken<X> target,
-			Function<? super ReversibleTransformationPrecursor<E, X, ?>, Transformation<E, X>> transform, Comparator<? super X> compare) {
+			Function<? super ReversibleTransformationPrecursor<E, X, ?>, ? extends Transformation<E, X>> transform,
+			Comparator<? super X> compare) {
 			Transformation<E, X> def = transform.apply(new ReversibleTransformationPrecursor<>());
 			return new DistinctSortedTransformOp<>(getSource(), this, target, def, compare);
 		}

@@ -2,30 +2,30 @@ package org.observe.util.swing;
 
 import java.awt.BorderLayout;
 import java.awt.Container;
-import java.awt.Dialog;
-import java.awt.Frame;
 import java.awt.LayoutManager;
-import java.awt.Window;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import javax.swing.RootPaneContainer;
+import javax.swing.Icon;
+import javax.swing.JFrame;
 import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
+import javax.swing.WindowConstants;
 
 import org.observe.Observable;
 import org.observe.ObservableAction;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
+import org.observe.util.ModelType;
+import org.observe.util.ModelTypes;
 import org.observe.util.ObservableModelQonfigParser;
 import org.observe.util.ObservableModelSet;
 import org.observe.util.ObservableModelSet.ExternalModelSet;
 import org.observe.util.ObservableModelSet.ModelSetInstance;
-import org.observe.util.ObservableModelSet.ModelType;
 import org.observe.util.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.PanelPopulation.ComponentEditor;
@@ -171,6 +171,15 @@ public class QuickSwingParser {
 	public static class QuickDocument {
 		private final QuickHeadSection theHead;
 		private final QuickComponent theComponent;
+		private String theDefaultTitle;
+		private Function<ModelSetInstance, SettableValue<String>> theTitleValue;
+		private Function<ModelSetInstance, SettableValue<Icon>> theIcon;
+		private Function<ModelSetInstance, SettableValue<Integer>> theX;
+		private Function<ModelSetInstance, SettableValue<Integer>> theY;
+		private Function<ModelSetInstance, SettableValue<Integer>> theWidth;
+		private Function<ModelSetInstance, SettableValue<Integer>> theHeight;
+		private Function<ModelSetInstance, SettableValue<Boolean>> isVisible;
+		private int theCloseAction = WindowConstants.HIDE_ON_CLOSE;
 
 		public QuickDocument(QuickHeadSection head, QuickComponent component) {
 			theHead = head;
@@ -185,47 +194,155 @@ public class QuickSwingParser {
 			return theComponent;
 		}
 
-		public void install(Window window, ExternalModelSet extModels, Observable<?> until) {
-			ModelSetInstance modelSet = theHead.theModels == null ? null : theHead.theModels.createInstance(extModels, until);
-			if (theHead.theTitleValue != null) {
-				SettableValue<String> titleV = theHead.theTitleValue.apply(modelSet);
-				titleV.changes().act(evt -> {
-					if (window instanceof Frame)
-						((Frame) window).setTitle(evt.getNewValue());
-					else if (window instanceof Dialog)
-						((Dialog) window).setTitle(evt.getNewValue());
-				});
-			} else if (theHead.theDefaultTitle != null) {
-				if (window instanceof Frame)
-					((Frame) window).setTitle(theHead.theDefaultTitle);
-				else if (window instanceof Dialog)
-					((Dialog) window).setTitle(theHead.theDefaultTitle);
-			}
-			if (window instanceof RootPaneContainer)
-				install(PanelPopulation.populatePanel(((RootPaneContainer) window).getContentPane(), until), modelSet);
-			else
-				install(PanelPopulation.populatePanel(window, until), modelSet);
+		public String getDefaultTitle() {
+			return theDefaultTitle;
 		}
 
-		public void install(Container container, ExternalModelSet extModels, Observable<?> until) {
-			ModelSetInstance modelSet = theHead.theModels == null ? null : theHead.theModels.createInstance(extModels, until);
-			install(PanelPopulation.populatePanel(container, until), modelSet);
+		public void setTitle(String defaultTitle) {
+			theDefaultTitle = defaultTitle;
 		}
 
-		public void install(PanelPopulation.PanelPopulator<?, ?> container, ModelSetInstance modelSet) {
-			theComponent.install(container, modelSet);
+		public Function<ModelSetInstance, SettableValue<String>> getTitleValue() {
+			return theTitleValue;
+		}
+
+		public void setTitle(Function<ModelSetInstance, SettableValue<String>> titleValue) {
+			theTitleValue = titleValue;
+		}
+
+		public Function<ModelSetInstance, SettableValue<Icon>> getIcon() {
+			return theIcon;
+		}
+
+		public void setIcon(Function<ModelSetInstance, SettableValue<Icon>> icon) {
+			theIcon = icon;
+		}
+
+		public Function<ModelSetInstance, SettableValue<Integer>> getX() {
+			return theX;
+		}
+
+		public Function<ModelSetInstance, SettableValue<Integer>> getY() {
+			return theY;
+		}
+
+		public Function<ModelSetInstance, SettableValue<Integer>> getWidth() {
+			return theWidth;
+		}
+
+		public Function<ModelSetInstance, SettableValue<Integer>> getHeight() {
+			return theHeight;
+		}
+
+		public Function<ModelSetInstance, SettableValue<Boolean>> getVisible() {
+			return isVisible;
+		}
+
+		public int getCloseAction() {
+			return theCloseAction;
+		}
+
+		public QuickDocument withBounds(//
+			Function<ModelSetInstance, SettableValue<Integer>> x, Function<ModelSetInstance, SettableValue<Integer>> y, //
+			Function<ModelSetInstance, SettableValue<Integer>> width, Function<ModelSetInstance, SettableValue<Integer>> height) {
+			theX = x;
+			theY = y;
+			theWidth = width;
+			theHeight = height;
+			return this;
+		}
+
+		public QuickDocument setVisible(Function<ModelSetInstance, SettableValue<Boolean>> visible) {
+			isVisible = visible;
+			return this;
+		}
+
+		public void setCloseAction(int closeAction) {
+			theCloseAction = closeAction;
+		}
+
+		public QuickUI createUI(ExternalModelSet extModels) {
+			return new QuickUI(this, extModels);
 		}
 	}
 
-	private static class QuickHeadSection {
-		final String theDefaultTitle;
-		final Function<ModelSetInstance, SettableValue<String>> theTitleValue;
-		final ObservableModelSet theModels;
+	public static class QuickUI {
+		private final QuickDocument theDocument;
+		private final ExternalModelSet theExternalModels;
+		private ModelSetInstance theModels;
+		private Observable<?> theUntil;
 
-		QuickHeadSection(String defaultTitle, Function<ModelSetInstance, SettableValue<String>> titleValue, ObservableModelSet models) {
-			theDefaultTitle = defaultTitle;
-			theTitleValue = titleValue;
+		private QuickUI(QuickDocument doc, ExternalModelSet extModels) {
+			theDocument = doc;
+			theExternalModels = extModels;
+		}
+
+		public QuickDocument getDocument() {
+			return theDocument;
+		}
+
+		public QuickUI withUntil(Observable<?> until) {
+			if (theUntil != null)
+				throw new IllegalStateException("Until has already been installed");
+			theUntil = until;
+			return this;
+		}
+
+		public Observable<?> getUntil() {
+			if (theUntil == null)
+				theUntil = Observable.empty();
+			return theUntil;
+		}
+
+		public ModelSetInstance getModels() {
+			theModels = theDocument.getHead().getModels().createInstance(theExternalModels, getUntil());
+			return theModels;
+		}
+
+		public JFrame createFrame() {
+			return install(new JFrame());
+		}
+
+		public JFrame install(JFrame frame) {
+			PanelPopulation.WindowBuilder<JFrame, ?> builder = WindowPopulation.populateWindow(frame, getUntil(), false, false);
+			if (theDocument.getTitleValue() != null)
+				builder.withTitle(theDocument.getTitleValue().apply(getModels()));
+			else if (theDocument.getDefaultTitle() != null)
+				builder.withTitle(theDocument.getDefaultTitle());
+			if (theDocument.getVisible() != null)
+				builder.withVisible(theDocument.getVisible().apply(getModels()));
+			if (theDocument.getX() != null)
+				builder.withX(theDocument.getX().apply(getModels()));
+			if (theDocument.getX() != null)
+				builder.withY(theDocument.getY().apply(getModels()));
+			if (theDocument.getX() != null)
+				builder.withWidth(theDocument.getWidth().apply(getModels()));
+			if (theDocument.getX() != null)
+				builder.withHeight(theDocument.getHeight().apply(getModels()));
+			builder.withCloseAction(theDocument.getCloseAction());
+			builder.withHContent(new BorderLayout(), content -> installContent(content));
+			builder.run(null);
+			return frame;
+		}
+
+		public void installContent(Container container) {
+			installContent(PanelPopulation.populatePanel(container, getUntil()));
+		}
+
+		public void installContent(PanelPopulation.PanelPopulator<?, ?> container) {
+			theDocument.getComponent().install(container, getModels());
+		}
+	}
+
+	public static class QuickHeadSection {
+		private final ObservableModelSet theModels;
+
+		QuickHeadSection(ObservableModelSet models) {
 			theModels = models;
+		}
+
+		public ObservableModelSet getModels() {
+			return theModels;
 		}
 	}
 
@@ -235,36 +352,58 @@ public class QuickSwingParser {
 		theModelParser = new ObservableModelQonfigParser();
 	}
 
-	public void configureInterpreter(Builder interpreter) {
+	public Builder configureInterpreter(Builder interpreter) {
 		theModelParser.configureInterpreter(interpreter);
 		Builder coreInterpreter = interpreter.forToolkit(CORE.get());
 		coreInterpreter.createWith("quick", QuickDocument.class, (element, session) -> {
 			QuickHeadSection head = session.getInterpreter().interpret(element.getChildrenInRole("head").getFirst(), QuickHeadSection.class);
-			session.put("quick-model", head.theModels);
-			return new QuickDocument(head, //
+			session.put("quick-model", head.getModels());
+			QuickDocument doc = new QuickDocument(head, //
 				session.getInterpreter().interpret(element.getChildrenInRole("root").getFirst(), QuickComponent.class));
+			if (element.getAttribute("visible") != null)
+				doc.setVisible(head.getModels().get(element.getAttributeText("visible"), ModelTypes.Value.forType(Boolean.class)));
+			return doc;
 		}).createWith("head", QuickHeadSection.class, (element, session) -> {
 			QonfigElement modelsEl = element.getChildrenInRole("models").peekFirst();
 			ObservableModelSet model = modelsEl == null ? null : session.getInterpreter().interpret(modelsEl, ObservableModelSet.class);
-			QonfigElement title = element.getChildrenInRole("title").peekFirst();
-			String defaultTitle = title == null ? null : (String) title.getValue();
-			String titleValueS = title == null ? null : title.getAttribute("title-value", String.class);
-			Function<ModelSetInstance, SettableValue<String>> titleValue;
-			if (titleValueS != null) {
-				if (defaultTitle != null)
-					System.err.println("WARNING: title and title-value both specified for head section");
-				titleValue = model.getValue(titleValueS, TypeTokens.get().STRING);
-			} else if (defaultTitle != null) {
-				SettableValue<String> titleS = ObservableModelQonfigParser.literal(defaultTitle, defaultTitle);
-				titleValue = __ -> titleS;
-			} else
-				titleValue = null;
-			return new QuickHeadSection(defaultTitle, titleValue, model);
+			return new QuickHeadSection(model);
+		}).modifyWith("window", QuickDocument.class, (doc, element, session) -> {
+			ObservableModelSet model = doc.getHead().getModels();
+			if (element.getAttribute("title-value") != null)
+				doc.setTitle(model.get(element.getAttributeText("title-value"), ModelTypes.Value.forType(String.class)));
+			if (element.getAttribute("title") != null)
+				doc.setTitle(element.getAttributeText("title"));
+			String x = element.getAttributeText("x");
+			String y = element.getAttributeText("y");
+			String w = element.getAttributeText("width");
+			String h = element.getAttributeText("height");
+			doc.withBounds(//
+				x == null ? null : model.get(x, ModelTypes.Value.forType(Integer.class)), //
+					y == null ? null : model.get(y, ModelTypes.Value.forType(Integer.class)), //
+						w == null ? null : model.get(w, ModelTypes.Value.forType(Integer.class)), //
+							h == null ? null : model.get(h, ModelTypes.Value.forType(Integer.class))//
+				);
+			switch (element.getAttributeText("close-action")) {
+			case "do-nothing":
+				doc.setCloseAction(WindowConstants.DO_NOTHING_ON_CLOSE);
+				break;
+			case "hide":
+				doc.setCloseAction(WindowConstants.HIDE_ON_CLOSE);
+				break;
+			case "dispose":
+				doc.setCloseAction(WindowConstants.DISPOSE_ON_CLOSE);
+				break;
+			case "edit":
+				doc.setCloseAction(WindowConstants.EXIT_ON_CLOSE);
+				break;
+			}
+			return doc;
 		});
 		if (BASE.isBuilt() && BASE.isValid() && interpreter.dependsOn(BASE.get()))
 			configureBase(interpreter.forToolkit(BASE.get()));
 		if (SWING.isBuilt() && SWING.isValid() && interpreter.dependsOn(SWING.get()))
 			configureSwing(interpreter.forToolkit(SWING.get()));
+		return interpreter;
 	}
 
 	void configureBase(Builder interpreter) {
@@ -342,7 +481,7 @@ public class QuickSwingParser {
 		})//
 		.createWith("label", QuickComponent.class, (element, session) -> {
 			ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
-			Function<ModelSetInstance, SettableValue<Object>> value;
+			Function<ModelSetInstance, ? extends SettableValue> value;
 			TypeToken<?> valueType;
 			String valueStr = element.getAttributeText("value");
 			String formatStr = element.getAttributeText("format");
@@ -350,19 +489,19 @@ public class QuickSwingParser {
 			if (valueStr == null || valueStr.isEmpty()) {
 				if (formatStr != null && !formatStr.isEmpty())
 					System.err.println("Warning: format specified on label without value");
-				String txt = element.getAttributeText("text");
+				String txt = element.getValueText();
 				if (txt == null)
 					throw new IllegalArgumentException("Either 'text' or 'value' must be specified");
 				value = __ -> SettableValue.asSettable(ObservableValue.of(txt), ___ -> "Constant value");
 				format = __ -> ObservableModelQonfigParser.literal((Format<Object>) (Format<?>) Format.TEXT, "<unspecified>");
 			} else {
-				value = model.getValue(valueStr, null);
-				valueType = ((ValueContainer<?, ?>) value).getValueType();
+				value = model.get(valueStr, ModelTypes.Value);
+				valueType = ((ValueContainer<?, ?>) value).getType().getType(0);
 				if (formatStr == null || formatStr.isEmpty()) {
 					format = __ -> ObservableModelQonfigParser.literal((Format<Object>) (Format<?>) LABEL_FORMAT, "<unspecified>");
 				} else
-					format = model.getValue(formatStr,
-						TypeTokens.get().keyFor(Format.class).parameterized(TypeTokens.get().wrap(valueType)));
+					format = model.get(formatStr, ModelTypes.Value
+						.forType(TypeTokens.get().keyFor(Format.class).parameterized(TypeTokens.get().wrap(valueType))));
 			}
 			return new AbstractQuickComponent(element) {
 				@Override
@@ -376,17 +515,18 @@ public class QuickSwingParser {
 			};
 		}).createWith("text-field", QuickComponent.class, (element, session) -> {
 			ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
-			ValueContainer<Object, SettableValue<Object>> value;
+			ValueContainer<SettableValue, ?> value;
 			String valueStr = element.getAttributeText("value");
 			String formatStr = element.getAttributeText("format");
 			Function<ModelSetInstance, SettableValue<Format<Object>>> format;
-			value = model.getValue(valueStr, null);
-			format = model.getValue(formatStr, TypeTokens.get().keyFor(Format.class).parameterized(value.getValueType()));
+			value = model.get(valueStr, ModelTypes.Value);
+			format = model.get(formatStr,
+				ModelTypes.Value.forType(TypeTokens.get().keyFor(Format.class).parameterized(value.getType().getType(0))));
 			return new AbstractQuickComponent(element) {
 				@Override
 				public void install(PanelPopulator<?, ?> container, ModelSetInstance modelSet) {
 					container.addTextField(getFieldName(), //
-						value.apply(modelSet), format.apply(modelSet).get(), field -> modify(field));
+						(SettableValue<Object>) value.apply(modelSet), format.apply(modelSet).get(), field -> modify(field));
 				}
 			};
 		}).createWith("button", QuickComponent.class, (element, session) -> {
@@ -399,8 +539,9 @@ public class QuickSwingParser {
 					throw new IllegalArgumentException("Either 'text' or 'text-value' must be specified");
 				buttonText = __ -> ObservableModelQonfigParser.literal(txt, txt);
 			} else
-				buttonText = model.getValue(valueStr, TypeTokens.get().STRING);
-			Function<ModelSetInstance, ObservableAction<?>> action = model.getAction(element.getAttributeText("action"), null);
+				buttonText = model.get(valueStr, ModelTypes.Value.forType(String.class));
+			Function<ModelSetInstance, ? extends ObservableAction> action = model.get(element.getAttributeText("action"),
+				ModelTypes.Action);
 			return new AbstractQuickComponent(element) {
 				@Override
 				public void install(PanelPopulator<?, ?> container, ModelSetInstance modelSet) {
@@ -413,41 +554,37 @@ public class QuickSwingParser {
 						});
 				}
 			};
-		}).createWith("table", QuickComponent.class, (element, session) -> {
+		});
+		interpreter.createWith("table", QuickComponent.class, (element, session) -> {
 			ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
-			ValueContainer<Object, ObservableCollection<Object>> rows = model.getCollection(//
-				element.getAttributeText("rows"), null);
-			ValueContainer<Object, SettableValue<Object>> selectionV;
-			ValueContainer<Object, ObservableCollection<Object>> selectionC;
+			ValueContainer<ObservableCollection, ?> rows = model.get(//
+				element.getAttributeText("rows"), ModelTypes.Collection);
+			Function<ModelSetInstance, SettableValue<Object>> selectionV;
+			Function<ModelSetInstance, ObservableCollection<Object>> selectionC;
 			String selectionS = element.getAttributeText("selection");
 			if (selectionS != null) {
-				ModelType type = model.getType(selectionS);
-				switch (type) {
-				case Value:
-					selectionV = model.getValue(selectionS, rows.getValueType());
+				ModelType<?> type = model.get(selectionS).getType().getModelType();
+				if (type == ModelTypes.Value) {
+					selectionV = model.get(selectionS, ModelTypes.Value.forType((TypeToken<Object>) rows.getType().getType(0)));
 					selectionC = null;
-					break;
-				case Collection:
-				case SortedCollection:
+				} else if (type == ModelTypes.Collection || type == ModelTypes.SortedCollection) {
 					selectionV = null;
-					selectionC = model.getCollection(selectionS, rows.getValueType());
-					break;
-				default:
+					selectionC = model.get(selectionS, ModelTypes.Collection.forType((TypeToken<Object>) rows.getType().getType(0)));
+				} else
 					throw new IllegalArgumentException("Model value " + selectionS + " is of type " + type
 						+ "--only Value, Collection, and SortedCollection supported");
-				}
 			} else {
 				selectionV = null;
 				selectionC = null;
 			}
-			session.put("model-type", rows.getValueType());
+			session.put("model-type", rows.getType().getType(0));
 			List<Function<ModelSetInstance, CategoryRenderStrategy<Object, ?>>> columns = new ArrayList<>();
 			for (QonfigElement columnEl : element.getChildrenInRole("column"))
 				columns.add(session.getInterpreter().interpret(columnEl, Function.class));
 			return new AbstractQuickComponent(element) {
 				@Override
 				public void install(PanelPopulator<?, ?> container, ModelSetInstance modelSet) {
-					container.addTable(rows.apply(modelSet), table -> {
+					container.addTable((ObservableCollection<Object>) rows.apply(modelSet), table -> {
 						modify(table);
 						if (selectionV != null)
 							table.withSelection(selectionV.apply(modelSet), false);
@@ -479,7 +616,7 @@ public class QuickSwingParser {
 	}
 
 	private void configureSwing(Builder interpreter) {
-		interpreter.modifyWith("swing:quick", QuickDocument.class, (value, element, session) -> {
+		interpreter.modifyWith("quick", QuickDocument.class, (value, element, session) -> {
 			String lAndFClass;
 			switch (element.getAttributeText("look-and-feel")) {
 			case "system":

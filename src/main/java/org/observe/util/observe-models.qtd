@@ -52,8 +52,8 @@
 		</add-on>
 
 		<add-on name="file-source-type" requires="file-source" />
-		<add-on name="native" inherits="file-source-type" />
-		<add-on name="sftp" inherits="file-source-type">
+		<add-on name="native" inherits="file-source-type" requires="file-source" />
+		<add-on name="sftp" inherits="file-source-type" requires="file-source">
 			<attribute name="host" type="string" />
 			<attribute name="user" type="string" />
 			<attribute name="password" type="string" />
@@ -63,20 +63,9 @@
 			<attribute name="connecting-value" type="string" />
 		</add-on>
 		<add-on name="archive-type" requires="archive-method" />
-		<add-on name="zip" inherits="archive-type" />
-		<add-on name="tar" inherits="archive-type" />
-		<add-on name="gz" inherits="archive-type" />
-
-		<add-on name="format-type" requires="format" />
-		<add-on name="file" inherits="format-type">
-			<attribute name="file-source" type="string" specify="optional" />
-			<attribute name="working-dir" type="string" specify="optional" />
-			<attribute name="allow-empty" type="boolean" default="false" />
-		</add-on>
-		<add-on name="double" inherits="format-type">
-			<attribute name="sig-digs" type="int" />
-			<!-- TODO -->
-		</add-on>
+		<add-on name="zip" inherits="archive-type" requires="archive-method" />
+		<add-on name="tar" inherits="archive-type" requires="archive-method" />
+		<add-on name="gz" inherits="archive-type" requires="archive-method" />
 	</add-ons>
 
 	<elements>
@@ -144,12 +133,6 @@
 		<element-def name="map-to" extends="operation" inherits="abst-map-op">
 			<attribute name="equivalence" type="string" specify="optional" />
 			<attribute name="function" type="string" specify="required" />
-			<attribute name="cached" type="boolean" default="false" />
-			<attribute name="null-to-null" type="boolean" default="false" />
-			<attribute name="re-eval-on-update" type="boolean" default="false" />
-			<attribute name="fire-if-unchanged" type="boolean" default="false" />
-			<attribute name="many-to-one" type="boolean" default="false" />
-			<attribute name="one-to-many" type="boolean" default="false" />
 			<child-def name="combined-value" type="combine-with" min="0" max="inf" />
 			<child-def name="reverse" type="map-reverse" min="0" />
 		</element-def>
@@ -195,6 +178,7 @@
 			<attribute name="type" type="flatten-reverse-type" />
 		</element-def>
 		<element-def name="flatten" extends="operation" inherits="abst-map-op">
+			<attribute name="function" type="string" specify="required" />
 			<!-- This option requires caching, so the default will be the same as the cached attribute and cannot be specified here -->
 			<attribute name="propagate-update-to-parent" type="boolean" specify="optional" />
 		</element-def>
@@ -221,7 +205,7 @@
 		<element-def name="transform" extends="int-model-value">
 			<attribute name="source" type="string" specify="required" />
 			<!-- Type can be inferred from the transformation, but the user can specify that the result is a super-type instead -->
-			<attribute name="type" specify="optional" default="" />
+			<attribute name="int-model-value.type" specify="optional" default="" />
 			<!-- Default of this attribute is whatever the flow prefers -->
 			<attribute name="active" type="boolean" specify="optional" />
 			<child-def name="op" type="operation" min="0" max="inf" /> <!-- Allow min=0 to facilitate aliases -->
@@ -234,10 +218,6 @@
 			<attribute name="type" type="file-source-type" default="native" />
 			<attribute name="max-archive-depth" type="vbl-or-int" default="10" />
 			<child-def name="archive" type="archive-method" min="0" max="inf" />
-		</element-def>
-		<element-def name="format" extends="int-model-value">
-			<attribute name="int-model-value.type" specify="forbidden" default="" />
-			<attribute name="type" type="format-type" />
 		</element-def>
 
 		<element-def name="abst-model" abstract="true">

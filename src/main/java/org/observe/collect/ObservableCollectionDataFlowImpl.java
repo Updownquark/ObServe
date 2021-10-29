@@ -646,7 +646,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public <X> CollectionDataFlow<E, T, X> transform(TypeToken<X> targetType,
-			Function<Transformation.ReversibleTransformationPrecursor<T, X, ?>, Transformation<T, X>> combination) {
+			Function<? super Transformation.ReversibleTransformationPrecursor<T, X, ?>, ? extends Transformation<T, X>> combination) {
 			Transformation<T, X> def = combination.apply(new ReversibleTransformationPrecursor<>());
 			return new TransformedCollectionOp<>(theSource, this, targetType, def);
 		}

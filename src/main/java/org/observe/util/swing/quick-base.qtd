@@ -5,7 +5,32 @@
 	Local URL ../../../../core/src/main/resources/quick.dtd
 -->
 <qonfig-def extends:core="quick-core.qtd">
+	<patterns>
+		<pattern name="float">[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?</pattern>
+	</patterns>
 	<add-ons>
+		<add-on name="format-type" requires="format" abstract="true" />
+		<add-on name="file" inherits="format-type" requires="format">
+			<attribute name="file-source" type="string" specify="optional" />
+			<attribute name="working-dir" type="string" specify="optional" />
+			<attribute name="allow-empty" type="boolean" default="false" />
+		</add-on>
+		<add-on name="double" inherits="format-type" requires="format">
+			<attribute name="sig-digs" type="int" />
+			<attribute name="unit" type="string" specify="optional" />
+			<attribute name="unit-required" type="boolean" default="true" />
+			<attribute name="metric-prefixes" type="boolean" default="false" />
+			<attribute name="metric-prefixes-p2" type="boolean" default="false" />
+			<child-def name="prefix" type="prefix" min="0" max="inf" />
+			<!-- TODO -->
+		</add-on>
+		<add-on name="instant" inherits="format-type" requires="format">
+			<attribute name="time-zone" type="string" specify="optional" />
+			<attribute name="max-resolution" type="string" default="Second" />
+			<attribute name="format-24h" type="boolean" default="false" />
+			<attribute name="relative-eval-type" type="string" default="Closest" />
+		</add-on>
+
 		<add-on name="orientation" />
 		<add-on name="horizontal" inherits="orientation" />
 		<add-on name="vertical" inherits="orientation" />
@@ -62,9 +87,19 @@
 	</add-ons>
 
 	<elements>
+		<element-def name="format" extends="int-model-value">
+			<attribute name="int-model-value.type" specify="forbidden" default="" />
+			<attribute name="type" type="format-type" />
+		</element-def>
+		<element-def name="prefix">
+			<attribute name="name" type="string" />
+			<attribute name="exp" type="int" specify="optional" />
+			<attribute name="multiplier" type="float" specify="optional" />
+		</element-def>
+
 		<element-def name="spacer" extends="widget" inherits="v-sizeable,h-sizeable" />
 		<element-def name="button" extends="widget">
-			<attribute name="text" type="string" specify="optional" />
+			<value type="string" specify="optional" />
 			<attribute name="text-value" type="string" specify="optional" />
 			<attribute name="action" type="string" specify="required" />
 		</element-def>
@@ -78,7 +113,7 @@
 			<attribute name="format" type="string" specify="required" />
 		</element-def>
 		<element-def name="label" extends="text-widget">
-			<attribute name="text" type="string" specify="optional" />
+			<value type="string" specify="optional" />
 			<attribute name="value-widget.value" type="string" specify="optional" default="" />
 			<attribute name="text-widget.format" type="string" specify="optional" default="" />
 			<attribute name="icon" type="string" specify="optional" />

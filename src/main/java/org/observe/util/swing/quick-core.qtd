@@ -2,10 +2,15 @@
 
 <qonfig-def name="quick" root="quick" extends:observe="../observe-models.qtd">
 	<patterns>
-		<pattern name="variable">^[a-zA-Z_$][a-zA-Z_$0-9]*</pattern>
-		<pattern name="int">\d+</pattern> <!-- Positive integer -->
 		<pattern name="size">\d+(%|px)?</pattern>
 		<pattern name="position">\d+(%|px|xp)?</pattern>
+
+		<one-of name="window-close-action">
+			<literal>do-nothing</literal>
+			<literal>hide</literal>
+			<literal>dispose</literal>
+			<literal>exit</literal>
+		</one-of>
 	</patterns>
 
 	<add-ons>
@@ -38,15 +43,21 @@
 			<attribute name="max-pref-length" type="size" specify="optional" />
 			<attribute name="max-length" type="size" specify="optional" />
 		</add-on>
+
+		<add-on name="window">
+			<attribute name="x" type="variable" specify="optional" />
+			<attribute name="y" type="variable" specify="optional" />
+			<attribute name="height" type="variable" specify="optional" />
+			<attribute name="width" type="variable" specify="optional" />
+			<attribute name="title-value" type="string" specify="optional" />
+			<attribute name="title" type="string" specify="optional" />
+			<attribute name="visible" type="string" specify="optional" />
+			<attribute name="close-action" type="window-close-action" default="hide" />
+		</add-on>
 	</add-ons>
 
 	<elements>
-		<element-def name="title">
-			<attribute name="title-value" type="string" specify="optional" />
-			<value type="string" specify="optional" />
-		</element-def>
-		<element-def name="head" ordered="true">
-			<child-def name="title" type="title" min="0" />
+		<element-def name="head">
 			<child-def name="imports" type="imports" min="0" />
 			<child-def name="models" type="models" min="0" /> <!-- Don't know what you could do without models, but whatever -->
 		</element-def>
@@ -61,7 +72,7 @@
 			<attribute name="onExit" type="string" specify="optional" />
 		</element-def>
 
-		<element-def name="quick" ordered="true">
+		<element-def name="quick">
 			<child-def name="head" type="head" min="0" />
 			<child-def name="root" type="widget" min="1" />
 		</element-def>

@@ -71,6 +71,7 @@ import javax.swing.ListSelectionModel;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
+import javax.swing.WindowConstants;
 import javax.swing.event.ChangeListener;
 import javax.swing.tree.TreeCellRenderer;
 import javax.swing.tree.TreePath;
@@ -1088,7 +1089,19 @@ public class PanelPopulation {
 
 		P withMenuBar(Consumer<MenuBarBuilder<?>> menuBar);
 
-		P disposeOnClose(boolean dispose);
+		default P disposeOnClose(boolean dispose) {
+			return withCloseAction(dispose ? WindowConstants.DISPOSE_ON_CLOSE : WindowConstants.HIDE_ON_CLOSE);
+		}
+
+		/**
+		 * @param closeAction The action to perform when the user closes the window
+		 * @return This builder
+		 * @see WindowConstants#DO_NOTHING_ON_CLOSE
+		 * @see WindowConstants#HIDE_ON_CLOSE
+		 * @see WindowConstants#DISPOSE_ON_CLOSE
+		 * @see WindowConstants#EXIT_ON_CLOSE
+		 */
+		P withCloseAction(int closeAction);
 
 		P withVContent(Consumer<PanelPopulator<?, ?>> content);
 
