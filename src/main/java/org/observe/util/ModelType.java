@@ -1,17 +1,25 @@
 package org.observe.util;
 
+import java.lang.reflect.WildcardType;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 import org.qommons.Named;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * Represents a type of value stored in an {@link ObservableModelSet}
+ *
+ * @param <M> The java type of value represented by this type
+ */
 public abstract class ModelType<M> implements Named {
 	public interface ModelConverter<M1, M2> {
 		ModelInstanceConverter<M1, M2> convert(ModelInstanceType<M1, ?> source, ModelInstanceType<M2, ?> dest)
@@ -21,10 +29,26 @@ public abstract class ModelType<M> implements Named {
 			@Override
 			default ModelInstanceConverter<M1, M2> convert(ModelInstanceType<M1, ?> source, ModelInstanceType<M2, ?> dest)
 				throws IllegalArgumentException {
-				return src -> convert(src);
+				return new ModelInstanceConverter<M1, M2>() {
+					private ModelInstanceType<M2, ?> theType;
+
+					@Override
+					public M2 convert(M1 src) {
+						return convert(src);
+					}
+
+					@Override
+					public ModelInstanceType<M2, ?> getType() {
+						if (theType == null)
+							theType = SimpleUnTyped.this.getType(source, dest);
+						return theType;
+					}
+				};
 			}
 
 			M2 convert(M1 source);
+
+			ModelInstanceType<M2, ?> getType(ModelInstanceType<M1, ?> source, ModelInstanceType<M2, ?> dest);
 		}
 
 		public interface SimpleSingleTyped<M1, M2> extends ModelConverter<M1, M2> {
@@ -33,14 +57,29 @@ public abstract class ModelType<M> implements Named {
 				throws IllegalArgumentException {
 				Function<Object, Object> cast;
 				Function<Object, Object> reverse;
-				if (!source.getType(0).equals(dest.getType(0))) {
+				TypeToken<?> type;
+				if (source.getType(0).equals(dest.getType(0)) || (dest.getType(0).isAssignableFrom(source.getType(0))
+					&& (dest.getType(0).getType() instanceof WildcardType || source.getType(0).isAssignableFrom(dest.getType(0))))) {
+					type = source.getType(0);
+					cast = reverse = null;
+				} else {
 					cast = TypeTokens.get().getCast((TypeToken<Object>) source.getType(0), (TypeToken<Object>) dest.getType(0), true);
 					if (cast == null)
 						throw new IllegalArgumentException("Cannot convert " + source + " to " + dest);
+					type = dest.getType(0);
 					reverse = TypeTokens.get().getCast((TypeToken<Object>) dest.getType(0), (TypeToken<Object>) source.getType(0), true);
-				} else
-					cast = reverse = null;
-				return src -> convert(src, (TypeToken<Object>) dest.getType(0), cast, reverse);
+				}
+				return new ModelInstanceConverter<M1, M2>() {
+					@Override
+					public M2 convert(M1 src) {
+						return SimpleSingleTyped.this.convert(src, (TypeToken<Object>) dest.getType(0), cast, reverse);
+					}
+
+					@Override
+					public ModelInstanceType<M2, ?> getType() {
+						return dest.getModelType().forTypes(type);
+					}
+				};
 			}
 
 			<S, T> M2 convert(M1 source, TypeToken<T> targetType, Function<S, T> cast, Function<T, S> reverse);
@@ -50,27 +89,47 @@ public abstract class ModelType<M> implements Named {
 			@Override
 			default ModelInstanceConverter<M1, M2> convert(ModelInstanceType<M1, ?> source, ModelInstanceType<M2, ?> dest)
 				throws IllegalArgumentException {
+				TypeToken<?> keyType;
 				Function<Object, Object> keyCast;
 				Function<Object, Object> keyReverse;
-				if (!source.getType(0).equals(dest.getType(0))) {
+				if (source.getType(0).equals(dest.getType(0)) || (dest.getType(0).isAssignableFrom(source.getType(0))
+					&& (dest.getType(0).getType() instanceof WildcardType || source.getType(0).isAssignableFrom(dest.getType(0))))) {
+					keyType = source.getType(0);
+					keyCast = keyReverse = null;
+				} else {
 					keyCast = TypeTokens.get().getCast((TypeToken<Object>) source.getType(0), (TypeToken<Object>) dest.getType(0), true);
 					if (keyCast == null)
 						throw new IllegalArgumentException("Cannot convert " + source + " to " + dest);
+					keyType = dest.getType(0);
 					keyReverse = TypeTokens.get().getCast((TypeToken<Object>) dest.getType(0), (TypeToken<Object>) source.getType(0), true);
-				} else
-					keyCast = keyReverse = null;
+				}
+				TypeToken<?> valueType;
 				Function<Object, Object> valueCast;
 				Function<Object, Object> valueReverse;
-				if (!source.getType(1).equals(dest.getType(1))) {
+				if (source.getType(1).equals(dest.getType(1)) || (dest.getType(1).isAssignableFrom(source.getType(1))
+					&& (dest.getType(1).getType() instanceof WildcardType || source.getType(1).isAssignableFrom(dest.getType(1))))) {
+					valueType = source.getType(1);
+					valueCast = valueReverse = null;
+				} else {
 					valueCast = TypeTokens.get().getCast((TypeToken<Object>) source.getType(1), (TypeToken<Object>) dest.getType(1), true);
 					if (valueCast == null)
 						throw new IllegalArgumentException("Cannot convert " + source + " to " + dest);
+					valueType = dest.getType(0);
 					valueReverse = TypeTokens.get().getCast((TypeToken<Object>) dest.getType(1), (TypeToken<Object>) source.getType(1),
 						true);
-				} else
-					valueCast = valueReverse = null;
-				return src -> convert(src, (TypeToken<Object>) dest.getType(0), (TypeToken<Object>) dest.getType(1), //
-					keyCast, keyReverse, valueCast, valueReverse);
+				}
+				return new ModelInstanceConverter<M1, M2>() {
+					@Override
+					public M2 convert(M1 src) {
+						return SimpleDoubleTyped.this.convert(src, (TypeToken<Object>) dest.getType(0), (TypeToken<Object>) dest.getType(1), //
+							keyCast, keyReverse, valueCast, valueReverse);
+					}
+
+					@Override
+					public ModelInstanceType<M2, ?> getType() {
+						return dest.getModelType().forTypes(keyType, valueType);
+					}
+				};
 			}
 
 			<KS, KT, VS, VT> M2 convert(M1 source, TypeToken<KT> targetKeyType, TypeToken<VT> targetValueType, //
@@ -81,15 +140,57 @@ public abstract class ModelType<M> implements Named {
 	public interface ModelInstanceConverter<M1, M2> {
 		M2 convert(M1 source);
 
-		static ModelInstanceConverter<?, ?> NULL = new ModelInstanceConverter<Object, Object>() {
+		ModelInstanceType<M2, ?> getType();
+	}
+
+	static <M> ModelInstanceConverter<M, M> nullConverter(ModelInstanceType<M, ?> type) {
+		return new ModelInstanceConverter<M, M>() {
 			@Override
-			public Object convert(Object source) {
+			public M convert(M source) {
 				return source;
+			}
+
+			@Override
+			public ModelInstanceType<M, ?> getType() {
+				return type;
 			}
 
 			@Override
 			public String toString() {
 				return "no-op";
+			}
+		};
+	}
+
+	public static <M1, M2> ModelInstanceConverter<M1, M2> converter(Function<M1, M2> converter, ModelInstanceType<M2, ?> type) {
+		return new ModelInstanceConverter<M1, M2>() {
+			@Override
+			public M2 convert(M1 source) {
+				return converter.apply(source);
+			}
+
+			@Override
+			public ModelInstanceType<M2, ?> getType() {
+				return type;
+			}
+		};
+	}
+
+	public static <M1, M2> ModelInstanceConverter<M1, M2> converter(Function<M1, M2> converter,
+		Supplier<ModelInstanceType<M2, ?>> typeConverter) {
+		return new ModelInstanceConverter<M1, M2>() {
+			private ModelInstanceType<M2, ?> theType;
+
+			@Override
+			public M2 convert(M1 source) {
+				return converter.apply(source);
+			}
+
+			@Override
+			public ModelInstanceType<M2, ?> getType() {
+				if (theType == null)
+					theType = typeConverter.get();
+				return theType;
 			}
 		};
 	}
@@ -105,32 +206,52 @@ public abstract class ModelType<M> implements Named {
 				for (int i = 0; goodType && i < getModelType().getTypeCount(); i++)
 					goodType = target.getType(i).equals(getType(i));
 				if (goodType)
-					return (ModelInstanceConverter<M, M2>) ModelInstanceConverter.NULL;
-				Function<Object, Object>[] casts = new Function[getModelType().getTypeCount()];
+					return (ModelInstanceConverter<M, M2>) nullConverter(target);
+				TypeToken<?>[] params = new TypeToken[getModelType().getTypeCount()];
+				Function<Object, Object>[] casts = new Function[params.length];
 				Function<Object, Object>[] reverses = new Function[casts.length];
 				boolean reversible = true;
 				for (int i = 0; i < getModelType().getTypeCount(); i++) {
-					if (target.getType(i).equals(getType(i)))
+					if (target.getType(i).equals(getType(i))) {
+						params[i] = getType(i);
 						continue;
-					if (target.getType(i).isAssignableFrom(getType(i)))
+					} else if (target.getType(i).isAssignableFrom(getType(i))
+						&& (target.getType(i).getType() instanceof WildcardType || getType(i).isAssignableFrom(target.getType(i)))) {
+						params[i] = getType(i);
 						casts[i] = null;
-					else {
+					} else {
+						params[i] = target.getType(i);
 						try {
-							casts[i] = (Function<Object, Object>) TypeTokens.get().getCast(getType(i), target.getType(i), true);
+							casts[i] = (Function<Object, Object>) TypeTokens.get().getCast(target.getType(i), getType(i), true);
 						} catch (IllegalArgumentException e) {
 							return null;
 						}
 					}
 					if (reversible && !getType(i).isAssignableFrom(target.getType(i))) {
 						try {
-							reverses[i] = (Function<Object, Object>) TypeTokens.get().getCast(target.getType(i), getType(i), true);
+							reverses[i] = (Function<Object, Object>) TypeTokens.get().getCast(getType(i), target.getType(i), true);
 						} catch (IllegalArgumentException e) {
 							reversible = false;
 						}
 					}
 				}
-				return (ModelInstanceConverter<M, M2>) getModelType().convertType((ModelInstanceType<M, ? extends M>) target, casts,
+				Function<M, M2> converter = (Function<M, M2>) getModelType().convertType((ModelInstanceType<M, ? extends M>) target, casts,
 					reversible ? reverses : null);
+				return new ModelInstanceConverter<M, M2>() {
+					private ModelInstanceType<M2, ?> theType;
+
+					@Override
+					public M2 convert(M source) {
+						return converter.apply(source);
+					}
+
+					@Override
+					public ModelInstanceType<M2, ?> getType() {
+						if (theType == null)
+							theType = target.getModelType().forTypes(params);
+						return theType;
+					}
+				};
 			}
 			ModelConverter<M, M2> modelConverter = (ModelConverter<M, M2>) CONVERSION_TARGETS
 				.getOrDefault(getModelType(), Collections.emptyMap())//
@@ -138,6 +259,43 @@ public abstract class ModelType<M> implements Named {
 			if (modelConverter == null)
 				return null;
 			return modelConverter.convert(this, target);
+		}
+
+		@Override
+		public int hashCode() {
+			int hash = getModelType().hashCode();
+			for (int i = 0; i < getModelType().getTypeCount(); i++)
+				hash = Integer.rotateLeft(i, 7) ^ getType(i).hashCode();
+			return hash;
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (this == obj)
+				return true;
+			else if (!(obj instanceof ModelInstanceType))
+				return false;
+			ModelInstanceType<?, ?> other = (ModelInstanceType<?, ?>) obj;
+			if (getModelType() != other.getModelType())
+				return false;
+			for (int i = 0; i < getModelType().getTypeCount(); i++) {
+				if (!getType(i).equals(other.getType(i)))
+					return false;
+			}
+			return true;
+		}
+
+		@Override
+		public String toString() {
+			if (getModelType().getTypeCount() == 0)
+				return getModelType().modelType.getSimpleName();
+			StringBuilder str = new StringBuilder(getModelType().modelType.getSimpleName()).append('<');
+			for (int i = 0; i < getModelType().getTypeCount(); i++) {
+				if (i > 0)
+					str.append(", ");
+				str.append(getType(i));
+			}
+			return str.append('>').toString();
 		}
 
 		public static abstract class UnTyped<M> extends ModelInstanceType<M, M> {
@@ -234,13 +392,18 @@ public abstract class ModelType<M> implements Named {
 	private static final Map<ModelType<?>, Map<ModelType<?>, ModelConverter<?, ?>>> CONVERSION_TARGETS = new HashMap<>();
 
 	private final String theName;
+	/** The type of model this represents */
 	public final Class<M> modelType;
 	private final int theTypeCount;
 
-	protected ModelType(String name, Class<M> type, int typeCount) {
+	/**
+	 * @param name The name of the model type
+	 * @param type The type of model represented by this type
+	 */
+	protected ModelType(String name, Class<M> type) {
 		theName = name;
 		this.modelType = type;
-		theTypeCount = typeCount;
+		theTypeCount = type.getTypeParameters().length;
 		synchronized (ModelType.class) {
 			ModelType<?> old = MODEL_TYPES_BY_NAME.get(name);
 			if (old != null)
@@ -266,11 +429,20 @@ public abstract class ModelType<M> implements Named {
 		return theName;
 	}
 
+	/** @return The number of type parameters for this model type */
 	public int getTypeCount() {
 		return theTypeCount;
 	}
 
-	protected abstract ModelInstanceConverter<M, M> convertType(ModelInstanceType<M, ?> target, Function<Object, Object>[] casts,
+	public abstract ModelInstanceType<M, ?> forTypes(TypeToken<?>... types);
+
+	public ModelInstanceType<M, ?> any() {
+		TypeToken<?>[] types = new TypeToken[theTypeCount];
+		Arrays.fill(types, TypeTokens.get().WILDCARD);
+		return forTypes(types);
+	}
+
+	protected abstract Function<M, M> convertType(ModelInstanceType<M, ?> target, Function<Object, Object>[] casts,
 		Function<Object, Object>[] reverses);
 
 	protected void setupConversions(ConversionBuilder<M> builder) {
@@ -328,7 +500,7 @@ public abstract class ModelType<M> implements Named {
 		private final ModelInstanceType.UnTyped<M> theInstance;
 
 		public UnTyped(String name, Class<M> type) {
-			super(name, type, 0);
+			super(name, type);
 			theInstance = new ModelInstanceType.UnTyped<M>() {
 				@Override
 				public ModelType.UnTyped<M> getModelType() {
@@ -337,12 +509,19 @@ public abstract class ModelType<M> implements Named {
 			};
 		}
 
+		@Override
+		public ModelInstanceType<M, ?> forTypes(TypeToken<?>... types) {
+			if (types.length != 0)
+				throw new IllegalArgumentException(this + " is parameterized with 0 types, not " + types.length);
+			return instance();
+		}
+
 		public ModelInstanceType.UnTyped<M> instance() {
 			return theInstance;
 		}
 
 		@Override
-		protected ModelInstanceConverter<M, M> convertType(ModelInstanceType<M, ?> target, Function<Object, Object>[] casts,
+		protected Function<M, M> convertType(ModelInstanceType<M, ?> target, Function<Object, Object>[] casts,
 			Function<Object, Object>[] reverses) {
 			throw new IllegalStateException("No types to convert");
 		}
@@ -350,7 +529,7 @@ public abstract class ModelType<M> implements Named {
 
 	public static abstract class SingleTyped<M> extends ModelType<M> {
 		public SingleTyped(String name, Class<M> type) {
-			super(name, type, 1);
+			super(name, type);
 		}
 
 		private <V, MV extends M> ModelInstanceType.SingleTyped<M, V, MV> createInstance(TypeToken<V> valueType) {
@@ -360,6 +539,13 @@ public abstract class ModelType<M> implements Named {
 					return ModelType.SingleTyped.this;
 				}
 			};
+		}
+
+		@Override
+		public ModelInstanceType<M, ?> forTypes(TypeToken<?>... types) {
+			if (types.length != getTypeCount())
+				throw new IllegalArgumentException(this + " is parameterized with 1 type, not " + types.length);
+			return createInstance(types[0]);
 		}
 
 		public <V> ModelInstanceType.SingleTyped<M, V, ?> forType(TypeToken<V> type) {
@@ -389,7 +575,7 @@ public abstract class ModelType<M> implements Named {
 
 	public static abstract class DoubleTyped<M> extends ModelType<M> {
 		public DoubleTyped(String name, Class<M> type) {
-			super(name, type, 2);
+			super(name, type);
 		}
 
 		private <K, V, MV extends M> ModelInstanceType.DoubleTyped<M, K, V, MV> createInstance(TypeToken<K> keyType,
@@ -400,6 +586,13 @@ public abstract class ModelType<M> implements Named {
 					return ModelType.DoubleTyped.this;
 				}
 			};
+		}
+
+		@Override
+		public ModelInstanceType<M, ?> forTypes(TypeToken<?>... types) {
+			if (types.length != getTypeCount())
+				throw new IllegalArgumentException(this + " is parameterized with 2 types, not " + types.length);
+			return createInstance(types[0], types[1]);
 		}
 
 		public <K, V> ModelInstanceType.DoubleTyped<M, K, V, ?> forType(TypeToken<K> keyType, TypeToken<V> valueType) {

@@ -436,14 +436,14 @@ public class TypeTokens {
 				if (bounds.length > 0) {
 					t = bounds[0];
 				} else {
-					return null;
+					return Object.class;
 				}
 			} else if (t instanceof TypeVariable) {
 				Type[] bounds = ((TypeVariable<?>) t).getBounds();
 				if (bounds.length > 0) {
 					t = bounds[0];
 				} else {
-					return null;
+					return Object.class;
 				}
 			} else
 				throw new IllegalStateException("Unrecognized type implementation: " + t.getClass().getName());
@@ -572,6 +572,8 @@ public class TypeTokens {
 	 */
 	public <T> TypeToken<T> wrap(TypeToken<T> type) {
 		Class<T> raw = getRawType(type);
+		if (raw == null)
+			return (TypeToken<T>) OBJECT;
 		Class<T> wrapped = wrap(raw);
 		if (wrapped == raw)
 			return type;
@@ -585,6 +587,8 @@ public class TypeTokens {
 	 */
 	public <T> TypeToken<T> unwrap(TypeToken<T> type) {
 		Class<T> raw = getRawType(type);
+		if (raw == null)
+			return (TypeToken<T>) OBJECT;
 		Class<T> unwrapped = unwrap(raw);
 		if (unwrapped == raw)
 			return type;
@@ -726,8 +730,10 @@ public class TypeTokens {
 			} else
 				return v -> (X) v;
 		}
-		Class<?> primitiveRight = unwrap(getRawType(right));
-		Class<?> primitiveLeft = unwrap(getRawType(left));
+		Class<?> primitiveRight = getRawType(unwrap(right));
+		Class<?> primitiveLeft = getRawType(unwrap(left));
+		Class<?> wrappedRight = getRawType(wrap(right));
+		Class<?> wrappedLeft = getRawType(wrap(left));
 		Function<T, T> nullCheck;
 		if (left.isPrimitive() && !right.isPrimitive()) {
 			T safeValue = safe ? (T) SAFE_VALUES.get(primitiveLeft) : null;
@@ -744,7 +750,7 @@ public class TypeTokens {
 		}
 		if (!primitiveRight.isPrimitive())
 			throw new IllegalArgumentException("Cannot cast " + right + " to " + left);
-		else if (primitiveRight == primitiveLeft) {
+		else if (primitiveRight == primitiveLeft || wrappedLeft.isAssignableFrom(wrappedRight)) {
 			return v -> (X) nullCheck.apply(v);
 		} else if (!primitiveLeft.isPrimitive())
 			throw new IllegalArgumentException("Cannot cast " + right + " to " + left);

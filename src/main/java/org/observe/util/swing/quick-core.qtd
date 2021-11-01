@@ -45,13 +45,13 @@
 		</add-on>
 
 		<add-on name="window">
-			<attribute name="x" type="variable" specify="optional" />
-			<attribute name="y" type="variable" specify="optional" />
-			<attribute name="height" type="variable" specify="optional" />
-			<attribute name="width" type="variable" specify="optional" />
-			<attribute name="title-value" type="string" specify="optional" />
+			<attribute name="x" type="expression" specify="optional" />
+			<attribute name="y" type="expression" specify="optional" />
+			<attribute name="height" type="expression" specify="optional" />
+			<attribute name="width" type="expression" specify="optional" />
+			<attribute name="title-value" type="expression" specify="optional" />
 			<attribute name="title" type="string" specify="optional" />
-			<attribute name="visible" type="string" specify="optional" />
+			<attribute name="visible" type="expression" specify="optional" />
 			<attribute name="close-action" type="window-close-action" default="hide" />
 		</add-on>
 	</add-ons>
@@ -63,13 +63,13 @@
 		</element-def>
 
 		<element-def name="widget" abstract="true">
-			<attribute name="tooltip" type="string" specify="optional" />
+			<attribute name="tooltip" type="expression" specify="optional" />
 			<attribute name="tooltip-text" type="string" specify="optional" />
-			<attribute name="visible" type="string" specify="optional" />
-			<attribute name="onClick" type="string" specify="optional" />
-			<attribute name="onHover" type="string" specify="optional" />
-			<attribute name="onEnter" type="string" specify="optional" />
-			<attribute name="onExit" type="string" specify="optional" />
+			<attribute name="visible" type="expression" specify="optional" />
+			<attribute name="onClick" type="expression" specify="optional" />
+			<attribute name="onHover" type="expression" specify="optional" />
+			<attribute name="onEnter" type="expression" specify="optional" />
+			<attribute name="onExit" type="expression" specify="optional" />
 		</element-def>
 
 		<element-def name="quick">

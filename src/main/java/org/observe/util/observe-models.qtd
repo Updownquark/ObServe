@@ -70,7 +70,6 @@
 
 	<elements>
 		<element-def name="import">
-			<attribute name="alias" type="variable" specify="required" />
 			<value type="string" specify="required" />
 		</element-def>
 		<element-def name="imports">

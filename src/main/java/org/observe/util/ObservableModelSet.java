@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.function.Function;
 
 import org.observe.Observable;
+import org.observe.util.ModelType.ModelInstanceConverter;
 import org.observe.util.ModelType.ModelInstanceType;
 
 public interface ObservableModelSet {
@@ -20,29 +21,66 @@ public interface ObservableModelSet {
 		}
 	}
 
+	static <M, MV extends M> ValueContainer<M, MV> container(Function<ModelSetInstance, MV> value, ModelInstanceType<M, MV> type) {
+		class SyntheticValueContainer implements ValueContainer<M, MV> {
+			@Override
+			public ModelInstanceType<M, MV> getType() {
+				return type;
+			}
+
+			private Function<ModelSetInstance, MV> getValue() {
+				return value;
+			}
+
+			@Override
+			public MV get(ModelSetInstance extModels) {
+				return value.apply(extModels);
+			}
+
+			@Override
+			public int hashCode() {
+				return value.hashCode();
+			}
+
+			@Override
+			public boolean equals(Object obj) {
+				if (this == obj)
+					return true;
+				else if (!(obj instanceof SyntheticValueContainer))
+					return false;
+				return value.equals(((SyntheticValueContainer) obj).getValue());
+			}
+
+			@Override
+			public String toString() {
+				return value.toString();
+			}
+		}
+		return new SyntheticValueContainer();
+	}
+
 	String getPath();
 
-	ValueContainer<?, ?> get(String path) throws IllegalArgumentException;
+	ValueContainer<?, ?> get(String path, boolean required) throws IllegalArgumentException;
 
 	default <M> ValueContainer<M, ?> get(String path, ModelType<M> type) throws IllegalArgumentException {
-		ValueContainer<?, ?> thing = get(path);
+		ValueContainer<?, ?> thing = get(path, true);
 		if (thing.getType().getModelType() != type)
 			throw new IllegalArgumentException(path + " is a " + thing.getType() + ", not a " + type);
 		return (ValueContainer<M, ?>) thing;
 	}
 
-	default <M, MV extends M> Function<ModelSetInstance, MV> get(String path, ModelInstanceType<M, MV> type)
+	default <M, MV extends M> ValueContainer<M, MV> get(String path, ModelInstanceType<M, MV> type)
 		throws IllegalArgumentException {
-		ValueContainer<M, ?> thing = get(path, type.getModelType());
+		ValueContainer<?, ?> thing = get(path, true);
+		if (type == null)
+			return (ValueContainer<M, MV>) thing;
 		ModelType.ModelInstanceConverter<Object, M> converter = (ModelType.ModelInstanceConverter<Object, M>) thing.getType().convert(type);
 		if (converter == null)
 			throw new IllegalArgumentException("Cannot convert " + path + " (" + thing.getType() + ") to " + type);
-		return models -> {
-			Object modelV = thing.get(models);
-			M converted = converter.convert(modelV);
-			return (MV) converted;
-		};
 
+		return new ConvertedValue<M, Object, MV>((ValueContainer<?, Object>) thing, (ModelInstanceType<M, MV>) converter.getType(),
+			(ModelInstanceConverter<Object, MV>) converter);
 	}
 
 	ModelSetInstance createInstance(ExternalModelSet extModel, Observable<?> until);
@@ -211,14 +249,14 @@ public interface ObservableModelSet {
 		}
 
 		@Override
-		public ValueContainer<?, ?> get(String path) throws IllegalArgumentException {
+		public ValueContainer<?, ?> get(String path, boolean required) throws IllegalArgumentException {
 			int dot = path.lastIndexOf('.');
 			if (dot >= 0) {
 				Default subModel = theRoot.getSubModel(path.substring(0, dot));
-				return subModel.get(path.substring(dot + 1));
+				return subModel.get(path.substring(dot + 1), required);
 			}
 			ValueContainer<?, ?> thing = theThings.get(path);
-			if (thing == null)
+			if (thing == null && required)
 				throw new IllegalArgumentException("No such value " + path);
 			return thing;
 		}
@@ -361,6 +399,30 @@ public interface ObservableModelSet {
 					things.put(thing.getKey(), thing.getValue());
 			}
 			return model;
+		}
+	}
+
+	class ConvertedValue<M, MVS, MVT extends M> implements ValueContainer<M, MVT> {
+		private final ValueContainer<?, MVS> theSource;
+		private final ModelInstanceType<M, MVT> theType;
+		private final ModelType.ModelInstanceConverter<MVS, MVT> theConverter;
+
+		ConvertedValue(ValueContainer<?, MVS> source, ModelInstanceType<M, MVT> type, ModelInstanceConverter<MVS, MVT> converter) {
+			theSource = source;
+			theType = type;
+			theConverter = converter;
+		}
+
+		@Override
+		public ModelInstanceType<M, MVT> getType() {
+			return theType;
+		}
+
+		@Override
+		public MVT get(ModelSetInstance extModels) {
+			MVS modelV = theSource.get(extModels);
+			MVT converted = theConverter.convert(modelV);
+			return converted;
 		}
 	}
 }

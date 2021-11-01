@@ -70,7 +70,7 @@
 		</add-on>
 
 		<add-on name="tabular-widget" requires="multi-value-widget">
-			<attribute name="columns" type="string" specify="optional" />
+			<attribute name="columns" type="expression" specify="optional" />
 			<child-def name="column" type="column" min="0" max="inf" />
 		</add-on>
 
@@ -82,7 +82,7 @@
 		<add-on name="tab" requires="widget">
 			<attribute name="tab-id" type="string" specify="optional" />
 			<attribute name="tab-name" type="string" specify="optional" />
-			<attribute name="tab-name-value" type="string" specify="optional" />
+			<attribute name="tab-name-value" type="expression" specify="optional" />
 		</add-on>
 	</add-ons>
 
@@ -100,35 +100,35 @@
 		<element-def name="spacer" extends="widget" inherits="v-sizeable,h-sizeable" />
 		<element-def name="button" extends="widget">
 			<value type="string" specify="optional" />
-			<attribute name="text-value" type="string" specify="optional" />
-			<attribute name="action" type="string" specify="required" />
+			<attribute name="text-value" type="expression" specify="optional" />
+			<attribute name="action" type="expression" specify="required" />
 		</element-def>
 
 		<!-- Editors -->
 		<element-def name="value-widget" extends="widget" abstract="true" >
-			<attribute name="value" type="string" specify="required" />
+			<attribute name="value" type="expression" specify="required" />
 		</element-def>
 		<element-def name="file-button" extends="value-widget" />
 		<element-def name="text-widget" extends="value-widget" abstract="true">
-			<attribute name="format" type="string" specify="required" />
+			<attribute name="format" type="expression" specify="required" />
 		</element-def>
 		<element-def name="label" extends="text-widget">
 			<value type="string" specify="optional" />
-			<attribute name="value-widget.value" type="string" specify="optional" default="" />
-			<attribute name="text-widget.format" type="string" specify="optional" default="" />
-			<attribute name="icon" type="string" specify="optional" />
+			<attribute name="value-widget.value" specify="optional" default="" />
+			<attribute name="text-widget.format" specify="optional" default="" />
+			<attribute name="icon" type="expression" specify="optional" />
 			<attribute name="icon-ref" type="string" specify="optional" />
 		</element-def>
 		<element-def name="text-field" extends="text-widget" />
 		<element-def name="text-area" extends="text-widget">
-			<attribute name="rows" type="int" />
+			<attribute name="rows" type="expression" />
 		</element-def>
 		<element-def name="spinner" extends="text-field">
-			<attribute name="increment" type="string" specify="optional" />
-			<attribute name="increment-value" type="string" specify="optional" />
+			<attribute name="increment" type="expression" specify="optional" />
+			<attribute name="increment-value" type="expression" specify="optional" />
 		</element-def>
 		<element-def name="progress-bar" extends="value-widget">
-			<attribute name="max" type="string" specify="required" />
+			<attribute name="max" type="expression" specify="required" />
 		</element-def>
 		<element-def name="render-field-panel" extends="value-widget">
 			<attribute name="subject-name" type="variable" specify="required" />
@@ -136,37 +136,37 @@
 		</element-def>
 
 		<element-def name="collection-selector-widget" extends="value-widget" inherits="single-rendering" abstract="true">
-			<attribute name="values" type="string" specify="required" />
+			<attribute name="values" type="expression" specify="required" />
 		</element-def>
 		<element-def name="combo" extends="collection-selector-widget" />
 		<element-def name="radio-buttons" extends="collection-selector-widget" />
 		<element-def name="toggle-buttons" extends="collection-selector-widget" />
 
 		<element-def name="multi-value-widget" extends="widget">
-			<attribute name="selection" type="string" specify="optional" />
+			<attribute name="selection" type="expression" specify="optional" />
 		</element-def>
 		<element-def name="little-list" extends="multi-value-widget" inherits="single-rendering">
-			<attribute name="values" type="string" specify="required" />
+			<attribute name="values" type="expression" specify="required" />
 		</element-def>
 		<element-def name="big-list" inherits="single-rendering">
 		</element-def>
 		<element-def name="column" inherits="single-rendering">
 			<attribute name="name" type="string" />
-			<attribute name="value" type="string" specify="optional" /> <!-- Unspecified means to use the row value for the column value -->
+			<attribute name="value" type="expression" specify="optional" /> <!-- Unspecified means to use the row value for the column value -->
 		</element-def>
 		<element-def name="value-action">
 			<attribute name="name" type="string" specify="optional" />
 			<attribute name="icon" type="string" specify="optional" />
-			<attribute name="action" type="string" specify="required" />
-			<attribute name="enabled" type="string" specify="optional" />
+			<attribute name="action" type="expression" specify="required" />
+			<attribute name="enabled" type="expression" specify="optional" />
 		</element-def>
 		<element-def name="table" extends="multi-value-widget" inherits="tabular-widget">
-			<attribute name="rows" type="string" specify="required" />
+			<attribute name="rows" type="expression" specify="required" />
 			<child-def name="action" type="value-action" min="0" max="inf" />
 		</element-def>
 		<element-def name="tree" extends="multi-value-widget" inherits="single-rendering">
-			<attribute name="root" type="string" specify="required" />
-			<attribute name="children" type="string" specify="required" />
+			<attribute name="root" type="expression" specify="required" />
+			<attribute name="children" type="expression" specify="required" />
 			<child-def name="action" type="value-action" min="0" max="inf" />
 		</element-def>
 		<element-def name="tree-table" extends="tree" inherits="tabular-widget" />
@@ -184,21 +184,21 @@
 		</element-def>
 		<element-def name="scroll" extends="singleton-container" />
 		<element-def name="collapse-pane" extends="singleton-container">
-			<attribute name="collapsed" type="string" specify="optional"/>
+			<attribute name="collapsed" type="expression" specify="optional"/>
 			<attribute name="init-collapsed" type="boolean" specify="optional" default="false" />
 		</element-def>
 		
 		<element-def name="tabs" extends="widget">
-			<attribute name="selected" type="string" specify="optional" />
+			<attribute name="selected" type="expression" specify="optional" />
 			<child-def name="tab" type="widget" inherits="tab" min="0" max="inf"/>
 		</element-def>
 		<element-def name="variable-tabs" extends="multi-value-widget" inherits="single-rendering" >
-			<attribute name="values" type="string" specify="required" />
+			<attribute name="values" type="expression" specify="required" />
 		</element-def>
 		<element-def name="split" extends="widget">
 			<attribute name="orientation" type="orientation" specify="required" />
 			<attribute name="split-position" type="position" specify="optional" />
-			<attribute name="split-position-value" type="string" specify="optional" />
+			<attribute name="split-position-value" type="expression" specify="optional" />
 			<child-def name="content" type="widget" min="2" max="2" />
 		</element-def>
 	</elements>

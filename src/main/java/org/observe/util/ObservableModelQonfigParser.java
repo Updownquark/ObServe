@@ -35,6 +35,7 @@ import org.observe.collect.ObservableCollectionBuilder;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSortedCollection;
 import org.observe.collect.ObservableSortedSet;
+import org.observe.expresso.DefaultExpressoParser;
 import org.observe.util.ObservableModelSet.Builder;
 import org.observe.util.ObservableModelSet.ExternalModelSet;
 import org.observe.util.ObservableModelSet.ModelSetInstance;
@@ -62,7 +63,8 @@ import org.qommons.tree.BetterTreeList;
 import com.google.common.reflect.TypeToken;
 
 public class ObservableModelQonfigParser {
-	public static final QonfigToolkitAccess TOOLKIT = new QonfigToolkitAccess(ObservableModelQonfigParser.class, "observe-models.qtd");
+	public static final QonfigToolkitAccess TOOLKIT = new QonfigToolkitAccess(ObservableModelQonfigParser.class, "observe-models.qtd")
+		.withCustomValueType(new ExpressionValueType("expression", new DefaultExpressoParser()));
 
 	public interface ValueParser {
 		<T> Function<ExternalModelSet, T> parseModelValue(ObservableModelSet models, TypeToken<T> type, String text) throws ParseException;
@@ -125,20 +127,11 @@ public class ObservableModelQonfigParser {
 
 	public QonfigInterpreter.Builder configureInterpreter(QonfigInterpreter.Builder interpreter) {
 		QonfigInterpreter.Builder observeInterpreter = interpreter.forToolkit(TOOLKIT.get());
-		observeInterpreter.createWith("imports", Void.class, (el, session) -> {
+		observeInterpreter.createWith("imports", ClassView.class, (el, session) -> {
+			ClassView.Builder builder = ClassView.build();
 			for (QonfigElement imp : el.getChildrenInRole("import"))
-				session.getInterpreter().interpret(imp, Void.class);
-			return null;
-		}).createWith("import", Void.class, (el, session) -> {
-			String typeName = el.getAttributeText("type");
-			Class<?> type;
-			try {
-				type = Thread.currentThread().getContextClassLoader().loadClass(typeName);
-			} catch (ClassNotFoundException e) {
-				throw new IllegalArgumentException("Unrecognized type: " + typeName, e);
-			}
-			theImports.put(el.getAttributeText("alias"), type);
-			return null;
+				builder.withImport(el.getValueText());
+			return builder.build();
 		});
 		observeInterpreter.createWith("models", ObservableModelSet.class, (el, session) -> {
 			ObservableModelSet.Builder builder = ObservableModelSet.build();
@@ -632,7 +625,7 @@ public class ObservableModelQonfigParser {
 				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.get("model");
 				String name = element.getAttributeText("name");
 				String sourceName = element.getAttributeText("source");
-				ValueContainer<?, ?> source = model.get(sourceName);
+				ValueContainer<?, ?> source = model.get(sourceName, true);
 				ModelType<?> type = source.getType().getModelType();
 				if (type == ModelTypes.Event)
 					transformEvent((ValueContainer<Object, Observable<Object>>) source, element, model, name);
