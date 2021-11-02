@@ -13,48 +13,79 @@ import org.qommons.collect.QuickSet.QuickMap;
 
 /** A CSV entity set that is synchronized with a version control system */
 public abstract class VersionedEntities extends CsvEntitySet {
+	/** The author of a commit */
 	public interface Committer extends Named {
 	}
 
+	/** Represents a change to one or more entities in the set */
 	public interface Commit {
+		/** @return The author of the commit */
 		Committer getCommitter();
 
+		/** @return The time of the commit */
 		Instant getCommitTime();
 
+		/** @return The commit message */
 		String getMessage();
 
+		/** @return Whether the commit was made locally */
 		boolean isLocalOnly();
 
+		/** @return The changes in the commit */
 		List<EntityUpdate> getChanges();
 	}
 
+	/** A change to an entity */
 	public interface EntityUpdate {
+		/** @return The commit in which the entity was changed */
 		Commit getCommit();
 
+		/** @return The type of the entity that was changed */
 		EntityFormat getEntityType();
 
+		/** @return The entity before the change */
 		QuickMap<String, Object> getOldValues();
 
+		/** @return The entity after the change */
 		QuickMap<String, Object> getNewValues();
 	}
 
+	/** Listens for changes to the entity set */
 	public interface ChangeListener {
+		/** @param commit The change */
 		void changeOccurred(Commit commit);
 	}
 
+	/** Represents a conflict, changes from both a remote source as well as local, which must be resolved */
 	public interface EntityConflict {
+		/** @return The entity before any changes, local or remote */
 		QuickMap<String, Object> getOriginal();
 
+		/** @return The entity after local changes */
 		QuickMap<String, Object> getMine();
 
+		/** @return The entity after remote changes */
 		QuickMap<String, Object> getTheirs();
 
+		/**
+		 * @param fieldIndex The index of the field
+		 * @return The latest local commit where the field was modified
+		 */
 		Commit getMyChange(int fieldIndex);
 
+		/**
+		 * @param fieldIndex The index of the field
+		 * @return The latest remote commit where the field was modified
+		 */
 		Commit getTheirChange(int fieldIndex);
 	}
 
+	/** Resolves conflicts against a single entity from multiple sources */
 	public interface ConflictResolver {
+		/**
+		 * @param conflict The conflict to resolve
+		 * @return The resolved entity
+		 */
 		QuickMap<String, Object> resolveConflict(EntityConflict conflict);
 	}
 
