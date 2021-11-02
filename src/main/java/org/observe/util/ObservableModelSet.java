@@ -95,11 +95,20 @@ public interface ObservableModelSet {
 
 	public static class ModelSetInstance {
 		final Map<Default.Placeholder<?, ?>, Object> theThings;
+		private Object theModelConfiguration;
 		private final Observable<?> theUntil;
 
 		ModelSetInstance(Observable<?> until) {
 			theThings = new LinkedHashMap<>();
 			theUntil = until;
+		}
+
+		public Object getModelConfiguration() {
+			return theModelConfiguration;
+		}
+
+		void setModelConfiguration(Object modelConfiguration) {
+			theModelConfiguration = modelConfiguration;
 		}
 
 		public Observable<?> getUntil() {
@@ -241,11 +250,14 @@ public interface ObservableModelSet {
 		protected final Default theRoot;
 		protected final String thePath;
 		protected final Map<String, Placeholder<?, ?>> theThings;
+		protected final Function<ModelSetInstance, ?> theModelConfiguration;
 
-		protected Default(Default root, String path, Map<String, Placeholder<?, ?>> things) {
+		protected Default(Default root, String path, Map<String, Placeholder<?, ?>> things,
+			Function<ModelSetInstance, ?> modifiableConfiguration) {
 			theRoot = root == null ? this : root;
 			thePath = path;
 			theThings = things;
+			theModelConfiguration = modifiableConfiguration;
 		}
 
 		@Override
@@ -279,7 +291,7 @@ public interface ObservableModelSet {
 				return subModel.model.getSubModel(path.substring(dot + 1));
 		}
 
-		String pathTo(String name) {
+		public String pathTo(String name) {
 			if (thePath.isEmpty())
 				return name;
 			else
@@ -301,10 +313,13 @@ public interface ObservableModelSet {
 		}
 
 		private void install(ModelSetInstance modelSet, ExternalModelSet extModel) {
+			Object modelConfig = theModelConfiguration == null ? null : theModelConfiguration.apply(modelSet);
+			modelSet.setModelConfiguration(modelConfig);
 			for (Placeholder<?, ?> thing : theThings.values()) {
-				if (thing.model != null)
+				if (thing.model != null) {
 					thing.model.install(modelSet, extModel);
-				else
+					modelSet.setModelConfiguration(modelConfig);
+				} else
 					modelSet.theThings.put(thing, thing.getter.get(modelSet, extModel));
 			}
 		}
@@ -359,8 +374,15 @@ public interface ObservableModelSet {
 	}
 
 	public class Builder extends Default implements ObservableModelSet {
+		private Function<ModelSetInstance, ?> theModifiableConfiguration;
+
 		private Builder(Builder root, String path) {
-			super(root, path, new LinkedHashMap<>());
+			super(root, path, new LinkedHashMap<>(), null);
+		}
+
+		public Builder setModelConfiguration(Function<ModelSetInstance, ?> modelConfiguration) {
+			theModifiableConfiguration = modelConfiguration;
+			return this;
 		}
 
 		public <M, MV extends M> Builder with(String name, ModelInstanceType<M, MV> type, ValueGetter<MV> getter) {
@@ -372,12 +394,15 @@ public interface ObservableModelSet {
 		}
 
 		public Builder createSubModel(String name) {
-			if (theThings.containsKey(name))
-				throw new IllegalArgumentException(
-					"A value of type " + theThings.get(name).type + " has already been added as '" + name + "'");
-			Builder subModel = new Builder((Builder) theRoot, pathTo(name));
-			theThings.put(name, new Placeholder<>(pathTo(name), ModelTypes.Model.instance(), null, subModel));
-			return subModel;
+			Placeholder<?, ?> thing = theThings.get(name);
+			if (thing == null) {
+				Builder subModel = new Builder((Builder) theRoot, pathTo(name));
+				theThings.put(name, new Placeholder<>(pathTo(name), ModelTypes.Model.instance(), null, subModel));
+				return subModel;
+			} else if (thing.model != null)
+				return (Builder) thing.model;
+			else
+				throw new IllegalArgumentException("A value of type " + thing.type + " has already been added as '" + name + "'");
 		}
 
 		public ObservableModelSet build() {
@@ -386,7 +411,7 @@ public interface ObservableModelSet {
 
 		private Default _build(Default root, String path) {
 			Map<String, Placeholder<?, ?>> things = new LinkedHashMap<>(theThings.size() * 3 / 2 + 1);
-			Default model = new Default(root, path, Collections.unmodifiableMap(things));
+			Default model = new Default(root, path, Collections.unmodifiableMap(things), theModifiableConfiguration);
 			if (root == null)
 				root = model;
 			for (Map.Entry<String, Placeholder<?, ?>> thing : theThings.entrySet()) {

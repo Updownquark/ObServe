@@ -18,6 +18,7 @@ import org.observe.collect.ObservableCollectionEvent;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSortedCollection;
 import org.observe.collect.ObservableSortedSet;
+import org.observe.config.ObservableValueSet;
 
 import com.google.common.reflect.TypeToken;
 
@@ -29,7 +30,37 @@ public class ModelTypes {
 		ObservableModelSet.class) {
 	};
 	/** An {@link Observable} */
-	public static final ModelType.SingleTyped<Observable> Event = new ModelType.SingleTyped<Observable>("Event", Observable.class) {
+	public static final EventModelType Event = new EventModelType();
+	/** An {@link ObservableAction} */
+	public static final ActionModelType Action = new ActionModelType();
+	/** A {@link SettableValue} */
+	public static final ValueModelType Value = new ValueModelType();
+
+	/** An {@link ObservableCollection} */
+	public static final CollectionModelType Collection = new CollectionModelType();
+	/** An {@link ObservableSortedCollection} */
+	public static final SortedCollectionModelType SortedCollection = new SortedCollectionModelType();
+	/** An {@link ObservableSet} */
+	public static final SetModelType Set = new SetModelType();
+	/** An {@link ObservableSortedSet} */
+	public static final SortedSetModelType SortedSet = new SortedSetModelType();
+	/** An {@link ObservableValueSet} */
+	public static final ValueSetModelType ValueSet = new ValueSetModelType();
+	/** An {@link ObservableMap} */
+	public static final MapModelType Map = new MapModelType();
+	/** An {@link ObservableSortedMap} */
+	public static final SortedMapModelType SortedMap = new SortedMapModelType();
+	/** An {@link ObservableMultiMap} */
+	public static final MultiMapModelType MultiMap = new MultiMapModelType();
+	/** An {@link ObservableSortedMultiMap} */
+	public static final SortedMultiMapModelType SortedMultiMap = new SortedMultiMapModelType();
+
+	/** See {@link ModelTypes#Event} */
+	public static class EventModelType extends ModelType.SingleTyped<Observable> {
+		private EventModelType() {
+			super("Event", Observable.class);
+		}
+
 		@Override
 		public <V> ModelInstanceType.SingleTyped<Observable, V, Observable<V>> forType(TypeToken<V> type) {
 			return (ModelInstanceType.SingleTyped<Observable, V, Observable<V>>) super.forType(type);
@@ -65,10 +96,14 @@ public class ModelTypes {
 			Function<Object, Object>[] reverses) {
 			return src -> src.map(casts[0]);
 		}
-	};
-	/** An {@link ObservableAction} */
-	public static final ModelType.SingleTyped<ObservableAction> Action = new ModelType.SingleTyped<ObservableAction>("Action",
-		ObservableAction.class) {
+	}
+
+	/** See {@link ModelTypes#Action} */
+	public static class ActionModelType extends ModelType.SingleTyped<ObservableAction> {
+		private ActionModelType() {
+			super("Action", ObservableAction.class);
+		}
+
 		@Override
 		public <V> ModelInstanceType.SingleTyped<ObservableAction, V, ObservableAction<V>> forType(TypeToken<V> type) {
 			return (ModelInstanceType.SingleTyped<ObservableAction, V, ObservableAction<V>>) super.forType(type);
@@ -104,10 +139,14 @@ public class ModelTypes {
 			Function<Object, Object>[] casts, Function<Object, Object>[] reverses) {
 			return src -> src.map(casts[0]);
 		}
-	};
-	/** A {@link SettableValue} */
-	public static final ModelType.SingleTyped<SettableValue> Value = new ModelType.SingleTyped<SettableValue>("Value",
-		SettableValue.class) {
+	}
+
+	/** See {@link ModelTypes#Value} */
+	public static class ValueModelType extends ModelType.SingleTyped<SettableValue> {
+		private ValueModelType() {
+			super("Value", SettableValue.class);
+		}
+
 		@Override
 		public <V> ModelInstanceType.SingleTyped<SettableValue, V, SettableValue<V>> forType(TypeToken<V> type) {
 			return (ModelInstanceType.SingleTyped<SettableValue, V, SettableValue<V>>) super.forType(type);
@@ -143,9 +182,9 @@ public class ModelTypes {
 			Function<Object, Object>[] casts, Function<Object, Object>[] reverses) {
 			if (reverses != null)
 				return src -> src.transformReversible(target.getType(0), transformReversible(casts[0], reverses[0]));
-				else
-					return src -> SettableValue.asSettable(src.transform(target.getType(0), transform(casts[0])), //
-						__ -> "Not reversble");
+			else
+				return src -> SettableValue.asSettable(src.transform(target.getType(0), transform(casts[0])), //
+					__ -> "Not reversble");
 		}
 
 		@Override
@@ -175,21 +214,14 @@ public class ModelTypes {
 				}
 			});
 		}
-	};
-
-	static Function<Transformation.TransformationPrecursor<Object, Object, ?>, Transformation<Object, Object>> transform(
-		Function<Object, Object> cast) {
-		return tx -> tx.cache(false).map(cast);
 	}
 
-	static Function<Transformation.ReversibleTransformationPrecursor<Object, Object, ?>, Transformation.ReversibleTransformation<Object, Object>> transformReversible(
-		Function<Object, Object> cast, Function<Object, Object> reverse) {
-		return tx -> tx.cache(false).map(cast).withReverse(reverse);
-	}
+	/** See {@link ModelTypes#Collection} */
+	public static class CollectionModelType extends ModelType.SingleTyped<ObservableCollection> {
+		private CollectionModelType() {
+			super("Collection", ObservableCollection.class);
+		}
 
-	/** An {@link ObservableCollection} */
-	public static final ModelType.SingleTyped<ObservableCollection> Collection = new ModelType.SingleTyped<ObservableCollection>(
-		"Collection", ObservableCollection.class) {
 		@Override
 		public <V> ModelInstanceType.SingleTyped<ObservableCollection, V, ObservableCollection<V>> forType(TypeToken<V> type) {
 			return (ModelInstanceType.SingleTyped<ObservableCollection, V, ObservableCollection<V>>) super.forType(type);
@@ -228,9 +260,9 @@ public class ModelTypes {
 			Function<Object, Object>[] casts, Function<Object, Object>[] reverses) {
 			if (reverses != null)
 				return src -> src.flow().transform(target.getType(0), transformReversible(casts[0], reverses[0])).collectPassive();
-				else
-					return src -> src.flow().transform(target.getType(0), transform(casts[0]))
-						.filterMod(opts -> ((ObservableCollection.ModFilterBuilder<Object>) opts).noAdd("Not reversible")).collectPassive();
+			else
+				return src -> src.flow().transform(target.getType(0), transform(casts[0]))
+					.filterMod(opts -> ((ObservableCollection.ModFilterBuilder<Object>) opts).noAdd("Not reversible")).collectPassive();
 		}
 
 		@Override
@@ -251,10 +283,14 @@ public class ModelTypes {
 				}
 			});
 		}
-	};
-	/** An {@link ObservableSortedCollection} */
-	public static final ModelType.SingleTyped<ObservableSortedCollection> SortedCollection = new ModelType.SingleTyped<ObservableSortedCollection>(
-		"SortedCollection", ObservableSortedCollection.class) {
+	}
+
+	/** See {@link ModelTypes#SortedCollection} */
+	public static class SortedCollectionModelType extends ModelType.SingleTyped<ObservableSortedCollection> {
+		SortedCollectionModelType() {
+			super("SortedCollection", ObservableSortedCollection.class);
+		}
+
 		@Override
 		public <V> ModelInstanceType.SingleTyped<ObservableSortedCollection, V, ObservableSortedCollection<V>> forType(TypeToken<V> type) {
 			return (ModelInstanceType.SingleTyped<ObservableSortedCollection, V, ObservableSortedCollection<V>>) super.forType(type);
@@ -326,9 +362,14 @@ public class ModelTypes {
 				}
 			});
 		}
-	};
-	/** An {@link ObservableSet} */
-	public static final ModelType.SingleTyped<ObservableSet> Set = new ModelType.SingleTyped<ObservableSet>("Set", ObservableSet.class) {
+	}
+
+	/** See {@link ModelTypes#Set} */
+	public static class SetModelType extends ModelType.SingleTyped<ObservableSet> {
+		SetModelType() {
+			super("Set", ObservableSet.class);
+		}
+
 		@Override
 		public <V> ModelInstanceType.SingleTyped<ObservableSet, V, ObservableSet<V>> forType(TypeToken<V> type) {
 			return (ModelInstanceType.SingleTyped<ObservableSet, V, ObservableSet<V>>) super.forType(type);
@@ -390,10 +431,14 @@ public class ModelTypes {
 				}
 			});
 		}
-	};
-	/** An {@link ObservableSortedSet} */
-	public static final ModelType.SingleTyped<ObservableSortedSet> SortedSet = new ModelType.SingleTyped<ObservableSortedSet>("SortedSet",
-		ObservableSortedSet.class) {
+	}
+
+	/** See {@link ModelTypes#SortedSet} */
+	public static class SortedSetModelType extends ModelType.SingleTyped<ObservableSortedSet> {
+		SortedSetModelType() {
+			super("SortedSet", ObservableSortedSet.class);
+		}
+
 		@Override
 		public <V> ModelInstanceType.SingleTyped<ObservableSortedSet, V, ObservableSortedSet<V>> forType(TypeToken<V> type) {
 			return (ModelInstanceType.SingleTyped<ObservableSortedSet, V, ObservableSortedSet<V>>) super.forType(type);
@@ -458,9 +503,79 @@ public class ModelTypes {
 				}
 			});
 		}
-	};
-	/** An {@link ObservableMap} */
-	public static final ModelType.DoubleTyped<ObservableMap> Map = new ModelType.DoubleTyped<ObservableMap>("Map", ObservableMap.class) {
+	}
+
+	/** See {@link ModelTypes#ValueSet} */
+	public static class ValueSetModelType extends ModelType.SingleTyped<ObservableValueSet> {
+		private ValueSetModelType() {
+			super("ValueSet", ObservableValueSet.class);
+		}
+
+		@Override
+		public <V> ModelInstanceType.SingleTyped<ObservableValueSet, V, ObservableValueSet<V>> forType(TypeToken<V> type) {
+			return (ModelInstanceType.SingleTyped<ObservableValueSet, V, ObservableValueSet<V>>) super.forType(type);
+		}
+
+		@Override
+		public <V> ModelInstanceType.SingleTyped<ObservableValueSet, V, ObservableValueSet<V>> forType(Class<V> type) {
+			return (ModelInstanceType.SingleTyped<ObservableValueSet, V, ObservableValueSet<V>>) super.forType(type);
+		}
+
+		@Override
+		public <V> ModelInstanceType.SingleTyped<ObservableValueSet, ? extends V, ObservableValueSet<? extends V>> below(
+			TypeToken<V> type) {
+			return (ModelInstanceType.SingleTyped<ObservableValueSet, ? extends V, ObservableValueSet<? extends V>>) super.below(type);
+		}
+
+		@Override
+		public <V> ModelInstanceType.SingleTyped<ObservableValueSet, ? extends V, ObservableValueSet<? extends V>> below(Class<V> type) {
+			return (ModelInstanceType.SingleTyped<ObservableValueSet, ? extends V, ObservableValueSet<? extends V>>) super.below(type);
+		}
+
+		@Override
+		public <V> ModelInstanceType.SingleTyped<ObservableValueSet, ? super V, ObservableValueSet<? super V>> above(TypeToken<V> type) {
+			return (ModelInstanceType.SingleTyped<ObservableValueSet, ? super V, ObservableValueSet<? super V>>) super.above(type);
+		}
+
+		@Override
+		public <V> ModelInstanceType.SingleTyped<ObservableValueSet, ? super V, ObservableValueSet<? super V>> above(Class<V> type) {
+			return (ModelInstanceType.SingleTyped<ObservableValueSet, ? super V, ObservableValueSet<? super V>>) super.above(type);
+		}
+
+		@Override
+		protected Function<ObservableValueSet, ObservableValueSet> convertType(ModelInstanceType<ObservableValueSet, ?> target,
+			Function<Object, Object>[] casts, Function<Object, Object>[] reverses) {
+			return null;
+		}
+
+		@Override
+		protected void setupConversions(ConversionBuilder<ObservableValueSet> builder) {
+			builder.convertibleTo(Collection, (source, dest) -> ModelType.converter(src -> src.getValues(), dest))//
+			.convertibleTo(Event, new ModelConverter<ObservableValueSet, Observable>() {
+				@Override
+				public ModelInstanceConverter<ObservableValueSet, Observable> convert(ModelInstanceType<ObservableValueSet, ?> source,
+					ModelInstanceType<Observable, ?> dest) throws IllegalArgumentException {
+					if (dest.getType(0) == TypeTokens.get().VOID || TypeTokens.getRawType(dest.getType(0)) == void.class) {
+						return ModelType.converter(src -> src.getValues().changes().map(__ -> null), dest);
+					} else {
+						TypeToken<?> oceType = TypeTokens.get().keyFor(ObservableCollectionEvent.class)
+							.parameterized(source.getType(0));
+						if (dest.getType(0).isAssignableFrom(oceType)) {
+							return ModelType.converter(src -> src.getValues().changes(), dest.getModelType().forTypes(oceType));
+						} else
+							throw new IllegalArgumentException("Cannot convert from " + source + " to " + dest);
+					}
+				}
+			});
+		}
+	}
+
+	/** See {@link ModelTypes#Map} */
+	public static class MapModelType extends ModelType.DoubleTyped<ObservableMap> {
+		MapModelType() {
+			super("Map", ObservableMap.class);
+		}
+
 		@Override
 		public <K, V> ModelInstanceType.DoubleTyped<ObservableMap, K, V, ObservableMap<K, V>> forType(TypeToken<K> keyType,
 			TypeToken<V> valueType) {
@@ -526,10 +641,14 @@ public class ModelTypes {
 				}
 			});
 		}
-	};
-	/** An {@link ObservableSortedMap} */
-	public static final ModelType.DoubleTyped<ObservableSortedMap> SortedMap = new ModelType.DoubleTyped<ObservableSortedMap>("SortedMap",
-		ObservableSortedMap.class) {
+	}
+
+	/** See {@link ModelTypes#SortedMap} */
+	public static class SortedMapModelType extends ModelType.DoubleTyped<ObservableSortedMap> {
+		SortedMapModelType() {
+			super("SortedMap", ObservableSortedMap.class);
+		}
+
 		@Override
 		public <K, V> ModelInstanceType.DoubleTyped<ObservableSortedMap, K, V, ObservableSortedMap<K, V>> forType(TypeToken<K> keyType,
 			TypeToken<V> valueType) {
@@ -596,10 +715,14 @@ public class ModelTypes {
 				}
 			});
 		}
-	};
-	/** An {@link ObservableMultiMap} */
-	public static final ModelType.DoubleTyped<ObservableMultiMap> MultiMap = new ModelType.DoubleTyped<ObservableMultiMap>("MultiMap",
-		ObservableMultiMap.class) {
+	}
+
+	/** See {@link ModelTypes#MultiMap} */
+	public static class MultiMapModelType extends ModelType.DoubleTyped<ObservableMultiMap> {
+		MultiMapModelType() {
+			super("MultiMap", ObservableMultiMap.class);
+		}
+
 		@Override
 		public <K, V> ModelInstanceType.DoubleTyped<ObservableMultiMap, K, V, ObservableMultiMap<K, V>> forType(TypeToken<K> keyType,
 			TypeToken<V> valueType) {
@@ -683,10 +806,14 @@ public class ModelTypes {
 				}
 			});
 		}
-	};
-	/** An {@link ObservableSortedMultiMap} */
-	public static final ModelType.DoubleTyped<ObservableSortedMultiMap> SortedMultiMap = new ModelType.DoubleTyped<ObservableSortedMultiMap>(
-		"SortedMultiMap", ObservableSortedMultiMap.class) {
+	}
+
+	/** See {@link ModelTypes#SortedMultiMap} */
+	public static class SortedMultiMapModelType extends ModelType.DoubleTyped<ObservableSortedMultiMap> {
+		SortedMultiMapModelType() {
+			super("SortedMultiMap", ObservableSortedMultiMap.class);
+		}
+
 		@Override
 		public <K, V> ModelInstanceType.DoubleTyped<ObservableSortedMultiMap, K, V, ObservableSortedMultiMap<K, V>> forType(
 			TypeToken<K> keyType, TypeToken<V> valueType) {
@@ -774,5 +901,15 @@ public class ModelTypes {
 				}
 			});
 		}
-	};
+	}
+
+	static Function<Transformation.TransformationPrecursor<Object, Object, ?>, Transformation<Object, Object>> transform(
+		Function<Object, Object> cast) {
+		return tx -> tx.cache(false).map(cast);
+	}
+
+	static Function<Transformation.ReversibleTransformationPrecursor<Object, Object, ?>, Transformation.ReversibleTransformation<Object, Object>> transformReversible(
+		Function<Object, Object> cast, Function<Object, Object> reverse) {
+		return tx -> tx.cache(false).map(cast).withReverse(reverse);
+	}
 }

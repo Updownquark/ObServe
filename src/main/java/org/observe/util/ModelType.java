@@ -237,6 +237,8 @@ public abstract class ModelType<M> implements Named {
 				}
 				Function<M, M2> converter = (Function<M, M2>) getModelType().convertType((ModelInstanceType<M, ? extends M>) target, casts,
 					reversible ? reverses : null);
+				if (converter == null)
+					return null;
 				return new ModelInstanceConverter<M, M2>() {
 					private ModelInstanceType<M2, ?> theType;
 

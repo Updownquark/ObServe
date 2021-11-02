@@ -5,6 +5,13 @@
 		<pattern name="int">\d+</pattern> <!-- Positive integer -->
 		<pattern name="variable">^[a-zA-Z_$][a-zA-Z_$0-9]*</pattern>
 
+		<one-of name="expression-or-string">
+			<explicit prefix="${" suffix="}">
+				<pattern name="expression" />
+			</explicit>
+			<string />
+		</one-of>
+
 		<one-of name="vbl-or-int">
 			<pattern name="int" />
 			<pattern name="variable" />
@@ -15,24 +22,24 @@
 		<add-on name="map-model-value" requires="abst-model-value">
 			<attribute name="key-type" type="string" specify="required" />
 		</add-on>
-		<add-on name="sorted">
-			<attribute name="sort-with" type="string" specify="optional" />
+		<add-on name="sorted" abstract="true" >
+			<attribute name="sort-with" type="expression" specify="optional" />
 		</add-on>
 
-		<add-on name="map-reverse-type" />
+		<add-on name="map-reverse-type" abstract="true" />
 		<add-on name="source-modifying-transform-reverse" inherits="map-reverse-type">
-			<attribute name="function" type="string" />
-			<attribute name="enabled" type="string" specify="optional" />
-			<attribute name="accept" type="string" specify="optional" />
-			<attribute name="add" type="string" specify="optional" />
-			<attribute name="add-accept" type="string" specify="optional" />
+			<attribute name="function" type="expression" />
+			<attribute name="enabled" type="expression" specify="optional" />
+			<attribute name="accept" type="expression" specify="optional" />
+			<attribute name="add" type="expression" specify="optional" />
+			<attribute name="add-accept" type="expression" specify="optional" />
 		</add-on>
 		<add-on name="source-replacing-transform-reverse" inherits="source-modifying-transform-reverse">
 			<attribute name="stateful" type="boolean" specify="optional" default="true" />
 			<attribute name="inexact" type="boolean" specify="optional" default="false" />
 		</add-on>
 
-		<add-on name="abst-map-op">
+		<add-on name="abst-map-op" abstract="true" >
 			<attribute name="cache" type="boolean" default="true" />
 			<attribute name="re-eval-on-update" type="boolean" default="true" />
 			<attribute name="fire-if-unchanged" type="boolean" default="true" />
@@ -41,25 +48,22 @@
 			<attribute name="one-to-many" type="boolean" default="false" />
 		</add-on>
 
-		<add-on name="flatten-reverse-type" />
+		<add-on name="flatten-reverse-type" abstract="true" />
 		<add-on name="flatten-replace-source" inherits="flatten-reverse-type">
-			<attribute name="function" type="string" />
-			<attribute name="accept" type="string" />
+			<attribute name="function" type="expression" />
+			<attribute name="accept" type="expression" />
 		</add-on>
 		<add-on name="flatten-modify-source" inherits="flatten-replace-source">
-			<attribute name="add" type="string" />
-			<attribute name="add-accept" type="string" />
+			<attribute name="add" type="expression" />
+			<attribute name="add-accept" type="expression" />
 		</add-on>
 
-		<add-on name="file-source-type" requires="file-source" />
+		<add-on name="file-source-type" requires="file-source" abstract="true" />
 		<add-on name="native" inherits="file-source-type" requires="file-source" />
 		<add-on name="sftp" inherits="file-source-type" requires="file-source">
-			<attribute name="host" type="string" />
-			<attribute name="user" type="string" />
-			<attribute name="password" type="string" />
-			<attribute name="host-value" type="string" />
-			<attribute name="user-value" type="string" />
-			<attribute name="password-value" type="string" />
+			<attribute name="host" type="expression-or-string" />
+			<attribute name="user" type="expression-or-string" />
+			<attribute name="password" type="expression-or-string" />
 			<attribute name="connecting-value" type="string" />
 		</add-on>
 		<add-on name="archive-type" requires="archive-method" />
@@ -89,6 +93,7 @@
 		<element-def name="ext-set" extends="ext-list" />
 		<element-def name="ext-sorted-set" extends="ext-set" inherits="sorted" />
 		<element-def name="ext-sorted-list" extends="ext-list" inherits="sorted" />
+		<element-def name="ext-value-set" extends="ext-list" />
 		<element-def name="ext-map" extends="ext-model-value" inherits="map-model-value" />
 		<element-def name="ext-sorted-map" extends="ext-map" inherits="sorted" />
 		<element-def name="ext-multi-map" extends="ext-map" />
@@ -110,6 +115,7 @@
 		<element-def name="set" extends="list" />
 		<element-def name="sorted-set" extends="set" inherits="sorted" />
 		<element-def name="sorted-list" extends="list" inherits="sorted" />
+		<element-def name="value-set" extends="list" />
 		<element-def name="entry" extends="element">
 			<attribute name="key" type="string" />
 		</element-def>
@@ -127,35 +133,35 @@
 			<attribute name="type" type="map-reverse-type" />
 		</element-def>
 		<element-def name="combine-with">
-			<value type="string" specify="required" />
+			<value type="expression" specify="required" />
 		</element-def>
 		<element-def name="map-to" extends="operation" inherits="abst-map-op">
-			<attribute name="equivalence" type="string" specify="optional" />
-			<attribute name="function" type="string" specify="required" />
+			<attribute name="equivalence" type="expression" specify="optional" />
+			<attribute name="function" type="expression" specify="required" />
 			<child-def name="combined-value" type="combine-with" min="0" max="inf" />
 			<child-def name="reverse" type="map-reverse" min="0" />
 		</element-def>
 		<element-def name="filter" extends="operation">
-			<attribute name="test" type="string" />
+			<attribute name="test" type="expression" />
 		</element-def>
 		<element-def name="filter-by-type" extends="operation">
 			<attribute name="type" type="string" />
 		</element-def>
 		<element-def name="reverse" extends="operation" />
 		<element-def name="refresh" extends="operation">
-			<attribute name="on" type="string" />
+			<attribute name="on" type="expression" />
 		</element-def>
 		<element-def name="refresh-each" extends="operation">
-			<attribute name="on" type="string" />
+			<attribute name="on" type="expression" />
 		</element-def>
 		<element-def name="distinct" extends="operation">
-			<attribute name="sort-with" type="string" specify="optional" />
+			<attribute name="sort-with" type="expression" specify="optional" />
 			<attribute name="use-first" type="boolean" default="false" />
 			<attribute name="preserve-source-order" type="boolean" default="false" />
 		</element-def>
 		<element-def name="sort" extends="operation" inherits="sorted" />
 		<element-def name="with-equivalence" extends="operation">
-			<attribute name="equivalence" type="string" />
+			<attribute name="equivalence" type="expression" />
 		</element-def>
 		<element-def name="unmodifiable" extends="operation">
 			<attribute name="allow-updates" type="boolean" default="true" />
@@ -166,8 +172,8 @@
 			<attribute name="no-remove" type="string" specify="optional" />
 			<attribute name="no-move" type="string" specify="optional" />
 			<attribute name="unmodifiable" type="string" specify="optional" />
-			<attribute name="filter-add" type="string" specify="optional" />
-			<attribute name="filter-remove" type="string" specify="optional" />
+			<attribute name="filter-add" type="expression" specify="optional" />
+			<attribute name="filter-remove" type="expression" specify="optional" />
 		</element-def>
 		<element-def name="map-equivalent" extends="map-to" inherits="sorted">
 			<!-- For distinct flows, the reverse operation must be specified.
@@ -177,15 +183,15 @@
 			<attribute name="type" type="flatten-reverse-type" />
 		</element-def>
 		<element-def name="flatten" extends="operation" inherits="abst-map-op">
-			<attribute name="function" type="string" specify="required" />
+			<attribute name="function" type="expression" specify="required" />
 			<!-- This option requires caching, so the default will be the same as the cached attribute and cannot be specified here -->
 			<attribute name="propagate-update-to-parent" type="boolean" specify="optional" />
 		</element-def>
 		<element-def name="cross" extends="flatten">
-			<attribute name="with" type="string" />
+			<attribute name="with" type="expression" />
 		</element-def>
 		<element-def name="where-contained" extends="operation">
-			<attribute name="filter" type="string" />
+			<attribute name="filter" type="expression" />
 			<attribute name="inclusive" type="boolean" default="true" />
 		</element-def>
 		<element-def name="group-by" extends="operation">
@@ -199,10 +205,10 @@
 			<attribute name="times" type="int" specify="required" />
 		</element-def>
 		<element-def name="take-until" extends="operation">
-			<attribute name="until" type="string" specify="required" />
+			<attribute name="until" type="expression" specify="required" />
 		</element-def>
 		<element-def name="transform" extends="int-model-value">
-			<attribute name="source" type="string" specify="required" />
+			<attribute name="source" type="expression" specify="required" />
 			<!-- Type can be inferred from the transformation, but the user can specify that the result is a super-type instead -->
 			<attribute name="int-model-value.type" specify="optional" default="" />
 			<!-- Default of this attribute is whatever the flow prefers -->
@@ -215,7 +221,7 @@
 		<element-def name="file-source" extends="int-model-value">
 			<attribute name="int-model-value.type" specify="forbidden" default="" />
 			<attribute name="type" type="file-source-type" default="native" />
-			<attribute name="max-archive-depth" type="vbl-or-int" default="10" />
+			<attribute name="max-archive-depth" type="expression" default="10" />
 			<child-def name="archive" type="archive-method" min="0" max="inf" />
 		</element-def>
 
@@ -230,6 +236,16 @@
 		<element-def name="model" extends="abst-model">
 			<child-mod child="abst-model.value" type="int-model-value" />
 			<child-def name="sub-model" type="model" min="0" max="inf" />
+		</element-def>
+		<element-def name="config" extends="model">
+			<attribute name="config-dir" type="expression" specify="optional" />
+			<child-mod name="abst-model.value">
+				<attribute name="config-path" type="string" specify="optional" />
+				<attribute name="format" type="expression" specify="optional" />
+				<attribute name="key-format" type="expression" specify="optional" />
+				<attribute name="default" type="expression" specify="optional" />
+				<attribute name="key-default" type="expression" specify="optional" />
+			</child-mod>
 		</element-def>
 		<element-def name="models">
 			<child-def name="model" type="abst-model" min="0" max="inf" />
