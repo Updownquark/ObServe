@@ -1167,6 +1167,9 @@ constantExpression
 	:	expression
 	;
 
+expressionFull
+	: expression EOF;
+
 expression
 	:	lambdaExpression
 	|	assignmentExpression

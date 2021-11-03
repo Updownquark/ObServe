@@ -22,7 +22,6 @@ import org.observe.util.ObservableModelSet.ModelSetInstance;
 import org.observe.util.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
 import org.qommons.Identifiable;
-import org.qommons.LambdaUtils;
 import org.qommons.StringUtils;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
@@ -30,55 +29,20 @@ import org.qommons.tree.BetterTreeList;
 
 import com.google.common.reflect.TypeToken;
 
+import main.antlr.Java8Lexer;
+import main.antlr.Java8Parser;
+
 public class DefaultExpressoParser implements ExpressoParser {
 	@Override
 	public ObservableExpression parse(String text) throws ExpressoParseException {
 		if (text.trim().isEmpty())
 			return ObservableExpression.EMPTY;
-		Java8Parser parser = new Java8Parser(null);
-		ParseTree result;
-		int max = 0;
-		try {
-			String input = "return " + text + ";";
-			result = parseAntlr(parser, input, Java8Parser::returnStatement);
-			result = result.getChild(1);
-		} catch (RuntimeException e) {
-			result = null;
-		}
-		RuntimeException ex = null;
-		if (result == null) {
-			try {
-				String input = text + ";";
-				result = parseAntlr(parser, input, Java8Parser::returnStatement);
-				if (result.getText().length() == input.length())
-					result = result.getChild(0);
-				else {
-					if (max < result.getText().length())
-						max = result.getText().length();
-					result = null;
-				}
-			} catch (RuntimeException e) {
-				result = null;
-				ex = e;
-			}
-		}
-		if (result == null) {
-			if (ex != null)
-				throw ex;
-			else
-				throw new ExpressoParseException(max, text.length(), "?", text, "Unrecognized input");
-		}
-		Expression parsed = Expression.of(parser, result);
-		return _parse(parsed);
-	}
-
-	private ParseTree parseAntlr(Java8Parser parser, String text, Function<Java8Parser, ParseTree> type) {
 		Java8Lexer lexer = new Java8Lexer(CharStreams.fromString(text));
 		CommonTokenStream tokens = new CommonTokenStream(lexer);
-
-		// parser generates abstract syntax tree
-		parser.setTokenStream(tokens);
-		return type.apply(parser);
+		Java8Parser parser = new Java8Parser(tokens);
+		ParseTree result = parser.expressionFull();
+		Expression parsed = Expression.of(parser, result);
+		return _parse(parsed);
 	}
 
 	private ObservableExpression _parse(Expression expression) throws ExpressoParseException {
@@ -121,13 +85,12 @@ public class DefaultExpressoParser implements ExpressoParser {
 				// Pass-through types
 				// $FALL-THROUGH$
 			case "literal":
-			case "IntegerLiteral":
-			case "FloatingPointLiteral":
 			case "localVariableDeclarationStatement":
 			case "statement":
 			case "statementWithoutTrailingSubstatement":
 			case "statementExpression":
 			case "statementNoShortIf":
+			case "expressionFull":
 			case "expression":
 			case "assignmentExpression":
 			case "constantExpression":
@@ -175,33 +138,29 @@ public class DefaultExpressoParser implements ExpressoParser {
 		case "this":
 			return ThisExpression.INSTANCE;
 			// Literals
-		case "DecimalIntegerLiteral":
-			boolean isLong = expression.search().get("IntegerTypeSuffix").findAny() != null;
+		case "IntegerLiteral":
+			String text = expression.getText();
+			char lastChar = text.charAt(text.length() - 1);
+			boolean isLong = lastChar == 'l' || lastChar == 'L';
 			if (isLong)
-				return literalExpression(expression, Long.parseLong(expression.toString()));
-			else
-				return literalExpression(expression, Integer.parseInt(expression.toString()));
-		case "HexIntegerLiteral":
-			isLong = expression.search().get("IntegerTypeSuffix").findAny() != null;
-			String text = expression.search().get("HexDigits").find().toString();
+				text = text.substring(0, text.length() - 1);
+			int radix;
+			if (expression.getText().startsWith("0x")) {
+				radix = 16;
+				text = text.substring(2);
+			} else if (expression.getText().startsWith("0b")) {
+				radix = 2;
+				text = text.substring(1);
+			} else if (expression.getText().startsWith("0")) {
+				radix = 8;
+				text = text.substring(2);
+			} else
+				radix = 10;
 			if (isLong)
-				return literalExpression(expression, Long.parseLong(text, 16));
+				return literalExpression(expression, Long.parseLong(text, radix));
 			else
-				return literalExpression(expression, Integer.parseInt(text, 16));
-		case "OctalIntegerLiteral":
-			isLong = expression.search().get("IntegerTypeSuffix").findAny() != null;
-			text = expression.search().get("OctalDigits").find().toString();
-			if (isLong)
-				return literalExpression(expression, Long.parseLong(text, 8));
-			else
-				return literalExpression(expression, Integer.parseInt(text, 8));
-		case "BinaryIntegerLiteral":
-			isLong = expression.search().get("IntegerTypeSuffix").findAny() != null;
-			text = expression.search().get("BinaryDigits").find().toString();
-			if (isLong)
-				return literalExpression(expression, Long.parseLong(text, 2));
-			else
-				return literalExpression(expression, Integer.parseInt(text, 2));
+				return literalExpression(expression, Integer.parseInt(text, radix));
+		case "FloatingPointLiteral":
 		case "DecimalFloatingPointLiteral":
 			Expression type = expression.search().get("FloatingTypeSuffix").findAny();
 			text = expression.toString();
@@ -364,6 +323,7 @@ public class DefaultExpressoParser implements ExpressoParser {
 			//						typeArgs = null;
 			//					return methodReference(expression, (TypedStatement<E, Object>) context, (TypeToken<Object>) ctxType, typeArgs,
 			//						expression.getComponents().getLast().toString());
+			throw new ExpressoParseException(expression, "Expression type '" + expression.getType() + "' not implemented yet");
 		case "ambiguousName":
 		case "expressionName":
 			// Other names?
@@ -578,14 +538,14 @@ public class DefaultExpressoParser implements ExpressoParser {
 			//		}
 			//		throw ex;
 			// Unsupported types
-			throw new IllegalStateException("Unimplemented expression type: " + expression.getType() + " " + expression);
+			throw new ExpressoParseException(expression, "Expression type '" + expression.getType() + "' not implemented yet");
 		default:
 			throw new IllegalStateException("Unrecognized expression type: " + expression.getType() + " " + expression);
 		}
 	}
 
 	private ObservableExpression literalExpression(Expression expression, Object value) {
-		return new LiteralExpression<>(expression, value);
+		return new ObservableExpression.LiteralExpression<>(expression, value);
 	}
 
 	private static char evaluateEscape(Expression escaped) {
@@ -632,54 +592,6 @@ public class DefaultExpressoParser implements ExpressoParser {
 		for (Expression comp : expression.getComponents())
 			extractNameSequence(comp, names);
 		return names;
-	}
-
-	public static class LiteralExpression<T> implements ObservableExpression {
-		private final Expression theExpression;
-		private final T theValue;
-
-		public LiteralExpression(Expression exp, T value) {
-			theExpression = exp;
-			theValue = value;
-		}
-
-		public Expression getExpression() {
-			return theExpression;
-		}
-
-		public T getValue() {
-			return theValue;
-		}
-
-		@Override
-		public <M, MV extends M> ValueContainer<M, MV> evaluate(ModelInstanceType<M, MV> type, ObservableModelSet models,
-			ClassView classView) throws IllegalArgumentException {
-			if (type.getModelType() != ModelTypes.Value)
-				throw new IllegalArgumentException("'" + theExpression.getText() + "' cannot be evaluated as a " + type);
-			if (theValue == null) {
-				if (type.getType(0).isPrimitive())
-					throw new IllegalArgumentException("Cannot assign null to a primitive type (" + type.getType(0));
-				MV value = (MV) createValue(type.getType(0), null);
-				return ObservableModelSet.container(LambdaUtils.constantFn(value, theExpression.getText(), null), type);
-			} else if (TypeTokens.get().isInstance(type.getType(0), theValue)) {
-				MV value = (MV) createValue(type.getType(0), theValue);
-				return ObservableModelSet.container(LambdaUtils.constantFn(value, theExpression.getText(), null), type);
-			} else if (TypeTokens.get().isAssignable(type.getType(0), TypeTokens.get().of(theValue.getClass()))) {
-				MV value = (MV) createValue(type.getType(0), TypeTokens.get().cast(type.getType(0), theValue));
-				return ObservableModelSet.container(LambdaUtils.constantFn(value, theExpression.getText(), null), type);
-			} else
-				throw new IllegalArgumentException("'" + theExpression.getText() + "' cannot be evaluated as a " + type);
-		}
-
-		SettableValue<?> createValue(TypeToken<?> type, Object value) {
-			return SettableValue.asSettable(ObservableValue.of((TypeToken<Object>) type, value), //
-				__ -> "Literal value '" + theExpression.getText() + "'");
-		}
-
-		@Override
-		public String toString() {
-			return String.valueOf(theValue);
-		}
 	}
 
 	public static class NameExpression implements ObservableExpression {

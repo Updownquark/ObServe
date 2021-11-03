@@ -48,6 +48,7 @@ import org.observe.config.ObservableConfigPath;
 import org.observe.config.ObservableValueSet;
 import org.observe.config.SyncValueSet;
 import org.observe.expresso.DefaultExpressoParser;
+import org.observe.expresso.ExpressoParser;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableExpression.MethodFinder;
 import org.observe.util.ObservableModelSet.Builder;
@@ -84,8 +85,11 @@ import org.xml.sax.SAXException;
 import com.google.common.reflect.TypeToken;
 
 public class ObservableModelQonfigParser {
+	public static final ExpressoParser EXPRESSION_PARSER = new DefaultExpressoParser();
+
 	public static final QonfigToolkitAccess TOOLKIT = new QonfigToolkitAccess(ObservableModelQonfigParser.class, "observe-models.qtd")
-		.withCustomValueType(new ExpressionValueType("expression", new DefaultExpressoParser()));
+		.withCustomValueType(new ExpressionValueType("expression", EXPRESSION_PARSER, false))//
+		.withCustomValueType(new ExpressionValueType("expression-or-string", EXPRESSION_PARSER, true));
 
 	public interface ValueParser {
 		<T> Function<ExternalModelSet, T> parseModelValue(ObservableModelSet models, TypeToken<T> type, String text) throws ParseException;
@@ -1013,7 +1017,7 @@ public class ObservableModelQonfigParser {
 				return extModels.get(name, ModelTypes.Map.forType(keyType, valueType));
 			}
 		});
-		observeInterpreter.createWith("ext-map", Void.class, new ExtBiTypedModelValidator<ObservableSortedMap>() {
+		observeInterpreter.createWith("ext-sorted-map", Void.class, new ExtBiTypedModelValidator<ObservableSortedMap>() {
 			@Override
 			protected <K, V> void expect(Builder model, String name, TypeToken<K> keyType, TypeToken<V> valueType,
 				ValueGetter<? extends ObservableSortedMap> valueGetter) {

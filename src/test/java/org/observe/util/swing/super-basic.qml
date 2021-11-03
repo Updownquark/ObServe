@@ -20,15 +20,15 @@
 			</ext-model>
 		</models>
 	</head>
-	<box layout="border-layout">
-		<box region="north" layout="inline-layout" orientation="horizontal">
+	<box layout="border">
+		<box region="north" layout="inline" orientation="horizontal">
 			<label>External Value 1:</label>
 			<label value="extModel.value1" />
 		</box>
 		<table region="west" rows="appModel.list1" selection="appModel.value1">
 			<column name="Value" />
 		</table>
-		<box layout="inline-layout" orientation="vertical" main-align="center" cross-align="center">
+		<box layout="inline" orientation="vertical" main-align="center" cross-align="center">
 			<label>Selected</label>
 			<label value="appModel.value1" />
 		</box>

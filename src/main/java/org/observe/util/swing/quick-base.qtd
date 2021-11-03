@@ -6,31 +6,15 @@
 -->
 <qonfig-def extends:core="quick-core.qtd">
 	<patterns>
-		<pattern name="float">[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?</pattern>
+		<one-of name="pos-or-exp">
+			<explicit prefix="${" suffix="}">
+				<pattern name="expression" />
+			</explicit>
+			<pattern name="position" />
+		</one-of>
 	</patterns>
-	<add-ons>
-		<add-on name="format-type" requires="format" abstract="true" />
-		<add-on name="file" inherits="format-type" requires="format">
-			<attribute name="file-source" type="string" specify="optional" />
-			<attribute name="working-dir" type="string" specify="optional" />
-			<attribute name="allow-empty" type="boolean" default="false" />
-		</add-on>
-		<add-on name="double" inherits="format-type" requires="format">
-			<attribute name="sig-digs" type="int" />
-			<attribute name="unit" type="string" specify="optional" />
-			<attribute name="unit-required" type="boolean" default="true" />
-			<attribute name="metric-prefixes" type="boolean" default="false" />
-			<attribute name="metric-prefixes-p2" type="boolean" default="false" />
-			<child-def name="prefix" type="prefix" min="0" max="inf" />
-			<!-- TODO -->
-		</add-on>
-		<add-on name="instant" inherits="format-type" requires="format">
-			<attribute name="time-zone" type="string" specify="optional" />
-			<attribute name="max-resolution" type="string" default="Second" />
-			<attribute name="format-24h" type="boolean" default="false" />
-			<attribute name="relative-eval-type" type="string" default="Closest" />
-		</add-on>
 
+	<add-ons>
 		<add-on name="orientation" />
 		<add-on name="horizontal" inherits="orientation" />
 		<add-on name="vertical" inherits="orientation" />
@@ -49,13 +33,13 @@
 		<add-on name="border-layout-child">
 			<attribute name="region" type="border-layout-region" default="center" />
 		</add-on>
-		<add-on name="border-layout" requires="box" inherits="layout">
+		<add-on name="border" requires="box" inherits="layout">
 			<child-mod child="box.content" inherits="border-layout-child" />
 		</add-on>
 		<add-on name="leading" inherits="inline-alignment" />
 		<add-on name="trailing" inherits="inline-alignment" />
 		<add-on name="justify" inherits="inline-alignment" />
-		<add-on name="inline-layout" requires="box" inherits="layout">
+		<add-on name="inline" requires="box" inherits="layout">
 			<attribute name="orientation" type="orientation" />
 			<attribute name="main-align" type="inline-alignment" default="leading" />
 			<attribute name="cross-align" type="inline-alignment" default="justify" />
@@ -73,6 +57,20 @@
 			<attribute name="columns" type="expression" specify="optional" />
 			<child-def name="column" type="column" min="0" max="inf" />
 		</add-on>
+		<add-on name="column-edit-type" requires="edit" abstract="true">
+			<attribute name="function" type="expression" />
+			<attribute name="editable-if" type="expression" specify="optional" />
+			<attribute name="accept" type="expression" specify="optional" />
+		</add-on>
+		<add-on name="modify-row-value" requires="edit" inherits="column-edit-type">
+			<attribute name="row-update" type="boolean" default="false" />
+		</add-on>
+		<add-on name="replace-row-value" requires="edit" inherits="column-edit-type">
+			<attribute name="column-edit-type.function" type="expression" specify="optional" default="" />
+		</add-on>
+		<add-on name="column-editor" requires="value-widget">
+			<attribute name="value-widget.value" specify="forbidden" default="column" />
+		</add-on>
 
 		<add-on name="field" requires="widget">
 			<attribute name="field-name" type="string" specify="optional" />
@@ -81,36 +79,30 @@
 
 		<add-on name="tab" requires="widget">
 			<attribute name="tab-id" type="string" specify="optional" />
-			<attribute name="tab-name" type="string" specify="optional" />
-			<attribute name="tab-name-value" type="expression" specify="optional" />
+			<attribute name="tab-name" type="expression-or-string" specify="optional" />
 		</add-on>
 	</add-ons>
 
 	<elements>
-		<element-def name="format" extends="int-model-value">
-			<attribute name="int-model-value.type" specify="forbidden" default="" />
-			<attribute name="type" type="format-type" />
-		</element-def>
-		<element-def name="prefix">
-			<attribute name="name" type="string" />
-			<attribute name="exp" type="int" specify="optional" />
-			<attribute name="multiplier" type="float" specify="optional" />
-		</element-def>
-
 		<element-def name="spacer" extends="widget" inherits="v-sizeable,h-sizeable" />
 		<element-def name="button" extends="widget">
 			<value type="string" specify="optional" />
-			<attribute name="text-value" type="expression" specify="optional" />
+			<attribute name="text" type="expression" specify="optional" />
 			<attribute name="action" type="expression" specify="required" />
 		</element-def>
 
 		<!-- Editors -->
 		<element-def name="value-widget" extends="widget" abstract="true" >
 			<attribute name="value" type="expression" specify="required" />
+			<attribute name="disable-with" type="expression" specify="optional" />
+		</element-def>
+		<element-def name="check-box" extends="value-widget">
+			<value type="expression-or-string" specify="optional" />
 		</element-def>
 		<element-def name="file-button" extends="value-widget" />
 		<element-def name="text-widget" extends="value-widget" abstract="true">
-			<attribute name="format" type="expression" specify="required" />
+			<attribute name="format" type="expression" specify="optional" />
+			<attribute name="editable" type="expression" specify="optional" />
 		</element-def>
 		<element-def name="label" extends="text-widget">
 			<value type="string" specify="optional" />
@@ -122,11 +114,12 @@
 		<element-def name="text-field" extends="text-widget" />
 		<element-def name="text-area" extends="text-widget">
 			<attribute name="rows" type="expression" />
+			<attribute name="html" type="boolean" />
 		</element-def>
 		<element-def name="spinner" extends="text-field">
 			<attribute name="increment" type="expression" specify="optional" />
-			<attribute name="increment-value" type="expression" specify="optional" />
 		</element-def>
+		<element-def name="file-field" extends="text-field" />
 		<element-def name="progress-bar" extends="value-widget">
 			<attribute name="max" type="expression" specify="required" />
 		</element-def>
@@ -153,6 +146,12 @@
 		<element-def name="column" inherits="single-rendering">
 			<attribute name="name" type="string" />
 			<attribute name="value" type="expression" specify="optional" /> <!-- Unspecified means to use the row value for the column value -->
+			<attribute name="format" type="expression" specify="optional" />
+			<child-def name="edit" type="edit" min="0" />
+		</element-def>
+		<element-def name="edit">
+			<attribute name="type" type="column-edit-type" />
+			<child-def name="editor" type="value-widget" inherits="column-editor" />
 		</element-def>
 		<element-def name="value-action">
 			<attribute name="name" type="string" specify="optional" />
@@ -172,15 +171,17 @@
 		<element-def name="tree-table" extends="tree" inherits="tabular-widget" />
 
 		<!-- Containers -->
-		<element-def name="box" extends="widget">
-			<attribute name="layout" type="layout" specify="required" />
+		<element-def name="container" extends="widget" abstract="true">
 			<child-def name="content" type="widget" min="0" max="inf" />
 		</element-def>
-		<element-def name="field-panel">
-			<child-def name="field" type="widget" inherits="field" />
+		<element-def name="box" extends="container">
+			<attribute name="layout" type="layout" specify="required" />
 		</element-def>
-		<element-def name="singleton-container" extends="widget" abstract="true">
-			<child-def name="child" type="widget" />
+		<element-def name="field-panel" extends="container">
+			<child-mod child="content" inherits="field" />
+		</element-def>
+		<element-def name="singleton-container" extends="container" abstract="true">
+			<child-mod child="content" min="1" max="1" />
 		</element-def>
 		<element-def name="scroll" extends="singleton-container" />
 		<element-def name="collapse-pane" extends="singleton-container">
@@ -188,18 +189,19 @@
 			<attribute name="init-collapsed" type="boolean" specify="optional" default="false" />
 		</element-def>
 		
-		<element-def name="tabs" extends="widget">
+		<element-def name="tabs" extends="container">
 			<attribute name="selected" type="expression" specify="optional" />
-			<child-def name="tab" type="widget" inherits="tab" min="0" max="inf"/>
+			<child-mod child="content" inherits="tab" />
+			<child-def name="tab-set" type="tab-set" min="0" max="inf" />
 		</element-def>
-		<element-def name="variable-tabs" extends="multi-value-widget" inherits="single-rendering" >
-			<attribute name="values" type="expression" specify="required" />
+		<element-def name="tab-set" inherits="single-rendering">
+			<attribute name="values" type="expression" />
+			<attribute name="name-function" type="expression" />
 		</element-def>
-		<element-def name="split" extends="widget">
+		<element-def name="split" extends="container">
 			<attribute name="orientation" type="orientation" specify="required" />
-			<attribute name="split-position" type="position" specify="optional" />
-			<attribute name="split-position-value" type="expression" specify="optional" />
-			<child-def name="content" type="widget" min="2" max="2" />
+			<attribute name="split-position" type="pos-or-exp" specify="optional" />
+			<child-mod child="content" min="2" max="2" />
 		</element-def>
 	</elements>
 </qonfig-def>

@@ -5,6 +5,7 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStreamWriter;
 import java.io.StringWriter;
 import java.io.Writer;
 import java.text.ParseException;
@@ -60,6 +61,7 @@ import org.qommons.collect.CollectionUtils.ElementSyncInput;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MapEntryHandle;
 import org.qommons.ex.ExFunction;
+import org.qommons.io.BetterFile;
 import org.qommons.io.Format;
 import org.qommons.tree.BetterTreeMap;
 import org.xml.sax.Attributes;
@@ -675,6 +677,11 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 			theKeyType = keyType;
 		}
 
+		/** @return The configuration for this map's values */
+		public ObservableConfigValueBuilder<V> values() {
+			return theValueBuilder;
+		}
+
 		/**
 		 * @param format The format to parse and persist the key from config
 		 * @return This builder
@@ -1140,6 +1147,17 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 	 */
 	public static ObservableConfigPersistence<IOException> toFile(File file, XmlEncoding encoding) {
 		return toWriter(() -> new BufferedWriter(new FileWriter(file)), encoding);
+	}
+
+	/**
+	 * A factory method to create a persistence operator for storing config in XML to a file
+	 *
+	 * @param file The file to persist to
+	 * @param encoding The XML encoding to use for XML persistence
+	 * @return The persistence operation to use
+	 */
+	public static ObservableConfigPersistence<IOException> toFile(BetterFile file, XmlEncoding encoding) {
+		return toWriter(() -> new BufferedWriter(new OutputStreamWriter(file.write())), encoding);
 	}
 
 	/** Creates a {@link Writer} */

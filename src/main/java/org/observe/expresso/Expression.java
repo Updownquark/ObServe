@@ -631,6 +631,8 @@ public interface Expression {
 
 		@Override
 		public void visitTerminal(TerminalNode arg0) {
+			if (arg0.getSymbol().getType() < 0)
+				return;
 			String displayType = theParser.getVocabulary().getDisplayName(arg0.getSymbol().getType());
 			Expression ex = new Terminal(displayType, //
 				arg0.getSymbol().getStartIndex(), arg0.getSymbol().getText());

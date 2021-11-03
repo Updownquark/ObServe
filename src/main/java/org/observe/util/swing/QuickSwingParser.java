@@ -176,8 +176,7 @@ public class QuickSwingParser {
 	public static class QuickDocument {
 		private final QuickHeadSection theHead;
 		private final QuickComponent theComponent;
-		private String theDefaultTitle;
-		private Function<ModelSetInstance, SettableValue<String>> theTitleValue;
+		private Function<ModelSetInstance, SettableValue<String>> theTitle;
 		private Function<ModelSetInstance, SettableValue<Icon>> theIcon;
 		private Function<ModelSetInstance, SettableValue<Integer>> theX;
 		private Function<ModelSetInstance, SettableValue<Integer>> theY;
@@ -199,20 +198,12 @@ public class QuickSwingParser {
 			return theComponent;
 		}
 
-		public String getDefaultTitle() {
-			return theDefaultTitle;
+		public Function<ModelSetInstance, SettableValue<String>> getTitle() {
+			return theTitle;
 		}
 
-		public void setTitle(String defaultTitle) {
-			theDefaultTitle = defaultTitle;
-		}
-
-		public Function<ModelSetInstance, SettableValue<String>> getTitleValue() {
-			return theTitleValue;
-		}
-
-		public void setTitle(Function<ModelSetInstance, SettableValue<String>> titleValue) {
-			theTitleValue = titleValue;
+		public void setTitle(Function<ModelSetInstance, SettableValue<String>> title) {
+			theTitle = title;
 		}
 
 		public Function<ModelSetInstance, SettableValue<Icon>> getIcon() {
@@ -310,10 +301,8 @@ public class QuickSwingParser {
 
 		public JFrame install(JFrame frame) {
 			PanelPopulation.WindowBuilder<JFrame, ?> builder = WindowPopulation.populateWindow(frame, getUntil(), false, false);
-			if (theDocument.getTitleValue() != null)
-				builder.withTitle(theDocument.getTitleValue().apply(getModels()));
-			else if (theDocument.getDefaultTitle() != null)
-				builder.withTitle(theDocument.getDefaultTitle());
+			if (theDocument.getTitle() != null)
+				builder.withTitle(theDocument.getTitle().apply(getModels()));
 			if (theDocument.getVisible() != null)
 				builder.withVisible(theDocument.getVisible().apply(getModels()));
 			if (theDocument.getX() != null)
@@ -389,11 +378,9 @@ public class QuickSwingParser {
 			return new QuickHeadSection(cv, model);
 		}).modifyWith("window", QuickDocument.class, (doc, element, session) -> {
 			ObservableModelSet model = doc.getHead().getModels();
-			if (element.getAttribute("title-value") != null)
-				doc.setTitle(element.getAttribute("title-value", ObservableExpression.class)
-					.evaluate(ModelTypes.Value.forType(String.class), model, doc.getHead().getImports()));
 			if (element.getAttribute("title") != null)
-				doc.setTitle(element.getAttributeText("title"));
+				doc.setTitle(element.getAttribute("title", ObservableExpression.class)
+					.evaluate(ModelTypes.Value.forType(String.class), model, doc.getHead().getImports()));
 			ObservableExpression x = element.getAttribute("x", ObservableExpression.class);
 			ObservableExpression y = element.getAttribute("y", ObservableExpression.class);
 			ObservableExpression w = element.getAttribute("width", ObservableExpression.class);
@@ -435,7 +422,7 @@ public class QuickSwingParser {
 			return new QuickBox(element, children, //
 				element.getAttributeText("layout"));
 		});
-		interpreter.modifyWith("border-layout", QuickBox.class, (value, element, session) -> {
+		interpreter.modifyWith("border", QuickBox.class, (value, element, session) -> {
 			value.setLayout(BorderLayout::new);
 			for (QuickComponent child : value.getChildren()) {
 				String layoutConstraint;
@@ -464,7 +451,7 @@ public class QuickSwingParser {
 			}
 			return value;
 		});
-		interpreter.modifyWith("inline-layout", QuickBox.class, (value, element, session) -> {
+		interpreter.modifyWith("inline", QuickBox.class, (value, element, session) -> {
 			JustifiedBoxLayout layout = new JustifiedBoxLayout(element.getAttributeText("orientation").equals("vertical"));
 			switch (element.getAttributeText("main-align")) {
 			case "leading":
@@ -522,11 +509,11 @@ public class QuickSwingParser {
 			ClassView cv = (ClassView) session.get("quick-cv");
 			ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
 			Function<ModelSetInstance, SettableValue<String>> buttonText;
-			ObservableExpression valueX = element.getAttribute("text-value", ObservableExpression.class);
+			ObservableExpression valueX = element.getAttribute("text", ObservableExpression.class);
 			if (valueX == null) {
-				String txt = element.getAttributeText("text");
+				String txt = element.getValueText();
 				if (txt == null)
-					throw new IllegalArgumentException("Either 'text' or 'text-value' must be specified");
+					throw new IllegalArgumentException("Either 'text' attribute or element value must be specified");
 				buttonText = __ -> ObservableModelQonfigParser.literal(txt, txt);
 			} else
 				buttonText = valueX.evaluate(ModelTypes.Value.forType(String.class), model, cv);

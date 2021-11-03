@@ -3,19 +3,8 @@
 <qonfig-def name="observe" root="models">
 	<patterns>
 		<pattern name="int">\d+</pattern> <!-- Positive integer -->
+		<pattern name="float">[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?</pattern>
 		<pattern name="variable">^[a-zA-Z_$][a-zA-Z_$0-9]*</pattern>
-
-		<one-of name="expression-or-string">
-			<explicit prefix="${" suffix="}">
-				<pattern name="expression" />
-			</explicit>
-			<string />
-		</one-of>
-
-		<one-of name="vbl-or-int">
-			<pattern name="int" />
-			<pattern name="variable" />
-		</one-of>
 	</patterns>
 
 	<add-ons>
@@ -64,12 +53,50 @@
 			<attribute name="host" type="expression-or-string" />
 			<attribute name="user" type="expression-or-string" />
 			<attribute name="password" type="expression-or-string" />
-			<attribute name="connecting-value" type="string" />
+			<attribute name="connecting" type="expression" />
 		</add-on>
 		<add-on name="archive-type" requires="archive-method" />
 		<add-on name="zip" inherits="archive-type" requires="archive-method" />
 		<add-on name="tar" inherits="archive-type" requires="archive-method" />
 		<add-on name="gz" inherits="archive-type" requires="archive-method" />
+
+		<add-on name="format-type" requires="format" abstract="true" />
+		<add-on name="text" inherits="format-type" requires="format" />
+		<add-on name="file" inherits="format-type" requires="format">
+			<attribute name="file-source" type="string" specify="optional" />
+			<attribute name="working-dir" type="string" specify="optional" />
+			<attribute name="allow-empty" type="boolean" default="false" />
+		</add-on>
+		<add-on name="double" inherits="format-type" requires="format">
+			<attribute name="sig-digs" type="int" />
+			<attribute name="unit" type="string" specify="optional" />
+			<attribute name="unit-required" type="boolean" default="true" />
+			<attribute name="metric-prefixes" type="boolean" default="false" />
+			<attribute name="metric-prefixes-p2" type="boolean" default="false" />
+			<child-def name="prefix" type="prefix" min="0" max="inf" />
+			<!-- TODO -->
+		</add-on>
+		<add-on name="instant" inherits="format-type" requires="format">
+			<attribute name="time-zone" type="string" specify="optional" />
+			<attribute name="max-resolution" type="string" default="Second" />
+			<attribute name="format-24h" type="boolean" default="false" />
+			<attribute name="relative-eval-type" type="string" default="Closest" />
+		</add-on>
+		<add-on name="regex-format" inherits="format-type" requires="format" />
+		<add-on name="validate-type" abstract="true" />
+		<add-on name="regex-validation" inherits="validate-type">
+			<attribute name="pattern" type="expression-or-string" />
+		</add-on>
+		<add-on name="filter-validation" inherits="validate-type">
+			<attribute name="filter" type="expression" />
+		</add-on>
+		<add-on name="config-value" requires="value">
+			<attribute name="config-path" type="string" specify="optional" />
+			<attribute name="format" type="string" specify="optional" />
+			<attribute name="key-format" type="expression" specify="optional" />
+			<attribute name="default" type="string" specify="optional" />
+			<attribute name="key-default" type="expression" specify="optional" />
+		</add-on>
 	</add-ons>
 
 	<elements>
@@ -87,6 +114,7 @@
 		</element-def>
 		<element-def name="ext-model-value" extends="abst-model-value" abstract="true" />
 		<element-def name="ext-event" extends="ext-model-value" />
+		<!-- TODO Allow offloading, EDT, etc. -->
 		<element-def name="ext-action" extends="ext-model-value" />
 		<element-def name="ext-value" extends="ext-model-value" />
 		<element-def name="ext-list" extends="ext-model-value" />
@@ -238,17 +266,31 @@
 			<child-def name="sub-model" type="model" min="0" max="inf" />
 		</element-def>
 		<element-def name="config" extends="model">
+			<attribute name="config-name" type="string" specify="optional" />
 			<attribute name="config-dir" type="expression" specify="optional" />
-			<child-mod name="abst-model.value">
-				<attribute name="config-path" type="string" specify="optional" />
-				<attribute name="format" type="expression" specify="optional" />
-				<attribute name="key-format" type="expression" specify="optional" />
-				<attribute name="default" type="expression" specify="optional" />
-				<attribute name="key-default" type="expression" specify="optional" />
-			</child-mod>
+			<child-mod child="abst-model.value" inherits="config-value" />
 		</element-def>
 		<element-def name="models">
 			<child-def name="model" type="abst-model" min="0" max="inf" />
+		</element-def>
+
+		<element-def name="validate">
+			<attribute name="type" type="validate-type" />
+		</element-def>
+		<element-def name="format" extends="int-model-value">
+			<attribute name="int-model-value.type" specify="forbidden" default="" />
+			<attribute name="type" type="format-type" />
+			<child-def name="validate" type="validate" min="0" max="inf" />
+		</element-def>
+		<element-def name="prefix">
+			<attribute name="name" type="string" />
+			<attribute name="exp" type="int" specify="optional" />
+			<attribute name="multiplier" type="float" specify="optional" />
+		</element-def>
+		<element-def name="simple-config-format" extends="int-model-value">
+			<!-- Optional because this can be supplied for some types -->
+			<attribute name="format" type="expression" specify="optional" />
+			<attribute name="default" type="string" specify="optional" />
 		</element-def>
 	</elements>
 </qonfig-def>

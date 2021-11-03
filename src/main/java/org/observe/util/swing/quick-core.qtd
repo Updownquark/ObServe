@@ -23,6 +23,7 @@
 			<attribute name="bottom" type="position" specify="optional" />
 		</add-on>
 		<add-on name="h-sizeable">
+			<attribute name="width" type="size" specify="optional" />
 			<attribute name="min-width" type="size" specify="optional" />
 			<attribute name="min-pref-width" type="size" specify="optional" />
 			<attribute name="pref-width" type="size" specify="optional" />
@@ -30,6 +31,7 @@
 			<attribute name="max-width" type="size" specify="optional" />
 		</add-on>
 		<add-on name="v-sizeable">
+			<attribute name="height" type="size" specify="optional" />
 			<attribute name="min-height" type="size" specify="optional" />
 			<attribute name="min-pref-height" type="size" specify="optional" />
 			<attribute name="pref-height" type="size" specify="optional" />
@@ -49,8 +51,7 @@
 			<attribute name="y" type="expression" specify="optional" />
 			<attribute name="height" type="expression" specify="optional" />
 			<attribute name="width" type="expression" specify="optional" />
-			<attribute name="title-value" type="expression" specify="optional" />
-			<attribute name="title" type="string" specify="optional" />
+			<attribute name="title" type="expression-or-string" specify="optional" />
 			<attribute name="visible" type="expression" specify="optional" />
 			<attribute name="close-action" type="window-close-action" default="hide" />
 		</add-on>
