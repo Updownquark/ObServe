@@ -905,7 +905,6 @@ implements TableBuilder<R, P> {
 					beforeRow = true;
 				}
 				ElementId targetRow = theSafeRows.getElement(rowIndex).getElementId();
-				R rowValue = theSafeRows.getElement(targetRow).get();
 				ElementId after = beforeRow ? CollectionElement.getElementId(theSafeRows.getAdjacentElement(targetRow, false)) : targetRow;
 				ElementId before = beforeRow ? targetRow : CollectionElement.getElementId(theSafeRows.getAdjacentElement(targetRow, true));
 				// Support row move before anything else
@@ -931,7 +930,8 @@ implements TableBuilder<R, P> {
 					} catch (IOException | UnsupportedFlavorException e) {
 						e.printStackTrace();
 					}
-				} else if (theRowAccepter != null && theRowAccepter.canAccept(null, support, true)) {
+				}
+				if (theRowAccepter != null && support.getComponent() != theTable && theRowAccepter.canAccept(null, support, true)) {
 					BetterList<R> newRows;
 					try {
 						newRows = theRowAccepter.accept(null, support.getTransferable(), true, true);
@@ -1057,7 +1057,7 @@ implements TableBuilder<R, P> {
 						e.printStackTrace();
 					}
 				}
-				if (theRowAccepter != null && theRowAccepter.canAccept(null, support, true)) {
+				if (theRowAccepter != null && support.getComponent() != theTable && theRowAccepter.canAccept(null, support, true)) {
 					BetterList<R> newRows;
 					try {
 						newRows = theRowAccepter.accept(null, support.getTransferable(), true, false);
@@ -1142,7 +1142,7 @@ implements TableBuilder<R, P> {
 		public Object getTransferData(DataFlavor flavor) throws UnsupportedFlavorException, IOException {
 			if (flavor == ROW_ELEMENT_FLAVOR)
 				return theRowElements;
-			else if (theWrapped == null)
+			else if (theWrapped != null)
 				return theWrapped.getTransferData(flavor);
 			throw new UnsupportedFlavorException(flavor);
 		}
