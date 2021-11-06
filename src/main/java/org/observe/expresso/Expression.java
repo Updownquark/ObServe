@@ -568,11 +568,8 @@ public interface Expression {
 			for (int i = 0; i < indent; i++)
 				str.append('\t');
 			str.append(theType).append(": ");
-			boolean first = true;
-			for (Expression component : theComponents) {
-				component.printStructure(str, first ? 0 : indent + 1).append('\n');
-				first = false;
-			}
+			for (Expression component : theComponents)
+				component.printStructure(str.append('\n'), indent + 1);
 			return str;
 		}
 
@@ -622,6 +619,7 @@ public interface Expression {
 
 		@Override
 		public void exitEveryRule(ParserRuleContext arg0) {
+			theStack.removeLast();
 		}
 
 		@Override

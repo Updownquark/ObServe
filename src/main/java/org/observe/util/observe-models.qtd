@@ -63,10 +63,14 @@
 		<add-on name="format-type" requires="format" abstract="true" />
 		<add-on name="text" inherits="format-type" requires="format" />
 		<add-on name="file" inherits="format-type" requires="format">
-			<attribute name="file-source" type="string" specify="optional" />
+			<attribute name="file-source" type="expression" specify="optional" />
 			<attribute name="working-dir" type="string" specify="optional" />
 			<attribute name="allow-empty" type="boolean" default="false" />
 		</add-on>
+		<add-on name="int-format" inherits="format-type" requires="format">
+			<attribute name="grouping-separator" type="string" specify="optional" />
+		</add-on>
+		<add-on name="long-format" inherits="int-format" requires="format" />
 		<add-on name="double" inherits="format-type" requires="format">
 			<attribute name="sig-digs" type="int" />
 			<attribute name="unit" type="string" specify="optional" />
@@ -77,10 +81,12 @@
 			<!-- TODO -->
 		</add-on>
 		<add-on name="instant" inherits="format-type" requires="format">
+			<attribute name="day-format" type="string" default="EEE MMM dd, yyyy" />
 			<attribute name="time-zone" type="string" specify="optional" />
 			<attribute name="max-resolution" type="string" default="Second" />
 			<attribute name="format-24h" type="boolean" default="false" />
 			<attribute name="relative-eval-type" type="string" default="Closest" />
+			<attribute name="relative-to" type="expression-or-string" specify="optional" />
 		</add-on>
 		<add-on name="regex-format" inherits="format-type" requires="format" />
 		<add-on name="validate-type" abstract="true" />
@@ -92,7 +98,7 @@
 		</add-on>
 		<add-on name="config-value" requires="value">
 			<attribute name="config-path" type="string" specify="optional" />
-			<attribute name="format" type="string" specify="optional" />
+			<attribute name="format" type="expression" specify="optional" />
 			<attribute name="key-format" type="expression" specify="optional" />
 			<attribute name="default" type="string" specify="optional" />
 			<attribute name="key-default" type="expression" specify="optional" />
@@ -214,6 +220,7 @@
 			<attribute name="function" type="expression" specify="required" />
 			<!-- This option requires caching, so the default will be the same as the cached attribute and cannot be specified here -->
 			<attribute name="propagate-update-to-parent" type="boolean" specify="optional" />
+			<child-def name="reverse" type="flatten-reverse" min="0" max="1" />
 		</element-def>
 		<element-def name="cross" extends="flatten">
 			<attribute name="with" type="expression" />
@@ -269,6 +276,10 @@
 			<attribute name="config-name" type="string" specify="optional" />
 			<attribute name="config-dir" type="expression" specify="optional" />
 			<child-mod child="abst-model.value" inherits="config-value" />
+			<child-def name="old-config-name" type="old-config-name" min="0" max="inf" />
+		</element-def>
+		<element-def name="old-config-name">
+			<value type="string" />
 		</element-def>
 		<element-def name="models">
 			<child-def name="model" type="abst-model" min="0" max="inf" />

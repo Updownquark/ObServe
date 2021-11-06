@@ -269,7 +269,7 @@ public interface ObservableConfigFormat<E> {
 	 * @param defaultValue The value to return if the config is missing or value-less
 	 * @return A format that simply sets the value of a config to the text-formatted string
 	 */
-	static <T> Impl.SimpleConfigFormat<T> ofQommonFormat(Format<T> format, Supplier<? extends T> defaultValue) {
+	static <T> ObservableConfigFormat<T> ofQommonFormat(Format<T> format, Supplier<? extends T> defaultValue) {
 		return new Impl.SimpleConfigFormat<>(format, defaultValue);
 	}
 

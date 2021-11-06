@@ -4,6 +4,8 @@ import java.awt.BorderLayout;
 import java.awt.Container;
 import java.awt.LayoutManager;
 import java.text.ParseException;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
@@ -23,6 +25,7 @@ import org.observe.collect.ObservableCollection;
 import org.observe.expresso.DefaultExpressoParser;
 import org.observe.expresso.ExpressoParser;
 import org.observe.expresso.ObservableExpression;
+import org.observe.expresso.ObservableExpression.MethodFinder;
 import org.observe.util.ClassView;
 import org.observe.util.ModelType;
 import org.observe.util.ModelTypes;
@@ -34,11 +37,14 @@ import org.observe.util.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.PanelPopulation.ComponentEditor;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
+import org.qommons.collect.BetterList;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpreter.Builder;
+import org.qommons.config.QonfigInterpreter.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreter.QonfigInterpretingSession;
 import org.qommons.config.QonfigToolkitAccess;
 import org.qommons.io.Format;
+import org.qommons.io.SpinnerFormat;
 
 import com.google.common.reflect.TypeToken;
 
@@ -137,29 +143,36 @@ public class QuickSwingParser {
 		}
 	}
 
-	public interface QuickLayout {
-		LayoutManager create();
-	}
+	public static abstract class AbstractQuickContainer extends AbstractQuickComponent implements QuickContainer {
+		private final List<QuickComponent> theChildren;
 
-	public static class QuickBox extends AbstractQuickComponent implements QuickContainer {
-		private List<QuickComponent> theChildren;
-		private final String theLayoutName;
-		private QuickLayout theLayout;
-
-		public QuickBox(QonfigElement element, List<QuickComponent> children, String layoutName) {
+		public AbstractQuickContainer(QonfigElement element, List<QuickComponent> children) {
 			super(element);
-			theLayoutName = layoutName;
 			theChildren = children;
-		}
-
-		public QuickBox setLayout(QuickLayout layout) {
-			theLayout = layout;
-			return this;
 		}
 
 		@Override
 		public List<QuickComponent> getChildren() {
 			return theChildren;
+		}
+	}
+
+	public interface QuickLayout {
+		LayoutManager create();
+	}
+
+	public static class QuickBox extends AbstractQuickContainer {
+		private final String theLayoutName;
+		private QuickLayout theLayout;
+
+		public QuickBox(QonfigElement element, List<QuickComponent> children, String layoutName) {
+			super(element, children);
+			theLayoutName = layoutName;
+		}
+
+		public QuickBox setLayout(QuickLayout layout) {
+			theLayout = layout;
+			return this;
 		}
 
 		@Override
@@ -348,12 +361,10 @@ public class QuickSwingParser {
 
 	private final ObservableModelQonfigParser theModelParser;
 	private final ExpressoParser theExpressionParser;
-	private final ClassView theClassView;
 
 	public QuickSwingParser() {
 		theModelParser = new ObservableModelQonfigParser();
 		theExpressionParser = new DefaultExpressoParser();
-		theClassView = ClassView.build().build();
 	}
 
 	public Builder configureInterpreter(Builder interpreter) {
@@ -496,8 +507,32 @@ public class QuickSwingParser {
 			ObservableExpression formatX = element.getAttribute("format", ObservableExpression.class);
 			Function<ModelSetInstance, SettableValue<Format<Object>>> format;
 			value = valueX.evaluate(ModelTypes.Value.any(), model, cv);
-			format = formatX.evaluate(
-				ModelTypes.Value.forType(TypeTokens.get().keyFor(Format.class).parameterized(value.getType().getType(0))), model, cv);
+			if (formatX != null) {
+				format = formatX.evaluate(
+					ModelTypes.Value.forType(TypeTokens.get().keyFor(Format.class).parameterized(value.getType().getType(0))), model, cv);
+			} else {
+				Class<?> type = TypeTokens.get().unwrap(TypeTokens.getRawType(value.getType().getType(0)));
+				Format<?> f;
+				if (type == String.class)
+					f = SpinnerFormat.NUMERICAL_TEXT;
+				else if (type == int.class)
+					f = SpinnerFormat.INT;
+				else if (type == long.class)
+					f = SpinnerFormat.LONG;
+				else if (type == double.class)
+					f = Format.doubleFormat(4).build();
+				else if (type == float.class)
+					f = Format.doubleFormat(4).buildFloat();
+				else if (type == Instant.class)
+					f = SpinnerFormat.flexDate(Instant::now, "EEE MMM dd, yyyy", null);
+				else if (type == Duration.class)
+					f = SpinnerFormat.flexDuration(false);
+				else
+					throw new QonfigInterpretationException(
+						"No default format available for type " + value.getType().getType(0) + " -- format must be specified");
+				format = ObservableModelQonfigParser.literalContainer(
+					ModelTypes.Value.forType((Class<Format<Object>>) (Class<?>) Format.class), (Format<Object>) f, type.getSimpleName());
+			}
 			return new AbstractQuickComponent(element) {
 				@Override
 				public void install(PanelPopulator<?, ?> container, ModelSetInstance modelSet) {
@@ -534,26 +569,163 @@ public class QuickSwingParser {
 		});
 		interpreter.createWith("table", QuickComponent.class, (element, session) -> interpretTable(element, session));
 		interpreter.createWith("column", Function.class, (element, session) -> {
+			System.err.println("WARNING: split is not fully implemented!!"); // TODO
 			ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
+			ClassView cv = (ClassView) session.get("imports");
 			TypeToken<Object> modelType = (TypeToken<Object>) session.get("model-type");
 			String name = element.getAttributeText("name");
-			String valueS = element.getAttributeText("value");
+			ObservableExpression valueX = element.getAttribute("value", ObservableExpression.class);
 			TypeToken<Object> columnType;
-			Function<Object, Object> valueFn;
-			if (valueS != null) {
-				throw new UnsupportedOperationException("column value function not yet implemented");
+			Function<ModelSetInstance, Function<Object, Object>> valueFn;
+			if (valueX != null) {
+				MethodFinder<Object, Object, Object, Object> finder = valueX.findMethod(TypeTokens.get().OBJECT, model, cv)//
+					.withOption(BetterList.of(modelType), new ObservableExpression.ArgMaker<Object, Object, Object>() {
+						@Override
+						public void makeArgs(Object t, Object u, Object v, Object[] args, ModelSetInstance models) {
+							args[0] = t;
+						}
+					});
+				columnType = (TypeToken<Object>) finder.getResultType();
+				valueFn = finder.find1();
 			} else {
-				valueFn = v -> v;
+				valueFn = msi -> v -> v;
 				columnType = modelType;
 			}
 			return extModels -> {
-				CategoryRenderStrategy<Object, Object> column = new CategoryRenderStrategy<>(name, columnType, valueFn);
+				CategoryRenderStrategy<Object, Object> column = new CategoryRenderStrategy<>(name, columnType,
+					valueFn.apply((ModelSetInstance) extModels));
 				return column;
+			};
+		});
+		interpreter.createWith("split", QuickComponent.class, (element, session) -> {
+			if (element.getChildrenInRole("content").size() != 2)
+				throw new UnsupportedOperationException("Currently only 2 (and exactly 2) contents are supported for split");
+			List<QuickComponent> children = new ArrayList<>(2);
+			for (QonfigElement child : element.getChildrenInRole("content"))
+				children.add(session.getInterpreter().interpret(child, QuickComponent.class));
+			boolean vertical = element.getAttributeText("orientation").equals("vertical");
+			System.err.println("WARNING: split is not fully implemented!!"); // TODO
+			return new AbstractQuickComponent(element) {
+				@Override
+				public void install(PanelPopulator<?, ?> container, ModelSetInstance modelSet) {
+					container.addSplit(vertical, split -> {
+						split.firstV(first -> children.get(0).install(container, modelSet));
+						split.lastV(first -> children.get(1).install(container, modelSet));
+					});
+				}
+			};
+		});
+		interpreter.createWith("field-panel", QuickComponent.class, (element, session)->{
+			List<QuickComponent> children = new ArrayList<>();
+			for (QonfigElement child : element.getChildrenInRole("content"))
+				children.add(session.getInterpreter().interpret(child, QuickComponent.class));
+			System.err.println("WARNING: field-panel is not fully implemented!!"); // TODO
+			return new AbstractQuickComponent(element) {
+				@Override
+				public void install(PanelPopulator<?, ?> container, ModelSetInstance modelSet) {
+					container.addVPanel(panel->{
+						for (QuickComponent child : children) {
+							child.install(panel, modelSet);
+						}
+					});
+				}
+			};
+		});
+		interpreter.createWith("spacer", QuickComponent.class, (element, session) -> {
+			int length = Integer.parseInt(element.getAttributeText("length"));
+			return new AbstractQuickComponent(element) {
+				@Override
+				public void install(PanelPopulator<?, ?> container, ModelSetInstance modelSet) {
+					container.spacer(length);
+				}
+			};
+		});
+		interpreter.createWith("tree", QuickComponent.class, (element, session) -> {
+			return interpretTree(element, session);
+		});
+		interpreter.createWith("text-area", QuickComponent.class, (element, session) -> {
+			ClassView cv = (ClassView) session.get("quick-cv");
+			ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
+			ValueContainer<SettableValue, ?> value;
+			ObservableExpression valueX = element.getAttribute("value", ObservableExpression.class);
+			ObservableExpression formatX = element.getAttribute("format", ObservableExpression.class);
+			Function<ModelSetInstance, SettableValue<Format<Object>>> format;
+			value = valueX.evaluate(ModelTypes.Value.any(), model, cv);
+			if (formatX != null) {
+				format = formatX.evaluate(
+					ModelTypes.Value.forType(TypeTokens.get().keyFor(Format.class).parameterized(value.getType().getType(0))), model, cv);
+			} else {
+				Class<?> type = TypeTokens.get().unwrap(TypeTokens.getRawType(value.getType().getType(0)));
+				Format<?> f;
+				if (type == String.class)
+					f = SpinnerFormat.NUMERICAL_TEXT;
+				else if (type == int.class)
+					f = SpinnerFormat.INT;
+				else if (type == long.class)
+					f = SpinnerFormat.LONG;
+				else if (type == double.class)
+					f = Format.doubleFormat(4).build();
+				else if (type == float.class)
+					f = Format.doubleFormat(4).buildFloat();
+				else if (type == Instant.class)
+					f = SpinnerFormat.flexDate(Instant::now, "EEE MMM dd, yyyy", null);
+				else if (type == Duration.class)
+					f = SpinnerFormat.flexDuration(false);
+				else
+					throw new QonfigInterpretationException(
+						"No default format available for type " + value.getType().getType(0) + " -- format must be specified");
+				format = ObservableModelQonfigParser.literalContainer(
+					ModelTypes.Value.forType((Class<Format<Object>>) (Class<?>) Format.class), (Format<Object>) f, type.getSimpleName());
+			}
+			ValueContainer<SettableValue, SettableValue<Integer>> rows;
+			if (element.getAttribute("rows") != null)
+				rows = element.getAttribute("rows", ObservableExpression.class).evaluate(ModelTypes.Value.forType(Integer.class), model,
+					cv);
+			else
+				rows = null;
+			ValueContainer<SettableValue, SettableValue<Boolean>> html;
+			if (element.getAttribute("html") != null)
+				html = element.getAttribute("html", ObservableExpression.class).evaluate(ModelTypes.Value.forType(Boolean.class), model,
+					cv);
+			else
+				html = null;
+			ValueContainer<SettableValue, SettableValue<Boolean>> editable;
+			if (element.getAttribute("editable") != null)
+				editable = element.getAttribute("editable", ObservableExpression.class).evaluate(ModelTypes.Value.forType(Boolean.class),
+					model, cv);
+			else
+				editable = null;
+			return new AbstractQuickComponent(element) {
+				@Override
+				public void install(PanelPopulator<?, ?> container, ModelSetInstance modelSet) {
+					container.addTextArea(getFieldName(), //
+						(SettableValue<Object>) value.apply(modelSet), format.apply(modelSet).get(), field -> {
+							if (rows != null) {
+								SettableValue<Integer> rowsV = rows.apply(modelSet);
+								rowsV.changes().act(evt -> {
+									field.getEditor().withRows(evt.getNewValue());
+								});
+							}
+							if (html != null) {
+								SettableValue<Boolean> htmlV = html.apply(modelSet);
+								htmlV.changes().act(evt -> {
+									field.getEditor().asHtml(evt.getNewValue());
+								});
+							}
+							if (editable != null) {
+								SettableValue<Boolean> editableV = editable.apply(modelSet);
+								editableV.changes().act(evt -> {
+									field.getEditor().setEditable(evt.getNewValue());
+								});
+							}
+							modify(field);
+						});
+				}
 			};
 		});
 	}
 
-	private QuickComponent evaluateLabel(QonfigElement element, QonfigInterpretingSession session) throws ParseException {
+	private QuickComponent evaluateLabel(QonfigElement element, QonfigInterpretingSession session) throws QonfigInterpretationException {
 		ClassView cv = (ClassView) session.get("quick-cv");
 		ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
 		Function<ModelSetInstance, ? extends SettableValue> value;
@@ -592,9 +764,9 @@ public class QuickSwingParser {
 		};
 	}
 
-	private QuickComponent interpretTable(QonfigElement element, QonfigInterpretingSession session) throws ParseException {
-		ClassView cv = (ClassView) session.get("quick-cv");
+	private QuickComponent interpretTable(QonfigElement element, QonfigInterpretingSession session) throws QonfigInterpretationException {
 		ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
+		ClassView cv = (ClassView) session.get("imports");
 		ValueContainer<ObservableCollection, ?> rows = element.getAttribute("rows", ObservableExpression.class)
 			.evaluate(ModelTypes.Collection.any(), model, cv);
 		Function<ModelSetInstance, SettableValue<Object>> selectionV;
@@ -631,6 +803,84 @@ public class QuickSwingParser {
 						table.withSelection(selectionC.apply(modelSet));
 					for (Function<ModelSetInstance, CategoryRenderStrategy<Object, ?>> column : columns)
 						table.withColumn(column.apply(modelSet));
+				});
+			}
+		};
+	}
+
+	private <T> QuickComponent interpretTree(QonfigElement element, QonfigInterpretingSession session)
+		throws QonfigInterpretationException {
+		System.err.println("WARNING: tree is not fully implemented!!"); // TODO
+		ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
+		ClassView cv = (ClassView) session.get("imports");
+		ValueContainer<SettableValue, ? extends SettableValue<T>> root = (ValueContainer<SettableValue, ? extends SettableValue<T>>) element
+			.getAttribute("root", ObservableExpression.class).evaluate(ModelTypes.Value.any(), model, cv);
+		TypeToken<T> valueType = (TypeToken<T>) root.getType().getType(0);
+		Function<ModelSetInstance, Function<T, ObservableCollection<? extends T>>> children;
+		children = element.getAttribute("children", ObservableExpression.class)
+			.<T, Object, Object, ObservableCollection<? extends T>> findMethod(TypeTokens.get().keyFor(ObservableCollection.class)
+				.<ObservableCollection<? extends T>> parameterized(TypeTokens.get().getExtendsWildcard(valueType)), model, cv)//
+			.withOption1(valueType, null)//
+			.find1();
+		Function<ModelSetInstance, Function<T, T>> parent;
+		if (element.getAttribute("parent") != null) {
+			parent = element.getAttribute("parent", ObservableExpression.class).<T, Object, Object, T> findMethod(valueType, model, cv)//
+				.withOption1(valueType, null)//
+				.find1();
+		} else
+			parent = null;
+		ValueContainer<ObservableCollection, ObservableCollection<T>> multiSelectionV;
+		ValueContainer<ObservableCollection, ObservableCollection<BetterList<T>>> multiSelectionPath;
+		ValueContainer<SettableValue, SettableValue<T>> singleSelectionV;
+		ValueContainer<SettableValue, SettableValue<BetterList<T>>> singleSelectionPath;
+		if (element.getAttribute("selection") == null) {
+			multiSelectionV = null;
+			multiSelectionPath = null;
+			singleSelectionV = null;
+			singleSelectionPath = null;
+		} else {
+			ValueContainer<?, ?> selection = element.getAttribute("selection", ObservableExpression.class).evaluate(//
+				null, model, cv);
+			ValueContainer<Object, Object> hackS = (ValueContainer<Object, Object>) selection;
+			if (selection.getType().getModelType() == ModelTypes.Value) {
+				multiSelectionV = null;
+				multiSelectionPath = null;
+				if (TypeTokens.get().isAssignable(valueType, selection.getType().getType(0))) {
+					if (parent == null)
+						throw new QonfigInterpretationException("parent function most be provided for value selection."
+							+ " Specify parent as a function which takes a value and returns its parent");
+					singleSelectionPath = null;
+					singleSelectionV = hackS.getType().as(hackS, ModelTypes.Value.forType(valueType));
+				} else if (TypeTokens.get().isAssignable(TypeTokens.get().keyFor(BetterList.class).parameterized(valueType),
+					selection.getType().getType(0))) {
+					singleSelectionV = null;
+					singleSelectionPath = hackS.getType().as(hackS, ModelTypes.Value.forType(//
+						TypeTokens.get().keyFor(BetterList.class).parameterized(valueType)));
+				} else
+					throw new QonfigInterpretationException("Value " + element.getAttribute("selection") + ", type " + selection.getType()
+					+ " cannot be used for tree selection");
+			} else if (selection.getType().getModelType() == ModelTypes.Collection
+				|| selection.getType().getModelType() == ModelTypes.SortedCollection || selection.getType().getModelType() == ModelTypes.Set
+				|| selection.getType().getModelType() == ModelTypes.SortedSet) {
+				singleSelectionV = null;
+				singleSelectionPath = null;
+				throw new UnsupportedOperationException("Not yet implemented");
+			} else
+				throw new QonfigInterpretationException(
+					"Value " + element.getAttribute("selection") + ", type " + selection.getType() + " cannot be used for tree selection");
+		}
+		return new AbstractQuickComponent(element) {
+			@Override
+			public void install(PanelPopulator<?, ?> container, ModelSetInstance modelSet) {
+				container.addTree(root.apply(modelSet), children.apply(modelSet), tree -> {
+					if (singleSelectionV != null)
+						tree.withSelection(singleSelectionV.apply(modelSet), parent.apply(modelSet), false);
+					else if (singleSelectionPath != null)
+						tree.withSelection(singleSelectionPath.apply(modelSet), false);
+					else if (multiSelectionV != null)
+						tree.withSelection(multiSelectionV.apply(modelSet), parent.apply(modelSet));
+					else if (multiSelectionPath != null)
+						tree.withSelection(multiSelectionPath.apply(modelSet));
 				});
 			}
 		};

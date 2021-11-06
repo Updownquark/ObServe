@@ -84,7 +84,9 @@
 	</add-ons>
 
 	<elements>
-		<element-def name="spacer" extends="widget" inherits="v-sizeable,h-sizeable" />
+		<element-def name="spacer" extends="widget">
+			<attribute name="length" type="int" />
+		</element-def>
 		<element-def name="button" extends="widget">
 			<value type="string" specify="optional" />
 			<attribute name="text" type="expression" specify="optional" />
@@ -114,7 +116,7 @@
 		<element-def name="text-field" extends="text-widget" />
 		<element-def name="text-area" extends="text-widget">
 			<attribute name="rows" type="expression" />
-			<attribute name="html" type="boolean" />
+			<attribute name="html" type="expression" />
 		</element-def>
 		<element-def name="spinner" extends="text-field">
 			<attribute name="increment" type="expression" specify="optional" />
@@ -166,6 +168,7 @@
 		<element-def name="tree" extends="multi-value-widget" inherits="single-rendering">
 			<attribute name="root" type="expression" specify="required" />
 			<attribute name="children" type="expression" specify="required" />
+			<attribute name="parent" type="expression" specify="optional" />
 			<child-def name="action" type="value-action" min="0" max="inf" />
 		</element-def>
 		<element-def name="tree-table" extends="tree" inherits="tabular-widget" />

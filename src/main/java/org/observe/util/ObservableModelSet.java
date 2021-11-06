@@ -6,7 +6,6 @@ import java.util.Map;
 import java.util.function.Function;
 
 import org.observe.Observable;
-import org.observe.util.ModelType.ModelInstanceConverter;
 import org.observe.util.ModelType.ModelInstanceType;
 
 public interface ObservableModelSet {
@@ -72,15 +71,10 @@ public interface ObservableModelSet {
 
 	default <M, MV extends M> ValueContainer<M, MV> get(String path, ModelInstanceType<M, MV> type)
 		throws IllegalArgumentException {
-		ValueContainer<?, ?> thing = get(path, true);
+		ValueContainer<Object, Object> thing = (ValueContainer<Object, Object>) get(path, true);
 		if (type == null)
 			return (ValueContainer<M, MV>) thing;
-		ModelType.ModelInstanceConverter<Object, M> converter = (ModelType.ModelInstanceConverter<Object, M>) thing.getType().convert(type);
-		if (converter == null)
-			throw new IllegalArgumentException("Cannot convert " + path + " (" + thing.getType() + ") to " + type);
-
-		return new ConvertedValue<M, Object, MV>((ValueContainer<?, Object>) thing, (ModelInstanceType<M, MV>) converter.getType(),
-			(ModelInstanceConverter<Object, MV>) converter);
+		return thing.getType().as(thing, type);
 	}
 
 	ModelSetInstance createInstance(ExternalModelSet extModel, Observable<?> until);
@@ -264,16 +258,21 @@ public interface ObservableModelSet {
 		public ValueContainer<?, ?> get(String path, boolean required) throws IllegalArgumentException {
 			int dot = path.lastIndexOf('.');
 			if (dot >= 0) {
-				Default subModel = theRoot.getSubModel(path.substring(0, dot));
-				return subModel.get(path.substring(dot + 1), required);
+				Default subModel = theRoot.getSubModel(path.substring(0, dot), required);
+				return subModel == null ? null : subModel.get(path.substring(dot + 1), required);
 			}
 			ValueContainer<?, ?> thing = theThings.get(path);
+			if (thing == null && theRoot != this) {
+				Placeholder<?, ?> p = theRoot.theThings.get(path);
+				if (p != null && p.model != null)
+					return p;
+			}
 			if (thing == null && required)
 				throw new IllegalArgumentException("No such value " + path);
 			return thing;
 		}
 
-		private Default getSubModel(String path) {
+		private Default getSubModel(String path, boolean required) {
 			int dot = path.indexOf('.');
 			String modelName;
 			if (dot >= 0) {
@@ -281,14 +280,17 @@ public interface ObservableModelSet {
 			} else
 				modelName = path;
 			Placeholder<?, ?> subModel = theThings.get(modelName);
-			if (subModel == null)
-				throw new IllegalArgumentException("No such sub-model declared: '" + pathTo(modelName) + "'");
-			else if (subModel.type.getModelType() != ModelTypes.Model)
+			if (subModel == null) {
+				if (required)
+					throw new IllegalArgumentException("No such sub-model declared: '" + pathTo(modelName) + "'");
+				else
+					return null;
+			} else if (subModel.type.getModelType() != ModelTypes.Model)
 				throw new IllegalArgumentException("'" + pathTo(modelName) + "' is a " + subModel.type + ", not a Model");
 			if (dot < 0)
 				return subModel.model;
 			else
-				return subModel.model.getSubModel(path.substring(dot + 1));
+				return subModel.model.getSubModel(path.substring(dot + 1), required);
 		}
 
 		public String pathTo(String name) {
@@ -424,30 +426,6 @@ public interface ObservableModelSet {
 					things.put(thing.getKey(), thing.getValue());
 			}
 			return model;
-		}
-	}
-
-	class ConvertedValue<M, MVS, MVT extends M> implements ValueContainer<M, MVT> {
-		private final ValueContainer<?, MVS> theSource;
-		private final ModelInstanceType<M, MVT> theType;
-		private final ModelType.ModelInstanceConverter<MVS, MVT> theConverter;
-
-		ConvertedValue(ValueContainer<?, MVS> source, ModelInstanceType<M, MVT> type, ModelInstanceConverter<MVS, MVT> converter) {
-			theSource = source;
-			theType = type;
-			theConverter = converter;
-		}
-
-		@Override
-		public ModelInstanceType<M, MVT> getType() {
-			return theType;
-		}
-
-		@Override
-		public MVT get(ModelSetInstance extModels) {
-			MVS modelV = theSource.get(extModels);
-			MVT converted = theConverter.convert(modelV);
-			return converted;
 		}
 	}
 }

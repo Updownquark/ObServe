@@ -1,9 +1,14 @@
 package org.observe.expresso;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
@@ -17,14 +22,18 @@ import org.observe.expresso.Expression.ExpressoParseException;
 import org.observe.util.ClassView;
 import org.observe.util.ModelType.ModelInstanceType;
 import org.observe.util.ModelTypes;
+import org.observe.util.ObservableModelQonfigParser;
 import org.observe.util.ObservableModelSet;
 import org.observe.util.ObservableModelSet.ModelSetInstance;
 import org.observe.util.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
 import org.qommons.Identifiable;
+import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
 import org.qommons.Transaction;
+import org.qommons.TriFunction;
 import org.qommons.collect.BetterList;
+import org.qommons.config.QonfigInterpreter.QonfigInterpretationException;
 import org.qommons.tree.BetterTreeList;
 
 import com.google.common.reflect.TypeToken;
@@ -50,7 +59,8 @@ public class DefaultExpressoParser implements ExpressoParser {
 		try {
 			result = parse(expression);
 		} catch (RuntimeException e) {
-			throw new ExpressoParseException(expression, "Expression parsing failed");
+			e.printStackTrace();
+			throw new ExpressoParseException(expression, "Expression parsing failed: " + e);
 		}
 		return result;
 	}
@@ -134,9 +144,7 @@ public class DefaultExpressoParser implements ExpressoParser {
 		case "classDeclaration":
 			// Fields, methods, and constructors
 		case "localVariableDeclaration":
-			throw new ExpressoParseException(expression, "Expression type not supported");
-		case "this":
-			return ThisExpression.INSTANCE;
+			throw new ExpressoParseException(expression, "Expression type '" + expression.getType() + "' not supported");
 			// Literals
 		case "IntegerLiteral":
 			String text = expression.getText();
@@ -182,18 +190,6 @@ public class DefaultExpressoParser implements ExpressoParser {
 			return literalExpression(expression, compileString(expression.search().get("StringCharacters").find().getComponents()));
 		case "NullLiteral":
 			return literalExpression(expression, null);
-		case "fieldAccess":
-		case "fieldAccess_lfno_primary":
-			//			target = expression.getComponents().getFirst();
-			//			TypedStatement<E, ?> context;
-			//			if (target.getComponents().isEmpty() && "super".equals(target.toString()))
-			//				context = getSuper(expression, null);
-			//			else if ("super".equals(expression.getComponents().get(1).toString()))
-			//				context = getSuper(expression, //
-			//					evaluateType(expression.getComponents().getFirst(), env, OBJECT));
-			//			else
-			//				context = evaluate(expression.getComponents().getFirst(), env, OBJECT);
-			//			return fieldAccess(expression, context, expression.getComponents().getLast().toString(), env);
 		case "arrayAccess":
 		case "arrayAccess_lfno_primary":
 			//			context = evaluate(expression.getComponents().getFirst(), env, OBJECT);
@@ -205,36 +201,43 @@ public class DefaultExpressoParser implements ExpressoParser {
 			//					evaluate(dimExp, env, context, indexes);
 			//		}
 			//			return arrayAccess(expression, targetType, context, indexes);
+			throw new ExpressoParseException(expression, "Expression type '" + expression.getType() + "' not implemented yet");
 		case "methodInvocation":
 		case "methodInvocation_lfno_primary":
-			//					target = expression.getComponents().getFirst();
-			//					String methodName;
-			//					if ("methodName".equals(target.getType())) {
-			//						context = null;
-			//						methodName = target.toString();
-			//					} else {
-			//						methodName = expression.getComponent("Identifier").toString();
-			//						if (target.getComponents().isEmpty() && "super".equals(target.toString()))
-			//							context = getSuper(expression, null);
-			//						else if ("super".equals(expression.getComponents().get(1).toString()))
-			//							context = getSuper(expression, //
-			//								evaluateType(target, env, OBJECT));
-			//						else // TODO Failed to account for static method invocation (with type context) here
-			//							context = evaluate(target, env, OBJECT);
-			//					}
-			//					List<TypeToken<?>> typeArgs;
-			//					if (expression.getComponent("typeArguments") != null) {
-			//						List<Expression> typeArgExprs = expression.getComponents("typeArguments", "typeArgumentList", "typeArgument");
-			//						typeArgs = new ArrayList<>(typeArgExprs.size());
-			//						for (Expression tae : typeArgExprs) {
-			//							for (Expression taeChild : tae.getComponents())
-			//								typeArgs.add(//
-			//									evaluateType(taeChild, env, OBJECT));
-			//						}
-			//					} else
-			//						typeArgs = null;
-			//					return methodInvocation(expression, context, typeArgs, methodName,
-			//						expression.getComponents("argumentList", "expression"), env);
+			ObservableExpression context;
+			Expression target = expression.getComponents().getFirst();
+			String methodName;
+			if ("methodName".equals(target.getType())) {
+				context = null;
+				methodName = target.toString();
+			} else {
+				methodName = expression.getComponent("Identifier").toString();
+				if (target.getComponents().isEmpty() && "super".equals(target.toString()))
+					throw new ExpressoParseException(target, "'super' is not allowed");
+				else if ("super".equals(expression.getComponents().get(1).toString()))
+					throw new ExpressoParseException(expression.getComponents().get(1), "'super' is not allowed");
+				else // TODO Failed to account for static method invocation (with type context) here
+					context = parse(target);
+			}
+			List<String> typeArgs;
+			if (expression.getComponent("typeArguments") != null) {
+				List<Expression> typeArgExprs = expression.getComponents("typeArguments", "typeArgumentList", "typeArgument");
+				typeArgs = new ArrayList<>(typeArgExprs.size());
+				for (Expression tae : typeArgExprs) {
+					for (Expression taeChild : tae.getComponents())
+						typeArgs.add(taeChild.getText());
+				}
+			} else
+				typeArgs = null;
+			List<ObservableExpression> args;
+			if (expression.getComponent("argumentList") != null) {
+				List<Expression> argExprs = expression.getComponents("argumentList", "expression");
+				args = new ArrayList<>(argExprs.size());
+				for (Expression arg : argExprs)
+					args.add(_parse(arg));
+			} else
+				args = null;
+			return new MethodExpression(context, methodName, typeArgs, args);
 		case "classInstanceCreationExpression":
 		case "classInstanceCreationExpression_lfno_primary":
 			//					target = expression.getComponents().getFirst();
@@ -278,52 +281,28 @@ public class DefaultExpressoParser implements ExpressoParser {
 			//						expression.getComponents("argumentList", "expression"), env);
 		case "lambdaExpression":
 			//					throw new CompilationException(expression, "Lambda expressions are not supported");
+			throw new ExpressoParseException(expression, "Expression type '" + expression.getType() + "' not implemented yet");
 		case "methodReference":
 		case "methodReference_lfno_primary":
-			//					target = expression.getComponents().getFirst();
-			//					TypeToken<?> ctxType;
-			//					if (target.getComponents().isEmpty() && "super".equals(target.toString())) {
-			//						context = getSuper(expression, null);
-			//						ctxType = null;
-			//					} else {
-			//						switch (target.getType()) {
-			//						case "expressionName":
-			//						case "referenceType":
-			//						case "classType":
-			//							Object ctx = evaluateExpressionOrType(expression, env, OBJECT);
-			//							if (ctx instanceof TypeToken) {
-			//								context = null;
-			//								ctxType = (TypeToken<?>) ctx;
-			//							} else {
-			//								context = (TypedStatement<E, ?>) ctx;
-			//								ctxType = null;
-			//							}
-			//							break;
-			//						case "typeName":
-			//							context = getSuper(expression, evaluateType(target, env, OBJECT));
-			//							ctxType = null;
-			//							break;
-			//						case "arrayType":
-			//							context = null;
-			//							ctxType = evaluateType(target, env, OBJECT);
-			//							break;
-			//						default:
-			//							throw new CompilationException(expression, "Unrecognized method reference context: " + target.getType());
-			//						}
-			//					}
-			//					if (expression.getComponent("typeArguments") != null) {
-			//						List<Expression> typeArgExprs = expression.getComponents("typeArguments", "typeArgumentList", "typeArgument");
-			//						typeArgs = new ArrayList<>(typeArgExprs.size());
-			//						for (Expression tae : typeArgExprs) {
-			//							for (Expression taeChild : tae.getComponents())
-			//								typeArgs.add(//
-			//									evaluateType(taeChild, env, OBJECT));
-			//						}
-			//					} else
-			//						typeArgs = null;
-			//					return methodReference(expression, (TypedStatement<E, Object>) context, (TypeToken<Object>) ctxType, typeArgs,
-			//						expression.getComponents().getLast().toString());
-			throw new ExpressoParseException(expression, "Expression type '" + expression.getType() + "' not implemented yet");
+			target = expression.getComponents().getFirst();
+			TypeToken<?> ctxType;
+			if (target.getComponents().isEmpty() && "super".equals(target.toString()))
+				throw new ExpressoParseException(target, "'super' is not allowed");
+			context = parse(target);
+			if (expression.getComponent("typeArguments") != null) {
+				List<Expression> typeArgExprs = expression.getComponents("typeArguments", "typeArgumentList", "typeArgument");
+				typeArgs = new ArrayList<>(typeArgExprs.size());
+				for (Expression tae : typeArgExprs) {
+					for (Expression taeChild : tae.getComponents())
+						typeArgs.add(taeChild.getText());
+				}
+			} else
+				typeArgs = null;
+			return new MethodReferenceExpression(context, expression.getComponents().getLast().toString(), typeArgs);
+		case "this":
+		case "fieldAccess":
+		case "fieldAccess_lfno_primary":
+		case "typeName":
 		case "ambiguousName":
 		case "expressionName":
 			// Other names?
@@ -613,10 +592,35 @@ public class DefaultExpressoParser implements ExpressoParser {
 
 		@Override
 		public <M, MV extends M> ObservableModelSet.ValueContainer<M, MV> evaluate(ModelInstanceType<M, MV> type, ObservableModelSet models,
-			ClassView classView) throws IllegalArgumentException {
+			ClassView classView) throws QonfigInterpretationException {
 			ValueContainer<?, ?> mv = models.get(theNames.getFirst(), false);
 			if (mv != null)
-				return evaluateModel(mv, 1, new StringBuilder(theNames.get(0)), type, models);
+				return evaluateModel(//
+					mv, 1, new StringBuilder(theNames.get(0)), type, models);
+			// Allow unqualified enum value references
+			if (theNames.size() == 1 && type.getModelType() == ModelTypes.Value) {
+				Class<?> paramType = TypeTokens.getRawType(type.getType(0));
+				if (paramType != null && paramType.isEnum()) {
+					for (Enum<?> value : ((Class<? extends Enum<?>>) paramType).getEnumConstants()) {
+						if (value.name().equals(theNames.getFirst())) {
+							return new ValueContainer<M, MV>() {
+								final ModelInstanceType<M, MV> retType = (ModelInstanceType<M, MV>) ModelTypes.Value.forType(paramType);
+								final MV retValue = (MV) ObservableModelQonfigParser.literal(value, value.name());
+
+								@Override
+								public ModelInstanceType<M, MV> getType() {
+									return retType;
+								}
+
+								@Override
+								public MV get(ModelSetInstance extModels) {
+									return retValue;
+								}
+							};
+						}
+					}
+				}
+			}
 			Field field = classView.getImportedStaticField(theNames.getFirst());
 			if (field != null)
 				return evaluateField(field, TypeTokens.get().of(field.getGenericType()), null, 1, type);
@@ -628,52 +632,51 @@ public class DefaultExpressoParser implements ExpressoParser {
 				clazz = classView.getType(typeName.toString());
 			}
 			if (clazz == null)
-				throw new IllegalArgumentException("'" + theNames.get(0) + "' cannot be resolved to a variable ");
+				throw new QonfigInterpretationException("'" + theNames.get(0) + "' cannot be resolved to a variable ");
 			try {
 				field = clazz.getField(theNames.get(i));
 			} catch (NoSuchFieldException e) {
-				throw new IllegalArgumentException("'" + theNames.get(i) + "' cannot be resolved or is not a field");
+				throw new QonfigInterpretationException("'" + theNames.get(i) + "' cannot be resolved or is not a field");
 			} catch (SecurityException e) {
-				throw new IllegalArgumentException(clazz.getName() + "." + theNames.get(i) + " cannot be accessed", e);
+				throw new QonfigInterpretationException(clazz.getName() + "." + theNames.get(i) + " cannot be accessed", e);
 			}
 			return evaluateField(field, TypeTokens.get().of(field.getGenericType()), null, 1, type);
 		}
 
 		private <M, MV extends M> ObservableModelSet.ValueContainer<M, MV> evaluateModel(ValueContainer<?, ?> mv, int nameIndex,
-			StringBuilder path, ModelInstanceType<M, MV> type, ObservableModelSet models) {
+			StringBuilder path, ModelInstanceType<M, MV> type, ObservableModelSet models) throws QonfigInterpretationException {
 			if (nameIndex == theNames.size())
-				throw new IllegalArgumentException("'" + path + "' is a model, not a " + type);
-			if (nameIndex == theNames.size() - 1)
 				return models.get(toString(), type);
 			if (mv.getType().getModelType() == ModelTypes.Model) {
 				path.append('.').append(theNames.get(nameIndex));
 				ValueContainer<?, ?> nextMV = models.get(path.toString(), false);
 				if (nextMV != null)
 					return evaluateModel(nextMV, nameIndex + 1, path, type, models);
-				throw new IllegalArgumentException("'" + theNames.get(nameIndex) + "' cannot be resolved or is not a model value");
+				throw new QonfigInterpretationException("'" + theNames.get(nameIndex) + "' cannot be resolved or is not a model value");
 			} else if (mv.getType().getModelType() == ModelTypes.Value) {
 				Field field;
 				try {
 					field = TypeTokens.getRawType(mv.getType().getType(0)).getField(theNames.get(nameIndex));
 				} catch (NoSuchFieldException e) {
-					throw new IllegalArgumentException(getPath(nameIndex) + "' cannot be resolved or is not a field");
+					throw new QonfigInterpretationException(getPath(nameIndex) + "' cannot be resolved or is not a field");
 				} catch (SecurityException e) {
-					throw new IllegalArgumentException(getPath(nameIndex) + " cannot be accessed", e);
+					throw new QonfigInterpretationException(getPath(nameIndex) + " cannot be accessed", e);
 				}
 				return evaluateField(field, mv.getType().getType(0).resolveType(field.getGenericType()), //
 					msi -> (SettableValue<?>) mv.get(msi), nameIndex + 1, type);
 			} else
-				throw new IllegalArgumentException(
+				throw new QonfigInterpretationException(
 					"Cannot evaluate field '" + theNames.get(nameIndex + 1) + "' against model of type " + mv.getType());
 		}
 
 		private <M, MV extends M, F> ValueContainer<M, MV> evaluateField(Field field, TypeToken<F> fieldType,
-			Function<ModelSetInstance, ? extends SettableValue<?>> context, int nameIndex, ModelInstanceType<M, MV> type) {
+			Function<ModelSetInstance, ? extends SettableValue<?>> context, int nameIndex, ModelInstanceType<M, MV> type)
+				throws QonfigInterpretationException {
 			if (!field.isAccessible()) {
 				try {
 					field.setAccessible(true);
 				} catch (SecurityException e) {
-					throw new IllegalArgumentException("Could not access field " + getPath(nameIndex), e);
+					throw new QonfigInterpretationException("Could not access field " + getPath(nameIndex), e);
 				}
 			}
 			if (nameIndex == theNames.size() - 1) {
@@ -688,9 +691,9 @@ public class DefaultExpressoParser implements ExpressoParser {
 			try {
 				newField = TypeTokens.getRawType(fieldType).getField(theNames.get(nameIndex));
 			} catch (NoSuchFieldException e) {
-				throw new IllegalArgumentException(getPath(nameIndex) + "' cannot be resolved or is not a field");
+				throw new QonfigInterpretationException(getPath(nameIndex) + "' cannot be resolved or is not a field");
 			} catch (SecurityException e) {
-				throw new IllegalArgumentException(getPath(nameIndex) + " cannot be accessed", e);
+				throw new QonfigInterpretationException(getPath(nameIndex) + " cannot be accessed", e);
 			}
 			return evaluateField(newField, fieldType.resolveType(newField.getGenericType()), //
 				getFieldValue(field, fieldType, context, null), nameIndex + 1, type);
@@ -764,6 +767,186 @@ public class DefaultExpressoParser implements ExpressoParser {
 			} else
 				throw new IllegalStateException(
 					"Cannot convert from SettableValue<" + fieldType + "> to SettableValue<" + targetType + ">");
+		}
+
+		@Override
+		public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ObservableModelSet models,
+			ClassView classView) throws QonfigInterpretationException {
+			boolean voidTarget = TypeTokens.get().unwrap(TypeTokens.getRawType(targetType)) == void.class;
+			return new MethodFinder<P1, P2, P3, T>(targetType) {
+				@Override
+				public Function<ModelSetInstance, TriFunction<P1, P2, P3, T>> find3() throws QonfigInterpretationException {
+					ValueContainer<?, ?> mv = models.get(toString(), false);
+					if (mv != null) {
+						for (MethodOption option : theOptions) {
+							switch (option.argTypes.length) {
+							case 0:
+								if (mv.getType().getModelType() == ModelTypes.Value) {
+									if (targetType.isAssignableFrom(mv.getType().getType(0))) {
+										// TODO resultType
+										return msi -> (p1, p2, p3) -> ((SettableValue<T>) mv.apply(msi)).get();
+									} else if (TypeTokens.get().isAssignable(targetType, mv.getType().getType(0))) {
+										ValueContainer<?, SettableValue<T>> mv2 = models.get(toString(),
+											ModelTypes.Value.forType(targetType));
+										// TODO resultType
+										return msi -> (p1, p2, p3) -> mv2.apply(msi).get();
+									} else if (Supplier.class.isAssignableFrom(TypeTokens.getRawType(mv.getType().getType(0)))
+										&& TypeTokens.get().isAssignable(targetType,
+											mv.getType().getType(0).resolveType(Supplier.class.getTypeParameters()[0]))) {
+										// TODO resultType
+										return msi -> (p1, p2, p3) -> ((SettableValue<Supplier<? extends T>>) mv.apply(msi)).get().get();
+									} else if (voidTarget
+										&& Runnable.class.isAssignableFrom(TypeTokens.getRawType(mv.getType().getType(0)))) {
+										// TODO resultType
+										return msi -> (p1, p2, p3) -> {
+											((SettableValue<? extends Runnable>) mv.apply(msi)).get().run();
+											return null;
+										};
+									} else
+										continue;
+								} else if (targetType.isAssignableFrom(TypeTokens.get().keyFor(mv.getType().getModelType().modelType)
+									.parameterized(mv.getType().getType(0)))) {
+									// TODO resultType
+									return msi -> (p1, p2, p3) -> (T) mv.apply(msi);
+								} else
+									continue;
+							case 1:
+								if (mv.getType().getModelType() == ModelTypes.Value) {
+									if (Function.class.isAssignableFrom(TypeTokens.getRawType(mv.getType().getType(0)))
+										&& TypeTokens.get().isAssignable(
+											mv.getType().getType(0).resolveType(Function.class.getTypeParameters()[0]), option.argTypes[0])//
+										&& TypeTokens.get().isAssignable(targetType,
+											mv.getType().getType(0).resolveType(Function.class.getTypeParameters()[1]))) {
+										// TODO resultType
+										return msi -> (p1, p2, p3) -> {
+											Object[] args = new Object[1];
+											option.argMaker.makeArgs(p1, p2, p3, args, msi);
+											return ((SettableValue<Function<Object, ? extends T>>) mv.apply(msi)).get().apply(args[0]);
+										};
+									} else if (voidTarget
+										&& Consumer.class.isAssignableFrom(TypeTokens.getRawType(mv.getType().getType(0)))) {
+										// TODO resultType
+										return msi -> (p1, p2, p3) -> {
+											Object[] args = new Object[1];
+											option.argMaker.makeArgs(p1, p2, p3, args, msi);
+											((SettableValue<? extends Consumer<Object>>) mv.apply(msi)).get().accept(args[0]);
+											return null;
+										};
+									} else
+										continue;
+								} else
+									continue;
+							case 2:
+							default:
+								// TODO
+							}
+						}
+					} else if (theNames.size() == 1) {
+						for (Method m : classView.getImportedStaticMethods(theNames.getFirst())) {
+							Method finalM = m;
+							for (MethodOption option : theOptions) {
+								switch (option.argTypes.length) {
+								case 0:
+									if (!Modifier.isStatic(m.getModifiers()))
+										continue;
+									switch (m.getParameterTypes().length) {
+									case 0:
+										if (voidTarget || targetType.isAssignableFrom(TypeTokens.get().of(m.getGenericReturnType()))) {
+											// TODO resultType
+											return msi -> (p1, p2, p3) -> {
+												try {
+													return voidTarget ? null : (T) finalM.invoke(null);
+												} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
+													throw new IllegalStateException("Could not invoke " + finalM, e);
+												}
+											};
+										} else
+											continue;
+									default:
+										continue;
+									}
+								case 1:
+								case 2:
+								default:
+									// TODO
+								}
+							}
+						}
+					} else {
+						// TODO evaluate model value for names.length-1, then use that context to find a method
+						Class<?> type = classView.getType(getPath(theNames.size() - 2));
+						if (type != null) {
+							Method[] methods = type.getMethods();
+							for (Method m : methods) {
+								if (!m.getName().equals(theNames.getLast()))
+									continue;
+								if (!Modifier.isStatic(m.getModifiers()))
+									continue;
+								Method finalM = m;
+								for (MethodOption option : theOptions) {
+									switch (option.argTypes.length) {
+									case 0:
+										switch (m.getParameterTypes().length) {
+										case 1:
+											if (!m.isVarArgs())
+												continue;
+											//$FALL-THROUGH$
+										case 0:
+											if (voidTarget || targetType.isAssignableFrom(TypeTokens.get().of(m.getGenericReturnType()))) {
+												// TODO resultType
+												return msi -> (p1, p2, p3) -> {
+													try {
+														return voidTarget ? null : (T) finalM.invoke(null,
+															m.isVarArgs() ? new Object[] { new Object[0] } : new Object[0]);
+													} catch (IllegalAccessException | IllegalArgumentException
+														| InvocationTargetException e) {
+														throw new IllegalStateException("Could not invoke " + finalM, e);
+													}
+												};
+											} else
+												continue;
+										default:
+											continue;
+										}
+									case 1:
+										switch (m.getParameterTypes().length) {
+										case 0:
+											continue;
+										case 2:
+											if (!m.isVarArgs())
+												continue;
+											//$FALL-THROUGH$
+										case 1:
+											if (TypeTokens.get().isAssignable(TypeTokens.get().of(m.getGenericParameterTypes()[0]),
+												option.argTypes[0])//
+												&& (voidTarget
+													|| targetType.isAssignableFrom(TypeTokens.get().of(m.getGenericReturnType())))) {
+												// TODO resultType
+												return msi -> (p1, p2, p3) -> {
+													try {
+														return voidTarget ? null : (T) finalM.invoke(null,
+															m.isVarArgs() ? new Object[] { p1, new Object[0] } : new Object[] { p1 });
+													} catch (IllegalAccessException | IllegalArgumentException
+														| InvocationTargetException e) {
+														throw new IllegalStateException("Could not invoke " + finalM, e);
+													}
+												};
+											} else
+												continue;
+										default:
+											continue;
+										}
+									case 2:
+									default:
+										// TODO
+									}
+								}
+							}
+						}
+					}
+					throw new QonfigInterpretationException("Could not parse method from " + NameExpression.this.toString());
+				}
+			};
 		}
 
 		public static class FieldValue<M, F> extends Identifiable.AbstractIdentifiable implements SettableValue<F> {
@@ -856,21 +1039,165 @@ public class DefaultExpressoParser implements ExpressoParser {
 		}
 	}
 
-	public static class ThisExpression implements ObservableExpression {
-		public static final ThisExpression INSTANCE = new ThisExpression();
+	public static class MethodExpression implements ObservableExpression {
+		private final ObservableExpression theContext;
+		private final String theMethodName;
+		private final List<String> theTypeArguments;
+		private final List<ObservableExpression> theArguments;
 
-		private ThisExpression() {
+		public MethodExpression(ObservableExpression context, String methodName, List<String> typeArgs,
+			List<ObservableExpression> arguments) {
+			theContext = context;
+			theMethodName = methodName;
+			theTypeArguments = QommonsUtils.unmodifiableCopy(typeArgs);
+			theArguments = QommonsUtils.unmodifiableCopy(arguments);
+		}
+
+		public ObservableExpression getContext() {
+			return theContext;
+		}
+
+		public String getMethodName() {
+			return theMethodName;
+		}
+
+		public List<String> getTypeArguments() {
+			return theTypeArguments;
+		}
+
+		public List<ObservableExpression> getArguments() {
+			return theArguments;
 		}
 
 		@Override
 		public <M, MV extends M> ValueContainer<M, MV> evaluate(ModelInstanceType<M, MV> type, ObservableModelSet models,
-			ClassView classView) throws IllegalArgumentException {
-			// TODO Auto-generated method stub
+			ClassView classView) throws QonfigInterpretationException {
+			if (theContext != null) {
+				// TODO
+			} else {
+				List<Method> methods = classView.getImportedStaticMethods(theMethodName);
+				// for(Method m : methods) {
+				// ValueContainer<M, MV>
+				// }
+			}
+			throw new QonfigInterpretationException("Method is not fully implemented yet");
+		}
+	}
+
+	public static class MethodReferenceExpression implements ObservableExpression {
+		private final ObservableExpression theContext;
+		private final String theMethodName;
+		private final List<String> theTypeArgs;
+
+		public MethodReferenceExpression(ObservableExpression context, String methodName, List<String> typeArgs) {
+			theContext = context;
+			theMethodName = methodName;
+			theTypeArgs = QommonsUtils.unmodifiableCopy(typeArgs);
+		}
+
+		public ObservableExpression getContext() {
+			return theContext;
+		}
+
+		public String getMethodName() {
+			return theMethodName;
+		}
+
+		public List<String> getTypeArgs() {
+			return theTypeArgs;
+		}
+
+		@Override
+		public <M, MV extends M> ValueContainer<M, MV> evaluate(ModelInstanceType<M, MV> type, ObservableModelSet models,
+			ClassView classView) throws QonfigInterpretationException {
+			throw new QonfigInterpretationException("Not implemented");
+		}
+
+		@Override
+		public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ObservableModelSet models,
+			ClassView classView) throws QonfigInterpretationException {
+			return new MethodFinder<P1, P2, P3, T>(targetType) {
+				@Override
+				public Function<ModelSetInstance, TriFunction<P1, P2, P3, T>> find3() throws QonfigInterpretationException {
+					if (theContext instanceof NameExpression) {
+						Class<?> type = classView.getType(theContext.toString());
+						if (type != null) {
+							Method[] methods = type.getMethods();
+							for (Method m : methods) {
+								if (!m.getName().equals(theMethodName))
+									continue;
+								Method finalM = m;
+								for (MethodOption option : theOptions) {
+									switch (option.argTypes.length) {
+									case 0:
+										continue; // TODO
+									case 1:
+										switch (m.getParameterTypes().length) {
+										case 0:
+											if (Modifier.isStatic(m.getModifiers()))
+												continue;
+											else if (!type.isAssignableFrom(TypeTokens.getRawType(option.argTypes[0])))
+												continue;
+											TypeToken<?> resultType = TypeTokens.get().of(m.getGenericReturnType());
+											if (!TypeTokens.get().isAssignable(targetType, resultType))
+												continue;
+											setResultType((TypeToken<? extends T>) resultType);
+											return msi -> (p1, p2, p3) -> {
+												try {
+													return (T) finalM.invoke(p1);
+												} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
+													throw new IllegalStateException("Could not invoke " + finalM, e);
+												}
+											};
+										case 1:
+											if (!Modifier.isStatic(m.getModifiers()))
+												continue;
+											else if (!TypeTokens.get().isAssignable(TypeTokens.get().of(m.getGenericParameterTypes()[0]),
+												option.argTypes[0]))
+												continue;
+											resultType = TypeTokens.get().of(m.getGenericReturnType());
+											if (!TypeTokens.get().isAssignable(targetType, resultType))
+												continue;
+											setResultType((TypeToken<? extends T>) resultType);
+											return msi -> (p1, p2, p3) -> {
+												try {
+													return (T) finalM.invoke(null, new Object[] { p1 });
+												} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
+													throw new IllegalStateException("Could not invoke " + finalM, e);
+												}
+											};
+										case 2:
+										default:
+											// TODO
+											continue;
+										}
+									}
+								}
+							}
+						}
+					}
+					// ValueContainer<?, ?> ctx=theContext.evaluate(null, models, classView)
+					// ValueContainer<?, ?> mv=models.get(theMethodName, false)
+					throw new QonfigInterpretationException("Could not evaluate method from " + MethodReferenceExpression.this.toString());
+				}
+			};
 		}
 
 		@Override
 		public String toString() {
-			return "this";
+			StringBuilder str = new StringBuilder();
+			str.append(theContext.toString()).append("::");
+			if (!theTypeArgs.isEmpty()) {
+				str.append('<');
+				for (int i = 0; i < theTypeArgs.size(); i++) {
+					if (i > 0)
+						str.append(", ");
+					str.append(theTypeArgs.get(i));
+				}
+				str.append('>');
+			}
+			str.append(theMethodName);
+			return str.toString();
 		}
 	}
 }

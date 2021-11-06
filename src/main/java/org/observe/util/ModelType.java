@@ -11,6 +11,9 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
+import org.observe.util.ObservableModelSet.ModelSetInstance;
+import org.observe.util.ObservableModelSet.ValueContainer;
+import org.observe.util.TypeTokens.TypeConverter;
 import org.qommons.Named;
 
 import com.google.common.reflect.TypeToken;
@@ -55,8 +58,8 @@ public abstract class ModelType<M> implements Named {
 			@Override
 			default ModelInstanceConverter<M1, M2> convert(ModelInstanceType<M1, ?> source, ModelInstanceType<M2, ?> dest)
 				throws IllegalArgumentException {
-				Function<Object, Object> cast;
-				Function<Object, Object> reverse;
+				TypeConverter<Object, Object> cast;
+				TypeConverter<Object, Object> reverse;
 				TypeToken<?> type;
 				if (source.getType(0).equals(dest.getType(0)) || (dest.getType(0).isAssignableFrom(source.getType(0))
 					&& (dest.getType(0).getType() instanceof WildcardType || source.getType(0).isAssignableFrom(dest.getType(0))))) {
@@ -66,7 +69,7 @@ public abstract class ModelType<M> implements Named {
 					cast = TypeTokens.get().getCast((TypeToken<Object>) source.getType(0), (TypeToken<Object>) dest.getType(0), true);
 					if (cast == null)
 						throw new IllegalArgumentException("Cannot convert " + source + " to " + dest);
-					type = dest.getType(0);
+					type = cast.getConvertedType();
 					reverse = TypeTokens.get().getCast((TypeToken<Object>) dest.getType(0), (TypeToken<Object>) source.getType(0), true);
 				}
 				return new ModelInstanceConverter<M1, M2>() {
@@ -90,8 +93,8 @@ public abstract class ModelType<M> implements Named {
 			default ModelInstanceConverter<M1, M2> convert(ModelInstanceType<M1, ?> source, ModelInstanceType<M2, ?> dest)
 				throws IllegalArgumentException {
 				TypeToken<?> keyType;
-				Function<Object, Object> keyCast;
-				Function<Object, Object> keyReverse;
+				TypeConverter<Object, Object> keyCast;
+				TypeConverter<Object, Object> keyReverse;
 				if (source.getType(0).equals(dest.getType(0)) || (dest.getType(0).isAssignableFrom(source.getType(0))
 					&& (dest.getType(0).getType() instanceof WildcardType || source.getType(0).isAssignableFrom(dest.getType(0))))) {
 					keyType = source.getType(0);
@@ -100,12 +103,12 @@ public abstract class ModelType<M> implements Named {
 					keyCast = TypeTokens.get().getCast((TypeToken<Object>) source.getType(0), (TypeToken<Object>) dest.getType(0), true);
 					if (keyCast == null)
 						throw new IllegalArgumentException("Cannot convert " + source + " to " + dest);
-					keyType = dest.getType(0);
+					keyType = keyCast.getConvertedType();
 					keyReverse = TypeTokens.get().getCast((TypeToken<Object>) dest.getType(0), (TypeToken<Object>) source.getType(0), true);
 				}
 				TypeToken<?> valueType;
-				Function<Object, Object> valueCast;
-				Function<Object, Object> valueReverse;
+				TypeConverter<Object, Object> valueCast;
+				TypeConverter<Object, Object> valueReverse;
 				if (source.getType(1).equals(dest.getType(1)) || (dest.getType(1).isAssignableFrom(source.getType(1))
 					&& (dest.getType(1).getType() instanceof WildcardType || source.getType(1).isAssignableFrom(dest.getType(1))))) {
 					valueType = source.getType(1);
@@ -114,7 +117,7 @@ public abstract class ModelType<M> implements Named {
 					valueCast = TypeTokens.get().getCast((TypeToken<Object>) source.getType(1), (TypeToken<Object>) dest.getType(1), true);
 					if (valueCast == null)
 						throw new IllegalArgumentException("Cannot convert " + source + " to " + dest);
-					valueType = dest.getType(0);
+					valueType = valueCast.getConvertedType();
 					valueReverse = TypeTokens.get().getCast((TypeToken<Object>) dest.getType(1), (TypeToken<Object>) source.getType(1),
 						true);
 				}
@@ -208,8 +211,8 @@ public abstract class ModelType<M> implements Named {
 				if (goodType)
 					return (ModelInstanceConverter<M, M2>) nullConverter(target);
 				TypeToken<?>[] params = new TypeToken[getModelType().getTypeCount()];
-				Function<Object, Object>[] casts = new Function[params.length];
-				Function<Object, Object>[] reverses = new Function[casts.length];
+				TypeConverter<Object, Object>[] casts = new TypeConverter[params.length];
+				TypeConverter<Object, Object>[] reverses = new TypeConverter[casts.length];
 				boolean reversible = true;
 				for (int i = 0; i < getModelType().getTypeCount(); i++) {
 					if (target.getType(i).equals(getType(i))) {
@@ -220,22 +223,23 @@ public abstract class ModelType<M> implements Named {
 						params[i] = getType(i);
 						casts[i] = null;
 					} else {
-						params[i] = target.getType(i);
 						try {
-							casts[i] = (Function<Object, Object>) TypeTokens.get().getCast(target.getType(i), getType(i), true);
+							casts[i] = (TypeConverter<Object, Object>) TypeTokens.get().getCast(target.getType(i), getType(i), true);
+							params[i] = casts[i].getConvertedType();
 						} catch (IllegalArgumentException e) {
 							return null;
 						}
 					}
 					if (reversible && !getType(i).isAssignableFrom(target.getType(i))) {
 						try {
-							reverses[i] = (Function<Object, Object>) TypeTokens.get().getCast(getType(i), target.getType(i), true);
+							reverses[i] = (TypeConverter<Object, Object>) TypeTokens.get().getCast(getType(i), target.getType(i), true);
 						} catch (IllegalArgumentException e) {
 							reversible = false;
 						}
 					}
 				}
-				Function<M, M2> converter = (Function<M, M2>) getModelType().convertType((ModelInstanceType<M, ? extends M>) target, casts,
+				Function<M, M2> converter = (Function<M, M2>) getModelType().convertType(//
+					(ModelInstanceType<M, ? extends M>) target.getModelType().forTypes(params), casts,
 					reversible ? reverses : null);
 				if (converter == null)
 					return null;
@@ -261,6 +265,14 @@ public abstract class ModelType<M> implements Named {
 			if (modelConverter == null)
 				return null;
 			return modelConverter.convert(this, target);
+		}
+
+		public <M2, MV2 extends M2> ValueContainer<M2, MV2> as(ValueContainer<M, MV> source, ModelInstanceType<M2, MV2> targetType) {
+			ModelType.ModelInstanceConverter<M, M2> converter = source.getType().convert(targetType);
+			if (converter == null)
+				throw new IllegalArgumentException("Cannot convert " + source + " (" + source.getType() + ") to " + targetType);
+
+			return new ConvertedValue<>(source, (ModelInstanceType<M2, MV2>) converter.getType(), converter);
 		}
 
 		@Override
@@ -624,5 +636,29 @@ public abstract class ModelType<M> implements Named {
 
 	public interface ConversionBuilder<M> {
 		<M2> ConversionBuilder<M> convertibleTo(ModelType<M2> modelType, ModelConverter<M, M2> converter);
+	}
+
+	public static class ConvertedValue<MS, MVS extends MS, MT, MVT extends MT> implements ValueContainer<MT, MVT> {
+		private final ValueContainer<MS, MVS> theSource;
+		private final ModelInstanceType<MT, MVT> theType;
+		private final ModelType.ModelInstanceConverter<MS, MT> theConverter;
+
+		ConvertedValue(ValueContainer<MS, MVS> source, ModelInstanceType<MT, MVT> type, ModelInstanceConverter<MS, MT> converter) {
+			theSource = source;
+			theType = type;
+			theConverter = converter;
+		}
+
+		@Override
+		public ModelInstanceType<MT, MVT> getType() {
+			return theType;
+		}
+
+		@Override
+		public MVT get(ModelSetInstance extModels) {
+			MVS modelV = theSource.get(extModels);
+			MVT converted = (MVT) theConverter.convert(modelV);
+			return converted;
+		}
 	}
 }

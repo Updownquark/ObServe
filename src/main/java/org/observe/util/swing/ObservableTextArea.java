@@ -177,8 +177,8 @@ public class ObservableTextArea<E> extends JEditorPane {
 		return this;
 	}
 
-	public ObservableTextArea<E> asHtml() {
-		setContentType("text/html");
+	public ObservableTextArea<E> asHtml(boolean html) {
+		setContentType(html ? "text/html" : "text/plain");
 		return this;
 	}
 
