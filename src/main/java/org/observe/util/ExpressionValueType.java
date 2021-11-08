@@ -33,7 +33,7 @@ public class ExpressionValueType implements CustomValueType {
 			if (value.startsWith("${") && value.endsWith("}")) {
 				value = value.substring(2, value.length() - 1);
 			} else
-				return new ObservableExpression.LiteralExpression<>(org.observe.expresso.Expression.create("literal", value), value);
+				return new Literal(value);
 		}
 		try {
 			return theParser.parse(value);
@@ -46,5 +46,11 @@ public class ExpressionValueType implements CustomValueType {
 	@Override
 	public boolean isInstance(Object value) {
 		return value instanceof ObservableExpression;
+	}
+
+	public static class Literal extends ObservableExpression.LiteralExpression<String> {
+		public Literal(String value) {
+			super(org.observe.expresso.Expression.create("literal", value), value);
+		}
 	}
 }

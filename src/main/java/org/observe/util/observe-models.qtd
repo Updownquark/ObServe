@@ -64,7 +64,7 @@
 		<add-on name="text" inherits="format-type" requires="format" />
 		<add-on name="file" inherits="format-type" requires="format">
 			<attribute name="file-source" type="expression" specify="optional" />
-			<attribute name="working-dir" type="string" specify="optional" />
+			<attribute name="working-dir" type="expression" specify="optional" />
 			<attribute name="allow-empty" type="boolean" default="false" />
 		</add-on>
 		<add-on name="int-format" inherits="format-type" requires="format">
@@ -96,11 +96,11 @@
 		<add-on name="filter-validation" inherits="validate-type">
 			<attribute name="filter" type="expression" />
 		</add-on>
-		<add-on name="config-value" requires="value">
+		<add-on name="config-value" requires="int-model-value">
 			<attribute name="config-path" type="string" specify="optional" />
 			<attribute name="format" type="expression" specify="optional" />
 			<attribute name="key-format" type="expression" specify="optional" />
-			<attribute name="default" type="string" specify="optional" />
+			<attribute name="default" type="expression-or-string" specify="optional" />
 			<attribute name="key-default" type="expression" specify="optional" />
 		</add-on>
 	</add-ons>

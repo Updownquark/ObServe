@@ -485,14 +485,14 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 		}
 
 		/** @return The format set associated with this builder */
-		protected ObservableConfigFormatSet getFormatSet() {
+		public ObservableConfigFormatSet getFormatSet() {
 			if (theFormatSet == null)
 				theFormatSet = new ObservableConfigFormatSet();
 			return theFormatSet;
 		}
 
 		/** @return The format that will be used to parse and persist values from config */
-		protected ObservableConfigFormat<T> getFormat() {
+		public ObservableConfigFormat<T> getFormat() {
 			ObservableConfigFormat<T> format = theFormat;
 			if (format == null)
 				format = getFormatSet().getConfigFormat(theType, theConfig.getName());

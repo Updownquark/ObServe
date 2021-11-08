@@ -58,6 +58,8 @@ public interface ObservableModelSet {
 		return new SyntheticValueContainer();
 	}
 
+	ObservableModelSet getParent();
+
 	String getPath();
 
 	ValueContainer<?, ?> get(String path, boolean required) throws IllegalArgumentException;
@@ -80,7 +82,7 @@ public interface ObservableModelSet {
 	ModelSetInstance createInstance(ExternalModelSet extModel, Observable<?> until);
 
 	public static Builder build() {
-		return new Builder(null, "");
+		return new Builder(null, null, "");
 	}
 
 	public static ExternalModelSetBuilder buildExternal() {
@@ -241,17 +243,24 @@ public interface ObservableModelSet {
 	}
 
 	public class Default implements ObservableModelSet {
+		private final Default theParent;
 		protected final Default theRoot;
 		protected final String thePath;
 		protected final Map<String, Placeholder<?, ?>> theThings;
 		protected final Function<ModelSetInstance, ?> theModelConfiguration;
 
-		protected Default(Default root, String path, Map<String, Placeholder<?, ?>> things,
+		protected Default(Default root, Default parent, String path, Map<String, Placeholder<?, ?>> things,
 			Function<ModelSetInstance, ?> modifiableConfiguration) {
 			theRoot = root == null ? this : root;
+			theParent = parent;
 			thePath = path;
 			theThings = things;
 			theModelConfiguration = modifiableConfiguration;
+		}
+
+		@Override
+		public Default getParent() {
+			return theParent;
 		}
 
 		@Override
@@ -378,8 +387,8 @@ public interface ObservableModelSet {
 	public class Builder extends Default implements ObservableModelSet {
 		private Function<ModelSetInstance, ?> theModifiableConfiguration;
 
-		private Builder(Builder root, String path) {
-			super(root, path, new LinkedHashMap<>(), null);
+		private Builder(Builder root, Builder parent, String path) {
+			super(root, parent, path, new LinkedHashMap<>(), null);
 		}
 
 		public Builder setModelConfiguration(Function<ModelSetInstance, ?> modelConfiguration) {
@@ -398,7 +407,7 @@ public interface ObservableModelSet {
 		public Builder createSubModel(String name) {
 			Placeholder<?, ?> thing = theThings.get(name);
 			if (thing == null) {
-				Builder subModel = new Builder((Builder) theRoot, pathTo(name));
+				Builder subModel = new Builder((Builder) theRoot, this, pathTo(name));
 				theThings.put(name, new Placeholder<>(pathTo(name), ModelTypes.Model.instance(), null, subModel));
 				return subModel;
 			} else if (thing.model != null)
@@ -408,19 +417,19 @@ public interface ObservableModelSet {
 		}
 
 		public ObservableModelSet build() {
-			return _build(null, thePath);
+			return _build(null, null, thePath);
 		}
 
-		private Default _build(Default root, String path) {
+		private Default _build(Default root, Default parent, String path) {
 			Map<String, Placeholder<?, ?>> things = new LinkedHashMap<>(theThings.size() * 3 / 2 + 1);
-			Default model = new Default(root, path, Collections.unmodifiableMap(things), theModifiableConfiguration);
+			Default model = new Default(root, parent, path, Collections.unmodifiableMap(things), theModifiableConfiguration);
 			if (root == null)
 				root = model;
 			for (Map.Entry<String, Placeholder<?, ?>> thing : theThings.entrySet()) {
 				if (thing.getValue().type.getModelType() == ModelTypes.Model)
 					things.put(thing.getKey(),
 						new Placeholder<>(thing.getValue().thePath, ModelTypes.Model.instance(), null,
-							((Builder) thing.getValue().model)._build(root, //
+							((Builder) thing.getValue().model)._build(root, model, //
 								(path.isEmpty() ? "" : path + ".") + thing.getKey())));
 				else
 					things.put(thing.getKey(), thing.getValue());

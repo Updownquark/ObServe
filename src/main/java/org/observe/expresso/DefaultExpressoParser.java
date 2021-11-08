@@ -38,9 +38,6 @@ import org.qommons.tree.BetterTreeList;
 
 import com.google.common.reflect.TypeToken;
 
-import main.antlr.Java8Lexer;
-import main.antlr.Java8Parser;
-
 public class DefaultExpressoParser implements ExpressoParser {
 	@Override
 	public ObservableExpression parse(String text) throws ExpressoParseException {
@@ -1146,7 +1143,14 @@ public class DefaultExpressoParser implements ExpressoParser {
 												try {
 													return (T) finalM.invoke(p1);
 												} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
-													throw new IllegalStateException("Could not invoke " + finalM, e);
+													throw new IllegalStateException(
+														MethodReferenceExpression.this + ": Could not invoke " + finalM, e);
+												} catch (NullPointerException e) {
+													NullPointerException npe = new NullPointerException(
+														MethodReferenceExpression.this.toString()//
+														+ (e.getMessage() == null ? "" : ": " + e.getMessage()));
+													npe.setStackTrace(e.getStackTrace());
+													throw npe;
 												}
 											};
 										case 1:
@@ -1163,7 +1167,14 @@ public class DefaultExpressoParser implements ExpressoParser {
 												try {
 													return (T) finalM.invoke(null, new Object[] { p1 });
 												} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
-													throw new IllegalStateException("Could not invoke " + finalM, e);
+													throw new IllegalStateException(
+														MethodReferenceExpression.this + ": Could not invoke " + finalM, e);
+												} catch (NullPointerException e) {
+													NullPointerException npe = new NullPointerException(
+														MethodReferenceExpression.this.toString()//
+														+ (e.getMessage() == null ? "" : ": " + e.getMessage()));
+													npe.setStackTrace(e.getStackTrace());
+													throw npe;
 												}
 											};
 										case 2:

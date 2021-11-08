@@ -47,6 +47,7 @@ import org.observe.config.ObservableConfig.ObservableConfigMapBuilder;
 import org.observe.config.ObservableConfig.ObservableConfigPersistence;
 import org.observe.config.ObservableConfig.ObservableConfigValueBuilder;
 import org.observe.config.ObservableConfigFormat;
+import org.observe.config.ObservableConfigParseSession;
 import org.observe.config.ObservableConfigPath;
 import org.observe.config.ObservableValueSet;
 import org.observe.config.SyncValueSet;
@@ -277,7 +278,7 @@ public class ObservableModelQonfigParser {
 						if (prop != null)
 							return literal(BetterFile.at(new NativeFileSource(), prop), prop);
 						else
-							return literal(BetterFile.at(new NativeFileSource(), configName), "./" + configName);
+							return literal(BetterFile.at(new NativeFileSource(), "./" + configName), "./" + configName);
 					};
 				}
 				List<String> oldConfigNames = new ArrayList<>(2);
@@ -290,7 +291,7 @@ public class ObservableModelQonfigParser {
 						if (configProp != null)
 							configDirFile = BetterFile.at(new NativeFileSource(), configProp);
 						else
-							configDirFile = BetterFile.at(new NativeFileSource(), configName);
+							configDirFile = BetterFile.at(new NativeFileSource(), "./" + configName);
 					}
 					if (!configDirFile.exists()) {
 						try {
@@ -452,7 +453,7 @@ public class ObservableModelQonfigParser {
 					if (path == null)
 						path = name;
 					Function<ModelSetInstance, ObservableConfigFormat<Object>> format = parseConfigFormat(
-						element.getAttribute("format", ObservableExpression.class), element.getAttribute("default", String.class), model,
+						element.getAttribute("format", ObservableExpression.class), null, model,
 						cv, (TypeToken<Object>) type);
 					buildConfig(model, cv, name, (TypeToken<Object>) type, element, path, format);
 				} else {
@@ -519,12 +520,36 @@ public class ObservableModelQonfigParser {
 				Function<ModelSetInstance, ObservableConfigFormat<V>> format) throws QonfigInterpretationException {
 				if (element.getValue() != null)
 					System.err.println("WARNING: Config value " + model.pathTo(name) + " specifies a value, ignored");
+				Function<ModelSetInstance, SettableValue<V>> defaultX;
+				String defaultS;
+				if (element.getAttribute("default") instanceof ExpressionValueType.Literal) {
+					defaultX = null;
+					defaultS = element.getAttributeText("default");
+				} else if (element.getAttribute("default") != null) {
+					defaultS = null;
+					defaultX = element.getAttribute("default", ObservableExpression.class).evaluate(ModelTypes.Value.forType(type), model,
+						cv);
+				} else {
+					defaultS = null;
+					defaultX = null;
+				}
 				model.with(name, ModelTypes.Value.forType(type), (msi, extModels) -> {
 					ObservableConfig config = (ObservableConfig) msi.getModelConfiguration();
 					ObservableConfigValueBuilder<V> valueBuilder = config.asValue(type).at(path);
+					valueBuilder.at(path);
 					if (format != null)
 						valueBuilder.withFormat(format.apply(msi));
-					return valueBuilder.buildValue(null);
+					if (defaultS != null && config.getChild(path) == null)
+						config.set(path, defaultS);
+					if (defaultX != null) {
+						valueBuilder.getFormat().format(new ObservableConfigParseSession(), //
+							defaultX.apply(msi).get(), null, (cia, trivial) -> config.getChild(path, cia, newCfg -> {
+								newCfg.setTrivial(trivial);
+							}), __ -> {
+							}, null);
+					}
+					SettableValue<V> built = valueBuilder.buildValue(null);
+					return built;
 				});
 			}
 		}).createWith("value-set", Void.class, new TypedModelThing<ObservableValueSet>() {
@@ -539,9 +564,12 @@ public class ObservableModelQonfigParser {
 				Function<ModelSetInstance, ObservableConfigFormat<V>> format) throws QonfigInterpretationException {
 				if (!element.getChildrenInRole("element").isEmpty())
 					System.err.println("WARNING: Config value " + model.pathTo(name) + " specifies elements, ignored");
+				if (element.getAttribute("default") != null)
+					System.err.println("WARNING: Config entry-set " + model.pathTo(name) + " specifies default, ignored");
 				model.<ObservableValueSet, ObservableValueSet<V>> with(name, ModelTypes.ValueSet.forType(type), (msi, extModels) -> {
 					ObservableConfig config = (ObservableConfig) msi.getModelConfiguration();
 					ObservableConfigValueBuilder<V> valueBuilder = config.asValue(type);
+					valueBuilder.at(path);
 					if (format != null)
 						valueBuilder.withFormat(format.apply(msi));
 					return valueBuilder.buildEntitySet(null);
@@ -571,11 +599,14 @@ public class ObservableModelQonfigParser {
 			<V> void buildConfig(Builder model, ClassView cv, String name, TypeToken<V> type, QonfigElement element, String path,
 				Function<ModelSetInstance, ObservableConfigFormat<V>> format) throws QonfigInterpretationException {
 				if (!element.getChildrenInRole("element").isEmpty())
-					System.err.println("WARNING: Config value " + model.pathTo(name) + " specifies elements, ignored");
+					System.err.println("WARNING: Config collection " + model.pathTo(name) + " specifies elements, ignored");
+				if (element.getAttribute("default") != null)
+					System.err.println("WARNING: Config collection " + model.pathTo(name) + " specifies default, ignored");
 				prepare(type, element, model, cv);
 				add(model, cv, name, type, element, (msi, extModels) -> {
 					ObservableConfig config = (ObservableConfig) msi.getModelConfiguration();
 					ObservableConfigValueBuilder<V> valueBuilder = config.asValue(type);
+					valueBuilder.at(path);
 					if (format != null)
 						valueBuilder.withFormat(format.apply(msi));
 					ObservableCollection<V> collection = valueBuilder.buildCollection(null);
@@ -749,10 +780,13 @@ public class ObservableModelQonfigParser {
 				Function<ModelSetInstance, ObservableConfigFormat<V>> valueFormat) throws QonfigInterpretationException {
 				if (!element.getChildrenInRole("entry").isEmpty())
 					System.err.println("WARNING: Config value " + model.pathTo(name) + " specifies entries, ignored");
+				if (element.getAttribute("default") != null)
+					System.err.println("WARNING: Config map " + model.pathTo(name) + " specifies default, ignored");
 				prepare(keyType, valueType, element, model, cv);
 				add(model, cv, name, keyType, valueType, element, (msi, extModels) -> {
 					ObservableConfig config = (ObservableConfig) msi.getModelConfiguration();
 					ObservableConfigMapBuilder<K, V> valueBuilder = config.asValue(valueType).asMap(keyType);
+					valueBuilder.at(path);
 					if (keyFormat != null)
 						valueBuilder.withKeyFormat(keyFormat.apply(msi));
 					if (valueFormat != null)
@@ -849,10 +883,13 @@ public class ObservableModelQonfigParser {
 				Function<ModelSetInstance, ObservableConfigFormat<V>> valueFormat) throws QonfigInterpretationException {
 				if (!element.getChildrenInRole("entry").isEmpty())
 					System.err.println("WARNING: Config value " + model.pathTo(name) + " specifies entries, ignored");
+				if (element.getAttribute("default") != null)
+					System.err.println("WARNING: Config multi-map " + model.pathTo(name) + " specifies default, ignored");
 				prepare(keyType, valueType, element, model, cv);
 				add(model, cv, name, keyType, valueType, element, (msi, extModels) -> {
 					ObservableConfig config = (ObservableConfig) msi.getModelConfiguration();
 					ObservableConfigMapBuilder<K, V> valueBuilder = config.asValue(valueType).asMap(keyType);
+					valueBuilder.at(path);
 					if (keyFormat != null)
 						valueBuilder.withKeyFormat(keyFormat.apply(msi));
 					if (valueFormat != null)
@@ -929,8 +966,15 @@ public class ObservableModelQonfigParser {
 				String path;
 				if (model.getPath() == null)
 					path = name;
-				else
-					path = model.getPath() + "." + name;
+				else {
+					String pathBuilder = name;
+					QonfigElement modelEl = element.getParent();
+					while (modelEl.getParent() != null && modelEl.getParent().getType().getName().equals("ext-model")) {
+						pathBuilder = modelEl.getAttributeText("name") + "." + pathBuilder;
+						modelEl = modelEl.getParent();
+					}
+					path = pathBuilder;
+				}
 				expect(model, name, type, new ValueGetter<T>() {
 					@Override
 					public T get(ModelSetInstance modelSet, ExternalModelSet extModels) {
@@ -1395,7 +1439,12 @@ public class ObservableModelQonfigParser {
 				else
 					fileSource = literalContainer(ModelTypes.Value.forType(BetterFile.FileDataSource.class), new NativeFileSource(),
 						"native");
-				String workingDir = element.getAttributeText("working-dir");
+				Function<ModelSetInstance, SettableValue<String>> workingDir;
+				if (element.getAttribute("working-dir") != null)
+					workingDir = element.getAttribute("working-dir", ObservableExpression.class)
+					.evaluate(ModelTypes.Value.forType(String.class), model, cv);
+				else
+					workingDir = null;
 				boolean allowEmpty = element.getAttribute("allow-empty", boolean.class);
 				TypeToken<Format<BetterFile>> fileFormatType = TypeTokens.get().keyFor(Format.class)
 					.<Format<BetterFile>> parameterized(BetterFile.class);
@@ -1403,7 +1452,7 @@ public class ObservableModelQonfigParser {
 					SettableValue<BetterFile.FileDataSource> fds = fileSource.apply(models);
 					return SettableValue.asSettable(//
 						fds.transform(fileFormatType, tx -> tx.map(fs -> {
-							BetterFile workingDirFile = BetterFile.at(fs, workingDir == null ? "." : workingDir);
+							BetterFile workingDirFile = BetterFile.at(fs, workingDir == null ? "." : workingDir.apply(models).get());
 							return new BetterFile.FileFormat(fs, workingDirFile, allowEmpty);
 						})), //
 						__ -> "Not reversible");
@@ -1515,7 +1564,7 @@ public class ObservableModelQonfigParser {
 		}
 		SettableValue<Instant> selectedBackup = SettableValue.build(Instant.class).safe(false).build();
 		Format<Instant> PAST_DATE_FORMAT = SpinnerFormat.flexDate(Instant::now, "EEE MMM dd, yyyy",
-			opts -> opts.withMaxResolution(TimeUtils.DateElementType.Second).withEvaluationType(TimeUtils.RelativeTimeEvaluation.Past));
+			opts -> opts.withMaxResolution(TimeUtils.DateElementType.Second).withEvaluationType(TimeUtils.RelativeTimeEvaluation.PAST));
 		JFrame[] frame = new JFrame[1];
 		boolean[] backedUp = new boolean[1];
 		frame[0] = WindowPopulation.populateWindow(null, null, false, false)//
@@ -1755,6 +1804,7 @@ public class ObservableModelQonfigParser {
 					});
 				Function<ModelSetInstance, Function<Object, Object>> found = finder.find1();
 				Class<?> resultType = TypeTokens.getRawType(finder.getResultType());
+				boolean nullToNull = op.getAttribute("null-to-null", boolean.class);
 				if (ObservableValue.class.isAssignableFrom(resultType)) {
 					throw new UnsupportedOperationException("Not yet implemented");// TODO
 				} else if (ObservableCollection.class.isAssignableFrom(resultType)) {
@@ -1777,7 +1827,8 @@ public class ObservableModelQonfigParser {
 						@Override
 						public ObservableCollection<Object> get(ModelSetInstance extModels) {
 							ObservableValue<?> txValue = penultimateTransform.transform(source.get(extModels), extModels)
-								.transform((TypeToken<Object>) finder.getResultType(), tx -> tx.map(found.apply(extModels)));
+								.transform((TypeToken<Object>) finder.getResultType(),
+									tx -> tx.nullToNull(nullToNull).map(found.apply(extModels)));
 							if (ObservableSet.class.isAssignableFrom(resultType))
 								return ObservableSet.flattenValue((ObservableValue<ObservableSet<Object>>) txValue);
 							else
@@ -1841,7 +1892,7 @@ public class ObservableModelQonfigParser {
 				break;
 			case "refresh":
 				Function<ModelSetInstance, Observable<?>> refresh = op.getAttribute("on", ObservableExpression.class)
-					.evaluate(ModelTypes.Event.any(), model, cv);
+				.evaluate(ModelTypes.Event.any(), model, cv);
 				transformFn = (v, models) -> prevTransform.transform(v, models).refresh(refresh.apply(models));
 				break;
 			case "refresh-each":

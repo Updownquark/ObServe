@@ -213,7 +213,7 @@ public abstract class ModelType<M> implements Named {
 				TypeToken<?>[] params = new TypeToken[getModelType().getTypeCount()];
 				TypeConverter<Object, Object>[] casts = new TypeConverter[params.length];
 				TypeConverter<Object, Object>[] reverses = new TypeConverter[casts.length];
-				boolean reversible = true;
+				boolean trivial = true, reversible = true;
 				for (int i = 0; i < getModelType().getTypeCount(); i++) {
 					if (target.getType(i).equals(getType(i))) {
 						params[i] = getType(i);
@@ -223,6 +223,7 @@ public abstract class ModelType<M> implements Named {
 						params[i] = getType(i);
 						casts[i] = null;
 					} else {
+						trivial = false;
 						try {
 							casts[i] = (TypeConverter<Object, Object>) TypeTokens.get().getCast(target.getType(i), getType(i), true);
 							params[i] = casts[i].getConvertedType();
@@ -238,9 +239,13 @@ public abstract class ModelType<M> implements Named {
 						}
 					}
 				}
-				Function<M, M2> converter = (Function<M, M2>) getModelType().convertType(//
-					(ModelInstanceType<M, ? extends M>) target.getModelType().forTypes(params), casts,
-					reversible ? reverses : null);
+				Function<M, M2> converter;
+				if (trivial) {
+					converter = m -> (M2) m;
+				} else {
+					converter = (Function<M, M2>) getModelType().convertType(//
+						(ModelInstanceType<M, ? extends M>) target.getModelType().forTypes(params), casts, reversible ? reverses : null);
+				}
 				if (converter == null)
 					return null;
 				return new ModelInstanceConverter<M, M2>() {
