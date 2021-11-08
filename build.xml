@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<project default="jar" name="Create Runnable Jar for Project OGame ROI">
+    <!--this file was created by Eclipse Runnable JAR Export Wizard-->
+    <!--ANT 1.7 is required                                        -->
+    <!--define folder properties-->
+	<property name="app.name" value="ObServe" />
+	<property name="app.short.name" value="${app.name}" />
+	<property name="app.vendor" value="Updownquark" />
+	<property name="app.version" value="2.0.0" />
+	<property name="app.descrip" value="Observable structures and utilities" />
+
+    <property name="dir.buildfile" value="."/>
+    <property name="dir.workspace" value=".."/>
+    <property name="dir.jarfile" value="${dir.buildfile}/target/deploy"/>
+	<!--<property name="jar.file" value="${dir.jarfile}/${app.short.name}.jar" />-->
+	<property name="jar.file" value="${dir.jarfile}/ObServe-${app.version}.jar" />
+	<target name="antlr-sources">
+		<java fork="true" dir="${dir.buildfile}/src/main/antlr" jar="${dir.buildfile}/lib/antlr-4.9.2-complete.jar">
+			<arg value="-o" />
+			<arg value="../../../target/generated-sources/antlr4/org/observe/expresso" />
+			<arg value="-package" />
+			<arg value="org.observe.expresso" />
+			<arg value="Java8Lexer.g4" />
+		</java>
+		<java fork="true" dir="${dir.buildfile}/src/main/antlr" jar="${dir.buildfile}/lib/antlr-4.9.2-complete.jar">
+			<arg value="-o" />
+			<arg value="../../../target/generated-sources/antlr4/org/observe/expresso" />
+			<arg value="-package" />
+			<arg value="org.observe.expresso" />
+			<arg value="Java8Parser.g4" />
+		</java>
+	</target>
+    <target name="jar">
+        <jar destfile="${jar.file}" filesetmanifest="mergewithoutmain">
+            <manifest>
+                <attribute name="Class-Path" value="."/>
+            	<section name="org/observe/">
+	            	<attribute name="Specification-Title" value="${app.name}" />
+            		<attribute name="Specification-Version" value="${app.version}" />
+            		<attribute name="Specification-Vendor" value="${app.vendor}" />
+            		<attribute name="Implementation-Title" value="org.observe" />
+            		<attribute name="Implementation-Version" value="${app.version}" />
+            	</section>
+            </manifest>
+            <fileset dir="${dir.buildfile}/classes"/>
+            <fileset dir="${dir.buildfile}/src/main/java"/>
+            <zipfileset excludes="META-INF/*.SF" src="${dir.buildfile}/lib/guava-18.0.jar"/>
+            <zipfileset excludes="META-INF/*.SF" src="${dir.buildfile}/lib/miglayout-core-4.2.jar"/>
+            <zipfileset excludes="META-INF/*.SF" src="${dir.buildfile}/lib/miglayout-swing-4.2.jar"/>
+            <zipfileset excludes="META-INF/*.SF" src="${dir.buildfile}/lib/swingx-1.6.jar"/>
+            <zipfileset excludes="META-INF/*.SF" src="${dir.buildfile}/lib/antlr-runtime-4.9.2.jar"/>
+        </jar>
+    </target>
+</project>
