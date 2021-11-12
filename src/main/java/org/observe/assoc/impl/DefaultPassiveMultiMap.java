@@ -215,12 +215,12 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 	}
 
 	@Override
-	public ObservableCollection<V> get(Object key) {
+	public ObservableCollection<V> get(K key) {
 		if (!theKeySet.belongs(key))
-			return theValueFlow.apply(theSourceMap.get(NULL_KEY).flow()).collectPassive();
-		FilterMapResult<K, K0> reversedKey = theKeyManager.reverse((K) key, false, true);
+			return theValueFlow.apply(theSourceMap.get((K0) NULL_KEY).flow()).collectPassive();
+		FilterMapResult<K, K0> reversedKey = theKeyManager.reverse(key, false, true);
 		if (!reversedKey.isAccepted())
-			return theValueFlow.apply(theSourceMap.get(NULL_KEY).flow()).collectPassive();
+			return theValueFlow.apply(theSourceMap.get((K0) NULL_KEY).flow()).collectPassive();
 		return theValueFlow.apply(theSourceMap.get(reversedKey.result).flow()).collectPassive();
 	}
 

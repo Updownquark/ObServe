@@ -153,7 +153,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 	 * @param key The key to get the value for
 	 * @return An observable value that changes whenever the value for the given key changes in this map
 	 */
-	default <K2> SettableElement<V> observe(K2 key) {
+	default SettableElement<V> observe(K key) {
 		if (!keySet().belongs(key))
 			return SettableElement.empty(getValueType());
 		class MapValueObservable extends AbstractIdentifiable implements SettableElement<V> {
@@ -167,7 +167,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 			@Override
 			public ElementId getElementId() {
 				if (thePreviousElement == null || !thePreviousElement.isPresent()) {
-					MapEntryHandle<K, V> entry = getEntry((K) key);
+					MapEntryHandle<K, V> entry = getEntry(key);
 					thePreviousElement = entry == null ? null : entry.getElementId();
 				}
 				return thePreviousElement;
@@ -195,7 +195,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 					if (thePreviousElement != null && thePreviousElement.isPresent())
 						entry = getEntryById(thePreviousElement);
 					else {
-						entry = getEntry((K) key);
+						entry = getEntry(key);
 						thePreviousElement = entry == null ? null : entry.getElementId();
 					}
 					return entry == null ? null : entry.getValue();
@@ -231,7 +231,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 									observer.onNext(evt2);
 								}
 							});
-							CollectionElement<Map.Entry<K, V>> entryEl = entrySet().getElement(new SimpleMapEntry<>((K) key, null), true);
+							CollectionElement<Map.Entry<K, V>> entryEl = entrySet().getElement(new SimpleMapEntry<>(key, null), true);
 							exists[0] = entryEl != null;
 							return sub;
 						}
@@ -300,13 +300,13 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 							if (thePreviousElement != null && thePreviousElement.isPresent())
 								entry = getEntryById(thePreviousElement);
 							else {
-								entry = getEntry((K) key);
+								entry = getEntry(key);
 								thePreviousElement = CollectionElement.getElementId(entry);
 							}
 							if (entry != null)
 								return mutableEntry(entry.getElementId()).isEnabled();
 							else
-								return keySet().canAdd((K) key, null, null);
+								return null; // Without an actual value to test, we can't be sure whether ANY value could be inserted
 						}
 					}
 
@@ -367,13 +367,13 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 					if (thePreviousElement != null && thePreviousElement.isPresent())
 						entry = getEntryById(thePreviousElement);
 					else {
-						entry = getEntry((K) key);
+						entry = getEntry(key);
 						thePreviousElement = CollectionElement.getElementId(entry);
 					}
 					if (entry != null)
 						return mutableEntry(entry.getElementId()).isAcceptable(value);
 					else
-						return keySet().canAdd((K) key, null, null);
+						return canPut(key, value);
 				}
 			}
 
@@ -384,7 +384,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 					if (thePreviousElement != null && thePreviousElement.isPresent())
 						entry = getEntryById(thePreviousElement);
 					else {
-						entry = getEntry((K) key);
+						entry = getEntry(key);
 						thePreviousElement = CollectionElement.getElementId(entry);
 					}
 					if (entry != null) {
@@ -392,7 +392,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 						mutableEntry(entry.getElementId()).set(value);
 						return oldValue;
 					} else {
-						mutableEntry(keySet().addElement((K) key, null, null, false).getElementId()).set(value);
+						putEntry(key, value, false);
 						return null;
 					}
 				}
@@ -415,7 +415,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 							if (thePreviousElement != null && thePreviousElement.isPresent())
 								entry = getEntryById(thePreviousElement);
 							else {
-								entry = getEntry((K) key);
+								entry = getEntry(key);
 								thePreviousElement = CollectionElement.getElementId(entry);
 							}
 							ObservableElementEvent<V> initEvt = new ObservableElementEvent<>(getType(), true, null,
@@ -893,6 +893,16 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 		}
 
 		@Override
+		public String canPut(K key, V value) {
+			if (!keySet().belongs(key))
+				return StdMsg.ILLEGAL_ELEMENT;
+			else if (containsKey(key))
+				return StdMsg.ELEMENT_EXISTS;
+			else
+				return theEntries.canAdd(new MapEntry(key, value));
+		}
+
+		@Override
 		public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action) {
 			return theEntries.onChange(evt -> {
 				V oldValue = ((MapEntry) evt.getNewValue()).getOldValue();
@@ -1063,6 +1073,11 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 		}
 
 		@Override
+		public String canPut(K key, V value) {
+			return StdMsg.UNSUPPORTED_OPERATION;
+		}
+
+		@Override
 		public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action) {
 			return Subscription.NONE;
 		}
@@ -1155,6 +1170,11 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 		@Override
 		public ObservableSet<K> keySet() {
 			return theKeySet;
+		}
+
+		@Override
+		public String canPut(K key, V value) {
+			return StdMsg.UNSUPPORTED_OPERATION;
 		}
 
 		@Override

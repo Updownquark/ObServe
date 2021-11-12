@@ -736,12 +736,12 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		private <K> CollectionDataFlow<E, ?, T> gatherValues(AddKeyHolder.Default<K> addKey, BiFunction<K, T, T> reverse) {
-			return transform(getTargetType(), tx -> tx.map(v -> v).withReverse(v -> {
+			return transform(getTargetType(), tx -> tx.map(LambdaUtils.identity()).withReverse(LambdaUtils.printableFn(v -> {
 				if (addKey.get() != null)
 					return reverse.apply(addKey.get(), v);
 				else
 					return v;
-			}));
+			}, "identity", null)));
 		}
 
 		@Override

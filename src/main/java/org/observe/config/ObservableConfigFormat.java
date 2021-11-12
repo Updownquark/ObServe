@@ -2121,6 +2121,11 @@ public interface ObservableConfigFormat<E> {
 			protected MapEntry<K, V> create(ObservableConfigParseContext<MapEntry<K, V>> ctx, QuickMap<String, Object> fieldValues) {
 				return new MapEntry<>((K) fieldValues.get(0), (V) fieldValues.get(1));
 			}
+
+			@Override
+			public String toString() {
+				return "entry-format";
+			}
 		}
 
 		static class EntityConfigFormatImpl<E> extends Impl.AbstractComponentFormat<E> implements EntityConfigFormat<E> {

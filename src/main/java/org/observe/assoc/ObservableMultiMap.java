@@ -199,10 +199,10 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 	 * @return The collection of values stored for the given key in this map. Never null.
 	 */
 	@Override
-	default ObservableCollection<V> get(Object key) {
+	default ObservableCollection<V> get(K key) {
 		if (!keySet().belongs(key))
 			return ObservableCollection.of(getValueType());
-		return watch((K) key);
+		return watch(key);
 	}
 
 	/**
@@ -854,7 +854,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		}
 
 		@Override
-		public ObservableCollection<V> get(Object key) {
+		public ObservableCollection<V> get(K key) {
 			return getSource().get(key).reverse();
 		}
 
@@ -936,7 +936,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		}
 
 		@Override
-		public <K2> SettableElement<V> observe(K2 key) {
+		public SettableElement<V> observe(K key) {
 			return getSource().get(key).observeFind(v -> true).at(true).find();
 		}
 
@@ -1099,10 +1099,10 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		}
 
 		@Override
-		public <K2> SettableElement<X> observe(K2 key) {
+		public SettableElement<X> observe(K key) {
 			if (keySet().belongs(key))
 				return SettableElement.empty(getValueType());
-			ObservableMultiEntry<K, V> sourceValues = getSource().watch((K) key);
+			ObservableMultiEntry<K, V> sourceValues = getSource().watch(key);
 			ObservableValue<? extends X> combined = theObservableCombination.apply(sourceValues);
 			class CombinedElement extends AbstractIdentifiable implements SettableElement<X> {
 				@Override

@@ -13,9 +13,6 @@ import org.observe.assoc.ObservableMultiMap;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSet;
 import org.observe.util.TypeTokens;
-import org.observe.util.swing.ObservableSwingUtils;
-import org.observe.util.swing.ObservableTreeModel;
-import org.observe.util.swing.PanelPopulation;
 import org.qommons.collect.CollectionElement;
 import org.qommons.io.SpinnerFormat;
 
@@ -102,7 +99,7 @@ public class ObservableDemoGui extends JPanel {
 				if (parent instanceof String)
 					return mapByMod5.keySet();
 				else if (parent instanceof Long)
-					return mapByMod5.get(parent);
+					return mapByMod5.get((Long) parent);
 				else
 					return ObservableCollection.of(TypeTokens.get().VOID);
 			}

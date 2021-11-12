@@ -363,6 +363,11 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 		}
 
 		@Override
+		public String canPut(K key, V value) {
+			return theWrapped.canPut(key, value);
+		}
+
+		@Override
 		public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action) {
 			try (Transaction t = lock(false, null)) {
 				int[] size = new int[] { size() };

@@ -432,7 +432,7 @@ public class AppPopulation {
 			}
 			SettableValue<Instant> selectedBackup = SettableValue.build(Instant.class).safe(false).build();
 			Format<Instant> PAST_DATE_FORMAT = SpinnerFormat.flexDate(Instant::now, "EEE MMM dd, yyyy",
-				opts -> opts.withMaxResolution(TimeUtils.DateElementType.Second).withEvaluationType(TimeUtils.RelativeTimeEvaluation.PAST));
+				opts -> opts.withMaxResolution(TimeUtils.DateElementType.Second).withEvaluationType(TimeUtils.RelativeTimeEvaluation.Past));
 			JFrame[] frame = new JFrame[1];
 			boolean[] backedUp = new boolean[1];
 			frame[0] = WindowPopulation.populateWindow(null, null, false, false)//
@@ -520,7 +520,7 @@ public class AppPopulation {
 						.addLabel(null, theLatestVersionValue.map(v -> v == null ? "" : v.title), Format.TEXT, label -> label.fill())//
 						.addTextArea(null,
 							SettableValue.asSettable(theLatestVersionValue.map(v -> v == null ? "" : wrap(v.description)), d -> null),
-							Format.TEXT, label -> label.fill().fillV().modifyEditor(ed -> ed.asHtml().setEditable(false)))//
+							Format.TEXT, label -> label.fill().fillV().modifyEditor(ed -> ed.asHtml(true).setEditable(false)))//
 						.addButton("Upgrade", __ -> {
 							theUpgrader.get().accept(theLatestRelease);
 						}, btn -> btn.visibleWhen(theUpgrader
@@ -534,7 +534,7 @@ public class AppPopulation {
 								if (!lvM.matches())
 									return false;
 								return //
-								Integer.parseInt(cvM.group(1)) != Integer.parseInt(lvM.group(1))//
+									Integer.parseInt(cvM.group(1)) != Integer.parseInt(lvM.group(1))//
 									|| Integer.parseInt(cvM.group(2)) != Integer.parseInt(lvM.group(2))//
 									|| Integer.parseInt(cvM.group(3)) != Integer.parseInt(lvM.group(3));
 							}))))//

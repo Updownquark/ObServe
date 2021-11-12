@@ -1295,6 +1295,16 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		}
 
 		@Override
+		public String canPut(K key, V value) {
+			if (!keySet().belongs(key))
+				return StdMsg.ILLEGAL_ELEMENT;
+			else if (containsKey(key))
+				return StdMsg.ELEMENT_EXISTS;
+			else
+				return null;
+		}
+
+		@Override
 		public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action) {
 			return theWrapped.onChange(action);
 		}

@@ -855,6 +855,13 @@ public interface Equivalence<E> {
 		}
 
 		@Override
+		public String canPut(T2 key, V value) {
+			return theWrapped.canPut(//
+				theReverse.apply(key), //
+				value);
+		}
+
+		@Override
 		public int hashCode() {
 			return BetterMap.hashCode(this);
 		}
