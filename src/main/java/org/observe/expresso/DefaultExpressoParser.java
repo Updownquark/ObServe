@@ -1,10 +1,12 @@
 package org.observe.expresso;
 
+import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -14,13 +16,18 @@ import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.observe.Observable;
+import org.observe.ObservableAction;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
+import org.observe.collect.ObservableCollection;
+import org.observe.collect.ObservableSet;
 import org.observe.expresso.Expression.ExpressoParseException;
+import org.observe.expresso.ObservableExpression.Args;
 import org.observe.util.ClassView;
 import org.observe.util.ModelType.ModelInstanceType;
+import org.observe.util.ModelType.ModelInstanceType.SingleTyped;
 import org.observe.util.ModelTypes;
 import org.observe.util.ObservableModelQonfigParser;
 import org.observe.util.ObservableModelSet;
@@ -588,8 +595,8 @@ public class DefaultExpressoParser implements ExpressoParser {
 		 */
 
 		@Override
-		public <M, MV extends M> ObservableModelSet.ValueContainer<M, MV> evaluate(ModelInstanceType<M, MV> type, ObservableModelSet models,
-			ClassView classView) throws QonfigInterpretationException {
+		public <M, MV extends M> ObservableModelSet.ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
+			ObservableModelSet models, ClassView classView) throws QonfigInterpretationException {
 			ValueContainer<?, ?> mv = models.get(theNames.getFirst(), false);
 			if (mv != null)
 				return evaluateModel(//
@@ -1067,17 +1074,339 @@ public class DefaultExpressoParser implements ExpressoParser {
 		}
 
 		@Override
-		public <M, MV extends M> ValueContainer<M, MV> evaluate(ModelInstanceType<M, MV> type, ObservableModelSet models,
+		public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ObservableModelSet models,
 			ClassView classView) throws QonfigInterpretationException {
+			TypeToken<?> targetType;
+			if (type.getModelType() == ModelTypes.Action || type.getModelType() == ModelTypes.Value)
+				targetType = type.getType(0);
+			else
+				targetType = TypeTokens.get().keyFor(type.getModelType().modelType).parameterized(type.getTypeList());
+
+			class ArgOption implements Args {
+				final List<ValueContainer<SettableValue, SettableValue<?>>>[] args = new List[theArguments.size()];
+				ValueContainer<SettableValue, SettableValue<?>> firstResolved;
+
+				{
+					for (int a = 0; a < theArguments.size(); a++)
+						args[a] = new ArrayList<>(2);
+				}
+
+				@Override
+				public int size() {
+					return args.length;
+				}
+
+				@Override
+				public boolean matchesType(int arg, TypeToken<?> paramType) {
+					ValueContainer<SettableValue, SettableValue<?>> c;
+					for (int i = 0; i < args[arg].size(); i++) {
+						c = args[arg].get(i);
+						if (TypeTokens.get().isAssignable(paramType, c.getType().getType(i))) {
+							// Move to the beginning
+							args[arg].remove(i);
+							args[arg].add(0, c);
+							return true;
+						}
+					}
+					// Not found, try to evaluate it
+					try {
+						c = (ValueContainer<SettableValue, SettableValue<?>>) (ValueContainer<?, ?>) theArguments.get(arg)
+							.evaluate(ModelTypes.Value.forType(paramType), models, classView);
+					} catch (QonfigInterpretationException e) {
+						return false;
+					}
+					args[arg].add(0, c);
+					return true;
+				}
+
+				@Override
+				public TypeToken<?> resolveFirst() throws QonfigInterpretationException {
+					if (firstResolved == null)
+						firstResolved = theArguments.get(0).evaluate(ModelTypes.Value.any(), models, classView);
+					return firstResolved.getType().getType(0);
+				}
+			}
+			ArgOption args = new ArgOption();
 			if (theContext != null) {
-				// TODO
+				if (theContext instanceof NameExpression) {
+					Class<?> clazz = classView.getType(theContext.toString());
+					if (clazz != null) {
+						MethodResult<?> result = DefaultExpressoParser.findMethod(clazz.getMethods(), theMethodName,
+							TypeTokens.get().of(clazz), true, Arrays.asList(args), targetType, models, classView);
+						if (result != null) {
+							ValueContainer<SettableValue, SettableValue<?>>[] realArgs = new ValueContainer[theArguments.size()];
+							for (int a = 0; a < realArgs.length; a++)
+								realArgs[a] = args.args[a].get(0);
+							if (type.getModelType() == ModelTypes.Value)
+								return (ValueContainer<M, MV>) new MethodValueContainer<>(result, null, Arrays.asList(realArgs));
+							else if (type.getModelType() == ModelTypes.Action)
+								return (ValueContainer<M, MV>) new MethodActionContainer<>(result, null, Arrays.asList(realArgs));
+							else {
+								TypeToken<?>[] paramTypes = new TypeToken[type.getModelType().getTypeCount()];
+								for (int i = 0; i < paramTypes.length; i++)
+									paramTypes[i] = result.returnType.resolveType(type.getModelType().modelType.getTypeParameters()[i]);
+								return new MethodThingContainer<>((MethodResult<MV>) result, null, Arrays.asList(realArgs),
+									(ModelInstanceType<M, MV>) type.getModelType().forTypes(paramTypes));
+							}
+						}
+						throw new QonfigInterpretationException("No such method " + printSignature() + " in class " + clazz.getName());
+					}
+				}
+				ValueContainer<SettableValue, SettableValue<?>> ctx = theContext.evaluate(ModelTypes.Value.any(), models, classView);
+				MethodResult<?> result = DefaultExpressoParser.findMethod(TypeTokens.getRawType(ctx.getType().getType(0)).getMethods(),
+					theMethodName, ctx.getType().getType(0), false, Arrays.asList(args), targetType, models, classView);
+				if (result != null) {
+					ValueContainer<SettableValue, SettableValue<?>>[] realArgs = new ValueContainer[theArguments.size()];
+					for (int a = 0; a < realArgs.length; a++)
+						realArgs[a] = args.args[a].get(0);
+					if (type.getModelType() == ModelTypes.Value)
+						return (ValueContainer<M, MV>) new MethodValueContainer<>(result, ctx, Arrays.asList(realArgs));
+					else if (type.getModelType() == ModelTypes.Action)
+						return (ValueContainer<M, MV>) new MethodActionContainer<>(result, ctx, Arrays.asList(realArgs));
+					else {
+						TypeToken<?>[] paramTypes = new TypeToken[type.getModelType().getTypeCount()];
+						for (int i = 0; i < paramTypes.length; i++)
+							paramTypes[i] = result.returnType.resolveType(type.getModelType().modelType.getTypeParameters()[i]);
+						return new MethodThingContainer<>((MethodResult<MV>) result, ctx, Arrays.asList(realArgs),
+							(ModelInstanceType<M, MV>) type.getModelType().forTypes(paramTypes));
+					}
+				}
+				throw new QonfigInterpretationException("No such method " + printSignature() + " in type " + ctx.getType().getType(0));
 			} else {
 				List<Method> methods = classView.getImportedStaticMethods(theMethodName);
-				// for(Method m : methods) {
-				// ValueContainer<M, MV>
-				// }
+				MethodResult<?> result = DefaultExpressoParser.findMethod(methods.toArray(new Method[methods.size()]), theMethodName, null,
+					true, Arrays.asList(args), targetType, models, classView);
+				if (result != null) {
+					ValueContainer<SettableValue, SettableValue<?>>[] realArgs = new ValueContainer[theArguments.size()];
+					for (int a = 0; a < realArgs.length; a++)
+						realArgs[a] = args.args[a].get(0);
+					if (type.getModelType() == ModelTypes.Value)
+						return (ValueContainer<M, MV>) new MethodValueContainer<>(result, null, Arrays.asList(realArgs));
+					else if (type.getModelType() == ModelTypes.Action)
+						return (ValueContainer<M, MV>) new MethodActionContainer<>(result, null, Arrays.asList(realArgs));
+					else {
+						TypeToken<?>[] paramTypes = new TypeToken[type.getModelType().getTypeCount()];
+						for (int i = 0; i < paramTypes.length; i++)
+							paramTypes[i] = result.returnType.resolveType(type.getModelType().modelType.getTypeParameters()[i]);
+						return new MethodThingContainer<>((MethodResult<MV>) result, null, Arrays.asList(realArgs),
+							(ModelInstanceType<M, MV>) type.getModelType().forTypes(paramTypes));
+					}
+				}
+				throw new QonfigInterpretationException("No such imported method " + printSignature());
 			}
-			throw new QonfigInterpretationException("Method is not fully implemented yet");
+		}
+
+		@Override
+		public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ObservableModelSet models,
+			ClassView classView) throws QonfigInterpretationException {
+			throw new QonfigInterpretationException("Not implemented.  Are you sure you didn't mean to use the resolution operator (::)?");
+		}
+
+		@Override
+		public String toString() {
+			StringBuilder str = new StringBuilder();
+			if (theContext != null)
+				str.append(theContext).append('.');
+			str.append(printSignature());
+			return str.toString();
+		}
+
+		public String printSignature() {
+			StringBuilder str = new StringBuilder(theMethodName).append('(');
+			boolean first = true;
+			for (ObservableExpression arg : theArguments) {
+				if (first)
+					first = false;
+				else
+					str.append(", ");
+				str.append(arg);
+			}
+			return str.append(')').toString();
+		}
+
+		public static abstract class MethodContainer<M, T, MV extends M> implements ValueContainer<M, MV> {
+			private final MethodResult<T> theMethod;
+			private final ValueContainer<SettableValue, SettableValue<?>> theContext;
+			private final List<ValueContainer<SettableValue, SettableValue<?>>> theArguments;
+			private final ModelInstanceType<M, MV> theType;
+
+			public MethodContainer(MethodResult<T> method, ValueContainer<SettableValue, SettableValue<?>> context,
+				List<ValueContainer<SettableValue, SettableValue<?>>> arguments, ModelInstanceType<M, MV> type) {
+				theMethod = method;
+				theArguments = arguments;
+				theType = type;
+				if (Modifier.isStatic(theMethod.method.getModifiers())) {
+					if (context != null)
+						System.out.println("Info: " + method + " should be called statically");
+					theContext = null;
+				} else {
+					if (context == null)
+						throw new IllegalStateException(method + " cannot be called without context");
+					theContext = context;
+				}
+			}
+
+			@Override
+			public ModelInstanceType<M, MV> getType() {
+				return theType;
+			}
+
+			@Override
+			public MV get(ModelSetInstance models) {
+				SettableValue<?> ctxV = theContext == null ? null : theContext.get(models);
+				SettableValue<?>[] argVs = new SettableValue[theArguments.size()];
+				Observable<?>[] changeSources = new Observable[ctxV == null ? argVs.length : argVs.length + 1];
+				if (ctxV != null)
+					changeSources[changeSources.length - 1] = ctxV.noInitChanges();
+				for (int i = 0; i < argVs.length; i++) {
+					argVs[i] = theArguments.get(i).get(models);
+					changeSources[i] = argVs[i].noInitChanges();
+				}
+				return createModelValue(ctxV, argVs, //
+					Observable.or(changeSources));
+			}
+
+			protected abstract MV createModelValue(SettableValue<?> ctxV, SettableValue<?>[] argVs, Observable<Object> changes);
+
+			protected T invoke(SettableValue<?> ctxV, SettableValue<?>[] argVs)
+				throws IllegalAccessException, IllegalArgumentException, InvocationTargetException {
+				Object ctx = ctxV == null ? null : ctxV.get();
+				if (ctx == null && ctxV != null)
+					throw new NullPointerException(ctxV + " is null, cannot call " + theMethod);
+				Object[] args = new Object[argVs.length];
+				for (int a = 0; a < args.length; a++)
+					args[a] = argVs[a].get();
+				return theMethod.invoke(ctx, args);
+			}
+
+			@Override
+			public String toString() {
+				StringBuilder str = new StringBuilder();
+				if (theContext != null)
+					str.append(theContext).append('.');
+				str.append(theMethod.method.getName()).append('(');
+				for (int i = 0; i < theArguments.size(); i++) {
+					if (i > 0)
+						str.append(", ");
+					str.append(theArguments.get(i));
+				}
+				return str.append(')').toString();
+			}
+		}
+
+		public static class MethodActionContainer<T> extends MethodContainer<ObservableAction, T, ObservableAction<T>> {
+			public MethodActionContainer(MethodResult<T> method, ValueContainer<SettableValue, SettableValue<?>> context,
+				List<ValueContainer<SettableValue, SettableValue<?>>> arguments) {
+				super(method, context, arguments, ModelTypes.Action.forType(method.returnType));
+			}
+
+			@Override
+			public ModelInstanceType.SingleTyped<ObservableAction, T, ObservableAction<T>> getType() {
+				return (SingleTyped<ObservableAction, T, ObservableAction<T>>) super.getType();
+			}
+
+			@Override
+			protected ObservableAction<T> createModelValue(SettableValue<?> ctxV, SettableValue<?>[] argVs, Observable<Object> changes) {
+				return ObservableAction.of(getType().getValueType(), __ -> {
+					try {
+						return invoke(ctxV, argVs);
+					} catch (Throwable e) {
+						e.printStackTrace();
+						return null;
+					}
+				});
+			}
+		}
+
+		public static class MethodValueContainer<T> extends MethodContainer<SettableValue, T, SettableValue<T>> {
+			public MethodValueContainer(MethodResult<T> method, ValueContainer<SettableValue, SettableValue<?>> context,
+				List<ValueContainer<SettableValue, SettableValue<?>>> arguments) {
+				super(method, context, arguments, ModelTypes.Value.forType(method.returnType));
+			}
+
+			@Override
+			public ModelInstanceType.SingleTyped<SettableValue, T, SettableValue<T>> getType() {
+				return (SingleTyped<SettableValue, T, SettableValue<T>>) super.getType();
+			}
+
+			@Override
+			protected SettableValue<T> createModelValue(SettableValue<?> ctxV, SettableValue<?>[] argVs, Observable<Object> changes) {
+				CachingSupplier<T> supplier = new CachingSupplier<T>() {
+					@Override
+					protected T compute() throws IllegalAccessException, IllegalArgumentException, InvocationTargetException {
+						return invoke(ctxV, argVs);
+					}
+				};
+				return SettableValue.asSettable(//
+					ObservableValue.of(getType().getValueType(), supplier, supplier::getStamp, changes), //
+					__ -> "Methods are not reversible");
+			}
+		}
+
+		public static class MethodThingContainer<M, MV extends M> extends MethodContainer<M, MV, MV> {
+			public MethodThingContainer(MethodResult<MV> method, ValueContainer<SettableValue, SettableValue<?>> context,
+				List<ValueContainer<SettableValue, SettableValue<?>>> arguments, ModelInstanceType<M, MV> type) {
+				super(method, context, arguments, type);
+			}
+
+			@Override
+			protected MV createModelValue(SettableValue<?> ctxV, SettableValue<?>[] argVs, Observable<Object> changes) {
+				CachingSupplier<MV> supplier = new CachingSupplier<MV>() {
+					@Override
+					protected MV compute() throws IllegalAccessException, IllegalArgumentException, InvocationTargetException {
+						return invoke(ctxV, argVs);
+					}
+				};
+				if (getType().getModelType() == ModelTypes.Collection) {
+					ObservableValue<ObservableCollection<?>> value = ObservableValue.of(
+						TypeTokens.get().keyFor(ObservableCollection.class).parameterized(getType().getType(0)),
+						() -> (ObservableCollection<?>) supplier.get(), supplier::getStamp, changes);
+					return (MV) ObservableCollection.flattenValue(value);
+				} else if (getType().getModelType() == ModelTypes.Set) {
+					ObservableValue<ObservableSet<?>> value = ObservableValue.of(
+						TypeTokens.get().keyFor(ObservableSet.class).parameterized(getType().getType(0)),
+						() -> (ObservableSet<?>) supplier.get(), supplier::getStamp, changes);
+					return (MV) ObservableSet.flattenValue(value);
+				} else {
+					try {
+						return supplier.compute();
+					} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
+						e.printStackTrace();
+						return (MV) ObservableCollection.of(getType().getType(0));
+					}
+				}
+			}
+		}
+
+		private static abstract class CachingSupplier<T> implements Supplier<T> {
+			private T theValue;
+			private boolean isDirty = true;
+			private long theStamp;
+
+			void dirty() {
+				isDirty = true;
+				theStamp++;
+			}
+
+			long getStamp() {
+				return theStamp;
+			}
+
+			@Override
+			public T get() {
+				if (isDirty) {
+					isDirty = false;
+					try {
+						theValue = compute();
+					} catch (Throwable e) {
+						e.printStackTrace();
+						theValue = null;
+					}
+				}
+				return theValue;
+			}
+
+			protected abstract T compute() throws IllegalAccessException, IllegalArgumentException, InvocationTargetException;
 		}
 	}
 
@@ -1105,7 +1434,7 @@ public class DefaultExpressoParser implements ExpressoParser {
 		}
 
 		@Override
-		public <M, MV extends M> ValueContainer<M, MV> evaluate(ModelInstanceType<M, MV> type, ObservableModelSet models,
+		public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ObservableModelSet models,
 			ClassView classView) throws QonfigInterpretationException {
 			throw new QonfigInterpretationException("Not implemented");
 		}
@@ -1116,80 +1445,67 @@ public class DefaultExpressoParser implements ExpressoParser {
 			return new MethodFinder<P1, P2, P3, T>(targetType) {
 				@Override
 				public Function<ModelSetInstance, TriFunction<P1, P2, P3, T>> find3() throws QonfigInterpretationException {
+					boolean voidTarget = TypeTokens.get().unwrap(TypeTokens.getRawType(targetType)) == void.class;
 					if (theContext instanceof NameExpression) {
 						Class<?> type = classView.getType(theContext.toString());
 						if (type != null) {
-							Method[] methods = type.getMethods();
-							for (Method m : methods) {
-								if (!m.getName().equals(theMethodName))
-									continue;
-								Method finalM = m;
-								for (MethodOption option : theOptions) {
-									switch (option.argTypes.length) {
-									case 0:
-										continue; // TODO
-									case 1:
-										switch (m.getParameterTypes().length) {
-										case 0:
-											if (Modifier.isStatic(m.getModifiers()))
-												continue;
-											else if (!type.isAssignableFrom(TypeTokens.getRawType(option.argTypes[0])))
-												continue;
-											TypeToken<?> resultType = TypeTokens.get().of(m.getGenericReturnType());
-											if (!TypeTokens.get().isAssignable(targetType, resultType))
-												continue;
-											setResultType((TypeToken<? extends T>) resultType);
-											return msi -> (p1, p2, p3) -> {
-												try {
-													return (T) finalM.invoke(p1);
-												} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
-													throw new IllegalStateException(
-														MethodReferenceExpression.this + ": Could not invoke " + finalM, e);
-												} catch (NullPointerException e) {
-													NullPointerException npe = new NullPointerException(
-														MethodReferenceExpression.this.toString()//
-														+ (e.getMessage() == null ? "" : ": " + e.getMessage()));
-													npe.setStackTrace(e.getStackTrace());
-													throw npe;
-												}
-											};
-										case 1:
-											if (!Modifier.isStatic(m.getModifiers()))
-												continue;
-											else if (!TypeTokens.get().isAssignable(TypeTokens.get().of(m.getGenericParameterTypes()[0]),
-												option.argTypes[0]))
-												continue;
-											resultType = TypeTokens.get().of(m.getGenericReturnType());
-											if (!TypeTokens.get().isAssignable(targetType, resultType))
-												continue;
-											setResultType((TypeToken<? extends T>) resultType);
-											return msi -> (p1, p2, p3) -> {
-												try {
-													return (T) finalM.invoke(null, new Object[] { p1 });
-												} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
-													throw new IllegalStateException(
-														MethodReferenceExpression.this + ": Could not invoke " + finalM, e);
-												} catch (NullPointerException e) {
-													NullPointerException npe = new NullPointerException(
-														MethodReferenceExpression.this.toString()//
-														+ (e.getMessage() == null ? "" : ": " + e.getMessage()));
-													npe.setStackTrace(e.getStackTrace());
-													throw npe;
-												}
-											};
-										case 2:
-										default:
-											// TODO
-											continue;
-										}
+							MethodResult<? extends T> result = DefaultExpressoParser.findMethod(type.getMethods(), theMethodName,
+								TypeTokens.get().of(type), true, theOptions, targetType, models, classView);
+							if (result != null) {
+								setResultType(result.returnType);
+								MethodOption option = theOptions.get(result.argListOption);
+								return msi -> (p1, p2, p3) -> {
+									Object[] args = new Object[option.argTypes.length];
+									option.argMaker.makeArgs(p1, p2, p3, args, msi);
+									try {
+										T val = result.invoke(null, args);
+										return voidTarget ? null : val;
+									} catch (InvocationTargetException e) {
+										throw new IllegalStateException(MethodReferenceExpression.this + ": Could not invoke " + result,
+											e.getTargetException());
+									} catch (IllegalAccessException | IllegalArgumentException e) {
+										throw new IllegalStateException(MethodReferenceExpression.this + ": Could not invoke " + result, e);
+									} catch (NullPointerException e) {
+										NullPointerException npe = new NullPointerException(MethodReferenceExpression.this.toString()//
+											+ (e.getMessage() == null ? "" : ": " + e.getMessage()));
+										npe.setStackTrace(e.getStackTrace());
+										throw npe;
 									}
-								}
+								};
 							}
+							throw new QonfigInterpretationException(
+								"No such method matching: " + MethodReferenceExpression.this + " on class " + type.getName());
 						}
 					}
-					// ValueContainer<?, ?> ctx=theContext.evaluate(null, models, classView)
-					// ValueContainer<?, ?> mv=models.get(theMethodName, false)
-					throw new QonfigInterpretationException("Could not evaluate method from " + MethodReferenceExpression.this.toString());
+					ValueContainer<SettableValue, SettableValue<?>> ctx = theContext.evaluate(ModelTypes.Value.any(), models, classView);
+					MethodResult<? extends T> result = DefaultExpressoParser.findMethod(//
+						TypeTokens.getRawType(ctx.getType().getType(0)).getMethods(), theMethodName, ctx.getType().getType(0), true,
+						theOptions, targetType, models, classView);
+					if (result != null) {
+						setResultType(result.returnType);
+						MethodOption option = theOptions.get(result.argListOption);
+						return msi -> (p1, p2, p3) -> {
+							Object ctxV = ctx.apply(msi).get();
+							Object[] args = new Object[option.argTypes.length];
+							option.argMaker.makeArgs(p1, p2, p3, args, msi);
+							try {
+								T val = result.invoke(ctxV, args);
+								return voidTarget ? null : val;
+							} catch (InvocationTargetException e) {
+								throw new IllegalStateException(MethodReferenceExpression.this + ": Could not invoke " + result,
+									e.getTargetException());
+							} catch (IllegalAccessException | IllegalArgumentException e) {
+								throw new IllegalStateException(MethodReferenceExpression.this + ": Could not invoke " + result, e);
+							} catch (NullPointerException e) {
+								NullPointerException npe = new NullPointerException(MethodReferenceExpression.this.toString()//
+									+ (e.getMessage() == null ? "" : ": " + e.getMessage()));
+								npe.setStackTrace(e.getStackTrace());
+								throw npe;
+							}
+						};
+					}
+					throw new QonfigInterpretationException(
+						"No such method matching: " + MethodReferenceExpression.this + " for type " + ctx.getType().getType(0));
 				}
 			};
 		}
@@ -1210,5 +1526,170 @@ public class DefaultExpressoParser implements ExpressoParser {
 			str.append(theMethodName);
 			return str.toString();
 		}
+	}
+
+	public static boolean checkArgCount(int parameters, int args, boolean varArgs) {
+		if (varArgs)
+			return args >= parameters - 1;
+			else
+				return args == parameters;
+	}
+
+	static <T> MethodResult<? extends T> findMethod(Method[] methods, String methodName, TypeToken<?> contextType, boolean arg0Context,
+		List<? extends Args> argOptions, TypeToken<T> targetType, ObservableModelSet models, ClassView classView)
+			throws QonfigInterpretationException {
+		Class<T> rawTarget = TypeTokens.get().wrap(TypeTokens.getRawType(targetType));
+		boolean voidTarget = rawTarget == Void.class;
+		for (Method m : methods) {
+			if (methodName != null && !m.getName().equals(methodName))
+				continue;
+			boolean isStatic = Modifier.isStatic(m.getModifiers());
+			if (!isStatic && !arg0Context && contextType == null)
+				continue;
+			TypeToken<?>[] paramTypes = null;
+			for (int o = 0; o < argOptions.size(); o++) {
+				Args option = argOptions.get(o);
+				int methodArgCount = (!isStatic && arg0Context) ? option.size() - 1 : option.size();
+				if (methodArgCount < 0 || !checkArgCount(m.getParameterTypes().length, methodArgCount, m.isVarArgs()))
+					continue;
+				boolean ok = true;
+				if (isStatic) {
+					if (paramTypes == null) {
+						paramTypes = new TypeToken[m.getParameterTypes().length];
+						for (int p = 0; p < paramTypes.length; p++)
+							paramTypes[p] = TypeTokens.get().of(m.getGenericParameterTypes()[p]);
+					}
+					// All arguments are parameters
+					for (int a = 0; ok && a < option.size(); a++) {
+						int p = a;
+						TypeToken<?> paramType = p < paramTypes.length ? paramTypes[p] : paramTypes[paramTypes.length - 1];
+						if (!option.matchesType(a, paramType))
+							ok = false;
+					}
+					if (ok) {
+						TypeToken<?> returnType = TypeTokens.get().of(m.getGenericReturnType());
+						if (!voidTarget && !TypeTokens.get().isAssignable(targetType, returnType))
+							throw new QonfigInterpretationException("Return type " + returnType + " of method " + printSignature(m)
+							+ " cannot be assigned to type " + targetType);
+						return new MethodResult<>(m, o, false, (TypeToken<? extends T>) returnType);
+					}
+				} else {
+					if (arg0Context) {
+						// Use the first argument as context
+						contextType = option.resolveFirst();
+						if (paramTypes == null) {
+							paramTypes = new TypeToken[m.getParameterTypes().length];
+							for (int p = 0; p < paramTypes.length; p++) {
+								paramTypes[p] = contextType.resolveType(m.getGenericParameterTypes()[p]);
+							}
+						}
+						ok = true;
+						if (!option.matchesType(0, contextType))
+							continue;
+						for (int a = 1; ok && a < option.size(); a++) {
+							int p = a - 1;
+							TypeToken<?> paramType = p < paramTypes.length ? paramTypes[p] : paramTypes[paramTypes.length - 1];
+							if (!option.matchesType(a, paramType))
+								ok = false;
+						}
+						if (ok) {
+							TypeToken<?> returnType;
+							if (!isStatic && contextType != null && !(contextType.getType() instanceof Class))
+								returnType = contextType.resolveType(m.getGenericReturnType());
+							else
+								returnType = TypeTokens.get().of(m.getGenericReturnType());
+							if (!voidTarget && !TypeTokens.get().isAssignable(targetType, returnType))
+								throw new QonfigInterpretationException("Return type " + returnType + " of method " + printSignature(m)
+								+ " cannot be assigned to type " + targetType);
+							return new MethodResult<>(m, o, true, (TypeToken<? extends T>) returnType);
+						}
+					} else {
+						// Ignore context (supplied by caller), all arguments are parameters
+						if (paramTypes == null) {
+							paramTypes = new TypeToken[m.getParameterTypes().length];
+							for (int p = 0; p < paramTypes.length; p++) {
+								if (!(contextType.getType() instanceof Class))
+									paramTypes[p] = contextType.resolveType(m.getGenericParameterTypes()[p]);
+								else
+									paramTypes[p] = TypeTokens.get().of(m.getGenericParameterTypes()[p]);
+							}
+						}
+						for (int a = 0; ok && a < option.size(); a++) {
+							int p = a;
+							TypeToken<?> paramType = p < paramTypes.length ? paramTypes[p] : paramTypes[paramTypes.length - 1];
+							if (!option.matchesType(a, paramType))
+								ok = false;
+						}
+						if (ok) {
+							TypeToken<?> returnType;
+							if (!(contextType.getType() instanceof Class))
+								returnType = contextType.resolveType(m.getGenericReturnType());
+							else
+								returnType = TypeTokens.get().of(m.getGenericReturnType());
+							if (!voidTarget && !TypeTokens.get().isAssignable(targetType, returnType))
+								throw new QonfigInterpretationException("Return type " + returnType + " of method " + printSignature(m)
+								+ " cannot be assigned to type " + targetType);
+							return new MethodResult<>(m, o, false, (TypeToken<? extends T>) returnType);
+						}
+					}
+				}
+			}
+		}
+		return null;
+	}
+
+	public static class MethodResult<R> {
+		public final Method method;
+		public final int argListOption;
+		private final boolean isArg0Context;
+		public final TypeToken<R> returnType;
+
+		public MethodResult(Method method, int argListOption, boolean arg0Context, TypeToken<R> returnType) {
+			this.method = method;
+			this.argListOption = argListOption;
+			isArg0Context = arg0Context;
+			this.returnType = returnType;
+		}
+
+		public R invoke(Object context, Object[] args) throws IllegalAccessException, IllegalArgumentException, InvocationTargetException {
+			Object[] parameters;
+			if (isArg0Context || method.isVarArgs()) {
+				parameters = new Object[method.getParameterCount()];
+				if (isArg0Context) {
+					context = args[0];
+					if (method.isVarArgs()) {
+						System.arraycopy(args, 1, parameters, 0, parameters.length - 1);
+						int lastArgLen = args.length - parameters.length;
+						Object lastArg = Array.newInstance(method.getParameterTypes()[parameters.length - 1], lastArgLen);
+						System.arraycopy(args, parameters.length, lastArg, 0, lastArgLen);
+						parameters[parameters.length - 1] = lastArg;
+					} else
+						System.arraycopy(args, 1, parameters, 0, parameters.length);
+				} else { // var args
+					System.arraycopy(args, 0, parameters, 0, parameters.length - 1);
+					int lastArgLen = args.length - parameters.length + 1;
+					Object lastArg = Array.newInstance(method.getParameterTypes()[parameters.length - 1], lastArgLen);
+					System.arraycopy(args, parameters.length - 1, lastArg, 0, lastArgLen);
+					parameters[parameters.length - 1] = lastArg;
+				}
+			} else
+				parameters = args;
+			return (R) method.invoke(context, parameters);
+		}
+
+		@Override
+		public String toString() {
+			return printSignature(method);
+		}
+	}
+
+	public static String printSignature(Method method) {
+		StringBuilder str = new StringBuilder(method.getName()).append('(');
+		for (int i = 0; i < method.getParameterCount(); i++) {
+			if (i > 0)
+				str.append(", ");
+			str.append(method.getParameterTypes()[i].getName());
+		}
+		return str.append(')').toString();
 	}
 }
