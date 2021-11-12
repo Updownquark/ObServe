@@ -980,7 +980,7 @@ public class ObservableModelQonfigParser {
 					public T get(ModelSetInstance modelSet, ExternalModelSet extModels) {
 						try {
 							return getValue(extModels, path, type);
-						} catch (IllegalArgumentException e) {
+						} catch (IllegalArgumentException | QonfigInterpretationException e) {
 							throw new IllegalArgumentException(
 								"External model " + model.getPath() + " does not match expected: " + e.getMessage(), e);
 						}
@@ -992,7 +992,7 @@ public class ObservableModelQonfigParser {
 			protected abstract <V> void expect(ObservableModelSet.Builder model, String name, TypeToken<V> type,
 				ValueGetter<? extends T> valueGetter);
 
-			protected abstract T getValue(ExternalModelSet extModels, String name, TypeToken<?> type);
+			protected abstract T getValue(ExternalModelSet extModels, String name, TypeToken<?> type) throws QonfigInterpretationException;
 		}
 		observeInterpreter.createWith("ext-event", Void.class, new ExtModelValidator<Observable>() {
 			@Override
@@ -1001,7 +1001,7 @@ public class ObservableModelQonfigParser {
 			}
 
 			@Override
-			protected Observable getValue(ExternalModelSet extModels, String name, TypeToken<?> type) {
+			protected Observable getValue(ExternalModelSet extModels, String name, TypeToken<?> type) throws QonfigInterpretationException {
 				return extModels.get(name, ModelTypes.Event.forType(type));
 			}
 		});
@@ -1012,7 +1012,8 @@ public class ObservableModelQonfigParser {
 			}
 
 			@Override
-			protected ObservableAction getValue(ExternalModelSet extModels, String name, TypeToken<?> type) {
+			protected ObservableAction getValue(ExternalModelSet extModels, String name, TypeToken<?> type)
+				throws QonfigInterpretationException {
 				return extModels.get(name, ModelTypes.Action.forType(type));
 			}
 		});
@@ -1023,7 +1024,8 @@ public class ObservableModelQonfigParser {
 			}
 
 			@Override
-			protected SettableValue getValue(ExternalModelSet extModels, String name, TypeToken<?> type) {
+			protected SettableValue getValue(ExternalModelSet extModels, String name, TypeToken<?> type)
+				throws QonfigInterpretationException {
 				return extModels.get(name, ModelTypes.Value.forType(type));
 			}
 		});
@@ -1035,7 +1037,8 @@ public class ObservableModelQonfigParser {
 			}
 
 			@Override
-			protected ObservableCollection getValue(ExternalModelSet extModels, String name, TypeToken<?> type) {
+			protected ObservableCollection getValue(ExternalModelSet extModels, String name, TypeToken<?> type)
+				throws QonfigInterpretationException {
 				return extModels.get(name, ModelTypes.Collection.forType(type));
 			}
 		});
@@ -1046,7 +1049,8 @@ public class ObservableModelQonfigParser {
 			}
 
 			@Override
-			protected ObservableSet getValue(ExternalModelSet extModels, String name, TypeToken<?> type) {
+			protected ObservableSet getValue(ExternalModelSet extModels, String name, TypeToken<?> type)
+				throws QonfigInterpretationException {
 				return extModels.get(name, ModelTypes.Set.forType(type));
 			}
 		});
@@ -1058,7 +1062,8 @@ public class ObservableModelQonfigParser {
 			}
 
 			@Override
-			protected ObservableSortedCollection getValue(ExternalModelSet extModels, String name, TypeToken<?> type) {
+			protected ObservableSortedCollection getValue(ExternalModelSet extModels, String name, TypeToken<?> type)
+				throws QonfigInterpretationException {
 				return extModels.get(name, ModelTypes.SortedCollection.forType(type));
 			}
 		});
@@ -1070,7 +1075,8 @@ public class ObservableModelQonfigParser {
 			}
 
 			@Override
-			protected ObservableSortedSet getValue(ExternalModelSet extModels, String name, TypeToken<?> type) {
+			protected ObservableSortedSet getValue(ExternalModelSet extModels, String name, TypeToken<?> type)
+				throws QonfigInterpretationException {
 				return extModels.get(name, ModelTypes.SortedSet.forType(type));
 			}
 		});
@@ -1082,7 +1088,8 @@ public class ObservableModelQonfigParser {
 			}
 
 			@Override
-			protected ObservableValueSet getValue(ExternalModelSet extModels, String name, TypeToken<?> type) {
+			protected ObservableValueSet getValue(ExternalModelSet extModels, String name, TypeToken<?> type)
+				throws QonfigInterpretationException {
 				return extModels.get(name, ModelTypes.ValueSet.forType(type));
 			}
 		});
@@ -1104,7 +1111,12 @@ public class ObservableModelQonfigParser {
 				expect(model, name, keyType, valueType, new ValueGetter<T>() {
 					@Override
 					public T get(ModelSetInstance modelSet, ExternalModelSet extModels) {
-						return getValue(extModels, path, keyType, valueType);
+						try {
+							return getValue(extModels, path, keyType, valueType);
+						} catch (QonfigInterpretationException e) {
+							throw new IllegalArgumentException(
+								"External model " + model.getPath() + " does not match expected: " + e.getMessage(), e);
+						}
 					}
 				});
 				return null;
@@ -1113,7 +1125,8 @@ public class ObservableModelQonfigParser {
 			protected abstract <K, V> void expect(ObservableModelSet.Builder model, String name, TypeToken<K> keyType,
 				TypeToken<V> valueType, ValueGetter<? extends T> valueGetter);
 
-			protected abstract T getValue(ExternalModelSet extModels, String name, TypeToken<?> keyType, TypeToken<?> valueType);
+			protected abstract T getValue(ExternalModelSet extModels, String name, TypeToken<?> keyType, TypeToken<?> valueType)
+				throws QonfigInterpretationException;
 		}
 		observeInterpreter.createWith("ext-map", Void.class, new ExtBiTypedModelValidator<ObservableMap>() {
 			@Override
@@ -1123,7 +1136,8 @@ public class ObservableModelQonfigParser {
 			}
 
 			@Override
-			protected ObservableMap getValue(ExternalModelSet extModels, String name, TypeToken<?> keyType, TypeToken<?> valueType) {
+			protected ObservableMap getValue(ExternalModelSet extModels, String name, TypeToken<?> keyType, TypeToken<?> valueType)
+				throws QonfigInterpretationException {
 				return extModels.get(name, ModelTypes.Map.forType(keyType, valueType));
 			}
 		});
@@ -1135,7 +1149,8 @@ public class ObservableModelQonfigParser {
 			}
 
 			@Override
-			protected ObservableSortedMap getValue(ExternalModelSet extModels, String name, TypeToken<?> keyType, TypeToken<?> valueType) {
+			protected ObservableSortedMap getValue(ExternalModelSet extModels, String name, TypeToken<?> keyType, TypeToken<?> valueType)
+				throws QonfigInterpretationException {
 				return extModels.get(name, ModelTypes.SortedMap.forType(keyType, valueType));
 			}
 		});
@@ -1147,7 +1162,8 @@ public class ObservableModelQonfigParser {
 			}
 
 			@Override
-			protected ObservableMultiMap getValue(ExternalModelSet extModels, String name, TypeToken<?> keyType, TypeToken<?> valueType) {
+			protected ObservableMultiMap getValue(ExternalModelSet extModels, String name, TypeToken<?> keyType, TypeToken<?> valueType)
+				throws QonfigInterpretationException {
 				return extModels.get(name, ModelTypes.MultiMap.forType(keyType, valueType));
 			}
 		});
@@ -1161,7 +1177,7 @@ public class ObservableModelQonfigParser {
 
 			@Override
 			protected ObservableSortedMultiMap getValue(ExternalModelSet extModels, String name, TypeToken<?> keyType,
-				TypeToken<?> valueType) {
+				TypeToken<?> valueType) throws QonfigInterpretationException {
 				return extModels.get(name, ModelTypes.SortedMultiMap.forType(keyType, valueType));
 			}
 		});
@@ -1201,10 +1217,10 @@ public class ObservableModelQonfigParser {
 				default:
 					throw new IllegalArgumentException("Unrecognized file-source-type: " + element.getAttributeText("file-source-type"));
 				}
-				if (!element.getChildrenByRole().get("archive").isEmpty()) {
+				if (!element.getChildrenInRole("archive").isEmpty()) {
 					Set<String> archiveMethodStrs = new HashSet<>();
 					List<ArchiveEnabledFileSource.FileArchival> archiveMethods = new ArrayList<>(5);
-					for (QonfigElement archive : element.getChildrenByRole().get("archive")) {
+					for (QonfigElement archive : element.getChildrenInRole("archive")) {
 						String type = archive.getAttributeText("type");
 						if (!archiveMethodStrs.add(type))
 							continue;
@@ -1223,12 +1239,12 @@ public class ObservableModelQonfigParser {
 						}
 					}
 					Function<ModelSetInstance, SettableValue<Integer>> maxZipDepth;
-					if (element.getAttribute("max-zip-depth") == null)
+					if (element.getAttribute("max-archive-depth") == null)
 						maxZipDepth = null;
 					else {
 						int zipDepth;
 						try {
-							zipDepth = Integer.parseInt(element.getAttributeText("max-zip-depth"));
+							zipDepth = Integer.parseInt(element.getAttributeText("max-archive-depth"));
 						} catch (NumberFormatException e) {
 							zipDepth = -1;
 						}
@@ -1236,7 +1252,7 @@ public class ObservableModelQonfigParser {
 							int finalZD = zipDepth;
 							maxZipDepth = models -> literal(finalZD, element.getAttributeText("max-archive-depth"));
 						} else {
-							maxZipDepth = model.get(element.getAttributeText("max-zip-depth"), ModelTypes.Value.forType(Integer.class));
+							maxZipDepth = model.get(element.getAttributeText("max-archive-depth"), ModelTypes.Value.forType(Integer.class));
 						}
 					}
 					ValueGetter<SettableValue<FileDataSource>> root = source;
@@ -1564,7 +1580,7 @@ public class ObservableModelQonfigParser {
 		}
 		SettableValue<Instant> selectedBackup = SettableValue.build(Instant.class).safe(false).build();
 		Format<Instant> PAST_DATE_FORMAT = SpinnerFormat.flexDate(Instant::now, "EEE MMM dd, yyyy",
-			opts -> opts.withMaxResolution(TimeUtils.DateElementType.Second).withEvaluationType(TimeUtils.RelativeTimeEvaluation.PAST));
+			opts -> opts.withMaxResolution(TimeUtils.DateElementType.Second).withEvaluationType(TimeUtils.RelativeTimeEvaluation.Past));
 		JFrame[] frame = new JFrame[1];
 		boolean[] backedUp = new boolean[1];
 		frame[0] = WindowPopulation.populateWindow(null, null, false, false)//

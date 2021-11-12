@@ -64,8 +64,7 @@
 		</element-def>
 
 		<element-def name="widget" abstract="true">
-			<attribute name="tooltip" type="expression" specify="optional" />
-			<attribute name="tooltip-text" type="string" specify="optional" />
+			<attribute name="tooltip" type="expression-or-string" specify="optional" />
 			<attribute name="visible" type="expression" specify="optional" />
 			<attribute name="onClick" type="expression" specify="optional" />
 			<attribute name="onHover" type="expression" specify="optional" />

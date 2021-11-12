@@ -192,7 +192,6 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	@Override
 	public MutableCollectionElement<E> mutableElement(ElementId id) {
 		try (Transaction t = theCollection.lock(false, null)) {
-			flush();
 			MutableCollectionElement<E> srcEl = theCollection.mutableElement(//
 				theSyntheticBacking.getElement(id).get().sourceId);
 			return new MutableCollectionElement<E>() {
@@ -223,6 +222,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 
 				@Override
 				public void set(E value) throws UnsupportedOperationException, IllegalArgumentException {
+					flush();
 					srcEl.set(value);
 				}
 
@@ -233,6 +233,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 
 				@Override
 				public void remove() throws UnsupportedOperationException {
+					flush();
 					srcEl.remove();
 				}
 			};

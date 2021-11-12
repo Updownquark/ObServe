@@ -84,6 +84,7 @@ import org.observe.Equivalence;
 import org.observe.Observable;
 import org.observe.ObservableAction;
 import org.observe.ObservableValue;
+import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
 import org.observe.SettableValue.Builder;
 import org.observe.SimpleObservable;
@@ -1776,6 +1777,43 @@ public class PanelPopulation {
 		protected abstract Component createPostLabel(Observable<?> until);
 	}
 
+	static class VizChanger implements Consumer<ObservableValueEvent<Boolean>> {
+		private final Component theComponent;
+		private final Component theFieldLabel;
+		private boolean shouldBeVisible;
+
+		public VizChanger(Component component, Component fieldLabel) {
+			theComponent = component;
+			theFieldLabel = fieldLabel;
+		}
+
+		@Override
+		public void accept(ObservableValueEvent<Boolean> evt) {
+			boolean visible = evt.getNewValue();
+			shouldBeVisible = visible;
+			if (EventQueue.isDispatchThread())
+				setVisible(visible);
+			else {
+				EventQueue.invokeLater(() -> {
+					if (shouldBeVisible == visible)
+						setVisible(visible);
+				});
+			}
+		}
+
+		private void setVisible(boolean visible) {
+			if (visible == theComponent.isVisible())
+				return;
+			if (theFieldLabel != null)
+				theFieldLabel.setVisible(visible);
+			theComponent.setVisible(visible);
+			if (theComponent != null)
+				theComponent.setVisible(visible);
+			if (theComponent.getParent() != null)
+				theComponent.getParent().revalidate();
+		}
+	}
+
 	static class MigFieldPanel<C extends Container> extends AbstractComponentEditor<C, MigFieldPanel<C>>
 	implements PartialPanelPopulatorImpl<C, MigFieldPanel<C>> {
 		private final Observable<?> theUntil;
@@ -1848,18 +1886,8 @@ public class PanelPopulation {
 				getContainer().add(component, constraints.toString());
 			if (postLabel != null)
 				getContainer().add(postLabel, "wrap");
-			if (field.isVisible() != null) {
-				field.isVisible().changes().takeUntil(getUntil()).act(evt -> {
-					if (evt.getNewValue() == component.isVisible())
-						return;
-					if (fieldLabel != null)
-						fieldLabel.setVisible(evt.getNewValue());
-					component.setVisible(evt.getNewValue());
-					if (postLabel != null)
-						postLabel.setVisible(evt.getNewValue());
-					getContainer().revalidate();
-				});
-			}
+			if (field.isVisible() != null)
+				field.isVisible().changes().takeUntil(getUntil()).act(new VizChanger(component, fieldLabel));
 		}
 
 		@Override
@@ -2049,15 +2077,8 @@ public class PanelPopulation {
 			if (postLabel != null)
 				getContainer().add(postLabel);
 			if (field.isVisible() != null) {
-				field.isVisible().changes().takeUntil(getUntil()).act(evt -> {
-					if (evt.getNewValue() == component.isVisible())
-						return;
-					if (fieldLabel != null)
-						fieldLabel.setVisible(evt.getNewValue());
-					component.setVisible(evt.getNewValue());
-					if (postLabel != null)
-						postLabel.setVisible(evt.getNewValue());
-				});
+				if (field.isVisible() != null)
+					field.isVisible().changes().takeUntil(getUntil()).act(new VizChanger(component, fieldLabel));
 			}
 		}
 
@@ -2451,7 +2472,6 @@ public class PanelPopulation {
 			final Object id;
 			final SimpleTabEditor<?> tab;
 			Component component;
-			boolean visible;
 			SimpleObservable<Void> tabEnd;
 			boolean isRemovable;
 			ObservableValue<String> theName;
@@ -2461,7 +2481,6 @@ public class PanelPopulation {
 			Tab(Object id, SimpleTabEditor<?> tab) {
 				this.id = id;
 				this.tab = tab;
-				visible = true;
 			}
 		}
 
@@ -2521,12 +2540,7 @@ public class PanelPopulation {
 			if (theTabsByComponent.put(tab.component, tab) != null)
 				throw new IllegalStateException("Duplicate tab components (" + tabID + ")");
 			if (panel != null && panel.isVisible() != null)
-				panel.isVisible().takeUntil(tabUntil).changes().act(evt -> ObservableSwingUtils.onEQ(() -> {
-					if (evt.getNewValue() == tab.visible)
-						return;
-					tab.visible = evt.getNewValue();
-					tab.component.setVisible(evt.getNewValue());
-				}));
+				panel.isVisible().changes().takeUntil(theUntil).act(new VizChanger(tab.component, null));
 			if (oldTab != null) {
 				for (int i = 0; i < getEditor().getTabCount(); i++) {
 					if (getEditor().getComponentAt(i) == oldTab.component) {
@@ -2638,7 +2652,7 @@ public class PanelPopulation {
 						getEditor().setSelectedIndex(-1);
 					} else {
 						Tab tab = theTabs.get(evt.getNewValue());
-						if (theSelectedTab == tab || !tab.visible)
+						if (theSelectedTab == tab || !tab.component.isVisible())
 							return;
 						getEditor().setSelectedComponent(tab.component);
 					}
@@ -2825,12 +2839,7 @@ public class PanelPopulation {
 			vPanel.accept(fieldPanel);
 			first(fieldPanel.getOrCreateComponent(theUntil));
 			if (fieldPanel.isVisible() != null)
-				fieldPanel.isVisible().changes().act(evt -> {
-					if (evt.getNewValue() == fieldPanel.getComponent().isVisible())
-						return;
-					fieldPanel.getComponent().setVisible(evt.getNewValue());
-					getComponent().revalidate();
-				});
+				fieldPanel.isVisible().changes().takeUntil(theUntil).act(new VizChanger(fieldPanel.getComponent(), null));
 			return (P) this;
 		}
 
@@ -2840,12 +2849,7 @@ public class PanelPopulation {
 			hPanel.accept(panel);
 			first(panel.getOrCreateComponent(theUntil));
 			if (panel.isVisible() != null)
-				panel.isVisible().changes().act(evt -> {
-					if (evt.getNewValue() == panel.getComponent().isVisible())
-						return;
-					panel.getComponent().setVisible(evt.getNewValue());
-					getComponent().revalidate();
-				});
+				panel.isVisible().changes().takeUntil(theUntil).act(new VizChanger(panel.getComponent(), null));
 			return (P) this;
 		}
 
@@ -2864,12 +2868,7 @@ public class PanelPopulation {
 			vPanel.accept(fieldPanel);
 			last(fieldPanel.getOrCreateComponent(theUntil));
 			if (fieldPanel.isVisible() != null)
-				fieldPanel.isVisible().changes().act(evt -> {
-					if (evt.getNewValue() == fieldPanel.getComponent().isVisible())
-						return;
-					fieldPanel.getComponent().setVisible(evt.getNewValue());
-					getComponent().revalidate();
-				});
+				fieldPanel.isVisible().changes().takeUntil(theUntil).act(new VizChanger(fieldPanel.getComponent(), null));
 			return (P) this;
 		}
 
@@ -2879,12 +2878,7 @@ public class PanelPopulation {
 			hPanel.accept(panel);
 			last(panel.getOrCreateComponent(theUntil));
 			if (panel.isVisible() != null)
-				panel.isVisible().changes().act(evt -> {
-					if (evt.getNewValue() == panel.getComponent().isVisible())
-						return;
-					panel.getComponent().setVisible(evt.getNewValue());
-					getComponent().revalidate();
-				});
+				panel.isVisible().changes().takeUntil(theUntil).act(new VizChanger(panel.getComponent(), null));
 			return (P) this;
 		}
 
@@ -3141,11 +3135,7 @@ public class PanelPopulation {
 			panel.accept(fieldPanel);
 			withContent(fieldPanel.getOrCreateComponent(theUntil));
 			if (fieldPanel.isVisible() != null)
-				fieldPanel.isVisible().changes().act(evt -> {
-					if (evt.getNewValue() == fieldPanel.getComponent().isVisible())
-						return;
-					fieldPanel.getComponent().setVisible(evt.getNewValue());
-				});
+				fieldPanel.isVisible().changes().takeUntil(theUntil).act(new VizChanger(fieldPanel.getComponent(), null));
 			return (P) this;
 		}
 
@@ -3155,11 +3145,7 @@ public class PanelPopulation {
 			panel.accept(hPanel);
 			withContent(hPanel.getOrCreateComponent(theUntil));
 			if (hPanel.isVisible() != null)
-				hPanel.isVisible().changes().act(evt -> {
-					if (evt.getNewValue() == hPanel.getComponent().isVisible())
-						return;
-					hPanel.getComponent().setVisible(evt.getNewValue());
-				});
+				hPanel.isVisible().changes().takeUntil(theUntil).act(new VizChanger(hPanel.getComponent(), null));
 			return (P) this;
 		}
 

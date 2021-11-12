@@ -4,6 +4,7 @@ import java.util.function.Function;
 
 import org.observe.Observable;
 import org.observe.ObservableAction;
+import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
 import org.observe.Transformation;
@@ -19,12 +20,17 @@ import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSortedCollection;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.config.ObservableValueSet;
+import org.qommons.LambdaUtils;
 
 import com.google.common.reflect.TypeToken;
 
 /** Standard {@link ModelType}s */
 @SuppressWarnings("rawtypes")
 public class ModelTypes {
+	/** Used for disabled settable values */
+	public static final Function<Object, String> NOT_REVERSIBLE = LambdaUtils.constantFn("Not reversible", "Not reversible",
+		"Not reversible");
+
 	/** A nested model in a model */
 	public static final ModelType.UnTyped<ObservableModelSet> Model = new ModelType.UnTyped<ObservableModelSet>("Model",
 		ObservableModelSet.class) {
@@ -194,7 +200,7 @@ public class ModelTypes {
 				return src -> src.transformReversible(target.getType(0), transformReversible(casts[0], reverses[0]));
 			} else {
 				return src -> SettableValue.asSettable(src.transform(target.getType(0), transform(casts[0])), //
-					__ -> "Not reversble");
+					NOT_REVERSIBLE);
 			}
 		}
 
@@ -222,6 +228,67 @@ public class ModelTypes {
 						return source.value().noInit().map(cast);
 					else
 						return source.value().noInit();
+				}
+			});
+			builder.convertibleFromAny(new ModelConverter<Object, SettableValue>() {
+				@Override
+				public ModelInstanceConverter<Object, SettableValue> convert(ModelInstanceType<Object, ?> source,
+					ModelInstanceType<SettableValue, ?> dest) throws IllegalArgumentException {
+					TypeToken<?> valueType = TypeTokens.get().keyFor(source.getModelType().modelType).parameterized(source.getTypeList());
+					ModelInstanceType<SettableValue, ?> type = Value.forType(valueType);
+					return new ModelInstanceConverter<Object, SettableValue>() {
+						@Override
+						public SettableValue convert(Object sourceV) {
+							return SettableValue.asSettable(//
+								ObservableValue.of((TypeToken<Object>) valueType, sourceV), //
+								NOT_REVERSIBLE);
+						}
+
+						@Override
+						public ModelInstanceType<SettableValue, ?> getType() {
+							return type;
+						}
+					};
+				}
+			});
+			builder.convertSelf(new ModelConverter<SettableValue, SettableValue>() {
+				@Override
+				public ModelInstanceConverter<SettableValue, SettableValue> convert(ModelInstanceType<SettableValue, ?> source,
+					ModelInstanceType<SettableValue, ?> dest) throws IllegalArgumentException {
+					Class<?> rawSource = TypeTokens.getRawType(source.getType(0));
+					if (!ObservableValue.class.isAssignableFrom(rawSource))
+						return null;
+					TypeToken<?> sourceType = source.getType(0).resolveType(ObservableValue.class.getTypeParameters()[0]);
+					if (!TypeTokens.get().isAssignable(dest.getType(0), sourceType))
+						return null;
+					ModelInstanceType<SettableValue, ?> type = Value.forType(sourceType);
+					if (SettableValue.class.isAssignableFrom(rawSource)) {
+						return new ModelInstanceConverter<SettableValue, SettableValue>() {
+							@Override
+							public SettableValue convert(SettableValue sourceV) {
+								return SettableValue.flatten((SettableValue<SettableValue<Object>>) sourceV);
+							}
+
+							@Override
+							public ModelInstanceType<SettableValue, ?> getType() {
+								return type;
+							}
+						};
+					} else {
+						return new ModelInstanceConverter<SettableValue, SettableValue>() {
+							@Override
+							public SettableValue convert(SettableValue sourceV) {
+								return SettableValue.asSettable(//
+									ObservableValue.flatten((SettableValue<ObservableValue<Object>>) sourceV), //
+									NOT_REVERSIBLE);
+							}
+
+							@Override
+							public ModelInstanceType<SettableValue, ?> getType() {
+								return type;
+							}
+						};
+					}
 				}
 			});
 		}

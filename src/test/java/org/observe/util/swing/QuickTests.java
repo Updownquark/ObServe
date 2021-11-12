@@ -3,7 +3,6 @@ package org.observe.util.swing;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
-import java.text.ParseException;
 
 import javax.swing.JFrame;
 
@@ -16,6 +15,7 @@ import org.observe.util.ObservableModelSet;
 import org.qommons.config.DefaultQonfigParser;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpreter;
+import org.qommons.config.QonfigInterpreter.QonfigInterpretationException;
 import org.qommons.config.QonfigParseException;
 
 public class QuickTests {
@@ -33,7 +33,7 @@ public class QuickTests {
 	}
 
 	@Test
-	public void testSuperBasic() throws IOException, QonfigParseException, ParseException {
+	public void testSuperBasic() throws IOException, QonfigParseException, QonfigInterpretationException {
 		ObservableModelSet.ExternalModelSetBuilder extModels = ObservableModelSet.buildExternal();
 		extModels.addSubModel("extModel").with("value1", ModelTypes.Value.forType(double.class),
 			SettableValue.build(double.class).safe(false).withDescription("extModel.value1").withValue(42.0).build());
@@ -41,7 +41,7 @@ public class QuickTests {
 	}
 
 	private void testQuick(String fileName, ObservableModelSet.ExternalModelSet extModels)
-		throws IOException, QonfigParseException, ParseException {
+		throws IOException, QonfigParseException, QonfigInterpretationException {
 		URL location = QuickTests.class.getResource(fileName);
 		QonfigElement element;
 		try (InputStream in = location.openStream()) {

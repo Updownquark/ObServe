@@ -72,9 +72,9 @@ public class QuickSwingParser {
 	public interface QuickComponent {
 		QonfigElement getElement();
 
-		String getFieldName();
+		Function<ModelSetInstance, ? extends ObservableValue<String>> getFieldName();
 
-		void setFieldName(String fieldName);
+		void setFieldName(Function<ModelSetInstance, ? extends ObservableValue<String>> fieldName);
 
 		QuickComponent modify(Consumer<ComponentEditor<?, ?>> modification);
 
@@ -83,7 +83,7 @@ public class QuickSwingParser {
 
 	public static abstract class AbstractQuickComponent implements QuickComponent {
 		private final QonfigElement theElement;
-		private String theFieldName;
+		private Function<ModelSetInstance, ? extends ObservableValue<String>> theFieldName;
 		private Consumer<ComponentEditor<?, ?>> theModifications;
 
 		public AbstractQuickComponent(QonfigElement element) {
@@ -96,12 +96,12 @@ public class QuickSwingParser {
 		}
 
 		@Override
-		public String getFieldName() {
+		public Function<ModelSetInstance, ? extends ObservableValue<String>> getFieldName() {
 			return theFieldName;
 		}
 
 		@Override
-		public void setFieldName(String fieldName) {
+		public void setFieldName(Function<ModelSetInstance, ? extends ObservableValue<String>> fieldName) {
 			theFieldName = fieldName;
 		}
 
@@ -119,9 +119,22 @@ public class QuickSwingParser {
 			return this;
 		}
 
-		public void modify(ComponentEditor<?, ?> component) {
+		public void modify(ComponentEditor<?, ?> component, ModelSetInstance modelSet) {
 			if (theModifications != null)
 				theModifications.accept(component);
+		}
+	}
+
+	public static abstract class AbstractQuickField extends AbstractQuickComponent {
+		public AbstractQuickField(QonfigElement element) {
+			super(element);
+		}
+
+		@Override
+		public void modify(ComponentEditor<?, ?> component, ModelSetInstance modelSet) {
+			if (getFieldName() != null && component instanceof PanelPopulation.FieldEditor)
+				((PanelPopulation.FieldEditor<?, ?>) component).withFieldName(getFieldName().apply(modelSet));
+			super.modify(component, modelSet);
 		}
 	}
 
@@ -179,8 +192,9 @@ public class QuickSwingParser {
 		public void installContainer(PanelPopulator<?, ?> container, ModelSetInstance modelSet, Consumer<PanelPopulator<?, ?>> populator) {
 			if (theLayout == null)
 				throw new IllegalStateException("No interpreter configured for layout " + theLayoutName);
-			container.addHPanel(getFieldName(), theLayout.create(), thisContainer -> {
-				modify(thisContainer);
+			String fieldName = getFieldName() == null ? null : getFieldName().apply(modelSet).get();
+			container.addHPanel(fieldName, theLayout.create(), thisContainer -> {
+				modify(thisContainer, modelSet);
 				populator.accept(thisContainer);
 			});
 		}
@@ -425,6 +439,7 @@ public class QuickSwingParser {
 		return interpreter;
 	}
 
+	@SuppressWarnings("rawtypes")
 	void configureBase(Builder interpreter) {
 		interpreter.createWith("box", QuickBox.class, (element, session) -> {
 			List<QuickComponent> children = new ArrayList<>(5);
@@ -506,6 +521,7 @@ public class QuickSwingParser {
 			ObservableExpression valueX = element.getAttribute("value", ObservableExpression.class);
 			ObservableExpression formatX = element.getAttribute("format", ObservableExpression.class);
 			Function<ModelSetInstance, SettableValue<Format<Object>>> format;
+			int columns = element.getAttribute("columns") == null ? -1 : Integer.parseInt(element.getAttributeText("columns"));
 			value = valueX.evaluate(ModelTypes.Value.any(), model, cv);
 			if (formatX != null) {
 				format = formatX.evaluate(
@@ -533,11 +549,21 @@ public class QuickSwingParser {
 				format = ObservableModelQonfigParser.literalContainer(
 					ModelTypes.Value.forType((Class<Format<Object>>) (Class<?>) Format.class), (Format<Object>) f, type.getSimpleName());
 			}
-			return new AbstractQuickComponent(element) {
+			return new AbstractQuickField(element) {
 				@Override
 				public void install(PanelPopulator<?, ?> container, ModelSetInstance modelSet) {
-					container.addTextField(getFieldName(), //
-						(SettableValue<Object>) value.apply(modelSet), format.apply(modelSet).get(), field -> modify(field));
+					SettableValue<Object> realValue = value.apply(modelSet);
+					ObservableValue<String> fieldName;
+					if (getFieldName() != null)
+						fieldName = getFieldName().apply(modelSet);
+					else
+						fieldName = null;
+					container.addTextField(fieldName == null ? null : fieldName.get(), //
+						realValue, format.apply(modelSet).get(), field -> {
+							modify(field, modelSet);
+							if (columns > 0)
+								field.getEditor().withColumns(columns);
+						});
 				}
 			};
 		}).createWith("button", QuickComponent.class, (element, session) -> {
@@ -561,7 +587,7 @@ public class QuickSwingParser {
 					container.addButton(text.get(), //
 						action.apply(modelSet), //
 						btn -> {
-							modify(btn);
+							modify(btn, modelSet);
 							btn.withText(text);
 						});
 				}
@@ -609,21 +635,32 @@ public class QuickSwingParser {
 				@Override
 				public void install(PanelPopulator<?, ?> container, ModelSetInstance modelSet) {
 					container.addSplit(vertical, split -> {
-						split.firstV(first -> children.get(0).install(container, modelSet));
-						split.lastV(first -> children.get(1).install(container, modelSet));
+						modify(split, modelSet);
+						split.firstV(first -> children.get(0).install(first.fill().fillV(), modelSet));
+						split.lastV(last -> children.get(1).install(last.fill().fillV(), modelSet));
 					});
 				}
 			};
 		});
 		interpreter.createWith("field-panel", QuickComponent.class, (element, session)->{
+			ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
+			ClassView cv = (ClassView) session.get("imports");
 			List<QuickComponent> children = new ArrayList<>();
-			for (QonfigElement child : element.getChildrenInRole("content"))
-				children.add(session.getInterpreter().interpret(child, QuickComponent.class));
+			for (QonfigElement child : element.getChildrenInRole("content")) {
+				QuickComponent childC = session.getInterpreter().interpret(child, QuickComponent.class);
+				ObservableExpression fieldName = child.getAttribute("field-name", ObservableExpression.class);
+				if (fieldName != null)
+					childC.setFieldName(fieldName.evaluate(ModelTypes.Value.forType(String.class), model, cv));
+				if ("true".equals(child.getAttributeText("fill")))
+					childC.modify(f -> f.fill());
+				children.add(childC);
+			}
 			System.err.println("WARNING: field-panel is not fully implemented!!"); // TODO
 			return new AbstractQuickComponent(element) {
 				@Override
 				public void install(PanelPopulator<?, ?> container, ModelSetInstance modelSet) {
 					container.addVPanel(panel->{
+						modify(panel, modelSet);
 						for (QuickComponent child : children) {
 							child.install(panel, modelSet);
 						}
@@ -695,11 +732,17 @@ public class QuickSwingParser {
 					model, cv);
 			else
 				editable = null;
-			return new AbstractQuickComponent(element) {
+			return new AbstractQuickField(element) {
 				@Override
 				public void install(PanelPopulator<?, ?> container, ModelSetInstance modelSet) {
-					container.addTextArea(getFieldName(), //
+					ObservableValue<String> fieldName;
+					if (getFieldName() != null)
+						fieldName = getFieldName().apply(modelSet);
+					else
+						fieldName = null;
+					container.addTextArea(fieldName == null ? null : fieldName.get(), //
 						(SettableValue<Object>) value.apply(modelSet), format.apply(modelSet).get(), field -> {
+							modify(field, modelSet);
 							if (rows != null) {
 								SettableValue<Integer> rowsV = rows.apply(modelSet);
 								rowsV.changes().act(evt -> {
@@ -718,7 +761,30 @@ public class QuickSwingParser {
 									field.getEditor().setEditable(evt.getNewValue());
 								});
 							}
-							modify(field);
+						});
+				}
+			};
+		});
+		interpreter.createWith("radio-buttons", QuickComponent.class, (element, session) -> {
+			System.err.println("WARNING: radio-buttons is not fully implemented!!"); // TODO
+			ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
+			ClassView cv = (ClassView) session.get("quick-cv");
+			ValueContainer<SettableValue, ? extends SettableValue<Object>> value;
+			value = (ValueContainer<SettableValue, ? extends SettableValue<Object>>) element
+				.getAttribute("value", ObservableExpression.class)//
+				.evaluate(ModelTypes.Value.any(), model, cv);
+			ValueContainer<SettableValue, SettableValue<Object[]>> values = element.getAttribute("values", ObservableExpression.class)
+				.evaluate(ModelTypes.Value.forType((TypeToken<Object[]>) TypeTokens.get().getArrayType(value.getType().getType(0), 1)),
+					model, cv);
+			return new AbstractQuickField(element) {
+				@Override
+				public void install(PanelPopulator<?, ?> container, ModelSetInstance modelSet) {
+					SettableValue<Object> realValue = value.apply(modelSet);
+					container.addRadioField(null, //
+						realValue, //
+						values.apply(modelSet).get(), //
+						radioBs -> {
+							modify(radioBs, modelSet);
 						});
 				}
 			};
@@ -752,13 +818,18 @@ public class QuickSwingParser {
 					ModelTypes.Value.forType(TypeTokens.get().keyFor(Format.class).parameterized(TypeTokens.get().wrap(valueType))), model,
 					cv);
 		}
-		return new AbstractQuickComponent(element) {
+		return new AbstractQuickField(element) {
 			@Override
 			public void install(PanelPopulator<?, ?> container, ModelSetInstance modelSet) {
+				ObservableValue<String> fieldName;
+				if (getFieldName() != null)
+					fieldName = getFieldName().apply(modelSet);
+				else
+					fieldName = null;
 				SettableValue<Object> valueV = value.apply(modelSet);
-				container.addLabel(getFieldName(), valueV, //
+				container.addLabel(fieldName == null ? null : fieldName.get(), valueV, //
 					format.apply(modelSet).get(), field -> {
-						modify(field);
+						modify(field, modelSet);
 					});
 			}
 		};
@@ -796,7 +867,7 @@ public class QuickSwingParser {
 			@Override
 			public void install(PanelPopulator<?, ?> container, ModelSetInstance modelSet) {
 				container.addTable((ObservableCollection<Object>) rows.apply(modelSet), table -> {
-					modify(table);
+					modify(table, modelSet);
 					if (selectionV != null)
 						table.withSelection(selectionV.apply(modelSet), false);
 					if (selectionC != null)
@@ -873,6 +944,7 @@ public class QuickSwingParser {
 			@Override
 			public void install(PanelPopulator<?, ?> container, ModelSetInstance modelSet) {
 				container.addTree(root.apply(modelSet), children.apply(modelSet), tree -> {
+					modify(tree.fill().fillV(), modelSet);
 					if (singleSelectionV != null)
 						tree.withSelection(singleSelectionV.apply(modelSet), parent.apply(modelSet), false);
 					else if (singleSelectionPath != null)

@@ -73,7 +73,7 @@
 		</add-on>
 
 		<add-on name="field" requires="widget">
-			<attribute name="field-name" type="string" specify="optional" />
+			<attribute name="field-name" type="expression-or-string" specify="optional" />
 			<attribute name="fill" type="boolean" specify="optional" />
 		</add-on>
 
@@ -113,7 +113,9 @@
 			<attribute name="icon" type="expression" specify="optional" />
 			<attribute name="icon-ref" type="string" specify="optional" />
 		</element-def>
-		<element-def name="text-field" extends="text-widget" />
+		<element-def name="text-field" extends="text-widget">
+			<attribute name="columns" type="int" specify="optional" />
+		</element-def>
 		<element-def name="text-area" extends="text-widget">
 			<attribute name="rows" type="expression" />
 			<attribute name="html" type="expression" />
@@ -142,8 +144,6 @@
 		</element-def>
 		<element-def name="little-list" extends="multi-value-widget" inherits="single-rendering">
 			<attribute name="values" type="expression" specify="required" />
-		</element-def>
-		<element-def name="big-list" inherits="single-rendering">
 		</element-def>
 		<element-def name="column" inherits="single-rendering">
 			<attribute name="name" type="string" />

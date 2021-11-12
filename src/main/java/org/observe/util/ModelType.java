@@ -15,6 +15,7 @@ import org.observe.util.ObservableModelSet.ModelSetInstance;
 import org.observe.util.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens.TypeConverter;
 import org.qommons.Named;
+import org.qommons.config.QonfigInterpreter.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
@@ -144,9 +145,27 @@ public abstract class ModelType<M> implements Named {
 		M2 convert(M1 source);
 
 		ModelInstanceType<M2, ?> getType();
+
+		default <M3> ModelInstanceConverter<M1, M3> and(ModelInstanceConverter<M2, M3> next) {
+			ModelInstanceConverter<M1, M2> self = this;
+			return new ModelInstanceConverter<M1, M3>() {
+				@Override
+				public M3 convert(M1 source) {
+					M2 stage1 = self.convert(source);
+					return next.convert(stage1);
+				}
+
+				@Override
+				public ModelInstanceType<M3, ?> getType() {
+					return next.getType();
+				}
+			};
+		}
 	}
 
-	static <M> ModelInstanceConverter<M, M> nullConverter(ModelInstanceType<M, ?> type) {
+	public static <M> ModelInstanceConverter<M, M> nullConverter(ModelInstanceType<M, ?> type) {
+		if (type == null)
+			throw new NullPointerException();
 		return new ModelInstanceConverter<M, M>() {
 			@Override
 			public M convert(M source) {
@@ -166,6 +185,8 @@ public abstract class ModelType<M> implements Named {
 	}
 
 	public static <M1, M2> ModelInstanceConverter<M1, M2> converter(Function<M1, M2> converter, ModelInstanceType<M2, ?> type) {
+		if (converter == null || type == null)
+			throw new NullPointerException();
 		return new ModelInstanceConverter<M1, M2>() {
 			@Override
 			public M2 convert(M1 source) {
@@ -181,6 +202,8 @@ public abstract class ModelType<M> implements Named {
 
 	public static <M1, M2> ModelInstanceConverter<M1, M2> converter(Function<M1, M2> converter,
 		Supplier<ModelInstanceType<M2, ?>> typeConverter) {
+		if (converter == null || typeConverter == null)
+			throw new NullPointerException();
 		return new ModelInstanceConverter<M1, M2>() {
 			private ModelInstanceType<M2, ?> theType;
 
@@ -203,13 +226,34 @@ public abstract class ModelType<M> implements Named {
 
 		public abstract TypeToken<?> getType(int typeIndex);
 
+		public TypeToken<?>[] getTypeList() {
+			TypeToken<?>[] types = new TypeToken[getModelType().getTypeCount()];
+			for (int t = 0; t < types.length; t++)
+				types[t] = getType(t);
+			return types;
+		}
+
 		public <M2> ModelInstanceConverter<M, M2> convert(ModelInstanceType<M2, ? extends M2> target) {
+			if (target == null) {
+				ModelConverter<M, M2> selfConverter = (ModelConverter<M, M2>) SELF_CONVERSION_TARGETS.get(getModelType());
+				ModelInstanceConverter<M, M2> selfInstConverter = selfConverter == null ? null : selfConverter.convert(this, target);
+				if (selfInstConverter == null)
+					return (ModelInstanceConverter<M, M2>) nullConverter(this);
+				else
+					return selfInstConverter;
+			}
 			if (target.getModelType() == getModelType()) {
 				boolean goodType = true;
 				for (int i = 0; goodType && i < getModelType().getTypeCount(); i++)
 					goodType = target.getType(i).equals(getType(i));
-				if (goodType)
-					return (ModelInstanceConverter<M, M2>) nullConverter(target);
+				if (goodType) {
+					ModelConverter<M, M2> selfConverter = (ModelConverter<M, M2>) SELF_CONVERSION_TARGETS.get(getModelType());
+					ModelInstanceConverter<M, M2> selfInstConverter = selfConverter == null ? null : selfConverter.convert(this, target);
+					if (selfInstConverter == null)
+						return (ModelInstanceConverter<M, M2>) nullConverter(target);
+					else
+						return selfInstConverter;
+				}
 				TypeToken<?>[] params = new TypeToken[getModelType().getTypeCount()];
 				TypeConverter<Object, Object>[] casts = new TypeConverter[params.length];
 				TypeConverter<Object, Object>[] reverses = new TypeConverter[casts.length];
@@ -231,9 +275,9 @@ public abstract class ModelType<M> implements Named {
 							return null;
 						}
 					}
-					if (reversible && !getType(i).isAssignableFrom(target.getType(i))) {
+					if (reversible && !params[i].isAssignableFrom(target.getType(i))) {
 						try {
-							reverses[i] = (TypeConverter<Object, Object>) TypeTokens.get().getCast(getType(i), target.getType(i), true);
+							reverses[i] = (TypeConverter<Object, Object>) TypeTokens.get().getCast(getType(i), params[i], true);
 						} catch (IllegalArgumentException e) {
 							reversible = false;
 						}
@@ -248,34 +292,37 @@ public abstract class ModelType<M> implements Named {
 				}
 				if (converter == null)
 					return null;
-				return new ModelInstanceConverter<M, M2>() {
-					private ModelInstanceType<M2, ?> theType;
-
-					@Override
-					public M2 convert(M source) {
-						return converter.apply(source);
-					}
-
-					@Override
-					public ModelInstanceType<M2, ?> getType() {
-						if (theType == null)
-							theType = target.getModelType().forTypes(params);
-						return theType;
-					}
-				};
+				ModelInstanceType<M2, ?> newType = target.getModelType().forTypes(params);
+				ModelInstanceConverter<M, M2> firstConverter = converter(converter, newType);
+				ModelConverter<M2, M2> selfConverter = (ModelConverter<M2, M2>) SELF_CONVERSION_TARGETS.get(target.getModelType());
+				ModelInstanceConverter<M2, M2> selfInstConverter = selfConverter == null ? null : selfConverter.convert(newType, target);
+				if (selfInstConverter != null)
+					return firstConverter.and(selfInstConverter);
+				else
+					return firstConverter;
 			}
 			ModelConverter<M, M2> modelConverter = (ModelConverter<M, M2>) CONVERSION_TARGETS
 				.getOrDefault(getModelType(), Collections.emptyMap())//
 				.get(target.getModelType());
 			if (modelConverter == null)
+				modelConverter = (ModelConverter<M, M2>) FLEX_CONVERSION_TARGETS.get(target.getModelType());
+			if (modelConverter == null)
 				return null;
-			return modelConverter.convert(this, target);
+			ModelInstanceConverter<M, M2> firstConverter = modelConverter.convert(this, target);
+			ModelConverter<M2, M2> selfConverter = (ModelConverter<M2, M2>) SELF_CONVERSION_TARGETS.get(target.getModelType());
+			ModelInstanceConverter<M2, M2> selfInstConverter = selfConverter == null ? null
+				: selfConverter.convert(firstConverter.getType(), target);
+			if (selfInstConverter != null)
+				return firstConverter.and(selfInstConverter);
+			else
+				return firstConverter;
 		}
 
-		public <M2, MV2 extends M2> ValueContainer<M2, MV2> as(ValueContainer<M, MV> source, ModelInstanceType<M2, MV2> targetType) {
+		public <M2, MV2 extends M2> ValueContainer<M2, MV2> as(ValueContainer<M, MV> source, ModelInstanceType<M2, MV2> targetType)
+			throws QonfigInterpretationException {
 			ModelType.ModelInstanceConverter<M, M2> converter = source.getType().convert(targetType);
 			if (converter == null)
-				throw new IllegalArgumentException("Cannot convert " + source + " (" + source.getType() + ") to " + targetType);
+				throw new QonfigInterpretationException("Cannot convert " + source + " (" + source.getType() + ") to " + targetType);
 
 			return new ConvertedValue<>(source, (ModelInstanceType<M2, MV2>) converter.getType(), converter);
 		}
@@ -409,6 +456,8 @@ public abstract class ModelType<M> implements Named {
 	private static final Map<Class<?>, ModelType<?>> MODEL_TYPES_BY_TYPE = Collections.synchronizedMap(new LinkedHashMap<>());
 	private static final List<ModelType<?>> ALL_MODEL_TYPES = Collections.synchronizedList(new ArrayList<>());
 	private static final Map<ModelType<?>, Map<ModelType<?>, ModelConverter<?, ?>>> CONVERSION_TARGETS = new HashMap<>();
+	private static final Map<ModelType<?>, ModelConverter<Object, ?>> FLEX_CONVERSION_TARGETS = new HashMap<>();
+	private static final Map<ModelType<?>, ModelConverter<?, ?>> SELF_CONVERSION_TARGETS = new HashMap<>();
 
 	private final String theName;
 	/** The type of model this represents */
@@ -438,6 +487,24 @@ public abstract class ModelType<M> implements Named {
 			@Override
 			public <M2> ConversionBuilder<M> convertibleTo(ModelType<M2> targetModelType, ModelConverter<M, M2> converter) {
 				CONVERSION_TARGETS.computeIfAbsent(ModelType.this, __ -> new HashMap<>()).put(targetModelType, converter);
+				return this;
+			}
+
+			@Override
+			public <M2> ConversionBuilder<M> convertibleFrom(ModelType<M2> sourceModelType, ModelConverter<M2, M> converter) {
+				CONVERSION_TARGETS.computeIfAbsent(sourceModelType, __ -> new HashMap<>()).put(ModelType.this, converter);
+				return this;
+			}
+
+			@Override
+			public ConversionBuilder<M> convertibleFromAny(ModelConverter<Object, M> converter) {
+				FLEX_CONVERSION_TARGETS.put(ModelType.this, converter);
+				return this;
+			}
+
+			@Override
+			public ConversionBuilder<M> convertSelf(ModelConverter<M, M> converter) {
+				SELF_CONVERSION_TARGETS.put(ModelType.this, converter);
 				return this;
 			}
 		});
@@ -473,43 +540,6 @@ public abstract class ModelType<M> implements Named {
 			.append('(').append(modelType).append(')')//
 			.toString();
 	}
-
-	// public boolean isExtension(ModelType type) {
-	// return this == type || superTypes.contains(type);
-	// }
-	//
-	// public static ModelType of(Class<?> thing) {
-	// if (ObservableModelSet.class.isAssignableFrom(thing))
-	// return Model;
-	// else if (ObservableSortedMultiMap.class.isAssignableFrom(thing))
-	// return SortedMultiMap;
-	// else if (ObservableMultiMap.class.isAssignableFrom(thing))
-	// return MultiMap;
-	// else if (ObservableSortedMap.class.isAssignableFrom(thing))
-	// return SortedMap;
-	// else if (ObservableMap.class.isAssignableFrom(thing))
-	// return Map;
-	// else if (ObservableSortedSet.class.isAssignableFrom(thing))
-	// return SortedSet;
-	// else if (ObservableSet.class.isAssignableFrom(thing))
-	// return Set;
-	// else if (ObservableSortedCollection.class.isAssignableFrom(thing))
-	// return SortedCollection;
-	// else if (ObservableCollection.class.isAssignableFrom(thing))
-	// return Collection;
-	// else if (SettableValue.class.isAssignableFrom(thing))
-	// return Value;
-	// else if (ObservableAction.class.isAssignableFrom(thing))
-	// return Action;
-	// else if (Observable.class.isAssignableFrom(thing))
-	// return Event;
-	// else
-	// return null;
-	// }
-
-	// public static String printType(Object value) {
-	// return printType(of(value.getClass()));
-	// }
 
 	public static String print(ModelType type) {
 		return type == null ? "Unknown" : type.toString();
@@ -640,7 +670,13 @@ public abstract class ModelType<M> implements Named {
 	}
 
 	public interface ConversionBuilder<M> {
-		<M2> ConversionBuilder<M> convertibleTo(ModelType<M2> modelType, ModelConverter<M, M2> converter);
+		<M2> ConversionBuilder<M> convertibleTo(ModelType<M2> targetModelType, ModelConverter<M, M2> converter);
+
+		<M2> ConversionBuilder<M> convertibleFrom(ModelType<M2> sourceModelType, ModelConverter<M2, M> converter);
+
+		ConversionBuilder<M> convertibleFromAny(ModelConverter<Object, M> converter);
+
+		ConversionBuilder<M> convertSelf(ModelConverter<M, M> converter);
 	}
 
 	public static class ConvertedValue<MS, MVS extends MS, MT, MVT extends MT> implements ValueContainer<MT, MVT> {
@@ -649,6 +685,8 @@ public abstract class ModelType<M> implements Named {
 		private final ModelType.ModelInstanceConverter<MS, MT> theConverter;
 
 		ConvertedValue(ValueContainer<MS, MVS> source, ModelInstanceType<MT, MVT> type, ModelInstanceConverter<MS, MT> converter) {
+			if (source == null || type == null || converter == null)
+				throw new NullPointerException();
 			theSource = source;
 			theType = type;
 			theConverter = converter;
@@ -664,6 +702,11 @@ public abstract class ModelType<M> implements Named {
 			MVS modelV = theSource.get(extModels);
 			MVT converted = (MVT) theConverter.convert(modelV);
 			return converted;
+		}
+
+		@Override
+		public String toString() {
+			return theSource.toString();
 		}
 	}
 }

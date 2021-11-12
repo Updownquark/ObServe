@@ -25,7 +25,7 @@ import com.google.common.reflect.TypeToken;
 public interface ObservableExpression {
 	ObservableExpression EMPTY = new ObservableExpression() {
 		@Override
-		public <M, MV extends M> ValueContainer<M, MV> evaluate(ModelInstanceType<M, MV> type, ObservableModelSet models,
+		public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ObservableModelSet models,
 			ClassView classView) throws QonfigInterpretationException {
 			return null;
 		}
@@ -37,7 +37,15 @@ public interface ObservableExpression {
 		}
 	};
 
-	<M, MV extends M> ObservableModelSet.ValueContainer<M, MV> evaluate(ModelInstanceType<M, MV> type, ObservableModelSet models,
+	default <M, MV extends M> ValueContainer<M, MV> evaluate(ModelInstanceType<M, MV> type, ObservableModelSet models, ClassView classView)
+		throws QonfigInterpretationException {
+		ValueContainer<M, MV> value = evaluateInternal(type, models, classView);
+		if (value == null)
+			return null;
+		return value.getType().as(value, type);
+	}
+
+	<M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ObservableModelSet models,
 		ClassView classView) throws QonfigInterpretationException;
 
 	<P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ObservableModelSet models, ClassView classView)
@@ -50,6 +58,14 @@ public interface ObservableExpression {
 
 	interface ArgMaker<T, U, V> {
 		void makeArgs(T t, U u, V v, Object[] args, ModelSetInstance models);
+	}
+
+	interface Args {
+		int size();
+
+		boolean matchesType(int arg, TypeToken<?> paramType);
+
+		TypeToken<?> resolveFirst() throws QonfigInterpretationException;
 	}
 
 	abstract class MethodFinder<P1, P2, P3, T> {
@@ -129,13 +145,28 @@ public interface ObservableExpression {
 			theResultType = resultType;
 		}
 
-		protected class MethodOption {
+		protected class MethodOption implements Args {
 			final TypeToken<?>[] argTypes;
 			final ArgMaker<P1, P2, P3> argMaker;
 
 			MethodOption(TypeToken<?>[] argTypes, ArgMaker<P1, P2, P3> argMaker) {
 				this.argTypes = argTypes;
 				this.argMaker = argMaker;
+			}
+
+			@Override
+			public int size() {
+				return argTypes.length;
+			}
+
+			@Override
+			public TypeToken<?> resolveFirst() {
+				return argTypes[0];
+			}
+
+			@Override
+			public boolean matchesType(int arg, TypeToken<?> paramType) {
+				return TypeTokens.get().isAssignable(paramType, argTypes[arg]);
 			}
 
 			public TypeToken<?>[] getArgTypes() {
@@ -166,7 +197,7 @@ public interface ObservableExpression {
 		}
 
 		@Override
-		public <M, MV extends M> ValueContainer<M, MV> evaluate(ModelInstanceType<M, MV> type, ObservableModelSet models,
+		public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ObservableModelSet models,
 			ClassView classView) throws QonfigInterpretationException {
 			if (type.getModelType() != ModelTypes.Value)
 				throw new QonfigInterpretationException("'" + theExpression.getText() + "' cannot be evaluated as a " + type);

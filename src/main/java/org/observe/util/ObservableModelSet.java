@@ -7,16 +7,17 @@ import java.util.function.Function;
 
 import org.observe.Observable;
 import org.observe.util.ModelType.ModelInstanceType;
+import org.qommons.config.QonfigInterpreter.QonfigInterpretationException;
 
 public interface ObservableModelSet {
 	interface ValueContainer<M, MV extends M> extends Function<ModelSetInstance, MV> {
 		ModelInstanceType<M, MV> getType();
 
-		MV get(ModelSetInstance extModels);
+		MV get(ModelSetInstance models);
 
 		@Override
-		default MV apply(ModelSetInstance extModels) {
-			return get(extModels);
+		default MV apply(ModelSetInstance models) {
+			return get(models);
 		}
 	}
 
@@ -62,17 +63,17 @@ public interface ObservableModelSet {
 
 	String getPath();
 
-	ValueContainer<?, ?> get(String path, boolean required) throws IllegalArgumentException;
+	ValueContainer<?, ?> get(String path, boolean required) throws QonfigInterpretationException;
 
-	default <M> ValueContainer<M, ?> get(String path, ModelType<M> type) throws IllegalArgumentException {
+	default <M> ValueContainer<M, ?> get(String path, ModelType<M> type) throws QonfigInterpretationException {
 		ValueContainer<?, ?> thing = get(path, true);
 		if (thing.getType().getModelType() != type)
-			throw new IllegalArgumentException(path + " is a " + thing.getType() + ", not a " + type);
+			throw new QonfigInterpretationException(path + " is a " + thing.getType() + ", not a " + type);
 		return (ValueContainer<M, ?>) thing;
 	}
 
 	default <M, MV extends M> ValueContainer<M, MV> get(String path, ModelInstanceType<M, MV> type)
-		throws IllegalArgumentException {
+		throws QonfigInterpretationException {
 		ValueContainer<Object, Object> thing = (ValueContainer<Object, Object>) get(path, true);
 		if (type == null)
 			return (ValueContainer<M, MV>) thing;
@@ -127,7 +128,7 @@ public interface ObservableModelSet {
 			return thePath;
 		}
 
-		public <M> M get(String path, ModelInstanceType<?, ?> type) throws IllegalArgumentException {
+		public <M> M get(String path, ModelInstanceType<?, ?> type) throws QonfigInterpretationException {
 			int dot = path.lastIndexOf('.');
 			if (dot >= 0) {
 				ExternalModelSet subModel = theRoot.getSubModel(path.substring(0, dot));
@@ -135,14 +136,14 @@ public interface ObservableModelSet {
 			}
 			Placeholder thing = theThings.get(path);
 			if (thing == null)
-				throw new IllegalArgumentException("No such " + type + " declared: '" + pathTo(path) + "'");
+				throw new QonfigInterpretationException("No such " + type + " declared: '" + pathTo(path) + "'");
 			ModelType.ModelInstanceConverter<Object, M> converter = (ModelType.ModelInstanceConverter<Object, M>) thing.type.convert(type);
 			if (converter == null)
-				throw new IllegalArgumentException("Cannot convert " + path + " (" + thing.type + ") to " + type);
+				throw new QonfigInterpretationException("Cannot convert " + path + " (" + thing.type + ") to " + type);
 			return converter.convert(thing.thing);
 		}
 
-		private ExternalModelSet getSubModel(String path) {
+		private ExternalModelSet getSubModel(String path) throws QonfigInterpretationException {
 			int dot = path.indexOf('.');
 			String modelName;
 			if (dot >= 0) {
@@ -151,9 +152,9 @@ public interface ObservableModelSet {
 				modelName = path;
 			Placeholder subModel = theThings.get(modelName);
 			if (subModel == null)
-				throw new IllegalArgumentException("No such sub-model declared: '" + pathTo(modelName) + "'");
+				throw new QonfigInterpretationException("No such sub-model declared: '" + pathTo(modelName) + "'");
 			else if (subModel.type.getModelType() != ModelTypes.Model)
-				throw new IllegalArgumentException("'" + pathTo(modelName) + "' is a " + subModel.type + ", not a Model");
+				throw new QonfigInterpretationException("'" + pathTo(modelName) + "' is a " + subModel.type + ", not a Model");
 			if (dot < 0)
 				return (ExternalModelSet) subModel.thing;
 			else
@@ -205,17 +206,18 @@ public interface ObservableModelSet {
 			super(root, path, new LinkedHashMap<>());
 		}
 
-		public <M, MV extends M> ExternalModelSetBuilder with(String name, ModelInstanceType<M, MV> type, MV item) {
+		public <M, MV extends M> ExternalModelSetBuilder with(String name, ModelInstanceType<M, MV> type, MV item)
+			throws QonfigInterpretationException {
 			if (theThings.containsKey(name))
-				throw new IllegalArgumentException(
+				throw new QonfigInterpretationException(
 					"A value of type " + theThings.get(name).type + " has already been added as '" + name + "'");
 			theThings.put(name, new ExternalModelSet.Placeholder(type, item));
 			return this;
 		}
 
-		public ExternalModelSetBuilder addSubModel(String name) {
+		public ExternalModelSetBuilder addSubModel(String name) throws QonfigInterpretationException {
 			if (theThings.containsKey(name))
-				throw new IllegalArgumentException(
+				throw new QonfigInterpretationException(
 					"A value of type " + theThings.get(name).type + " has already been added as '" + name + "'");
 			ExternalModelSetBuilder subModel = new ExternalModelSetBuilder((ExternalModelSetBuilder) theRoot, pathTo(name));
 			theThings.put(name, new ExternalModelSet.Placeholder(ModelTypes.Model.instance(), subModel));
@@ -264,7 +266,7 @@ public interface ObservableModelSet {
 		}
 
 		@Override
-		public ValueContainer<?, ?> get(String path, boolean required) throws IllegalArgumentException {
+		public ValueContainer<?, ?> get(String path, boolean required) throws QonfigInterpretationException {
 			int dot = path.lastIndexOf('.');
 			if (dot >= 0) {
 				Default subModel = theRoot.getSubModel(path.substring(0, dot), required);
@@ -277,11 +279,11 @@ public interface ObservableModelSet {
 					return p;
 			}
 			if (thing == null && required)
-				throw new IllegalArgumentException("No such value " + path);
+				throw new QonfigInterpretationException("No such value " + path);
 			return thing;
 		}
 
-		private Default getSubModel(String path, boolean required) {
+		private Default getSubModel(String path, boolean required) throws QonfigInterpretationException {
 			int dot = path.indexOf('.');
 			String modelName;
 			if (dot >= 0) {
@@ -291,11 +293,11 @@ public interface ObservableModelSet {
 			Placeholder<?, ?> subModel = theThings.get(modelName);
 			if (subModel == null) {
 				if (required)
-					throw new IllegalArgumentException("No such sub-model declared: '" + pathTo(modelName) + "'");
+					throw new QonfigInterpretationException("No such sub-model declared: '" + pathTo(modelName) + "'");
 				else
 					return null;
 			} else if (subModel.type.getModelType() != ModelTypes.Model)
-				throw new IllegalArgumentException("'" + pathTo(modelName) + "' is a " + subModel.type + ", not a Model");
+				throw new QonfigInterpretationException("'" + pathTo(modelName) + "' is a " + subModel.type + ", not a Model");
 			if (dot < 0)
 				return subModel.model;
 			else
