@@ -311,14 +311,18 @@ public class WindowPopulation {
 				theWindow.addComponentListener(boundsListener);
 			}
 			SettableValue<Boolean> visible = isVisible;
-			boolean disposeOnClose;
+			boolean disposeOnClose, exitOnClose;
 			switch (theCloseAction) {
-			case WindowConstants.DISPOSE_ON_CLOSE:
 			case WindowConstants.EXIT_ON_CLOSE:
 				disposeOnClose = true;
+				exitOnClose = true;
+				break;
+			case WindowConstants.DISPOSE_ON_CLOSE:
+				disposeOnClose = true;
+				exitOnClose = false;
 				break;
 			default:
-				disposeOnClose = false;
+				disposeOnClose = exitOnClose = false;
 			}
 			theWindow.addComponentListener(new ComponentAdapter() {
 				@Override
@@ -334,8 +338,9 @@ public class WindowPopulation {
 					if (disposeOnClose) {
 						if (theDispose != null)
 							theDispose.onNext(e);
-						System.exit(0);
 					}
+					if (exitOnClose)
+						System.exit(0);
 				}
 			});
 			theUntil.take(1).act(__ -> {

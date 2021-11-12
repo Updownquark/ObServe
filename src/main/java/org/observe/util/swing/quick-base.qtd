@@ -101,7 +101,9 @@
 		<element-def name="check-box" extends="value-widget">
 			<value type="expression-or-string" specify="optional" />
 		</element-def>
-		<element-def name="file-button" extends="value-widget" />
+		<element-def name="file-button" extends="value-widget">
+			<attribute name="open" type="boolean" />
+		</element-def>
 		<element-def name="text-widget" extends="value-widget" abstract="true">
 			<attribute name="format" type="expression" specify="optional" />
 			<attribute name="editable" type="expression" specify="optional" />
@@ -123,7 +125,6 @@
 		<element-def name="spinner" extends="text-field">
 			<attribute name="increment" type="expression" specify="optional" />
 		</element-def>
-		<element-def name="file-field" extends="text-field" />
 		<element-def name="progress-bar" extends="value-widget">
 			<attribute name="max" type="expression" specify="required" />
 		</element-def>

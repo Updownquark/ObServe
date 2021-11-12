@@ -3,6 +3,7 @@ package org.observe.util.swing;
 import java.awt.BorderLayout;
 import java.awt.Container;
 import java.awt.LayoutManager;
+import java.io.File;
 import java.text.ParseException;
 import java.time.Duration;
 import java.time.Instant;
@@ -43,6 +44,8 @@ import org.qommons.config.QonfigInterpreter.Builder;
 import org.qommons.config.QonfigInterpreter.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreter.QonfigInterpretingSession;
 import org.qommons.config.QonfigToolkitAccess;
+import org.qommons.io.BetterFile;
+import org.qommons.io.FileUtils;
 import org.qommons.io.Format;
 import org.qommons.io.SpinnerFormat;
 
@@ -426,9 +429,11 @@ public class QuickSwingParser {
 			case "dispose":
 				doc.setCloseAction(WindowConstants.DISPOSE_ON_CLOSE);
 				break;
-			case "edit":
+			case "exit":
 				doc.setCloseAction(WindowConstants.EXIT_ON_CLOSE);
 				break;
+			default:
+				throw new IllegalStateException("Unrecognized close-action: " + element.getAttributeText("close-action"));
 			}
 			return doc;
 		});
@@ -635,9 +640,9 @@ public class QuickSwingParser {
 				@Override
 				public void install(PanelPopulator<?, ?> container, ModelSetInstance modelSet) {
 					container.addSplit(vertical, split -> {
-						modify(split, modelSet);
-						split.firstV(first -> children.get(0).install(first.fill().fillV(), modelSet));
-						split.lastV(last -> children.get(1).install(last.fill().fillV(), modelSet));
+						modify(split.fill().fillV(), modelSet);
+						split.firstH(new BorderLayout(), first -> children.get(0).install(first, modelSet));
+						split.lastH(new BorderLayout(), last -> children.get(1).install(last, modelSet));
 					});
 				}
 			};
@@ -765,6 +770,21 @@ public class QuickSwingParser {
 				}
 			};
 		});
+		interpreter.createWith("check-box", QuickComponent.class, (element, session) -> {
+			ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
+			ClassView cv = (ClassView) session.get("quick-cv");
+			ValueContainer<SettableValue, SettableValue<Boolean>> value;
+			value = element.getAttribute("value", ObservableExpression.class).evaluate(ModelTypes.Value.forType(boolean.class), model, cv);
+			return new AbstractQuickField(element) {
+				@Override
+				public void install(PanelPopulator<?, ?> container, ModelSetInstance modelSet) {
+					SettableValue<Boolean> realValue = value.apply(modelSet);
+					container.addCheckField(null, realValue, check -> {
+						modify(check, modelSet);
+					});
+				}
+			};
+		});
 		interpreter.createWith("radio-buttons", QuickComponent.class, (element, session) -> {
 			System.err.println("WARNING: radio-buttons is not fully implemented!!"); // TODO
 			ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
@@ -786,6 +806,41 @@ public class QuickSwingParser {
 						radioBs -> {
 							modify(radioBs, modelSet);
 						});
+				}
+			};
+		});
+		interpreter.createWith("file-button", QuickComponent.class, (element, session) -> {
+			ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
+			ClassView cv = (ClassView) session.get("quick-cv");
+			ValueContainer<SettableValue, ? extends SettableValue<Object>> value;
+			value = (ValueContainer<SettableValue, ? extends SettableValue<Object>>) element
+				.getAttribute("value", ObservableExpression.class)//
+				.evaluate(ModelTypes.Value.any(), model, cv);
+			Function<ModelSetInstance, SettableValue<File>> file;
+			Class<?> valueType = TypeTokens.getRawType(value.getType().getType(0));
+			if (File.class.isAssignableFrom(valueType))
+				file = (ValueContainer<SettableValue, SettableValue<File>>) value;
+			else if (BetterFile.class.isAssignableFrom(valueType)) {
+				file = msi -> {
+					SettableValue<BetterFile> betterFile = ((ValueContainer<SettableValue, SettableValue<BetterFile>>) value).apply(msi);
+					return betterFile.transformReversible(File.class, tx -> tx//
+						.map(FileUtils::asFile)//
+						.withReverse(f -> {
+							if (betterFile.get() != null)
+								return BetterFile.at(betterFile.get().getSource(), f.getAbsolutePath());
+							else
+								return FileUtils.better(f);
+						}));
+				};
+			} else
+				throw new QonfigInterpretationException("Cannot use " + value + " as a File");
+			boolean open = element.getAttribute("open", boolean.class);
+			return new AbstractQuickField(element) {
+				@Override
+				public void install(PanelPopulator<?, ?> container, ModelSetInstance modelSet) {
+					container.addFileField(null, file.apply(modelSet), open, fb -> {
+						modify(fb, modelSet);
+					});
 				}
 			};
 		});
