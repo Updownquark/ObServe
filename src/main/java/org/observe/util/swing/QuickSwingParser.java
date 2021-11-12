@@ -775,11 +775,21 @@ public class QuickSwingParser {
 			ClassView cv = (ClassView) session.get("quick-cv");
 			ValueContainer<SettableValue, SettableValue<Boolean>> value;
 			value = element.getAttribute("value", ObservableExpression.class).evaluate(ModelTypes.Value.forType(boolean.class), model, cv);
+			ValueContainer<SettableValue, SettableValue<String>> text;
+			if (element.getValue() != null)
+				text = ((ObservableExpression) element.getValue()).evaluate(ModelTypes.Value.forType(String.class), model, cv);
+			else
+				text = null;
 			return new AbstractQuickField(element) {
 				@Override
 				public void install(PanelPopulator<?, ?> container, ModelSetInstance modelSet) {
 					SettableValue<Boolean> realValue = value.apply(modelSet);
 					container.addCheckField(null, realValue, check -> {
+						if (text != null) {
+							text.get(modelSet).changes().act(evt -> {
+								check.getEditor().setText(evt.getNewValue());
+							});
+						}
 						modify(check, modelSet);
 					});
 				}
