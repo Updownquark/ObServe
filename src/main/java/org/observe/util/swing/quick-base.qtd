@@ -156,6 +156,9 @@
 			<attribute name="type" type="column-edit-type" />
 			<child-def name="editor" type="value-widget" inherits="column-editor" />
 		</element-def>
+		<element-def name="columns" extends="int-model-value">
+			<child-def name="column" type="column" min="0" max="inf" />
+		</element-def>
 		<element-def name="value-action">
 			<attribute name="name" type="string" specify="optional" />
 			<attribute name="icon" type="string" specify="optional" />

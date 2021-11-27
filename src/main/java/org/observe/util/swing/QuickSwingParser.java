@@ -1,14 +1,18 @@
 package org.observe.util.swing;
 
 import java.awt.BorderLayout;
+import java.awt.Component;
 import java.awt.Container;
+import java.awt.Dimension;
 import java.awt.LayoutManager;
+import java.awt.Point;
 import java.io.File;
 import java.text.ParseException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -39,6 +43,7 @@ import org.observe.util.TypeTokens;
 import org.observe.util.swing.PanelPopulation.ComponentEditor;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.qommons.collect.BetterList;
+import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpreter.Builder;
 import org.qommons.config.QonfigInterpreter.QonfigInterpretationException;
@@ -72,24 +77,39 @@ public class QuickSwingParser {
 		}
 	};
 
-	public interface QuickComponent {
+	public interface QuickComponentDef {
 		QonfigElement getElement();
 
 		Function<ModelSetInstance, ? extends ObservableValue<String>> getFieldName();
 
 		void setFieldName(Function<ModelSetInstance, ? extends ObservableValue<String>> fieldName);
 
-		QuickComponent modify(Consumer<ComponentEditor<?, ?>> modification);
+		Map<QonfigAttributeDef, Function<ModelSetInstance, ? extends ObservableValue<String>>> getAttributeValues();
 
-		void install(PanelPopulator<?, ?> container, ModelSetInstance modelSet);
+		QuickComponentDef modify(Consumer<ComponentEditor<?, ?>> modification);
+
+		QuickComponent install(PanelPopulator<?, ?> container, ModelSetInstance modelSet);
 	}
 
-	public static abstract class AbstractQuickComponent implements QuickComponent {
+	public interface QuickComponent {
+		QuickComponentDef getDefinition();
+
+		ObservableCollection<Component> getComponents();
+
+		Map<QonfigAttributeDef, ObservableValue<String>> getAttributeValues();
+
+		ObservableValue<Point> getLocation();
+
+		ObservableValue<Dimension> getSize();
+
+	}
+
+	public static abstract class AbstractQuickComponentDef implements QuickComponentDef {
 		private final QonfigElement theElement;
 		private Function<ModelSetInstance, ? extends ObservableValue<String>> theFieldName;
 		private Consumer<ComponentEditor<?, ?>> theModifications;
 
-		public AbstractQuickComponent(QonfigElement element) {
+		public AbstractQuickComponentDef(QonfigElement element) {
 			theElement = element;
 		}
 
@@ -109,7 +129,7 @@ public class QuickSwingParser {
 		}
 
 		@Override
-		public AbstractQuickComponent modify(Consumer<ComponentEditor<?, ?>> fieldModification) {
+		public AbstractQuickComponentDef modify(Consumer<ComponentEditor<?, ?>> fieldModification) {
 			if (theModifications == null)
 				theModifications = fieldModification;
 			else {
@@ -128,7 +148,7 @@ public class QuickSwingParser {
 		}
 	}
 
-	public static abstract class AbstractQuickField extends AbstractQuickComponent {
+	public static abstract class AbstractQuickField extends AbstractQuickComponentDef {
 		public AbstractQuickField(QonfigElement element) {
 			super(element);
 		}
@@ -141,14 +161,14 @@ public class QuickSwingParser {
 		}
 	}
 
-	public interface QuickContainer extends QuickComponent {
-		List<QuickComponent> getChildren();
+	public interface QuickContainer extends QuickComponentDef {
+		List<QuickComponentDef> getChildren();
 
 		void installContainer(PanelPopulator<?, ?> container, ModelSetInstance modelSet, Consumer<PanelPopulator<?, ?>> populator);
 
 		default void populateContainer(PanelPopulator<?, ?> thisContainer, ModelSetInstance modelSet) {
 			for (int c = 0; c < getChildren().size(); c++) {
-				QuickComponent child = getChildren().get(c);
+				QuickComponentDef child = getChildren().get(c);
 				child.install(thisContainer, modelSet);
 			}
 		}
@@ -159,16 +179,16 @@ public class QuickSwingParser {
 		}
 	}
 
-	public static abstract class AbstractQuickContainer extends AbstractQuickComponent implements QuickContainer {
-		private final List<QuickComponent> theChildren;
+	public static abstract class AbstractQuickContainer extends AbstractQuickComponentDef implements QuickContainer {
+		private final List<QuickComponentDef> theChildren;
 
-		public AbstractQuickContainer(QonfigElement element, List<QuickComponent> children) {
+		public AbstractQuickContainer(QonfigElement element, List<QuickComponentDef> children) {
 			super(element);
 			theChildren = children;
 		}
 
 		@Override
-		public List<QuickComponent> getChildren() {
+		public List<QuickComponentDef> getChildren() {
 			return theChildren;
 		}
 	}
@@ -181,7 +201,7 @@ public class QuickSwingParser {
 		private final String theLayoutName;
 		private QuickLayout theLayout;
 
-		public QuickBox(QonfigElement element, List<QuickComponent> children, String layoutName) {
+		public QuickBox(QonfigElement element, List<QuickComponentDef> children, String layoutName) {
 			super(element, children);
 			theLayoutName = layoutName;
 		}
@@ -205,7 +225,7 @@ public class QuickSwingParser {
 
 	public static class QuickDocument {
 		private final QuickHeadSection theHead;
-		private final QuickComponent theComponent;
+		private final QuickComponentDef theComponent;
 		private Function<ModelSetInstance, SettableValue<String>> theTitle;
 		private Function<ModelSetInstance, SettableValue<Icon>> theIcon;
 		private Function<ModelSetInstance, SettableValue<Integer>> theX;
@@ -215,7 +235,7 @@ public class QuickSwingParser {
 		private Function<ModelSetInstance, SettableValue<Boolean>> isVisible;
 		private int theCloseAction = WindowConstants.HIDE_ON_CLOSE;
 
-		public QuickDocument(QuickHeadSection head, QuickComponent component) {
+		public QuickDocument(QuickHeadSection head, QuickComponentDef component) {
 			theHead = head;
 			theComponent = component;
 		}
@@ -224,7 +244,7 @@ public class QuickSwingParser {
 			return theHead;
 		}
 
-		public QuickComponent getComponent() {
+		public QuickComponentDef getComponent() {
 			return theComponent;
 		}
 
@@ -337,11 +357,11 @@ public class QuickSwingParser {
 				builder.withVisible(theDocument.getVisible().apply(getModels()));
 			if (theDocument.getX() != null)
 				builder.withX(theDocument.getX().apply(getModels()));
-			if (theDocument.getX() != null)
+			if (theDocument.getY() != null)
 				builder.withY(theDocument.getY().apply(getModels()));
-			if (theDocument.getX() != null)
+			if (theDocument.getWidth() != null)
 				builder.withWidth(theDocument.getWidth().apply(getModels()));
-			if (theDocument.getX() != null)
+			if (theDocument.getHeight() != null)
 				builder.withHeight(theDocument.getHeight().apply(getModels()));
 			builder.withCloseAction(theDocument.getCloseAction());
 			builder.withHContent(new BorderLayout(), content -> installContent(content));
@@ -393,7 +413,7 @@ public class QuickSwingParser {
 			session.put("quick-cv", head.getImports());
 			session.put("quick-model", head.getModels());
 			QuickDocument doc = new QuickDocument(head, //
-				session.getInterpreter().interpret(element.getChildrenInRole("root").getFirst(), QuickComponent.class));
+				session.getInterpreter().interpret(element.getChildrenInRole("root").getFirst(), QuickComponentDef.class));
 			if (element.getAttribute("visible") != null)
 				doc.setVisible(element.getAttribute("visible", ObservableExpression.class).evaluate(ModelTypes.Value.forType(Boolean.class),
 					head.getModels(), head.getImports()));
@@ -447,15 +467,15 @@ public class QuickSwingParser {
 	@SuppressWarnings("rawtypes")
 	void configureBase(Builder interpreter) {
 		interpreter.createWith("box", QuickBox.class, (element, session) -> {
-			List<QuickComponent> children = new ArrayList<>(5);
+			List<QuickComponentDef> children = new ArrayList<>(5);
 			for (QonfigElement child : element.getChildrenInRole("content"))
-				children.add(session.getInterpreter().interpret(child, QuickComponent.class));
+				children.add(session.getInterpreter().interpret(child, QuickComponentDef.class));
 			return new QuickBox(element, children, //
 				element.getAttributeText("layout"));
 		});
 		interpreter.modifyWith("border", QuickBox.class, (value, element, session) -> {
 			value.setLayout(BorderLayout::new);
-			for (QuickComponent child : value.getChildren()) {
+			for (QuickComponentDef child : value.getChildren()) {
 				String layoutConstraint;
 				switch (child.getElement().getAttributeText("region")) {
 				case "center":
@@ -518,8 +538,8 @@ public class QuickSwingParser {
 			}
 			return value.setLayout(() -> layout);
 		});
-		interpreter.createWith("label", QuickComponent.class, (element, session) -> evaluateLabel(element, session));
-		interpreter.createWith("text-field", QuickComponent.class, (element, session) -> {
+		interpreter.createWith("label", QuickComponentDef.class, (element, session) -> evaluateLabel(element, session));
+		interpreter.createWith("text-field", QuickComponentDef.class, (element, session) -> {
 			ClassView cv = (ClassView) session.get("quick-cv");
 			ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
 			ValueContainer<SettableValue, ?> value;
@@ -571,7 +591,7 @@ public class QuickSwingParser {
 						});
 				}
 			};
-		}).createWith("button", QuickComponent.class, (element, session) -> {
+		}).createWith("button", QuickComponentDef.class, (element, session) -> {
 			ClassView cv = (ClassView) session.get("quick-cv");
 			ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
 			Function<ModelSetInstance, SettableValue<String>> buttonText;
@@ -585,7 +605,7 @@ public class QuickSwingParser {
 				buttonText = valueX.evaluate(ModelTypes.Value.forType(String.class), model, cv);
 			Function<ModelSetInstance, ? extends ObservableAction> action = model.get(element.getAttributeText("action"),
 				ModelTypes.Action);
-			return new AbstractQuickComponent(element) {
+			return new AbstractQuickComponentDef(element) {
 				@Override
 				public void install(PanelPopulator<?, ?> container, ModelSetInstance modelSet) {
 					ObservableValue<String> text = buttonText.apply(modelSet);
@@ -598,7 +618,7 @@ public class QuickSwingParser {
 				}
 			};
 		});
-		interpreter.createWith("table", QuickComponent.class, (element, session) -> interpretTable(element, session));
+		interpreter.createWith("table", QuickComponentDef.class, (element, session) -> interpretTable(element, session));
 		interpreter.createWith("column", Function.class, (element, session) -> {
 			System.err.println("WARNING: split is not fully implemented!!"); // TODO
 			ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
@@ -628,15 +648,15 @@ public class QuickSwingParser {
 				return column;
 			};
 		});
-		interpreter.createWith("split", QuickComponent.class, (element, session) -> {
+		interpreter.createWith("split", QuickComponentDef.class, (element, session) -> {
 			if (element.getChildrenInRole("content").size() != 2)
 				throw new UnsupportedOperationException("Currently only 2 (and exactly 2) contents are supported for split");
-			List<QuickComponent> children = new ArrayList<>(2);
+			List<QuickComponentDef> children = new ArrayList<>(2);
 			for (QonfigElement child : element.getChildrenInRole("content"))
-				children.add(session.getInterpreter().interpret(child, QuickComponent.class));
+				children.add(session.getInterpreter().interpret(child, QuickComponentDef.class));
 			boolean vertical = element.getAttributeText("orientation").equals("vertical");
 			System.err.println("WARNING: split is not fully implemented!!"); // TODO
-			return new AbstractQuickComponent(element) {
+			return new AbstractQuickComponentDef(element) {
 				@Override
 				public void install(PanelPopulator<?, ?> container, ModelSetInstance modelSet) {
 					container.addSplit(vertical, split -> {
@@ -647,12 +667,12 @@ public class QuickSwingParser {
 				}
 			};
 		});
-		interpreter.createWith("field-panel", QuickComponent.class, (element, session)->{
+		interpreter.createWith("field-panel", QuickComponentDef.class, (element, session)->{
 			ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
 			ClassView cv = (ClassView) session.get("imports");
-			List<QuickComponent> children = new ArrayList<>();
+			List<QuickComponentDef> children = new ArrayList<>();
 			for (QonfigElement child : element.getChildrenInRole("content")) {
-				QuickComponent childC = session.getInterpreter().interpret(child, QuickComponent.class);
+				QuickComponentDef childC = session.getInterpreter().interpret(child, QuickComponentDef.class);
 				ObservableExpression fieldName = child.getAttribute("field-name", ObservableExpression.class);
 				if (fieldName != null)
 					childC.setFieldName(fieldName.evaluate(ModelTypes.Value.forType(String.class), model, cv));
@@ -661,31 +681,31 @@ public class QuickSwingParser {
 				children.add(childC);
 			}
 			System.err.println("WARNING: field-panel is not fully implemented!!"); // TODO
-			return new AbstractQuickComponent(element) {
+			return new AbstractQuickComponentDef(element) {
 				@Override
 				public void install(PanelPopulator<?, ?> container, ModelSetInstance modelSet) {
 					container.addVPanel(panel->{
 						modify(panel, modelSet);
-						for (QuickComponent child : children) {
+						for (QuickComponentDef child : children) {
 							child.install(panel, modelSet);
 						}
 					});
 				}
 			};
 		});
-		interpreter.createWith("spacer", QuickComponent.class, (element, session) -> {
+		interpreter.createWith("spacer", QuickComponentDef.class, (element, session) -> {
 			int length = Integer.parseInt(element.getAttributeText("length"));
-			return new AbstractQuickComponent(element) {
+			return new AbstractQuickComponentDef(element) {
 				@Override
 				public void install(PanelPopulator<?, ?> container, ModelSetInstance modelSet) {
 					container.spacer(length);
 				}
 			};
 		});
-		interpreter.createWith("tree", QuickComponent.class, (element, session) -> {
+		interpreter.createWith("tree", QuickComponentDef.class, (element, session) -> {
 			return interpretTree(element, session);
 		});
-		interpreter.createWith("text-area", QuickComponent.class, (element, session) -> {
+		interpreter.createWith("text-area", QuickComponentDef.class, (element, session) -> {
 			ClassView cv = (ClassView) session.get("quick-cv");
 			ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
 			ValueContainer<SettableValue, ?> value;
@@ -770,7 +790,7 @@ public class QuickSwingParser {
 				}
 			};
 		});
-		interpreter.createWith("check-box", QuickComponent.class, (element, session) -> {
+		interpreter.createWith("check-box", QuickComponentDef.class, (element, session) -> {
 			ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
 			ClassView cv = (ClassView) session.get("quick-cv");
 			ValueContainer<SettableValue, SettableValue<Boolean>> value;
@@ -795,7 +815,7 @@ public class QuickSwingParser {
 				}
 			};
 		});
-		interpreter.createWith("radio-buttons", QuickComponent.class, (element, session) -> {
+		interpreter.createWith("radio-buttons", QuickComponentDef.class, (element, session) -> {
 			System.err.println("WARNING: radio-buttons is not fully implemented!!"); // TODO
 			ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
 			ClassView cv = (ClassView) session.get("quick-cv");
@@ -819,7 +839,7 @@ public class QuickSwingParser {
 				}
 			};
 		});
-		interpreter.createWith("file-button", QuickComponent.class, (element, session) -> {
+		interpreter.createWith("file-button", QuickComponentDef.class, (element, session) -> {
 			ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
 			ClassView cv = (ClassView) session.get("quick-cv");
 			ValueContainer<SettableValue, ? extends SettableValue<Object>> value;
@@ -856,7 +876,7 @@ public class QuickSwingParser {
 		});
 	}
 
-	private QuickComponent evaluateLabel(QonfigElement element, QonfigInterpretingSession session) throws QonfigInterpretationException {
+	private QuickComponentDef evaluateLabel(QonfigElement element, QonfigInterpretingSession session) throws QonfigInterpretationException {
 		ClassView cv = (ClassView) session.get("quick-cv");
 		ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
 		Function<ModelSetInstance, ? extends SettableValue> value;
@@ -900,7 +920,7 @@ public class QuickSwingParser {
 		};
 	}
 
-	private QuickComponent interpretTable(QonfigElement element, QonfigInterpretingSession session) throws QonfigInterpretationException {
+	private QuickComponentDef interpretTable(QonfigElement element, QonfigInterpretingSession session) throws QonfigInterpretationException {
 		ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
 		ClassView cv = (ClassView) session.get("imports");
 		ValueContainer<ObservableCollection, ?> rows = element.getAttribute("rows", ObservableExpression.class)
@@ -928,7 +948,7 @@ public class QuickSwingParser {
 		List<Function<ModelSetInstance, CategoryRenderStrategy<Object, ?>>> columns = new ArrayList<>();
 		for (QonfigElement columnEl : element.getChildrenInRole("column"))
 			columns.add(session.getInterpreter().interpret(columnEl, Function.class));
-		return new AbstractQuickComponent(element) {
+		return new AbstractQuickComponentDef(element) {
 			@Override
 			public void install(PanelPopulator<?, ?> container, ModelSetInstance modelSet) {
 				container.addTable((ObservableCollection<Object>) rows.apply(modelSet), table -> {
@@ -944,7 +964,7 @@ public class QuickSwingParser {
 		};
 	}
 
-	private <T> QuickComponent interpretTree(QonfigElement element, QonfigInterpretingSession session)
+	private <T> QuickComponentDef interpretTree(QonfigElement element, QonfigInterpretingSession session)
 		throws QonfigInterpretationException {
 		System.err.println("WARNING: tree is not fully implemented!!"); // TODO
 		ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
@@ -1005,7 +1025,7 @@ public class QuickSwingParser {
 				throw new QonfigInterpretationException(
 					"Value " + element.getAttribute("selection") + ", type " + selection.getType() + " cannot be used for tree selection");
 		}
-		return new AbstractQuickComponent(element) {
+		return new AbstractQuickComponentDef(element) {
 			@Override
 			public void install(PanelPopulator<?, ?> container, ModelSetInstance modelSet) {
 				container.addTree(root.apply(modelSet), children.apply(modelSet), tree -> {

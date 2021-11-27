@@ -5,5 +5,12 @@
 		<add-on name="quick" requires="core:quick">
 			<attribute name="look-and-feel" type="string" default="system" />
 		</add-on>
+		<add-on name="quick-debug" requires="core:quick">
+			<attribute name="visible" type="expression" />
+			<attribute name="x" type="expression" specify="optional" />
+			<attribute name="y" type="expression" specify="optional" />
+			<attribute name="width" type="expression" specify="optional" />
+			<attribute name="height" type="expression" specify="optional" />
+		</add-on>
 	</add-ons>
 </qonfig-def>
