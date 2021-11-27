@@ -157,7 +157,7 @@
 			<child-def name="entry" type="entry" min="0" max="inf" />
 		</element-def>
 		<element-def name="sorted-map" extends="map" inherits="sorted" />
-		<element-def name="multi-map" extends="ext-multi-map" />
+		<element-def name="multi-map" extends="map" />
 		<element-def name="sorted-multi-map" extends="multi-map" inherits="sorted" />
 
 		<element-def name="operation" abstract="true" />

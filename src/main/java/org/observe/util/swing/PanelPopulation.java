@@ -327,7 +327,14 @@ public class PanelPopulation {
 		P addScroll(String fieldName, Consumer<ScrollPane<?>> scroll);
 
 		default P spacer(int size) {
-			return addComponent(null, Box.createRigidArea(new Dimension(size, size)), null);
+			return spacer(size, null);
+		}
+
+		default P spacer(int size, Consumer<Component> component) {
+			Component box = Box.createRigidArea(new Dimension(size, size));
+			if (component != null)
+				component.accept(box);
+			return addComponent(null, box, null);
 		}
 
 		<S> P addComponent(String fieldName, S component, Consumer<FieldEditor<S, ?>> modify);
