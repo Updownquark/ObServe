@@ -35,6 +35,11 @@ public interface ObservableExpression {
 			ClassView classView) throws QonfigInterpretationException {
 			throw new QonfigInterpretationException("Empty expression");
 		}
+
+		@Override
+		public String toString() {
+			return "null";
+		}
 	};
 
 	default <M, MV extends M> ValueContainer<M, MV> evaluate(ModelInstanceType<M, MV> type, ObservableModelSet models, ClassView classView)

@@ -6,7 +6,14 @@ import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.LayoutManager;
 import java.awt.Point;
+import java.awt.Window;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
+import java.awt.event.MouseEvent;
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URL;
 import java.text.ParseException;
 import java.time.Duration;
 import java.time.Instant;
@@ -19,7 +26,9 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 import javax.swing.Icon;
+import javax.swing.JDialog;
 import javax.swing.JFrame;
+import javax.swing.JPanel;
 import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
 import javax.swing.WindowConstants;
@@ -45,12 +54,18 @@ import org.observe.util.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.PanelPopulation.ComponentEditor;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
+import org.observe.util.swing.PanelPopulation.WindowBuilder;
 import org.qommons.collect.BetterList;
+import org.qommons.config.DefaultQonfigParser;
 import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigInterpreter;
 import org.qommons.config.QonfigInterpreter.Builder;
 import org.qommons.config.QonfigInterpreter.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreter.QonfigInterpretingSession;
+import org.qommons.config.QonfigInterpreter.QonfigValueExtension;
+import org.qommons.config.QonfigParseException;
+import org.qommons.config.QonfigParser;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.QonfigToolkitAccess;
 import org.qommons.io.BetterFile;
@@ -102,8 +117,8 @@ public class QuickSwingParser {
 		private ObservableValue<Point> theLocation;
 		private ObservableValue<Dimension> theSize;
 
-		public QuickComponent(QuickComponentDef definition, Component component,
-			Map<QonfigAttributeDef, Object> attributeValues, ObservableCollection<QuickComponent> children) {
+		public QuickComponent(QuickComponentDef definition, Component component, Map<QonfigAttributeDef, Object> attributeValues,
+			ObservableCollection<QuickComponent> children) {
 			super();
 			theDefinition = definition;
 			theComponent = component;
@@ -313,7 +328,46 @@ public class QuickSwingParser {
 		}
 	}
 
-	public static class QuickDocument {
+	public interface QuickDocument {
+		public QonfigElement getElement();
+
+		public QuickHeadSection getHead();
+
+		public QuickComponentDef getComponent();
+
+		public Function<ModelSetInstance, SettableValue<String>> getTitle();
+
+		public void setTitle(Function<ModelSetInstance, SettableValue<String>> title);
+
+		public Function<ModelSetInstance, SettableValue<Icon>> getIcon();
+
+		public void setIcon(Function<ModelSetInstance, SettableValue<Icon>> icon);
+
+		public Function<ModelSetInstance, SettableValue<Integer>> getX();
+
+		public Function<ModelSetInstance, SettableValue<Integer>> getY();
+
+		public Function<ModelSetInstance, SettableValue<Integer>> getWidth();
+
+		public Function<ModelSetInstance, SettableValue<Integer>> getHeight();
+
+		public QuickDocument withBounds(//
+			Function<ModelSetInstance, SettableValue<Integer>> x, Function<ModelSetInstance, SettableValue<Integer>> y, //
+			Function<ModelSetInstance, SettableValue<Integer>> width, Function<ModelSetInstance, SettableValue<Integer>> height);
+
+		public Function<ModelSetInstance, SettableValue<Boolean>> getVisible();
+
+		public int getCloseAction();
+
+		public QuickDocument setVisible(Function<ModelSetInstance, SettableValue<Boolean>> visible);
+
+		public void setCloseAction(int closeAction);
+
+		public QuickUiDef createUI(ExternalModelSet extModels);
+	}
+
+	public static class QuickDocumentImpl implements QuickDocument {
+		private final QonfigElement theElement;
 		private final QuickHeadSection theHead;
 		private final QuickComponentDef theComponent;
 		private Function<ModelSetInstance, SettableValue<String>> theTitle;
@@ -325,59 +379,78 @@ public class QuickSwingParser {
 		private Function<ModelSetInstance, SettableValue<Boolean>> isVisible;
 		private int theCloseAction = WindowConstants.HIDE_ON_CLOSE;
 
-		public QuickDocument(QuickHeadSection head, QuickComponentDef component) {
+		public QuickDocumentImpl(QonfigElement element, QuickHeadSection head, QuickComponentDef component) {
+			theElement = element;
 			theHead = head;
 			theComponent = component;
 		}
 
+		@Override
+		public QonfigElement getElement() {
+			return theElement;
+		}
+
+		@Override
 		public QuickHeadSection getHead() {
 			return theHead;
 		}
 
+		@Override
 		public QuickComponentDef getComponent() {
 			return theComponent;
 		}
 
+		@Override
 		public Function<ModelSetInstance, SettableValue<String>> getTitle() {
 			return theTitle;
 		}
 
+		@Override
 		public void setTitle(Function<ModelSetInstance, SettableValue<String>> title) {
 			theTitle = title;
 		}
 
+		@Override
 		public Function<ModelSetInstance, SettableValue<Icon>> getIcon() {
 			return theIcon;
 		}
 
+		@Override
 		public void setIcon(Function<ModelSetInstance, SettableValue<Icon>> icon) {
 			theIcon = icon;
 		}
 
+		@Override
 		public Function<ModelSetInstance, SettableValue<Integer>> getX() {
 			return theX;
 		}
 
+		@Override
 		public Function<ModelSetInstance, SettableValue<Integer>> getY() {
 			return theY;
 		}
 
+		@Override
 		public Function<ModelSetInstance, SettableValue<Integer>> getWidth() {
 			return theWidth;
 		}
 
+		@Override
 		public Function<ModelSetInstance, SettableValue<Integer>> getHeight() {
 			return theHeight;
 		}
 
+		@Override
 		public Function<ModelSetInstance, SettableValue<Boolean>> getVisible() {
 			return isVisible;
 		}
 
+		@Override
 		public int getCloseAction() {
 			return theCloseAction;
 		}
 
+		@Override
 		public QuickDocument withBounds(//
 			Function<ModelSetInstance, SettableValue<Integer>> x, Function<ModelSetInstance, SettableValue<Integer>> y, //
 			Function<ModelSetInstance, SettableValue<Integer>> width, Function<ModelSetInstance, SettableValue<Integer>> height) {
@@ -388,15 +461,18 @@ public class QuickSwingParser {
 			return this;
 		}
 
+		@Override
 		public QuickDocument setVisible(Function<ModelSetInstance, SettableValue<Boolean>> visible) {
 			isVisible = visible;
 			return this;
 		}
 
+		@Override
 		public void setCloseAction(int closeAction) {
 			theCloseAction = closeAction;
 		}
 
+		@Override
 		public QuickUiDef createUI(ExternalModelSet extModels) {
 			return new QuickUiDef(this, extModels);
 		}
@@ -441,7 +517,14 @@ public class QuickSwingParser {
 		}
 
 		public JFrame install(JFrame frame) {
-			PanelPopulation.WindowBuilder<JFrame, ?> builder = WindowPopulation.populateWindow(frame, getUntil(), false, false);
+			return install(WindowPopulation.populateWindow(frame, getUntil(), false, false)).getWindow();
+		}
+
+		public JDialog install(JDialog dialog) {
+			return install(WindowPopulation.populateDialog(dialog, getUntil(), false)).getWindow();
+		}
+
+		public <W extends Window> WindowBuilder<W, ?> install(WindowBuilder<W, ?> builder) {
 			if (theDocument.getTitle() != null)
 				builder.withTitle(theDocument.getTitle().apply(getModels()));
 			if (theDocument.getVisible() != null)
@@ -457,7 +540,7 @@ public class QuickSwingParser {
 			builder.withCloseAction(theDocument.getCloseAction());
 			builder.withHContent(new BorderLayout(), content -> installContent(content));
 			builder.run(null);
-			return frame;
+			return builder;
 		}
 
 		public void installContent(Container container) {
@@ -506,7 +589,7 @@ public class QuickSwingParser {
 				element.getChildrenByRole().get(core.getChild("quick", "head").getDeclared()).getFirst(), QuickHeadSection.class);
 			session.put("quick-cv", head.getImports());
 			session.put("quick-model", head.getModels());
-			QuickDocument doc = new QuickDocument(head, //
+			QuickDocument doc = new QuickDocumentImpl(element, head, //
 				session.getInterpreter().interpret(element.getChildrenByRole().get(core.getChild("quick", "root").getDeclared()).getFirst(),
 					QuickComponentDef.class));
 			return doc;
@@ -781,7 +864,7 @@ public class QuickSwingParser {
 				}
 			};
 		});
-		interpreter.createWith("field-panel", QuickComponentDef.class, (element, session)->{
+		interpreter.createWith("field-panel", QuickComponentDef.class, (element, session) -> {
 			ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
 			ClassView cv = (ClassView) session.get("imports");
 			List<QuickComponentDef> children = new ArrayList<>();
@@ -798,7 +881,7 @@ public class QuickSwingParser {
 			return new AbstractQuickComponentDef(element) {
 				@Override
 				public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
-					container.addVPanel(panel->{
+					container.addVPanel(panel -> {
 						modify(panel, builder);
 						for (QuickComponentDef child : children) {
 							QuickComponent.Builder<?> childBuilder = QuickComponent.build(child, builder.getModels());
@@ -860,8 +943,7 @@ public class QuickSwingParser {
 			ValueContainer<SettableValue, SettableValue<Integer>> rows;
 			if (element.getAttributes().get(base.getAttribute("text-area", "rows")) != null)
 				rows = element.getAttribute(base.getAttribute("text-area", "rows"), ObservableExpression.class)
-				.evaluate(ModelTypes.Value.forType(Integer.class), model,
-					cv);
+				.evaluate(ModelTypes.Value.forType(Integer.class), model, cv);
 			else
 				rows = null;
 			ValueContainer<SettableValue, SettableValue<Boolean>> html;
@@ -1012,7 +1094,7 @@ public class QuickSwingParser {
 		ObservableExpression formatX = element.getAttribute(base.getAttribute("label", "format"), ObservableExpression.class);
 		Function<ModelSetInstance, SettableValue<Format<Object>>> format;
 		if (valueX == null) {
-			if (formatX != null)
+			if (formatX != null && formatX != ObservableExpression.EMPTY)
 				System.err.println("Warning: format specified on label without value");
 			String txt = element.getValueText();
 			if (txt == null)
@@ -1047,7 +1129,8 @@ public class QuickSwingParser {
 		};
 	}
 
-	private QuickComponentDef interpretTable(QonfigElement element, QonfigInterpretingSession session) throws QonfigInterpretationException {
+	private QuickComponentDef interpretTable(QonfigElement element, QonfigInterpretingSession session)
+		throws QonfigInterpretationException {
 		QonfigToolkit base = BASE.get();
 		ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
 		ClassView cv = (ClassView) session.get("imports");
@@ -1145,8 +1228,8 @@ public class QuickSwingParser {
 					singleSelectionPath = hackS.getType().as(hackS, ModelTypes.Value.forType(//
 						TypeTokens.get().keyFor(BetterList.class).parameterized(valueType)));
 				} else
-					throw new QonfigInterpretationException("Value " + selectionEx + ", type " + selection.getType()
-					+ " cannot be used for tree selection");
+					throw new QonfigInterpretationException(
+						"Value " + selectionEx + ", type " + selection.getType() + " cannot be used for tree selection");
 			} else if (selection.getType().getModelType() == ModelTypes.Collection
 				|| selection.getType().getModelType() == ModelTypes.SortedCollection || selection.getType().getModelType() == ModelTypes.Set
 				|| selection.getType().getModelType() == ModelTypes.SortedSet) {
@@ -1176,8 +1259,291 @@ public class QuickSwingParser {
 		};
 	}
 
+	private QuickDocument theDebugDoc;
+	private QuickDocument theDebugOverlayDoc;
+
 	private void configureSwing(Builder interpreter) {
 		QonfigToolkit swing = SWING.get();
+		interpreter.extend(CORE.get().getElement("quick"), swing.getElement("quick-debug"), QuickDocument.class, QuickDocument.class, //
+			new QonfigValueExtension<QuickDocument, QuickDocument>() {
+			@Override
+			public QuickDocument createValue(QuickDocument superValue, QonfigElement element, QonfigInterpretingSession session)
+				throws QonfigInterpretationException {
+
+				if (theDebugDoc == null) {
+					synchronized (QuickSwingParser.this) {
+						if (theDebugDoc == null) {
+							QonfigParser debugParser = new DefaultQonfigParser().withToolkit(ObservableModelQonfigParser.TOOLKIT.get(),
+								CORE.get(), BASE.get(), swing);
+							QonfigInterpreter debugInterp = configureInterpreter(QonfigInterpreter.build(BASE.get(), swing)).build();
+								URL debugXml = QuickSwingParser.class.getResource("quick-debug.qml");
+								try (InputStream in = debugXml.openStream()) {
+								theDebugDoc = debugInterp.interpret(//
+										debugParser.parseDocument(debugXml.toString(), in).getRoot(), QuickDocument.class);
+							} catch (IOException e) {
+								throw new QonfigInterpretationException("Could not read quick-debug.qml", e);
+							} catch (QonfigParseException e) {
+								throw new QonfigInterpretationException("Could not interpret quick-debug.qml", e);
+							}
+								debugXml = QuickSwingParser.class.getResource("quick-debug-overlay.qml");
+								try (InputStream in = debugXml.openStream()) {
+								theDebugOverlayDoc = debugInterp.interpret(//
+										debugParser.parseDocument(debugXml.toString(), in).getRoot(), QuickDocument.class);
+							} catch (IOException e) {
+								throw new QonfigInterpretationException("Could not read quick-debug.qml", e);
+							} catch (QonfigParseException e) {
+								throw new QonfigInterpretationException("Could not interpret quick-debug.qml", e);
+							}
+						}
+					}
+				}
+
+				Function<ModelSetInstance, SettableValue<Integer>> xVal, yVal, wVal, hVal;
+				Function<ModelSetInstance, SettableValue<Boolean>> vVal;
+				ObservableExpression x = element.getAttribute(swing.getAttribute("quick-debug", "debug-x"), ObservableExpression.class);
+				ObservableExpression y = element.getAttribute(swing.getAttribute("quick-debug", "debug-y"), ObservableExpression.class);
+				ObservableExpression w = element.getAttribute(swing.getAttribute("quick-debug", "debug-width"),
+					ObservableExpression.class);
+				ObservableExpression h = element.getAttribute(swing.getAttribute("quick-debug", "debug-height"),
+					ObservableExpression.class);
+				ObservableExpression v = element.getAttribute(swing.getAttribute("quick-debug", "debug-visible"),
+					ObservableExpression.class);
+				if (x != null) {
+					xVal = x.evaluate(ModelTypes.Value.forType(int.class), superValue.getHead().getModels(),
+						superValue.getHead().getImports());
+				} else {
+					xVal = msi -> SettableValue.build(int.class).safe(false).withValue(0).build();
+				}
+				if (y != null) {
+					yVal = y.evaluate(ModelTypes.Value.forType(int.class), superValue.getHead().getModels(),
+						superValue.getHead().getImports());
+				} else {
+					yVal = msi -> SettableValue.build(int.class).safe(false).withValue(0).build();
+				}
+				if (w != null) {
+					wVal = w.evaluate(ModelTypes.Value.forType(int.class), superValue.getHead().getModels(),
+						superValue.getHead().getImports());
+				} else {
+					wVal = msi -> SettableValue.build(int.class).safe(false).withValue(0).build();
+				}
+				if (h != null) {
+					hVal = h.evaluate(ModelTypes.Value.forType(int.class), superValue.getHead().getModels(),
+						superValue.getHead().getImports());
+				} else {
+					hVal = msi -> SettableValue.build(int.class).safe(false).withValue(0).build();
+				}
+				if (v != null) {
+					vVal = v.evaluate(ModelTypes.Value.forType(boolean.class), superValue.getHead().getModels(),
+						superValue.getHead().getImports());
+				} else {
+					vVal = msi -> SettableValue.build(boolean.class).safe(false).withValue(true).build();
+				}
+
+				Function<ModelSetInstance, SettableValue<QuickComponent>> selectedComponent = theDebugDoc.getHead().getModels()
+					.get("debug.selectedComponent", ModelTypes.Value.forType(QuickComponent.class));
+				// Function<ModelSetInstance, SettableValue<Integer>> scX, scY, scW, scH;
+				// Function<ModelSetInstance, SettableValue<Boolean>> scV;
+				// scX=msi->
+
+				return new QuickDocument() {
+					@Override
+					public QonfigElement getElement() {
+						return element;
+					}
+
+					@Override
+					public QuickHeadSection getHead() {
+						return superValue.getHead();
+					}
+
+					@Override
+					public QuickComponentDef getComponent() {
+					}
+
+					@Override
+					public Function<ModelSetInstance, SettableValue<String>> getTitle() {
+						return superValue.getTitle();
+					}
+
+					@Override
+					public void setTitle(Function<ModelSetInstance, SettableValue<String>> title) {
+						superValue.setTitle(title);
+					}
+
+					@Override
+					public Function<ModelSetInstance, SettableValue<Icon>> getIcon() {
+						return superValue.getIcon();
+					}
+
+					@Override
+					public void setIcon(Function<ModelSetInstance, SettableValue<Icon>> icon) {
+						superValue.setIcon(icon);
+					}
+
+					@Override
+					public Function<ModelSetInstance, SettableValue<Integer>> getX() {
+						return superValue.getX();
+					}
+
+					@Override
+					public Function<ModelSetInstance, SettableValue<Integer>> getY() {
+						return superValue.getY();
+					}
+
+					@Override
+					public Function<ModelSetInstance, SettableValue<Integer>> getWidth() {
+						return superValue.getWidth();
+					}
+
+					@Override
+					public Function<ModelSetInstance, SettableValue<Integer>> getHeight() {
+						return superValue.getHeight();
+					}
+
+					@Override
+					public QuickDocument withBounds(Function<ModelSetInstance, SettableValue<Integer>> x,
+						Function<ModelSetInstance, SettableValue<Integer>> y, Function<ModelSetInstance, SettableValue<Integer>> width,
+						Function<ModelSetInstance, SettableValue<Integer>> height) {
+						superValue.withBounds(x, y, width, height);
+						return this;
+					}
+
+					@Override
+					public Function<ModelSetInstance, SettableValue<Boolean>> getVisible() {
+						return superValue.getVisible();
+					}
+
+					@Override
+					public int getCloseAction() {
+						return superValue.getCloseAction();
+					}
+
+					@Override
+					public QuickDocument setVisible(Function<ModelSetInstance, SettableValue<Boolean>> visible) {
+						superValue.setVisible(visible);
+						return this;
+					}
+
+					@Override
+					public void setCloseAction(int closeAction) {
+						superValue.setCloseAction(closeAction);
+					}
+
+					@Override
+					public QuickUiDef createUI(ExternalModelSet extModels) {
+						return new QuickUiDef(this, extModels) {
+							private final QuickUiDef theContentUi;
+							private final SettableValue<Integer> theCursorX;
+							private final SettableValue<Integer> theCursorY;
+							private final QuickUiDef theDebugUi;
+							private final QuickUiDef theDebugOverlayUi;
+
+							{
+								theContentUi = superValue.createUI(extModels);
+								theCursorX = SettableValue.build(int.class).safe(false).withValue(0).build();
+								theCursorY = SettableValue.build(int.class).safe(false).withValue(0).build();
+								theDebugUi = theDebugDoc.createUI(createDebugModel());
+								theDebugOverlayUi = theDebugOverlayDoc.createUI(createOverlayModel());
+							}
+
+							ExternalModelSet createDebugModel() {
+								ObservableModelSet.ExternalModelSetBuilder debugExtModelsBuilder = ObservableModelSet.buildExternal();
+								try {
+									ObservableModelSet.ExternalModelSetBuilder debugUiModels = debugExtModelsBuilder.addSubModel("ext");
+									debugUiModels.with("x", ModelTypes.Value.forType(int.class), xVal.apply(theContentUi.getModels()));
+									debugUiModels.with("y", ModelTypes.Value.forType(int.class), yVal.apply(theContentUi.getModels()));
+									debugUiModels.with("width", ModelTypes.Value.forType(int.class),
+										wVal.apply(theContentUi.getModels()));
+									debugUiModels.with("height", ModelTypes.Value.forType(int.class),
+										hVal.apply(theContentUi.getModels()));
+									debugUiModels.with("ui", ModelTypes.Value.forType(QuickUiDef.class),
+										ObservableModelQonfigParser.literal(theContentUi, "ui"));
+									debugUiModels.with("cursorX", ModelTypes.Value.forType(int.class), theCursorX);
+									debugUiModels.with("cursorY", ModelTypes.Value.forType(int.class), theCursorY);
+								} catch (QonfigInterpretationException e) {
+									e.printStackTrace();
+								}
+								return debugExtModelsBuilder.build();
+							}
+
+							ExternalModelSet createOverlayModel() {
+								SettableValue<QuickComponent> component = selectedComponent.apply(theDebugUi.getModels());
+								SettableValue<Integer> x = SettableValue.build(int.class).safe(false).withValue(0).build();
+								SettableValue<Integer> y = SettableValue.build(int.class).safe(false).withValue(0).build();
+								SettableValue<Integer> w = SettableValue.build(int.class).safe(false).withValue(0).build();
+								SettableValue<Integer> h = SettableValue.build(int.class).safe(false).withValue(0).build();
+								SettableValue<Boolean> v = SettableValue.build(boolean.class).safe(false).withValue(false).build();
+								ComponentAdapter listener = new ComponentAdapter() {
+									@Override
+									public void componentResized(ComponentEvent e) {
+										w.set(e.getComponent().getWidth(), e);
+										h.set(e.getComponent().getHeight(), e);
+									}
+
+									@Override
+									public void componentMoved(ComponentEvent e) {
+										x.set(e.getComponent().getX(), e);
+										y.set(e.getComponent().getY(), e);
+									}
+								};
+								component.changes().act(evt -> {
+									if (evt.getOldValue() == evt.getNewValue())
+										return;
+									v.set(evt.getNewValue() != null, evt);
+									if (evt.getOldValue() != null)
+										evt.getOldValue().getComponent().removeComponentListener(listener);
+									if (evt.getNewValue() == null) {
+										x.set(0, evt);
+										y.set(0, evt);
+										w.set(0, evt);
+										h.set(0, evt);
+									} else {
+										Component c = evt.getNewValue().getComponent();
+										c.addComponentListener(listener);
+										x.set(c.getX(), evt);
+										y.set(c.getY(), evt);
+										w.set(c.getWidth(), evt);
+										h.set(c.getHeight(), evt);
+									}
+								});
+								ObservableModelSet.ExternalModelSetBuilder debugExtModelsBuilder = ObservableModelSet.buildExternal();
+								try {
+									ObservableModelSet.ExternalModelSetBuilder debugUiModels = debugExtModelsBuilder
+										.addSubModel("selectedComponent");
+									debugUiModels.with("visible", ModelTypes.Value.forType(boolean.class), v);
+									debugUiModels.with("x", ModelTypes.Value.forType(int.class), x);
+									debugUiModels.with("y", ModelTypes.Value.forType(int.class), y);
+									debugUiModels.with("width", ModelTypes.Value.forType(int.class), w);
+									debugUiModels.with("height", ModelTypes.Value.forType(int.class), h);
+									debugUiModels.with("tooltip", ModelTypes.Value.forType(String.class),
+										ObservableModelQonfigParser.literal("Not yet implemented", "tooltip"));
+									debugUiModels.with("onMouse", ModelTypes.Action.forType(Void.class),
+										ObservableAction.of(TypeTokens.get().VOID, evt -> {
+											MouseEvent mEvt = (MouseEvent) evt;
+											theCursorX.set(mEvt.getX(), evt);
+											theCursorY.set(mEvt.getY(), evt);
+											return null;
+										}));
+								} catch (QonfigInterpretationException e) {
+									e.printStackTrace();
+								}
+								return debugExtModelsBuilder.build();
+							}
+
+							@Override
+							public JFrame install(JFrame frame) {
+								frame = super.install(frame);
+								JPanel glassPane = new JPanel();
+								glassPane.setOpaque(false);
+								theDebugOverlayUi.installContent(glassPane);
+								theDebugUi.install(new JDialog());
+								return frame;
+							}
+						};
+					}
+				};
+			}
+		});
 		interpreter.modifyWith("quick", QuickDocument.class, (value, element, session) -> {
 			String lAndFClass;
 			switch (element.getAttributeText(swing.getAttribute("quick", "look-and-feel"))) {

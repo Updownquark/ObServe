@@ -1225,15 +1225,16 @@ public class ObservableModelQonfigParser {
 				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.get("model");
 				String name = element.getAttributeText(obsTk.getAttribute("abst-model-value", "name"));
 				ValueGetter<SettableValue<FileDataSource>> source;
-				switch (element.getAttributeText(obsTk.getAttribute("abst-model-value", "type"))) {
+				switch (element.getAttributeText(obsTk.getAttribute("file-source", "type"))) {
 				case "native":
 					source = (modelSet, extModels) -> literal(new NativeFileSource(), "native-file-source");
 					break;
 				case "sftp":
 					throw new UnsupportedOperationException("Not yet implemented");
 				default:
-					throw new IllegalArgumentException("Unrecognized file-source-type: "
-						+ element.getAttributeText(obsTk.getAttribute("file-source", "file-source-type")));
+					throw new IllegalArgumentException(
+						"Unrecognized file-source type: "
+							+ element.getAttributeText(obsTk.getAttribute("file-source", "type")));
 				}
 				if (!element.getChildrenByRole().get(obsTk.getChild("file-source", "archive").getDeclared()).isEmpty()) {
 					Set<String> archiveMethodStrs = new HashSet<>();
@@ -1719,7 +1720,7 @@ public class ObservableModelQonfigParser {
 
 	private TypeToken<?> parseType(String text, ClassView cv) throws QonfigInterpretationException {
 		try {
-			return TypeTokens.get().parseType(text);
+			return TypeTokens.get().parseType(text.replaceAll("\\{", "<").replaceAll("\\}", ">"));
 		} catch (ParseException e) {
 			try {
 				return TypeTokens.get().parseType("java.lang." + text);
