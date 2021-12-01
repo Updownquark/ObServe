@@ -132,6 +132,13 @@ public class ObservableModelQonfigParser {
 	private static final SubClassMap2<Object, ValueParser> DEFAULT_PARSERS;
 	static {
 		DEFAULT_PARSERS = new SubClassMap2<>(Object.class);
+		DEFAULT_PARSERS.with(Boolean.class, simple((t, s) -> {
+			if ("true".equals(s))
+				return Boolean.TRUE;
+			else if ("false".equals(s))
+				return Boolean.FALSE;
+			throw new ParseException("Unrecognized boolean value: '" + s + "'", 0);
+		}));
 		DEFAULT_PARSERS.with(Integer.class, simple((t, s) -> Format.INT.parse(s)));
 		DEFAULT_PARSERS.with(Long.class, simple((t, s) -> Format.LONG.parse(s)));
 		DecimalFormat df = new DecimalFormat("0.#######");
@@ -1730,7 +1737,7 @@ public class ObservableModelQonfigParser {
 		}
 	}
 
-	private <T> Function<ExternalModelSet, T> parseValue(ObservableModelSet models, TypeToken<T> type, String text)
+	<T> Function<ExternalModelSet, T> parseValue(ObservableModelSet models, TypeToken<T> type, String text)
 		throws QonfigInterpretationException {
 		ValueParser parser = theParsers.get(TypeTokens.get().wrap(TypeTokens.getRawType(type)), false);
 		if (parser == null)
@@ -1848,25 +1855,33 @@ public class ObservableModelQonfigParser {
 				break;
 			case "flatten":
 				System.err.println("WARNING: Value.flatten is not fully implemented!!  Some options may be ignored.");
-				MethodFinder<Object, Object, Object, Object> finder = op
-					.getAttribute(obsTk.getAttribute("flatten", "function"), ObservableExpression.class)
-					.<Object, Object, Object, Object> findMethod(TypeTokens.get().of(Object.class), model, cv)//
-					.withOption(BetterList.of(currentType), new ObservableExpression.ArgMaker<Object, Object, Object>() {
-						@Override
-						public void makeArgs(Object t, Object u, Object v, Object[] args, ModelSetInstance models) {
-							args[0] = t;
-						}
-					});
-				Function<ModelSetInstance, Function<Object, Object>> found = finder.find1();
-				Class<?> resultType = TypeTokens.getRawType(finder.getResultType());
+				Function<ModelSetInstance, Function<Object, Object>> function;
+				TypeToken<?> resultType;
+				if (op.getAttributes().get(obsTk.getAttribute("flatten", "function")) != null) {
+					MethodFinder<Object, Object, Object, Object> finder = op
+						.getAttribute(obsTk.getAttribute("flatten", "function"), ObservableExpression.class)
+						.<Object, Object, Object, Object> findMethod(TypeTokens.get().of(Object.class), model, cv)//
+						.withOption(BetterList.of(currentType), new ObservableExpression.ArgMaker<Object, Object, Object>() {
+							@Override
+							public void makeArgs(Object t, Object u, Object v, Object[] args, ModelSetInstance models) {
+								args[0] = t;
+							}
+						});
+					function = finder.find1();
+					resultType = finder.getResultType();
+				} else {
+					resultType = currentType;
+					function = msi -> v -> v;
+				}
+				Class<?> resultClass = TypeTokens.getRawType(resultType);
 				boolean nullToNull = op.getAttribute(obsTk.getAttribute("flatten", "null-to-null"), boolean.class);
-				if (ObservableValue.class.isAssignableFrom(resultType)) {
+				if (ObservableValue.class.isAssignableFrom(resultClass)) {
 					throw new UnsupportedOperationException("Not yet implemented");// TODO
-				} else if (ObservableCollection.class.isAssignableFrom(resultType)) {
+				} else if (ObservableCollection.class.isAssignableFrom(resultClass)) {
 					ModelInstanceType<Object, ObservableCollection<Object>> modelType;
-					TypeToken<Object> elementType = (TypeToken<Object>) finder.getResultType()
+					TypeToken<Object> elementType = (TypeToken<Object>) resultType
 						.resolveType(ObservableCollection.class.getTypeParameters()[0]);
-					if (ObservableSet.class.isAssignableFrom(resultType))
+					if (ObservableSet.class.isAssignableFrom(resultClass))
 						modelType = (ModelInstanceType<Object, ObservableCollection<Object>>) (ModelInstanceType<?, ?>) ModelTypes.Set
 						.forType(elementType);
 					else
@@ -1882,9 +1897,8 @@ public class ObservableModelQonfigParser {
 						@Override
 						public ObservableCollection<Object> get(ModelSetInstance extModels) {
 							ObservableValue<?> txValue = penultimateTransform.transform(source.get(extModels), extModels)
-								.transform((TypeToken<Object>) finder.getResultType(),
-									tx -> tx.nullToNull(nullToNull).map(found.apply(extModels)));
-							if (ObservableSet.class.isAssignableFrom(resultType))
+								.transform((TypeToken<Object>) resultType, tx -> tx.nullToNull(nullToNull).map(function.apply(extModels)));
+							if (ObservableSet.class.isAssignableFrom(resultClass))
 								return ObservableSet.flattenValue((ObservableValue<ObservableSet<Object>>) txValue);
 							else
 								return ObservableCollection.flattenValue((ObservableValue<ObservableCollection<Object>>) txValue);
@@ -1893,7 +1907,7 @@ public class ObservableModelQonfigParser {
 					transformCollection(collectionContainer, transform, model, cv, name, i + 1);
 					return;
 				} else
-					throw new QonfigInterpretationException("Cannot flatten a value to a " + finder.getResultType());
+					throw new QonfigInterpretationException("Cannot flatten a value to a " + resultType);
 				// transformFn=(v, models)->prevTransformFn.transform(v, models).fl
 			case "filter":
 			case "filter-by-type":

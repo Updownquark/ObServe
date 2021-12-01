@@ -195,6 +195,7 @@ public class DefaultExpressoParser implements ExpressoParser {
 		case "StringLiteral":
 			return literalExpression(expression, compileString(expression.search().get("StringCharacters").find().getComponents()));
 		case "NullLiteral":
+		case "'null'": // Really? Very strange type name
 			return literalExpression(expression, null);
 		case "arrayAccess":
 		case "arrayAccess_lfno_primary":
@@ -304,7 +305,7 @@ public class DefaultExpressoParser implements ExpressoParser {
 				parameters = Collections.unmodifiableList(parameters);
 			}
 			return new LambdaExpression(parameters, //
-				_parse(expression.getComponent("lambdaBody")));
+				_parse(expression.getComponent("lambdaBody").getComponents().getFirst()));
 		case "methodReference":
 		case "methodReference_lfno_primary":
 			target = expression.getComponents().getFirst();
@@ -413,50 +414,15 @@ public class DefaultExpressoParser implements ExpressoParser {
 			//		return arrayCreate(expression, Collections.emptyList(), values);
 			// Ternary operation types
 		case "conditionalExpression":
-			//		if (expression.getComponents().size() != 5)
-			//			throw new CompilationException(expression,
-			//				"Unrecognized expression with " + expression.getComponents().size() + " components");
-			//		CompilationException ex = null;
-			//		String firstOp = expression.getComponents().get(1).toString();
-			//		String secondOp = expression.getComponents().get(3).toString();
-			//		for (TypeToken<?> leftTargetType : theOperations.getTernaryLeftTargetTypes(targetType, firstOp, secondOp)) {
-			//			TypedStatement<E, ?> leftOperand;
-			//			try {
-			//				leftOperand = evaluate(expression.getComponents().getFirst(), env, leftTargetType);
-			//			} catch (CompilationException e) {
-			//				if (ex == null)
-			//					ex = e;
-			//				continue;
-			//			}
-			//			for (TypeToken<?> middleTargetType : theOperations.getTernaryMiddleTargetTypes(leftOperand.getReturnType(),
-			//				firstOp, secondOp)) {
-			//				TypedStatement<E, ?> middleOperand;
-			//				try {
-			//					middleOperand = evaluate(expression.getComponents().get(2), env, middleTargetType);
-			//				} catch (CompilationException e) {
-			//					if (ex == null)
-			//						ex = e;
-			//					continue;
-			//				}
-			//				for (TypeToken<?> rightTargetType : theOperations.getTernaryRightTargetTypes(leftOperand.getReturnType(),
-			//					middleOperand.getReturnType(), firstOp, secondOp)) {
-			//					TypedStatement<E, ?> rightOperand;
-			//					try {
-			//						rightOperand = evaluate(expression.getComponents().getLast(), env, rightTargetType);
-			//					} catch (CompilationException e) {
-			//						if (ex == null)
-			//							ex = e;
-			//						continue;
-			//					}
-			//					TernaryOperation<?, ?, ?, ? extends X> op = theOperations.ternaryOperation(targetType, leftOperand.getReturnType(),
-			//						middleOperand.getReturnType(), rightOperand.getReturnType(), firstOp, secondOp);
-			//					return ternaryOperation(expression, (TernaryOperation<Object, Object, Object, X>) op,
-			//						(TypedStatement<E, Object>) leftOperand, (TypedStatement<E, Object>) middleOperand,
-			//						(TypedStatement<E, Object>) rightOperand);
-			//				}
-			//			}
-			//		}
-			//		throw ex;
+			if (expression.getComponents().size() == 1)
+				return _parse(expression.getComponents().getFirst());
+			if (expression.getComponents().size() != 5)
+				throw new ExpressoParseException(expression,
+					"Unrecognized expression with " + expression.getComponents().size() + " components");
+			ObservableExpression condition = _parse(expression.getComponents().getFirst());
+			ObservableExpression primary = _parse(expression.getComponents().get(2));
+			ObservableExpression secondary = _parse(expression.getComponents().getLast());
+			return new ConditionalExpression(condition, primary, secondary);
 			// Binary operation types
 		case "conditionalOrExpression":
 		case "conditionalAndExpression":
@@ -593,6 +559,130 @@ public class DefaultExpressoParser implements ExpressoParser {
 		for (Expression comp : expression.getComponents())
 			extractNameSequence(comp, names);
 		return names;
+	}
+
+	public static class ConditionalExpression implements ObservableExpression {
+		private final ObservableExpression theCondition;
+		private final ObservableExpression thePrimary;
+		private final ObservableExpression theSecondary;
+
+		public ConditionalExpression(ObservableExpression condition, ObservableExpression primary, ObservableExpression secondary) {
+			theCondition = condition;
+			thePrimary = primary;
+			theSecondary = secondary;
+		}
+
+		public ObservableExpression getCondition() {
+			return theCondition;
+		}
+
+		public ObservableExpression getPrimary() {
+			return thePrimary;
+		}
+
+		public ObservableExpression getSecondary() {
+			return theSecondary;
+		}
+
+		@Override
+		public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ObservableModelSet models,
+			ClassView classView) throws QonfigInterpretationException {
+			if (type != null && (type.getModelType() == ModelTypes.Value || type.getModelType() == ModelTypes.Collection
+				|| type.getModelType() == ModelTypes.Set)) {//
+			} else
+				throw new QonfigInterpretationException(
+					"Conditional expressions not supported for model type " + type.getModelType() + " (" + this + ")");
+			ValueContainer<SettableValue, SettableValue<Boolean>> conditionV = theCondition.evaluate(//
+				ModelTypes.Value.forType(boolean.class), models, classView);
+			ValueContainer<M, MV> primaryV = thePrimary.evaluate(type, models, classView);
+			ValueContainer<M, MV> secondaryV = theSecondary.evaluate(type, models, classView);
+			// TODO reconcile compatible model types, like Collection and Set
+			if (primaryV.getType().getModelType() != secondaryV.getType().getModelType())
+				throw new QonfigInterpretationException("Incompatible expressions: " + thePrimary + ", evaluated to " + primaryV.getType()
+				+ " and " + theSecondary + ", evaluated to " + secondaryV.getType());
+			if (primaryV.getType().getModelType() == ModelTypes.Value || primaryV.getType().getModelType() == ModelTypes.Collection
+				|| primaryV.getType().getModelType() == ModelTypes.Set) {//
+			} else
+				throw new QonfigInterpretationException(
+					"Conditional expressions not supported for model type " + primaryV.getType().getModelType() + " (" + this + ")");
+
+			ModelInstanceType<M, MV> resultType;
+			if (primaryV.getType().equals(secondaryV.getType()))
+				resultType = primaryV.getType();
+			else {
+				TypeToken<?>[] types = new TypeToken[primaryV.getType().getModelType().getTypeCount()];
+				for (int i = 0; i < types.length; i++)
+					types[i] = TypeTokens.get().getCommonType(primaryV.getType().getType(i), secondaryV.getType().getType(i));
+				resultType = (ModelInstanceType<M, MV>) primaryV.getType().getModelType().forTypes(types);
+			}
+			return new ValueContainer<M, MV>() {
+				@Override
+				public ModelInstanceType<M, MV> getType() {
+					return resultType;
+				}
+
+				@Override
+				public MV get(ModelSetInstance msi) {
+					SettableValue<Boolean> conditionX = conditionV.get(msi);
+					Object[] values = new Object[2];
+					if (primaryV.getType().getModelType() == ModelTypes.Value) {
+						return (MV) SettableValue.flattenAsSettable(conditionX.map(
+							TypeTokens.get().keyFor(ObservableValue.class).<SettableValue<Object>> parameterized(resultType.getType(0)),
+							c -> {
+								if (c) {
+									if (values[0] == null)
+										values[0] = primaryV.get(msi);
+									return (SettableValue<Object>) values[0];
+								} else {
+									if (values[1] == null)
+										values[1] = secondaryV.get(msi);
+									return (SettableValue<Object>) values[1];
+								}
+							}), null);
+					} else if (primaryV.getType().getModelType() == ModelTypes.Collection) {
+						return (MV) ObservableCollection.flattenValue(conditionX.map(TypeTokens.get().keyFor(ObservableCollection.class)
+							.<ObservableCollection<Object>> parameterized(resultType.getType(0)), c -> {
+								if (c) {
+									if (values[0] == null)
+										values[0] = primaryV.get(msi);
+									return (ObservableCollection<Object>) values[0];
+								} else {
+									if (values[1] == null)
+										values[1] = secondaryV.get(msi);
+									return (ObservableCollection<Object>) values[1];
+								}
+							}));
+					} else if (primaryV.getType().getModelType() == ModelTypes.Set) {
+						return (MV) ObservableSet.flattenValue(conditionX.map(
+							TypeTokens.get().keyFor(ObservableSet.class).<ObservableSet<Object>> parameterized(resultType.getType(0)),
+							c -> {
+								if (c) {
+									if (values[0] == null)
+										values[0] = primaryV.get(msi);
+									return (ObservableSet<Object>) values[0];
+								} else {
+									if (values[1] == null)
+										values[1] = secondaryV.get(msi);
+									return (ObservableSet<Object>) values[1];
+								}
+							}));
+					} else
+						throw new IllegalStateException(
+							"Conditional expressions not supported for model type " + primaryV.getType().getModelType());
+				}
+			};
+		}
+
+		@Override
+		public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ObservableModelSet models,
+			ClassView classView) throws QonfigInterpretationException {
+			throw new QonfigInterpretationException("Not supported for conditionals");
+		}
+
+		@Override
+		public String toString() {
+			return theCondition + " ? " + thePrimary + " : " + theSecondary;
+		}
 	}
 
 	public static class NameExpression implements ObservableExpression {
@@ -1696,7 +1786,7 @@ public class DefaultExpressoParser implements ExpressoParser {
 						}
 						ObservableModelSet.WrappedBuilder wrappedModelsBuilder = ObservableModelSet.wrap(models);
 						ObservableModelSet.ModelValuePlaceholder<?, ?>[] placeholders = new ObservableModelSet.ModelValuePlaceholder[theParameters
-							.size()];
+						                                                                                                             .size()];
 						for (int i = 0; i < theParameters.size(); i++)
 							placeholders[i] = configureParameter(wrappedModelsBuilder, theParameters.get(i), option.argTypes[i]);
 						ObservableModelSet.Wrapped wrappedModels = wrappedModelsBuilder.build();
@@ -1736,6 +1826,25 @@ public class DefaultExpressoParser implements ExpressoParser {
 					return modelBuilder.withPlaceholder(paramName, type);
 				}
 			};
+		}
+
+		@Override
+		public String toString() {
+			StringBuilder str = new StringBuilder();
+			if (theParameters.size() == 1)
+				str.append(theParameters.get(0));
+			else {
+				str.append('(');
+				for (int i = 0; i < theParameters.size(); i++) {
+					if (i > 0)
+						str.append(',');
+					str.append(theParameters.get(i));
+				}
+				str.append(')');
+			}
+			str.append("->");
+			str.append(theBody);
+			return str.toString();
 		}
 	}
 

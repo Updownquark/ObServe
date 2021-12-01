@@ -8,7 +8,7 @@
 		<imports>
 			<import>org.observe.util.swing.QuickSwingParser</import>
 			<import>org.observe.util.swing.QuickSwingParser.QuickComponent</import>
-			<import>org.observe.ObservableCollection</import>
+			<import>org.observe.collect.ObservableCollection</import>
 			<import>org.observe.util.swing.CategoryRenderStrategy</import>
 		</imports>
 		<models>

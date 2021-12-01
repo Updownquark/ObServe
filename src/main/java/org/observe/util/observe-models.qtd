@@ -217,7 +217,7 @@
 			<attribute name="type" type="flatten-reverse-type" />
 		</element-def>
 		<element-def name="flatten" extends="operation" inherits="abst-map-op">
-			<attribute name="function" type="expression" specify="required" />
+			<attribute name="function" type="expression" specify="optional" /> <!-- Don't require if the type is already flattenable -->
 			<!-- This option requires caching, so the default will be the same as the cached attribute and cannot be specified here -->
 			<attribute name="propagate-update-to-parent" type="boolean" specify="optional" />
 			<child-def name="reverse" type="flatten-reverse" min="0" max="1" />

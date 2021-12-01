@@ -66,6 +66,8 @@ public interface ObservableModelSet {
 
 	String getPath();
 
+	String pathTo(String name);
+
 	ValueContainer<?, ?> get(String path, boolean required) throws QonfigInterpretationException;
 
 	default <M> ValueContainer<M, ?> get(String path, ModelType<M> type) throws QonfigInterpretationException {
@@ -306,6 +308,7 @@ public interface ObservableModelSet {
 				return subModel.getModel().getSubModel(path.substring(dot + 1), required);
 		}
 
+		@Override
 		public String pathTo(String name) {
 			if (thePath.isEmpty())
 				return name;
