@@ -103,14 +103,15 @@ public class ObservableModelQonfigParser {
 		.withCustomValueType(new ExpressionValueType("expression-or-string", EXPRESSION_PARSER, true));
 
 	public interface ValueParser {
-		<T> Function<ExternalModelSet, T> parseModelValue(ObservableModelSet models, TypeToken<T> type, String text)
+		<T> BiFunction<ModelSetInstance, ExternalModelSet, T> parseModelValue(ObservableModelSet models, TypeToken<T> type, String text)
 			throws QonfigInterpretationException;
 	}
 
 	public interface SimpleValueParser extends ValueParser {
 		@Override
-		default <T> Function<ExternalModelSet, T> parseModelValue(ObservableModelSet models, TypeToken<T> type, String text)
-			throws QonfigInterpretationException {
+		default <T> BiFunction<ModelSetInstance, ExternalModelSet, T> parseModelValue(ObservableModelSet models, TypeToken<T> type,
+			String text)
+				throws QonfigInterpretationException {
 			T value;
 			try {
 				value = (T) parseValue(type, text);
@@ -119,7 +120,7 @@ public class ObservableModelQonfigParser {
 			}
 			if (value != null && !TypeTokens.get().isInstance(type, value))
 				throw new IllegalStateException("Parser " + this + " parsed a value of type " + value.getClass() + " for type " + type);
-			return extModel -> value;
+			return (msi, extModel) -> value;
 		}
 
 		Object parseValue(TypeToken<?> type, String text) throws ParseException;
@@ -208,22 +209,10 @@ public class ObservableModelQonfigParser {
 		};
 	}
 
-	public static class AppEnvironment {
-		private final ObservableValue<String> theTitle;
-		private final ObservableValue<Image> theIcon;
+	public interface AppEnvironment {
+		Function<ModelSetInstance, ? extends ObservableValue<String>> getTitle();
 
-		public AppEnvironment(ObservableValue<String> title, ObservableValue<Image> icon) {
-			theTitle = title;
-			theIcon = icon;
-		}
-
-		public ObservableValue<String> getTitle() {
-			return theTitle;
-		}
-
-		public ObservableValue<Image> getIcon() {
-			return theIcon;
-		}
+		Function<ModelSetInstance, ? extends ObservableValue<Image>> getIcon();
 	}
 
 	@SuppressWarnings("rawtypes")
@@ -389,7 +378,7 @@ public class ObservableModelQonfigParser {
 						}, () -> {
 							config.setName(configName);
 							build2(config, configFile, backups, closingWithoutSave);
-						}, app, closingWithoutSave);
+						}, app, closingWithoutSave, msi);
 					} else {
 						config.setName(configName);
 						build2(config, configFile, backups, closingWithoutSave);
@@ -492,9 +481,10 @@ public class ObservableModelQonfigParser {
 			@Override
 			<V> void build(ObservableModelSet.Builder model, ClassView cv, String name, TypeToken<V> type, QonfigElement element,
 				String path) throws QonfigInterpretationException {
-				Function<ExternalModelSet, V> value = parseValue(model, type, element.getValue().toString());
+				BiFunction<ModelSetInstance, ExternalModelSet, V> value = parseValue(model, cv, type,
+					(ObservableExpression) element.getValue());
 				model.with(name, ModelTypes.Value.forType(type), (modelSet, extModels) -> SettableValue
-					.asSettable(new ObservableValue.ConstantObservableValue<V>(type, value.apply(extModels)) {
+					.asSettable(new ObservableValue.ConstantObservableValue<V>(type, value.apply(modelSet, extModels)) {
 						private Object theIdentity;
 
 						@Override
@@ -515,16 +505,13 @@ public class ObservableModelQonfigParser {
 			@Override
 			<V> void build(ObservableModelSet.Builder model, ClassView cv, String name, TypeToken<V> type, QonfigElement element,
 				String path) throws QonfigInterpretationException {
-				Function<ExternalModelSet, V> value;
-				if (element.getValue() != null)
-					value = parseValue(model, type, element.getValue().toString());
-				else
-					value = null;
+				BiFunction<ModelSetInstance, ExternalModelSet, V> value = parseValue(model, cv, type,
+					(ObservableExpression) element.getValue());
 				model.with(name, ModelTypes.Value.forType(type), (modelSet, extModels) -> {
 					SettableValue.Builder<V> builder = SettableValue.build(type).safe(false);
 					builder.withDescription(path);
 					if (value != null)
-						builder.withValue(value.apply(extModels));
+						builder.withValue(value.apply(modelSet, extModels));
 					return builder.build();
 				});
 			}
@@ -595,16 +582,16 @@ public class ObservableModelQonfigParser {
 			@Override
 			<V> void build(ObservableModelSet.Builder model, ClassView cv, String name, TypeToken<V> type, QonfigElement element,
 				String path) throws QonfigInterpretationException {
-				List<Function<ExternalModelSet, V>> values = new ArrayList<>();
+				List<BiFunction<ModelSetInstance, ExternalModelSet, V>> values = new ArrayList<>();
 				QonfigChildDef.Declared elRole = obsTk.getChild("list", "element").getDeclared();
 				for (QonfigElement el : element.getChildrenByRole().get(elRole))
-					values.add(parseValue(model, type, el.getValue().toString()));
+					values.add(parseValue(model, cv, type, (ObservableExpression) el.getValue()));
 				prepare(type, element, model, cv);
 				add(model, cv, name, type, element, (modelSet, extModels) -> {
 					C collection = (C) create(type, modelSet).safe(false).withDescription(path).build();
 					int i = 0;
 					for (QonfigElement el : element.getChildrenByRole().get(elRole)) {
-						if (!collection.add(values.get(i).apply(extModels)))
+						if (!collection.add(values.get(i).apply(modelSet, extModels)))
 							System.err.println(
 								"Warning: Value " + el.getValue() + " already added to " + element.getType().getName() + " " + name);
 						i++;
@@ -773,22 +760,23 @@ public class ObservableModelQonfigParser {
 			@Override
 			<K, V> void build(ObservableModelSet.Builder model, ClassView cv, String name, TypeToken<K> keyType, TypeToken<V> valueType,
 				QonfigElement element, String path) throws QonfigInterpretationException {
-				List<BiTuple<Function<ExternalModelSet, K>, Function<ExternalModelSet, V>>> entries = new ArrayList<>();
+				List<BiTuple<BiFunction<ModelSetInstance, ExternalModelSet, K>, BiFunction<ModelSetInstance, ExternalModelSet, V>>> entries = new ArrayList<>();
 				QonfigChildDef.Declared entryRole = obsTk.getChild("map", "entry").getDeclared();
 				for (QonfigElement entry : element.getChildrenByRole().get(entryRole)) {
-					Function<ExternalModelSet, K> key = parseValue(model, keyType,
-						entry.getAttributeText(entryRole.getType().getAttribute("key")));
-					Function<ExternalModelSet, V> v = parseValue(model, valueType,
-						entry.getAttributeText(entryRole.getType().getAttribute("value")));
+					BiFunction<ModelSetInstance, ExternalModelSet, K> key = parseValue(model, cv, keyType,
+						entry.getAttribute(entryRole.getType().getAttribute("key"), ObservableExpression.class));
+					BiFunction<ModelSetInstance, ExternalModelSet, V> v = parseValue(model, cv, valueType,
+						entry.getAttribute(entryRole.getType().getAttribute("value"), ObservableExpression.class));
 					entries.add(new BiTuple<>(key, v));
 				}
 				prepare(keyType, valueType, element, model, cv);
 				add(model, cv, name, keyType, valueType, element, (modelSet, extModels) -> {
 					M map = (M) create(keyType, valueType, modelSet).safe(false).withDescription(path).build();
 					for (int i = 0; i < entries.size(); i++) {
-						BiTuple<Function<ExternalModelSet, K>, Function<ExternalModelSet, V>> entry = entries.get(i);
-						Object key = entry.getValue1().apply(extModels);
-						Object v = entry.getValue2().apply(extModels);
+						BiTuple<BiFunction<ModelSetInstance, ExternalModelSet, K>, BiFunction<ModelSetInstance, ExternalModelSet, V>> entry = entries
+							.get(i);
+						Object key = entry.getValue1().apply(modelSet, extModels);
+						Object v = entry.getValue2().apply(modelSet, extModels);
 						if (map.put(key, v) != null)
 							System.err.println("Warning: Key " + key + " already used for " + element.getType().getName() + " " + name);
 					}
@@ -878,22 +866,23 @@ public class ObservableModelQonfigParser {
 			@Override
 			<K, V> void build(ObservableModelSet.Builder model, ClassView cv, String name, TypeToken<K> keyType, TypeToken<V> valueType,
 				QonfigElement element, String path) throws QonfigInterpretationException {
-				List<BiTuple<Function<ExternalModelSet, K>, Function<ExternalModelSet, V>>> entries = new ArrayList<>();
+				List<BiTuple<BiFunction<ModelSetInstance, ExternalModelSet, K>, BiFunction<ModelSetInstance, ExternalModelSet, V>>> entries = new ArrayList<>();
 				QonfigChildDef.Declared entryRole = obsTk.getChild("map", "entry").getDeclared();
 				for (QonfigElement entry : element.getChildrenByRole().get(entryRole)) {
-					Function<ExternalModelSet, K> key = parseValue(model, keyType,
-						entry.getAttributeText(entryRole.getType().getAttribute("key")));
-					Function<ExternalModelSet, V> v = parseValue(model, valueType,
-						entry.getAttributeText(entryRole.getType().getAttribute("value")));
+					BiFunction<ModelSetInstance, ExternalModelSet, K> key = parseValue(model, cv, keyType,
+						entry.getAttribute(entryRole.getType().getAttribute("key"), ObservableExpression.class));
+					BiFunction<ModelSetInstance, ExternalModelSet, V> v = parseValue(model, cv, valueType,
+						entry.getAttribute(entryRole.getType().getAttribute("value"), ObservableExpression.class));
 					entries.add(new BiTuple<>(key, v));
 				}
 				prepare(keyType, valueType, element, model, cv);
 				add(model, cv, name, keyType, valueType, element, (modelSet, extModels) -> {
 					M map = (M) create(keyType, valueType, modelSet).safe(false).withDescription(path).build(null);
 					for (int i = 0; i < entries.size(); i++) {
-						BiTuple<Function<ExternalModelSet, K>, Function<ExternalModelSet, V>> entry = entries.get(i);
-						Object key = entry.getValue1().apply(extModels);
-						Object v = entry.getValue2().apply(extModels);
+						BiTuple<BiFunction<ModelSetInstance, ExternalModelSet, K>, BiFunction<ModelSetInstance, ExternalModelSet, V>> entry = entries
+							.get(i);
+						Object key = entry.getValue1().apply(modelSet, extModels);
+						Object v = entry.getValue2().apply(modelSet, extModels);
 						if (!map.add(key, v))
 							System.err.println("Warning: Key " + key + " already used for " + element.getType().getName() + " " + name);
 					}
@@ -1613,7 +1602,7 @@ public class ObservableModelQonfigParser {
 	}
 
 	private static void restoreBackup(boolean fromError, ObservableConfig config, FileBackups backups, Runnable onBackup,
-		Runnable onNoBackup, AppEnvironment app, boolean[] closingWithoutSave) {
+		Runnable onNoBackup, AppEnvironment app, boolean[] closingWithoutSave, ModelSetInstance msi) {
 		BetterSortedSet<Instant> backupTimes = backups == null ? null : backups.getBackups();
 		if (backupTimes == null || backupTimes.isEmpty()) {
 			if (onNoBackup != null)
@@ -1625,9 +1614,11 @@ public class ObservableModelQonfigParser {
 			opts -> opts.withMaxResolution(TimeUtils.DateElementType.Second).withEvaluationType(TimeUtils.RelativeTimeEvaluation.Past));
 		JFrame[] frame = new JFrame[1];
 		boolean[] backedUp = new boolean[1];
+		ObservableValue<String> title = app.getTitle().apply(msi);
+		ObservableValue<Image> icon = app.getIcon().apply(msi);
 		frame[0] = WindowPopulation.populateWindow(null, null, false, false)//
-			.withTitle((app == null || app.getTitle().get() == null) ? "Backup" : app.getTitle().get() + " Backup")//
-			.withIcon(app == null ? ObservableValue.of(Image.class, null) : app.getIcon())//
+			.withTitle((app == null || title.get() == null) ? "Backup" : title.get() + " Backup")//
+			.withIcon(app == null ? ObservableValue.of(Image.class, null) : icon)//
 			.withVContent(content -> {
 				if (fromError)
 					content.addLabel(null, "Your configuration is missing or has been corrupted", null);
@@ -1725,24 +1716,33 @@ public class ObservableModelQonfigParser {
 			return null;
 	}
 
-	private TypeToken<?> parseType(String text, ClassView cv) throws QonfigInterpretationException {
+	public static TypeToken<?> parseType(String text, ClassView cv) throws QonfigInterpretationException {
 		try {
 			return TypeTokens.get().parseType(text.replaceAll("\\{", "<").replaceAll("\\}", ">"));
 		} catch (ParseException e) {
 			try {
 				return TypeTokens.get().parseType("java.lang." + text);
 			} catch (ParseException e2) {
-				throw new QonfigInterpretationException(e);
+				throw new QonfigInterpretationException(text + ": " + e.getMessage(), e);
 			}
 		}
 	}
 
-	<T> Function<ExternalModelSet, T> parseValue(ObservableModelSet models, TypeToken<T> type, String text)
-		throws QonfigInterpretationException {
-		ValueParser parser = theParsers.get(TypeTokens.get().wrap(TypeTokens.getRawType(type)), false);
-		if (parser == null)
-			throw new QonfigInterpretationException("No parser configured for type " + type);
-		return parser.parseModelValue(models, type, text);
+	<T> BiFunction<ModelSetInstance, ExternalModelSet, T> parseValue(ObservableModelSet models, ClassView cv, TypeToken<T> type,
+		ObservableExpression expression)
+			throws QonfigInterpretationException {
+		if (expression == null)
+			return null;
+		else if (expression instanceof ExpressionValueType.Literal) {
+			ValueParser parser = theParsers.get(TypeTokens.get().wrap(TypeTokens.getRawType(type)), false);
+			if (parser == null)
+				throw new QonfigInterpretationException("No parser configured for type " + type);
+			return parser.parseModelValue(models, type, expression.toString());
+		} else {
+			@SuppressWarnings("rawtypes")
+			ValueContainer<SettableValue, SettableValue<T>> container = expression.evaluate(ModelTypes.Value.forType(type), models, cv);
+			return (msi, ext) -> container.apply(msi).get();
+		}
 	}
 
 	private void transformEvent(ValueContainer<Object, Observable<Object>> source, QonfigElement transform,
@@ -1907,7 +1907,7 @@ public class ObservableModelQonfigParser {
 					transformCollection(collectionContainer, transform, model, cv, name, i + 1);
 					return;
 				} else
-					throw new QonfigInterpretationException("Cannot flatten a value to a " + resultType);
+					throw new QonfigInterpretationException("Cannot flatten a value of type " + resultType);
 				// transformFn=(v, models)->prevTransformFn.transform(v, models).fl
 			case "filter":
 			case "filter-by-type":
@@ -1998,7 +1998,40 @@ public class ObservableModelQonfigParser {
 			case "map-equivalent":
 				throw new UnsupportedOperationException("Not yet implemented");// TODO
 			case "flatten":
-				throw new UnsupportedOperationException("Not yet implemented");// TODO
+				System.err.println("WARNING: Collection.flatten is not fully implemented!!  Some options may be ignored.");
+				Function<ModelSetInstance, Function<Object, Object>> function;
+				TypeToken<?> resultType;
+				if (op.getAttributes().get(obsTk.getAttribute("flatten", "function")) != null) {
+					MethodFinder<Object, Object, Object, Object> finder = op
+						.getAttribute(obsTk.getAttribute("flatten", "function"), ObservableExpression.class)
+						.<Object, Object, Object, Object> findMethod(TypeTokens.get().of(Object.class), model, cv)//
+						.withOption(BetterList.of(currentType), new ObservableExpression.ArgMaker<Object, Object, Object>() {
+							@Override
+							public void makeArgs(Object t, Object u, Object v, Object[] args, ModelSetInstance models) {
+								args[0] = t;
+							}
+						});
+					function = finder.find1();
+					resultType = finder.getResultType();
+				} else {
+					resultType = currentType;
+					function = msi -> v -> v;
+				}
+				Class<?> resultClass = TypeTokens.getRawType(resultType);
+				if (ObservableValue.class.isAssignableFrom(resultClass)) {
+					throw new UnsupportedOperationException("Not yet implemented");// TODO
+				} else if (ObservableCollection.class.isAssignableFrom(resultClass)) {
+					TypeToken<Object> elementType = (TypeToken<Object>) resultType
+						.resolveType(ObservableCollection.class.getTypeParameters()[0]);
+					transformFn = (srcFlow, extModels) -> {
+						Function<Object, Object> function2 = function.apply(extModels);
+						return prevTransform.transform(source.get(extModels).flow(), extModels)//
+							.flatMap(elementType, v -> v == null ? null : ((ObservableCollection<Object>) function2.apply(v)).flow());
+					};
+					currentType = elementType;
+				} else
+					throw new QonfigInterpretationException("Cannot flatten a collection of type " + resultType);
+				break;
 			case "cross":
 				throw new UnsupportedOperationException("Not yet implemented");// TODO
 			case "where-contained":

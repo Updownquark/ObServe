@@ -2030,6 +2030,13 @@ public class PanelPopulation {
 			else
 				return null;
 		}
+
+		@Override
+		protected Component decorate(Component c) {
+			if (theFont != null)
+				theFont.accept(new FontAdjuster<>(c));
+			return super.decorate(c);
+		}
 	}
 
 	static class SimpleHPanel<C extends Container> extends SimpleFieldEditor<C, SimpleHPanel<C>>

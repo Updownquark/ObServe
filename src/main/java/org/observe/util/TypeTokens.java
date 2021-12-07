@@ -1197,7 +1197,9 @@ public class TypeTokens {
 					} else if (typeName.regionMatches(c, "super", 0, "super".length())) {
 						extendsOrSuper = Boolean.FALSE;
 						c += "super".length();
-					} else
+					} else if (typeName.length() == 1)
+						return WILDCARD;
+					else
 						throw new ParseException("Expected 'extends' or 'super' after '?'", c);
 				}
 				break;

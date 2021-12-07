@@ -235,6 +235,7 @@ public class ModelTypes {
 				public ModelInstanceConverter<Object, SettableValue> convert(ModelInstanceType<Object, ?> source,
 					ModelInstanceType<SettableValue, ?> dest) throws IllegalArgumentException {
 					TypeToken<?> valueType = TypeTokens.get().keyFor(source.getModelType().modelType).parameterized(source.getTypeList());
+					// TODO Check for type compatibility here?
 					ModelInstanceType<SettableValue, ?> type = Value.forType(valueType);
 					return new ModelInstanceConverter<Object, SettableValue>() {
 						@Override

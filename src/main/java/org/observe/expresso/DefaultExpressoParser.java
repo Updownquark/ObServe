@@ -609,6 +609,10 @@ public class DefaultExpressoParser implements ExpressoParser {
 			ModelInstanceType<M, MV> resultType;
 			if (primaryV.getType().equals(secondaryV.getType()))
 				resultType = primaryV.getType();
+			else if (thePrimary instanceof LiteralExpression && ((LiteralExpression<?>) thePrimary).getValue() == null)
+				resultType = secondaryV.getType();
+			else if (theSecondary instanceof LiteralExpression && ((LiteralExpression<?>) theSecondary).getValue() == null)
+				resultType = primaryV.getType();
 			else {
 				TypeToken<?>[] types = new TypeToken[primaryV.getType().getModelType().getTypeCount()];
 				for (int i = 0; i < types.length; i++)
@@ -1799,6 +1803,7 @@ public class DefaultExpressoParser implements ExpressoParser {
 							continue;
 						}
 						ArgMaker<P1, P2, P3> argMaker = option.argMaker;
+						setResultType((TypeToken<T>) body.getType().getType(0));
 						return msi -> (p1, p2, p3) -> {
 							Object[] args = new Object[theParameters.size()];
 							if (argMaker != null)

@@ -4,6 +4,7 @@ import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Dimension;
+import java.awt.Image;
 import java.awt.LayoutManager;
 import java.awt.Point;
 import java.awt.Window;
@@ -25,7 +26,6 @@ import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import javax.swing.Icon;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JPanel;
@@ -143,6 +143,15 @@ public class QuickSwingParser {
 		}
 
 		public ObservableValue<Point> getLocation() {
+		}
+
+		public ObservableValue<Dimension> getMinimumSize() {
+		}
+
+		public ObservableValue<Dimension> getPreferredSize() {
+		}
+
+		public ObservableValue<Dimension> getMaximumSize() {
 		}
 
 		public ObservableValue<Dimension> getSize() {
@@ -328,20 +337,22 @@ public class QuickSwingParser {
 		}
 	}
 
-	public interface QuickDocument {
+	public interface QuickDocument extends ObservableModelQonfigParser.AppEnvironment {
 		public QonfigElement getElement();
 
 		public QuickHeadSection getHead();
 
 		public QuickComponentDef getComponent();
 
+		@Override
 		public Function<ModelSetInstance, SettableValue<String>> getTitle();
 
 		public void setTitle(Function<ModelSetInstance, SettableValue<String>> title);
 
-		public Function<ModelSetInstance, SettableValue<Icon>> getIcon();
+		@Override
+		public Function<ModelSetInstance, SettableValue<Image>> getIcon();
 
-		public void setIcon(Function<ModelSetInstance, SettableValue<Icon>> icon);
+		public void setIcon(Function<ModelSetInstance, SettableValue<Image>> icon);
 
 		public Function<ModelSetInstance, SettableValue<Integer>> getX();
 
@@ -371,7 +382,7 @@ public class QuickSwingParser {
 		private final QuickHeadSection theHead;
 		private final QuickComponentDef theComponent;
 		private Function<ModelSetInstance, SettableValue<String>> theTitle;
-		private Function<ModelSetInstance, SettableValue<Icon>> theIcon;
+		private Function<ModelSetInstance, SettableValue<Image>> theIcon;
 		private Function<ModelSetInstance, SettableValue<Integer>> theX;
 		private Function<ModelSetInstance, SettableValue<Integer>> theY;
 		private Function<ModelSetInstance, SettableValue<Integer>> theWidth;
@@ -411,12 +422,12 @@ public class QuickSwingParser {
 		}
 
 		@Override
-		public Function<ModelSetInstance, SettableValue<Icon>> getIcon() {
+		public Function<ModelSetInstance, SettableValue<Image>> getIcon() {
 			return theIcon;
 		}
 
 		@Override
-		public void setIcon(Function<ModelSetInstance, SettableValue<Icon>> icon) {
+		public void setIcon(Function<ModelSetInstance, SettableValue<Image>> icon) {
 			theIcon = icon;
 		}
 
@@ -527,6 +538,8 @@ public class QuickSwingParser {
 		public <W extends Window> WindowBuilder<W, ?> install(WindowBuilder<W, ?> builder) {
 			if (theDocument.getTitle() != null)
 				builder.withTitle(theDocument.getTitle().apply(getModels()));
+			if (theDocument.getIcon() != null)
+				builder.withIcon(theDocument.getIcon().apply(getModels()));
 			if (theDocument.getVisible() != null)
 				builder.withVisible(theDocument.getVisible().apply(getModels()));
 			if (theDocument.getX() != null)
@@ -835,6 +848,28 @@ public class QuickSwingParser {
 					valueFn.apply((ModelSetInstance) extModels));
 				return column;
 			};
+		});
+		interpreter.createWith("columns", Void.class, (element, session) -> {
+			ObservableModelSet.Builder models = (ObservableModelSet.Builder) session.get("model");
+			session.put("quick-model", models);
+			ClassView cv = (ClassView) session.get("imports");
+			TypeToken<Object> rowType = (TypeToken<Object>) ObservableModelQonfigParser.parseType(element.getAttributeText(//
+				base.getAttribute("columns", "type")), cv);
+			session.put("model-type", rowType);
+			TypeToken<CategoryRenderStrategy<Object, ?>> columnType = TypeTokens.get().keyFor(CategoryRenderStrategy.class)
+				.<CategoryRenderStrategy<Object, ?>> parameterized(rowType, TypeTokens.get().WILDCARD);
+			List<Function<ModelSetInstance, CategoryRenderStrategy<Object, ?>>> columns = new ArrayList<>();
+			for (QonfigElement columnEl : element.getChildrenByRole().get(base.getChild("columns", "column").getDeclared())) {
+				columns.add(session.getInterpreter().interpret(columnEl, Function.class));
+			}
+			models.with(element.getAttributeText(base.getAttribute("columns", "name")), ModelTypes.Collection.forType(columnType), //
+				(msi, extModels) -> {
+					List<CategoryRenderStrategy<Object, ?>> columnInstances = new ArrayList<>(columns.size());
+					for (Function<ModelSetInstance, CategoryRenderStrategy<Object, ?>> column : columns)
+						columnInstances.add(column.apply(msi));
+					return ObservableCollection.of(columnType, columnInstances);
+				});
+			return null;
 		});
 		interpreter.createWith("split", QuickComponentDef.class, (element, session) -> {
 			if (element.getChildrenByRole().get(base.getChild("split", "content").getDeclared()).size() != 2)
@@ -1155,6 +1190,11 @@ public class QuickSwingParser {
 			selectionV = null;
 			selectionC = null;
 		}
+		TypeToken<CategoryRenderStrategy<Object, ?>> columnType = TypeTokens.get().keyFor(CategoryRenderStrategy.class)
+			.<CategoryRenderStrategy<Object, ?>> parameterized(rows.getType().getType(0), TypeTokens.get().WILDCARD);
+		ObservableExpression columnsX = element.getAttribute(base.getAttribute("table", "columns"), ObservableExpression.class);
+		Function<ModelSetInstance, ObservableCollection<CategoryRenderStrategy<Object, ?>>> columnsAttr//
+		= columnsX == null ? null : columnsX.evaluate(ModelTypes.Collection.forType(columnType), model, cv);
 		session.put("model-type", rows.getType().getType(0));
 		List<Function<ModelSetInstance, CategoryRenderStrategy<Object, ?>>> columns = new ArrayList<>();
 		for (QonfigElement columnEl : element.getChildrenByRole().get(base.getChild("table", "column").getDeclared()))
@@ -1168,6 +1208,13 @@ public class QuickSwingParser {
 						table.withSelection(selectionV.apply(builder.getModels()), false);
 					if (selectionC != null)
 						table.withSelection(selectionC.apply(builder.getModels()));
+					if (columnsAttr != null) {
+						// The flatten here is so columns can also be specified on the table.
+						// Without this, additional columns could not be added if, as is likely, the columnsAttr collection is unmodifiable.
+						table.withColumns(ObservableCollection.flattenCollections(columnType, //
+							columnsAttr.apply(builder.getModels()), //
+							ObservableCollection.build(columnType).safe(false).build()).collect());
+					}
 					for (Function<ModelSetInstance, CategoryRenderStrategy<Object, ?>> column : columns)
 						table.withColumn(column.apply(builder.getModels()));
 				});
@@ -1276,19 +1323,19 @@ public class QuickSwingParser {
 							QonfigParser debugParser = new DefaultQonfigParser().withToolkit(ObservableModelQonfigParser.TOOLKIT.get(),
 								CORE.get(), BASE.get(), swing);
 							QonfigInterpreter debugInterp = configureInterpreter(QonfigInterpreter.build(BASE.get(), swing)).build();
-								URL debugXml = QuickSwingParser.class.getResource("quick-debug.qml");
-								try (InputStream in = debugXml.openStream()) {
+							URL debugXml = QuickSwingParser.class.getResource("quick-debug.qml");
+							try (InputStream in = debugXml.openStream()) {
 								theDebugDoc = debugInterp.interpret(//
-										debugParser.parseDocument(debugXml.toString(), in).getRoot(), QuickDocument.class);
+									debugParser.parseDocument(debugXml.toString(), in).getRoot(), QuickDocument.class);
 							} catch (IOException e) {
 								throw new QonfigInterpretationException("Could not read quick-debug.qml", e);
 							} catch (QonfigParseException e) {
 								throw new QonfigInterpretationException("Could not interpret quick-debug.qml", e);
 							}
-								debugXml = QuickSwingParser.class.getResource("quick-debug-overlay.qml");
-								try (InputStream in = debugXml.openStream()) {
+							debugXml = QuickSwingParser.class.getResource("quick-debug-overlay.qml");
+							try (InputStream in = debugXml.openStream()) {
 								theDebugOverlayDoc = debugInterp.interpret(//
-										debugParser.parseDocument(debugXml.toString(), in).getRoot(), QuickDocument.class);
+									debugParser.parseDocument(debugXml.toString(), in).getRoot(), QuickDocument.class);
 							} catch (IOException e) {
 								throw new QonfigInterpretationException("Could not read quick-debug.qml", e);
 							} catch (QonfigParseException e) {
@@ -1371,12 +1418,12 @@ public class QuickSwingParser {
 					}
 
 					@Override
-					public Function<ModelSetInstance, SettableValue<Icon>> getIcon() {
+					public Function<ModelSetInstance, SettableValue<Image>> getIcon() {
 						return superValue.getIcon();
 					}
 
 					@Override
-					public void setIcon(Function<ModelSetInstance, SettableValue<Icon>> icon) {
+					public void setIcon(Function<ModelSetInstance, SettableValue<Image>> icon) {
 						superValue.setIcon(icon);
 					}
 

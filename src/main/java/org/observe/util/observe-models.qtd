@@ -135,13 +135,13 @@
 
 		<element-def name="int-model-value" extends="abst-model-value" abstract="true" />
 		<element-def name="constant" extends="int-model-value">
-			<value type="string" specify="required" />
+			<value type="expression-or-string" specify="required" />
 		</element-def>
 		<element-def name="value" extends="int-model-value">
-			<value type="string" specify="optional" default="" />
+			<value type="expression-or-string" specify="optional" default="" />
 		</element-def>
 		<element-def name="element">
-			<value type="string" specify="required" />
+			<value type="expression-or-string" specify="required" />
 		</element-def>
 		<element-def name="list" extends="int-model-value">
 			<child-def name="element" type="element" min="0" max="inf" />
@@ -151,7 +151,7 @@
 		<element-def name="sorted-list" extends="list" inherits="sorted" />
 		<element-def name="value-set" extends="list" />
 		<element-def name="entry" extends="element">
-			<attribute name="key" type="string" />
+			<attribute name="key" type="expression-or-string" />
 		</element-def>
 		<element-def name="map" extends="int-model-value" inherits="map-model-value">
 			<child-def name="entry" type="entry" min="0" max="inf" />

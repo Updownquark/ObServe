@@ -321,8 +321,10 @@ public abstract class ModelType<M> implements Named {
 		public <M2, MV2 extends M2> ValueContainer<M2, MV2> as(ValueContainer<M, MV> source, ModelInstanceType<M2, MV2> targetType)
 			throws QonfigInterpretationException {
 			ModelType.ModelInstanceConverter<M, M2> converter = source.getType().convert(targetType);
-			if (converter == null)
+			if (converter == null) {
+				source.getType().convert(targetType); // TODO DEBUG REMOVE
 				throw new QonfigInterpretationException("Cannot convert " + source + " (" + source.getType() + ") to " + targetType);
+			}
 
 			return new ConvertedValue<>(source, (ModelInstanceType<M2, MV2>) converter.getType(), converter);
 		}

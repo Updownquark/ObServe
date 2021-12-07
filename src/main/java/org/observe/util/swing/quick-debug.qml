@@ -38,8 +38,8 @@
 					<map-to function="t->t ? boundsColumns : null" />
 					<flatten />
 				</transform>
-				<list name="componentColumnLists" type="ObservableCollection{CategoryRenderStrategy{QuickComponent, ?}}">
-					<element>toggleBoundsColumns</element>
+				<list name="componentColumnLists" type="ObservableCollection{? extends CategoryRenderStrategy{QuickComponent, ?}}">
+					<element>${toggleBoundsColumns}</element>
 				</list>
 				<transform name="componentColumns" source="componentColumnLists">
 					<flatten />
