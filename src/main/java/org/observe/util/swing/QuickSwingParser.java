@@ -26,6 +26,7 @@ import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import javax.swing.ImageIcon;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JPanel;
@@ -57,7 +58,9 @@ import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.observe.util.swing.PanelPopulation.WindowBuilder;
 import org.qommons.collect.BetterList;
 import org.qommons.config.DefaultQonfigParser;
+import org.qommons.config.QommonsConfig;
 import org.qommons.config.QonfigAttributeDef;
+import org.qommons.config.QonfigChildDef;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpreter;
 import org.qommons.config.QonfigInterpreter.Builder;
@@ -1080,6 +1083,7 @@ public class QuickSwingParser {
 				}
 			};
 		});
+		interpreter.createWith("tabs", QuickComponentDef.class, (element, session) -> createTabs(element, session));
 		interpreter.createWith("file-button", QuickComponentDef.class, (element, session) -> {
 			ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
 			ClassView cv = (ClassView) session.get("quick-cv");
@@ -1304,6 +1308,271 @@ public class QuickSwingParser {
 				return builder.build();
 			}
 		};
+	}
+
+	static class Tab<T> {
+		final QuickComponentDef content;
+		final Function<ModelSetInstance, T> tabId;
+		final Function<ModelSetInstance, ? extends ObservableValue<String>> tabName;
+		final Function<ModelSetInstance, ? extends ObservableValue<Image>> tabIcon;
+		final boolean removable;
+		final Function<ModelSetInstance, Consumer<T>> onRemove;
+		final Function<ModelSetInstance, Observable<?>> selectOn;
+		final Function<ModelSetInstance, Consumer<T>> onSelect;
+
+		private Tab(QuickComponentDef content, Function<ModelSetInstance, T> tabId,
+			Function<ModelSetInstance, ? extends ObservableValue<String>> tabName,
+				Function<ModelSetInstance, ? extends ObservableValue<Image>> tabIcon, boolean removable,
+					Function<ModelSetInstance, Consumer<T>> onRemove, Function<ModelSetInstance, Observable<?>> selectOn,
+					Function<ModelSetInstance, Consumer<T>> onSelect) {
+			this.content = content;
+			this.tabId = tabId;
+			this.tabName = tabName;
+			this.tabIcon = tabIcon;
+			this.removable = removable;
+			this.onRemove = onRemove;
+			this.selectOn = selectOn;
+			this.onSelect = onSelect;
+		}
+
+		static <T> Tab<T> parse(QonfigElement tab, QonfigInterpretingSession session) throws QonfigInterpretationException {
+			QonfigToolkit base = BASE.get();
+			ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
+			ClassView cv = (ClassView) session.get("imports");
+			QuickComponentDef content = session.getInterpreter().interpret(tab, QuickComponentDef.class);
+			ValueContainer<SettableValue, SettableValue<T>> tabId = tab
+				.getAttribute(base.getAttribute("tab", "tab-id"), ObservableExpression.class)//
+				.evaluate(ModelTypes.Value.forType((TypeToken<T>) TypeTokens.get().WILDCARD), model, cv);
+			Function<ModelSetInstance, T> tabIdFn = tabId.andThen(sv -> sv.get());
+
+			Function<ModelSetInstance, ? extends ObservableValue<String>> tabName;
+			if (tab.getAttributes().containsKey(base.getAttribute("tab", "tab-name"))) {
+				tabName = tab.getAttribute(base.getAttribute("tab", "tab-name"), ObservableExpression.class)//
+					.evaluate(ModelTypes.Value.forType(String.class), model, cv);
+			} else {
+				tabName = msi -> ObservableValue.of(String.class, tabIdFn.apply(msi).toString());
+			}
+
+			Function<ModelSetInstance, ObservableValue<Image>> tabIcon;
+			if (tab.getAttributes().containsKey(base.getAttribute("tab", "tab-icon"))) {
+				ValueContainer<SettableValue, SettableValue<?>> iconV = tab
+					.getAttribute(base.getAttribute("tab", "tab-icon"), ObservableExpression.class)//
+					.evaluate(ModelTypes.Value.any(), model, cv);
+				Class<?> iconType = TypeTokens.getRawType(iconV.getType().getType(0));
+				if (iconType == Image.class)
+					tabIcon = (Function<ModelSetInstance, ObservableValue<Image>>) (Function<?, ?>) iconV;
+				else if (iconType == URL.class) {
+					tabIcon = msi -> {
+						ObservableValue<URL> urlFn = (ObservableValue<URL>) iconV.apply(msi);
+						// There's probably a better way to do this, but this is what I know
+						return urlFn.map(Image.class, url -> new ImageIcon(url).getImage());
+					};
+				} else if (iconType == String.class) {
+					tabIcon = msi -> {
+						ObservableValue<String> strFn = (ObservableValue<String>) iconV.apply(msi);
+						return strFn.map(Image.class, str -> {
+							URL url;
+							try {
+								String location = QommonsConfig.resolve(str, tab.getDocument().getLocation());
+								url = QommonsConfig.toUrl(location);
+							} catch (IOException e) {
+								System.err.println("Could not resolve icon location '" + str + "': " + e);
+								return null;
+							}
+							return new ImageIcon(url).getImage(); // There's probably a better way to do this, but this is what I know
+						});
+					};
+				} else {
+					tabIcon = null;
+					session.withWarning("Cannot interpret tab-icon '" + tab.getAttributes().get(base.getAttribute("tab", "tab-icon"))
+						+ "', type " + iconV.getType().getType(0) + " as an image");
+				}
+			} else
+				tabIcon = null;
+
+			boolean removable;
+			if (tab.getAttributes().containsKey(base.getAttribute("tab", "removable")))
+				removable = tab.getAttribute(base.getAttribute("tab", "removable"), boolean.class);
+			else
+				removable = false;
+
+			Function<ModelSetInstance, Consumer<T>> onRemove;
+			if (tab.getAttributes().containsKey(base.getAttribute("tab", "on-remove"))) {
+				if (!removable) {
+					session.withWarning("on-remove specified, for tab '" + tab.getAttributes().get(base.getAttribute("tab", "tab-id"))
+						+ "' but tab is not removable");
+					onRemove = null;
+				} else {
+					onRemove = tab.getAttribute(base.getAttribute("tab", "on-remove"), ObservableExpression.class)//
+						.<T, Object, Object, Void> findMethod(Void.class, model, cv)//
+						.withOption0().withOption1((TypeToken<T>) tabId.getType().getType(0), t -> t)//
+						.find1().andThen(fn -> t -> fn.apply(t));
+				}
+			} else
+				onRemove = null;
+
+			Function<ModelSetInstance, ? extends Observable<?>> selectOn;
+			if (tab.getAttributes().containsKey(base.getAttribute("tab", "select-on"))) {
+				selectOn = tab.getAttribute(base.getAttribute("tab", "select-on"), ObservableExpression.class)//
+					.evaluate(ModelTypes.Event.forType(TypeTokens.get().WILDCARD), model, cv);
+			} else
+				selectOn = null;
+
+			Function<ModelSetInstance, Consumer<T>> onSelect;
+			if (tab.getAttributes().containsKey(base.getAttribute("tab", "on-select"))) {
+				onSelect = tab.getAttribute(base.getAttribute("tab", "on-select"), ObservableExpression.class)//
+					.<T, Object, Object, Void> findMethod(Void.class, model, cv)//
+					.withOption0().withOption1((TypeToken<T>) tabId.getType().getType(0), t -> t)//
+					.find1().andThen(fn -> t -> fn.apply(t));
+			} else
+				onSelect = null;
+
+			return new Tab<>(content, tabIdFn, tabName, tabIcon, removable, onRemove, (Function<ModelSetInstance, Observable<?>>) selectOn,
+				onSelect);
+		}
+	}
+
+	static class TabSet<T> {
+		final Function<ModelSetInstance, ObservableCollection<T>> values;
+		final QuickComponentDef content;
+		final Function<ModelSetInstance, Function<T, String>> tabName;
+		final Function<ModelSetInstance, Function<T, Image>> tabIcon;
+		final Function<ModelSetInstance, Function<T, Boolean>> removable;
+		final Function<ModelSetInstance, Consumer<T>> onRemove;
+		final Function<ModelSetInstance, Function<T, Observable<?>>> selectOn;
+		final Function<ModelSetInstance, Consumer<T>> onSelect;
+
+		TabSet(Function<ModelSetInstance, ObservableCollection<T>> values, QuickComponentDef content,
+			Function<ModelSetInstance, Function<T, String>> tabName, Function<ModelSetInstance, Function<T, Image>> tabIcon,
+			Function<ModelSetInstance, Function<T, Boolean>> removable, Function<ModelSetInstance, Consumer<T>> onRemove,
+			Function<ModelSetInstance, Function<T, Observable<?>>> selectOn, Function<ModelSetInstance, Consumer<T>> onSelect) {
+			this.values = values;
+			this.content = content;
+			this.tabName = tabName;
+			this.tabIcon = tabIcon;
+			this.removable = removable;
+			this.onRemove = onRemove;
+			this.selectOn = selectOn;
+			this.onSelect = onSelect;
+		}
+
+		static <T> TabSet<T> parse(QonfigElement tabSet, QonfigInterpretingSession session) throws QonfigInterpretationException {
+			QonfigToolkit base = BASE.get();
+			ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
+			ClassView cv = (ClassView) session.get("imports");
+			ValueContainer<ObservableCollection, ObservableCollection<T>> values = tabSet
+				.getAttribute(base.getAttribute("tab-set", "values"), ObservableExpression.class)//
+				.evaluate(ModelTypes.Collection.forType((TypeToken<T>) TypeTokens.get().WILDCARD), model, cv);
+			QuickComponentDef content = session.getInterpreter().interpret(
+				tabSet.getChildrenByRole().get(base.getChild("tab-set", "renderer").getDeclared()).getFirst(), QuickComponentDef.class);
+
+			Function<ModelSetInstance, Function<T, String>> tabName;
+			if (tabSet.getAttributes().containsKey(base.getAttribute("tab", "tab-name"))) {
+				tabName = tabSet.getAttribute(base.getAttribute("tab", "tab-name"), ObservableExpression.class)//
+					.<T, Object, Object, String> findMethod(String.class, model, cv).withOption0()
+					.withOption1((TypeToken<T>) values.getType().getType(0), a -> a)//
+					.find1();
+			} else {
+				tabName = msi -> String::valueOf;
+			}
+
+			Function<ModelSetInstance, Function<T, Image>> tabIcon;
+			if (tabSet.getAttributes().containsKey(base.getAttribute("tab", "tab-icon"))) {
+				MethodFinder<T, Object, Object, Object> finder = tabSet
+					.getAttribute(base.getAttribute("tab", "tab-icon"), ObservableExpression.class)//
+					.<T, Object, Object, Object> findMethod((TypeToken<Object>) TypeTokens.get().WILDCARD, model, cv).withOption0()
+					.withOption1((TypeToken<T>) values.getType().getType(0), a -> a);
+				Function<ModelSetInstance, Function<T, Object>> iconFn = finder.find1();
+				Class<?> iconType = TypeTokens.getRawType(finder.getResultType());
+				if (iconType == Image.class)
+					tabIcon = (Function<ModelSetInstance, Function<T, Image>>) (Function<?, ?>) iconFn;
+				else if (iconType == URL.class) {
+					tabIcon = msi -> {
+						Function<T, URL> urlFn = (Function<T, URL>) (Function<?, ?>) iconFn.apply(msi);
+						return tabValue -> {
+							URL url = urlFn.apply(tabValue);
+							;
+							return new ImageIcon(url).getImage(); // There's probably a better way to do this, but this is what I know
+						};
+					};
+				} else if (iconType == String.class) {
+					tabIcon = msi -> {
+						Function<T, String> strFn = (Function<T, String>) (Function<?, ?>) iconFn.apply(msi);
+						return tabValue -> {
+							String str = strFn.apply(tabValue);
+							URL url;
+							try {
+								String location = QommonsConfig.resolve(str, tabSet.getDocument().getLocation());
+								url = QommonsConfig.toUrl(location);
+							} catch (IOException e) {
+								throw new IllegalArgumentException("Could not resolve icon location '" + str + "'", e);
+							}
+							return new ImageIcon(url).getImage(); // There's probably a better way to do this, but this is what I know
+						};
+					};
+				} else {
+					tabIcon = null;
+					session.withWarning("Cannot interpret tab-icon '" + tabSet.getAttributes().get(base.getAttribute("tab", "tab-icon"))
+						+ "', type " + finder.getResultType() + " as an image");
+				}
+			} else
+				tabIcon = null;
+
+			Function<ModelSetInstance, Function<T, Boolean>> removable;
+			if (tabSet.getAttributes().containsKey(base.getAttribute("tab", "removable")))
+				removable = tabSet.getAttribute(base.getAttribute("tab", "removable"), ObservableExpression.class)//
+				.<T, Object, Object, Boolean> findMethod(boolean.class, model, cv)//
+				.withOption0().withOption1((TypeToken<T>) values.getType().getType(0), t -> t)//
+				.find1();
+			else
+				removable = null;
+
+			Function<ModelSetInstance, Consumer<T>> onRemove;
+			if (tabSet.getAttributes().containsKey(base.getAttribute("tab", "on-remove"))) {
+				onRemove = tabSet.getAttribute(base.getAttribute("tab", "on-remove"), ObservableExpression.class)//
+					.<T, Object, Object, Void> findMethod(Void.class, model, cv)//
+					.withOption0().withOption1((TypeToken<T>) values.getType().getType(0), t -> t)//
+					.find1().andThen(fn -> t -> fn.apply(t));
+			} else
+				onRemove = null;
+
+			Function<ModelSetInstance, Function<T, Observable<?>>> selectOn;
+			if (tabSet.getAttributes().containsKey(base.getAttribute("tab", "select-on"))) {
+				selectOn = tabSet.getAttribute(base.getAttribute("tab", "select-on"), ObservableExpression.class)//
+					.<T, Object, Object, Observable<?>> findMethod(TypeTokens.get().keyFor(Observable.class).<Observable<?>> wildCard(),
+						model, cv)//
+					.withOption0().withOption1((TypeToken<T>) values.getType().getType(0), t -> t)//
+					.find1();
+			} else
+				selectOn = null;
+
+			Function<ModelSetInstance, Consumer<T>> onSelect;
+			if (tabSet.getAttributes().containsKey(base.getAttribute("tab", "on-select"))) {
+				onSelect = tabSet.getAttribute(base.getAttribute("tab", "on-select"), ObservableExpression.class)//
+					.<T, Object, Object, Void> findMethod(Void.class, model, cv)//
+					.withOption0().withOption1((TypeToken<T>) values.getType().getType(0), t -> t)//
+					.find1().andThen(fn -> t -> fn.apply(t));
+			} else
+				onSelect = null;
+
+			return new TabSet<>(values, content, tabName, tabIcon, removable, onRemove, selectOn, onSelect);
+		}
+	}
+
+	private QuickComponentDef createTabs(QonfigElement element, QonfigInterpretingSession session) throws QonfigInterpretationException {
+		QonfigToolkit base = BASE.get();
+		ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
+		ClassView cv = (ClassView) session.get("imports");
+		List<Object> tabs = new ArrayList<>();
+		QonfigChildDef.Declared tabSetDef = base.getChild("tabs", "tab-set").getDeclared();
+		QonfigChildDef.Declared widgetDef = base.getChild("tabs", "content").getDeclared();
+		for (QonfigElement child : element.getChildren()) {
+			if (child.getParentRoles().contains(tabSetDef)) {
+				tabs.add(TabSet.parse(element, session));
+			} else if (child.getParentRoles().contains(widgetDef)) {
+				tabs.add(Tab.parse(element, session));
+			}
+		}
 	}
 
 	private QuickDocument theDebugDoc;

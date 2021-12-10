@@ -224,7 +224,18 @@ public interface ObservableExpression {
 		@Override
 		public <P1, P2, P3, T2> MethodFinder<P1, P2, P3, T2> findMethod(TypeToken<T2> targetType, ObservableModelSet models,
 			ClassView classView) throws QonfigInterpretationException {
-			throw new QonfigInterpretationException("Literal '" + theValue + "' cannot be evaluated as a method");
+			if (!TypeTokens.get().isInstance(targetType, theValue))
+				throw new QonfigInterpretationException("'" + theValue + "' is not an instance of " + targetType);
+			return new MethodFinder<P1, P2, P3, T2>(targetType) {
+				@Override
+				public Function<ModelSetInstance, TriFunction<P1, P2, P3, T2>> find3() throws QonfigInterpretationException {
+					for (MethodOption option : theOptions) {
+						if (option.argTypes.length == 0)
+							return __ -> (p1, p2, p3) -> (T2) theValue;
+					}
+					throw new QonfigInterpretationException("No zero-parameter option for literal '" + theValue + "'");
+				}
+			};
 		}
 
 		SettableValue<?> createValue(TypeToken<?> type, Object value) {

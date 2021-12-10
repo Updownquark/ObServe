@@ -78,8 +78,13 @@
 		</add-on>
 
 		<add-on name="tab" requires="widget">
-			<attribute name="tab-id" type="string" specify="optional" />
+			<attribute name="tab-id" type="expression-or-string" />
 			<attribute name="tab-name" type="expression-or-string" specify="optional" />
+			<attribute name="tab-icon" type="expression-or-strng" specify="optional" />
+			<attribute name="removable" type="boolean" default="false" />
+			<attribute name="onRemove" type="expression" specify="optional" />
+			<attribute name="select-on" type="expression" specify="optional" />
+			<attribute name="on-select" type="expression" specify="optional" />
 		</add-on>
 	</add-ons>
 
@@ -201,9 +206,10 @@
 			<child-mod child="content" inherits="tab" />
 			<child-def name="tab-set" type="tab-set" min="0" max="inf" />
 		</element-def>
-		<element-def name="tab-set" inherits="single-rendering">
+		<element-def name="tab-set" inherits="single-rendering,tab"> <!-- Renderer is the tab's content -->
+			<child-mod name="single-rendering.renderer" min="1" />
 			<attribute name="values" type="expression" />
-			<attribute name="name-function" type="expression" />
+			<attribute name="tab.tab-id" specify="forbidden" default=""/>
 		</element-def>
 		<element-def name="split" extends="container">
 			<attribute name="orientation" type="orientation" specify="required" />
