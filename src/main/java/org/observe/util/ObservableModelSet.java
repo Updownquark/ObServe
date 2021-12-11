@@ -1,8 +1,10 @@
 package org.observe.util;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
@@ -524,6 +526,8 @@ public interface ObservableModelSet {
 	public interface WrappedInstanceBuilder {
 		<M, MV extends M> WrappedInstanceBuilder with(ModelValuePlaceholder<M, MV> placeholder, MV value);
 
+		WrappedInstanceBuilder withUntil(Observable<?> until);
+
 		ModelSetInstance build() throws IllegalStateException;
 	}
 
@@ -645,6 +649,7 @@ public interface ObservableModelSet {
 
 			private final ModelSetInstance theWrapped;
 			private final Map<ModelValuePlaceholderImpl<?, ?>, Object> theValues;
+			private List<Observable<?>> theUntils;
 
 			WrappedInstanceBuilderImpl(ModelSetInstance wrapped, Collection<ModelValuePlaceholderImpl<?, ?>> placeholders) {
 				theWrapped = wrapped;
@@ -666,22 +671,40 @@ public interface ObservableModelSet {
 			}
 
 			@Override
+			public WrappedInstanceBuilder withUntil(Observable<?> until) {
+				if (theUntils == null)
+					theUntils = new ArrayList<>(3);
+				theUntils.add(until);
+				return this;
+			}
+
+			@Override
 			public ModelSetInstance build() throws IllegalStateException {
 				for (Map.Entry<ModelValuePlaceholderImpl<?, ?>, Object> value : theValues.entrySet()) {
 					if (value.getValue() == UNFULFILLED)
 						throw new IllegalStateException("Placeholder " + value.getKey() + " is unfulfilled");
 				}
-				return new WrappedMSI(theWrapped, QommonsUtils.unmodifiableCopy(theValues));
+				Observable<?> until;
+				if (theUntils == null)
+					until = theWrapped.getUntil();
+				else {
+					theUntils.add(0, theWrapped.getUntil());
+					until = Observable.or(theUntils.toArray(new Observable[theUntils.size()]));
+					theUntils.remove(0);
+				}
+				return new WrappedMSI(theWrapped, QommonsUtils.unmodifiableCopy(theValues), until);
 			}
 		}
 
 		static class WrappedMSI extends ModelSetInstance {
 			private final ModelSetInstance theWrapped;
 			private final Map<ModelValuePlaceholderImpl<?, ?>, Object> thePlaceholderValues;
+			private final Observable<?> theUntil;
 
-			WrappedMSI(ModelSetInstance wrapped, Map<ModelValuePlaceholderImpl<?, ?>, Object> placeholderValues) {
+			WrappedMSI(ModelSetInstance wrapped, Map<ModelValuePlaceholderImpl<?, ?>, Object> placeholderValues, Observable<?> until) {
 				theWrapped = wrapped;
 				thePlaceholderValues = placeholderValues;
+				theUntil = until;
 			}
 
 			@Override
@@ -691,7 +714,7 @@ public interface ObservableModelSet {
 
 			@Override
 			public Observable<?> getUntil() {
-				return theWrapped.getUntil();
+				return theUntil;
 			}
 
 			@Override

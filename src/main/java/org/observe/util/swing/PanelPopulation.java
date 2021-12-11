@@ -633,15 +633,30 @@ public class PanelPopulation {
 	}
 
 	public interface TabPaneEditor<E, P extends TabPaneEditor<E, P>> extends ComponentEditor<E, P> {
-		P withVTab(Object tabID, Consumer<PanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier);
+		int getTabCount();
+
+		default P withVTab(Object tabID, Consumer<PanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier) {
+			return withVTab(tabID, getTabCount(), panel, tabModifier);
+		}
+
+		P withVTab(Object tabID, int tabIndex, Consumer<PanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier);
 
 		default P withHTab(Object tabID, String layoutType, Consumer<PanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier) {
 			return withHTab(tabID, makeLayout(layoutType), panel, tabModifier);
 		}
 
-		P withHTab(Object tabID, LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier);
+		default P withHTab(Object tabID, LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier) {
+			return withHTab(tabID, getTabCount(), layout, panel, tabModifier);
+		}
 
-		P withTab(Object tabID, Component tabComponent, Consumer<TabEditor<?>> tabModifier);
+		P withHTab(Object tabID, int tabIndex, LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel,
+			Consumer<TabEditor<?>> tabModifier);
+
+		default P withTab(Object tabID, Component tabComponent, Consumer<TabEditor<?>> tabModifier) {
+			return withTab(tabID, getTabCount(), tabComponent, tabModifier);
+		}
+
+		P withTab(Object tabID, int tabIndex, Component tabComponent, Consumer<TabEditor<?>> tabModifier);
 
 		P withSelectedTab(SettableValue<?> tabID);
 
@@ -660,6 +675,10 @@ public class PanelPopulation {
 		P setName(ObservableValue<String> name);
 
 		ObservableValue<String> getName();
+
+		P setIcon(ObservableValue<Image> icon);
+
+		ObservableValue<Image> getIcon();
 
 		P selectOn(Observable<?> select);
 
@@ -2489,6 +2508,7 @@ public class PanelPopulation {
 			SimpleObservable<Void> tabEnd;
 			boolean isRemovable;
 			ObservableValue<String> theName;
+			ObservableValue<Image> theIcon;
 			Observable<?> until;
 			Consumer<Object> onRemove;
 
@@ -2515,25 +2535,32 @@ public class PanelPopulation {
 		}
 
 		@Override
-		public P withVTab(Object tabID, Consumer<PanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier) {
+		public int getTabCount() {
+			return getEditor().getTabCount();
+		}
+
+		@Override
+		public P withVTab(Object tabID, int tabIndex, Consumer<PanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier) {
 			MigFieldPanel<JPanel> fieldPanel = new MigFieldPanel<>(null, theUntil, theLock);
 			panel.accept(fieldPanel);
-			return withTabImpl(tabID, fieldPanel.getContainer(), tabModifier, fieldPanel);
+			return withTabImpl(tabID, tabIndex, fieldPanel.getContainer(), tabModifier, fieldPanel);
 		}
 
 		@Override
-		public P withHTab(Object tabID, LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier) {
+		public P withHTab(Object tabID, int tabIndex, LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel,
+			Consumer<TabEditor<?>> tabModifier) {
 			SimpleHPanel<JPanel> hPanel = new SimpleHPanel<>(null, new JPanel(layout), theLock, theUntil);
 			panel.accept(hPanel);
-			return withTabImpl(tabID, hPanel.getContainer(), tabModifier, hPanel);
+			return withTabImpl(tabID, tabIndex, hPanel.getContainer(), tabModifier, hPanel);
 		}
 
 		@Override
-		public P withTab(Object tabID, Component tabComponent, Consumer<TabEditor<?>> tabModifier) {
-			return withTabImpl(tabID, tabComponent, tabModifier, null);
+		public P withTab(Object tabID, int tabIndex, Component tabComponent, Consumer<TabEditor<?>> tabModifier) {
+			return withTabImpl(tabID, tabIndex, tabComponent, tabModifier, null);
 		}
 
-		P withTabImpl(Object tabID, Component tabComponent, Consumer<TabEditor<?>> tabModifier, AbstractComponentEditor<?, ?> panel) {
+		P withTabImpl(Object tabID, int tabIndex, Component tabComponent, Consumer<TabEditor<?>> tabModifier,
+			AbstractComponentEditor<?, ?> panel) {
 			if (tabID == null)
 				throw new NullPointerException();
 			SimpleTabEditor<?> t = new SimpleTabEditor<>(this, tabID, tabComponent);
@@ -2565,11 +2592,16 @@ public class PanelPopulation {
 					}
 				}
 			} else
-				getEditor().add(tab.component);
+				getEditor().add(tab.component, tabIndex);
 			tab.theName = t.getName();
 			if (tab.theName != null)
 				t.theName.changes().takeUntil(tabUntil).act(evt -> {
 					getEditor().setTitleAt(getTabIndex(tabID), evt.getNewValue());
+				});
+			tab.theIcon = t.getIcon();
+			if (tab.theIcon != null)
+				t.theIcon.changes().takeUntil(tabUntil).act(evt -> {
+					getEditor().setIconAt(getTabIndex(tabID), evt.getNewValue() == null ? null : new ImageIcon(evt.getNewValue()));
 				});
 			if (t.getSelection() != null) {
 				t.getSelection().takeUntil(tabUntil).act(__ -> ObservableSwingUtils.onEQ(() -> {
@@ -2723,6 +2755,10 @@ public class PanelPopulation {
 						found.theName.changes().takeUntil(found.until).act(evt -> {
 							title.setText(evt.getNewValue());
 						});
+					if (found.theIcon != null)
+						found.theIcon.changes().takeUntil(found.until).act(evt -> {
+							title.setIcon(evt.getNewValue() == null ? null : new ImageIcon(evt.getNewValue()));
+						});
 					tabC.add(title);
 					getEditor().setTabComponentAt(t, tabC);
 				}
@@ -2751,6 +2787,7 @@ public class PanelPopulation {
 		private final Object theID;
 		private final Component theComponent;
 		private ObservableValue<String> theName;
+		private ObservableValue<Image> theIcon;
 		private Observable<?> theSelection;
 		private SettableValue<Boolean> theOnSelect;
 		private boolean isRemovable;
@@ -2771,6 +2808,17 @@ public class PanelPopulation {
 		@Override
 		public ObservableValue<String> getName() {
 			return theName;
+		}
+
+		@Override
+		public P setIcon(ObservableValue<Image> icon) {
+			theIcon = icon;
+			return (P) this;
+		}
+
+		@Override
+		public ObservableValue<Image> getIcon() {
+			return theIcon;
 		}
 
 		@Override

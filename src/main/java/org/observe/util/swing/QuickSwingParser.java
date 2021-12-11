@@ -38,6 +38,7 @@ import org.observe.Observable;
 import org.observe.ObservableAction;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
+import org.observe.SimpleObservable;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.DefaultExpressoParser;
@@ -55,6 +56,7 @@ import org.observe.util.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.PanelPopulation.ComponentEditor;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
+import org.observe.util.swing.PanelPopulation.TabEditor;
 import org.observe.util.swing.PanelPopulation.WindowBuilder;
 import org.qommons.collect.BetterList;
 import org.qommons.config.DefaultQonfigParser;
@@ -186,21 +188,25 @@ public class QuickSwingParser {
 				return theModelsInstance;
 			}
 
-			public Builder withAttribute(QonfigAttributeDef attr, Object value) {
+			public ObservableCollection<QuickComponent> getChildren() {
+				return theChildren;
+			}
+
+			public Builder<C> withAttribute(QonfigAttributeDef attr, Object value) {
 				if (isBuilt)
 					throw new IllegalStateException("Already built");
 				theAttributeValues.put(attr, value);
 				return this;
 			}
 
-			public Builder withChild(QuickComponent component) {
+			public Builder<C> withChild(QuickComponent component) {
 				if (isBuilt)
 					throw new IllegalStateException("Already built");
 				theChildren.add(component);
 				return this;
 			}
 
-			public Builder withComponent(Component component) {
+			public Builder<C> withComponent(Component component) {
 				if (isBuilt)
 					throw new IllegalStateException("Already built");
 				theComponent = component;
@@ -1083,6 +1089,7 @@ public class QuickSwingParser {
 				}
 			};
 		});
+		interpreter.createWith("tab-set", MultiTabSet.class, (element, session) -> MultiTabSet.parse(element, session));
 		interpreter.createWith("tabs", QuickComponentDef.class, (element, session) -> createTabs(element, session));
 		interpreter.createWith("file-button", QuickComponentDef.class, (element, session) -> {
 			ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
@@ -1310,9 +1317,24 @@ public class QuickSwingParser {
 		};
 	}
 
-	static class Tab<T> {
+	public interface TabSet<T> {
+		TypeToken<T> getType();
+
+		QuickComponentDef getContent();
+
+		ObservableCollection<T> getValues(ModelSetInstance models);
+
+		ModelSetInstance overrideModels(ModelSetInstance models, SettableValue<T> tabValue, Observable<?> until);
+
+		void modifyTab(ObservableValue<T> value, PanelPopulation.TabEditor<?> tabEditor, ModelSetInstance models);
+	}
+
+	static class SingleTab<T> implements TabSet<T> {
+		final ObservableModelSet.Wrapped models;
+		final ObservableModelSet.ModelValuePlaceholder<SettableValue, SettableValue<T>> tabValuePlaceholder;
 		final QuickComponentDef content;
-		final Function<ModelSetInstance, T> tabId;
+		final ValueContainer<SettableValue, SettableValue<T>> tabId;
+		final String renderValueName;
 		final Function<ModelSetInstance, ? extends ObservableValue<String>> tabName;
 		final Function<ModelSetInstance, ? extends ObservableValue<Image>> tabIcon;
 		final boolean removable;
@@ -1320,13 +1342,18 @@ public class QuickSwingParser {
 		final Function<ModelSetInstance, Observable<?>> selectOn;
 		final Function<ModelSetInstance, Consumer<T>> onSelect;
 
-		private Tab(QuickComponentDef content, Function<ModelSetInstance, T> tabId,
+		private SingleTab(ObservableModelSet.Wrapped models,
+			ObservableModelSet.ModelValuePlaceholder<SettableValue, SettableValue<T>> tabValuePlaceholder, QuickComponentDef content,
+			ValueContainer<SettableValue, SettableValue<T>> tabId, String renderValueName,
 			Function<ModelSetInstance, ? extends ObservableValue<String>> tabName,
 				Function<ModelSetInstance, ? extends ObservableValue<Image>> tabIcon, boolean removable,
 					Function<ModelSetInstance, Consumer<T>> onRemove, Function<ModelSetInstance, Observable<?>> selectOn,
 					Function<ModelSetInstance, Consumer<T>> onSelect) {
+			this.models = models;
+			this.tabValuePlaceholder = tabValuePlaceholder;
 			this.content = content;
 			this.tabId = tabId;
+			this.renderValueName = renderValueName;
 			this.tabName = tabName;
 			this.tabIcon = tabIcon;
 			this.removable = removable;
@@ -1335,7 +1362,58 @@ public class QuickSwingParser {
 			this.onSelect = onSelect;
 		}
 
-		static <T> Tab<T> parse(QonfigElement tab, QonfigInterpretingSession session) throws QonfigInterpretationException {
+		@Override
+		public TypeToken<T> getType() {
+			return (TypeToken<T>) tabId.getType().getType(0);
+		}
+
+		@Override
+		public QuickComponentDef getContent() {
+			return content;
+		}
+
+		@Override
+		public ObservableCollection<T> getValues(ModelSetInstance models) {
+			// The collection allows removal
+			SettableValue<T> id = tabId.get(models);
+			ObservableCollection<T> values = ObservableCollection.build(id.getType()).safe(false).build();
+			values.add(id.get());
+			id.changes().takeUntil(models.getUntil()).act(evt -> {
+				values.set(0, evt.getNewValue());
+			});
+			return values;
+		}
+
+		@Override
+		public ModelSetInstance overrideModels(ModelSetInstance models, SettableValue<T> tabValue, Observable<?> until) {
+			ModelSetInstance newModels = this.models.wrap(models)//
+				.with(tabValuePlaceholder, tabValue)//
+				.withUntil(until)//
+				.build();
+			return newModels;
+		}
+
+		@Override
+		public void modifyTab(ObservableValue<T> value, TabEditor<?> tabEditor, ModelSetInstance models) {
+			tabEditor.setName(tabName.apply(models));
+			if (tabIcon != null)
+				tabEditor.setIcon(tabIcon.apply(models));
+			if (removable) {
+				tabEditor.setRemovable(true);
+				if (onRemove != null) {
+					Consumer<T> or = onRemove.apply(models);
+					tabEditor.onRemove(v -> or.accept((T) v));
+				}
+			}
+			if (selectOn != null)
+				tabEditor.selectOn(selectOn.apply(models));
+			if (onSelect != null) {
+				Consumer<T> os = onSelect.apply(models);
+				tabEditor.onSelect(v -> os.accept((T) v));
+			}
+		}
+
+		static <T> SingleTab<T> parse(QonfigElement tab, QonfigInterpretingSession session) throws QonfigInterpretationException {
 			QonfigToolkit base = BASE.get();
 			ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
 			ClassView cv = (ClassView) session.get("imports");
@@ -1343,14 +1421,18 @@ public class QuickSwingParser {
 			ValueContainer<SettableValue, SettableValue<T>> tabId = tab
 				.getAttribute(base.getAttribute("tab", "tab-id"), ObservableExpression.class)//
 				.evaluate(ModelTypes.Value.forType((TypeToken<T>) TypeTokens.get().WILDCARD), model, cv);
-			Function<ModelSetInstance, T> tabIdFn = tabId.andThen(sv -> sv.get());
+			String renderValueName = tab.getAttributeText(base.getAttribute("tab", "render-value-name"));
+			ObservableModelSet.WrappedBuilder wb = ObservableModelSet.wrap(model);
+			ObservableModelSet.ModelValuePlaceholder<SettableValue, SettableValue<T>> tvp = wb.withPlaceholder(renderValueName,
+				ModelTypes.Value.forType((TypeToken<T>) tabId.getType().getType(0)));
+			model = wb.build();
 
 			Function<ModelSetInstance, ? extends ObservableValue<String>> tabName;
 			if (tab.getAttributes().containsKey(base.getAttribute("tab", "tab-name"))) {
 				tabName = tab.getAttribute(base.getAttribute("tab", "tab-name"), ObservableExpression.class)//
 					.evaluate(ModelTypes.Value.forType(String.class), model, cv);
 			} else {
-				tabName = msi -> ObservableValue.of(String.class, tabIdFn.apply(msi).toString());
+				tabName = msi -> ObservableValue.of(String.class, tabId.get(msi).get().toString());
 			}
 
 			Function<ModelSetInstance, ObservableValue<Image>> tabIcon;
@@ -1365,12 +1447,14 @@ public class QuickSwingParser {
 					tabIcon = msi -> {
 						ObservableValue<URL> urlFn = (ObservableValue<URL>) iconV.apply(msi);
 						// There's probably a better way to do this, but this is what I know
-						return urlFn.map(Image.class, url -> new ImageIcon(url).getImage());
+						return urlFn.map(Image.class, url -> url == null ? null : new ImageIcon(url).getImage());
 					};
 				} else if (iconType == String.class) {
 					tabIcon = msi -> {
 						ObservableValue<String> strFn = (ObservableValue<String>) iconV.apply(msi);
 						return strFn.map(Image.class, str -> {
+							if (str == null)
+								return null;
 							URL url;
 							try {
 								String location = QommonsConfig.resolve(str, tab.getDocument().getLocation());
@@ -1427,13 +1511,17 @@ public class QuickSwingParser {
 			} else
 				onSelect = null;
 
-			return new Tab<>(content, tabIdFn, tabName, tabIcon, removable, onRemove, (Function<ModelSetInstance, Observable<?>>) selectOn,
-				onSelect);
+			return new SingleTab<>((ObservableModelSet.Wrapped) model, tvp, content, tabId, renderValueName, tabName, tabIcon, removable,
+				onRemove, (Function<ModelSetInstance, Observable<?>>) selectOn, onSelect);
 		}
 	}
 
-	static class TabSet<T> {
-		final Function<ModelSetInstance, ObservableCollection<T>> values;
+	static class MultiTabSet<T> implements TabSet<T> {
+		final ObservableModelSet.Wrapped models;
+		final ObservableModelSet.ModelValuePlaceholder<SettableValue, SettableValue<T>> tabValuePlaceholder;
+		final QonfigElement element;
+		final ValueContainer<ObservableCollection, ObservableCollection<T>> values;
+		final String renderValueName;
 		final QuickComponentDef content;
 		final Function<ModelSetInstance, Function<T, String>> tabName;
 		final Function<ModelSetInstance, Function<T, Image>> tabIcon;
@@ -1442,11 +1530,18 @@ public class QuickSwingParser {
 		final Function<ModelSetInstance, Function<T, Observable<?>>> selectOn;
 		final Function<ModelSetInstance, Consumer<T>> onSelect;
 
-		TabSet(Function<ModelSetInstance, ObservableCollection<T>> values, QuickComponentDef content,
-			Function<ModelSetInstance, Function<T, String>> tabName, Function<ModelSetInstance, Function<T, Image>> tabIcon,
-			Function<ModelSetInstance, Function<T, Boolean>> removable, Function<ModelSetInstance, Consumer<T>> onRemove,
-			Function<ModelSetInstance, Function<T, Observable<?>>> selectOn, Function<ModelSetInstance, Consumer<T>> onSelect) {
+		MultiTabSet(ObservableModelSet.Wrapped models,
+			ObservableModelSet.ModelValuePlaceholder<SettableValue, SettableValue<T>> tabValuePlaceholder, QonfigElement element,
+			ValueContainer<ObservableCollection, ObservableCollection<T>> values, String renderValueName,
+			QuickComponentDef content, Function<ModelSetInstance, Function<T, String>> tabName,
+			Function<ModelSetInstance, Function<T, Image>> tabIcon, Function<ModelSetInstance, Function<T, Boolean>> removable,
+			Function<ModelSetInstance, Consumer<T>> onRemove, Function<ModelSetInstance, Function<T, Observable<?>>> selectOn,
+			Function<ModelSetInstance, Consumer<T>> onSelect) {
+			this.models = models;
+			this.tabValuePlaceholder = tabValuePlaceholder;
+			this.element = element;
 			this.values = values;
+			this.renderValueName = renderValueName;
 			this.content = content;
 			this.tabName = tabName;
 			this.tabIcon = tabIcon;
@@ -1456,13 +1551,68 @@ public class QuickSwingParser {
 			this.onSelect = onSelect;
 		}
 
-		static <T> TabSet<T> parse(QonfigElement tabSet, QonfigInterpretingSession session) throws QonfigInterpretationException {
+		@Override
+		public TypeToken<T> getType() {
+			return (TypeToken<T>) values.getType().getType(0);
+		}
+
+		@Override
+		public QuickComponentDef getContent() {
+			return content;
+		}
+
+		@Override
+		public ObservableCollection<T> getValues(ModelSetInstance models) {
+			return values.get(models);
+		}
+
+		@Override
+		public ModelSetInstance overrideModels(ModelSetInstance models, SettableValue<T> tabValue, Observable<?> until) {
+			ModelSetInstance newModels = this.models.wrap(models)//
+				.with(tabValuePlaceholder, tabValue)//
+				.withUntil(until)//
+				.build();
+			return newModels;
+		}
+
+		@Override
+		public void modifyTab(ObservableValue<T> value, TabEditor<?> tabEditor, ModelSetInstance models) {
+			tabEditor.setName(value.map(tabName.apply(models)));
+			if (tabIcon != null)
+				tabEditor.setIcon(value.map(tabIcon.apply(models)));
+			if (removable != null) {
+				Function<T, Boolean> rem = removable.apply(models);
+				value.changes().takeUntil(models.getUntil()).act(evt -> {
+					tabEditor.setRemovable(rem.apply(evt.getNewValue()));
+				});
+				if (onRemove != null) {
+					Consumer<T> or = onRemove.apply(models);
+					tabEditor.onRemove(v -> or.accept((T) v));
+				}
+			}
+			if (selectOn != null) {
+				Function<T, Observable<?>> so = selectOn.apply(models);
+				tabEditor.selectOn(ObservableValue.flattenObservableValue(value.map(so)));
+			}
+			if (onSelect != null) {
+				Consumer<T> os = onSelect.apply(models);
+				tabEditor.onSelect(v -> os.accept((T) v));
+			}
+		}
+
+		static <T> MultiTabSet<T> parse(QonfigElement tabSet, QonfigInterpretingSession session) throws QonfigInterpretationException {
 			QonfigToolkit base = BASE.get();
 			ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
 			ClassView cv = (ClassView) session.get("imports");
 			ValueContainer<ObservableCollection, ObservableCollection<T>> values = tabSet
 				.getAttribute(base.getAttribute("tab-set", "values"), ObservableExpression.class)//
 				.evaluate(ModelTypes.Collection.forType((TypeToken<T>) TypeTokens.get().WILDCARD), model, cv);
+			String renderValueName = tabSet.getAttributeText(base.getAttribute("tab-set", "render-value-name"));
+			ObservableModelSet.WrappedBuilder wb = ObservableModelSet.wrap(model);
+			ObservableModelSet.ModelValuePlaceholder<SettableValue, SettableValue<T>> tvp = wb.withPlaceholder(renderValueName,
+				ModelTypes.Value.forType((TypeToken<T>) values.getType().getType(0)));
+			model = wb.build();
+
 			QuickComponentDef content = session.getInterpreter().interpret(
 				tabSet.getChildrenByRole().get(base.getChild("tab-set", "renderer").getDeclared()).getFirst(), QuickComponentDef.class);
 
@@ -1491,7 +1641,8 @@ public class QuickSwingParser {
 						Function<T, URL> urlFn = (Function<T, URL>) (Function<?, ?>) iconFn.apply(msi);
 						return tabValue -> {
 							URL url = urlFn.apply(tabValue);
-							;
+							if (url == null)
+								return null;
 							return new ImageIcon(url).getImage(); // There's probably a better way to do this, but this is what I know
 						};
 					};
@@ -1500,6 +1651,8 @@ public class QuickSwingParser {
 						Function<T, String> strFn = (Function<T, String>) (Function<?, ?>) iconFn.apply(msi);
 						return tabValue -> {
 							String str = strFn.apply(tabValue);
+							if (str == null)
+								return null;
 							URL url;
 							try {
 								String location = QommonsConfig.resolve(str, tabSet.getDocument().getLocation());
@@ -1555,24 +1708,133 @@ public class QuickSwingParser {
 			} else
 				onSelect = null;
 
-			return new TabSet<>(values, content, tabName, tabIcon, removable, onRemove, selectOn, onSelect);
+			return new MultiTabSet<>((ObservableModelSet.Wrapped) model, tvp, tabSet, values,
+				tabSet.getAttributeText(base.getAttribute("tab-set", "render-value-name")), content, tabName, tabIcon, removable, onRemove,
+				selectOn, onSelect);
 		}
 	}
 
-	private QuickComponentDef createTabs(QonfigElement element, QonfigInterpretingSession session) throws QonfigInterpretationException {
+	static class TabValue<T> {
+		final SettableValue<T> value;
+		final ModelSetInstance models;
+		final SimpleObservable<?> until;
+		final TabSet<T> tabs;
+		TabEditor<?> tab;
+		QuickComponent component;
+
+		TabValue(SettableValue<T> value, ModelSetInstance models, TabSet<T> tabs) {
+			this.value = value;
+			this.models = models;
+			this.tabs = tabs;
+			until = SimpleObservable.build().safe(false).build();
+		}
+	}
+
+	private <T> QuickComponentDef createTabs(QonfigElement element, QonfigInterpretingSession session)
+		throws QonfigInterpretationException {
 		QonfigToolkit base = BASE.get();
 		ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
 		ClassView cv = (ClassView) session.get("imports");
-		List<Object> tabs = new ArrayList<>();
+		List<TabSet<? extends T>> tabs = new ArrayList<>();
 		QonfigChildDef.Declared tabSetDef = base.getChild("tabs", "tab-set").getDeclared();
 		QonfigChildDef.Declared widgetDef = base.getChild("tabs", "content").getDeclared();
+		List<TypeToken<? extends T>> tabTypes = new ArrayList<>();
 		for (QonfigElement child : element.getChildren()) {
 			if (child.getParentRoles().contains(tabSetDef)) {
-				tabs.add(TabSet.parse(element, session));
+				MultiTabSet tabSet = MultiTabSet.parse(element, session);
+				tabTypes.add(tabSet.values.getType().getType(0));
+				tabs.add(tabSet);
 			} else if (child.getParentRoles().contains(widgetDef)) {
-				tabs.add(Tab.parse(element, session));
+				SingleTab tab = SingleTab.parse(element, session);
+				tabTypes.add(tab.tabId.getType().getType(0));
+				tabs.add(tab);
 			}
 		}
+		ValueContainer<SettableValue, SettableValue<T>> selection;
+		TypeToken<T> tabType = TypeTokens.get().getCommonType(tabTypes);
+		if (element.getAttributes().containsKey(base.getAttribute("tabs", "selected"))) {
+			selection = element.getAttribute(base.getAttribute("tabs", "selected"), ObservableExpression.class)//
+				.evaluate(ModelTypes.Value.forType(TypeTokens.get().getSuperWildcard(tabType)), model, cv);
+		} else
+			selection = null;
+		return new AbstractQuickComponentDef(element) {
+			@Override
+			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
+				TypeToken<TabValue<? extends T>> tabValueType = TypeTokens.get().keyFor(TabValue.class)
+					.<TabValue<? extends T>> parameterized(TypeTokens.get().getExtendsWildcard(tabType));
+				ObservableCollection<TabValue<? extends T>>[] tabValues = new ObservableCollection[tabs.size()];
+				int t = 0;
+				for (TabSet<? extends T> tab : tabs) {
+					TabSet<T> tab2=(TabSet<T>) tab; //Avoid a bunch of other generic workarounds
+					ObservableCollection<T> values=tab2.getValues(builder.getModels());
+					ObservableCollection<TabValue<? extends T>> tabValuesI = ObservableCollection
+						.build(tabValueType).safe(false).build();
+					values.changes().takeUntil(builder.getModels().getUntil()).act(evt->{
+						ObservableSwingUtils.onEQ(()->{
+							switch(evt.type) {
+							case add:
+								for(int i=0;i<evt.getValues().size();i++) {
+									SettableValue<T> elValue = SettableValue.build(values.getType()).safe(false)
+										.withValue(evt.getValues().get(i)).build();
+									SimpleObservable<Void> tabUntil = SimpleObservable.build().safe(false).build();
+									tabValuesI.add(evt.getIndexes()[i], new TabValue<>(elValue,
+										((TabSet<T>) tab).overrideModels(builder.getModels(), elValue, tabUntil.readOnly()), //
+										(TabSet<T>) tab));
+								}
+								break;
+							case remove:
+								for (int i = evt.getValues().size() - 1; i >= 0; i--) {
+									tabValuesI.remove(evt.getIndexes()[i]).until.onNext(null);
+								}
+								break;
+							case set:
+								for (int i = 0; i < evt.getValues().size(); i++) {
+									// Would like to use the source event as a cause, but this might be executing asynchronously
+									((TabValue<T>) tabValuesI.get(evt.getIndexes()[i])).value.set(evt.getValues().get(i), null);
+								}
+								break;
+							}
+						});
+					});
+					tabValues[t++]=tabValuesI;
+				}
+				ObservableCollection<TabValue<? extends T>> flatTabValues = ObservableCollection
+					.flattenCollections(tabValueType, tabValues).collect();
+				container.addTabs(tabPane -> {
+					flatTabValues.changes().takeUntil(builder.getModels().getUntil()).act(evt -> {
+						switch (evt.type) {
+						case add:
+							for (int i = 0; i < evt.getValues().size(); i++) {
+								TabValue<T> tab = (TabValue<T>) evt.getValues().get(i);
+								int index = i;
+								tabPane.withHTab(tab.value.get(), new BorderLayout(), tabPanel -> {
+									tab.component = tab.tabs.getContent().install(tabPanel,
+										QuickComponent.build(tab.tabs.getContent(), tab.models));
+									builder.getChildren().add(evt.getIndexes()[index], tab.component);
+								}, panelTab -> {
+									tab.tab = panelTab;
+									tab.tabs.modifyTab(tab.value, panelTab, tab.models);
+								});
+							}
+							break;
+						case remove:
+							for (int i = evt.getValues().size() - 1; i >= 0; i--) {
+								TabValue<T> tab = (TabValue<T>) evt.getValues().get(i);
+								tab.tab.remove();
+								builder.getChildren().remove(evt.getIndexes()[i]);
+							}
+							break;
+						case set:
+							break;
+						}
+					});
+					if (selection != null)
+						tabPane.withSelectedTab(selection.get(builder.getModels()));
+					modify(tabPane, builder);
+				});
+				return builder.build();
+			}
+		};
 	}
 
 	private QuickDocument theDebugDoc;

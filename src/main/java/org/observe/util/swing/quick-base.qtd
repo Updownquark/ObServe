@@ -50,6 +50,7 @@
 			<attribute name="value-widget.value" default="subject" specify="forbidden" />
 		</add-on>
 		<add-on name="single-rendering">
+			<attribute name="render-value-name" type="string" />
 			<child-def name="renderer" type="value-widget" inherits="renderer-value-override" min="0" />
 		</add-on>
 
@@ -79,6 +80,7 @@
 
 		<add-on name="tab" requires="widget">
 			<attribute name="tab-id" type="expression-or-string" />
+			<attribute name="render-value-name" type="string" />
 			<attribute name="tab-name" type="expression-or-string" specify="optional" />
 			<attribute name="tab-icon" type="expression-or-strng" specify="optional" />
 			<attribute name="removable" type="boolean" default="false" />
