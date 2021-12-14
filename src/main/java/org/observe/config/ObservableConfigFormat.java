@@ -69,8 +69,8 @@ public interface ObservableConfigFormat<E> {
 	/** Persists {@link Duration}s */
 	public static ObservableConfigFormat<Duration> DURATION = ofQommonFormat(Format.DURATION, () -> Duration.ZERO);
 	/** Persists {@link Instant}s */
-	public static ObservableConfigFormat<Instant> DATE = ofQommonFormat(Format.flexibleDate("ddMMyyyy HH:mm:ss.SSS", TimeZone.getDefault()),
-		() -> null);
+	public static ObservableConfigFormat<Instant> DATE = ofQommonFormat(
+		Format.flexibleDate("ddMMMyyyy HH:mm:ss.SSS", TimeZone.getDefault()), () -> null);
 
 	/** An accessor for a config element at a particular location in the hierarchy, even if such an element does not currently exist */
 	interface ConfigGetter {
