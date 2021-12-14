@@ -26,6 +26,7 @@ import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.CategoryRenderStrategy.CategoryKeyListener;
+import org.qommons.IntList;
 import org.qommons.Transaction;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement;
@@ -302,8 +303,17 @@ public class ObservableTableModel<R> implements TableModel {
 
 				@Override
 				public void intervalRemoved(ListDataEvent e) {
-					for (int i = e.getIndex1(); i >= e.getIndex0(); i--)
+					IntList removedIndexes = new IntList(true, true);
+					for (int i = e.getIndex1(); i >= e.getIndex0(); i--) {
+						removedIndexes.add(table.getColumnModel().getColumn(i).getModelIndex());
 						table.getColumnModel().removeColumn(table.getColumnModel().getColumn(i));
+					}
+					for (int i = 0; i < table.getColumnCount(); i++) {
+						TableColumn col = table.getColumnModel().getColumn(i);
+						int removed = removedIndexes.indexFor(col.getModelIndex());
+						if (removed > 0)
+							col.setModelIndex(col.getModelIndex() - removed);
+					}
 				}
 
 				@Override
