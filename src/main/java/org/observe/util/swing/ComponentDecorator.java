@@ -141,16 +141,29 @@ public class ComponentDecorator {
 		return deriveFont(TextAttribute.STRIKETHROUGH, strikethrough ? TextAttribute.STRIKETHROUGH_ON : false);
 	}
 
+	/**
+	 * @param align -1 for left, 0 for center, 1 for right
+	 * @return This decorator
+	 */
 	public ComponentDecorator alignH(int align) {
 		theHAlign = align;
 		return this;
 	}
 
+	/**
+	 * @param align -1 for top, 0 for center, 1 for bottom
+	 * @return This decorator
+	 */
 	public ComponentDecorator alignV(int align) {
 		theVAlign = align;
 		return this;
 	}
 
+	/**
+	 * @param hAlign -1 for left, 0 for center, 1 for right
+	 * @param vAlign -1 for top, 0 for center, 1 for bottom
+	 * @return This decorator
+	 */
 	public ComponentDecorator align(int hAlign, int vAlign) {
 		theHAlign = hAlign;
 		theVAlign = vAlign;
