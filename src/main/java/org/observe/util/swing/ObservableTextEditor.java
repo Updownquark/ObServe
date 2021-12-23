@@ -7,6 +7,7 @@ import java.awt.event.FocusEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.text.ParseException;
+import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -60,6 +61,7 @@ public class ObservableTextEditor<E> {
 
 	private BiConsumer<? super E, ? super KeyEvent> theEnterAction;
 
+	private String theCachedText;
 	private long theStateStamp;
 	private SimpleObservable<Void> theStatusChange;
 
@@ -426,6 +428,10 @@ public class ObservableTextEditor<E> {
 	}
 
 	private void checkText(Object cause) {
+		String text = getText();
+		if (Objects.equals(theCachedText, text))
+			return;
+		theCachedText = text;
 		isDirty = true;
 		try {
 			E parsed = theFormat.parse(getText());

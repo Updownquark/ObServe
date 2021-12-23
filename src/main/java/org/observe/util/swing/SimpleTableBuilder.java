@@ -501,7 +501,7 @@ implements TableBuilder<R, P> {
 				(ObservableCollection<CategoryRenderStrategy<? super R, ?>>) TableContentControl.applyColumnControl(theColumns,
 					theFilter, until),
 				EventQueue::isDispatchThread, EventQueue::invokeLater, until);
-			Observable<?> columnChanges = safeColumns.simpleChanges();
+			Observable<?> columnChanges = Observable.or(Observable.constant(null), safeColumns.simpleChanges());
 			List<ValueRenderer<R>> renderers = new ArrayList<>();
 			columnChanges.act(__ -> {
 				renderers.clear();
