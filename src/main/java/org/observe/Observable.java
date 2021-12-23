@@ -1372,8 +1372,21 @@ public interface Observable<T> extends Lockable, Identifiable {
 
 		@Override
 		public Object getIdentity() {
-			if (theIdentity == null)
-				theIdentity = Identifiable.baseId(toString(), this);
+			if (theIdentity == null) {
+				StringBuilder str = new StringBuilder("every(");
+				if (theInitDelay == null)
+					str.append("null");
+				else
+					QommonsUtils.printDuration(theInitDelay, str, true);
+				str.append(", ");
+				QommonsUtils.printDuration(theTask.getFrequency(), str, true);
+				str.append(", ");
+				if (theTask.getLastRun() == null)
+					str.append("null");
+				else
+					QommonsUtils.printDuration(Duration.between(Instant.now(), theTask.getLastRun()), str, true);
+				theIdentity = Identifiable.baseId(str.toString(), this);
+			}
 			return theIdentity;
 		}
 
