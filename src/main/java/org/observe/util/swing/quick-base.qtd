@@ -12,6 +12,7 @@
 			</explicit>
 			<pattern name="position" />
 		</one-of>
+		<pattern name="value-name">^[a-zA-Z_$][a-zA-Z_$0-9]*$</pattern>
 	</patterns>
 
 	<add-ons>
@@ -50,12 +51,13 @@
 			<attribute name="value-widget.value" default="subject" specify="forbidden" />
 		</add-on>
 		<add-on name="single-rendering">
-			<attribute name="render-value-name" type="string" />
+			<attribute name="render-value-name" type="value-name" />
 			<child-def name="renderer" type="value-widget" inherits="renderer-value-override" min="0" />
 		</add-on>
 
 		<add-on name="tabular-widget" requires="multi-value-widget">
 			<attribute name="columns" type="expression" specify="optional" />
+			<attribute name="column-value-name" type="value-name" />
 			<child-def name="column" type="column" min="0" max="inf" />
 		</add-on>
 		<add-on name="column-edit-type" requires="edit" abstract="true">
@@ -77,16 +79,18 @@
 			<attribute name="field-name" type="expression-or-string" specify="optional" />
 			<attribute name="fill" type="boolean" specify="optional" />
 		</add-on>
-
-		<add-on name="tab" requires="widget">
-			<attribute name="tab-id" type="expression-or-string" />
-			<attribute name="render-value-name" type="string" />
+		
+		<add-on name="abstract-tab">
 			<attribute name="tab-name" type="expression-or-string" specify="optional" />
-			<attribute name="tab-icon" type="expression-or-strng" specify="optional" />
+			<attribute name="tab-icon" type="expression-or-string" specify="optional" />
 			<attribute name="removable" type="boolean" default="false" />
 			<attribute name="onRemove" type="expression" specify="optional" />
 			<attribute name="select-on" type="expression" specify="optional" />
 			<attribute name="on-select" type="expression" specify="optional" />
+		</add-on>
+
+		<add-on name="tab" requires="widget" inherits="abstract-tab">
+			<attribute name="tab-id" type="expression-or-string" />
 		</add-on>
 	</add-ons>
 
@@ -148,12 +152,14 @@
 		<element-def name="toggle-buttons" extends="collection-selector-widget" />
 
 		<element-def name="multi-value-widget" extends="widget">
+			<attribute name="value-name" type="value-name" />
 			<attribute name="selection" type="expression" specify="optional" />
 		</element-def>
 		<element-def name="little-list" extends="multi-value-widget" inherits="single-rendering">
 			<attribute name="values" type="expression" specify="required" />
 		</element-def>
 		<element-def name="column" inherits="single-rendering">
+			<attribute name="single-rendering.render-value-name" specify="forbidden" default="none" />
 			<attribute name="name" type="string" />
 			<attribute name="value" type="expression" specify="optional" /> <!-- Unspecified means to use the row value for the column value -->
 			<attribute name="format" type="expression" specify="optional" />
@@ -164,6 +170,8 @@
 			<child-def name="editor" type="value-widget" inherits="column-editor" />
 		</element-def>
 		<element-def name="columns" extends="int-model-value">
+			<attribute name="value-name" type="value-name" />
+			<attribute name="column-value-name" type="value-name" />
 			<child-def name="column" type="column" min="0" max="inf" />
 		</element-def>
 		<element-def name="value-action">
@@ -176,13 +184,15 @@
 			<attribute name="rows" type="expression" specify="required" />
 			<child-def name="action" type="value-action" min="0" max="inf" />
 		</element-def>
-		<element-def name="tree" extends="multi-value-widget" inherits="single-rendering">
+		<element-def name="tree" extends="multi-value-widget">
 			<attribute name="root" type="expression" specify="required" />
 			<attribute name="children" type="expression" specify="required" />
 			<attribute name="parent" type="expression" specify="optional" />
 			<child-def name="action" type="value-action" min="0" max="inf" />
 		</element-def>
-		<element-def name="tree-table" extends="tree" inherits="tabular-widget" />
+		<element-def name="tree-table" extends="tree" inherits="tabular-widget">
+			<child-def name="tree-column" type="column" />
+		</element-def>
 
 		<!-- Containers -->
 		<element-def name="container" extends="widget" abstract="true">
@@ -208,10 +218,10 @@
 			<child-mod child="content" inherits="tab" />
 			<child-def name="tab-set" type="tab-set" min="0" max="inf" />
 		</element-def>
-		<element-def name="tab-set" inherits="single-rendering,tab"> <!-- Renderer is the tab's content -->
-			<child-mod name="single-rendering.renderer" min="1" />
+		<element-def name="tab-set" inherits="single-rendering,abstract-tab"> <!-- Renderer is the tab's content -->
+			<attribute name="value-name" type="string" />
 			<attribute name="values" type="expression" />
-			<attribute name="tab.tab-id" specify="forbidden" default=""/>
+			<child-mod child="single-rendering.renderer" min="1" />
 		</element-def>
 		<element-def name="split" extends="container">
 			<attribute name="orientation" type="orientation" specify="required" />

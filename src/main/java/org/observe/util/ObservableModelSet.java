@@ -13,6 +13,7 @@ import org.observe.util.ModelType.ModelInstanceType;
 import org.qommons.Named;
 import org.qommons.QommonsUtils;
 import org.qommons.config.QonfigInterpreter.QonfigInterpretationException;
+import org.qommons.ex.ExConsumer;
 
 public interface ObservableModelSet {
 	interface ValueContainer<M, MV extends M> extends Function<ModelSetInstance, MV> {
@@ -208,6 +209,17 @@ public interface ObservableModelSet {
 				throw new QonfigInterpretationException(
 					"A value of type " + theThings.get(name).type + " has already been added as '" + name + "'");
 			theThings.put(name, new ExternalModelSet.Placeholder(type, item));
+			return this;
+		}
+
+		public ExternalModelSetBuilder withSubModel(String name,
+			ExConsumer<ExternalModelSetBuilder, QonfigInterpretationException> modelBuilder) throws QonfigInterpretationException {
+			if (theThings.containsKey(name))
+				throw new QonfigInterpretationException(
+					"A value of type " + theThings.get(name).type + " has already been added as '" + name + "'");
+			ExternalModelSetBuilder subModel = new ExternalModelSetBuilder((ExternalModelSetBuilder) theRoot, pathTo(name));
+			theThings.put(name, new ExternalModelSet.Placeholder(ModelTypes.Model.instance(), subModel));
+			modelBuilder.accept(subModel);
 			return this;
 		}
 

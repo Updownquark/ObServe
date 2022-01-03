@@ -213,10 +213,12 @@ public interface ObservableExpression {
 				return ObservableModelSet.container(LambdaUtils.constantFn(value, theExpression.getText(), null), type);
 			} else if (TypeTokens.get().isInstance(type.getType(0), theValue)) {
 				MV value = (MV) createValue(type.getType(0), theValue);
-				return ObservableModelSet.container(LambdaUtils.constantFn(value, theExpression.getText(), null), type);
+				return ObservableModelSet.container(LambdaUtils.constantFn(value, theExpression.getText(), null),
+					(ModelInstanceType<M, MV>) ModelTypes.Value.forType(theValue.getClass()));
 			} else if (TypeTokens.get().isAssignable(type.getType(0), TypeTokens.get().of(theValue.getClass()))) {
 				MV value = (MV) createValue(type.getType(0), TypeTokens.get().cast(type.getType(0), theValue));
-				return ObservableModelSet.container(LambdaUtils.constantFn(value, theExpression.getText(), null), type);
+				return ObservableModelSet.container(LambdaUtils.constantFn(value, theExpression.getText(), null),
+					(ModelInstanceType<M, MV>) ModelTypes.Value.forType(theValue.getClass()));
 			} else
 				throw new QonfigInterpretationException("'" + theExpression.getText() + "' cannot be evaluated as a " + type);
 		}

@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -36,6 +37,7 @@ import org.observe.util.ObservableModelSet.ModelSetInstance;
 import org.observe.util.ObservableModelSet.ModelValuePlaceholder;
 import org.observe.util.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
+import org.observe.util.TypeTokens.TypeConverter;
 import org.qommons.Identifiable;
 import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
@@ -433,37 +435,14 @@ public class DefaultExpressoParser implements ExpressoParser {
 		case "relationalExpression":
 		case "additiveExpression":
 		case "multiplicativeExpression":
-			//		if (expression.getComponents().size() != 3)
-			//			throw new CompilationException(expression,
-			//				"Unrecognized expression with " + expression.getComponents().size() + " components");
-			//		String operator = expression.getComponents().get(1).toString();
-			//		ex = null;
-			//		for (TypeToken<?> leftTargetType : theOperations.getBinaryLeftTargetTypes(targetType, operator)) {
-			//			TypedStatement<E, ?> leftOperand;
-			//			try {
-			//				leftOperand = evaluate(expression.getComponents().getFirst(), env, leftTargetType);
-			//			} catch (CompilationException e) {
-			//				if (ex == null)
-			//					ex = e;
-			//				continue;
-			//			}
-			//			for (TypeToken<?> rightTargetType : theOperations.getBinaryRightTargetTypes(leftOperand.getReturnType(),
-			//				operator)) {
-			//				TypedStatement<E, ?> rightOperand;
-			//				try {
-			//					rightOperand = evaluate(expression.getComponents().getLast(), env, rightTargetType);
-			//				} catch (CompilationException e) {
-			//					if (ex == null)
-			//						ex = e;
-			//					continue;
-			//				}
-			//				BinaryOperation<?, ?, ? extends X> op = theOperations.binaryOperation(targetType, leftOperand.getReturnType(),
-			//					rightOperand.getReturnType(), operator);
-			//				return binaryOperation(expression, (BinaryOperation<Object, Object, X>) op, (TypedStatement<E, Object>) leftOperand,
-			//					(TypedStatement<E, Object>) rightOperand);
-			//			}
-			//		}
-			//		throw ex;
+		case "shiftExpression":
+			if (expression.getComponents().size() != 3)
+				throw new ExpressoParseException(expression,
+					"Unrecognized expression with " + expression.getComponents().size() + " components");
+			String operator = expression.getComponents().get(1).toString();
+			ObservableExpression left = _parse(expression.getComponents().getFirst());
+			ObservableExpression right = _parse(expression.getComponents().getLast());
+			return new BinaryOperator(operator, left, right);
 			// Unary operation types
 		case "unaryExpression":
 		case "preIncrementExpression":
@@ -559,6 +538,306 @@ public class DefaultExpressoParser implements ExpressoParser {
 		for (Expression comp : expression.getComponents())
 			extractNameSequence(comp, names);
 		return names;
+	}
+
+	public static class BinaryOperator implements ObservableExpression {
+		private final String theOperator;
+		private final ObservableExpression theLeft;
+		private final ObservableExpression theRight;
+
+		public BinaryOperator(String operator, ObservableExpression left, ObservableExpression right) {
+			theOperator = operator;
+			theLeft = left;
+			theRight = right;
+		}
+
+		public String getOperator() {
+			return theOperator;
+		}
+
+		public ObservableExpression getLeft() {
+			return theLeft;
+		}
+
+		public ObservableExpression getRight() {
+			return theRight;
+		}
+
+		@Override
+		public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ObservableModelSet models,
+			ClassView classView) throws QonfigInterpretationException {
+			if (type.getModelType() != ModelTypes.Value)
+				throw new QonfigInterpretationException("Cannot evaluate a binary operator as anything but a value: " + type);
+			// & | && || ^ + - * / % == != < > <= >= << >> >>>
+			Class<?> leftType;
+			switch (theOperator) {
+			case "&":
+			case "|":
+			case "^": {
+				// int, long, or boolean args, return type same
+				ValueContainer<SettableValue, SettableValue<?>> left = theLeft
+					.evaluate((ModelInstanceType<SettableValue, SettableValue<?>>) type, models, classView);
+				ValueContainer<SettableValue, SettableValue<?>> right = theRight
+					.evaluate((ModelInstanceType<SettableValue, SettableValue<?>>) type, models, classView);
+				TypeToken<?> resultType = TypeTokens.get().getCommonType(left.getType().getType(0), right.getType().getType(0));
+				Class<?> rawResult = TypeTokens.get().unwrap(TypeTokens.getRawType(resultType));
+				if (rawResult == boolean.class)
+					return (ValueContainer<M, MV>) logicalOp((ValueContainer<SettableValue, SettableValue<Boolean>>) (Function<?, ?>) left,
+						(ValueContainer<SettableValue, SettableValue<Boolean>>) (Function<?, ?>) right);
+				else if (rawResult == long.class)
+					return (ValueContainer<M, MV>) longBitwiseOp(
+						(ValueContainer<SettableValue, SettableValue<Number>>) (Function<?, ?>) left,
+						(ValueContainer<SettableValue, SettableValue<Number>>) (Function<?, ?>) right);
+				else if (rawResult == int.class || rawResult == short.class || rawResult == char.class || rawResult == byte.class)
+					return (ValueContainer<M, MV>) bitwiseOp((ValueContainer<SettableValue, SettableValue<Number>>) (Function<?, ?>) left,
+						(ValueContainer<SettableValue, SettableValue<Number>>) (Function<?, ?>) right);
+				else
+					throw new QonfigInterpretationException("Cannot apply binary operator '" + theOperator + "' to arguments of type "
+						+ left.getType().getType(0) + " and " + right.getType().getType(0));
+			}
+			case "&&":
+			case "||":
+				// boolean
+				throw new QonfigInterpretationException("Binary operator '" + theOperator + "' is not implemented yet");
+			case "+":
+			case "-":
+			case "*":
+			case "/":
+			case "%":
+				// number
+				ValueContainer<SettableValue, SettableValue<?>> left = theLeft
+				.evaluate((ModelInstanceType<SettableValue, SettableValue<?>>) type, models, classView);
+				ValueContainer<SettableValue, SettableValue<?>> right = theRight
+					.evaluate((ModelInstanceType<SettableValue, SettableValue<?>>) type, models, classView);
+				return (ValueContainer<M, MV>) mathOp((ValueContainer<SettableValue, SettableValue<Number>>) (Function<?, ?>) left,
+					(ValueContainer<SettableValue, SettableValue<Number>>) (Function<?, ?>) right);
+			case "==":
+			case "!=":
+			case "<":
+			case ">":
+			case "<=":
+			case ">=":
+				// number args, return type boolean
+				throw new QonfigInterpretationException("Binary operator '" + theOperator + "' is not implemented yet");
+			case "<<":
+			case ">>":
+			case ">>>":
+				// int or long left, int right, return type same as left
+				throw new QonfigInterpretationException("Binary operator '" + theOperator + "' is not implemented yet");
+			default:
+				throw new QonfigInterpretationException("Unrecognized operator: " + theOperator + " in expression " + this);
+			}
+		}
+
+		private ValueContainer<SettableValue, SettableValue<Boolean>> logicalOp(ValueContainer<SettableValue, SettableValue<Boolean>> left,
+			ValueContainer<SettableValue, SettableValue<Boolean>> right) throws QonfigInterpretationException {
+			throw new QonfigInterpretationException("Binary operator '" + theOperator + "' is not immplemented yet");
+		}
+
+		private ValueContainer<SettableValue, SettableValue<? extends Number>> longBitwiseOp(
+			ValueContainer<SettableValue, SettableValue<Number>> left, ValueContainer<SettableValue, SettableValue<Number>> right)
+				throws QonfigInterpretationException {
+			throw new QonfigInterpretationException("Binary operator '" + theOperator + "' is not immplemented yet");
+		}
+
+		private ValueContainer<SettableValue, SettableValue<? extends Number>> bitwiseOp(
+			ValueContainer<SettableValue, SettableValue<Number>> left, ValueContainer<SettableValue, SettableValue<Number>> right)
+				throws QonfigInterpretationException {
+			throw new QonfigInterpretationException("Binary operator '" + theOperator + "' is not immplemented yet");
+		}
+
+		private ValueContainer<SettableValue, ? extends SettableValue<? extends Number>> mathOp(
+			ValueContainer<SettableValue, SettableValue<Number>> left, ValueContainer<SettableValue, SettableValue<Number>> right)
+				throws QonfigInterpretationException {
+			Class<?> resultType = TypeTokens.get()
+				.unwrap(TypeTokens.getRawType(TypeTokens.get().getCommonType(left.getType().getType(0), right.getType().getType(0))));
+			if (resultType == char.class || resultType == short.class || resultType == byte.class)
+				resultType = int.class;
+			Function<ModelSetInstance, SettableValue<? extends Number>> left2, right2;
+			if (!left.getType().getType(0).isPrimitive()
+				|| TypeTokens.get().unwrap(TypeTokens.getRawType(left.getType().getType(0))) != resultType) {
+				TypeConverter<Number, Number> leftConverter = (TypeConverter<Number, Number>) TypeTokens.get()
+					.getCast(left.getType().getType(0), TypeTokens.get().of(resultType));
+				TypeConverter<Number, Number> leftReverse = (TypeConverter<Number, Number>) TypeTokens.get()
+					.getCast(TypeTokens.get().of(resultType), left.getType().getType(0));
+				Class<?> fResultType = resultType;
+				left2 = msi -> left.apply(msi).transformReversible((Class<Number>) fResultType, tx -> tx.cache(false)//
+					.map(leftConverter).withReverse(leftReverse));
+			} else
+				left2 = (ValueContainer<SettableValue, SettableValue<? extends Number>>) (ValueContainer<?, ?>) left;
+			if (!right.getType().getType(0).isPrimitive()
+				|| TypeTokens.get().unwrap(TypeTokens.getRawType(right.getType().getType(0))) != resultType) {
+				TypeConverter<Number, Number> rightConverter = (TypeConverter<Number, Number>) TypeTokens.get()
+					.getCast(right.getType().getType(0), TypeTokens.get().of(resultType));
+				TypeConverter<Number, Number> rightReverse = (TypeConverter<Number, Number>) TypeTokens.get()
+					.getCast(TypeTokens.get().of(resultType), right.getType().getType(0));
+				Class<?> fResultType = resultType;
+				right2 = msi -> right.apply(msi).transformReversible((Class<Number>) fResultType, tx -> tx.cache(false)//
+					.map(rightConverter).withReverse(rightReverse));
+			} else
+				right2 = (ValueContainer<SettableValue, SettableValue<? extends Number>>) (ValueContainer<?, ?>) right;
+			if (resultType == double.class) {
+				if (theOperator.equals("%")) { // This one is special
+					return ObservableModelSet.container(msi -> {
+						SettableValue<Double> leftV = (SettableValue<Double>) left2.apply(msi);
+						SettableValue<Double> rightV = (SettableValue<Double>) right2.apply(msi);
+						return leftV.transformReversible(double.class, tx -> tx.cache(false)//
+							.combineWith(rightV)//
+							.combine((l, r) -> l % r)//
+							.replaceSourceWith((res, txv) -> {
+								long div = (long) (txv.getCurrentSource() / txv.get(rightV));
+								return div + res;
+							}, rep -> {
+								return rep.rejectWith((res, txv) -> {
+									if (Math.abs(res) >= Math.abs(txv.get(rightV)))
+										return "The result of a modulo expression must be less than the modulus";
+									return null;
+								}, true, true);
+							}));
+					}, ModelTypes.Value.forType(double.class));
+				}
+				BiFunction<Double, Double, Double> op, reverse;
+				switch (theOperator) {
+				case "+":
+					op = (l, r) -> l + r;
+					reverse = (res, r) -> res - r;
+					break;
+				case "-":
+					op = (l, r) -> l - r;
+					reverse = (res, r) -> res + r;
+					break;
+				case "*":
+					op = (l, r) -> l * r;
+					reverse = (res, r) -> res / r;
+					break;
+				case "/":
+					op = (l, r) -> l / r;
+					reverse = (res, r) -> res * r;
+					break;
+				default:
+					throw new IllegalStateException("Unimplemented binary operator '" + theOperator + "'");
+				}
+				return ObservableModelSet.container(msi -> {
+					SettableValue<Double> leftV = (SettableValue<Double>) left2.apply(msi);
+					SettableValue<Double> rightV = (SettableValue<Double>) right2.apply(msi);
+					return leftV.transformReversible(double.class, tx -> tx.cache(false)//
+						.combineWith(rightV)//
+						.combine(op)//
+						.replaceSource(reverse, null));
+				}, ModelTypes.Value.forType(double.class));
+			} else if (resultType == long.class) {
+				if (theOperator.equals("%")) { // This one is special
+					return ObservableModelSet.container(msi -> {
+						SettableValue<Long> leftV = (SettableValue<Long>) left2.apply(msi);
+						SettableValue<Long> rightV = (SettableValue<Long>) right2.apply(msi);
+						return leftV.transformReversible(long.class, tx -> tx.cache(false)//
+							.combineWith(rightV)//
+							.combine((l, r) -> l % r)//
+							.replaceSourceWith((res, txv) -> {
+								long div = txv.getCurrentSource() / txv.get(rightV);
+								return div + res;
+							}, rep -> {
+								return rep.rejectWith((res, txv) -> {
+									if (Math.abs(res) >= Math.abs(txv.get(rightV)))
+										return "The result of a modulo expression must be less than the modulus";
+									return null;
+								}, true, true);
+							}));
+					}, ModelTypes.Value.forType(long.class));
+				}
+				BiFunction<Long, Long, Long> op, reverse;
+				switch (theOperator) {
+				case "+":
+					op = (l, r) -> l + r;
+					reverse = (res, r) -> res - r;
+					break;
+				case "-":
+					op = (l, r) -> l - r;
+					reverse = (res, r) -> res + r;
+					break;
+				case "*":
+					op = (l, r) -> l * r;
+					reverse = (res, r) -> res / r;
+					break;
+				case "/":
+					op = (l, r) -> l / r;
+					reverse = (res, r) -> res * r;
+					break;
+				default:
+					throw new IllegalStateException("Unimplemented binary operator '" + theOperator + "'");
+				}
+				return ObservableModelSet.container(msi -> {
+					SettableValue<Long> leftV = (SettableValue<Long>) left2.apply(msi);
+					SettableValue<Long> rightV = (SettableValue<Long>) right2.apply(msi);
+					return leftV.transformReversible(long.class, tx -> tx.cache(false)//
+						.combineWith(rightV)//
+						.combine(op)//
+						.replaceSource(reverse, null));
+				}, ModelTypes.Value.forType(long.class));
+			} else if (resultType == int.class) {
+				if (theOperator.equals("%")) { // This one is special
+					return ObservableModelSet.container(msi -> {
+						SettableValue<Integer> leftV = (SettableValue<Integer>) left2.apply(msi);
+						SettableValue<Integer> rightV = (SettableValue<Integer>) right2.apply(msi);
+						return leftV.transformReversible(int.class, tx -> tx.cache(false)//
+							.combineWith(rightV)//
+							.combine((l, r) -> l % r)//
+							.replaceSourceWith((res, txv) -> {
+								int div = txv.getCurrentSource() / txv.get(rightV);
+								return div + res;
+							}, rep -> {
+								return rep.rejectWith((res, txv) -> {
+									if (Math.abs(res) >= Math.abs(txv.get(rightV)))
+										return "The result of a modulo expression must be less than the modulus";
+									return null;
+								}, true, true);
+							}));
+					}, ModelTypes.Value.forType(int.class));
+				}
+				BiFunction<Integer, Integer, Integer> op, reverse;
+				switch (theOperator) {
+				case "+":
+					op = (l, r) -> l + r;
+					reverse = (res, r) -> res - r;
+					break;
+				case "-":
+					op = (l, r) -> l - r;
+					reverse = (res, r) -> res + r;
+					break;
+				case "*":
+					op = (l, r) -> l * r;
+					reverse = (res, r) -> res / r;
+					break;
+				case "/":
+					op = (l, r) -> l / r;
+					reverse = (res, r) -> res * r;
+					break;
+				default:
+					throw new IllegalStateException("Unimplemented binary operator '" + theOperator + "'");
+				}
+				return ObservableModelSet.container(msi -> {
+					SettableValue<Integer> leftV = (SettableValue<Integer>) left2.apply(msi);
+					SettableValue<Integer> rightV = (SettableValue<Integer>) right2.apply(msi);
+					return leftV.transformReversible(int.class, tx -> tx.cache(false)//
+						.combineWith(rightV)//
+						.combine(op)//
+						.replaceSource(reverse, null));
+				}, ModelTypes.Value.forType(int.class));
+			} else
+				throw new QonfigInterpretationException("Cannot apply binary operator '" + theOperator + " to arguments of type "
+					+ left.getType().getType(0) + " and " + right.getType().getType(0));
+		}
+
+		@Override
+		public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ObservableModelSet models,
+			ClassView classView) throws QonfigInterpretationException {
+			throw new QonfigInterpretationException("Not supported for binary operators");
+		}
+
+		@Override
+		public String toString() {
+			return theLeft + " " + theOperator + " " + theRight;
+		}
 	}
 
 	public static class ConditionalExpression implements ObservableExpression {

@@ -607,6 +607,14 @@ public abstract class ModelType<M> implements Named {
 			return forType(TypeTokens.get().of(type));
 		}
 
+		public <V> ModelInstanceType.SingleTyped<M, V, ?> forType(Class<? super V> rawType, TypeToken<?>... parameters) {
+			return forType(TypeTokens.get().keyFor(rawType).parameterized(parameters));
+		}
+
+		public <V> ModelInstanceType.SingleTyped<M, V, ?> forType(Class<? super V> rawType, Class<?>... parameters) {
+			return forType(TypeTokens.get().keyFor(rawType).parameterized(parameters));
+		}
+
 		public <V> ModelInstanceType.SingleTyped<M, ? extends V, ?> below(TypeToken<V> type) {
 			return forType(TypeTokens.get().getExtendsWildcard(type));
 		}

@@ -25,8 +25,9 @@
 			<label>External Value 1:</label>
 			<label value="extModel.value1" />
 		</box>
-		<table region="west" rows="appModel.list1" selection="appModel.value1">
+		<table region="west" rows="appModel.list1" selection="appModel.value1" value-name="row" column-value-name="column">
 			<column name="Value" />
+			<column name="Value + 1" value="row+1" />
 		</table>
 		<box layout="inline" orientation="vertical" main-align="center" cross-align="center">
 			<label>Selected</label>

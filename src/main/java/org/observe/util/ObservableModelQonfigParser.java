@@ -221,7 +221,7 @@ public class ObservableModelQonfigParser {
 		QonfigInterpreter.Builder observeInterpreter = interpreter.forToolkit(obsTk);
 		observeInterpreter.createWith("imports", ClassView.class, (el, session) -> {
 			ClassView.Builder builder = ClassView.build();
-			for (QonfigElement imp : el.getChildrenByRole().get(obsTk.getChild("imports", "import").getDeclared())) {
+			for (QonfigElement imp : session.getChildren("import")) {
 				if (imp.getValueText().endsWith(".*"))
 					builder.withWildcardImport(imp.getValueText().substring(0, imp.getValueText().length() - 2));
 				else
@@ -270,9 +270,9 @@ public class ObservableModelQonfigParser {
 				throws QonfigInterpretationException {
 				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.get("model");
 				session.put("config-model", true);
-				String configName = el.getAttributeText(obsTk.getAttribute("config", "config-name"));
+				String configName = session.getAttributeText("config-name");
 				Function<ModelSetInstance, SettableValue<BetterFile>> configDir;
-				ObservableExpression configDirX = el.getAttribute(obsTk.getAttribute("config", "config-dir"), ObservableExpression.class);
+				ObservableExpression configDirX = session.getAttribute("config-dir", ObservableExpression.class);
 				if (configDirX != null)
 					configDir = configDirX.evaluate(ModelTypes.Value.forType(BetterFile.class), model, (ClassView) session.get("imports"));
 				else {
@@ -285,7 +285,7 @@ public class ObservableModelQonfigParser {
 					};
 				}
 				List<String> oldConfigNames = new ArrayList<>(2);
-				for (QonfigElement ch : el.getChildrenByRole().get(obsTk.getChild("config", "old-config-name").getDeclared()))
+				for (QonfigElement ch : session.getChildren("old-config-name"))
 					oldConfigNames.add(ch.getValueText());
 				model.setModelConfiguration(msi -> {
 					BetterFile configDirFile = configDir == null ? null : configDir.apply(msi).get();
@@ -982,7 +982,7 @@ public class ObservableModelQonfigParser {
 				else {
 					String pathBuilder = name;
 					QonfigElement modelEl = element.getParent();
-					while (modelEl.getParent() != null && modelEl.getParent().getType().getName().equals("ext-model")) {
+					while (modelEl != null && modelEl.getType().getName().equals("ext-model")) {
 						pathBuilder = modelEl.getAttributeText(obsTk.getAttribute("ext-model", "name")) + "." + pathBuilder;
 						modelEl = modelEl.getParent();
 					}

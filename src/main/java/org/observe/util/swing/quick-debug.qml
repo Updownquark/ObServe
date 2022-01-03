@@ -48,7 +48,7 @@
 		</models>
 	</head>
 	<tabs>
-		<box tab-name="Components" layout="inline" orientation="vertical" main-align="justify" cross-align="justify">
+		<box tab-id="components" tab-name="Components" layout="inline" orientation="vertical" main-align="justify" cross-align="justify">
 			<box layout="inline" orientation="horizontal" main-align="leading">
 			</box>
 			<tree-table root="ext.ui.getComponent()" children="parent->parent.getChildren()" selection="debug.selectedComponent"

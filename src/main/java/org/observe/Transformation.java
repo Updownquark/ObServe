@@ -672,7 +672,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 
 		/**
 		 * An abbreviated constructor
-		 * 
+		 *
 		 * @param transformation The transformation producing result values that uses this reverse
 		 * @param reverse A function to produce source values from result value inputs
 		 * @param stateful Whether the reverse function depends on the previous source value
@@ -712,7 +712,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 			isStateful = stateful;
 			if (inexactReversible && !transformation.getArgs().isEmpty()) {
 				throw new IllegalArgumentException(
-					"Inexact reversal is not supported with combination." + "It breaks equivalence-related contracts.");
+					"Inexact reversal is not supported with combination.  It breaks equivalence-related contracts.");
 			}
 			isInexactReversible = inexactReversible;
 		}
