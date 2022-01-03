@@ -2,6 +2,7 @@ package org.observe.test;
 
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Cursor;
 import java.awt.Dialog.ModalityType;
 import java.awt.EventQueue;
 import java.awt.Image;
@@ -34,8 +35,6 @@ import org.qommons.BiTuple;
 import org.qommons.QommonsUtils;
 import org.qommons.collect.BetterList;
 import org.qommons.io.Format;
-
-import com.sun.glass.ui.Cursor;
 
 /** A Swing panel to interface with an {@link InteractiveTestingService} to view tests, execute them, and view test results */
 public class DefaultInteractiveTestingPanel extends JPanel {
@@ -111,7 +110,7 @@ public class DefaultInteractiveTestingPanel extends JPanel {
 				})))//
 				.addLabel(null, theUserWait, Format.TEXT, lbl -> {
 					lbl.visibleWhen(theUserWait.map(w -> w != null));
-					lbl.decorate(deco -> deco.underline().withForeground(Color.blue).withCursor(Cursor.CURSOR_POINTING_HAND));
+					lbl.decorate(deco -> deco.underline().withForeground(Color.blue).withCursor(Cursor.HAND_CURSOR));
 					lbl.onClick(evt -> {
 						if (SwingUtilities.isLeftMouseButton(evt))
 							theUI.focusDialog();
@@ -259,18 +258,24 @@ public class DefaultInteractiveTestingPanel extends JPanel {
 			.addHPanel(null, new JustifiedBoxLayout(false).mainCenter(), buttons -> {
 				buttons.fill()//
 				.addButton(null, __ -> {
+							if (theCurrentResult == null)
+								return;
 					((UIResult<Object>) theCurrentResult).fulfilled(true);
 					theCurrentResult = null;
 					isClosing.getAndIncrement();
 					dialog.setVisible(false);
 				}, btn -> btn.withText(theYesLabel).visibleWhen(theYesVisible))//
 				.addButton(null, __ -> {
+							if (theCurrentResult == null)
+								return;
 					((UIResult<Object>) theCurrentResult).fulfilled(false);
 					theCurrentResult = null;
 					isClosing.getAndIncrement();
 					dialog.setVisible(false);
 				}, btn -> btn.withText(theNoLabel).visibleWhen(theNoVisible))//
 				.addButton("Cancel Testing", __ -> {
+							if (theCurrentResult == null)
+								return;
 					isCanceled = true;
 					((UIResult<Object>) theCurrentResult).failed(new TestCanceledException());
 					theCurrentResult = null;
