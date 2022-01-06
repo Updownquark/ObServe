@@ -1,5 +1,7 @@
 package org.observe.util.swing;
 
+import static org.observe.util.swing.TableContentControl.textMatches;
+
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -239,23 +241,23 @@ public interface TableContentControl {
 		TableContentControl[] splitFilters = new TableContentControl[split.length];
 		for (int i = 0; i < split.length; i++) {
 			TableContentControl splitFilter;
-			TableContentControl tempFilter;
 			int colonIndex = split[i].indexOf(':');
 			if (colonIndex > 0) {
 				String category = split[i].substring(0, colonIndex);
 				if (colonIndex < split[i].length() - 1) {
 					String catFilter = split[i].substring(colonIndex + 1);
-					splitFilter = new CategoryFilter(category, _parseFilterElement(catFilter));
 					if (category.equalsIgnoreCase("sort")) {
-						tempFilter = new RowSorter(Arrays.asList(catFilter.split(",")));
-						splitFilter = splitFilter.or(tempFilter);
+						splitFilter = new RowSorter(Arrays.asList(catFilter.split(",")));
 					} else if (category.equalsIgnoreCase("columns")) {
-						tempFilter = new ColumnSorter(Arrays.asList(catFilter.split(",")));
-						splitFilter = splitFilter.or(tempFilter);
+						splitFilter = new ColumnSorter(Arrays.asList(catFilter.split(",")));
+					} else {
+						splitFilter = new CategoryFilter(category, _parseFilterElement(catFilter))//
+							.or(_parseFilterElement(split[i])); // Also search as if the colon was part of the search
 					}
-				} else
-					splitFilter = new CategoryFilter(category, new EmptyFilter());
-				splitFilter.or(_parseFilterElement(split[i])); // Also search as if the colon was part of the search
+				} else {
+					splitFilter = new CategoryFilter(category, new EmptyFilter())//
+						.or(_parseFilterElement(split[i])); // Also search as if the colon was part of the search
+				}
 			} else
 				splitFilter = _parseFilterElement(split[i]);
 			splitFilters[i] = splitFilter;
@@ -480,6 +482,33 @@ public interface TableContentControl {
 		}
 	};
 
+	static int[] textMatches(CharSequence matcher, CharSequence toSearch, int searchStart) {
+		int c, m, matchStart = 0;
+		for (c = searchStart, m = 0; c < toSearch.length(); c++) {
+			char matchCh = matcher.charAt(m);
+			char testCh = toSearch.charAt(c);
+			int diff = matchCh - testCh;
+			boolean match;
+			if (diff == 0)
+				match = true;
+			else if (diff == StringUtils.a_MINUS_A && matchCh >= 'a' && matchCh <= 'z')
+				match = true;
+			else if (diff == -StringUtils.a_MINUS_A && matchCh >= 'A' && matchCh <= 'Z')
+				match = true;
+			else if (Character.isWhitespace(testCh) && !Character.isWhitespace(matchCh)) {
+				continue;
+			} else
+				match = false;
+			if (match) {
+				m++;
+				if (m == matcher.length())
+					return new int[] { matchStart, c + 1 };
+			} else
+				matchStart = m = 0;
+		}
+		return null;
+	}
+
 	public static class SimpleFilter implements TableContentControl {
 		private final String theMatcher;
 
@@ -493,21 +522,18 @@ public interface TableContentControl {
 		public int[][] findMatches(ValueRenderer<?> category, CharSequence toSearch) {
 			if (!category.searchGeneral())
 				return null;
-			int c, textIdx;
+			int[] match;
+			int lastMatch = 0;
 			SortedIntArraySet matches = null;
-			for (c = 0, textIdx = 0; c < toSearch.length(); c++) {
-				if (Character.toLowerCase(toSearch.charAt(c)) == theMatcher.charAt(textIdx)) {
-					textIdx++;
-					if (textIdx == theMatcher.length()) {
-						if (matches == null)
-							matches = SortedIntArraySet.get();
-						matches.add(new int[] { c - textIdx + 1, c + 1 });
-						textIdx = 0;
-					}
-				} else
-					textIdx = 0;
-
-			}
+			do {
+				match = textMatches(theMatcher, toSearch, lastMatch);
+				if (match != null) {
+					lastMatch = match[1];
+					if (matches == null)
+						matches = SortedIntArraySet.get();
+					matches.add(match);
+				}
+			} while (match != null);
 			return matches == null ? NO_MATCH : matches.flush();
 		}
 
@@ -532,12 +558,38 @@ public interface TableContentControl {
 		}
 	}
 
-	public static class RootFilter extends OrFilter {
+	public static class RootFilter implements TableContentControl {
 		private final String theText;
+		private final TableContentControl theFilter;
 
-		public RootFilter(String text, TableContentControl complexFilter) {
-			super(complexFilter, new SimpleFilter(text));
+		public RootFilter(String text, TableContentControl filter) {
 			theText = text;
+			theFilter = filter;
+		}
+
+		@Override
+		public int[][][] findMatches(List<? extends ValueRenderer<?>> categories, CharSequence[] texts) {
+			return theFilter.findMatches(categories, texts);
+		}
+
+		@Override
+		public int[][] findMatches(ValueRenderer<?> category, CharSequence text) {
+			return theFilter.findMatches(category, text);
+		}
+
+		@Override
+		public boolean isSearch() {
+			return theFilter.isSearch();
+		}
+
+		@Override
+		public List<String> getRowSorting() {
+			return theFilter.getRowSorting();
+		}
+
+		@Override
+		public List<String> getColumnSorting() {
+			return theFilter.getColumnSorting();
 		}
 
 		@Override
@@ -627,16 +679,23 @@ public interface TableContentControl {
 		public static boolean categoryMatches(String category, String test) {
 			int c, t;
 			for (c = 0, t = 0; c < category.length() && t < test.length();) {
-				if (Character.isWhitespace(test.charAt(t)))
+				if (t == test.length())
+					return false;
+				char catCh = category.charAt(c);
+				char testCh = test.charAt(t);
+				int diff = catCh - testCh;
+				if (diff == 0) {//
+				} else if (diff == StringUtils.a_MINUS_A && catCh >= 'a' && catCh <= 'z') {//
+				} else if (diff == -StringUtils.a_MINUS_A && catCh >= 'A' && catCh <= 'Z') {//
+				} else if (Character.isWhitespace(testCh) && !Character.isWhitespace(catCh)) {//
 					t++;
-				else if (Character.toLowerCase(category.charAt(c)) != Character.toLowerCase(test.charAt(t)))
-					break;
-				else {
-					c++;
-					t++;
-				}
+					continue;
+				} else
+					return false;
+				c++;
+				t++;
 			}
-			return c == category.length(); // Don't need to match the entire text, just the start
+			return true;
 		}
 
 		@Override
@@ -825,12 +884,16 @@ public interface TableContentControl {
 		}
 		int end = wholeStart;
 		int wholeEnd = end;
+		boolean trivial = true;
 		while (end < text.length() && text.charAt(end) >= '0' && text.charAt(end) <= '9') {
+			if (trivial && text.charAt(end) != '0')
+				trivial = false;
 			end++;
 			wholeEnd++;
 		}
 		int decimalStart = end, decimalEnd = end;
 		if (end < text.length() && text.charAt(end) == '.') {
+			trivial = false;
 			end++;
 			decimalStart++;
 			decimalEnd++;
@@ -843,6 +906,8 @@ public interface TableContentControl {
 			return null;
 		int expStart = end, expEnd = end;
 		if (end < text.length() && (text.charAt(end) == 'E' || text.charAt(end) == 'e')) {
+			if (trivial)
+				return null;
 			end++;
 			expStart++;
 			expEnd++;
@@ -1030,7 +1095,8 @@ public interface TableContentControl {
 			for (int i = 0; i < text.length();) {
 				TimeUtils.ParsedTime time;
 				try {
-					time = TimeUtils.parseFlexFormatTime(text.subSequence(i, text.length()), false, false, null);
+					time = TimeUtils.parseFlexFormatTime(//
+						text.subSequence(i, text.length()), false, false, null);
 				} catch (ParseException e) {
 					e.printStackTrace();
 					return NO_MATCH;
