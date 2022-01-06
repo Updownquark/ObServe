@@ -148,7 +148,7 @@ public class ModelTypes {
 		@Override
 		protected Function<ObservableAction, ObservableAction> convertType(ModelInstanceType<ObservableAction, ?> target,
 			Function<Object, Object>[] casts, Function<Object, Object>[] reverses) {
-			return src -> src.map(casts[0]);
+			return src -> src.map(target.getType(0), casts[0]);
 		}
 	}
 

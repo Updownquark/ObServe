@@ -35,7 +35,7 @@ public class ObservableTextArea<E> extends JEditorPane {
 	 */
 	public ObservableTextArea(SettableValue<E> value, Format<E> format, Observable<?> until) {
 		theEditor = new ObservableTextEditor<E>(this, value, format, until, //
-			e -> super.setEnabled(e), //
+			e -> super.setEditable(e), //
 			tt -> super.setToolTipText(tt)) {
 			@Override
 			protected ObservableTextEditor<E> setText(String text) {

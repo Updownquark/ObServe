@@ -275,7 +275,7 @@ public abstract class ModelType<M> implements Named {
 							return null;
 						}
 					}
-					if (reversible && !params[i].isAssignableFrom(target.getType(i))) {
+					if (reversible) {
 						try {
 							reverses[i] = (TypeConverter<Object, Object>) TypeTokens.get().getCast(getType(i), params[i], true);
 						} catch (IllegalArgumentException e) {

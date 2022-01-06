@@ -32,11 +32,12 @@ public interface ObservableAction<T> extends TypedValueContainer<T> {
 
 	/**
 	 * @param <V> The type for the new action
+	 * @param targetType The type of the target action
 	 * @param map A function to produce values of the this action's type
 	 * @return The mapped action
 	 */
-	default <V> ObservableAction<V> map(Function<? super V, ? extends T> map) {
-		return new MappedObservableAction<>(this, map);
+	default <V> ObservableAction<V> map(TypeToken<V> targetType, Function<? super T, ? extends V> map) {
+		return new MappedObservableAction<>(this, targetType, map);
 	}
 
 	/**
@@ -173,36 +174,36 @@ public interface ObservableAction<T> extends TypedValueContainer<T> {
 	}
 
 	/**
-	 * Implements {@link ObservableAction#map(Function)}
-	 * 
+	 * Implements {@link ObservableAction#map(TypeToken, Function)}
+	 *
 	 * @param <T> The type of the source action
 	 * @param <V> The type of the mapped action (this)
 	 */
 	class MappedObservableAction<T, V> implements ObservableAction<V> {
 		private final ObservableAction<T> theSource;
-		private final Function<? super V, ? extends T> theMap;
+		private final TypeToken<V> theTargetType;
+		private final Function<? super T, ? extends V> theMap;
 
-		public MappedObservableAction(ObservableAction<T> source, Function<? super V, ? extends T> map) {
+		public MappedObservableAction(ObservableAction<T> source, TypeToken<V> targetType, Function<? super T, ? extends V> map) {
 			theSource = source;
+			theTargetType = targetType;
 			theMap = map;
 		}
 
 		@Override
 		public TypeToken<V> getType() {
-			// TODO Auto-generated method stub
-			return null;
+			return theTargetType;
 		}
 
 		@Override
 		public V act(Object cause) throws IllegalStateException {
-			// TODO Auto-generated method stub
-			return null;
+			T sourceRes = theSource.act(cause);
+			return theMap.apply(sourceRes);
 		}
 
 		@Override
 		public ObservableValue<String> isEnabled() {
-			// TODO Auto-generated method stub
-			return null;
+			return theSource.isEnabled();
 		}
 
 		@Override
