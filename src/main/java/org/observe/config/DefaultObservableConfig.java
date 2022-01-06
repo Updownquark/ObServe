@@ -180,8 +180,7 @@ class DefaultObservableConfig extends AbstractObservableConfig {
 				before == null ? null : Objects.requireNonNull(before.getParentChildRef()), //
 					first).getElementId();
 		((DefaultObservableConfig) child).initialize(this, el);
-		if (!child.isTrivial())
-			fire(CollectionChangeType.add, move, BetterList.of(child), child.getName(), null);
+		fire(CollectionChangeType.add, move, BetterList.of(child), child.getName(), null);
 	}
 
 	@Override

@@ -1099,23 +1099,18 @@ public interface Observable<T> extends Lockable, Identifiable {
 	 *
 	 * @param <V> The super type of the observables being or-ed
 	 */
-	class OrObservable<V> implements Observable<V> {
+	class OrObservable<V> extends AbstractIdentifiable implements Observable<V> {
 		private final List<? extends Observable<? extends V>> theObservables;
-
-		private Object theIdentity;
 
 		public OrObservable(List<? extends Observable<? extends V>> obs) {
 			this.theObservables = obs;
 		}
 
 		@Override
-		public Object getIdentity() {
-			if (theIdentity == null) {
-				theIdentity = Identifiable.idFor(theObservables, () -> {
-					return StringUtils.conversational(", ", null).print(theObservables, StringBuilder::append).toString();
-				}, () -> theObservables.hashCode(), other -> theObservables.equals(other));
-			}
-			return theIdentity;
+		protected Object createIdentity() {
+			return Identifiable.idFor(theObservables, () -> {
+				return StringUtils.conversational(", ", null).print(theObservables, StringBuilder::append).toString();
+			}, () -> theObservables.hashCode(), other -> theObservables.equals(other));
 		}
 
 		@Override

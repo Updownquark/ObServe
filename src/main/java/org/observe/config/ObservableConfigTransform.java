@@ -116,7 +116,8 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 				try (Transaction ceT = newParent == null ? Transaction.NONE : newParent.lock(false, null)) {
 					initConfig(evt.getNewValue(), evt, initialized[0] ? Observable.constant(null) : findRefs);
 					if (listen && newParent != null)
-						newParent.watch("").takeUntil(theUntil).act(this::onChange);
+						newParent.watch("").takeUntil(theUntil).act(LambdaUtils.printableConsumer(this::onChange, //
+							() -> ObservableConfigTransform.this.getClass().getSimpleName() + "(" + newParent + ").onChange()", null));
 				}
 			});
 	}

@@ -49,6 +49,7 @@ import org.observe.config.ObservableConfig.ObservableConfigPersistence;
 import org.observe.config.ObservableConfigPath;
 import org.observe.config.SyncValueSet;
 import org.observe.util.TypeTokens;
+import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
 import org.qommons.QommonsUtils.TimePrecision;
 import org.qommons.TimeUtils;
@@ -342,12 +343,13 @@ public class AppPopulation {
 				}
 			} else {
 				boolean[] printed = new boolean[1];
-				config.watch(ObservableConfigPath.buildPath(ObservableConfigPath.ANY_NAME).multi(true).build()).act(__ -> {
-					if (!printed[0]) {
-						System.out.println("WARNING: This application has not configured config persistence");
-						printed[0] = true;
-					}
-				});
+				config.watch(ObservableConfigPath.buildPath(ObservableConfigPath.ANY_NAME).multi(true).build())
+					.act(LambdaUtils.printableConsumer(__ -> {
+						if (!printed[0]) {
+							System.out.println("WARNING: This application has not configured config persistence");
+							printed[0] = true;
+						}
+					}, "App Persistence", null));
 				if (theErrorReportLink != null || theErrorReportInstructions != null) {
 					File errorFile = new File("App.errors.txt");
 					new SystemOutputHandler(null, errorFile);

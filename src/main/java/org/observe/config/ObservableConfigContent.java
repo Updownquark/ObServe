@@ -26,6 +26,7 @@ import org.observe.config.ObservableConfigPath.ObservableConfigPathElement;
 import org.observe.util.TypeTokens;
 import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
+import org.qommons.LambdaUtils;
 import org.qommons.Lockable;
 import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
@@ -78,25 +79,26 @@ public class ObservableConfigContent {
 		void setInUse(boolean inUse) {
 			try (Transaction t = theRoot.lock(false, null)) {
 				if (inUse) {
-					thePathSubscription = theRoot.watch(ObservableConfigPath.ANY_DEPTH).act(evt -> {
-						int size = evt.relativePath.size();
-						if (size > thePathElements.length)
-							return;
-						int pathIndex = 0;
-						ObservableConfigEvent pathChange = evt;
-						boolean childChange = false;
-						while (pathIndex < thePathElements.length && pathIndex < evt.relativePath.size()) {
-							if (evt.relativePath.get(pathIndex) != thePathElements[pathIndex])
-								break;
-							childChange = true;
-							pathChange = pathChange.asFromChild();
-							thePathElementStamps[pathIndex] = thePathElements[pathIndex].getStamp();
-							pathIndex++;
-						}
-						try (Transaction ct = childChange ? pathChange.use() : Transaction.NONE) {
-							handleChange(pathIndex, pathChange, evt);
-						}
-					});
+					thePathSubscription = theRoot.watch(ObservableConfigPath.ANY_DEPTH)
+						.act(LambdaUtils.<ObservableConfigEvent> printableConsumer(evt -> {
+							int size = evt.relativePath.size();
+							if (size > thePathElements.length)
+								return;
+							int pathIndex = 0;
+							ObservableConfigEvent pathChange = evt;
+							boolean childChange = false;
+							while (pathIndex < thePathElements.length && pathIndex < evt.relativePath.size()) {
+								if (evt.relativePath.get(pathIndex) != thePathElements[pathIndex])
+									break;
+								childChange = true;
+								pathChange = pathChange.asFromChild();
+								thePathElementStamps[pathIndex] = thePathElements[pathIndex].getStamp();
+								pathIndex++;
+							}
+							try (Transaction ct = childChange ? pathChange.use() : Transaction.NONE) {
+								handleChange(pathIndex, pathChange, evt);
+							}
+						}, () -> thePath.toString(), null));
 				} else {
 					thePathSubscription.unsubscribe();
 					thePathSubscription = null;

@@ -924,6 +924,8 @@ public interface ObservableConfigFormat<E> {
 			@Override
 			public SyncValueSet<E> parse(ObservableConfigParseContext<SyncValueSet<E>> ctx) throws ParseException {
 				if (ctx.getPreviousValue() == null) {
+					// The listen parameter is false here, because the root observable structure will cause the trickle-down of events
+					// via element parsing. The root structure, generated via ObservableConfig.asValue(), is called with listen=true
 					return new ObservableConfigTransform.ObservableConfigEntityValues<>(ctx.getLock(), ctx.getSession(), ctx.getConfig(),
 						trivial -> ctx.getConfig(true, trivial), elementFormat, childName, ctx.getUntil(), false, ctx.findReferences());
 				} else {
@@ -1693,13 +1695,11 @@ public interface ObservableConfigFormat<E> {
 				ctx.getConfig(true, true).setTrivial(true);
 				ctx.findReferences().act(__ -> {
 					ObservableConfig parent = ctx.getConfig(true, true);
-					if (parent != null)
-						parent = parent.getParent();
+					// if (parent != null) //Why did I have this here?
+					// parent = parent.getParent();
 					while (parent != null) {
 						Object item = parent.getParsedItem(ctx.getSession());
-						if (item == null)
-							break;
-						else if (TypeTokens.get().isInstance(theType, item)) {
+						if (item != null && TypeTokens.get().isInstance(theType, item)) {
 							exec.value = (T) item;
 							break;
 						}
