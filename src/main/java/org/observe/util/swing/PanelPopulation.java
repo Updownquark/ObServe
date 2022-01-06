@@ -2698,7 +2698,7 @@ public class PanelPopulation {
 						getEditor().setSelectedIndex(-1);
 					} else {
 						Tab tab = theTabs.get(evt.getNewValue());
-						if (theSelectedTab == tab || !tab.component.isVisible())
+						if (theSelectedTab == tab)
 							return;
 						getEditor().setSelectedComponent(tab.component);
 					}
