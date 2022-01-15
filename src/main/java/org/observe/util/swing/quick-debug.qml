@@ -3,7 +3,7 @@
 <quick
 	uses:base="quick-base.qtd"
 	with-extension="window"
-	x="ext.debugX" y="ext.debugY" width="ext.debugWidth" height="ext.debugHeight" visible="ext.debugVisible">
+	x="ext.x" y="ext.y" width="ext.width" height="ext.height" visible="ext.visible">
 	<head>
 		<imports>
 			<import>org.observe.util.swing.QuickSwingParser</import>
@@ -18,7 +18,7 @@
 				<ext-value name="width" type="int" />
 				<ext-value name="height" type="int" />
 				<ext-value name="visible" type="boolean" />
-				<ext-value name="ui" type="QuickSwingParser.QuickUiDef" />
+				<ext-value name="ui" type="QuickComponent" />
 				<ext-value name="cursorX" type="int" />
 				<ext-value name="cursorY" type="int" />
 			</ext-model>
@@ -27,12 +27,12 @@
 			</model>
 			<model name="internal">
 				<value name="boundsToggle" type="boolean">true</value>
-				<columns name="boundsColumns" type="QuickComponent">
-					<column name="Top Left" value="QuickComponent::getLocation" />
-					<column name="Size" value="QuickComponent::getSize" />
-					<column name="Min" value="QuickComponent::getMinimumSize" />
-					<column name="Pref" value="QuickComponent::getPreferredSize" />
-					<column name="Max" value="QuickComponent::getMaximumSize" />
+				<columns name="boundsColumns" type="QuickComponent" value-name="row" column-value-name="col">
+					<column name="Top Left" value="row.getLocation()" />
+					<column name="Size" value="row.getSize()" />
+					<column name="Min" value="row.getMinimumSize()" />
+					<column name="Pref" value="row.getPreferredSize()" />
+					<column name="Max" value="row.getMaximumSize()" />
 				</columns>
 				<transform name="toggleBoundsColumns" source="boundsToggle">
 					<map-to function="t->t ? boundsColumns : null" />
@@ -51,8 +51,8 @@
 		<box tab-id="components" tab-name="Components" layout="inline" orientation="vertical" main-align="justify" cross-align="justify">
 			<box layout="inline" orientation="horizontal" main-align="leading">
 			</box>
-			<tree-table root="ext.ui.getComponent()" children="parent->parent.getChildren()" selection="debug.selectedComponent"
-				columns="componentColumns">
+			<tree-table root="ext.ui" value-name="row" column-value-name="col" children="row.getChildren()" parent="row.getParent()"
+				selection="debug.selectedComponent" columns="internal.componentColumns">
 			</tree-table>
 		</box>
 	</tabs>

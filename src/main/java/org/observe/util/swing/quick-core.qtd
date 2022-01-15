@@ -25,17 +25,17 @@
 		<add-on name="h-sizeable">
 			<attribute name="width" type="size" specify="optional" />
 			<attribute name="min-width" type="size" specify="optional" />
-			<attribute name="min-pref-width" type="size" specify="optional" />
+			<!--<attribute name="min-pref-width" type="size" specify="optional" />-->
 			<attribute name="pref-width" type="size" specify="optional" />
-			<attribute name="max-pref-width" type="size" specify="optional" />
+			<!--<attribute name="max-pref-width" type="size" specify="optional" />-->
 			<attribute name="max-width" type="size" specify="optional" />
 		</add-on>
 		<add-on name="v-sizeable">
 			<attribute name="height" type="size" specify="optional" />
 			<attribute name="min-height" type="size" specify="optional" />
-			<attribute name="min-pref-height" type="size" specify="optional" />
+			<!--<attribute name="min-pref-height" type="size" specify="optional" />-->
 			<attribute name="pref-height" type="size" specify="optional" />
-			<attribute name="max-pref-height" type="size" specify="optional" />
+			<!--<attribute name="max-pref-height" type="size" specify="optional" />-->
 			<attribute name="max-height" type="size" specify="optional" />
 		</add-on>
 		<add-on name="generic-sizeable">

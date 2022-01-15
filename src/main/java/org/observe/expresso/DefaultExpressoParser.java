@@ -333,7 +333,7 @@ public class DefaultExpressoParser implements ExpressoParser {
 			// Other names?
 			BetterList<String> nameSequence = extractNameSequence(expression, //
 				BetterTreeList.<String> build().safe(false).build());
-			return new NameExpression(nameSequence);
+			return new NameExpression(null, nameSequence);
 			// Expression types
 		case "assignment":
 			//					TypedStatement<E, ? extends X> leftHand = evaluate(//
@@ -354,6 +354,57 @@ public class DefaultExpressoParser implements ExpressoParser {
 			//							expr = modifyPrimary(expression, expr, expression.getComponents().get(i), env, OBJECT);
 			//					}
 			//					return (TypedStatement<E, ? extends X>) expr;
+			ObservableExpression base = null;
+			for (Expression ex : expression.getComponents()) {
+				if (base == null) {
+					base = _parse(expression.getComponents().getFirst());
+					continue;
+				}
+				ex = ex.getComponents().getFirst();
+				switch (ex.getType()) {
+				case "classInstanceCreationExpression_lf_primary":
+					throw new ExpressoParseException(expression, "Expression type '" + ex.getType() + "' not implemented yet");
+				case "fieldAccess_lf_primary":
+					base = new NameExpression(base, BetterList.of(ex.getComponents().getLast().getText()));
+					break;
+				case "arrayAccess_lf_primary":
+					throw new ExpressoParseException(expression, "Expression type '" + ex.getType() + "' not implemented yet");
+				case "methodInvocation_lf_primary":
+					if (ex.getComponent("typeArguments") != null) {
+						List<Expression> typeArgExprs = ex.getComponents("typeArguments", "typeArgumentList", "typeArgument");
+						typeArgs = new ArrayList<>(typeArgExprs.size());
+						for (Expression tae : typeArgExprs) {
+							for (Expression taeChild : tae.getComponents())
+								typeArgs.add(taeChild.getText());
+						}
+					} else
+						typeArgs = null;
+					if (ex.getComponent("argumentList") != null) {
+						List<Expression> argExprs = ex.getComponents("argumentList", "expression");
+						args = new ArrayList<>(argExprs.size());
+						for (Expression arg : argExprs)
+							args.add(_parse(arg));
+					} else
+						args = null;
+					base = new MethodExpression(base, ex.getComponent("Identifier").getText(), typeArgs, args);
+					break;
+				case "methodReference_lf_primary":
+					if (ex.getComponent("typeArguments") != null) {
+						List<Expression> typeArgExprs = ex.getComponents("typeArguments", "typeArgumentList", "typeArgument");
+						typeArgs = new ArrayList<>(typeArgExprs.size());
+						for (Expression tae : typeArgExprs) {
+							for (Expression taeChild : tae.getComponents())
+								typeArgs.add(taeChild.getText());
+						}
+					} else
+						typeArgs = null;
+					base = new MethodReferenceExpression(base, ex.getComponent("Identifier").getText(), typeArgs);
+					break;
+				default:
+					throw new ExpressoParseException(expression, "Unrecognized primary operator: '" + ex.getType());
+				}
+			}
+			return base;
 		case "primaryNoNewArray":
 		case "primaryNoNewArray_lfno_primary":
 		case "primaryNoNewArray_lfno_arrayAccess":
@@ -415,6 +466,7 @@ public class DefaultExpressoParser implements ExpressoParser {
 			//		}
 			//		return arrayCreate(expression, Collections.emptyList(), values);
 			// Ternary operation types
+			throw new ExpressoParseException(expression, "Expression type '" + expression.getType() + "' not implemented yet");
 		case "conditionalExpression":
 			if (expression.getComponents().size() == 1)
 				return _parse(expression.getComponents().getFirst());
@@ -969,10 +1021,16 @@ public class DefaultExpressoParser implements ExpressoParser {
 	}
 
 	public static class NameExpression implements ObservableExpression {
+		private final ObservableExpression theContext;
 		private final BetterList<String> theNames;
 
-		public NameExpression(BetterList<String> names) {
+		public NameExpression(ObservableExpression ctx, BetterList<String> names) {
+			theContext = ctx;
 			theNames = names;
+		}
+
+		public ObservableExpression getContext() {
+			return theContext;
 		}
 
 		public BetterList<String> getNames() {
@@ -988,7 +1046,11 @@ public class DefaultExpressoParser implements ExpressoParser {
 		@Override
 		public <M, MV extends M> ObservableModelSet.ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
 			ObservableModelSet models, ClassView classView) throws QonfigInterpretationException {
-			ValueContainer<?, ?> mv = models.get(theNames.getFirst(), false);
+			ValueContainer<?, ?> mv = null;
+			if (theContext != null)
+				mv = theContext.evaluate(ModelTypes.Value.any(), models, classView);
+			if (mv == null)
+				mv = models.get(theNames.getFirst(), false);
 			if (mv != null)
 				return evaluateModel(//
 					mv, 1, new StringBuilder(theNames.get(0)), type, models);

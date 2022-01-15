@@ -113,6 +113,7 @@ public class QuickSwingParser {
 
 	public static class QuickComponent {
 		private final QuickComponentDef theDefinition;
+		private final QuickComponent.Builder theParent;
 		private final Component theComponent;
 		private final Map<QonfigAttributeDef, Object> theAttributeValues;
 		private final ObservableCollection<QuickComponent> theChildren;
@@ -120,10 +121,11 @@ public class QuickSwingParser {
 		private ObservableValue<Point> theLocation;
 		private ObservableValue<Dimension> theSize;
 
-		public QuickComponent(QuickComponentDef definition, Component component, Map<QonfigAttributeDef, Object> attributeValues,
-			ObservableCollection<QuickComponent> children) {
+		public QuickComponent(QuickComponentDef definition, QuickComponent.Builder parent, Component component,
+			Map<QonfigAttributeDef, Object> attributeValues, ObservableCollection<QuickComponent> children) {
 			super();
 			theDefinition = definition;
+			theParent = parent;
 			theComponent = component;
 			theAttributeValues = attributeValues;
 			theChildren = children;
@@ -131,6 +133,10 @@ public class QuickSwingParser {
 
 		public QuickComponentDef getDefinition() {
 			return theDefinition;
+		}
+
+		public QuickComponent getParent() {
+			return theParent == null ? null : theParent.getBuilt();
 		}
 
 		public Component getComponent() {
@@ -163,20 +169,22 @@ public class QuickSwingParser {
 		public ObservableMultiMap<QuickComponentDef, QuickComponent> getGroupedChildren() {
 		}
 
-		public static Builder build(QuickComponentDef def, ModelSetInstance models) {
-			return new Builder(def, models);
+		public static Builder build(QuickComponentDef def, QuickComponent.Builder parent, ModelSetInstance models) {
+			return new Builder(def, parent, models);
 		}
 
-		public static class Builder<C> {
+		public static class Builder {
 			private final QuickComponentDef theDefinition;
+			private final Builder theParent;
 			private final ModelSetInstance theModelsInstance;
 			private Component theComponent;
 			private final Map<QonfigAttributeDef, Object> theAttributeValues;
 			private final ObservableCollection<QuickComponent> theChildren;
-			private boolean isBuilt;
+			private QuickComponent theBuilt;
 
-			public Builder(QuickComponentDef definition, ModelSetInstance models) {
+			public Builder(QuickComponentDef definition, Builder parent, ModelSetInstance models) {
 				theDefinition = definition;
+				theParent = parent;
 				theModelsInstance = models;
 				theAttributeValues = new LinkedHashMap<>();
 				theChildren = ObservableCollection.build(QuickComponent.class).safe(false).build();
@@ -190,29 +198,35 @@ public class QuickSwingParser {
 				return theChildren;
 			}
 
-			public Builder<C> withAttribute(QonfigAttributeDef attr, Object value) {
-				if (isBuilt)
+			public Builder withAttribute(QonfigAttributeDef attr, Object value) {
+				if (theBuilt != null)
 					throw new IllegalStateException("Already built");
 				theAttributeValues.put(attr, value);
 				return this;
 			}
 
-			public Builder<C> withChild(QuickComponent component) {
-				if (isBuilt)
+			public Builder withChild(QuickComponent component) {
+				if (theBuilt != null)
 					throw new IllegalStateException("Already built");
 				theChildren.add(component);
 				return this;
 			}
 
-			public Builder<C> withComponent(Component component) {
-				if (isBuilt)
+			public Builder withComponent(Component component) {
+				if (theBuilt != null)
 					throw new IllegalStateException("Already built");
 				theComponent = component;
 				return this;
 			}
 
+			QuickComponent getBuilt() {
+				return theBuilt;
+			}
+
 			public QuickComponent build() {
-				return new QuickComponent(theDefinition, theComponent, Collections.unmodifiableMap(theAttributeValues),
+				if (theBuilt != null)
+					throw new IllegalStateException("Already built");
+				return new QuickComponent(theDefinition, theParent, theComponent, Collections.unmodifiableMap(theAttributeValues),
 					theChildren.flow().unmodifiable().collect());
 			}
 		}
@@ -285,7 +299,7 @@ public class QuickSwingParser {
 			List<QuickComponent> children = new ArrayList<>(getChildren().size());
 			for (int c = 0; c < getChildren().size(); c++) {
 				QuickComponentDef childDef = getChildren().get(c);
-				QuickComponent.Builder childBuilder = QuickComponent.build(childDef, builder.getModels());
+				QuickComponent.Builder childBuilder = QuickComponent.build(childDef, builder, builder.getModels());
 				children.add(childDef.install(thisContainer, childBuilder));
 			}
 			return ObservableCollection.of(QuickComponent.class, children);
@@ -568,7 +582,7 @@ public class QuickSwingParser {
 		}
 
 		public QuickComponent installContent(PanelPopulation.PanelPopulator<?, ?> container) {
-			QuickComponent.Builder root = QuickComponent.build(theDocument.getComponent(), theModels);
+			QuickComponent.Builder root = QuickComponent.build(theDocument.getComponent(), null, theModels);
 			theDocument.getComponent().install(container, root);
 			return root.build();
 		}
@@ -697,6 +711,32 @@ public class QuickSwingParser {
 					break;
 				}
 				child.modify(ch -> ch.withLayoutConstraints(layoutConstraint));
+			}
+			return value;
+		});
+		interpreter.modifyWith("simple", QuickBox.class, (value, element, session) -> {
+			value.setLayout(SimpleLayout::new);
+			for (QuickComponentDef child : value.getChildren()) {
+				String leftS = child.getElement().getAttributeText(base.getAttribute("simple-layout-child", "left"));
+				String rightS = child.getElement().getAttributeText(base.getAttribute("simple-layout-child", "right"));
+				String topS = child.getElement().getAttributeText(base.getAttribute("simple-layout-child", "top"));
+				String bottomS = child.getElement().getAttributeText(base.getAttribute("simple-layout-child", "bottom"));
+				String minWidthS = child.getElement().getAttributeText(base.getAttribute("simple-layout-child", "min-width"));
+				String prefWidthS = child.getElement().getAttributeText(base.getAttribute("simple-layout-child", "pref-width"));
+				String maxWidthS = child.getElement().getAttributeText(base.getAttribute("simple-layout-child", "max-width"));
+				String minHeightS = child.getElement().getAttributeText(base.getAttribute("simple-layout-child", "min-height"));
+				String prefHeightS = child.getElement().getAttributeText(base.getAttribute("simple-layout-child", "pref-height"));
+				String maxHeightS = child.getElement().getAttributeText(base.getAttribute("simple-layout-child", "max-height"));
+				SimpleLayout.SimpleConstraints constraints = new SimpleLayout.SimpleConstraints(//
+					leftS == null ? null : QuickPosition.parse(leftS), rightS == null ? null : QuickPosition.parse(rightS), //
+					topS == null ? null : QuickPosition.parse(topS), bottomS == null ? null : QuickPosition.parse(bottomS), //
+					minWidthS == null ? null : QuickSize.parse(minWidthS), //
+					prefWidthS == null ? null : QuickSize.parse(prefWidthS), //
+					maxWidthS == null ? null : QuickSize.parse(maxWidthS), //
+					minHeightS == null ? null : QuickSize.parse(minHeightS), //
+					prefHeightS == null ? null : QuickSize.parse(prefHeightS), //
+					maxHeightS == null ? null : QuickSize.parse(maxHeightS));
+				child.modify(ch -> ch.withLayoutConstraints(constraints));
 			}
 			return value;
 		});
@@ -882,7 +922,7 @@ public class QuickSwingParser {
 			session.put("model-type", rowType);
 			TypeToken<CategoryRenderStrategy<Object, ?>> columnType = TypeTokens.get().keyFor(CategoryRenderStrategy.class)
 				.<CategoryRenderStrategy<Object, ?>> parameterized(rowType, TypeTokens.get().WILDCARD);
-			String rowValueName = session.getAttributeText("row-value-name");
+			String rowValueName = session.getAttributeText("value-name");
 			session.put("value-name", rowValueName);
 			String colValueName = session.getAttributeText("column-value-name");
 			session.put("render-value-name", colValueName);
@@ -910,13 +950,13 @@ public class QuickSwingParser {
 				public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
 					container.addSplit(vertical, split -> {
 						modify(split.fill().fillV(), builder);
-						split.firstH(new BorderLayout(), first -> {
-							QuickComponent.Builder<?> child = QuickComponent.build(children.get(0), builder.getModels());
+						split.firstH(new JustifiedBoxLayout(true), first -> {
+							QuickComponent.Builder child = QuickComponent.build(children.get(0), builder, builder.getModels());
 							children.get(0).install(first, child);
 							builder.withChild(child.build());
 						});
-						split.lastH(new BorderLayout(), last -> {
-							QuickComponent.Builder<?> child = QuickComponent.build(children.get(1), builder.getModels());
+						split.lastH(new JustifiedBoxLayout(true), last -> {
+							QuickComponent.Builder child = QuickComponent.build(children.get(1), builder, builder.getModels());
 							children.get(1).install(last, child);
 							builder.withChild(child.build());
 						});
@@ -934,7 +974,7 @@ public class QuickSwingParser {
 					container.addVPanel(panel -> {
 						modify(panel, builder);
 						for (QuickComponentDef child : children) {
-							QuickComponent.Builder<?> childBuilder = QuickComponent.build(child, builder.getModels());
+							QuickComponent.Builder childBuilder = QuickComponent.build(child, builder, builder.getModels());
 							child.install(panel, childBuilder);
 							builder.withChild(childBuilder.build());
 						}
@@ -1440,7 +1480,7 @@ public class QuickSwingParser {
 	}
 
 	static class SingleTab<T> implements TabSet<T> {
-		final ObservableModelSet.Wrapped models;
+		final ObservableModelSet models;
 		final ObservableModelSet.ModelValuePlaceholder<SettableValue, SettableValue<T>> tabValuePlaceholder;
 		final QuickComponentDef content;
 		final ValueContainer<SettableValue, SettableValue<T>> tabId;
@@ -1452,7 +1492,7 @@ public class QuickSwingParser {
 		final Function<ModelSetInstance, Observable<?>> selectOn;
 		final Function<ModelSetInstance, Consumer<T>> onSelect;
 
-		private SingleTab(ObservableModelSet.Wrapped models,
+		private SingleTab(ObservableModelSet models,
 			ObservableModelSet.ModelValuePlaceholder<SettableValue, SettableValue<T>> tabValuePlaceholder, QuickComponentDef content,
 			ValueContainer<SettableValue, SettableValue<T>> tabId, String renderValueName,
 			Function<ModelSetInstance, ? extends ObservableValue<String>> tabName,
@@ -1496,11 +1536,14 @@ public class QuickSwingParser {
 
 		@Override
 		public ModelSetInstance overrideModels(ModelSetInstance models, SettableValue<T> tabValue, Observable<?> until) {
-			ModelSetInstance newModels = this.models.wrap(models)//
-				.with(tabValuePlaceholder, tabValue)//
-				.withUntil(until)//
-				.build();
-			return newModels;
+			if (tabValuePlaceholder != null) {
+				ModelSetInstance newModels = ((ObservableModelSet.Wrapped) this.models).wrap(models)//
+					.with(tabValuePlaceholder, tabValue)//
+					.withUntil(until)//
+					.build();
+				return newModels;
+			} else
+				return models;
 		}
 
 		@Override
@@ -1528,87 +1571,103 @@ public class QuickSwingParser {
 			ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
 			ClassView cv = (ClassView) session.get("imports");
 			QuickComponentDef content = session.getInterpreter().interpret(tab, QuickComponentDef.class);
-			ValueContainer<SettableValue, SettableValue<T>> tabId = session.getAttribute("tab-id", ObservableExpression.class)//
+			ValueContainer<SettableValue, SettableValue<T>> tabId = tab.getAttribute(base, "tab", "tab-id", ObservableExpression.class)//
 				.evaluate(ModelTypes.Value.forType((TypeToken<T>) TypeTokens.get().WILDCARD), model, cv);
-			String renderValueName = tab.getAttributeText(base.getAttribute("tab", "render-value-name"));
-			ObservableModelSet.WrappedBuilder wb = ObservableModelSet.wrap(model);
-			ObservableModelSet.ModelValuePlaceholder<SettableValue, SettableValue<T>> tvp = wb.withPlaceholder(renderValueName,
-				ModelTypes.Value.forType((TypeToken<T>) tabId.getType().getType(0)));
-			model = wb.build();
+			String renderValueName;
+			ObservableModelSet.ModelValuePlaceholder<SettableValue, SettableValue<T>> tvp;
+			if (tab.isInstance(base.getElementOrAddOn("single-rendering"))) {
+				renderValueName = tab.getAttributeText(base.getAttribute("tab", "render-value-name"));
+				ObservableModelSet.WrappedBuilder wb = ObservableModelSet.wrap(model);
+				tvp = wb.withPlaceholder(renderValueName, ModelTypes.Value.forType((TypeToken<T>) tabId.getType().getType(0)));
+				model = wb.build();
+			} else {
+				renderValueName = null;
+				tvp = null;
+			}
 
 			ObservableModelSet fModel = model;
-			Function<ModelSetInstance, ? extends ObservableValue<String>> tabName = session.interpretAttribute("tab-name",
-				ObservableExpression.class, false, tn -> {
-					if (tn == null) {
-						return (Function<ModelSetInstance, ? extends ObservableValue<String>>) msi -> ObservableValue.of(String.class,
-							tabId.get(msi).get().toString());
-					} else {
-						return tn.evaluate(ModelTypes.Value.forType(String.class), fModel, cv);
-					}
-				});
+			ObservableExpression tabNameEx = tab.getAttribute(base, "tab", "tab-name", ObservableExpression.class);
+			Function<ModelSetInstance, ? extends ObservableValue<String>> tabName;
+			if (tabNameEx != null)
+				tabName = tabNameEx.evaluate(ModelTypes.Value.forType(String.class), fModel, cv);
+			else {
+				tabName = (Function<ModelSetInstance, ? extends ObservableValue<String>>) msi -> ObservableValue.of(String.class,
+					tabId.get(msi).get().toString());
+			}
 
-			Function<ModelSetInstance, ObservableValue<Image>> tabIcon = session.interpretAttribute("tab-icon", ObservableExpression.class,
-				true, ex -> {
-					ValueContainer<SettableValue, SettableValue<?>> iconV = ex.evaluate(ModelTypes.Value.any(), fModel, cv);
-					Class<?> iconType = TypeTokens.getRawType(iconV.getType().getType(0));
-					if (iconType == Image.class)
-						return (Function<ModelSetInstance, ObservableValue<Image>>) (Function<?, ?>) iconV;
-					else if (iconType == URL.class) {
-						return msi -> {
-							ObservableValue<URL> urlFn = (ObservableValue<URL>) iconV.apply(msi);
-							// There's probably a better way to do this, but this is what I know
-							return urlFn.map(Image.class, url -> url == null ? null : new ImageIcon(url).getImage());
-						};
-					} else if (iconType == String.class) {
-						return msi -> {
-							ObservableValue<String> strFn = (ObservableValue<String>) iconV.apply(msi);
-							return strFn.map(Image.class, str -> {
-								if (str == null)
-									return null;
-								URL url;
-								try {
-									String location = QommonsConfig.resolve(str, tab.getDocument().getLocation());
-									url = QommonsConfig.toUrl(location);
-								} catch (IOException e) {
-									System.err.println("Could not resolve icon location '" + str + "': " + e);
-									return null;
-								}
-								return new ImageIcon(url).getImage(); // There's probably a better way to do this, but this is what I know
-							});
-						};
-					} else {
-						session.withWarning("Cannot interpret tab-icon '" + tab.getAttributes().get(base.getAttribute("tab", "tab-icon"))
-							+ "', type " + iconV.getType().getType(0) + " as an image");
-						return null;
-					}
-				});
+			ObservableExpression tabIconEx = tab.getAttribute(base, "tab", "tab-icon", ObservableExpression.class);
+			Function<ModelSetInstance, ObservableValue<Image>> tabIcon;
+			if (tabIconEx != null) {
+				ValueContainer<SettableValue, SettableValue<?>> iconV = tabIconEx.evaluate(ModelTypes.Value.any(), fModel, cv);
+				Class<?> iconType = TypeTokens.getRawType(iconV.getType().getType(0));
+				if (iconType == Image.class)
+					tabIcon = (Function<ModelSetInstance, ObservableValue<Image>>) (Function<?, ?>) iconV;
+				else if (iconType == URL.class) {
+					tabIcon = msi -> {
+						ObservableValue<URL> urlFn = (ObservableValue<URL>) iconV.apply(msi);
+						// There's probably a better way to do this, but this is what I know
+						return urlFn.map(Image.class, url -> url == null ? null : new ImageIcon(url).getImage());
+					};
+				} else if (iconType == String.class) {
+					tabIcon = msi -> {
+						ObservableValue<String> strFn = (ObservableValue<String>) iconV.apply(msi);
+						return strFn.map(Image.class, str -> {
+							if (str == null)
+								return null;
+							URL url;
+							try {
+								String location = QommonsConfig.resolve(str, tab.getDocument().getLocation());
+								url = QommonsConfig.toUrl(location);
+							} catch (IOException e) {
+								System.err.println("Could not resolve icon location '" + str + "': " + e);
+								return null;
+							}
+							return new ImageIcon(url).getImage(); // There's probably a better way to do this, but this is what I know
+						});
+					};
+				} else {
+					session.withWarning("Cannot interpret tab-icon '" + tab.getAttributes().get(base.getAttribute("tab", "tab-icon"))
+						+ "', type " + iconV.getType().getType(0) + " as an image");
+					tabIcon = null;
+				}
+			} else
+				tabIcon = null;
 
-			boolean removable = session.getAttribute("removable", boolean.class, false);
+			boolean removable = tab.getAttribute(base, "tab", "removable", boolean.class);
 
-			Function<ModelSetInstance, Consumer<T>> onRemove = session.interpretAttribute("on-remove", ObservableExpression.class, true,
-				ex -> {
-					;
-					if (!removable) {
-						session.withWarning("on-remove specified, for tab '" + tab.getAttributes().get(base.getAttribute("tab", "tab-id"))
-							+ "' but tab is not removable");
-						return null;
-					} else {
-						return ex.<T, Object, Object, Void> findMethod(Void.class, fModel, cv)//
-							.withOption0().withOption1((TypeToken<T>) tabId.getType().getType(0), t -> t)//
-							.find1().andThen(fn -> t -> fn.apply(t));
-					}
-				});
+			ObservableExpression onRemoveEx = tab.getAttribute(base, "tab", "on-remove", ObservableExpression.class);
+			Function<ModelSetInstance, Consumer<T>> onRemove;
+			if (onRemoveEx != null) {
+				if (!removable) {
+					session.withWarning("on-remove specified, for tab '" + tab.getAttributes().get(base.getAttribute("tab", "tab-id"))
+						+ "' but tab is not removable");
+					return null;
+				} else {
+					onRemove = onRemoveEx.<T, Object, Object, Void> findMethod(Void.class, fModel, cv)//
+						.withOption0().withOption1((TypeToken<T>) tabId.getType().getType(0), t -> t)//
+						.find1().andThen(fn -> t -> fn.apply(t));
+				}
+			} else
+				onRemove = null;
 
-			Function<ModelSetInstance, ? extends Observable<?>> selectOn = session.interpretAttribute("select-on",
-				ObservableExpression.class, true, ex -> ex.evaluate(ModelTypes.Event.forType(TypeTokens.get().WILDCARD), fModel, cv));
+			ObservableExpression selectOnEx = tab.getAttribute(base, "tab", "select-on", ObservableExpression.class);
+			Function<ModelSetInstance, ? extends Observable<?>> selectOn;
+			if (selectOnEx != null)
+				selectOn = selectOnEx.evaluate(ModelTypes.Event.forType(TypeTokens.get().WILDCARD), fModel, cv);
+			else
+				selectOn = null;
 
-			Function<ModelSetInstance, Consumer<T>> onSelect = session.interpretAttribute("on-select", ObservableExpression.class, true,
-				ex -> ex.<T, Object, Object, Void> findMethod(Void.class, fModel, cv)//
-				.withOption0().withOption1((TypeToken<T>) tabId.getType().getType(0), t -> t)//
-				.find1().andThen(fn -> t -> fn.apply(t)));
+			ObservableExpression onSelectEx = tab.getAttribute(base, "tab", "on-select", ObservableExpression.class);
+			Function<ModelSetInstance, Consumer<T>> onSelect;
+			if (onSelectEx != null) {
+				onSelect = onSelectEx.<T, Object, Object, Void> findMethod(Void.class, fModel, cv)//
+					.withOption0().withOption1((TypeToken<T>) tabId.getType().getType(0), t -> t)//
+					.find1().andThen(fn -> t -> fn.apply(t));
+			} else
+				onSelect = null;
 
-			return new SingleTab<>((ObservableModelSet.Wrapped) model, tvp, content, tabId, renderValueName, tabName, tabIcon, removable,
-				onRemove, (Function<ModelSetInstance, Observable<?>>) selectOn, onSelect);
+			return new SingleTab<>(model, tvp, content, tabId, renderValueName, tabName, tabIcon, removable, onRemove,
+				(Function<ModelSetInstance, Observable<?>>) selectOn, onSelect);
 		}
 	}
 
@@ -1884,7 +1943,7 @@ public class QuickSwingParser {
 								int index = i;
 								tabPane.withHTab(tab.value.get(), new BorderLayout(), tabPanel -> {
 									tab.component = tab.tabs.getContent().install(tabPanel,
-										QuickComponent.build(tab.tabs.getContent(), tab.models));
+										QuickComponent.build(tab.tabs.getContent(), builder, tab.models));
 									builder.getChildren().add(evt.getIndexes()[index], tab.component);
 								}, panelTab -> {
 									tab.tab = panelTab;

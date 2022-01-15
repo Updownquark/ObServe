@@ -46,6 +46,10 @@
 			<attribute name="cross-align" type="inline-alignment" default="justify" />
 			<!--<child-mod child="box.content" inherits="generic-sizeable" />-->
 		</add-on>
+		<add-on name="simple-layout-child" inherits="h-positionable,v-positionable,h-sizeable,v-sizeable" />
+		<add-on name="simple" requires="box" inherits="layout">
+			<child-mod child="box.content" inherits="simple-layout-child" />
+		</add-on>
 
 		<add-on name="renderer-value-override" requires="value-widget">
 			<attribute name="value-widget.value" default="subject" specify="forbidden" />
@@ -84,7 +88,7 @@
 			<attribute name="tab-name" type="expression-or-string" specify="optional" />
 			<attribute name="tab-icon" type="expression-or-string" specify="optional" />
 			<attribute name="removable" type="boolean" default="false" />
-			<attribute name="onRemove" type="expression" specify="optional" />
+			<attribute name="on-remove" type="expression" specify="optional" />
 			<attribute name="select-on" type="expression" specify="optional" />
 			<attribute name="on-select" type="expression" specify="optional" />
 		</add-on>
