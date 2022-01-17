@@ -3948,7 +3948,7 @@ public final class ObservableCollectionImpl {
 			theSynchronizer = synchronizer;
 			theAdjustmentOrder = adjustmentOrder;
 			theListeningCount = theAutoRefresh == null ? null : new AtomicInteger();
-			isRefreshing = SettableValue.build(boolean.class).withLock(backing).withValue(false).safe(false).build();
+			isRefreshing = SettableValue.build(boolean.class).withLocking(backing).withValue(false).build();
 
 			init(backing// TODO Maybe one day add capability for callers to affect the backing data
 				.flow().unmodifiable(false).collectPassive());

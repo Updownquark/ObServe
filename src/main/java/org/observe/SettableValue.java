@@ -1,7 +1,6 @@
 package org.observe;
 
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
@@ -17,6 +16,7 @@ import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.Lockable;
 import org.qommons.Transactable;
+import org.qommons.TransactableBuilder;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
 import org.qommons.collect.ListenerList;
@@ -926,7 +926,7 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 					public CoreId getCoreId() {
 						return value.getCoreId();
 					}
-					};
+				};
 			}, cause);
 		}
 
@@ -954,7 +954,7 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 					public CoreId getCoreId() {
 						return value.getCoreId();
 					}
-					};
+				};
 			}, cause);
 		}
 
@@ -1101,22 +1101,18 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	}
 
 	/** @param <T> The type for the settable value */
-	class Builder<T> {
+	class Builder<T> extends TransactableBuilder.Default<Builder<T>> {
 		static final AtomicLong ID_GEN = new AtomicLong();
 
 		private final TypeToken<T> theType;
-		private String theDescription;
 		private boolean isVetoable;
-		private Function<Object, Transactable> theLock;
-		private boolean isSafe;
 		private ListenerList.Builder theListenerBuilder;
 		private T theInitialValue;
 		private boolean isNullable;
 
 		Builder(TypeToken<T> type) {
+			super("settable-value");
 			theType = type;
-			theDescription = "settable-value";
-			isSafe = true;
 			theListenerBuilder = ListenerList.build();
 			isNullable = true;
 		}
@@ -1131,26 +1127,6 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 			return this;
 		}
 
-		public Builder<T> withLock(Transactable lock) {
-			theLock = __ -> lock;
-			return this;
-		}
-
-		public Builder<T> withLock(Function<Object, Transactable> lock) {
-			theLock = lock;
-			return this;
-		}
-
-		public Builder<T> safe(boolean safe) {
-			isSafe = safe;
-			return this;
-		}
-
-		public Builder<T> withDescription(String description) {
-			theDescription = description;
-			return this;
-		}
-
 		public Builder<T> withListening(Consumer<ListenerList.Builder> listening) {
 			listening.accept(theListenerBuilder);
 			return this;
@@ -1162,15 +1138,12 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 		}
 
 		public SettableValue<T> build() {
-			Function<Object, Transactable> lock = theLock;
-			if (lock == null && isSafe)
-				lock = sv -> Transactable.transactable(new ReentrantReadWriteLock(), sv);
-				if (isVetoable)
-					return new VetoableSettableValue<>(theType, theDescription, isNullable, theListenerBuilder, lock).withValue(theInitialValue,
-						null);
-				else
-					return new SimpleSettableValue<>(theType, theDescription, isNullable, lock, theListenerBuilder).withValue(theInitialValue,
-						null);
+			if (isVetoable)
+				return new VetoableSettableValue<>(theType, getDescription(), isNullable, theListenerBuilder, getLocker())
+					.withValue(theInitialValue, null);
+			else
+				return new SimpleSettableValue<>(theType, getDescription(), isNullable, getLocker(), theListenerBuilder)
+					.withValue(theInitialValue, null);
 		}
 	}
 }

@@ -142,7 +142,7 @@ public class DSTesting {
 				components.add(configureComponent(dds.inject(name, __ -> name), components.size(), services, helper));
 			}
 
-			BetterSet<Dependency<String, ?>> path = BetterHashSet.build().unsafe().buildSet();
+			BetterSet<Dependency<String, ?>> path = BetterHashSet.build().buildSet();
 			checkState(dds, false, path);
 			dds.init();
 			checkState(dds, true, path);

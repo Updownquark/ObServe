@@ -54,9 +54,9 @@ public class DefaultInteractiveTestingPanel extends JPanel {
 		theSelectedItem = SettableValue
 			.build(
 				TypeTokens.get().keyFor(BetterList.class).<BetterList<InteractiveTestOrSuite>> parameterized(InteractiveTestOrSuite.class))
-			.safe(false).build();
-		theCurrentState = SettableValue.build(TestingState.class).safe(false).build();
-		theUserWait = SettableValue.build(String.class).safe(false).build();
+			.build();
+		theCurrentState = SettableValue.build(TestingState.class).build();
+		theUserWait = SettableValue.build(String.class).build();
 
 		initComponents();
 	}
@@ -225,11 +225,11 @@ public class DefaultInteractiveTestingPanel extends JPanel {
 
 		SwingUI() {
 			isClosing = new AtomicInteger();
-			theMessage = SettableValue.build(String.class).safe(false).withValue("").build();
-			theYesLabel = SettableValue.build(String.class).safe(false).withValue("Yes").build();
-			theNoLabel = SettableValue.build(String.class).safe(false).withValue("No").build();
-			theYesVisible = SettableValue.build(boolean.class).safe(false).withValue(false).build();
-			theNoVisible = SettableValue.build(boolean.class).safe(false).withValue(false).build();
+			theMessage = SettableValue.build(String.class).withValue("").build();
+			theYesLabel = SettableValue.build(String.class).withValue("Yes").build();
+			theNoLabel = SettableValue.build(String.class).withValue("No").build();
+			theYesVisible = SettableValue.build(boolean.class).withValue(false).build();
+			theNoVisible = SettableValue.build(boolean.class).withValue(false).build();
 
 			theDefaultDialog = createDialog(SwingUtilities.getWindowAncestor(DefaultInteractiveTestingPanel.this));
 		}
@@ -258,24 +258,24 @@ public class DefaultInteractiveTestingPanel extends JPanel {
 			.addHPanel(null, new JustifiedBoxLayout(false).mainCenter(), buttons -> {
 				buttons.fill()//
 				.addButton(null, __ -> {
-							if (theCurrentResult == null)
-								return;
+					if (theCurrentResult == null)
+						return;
 					((UIResult<Object>) theCurrentResult).fulfilled(true);
 					theCurrentResult = null;
 					isClosing.getAndIncrement();
 					dialog.setVisible(false);
 				}, btn -> btn.withText(theYesLabel).visibleWhen(theYesVisible))//
 				.addButton(null, __ -> {
-							if (theCurrentResult == null)
-								return;
+					if (theCurrentResult == null)
+						return;
 					((UIResult<Object>) theCurrentResult).fulfilled(false);
 					theCurrentResult = null;
 					isClosing.getAndIncrement();
 					dialog.setVisible(false);
 				}, btn -> btn.withText(theNoLabel).visibleWhen(theNoVisible))//
 				.addButton("Cancel Testing", __ -> {
-							if (theCurrentResult == null)
-								return;
+					if (theCurrentResult == null)
+						return;
 					isCanceled = true;
 					((UIResult<Object>) theCurrentResult).failed(new TestCanceledException());
 					theCurrentResult = null;

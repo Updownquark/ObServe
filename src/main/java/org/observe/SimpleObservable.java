@@ -6,6 +6,7 @@ import java.util.function.Function;
 
 import org.qommons.Identifiable;
 import org.qommons.Transactable;
+import org.qommons.TransactableBuilder;
 import org.qommons.Transaction;
 import org.qommons.collect.ListenerList;
 
@@ -21,42 +22,14 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 	}
 
 	/** Builds {@link SimpleObservable}s */
-	public static class Builder {
+	public static class Builder extends TransactableBuilder.Default<Builder> {
 		private ListenerList.Builder theListening;
 		private boolean isInternalState;
-		private Function<Object, Transactable> theLock;
 		private Object theIdentity;
-		private String theDescription;
 
 		Builder() {
+			super("observable");
 			theListening = ListenerList.build();
-			theDescription = "observable";
-		}
-
-		/**
-		 * @param safe Whether the observable should be thread-safe or not
-		 * @return This builder
-		 */
-		public Builder safe(boolean safe) {
-			if (safe) {
-				theLock = o -> Transactable.transactable(new ReentrantReadWriteLock(), o);
-				theListening = theListening.forEachSafe(true).reentrancyError("Reentrancy not allowed").withFastSize(true)
-					.withSyncType(ListenerList.SynchronizationType.ELEMENT);
-			} else {
-				theLock = __ -> Transactable.NONE;
-				// Just 'cause we don't worry about thread safety doesn't mean we can be reentrant
-				theListening = theListening.unsafe().reentrancyError("Reentrancy not allowed");
-			}
-			return this;
-		}
-
-		/**
-		 * @param description A description for the observable
-		 * @return This builder
-		 */
-		public Builder withDescription(String description) {
-			theDescription = description;
-			return this;
 		}
 
 		/**
@@ -87,30 +60,11 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 		}
 
 		/**
-		 * @param lock The lock to (potentially) ensure thread safety for the observable's firing
-		 * @return This builder
-		 */
-		public Builder withLock(Transactable lock) {
-			theLock = __ -> lock;
-			return this;
-		}
-
-		/**
-		 * @param lock The lock to (potentially) ensure thread safety for the observable's firing
-		 * @return This builder
-		 */
-		public Builder withLock(Function<Object, Transactable> lock) {
-			theLock = lock;
-			return this;
-		}
-
-		/**
 		 * @param lock The lock to ensure thread safety for the observable's firing (may be null to configure a non-thread safe observable)
 		 * @return This builder
 		 */
-		public Builder withLock(ReentrantReadWriteLock lock) {
-			theLock = o -> Transactable.transactable(lock, o);
-			return this;
+		public Builder withLocking(ReentrantReadWriteLock lock) {
+			return withLocking(o -> Transactable.transactable(lock, o));
 		}
 
 		/** @return The observable */
@@ -123,8 +77,8 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 		 * @return The observable
 		 */
 		public <T> SimpleObservable<T> build(Consumer<? super Observer<? super T>> onSubscribe) {
-			return new SimpleObservable<>(onSubscribe, theIdentity, theDescription, isInternalState, //
-				theLock != null ? theLock : o -> Transactable.transactable(new ReentrantReadWriteLock(), o), theListening);
+			return new SimpleObservable<>(onSubscribe, theIdentity, getDescription(), isInternalState, //
+				getLocker(), theListening);
 		}
 	}
 

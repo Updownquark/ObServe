@@ -161,7 +161,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			}
 		});
 		Subscription[] editSub = new Subscription[1];
-		SimpleObservable<Void> until = SimpleObservable.build().safe(false).build();
+		SimpleObservable<Void> until = SimpleObservable.build().build();
 		ObservableCellEditor<M, C>[] editor = new ObservableCellEditor[1];
 		editor[0] = new DefaultObservableCellEditor<>(combo, value, (e, c, f, tt, vtt) -> {
 			filter[0] = f;

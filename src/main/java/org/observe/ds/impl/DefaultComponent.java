@@ -40,8 +40,8 @@ class DefaultComponent<C> implements ComponentController<C> {
 		theDisposer = disposer;
 		theProvided = provided;
 		theDependencies = dependencies;
-		theStage = SettableValue.build(ComponentStage.class).withLock(service.getComponents()).withValue(ComponentStage.Defined).build();
-		isAvailable = SettableValue.build(boolean.class).withLock(service.getComponents()).withValue(available).build();
+		theStage = SettableValue.build(ComponentStage.class).withLocking(service.getComponents()).withValue(ComponentStage.Defined).build();
+		isAvailable = SettableValue.build(boolean.class).withLocking(service.getComponents()).withValue(available).build();
 
 		reset(available);
 	}

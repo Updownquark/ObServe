@@ -20,7 +20,6 @@ import org.qommons.collect.BetterMultiMap;
 import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.BetterSortedMultiMap;
 import org.qommons.collect.CollectionElement;
-import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MultiEntryHandle;
@@ -152,8 +151,9 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 	 *
 	 * @param <K> The key type for the map
 	 * @param <V> The value type for the map
+	 * @param <B> The sub-type of this builder
 	 */
-	class Builder<K, V> extends ObservableMultiMap.Builder<K, V> {
+	class Builder<K, V, B extends Builder<K, V, ? extends B>> extends ObservableMultiMap.Builder<K, V, B> {
 		Builder(ObservableCollectionBuilder<MapEntry<K, V>, ?> backingBuilder, TypeToken<K> keyType, TypeToken<V> valueType,
 			Comparator<? super K> sorting, String defaultDescrip) {
 			super(backingBuilder, keyType, valueType, defaultDescrip);
@@ -161,33 +161,9 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		}
 
 		@Override
-		public Builder<K, V> safe(boolean safe) {
-			super.safe(safe);
-			return this;
-		}
-
-		@Override
-		public Builder<K, V> withLocker(CollectionLockingStrategy locking) {
-			super.withLocker(locking);
-			return this;
-		}
-
-		@Override
-		public ObservableMultiMap.Builder<K, V> withKeyEquivalence(Equivalence<? super K> keyEquivalence) {
-			return new ObservableMultiMap.Builder<>(getBackingBuilder(), getKeyType(), getValueType(), getDescrip())//
+		public ObservableMultiMap.Builder<K, V, ?> withKeyEquivalence(Equivalence<? super K> keyEquivalence) {
+			return new ObservableMultiMap.Builder<>(getBackingBuilder(), getKeyType(), getValueType(), getDescription())//
 				.withKeyEquivalence(keyEquivalence).withValueEquivalence(getValueEquivalence());
-		}
-
-		@Override
-		public Builder<K, V> withValueEquivalence(Equivalence<? super V> valueEquivalence) {
-			super.withValueEquivalence(valueEquivalence);
-			return this;
-		}
-
-		@Override
-		public Builder<K, V> withDescription(String description) {
-			super.withDescription(description);
-			return this;
 		}
 
 		@Override

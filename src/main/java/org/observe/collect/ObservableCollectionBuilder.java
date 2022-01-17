@@ -8,7 +8,6 @@ import java.util.Objects;
 import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
 import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.function.Supplier;
 
 import org.observe.Equivalence;
@@ -18,13 +17,11 @@ import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.BetterSortedSet;
-import org.qommons.collect.CollectionLockingStrategy;
+import org.qommons.collect.CollectionBuilder;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.CollectionUtils.CollectionSynchronizerE;
 import org.qommons.collect.ElementId;
-import org.qommons.collect.FastFailLockingStrategy;
 import org.qommons.collect.ListenerList;
-import org.qommons.collect.StampedLockingStrategy;
 import org.qommons.ex.ExFunction;
 import org.qommons.threading.QommonsTimer;
 import org.qommons.threading.QommonsTimer.TaskHandle;
@@ -41,14 +38,14 @@ import com.google.common.reflect.TypeToken;
  * @param <E> The type of elements in the collection
  * @param <B> The sub-type of the builder
  */
-public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBuilder<E, B>> {
+public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBuilder<E, ? extends B>> extends CollectionBuilder<B> {
 	/**
 	 * An {@link ObservableCollectionBuilder} that builds {@link ObservableSortedCollection} instances
 	 *
 	 * @param <E> The type of elements in the collection
 	 * @param <B> The sub-type of the builder
 	 */
-	public interface SortedBuilder<E, B extends SortedBuilder<E, B>> extends ObservableCollectionBuilder<E, B> {
+	public interface SortedBuilder<E, B extends SortedBuilder<E, ? extends B>> extends ObservableCollectionBuilder<E, B> {
 		@Override
 		DistinctSortedBuilder<E, ?> distinct();
 
@@ -62,7 +59,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 	 * @param <E> The type of elements in the collection
 	 * @param <B> The sub-type of the builder
 	 */
-	public interface DistinctBuilder<E, B extends DistinctBuilder<E, B>> extends ObservableCollectionBuilder<E, B> {
+	public interface DistinctBuilder<E, B extends DistinctBuilder<E, ? extends B>> extends ObservableCollectionBuilder<E, B> {
 		@Override
 		default DistinctBuilder<E, ?> distinct() {
 			return this;
@@ -78,7 +75,8 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 	 * @param <E> The type of elements in the collection
 	 * @param <B> The sub-type of the builder
 	 */
-	public interface DistinctSortedBuilder<E, B extends DistinctSortedBuilder<E, B>> extends SortedBuilder<E, B>, DistinctBuilder<E, B> {
+	public interface DistinctSortedBuilder<E, B extends DistinctSortedBuilder<E, ? extends B>>
+	extends SortedBuilder<E, B>, DistinctBuilder<E, B> {
 		@Override
 		default DistinctSortedBuilder<E, ?> distinct() {
 			return this;
@@ -101,41 +99,12 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 	B withEquivalence(Equivalence<? super E> equivalence);
 
 	/**
-	 * @param locker The locker for the collection
-	 * @return This builder
-	 */
-	default B withLocker(CollectionLockingStrategy locker) {
-		return withLocker(__ -> locker);
-	}
-
-	/**
-	 * @param locker The locker for the collection
-	 * @return This builder
-	 */
-	B withLocker(Function<Object, CollectionLockingStrategy> locker);
-
-	/**
-	 * @param safe Whether the collection should be thread-safe
-	 * @return This builder
-	 */
-	default B safe(boolean safe) {
-		withLocker(v -> safe ? new StampedLockingStrategy(v) : new FastFailLockingStrategy());
-		return (B) this;
-	}
-
-	/**
 	 * Specifies that the collection should maintain an order (but not necessarily distinctness) among its elements
 	 *
 	 * @param sorting The sorting for the collection
 	 * @return This builder
 	 */
 	SortedBuilder<E, ?> sortBy(Comparator<? super E> sorting);
-
-	/**
-	 * @param description The description for the collection
-	 * @return This builder
-	 */
-	B withDescription(String description);
 
 	/**
 	 * @param elementSource A function to look up elements in the {@link #withBacking(BetterList) backing} collection by source element ID
@@ -187,7 +156,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 	 * @param <V> The type of the source data
 	 * @param <B> The sub-type of this builder
 	 */
-	interface DataControlledCollectionBuilder<E, V, B extends DataControlledCollectionBuilder<E, V, B>> {
+	interface DataControlledCollectionBuilder<E, V, B extends DataControlledCollectionBuilder<E, V, ? extends B>> {
 		/**
 		 * @param equals An equals tester to preserve elements still present in the collection after refresh
 		 * @return This builder
@@ -257,7 +226,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 	 * @param <V> The type of the source data
 	 * @param <B> The sub-type of this builder
 	 */
-	interface DataControlledSortedCollectionBuilder<E, V, B extends DataControlledSortedCollectionBuilder<E, V, B>>
+	interface DataControlledSortedCollectionBuilder<E, V, B extends DataControlledSortedCollectionBuilder<E, V, ? extends B>>
 	extends DataControlledCollectionBuilder<E, V, B> {
 		@Override
 		DataControlledCollection.Sorted<E, V> build(CollectionSynchronizerE<E, ? super V, ?> synchronizer);
@@ -276,7 +245,8 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 	 * @param <V> The type of the source data
 	 * @param <B> The sub-type of this builder
 	 */
-	interface DataControlledSetBuilder<E, V, B extends DataControlledSetBuilder<E, V, B>> extends DataControlledCollectionBuilder<E, V, B> {
+	interface DataControlledSetBuilder<E, V, B extends DataControlledSetBuilder<E, V, ? extends B>>
+	extends DataControlledCollectionBuilder<E, V, B> {
 		@Override
 		DataControlledCollection.Set<E, V> build(CollectionSynchronizerE<E, ? super V, ?> synchronizer);
 
@@ -294,7 +264,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 	 * @param <V> The type of the source data
 	 * @param <B> The sub-type of this builder
 	 */
-	interface DataControlledSortedSetBuilder<E, V, B extends DataControlledSortedSetBuilder<E, V, B>>
+	interface DataControlledSortedSetBuilder<E, V, B extends DataControlledSortedSetBuilder<E, V, ? extends B>>
 	extends DataControlledSetBuilder<E, V, B>, DataControlledSortedCollectionBuilder<E, V, B> {
 		@Override
 		DataControlledCollection.SortedSet<E, V> build(CollectionSynchronizerE<E, ? super V, ?> synchronizer);
@@ -312,23 +282,22 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 	 * @param <E> The type of element for the collection
 	 * @param <B> The sub-type of the builder
 	 */
-	public static class CollectionBuilderImpl<E, B extends ObservableCollectionBuilder<E, B>> implements ObservableCollectionBuilder<E, B> {
+	public static class CollectionBuilderImpl<E, B extends CollectionBuilderImpl<E, ? extends B>> extends CollectionBuilder.Default<B>
+	implements ObservableCollectionBuilder<E, B> {
 		private final TypeToken<E> theType;
 		private BetterList<E> theBacking;
-		private Function<Object, CollectionLockingStrategy> theLocker;
 		private Comparator<? super E> theSorting;
 		private BiFunction<ElementId, BetterCollection<?>, ElementId> theElementSource;
 		private BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> theSourceElements;
 		private Equivalence<? super E> theEquivalence;
-		private String theDescription;
 
 		/**
 		 * @param type The type of elements in the collection
 		 * @param initDescrip The initial (default) description for the collection
 		 */
 		public CollectionBuilderImpl(TypeToken<E> type, String initDescrip) {
+			super(initDescrip);
 			theType = type;
-			theDescription = initDescrip;
 		}
 
 		/**
@@ -337,9 +306,9 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 		 * @param toCopy The builder to copy
 		 */
 		protected CollectionBuilderImpl(CollectionBuilderImpl<E, ?> toCopy) {
-			this(toCopy.theType, toCopy.theDescription);
+			this(toCopy.theType, toCopy.getDescription());
 			theBacking = toCopy.theBacking;
-			theLocker = toCopy.theLocker;
+			withCollectionLocking(toCopy.getLocker());
 			theSorting = toCopy.theSorting;
 			theElementSource = toCopy.theElementSource;
 			theSourceElements = toCopy.theSourceElements;
@@ -359,31 +328,8 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 		}
 
 		@Override
-		public B withLocker(CollectionLockingStrategy locker) {
-			return withLocker(__ -> locker);
-		}
-
-		@Override
-		public B withLocker(Function<Object, CollectionLockingStrategy> locker) {
-			theLocker = locker;
-			return (B) this;
-		}
-
-		@Override
-		public B safe(boolean safe) {
-			withLocker(v -> safe ? new StampedLockingStrategy(v) : new FastFailLockingStrategy());
-			return (B) this;
-		}
-
-		@Override
 		public SortedBuilder<E, ?> sortBy(Comparator<? super E> sorting) {
 			return new SortedBuilderImpl<>(this, sorting);
-		}
-
-		@Override
-		public B withDescription(String description) {
-			theDescription = description;
-			return (B) this;
 		}
 
 		@Override
@@ -442,22 +388,6 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 			return theSourceElements;
 		}
 
-		/** @return The description for the collection */
-		protected String getDescription() {
-			return theDescription;
-		}
-
-		/**
-		 * @param built The built collection
-		 * @return The locker for the collection
-		 */
-		protected CollectionLockingStrategy getLocker(Object built) {
-			if (theLocker != null)
-				return theLocker.apply(built);
-			else
-				return new StampedLockingStrategy(built);
-		}
-
 		/** @return The sorting for the collection */
 		protected Comparator<? super E> getSorting() {
 			return theSorting;
@@ -467,9 +397,9 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 		public ObservableCollection<E> build() {
 			BetterList<E> backing = theBacking;
 			if (backing == null) {
-				RedBlackNodeList.RBNLBuilder<E, ?> builder = theSorting != null ? SortedTreeList.buildTreeList(theSorting)
+				RedBlackNodeList.RBNLBuilder<E, ?, ?> builder = theSorting != null ? SortedTreeList.buildTreeList(theSorting)
 					: BetterTreeList.build();
-				backing = builder.withDescription(theDescription).withLocker(this::getLocker).build();
+				backing = builder.withDescription(getDescription()).withCollectionLocking(getLocker()).build();
 			}
 			return new DefaultObservableCollection<>(theType, backing, theElementSource, theSourceElements, theEquivalence);
 		}
@@ -487,7 +417,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 	 * @param <V> The type of the source data
 	 * @param <B> The sub-type of this builder
 	 */
-	public static class DataControlledCollectionBuilderImpl<E, V, B extends DataControlledCollectionBuilder<E, V, B>>
+	public static class DataControlledCollectionBuilderImpl<E, V, B extends DataControlledCollectionBuilderImpl<E, V, ? extends B>>
 	implements DataControlledCollectionBuilder<E, V, B> {
 		private final ObservableCollection<E> theBackingCollection;
 		private final Supplier<? extends List<? extends V>> theBackingData;
@@ -594,7 +524,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 	 * @param <E> The type of element for the collection
 	 * @param <B> The sub-type of the builder
 	 */
-	public static class SortedBuilderImpl<E, B extends SortedBuilder<E, B>> extends CollectionBuilderImpl<E, B>
+	public static class SortedBuilderImpl<E, B extends SortedBuilderImpl<E, ? extends B>> extends CollectionBuilderImpl<E, B>
 	implements SortedBuilder<E, B> {
 		/**
 		 * @param toCopy The builder to copy
@@ -646,7 +576,8 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 		public ObservableSortedCollection<E> build() {
 			BetterList<E> backing = getBacking();
 			if (backing == null)
-				backing = SortedTreeList.<E> buildTreeList(getSorting()).withDescription(getDescription()).withLocker(this::getLocker)
+				backing = SortedTreeList.<E> buildTreeList(getSorting()).withDescription(getDescription())
+				.withCollectionLocking(getLocker())
 				.build();
 			else if (!(backing instanceof BetterSortedList))
 				throw new IllegalStateException("An ObservableSortedCollection must be backed by an instance of BetterSortedList");
@@ -667,7 +598,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 	 * @param <V> The type of the source data
 	 * @param <B> The sub-type of this builder
 	 */
-	public static class DataControlledSortedCollectionBuilderImpl<E, V, B extends DataControlledSortedCollectionBuilder<E, V, B>>
+	public static class DataControlledSortedCollectionBuilderImpl<E, V, B extends DataControlledSortedCollectionBuilderImpl<E, V, ? extends B>>
 	extends DataControlledCollectionBuilderImpl<E, V, B> implements DataControlledSortedCollectionBuilder<E, V, B> {
 		/**
 		 * @param backingCollection The observable collection providing the observable functionality
@@ -697,7 +628,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 	 * @param <E> The type of element for the collection
 	 * @param <B> The sub-type of the builder
 	 */
-	public static class DistinctBuilderImpl<E, B extends DistinctBuilder<E, B>> extends CollectionBuilderImpl<E, B>
+	public static class DistinctBuilderImpl<E, B extends DistinctBuilderImpl<E, ? extends B>> extends CollectionBuilderImpl<E, B>
 	implements DistinctBuilder<E, B> {
 		/** @see ObservableCollectionBuilder.CollectionBuilderImpl#CollectionBuilderImpl(CollectionBuilderImpl) */
 		public DistinctBuilderImpl(CollectionBuilderImpl<E, ?> toCopy) {
@@ -727,7 +658,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 	 * @param <V> The type of the source data
 	 * @param <B> The sub-type of this builder
 	 */
-	public static class DataControlledSetBuilderImpl<E, V, B extends DataControlledSetBuilder<E, V, B>>
+	public static class DataControlledSetBuilderImpl<E, V, B extends DataControlledSetBuilderImpl<E, V, ? extends B>>
 	extends DataControlledCollectionBuilderImpl<E, V, B> implements DataControlledSetBuilder<E, V, B> {
 		/**
 		 * @param backingCollection The observable collection providing the observable functionality
@@ -756,7 +687,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 	 * @param <E> The type of element for the collection
 	 * @param <B> The sub-type of the builder
 	 */
-	public static class DistinctSortedBuilderImpl<E, B extends DistinctSortedBuilder<E, B>> extends SortedBuilderImpl<E, B>
+	public static class DistinctSortedBuilderImpl<E, B extends DistinctSortedBuilderImpl<E, ? extends B>> extends SortedBuilderImpl<E, B>
 	implements DistinctSortedBuilder<E, B> {
 		/** @see ObservableCollectionBuilder.SortedBuilderImpl#SortedBuilderImpl(CollectionBuilderImpl, Comparator) */
 		public DistinctSortedBuilderImpl(CollectionBuilderImpl<E, ?> toCopy, Comparator<? super E> sorting) {
@@ -789,7 +720,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 		public ObservableSortedSet<E> build() {
 			BetterList<E> backing = getBacking();
 			if (backing == null)
-				backing = BetterTreeSet.<E> buildTreeSet(getSorting()).withDescription(getDescription()).withLocker(this::getLocker)
+				backing = BetterTreeSet.<E> buildTreeSet(getSorting()).withDescription(getDescription()).withCollectionLocking(getLocker())
 				.build();
 			else if (!(backing instanceof BetterSortedSet))
 				throw new IllegalStateException("An ObservableSortedCollection must be backed by an instance of BetterSortedList");
@@ -809,7 +740,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 	 * @param <V> The type of the source data
 	 * @param <B> The sub-type of this builder
 	 */
-	public static class DataControlledSortedSetBuilderImpl<E, V, B extends DataControlledSortedSetBuilder<E, V, B>>
+	public static class DataControlledSortedSetBuilderImpl<E, V, B extends DataControlledSortedSetBuilderImpl<E, V, ? extends B>>
 	extends DataControlledCollectionBuilderImpl<E, V, B> implements DataControlledSortedSetBuilder<E, V, B> {
 		/**
 		 * @param backingCollection The observable collection providing the observable functionality

@@ -36,7 +36,7 @@ public class QuickTests {
 	public void testSuperBasic() throws IOException, QonfigParseException, QonfigInterpretationException {
 		ObservableModelSet.ExternalModelSetBuilder extModels = ObservableModelSet.buildExternal();
 		extModels.addSubModel("extModel").with("value1", ModelTypes.Value.forType(double.class),
-			SettableValue.build(double.class).safe(false).withDescription("extModel.value1").withValue(42.0).build());
+			SettableValue.build(double.class).withDescription("extModel.value1").withValue(42.0).build());
 		testQuick("super-basic.qml", extModels.build());
 	}
 

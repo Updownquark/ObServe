@@ -45,7 +45,7 @@ public class DefaultInteractiveTestService extends DefaultInteractiveTestSuite i
 	 */
 	public DefaultInteractiveTestService(String name, String globalConfig) {
 		super(null, name, false, new StampedLockingStrategy(name));
-		theCurrentTest = SettableValue.build(DefaultTesting.class).safe(false).build();
+		theCurrentTest = SettableValue.build(DefaultTesting.class).build();
 		theValues = new ConcurrentHashMap<>();
 		theGlobalConfigLocation = globalConfig;
 		theTestResourceLocations = new ArrayList<>();

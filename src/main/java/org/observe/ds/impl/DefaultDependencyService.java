@@ -53,14 +53,14 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 	/** @param lock The lock to facilitate thread safety */
 	public DefaultDependencyService(Transactable lock) {
 		theComponents = ObservableCollection.build((Class<DefaultComponent<C>>) (Class<?>) DefaultComponent.class)
-			.withLocker(new RRWLockingStrategy(lock)).build();
+			.withLocking(new RRWLockingStrategy(lock)).build();
 		theServices = ObservableSet.build(TypeTokens.get().keyFor(Service.class).<Service<?>> wildCard())
-			.withLocker(new RRWLockingStrategy(lock)).build();
+			.withLocking(new RRWLockingStrategy(lock)).build();
 
 		theServiceProviders = new LinkedHashMap<>();
 		theDependents = new LinkedHashMap<>();
 		theScheduledTasks = ListenerList.build().build();
-		theStage = SettableValue.build(DependencyServiceStage.class).withLock(new RRWLockingStrategy(lock))
+		theStage = SettableValue.build(DependencyServiceStage.class).withLocking(new RRWLockingStrategy(lock))
 			.withValue(DependencyServiceStage.Uninitialized).build();
 	}
 
@@ -108,7 +108,7 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 			theStage.set(DependencyServiceStage.Initializing, cause);
 			isActivating = true;
 			try {
-				BetterSet<DefaultDependency<C, ?>> componentPath = BetterHashSet.build().unsafe().buildSet();
+				BetterSet<DefaultDependency<C, ?>> componentPath = BetterHashSet.build().buildSet();
 				boolean progress = true;
 				while (progress) {
 					progress = false;
@@ -247,7 +247,7 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 				theDependents.computeIfAbsent(dep.getTarget(), __ -> new ArrayList<>()).add(dep);
 
 			boolean somethingSatisfied = getStage().get() != DependencyServiceStage.Uninitialized;
-			BetterSet<DefaultDependency<C, ?>> componentPath = BetterHashSet.build().unsafe().buildSet();
+			BetterSet<DefaultDependency<C, ?>> componentPath = BetterHashSet.build().buildSet();
 			boolean wasSatisfied = false;
 			while (somethingSatisfied) {
 				somethingSatisfied = false;

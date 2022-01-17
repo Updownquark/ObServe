@@ -332,7 +332,7 @@ public class DefaultExpressoParser implements ExpressoParser {
 		case "expressionName":
 			// Other names?
 			BetterList<String> nameSequence = extractNameSequence(expression, //
-				BetterTreeList.<String> build().safe(false).build());
+				BetterTreeList.<String> build().build());
 			return new NameExpression(null, nameSequence);
 			// Expression types
 		case "assignment":
@@ -1419,7 +1419,7 @@ public class DefaultExpressoParser implements ExpressoParser {
 				theType = type;
 				theCast = cast;
 				theReverse = reverse;
-				theChanges = SimpleObservable.build().safe(false).build();
+				theChanges = SimpleObservable.build().build();
 			}
 
 			@Override

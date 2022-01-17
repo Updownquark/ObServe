@@ -508,7 +508,7 @@ public class ObservableModelQonfigParser {
 				BiFunction<ModelSetInstance, ExternalModelSet, V> value = parseValue(model, cv, type,
 					(ObservableExpression) element.getValue());
 				model.with(name, ModelTypes.Value.forType(type), (modelSet, extModels) -> {
-					SettableValue.Builder<V> builder = SettableValue.build(type).safe(false);
+					SettableValue.Builder<V> builder = SettableValue.build(type);
 					builder.withDescription(path);
 					if (value != null)
 						builder.withValue(value.apply(modelSet, extModels));
@@ -588,7 +588,7 @@ public class ObservableModelQonfigParser {
 					values.add(parseValue(model, cv, type, (ObservableExpression) el.getValue()));
 				prepare(type, element, model, cv);
 				add(model, cv, name, type, element, (modelSet, extModels) -> {
-					C collection = (C) create(type, modelSet).safe(false).withDescription(path).build();
+					C collection = (C) create(type, modelSet).withDescription(path).build();
 					int i = 0;
 					for (QonfigElement el : element.getChildrenByRole().get(elRole)) {
 						if (!collection.add(values.get(i).apply(modelSet, extModels)))
@@ -674,7 +674,7 @@ public class ObservableModelQonfigParser {
 
 			@Override
 			<V> ObservableCollectionBuilder<V, ?> create(TypeToken<V> type, ModelSetInstance models) {
-				return ObservableCollection.build(type).safe(false)//
+				return ObservableCollection.build(type)//
 					.distinctSorted(theComparator.apply(models));
 			}
 
@@ -700,7 +700,7 @@ public class ObservableModelQonfigParser {
 
 			@Override
 			<V> ObservableCollectionBuilder<V, ?> create(TypeToken<V> type, ModelSetInstance models) {
-				return ObservableCollection.build(type).safe(false)//
+				return ObservableCollection.build(type)//
 					.sortBy(theComparator.apply(models));
 			}
 
@@ -771,7 +771,7 @@ public class ObservableModelQonfigParser {
 				}
 				prepare(keyType, valueType, element, model, cv);
 				add(model, cv, name, keyType, valueType, element, (modelSet, extModels) -> {
-					M map = (M) create(keyType, valueType, modelSet).safe(false).withDescription(path).build();
+					M map = (M) create(keyType, valueType, modelSet).withDescription(path).build();
 					for (int i = 0; i < entries.size(); i++) {
 						BiTuple<BiFunction<ModelSetInstance, ExternalModelSet, K>, BiFunction<ModelSetInstance, ExternalModelSet, V>> entry = entries
 							.get(i);
@@ -877,7 +877,7 @@ public class ObservableModelQonfigParser {
 				}
 				prepare(keyType, valueType, element, model, cv);
 				add(model, cv, name, keyType, valueType, element, (modelSet, extModels) -> {
-					M map = (M) create(keyType, valueType, modelSet).safe(false).withDescription(path).build(null);
+					M map = (M) create(keyType, valueType, modelSet).withDescription(path).build(null);
 					for (int i = 0; i < entries.size(); i++) {
 						BiTuple<BiFunction<ModelSetInstance, ExternalModelSet, K>, BiFunction<ModelSetInstance, ExternalModelSet, V>> entry = entries
 							.get(i);
@@ -916,7 +916,7 @@ public class ObservableModelQonfigParser {
 				ClassView cv) throws QonfigInterpretationException {
 			}
 
-			abstract <K, V> ObservableMultiMap.Builder<K, V> create(TypeToken<K> keyType, TypeToken<V> type, ModelSetInstance models);
+			abstract <K, V> ObservableMultiMap.Builder<K, V, ?> create(TypeToken<K> keyType, TypeToken<V> type, ModelSetInstance models);
 
 			abstract <K, V> void add(ObservableModelSet.Builder model, ClassView cv, String name, TypeToken<K> keyType,
 				TypeToken<V> valueType, QonfigElement element, ValueGetter<? extends M> map);
@@ -925,7 +925,7 @@ public class ObservableModelQonfigParser {
 		}
 		observeInterpreter.createWith("multi-map", Void.class, new MultiMapCreator<ObservableMultiMap>() {
 			@Override
-			<K, V> ObservableMultiMap.Builder<K, V> create(TypeToken<K> keyType, TypeToken<V> type, ModelSetInstance models) {
+			<K, V> ObservableMultiMap.Builder<K, V, ?> create(TypeToken<K> keyType, TypeToken<V> type, ModelSetInstance models) {
 				return ObservableMultiMap.build(keyType, type);
 			}
 
@@ -951,7 +951,7 @@ public class ObservableModelQonfigParser {
 			}
 
 			@Override
-			<K, V> ObservableSortedMultiMap.Builder<K, V> create(TypeToken<K> keyType, TypeToken<V> type, ModelSetInstance models) {
+			<K, V> ObservableSortedMultiMap.Builder<K, V, ?> create(TypeToken<K> keyType, TypeToken<V> type, ModelSetInstance models) {
 				return ObservableMultiMap.build(keyType, type)//
 					.sortedBy(theComparator.apply(models));
 			}
@@ -1609,7 +1609,7 @@ public class ObservableModelQonfigParser {
 				onNoBackup.run();
 			return;
 		}
-		SettableValue<Instant> selectedBackup = SettableValue.build(Instant.class).safe(false).build();
+		SettableValue<Instant> selectedBackup = SettableValue.build(Instant.class).build();
 		Format<Instant> PAST_DATE_FORMAT = SpinnerFormat.flexDate(Instant::now, "EEE MMM dd, yyyy",
 			opts -> opts.withMaxResolution(TimeUtils.DateElementType.Second).withEvaluationType(TimeUtils.RelativeTimeEvaluation.Past));
 		JFrame[] frame = new JFrame[1];

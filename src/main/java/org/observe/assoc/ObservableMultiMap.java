@@ -38,6 +38,7 @@ import org.qommons.collect.BetterMap;
 import org.qommons.collect.BetterMultiMap;
 import org.qommons.collect.BetterSet;
 import org.qommons.collect.BetterSortedMap;
+import org.qommons.collect.CollectionBuilder;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.ElementId;
@@ -332,7 +333,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 	 * @param valueType The value type for the map
 	 * @return A builder to build a new {@link ObservableMultiMap}
 	 */
-	public static <K, V> Builder<K, V> build(Class<K> keyType, Class<V> valueType) {
+	public static <K, V> Builder<K, V, ?> build(Class<K> keyType, Class<V> valueType) {
 		return build(TypeTokens.get().of(keyType), TypeTokens.get().of(valueType));
 	}
 
@@ -345,7 +346,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 	 * @param valueType The value type for the map
 	 * @return A builder to build a new {@link ObservableMultiMap}
 	 */
-	public static <K, V> Builder<K, V> build(TypeToken<K> keyType, TypeToken<V> valueType) {
+	public static <K, V> Builder<K, V, ?> build(TypeToken<K> keyType, TypeToken<V> valueType) {
 		return new Builder<>(null, keyType, valueType, "ObservableMultiMap");
 	}
 
@@ -354,8 +355,9 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 	 *
 	 * @param <K> The key type for the map
 	 * @param <V> the value type for the map
+	 * @param <B> The sub-type of this builder
 	 */
-	class Builder<K, V> {
+	class Builder<K, V, B extends Builder<K, V, ? extends B>> implements CollectionBuilder<B> {
 		/** A super-simple map entry class. The key and the value are both mutable. */
 		static class MapEntry<K, V> {
 			K key;
@@ -379,7 +381,6 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		private final ObservableCollectionBuilder<MapEntry<K, V>, ?> theBackingBuilder;
 		private Equivalence<? super K> theKeyEquivalence;
 		private Equivalence<? super V> theValueEquivalence;
-		private String theDescription;
 
 		Builder(ObservableCollectionBuilder<MapEntry<K, V>, ?> backingBuilder, //
 			TypeToken<K> keyType, TypeToken<V> valueType, String defaultDescrip) {
@@ -392,33 +393,21 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 			theBackingBuilder = backingBuilder;
 			theKeyEquivalence = Equivalence.DEFAULT;
 			theValueEquivalence = Equivalence.DEFAULT;
-			theDescription = defaultDescrip;
 		}
 
-		/**
-		 * @param safe Whether the map should be thread-safe
-		 * @return This builder
-		 */
-		public Builder<K, V> safe(boolean safe) {
-			theBackingBuilder.safe(safe);
-			return this;
-		}
-
-		/**
-		 * @param locking The locking strategy for the map
-		 * @return This builder
-		 */
-		public Builder<K, V> withLocker(CollectionLockingStrategy locking) {
-			theBackingBuilder.withLocker(locking);
-			return this;
+		@Override
+		public B withCollectionLocking(Function<Object, CollectionLockingStrategy> locking) {
+			theBackingBuilder.withCollectionLocking(locking);
+			return (B) this;
 		}
 
 		/**
 		 * @param sorting The sorting for the key set
 		 * @return A sorted builder with the same settings as this builder but that will build an {@link ObservableSortedMultiMap}
 		 */
-		public ObservableSortedMultiMap.Builder<K, V> sortedBy(Comparator<? super K> sorting) {
-			return new ObservableSortedMultiMap.Builder<>(theBackingBuilder, theKeyType, theValueType, sorting, theDescription);
+		public ObservableSortedMultiMap.Builder<K, V, ?> sortedBy(Comparator<? super K> sorting) {
+			return new ObservableSortedMultiMap.Builder<>(theBackingBuilder, theKeyType, theValueType, sorting,
+				theBackingBuilder.getDescription());
 		}
 
 		/**
@@ -426,7 +415,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		 * @return This builder, or if this builder is {@link #sortedBy(Comparator) sorted}, a new builder with the same settings as this
 		 *         one but the given key equivalence
 		 */
-		public Builder<K, V> withKeyEquivalence(Equivalence<? super K> keyEquivalence) {
+		public Builder<K, V, ?> withKeyEquivalence(Equivalence<? super K> keyEquivalence) {
 			theKeyEquivalence = keyEquivalence;
 			return this;
 		}
@@ -435,18 +424,15 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		 * @param valueEquivalence The value equivalence for the multi-map
 		 * @return This builder
 		 */
-		public Builder<K, V> withValueEquivalence(Equivalence<? super V> valueEquivalence) {
+		public B withValueEquivalence(Equivalence<? super V> valueEquivalence) {
 			theValueEquivalence = valueEquivalence;
-			return this;
+			return (B) this;
 		}
 
-		/**
-		 * @param description The description for the multi-map's {@link Identifiable#getIdentity() identity}
-		 * @return This builder
-		 */
-		public Builder<K, V> withDescription(String description) {
-			theDescription = description;
-			return this;
+		@Override
+		public B withDescription(String description) {
+			theBackingBuilder.withDescription(description);
+			return (B) this;
 		}
 
 		protected Equivalence<? super V> getValueEquivalence() {
@@ -457,8 +443,9 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 			theValueEquivalence = valueEquivalence;
 		}
 
-		protected String getDescrip() {
-			return theDescription;
+		@Override
+		public String getDescription() {
+			return theBackingBuilder.getDescription();
 		}
 
 		protected TypeToken<K> getKeyType() {
@@ -478,7 +465,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		 * @return The new multi-map
 		 */
 		public ObservableMultiMap<K, V> build(Observable<?> until) {
-			ObservableCollection<MapEntry<K, V>> backing = theBackingBuilder.withDescription(theDescription + " backing").build();
+			ObservableCollection<MapEntry<K, V>> backing = theBackingBuilder.withDescription(getDescription() + " backing").build();
 			MultiMapFlow<K, MapEntry<K, V>> mapFlow;
 			Function<MapEntry<K, V>, K> keyMap = LambdaUtils.printableFn(entry -> entry.key, "key", null);
 			BiConsumer<MapEntry<K, V>, K> keySet = LambdaUtils.printableBiConsumer((element, newKey) -> element.key = newKey,
@@ -1194,7 +1181,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 				X value;
 
 				MapEntry(ObservableMultiEntry<K, V> entry) {
-					values = ObservableCollection.build(getSource().getValueType()).safe(false).build();
+					values = ObservableCollection.build(getSource().getValueType()).build();
 					values.addAll(entry);
 					sub = theObservableCombination.apply(values).changes().act(evt -> value = evt.getNewValue());
 				}

@@ -44,7 +44,7 @@ public class ObservableValueTest {
 			int count = helper.getBoolean(.005) ? 0 : helper.getInt(1, 20);
 			SettableValue<Object>[] values = new SettableValue[count];
 			for (int i = 0; i < count; i++) {
-				values[i] = SettableValue.build((TypeToken<Object>) type.getType()).safe(false)//
+				values[i] = SettableValue.build((TypeToken<Object>) type.getType())//
 					.withValue(ObservableChainTester.SUPPLIERS.get(type).apply(helper)).build();
 			}
 			Object defValue = helper.getBoolean() ? null : ObservableChainTester.SUPPLIERS.get(type).apply(helper);

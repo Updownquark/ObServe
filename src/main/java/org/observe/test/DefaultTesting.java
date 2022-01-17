@@ -239,7 +239,7 @@ class DefaultTesting implements InteractiveTesting {
 
 		WrappedEnv(InteractiveTestEnvironment wrapped) {
 			theWrappedEnv = wrapped;
-			thePreviousValues = BetterHashMap.build().unsafe().buildMap();
+			thePreviousValues = BetterHashMap.build().buildMap();
 		}
 
 		@Override

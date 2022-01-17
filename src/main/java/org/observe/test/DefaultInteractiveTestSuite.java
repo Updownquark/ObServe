@@ -46,7 +46,7 @@ class DefaultInteractiveTestSuite implements InteractiveTestSuite {
 		theName = name;
 		isSequential = sequential;
 		theLocker = locker;
-		theContent = ObservableCollection.build(InteractiveTestOrSuite.class).withLocker(locker).build();
+		theContent = ObservableCollection.build(InteractiveTestOrSuite.class).withLocking(locker).build();
 		theConfigLocations = new HashMap<>();
 		theConfigs = new HashMap<>();
 		theResults = new HashMap<>();
@@ -171,7 +171,7 @@ class DefaultInteractiveTestSuite implements InteractiveTestSuite {
 		ObservableCollection<TestResult> results = theResults.get(testName);
 		if (results != null)
 			return results;
-		results = ObservableCollection.build(TestResult.class).safe(false).build();
+		results = ObservableCollection.build(TestResult.class).build();
 		theResults.put(testName, results);
 		InteractiveTestOrSuite test = null;
 		for (InteractiveTestOrSuite tos : theContent) {
@@ -185,7 +185,7 @@ class DefaultInteractiveTestSuite implements InteractiveTestSuite {
 		} else if (!(test instanceof InteractiveTest)) {
 			System.err.println(testName + " is a suite, not a test");
 		} else {
-			BetterList<InteractiveTestSuite> suitePath = BetterTreeList.<InteractiveTestSuite> build().safe(false).build();
+			BetterList<InteractiveTestSuite> suitePath = BetterTreeList.<InteractiveTestSuite> build().build();
 			DefaultInteractiveTestSuite suite = this;
 			while (suite != null) {
 				suitePath.addFirst(suite);
@@ -207,7 +207,7 @@ class DefaultInteractiveTestSuite implements InteractiveTestSuite {
 					System.err.println("Could not read test results for " + test.getClass().getName());
 					e.printStackTrace();
 				}
-				SimpleObservable<Void> until = SimpleObservable.build().safe(false).build();
+				SimpleObservable<Void> until = SimpleObservable.build().build();
 				results.addAll(resultsConfig.asValue(TestResult.class).at("result").until(until).buildCollection(null)//
 					.stream().map(DefaultTestResult::new).collect(Collectors.toList()));
 				until.onNext(null);
@@ -263,7 +263,7 @@ class DefaultInteractiveTestSuite implements InteractiveTestSuite {
 					}
 					// Write the results to XML
 					ObservableConfig resultsConfig = ObservableConfig.createRoot("results", null, __ -> new FastFailLockingStrategy());
-					SimpleObservable<Void> until = SimpleObservable.build().safe(false).build();
+					SimpleObservable<Void> until = SimpleObservable.build().build();
 					SyncValueSet<TestResult> configFailures = resultsConfig.asValue(TestResult.class).at("result").until(until)
 						.buildEntitySet(null);
 					for (TestResult result : results) {

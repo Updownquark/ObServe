@@ -410,15 +410,15 @@ public class ObservableCollectionActiveManagers2 {
 						boolean newIsElement = equivalence().isElement(evt.getNewValue());
 						IntersectionElement newEl = newIsElement
 							? theValues.computeIfAbsent((T) evt.getNewValue(), v -> new IntersectionElement(v)) : null;
-							if (newEl != null)
-								theRightElementValues.put(evt.getElementId(), newEl);
-							else if (element != null)
-								theRightElementValues.remove(evt.getElementId());
-							if (element != null)
-								element.decrementRight(evt.getElementId(), evt);
-							if (newIsElement)
-								newEl.incrementRight(evt.getElementId(), evt);
-							break;
+						if (newEl != null)
+							theRightElementValues.put(evt.getElementId(), newEl);
+						else if (element != null)
+							theRightElementValues.remove(evt.getElementId());
+						if (element != null)
+							element.decrementRight(evt.getElementId(), evt);
+						if (newIsElement)
+							newEl.incrementRight(evt.getElementId(), evt);
+						break;
 					}
 				}
 			}, action -> theFilter.subscribe(action, fromStart).removeAll());
@@ -906,7 +906,7 @@ public class ObservableCollectionActiveManagers2 {
 		ElementRefreshingCollectionManager(ActiveCollectionManager<E, ?, T> parent, Function<? super T, ? extends Observable<?>> refresh) {
 			theParent = parent;
 			theRefresh = refresh;
-			theRefreshObservables = BetterHashMap.build().unsafe().buildMap();
+			theRefreshObservables = BetterHashMap.build().buildMap();
 			theLock = new ReentrantLock();
 			theSettingElement = () -> null;
 		}
@@ -1193,8 +1193,7 @@ public class ObservableCollectionActiveManagers2 {
 			theMap = map;
 			theOptions = options;
 
-			theOuterElements = BetterTreeSet.<FlattenedHolder> buildTreeSet((f1, f2) -> f1.theParentEl.compareTo(f2.theParentEl))
-				.safe(false).build();
+			theOuterElements = BetterTreeSet.<FlattenedHolder> buildTreeSet((f1, f2) -> f1.theParentEl.compareTo(f2.theParentEl)).build();
 			theLock = new ReentrantReadWriteLock();
 		}
 
@@ -1597,8 +1596,7 @@ public class ObservableCollectionActiveManagers2 {
 			throws UnsupportedOperationException, IllegalArgumentException {
 			if (theOptions == null) {
 				// Group by flattened collection
-				BetterMap<FlattenedHolder, List<DerivedCollectionElement<V>>> grouped = BetterHashMap.build().identity().unsafe()
-					.buildMap();
+				BetterMap<FlattenedHolder, List<DerivedCollectionElement<V>>> grouped = BetterHashMap.build().identity().buildMap();
 				for (DerivedCollectionElement<T> el : elements)
 					grouped.computeIfAbsent(((FlattenedElement) el).theHolder, h -> new ArrayList<>())
 					.add((DerivedCollectionElement<V>) ((FlattenedElement) el).theParentEl);
@@ -1607,7 +1605,7 @@ public class ObservableCollectionActiveManagers2 {
 					((ActiveCollectionManager<?, ?, V>) entry.getKey().manager).setValues(entry.getValue(), (V) newValue);
 			} else if (theOptions.getReverse() == null || !theOptions.getReverse().isStateful()) {
 				// Group by flattened collection
-				BetterMap<FlattenedHolder, List<FlattenedElement>> grouped = BetterHashMap.build().identity().unsafe().buildMap();
+				BetterMap<FlattenedHolder, List<FlattenedElement>> grouped = BetterHashMap.build().identity().buildMap();
 				for (DerivedCollectionElement<T> el : elements)
 					grouped.computeIfAbsent(((FlattenedElement) el).theHolder, h -> new ArrayList<>()).add((FlattenedElement) el);
 
@@ -1696,7 +1694,7 @@ public class ObservableCollectionActiveManagers2 {
 
 			FlattenedHolder(DerivedCollectionElement<I> parentEl, WeakListening listening, Object cause, boolean fromStart) {
 				theParentEl = parentEl;
-				theElements = BetterTreeSet.<FlattenedElement> buildTreeSet(FlattenedElement::compareTo).safe(false).build();
+				theElements = BetterTreeSet.<FlattenedElement> buildTreeSet(FlattenedElement::compareTo).build();
 				isFromStart = fromStart;
 				theCacheHandler = theOptions == null ? null
 					: theOptions.createCacheHandler(new XformOptions.XformCacheHandlingInterface<I, Void>() {

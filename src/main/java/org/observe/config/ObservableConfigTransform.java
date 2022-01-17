@@ -646,7 +646,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 
 			public ConfigElement(ObservableConfig config, ValueHolder<E> value, Observable<?> findRefs) {
 				this.theConfig = config;
-				theElementObservable = SimpleObservable.build().withLock(theConfig).build();
+				theElementObservable = SimpleObservable.build().withLocking(theConfig).build();
 
 				if (value != null && value.isPresent()) {
 					theFormat.format(getSession(), value.get(), null, (__, trivial) -> config, v -> theValue = v,

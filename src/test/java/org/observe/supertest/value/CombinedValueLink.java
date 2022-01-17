@@ -61,7 +61,7 @@ public class CombinedValueLink<S, V, T> extends ObservableValueLink<S, T> implem
 			int valueCount = helper.getInt(1, 2); // Value combination only supports 1 or 2 combined values
 			List<SettableValue<V>> values = new ArrayList<>(valueCount);
 			for (int i = 0; i < valueCount; i++)
-				values.add(SettableValue.build((TypeToken<V>) transform.getValueType().getType()).safe(false).build());
+				values.add(SettableValue.build((TypeToken<V>) transform.getValueType().getType()).build());
 			Function<TestHelper, V> valueSupplier = (Function<TestHelper, V>) ObservableChainTester.SUPPLIERS.get(transform.getValueType());
 			for (int i = 0; i < valueCount; i++)
 				values.get(i).set(valueSupplier.apply(helper), null);

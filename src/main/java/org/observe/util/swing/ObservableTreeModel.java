@@ -255,7 +255,7 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 			}
 			areChildrenInitialized = true;
 
-			unsubscribe = SimpleObservable.build().safe(false).build();
+			unsubscribe = SimpleObservable.build().build();
 			theChildren = ObservableTreeModel.this.getChildren(theValue);
 			if (theChildren != null && !(theChildren instanceof SafeObservableCollection))
 				theChildren = new SafeObservableCollection<>(theChildren, EventQueue::isDispatchThread, EventQueue::invokeLater,

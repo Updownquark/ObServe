@@ -98,7 +98,7 @@ public class CollectionDerivedValues {
 		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestValueType targetType,
 			TestHelper helper) {
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
-			ObservableCollection<T> values = ObservableCollection.build(sourceCL.getCollection().getType()).safe(false).build();
+			ObservableCollection<T> values = ObservableCollection.build(sourceCL.getCollection().getType()).build();
 			boolean containsAny = helper.getBoolean();
 			return (ObservableChainLink<T, X>) new CollectionContainsValues<>(path, sourceCL, values, containsAny);
 		}
@@ -304,7 +304,7 @@ public class CollectionDerivedValues {
 
 		CollectionContainsValue(String path, ObservableCollectionLink<?, T> sourceLink, TestHelper helper) {
 			super(path, sourceLink, TestValueType.BOOLEAN, true);
-			theValue = SettableValue.build((TypeToken<T>) getSourceLink().getType().getType()).safe(false).build();
+			theValue = SettableValue.build((TypeToken<T>) getSourceLink().getType().getType()).build();
 			theValue.set(sourceLink.getValueSupplier().apply(helper), null);
 		}
 
@@ -572,7 +572,7 @@ public class CollectionDerivedValues {
 
 		CollectionConditionFinder(String path, ObservableCollectionLink<?, T> sourceLink, TestHelper helper) {
 			super(path, sourceLink, sourceLink.getType(), true);
-			theConditionValue = SettableValue.build((TypeToken<Function<T, String>>) (TypeToken<?>) TypeTokens.get().OBJECT).safe(false)
+			theConditionValue = SettableValue.build((TypeToken<Function<T, String>>) (TypeToken<?>) TypeTokens.get().OBJECT)
 				.build();
 			theConditionValue.set(FilteredCollectionLink.filterFor(getType(), helper), null);
 			theLocation = Ternian.values()[helper.getInt(0, 3)];
@@ -716,7 +716,7 @@ public class CollectionDerivedValues {
 					getSourceLink().expectAdd(value, //
 						theLocation == Ternian.FALSE ? found : null, //
 							theLocation == Ternian.TRUE ? found : null, //
-						true, rejection, true);
+								true, rejection, true);
 				} else
 					getSourceLink().expect(op, rejection.unrejectable(), true);
 			} else

@@ -33,7 +33,7 @@ public abstract class AbstractChainLink<S, T> implements ObservableChainLink<S, 
 		theSourceLink = sourceLink;
 		theDerivedLinks = new ArrayList<>();
 		theSiblingIndex = theSourceLink == null ? -1 : theSourceLink.getDerivedLinks().size(); // Assume we'll be added at the end
-		theDestruction = SimpleObservable.build().safe(false).build();
+		theDestruction = SimpleObservable.build().build();
 	}
 
 	@Override

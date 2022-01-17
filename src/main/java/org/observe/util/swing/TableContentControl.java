@@ -1725,18 +1725,18 @@ public interface TableContentControl {
 	}
 
 	public static void main(String... args) {
-		SettableValue<TableContentControl> control = SettableValue.build(TableContentControl.class).safe(false).withValue(DEFAULT).build();
+		SettableValue<TableContentControl> control = SettableValue.build(TableContentControl.class).withValue(DEFAULT).build();
 		control.noInitChanges().act(evt -> {
 			System.out.println(evt.getNewValue());
 		});
 		ObservableCollection<Map<String, String>> rows = ObservableCollection
-			.build(TypeTokens.get().keyFor(Map.class).<Map<String, String>> parameterized(String.class, String.class)).safe(false).build();
+			.build(TypeTokens.get().keyFor(Map.class).<Map<String, String>> parameterized(String.class, String.class)).build();
 		ObservableCollection<CategoryRenderStrategy<Map<String, String>, String>> columns = ObservableCollection
 			.build(TypeTokens.get().keyFor(CategoryRenderStrategy.class)
 				.<CategoryRenderStrategy<Map<String, String>, String>> parameterized(rows.getType(), TypeTokens.get().STRING))
-			.safe(false).build();
+			.build();
 		SettableValue<List<String>> categories = SettableValue
-			.build(TypeTokens.get().keyFor(List.class).<List<String>> parameterized(String.class)).safe(false).withValue(new ArrayList<>())
+			.build(TypeTokens.get().keyFor(List.class).<List<String>> parameterized(String.class)).withValue(new ArrayList<>())
 			.build();
 		categories.noInitChanges().act(evt -> {
 			CollectionUtils.synchronize(columns, evt.getNewValue(), (crs, cat) -> crs.getName().equals(cat))//

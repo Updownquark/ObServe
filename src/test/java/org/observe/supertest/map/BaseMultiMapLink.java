@@ -46,7 +46,7 @@ public class BaseMultiMapLink<K, V> extends ObservableMultiMapLink<V, K, V> {
 			TestValueType keyType = BaseCollectionLink.nextType(helper);
 			TestValueType valueType = targetType != null ? targetType : BaseCollectionLink.nextType(helper);
 			Comparator<? super K> keySorting = helper.getBoolean() ? SortedCollectionLink.compare(keyType, helper) : null;
-			ObservableMultiMap.Builder<K, V> builder = ObservableMultiMap.build((TypeToken<K>) keyType.getType(),
+			ObservableMultiMap.Builder<K, V, ?> builder = ObservableMultiMap.build((TypeToken<K>) keyType.getType(),
 				(TypeToken<V>) valueType.getType());
 			if (keySorting != null)
 				builder = builder.sortedBy(keySorting);

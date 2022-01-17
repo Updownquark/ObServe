@@ -70,7 +70,7 @@ public class WindowPopulation {
 
 		DefaultWindowBuilder(W window, Observable<?> until, boolean disposeOnClose) {
 			theWindow = window;
-			theDispose = SimpleObservable.build().safe(false).build();
+			theDispose = SimpleObservable.build().build();
 			theUntil = Observable.or(until.takeUntil(theDispose), theDispose);
 			disposeOnClose(disposeOnClose);
 		}

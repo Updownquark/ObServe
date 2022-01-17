@@ -344,12 +344,12 @@ public class AppPopulation {
 			} else {
 				boolean[] printed = new boolean[1];
 				config.watch(ObservableConfigPath.buildPath(ObservableConfigPath.ANY_NAME).multi(true).build())
-					.act(LambdaUtils.printableConsumer(__ -> {
-						if (!printed[0]) {
-							System.out.println("WARNING: This application has not configured config persistence");
-							printed[0] = true;
-						}
-					}, "App Persistence", null));
+				.act(LambdaUtils.printableConsumer(__ -> {
+					if (!printed[0]) {
+						System.out.println("WARNING: This application has not configured config persistence");
+						printed[0] = true;
+					}
+				}, "App Persistence", null));
 				if (theErrorReportLink != null || theErrorReportInstructions != null) {
 					File errorFile = new File("App.errors.txt");
 					new SystemOutputHandler(null, errorFile);
@@ -432,7 +432,7 @@ public class AppPopulation {
 					onNoBackup.run();
 				return;
 			}
-			SettableValue<Instant> selectedBackup = SettableValue.build(Instant.class).safe(false).build();
+			SettableValue<Instant> selectedBackup = SettableValue.build(Instant.class).build();
 			Format<Instant> PAST_DATE_FORMAT = SpinnerFormat.flexDate(Instant::now, "EEE MMM dd, yyyy",
 				opts -> opts.withMaxResolution(TimeUtils.DateElementType.Second).withEvaluationType(TimeUtils.RelativeTimeEvaluation.Past));
 			JFrame[] frame = new JFrame[1];
@@ -493,10 +493,10 @@ public class AppPopulation {
 			AboutDialogBuilder(ObservableUiBuilder app, Class<?> appClass, JDialog dialog, Observable<?> until, boolean disposeOnClose) {
 				super(dialog, until, disposeOnClose);
 				theAppClass = appClass;
-				theCurrentVersion = SettableValue.build(String.class).safe(false).build();
+				theCurrentVersion = SettableValue.build(String.class).build();
 				theUpgrader = SettableValue.build(TypeTokens.get().keyFor(Consumer.class).<Consumer<Version>> parameterized(Version.class))
-					.safe(false).build();
-				SimpleObservable<Object> shown = SimpleObservable.build().safe(false).build();
+					.build();
+				SimpleObservable<Object> shown = SimpleObservable.build().build();
 				shown.act(__ -> {
 					if (theLatestReleaseGetter != null)
 						theLatestRelease = theLatestReleaseGetter.get();

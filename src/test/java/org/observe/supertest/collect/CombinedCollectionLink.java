@@ -62,7 +62,7 @@ public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLin
 			int valueCount = helper.getInt(1, 5); // Between 1 and 4, inclusive
 			List<SettableValue<V>> values = new ArrayList<>(valueCount);
 			for (int i = 0; i < valueCount; i++)
-				values.add(SettableValue.build((TypeToken<V>) transform.getValueType().getType()).safe(false).build());
+				values.add(SettableValue.build((TypeToken<V>) transform.getValueType().getType()).build());
 			Function<TestHelper, V> valueSupplier = (Function<TestHelper, V>) ObservableChainTester.SUPPLIERS.get(transform.getValueType());
 			for (int i = 0; i < valueCount; i++)
 				values.get(i).set(valueSupplier.apply(helper), null);

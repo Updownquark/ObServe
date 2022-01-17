@@ -1107,8 +1107,8 @@ public class PanelPopulation {
 		}
 
 		default P withSize(int width, int height) {
-			withWidth(SettableValue.build(int.class).safe(false).withValue(width).build());
-			withHeight(SettableValue.build(int.class).safe(false).withValue(height).build());
+			withWidth(SettableValue.build(int.class).withValue(width).build());
+			withHeight(SettableValue.build(int.class).withValue(height).build());
 			return (P) this;
 		}
 
@@ -1299,7 +1299,7 @@ public class PanelPopulation {
 		@Override
 		public <T> SettableValue<T> getOrDeclareSettable(String name, TypeToken<T> type, Function<Builder<T>, SettableValue<T>> builder) {
 			return this.getOrDeclare(name, SettableValue.class, type, () -> builder.apply(//
-				SettableValue.build(type).safe(false).withLock(theLock.get()).withDescription(name)), true, true);
+				SettableValue.build(type).withLocking(theLock.get()).withDescription(name)), true, true);
 		}
 
 		@Override
@@ -1308,7 +1308,7 @@ public class PanelPopulation {
 			Transactable lock = theLock.get();
 			CollectionLockingStrategy locking = lock == null ? new FastFailLockingStrategy() : new RRWLockingStrategy(lock);
 			return this.getOrDeclare(name, ObservableCollection.class, type, () -> builder.apply(//
-				DefaultObservableCollection.build(type).withLocker(locking).withDescription(name)), true, true);
+				DefaultObservableCollection.build(type).withLocking(locking).withDescription(name)), true, true);
 		}
 
 		@Override
@@ -2530,7 +2530,7 @@ public class PanelPopulation {
 			theUntil = until;
 			theTabs = new LinkedHashMap<>();
 			theTabsByComponent = new IdentityHashMap<>();
-			theSelectedTabId = SettableValue.build(Object.class).safe(false).build();
+			theSelectedTabId = SettableValue.build(Object.class).build();
 			thePostCreateActions = new LinkedList<>();
 		}
 
@@ -2574,7 +2574,7 @@ public class PanelPopulation {
 				theTabsByComponent.remove(oldTab.component);
 			} else
 				tab.tabEnd = SimpleObservable.build().withIdentity(Identifiable.baseId("tab " + tabID, new BiTuple<>(this, tabID)))
-				.safe(false).build();
+				.build();
 			Observable<?> tabUntil = Observable.or(tab.tabEnd, theUntil);
 			tab.until = tabUntil;
 			tab.component = t.getComponent(tabUntil);
@@ -2833,7 +2833,7 @@ public class PanelPopulation {
 		@Override
 		public P onSelect(Consumer<ObservableValue<Boolean>> onSelect) {
 			if (theOnSelect == null)
-				theOnSelect = SettableValue.build(boolean.class).safe(false).nullable(false).withValue(false).build();
+				theOnSelect = SettableValue.build(boolean.class).nullable(false).withValue(false).build();
 			onSelect.accept(theOnSelect);
 			return (P) this;
 		}
@@ -3251,7 +3251,7 @@ public class PanelPopulation {
 
 			theCollapsedIcon = ObservableSwingUtils.getFixedIcon(PanelPopulation.class, "/icons/circlePlus.png", 16, 16);
 			theExpandedIcon = ObservableSwingUtils.getFixedIcon(PanelPopulation.class, "/icons/circleMinus.png", 16, 16);
-			theInternalCollapsed = SettableValue.build(boolean.class).safe(false).withValue(theCollapsePane.isCollapsed()).build();
+			theInternalCollapsed = SettableValue.build(boolean.class).withValue(theCollapsePane.isCollapsed()).build();
 			theInternalCollapsed.set(theCollapsePane.isCollapsed(), null);
 			theCollapsePane.addPropertyChangeListener("collapsed", evt -> {
 				boolean collapsed = Boolean.TRUE.equals(evt.getNewValue());
@@ -4364,8 +4364,8 @@ public class PanelPopulation {
 
 		@Override
 		public <T> T input(TypeToken<T> type, Format<T> format, T initial, Consumer<ObservableTextField<T>> modify) {
-			SimpleObservable<Void> until = SimpleObservable.build().safe(false).build();
-			SettableValue<T> value = SettableValue.build(type).safe(false).withValue(initial).build();
+			SimpleObservable<Void> until = SimpleObservable.build().build();
+			SettableValue<T> value = SettableValue.build(type).withValue(initial).build();
 			WindowBuilder<JDialog, ?> dialog = WindowPopulation.populateDialog(null, until, true)//
 				.modal(true).withTitle(theTitle);
 			if (theImage != null)

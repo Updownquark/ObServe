@@ -38,7 +38,7 @@ class DefaultObservableConfig extends AbstractObservableConfig {
 			throw new IllegalArgumentException("Name must not be empty");
 		theLocking = locking.apply(this);
 		theName = name;
-		theContent = BetterTreeList.<ObservableConfig> build().withLocker(theLocking).build();
+		theContent = BetterTreeList.<ObservableConfig> build().withLocking(theLocking).build();
 		theListeners = ListenerList.build().build();
 	}
 

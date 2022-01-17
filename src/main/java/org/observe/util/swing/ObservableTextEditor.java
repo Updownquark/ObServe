@@ -301,7 +301,7 @@ public class ObservableTextEditor<E> {
 		if (theStatusChange == null) {
 			synchronized (this) {
 				if (theStatusChange == null)
-					theStatusChange = SimpleObservable.build().safe(false).build();
+					theStatusChange = SimpleObservable.build().build();
 			}
 		}
 		return ObservableValue.of(TypeTokens.get().STRING, () -> theError, () -> theStateStamp, theStatusChange);

@@ -144,7 +144,7 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 	 * @param <V> The value type for the map
 	 * @param <B> The sub-type of the builder
 	 */
-	class Builder<K, V, B extends Builder<K, V, B>> extends ObservableMap.Builder<K, V, B>
+	class Builder<K, V, B extends Builder<K, V, ? extends B>> extends ObservableMap.Builder<K, V, B>
 	implements ObservableCollectionBuilder.SortedBuilder<K, B> {
 		Builder(TypeToken<K> keyType, TypeToken<V> valueType, Comparator<? super K> sorting, String initDescrip) {
 			super(keyType, valueType, initDescrip);
@@ -187,7 +187,7 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 				.withBacking((BetterList<Map.Entry<K, V>>) (BetterList<?>) getBacking())//
 				.withDescription(getDescription())//
 				.withElementSource(getElementSource()).withSourceElements(getSourceElements())//
-				.withLocker(this::getLocker)//
+					.withCollectionLocking(getLocker())//
 				.sortBy((entry1, entry2) -> compare.compare(entry1.getKey(), entry2.getKey()))//
 				.build());
 		}

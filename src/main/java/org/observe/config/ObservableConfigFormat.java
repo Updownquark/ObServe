@@ -1963,7 +1963,7 @@ public interface ObservableConfigFormat<E> {
 					@Override
 					public E create(ObservableConfig config, Observable<?> until) {
 						try {
-							SimpleObservable<Void> findRefs = SimpleObservable.build().safe(false).build();
+							SimpleObservable<Void> findRefs = SimpleObservable.build().build();
 							E inst = createInstance(
 								ctxFor(config, session, ObservableValue.of(config), trivial -> config, null, until, null, findRefs, null),
 								theFieldValues.copy());

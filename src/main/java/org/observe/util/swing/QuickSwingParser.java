@@ -187,7 +187,7 @@ public class QuickSwingParser {
 				theParent = parent;
 				theModelsInstance = models;
 				theAttributeValues = new LinkedHashMap<>();
-				theChildren = ObservableCollection.build(QuickComponent.class).safe(false).build();
+				theChildren = ObservableCollection.build(QuickComponent.class).build();
 			}
 
 			public ModelSetInstance getModels() {
@@ -729,13 +729,13 @@ public class QuickSwingParser {
 				String maxHeightS = child.getElement().getAttributeText(base.getAttribute("simple-layout-child", "max-height"));
 				SimpleLayout.SimpleConstraints constraints = new SimpleLayout.SimpleConstraints(//
 					leftS == null ? null : QuickPosition.parse(leftS), rightS == null ? null : QuickPosition.parse(rightS), //
-					topS == null ? null : QuickPosition.parse(topS), bottomS == null ? null : QuickPosition.parse(bottomS), //
-					minWidthS == null ? null : QuickSize.parse(minWidthS), //
-					prefWidthS == null ? null : QuickSize.parse(prefWidthS), //
-					maxWidthS == null ? null : QuickSize.parse(maxWidthS), //
-					minHeightS == null ? null : QuickSize.parse(minHeightS), //
-					prefHeightS == null ? null : QuickSize.parse(prefHeightS), //
-					maxHeightS == null ? null : QuickSize.parse(maxHeightS));
+						topS == null ? null : QuickPosition.parse(topS), bottomS == null ? null : QuickPosition.parse(bottomS), //
+							minWidthS == null ? null : QuickSize.parse(minWidthS), //
+								prefWidthS == null ? null : QuickSize.parse(prefWidthS), //
+									maxWidthS == null ? null : QuickSize.parse(maxWidthS), //
+										minHeightS == null ? null : QuickSize.parse(minHeightS), //
+											prefHeightS == null ? null : QuickSize.parse(prefHeightS), //
+												maxHeightS == null ? null : QuickSize.parse(maxHeightS));
 				child.modify(ch -> ch.withLayoutConstraints(constraints));
 			}
 			return value;
@@ -894,7 +894,7 @@ public class QuickSwingParser {
 				// });
 				columnType = (TypeToken<Object>) colValue.getType().getType(0);
 				valueFn = msi -> {
-					SettableValue<Object> rowValue = SettableValue.build(modelType).safe(false).build();
+					SettableValue<Object> rowValue = SettableValue.build(modelType).build();
 					ModelSetInstance valueModelInst = valueModel.wrap(msi)//
 						.with(valueRowVP, rowValue)//
 						.build();
@@ -1287,7 +1287,7 @@ public class QuickSwingParser {
 						// Without this, additional columns could not be added if, as is likely, the columnsAttr collection is unmodifiable.
 						table.withColumns(ObservableCollection.flattenCollections(columnType, //
 							columnsAttr.apply(builder.getModels()), //
-							ObservableCollection.build(columnType).safe(false).build()).collect());
+							ObservableCollection.build(columnType).build()).collect());
 					}
 					for (Function<ModelSetInstance, CategoryRenderStrategy<Object, ?>> column : columns)
 						table.withColumn(column.apply(builder.getModels()));
@@ -1344,7 +1344,7 @@ public class QuickSwingParser {
 						// Without this, additional columns could not be added if, as is likely, the columnsAttr collection is unmodifiable.
 						t.withColumns(ObservableCollection.flattenCollections(columnType, //
 							columnsAttr.apply(builder.getModels()), //
-							ObservableCollection.build(columnType).safe(false).build()).collect());
+							ObservableCollection.build(columnType).build()).collect());
 					}
 					for (Function<ModelSetInstance, CategoryRenderStrategy<Object, ?>> column : columns)
 						t.withColumn(column.apply(builder.getModels()));
@@ -1438,7 +1438,7 @@ public class QuickSwingParser {
 					}, tree -> {
 						modify(tree.fill().fillV(), builder);
 						if (singleSelectionV != null) {
-							SettableValue<T> nodeValue = SettableValue.build(valueType).safe(false).build();
+							SettableValue<T> nodeValue = SettableValue.build(valueType).build();
 							ModelSetInstance nodeModel = wModel.wrap(builder.getModels())//
 								.with(tvp, nodeValue)//
 								.withUntil(nodeValue.noInitChanges())//
@@ -1450,7 +1450,7 @@ public class QuickSwingParser {
 						} else if (singleSelectionPath != null)
 							tree.withSelection(singleSelectionPath.apply(builder.getModels()), false);
 						else if (multiSelectionV != null) {
-							SettableValue<T> nodeValue = SettableValue.build(valueType).safe(false).build();
+							SettableValue<T> nodeValue = SettableValue.build(valueType).build();
 							ModelSetInstance nodeModel = wModel.wrap(builder.getModels())//
 								.with(tvp, nodeValue)//
 								.withUntil(nodeValue.noInitChanges())//
@@ -1526,7 +1526,7 @@ public class QuickSwingParser {
 		public ObservableCollection<T> getValues(ModelSetInstance models) {
 			// The collection allows removal
 			SettableValue<T> id = tabId.get(models);
-			ObservableCollection<T> values = ObservableCollection.build(id.getType()).safe(false).build();
+			ObservableCollection<T> values = ObservableCollection.build(id.getType()).build();
 			values.add(id.get());
 			id.changes().takeUntil(models.getUntil()).act(evt -> {
 				values.set(0, evt.getNewValue());
@@ -1864,7 +1864,7 @@ public class QuickSwingParser {
 			this.value = value;
 			this.models = models;
 			this.tabs = tabs;
-			until = SimpleObservable.build().safe(false).build();
+			until = SimpleObservable.build().build();
 		}
 	}
 
@@ -1901,15 +1901,15 @@ public class QuickSwingParser {
 				for (TabSet<? extends T> tab : tabs) {
 					TabSet<T> tab2 = (TabSet<T>) tab; // Avoid a bunch of other generic workarounds
 					ObservableCollection<T> values = tab2.getValues(builder.getModels());
-					ObservableCollection<TabValue<? extends T>> tabValuesI = ObservableCollection.build(tabValueType).safe(false).build();
+					ObservableCollection<TabValue<? extends T>> tabValuesI = ObservableCollection.build(tabValueType).build();
 					values.changes().takeUntil(builder.getModels().getUntil()).act(evt -> {
 						ObservableSwingUtils.onEQ(() -> {
 							switch (evt.type) {
 							case add:
 								for (int i = 0; i < evt.getValues().size(); i++) {
-									SettableValue<T> elValue = SettableValue.build(values.getType()).safe(false)
+									SettableValue<T> elValue = SettableValue.build(values.getType())
 										.withValue(evt.getValues().get(i)).build();
-									SimpleObservable<Void> tabUntil = SimpleObservable.build().safe(false).build();
+									SimpleObservable<Void> tabUntil = SimpleObservable.build().build();
 									tabValuesI.add(evt.getIndexes()[i],
 										new TabValue<>(elValue,
 											((TabSet<T>) tab).overrideModels(builder.getModels(), elValue, tabUntil.readOnly()), //
@@ -2021,31 +2021,31 @@ public class QuickSwingParser {
 					xVal = x.evaluate(ModelTypes.Value.forType(int.class), superValue.getHead().getModels(),
 						superValue.getHead().getImports());
 				} else {
-					xVal = msi -> SettableValue.build(int.class).safe(false).withValue(0).build();
+					xVal = msi -> SettableValue.build(int.class).withValue(0).build();
 				}
 				if (y != null) {
 					yVal = y.evaluate(ModelTypes.Value.forType(int.class), superValue.getHead().getModels(),
 						superValue.getHead().getImports());
 				} else {
-					yVal = msi -> SettableValue.build(int.class).safe(false).withValue(0).build();
+					yVal = msi -> SettableValue.build(int.class).withValue(0).build();
 				}
 				if (w != null) {
 					wVal = w.evaluate(ModelTypes.Value.forType(int.class), superValue.getHead().getModels(),
 						superValue.getHead().getImports());
 				} else {
-					wVal = msi -> SettableValue.build(int.class).safe(false).withValue(0).build();
+					wVal = msi -> SettableValue.build(int.class).withValue(0).build();
 				}
 				if (h != null) {
 					hVal = h.evaluate(ModelTypes.Value.forType(int.class), superValue.getHead().getModels(),
 						superValue.getHead().getImports());
 				} else {
-					hVal = msi -> SettableValue.build(int.class).safe(false).withValue(0).build();
+					hVal = msi -> SettableValue.build(int.class).withValue(0).build();
 				}
 				if (v != null) {
 					vVal = v.evaluate(ModelTypes.Value.forType(boolean.class), superValue.getHead().getModels(),
 						superValue.getHead().getImports());
 				} else {
-					vVal = msi -> SettableValue.build(boolean.class).safe(false).withValue(true).build();
+					vVal = msi -> SettableValue.build(boolean.class).withValue(true).build();
 				}
 
 				Function<ModelSetInstance, SettableValue<QuickComponent>> selectedComponent = theDebugDoc.getHead().getModels()
@@ -2149,8 +2149,8 @@ public class QuickSwingParser {
 
 							{
 								theContentUi = superValue.createUI(extModels);
-								theCursorX = SettableValue.build(int.class).safe(false).withValue(0).build();
-								theCursorY = SettableValue.build(int.class).safe(false).withValue(0).build();
+								theCursorX = SettableValue.build(int.class).withValue(0).build();
+								theCursorY = SettableValue.build(int.class).withValue(0).build();
 								theDebugUi = theDebugDoc.createUI(createDebugModel());
 								theDebugOverlayUi = theDebugOverlayDoc.createUI(createOverlayModel());
 							}
@@ -2177,11 +2177,11 @@ public class QuickSwingParser {
 
 							ExternalModelSet createOverlayModel() {
 								SettableValue<QuickComponent> component = selectedComponent.apply(theDebugUi.getModels());
-								SettableValue<Integer> x = SettableValue.build(int.class).safe(false).withValue(0).build();
-								SettableValue<Integer> y = SettableValue.build(int.class).safe(false).withValue(0).build();
-								SettableValue<Integer> w = SettableValue.build(int.class).safe(false).withValue(0).build();
-								SettableValue<Integer> h = SettableValue.build(int.class).safe(false).withValue(0).build();
-								SettableValue<Boolean> v = SettableValue.build(boolean.class).safe(false).withValue(false).build();
+								SettableValue<Integer> x = SettableValue.build(int.class).withValue(0).build();
+								SettableValue<Integer> y = SettableValue.build(int.class).withValue(0).build();
+								SettableValue<Integer> w = SettableValue.build(int.class).withValue(0).build();
+								SettableValue<Integer> h = SettableValue.build(int.class).withValue(0).build();
+								SettableValue<Boolean> v = SettableValue.build(boolean.class).withValue(false).build();
 								ComponentAdapter listener = new ComponentAdapter() {
 									@Override
 									public void componentResized(ComponentEvent e) {

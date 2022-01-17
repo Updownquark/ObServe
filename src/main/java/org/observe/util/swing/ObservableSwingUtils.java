@@ -416,7 +416,7 @@ public class ObservableSwingUtils {
 		BiConsumer<? super TB, ? super T> render, Function<? super T, String> descrip) {
 		List<Subscription> subs = new LinkedList<>();
 		SafeObservableCollection<? extends T> safeValues;
-		SimpleObservable<Void> safeUntil = SimpleObservable.build().safe(false).build();
+		SimpleObservable<Void> safeUntil = SimpleObservable.build().build();
 		subs.add(() -> safeUntil.onNext(null));
 		if (availableValues instanceof SafeObservableCollection)
 			safeValues = (SafeObservableCollection<? extends T>) availableValues;

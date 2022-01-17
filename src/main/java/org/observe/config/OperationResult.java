@@ -234,7 +234,7 @@ public interface OperationResult<T> {
 		/** Creates the result */
 		public AsyncResult() {
 			theStatus = ResultStatus.WAITING;
-			theStatusChanges = SimpleObservable.build().safe(false).build(observer -> observer.onNext(this));
+			theStatusChanges = SimpleObservable.build().build(observer -> observer.onNext(this));
 		}
 
 		@Override

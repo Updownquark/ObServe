@@ -111,7 +111,7 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 		if (availableValues instanceof SafeObservableCollection)
 			safeValues = (SafeObservableCollection<? extends T>) availableValues;
 		else {
-			SimpleObservable<Void> safeUntil = SimpleObservable.build().safe(false).build();
+			SimpleObservable<Void> safeUntil = SimpleObservable.build().build();
 			safeValues = new SafeObservableCollection<>(availableValues, EventQueue::isDispatchThread, EventQueue::invokeLater, safeUntil);
 			subs.add(() -> safeUntil.onNext(null));
 		}

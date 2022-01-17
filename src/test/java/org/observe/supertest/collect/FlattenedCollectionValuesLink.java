@@ -51,7 +51,7 @@ public class FlattenedCollectionValuesLink<S, T> extends AbstractMappedCollectio
 			for (int i = 0; i < bucketCount; i++) {
 				T sourceValue = sourceCL.getValueSupplier().apply(helper);
 				buckets.computeIfAbsent(sourceValue, __ -> {
-					SettableValue<X> value = SettableValue.build(typeToken).safe(false).build();
+					SettableValue<X> value = SettableValue.build(typeToken).build();
 					value.set(bucketValueGen.apply(helper), null);
 					return value;
 				});

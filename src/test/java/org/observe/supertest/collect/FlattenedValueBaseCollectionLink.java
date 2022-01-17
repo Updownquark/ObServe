@@ -45,7 +45,7 @@ public class FlattenedValueBaseCollectionLink<T> extends BaseCollectionLink<T> {
 				collections.add(ObservableCollection.build(collectionType).build());
 			SettableValue<ObservableCollection<X>> collectionValue = SettableValue
 				.build(TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<X>> parameterized(collectionType))
-				.safe(false).build();
+				.build();
 			int collectionIdx = getRandomCollectionIndex(collections.size(), helper);
 			ObservableCollection<X> initCollection = collectionIdx == collections.size() ? null : collections.get(collectionIdx);
 			collectionValue.set(initCollection, null);

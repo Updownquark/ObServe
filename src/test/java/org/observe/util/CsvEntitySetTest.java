@@ -47,7 +47,7 @@ public class CsvEntitySetTest {
 
 	/**
 	 * Initializes an entity set with an entity type
-	 * 
+	 *
 	 * @param entitySet The entity set
 	 * @return The entity set
 	 * @throws IOException If the entity type could not be added
@@ -65,7 +65,7 @@ public class CsvEntitySetTest {
 
 	/**
 	 * Adds an entity to the "type1" entity type
-	 * 
+	 *
 	 * @param entitySet The entity set to add the entity to
 	 * @param id The ID for the new entity
 	 * @return The new entity
@@ -75,7 +75,7 @@ public class CsvEntitySetTest {
 		QuickMap<String, Object> entity = entitySet.getEntityType("test1").create(false)//
 			.with("id", (long) id)//
 			.with("name", "Entity " + id)//
-			.with("values", BetterTreeList.build().safe(false).build()//
+			.with("values", BetterTreeList.build().build()//
 				.with(id, (id + 1) * 2, (id + 1) * 3, (id + 1) * 4, (id + 1) * 5))//
 			;
 		Assert.assertFalse(entitySet.update("test1", entity, true));
@@ -180,7 +180,7 @@ public class CsvEntitySetTest {
 				throw new CheckedExceptionWrapper(e);
 			}
 			try {
-				BetterSortedMap<Long, QuickMap<String, Object>> existing = BetterTreeMap.build(Long::compare).safe(false).buildMap();
+				BetterSortedMap<Long, QuickMap<String, Object>> existing = BetterTreeMap.build(Long::compare).buildMap();
 				for (int i = 0; i < OPS; i++) {
 					if (i != 0 && i % PROGRESS == 0) {
 						if (i % PERCENT == 0)

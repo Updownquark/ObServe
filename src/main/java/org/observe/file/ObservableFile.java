@@ -223,7 +223,7 @@ public class ObservableFile implements BetterFile {
 			synchronized (this) {
 				contents = theContents == null ? null : theContents.get();
 				if (contents == null) {
-					contents = ObservableCollection.build(ObservableFile.class).withLocker(theFileSet.getLocking())
+					contents = ObservableCollection.build(ObservableFile.class).withLocking(theFileSet.getLocking())
 						.withDescription("Directory content of " + getPath())//
 						.withData(() -> theFile.listFiles()).refreshOnAccess(false).autoRefreshWith(theFileSet.getRefresher())
 						.withEquals((f1, f2) -> f1.getName().equals(f2.getName())).withMaxRefreshFrequency(5)//
@@ -303,7 +303,7 @@ public class ObservableFile implements BetterFile {
 
 	public static DataControlledCollection<ObservableFile, ?> getRoots(FileDataSource dataSource) {
 		return ObservableCollection.build(ObservableFile.class).sortBy(BetterFile.DISTINCT_NUMBER_TOLERANT)
-			.withLocker(ObservableFile.getDefaultFileSet().getLocking()).withData(() -> BetterFile.getRoots(dataSource))
+			.withLocking(ObservableFile.getDefaultFileSet().getLocking()).withData(() -> BetterFile.getRoots(dataSource))
 			.autoRefreshWith(ObservableFile.getDefaultFileSet().getRefresher()).refreshOnAccess(false)
 			.withEquals((f1, f2) -> f1.getName().equals(f2.getName())).withMaxRefreshFrequency(5)
 			.build(b -> ObservableFile.observe(b), adjustment -> adjustment.commonUsesLeft((of, f) -> of.checkChanged()));

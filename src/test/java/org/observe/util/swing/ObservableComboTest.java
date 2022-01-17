@@ -28,11 +28,11 @@ public class ObservableComboTest {
 			}
 		}
 		final int DISABLE_MOD = 3;
-		ObservableCollection<ValueHolder> comboSourceValues = ObservableCollection.build(ValueHolder.class).safe(false).build();
+		ObservableCollection<ValueHolder> comboSourceValues = ObservableCollection.build(ValueHolder.class).build();
 		for (int i = 0; i < 100; i++)
 			comboSourceValues.add(new ValueHolder(i));
-		SimpleObservable<Void> refresh = SimpleObservable.build().safe(false).build();
-		SettableValue<ValueHolder> selected = SettableValue.build(ValueHolder.class).safe(false).withValue(comboSourceValues.getFirst())
+		SimpleObservable<Void> refresh = SimpleObservable.build().build();
+		SettableValue<ValueHolder> selected = SettableValue.build(ValueHolder.class).withValue(comboSourceValues.getFirst())
 			.build().filterAccept(vh -> vh.value % DISABLE_MOD != 0 ? null : vh.value + "%" + DISABLE_MOD + "=0");
 		ObservableSwingUtils.systemLandF();
 		WindowPopulation.populateWindow(null, null, true, true)//

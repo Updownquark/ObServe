@@ -117,12 +117,12 @@ public interface Equivalence<E> {
 
 		@Override
 		public <E2> BetterSet<E2> createSet() {
-			return BetterHashSet.build().unsafe().buildSet();
+			return BetterHashSet.build().buildSet();
 		}
 
 		@Override
 		public <E2, V> BetterMap<E2, V> createMap() {
-			return BetterHashMap.build().unsafe().buildMap();
+			return BetterHashMap.build().buildMap();
 		}
 
 		@Override
@@ -150,12 +150,12 @@ public interface Equivalence<E> {
 
 		@Override
 		public <E2> BetterSet<E2> createSet() {
-			return BetterHashSet.build().unsafe().identity().buildSet();
+			return BetterHashSet.build().identity().buildSet();
 		}
 
 		@Override
 		public <E2, V> BetterMap<E2, V> createMap() {
-			return BetterHashMap.build().unsafe().identity().buildMap();
+			return BetterHashMap.build().identity().buildMap();
 		}
 
 		@Override

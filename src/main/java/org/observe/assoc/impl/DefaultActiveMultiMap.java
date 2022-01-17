@@ -691,7 +691,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		void checkKeys() {
 			BetterSortedSet<ObservableCollectionActiveManagers.DerivedCollectionElement<K>> keyElements = BetterTreeSet
 				.<ObservableCollectionActiveManagers.DerivedCollectionElement<K>> buildTreeSet(ObservableCollectionActiveManagers.DerivedCollectionElement::compareTo)//
-				.safe(false).build(getKeyManager().getElementsBySource(sourceElement, getSourceCollection()));
+				.build(getKeyManager().getElementsBySource(sourceElement, getSourceCollection()));
 			for (CollectionElement<KeyEntry> key : theKeys.elements()) {
 				CollectionElement<ObservableCollectionActiveManagers.DerivedCollectionElement<K>> keyEl = keyElements.search(key.get().theKeyElement,
 					SortedSearchFilter.OnlyMatch);

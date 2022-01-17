@@ -86,7 +86,7 @@ public class FlatMapCollectionLink<S, V, T> extends AbstractFlatMappedCollection
 			ObservableCollectionLink<?, S> sourceCL, TestValueType targetType, TestHelper helper) {
 			BetterSortedMap<S, ObservableCollectionLink<?, X>> buckets = BetterTreeMap
 				.<S> build(SortedCollectionLink.compare(sourceCL.getType(), helper))//
-				.safe(false).buildMap();
+				.buildMap();
 			// Having more buckets actually makes this class more performant, since fewer buckets means that additions to this link
 			// aren't duplicated more times though the flattened collection, and there are fewer duplicate update events propagated
 			int bucketCount = helper.getInt(10, 20);

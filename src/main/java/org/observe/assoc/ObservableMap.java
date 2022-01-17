@@ -480,7 +480,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 	 * @param <V> The value type for the map
 	 * @param <B> The sub-type of the builder
 	 */
-	class Builder<K, V, B extends Builder<K, V, B>> extends ObservableCollectionBuilder.CollectionBuilderImpl<K, B> {
+	class Builder<K, V, B extends Builder<K, V, ? extends B>> extends ObservableCollectionBuilder.CollectionBuilderImpl<K, B> {
 		private final TypeToken<V> theValueType;
 
 		Builder(TypeToken<K> keyType, TypeToken<V> valueType, String initDescrip) {
@@ -499,7 +499,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 				.withBacking((BetterList<Map.Entry<K, V>>) (BetterList<?>) getBacking())//
 				.withDescription(getDescription())//
 				.withElementSource(getElementSource()).withSourceElements(getSourceElements())//
-				.withLocker(this::getLocker);
+				.withCollectionLocking(getLocker());
 			if (compare != null)
 				entryBuilder.sortBy((entry1, entry2) -> compare.compare(entry1.getKey(), entry2.getKey()));
 			return new DefaultObservableMap<>(getType(), theValueType, getEquivalence(), entryBuilder.build());

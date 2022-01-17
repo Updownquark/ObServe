@@ -25,7 +25,7 @@ public class ObservableDemoGui extends JPanel {
 
 		ValueCategory(String nm) {
 			name = nm;
-			values = ObservableCollection.build(TypeTokens.get().INT).distinct().safe(false).build();
+			values = ObservableCollection.build(TypeTokens.get().INT).distinct().build();
 		}
 
 		@Override
@@ -51,16 +51,16 @@ public class ObservableDemoGui extends JPanel {
 	}
 
 	private void initComponents() {
-		SettableValue<String> newCategory = SettableValue.build(String.class).safe(false).withValue("Cat 1").build();
-		SettableValue<String> selectedCategory = SettableValue.build(String.class).safe(false).build();
+		SettableValue<String> newCategory = SettableValue.build(String.class).withValue("Cat 1").build();
+		SettableValue<String> selectedCategory = SettableValue.build(String.class).build();
 		ObservableSet<Integer> valuesOfSelectedCategory = ObservableSet.flattenValue(selectedCategory.map(cat -> {
 			CollectionElement<String> found = theCategoryNames.getElement(cat, true);
 			if (found == null)
 				return ObservableSet.of(TypeTokens.get().INT);
 			return theCategories.getElementsBySource(found.getElementId(), theCategoryNames).getFirst().get().values;
 		}));
-		ObservableCollection<Integer> selectedValues = ObservableCollection.build(int.class).safe(false).build();
-		SettableValue<Integer> newValue = SettableValue.build(Integer.class).safe(false).withValue(0).build();
+		ObservableCollection<Integer> selectedValues = ObservableCollection.build(int.class).build();
+		SettableValue<Integer> newValue = SettableValue.build(Integer.class).withValue(0).build();
 
 		JTree valueTree = new JTree(new ObservableTreeModel<Object>("Values") {
 			@Override
