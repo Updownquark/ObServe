@@ -43,11 +43,6 @@ public interface Observable<T> extends Lockable, Identifiable {
 	 */
 	Subscription subscribe(Observer<? super T> observer);
 
-	/** @return A chaining observable, allowing chained calls with one subscription to rule them all */
-	default ChainingObservable<T> chain() {
-		return new DefaultChainingObservable<>(this, null, null);
-	}
-
 	/**
 	 * @param action The action to perform for each new value
 	 * @return The subscription for the action
@@ -506,112 +501,6 @@ public interface Observable<T> extends Lockable, Identifiable {
 		@Override
 		protected Object createIdentity() {
 			return Identifiable.wrap(getWrapped().getIdentity(), "completed");
-		}
-	}
-
-	/**
-	 * Implements {@link #chain()}
-	 *
-	 * @param <T> The type of the observable
-	 */
-	class DefaultChainingObservable<T> extends WrappingObservable<T, T> implements ChainingObservable<T> {
-		private final Observable<Void> theCompletion;
-
-		private final Observer<Void> theCompletionController;
-
-		/**
-		 * @param wrap The observable that this chaining observable reflects the values of
-		 * @param completion The completion observable that will emit a value when the {@link #unsubscribe()} method of any link in the
-		 *        chain is called. May be null if this is the first link in the chain, in which case the observable and its controller will
-		 *        be created.
-		 * @param controller The controller for the completion observable. May be null if <code>completion</code> is null.
-		 */
-		public DefaultChainingObservable(Observable<T> wrap, Observable<Void> completion, Observer<Void> controller) {
-			super(wrap);
-			if (completion != null) {
-				theCompletion = completion;
-				theCompletionController = controller;
-			} else {
-				theCompletion = new SimpleObservable<>();
-				theCompletionController = (Observer<Void>) theCompletion;
-			}
-		}
-
-		@Override
-		protected Object createIdentity() {
-			return Identifiable.wrap(getWrapped().getIdentity(), "chain");
-		}
-
-		@Override
-		public void unsubscribe() {
-			theCompletionController.onNext(null);
-		}
-
-		@Override
-		public Observable<T> unchain() {
-			return getWrapped();
-		}
-
-		@Override
-		public ChainingObservable<T> subscribe(Observer<? super T> observer) {
-			theWrapped.takeUntil(theCompletion).subscribe(observer);
-			return this;
-		}
-
-		@Override
-		public ChainingObservable<T> act(Consumer<? super T> action) {
-			theWrapped.takeUntil(theCompletion).act(action);
-			return this;
-		}
-
-		@Override
-		public ChainingObservable<T> completed() {
-			return new DefaultChainingObservable<>(unchain().completed(), theCompletion, theCompletionController);
-		}
-
-		@Override
-		public ChainingObservable<T> noInit() {
-			return new DefaultChainingObservable<>(unchain().noInit(), theCompletion, theCompletionController);
-		}
-
-		@Override
-		public ChainingObservable<T> filter(Function<? super T, Boolean> func) {
-			return new DefaultChainingObservable<>(unchain().filter(func), theCompletion, theCompletionController);
-		}
-
-		@Override
-		public <R> ChainingObservable<R> map(Function<? super T, R> func) {
-			return new DefaultChainingObservable<>(unchain().map(func), theCompletion, theCompletionController);
-		}
-
-		@Override
-		public <R> ChainingObservable<R> filterMap(Function<? super T, R> func) {
-			return new DefaultChainingObservable<>(unchain().filterMap(func), theCompletion, theCompletionController);
-		}
-
-		@Override
-		public <V, R> ChainingObservable<R> combine(Observable<V> other, BiFunction<? super T, ? super V, R> func) {
-			return new DefaultChainingObservable<>(unchain().combine(other, func), theCompletion, theCompletionController);
-		}
-
-		@Override
-		public ChainingObservable<T> takeUntil(Observable<?> until) {
-			return new DefaultChainingObservable<>(unchain().takeUntil(until), theCompletion, theCompletionController);
-		}
-
-		@Override
-		public ChainingObservable<T> take(int times) {
-			return new DefaultChainingObservable<>(unchain().take(times), theCompletion, theCompletionController);
-		}
-
-		@Override
-		public ChainingObservable<T> skip(int times) {
-			return new DefaultChainingObservable<>(unchain().skip(times), theCompletion, theCompletionController);
-		}
-
-		@Override
-		public ChainingObservable<T> skip(Supplier<Integer> times) {
-			return new DefaultChainingObservable<>(unchain().skip(times), theCompletion, theCompletionController);
 		}
 	}
 

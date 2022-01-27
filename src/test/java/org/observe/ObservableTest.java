@@ -163,36 +163,6 @@ public class ObservableTest {
 		}
 	}
 
-	/**
-	 * Tests {@link Subscription} as an observable to ensure that it is closed (and its observers notified) when
-	 * {@link Subscription#unsubscribe()} is called
-	 */
-	@Test
-	public void chaining() {
-		SimpleObservable<Integer> obs = new SimpleObservable<>();
-		int [] received = new int[] {0};
-		ChainingObservable<Integer> sub = obs.chain().act(value -> received[0] = value);
-		int [] received2 = new int[] {0};
-		ChainingObservable<Integer> sub2 = sub.act(value -> received2[0] = value);
-		int [] received3 = new int[] {0};
-		sub2.act(value -> received3[0] = value);
-
-		for(int i = 1; i < 30; i++) {
-			obs.onNext(i);
-			assertEquals(i, received[0]);
-			assertEquals(i, received2[0]);
-			assertEquals(i, received3[0]);
-		}
-		final int finalValue = received[0];
-		sub2.unsubscribe();
-		for(int i = 1; i < 30; i++) {
-			obs.onNext(i);
-			assertEquals(finalValue, received[0]);
-			assertEquals(finalValue, received2[0]);
-			assertEquals(finalValue, received3[0]);
-		}
-	}
-
 	/** Tests {@link Observable#completed()} */
 	@Test
 	public void completed() {
