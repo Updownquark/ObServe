@@ -287,6 +287,11 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		return new ObservableMultiMapEntrySet<>(this);
 	}
 
+	@Override
+	default BetterList<V> values() {
+		return new ObservableMultiMapValues<>(this);
+	}
+
 	/** @return A collection of plain (non-observable) {@link java.util.Map.Entry entries}, one for each value in this map */
 	default ObservableCollection<MultiEntryValueHandle<K, V>> observeSingleEntries() {
 		return new ObservableSingleEntryCollection<>(this);
@@ -520,7 +525,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 
 		@Override
 		public TypeToken<MultiEntryHandle<K, V>> getType() {
-			return getMap().getEntryType();
+			return (TypeToken<MultiEntryHandle<K, V>>) (TypeToken<?>) getMap().getEntryType();
 		}
 
 		@Override
@@ -609,6 +614,77 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		}
 	}
 
+	/**
+	 * Implements {@link ObservableMultiMap#values()}
+	 *
+	 * @param <K> The key type of the map
+	 * @param <V> The value type of the map
+	 */
+	class ObservableMultiMapValues<K, V> extends BetterMultiMapValueCollection<K, V> implements BetterList<V> {
+		// I thought about making this observable, but there's not way to make indexing constant time, and that's required for the events
+		public ObservableMultiMapValues(ObservableMultiMap<K, V> map) {
+			super(map);
+		}
+
+		@Override
+		protected ObservableMultiMap<K, V> getMap() {
+			return (ObservableMultiMap<K, V>) super.getMap();
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return getMap().isLockSupported();
+		}
+
+		@Override
+		public boolean isContentControlled() {
+			return true;
+		}
+
+		@Override
+		public int getElementsBefore(ElementId id) {
+			int count = 0;
+			MultiEntryHandle<K, V> entry;
+			if (id.isPresent()) {
+				entry = getMap().getEntryById(((MapValueId) id).getKeyId());
+				count = ((BetterList<V>) entry.getValues()).getElementsBefore(((MapValueId) id).getValueId());
+			}
+			entry = getMap().getAdjacentEntry(((MapValueId) id).getKeyId(), false);
+			while (entry != null) {
+				count += entry.getValues().size();
+				entry = getMap().getAdjacentEntry(entry.getElementId(), false);
+			}
+			return count;
+		}
+
+		@Override
+		public int getElementsAfter(ElementId id) {
+			int count = 0;
+			MultiEntryHandle<K, V> entry;
+			if (id.isPresent()) {
+				entry = getMap().getEntryById(((MapValueId) id).getKeyId());
+				count = ((BetterList<V>) entry.getValues()).getElementsAfter(((MapValueId) id).getValueId());
+			}
+			entry = getMap().getAdjacentEntry(((MapValueId) id).getKeyId(), true);
+			while (entry != null) {
+				count += entry.getValues().size();
+				entry = getMap().getAdjacentEntry(entry.getElementId(), true);
+			}
+			return count;
+		}
+
+		@Override
+		public CollectionElement<V> getElement(int index) throws IndexOutOfBoundsException {
+			int remaining = index;
+			for (MultiEntryHandle<K, V> entry : getMap().entrySet()) {
+				int valueSize = entry.getValues().size();
+				if (remaining < valueSize)
+					return entryFor(entry.getElementId(), ((BetterList<V>) entry.getValues()).getElement(remaining));
+				remaining -= valueSize;
+			}
+			throw new IndexOutOfBoundsException(index + " of " + (index - remaining));
+		}
+	}
 	/**
 	 * Implements {@link ObservableMultiMap#singleEntries()}
 	 *
