@@ -464,11 +464,6 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 		return new RefreshingSettableValue<>(this, refresh);
 	}
 
-	@Override
-	default SettableValue<T> safe() {
-		return new SafeSettableValue<>(this);
-	}
-
 	/**
 	 * @param value An observable value that supplies settable values
 	 * @return A settable value that represents the current value in the inner observable
@@ -823,60 +818,6 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 		@Override
 		public ObservableValue<String> isEnabled() {
 			return getWrapped().isEnabled();
-		}
-	}
-
-	/**
-	 * Implements {@link SettableValue#safe()}
-	 *
-	 * @param <T> The type of the value
-	 */
-	class SafeSettableValue<T> extends SafeObservableValue<T> implements SettableValue<T> {
-		private final ObservableValue<String> isEnabled;
-
-		public SafeSettableValue(SettableValue<T> wrap) {
-			super(wrap);
-			isEnabled = wrap.isEnabled().safe();
-		}
-
-		@Override
-		protected SettableValue<T> getWrapped() {
-			return (SettableValue<T>) super.getWrapped();
-		}
-
-		@Override
-		public boolean isLockSupported() {
-			return getWrapped().isLockSupported();
-		}
-
-		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return getWrapped().lock(write, cause);
-		}
-
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return getWrapped().tryLock(write, cause);
-		}
-
-		@Override
-		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
-			return getWrapped().set(value, cause);
-		}
-
-		@Override
-		public <V extends T> String isAcceptable(V value) {
-			return getWrapped().isAcceptable(value);
-		}
-
-		@Override
-		public ObservableValue<String> isEnabled() {
-			return isEnabled;
-		}
-
-		@Override
-		public SettableValue<T> safe() {
-			return this;
 		}
 	}
 

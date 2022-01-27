@@ -470,11 +470,6 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 		return new RefreshingObservableValue<>(this, refresh);
 	}
 
-	/** @return An observable identical to this, but whose {@link #changes()} observable is {@link Observable#isSafe() safe} */
-	default ObservableValue<T> safe() {
-		return new SafeObservableValue<>(this);
-	}
-
 	/**
 	 * A shortened version of {@link #of(TypeToken, Object)}. The type of the object will be value's class. This is not always a good
 	 * idea. If the variable passed to this method may have a value that is a subclass of the variable's type, there may be unintended
@@ -1330,42 +1325,6 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 	}
 
 	/**
-	 * Implements {@link ObservableValue#safe()}
-	 *
-	 * @param <T> The type of the value
-	 */
-	class SafeObservableValue<T> extends WrappingObservableValue<T, T> {
-		public SafeObservableValue(ObservableValue<T> wrap) {
-			super(wrap);
-		}
-
-		@Override
-		public TypeToken<T> getType() {
-			return theWrapped.getType();
-		}
-
-		@Override
-		protected Object createIdentity() {
-			return Identifiable.wrap(getWrapped().getIdentity(), "safe");
-		}
-
-		@Override
-		public T get() {
-			return theWrapped.get();
-		}
-
-		@Override
-		public Observable<ObservableValueEvent<T>> noInitChanges() {
-			return theWrapped.noInitChanges().safe();
-		}
-
-		@Override
-		public ObservableValue<T> safe() {
-			return this;
-		}
-	}
-
-	/**
 	 * Implements {@link ObservableValue#flatten(ObservableValue)}
 	 *
 	 * @param <T> The type of the value
@@ -1514,9 +1473,9 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 													if (event.isInitial() && event2.isInitial())
 														toFire = withInitialEvent
 														? retObs.createInitialEvent(event2.getNewValue(), event2.getCauses()) : null;
-														else
-															toFire = retObs.createChangeEvent(innerOld, event2.getNewValue(),
-																event2.getCauses());
+													else
+														toFire = retObs.createChangeEvent(innerOld, event2.getNewValue(),
+															event2.getCauses());
 													if (toFire != null) {
 														try (Transaction t = toFire.use()) {
 															observer.onNext(toFire);
@@ -1539,8 +1498,8 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 									ObservableValueEvent<T> toFire;
 									if (event.isInitial())
 										toFire = withInitialEvent ? retObs.createInitialEvent(newValue, event.getCauses()) : null;
-										else
-											toFire = retObs.createChangeEvent((T) old[0], newValue, event.getCauses());
+									else
+										toFire = retObs.createChangeEvent((T) old[0], newValue, event.getCauses());
 									old[0] = newValue;
 									if (toFire != null) {
 										try (Transaction t = toFire.use()) {
@@ -1783,7 +1742,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 						return true;
 					}
 				}
-				valueSubs[0] = theValues[0].safe().changes().subscribe(new ElementFirstObserver(0));
+				valueSubs[0] = theValues[0].changes().subscribe(new ElementFirstObserver(0));
 				return () -> {
 					Subscription.forAll(valueSubs).unsubscribe();
 				};

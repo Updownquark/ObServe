@@ -6,7 +6,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -208,14 +207,6 @@ public interface Observable<T> extends Lockable, Identifiable {
 	@Override
 	Transaction tryLock();
 
-	/** @return An observable firing the same values that only fires values on a single thread at a time */
-	default Observable<T> safe() {
-		if (isSafe())
-			return this;
-		else
-			return new SafeObservable<>(this);
-	}
-
 	/**
 	 * @param <V> The super-type of all observables to or
 	 * @param obs The observables to combine
@@ -336,47 +327,6 @@ public interface Observable<T> extends Lockable, Identifiable {
 	}
 
 	/**
-	 * @param <T> The type of value to fire
-	 * @param value Supplies the value to fire via {@link Observer#onCompleted(Object)} upon subscription
-	 * @return An observable that fires the given value once via {@link Observer#onCompleted(Object)} once upon subscription
-	 */
-	static <T> Observable<T> once(Supplier<T> value) {
-		class OnceObservable extends AbstractIdentifiable implements Observable<T> {
-			@Override
-			protected Object createIdentity() {
-				return Identifiable.wrap(value, "once");
-			}
-
-			@Override
-			public boolean isSafe() {
-				return true;
-			}
-
-			@Override
-			public Transaction lock() {
-				return Transaction.NONE;
-			}
-
-			@Override
-			public Transaction tryLock() {
-				return Transaction.NONE;
-			}
-
-			@Override
-			public CoreId getCoreId() {
-				return CoreId.EMPTY;
-			}
-
-			@Override
-			public Subscription subscribe(Observer<? super T> observer) {
-				observer.onCompleted(value.get());
-				return Subscription.NONE;
-			}
-		}
-		return new OnceObservable();
-	}
-
-	/**
 	 * @return An observable that fires (a null value) both for {@link Observer#onNext(Object) onNext} and
 	 *         {@link Observer#onCompleted(Object) onCompleted} as the Java VM is shutting down
 	 */
@@ -404,9 +354,8 @@ public interface Observable<T> extends Lockable, Identifiable {
 	 * @param <F> The type of wrapped observable
 	 * @param <T> The type of this observable
 	 */
-	abstract class WrappingObservable<F, T> implements Observable<T> {
+	abstract class WrappingObservable<F, T> extends AbstractIdentifiable implements Observable<T> {
 		protected final Observable<F> theWrapped;
-		private Object theIdentity;
 
 		public WrappingObservable(Observable<F> wrapped) {
 			theWrapped = wrapped;
@@ -415,15 +364,6 @@ public interface Observable<T> extends Lockable, Identifiable {
 		protected Observable<F> getWrapped() {
 			return theWrapped;
 		}
-
-		@Override
-		public Object getIdentity() {
-			if (theIdentity == null)
-				theIdentity = createIdentity();
-			return theIdentity;
-		}
-
-		protected abstract Object createIdentity();
 
 		@Override
 		public boolean isSafe() {
@@ -443,21 +383,6 @@ public interface Observable<T> extends Lockable, Identifiable {
 		@Override
 		public CoreId getCoreId() {
 			return theWrapped.getCoreId();
-		}
-
-		@Override
-		public int hashCode() {
-			return getIdentity().hashCode();
-		}
-
-		@Override
-		public boolean equals(Object obj) {
-			return obj instanceof Observable && getIdentity().equals(((Observable<?>) obj).getIdentity());
-		}
-
-		@Override
-		public String toString() {
-			return getIdentity().toString();
 		}
 	}
 
@@ -913,73 +838,6 @@ public interface Observable<T> extends Lockable, Identifiable {
 					observer.onCompleted(value);
 				}
 			});
-		}
-	}
-
-	/**
-	 * Implements {@link Observable#safe()}
-	 *
-	 * @param <T> The type of values that the observable publishes
-	 */
-	class SafeObservable<T> extends WrappingObservable<T, T> {
-		private final ReentrantReadWriteLock theLock;
-
-		protected SafeObservable(Observable<T> wrap) {
-			super(wrap);
-			theLock = new ReentrantReadWriteLock();
-		}
-
-		@Override
-		protected Object createIdentity() {
-			return Identifiable.wrap(getWrapped().getIdentity(), "safe");
-		}
-
-		@Override
-		public Subscription subscribe(Observer<? super T> observer) {
-			return theWrapped.subscribe(new Observer<T>() {
-				@Override
-				public <V extends T> void onNext(V value) {
-					theLock.writeLock().lock();
-					try {
-						observer.onNext(value);
-					} finally {
-						theLock.writeLock().unlock();
-					}
-				}
-
-				@Override
-				public <V extends T> void onCompleted(V value) {
-					theLock.writeLock().lock();
-					try {
-						observer.onCompleted(value);
-					} finally {
-						theLock.writeLock().unlock();
-					}
-				}
-			});
-		}
-
-		@Override
-		public boolean isSafe() {
-			return true;
-		}
-
-		@Override
-		public Transaction lock() {
-			return Lockable.lockAll(theWrapped, Lockable.lockable(theLock, this, false));
-		}
-
-		@Override
-		public Transaction tryLock() {
-			return Lockable.tryLockAll(theWrapped, Lockable.lockable(theLock, this, false));
-		}
-
-		@Override
-		public Observable<T> noInit() {
-			Observable<T> wrap = getWrapped().noInit();
-			if (wrap == getWrapped())
-				return this;
-			return wrap.safe();
 		}
 	}
 

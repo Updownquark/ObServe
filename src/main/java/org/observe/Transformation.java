@@ -2289,7 +2289,12 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 			if (!stateChanged && !theTransformation.isReEvalOnUpdate() && oldResult != null
 				&& theSourceEquivalence.elementEquals(tv.getCurrentSource(), newSource))
 				return tv.getPreviousResult();
-			return theTransformation.getCombination().apply(newSource, tv);
+			try {
+				return theTransformation.getCombination().apply(newSource, tv);
+			} catch (RuntimeException e) {
+				e.printStackTrace();
+				return null; // This will probably cause problems, but at least the works aren't gummed up
+			}
 		}
 
 		ReverseQueryResult<S> reverse(TransformReverse<S, T> reverse, T value, Supplier<S> source, Function<S, T> previousResult,
@@ -2430,11 +2435,11 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 				T oldResult = getCachedOrEvaluate(oldSource, state);
 				T newResult = reEval ? transform(true, //
 					() -> oldSource, newSource, __ -> oldResult, state, false) : oldResult;
-					boolean fireChange = theTransformation.isFireIfUnchanged()
-						|| (oldResult != newResult && !theTransformation.equivalence().elementEquals(oldResult, newResult));
-					cacheSource(newSource);
-					cacheResult(newResult);
-					return fireChange ? new BiTuple<>(oldResult, newResult) : null;
+				boolean fireChange = theTransformation.isFireIfUnchanged()
+					|| (oldResult != newResult && !theTransformation.equivalence().elementEquals(oldResult, newResult));
+				cacheSource(newSource);
+				cacheResult(newResult);
+				return fireChange ? new BiTuple<>(oldResult, newResult) : null;
 			}
 
 			@Override
