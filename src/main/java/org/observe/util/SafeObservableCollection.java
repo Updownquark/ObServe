@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
@@ -19,7 +20,6 @@ import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
-import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.debug.Debug;
 import org.qommons.debug.Debug.DebugData;
@@ -56,7 +56,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	private final BooleanSupplier isOnEventThread;
 	private final Consumer<Runnable> theEventThreadExecutor;
 
-	private final ListenerList<ObservableCollectionEvent<E>> theEventQueue;
+	private final ConcurrentLinkedQueue<ObservableCollectionEvent<E>> theEventQueue;
 	private Object theIdentity;
 
 	/**
@@ -71,10 +71,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 		isOnEventThread = onEventThread;
 		theEventThreadExecutor = eventThreadExec;
 
-		theEventQueue = ListenerList.build().forEachSafe(false).withInUse(inUse -> {
-			if (inUse)
-				theEventThreadExecutor.accept(() -> _flush(true));
-		}).build();
+		theEventQueue = new ConcurrentLinkedQueue<>();
 		theSyntheticBacking = new BetterTreeList<>(false);
 
 		theSyntheticCollection = DefaultObservableCollection
@@ -95,7 +92,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 		boolean[] init = new boolean[1];
 		Subscription collSub = theCollection.subscribe(evt -> {
 			if (init[0] && (!theEventQueue.isEmpty() || !isOnEventThread.getAsBoolean()))
-				theEventQueue.add((ObservableCollectionEvent<E>) evt, false);
+				theEventQueue.add((ObservableCollectionEvent<E>) evt);
 			else
 				eventOccurred((ObservableCollectionEvent<E>) evt);
 		}, true);
@@ -130,26 +127,32 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	private boolean isFlushing;
 
 	/**
-	 * Attempts to flush changes from the backing collection to this collection's state and listeners. May only be called on an acceptable
-	 * event thread
+	 * <p>
+	 * Attempts to flush changes from the backing collection to this collection's state and listeners.
+	 * </p>
+	 * <p>
+	 * <b>May only be called on an acceptable event thread.</b>
+	 * </p>
 	 */
 	protected void flush() {
-		if (!isOnEventThread.getAsBoolean())
-			throw new IllegalStateException("Operations on this collection may only occur on the event thread");
+		// Turns out this check is fairly expensive
+		// if (!isOnEventThread.getAsBoolean())
+		// throw new IllegalStateException("Operations on this collection may only occur on the event thread");
 		if (isFlushing)
 			_flush(false);
 	}
 
 	private void _flush(boolean retryIfEmpty) {
-		ListenerList.Element<ObservableCollectionEvent<E>> evt = theEventQueue.poll(0);
+		ObservableCollectionEvent<E> evt = theEventQueue.poll();
 		if (retryIfEmpty && evt == null) {
 			// Don't spin the CPU checking for events over and over
-			QommonsTimer.getCommonInstance().execute(() -> _flush(true), Duration.ofMillis(10), Duration.ofDays(1), false).times(1).onEDT();
+			QommonsTimer.getCommonInstance().execute(() -> _flush(true), Duration.ofMillis(10), Duration.ofDays(1), false).times(1)//
+				.onEDT(); // TODO THIS IS NOT RIGHT!! Only correct if this is used for EDT, not for the general case!!
 			// theEventThreadExecutor.accept(() -> _flush(true));
 		}
 		while (evt != null) {
-			eventOccurred(evt.get());
-			evt = theEventQueue.poll(0);
+			eventOccurred(evt);
+			evt = theEventQueue.poll();
 		}
 	}
 

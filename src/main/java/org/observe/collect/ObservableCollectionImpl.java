@@ -1586,7 +1586,7 @@ public final class ObservableCollectionImpl {
 				CollectionElement<E> el = getCollection().getTerminalElement(true);
 				int index = 0;
 				while (el != null) {
-					value = update(value, new ObservableCollectionEvent<>(el.getElementId(), getCollection().getType(), index++, //
+					value = update(value, new ObservableCollectionEvent<>(el.getElementId(), index++, //
 						CollectionChangeType.add, false, null, el.get()));
 					el = getCollection().getAdjacentElement(el.getElementId(), true);
 				}
@@ -2119,7 +2119,7 @@ public final class ObservableCollectionImpl {
 				int index = theSize - evt.getIndex() - 1;
 				if (evt.getType() == CollectionChangeType.remove)
 					theSize--;
-				ObservableCollectionEvent<E> reversed = new ObservableCollectionEvent<>(evt.getElementId().reverse(), getType(), index,
+				ObservableCollectionEvent<E> reversed = new ObservableCollectionEvent<>(evt.getElementId().reverse(), index,
 					evt.getType(), evt.isMove(), evt.getOldValue(), evt.getNewValue(), evt);
 				try (Transaction t = reversed.use()) {
 					theObserver.accept(reversed);
@@ -2566,7 +2566,7 @@ public final class ObservableCollectionImpl {
 						while (el != null) {
 							E sourceVal = el.get();
 							ObservableCollectionEvent<? extends T> evt2 = new ObservableCollectionEvent<>(mapId(el.getElementId()),
-								getType(), index++, CollectionChangeType.set, false, evt.getOldValue().apply(sourceVal),
+								index++, CollectionChangeType.set, false, evt.getOldValue().apply(sourceVal),
 								currentMap[0].apply(sourceVal), evt);
 							try (Transaction evtT = evt2.use()) {
 								observer.accept(evt2);
@@ -2613,7 +2613,7 @@ public final class ObservableCollectionImpl {
 										theSize--;
 								}
 								ObservableCollectionEvent<? extends T> evt2 = new ObservableCollectionEvent<>(mapId(evt.getElementId()),
-									getType(), index, evt.getType(), evt.isMove(), oldValue, newValue, evt);
+									index, evt.getType(), evt.isMove(), oldValue, newValue, evt);
 								try (Transaction evtT = evt2.use()) {
 									observer.accept(evt2);
 								}
@@ -2738,7 +2738,7 @@ public final class ObservableCollectionImpl {
 				if (holder[0].treeNode == null)
 					throw new IllegalStateException("Element already exists: " + holder[0]);
 				boolean initMove = cause instanceof ObservableCollectionEvent && ((ObservableCollectionEvent<?>) cause).isMove();
-				fireListeners(new ObservableCollectionEvent<>(holder[0], theFlow.getTargetType(), holder[0].treeNode.getNodesBefore(),
+				fireListeners(new ObservableCollectionEvent<>(holder[0], holder[0].treeNode.getNodesBefore(),
 					CollectionChangeType.add, initMove, null, el.get(), cause));
 				el.setListener(new CollectionElementListener<T>() {
 					@Override
@@ -2752,15 +2752,15 @@ public final class ObservableCollectionImpl {
 							int index = holder[0].treeNode.getNodesBefore();
 							theDerivedElements.mutableElement(holder[0].treeNode.getElementId()).remove();
 							boolean elMove = oldValue == newValue;
-							fireListeners(new ObservableCollectionEvent<>(holder[0], theFlow.getTargetType(), index,
+							fireListeners(new ObservableCollectionEvent<>(holder[0], index,
 								CollectionChangeType.remove, elMove, oldValue, null, elCause));
 							// Don't re-use elements
 							holder[0] = createHolder(el);
 							holder[0].treeNode = theDerivedElements.addElement(holder[0], false);
-							fireListeners(new ObservableCollectionEvent<>(holder[0], theFlow.getTargetType(),
+							fireListeners(new ObservableCollectionEvent<>(holder[0],
 								holder[0].treeNode.getNodesBefore(), CollectionChangeType.add, elMove, null, newValue, elCause));
 						} else {
-							fireListeners(new ObservableCollectionEvent<>(holder[0], getType(), holder[0].treeNode.getNodesBefore(),
+							fireListeners(new ObservableCollectionEvent<>(holder[0], holder[0].treeNode.getNodesBefore(),
 								CollectionChangeType.set, false, oldValue, newValue, elCause));
 						}
 					}
@@ -2773,7 +2773,7 @@ public final class ObservableCollectionImpl {
 							theDerivedElements.mutableElement(holder[0].treeNode.getElementId()).remove();
 						boolean terminalMove = elCause instanceof ObservableCollectionEvent
 							&& ((ObservableCollectionEvent<?>) elCause).isMove();
-						fireListeners(new ObservableCollectionEvent<>(holder[0], theFlow.getTargetType(), index,
+						fireListeners(new ObservableCollectionEvent<>(holder[0], index,
 							CollectionChangeType.remove, terminalMove, value, value, elCause));
 					}
 				});
@@ -3626,7 +3626,7 @@ public final class ObservableCollectionImpl {
 				@Override
 				public void accept(ObservableCollectionEvent<? extends E> event) {
 					ObservableCollectionEvent<E> mapped = new ObservableCollectionEvent<>(//
-						new FlattenedElementId(theCollection, event.getElementId()), getType(), event.getIndex(), event.getType(),
+						new FlattenedElementId(theCollection, event.getElementId()), event.getIndex(), event.getType(),
 						event.isMove(), event.getOldValue(), event.getNewValue(), event);
 					theWrapped.accept(mapped);
 				}

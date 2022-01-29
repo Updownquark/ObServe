@@ -187,7 +187,7 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 				.withBacking((BetterList<Map.Entry<K, V>>) (BetterList<?>) getBacking())//
 				.withDescription(getDescription())//
 				.withElementSource(getElementSource()).withSourceElements(getSourceElements())//
-					.withCollectionLocking(getLocker())//
+				.withCollectionLocking(getLocker())//
 				.sortBy((entry1, entry2) -> compare.compare(entry1.getKey(), entry2.getKey()))//
 				.build());
 		}
@@ -377,8 +377,8 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 					int index = size[0] - evt.getIndex() - 1;
 					if (evt.getType() == CollectionChangeType.remove)
 						size[0]--;
-					ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent<>(evt.getElementId().reverse(), theWrapped.getKeyType(),
-						theWrapped.getValueType(), index, evt.getType(), evt.isMove(), evt.getKey(), evt.getOldValue(), evt.getNewValue(),
+					ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent<>(evt.getElementId().reverse(), index, evt.getType(),
+						evt.isMove(), evt.getKey(), evt.getOldValue(), evt.getNewValue(),
 						evt);
 					try (Transaction mt = mapEvent.use()) {
 						action.accept(mapEvent);
@@ -450,8 +450,8 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 				if (!keySet().belongs(evt.getKey()))
 					return;
 				int index = keySet().getElementsBefore(evt.getElementId());
-				ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent<>(evt.getElementId(), getSource().getKeyType(),
-					getSource().getValueType(), index, evt.getType(), evt.isMove(), evt.getKey(), evt.getOldValue(), evt.getNewValue(),
+				ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent<>(evt.getElementId(), index, evt.getType(), evt.isMove(),
+					evt.getKey(), evt.getOldValue(), evt.getNewValue(),
 					evt);
 				try (Transaction t = mapEvent.use()) {
 					action.accept(mapEvent);

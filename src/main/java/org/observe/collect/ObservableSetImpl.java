@@ -390,7 +390,7 @@ public class ObservableSetImpl {
 	}
 
 	/**
-	 * Implements {@link DistinctDataFlow#mapEquivalent(TypeToken, Function, Function)}
+	 * Implements {@link DistinctDataFlow#transformEquivalent(TypeToken, Function)}
 	 *
 	 * @param <E> The type of the source collection
 	 * @param <I> The type of the parent flow

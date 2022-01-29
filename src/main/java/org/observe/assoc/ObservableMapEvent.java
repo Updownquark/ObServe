@@ -2,10 +2,7 @@ package org.observe.assoc;
 
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollectionEvent;
-import org.observe.util.TypeTokens;
 import org.qommons.collect.ElementId;
-
-import com.google.common.reflect.TypeToken;
 
 /**
  * An event representing a change to a {@link ObservableMap}
@@ -18,8 +15,6 @@ public class ObservableMapEvent<K, V> extends ObservableCollectionEvent<V> {
 
 	/**
 	 * @param elementId The element ID of the entry in the map entry's value collection that was added/removed changed
-	 * @param keyType The key type of the map
-	 * @param valueType The value type of the map
 	 * @param index The index in the entry's value collection of the element that was added/removed/changed
 	 * @param type The type of the change (addition/removal/change)
 	 * @param move Whether this event represents either the removal of an entry in preparation for a move, or the re-addition of an entry
@@ -29,10 +24,10 @@ public class ObservableMapEvent<K, V> extends ObservableCollectionEvent<V> {
 	 * @param newValue The value of the element after the change
 	 * @param cause The cause of the change
 	 */
-	public ObservableMapEvent(ElementId elementId, TypeToken<K> keyType, TypeToken<V> valueType, int index, CollectionChangeType type,
+	public ObservableMapEvent(ElementId elementId, int index, CollectionChangeType type,
 		boolean move, K key, V oldValue, V newValue, Object cause) {
-		super(elementId, valueType, index, type, move, oldValue, newValue, cause);
-		theKey = TypeTokens.get().cast(keyType, key);
+		super(elementId, index, type, move, oldValue, newValue, cause);
+		theKey = key;
 	}
 
 	/** @return The key for the entry which was added/removed/changed */

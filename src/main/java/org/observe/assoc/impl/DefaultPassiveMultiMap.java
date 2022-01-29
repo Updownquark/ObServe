@@ -247,7 +247,7 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 				break;
 			}
 			ObservableMultiMapEvent<K, V> event = new ObservableMultiMapEvent<>(sourceEvt.getKeyElement(), sourceEvt.getElementId(), //
-				getKeyType(), getValueType(), sourceEvt.getKeyIndex(), sourceEvt.getIndex(), sourceEvt.getType(), sourceEvt.isMove(), //
+				sourceEvt.getKeyIndex(), sourceEvt.getIndex(), sourceEvt.getType(), sourceEvt.isMove(), //
 				theKeyManager.map().get().apply(sourceEvt.getKey()), oldValue, newValue, sourceEvt);
 			try (Transaction evtT = event.use()) {
 				action.accept(event);

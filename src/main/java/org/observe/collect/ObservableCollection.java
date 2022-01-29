@@ -59,9 +59,9 @@ import com.google.common.reflect.TypeToken;
  * collection is also updated accordingly. The {@link #flow() flow} API allows the creation of collections that are the result of
  * {@link CollectionDataFlow#transform(TypeToken, Function) transform}, {@link CollectionDataFlow#filter(Function) filter},
  * {@link CollectionDataFlow#distinct(Consumer) unique}, {@link CollectionDataFlow#sorted(Comparator) sort},
- * {@link CollectionDataFlow#combine(TypeToken, Function) combination} or other operations on the elements of the source. Collections so
- * derived from a source collection are themselves observable and reflect changes to the source. The derived collection may also be mutable,
- * with modifications to the derived collection affecting the source.</li>
+ * {@link CollectionDataFlow#transform(TypeToken, Function) transformation} or other operations on the elements of the source. Collections
+ * so derived from a source collection are themselves observable and reflect changes to the source. The derived collection may also be
+ * mutable, with modifications to the derived collection affecting the source.</li>
  * <li><b>Modification Control</b> The {@link #flow() flow} API also supports constraints on how or whether a derived collection may be
  * {@link CollectionDataFlow#filterMod(Consumer) modified}.</li>
  * <li><b>Transactionality</b> ObservableCollections support the {@link org.qommons.Transactable} interface, allowing callers to reserve a
@@ -934,22 +934,6 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		 */
 		default <X> CollectionDataFlow<E, T, X> map(Class<X> target, Function<? super T, ? extends X> map) {
 			return transform(target, tx -> tx.map(map));
-		}
-
-		/**
-		 * Combines each element of this flow the the value of one or more observable values. This operation may produce an
-		 * {@link #supportsPassive() active or passive} flow depending on the options selected on the builder.
-		 *
-		 * @param <X> The type of the combined values
-		 * @param targetType The type of the combined values
-		 * @param combination The function to create the combination definition
-		 * @return A data flow capable of producing a collection whose elements are each some combination of the source element and the
-		 *         dynamic value of the observable
-		 * @see Transformation for help using the API
-		 */
-		default <X> CollectionDataFlow<E, T, X> combine(TypeToken<X> targetType,
-			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ? extends Transformation<T, X>> combination) {
-			return transform(targetType, combination);
 		}
 
 		/**

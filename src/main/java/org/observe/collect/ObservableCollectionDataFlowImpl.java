@@ -1160,9 +1160,9 @@ public class ObservableCollectionDataFlowImpl {
 						.withReverse(new RefreshingMapReverse());
 				})//
 				.manageActive();
-			if (manager instanceof AbstractMappingManager) {
-				((AbstractMappingManager<E, ?, I>) manager).propagateUpdatesToParent = false;
-				if (((AbstractMappingManager<?, ?, ?>) manager)
+			if (manager instanceof AbstractTransformedManager) {
+				((AbstractTransformedManager<E, ?, I>) manager).propagateUpdatesToParent = false;
+				if (((AbstractTransformedManager<?, ?, ?>) manager)
 					.getParent() instanceof ObservableCollectionActiveManagers2.ElementRefreshingCollectionManager) {
 					/* There is a very narrow condition in which a child collection calls set on a settable element of this manager,
 					 * but the element refresh affects more than just the desired element, which may result in re-ordering in the child
@@ -1175,7 +1175,7 @@ public class ObservableCollectionDataFlowImpl {
 					 */
 					ObservableCollectionActiveManagers2.ElementRefreshingCollectionManager<E, ObservableValue<? extends T>> refresh;
 					refresh = (ObservableCollectionActiveManagers2.ElementRefreshingCollectionManager<E, ObservableValue<? extends T>>) //
-						((AbstractMappingManager<?, ?, ?>) manager).getParent();
+						((AbstractTransformedManager<?, ?, ?>) manager).getParent();
 					refresh.withSettingElement(settingElement);
 				}
 			}
@@ -1256,7 +1256,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 	}
 
-	static abstract class AbstractMappingManager<E, I, T> implements CollectionOperation<E, I, T> {
+	static abstract class AbstractTransformedManager<E, I, T> implements CollectionOperation<E, I, T> {
 		final CollectionOperation<E, ?, I> theParent;
 		private final TypeToken<T> theTargetType;
 		final Transformation.Engine<I, T> theEngine;
@@ -1266,7 +1266,7 @@ public class ObservableCollectionDataFlowImpl {
 		 */
 		boolean propagateUpdatesToParent;
 
-		protected AbstractMappingManager(CollectionOperation<E, ?, I> parent, TypeToken<T> targetType,
+		protected AbstractTransformedManager(CollectionOperation<E, ?, I> parent, TypeToken<T> targetType,
 			Transformation<I, T> transformation, Equivalence<? super T> equivalence) {
 			theParent = parent;
 			theTargetType = targetType;
@@ -1331,18 +1331,18 @@ public class ObservableCollectionDataFlowImpl {
 			return theEquivalence;
 		}
 
-		protected abstract void doParentMultiSet(Collection<AbstractMappedElement> elements, I newValue);
+		protected abstract void doParentMultiSet(Collection<AbstractTransformedElement> elements, I newValue);
 
 		protected void setElementsValue(Collection<?> elements, T newValue) throws UnsupportedOperationException, IllegalArgumentException {
 			List<Transformation.TransformedElement<I, T>> txElements = QommonsUtils.map(elements,
-				el -> ((AbstractMappedElement) el).transformElement, false);
+				el -> ((AbstractTransformedElement) el).transformElement, false);
 			List<I> sourceValues = theEngine.setElementsValue(txElements, newValue);
 			if (!propagateUpdatesToParent) { // Don't notify the parent
 			} else if (sourceValues.size() == 1)
-				doParentMultiSet((Collection<AbstractMappedElement>) elements, sourceValues.get(0));
+				doParentMultiSet((Collection<AbstractTransformedElement>) elements, sourceValues.get(0));
 			else {
 				int i = 0;
-				for (AbstractMappedElement el : (Collection<AbstractMappedElement>) elements) {
+				for (AbstractTransformedElement el : (Collection<AbstractTransformedElement>) elements) {
 					I sourceVal = sourceValues.get(i);
 					el.setParent(sourceVal);
 					i++;
@@ -1350,10 +1350,10 @@ public class ObservableCollectionDataFlowImpl {
 			}
 		}
 
-		protected abstract class AbstractMappedElement {
+		protected abstract class AbstractTransformedElement {
 			protected final Transformation.TransformedElement<I, T> transformElement;
 
-			AbstractMappedElement(Supplier<I> sourceValue) {
+			AbstractTransformedElement(Supplier<I> sourceValue) {
 				transformElement = theEngine.createElement(sourceValue);
 			}
 

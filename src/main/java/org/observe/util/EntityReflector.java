@@ -547,13 +547,12 @@ public class EntityReflector<E> {
 
 		/**
 		 * @param fieldIndex The {@link EntityReflector.ReflectedField#getFieldIndex()} of the field whose value changed
-		 * @param type The type of the field whose value changed
 		 * @param oldValue The previous value of the field
 		 * @param newValue The new (current) value of the field
 		 * @param cause The cause of the change
 		 */
-		public EntityFieldChangeEvent(int fieldIndex, TypeToken<F> type, F oldValue, F newValue, Object cause) {
-			super(type, false, oldValue, newValue, cause);
+		public EntityFieldChangeEvent(int fieldIndex, F oldValue, F newValue, Object cause) {
+			super(false, oldValue, newValue, cause);
 			theFieldIndex = fieldIndex;
 		}
 
@@ -717,7 +716,7 @@ public class EntityReflector<E> {
 		private final E theEntity;
 
 		EntityFieldChangeEventImpl(E entity, ReflectedField<E, F> field, F oldValue, F newValue, Object cause) {
-			super(field.getFieldIndex(), field.getType(), oldValue, newValue, cause);
+			super(field.getFieldIndex(), oldValue, newValue, cause);
 			theEntity = entity;
 		}
 

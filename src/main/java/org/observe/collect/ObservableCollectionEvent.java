@@ -5,8 +5,6 @@ import java.util.Collection;
 import org.observe.ObservableValueEvent;
 import org.qommons.collect.ElementId;
 
-import com.google.common.reflect.TypeToken;
-
 /**
  * An event representing a change to an {@link ObservableCollection}
  *
@@ -20,7 +18,6 @@ public class ObservableCollectionEvent<E> extends ObservableValueEvent<E> {
 
 	/**
 	 * @param elementId The ID of the element that was changed
-	 * @param valueType The type of the value, for validation
 	 * @param index The index of the element in the collection
 	 * @param type The type of the change
 	 * @param move Whether this event represents either the removal of an element in preparation for a move, or the re-addition of an
@@ -29,9 +26,9 @@ public class ObservableCollectionEvent<E> extends ObservableValueEvent<E> {
 	 * @param newValue The new value for the element
 	 * @param causes The causes of the change
 	 */
-	public ObservableCollectionEvent(ElementId elementId, TypeToken<E> valueType, int index, CollectionChangeType type, boolean move,
-		E oldValue, E newValue, Object... causes) {
-		super(valueType, type == CollectionChangeType.add, oldValue, newValue, causes);
+	public ObservableCollectionEvent(ElementId elementId, int index, CollectionChangeType type, boolean move, E oldValue, E newValue,
+		Object... causes) {
+		super(type == CollectionChangeType.add, oldValue, newValue, causes);
 		if (index < 0)
 			throw new IndexOutOfBoundsException("" + index);
 		theElementId = elementId;
@@ -42,7 +39,6 @@ public class ObservableCollectionEvent<E> extends ObservableValueEvent<E> {
 
 	/**
 	 * @param elementId The ID of the element that was changed
-	 * @param valueType The type of the value, for validation
 	 * @param index The index of the element in the collection
 	 * @param type The type of the change
 	 * @param move Whether this event represents either the removal of an element in preparation for a move, or the re-addition of an
@@ -51,9 +47,9 @@ public class ObservableCollectionEvent<E> extends ObservableValueEvent<E> {
 	 * @param newValue The new value for the element
 	 * @param causes The causes of the change
 	 */
-	public ObservableCollectionEvent(ElementId elementId, TypeToken<E> valueType, int index, CollectionChangeType type, boolean move,
-		E oldValue, E newValue, Collection<?> causes) {
-		this(elementId, valueType, index, type, move, oldValue, newValue, causes.toArray());
+	public ObservableCollectionEvent(ElementId elementId, int index, CollectionChangeType type, boolean move, E oldValue, E newValue,
+		Collection<?> causes) {
+		this(elementId, index, type, move, oldValue, newValue, causes.toArray());
 	}
 
 	/** @return The ID of the element that was changed */

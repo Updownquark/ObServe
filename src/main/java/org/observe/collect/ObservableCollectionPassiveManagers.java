@@ -11,7 +11,7 @@ import org.observe.ObservableValue;
 import org.observe.Transformation;
 import org.observe.Transformation.TransformationState;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
-import org.observe.collect.ObservableCollectionDataFlowImpl.AbstractMappingManager;
+import org.observe.collect.ObservableCollectionDataFlowImpl.AbstractTransformedManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionOperation;
 import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
 import org.observe.collect.ObservableCollectionDataFlowImpl.MapWithParent;
@@ -443,7 +443,7 @@ public class ObservableCollectionPassiveManagers {
 		}
 	}
 
-	static class PassiveTransformedCollectionManager<E, I, T> extends AbstractMappingManager<E, I, T>
+	static class PassiveTransformedCollectionManager<E, I, T> extends AbstractTransformedManager<E, I, T>
 	implements PassiveCollectionManager<E, I, T> {
 		PassiveTransformedCollectionManager(PassiveCollectionManager<E, ?, I> parent, TypeToken<T> targetType,
 			Transformation<I, T> transformation, Equivalence<? super T> equivalence) {
@@ -466,7 +466,7 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
-		protected void doParentMultiSet(Collection<AbstractMappedElement> elements, I newValue) {
+		protected void doParentMultiSet(Collection<AbstractTransformedElement> elements, I newValue) {
 			getParent().setValue(elements.stream().map(el -> ((TransformedElement) el).getParentEl()).collect(Collectors.toList()),
 				newValue);
 		}
@@ -530,7 +530,7 @@ public class ObservableCollectionPassiveManagers {
 			return new TransformedElement(source, map);
 		}
 
-		protected class TransformedElement extends AbstractMappedElement implements MutableCollectionElement<T> {
+		protected class TransformedElement extends AbstractTransformedElement implements MutableCollectionElement<T> {
 			private final MutableCollectionElement<I> theParentEl;
 			private final TransformedMap theTransformedMap;
 

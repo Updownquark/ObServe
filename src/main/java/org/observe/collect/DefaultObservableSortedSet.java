@@ -89,7 +89,7 @@ public class DefaultObservableSortedSet<E> extends DefaultObservableCollection<E
 			added.run();
 		});
 		if (addedCheck.get()) {
-			ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), getType(),
+			ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(),
 				getValues().getElementsBefore(el.getElementId()), CollectionChangeType.add, false, null, value, getCurrentCauses());
 			fire(event);
 		}
@@ -137,7 +137,7 @@ public class DefaultObservableSortedSet<E> extends DefaultObservableCollection<E
 				// We can't set the move boolean here because it's only for atomic moves
 				// --moves of a single element from one place to another.
 				// This operation may remove multiple elements before re-adding them in the appropriate position
-				ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(element.getElementId(), getType(),
+				ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(element.getElementId(),
 					getValues().getElementsBefore(element.getElementId()), CollectionChangeType.remove, false, element.get(), element.get(),
 					repair);
 				fire(event);
@@ -163,7 +163,7 @@ public class DefaultObservableSortedSet<E> extends DefaultObservableCollection<E
 		@Override
 		public void transferred(CollectionElement<E> element, RepairEvent<X> data) {
 			try {
-				ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(element.getElementId(), getType(),
+				ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(element.getElementId(),
 					getValues().getElementsBefore(element.getElementId()), CollectionChangeType.add, false, null, element.get(), data);
 				fire(event);
 				if (theWrapped != null) {

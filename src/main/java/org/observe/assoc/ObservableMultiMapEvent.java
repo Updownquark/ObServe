@@ -3,8 +3,6 @@ package org.observe.assoc;
 import org.observe.collect.CollectionChangeType;
 import org.qommons.collect.ElementId;
 
-import com.google.common.reflect.TypeToken;
-
 /**
  * An event representing a change to a {@link ObservableMultiMap}
  *
@@ -18,8 +16,6 @@ public class ObservableMultiMapEvent<K, V> extends ObservableMapEvent<K, V> {
 	/**
 	 * @param keyElementId The element ID of the entry in the map under which a value was added/removed/changed
 	 * @param valueElementId The element ID of the entry in the map entry's value collection that was added/removed changed
-	 * @param keyType The key type of the map
-	 * @param valueType The value type of the map
 	 * @param keyIndex The index in the key set of the key under which a value was added/removed/changed
 	 * @param valueIndex The index in the entry's value collection of the element that was added/removed/changed
 	 * @param type The type of the change (addition/removal/change)
@@ -30,9 +26,9 @@ public class ObservableMultiMapEvent<K, V> extends ObservableMapEvent<K, V> {
 	 * @param newValue The value of the element after the change
 	 * @param cause The cause of the change
 	 */
-	public ObservableMultiMapEvent(ElementId keyElementId, ElementId valueElementId, TypeToken<K> keyType, TypeToken<V> valueType,
-		int keyIndex, int valueIndex, CollectionChangeType type, boolean move, K key, V oldValue, V newValue, Object cause) {
-		super(valueElementId, keyType, valueType, valueIndex, type, move, key, oldValue, newValue, cause);
+	public ObservableMultiMapEvent(ElementId keyElementId, ElementId valueElementId, int keyIndex, int valueIndex,
+		CollectionChangeType type, boolean move, K key, V oldValue, V newValue, Object cause) {
+		super(valueElementId, valueIndex, type, move, key, oldValue, newValue, cause);
 		theKeyElement = keyElementId;
 		theKeyIndex = keyIndex;
 	}

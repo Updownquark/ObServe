@@ -97,7 +97,7 @@ public interface SettableElement<E> extends ObservableElement<E>, SettableValue<
 
 		@Override
 		public Observable<ObservableElementEvent<E>> elementChanges() {
-			return Observable.constant(new ObservableElementEvent<>(theType, true, null, null, null, null, null));
+			return Observable.constant(new ObservableElementEvent<>(true, null, null, null, null, null));
 		}
 
 		@Override

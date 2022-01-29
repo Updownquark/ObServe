@@ -537,7 +537,7 @@ public interface Observable<T> extends Lockable, Identifiable {
 	public class ComposedObservable<T> implements Observable<T> {
 		private static final Object UNSET = new Object();
 
-		private final List<Observable<?>> theComposed;
+		private final Observable<?>[] theComposed;
 
 		private final Function<Object[], T> theFunction;
 
@@ -553,11 +553,11 @@ public interface Observable<T> extends Lockable, Identifiable {
 		 */
 		public ComposedObservable(Function<Object[], T> function, String operation, Observable<?>... composed) {
 			theFunction = function;
-			theComposed = java.util.Collections.unmodifiableList(java.util.Arrays.asList(composed));
+			theComposed = composed.clone();
 			theObservers = ListenerList.build().withFastSize(false).withInUse(new ListenerList.InUseListener() {
-				private final Subscription[] composedSubs = new Subscription[theComposed.size()];
+				private final Subscription[] composedSubs = new Subscription[theComposed.length];
 
-				private final Object[] values = new Object[theComposed.size()];
+				private final Object[] values = new Object[theComposed.length];
 
 				{
 					Arrays.fill(values, UNSET);
@@ -566,9 +566,9 @@ public interface Observable<T> extends Lockable, Identifiable {
 				@Override
 				public void inUseChanged(boolean used) {
 					if (used) {
-						for (int i = 0; i < theComposed.size(); i++) {
+						for (int i = 0; i < theComposed.length; i++) {
 							int index = i;
-							composedSubs[i] = theComposed.get(i).subscribe(new Observer<Object>() {
+							composedSubs[i] = theComposed[i].subscribe(new Observer<Object>() {
 								@Override
 								public <V> void onNext(V value) {
 									values[index] = value;
@@ -605,7 +605,7 @@ public interface Observable<T> extends Lockable, Identifiable {
 							});
 						}
 					} else {
-						for (int i = 0; i < theComposed.size(); i++) {
+						for (int i = 0; i < theComposed.length; i++) {
 							composedSubs[i].unsubscribe();
 							composedSubs[i] = null;
 							values[i] = UNSET;
@@ -619,10 +619,10 @@ public interface Observable<T> extends Lockable, Identifiable {
 		@Override
 		public Object getIdentity() {
 			if (theIdentity == null) {
-				Object[] obsIds = new Object[theComposed.size() - 1];
+				Object[] obsIds = new Object[theComposed.length - 1];
 				for (int i = 0; i < obsIds.length; i++)
-					obsIds[i] = theComposed.get(i + 1).getIdentity();
-				theIdentity = Identifiable.wrap(theComposed.get(0).getIdentity(), theOperation, obsIds);
+					obsIds[i] = theComposed[i + 1].getIdentity();
+				theIdentity = Identifiable.wrap(theComposed[0].getIdentity(), theOperation, obsIds);
 			}
 			return theIdentity;
 		}
@@ -630,11 +630,6 @@ public interface Observable<T> extends Lockable, Identifiable {
 		@Override
 		public Subscription subscribe(Observer<? super T> observer) {
 			return theObservers.add(observer, false)::run;
-		}
-
-		/** @return The observables that this observable uses as sources */
-		public Observable<?>[] getComposed() {
-			return theComposed.toArray(new Observable[theComposed.size()]);
 		}
 
 		@Override
@@ -847,10 +842,10 @@ public interface Observable<T> extends Lockable, Identifiable {
 	 * @param <V> The super type of the observables being or-ed
 	 */
 	class OrObservable<V> extends AbstractIdentifiable implements Observable<V> {
-		private final List<? extends Observable<? extends V>> theObservables;
+		private final Observable<? extends V>[] theObservables;
 
 		public OrObservable(List<? extends Observable<? extends V>> obs) {
-			this.theObservables = obs;
+			this.theObservables = obs.toArray(new Observable[obs.size()]);
 		}
 
 		@Override
@@ -862,18 +857,18 @@ public interface Observable<T> extends Lockable, Identifiable {
 
 		@Override
 		public Subscription subscribe(Observer<? super V> observer) {
-			Subscription[] subs = new Subscription[theObservables.size()];
+			Subscription[] subs = new Subscription[theObservables.length];
 			boolean[] init = new boolean[] { true };
-			for (int i = 0; i < theObservables.size(); i++) {
+			for (int i = 0; i < theObservables.length; i++) {
 				int index = i;
-				Lockable[] others = new Lockable[theObservables.size() - 1];
-				for (int j = 0; j < theObservables.size(); j++) {
+				Lockable[] others = new Lockable[theObservables.length - 1];
+				for (int j = 0; j < theObservables.length; j++) {
 					if (j < index)
-						others[j] = theObservables.get(j);
+						others[j] = theObservables[j];
 					else if (j > index)
-						others[j - 1] = theObservables.get(j);
+						others[j - 1] = theObservables[j];
 				}
-				subs[i] = theObservables.get(i).subscribe(new Observer<V>() {
+				subs[i] = theObservables[i].subscribe(new Observer<V>() {
 					@Override
 					public <V2 extends V> void onNext(V2 value) {
 						try (Transaction t = Lockable.lockAll(others)) {

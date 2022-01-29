@@ -27,9 +27,8 @@ public interface ObservableElement<T> extends ObservableValue<T> {
 		private final ElementId theOldElement;
 		private final ElementId theNewElement;
 
-		public ObservableElementEvent(TypeToken<T> type, boolean initial, ElementId oldElement, ElementId newElement, T oldValue,
-			T newValue, Object cause) {
-			super(type, initial, oldValue, newValue, cause);
+		public ObservableElementEvent(boolean initial, ElementId oldElement, ElementId newElement, T oldValue, T newValue, Object cause) {
+			super(initial, oldValue, newValue, cause);
 			theOldElement = oldElement;
 			theNewElement = newElement;
 		}
@@ -76,7 +75,7 @@ public interface ObservableElement<T> extends ObservableValue<T> {
 	 * @return The initial event to fire
 	 */
 	default ObservableElementEvent<T> createInitialEvent(ElementId element, T value, Object cause) {
-		return new ObservableElementEvent<>(getType(), true, null, element, null, value, cause);
+		return new ObservableElementEvent<>(true, null, element, null, value, cause);
 	}
 
 	/**
@@ -90,7 +89,7 @@ public interface ObservableElement<T> extends ObservableValue<T> {
 	 * @return The change event to fire
 	 */
 	default ObservableElementEvent<T> createChangeEvent(ElementId oldElement, T oldVal, ElementId newElement, T newVal, Object cause) {
-		return new ObservableElementEvent<>(getType(), false, oldElement, newElement, oldVal, newVal, cause);
+		return new ObservableElementEvent<>(false, oldElement, newElement, oldVal, newVal, cause);
 	}
 
 	/**
