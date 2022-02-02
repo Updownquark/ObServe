@@ -25,7 +25,7 @@ import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.observe.collect.ObservableCollection;
-import org.observe.util.SafeObservableCollection;
+import org.observe.util.AbstractSafeObservableCollection;
 import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
 import org.qommons.IdentityKey;
@@ -122,6 +122,7 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 
 	private final Map<IdentityKey<T>, TreeNode> theNodes;
 	private final List<TreeModelListener> theListeners;
+	private boolean isPromisedSafe;
 
 	/** @param rootValue The root of the model */
 	public ObservableTreeModel(T rootValue) {
@@ -140,6 +141,14 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 		theNodes.put(new IdentityKey<>(theRootNode.get()), theRootNode);
 
 		root.noInitChanges().act(evt -> rootChanged(evt.getNewValue()));
+	}
+
+	/**
+	 * Represents a promise from the caller that the observable collections provided to this model will only ever fire on the AWT
+	 * {@link EventQueue} thread. This model may throw exceptions or report incorrect data if this promise is made and not kept.
+	 */
+	public void promiseSafe() {
+		isPromisedSafe = true;
 	}
 
 	/** @return The observable value that is the root of this tree */
@@ -164,24 +173,29 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 	}
 
 	private void rootChanged(T newRoot) {
-		ObservableSwingUtils.onEQ(() -> {
-			if (newRoot == theRootNode.get()) {
-				theRootNode.changed();
-				TreeModelEvent event = new TreeModelEvent(this, new Object[] { theRoot.get() }, null, null);
+		if (isPromisedSafe) {
+			doRootChanged(newRoot);
+		} else
+			ObservableSwingUtils.onEQ(() -> doRootChanged(newRoot));
+	}
 
-				for (TreeModelListener listener : theListeners)
-					listener.treeNodesChanged(event);
-			} else {
-				theRootNode.dispose();
-				theNodes.remove(new IdentityKey<>(theRootNode.get()));
-				theRootNode = new TreeNode(null, newRoot);
-				theNodes.put(new IdentityKey<>(newRoot), theRootNode);
-				TreeModelEvent event = new TreeModelEvent(this, new Object[] { theRoot.get() }, null, null);
+	private void doRootChanged(T newRoot) {
+		if (newRoot == theRootNode.get()) {
+			theRootNode.changed();
+			TreeModelEvent event = new TreeModelEvent(this, new Object[] { theRoot.get() }, null, null);
 
-				for (TreeModelListener listener : theListeners)
-					listener.treeStructureChanged(event);
-			}
-		});
+			for (TreeModelListener listener : theListeners)
+				listener.treeNodesChanged(event);
+		} else {
+			theRootNode.dispose();
+			theNodes.remove(new IdentityKey<>(theRootNode.get()));
+			theRootNode = new TreeNode(null, newRoot);
+			theNodes.put(new IdentityKey<>(newRoot), theRootNode);
+			TreeModelEvent event = new TreeModelEvent(this, new Object[] { theRoot.get() }, null, null);
+
+			for (TreeModelListener listener : theListeners)
+				listener.treeStructureChanged(event);
+		}
 	}
 
 	@Override
@@ -257,9 +271,8 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 
 			unsubscribe = SimpleObservable.build().build();
 			theChildren = ObservableTreeModel.this.getChildren(theValue);
-			if (theChildren != null && !(theChildren instanceof SafeObservableCollection))
-				theChildren = new SafeObservableCollection<>(theChildren, EventQueue::isDispatchThread, EventQueue::invokeLater,
-					unsubscribe);
+			if (!isPromisedSafe && theChildren != null && !(theChildren instanceof AbstractSafeObservableCollection))
+				theChildren = ObservableSwingUtils.safe(theChildren, unsubscribe);
 			init(false);
 		}
 

@@ -1,18 +1,20 @@
 package org.observe.util.swing;
 
-import static org.observe.util.swing.TableContentControl.textMatches;
-
+import java.awt.Color;
+import java.awt.EventQueue;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Random;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -25,9 +27,11 @@ import javax.swing.JFrame;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
+import org.observe.collect.CollectionChangesObservable;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
+import org.qommons.BiTuple;
 import org.qommons.BreakpointHere;
 import org.qommons.LambdaUtils;
 import org.qommons.Named;
@@ -35,7 +39,6 @@ import org.qommons.StringUtils;
 import org.qommons.TimeUtils;
 import org.qommons.TimeUtils.ParsedDuration;
 import org.qommons.TimeUtils.ParsedTime;
-import org.qommons.collect.CollectionUtils;
 import org.qommons.io.Format;
 
 import com.google.common.reflect.TypeToken;
@@ -62,13 +65,13 @@ public interface TableContentControl {
 
 	public static class FilteredValue<E> implements Comparable<FilteredValue<?>> {
 		E value;
-		int[][][] matches;
+		SortedMatchSet[] matches;
 		boolean hasMatch;
 		boolean isFiltered;
 
 		public FilteredValue(E value, int columns) {
 			this.value = value;
-			matches = new int[columns][][];
+			matches = new SortedMatchSet[columns];
 		}
 
 		public E getValue() {
@@ -92,10 +95,10 @@ public interface TableContentControl {
 		}
 
 		public boolean matches(int column) {
-			return matches[column] != null && matches[column].length > 0;
+			return matches[column] != null && matches[column].size() > 0;
 		}
 
-		public int[][] getMatches(int column) {
+		public SortedMatchSet getMatches(int column) {
 			return matches[column];
 		}
 
@@ -107,25 +110,27 @@ public interface TableContentControl {
 				return o.matches == null ? 0 : 1;
 			} else if (o.matches == null)
 				return -1;
-			for (int[][] cm : matches) {
+			for (SortedMatchSet cm : matches) {
 				if (cm == null)
 					continue;
-				for (int[] m : cm) {
-					if (thisMin < 0 || m[0] < thisMin)
-						thisMin = m[0];
+				for (int i = 0; i < cm.size(); i++) {
+					int start = cm.getStart(i);
+					if (thisMin < 0 || start < thisMin)
+						thisMin = start;
 					thisCount++;
 				}
 			}
 			int thatMin = -1;
 			int thatCount = 0;
-			for (int[][] cm : o.matches) {
+			for (SortedMatchSet cm : o.matches) {
 				if (cm == null)
 					continue;
-				for (int[] m : cm) {
+				for (int i = 0; i < cm.size(); i++) {
 					if (thisCount == 0)
 						return 1;
-					if (thatMin < 0 || m[0] < thatMin)
-						thatMin = m[0];
+					int start = cm.getStart(i);
+					if (thatMin < 0 || start < thatMin)
+						thatMin = start;
 					thatCount++;
 				}
 			}
@@ -141,38 +146,19 @@ public interface TableContentControl {
 		}
 	}
 
-	static int[][] NO_MATCH = new int[0][];
-
-	static int[][][] noMatch(int categories) {
-		int[][][] match = new int[categories][][];
-		Arrays.fill(match, NO_MATCH);
-		return match;
-	}
-
-	static boolean isMatch(int[][][] match) {
-		if (match == null)
-			return false;
-		for (int i = 0; i < match.length; i++) {
-			if (match[i] != null && match[i].length > 0)
-				return true;
-		}
-		return false;
-	}
-
-	default int[][][] findMatches(List<? extends ValueRenderer<?>> categories, CharSequence[] texts) {
-		int[][][] matches = null;
-		for (int i = 0; i < texts.length; i++) {
-			int[][] catMatches = findMatches(categories.get(i), texts[i]);
-			if (catMatches != null) {
-				if (matches == null)
-					matches = new int[texts.length][][];
-				matches[i] = catMatches;
-			}
-		}
+	/**
+	 * @param categories The categories of the row to filter on
+	 * @param texts The text for each category of the row
+	 * @return An array of text matches for each category
+	 */
+	default SortedMatchSet[] findMatches(List<? extends ValueRenderer<?>> categories, CharSequence[] texts) {
+		SortedMatchSet[] matches = new SortedMatchSet[texts.length];
+		for (int i = 0; i < texts.length; i++)
+			matches[i] = findMatches(categories.get(i), texts[i]);
 		return matches;
 	}
 
-	int[][] findMatches(ValueRenderer<?> category, CharSequence text);
+	SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence text);
 
 	boolean isSearch();
 
@@ -397,16 +383,14 @@ public interface TableContentControl {
 					v.isFiltered = true;
 					v.hasMatch = false;
 					for (i = 0; !v.hasMatch && i < texts.length; i++) {
-						if (v.matches[i] != null && v.matches[i].length > 0)
+						if (v.matches[i] != null && v.matches[i].size() > 0)
 							v.hasMatch = true;
 					}
 				}
 				return v;
-			}, "toFilterValue", null))).filter(LambdaUtils.printableFn(fv -> fv.hasMatch() ? null : "No match", "match", null))//
+			}, "toFilterValue", null)))//
+			.filter(LambdaUtils.printableFn(fv -> fv.hasMatch() ? null : "No match", "match", null))//
 			.sorted(LambdaUtils.printableComparator((fv1, fv2) -> {
-				int comp = fv1.compareTo(fv2);
-				if (comp != 0)
-					return comp;
 				List<String> sorting = filter.get().getRowSorting();
 				if (sorting != null) {
 					Collection<? extends ValueRenderer<? super E>> renders = render.get();
@@ -414,7 +398,7 @@ public interface TableContentControl {
 						for (ValueRenderer<? super E> r : renders) {
 							int rSort = RowSorter.sortCategoryMatches(s, r.getName());
 							if (rSort != 0) {
-								comp = r.compare(fv1.value, fv2.value);
+								int comp = r.compare(fv1.value, fv2.value);
 								if (comp != 0) {
 									if (rSort < 0)
 										return -comp;
@@ -452,12 +436,12 @@ public interface TableContentControl {
 
 	public static final TableContentControl DEFAULT = new TableContentControl() {
 		@Override
-		public int[][][] findMatches(List<? extends ValueRenderer<?>> category, CharSequence[] texts) {
+		public SortedMatchSet[] findMatches(List<? extends ValueRenderer<?>> category, CharSequence[] texts) {
 			return null;
 		}
 
 		@Override
-		public int[][] findMatches(ValueRenderer<?> category, CharSequence value) {
+		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence value) {
 			return null;
 		}
 
@@ -482,33 +466,6 @@ public interface TableContentControl {
 		}
 	};
 
-	static int[] textMatches(CharSequence matcher, CharSequence toSearch, int searchStart) {
-		int c, m, matchStart = 0;
-		for (c = searchStart, m = 0; c < toSearch.length(); c++) {
-			char matchCh = matcher.charAt(m);
-			char testCh = toSearch.charAt(c);
-			int diff = matchCh - testCh;
-			boolean match;
-			if (diff == 0)
-				match = true;
-			else if (diff == StringUtils.a_MINUS_A && matchCh >= 'a' && matchCh <= 'z')
-				match = true;
-			else if (diff == -StringUtils.a_MINUS_A && matchCh >= 'A' && matchCh <= 'Z')
-				match = true;
-			else if (Character.isWhitespace(testCh) && !Character.isWhitespace(matchCh)) {
-				continue;
-			} else
-				match = false;
-			if (match) {
-				m++;
-				if (m == matcher.length())
-					return new int[] { matchStart, c + 1 };
-			} else
-				matchStart = m = 0;
-		}
-		return null;
-	}
-
 	public static class SimpleFilter implements TableContentControl {
 		private final String theMatcher;
 
@@ -519,22 +476,34 @@ public interface TableContentControl {
 		}
 
 		@Override
-		public int[][] findMatches(ValueRenderer<?> category, CharSequence toSearch) {
+		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence toSearch) {
 			if (!category.searchGeneral())
 				return null;
-			int[] match;
-			int lastMatch = 0;
-			SortedIntArraySet matches = null;
-			do {
-				match = textMatches(theMatcher, toSearch, lastMatch);
-				if (match != null) {
-					lastMatch = match[1];
-					if (matches == null)
-						matches = SortedIntArraySet.get();
-					matches.add(match);
+			SortedMatchSet matches = null;
+			for (int s = 0; s < toSearch.length() - theMatcher.length(); s++) {
+				int c = s, m = 0;
+				while (m < theMatcher.length() && c < toSearch.length()) {
+					char matchCh = theMatcher.charAt(m);
+					char testCh = toSearch.charAt(c);
+					int diff = matchCh - testCh;
+					if (diff == 0) {//
+					} else if (diff == StringUtils.a_MINUS_A && matchCh >= 'a' && matchCh <= 'z') {//
+					} else if (diff == -StringUtils.a_MINUS_A && matchCh >= 'A' && matchCh <= 'Z') {//
+					} else if (m > 0 && Character.isWhitespace(testCh) && !Character.isWhitespace(matchCh)) {
+						c++;
+						continue;
+					} else
+						break;
+					c++;
+					m++;
 				}
-			} while (match != null);
-			return matches == null ? NO_MATCH : matches.flush();
+				if (m == theMatcher.length()) {
+					if (matches == null)
+						matches = new SortedMatchSet();
+					matches.add(s, c);
+				}
+			}
+			return matches;
 		}
 
 		@Override
@@ -568,12 +537,12 @@ public interface TableContentControl {
 		}
 
 		@Override
-		public int[][][] findMatches(List<? extends ValueRenderer<?>> categories, CharSequence[] texts) {
+		public SortedMatchSet[] findMatches(List<? extends ValueRenderer<?>> categories, CharSequence[] texts) {
 			return theFilter.findMatches(categories, texts);
 		}
 
 		@Override
-		public int[][] findMatches(ValueRenderer<?> category, CharSequence text) {
+		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence text) {
 			return theFilter.findMatches(category, text);
 		}
 
@@ -598,12 +567,13 @@ public interface TableContentControl {
 		}
 	}
 
+	/** Matches empty text */
 	public static class EmptyFilter implements TableContentControl {
 		@Override
-		public int[][] findMatches(ValueRenderer<?> category, CharSequence text) {
+		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence text) {
 			if (text == null || text.length() == 0)
-				return new int[1][2]; // [[0, 0]]
-			return NO_MATCH;
+				return new SortedMatchSet(1).add(0, 0); // [[0, 0]]
+			return null;
 		}
 
 		@Override
@@ -670,7 +640,7 @@ public interface TableContentControl {
 		}
 
 		@Override
-		public int[][] findMatches(ValueRenderer<?> category, CharSequence text) {
+		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence text) {
 			if (!categoryMatches(theCategory, category.getName()))
 				return null;
 			return theFilter.findMatches(new UnfilteredRenderer<>(category), text);
@@ -724,25 +694,25 @@ public interface TableContentControl {
 		}
 
 		@Override
-		public int[][] findMatches(ValueRenderer<?> category, CharSequence text) {
+		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence text) {
 			if (!category.searchGeneral())
 				return null;
 			if (theSequence.isEmpty()) {
-				return new int[] []{new int[] {0, text.length()}};
+				return new SortedMatchSet(1).add(0, text.length());
 			}
-			SortedIntArraySet matches = null;
-			int[] match = find(text, 0);
+			SortedMatchSet matches = null;
+			TextMatch match = find(text, 0);
 			if (match != null) {
-				matches = SortedIntArraySet.get();
+				matches = new SortedMatchSet();
 			}
 			while (match != null) {
 				matches.add(match);
-				match = find(text, match[0] + match[1]);
+				match = find(text, match.end);
 			}
-			return matches == null ? NO_MATCH : matches.flush();
+			return matches;
 		}
 
-		private int[] find(CharSequence text, int start) {
+		private TextMatch find(CharSequence text, int start) {
 			int end = start;
 			for (String seq : theSequence) {
 				if (seq.length() == 0)
@@ -754,7 +724,7 @@ public interface TableContentControl {
 				} else
 					end = index + seq.length();
 			}
-			return start >= 0 ? new int[] { start, end } : null;
+			return start >= 0 ? new TextMatch(start, end) : null;
 		}
 
 		private static int find(CharSequence text, String seq, int start) {
@@ -808,10 +778,10 @@ public interface TableContentControl {
 		}
 
 		@Override
-		public int[][] findMatches(ValueRenderer<?> category, CharSequence text) {
+		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence text) {
 			if (!category.searchGeneral())
 				return null;
-			SortedIntArraySet matches = null;
+			SortedMatchSet matches = null;
 			Matcher matcher = thePattern.matcher(text);
 			int start = 0;
 			while (matcher.find(start)) {
@@ -820,11 +790,11 @@ public interface TableContentControl {
 					continue;
 				}
 				if (matches == null)
-					matches = SortedIntArraySet.get();
-				matches.add(new int[] { matcher.start(), matcher.end() });
+					matches = new SortedMatchSet();
+				matches.add(matcher.start(), matcher.end());
 				start = matcher.end();
 			}
-			return matches == null ? NO_MATCH : matches.flush();
+			return matches;
 		}
 
 		@Override
@@ -951,10 +921,10 @@ public interface TableContentControl {
 		}
 
 		@Override
-		public int[][] findMatches(ValueRenderer<?> category, CharSequence text) {
+		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence text) {
 			if (!category.searchGeneral())
 				return null;
-			SortedIntArraySet matches = null;
+			SortedMatchSet matches = null;
 			for (int i = 0; i < text.length(); i++) {
 				FoundDouble found = TableContentControl.tryParseDouble(text, i);
 				if (found == null)
@@ -964,13 +934,13 @@ public interface TableContentControl {
 					comp = Double.compare(found.minValue, theMaxValue);
 					if (comp < 0 || (comp == 0 && theMinValue == theMaxValue)) {
 						if (matches == null)
-							matches = SortedIntArraySet.get();
-						matches.add(new int[] { i, found.end });
+							matches = new SortedMatchSet();
+						matches.add(i, found.end);
 					}
 				}
 				i += found.end - 1; // Loop will increment
 			}
-			return matches == null ? NO_MATCH : matches.flush();
+			return matches;
 		}
 
 		@Override
@@ -1005,10 +975,10 @@ public interface TableContentControl {
 		}
 
 		@Override
-		public int[][] findMatches(ValueRenderer<?> category, CharSequence toSearch) {
+		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence toSearch) {
 			if (!category.searchGeneral())
 				return null;
-			SortedIntArraySet matches = null;
+			SortedMatchSet matches = null;
 			int digitStart = -1;
 			for (int c = 0; c < toSearch.length(); c++) {
 				if (Character.isDigit(toSearch.charAt(c))) {
@@ -1017,18 +987,18 @@ public interface TableContentControl {
 				} else if (digitStart >= 0) {
 					if (isIncluded(toSearch, digitStart, c)) {
 						if (matches == null)
-							matches = SortedIntArraySet.get();
-						matches.add(new int[] { digitStart, c });
+							matches = new SortedMatchSet();
+						matches.add(digitStart, c);
 					}
 					digitStart = -1;
 				}
 			}
 			if (digitStart >= 0 && isIncluded(toSearch, digitStart, toSearch.length())) {
 				if (matches == null)
-					matches = SortedIntArraySet.get();
-				matches.add(new int[] { digitStart, toSearch.length() });
+					matches = new SortedMatchSet();
+				matches.add(digitStart, toSearch.length());
 			}
-			return matches == null ? NO_MATCH : matches.flush();
+			return matches;
 		}
 
 		private boolean isIncluded(CharSequence toSearch, int start, int end) {
@@ -1088,10 +1058,10 @@ public interface TableContentControl {
 		}
 
 		@Override
-		public int[][] findMatches(ValueRenderer<?> category, CharSequence text) {
+		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence text) {
 			if (!category.searchGeneral())
 				return null;
-			SortedIntArraySet matches = null;
+			SortedMatchSet matches = null;
 			for (int i = 0; i < text.length();) {
 				TimeUtils.ParsedTime time;
 				try {
@@ -1099,17 +1069,17 @@ public interface TableContentControl {
 						text.subSequence(i, text.length()), false, false, null);
 				} catch (ParseException e) {
 					e.printStackTrace();
-					return NO_MATCH;
+					return null;
 				}
 				if (time != null && theTime.isComparable(time) && theTime.compareTo(time) == 0) {
 					if (matches == null)
-						matches = SortedIntArraySet.get();
-					matches.add(new int[] { i, i + time.toString().length() });
+						matches = new SortedMatchSet();
+					matches.add(i, i + time.toString().length());
 					i += time.toString().length();
 				} else
 					i++;
 			}
-			return matches == null ? NO_MATCH : matches.flush();
+			return matches;
 		}
 
 		@Override
@@ -1143,10 +1113,10 @@ public interface TableContentControl {
 		}
 
 		@Override
-		public int[][] findMatches(ValueRenderer<?> category, CharSequence text) {
+		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence text) {
 			if (!category.searchGeneral())
 				return null;
-			SortedIntArraySet matches = null;
+			SortedMatchSet matches = null;
 			for (int i = 0; i < text.length();) {
 				if (Character.isDigit(text.charAt(i))) {
 					TimeUtils.ParsedTime time;
@@ -1158,15 +1128,15 @@ public interface TableContentControl {
 					if (time != null && theMinTime.isComparable(time) && theMinTime.compareTo(time) <= 0
 						&& theMaxTime.compareTo(time) >= 0) {
 						if (matches == null)
-							matches = SortedIntArraySet.get();
-						matches.add(new int[] { i, i + time.toString().length() });
+							matches = new SortedMatchSet();
+						matches.add(i, i + time.toString().length());
 						i += time.toString().length();
 					} else
 						i++;
 				} else
 					i++;
 			}
-			return matches == null ? NO_MATCH : matches.flush();
+			return matches;
 		}
 
 		@Override
@@ -1198,21 +1168,22 @@ public interface TableContentControl {
 		}
 
 		@Override
-		public int[][] findMatches(ValueRenderer<?> category, CharSequence text) {
+		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence text) {
 			if (!category.searchGeneral())
 				return null;
 			TimeUtils.ParsedDuration duration;
 			try {
 				duration = TimeUtils.parseDuration(text, false);
 				if (duration == null)
-					return NO_MATCH;
+					return null;
 			} catch (ParseException e) {
-				return NO_MATCH;
+				e.printStackTrace();
+				return null;
 			}
 			if (theDuration.compareTo(duration) == 0) {
-				return new int[][] { { 0, text.length() } };
+				return new SortedMatchSet(1).add(0, text.length());
 			}
-			return NO_MATCH;
+			return null;
 		}
 
 		@Override
@@ -1246,19 +1217,23 @@ public interface TableContentControl {
 		}
 
 		@Override
-		public int[][] findMatches(ValueRenderer<?> category, CharSequence text) {
+		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence text) {
 			if (!category.searchGeneral())
 				return null;
 			TimeUtils.ParsedDuration duration;
 			try {
-				duration = TimeUtils.parseDuration(text);
+				duration = TimeUtils.parseDuration(text, false);
+				if (duration == null)
+					return null;
 			} catch (ParseException e) {
-				return NO_MATCH;
+				e.printStackTrace();
+				;
+				return null;
 			}
 			if (theMinDuration.compareTo(duration) <= 0 && theMaxDuration.compareTo(duration) >= 0) {
-				return new int[][] { { 0, text.length() } };
+				return new SortedMatchSet(1).add(0, text.length());
 			}
-			return NO_MATCH;
+			return null;
 		}
 
 		@Override
@@ -1293,41 +1268,40 @@ public interface TableContentControl {
 		}
 
 		@Override
-		public int[][][] findMatches(List<? extends ValueRenderer<?>> categories, CharSequence[] texts) {
-			SortedIntArraySet[] matches = null;
+		public SortedMatchSet[] findMatches(List<? extends ValueRenderer<?>> categories, CharSequence[] texts) {
+			SortedMatchSet[] matches = null;
 			for (TableContentControl content : theContent) {
-				int[][][] match = content.findMatches(categories, texts);
+				SortedMatchSet[] match = content.findMatches(categories, texts);
 				if (match == null)
 					continue;
 				if (matches == null)
-					matches = new SortedIntArraySet[texts.length];
+					matches = new SortedMatchSet[texts.length];
 				for (int i = 0; i < match.length; i++) {
-					int[][] cm = match[i];
+					SortedMatchSet cm = match[i];
 					if (cm != null) {
 						if (matches[i] == null)
-							matches[i] = SortedIntArraySet.get();
-						for (int[] m : cm) {
-							matches[i].add(m);
-						}
+							matches[i] = cm;
+						else
+							matches[i].addAll(cm);
 					}
 				}
 			}
-			return SortedIntArraySet.flush(matches);
+			return matches;
 		}
 
 		@Override
-		public int[][] findMatches(ValueRenderer<?> category, CharSequence value) {
-			SortedIntArraySet matches = null;
+		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence value) {
+			SortedMatchSet matches = null;
 			for (TableContentControl content : theContent) {
-				int[][] match = content.findMatches(category, value);
+				SortedMatchSet match = content.findMatches(category, value);
 				if (match != null) {
 					if (matches == null)
-						matches = SortedIntArraySet.get();
-					for (int[] m : match)
-						matches.add(m);
+						matches = match;
+					else
+						matches.addAll(match);
 				}
 			}
-			return matches == null ? null : matches.flush();
+			return matches == null ? null : matches;
 		}
 
 		@Override
@@ -1396,45 +1370,44 @@ public interface TableContentControl {
 		}
 
 		@Override
-		public int[][][] findMatches(List<? extends ValueRenderer<?>> categories, CharSequence[] texts) {
-			SortedIntArraySet[] matches = null;
+		public SortedMatchSet[] findMatches(List<? extends ValueRenderer<?>> categories, CharSequence[] texts) {
+			SortedMatchSet[] matches = null;
 			for (TableContentControl content : theContent) {
-				int[][][] match = content.findMatches(categories, texts);
-				if (!TableContentControl.isMatch(match) && content.isSearch())
-					return TableContentControl.noMatch(texts.length);
+				SortedMatchSet[] match = content.findMatches(categories, texts);
+				if (match == null && content.isSearch())
+					return new SortedMatchSet[categories.size()];
 				if (match == null)
 					continue;
 				if (matches == null)
-					matches = new SortedIntArraySet[texts.length];
+					matches = new SortedMatchSet[texts.length];
 				for (int i = 0; i < match.length; i++) {
-					int[][] cm = match[i];
+					SortedMatchSet cm = match[i];
 					if (cm != null) {
 						if (matches[i] == null)
-							matches[i] = SortedIntArraySet.get();
-						for (int[] m : cm) {
-							matches[i].add(m);
-						}
+							matches[i] = cm;
+						else
+							matches[i].addAll(cm);
 					}
 				}
 			}
-			return SortedIntArraySet.flush(matches);
+			return matches;
 		}
 
 		@Override
-		public int[][] findMatches(ValueRenderer<?> category, CharSequence value) {
-			SortedIntArraySet matches = null;
+		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence value) {
+			SortedMatchSet matches = null;
 			for (TableContentControl content : theContent) {
-				int[][] match = content.findMatches(category, value);
+				SortedMatchSet match = content.findMatches(category, value);
 				if (match == null)
 					return null;
 				if (matches == null)
-					matches = SortedIntArraySet.get();
-				for (int[] m : match)
-					matches.add(m);
+					matches = match;
+				else
+					matches.addAll(match);
 			}
 			if (matches == null)
 				return null;
-			return matches.flush();
+			return matches;
 		}
 
 		@Override
@@ -1500,10 +1473,10 @@ public interface TableContentControl {
 		}
 
 		@Override
-		public int[][] findMatches(ValueRenderer<?> category, CharSequence text) {
+		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence text) {
 			if (!theCategory.equals(category.getName()))
-				return NO_MATCH;
-			return theFilter.test(text) ? new int[][] { { 0, text.length() } } : NO_MATCH;
+				return null;
+			return theFilter.test(text) ? new SortedMatchSet(1).add(0, text.length()) : null;
 		}
 
 		@Override
@@ -1530,7 +1503,7 @@ public interface TableContentControl {
 		}
 
 		@Override
-		public int[][] findMatches(ValueRenderer<?> category, CharSequence text) {
+		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence text) {
 			return null;
 		}
 
@@ -1594,7 +1567,7 @@ public interface TableContentControl {
 		}
 
 		@Override
-		public int[][] findMatches(ValueRenderer<?> category, CharSequence text) {
+		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence text) {
 			return null;
 		}
 
@@ -1620,110 +1593,6 @@ public interface TableContentControl {
 		}
 	}
 
-	/**
-	 * A simple sorted set of 2-length int array matches. This highly-specialized and highly-optimized class makes combining matches fast
-	 * and easy. It assumes single-threaded usage, as it should only be ever used on the Java AWT Event Queue thread. For performance
-	 * reasons however, this is never checked.
-	 */
-	public static class SortedIntArraySet {
-		private static final int MAX_LIST_SIZE_FOR_CACHE = 40; // No sets with >20 matches will be put back into the cache
-		private static final int MAX_LIST_QUEUE_SIZE = 20_000; // 10,000 matches
-		private static final ArrayList<SortedIntArraySet> LIST_CACHE = new ArrayList<>();
-		private static int LIST_CACHE_SIZE = 0;
-
-		public static SortedIntArraySet get() {
-			if (LIST_CACHE.isEmpty())
-				return new SortedIntArraySet();
-			else
-				return LIST_CACHE.remove(LIST_CACHE.size() - 1);
-		}
-
-		public static int[][][] flush(SortedIntArraySet[] tableMatches) {
-			if (tableMatches == null)
-				return null;
-			int[][][] matches = new int[tableMatches.length][][];
-			for (int i = 0; i < tableMatches.length; i++)
-				matches[i] = tableMatches[i] == null ? null : tableMatches[i].flush();
-			return matches;
-		}
-
-		private int[] theMatches = new int[10];
-		private int theSize; // This is double the number of matches in the set, as each match takes two spots
-
-		public SortedIntArraySet add(int[] match) {
-			int index = ArrayUtils.binarySearch(0, (theSize >> 1) - 1, idx -> {
-				int dblIdx = idx << 1;
-				int comp = Integer.compare(match[0], theMatches[dblIdx]);
-				if (comp == 0)
-					comp = Integer.compare(match[1], theMatches[dblIdx + 1]);
-				return comp;
-			});
-			if (index >= 0)
-				return this; // Duplicate
-			boolean newCap = theSize == theMatches.length;
-			int[] newMatches;
-			if (newCap)
-				newMatches = new int[theMatches.length << 1];
-			else
-				newMatches = theMatches;
-			index = -index - 1;
-			index = index << 1; // Double it
-			int move = theSize - index;
-			if (move >= 6) {
-				System.arraycopy(theMatches, index, newMatches, index + 2, move);
-			} else if (move > 0) {
-				for (int i = theSize; i > index; i--)
-					newMatches[i] = theMatches[i - 1];
-			}
-			if (newCap) {
-				if (index >= 6) {
-					System.arraycopy(theMatches, 0, newMatches, 0, index);
-				} else if (index > 0) {
-					for (int i = 0; i < index; i++)
-						newMatches[i] = theMatches[i];
-				}
-				theMatches = newMatches;
-			}
-			newMatches[index] = match[0];
-			newMatches[index + 1] = match[1];
-			theSize += 2;
-			return this;
-		}
-
-		public int[][] flush() {
-			int matchCount = theSize >> 1;
-					int[][] copy = new int[matchCount][2];
-					for (int i = 0, j = 0; i < matchCount; i++, j++) {
-						copy[i][0] = theMatches[j];
-						j++;
-						copy[i][1] = theMatches[j];
-					}
-					theSize = 0;
-					int cap = theMatches.length;
-					if (cap <= MAX_LIST_SIZE_FOR_CACHE && LIST_CACHE_SIZE < MAX_LIST_QUEUE_SIZE) {
-						LIST_CACHE_SIZE += cap;
-						LIST_CACHE.add(this);
-					}
-					return copy;
-		}
-
-		@Override
-		public String toString() {
-			StringBuilder str = new StringBuilder();
-			for (int i = 0; i < theSize; i++) {
-				if (i > 0)
-					str.append(',');
-				str.append('[');
-				str.append(theMatches[i]);
-				str.append(',');
-				i++;
-				str.append(theMatches[i]);
-				str.append(']');
-			}
-			return str.toString();
-		}
-	}
-
 	public static void main(String... args) {
 		SettableValue<TableContentControl> control = SettableValue.build(TableContentControl.class).withValue(DEFAULT).build();
 		control.noInitChanges().act(evt -> {
@@ -1735,119 +1604,115 @@ public interface TableContentControl {
 			.build(TypeTokens.get().keyFor(CategoryRenderStrategy.class)
 				.<CategoryRenderStrategy<Map<String, String>, String>> parameterized(rows.getType(), TypeTokens.get().STRING))
 			.build();
-		SettableValue<List<String>> categories = SettableValue
-			.build(TypeTokens.get().keyFor(List.class).<List<String>> parameterized(String.class)).withValue(new ArrayList<>())
-			.build();
-		categories.noInitChanges().act(evt -> {
-			CollectionUtils.synchronize(columns, evt.getNewValue(), (crs, cat) -> crs.getName().equals(cat))//
-			.simple(cat -> new CategoryRenderStrategy<Map<String, String>, String>(cat, TypeTokens.get().STRING, map -> {
-				return map.get(cat);
-			})//
-				.formatText(v -> v == null ? "" : v).withMutation(mut -> {
-					mut.mutateAttribute((map, v) -> map.put(cat, v)).asText(Format.TEXT).withRowUpdate(true);
-				}))//
-			.rightOrder()//
-			.commonUses(true, false)//
-			.adjust();
-		});
-		JFrame frame = ObservableSwingUtils.buildUI()//
-			.systemLandF()//
-			.withTitle(TableContentControl.class.getSimpleName() + " Tester")//
-			.withSize(640, 900)//
-			.withVContent(p -> p//
-				.addTextField("Categories:", categories, new Format.ListFormat<>(Format.TEXT, ",", null), f -> f.fill())//
-				.addTextField("Filter", control, FORMAT, f -> f.fill().modifyEditor(tf -> tf.setCommitOnType(true)))//
-				.addTable(rows, table -> {
-					table.fill().withFiltering(control).withColumns(columns)//
-					.withAdd(() -> new HashMap<>(), null)//
-					;
-				})//
-				).getWindow();
-		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-		frame.setVisible(true);
-		/*class TestValueRenderer implements ValueRenderer<String> {
-			private final String theName;
-
-			TestValueRenderer(String name) {
-				theName = name;
+		columns.add(new CategoryRenderStrategy<Map<String, String>, String>("A", TypeTokens.get().STRING, map -> {
+			return map.get("A");
+		})//
+			.formatText(v -> v == null ? "" : v).withMutation(mut -> {
+				mut.mutateAttribute((map, v) -> map.put("A", v)).asText(Format.TEXT).withRowUpdate(true);
+			}).withWidths(50, 100, 150));
+		columns.add(new CategoryRenderStrategy<Map<String, String>, String>("B", TypeTokens.get().STRING, map -> {
+			return map.get("B");
+		})//
+			.formatText(v -> v == null ? "" : v).withMutation(mut -> {
+				mut.mutateAttribute((map, v) -> map.put("B", v)).asText(Format.TEXT).withRowUpdate(true);
+			}).withWidths(50, 100, 150));
+		columns.add(new CategoryRenderStrategy<Map<String, String>, String>("C", TypeTokens.get().STRING, map -> {
+			return map.get("C");
+		})//
+			.formatText(v -> v == null ? "" : v).withMutation(mut -> {
+				mut.mutateAttribute((map, v) -> map.put("D", v)).asText(Format.TEXT).withRowUpdate(true);
+			}).withWidths(50, 100, 150));
+		columns.add(new CategoryRenderStrategy<Map<String, String>, String>("D", TypeTokens.get().STRING, map -> {
+			return map.get("D");
+		})//
+			.formatText(v -> v == null ? "" : v).withMutation(mut -> {
+				mut.mutateAttribute((map, v) -> map.put("A", v)).asText(Format.TEXT).withRowUpdate(true);
+			}).withWidths(50, 100, 150));
+		Random random = new Random();
+		int rowCount = 100000;
+		int lastPct = 0;
+		for (int i = 0; i < rowCount; i++) {
+			int pct = i * 100 / rowCount;
+			if (pct > lastPct) {
+				if (pct % 10 == 0)
+					System.out.print(pct);
+				else
+					System.out.print('.');
+				System.out.flush();
+				lastPct = pct;
 			}
-
-			@Override
-			public int compare(String o1, String o2) {
-				return StringUtils.compareNumberTolerant(o1, o2, true, true);
+			long r = random.nextLong();
+			Map<String, String> row = new HashMap<>();
+			row.put("A", "" + r);
+			row.put("B", Long.toHexString(r));
+			row.put("C", new Date(r).toString());
+			char[] chs = new char[9];
+			int mask = 0x7f;
+			for (int j = 0; j < chs.length; j++) {
+				chs[chs.length - j - 1] = (char) (r & mask);
+				if (chs[chs.length - j - 1] < ' ')
+					chs[chs.length - j - 1] = ' ';
+				r >>>= 7;
 			}
-
-			@Override
-			public String getName() {
-				return theName;
-			}
-
-			@Override
-			public boolean searchGeneral() {
-				return true;
-			}
-
-			@Override
-			public CharSequence render(String value) {
-				return value;
-			}
-
-			@Override
-			public String toString() {
-				return theName;
-			}
+			row.put("D", new String(chs));
+			rows.add(row);
 		}
-		try (Scanner scanner = new Scanner(System.in)) {
-			String line = scanner.nextLine();
-			List<ValueRenderer<String>> categories = Collections.emptyList();
-			TableContentControl control = null;
-			while (line != null) {
-				if (line.startsWith("control:")) {
-					control = parseContentControl(line.substring("control:".length()));
-					System.out.println(control);
-				} else if (line.startsWith("cat:")) {
-					String[] split = line.substring("cat:".length()).split(",");
-					categories = Arrays.stream(split).map(s -> new TestValueRenderer(s.trim())).collect(Collectors.toList());
-					System.out.println("Categories set to " + categories);
-				} else if (control == null) {
-					System.err.println("No content control specified");
-				} else {
-					String[] split = line.split(",");
-					if (split.length != categories.size()) {
-						System.err.println("There are currently " + categories.size() + " categor" + (categories.size() == 1 ? "y" : "ies")
-							+ ": " + categories + "--you gave " + split.length + ": " + Arrays.toString(split));
-					} else {
-						// TODO
-						int[][][] match = control.findMatches(categories, split);
-						if (match == null)
-							System.out.println("No matches");
-						else {
-							System.out.println("Matches: " + ArrayUtils.toString(match));
-							for (int i = 0; i < match.length; i++) {
-								if (i > 0)
-									System.out.print(", ");
-								if (match[i] == null)
-									System.out.print("()");
-								else {
-									int m = 0;
-									for (int c = 0; c < split[i].length(); c++) {
-										if (m < match[i].length && c == match[i][m][0])
-											System.out.print("[");
-										System.out.print(split[i].charAt(c));
-										if (m < match[i].length && c == match[i][m][1]) {
-											System.out.print("]");
-											m++;
-										}
-									}
+		System.out.println();
+		// SettableValue<List<String>> categories = SettableValue
+		// .build(TypeTokens.get().keyFor(List.class).<List<String>> parameterized(String.class)).withValue(new ArrayList<>()).build();
+		// categories.noInitChanges().act(evt -> {
+		// CollectionUtils.synchronize(columns, evt.getNewValue(), (crs, cat) -> crs.getName().equals(cat))//
+		// .simple(cat -> new CategoryRenderStrategy<Map<String, String>, String>(cat, TypeTokens.get().STRING, map -> {
+		// return map.get(cat);
+		// })//
+		// .formatText(v -> v == null ? "" : v).withMutation(mut -> {
+		// mut.mutateAttribute((map, v) -> map.put(cat, v)).asText(Format.TEXT).withRowUpdate(true);
+		// }))//
+		// .rightOrder()//
+		// .commonUses(true, false)//
+		// .adjust();
+		// });
+		EventQueue.invokeLater(() -> {
+			JFrame frame = ObservableSwingUtils.buildUI()//
+				.systemLandF()//
+				.withTitle(TableContentControl.class.getSimpleName() + " Tester")//
+				.withSize(640, 900)//
+				.withVContent(p -> p//
+					// .addTextField("Categories:", categories, new Format.ListFormat<>(Format.TEXT, ",", null), f -> f.fill())//
+					.addTextField("Filter", control, FORMAT, f -> f.fill().modifyEditor(tf -> tf.setCommitOnType(true)))//
+					.addTable(rows, table -> {
+						table.decorate(deco -> {
+							deco.withTitledBorder("Rows", Color.black);
+							Runnable[] install = new Runnable[1];
+							install[0] = () -> {
+								if (table.getFilteredRows() == null) {
+									EventQueue.invokeLater(install[0]);
+									return;
 								}
-								System.out.flush();
-							}
-							System.out.println();
-						}
-					}
-				}
-				line = scanner.nextLine();
-			}
-		}*/
+								table.getRows().observeSize().transform((Class<BiTuple<Integer, Integer>>) (Class<?>) BiTuple.class,
+									tx -> tx.combineWith(table.getFilteredRows().observeSize()).combine((sz, f) -> new BiTuple<>(sz, f)))
+									.changes().act(evt -> {
+										int sz = evt.getNewValue().getValue1();
+										int f = evt.getNewValue().getValue2();
+										String title = "Displaying " + f + " of " + sz + " row" + (f == 1 ? "" : "s");
+										deco.withTitledBorder(title, Color.black);
+										if (table.getComponent() != null)
+											table.getComponent().repaint();
+									});
+							};
+							EventQueue.invokeLater(install[0]);
+						}).fill().withFiltering(control).withColumns(columns)//
+							.withAdd(() -> new HashMap<>(), null)//
+						;
+					})//
+			).getWindow();
+			frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+			frame.setVisible(true);
+		});
+
+		control.changes().act(evt -> EventQueue.invokeLater(()->{
+			CollectionChangesObservable.CHANGES_TRACKER.printData();
+			CollectionChangesObservable.CHANGES_TRACKER.clear();
+		}));
 	}
 }

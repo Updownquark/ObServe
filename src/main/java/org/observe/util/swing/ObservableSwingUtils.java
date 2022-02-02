@@ -73,8 +73,9 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.ObservableCollection;
 import org.observe.config.ObservableConfig;
-import org.observe.util.SafeObservableCollection;
+import org.observe.util.AbstractSafeObservableCollection;
 import org.observe.util.TypeTokens;
+import org.observe.util.UIOptimizedCollection;
 import org.qommons.Causable;
 import org.qommons.Causable.CausableKey;
 import org.qommons.LambdaUtils;
@@ -122,6 +123,19 @@ public class ObservableSwingUtils {
 			}
 			task = EDT_EVENTS.poll(0);
 		}
+	}
+
+	/**
+	 * @param <E> The type of the collection
+	 * @param collection The collection to use with a swing widget
+	 * @param until An observable to fire when we no longer need the swing-attached collection
+	 * @return A collection that provides the same data as the given collection, but only fires its events on the AWT {@link EventQueue}
+	 */
+	public static <E> AbstractSafeObservableCollection<E> safe(ObservableCollection<E> collection, Observable<?> until) {
+		if (collection instanceof AbstractSafeObservableCollection)
+			return (AbstractSafeObservableCollection<E>) collection;
+		// return new SafeObservableCollection<E>(collection, EventQueue::isDispatchThread, EventQueue::invokeLater, until);
+		return new UIOptimizedCollection<>(collection, EventQueue::isDispatchThread, EventQueue::invokeLater, until);
 	}
 
 	/**
@@ -415,13 +429,10 @@ public class ObservableSwingUtils {
 		TypeToken<TB> buttonType, Function<? super T, ? extends TB> buttonCreator, Consumer<ObservableCollection<TB>> withButtons,
 		BiConsumer<? super TB, ? super T> render, Function<? super T, String> descrip) {
 		List<Subscription> subs = new LinkedList<>();
-		SafeObservableCollection<? extends T> safeValues;
+		ObservableCollection<? extends T> safeValues;
 		SimpleObservable<Void> safeUntil = SimpleObservable.build().build();
 		subs.add(() -> safeUntil.onNext(null));
-		if (availableValues instanceof SafeObservableCollection)
-			safeValues = (SafeObservableCollection<? extends T>) availableValues;
-		else
-			safeValues = new SafeObservableCollection<>(availableValues, EventQueue::isDispatchThread, EventQueue::invokeLater, safeUntil);
+		safeValues = safe(availableValues, safeUntil);
 		ObservableCollection<TB> buttons = safeValues.flow().transform(buttonType, tx -> tx.map((value, button) -> {
 			if (button == null)
 				button = buttonCreator.apply(value);

@@ -354,7 +354,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 	 *         by transaction when possible.
 	 */
 	default Observable<? extends CollectionChangeEvent<E>> changes() {
-		return new ObservableCollectionImpl.CollectionChangesObservable<>(this);
+		return new CollectionChangesObservable<>(this);
 	}
 
 	/**

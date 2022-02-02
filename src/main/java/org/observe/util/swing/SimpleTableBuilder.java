@@ -3,7 +3,6 @@ package org.observe.util.swing;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
-import java.awt.EventQueue;
 import java.awt.Rectangle;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
@@ -15,6 +14,7 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.function.BiConsumer;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -40,7 +40,7 @@ import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
-import org.observe.util.SafeObservableCollection;
+import org.observe.util.AbstractSafeObservableCollection;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.Dragging.SimpleTransferAccepter;
 import org.observe.util.swing.Dragging.SimpleTransferSource;
@@ -65,8 +65,6 @@ import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
-import org.qommons.debug.Debug;
-import org.qommons.debug.Debug.DebugData;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -74,7 +72,8 @@ import com.google.common.reflect.TypeToken;
 class SimpleTableBuilder<R, P extends SimpleTableBuilder<R, P>> extends AbstractComponentEditor<JTable, P>
 implements TableBuilder<R, P> {
 	private final ObservableCollection<R> theRows;
-	private SafeObservableCollection<R> theSafeRows;
+	private ObservableCollection<R> theFilteredRows;
+	private BooleanSupplier hasQueuedEvents;
 	private String theItemName;
 	private Function<? super R, String> theNameFunction;
 	private ObservableCollection<? extends CategoryRenderStrategy<? super R, ?>> theColumns;
@@ -89,6 +88,7 @@ implements TableBuilder<R, P> {
 	private int theAdaptivePrefRowHeight;
 	private int theAdaptiveMaxRowHeight;
 	private boolean isScrollable;
+	private boolean isPromisedSafe;
 
 	private Component theBuiltComponent;
 
@@ -148,7 +148,15 @@ implements TableBuilder<R, P> {
 				public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus,
 					int rowIndex, int columnIndex) {
 					super.getTableCellRendererComponent(table, value, isSelected, hasFocus, rowIndex, columnIndex);
-					setText(col.print(() -> theSafeRows.get(rowIndex), rowIndex));
+					setText(col.print(() -> {
+						CollectionElement<R> el = theFilteredRows.getElement(rowIndex);
+						if (el == null)
+							return null; // May have been removed
+						ElementId realRow = theRows.getEquivalentElement(el.getElementId());
+						if (realRow == null)
+							return null; // May have been removed
+						return theRows.getElement(realRow).get();
+					}, rowIndex));
 					return this;
 				}
 			}, (__, c) -> String.valueOf(c)));
@@ -185,6 +193,11 @@ implements TableBuilder<R, P> {
 	public P withFiltering(ObservableValue<? extends TableContentControl> filter) {
 		theFilter = filter;
 		return (P) this;
+	}
+
+	@Override
+	public ObservableCollection<R> getFilteredRows() {
+		return theFilteredRows;
 	}
 
 	@Override
@@ -279,7 +292,7 @@ implements TableBuilder<R, P> {
 	public P withCopy(Function<? super R, ? extends R> copier, Consumer<DataAction<R, ?>> actionMod) {
 		return withMultiAction(values -> {
 			try (Transaction t = theRows.lock(true, null)) {
-				if (theSafeRows.hasQueuedEvents()) { // If there are queued changes, we can't rely on indexes we get back from the model
+				if (hasQueuedEvents.getAsBoolean()) { // If there are queued changes, we can't rely on indexes we get back from the model
 					simpleCopy(values, copier);
 				} else {// Ignore the given values and use the selection model so we get the indexes right in the case of duplicates
 					betterCopy(copier);
@@ -340,10 +353,10 @@ implements TableBuilder<R, P> {
 				m -> m.mutateAttribute2((r, c) -> c).withEditor(ObservableCellEditor.createButtonCellEditor(__ -> null, cell -> {
 					if (up && cell.getRowIndex() == 0)
 						return cell.getCellValue();
-					else if (!up && cell.getRowIndex() == theSafeRows.size() - 1)
+					else if (!up && cell.getRowIndex() == theFilteredRows.size() - 1)
 						return cell.getCellValue();
 					try (Transaction t = theRows.lock(true, null)) {
-						if (!theSafeRows.hasQueuedEvents()) {
+						if (!hasQueuedEvents.getAsBoolean()) {
 							CollectionElement<R> row = theRows.getElement(cell.getRowIndex());
 							CollectionElement<R> adj = theRows.getAdjacentElement(row.getElementId(), !up);
 							if (adj != null) {
@@ -362,7 +375,7 @@ implements TableBuilder<R, P> {
 					if (up)
 						deco.enabled(cell.getRowIndex() > 0);
 					else
-						deco.enabled(cell.getRowIndex() < theSafeRows.size() - 1);
+						deco.enabled(cell.getRowIndex() < theFilteredRows.size() - 1);
 				}))));
 		return (P) this;
 	}
@@ -371,7 +384,7 @@ implements TableBuilder<R, P> {
 	public P withMoveToEnd(boolean up, Consumer<DataAction<R, ?>> actionMod) {
 		return withMultiAction(values -> {
 			try (Transaction t = theRows.lock(true, null)) {
-				if (theSafeRows.hasQueuedEvents()) { // If there are queued changes, we can't rely on indexes we get back from the model
+				if (hasQueuedEvents.getAsBoolean()) { // If there are queued changes, we can't rely on indexes we get back from the model
 				} else {// Ignore the given values and use the selection model so we get the indexes right in the case of duplicates
 					ListSelectionModel selModel = getEditor().getSelectionModel();
 					int selectionCount = 0;
@@ -396,7 +409,7 @@ implements TableBuilder<R, P> {
 			ObservableValue<String> enabled;
 			Supplier<String> enabledGet = () -> {
 				try (Transaction t = theRows.lock(false, null)) {
-					if (theSafeRows.hasQueuedEvents())
+					if (hasQueuedEvents.getAsBoolean())
 						return "Data set updating";
 					ListSelectionModel selModel = getEditor().getSelectionModel();
 					if (selModel.isSelectionEmpty())
@@ -488,24 +501,31 @@ implements TableBuilder<R, P> {
 	}
 
 	@Override
+	public P promiseSafe() {
+		isPromisedSafe = true;
+		return (P) this;
+	}
+
+	@Override
 	public Component getOrCreateComponent(Observable<?> until) {
 		if (theBuiltComponent != null)
 			return theBuiltComponent;
 		if (theColumns == null)
 			throw new IllegalStateException("No columns configured");
-		theSafeRows = new SafeObservableCollection<>(theRows, EventQueue::isDispatchThread, EventQueue::invokeLater, until);
 		ObservableTableModel<R> model;
 		ObservableCollection<TableContentControl.FilteredValue<R>> filtered;
+		ObservableCollection<? extends CategoryRenderStrategy<? super R, ?>> columns;
+		boolean columnsSafe = false;
 		if (theFilter != null) {
-			ObservableCollection<CategoryRenderStrategy<? super R, ?>> safeColumns = new SafeObservableCollection<>(//
-				(ObservableCollection<CategoryRenderStrategy<? super R, ?>>) TableContentControl.applyColumnControl(theColumns,
-					theFilter, until),
-				EventQueue::isDispatchThread, EventQueue::invokeLater, until);
-			Observable<?> columnChanges = Observable.or(Observable.constant(null), safeColumns.simpleChanges());
+			ObservableCollection<? extends CategoryRenderStrategy<? super R, ?>> fColumns = TableContentControl.applyColumnControl(
+				ObservableSwingUtils.safe(theColumns, until), theFilter, until);
+			columns = fColumns;
+			columnsSafe = true;
+			Observable<?> columnChanges = Observable.or(Observable.constant(null), fColumns.simpleChanges());
 			List<ValueRenderer<R>> renderers = new ArrayList<>();
 			columnChanges.act(__ -> {
 				renderers.clear();
-				for (CategoryRenderStrategy<? super R, ?> column : safeColumns) {
+				for (CategoryRenderStrategy<? super R, ?> column : fColumns) {
 					renderers.add(new TableContentControl.ValueRenderer<R>() {
 						@Override
 						public String getName() {
@@ -540,19 +560,31 @@ implements TableBuilder<R, P> {
 					});
 				}
 			});
-			filtered = TableContentControl.applyRowControl(theSafeRows, () -> renderers, theFilter.refresh(columnChanges), until);
-			ObservableCollection<R> filteredValues = filtered.flow()
+			ObservableCollection<TableContentControl.FilteredValue<R>> rawFiltered = TableContentControl.applyRowControl(theRows,
+				() -> renderers, theFilter.refresh(columnChanges), until);
+			if (!isPromisedSafe) {
+				filtered = ObservableSwingUtils.safe(rawFiltered, until);
+				hasQueuedEvents = ((AbstractSafeObservableCollection<?>) filtered)::hasQueuedEvents;
+			} else {
+				filtered = rawFiltered;
+				hasQueuedEvents = () -> false;
+			}
+			theFilteredRows = filtered.flow()
 				.transform(theRows.getType(),
 					tx -> tx.map(LambdaUtils.printableFn(f -> f.value, "value", null)).modifySource(FilteredValue::setValue))
 				.collectActive(until);
-			DebugData d = Debug.d().debug(theRows);
-			if (d.isActive())
-				Debug.d().debug(filteredValues, true).merge(d);
-			model = new ObservableTableModel<>(filteredValues, true, safeColumns, true);
 		} else {
 			filtered = null;
-			model = new ObservableTableModel<>(theSafeRows, true, theColumns, false);
+			columns = theColumns;
+			if (!isPromisedSafe) {
+				theFilteredRows = ObservableSwingUtils.safe(theRows, until);
+				hasQueuedEvents = ((AbstractSafeObservableCollection<?>) theFilteredRows)::hasQueuedEvents;
+			} else {
+				theFilteredRows = theRows;
+				hasQueuedEvents = () -> false;
+			}
 		}
+		model = new ObservableTableModel<>(theFilteredRows, true, columns, columnsSafe);
 		JTable table = getEditor();
 		table.setModel(model);
 		if(theMouseListeners!=null) {
@@ -562,7 +594,7 @@ implements TableBuilder<R, P> {
 		Subscription sub = ObservableTableModel.hookUp(table, model, //
 			filtered == null ? null : new ObservableTableModel.TableRenderContext() {
 			@Override
-			public int[][] getEmphaticRegions(int row, int column) {
+			public SortedMatchSet getEmphaticRegions(int row, int column) {
 				TableContentControl.FilteredValue<R> fv = filtered.get(row);
 				if (column >= fv.getColumns() || !fv.isFiltered())
 					return null;
@@ -643,9 +675,9 @@ implements TableBuilder<R, P> {
 						isVSBVisible = vbm.getExtent() > vbm.getMaximum();
 						Dimension psvs = table.getPreferredScrollableViewportSize();
 						if (psvs.height != prefHeight) {
-							int w = 0;
-							for (int c = 0; c < table.getColumnModel().getColumnCount(); c++)
-								w += table.getColumnModel().getColumn(c).getWidth();
+							// int w = 0;
+							// for (int c = 0; c < table.getColumnModel().getColumnCount(); c++)
+							// w += table.getColumnModel().getColumn(c).getWidth();
 							table.setPreferredScrollableViewportSize(new Dimension(psvs.width, prefHeight));
 						}
 						Dimension min = scroll.getMinimumSize();
@@ -831,7 +863,7 @@ implements TableBuilder<R, P> {
 							Transferable rowTr = theRowSource.createTransferable(selectedRows.get(r));
 							if (rowTr != null)
 								rowTs.add(rowTr);
-							rowIds[r] = theSafeRows.getElement(i).getElementId();
+							rowIds[r] = theFilteredRows.getElement(i).getElementId();
 							r++;
 						}
 					}
@@ -894,7 +926,7 @@ implements TableBuilder<R, P> {
 				if (support.isDrop()) {
 					rowIndex = theTable.rowAtPoint(support.getDropLocation().getDropPoint());
 					if (rowIndex < 0) {
-						rowIndex = theSafeRows.size() - 1;
+						rowIndex = theFilteredRows.size() - 1;
 						beforeRow = false;
 					} else {
 						Rectangle bounds = theTable.getCellRect(rowIndex, 0, false);
@@ -904,9 +936,11 @@ implements TableBuilder<R, P> {
 					rowIndex = theTable.getSelectedRow();
 					beforeRow = true;
 				}
-				ElementId targetRow = theSafeRows.getElement(rowIndex).getElementId();
-				ElementId after = beforeRow ? CollectionElement.getElementId(theSafeRows.getAdjacentElement(targetRow, false)) : targetRow;
-				ElementId before = beforeRow ? targetRow : CollectionElement.getElementId(theSafeRows.getAdjacentElement(targetRow, true));
+				ElementId targetRow = theFilteredRows.getElement(rowIndex).getElementId();
+				ElementId after = beforeRow ? CollectionElement.getElementId(theFilteredRows.getAdjacentElement(targetRow, false))
+					: targetRow;
+				ElementId before = beforeRow ? targetRow
+					: CollectionElement.getElementId(theFilteredRows.getAdjacentElement(targetRow, true));
 				// Support row move before anything else
 				if (support.getComponent() == theTable && support.isDrop()//
 					&& (support.getSourceDropActions() & MOVE) != 0 && support.isDataFlavorSupported(ROW_ELEMENT_FLAVOR)) {
@@ -920,7 +954,7 @@ implements TableBuilder<R, P> {
 								continue;
 							if (rowEl.equals(after) || rowEl.equals(before))
 								continue;
-							if (theSafeRows.canMove(rowEl, after, before) != null) {
+							if (theFilteredRows.canMove(rowEl, after, before) != null) {
 								canMoveAll = false;
 								break;
 							}
@@ -1017,7 +1051,7 @@ implements TableBuilder<R, P> {
 				if (support.isDrop()) {
 					rowIndex = theTable.rowAtPoint(support.getDropLocation().getDropPoint());
 					if (rowIndex < 0) {
-						rowIndex = theSafeRows.size() - 1;
+						rowIndex = theFilteredRows.size() - 1;
 						beforeRow = false;
 					} else {
 						Rectangle bounds = theTable.getCellRect(rowIndex, 0, false);
@@ -1027,9 +1061,11 @@ implements TableBuilder<R, P> {
 					rowIndex = theTable.getSelectedRow();
 					beforeRow = true;
 				}
-				ElementId targetRow = theSafeRows.getElement(rowIndex).getElementId();
-				ElementId after = beforeRow ? CollectionElement.getElementId(theSafeRows.getAdjacentElement(targetRow, false)) : targetRow;
-				ElementId before = beforeRow ? targetRow : CollectionElement.getElementId(theSafeRows.getAdjacentElement(targetRow, true));
+				ElementId targetRow = theFilteredRows.getElement(rowIndex).getElementId();
+				ElementId after = beforeRow ? CollectionElement.getElementId(theFilteredRows.getAdjacentElement(targetRow, false))
+					: targetRow;
+				ElementId before = beforeRow ? targetRow
+					: CollectionElement.getElementId(theFilteredRows.getAdjacentElement(targetRow, true));
 				// Support row move before anything else
 				if (support.getComponent() == theTable && support.isDrop()//
 					&& (support.getSourceDropActions() & MOVE) != 0 && support.isDataFlavorSupported(ROW_ELEMENT_FLAVOR)) {
@@ -1046,9 +1082,9 @@ implements TableBuilder<R, P> {
 							if (rowEl.equals(after) || rowEl.equals(before))
 								continue;
 							moved = true;
-							if (theSafeRows.canMove(rowEl, after, before) != null)
+							if (theFilteredRows.canMove(rowEl, after, before) != null)
 								continue;
-							ElementId newRowEl = theSafeRows.move(rowEl, after, before, true, null).getElementId();
+							ElementId newRowEl = theFilteredRows.move(rowEl, after, before, true, null).getElementId();
 							after = newRowEl;
 						}
 						if (moved)
@@ -1081,13 +1117,13 @@ implements TableBuilder<R, P> {
 							}
 						} else {
 							for (R row : newRows) {
-								if (theSafeRows.canAdd(row, after, before) != null) {
+								if (theFilteredRows.canAdd(row, after, before) != null) {
 									allImportable = false;
 									break;
 								}
 							}
 							if (allImportable) {
-								theSafeRows.addAll(beforeRow ? rowIndex : rowIndex + 1, newRows);
+								theFilteredRows.addAll(beforeRow ? rowIndex : rowIndex + 1, newRows);
 								return true;
 							}
 						}

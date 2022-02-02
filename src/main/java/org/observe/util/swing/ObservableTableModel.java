@@ -728,6 +728,6 @@ public class ObservableTableModel<R> implements TableModel {
 		 * @param column The model column index being rendered
 		 * @return The start/end regions that should be emphasized in the rendered text
 		 */
-		int[][] getEmphaticRegions(int row, int column);
+		SortedMatchSet getEmphaticRegions(int row, int column);
 	}
 }

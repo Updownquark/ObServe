@@ -15,7 +15,7 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
-import org.observe.util.SafeObservableCollection;
+import org.observe.util.AbstractSafeObservableCollection;
 import org.qommons.Transaction;
 import org.qommons.tree.BetterTreeList;
 
@@ -44,7 +44,7 @@ public class ObservableListModel<E> implements ListModel<E> {
 
 	/**
 	 * @param wrap The observable collection to back this model
-	 * @param safe Whether the collection is already {@link SafeObservableCollection safe}
+	 * @param safe Whether the collection is already {@link AbstractSafeObservableCollection safe}
 	 */
 	public ObservableListModel(ObservableCollection<E> wrap, boolean safe) {
 		if (wrap == null)

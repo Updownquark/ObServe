@@ -25,12 +25,12 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 	public interface CellRenderContext {
 		public static CellRenderContext DEFAULT = new CellRenderContext() {
 			@Override
-			public int[][] getEmphaticRegions() {
+			public SortedMatchSet getEmphaticRegions() {
 				return null;
 			}
 		};
 
-		int[][] getEmphaticRegions();
+		SortedMatchSet getEmphaticRegions();
 	}
 
 	String renderAsText(Supplier<? extends M> modelValue, C columnValue);
@@ -112,32 +112,21 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 	public static String tryEmphasize(String text, CellRenderContext ctx) {
 		if (text == null || text.isEmpty() || text.startsWith("<html>") || text.startsWith("<HTML>"))
 			return text;
-		int[][] regions = ctx == null ? null : ctx.getEmphaticRegions();
-		if (regions == null || regions.length == 0)
+		SortedMatchSet regions = ctx == null ? null : ctx.getEmphaticRegions();
+		if (regions == null || regions.size() == 0)
 			return text;
 		StringBuilder newText = new StringBuilder("<html>");
-		boolean emphasized = false;
-		int start = regions[0][0];
-		if (start > 0)
-			newText.append(text, 0, start);
-		for (int c = start; c < text.length(); c++) {
-			boolean newEmph = false;
-			for (int[] region : regions) {
-				if (c >= region[0] && c < region[1]) {
-					newEmph = true;
-					break;
-				}
-			}
-			if (newEmph && !emphasized)
-				newText.append("<b>");
-			else if (!newEmph && emphasized)
-				newText.append("</b>");
-			emphasized = newEmph;
-			newText.append(text.charAt(c));
-		}
-		if (emphasized)
+		int end = 0;
+		for (TextMatch match : regions.getDisjointMatches()) {
+			if (match.start > end)
+				newText.append(text, end, match.start);
+			newText.append("<b>");
+			newText.append(text, match.start, match.end);
 			newText.append("</b>");
-		newText.append("</html>");
+			end = match.end;
+		}
+		if (end < text.length())
+			newText.append(text, end, text.length());
 		return newText.toString();
 	}
 

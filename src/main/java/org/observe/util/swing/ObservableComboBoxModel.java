@@ -30,7 +30,7 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
-import org.observe.util.SafeObservableCollection;
+import org.observe.util.AbstractSafeObservableCollection;
 import org.observe.util.TypeTokens;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
@@ -107,12 +107,12 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 	public static <T> Subscription comboFor(JComboBox<T> comboBox, ObservableValue<String> descrip,
 		Function<? super T, String> valueTooltip, ObservableCollection<? extends T> availableValues, SettableValue<T> selected) {
 		List<Subscription> subs = new LinkedList<>();
-		SafeObservableCollection<? extends T> safeValues;
-		if (availableValues instanceof SafeObservableCollection)
-			safeValues = (SafeObservableCollection<? extends T>) availableValues;
+		ObservableCollection<? extends T> safeValues;
+		if (availableValues instanceof AbstractSafeObservableCollection)
+			safeValues = availableValues;
 		else {
 			SimpleObservable<Void> safeUntil = SimpleObservable.build().build();
-			safeValues = new SafeObservableCollection<>(availableValues, EventQueue::isDispatchThread, EventQueue::invokeLater, safeUntil);
+			safeValues = ObservableSwingUtils.safe(availableValues, safeUntil);
 			subs.add(() -> safeUntil.onNext(null));
 		}
 		ObservableComboBoxModel<? extends T> comboModel = new ObservableComboBoxModel<>(safeValues);
@@ -232,7 +232,7 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 	 * @param checkEnabled Called to update the enablement of the widget(s)
 	 * @return A subscription to stop all listening
 	 */
-	public static <T> Subscription hookUpComboData(SafeObservableCollection<? extends T> availableValues, SettableValue<T> selected,
+	static <T> Subscription hookUpComboData(ObservableCollection<? extends T> availableValues, SettableValue<T> selected,
 		IntConsumer setSelected, Function<TriFunction<T, Integer, Object, Boolean>, Subscription> acceptSelected,
 		Consumer<String> checkEnabled) {
 		List<Subscription> subs = new LinkedList<>();
@@ -274,15 +274,15 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 					CollectionElement<? extends T> found = availableValues.belongs(evt.getNewValue()) //
 						? ((ObservableCollection<T>) availableValues).getElement(evt.getNewValue(), true)//
 							: null;
-						if (found != null) {
-							currentSelectedElement[0] = found.getElementId();
-							currentSelected[0] = found.get();
-							setSelected.accept(availableValues.getElementsBefore(found.getElementId()));
-						} else {
-							currentSelectedElement[0] = null;
-							currentSelected[0] = null;
-							setSelected.accept(-1);
-						}
+					if (found != null) {
+						currentSelectedElement[0] = found.getElementId();
+						currentSelected[0] = found.get();
+						setSelected.accept(availableValues.getElementsBefore(found.getElementId()));
+					} else {
+						currentSelectedElement[0] = null;
+						currentSelected[0] = null;
+						setSelected.accept(-1);
+					}
 				} finally {
 					callbackLock[0] = false;
 				}

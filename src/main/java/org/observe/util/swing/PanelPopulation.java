@@ -96,7 +96,6 @@ import org.observe.collect.DefaultObservableCollection;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionBuilder;
 import org.observe.config.ObservableConfig;
-import org.observe.util.SafeObservableCollection;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.ObservableSwingUtils.FontAdjuster;
 import org.qommons.BiTuple;
@@ -765,6 +764,15 @@ public class PanelPopulation {
 		P withItemName(String itemName);
 
 		String getItemName();
+
+		/**
+		 * This method promises that the model backing this widged is known to only fire events on the UI's dedicated event thread. This
+		 * allows this widget to forego expensive thread safety checking, but at the expense of the stability of the UI, if the promise is
+		 * not kept.
+		 *
+		 * @return This widget builder
+		 */
+		P promiseSafe();
 	}
 
 	public interface ListWidgetBuilder<R, C extends Component, P extends ListWidgetBuilder<R, C, P>> {
@@ -838,6 +846,8 @@ public class PanelPopulation {
 		P withTableOption(Consumer<? super PanelPopulator<?, ?>> panel);
 
 		P withFiltering(ObservableValue<? extends TableContentControl> filter);
+
+		ObservableCollection<R> getFilteredRows();
 
 		P withMove(boolean up, Consumer<DataAction<R, ?>> actionMod);
 
@@ -2384,11 +2394,7 @@ public class PanelPopulation {
 		@Override
 		protected Component getOrCreateComponent(Observable<?> until) {
 			if (theButtons == null) {
-				SafeObservableCollection<? extends F> safeValues;
-				if (theValues instanceof SafeObservableCollection)
-					safeValues = (SafeObservableCollection<? extends F>) theValues;
-				else
-					safeValues = new SafeObservableCollection<>(theValues, EventQueue::isDispatchThread, EventQueue::invokeLater, until);
+				ObservableCollection<? extends F> safeValues = ObservableSwingUtils.safe(theValues, until);
 				ObservableCollection<TB>[] _buttons = new ObservableCollection[1];
 				Subscription valueSub = ObservableSwingUtils.togglesFor(safeValues, theValue, TypeTokens.get().of(theButtonType),
 					theButtonCreator, b -> _buttons[0] = b, this::render, this::getValueTooltip);
@@ -3542,6 +3548,12 @@ public class PanelPopulation {
 		}
 
 		@Override
+		public P promiseSafe() {
+			// We don't handle thread safety yet
+			return (P) this;
+		}
+
+		@Override
 		public String getItemName() {
 			return theItemName;
 		}
@@ -4176,6 +4188,12 @@ public class PanelPopulation {
 		@Override
 		public boolean isExpanded(List<? extends F> path) {
 			return getEditor().isExpanded(new TreePath(path.toArray()));
+		}
+
+		@Override
+		public P promiseSafe() {
+			((PPTreeModel<F>) getEditor().getModel()).promiseSafe();
+			return (P) this;
 		}
 
 		@Override
