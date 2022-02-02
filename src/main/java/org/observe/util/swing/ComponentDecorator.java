@@ -21,6 +21,7 @@ import javax.swing.JLabel;
 import javax.swing.JTextField;
 import javax.swing.SwingConstants;
 import javax.swing.border.Border;
+import javax.swing.border.LineBorder;
 import javax.swing.border.TitledBorder;
 import javax.swing.text.JTextComponent;
 
@@ -67,7 +68,12 @@ public class ComponentDecorator {
 	}
 
 	public ComponentDecorator withTitledBorder(String title, Color color) {
-		TitledBorder border = BorderFactory.createTitledBorder(title);
+		TitledBorder border;
+		if (theBorder instanceof TitledBorder) {
+			border = (TitledBorder) theBorder;
+			border.setTitle(title);
+		} else
+			border = BorderFactory.createTitledBorder(title);
 		if (color != null)
 			border.setTitleColor(color);
 		theBorder = border;
@@ -75,8 +81,27 @@ public class ComponentDecorator {
 	}
 
 	public ComponentDecorator withLineBorder(Color color, int thickness, boolean rounded) {
-		theBorder = BorderFactory.createLineBorder(color, thickness, rounded);
+		ModifiableLineBorder border;
+		if (theBorder instanceof ModifiableLineBorder) {
+			border = (ModifiableLineBorder) theBorder;
+			border.set(color, thickness, rounded);
+		} else
+			border = new ModifiableLineBorder(color, thickness, rounded);
+		theBorder = border;
 		return this;
+	}
+
+	static class ModifiableLineBorder extends LineBorder {
+		public ModifiableLineBorder(Color color, int thickness, boolean roundedCorners) {
+			super(color, thickness, roundedCorners);
+		}
+
+		public ModifiableLineBorder set(Color color, int thickness, boolean rounderCorners) {
+			lineColor = color;
+			this.thickness = thickness;
+			this.roundedCorners = rounderCorners;
+			return this;
+		}
 	}
 
 	public ComponentDecorator withBackground(Color bg) {
