@@ -224,6 +224,11 @@ public class WeakListening {
 			if (action != null)
 				action.accept(value);
 		}
+
+		@Override
+		public String toString() {
+			return getAction().toString();
+		}
 	}
 
 	private static class WeakBiConsumer<E, F> extends WeakAction implements BiConsumer<E, F> {

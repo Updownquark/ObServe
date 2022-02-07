@@ -2099,7 +2099,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 									}
 									if (cached == null || stamp != cached.stamp) {
 										boolean[] initialized = new boolean[1];
-										arg.changes().act(evt -> {
+										arg.changes().act(LambdaUtils.printableConsumer(evt -> {
 											if (evt.isInitial()) {
 												if (initialized[0])
 													throw new IllegalStateException("Multiple initialization events from " + arg);
@@ -2107,7 +2107,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 												values[index] = evt.getNewValue();
 											} else
 												argChanged(index, arg, evt, values, stamps, allInitialized[0], otherLocks);
-										});
+										}, () -> arg + " changes for " + transformation, null));
 										if (!(initialized[0]))
 											throw new IllegalStateException("Value " + args[i] + " did not fire an initial event");
 										theCachedValues = new StampedArgValues(values.clone(), stamp);
@@ -2435,11 +2435,11 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 				T oldResult = getCachedOrEvaluate(oldSource, state);
 				T newResult = reEval ? transform(true, //
 					() -> oldSource, newSource, __ -> oldResult, state, false) : oldResult;
-				boolean fireChange = theTransformation.isFireIfUnchanged()
-					|| (oldResult != newResult && !theTransformation.equivalence().elementEquals(oldResult, newResult));
-				cacheSource(newSource);
-				cacheResult(newResult);
-				return fireChange ? new BiTuple<>(oldResult, newResult) : null;
+					boolean fireChange = theTransformation.isFireIfUnchanged()
+						|| (oldResult != newResult && !theTransformation.equivalence().elementEquals(oldResult, newResult));
+					cacheSource(newSource);
+					cacheResult(newResult);
+					return fireChange ? new BiTuple<>(oldResult, newResult) : null;
 			}
 
 			@Override
@@ -2573,8 +2573,13 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 
 			@Override
 			public ReverseQueryResult<S> set(T value, TransformationState state, boolean test) {
+				// I had this previous-value function set before, but this is inconsistent with EngineImpl.setElementsValue(),
+				// where no such function is supplied to Engine.reverse() for un-cached transformations.
+				// In theory it could be either, but if the function is given, it requires several calls to evaluate,
+				// which may be expensive.
+				// The tester expects that this is not allowed, so I'm changing it here.
 				return super.set(value, //
-					theSource, s -> getCachedOrEvaluate(s, state), state, test);
+					theSource, null/*s -> getCachedOrEvaluate(s, state)*/, state, test);
 			}
 
 			@Override

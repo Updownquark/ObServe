@@ -30,7 +30,6 @@ import org.qommons.TestHelper;
 import org.qommons.TestHelper.RandomAction;
 import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterList;
-import org.qommons.collect.BetterSet;
 import org.qommons.collect.BetterSortedList.SortedSearchFilter;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;

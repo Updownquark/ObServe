@@ -773,7 +773,7 @@ public class ObservableCollectionsTest {
 	@Test
 	public void randomSimple() {
 		TestHelper.createTester(SimpleRandomTester.class).withMaxTotalDuration(Duration.ofSeconds(5))//
-		/**/.withPersistenceDir(new File("src/main/test/org/observe/collect"), false)//
+			/**/.withPersistenceDir(new File("src/test/java/org/observe/collect"), false).revisitKnownFailures(true).withDebug(true)//
 		.execute().throwErrorIfFailed();
 	}
 
@@ -1014,7 +1014,7 @@ public class ObservableCollectionsTest {
 		}
 	}
 
-	/** Tests {@link CollectionDataFlow#combine(TypeToken, Function)} */
+	/** Tests {@link CollectionDataFlow#transform(TypeToken, Function)} */
 	@Test
 	public void observableSetCombine() {
 		ObservableSet<Integer> set = ObservableCollection.create(intType).flow().distinct().collect();
@@ -1465,7 +1465,7 @@ public class ObservableCollectionsTest {
 		}
 	}
 
-	/** Tests {@link CollectionDataFlow#combine(TypeToken, Function)} */
+	/** Tests {@link CollectionDataFlow#transform(TypeToken, Function)} */
 	@Test
 	public void observableListCombine() {
 		ObservableCollection<Integer> list = ObservableCollection.create(intType);
@@ -1961,7 +1961,7 @@ public class ObservableCollectionsTest {
 		});
 		assertEquals(correctChanges[0], changeCount[0]);
 
-		for(int i = 0; i < 30; i++) {
+		for (int i = 0; i < 3; i++) {
 			assertEquals(correctChanges[0], changeCount[0]);
 			int toAdd = (int) (Math.random() * 2000000) - 1000000;
 			controller.add(toAdd);
@@ -1980,13 +1980,13 @@ public class ObservableCollectionsTest {
 			correctChanges[0]++;
 			// Depending on the nature of the observable collection, the event for the clear may have been fired immediately, or it may
 			// be fired at the next add, so don't check it until after that add
-			for (int i = 0; i < 30; i++) {
+			for (int i = 0; i < 3; i++) {
 				int toAdd = (int) (Math.random() * 2000000) - 1000000;
 				controller.add(toAdd);
 				if (i == 0)
-					assertEquals(correctChanges[0], changeCount[0]);
+					assertEquals(i + ": ", correctChanges[0], changeCount[0]);
 				correct.add(toAdd);
-				assertEquals(correct, new ArrayList<>(observable));
+				assertEquals(i + ": ", correct, new ArrayList<>(observable));
 			}
 			assertEquals(correctChanges[0], changeCount[0]);
 		} catch (RuntimeException | Error e) {
@@ -2051,7 +2051,7 @@ public class ObservableCollectionsTest {
 		tester.checkOps(0);
 	}
 
-	/** Tests transactions caused by {@link CollectionDataFlow#combine(TypeToken, Function) combining} a list with an observable value */
+	/** Tests transactions caused by {@link CollectionDataFlow#transform(TypeToken, Function) combining} a list with an observable value */
 	@Test
 	public void testTransactionsCombined() {
 		ObservableCollection<Integer> list = ObservableCollection.create(new TypeToken<Integer>() {});

@@ -95,7 +95,7 @@ public abstract class AbstractMappedCollectionLink<S, T> extends OneToOneCollect
 		case remove:
 			break;
 		case set:
-			if (getCollection().equivalence().elementEquals(derivedOp.getElement().getValue(), derivedOp.getValue())) {
+			if (isCached && getCollection().equivalence().elementEquals(derivedOp.getElement().getValue(), derivedOp.getValue())) {
 				// Update, re-use the previous source value
 				CollectionLinkElement<?, S> sourceEl = (CollectionLinkElement<?, S>) derivedOp.getElement().getFirstSource();
 				S sourceValue;
