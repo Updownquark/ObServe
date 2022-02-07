@@ -29,7 +29,7 @@ import org.qommons.ValueHolder;
 import com.google.common.reflect.TypeToken;
 
 /**
- * Tests {@link org.observe.collect.ObservableCollection.CollectionDataFlow#combine(TypeToken, Function)}
+ * Tests {@link org.observe.collect.ObservableCollection.CollectionDataFlow#transform(TypeToken, Function)}
  *
  * @param <S> The source link type
  * @param <V> The type of the value to combine with the source values

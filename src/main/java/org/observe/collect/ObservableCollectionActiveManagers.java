@@ -2,7 +2,6 @@ package org.observe.collect;
 
 import java.util.Collection;
 import java.util.Comparator;
-import java.util.List;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -22,14 +21,15 @@ import org.qommons.QommonsUtils;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
+import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
-import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.ValueStoredCollection;
 import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BetterTreeMap;
+import org.qommons.tree.BetterTreeSet;
 import org.qommons.tree.BinaryTreeNode;
 
 import com.google.common.reflect.TypeToken;
@@ -848,9 +848,9 @@ public class ObservableCollectionActiveManagers {
 				return StdMsg.ILLEGAL_ELEMENT_POSITION;
 			DerivedCollectionElement<T> requiredAfter = (after != null && afterComp == 0)
 				? ((SortedElement) after).theParentEl : null;
-			DerivedCollectionElement<T> requiredBefore = (before != null && beforeComp == 0)
-				? ((SortedElement) before).theParentEl : null;
-			return theParent.canAdd(toAdd, requiredAfter, requiredBefore);
+				DerivedCollectionElement<T> requiredBefore = (before != null && beforeComp == 0)
+					? ((SortedElement) before).theParentEl : null;
+					return theParent.canAdd(toAdd, requiredAfter, requiredBefore);
 		}
 
 		@Override
@@ -864,21 +864,21 @@ public class ObservableCollectionActiveManagers {
 				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT_POSITION);
 			DerivedCollectionElement<T> requiredAfter = (after != null && afterComp == 0)
 				? ((SortedElement) after).theParentEl : null;
-			DerivedCollectionElement<T> requiredBefore = (before != null && beforeComp == 0)
-				? ((SortedElement) before).theParentEl : null;
-			// Try to add relative to the specified elements if possible,
-			// but if such a positional add is unsupported by the parent, we need to ensure
-			// that a position-less add will insert the new element in the right spot
-			DerivedCollectionElement<T> parentEl;
-			if (requiredAfter != null || requiredBefore != null)
-				parentEl = theParent.addElement(value, requiredAfter, requiredBefore, first);
-			else if (first && after != null && theParent.canAdd(value, ((SortedElement) after).theParentEl, null) == null)
-				parentEl = theParent.addElement(value, ((SortedElement) after).theParentEl, null, true);
-			else if (!first && before != null && theParent.canAdd(value, null, ((SortedElement) before).theParentEl) == null)
-				parentEl = theParent.addElement(value, null, ((SortedElement) before).theParentEl, false);
-			else
-				parentEl = theParent.addElement(value, null, null, first);
-			return parentEl == null ? null : new SortedElement(parentEl, true);
+				DerivedCollectionElement<T> requiredBefore = (before != null && beforeComp == 0)
+					? ((SortedElement) before).theParentEl : null;
+					// Try to add relative to the specified elements if possible,
+					// but if such a positional add is unsupported by the parent, we need to ensure
+					// that a position-less add will insert the new element in the right spot
+					DerivedCollectionElement<T> parentEl;
+					if (requiredAfter != null || requiredBefore != null)
+						parentEl = theParent.addElement(value, requiredAfter, requiredBefore, first);
+					else if (first && after != null && theParent.canAdd(value, ((SortedElement) after).theParentEl, null) == null)
+						parentEl = theParent.addElement(value, ((SortedElement) after).theParentEl, null, true);
+					else if (!first && before != null && theParent.canAdd(value, null, ((SortedElement) before).theParentEl) == null)
+						parentEl = theParent.addElement(value, null, ((SortedElement) before).theParentEl, false);
+					else
+						parentEl = theParent.addElement(value, null, null, first);
+					return parentEl == null ? null : new SortedElement(parentEl, true);
 		}
 
 		@Override
@@ -891,9 +891,9 @@ public class ObservableCollectionActiveManagers {
 				return StdMsg.ILLEGAL_ELEMENT_POSITION;
 			DerivedCollectionElement<T> requiredAfter = (after != null && afterComp == 0)
 				? ((SortedElement) after).theParentEl : null;
-			DerivedCollectionElement<T> requiredBefore = (before != null && beforeComp == 0)
-				? ((SortedElement) before).theParentEl : null;
-			return theParent.canMove(((SortedElement) valueEl).theParentEl, requiredAfter, requiredBefore);
+				DerivedCollectionElement<T> requiredBefore = (before != null && beforeComp == 0)
+					? ((SortedElement) before).theParentEl : null;
+					return theParent.canMove(((SortedElement) valueEl).theParentEl, requiredAfter, requiredBefore);
 		}
 
 		@Override
@@ -907,10 +907,10 @@ public class ObservableCollectionActiveManagers {
 				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT_POSITION);
 			DerivedCollectionElement<T> requiredAfter = (after != null && afterComp == 0)
 				? ((SortedElement) after).theParentEl : null;
-			DerivedCollectionElement<T> requiredBefore = (before != null && beforeComp == 0)
-				? ((SortedElement) before).theParentEl : null;
-			return new SortedElement(theParent.move(//
-				((SortedElement) valueEl).theParentEl, requiredAfter, requiredBefore, first, afterRemove), true);
+				DerivedCollectionElement<T> requiredBefore = (before != null && beforeComp == 0)
+					? ((SortedElement) before).theParentEl : null;
+					return new SortedElement(theParent.move(//
+						((SortedElement) valueEl).theParentEl, requiredAfter, requiredBefore, first, afterRemove), true);
 		}
 
 		@Override
@@ -1004,9 +1004,9 @@ public class ObservableCollectionActiveManagers {
 				else { // Synthetic
 					BiTuple<T, DerivedCollectionElement<T>> tuple1 = theValueNode != null
 						? theValueNode.get() : new BiTuple<>(theParentEl.get(), theParentEl);
-					BiTuple<T, DerivedCollectionElement<T>> tuple2 = sorted.theValueNode != null
-						? sorted.theValueNode.get() : new BiTuple<>(sorted.theParentEl.get(), sorted.theParentEl);
-					return theTupleCompare.compare(tuple1, tuple2);
+						BiTuple<T, DerivedCollectionElement<T>> tuple2 = sorted.theValueNode != null
+							? sorted.theValueNode.get() : new BiTuple<>(sorted.theParentEl.get(), sorted.theParentEl);
+							return theTupleCompare.compare(tuple1, tuple2);
 				}
 			}
 
@@ -1417,13 +1417,13 @@ public class ObservableCollectionActiveManagers {
 	static class ActiveTransformedCollectionManager<E, I, T> extends AbstractTransformedManager<E, I, T>
 	implements ActiveCollectionManager<E, I, T> {
 		// Need to keep track of these to update them when the combined values change
-		private final ListenerList<TransformedElement> theElements;
+		private final BetterSortedSet<TransformedElement> theElements;
 
 		ActiveTransformedCollectionManager(ActiveCollectionManager<E, ?, I> parent, TypeToken<T> targetType, Transformation<I, T> def,
 			Equivalence<? super T> equivalence) {
 			super(parent, targetType, def, equivalence);
 
-			theElements = ListenerList.build().withFastSize(true).forEachSafe(false).build();
+			theElements = new BetterTreeSet<>(false, TransformedElement::compareTo);
 		}
 
 		@Override
@@ -1544,11 +1544,7 @@ public class ObservableCollectionActiveManagers {
 		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
 			listening.withConsumer((ObservableValueEvent<Transformation.TransformationState> evt) -> {
 				try (Transaction t = getParent().lock(false, null)) {
-					// The order of update here may be different than the order in the derived collection.
-					// It's a lot of otherwise-unnecessary work to keep the elements in order (since the order may change),
-					// so we'll just let order of addition be good enough
-					List<TransformedElement> els = theElements.dump();
-					for (TransformedElement el : els)
+					for (TransformedElement el : theElements)
 						el.updated(evt.getOldValue(), evt.getNewValue(), evt);
 				}
 			}, action -> getEngine().noInitChanges().act(action));
@@ -1562,7 +1558,7 @@ public class ObservableCollectionActiveManagers {
 
 		private class TransformedElement extends AbstractTransformedElement implements DerivedCollectionElement<T> {
 			private final DerivedCollectionElement<I> theParentEl;
-			private Runnable theStoreRemove;
+			private ElementId theStoreElement;
 			CollectionElementListener<T> theListener;
 
 			TransformedElement(DerivedCollectionElement<I> parentEl, boolean synthetic) {
@@ -1580,14 +1576,14 @@ public class ObservableCollectionActiveManagers {
 						@Override
 						public void removed(I value, Object cause) {
 							T val = transformElement.getCurrentValue(value, getEngine().get());
-							theStoreRemove.run();
-							theStoreRemove = null;
+							theElements.mutableElement(theStoreElement).remove();
+							theStoreElement = null;
 							ObservableCollectionActiveManagers.removed(theListener, val, cause);
 							theListener = null;
 						}
 					});
 				}
-				theStoreRemove = synthetic ? null : theElements.add(this, true);
+				theStoreElement = synthetic ? null : theElements.addElement(this, false).getElementId();
 			}
 
 			protected DerivedCollectionElement<I> getParentEl() {
