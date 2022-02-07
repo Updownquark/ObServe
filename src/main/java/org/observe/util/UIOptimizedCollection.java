@@ -12,7 +12,6 @@ import java.util.function.Consumer;
 import org.observe.Observable;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionEvent;
-import org.qommons.BreakpointHere;
 import org.qommons.Causable;
 import org.qommons.Causable.CausableKey;
 import org.qommons.Transaction;
@@ -177,12 +176,8 @@ public class UIOptimizedCollection<E> extends AbstractSafeObservableCollection<E
 			}
 			// System.out.println(": " + comp);
 			node = theSyntheticBacking.splitBetween(begin, end);
-			if (node == null) {
-				UIElementRef<E> terminal = (UIElementRef<E>) theSyntheticBacking.getElement(comp < 0 ? begin : end).get();
-				if (!terminal.getSourceId().equals(sourceId))
-					BreakpointHere.breakpoint();
-				return terminal;
-			}
+			if (node == null)
+				return (UIElementRef<E>) theSyntheticBacking.getElement(comp < 0 ? begin : end).get();
 		}
 	}
 

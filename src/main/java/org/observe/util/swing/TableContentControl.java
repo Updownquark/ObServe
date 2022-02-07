@@ -27,7 +27,6 @@ import javax.swing.JFrame;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
-import org.observe.collect.CollectionChangesObservable;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
@@ -1629,7 +1628,7 @@ public interface TableContentControl {
 				mut.mutateAttribute((map, v) -> map.put("A", v)).asText(Format.TEXT).withRowUpdate(true);
 			}).withWidths(50, 100, 150));
 		Random random = new Random();
-		int rowCount = 100000;
+		int rowCount = 500000;
 		int lastPct = 0;
 		for (int i = 0; i < rowCount; i++) {
 			int pct = i * 100 / rowCount;
@@ -1691,28 +1690,23 @@ public interface TableContentControl {
 								}
 								table.getRows().observeSize().transform((Class<BiTuple<Integer, Integer>>) (Class<?>) BiTuple.class,
 									tx -> tx.combineWith(table.getFilteredRows().observeSize()).combine((sz, f) -> new BiTuple<>(sz, f)))
-									.changes().act(evt -> {
-										int sz = evt.getNewValue().getValue1();
-										int f = evt.getNewValue().getValue2();
-										String title = "Displaying " + f + " of " + sz + " row" + (f == 1 ? "" : "s");
-										deco.withTitledBorder(title, Color.black);
-										if (table.getComponent() != null)
-											table.getComponent().repaint();
-									});
+								.changes().act(evt -> {
+									int sz = evt.getNewValue().getValue1();
+									int f = evt.getNewValue().getValue2();
+									String title = "Displaying " + f + " of " + sz + " row" + (f == 1 ? "" : "s");
+									deco.withTitledBorder(title, Color.black);
+									if (table.getComponent() != null)
+										table.getComponent().repaint();
+								});
 							};
 							EventQueue.invokeLater(install[0]);
 						}).fill().withFiltering(control).withColumns(columns)//
-							.withAdd(() -> new HashMap<>(), null)//
+						.withAdd(() -> new HashMap<>(), null)//
 						;
 					})//
-			).getWindow();
+					).getWindow();
 			frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 			frame.setVisible(true);
 		});
-
-		control.changes().act(evt -> EventQueue.invokeLater(()->{
-			CollectionChangesObservable.CHANGES_TRACKER.printData();
-			CollectionChangesObservable.CHANGES_TRACKER.clear();
-		}));
 	}
 }

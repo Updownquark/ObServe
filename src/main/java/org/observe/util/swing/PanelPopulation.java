@@ -99,6 +99,7 @@ import org.observe.config.ObservableConfig;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.ObservableSwingUtils.FontAdjuster;
 import org.qommons.BiTuple;
+import org.qommons.BreakpointHere;
 import org.qommons.Identifiable;
 import org.qommons.IntList;
 import org.qommons.QommonsUtils;
@@ -141,16 +142,25 @@ public class PanelPopulation {
 	 * @return The API structure to add fields with
 	 */
 	public static <C extends Container> PanelPopulator<C, ?> populateVPanel(C panel, Observable<?> until) {
+		if (!EventQueue.isDispatchThread())
+			System.err.println(
+				"Calling panel population off of the EDT from " + BreakpointHere.getCodeLine() + "--could cause threading problems!!");
 		if (panel == null)
 			panel = (C) new JPanel();
 		return new MigFieldPanel<>(panel, until == null ? Observable.empty() : until, new LazyLock());
 	}
 
 	public static <C extends Container> PanelPopulator<C, ?> populateHPanel(C panel, String layoutType, Observable<?> until) {
+		if (!EventQueue.isDispatchThread())
+			System.err.println(
+				"Calling panel population off of the EDT from " + BreakpointHere.getCodeLine() + "--could cause threading problems!!");
 		return populateHPanel(panel, layoutType == null ? null : makeLayout(layoutType), until);
 	}
 
 	public static <C extends Container> PanelPopulator<C, ?> populateHPanel(C panel, LayoutManager layout, Observable<?> until) {
+		if (!EventQueue.isDispatchThread())
+			System.err.println(
+				"Calling panel population off of the EDT from " + BreakpointHere.getCodeLine() + "--could cause threading problems!!");
 		if (panel == null)
 			panel = (C) new JPanel(layout);
 		else if (layout != null)
@@ -167,10 +177,16 @@ public class PanelPopulation {
 	 * @return The API structure to add fields with
 	 */
 	public static <C extends Container> PanelPopulator<C, ?> populatePanel(C panel, Observable<?> until) {
+		if (!EventQueue.isDispatchThread())
+			System.err.println(
+				"Calling panel population off of the EDT from " + BreakpointHere.getCodeLine() + "--could cause threading problems!!");
 		return new SimpleHPanel<>(null, panel, new LazyLock(), until == null ? Observable.empty() : until);
 	}
 
 	public static <R> TableBuilder<R, ?> buildTable(ObservableCollection<R> rows) {
+		if (!EventQueue.isDispatchThread())
+			System.err.println(
+				"Calling panel population off of the EDT from " + BreakpointHere.getCodeLine() + "--could cause threading problems!!");
 		return new SimpleTableBuilder<>(rows, new LazyLock());
 	}
 

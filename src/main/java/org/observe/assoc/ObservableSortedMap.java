@@ -10,7 +10,6 @@ import org.observe.Equivalence;
 import org.observe.Equivalence.SortedEquivalence;
 import org.observe.Subscription;
 import org.observe.collect.CollectionChangeType;
-import org.observe.collect.DefaultObservableCollection;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionBuilder;
 import org.observe.collect.ObservableSet;
@@ -182,13 +181,14 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 		@Override
 		public ObservableSortedMap<K, V> buildMap() {
 			Comparator<? super K> compare = getSorting();
-			return new DefaultObservableSortedMap<>(getType(), getValueType(), compare, //
-				DefaultObservableCollection.build(ObservableMap.buildEntryType(getType(), getValueType()))//
+			ObservableCollectionBuilder<Entry<K, V>, ?> builder = ObservableCollection
+				.build(ObservableMap.buildEntryType(getType(), getValueType()))//
 				.withBacking((BetterList<Map.Entry<K, V>>) (BetterList<?>) getBacking())//
-				.withDescription(getDescription())//
-				.withElementSource(getElementSource()).withSourceElements(getSourceElements())//
-				.withCollectionLocking(getLocker())//
-				.sortBy((entry1, entry2) -> compare.compare(entry1.getKey(), entry2.getKey()))//
+				.withDescription(getDescription());
+			builder.withElementSource(getElementSource()).withSourceElements(getSourceElements());
+			builder.withCollectionLocking(getLocker());
+			return new DefaultObservableSortedMap<>(getType(), getValueType(), compare, //
+				builder.sortBy((entry1, entry2) -> compare.compare(entry1.getKey(), entry2.getKey()))//
 				.build());
 		}
 	}

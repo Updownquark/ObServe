@@ -9,6 +9,7 @@ import org.observe.Observable;
 import org.observe.Subscription;
 import org.observe.collect.DefaultObservableCollection;
 import org.observe.collect.ObservableCollection;
+import org.observe.collect.ObservableCollectionBuilder;
 import org.observe.collect.ObservableCollectionEvent;
 import org.qommons.Identifiable;
 import org.qommons.Transactable;
@@ -84,12 +85,11 @@ public abstract class AbstractSafeObservableCollection<E> extends ObservableColl
 		theSyntheticBacking = new BetterTreeList<>(false);
 		isOnEventThread = onEventThread;
 
-		theSyntheticCollection = DefaultObservableCollection
+		ObservableCollectionBuilder<ElementRef<E>, ?> builder = DefaultObservableCollection
 			.build((TypeToken<ElementRef<E>>) (TypeToken<?>) TypeTokens.get().of(ElementRef.class))//
-			.withBacking(theSyntheticBacking)//
-			.withElementSource(this::_getElementSource)//
-			.withSourceElements(this::_getSourceElements)//
-			.build();
+			.withBacking(theSyntheticBacking);
+		builder.withSourceElements(this::_getSourceElements).withElementSource(this::_getElementSource);
+		theSyntheticCollection = builder.build();
 
 		theSyntheticCollection.onChange(evt -> {
 			switch (evt.getType()) {

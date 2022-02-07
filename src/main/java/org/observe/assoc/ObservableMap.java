@@ -16,7 +16,6 @@ import org.observe.Observer;
 import org.observe.Subscription;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.CollectionSubscription;
-import org.observe.collect.DefaultObservableCollection;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionBuilder;
 import org.observe.collect.ObservableCollectionEvent;
@@ -494,14 +493,14 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 
 		public ObservableMap<K, V> buildMap() {
 			Comparator<? super K> compare = getSorting();
-			ObservableCollectionBuilder<Map.Entry<K, V>, ?> entryBuilder = DefaultObservableCollection
+			ObservableCollectionBuilder<Entry<K, V>, ?> entryBuilder = ObservableCollection
 				.build(buildEntryType(getType(), theValueType))//
 				.withBacking((BetterList<Map.Entry<K, V>>) (BetterList<?>) getBacking())//
-				.withDescription(getDescription())//
-				.withElementSource(getElementSource()).withSourceElements(getSourceElements())//
-				.withCollectionLocking(getLocker());
+				.withDescription(getDescription());
+			entryBuilder.withElementSource(getElementSource()).withSourceElements(getSourceElements());
+			entryBuilder.withCollectionLocking(getLocker());
 			if (compare != null)
-				entryBuilder.sortBy((entry1, entry2) -> compare.compare(entry1.getKey(), entry2.getKey()));
+				entryBuilder = entryBuilder.sortBy((entry1, entry2) -> compare.compare(entry1.getKey(), entry2.getKey()));
 			return new DefaultObservableMap<>(getType(), theValueType, getEquivalence(), entryBuilder.build());
 		}
 	}
