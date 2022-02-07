@@ -12,8 +12,6 @@ import org.observe.collect.CollectionChangeEvent.ElementChange;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
-import org.qommons.ProgramTracker;
-import org.qommons.ProgramTracker.TrackNode;
 import org.qommons.Transaction;
 import org.qommons.collect.ListenerList;
 import org.qommons.debug.Debug;
@@ -29,8 +27,6 @@ import org.qommons.tree.RedBlackTree;
  * @param <E> The type of values in the collection
  */
 public class CollectionChangesObservable<E> extends AbstractIdentifiable implements Observable<CollectionChangeEvent<E>> {
-	public static final ProgramTracker CHANGES_TRACKER = new ProgramTracker("observable-changes");
-
 	/**
 	 * Tracks a set of changes corresponding to a set of {@link ObservableCollectionEvent}s, so those changes can be fired at once
 	 *
@@ -86,6 +82,11 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 				this.collectionIndex = collectionIndex;
 				this.changeIndex = changeIndex;
 				this.value = value;
+			}
+
+			@Override
+			public String toString() {
+				return value + "@" + collectionIndex;
 			}
 		}
 
@@ -220,6 +221,11 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 				this.collectionIndex = collectionIndex;
 				this.value = value;
 			}
+
+			@Override
+			public String toString() {
+				return value + "@" + collectionIndex;
+			}
 		}
 
 		private final RedBlackTree<Remove<E>> changes = new RedBlackTree<>();
@@ -239,20 +245,16 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 			int lastComp = 0;
 			while (true) {
 				RedBlackNode<Remove<E>> left = node.getLeft();
-				lastComp = Integer.compare(collectionIndex, node.getValue().collectionIndex);
-				if (lastComp == 0) {
-					collectionIndex++;
-					if (left != null)
-						collectionIndex += left.size();
-					break;
-				} else if (lastComp < 0) {
+				int newCI = collectionIndex;
+				if (left != null)
+					newCI += left.size();
+				lastComp = Integer.compare(newCI, node.getValue().collectionIndex);
+				if (lastComp < 0) {
 					if (left == null)
 						break;
 					node = left;
 				} else {
-					if (left != null)
-						collectionIndex += left.size();
-					collectionIndex++;
+					collectionIndex = newCI + 1;
 					if (node.getRight() == null)
 						break;
 					node = node.getRight();
@@ -352,6 +354,11 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 				this.oldValue = oldValue;
 				this.newValue = newValue;
 			}
+
+			@Override
+			public String toString() {
+				return oldValue + "->" + newValue + "@" + collectionIndex;
+			}
 		}
 
 		private final RedBlackTree<Set<E>> changes = new RedBlackTree<>();
@@ -437,7 +444,7 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 			RedBlackNode<Set<E>> node = changes.getFirst();
 			int index = 0;
 			while (node != null) {
-				dump[index] = new ElementChange<>(node.getValue().oldValue, node.getValue().newValue, node.getValue().collectionIndex);
+				dump[index] = new ElementChange<>(node.getValue().newValue, node.getValue().oldValue, node.getValue().collectionIndex);
 				node = node.getClosest(false);
 				index++;
 			}
@@ -446,7 +453,7 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 
 		@Override
 		public String toString() {
-			StringBuilder str = new StringBuilder("remove:\n");
+			StringBuilder str = new StringBuilder("set:\n");
 			RedBlackNode<Set<E>> node = changes.getFirst();
 			while (node != null) {
 				str.append('\t').append(node.getValue().collectionIndex)//
@@ -565,129 +572,110 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 	 */
 	private CollectionChangesObservable.SessionChangeTracker<E> accumulate(CollectionChangesObservable.SessionChangeTracker<E> tracker, ObservableCollectionEvent<? extends E> event,
 		Observer<? super CollectionChangeEvent<E>> observer) {
-		TrackNode node1 = CHANGES_TRACKER.start("accumulate");
 		int collIndex = event.getIndex();
 		if (tracker == null) {
 			debug(s -> s.append("From clean slate, tracking ").append(event));
-			node1.close();
 			return replace(tracker, event, observer);
 		}
 		CollectionChangesObservable.SessionChangeTracker<E> newTracker = tracker;
-		TrackNode node2 = null, node3 = null;
-		try {
-			switch (tracker.type) {
+		switch (tracker.type) {
+		case add:
+			switch (event.getType()) {
 			case add:
-				node2 = CHANGES_TRACKER.start("add");
-				switch (event.getType()) {
-				case add:
-					node3 = CHANGES_TRACKER.start("add");
-					debug(s -> s.append("\tAdding ").append(event));
-					tracker.changes.add(collIndex, event.getOldValue(), event.getNewValue());
-					break;
-				case remove:
-					node3 = CHANGES_TRACKER.start("remove");
-					int oldSize = tracker.changes.size();
-					E oldValue = tracker.changes.remove(collIndex);
-					if (tracker.changes.size() == 0) {
-						debug(s -> s.append("\tRemoving add ").append(collIndex).append(": ").append(oldValue));
-						newTracker = null;
-					} else if (tracker.changes.size() < oldSize)
-						debug(s -> s.append("\tRemoving add ").append(collIndex).append(": ").append(oldValue));
-					else {
-						debug(s -> s.append("Remove after adds, flushing ").append(tracker).append(", now tracking ").append(event));
-						newTracker = replace(tracker, event, observer);
-					}
-					break;
-				case set:
-					node3 = CHANGES_TRACKER.start("set");
-					if (tracker.changes.update(collIndex, event.getNewValue()))
-						debug(s -> s.append("\tReplacing add ").append(collIndex).append(" with ").append(event.getNewValue()));
-					else {
-						debug(s -> s.append("Set after adds, flushing ").append(tracker).append(", now tracking ").append(event));
-						newTracker = replace(tracker, event, observer);
-					}
-					break;
-				}
+				debug(s -> s.append("\tAdding ").append(event));
+				tracker.changes.add(collIndex, event.getOldValue(), event.getNewValue());
 				break;
 			case remove:
-				node2 = CHANGES_TRACKER.start("remove");
-				switch (event.getType()) {
-				case add:
-					node3 = CHANGES_TRACKER.start("add");
-					int oldSize = tracker.changes.size();
-					boolean replace = true;
-					if (oldSize == 1) {
-						E oldValue = tracker.changes.remove(collIndex);
-						if (tracker.changes.size() == 0) {
-							replace = false;
-							debug(s -> s.append("\tChanging remove ").append(collIndex).append(" to set ").append(event.getNewValue()));
-							newTracker = new CollectionChangesObservable.SessionChangeTracker<>(CollectionChangeType.set);
-							newTracker.changes.add(collIndex, oldValue, event.getNewValue());
-						}
-					}
-					if (replace) {
-						debug(s -> s.append("Add after removes, flushing ").append(tracker).append(", now tracking ").append(event));
-						newTracker = replace(tracker, event, observer);
-					}
-					break;
-				case remove:
-					node3 = CHANGES_TRACKER.start("remove");
-					if (collection.isEmpty() && newTracker.changes.size() > 1) {
-						// If the collection is empty, no more elements can be removed and any other change will just call a replace,
-						// so there's no more information we can possibly accumulate in this session.
-						// Let's preemptively fire the event now.
-						debug(s -> s.append("\tCollection cleared, flushing ").append(tracker));
-						fireEventsFromSessionData(newTracker, event, observer);
-						newTracker = null;
-					} else
-						debug(s -> s.append("Adding remove element ").append(event));
-					break;
-				case set:
-					node3 = CHANGES_TRACKER.start("set");
-					debug(s -> s.append("Set after removes, flushing ").append(tracker).append(", now tracking ").append(event));
+				int oldSize = tracker.changes.size();
+				E oldValue = tracker.changes.remove(collIndex);
+				if (tracker.changes.size() == 0) {
+					debug(s -> s.append("\tRemoving add ").append(collIndex).append(": ").append(oldValue));
+					newTracker = null;
+				} else if (tracker.changes.size() < oldSize)
+					debug(s -> s.append("\tRemoving add ").append(collIndex).append(": ").append(oldValue));
+				else {
+					debug(s -> s.append("Remove after adds, flushing ").append(tracker).append(", now tracking ").append(event));
 					newTracker = replace(tracker, event, observer);
-					break;
 				}
 				break;
 			case set:
-				node2 = CHANGES_TRACKER.start("set");
-				switch (event.getType()) {
-				case add:
-					node3 = CHANGES_TRACKER.start("add");
-					debug(s -> s.append("Add after sets, flushing ").append(tracker).append(", now tracking ").append(event));
+				if (tracker.changes.update(collIndex, event.getNewValue()))
+					debug(s -> s.append("\tReplacing add ").append(collIndex).append(" with ").append(event.getNewValue()));
+				else {
+					debug(s -> s.append("Set after adds, flushing ").append(tracker).append(", now tracking ").append(event));
 					newTracker = replace(tracker, event, observer);
-					break;
-				case remove:
-					node3 = CHANGES_TRACKER.start("remove");
-					int oldSize = tracker.changes.size();
-					E oldValue = tracker.changes.remove(collIndex);
-					if (oldSize == 1 && tracker.changes.size() == 0) {
-						debug(s -> s.append("\tSet element removed, replacing ").append(tracker).append(" with remove"));
-						newTracker = new CollectionChangesObservable.SessionChangeTracker<>(CollectionChangeType.remove);
-						newTracker.changes.add(collIndex, oldValue, oldValue);
-					} else if (tracker.changes.size() < oldSize) {
-						debug(s -> s.append("\tRemove after sets, flushing ").append(tracker).append(", now tracking remove [")
-							.append(collIndex).append("] ").append(oldValue));
-						newTracker = new CollectionChangesObservable.SessionChangeTracker<>(CollectionChangeType.remove);
-						newTracker.changes.add(collIndex, oldValue, oldValue);
-						fireEventsFromSessionData(tracker, event, observer);
-					} else {
-						debug(s -> s.append("Remove after sets, flushing ").append(tracker).append(", now tracking ").append(event));
-						newTracker = replace(tracker, event, observer);
-					}
-					break;
-				case set:
-					node3 = CHANGES_TRACKER.start("set");
-					debug(s -> s.append("\tAdding set ").append(collIndex).append(event.getNewValue()));
-					tracker.changes.add(collIndex, event.getOldValue(), event.getNewValue());
-					break;
 				}
 				break;
 			}
-		} finally {
-			node3.close();
-			node2.close();
-			node1.close();
+			break;
+		case remove:
+			switch (event.getType()) {
+			case add:
+				int oldSize = tracker.changes.size();
+				boolean replace = true;
+				if (oldSize == 1) {
+					E oldValue = tracker.changes.remove(collIndex);
+					if (tracker.changes.size() == 0) {
+						replace = false;
+						debug(s -> s.append("\tChanging remove ").append(collIndex).append(" to set ").append(event.getNewValue()));
+						newTracker = new CollectionChangesObservable.SessionChangeTracker<>(CollectionChangeType.set);
+						newTracker.changes.add(collIndex, oldValue, event.getNewValue());
+					}
+				}
+				if (replace) {
+					debug(s -> s.append("Add after removes, flushing ").append(tracker).append(", now tracking ").append(event));
+					newTracker = replace(tracker, event, observer);
+				}
+				break;
+			case remove:
+				tracker.changes.add(collIndex, event.getOldValue(), event.getNewValue());
+				if (collection.isEmpty() && newTracker.changes.size() > 1) {
+					// If the collection is empty, no more elements can be removed and any other change will just call a replace,
+					// so there's no more information we can possibly accumulate in this session.
+					// Let's preemptively fire the event now.
+					debug(s -> s.append("\tCollection cleared, flushing ").append(tracker));
+					fireEventsFromSessionData(newTracker, event, observer);
+					newTracker = null;
+				} else {
+					debug(s -> s.append("Adding remove element ").append(event));
+				}
+				break;
+			case set:
+				debug(s -> s.append("Set after removes, flushing ").append(tracker).append(", now tracking ").append(event));
+				newTracker = replace(tracker, event, observer);
+				break;
+			}
+			break;
+		case set:
+			switch (event.getType()) {
+			case add:
+				debug(s -> s.append("Add after sets, flushing ").append(tracker).append(", now tracking ").append(event));
+				newTracker = replace(tracker, event, observer);
+				break;
+			case remove:
+				int oldSize = tracker.changes.size();
+				E oldValue = tracker.changes.remove(collIndex);
+				if (oldSize == 1 && tracker.changes.size() == 0) {
+					debug(s -> s.append("\tSet element removed, replacing ").append(tracker).append(" with remove"));
+					newTracker = new CollectionChangesObservable.SessionChangeTracker<>(CollectionChangeType.remove);
+					newTracker.changes.add(collIndex, oldValue, oldValue);
+				} else if (tracker.changes.size() < oldSize) {
+					debug(s -> s.append("\tRemove after sets, flushing ").append(tracker).append(", now tracking remove [")
+						.append(collIndex).append("] ").append(oldValue));
+					newTracker = new CollectionChangesObservable.SessionChangeTracker<>(CollectionChangeType.remove);
+					newTracker.changes.add(collIndex, oldValue, oldValue);
+					fireEventsFromSessionData(tracker, event, observer);
+				} else {
+					debug(s -> s.append("Remove after sets, flushing ").append(tracker).append(", now tracking ").append(event));
+					newTracker = replace(tracker, event, observer);
+				}
+				break;
+			case set:
+				debug(s -> s.append("\tAdding set ").append(collIndex).append(event.getNewValue()));
+				tracker.changes.add(collIndex, event.getOldValue(), event.getNewValue());
+				break;
+			}
+			break;
 		}
 		return newTracker;
 	}
