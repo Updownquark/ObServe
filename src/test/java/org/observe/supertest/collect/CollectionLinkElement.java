@@ -55,7 +55,7 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 		theCollectionAddress = collectionAddress;
 		theElementAddress = elementAddress;
 
-		theSourceElements = new BetterTreeSet<>(false, CollectionLinkElement::compareTo);
+		theSourceElements = BetterTreeSet.<CollectionLinkElement<?, S>> buildTreeSet(CollectionLinkElement::compareTo).build();
 
 		theErrors = new LinkedList<>();
 		theLastKnownIndex = theCollectionLink.getElements().getElementsBefore(elementAddress);
@@ -157,7 +157,7 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 			theDerivedElements = newDerived;
 		}
 		if (theDerivedElements[siblingIndex] == null)
-			theDerivedElements[siblingIndex] = new BetterTreeList<>(false);
+			theDerivedElements[siblingIndex] = BetterTreeList.<CollectionLinkElement<T, ?>> build().build();
 		theDerivedElements[siblingIndex].add(derived);
 	}
 
@@ -307,7 +307,7 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 			int siblingIndex = theCollectionLink.getSiblingIndex();
 			CollectionUtils.synchronize(theSourceElements, sourceElements, (e1, e2) -> e1.getCollectionAddress().equals(e2))//
 			.simple(sourceEl -> {
-					CollectionLinkElement<?, S> sourceLinkEl = source.getElement(sourceEl);
+				CollectionLinkElement<?, S> sourceLinkEl = source.getElement(sourceEl);
 				if (sourceLinkEl == null)
 					throw new IllegalStateException("No such link found: " + sourceEl);
 				return sourceLinkEl;
@@ -316,7 +316,7 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 				if (withRemove)
 					sourceEl.getLeftValue().theDerivedElements[siblingIndex].remove(CollectionLinkElement.this);
 			}).onRight(sourceEl -> {
-					CollectionLinkElement<?, S> sourceLinkEl = source.getElement(sourceEl.getRightValue());
+				CollectionLinkElement<?, S> sourceLinkEl = source.getElement(sourceEl.getRightValue());
 				if (sourceLinkEl == null)
 					throw new IllegalStateException("No such link found: " + sourceEl);
 				sourceLinkEl.addDerived(siblingIndex, CollectionLinkElement.this);

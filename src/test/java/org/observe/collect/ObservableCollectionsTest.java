@@ -37,8 +37,8 @@ import org.observe.Observable;
 import org.observe.ObservableTester;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueTester;
+import org.observe.SettableValue;
 import org.observe.SimpleObservable;
-import org.observe.SimpleSettableValue;
 import org.observe.Subscription;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableMultiMapEvent;
@@ -165,7 +165,7 @@ public class ObservableCollectionsTest {
 
 		BiFunction<Integer, Integer, Integer> combineFn = LambdaUtils.printableBiFn((v1, v2) -> v1 + v2, "+", null);
 		BiFunction<Integer, Integer, Integer> reverseCombineFn = LambdaUtils.printableBiFn((v1, v2) -> v1 - v2, "-", null);
-		SimpleSettableValue<Integer> combineVar = new SimpleSettableValue<>(Integer.class, false);
+		SettableValue<Integer> combineVar = SettableValue.build(Integer.class).build();
 		combineVar.set(10000, null);
 		ObservableCollection<Integer> combinedOL;
 		ObservableCollectionTester<Integer> combinedTester;
@@ -481,7 +481,7 @@ public class ObservableCollectionsTest {
 	static class TreeListTester implements TestHelper.Testable {
 		@Override
 		public void accept(TestHelper helper) {
-			BetterTreeList<Integer> backing = new BetterTreeList<>(false);
+			BetterTreeList<Integer> backing = BetterTreeList.<Integer> build().build();
 			testCollection(ObservableCollection.create(TypeToken.of(Integer.class), backing), set -> backing.checkValid(), helper);
 		}
 	}
@@ -496,7 +496,7 @@ public class ObservableCollectionsTest {
 	static class TreeSetTester implements TestHelper.Testable {
 		@Override
 		public void accept(TestHelper helper) {
-			BetterTreeSet<Integer> backing = new BetterTreeSet<>(false, Integer::compareTo);
+			BetterTreeSet<Integer> backing = BetterTreeSet.<Integer> buildTreeSet(Integer::compareTo).build();
 			testCollection(ObservableCollection.create(TypeToken.of(Integer.class), backing), set -> backing.checkValid(), helper);
 		}
 	}
@@ -696,7 +696,7 @@ public class ObservableCollectionsTest {
 			else
 				derived = derivedFlow.collectActive(Observable.empty);
 			ObservableCollectionTester<Integer> tester;
-			BetterList<Integer> expected = new BetterTreeList<>(false);
+			BetterList<Integer> expected = BetterTreeList.<Integer> build().build();
 			if (helper.getBoolean()) {
 				derived = derived.reverse();
 				tester = new ObservableCollectionTester<>("reversed", derived, expected.reverse());
@@ -773,7 +773,7 @@ public class ObservableCollectionsTest {
 	@Test
 	public void randomSimple() {
 		TestHelper.createTester(SimpleRandomTester.class).withMaxTotalDuration(Duration.ofSeconds(5))//
-			/**/.withPersistenceDir(new File("src/test/java/org/observe/collect"), false).revisitKnownFailures(true).withDebug(true)//
+		/**/.withPersistenceDir(new File("src/test/java/org/observe/collect"), false).revisitKnownFailures(true).withDebug(true)//
 		.execute().throwErrorIfFailed();
 	}
 
@@ -1018,7 +1018,7 @@ public class ObservableCollectionsTest {
 	@Test
 	public void observableSetCombine() {
 		ObservableSet<Integer> set = ObservableCollection.create(intType).flow().distinct().collect();
-		SimpleSettableValue<Integer> value1 = new SimpleSettableValue<>(Integer.TYPE, false);
+		SettableValue<Integer> value1 = SettableValue.build(Integer.TYPE).build();
 		value1.set(1, null);
 		List<Integer> compare1 = new ArrayList<>();
 		Set<Integer> correct = new TreeSet<>();
@@ -1269,9 +1269,9 @@ public class ObservableCollectionsTest {
 	/** Tests {@link ObservableCollection#fold(ObservableCollection)} */
 	@Test
 	public void observableCollectionFold() {
-		SimpleSettableValue<Integer> obs1 = new SimpleSettableValue<>(Integer.class, true);
-		SimpleSettableValue<Integer> obs2 = new SimpleSettableValue<>(Integer.class, true);
-		SimpleSettableValue<Integer> obs3 = new SimpleSettableValue<>(Integer.class, true);
+		SettableValue<Integer> obs1 = SettableValue.build(Integer.class).build();
+		SettableValue<Integer> obs2 = SettableValue.build(Integer.class).build();
+		SettableValue<Integer> obs3 = SettableValue.build(Integer.class).build();
 		ObservableSet<ObservableValue<Integer>> set = ObservableCollection.create(new TypeToken<ObservableValue<Integer>>() {}).flow()
 			.distinct().collect();
 		set.add(obs1);
@@ -1469,7 +1469,7 @@ public class ObservableCollectionsTest {
 	@Test
 	public void observableListCombine() {
 		ObservableCollection<Integer> list = ObservableCollection.create(intType);
-		SimpleSettableValue<Integer> value1 = new SimpleSettableValue<>(Integer.TYPE, false);
+		SettableValue<Integer> value1 = SettableValue.build(Integer.TYPE).build();
 		value1.set(1, null);
 		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>("combined", list.flow()//
 			.transform(intType, combine -> {
@@ -1642,15 +1642,15 @@ public class ObservableCollectionsTest {
 	@Test
 	public void flattenListValues() {
 		ObservableCollection<ObservableValue<Integer>> list = ObservableCollection.create(new TypeToken<ObservableValue<Integer>>() {});
-		SimpleSettableValue<Integer> value1 = new SimpleSettableValue<>(Integer.TYPE, false);
+		SettableValue<Integer> value1 = SettableValue.build(Integer.TYPE).build();
 		value1.set(1, null);
-		SimpleSettableValue<Integer> value2 = new SimpleSettableValue<>(Integer.TYPE, false);
+		SettableValue<Integer> value2 = SettableValue.build(Integer.TYPE).build();
 		value2.set(2, null);
-		SimpleSettableValue<Integer> value3 = new SimpleSettableValue<>(Integer.TYPE, false);
+		SettableValue<Integer> value3 = SettableValue.build(Integer.TYPE).build();
 		value3.set(3, null);
-		SimpleSettableValue<Integer> value4 = new SimpleSettableValue<>(Integer.TYPE, false);
+		SettableValue<Integer> value4 = SettableValue.build(Integer.TYPE).build();
 		value4.set(4, null);
-		SimpleSettableValue<Integer> value5 = new SimpleSettableValue<>(Integer.TYPE, false);
+		SettableValue<Integer> value5 = SettableValue.build(Integer.TYPE).build();
 		value5.set(9, null);
 		list.addAll(java.util.Arrays.asList(value1, value2, value3, value4));
 
@@ -1694,8 +1694,8 @@ public class ObservableCollectionsTest {
 	/** Tests {@link ObservableCollection#flattenValue(ObservableValue)} */
 	@Test
 	public void flattenListValue() {
-		SimpleSettableValue<ObservableCollection<Integer>> listVal = new SimpleSettableValue<>(
-			new TypeToken<ObservableCollection<Integer>>() {}, true);
+		SettableValue<ObservableCollection<Integer>> listVal = SettableValue.build(new TypeToken<ObservableCollection<Integer>>() {
+		}).build();
 		ObservableCollection<Integer> firstList = ObservableCollection.create(TypeToken.of(Integer.TYPE));
 		ObservableCollection<Integer> secondList = ObservableCollection.create(TypeToken.of(Integer.TYPE));
 		listVal.set(firstList, null);
@@ -2055,7 +2055,8 @@ public class ObservableCollectionsTest {
 	@Test
 	public void testTransactionsCombined() {
 		ObservableCollection<Integer> list = ObservableCollection.create(new TypeToken<Integer>() {});
-		SimpleSettableValue<Integer> mult = new SimpleSettableValue<>(new TypeToken<Integer>() {}, false);
+		SettableValue<Integer> mult = SettableValue.build(new TypeToken<Integer>() {
+		}).build();
 		mult.set(1, null);
 		ObservableCollection<Integer> product = list.flow().transform(intType, combine -> {
 			return combine.combineWith(mult).build((s, cv) -> //

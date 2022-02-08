@@ -6,6 +6,7 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 import org.qommons.Lockable;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 
 /**
@@ -64,6 +65,11 @@ public interface AddKeyHolder<K> extends Consumer<K>, Lockable {
 		}
 
 		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return ThreadConstraint.ANY;
+		}
+
+		@Override
 		public boolean isLockSupported() {
 			return true;
 		}
@@ -115,6 +121,11 @@ public interface AddKeyHolder<K> extends Consumer<K>, Lockable {
 		@Override
 		public void clear() {
 			theSource.clear();
+		}
+
+		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return theSource.getThreadConstraint();
 		}
 
 		@Override

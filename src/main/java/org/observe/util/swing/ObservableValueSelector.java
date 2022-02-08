@@ -15,7 +15,6 @@ import javax.swing.event.ListSelectionListener;
 import org.observe.Observable;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
-import org.observe.SimpleSettableValue;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSortedSet;
@@ -164,7 +163,7 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		theMap = map;
 		theSelectableValues = ObservableSortedSet.create(new TypeToken<SelectableValue<T, X>>() {
 		}, SelectableValue::compareTo);
-		theFilterText = new SimpleSettableValue<>(TableContentControl.class, false).withValue(TableContentControl.DEFAULT, null);
+		theFilterText = SettableValue.build(TableContentControl.class).build().withValue(TableContentControl.DEFAULT, null);
 		theIncludedValues = theSelectableValues.flow().filter(sv -> sv.isIncluded() ? null : "Not Included").unmodifiable()
 			.collectActive(until);
 		isIncludedByDefault = includedByDefault;

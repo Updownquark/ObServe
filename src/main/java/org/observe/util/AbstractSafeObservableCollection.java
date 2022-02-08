@@ -3,7 +3,6 @@ package org.observe.util;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.function.BooleanSupplier;
 
 import org.observe.Observable;
 import org.observe.Subscription;
@@ -12,6 +11,7 @@ import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionBuilder;
 import org.observe.collect.ObservableCollectionEvent;
 import org.qommons.Identifiable;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
@@ -72,18 +72,18 @@ public abstract class AbstractSafeObservableCollection<E> extends ObservableColl
 	protected final BetterTreeList<ElementRef<E>> theSyntheticBacking;
 	protected final ObservableCollection<ElementRef<E>> theSyntheticCollection;
 
-	private final BooleanSupplier isOnEventThread;
+	private final ThreadConstraint theThreadConstraint;
 
 	private Object theIdentity;
 
 	/**
 	 * @param collection The backing collection
-	 * @param onEventThread A test that returns true only if the thread it is invoked from is acceptable for firing events directly
+	 * @param threadConstraint The thread constraint for this collection
 	 */
-	public AbstractSafeObservableCollection(ObservableCollection<E> collection, BooleanSupplier onEventThread) {
+	public AbstractSafeObservableCollection(ObservableCollection<E> collection, ThreadConstraint threadConstraint) {
 		theCollection = collection;
-		theSyntheticBacking = new BetterTreeList<>(false);
-		isOnEventThread = onEventThread;
+		theSyntheticBacking = BetterTreeList.<ElementRef<E>> build().withThreadConstraint(threadConstraint).build();
+		theThreadConstraint = threadConstraint;
 
 		ObservableCollectionBuilder<ElementRef<E>, ?> builder = DefaultObservableCollection
 			.build((TypeToken<ElementRef<E>>) (TypeToken<?>) TypeTokens.get().of(ElementRef.class))//
@@ -130,8 +130,13 @@ public abstract class AbstractSafeObservableCollection<E> extends ObservableColl
 
 	protected abstract boolean doFlush();
 
+	@Override
+	public ThreadConstraint getThreadConstraint() {
+		return theThreadConstraint;
+	}
+
 	public boolean isOnEventThread() {
-		return isOnEventThread.getAsBoolean();
+		return theThreadConstraint == null || theThreadConstraint.isEventThread();
 	}
 
 	protected void initialize(ElementRef<E> element, ElementId synthId) {
@@ -177,8 +182,8 @@ public abstract class AbstractSafeObservableCollection<E> extends ObservableColl
 	 * </p>
 	 */
 	protected void flush() {
-		if (!isOnEventThread.getAsBoolean())
-			throw new IllegalStateException("Operations on this collection may only occur on the event thread");
+		if (!isOnEventThread())
+			throw new IllegalStateException("Operations on this collection may only occur on "+theThreadConstraint);
 		doFlush();
 	}
 

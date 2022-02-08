@@ -11,6 +11,8 @@ import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl;
 import org.qommons.Lockable;
 import org.qommons.Lockable.CoreId;
+import org.qommons.ThreadConstrained;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterMultiMap;
@@ -81,6 +83,11 @@ public abstract class AbstractDerivedObservableMultiMap<S, K, V> implements Obse
 		if (theIdentity == null)
 			theIdentity = new MultiMapIdentity(theActiveKeyFlow.getIdentity(), getValueManager().getIdentity());
 		return theIdentity;
+	}
+
+	@Override
+	public ThreadConstraint getThreadConstraint() {
+		return ThreadConstrained.getThreadConstraint(getKeyLocker(), getValueManager());
 	}
 
 	@Override

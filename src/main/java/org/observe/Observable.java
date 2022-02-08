@@ -18,6 +18,8 @@ import org.qommons.LambdaUtils;
 import org.qommons.Lockable;
 import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
+import org.qommons.ThreadConstrained;
+import org.qommons.ThreadConstraint;
 import org.qommons.TimeUtils;
 import org.qommons.Transaction;
 import org.qommons.collect.ListenerList;
@@ -239,6 +241,11 @@ public interface Observable<T> extends Lockable, Identifiable {
 			}
 
 			@Override
+			public ThreadConstraint getThreadConstraint() {
+				return ThreadConstraint.NONE;
+			}
+
+			@Override
 			public boolean isSafe() {
 				return true;
 			}
@@ -290,6 +297,11 @@ public interface Observable<T> extends Lockable, Identifiable {
 		@Override
 		public Observable<Object> noInit() {
 			return this;
+		}
+
+		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return ThreadConstraint.NONE;
 		}
 
 		@Override
@@ -363,6 +375,11 @@ public interface Observable<T> extends Lockable, Identifiable {
 
 		protected Observable<F> getWrapped() {
 			return theWrapped;
+		}
+
+		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return theWrapped.getThreadConstraint();
 		}
 
 		@Override
@@ -628,6 +645,11 @@ public interface Observable<T> extends Lockable, Identifiable {
 		}
 
 		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return ThreadConstrained.getThreadConstraint(theComposed);
+		}
+
+		@Override
 		public Subscription subscribe(Observer<? super T> observer) {
 			return theObservers.add(observer, false)::run;
 		}
@@ -856,6 +878,20 @@ public interface Observable<T> extends Lockable, Identifiable {
 		}
 
 		@Override
+		public ThreadConstraint getThreadConstraint() {
+			if (theObservables.length == 0)
+				return ThreadConstraint.NONE;
+			ThreadConstraint c = theObservables[0].getThreadConstraint();
+			if (c == null)
+				return null;
+			for (int i = 1; i < theObservables.length; i++) {
+				if (theObservables[i].getThreadConstraint() != c)
+					return null;
+			}
+			return c;
+		}
+
+		@Override
 		public Subscription subscribe(Observer<? super V> observer) {
 			Subscription[] subs = new Subscription[theObservables.length];
 			boolean[] init = new boolean[] { true };
@@ -944,6 +980,11 @@ public interface Observable<T> extends Lockable, Identifiable {
 			return theIdentity;
 		}
 
+		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return null; // We can't know
+		}
+
 		protected Observable<? extends Observable<? extends T>> getWrapper() {
 			return theWrapper;
 		}
@@ -1012,6 +1053,11 @@ public interface Observable<T> extends Lockable, Identifiable {
 			if (theIdentity == null)
 				theIdentity = Identifiable.baseId("vmShutdown", this);
 			return theIdentity;
+		}
+
+		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return null;
 		}
 
 		@Override
@@ -1156,6 +1202,14 @@ public interface Observable<T> extends Lockable, Identifiable {
 				if (thePostAction != null)
 					thePostAction.accept(value);
 			}
+		}
+
+		@Override
+		public ThreadConstraint getThreadConstraint() {
+			if (theTask.getThreading() == QommonsTimer.TaskThreading.EDT)
+				return ThreadConstraint.EDT;
+			else
+				return ThreadConstraint.ANY;
 		}
 
 		@Override

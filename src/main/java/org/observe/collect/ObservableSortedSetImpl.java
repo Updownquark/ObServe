@@ -94,7 +94,7 @@ public class ObservableSortedSetImpl {
 				return getWrapped().onChange(new Consumer<ObservableCollectionEvent<? extends E>>() {
 					private final BetterSortedSet<ElementId> thePresentElements;
 					{
-						thePresentElements = new BetterTreeSet<>(false, ElementId::compareTo);
+						thePresentElements = BetterTreeSet.<ElementId> buildTreeSet(ElementId::compareTo).build();
 						for (CollectionElement<E> el : elements())
 							thePresentElements.add(unwrap(el.getElementId()));
 					}
@@ -288,7 +288,7 @@ public class ObservableSortedSetImpl {
 		@Override
 		public <X> DistinctSortedDataFlow<E, T, X> transformEquivalent(TypeToken<X> target,
 			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ? extends Transformation<T, X>> transform,
-			Comparator<? super X> compare) {
+				Comparator<? super X> compare) {
 			Transformation<T, X> def = transform.apply(new ReversibleTransformationPrecursor<>());
 			return new DistinctSortedTransformOp<>(getSource(), this, target, def, compare);
 		}
@@ -439,7 +439,7 @@ public class ObservableSortedSetImpl {
 		@Override
 		public <X> DistinctSortedDataFlow<E, T, X> transformEquivalent(TypeToken<X> target,
 			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ? extends Transformation<T, X>> transform,
-			Comparator<? super X> compare) {
+				Comparator<? super X> compare) {
 			Transformation<T, X> def = transform.apply(new ReversibleTransformationPrecursor<>());
 			return new DistinctSortedTransformOp<>(getSource(), this, target, def, compare);
 		}
@@ -532,7 +532,7 @@ public class ObservableSortedSetImpl {
 		@Override
 		public <X> DistinctSortedDataFlow<E, E, X> transformEquivalent(TypeToken<X> target,
 			Function<? super ReversibleTransformationPrecursor<E, X, ?>, ? extends Transformation<E, X>> transform,
-			Comparator<? super X> compare) {
+				Comparator<? super X> compare) {
 			Transformation<E, X> def = transform.apply(new ReversibleTransformationPrecursor<>());
 			return new DistinctSortedTransformOp<>(getSource(), this, target, def, compare);
 		}

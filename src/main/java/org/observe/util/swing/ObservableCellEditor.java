@@ -33,7 +33,6 @@ import javax.swing.tree.TreeCellEditor;
 import org.observe.Observable;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
-import org.observe.SimpleSettableValue;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
@@ -557,8 +556,8 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 		}
 
 		public static <C> SettableValue<C> createEditorValue(Function<C, String>[] filter) {
-			return new SimpleSettableValue<>((TypeToken<C>) TypeTokens.get().OBJECT, true, null,
-				opts -> opts.forEachSafe(false)).filterAccept(v -> {
+			return SettableValue.build((TypeToken<C>) TypeTokens.get().OBJECT).withListening(opts -> opts.forEachSafe(false)).build()//
+				.filterAccept(v -> {
 					if (filter[0] != null)
 						return filter[0].apply(v);
 					else

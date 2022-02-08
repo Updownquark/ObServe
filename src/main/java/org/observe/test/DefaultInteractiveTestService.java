@@ -18,6 +18,7 @@ import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.config.ObservableConfig;
 import org.observe.config.ObservableConfig.XmlEncoding;
+import org.qommons.ThreadConstraint;
 import org.qommons.collect.FastFailLockingStrategy;
 import org.qommons.collect.StampedLockingStrategy;
 import org.qommons.config.QommonsConfig;
@@ -34,17 +35,21 @@ public class DefaultInteractiveTestService extends DefaultInteractiveTestSuite i
 	private File theTestResourceCache;
 	private long theTestResourceCacheSizeLimit;
 
-	/** @param globalConfig The location of the global test configuration--may be null */
-	public DefaultInteractiveTestService(String globalConfig) {
-		this("Interactive Tests", globalConfig);
+	/**
+	 * @param globalConfig The location of the global test configuration--may be null
+	 * @param threadConstraint The thread constraint for this test service to obey
+	 */
+	public DefaultInteractiveTestService(String globalConfig, ThreadConstraint threadConstraint) {
+		this("Interactive Tests", globalConfig, threadConstraint);
 	}
 
 	/**
 	 * @param name The name of this test service
 	 * @param globalConfig The location of the global test configuration--may be null
+	 * @param threadConstraint The thread constraint for this test service to obey
 	 */
-	public DefaultInteractiveTestService(String name, String globalConfig) {
-		super(null, name, false, new StampedLockingStrategy(name));
+	public DefaultInteractiveTestService(String name, String globalConfig, ThreadConstraint threadConstraint) {
+		super(null, name, false, new StampedLockingStrategy(name, threadConstraint));
 		theCurrentTest = SettableValue.build(DefaultTesting.class).build();
 		theValues = new ConcurrentHashMap<>();
 		theGlobalConfigLocation = globalConfig;
@@ -143,7 +148,7 @@ public class DefaultInteractiveTestService extends DefaultInteractiveTestSuite i
 	ObservableConfig getSuiteConfig() throws IOException {
 		if (theGlobalConfig != null)
 			return theGlobalConfig;
-		ObservableConfig config = ObservableConfig.createRoot(getName(), null, __ -> new FastFailLockingStrategy());
+		ObservableConfig config = ObservableConfig.createRoot(getName(), null, __ -> new FastFailLockingStrategy(ThreadConstraint.ANY));
 		if (theGlobalConfigLocation != null) {
 			URL url = QommonsConfig.toUrl(theGlobalConfigLocation);
 			try {

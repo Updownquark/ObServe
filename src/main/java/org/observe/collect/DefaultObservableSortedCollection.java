@@ -6,6 +6,7 @@ import java.util.function.BiFunction;
 import org.observe.Equivalence;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
 import org.qommons.collect.BetterCollection;
@@ -37,21 +38,14 @@ public class DefaultObservableSortedCollection<E> extends DefaultObservableColle
 	 * @param sortedSet The backing sorted list to hold this observable set's values
 	 */
 	public DefaultObservableSortedCollection(TypeToken<E> type, BetterSortedList<E> sortedSet) {
-		this(type, sortedSet, null, null);
+		this(type, sortedSet, null, null, null);
 	}
 
-	/**
-	 * @param type The type for the sorted collection
-	 * @param list The backing sorted collection to hold this observable collection's values
-	 * @param elementSource The function to provide element sources for this collection
-	 * @param sourceElements The function to provide source elements for elements in this collection
-	 * @see #getElementsBySource(ElementId, BetterCollection)
-	 * @see #getSourceElements(ElementId, BetterCollection)
-	 */
-	public DefaultObservableSortedCollection(TypeToken<E> type, BetterSortedList<E> list,
+	DefaultObservableSortedCollection(TypeToken<E> type, BetterSortedList<E> list,
 		BiFunction<ElementId, BetterCollection<?>, ElementId> elementSource,
-		BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> sourceElements) {
-		super(type, list, elementSource, sourceElements, Equivalence.DEFAULT.sorted(TypeTokens.getRawType(type), list.comparator(), false));
+		BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> sourceElements, ThreadConstraint constraint) {
+		super(type, list, elementSource, sourceElements, Equivalence.DEFAULT.sorted(TypeTokens.getRawType(type), list.comparator(), false),
+			constraint);
 	}
 
 	@Override

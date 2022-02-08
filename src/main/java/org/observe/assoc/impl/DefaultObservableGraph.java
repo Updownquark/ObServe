@@ -30,8 +30,8 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 		private ObservableCollection<ObservableGraph.Edge<N, E>> theIncomingEdges;
 		private ObservableCollection<ObservableGraph.Edge<N, E>> theBiEdges;
 
-		DefaultNode(N value, ObservableCollection<ObservableGraph.Edge<N, E>> outEdges) {
-			super(theNodeType, false);
+		DefaultNode(DefaultObservableGraph<N, ?> graph, N value, ObservableCollection<ObservableGraph.Edge<N, E>> outEdges) {
+			super(theNodeType, null, true, __ -> graph, null);
 			set(value, null);
 			theOutgoingEdges = outEdges;
 		}
@@ -67,8 +67,9 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 
 		private final boolean isDirected;
 
-		DefaultEdge(ObservableGraph.Node<N, E> start, ObservableGraph.Node<N, E> end, boolean directed, E value) {
-			super(theEdgeType, true);
+		DefaultEdge(DefaultObservableGraph<N, ?> graph, ObservableGraph.Node<N, E> start, ObservableGraph.Node<N, E> end, boolean directed,
+			E value) {
+			super(theEdgeType, null, true, __ -> graph, null);
 			set(value, null);
 			theStart = start;
 			theEnd = end;
@@ -187,7 +188,7 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 	 */
 	protected DefaultNode createNode(N value) {
 		ObservableCollection<ObservableGraph.Edge<N, E>> nodeEdges = theEdgeCreator.apply(theEdges.getType());
-		return new DefaultNode(value, nodeEdges);
+		return new DefaultNode(this, value, nodeEdges);
 	}
 
 	@Override
@@ -207,7 +208,8 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 				throw new IllegalArgumentException("An edge may not start and end at the same node");
 			DefaultNode s = (DefaultNode) start;
 			try (Transaction edgeT = s.theOutgoingEdges.lock(true, null)) {
-				DefaultEdge edge = new DefaultEdge((ObservableGraph.Node<N, E>) start, (ObservableGraph.Node<N, E>) end, directed, value);
+				DefaultEdge edge = new DefaultEdge(this, (ObservableGraph.Node<N, E>) start, (ObservableGraph.Node<N, E>) end, directed,
+					value);
 				((DefaultNode) start).theOutgoingEdges.add(edge);
 				return edge;
 			}

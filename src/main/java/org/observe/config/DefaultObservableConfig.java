@@ -11,6 +11,7 @@ import org.observe.collect.CollectionChangeType;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.Lockable.CoreId;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
 import org.qommons.collect.BetterCollections;
@@ -77,6 +78,11 @@ class DefaultObservableConfig extends AbstractObservableConfig {
 	@Override
 	public DefaultObservableConfig getParent() {
 		return (DefaultObservableConfig) super.getParent();
+	}
+
+	@Override
+	public ThreadConstraint getThreadConstraint() {
+		return theLocking.getThreadConstraint();
 	}
 
 	@Override
@@ -199,8 +205,8 @@ class DefaultObservableConfig extends AbstractObservableConfig {
 		return ObservableConfig.toString(this);
 	}
 
-	static DefaultObservableConfig createRoot(String name) {
-		return createRoot(name, null, v -> new StampedLockingStrategy(v));
+	static DefaultObservableConfig createRoot(String name, ThreadConstraint threadConstraint) {
+		return createRoot(name, null, v -> new StampedLockingStrategy(v, threadConstraint));
 	}
 
 	static DefaultObservableConfig createRoot(String name, String value, Function<Object, CollectionLockingStrategy> locking) {
@@ -287,6 +293,11 @@ class DefaultObservableConfig extends AbstractObservableConfig {
 		@Override
 		public Subscription subscribe(Observer<? super ObservableConfigEvent> observer) {
 			return theConfig.theListeners.add(new InternalObservableConfigListener(thePath, observer), true)::run;
+		}
+
+		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return theConfig.getThreadConstraint();
 		}
 
 		@Override

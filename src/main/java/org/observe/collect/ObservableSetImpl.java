@@ -43,6 +43,7 @@ import org.qommons.Identifiable;
 import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
 import org.qommons.Ternian;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterCollections;
@@ -304,6 +305,11 @@ public class ObservableSetImpl {
 		@Override
 		public Equivalence<? super T> equivalence() {
 			return theWrapped.equivalence();
+		}
+
+		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return theWrapped.getThreadConstraint();
 		}
 
 		@Override
@@ -646,6 +652,11 @@ public class ObservableSetImpl {
 		}
 
 		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return theParent.getThreadConstraint();
+		}
+
+		@Override
 		public boolean isLockSupported() {
 			return theParent.isLockSupported();
 		}
@@ -684,7 +695,7 @@ public class ObservableSetImpl {
 
 		@Override
 		public BetterList<ElementId> getSourceElements(DerivedCollectionElement<T> localElement, BetterCollection<?> sourceCollection) {
-			BetterList<ElementId> sourceEls = new BetterTreeList<>(false);
+			BetterList<ElementId> sourceEls = BetterTreeList.<ElementId> build().build();
 			DerivedCollectionElement<T> activeEl = ((UniqueElement) localElement).theActiveElement;
 			sourceEls.addAll(theParent.getSourceElements(activeEl, sourceCollection));
 			for (DerivedCollectionElement<T> parentEl : ((UniqueElement) localElement).theParentElements.keySet()) {
@@ -943,7 +954,7 @@ public class ObservableSetImpl {
 			/** @param value The value that the element is for */
 			protected UniqueElement(T value) {
 				theValue = value;
-				theParentElements = new BetterTreeMap<>(false, DerivedCollectionElement::compareTo);
+				theParentElements = BetterTreeMap.<DerivedCollectionElement<T>> build(DerivedCollectionElement::compareTo).buildMap();
 			}
 
 			DistinctManager<E, T> getMgr() {

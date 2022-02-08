@@ -29,6 +29,7 @@ import org.observe.util.WeakListening;
 import org.qommons.Identifiable;
 import org.qommons.Lockable;
 import org.qommons.Lockable.CoreId;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
@@ -93,9 +94,9 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		theKeyManager = keyFlow.manageActive();
 		theValueManager = valueFlow.manageActive();
 
-		theEntries = new BetterTreeSet<>(false, KeyEntry::compareBySource);
-		theActiveEntries = new BetterTreeSet<>(false, KeyEntry::compareInternal);
-		theElementInfo = new BetterTreeMap<>(false, ElementId::compareTo);
+		theEntries = BetterTreeSet.<KeyEntry> buildTreeSet(KeyEntry::compareBySource).build();
+		theActiveEntries = BetterTreeSet.<KeyEntry> buildTreeSet(KeyEntry::compareInternal).build();
+		theElementInfo = BetterTreeMap.<ElementId> build(ElementId::compareTo).buildMap();
 
 		theMapListeners = ListenerList.build().withFastSize(false).build();
 		theKeySetListeners = ListenerList.build().withFastSize(false).build();
@@ -373,7 +374,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		KeyEntry(ObservableCollectionActiveManagers.DerivedCollectionElement<K> keyElement) {
 			theKeyElement = keyElement;
 			theValues = new ValueCollection(this);
-			theSources = new BetterTreeMap<>(false, GroupedElementInfo::compareTo);
+			theSources = BetterTreeMap.<GroupedElementInfo> build(GroupedElementInfo::compareTo).buildMap();
 			theExposedId = new KeyEntryId(this);
 		}
 
@@ -547,12 +548,12 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 
 		ValueRef(ObservableCollectionActiveManagers.DerivedCollectionElement<V> valueElement) {
 			theValueElement = valueElement;
-			theKeys = new BetterTreeMap<>(false, (k1, k2) -> k1.entryId.compareTo(k2.entryId));
-			theSources = new BetterTreeMap<>(false, GroupedElementInfo::compareTo);
+			theKeys = BetterTreeMap.<KeyEntry> build((k1, k2) -> k1.entryId.compareTo(k2.entryId)).buildMap();
+			theSources = BetterTreeMap.<GroupedElementInfo> build(GroupedElementInfo::compareTo).buildMap();
 		}
 
 		BetterSortedSet<KeyEntry> adjustKeys(V oldValue, Object cause) {
-			BetterSortedSet<KeyEntry> keys = new BetterTreeSet<>(false, KeyEntry::compareInternal);
+			BetterSortedSet<KeyEntry> keys = BetterTreeSet.<KeyEntry> buildTreeSet(KeyEntry::compareInternal).build();
 			for (ElementId sourceElement : getValueManager().getSourceElements(theValueElement, getSourceCollection())) {
 				GroupedElementInfo info = getSourceElementInfo(sourceElement);
 				keys.addAll(info.theKeys);
@@ -592,7 +593,8 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		void updated(V oldValue, V newValue, Object cause) {
 			synchronized (DefaultActiveMultiMap.this) {
 				// Check source elements and adjust against keys
-				BetterSortedSet<GroupedElementInfo> elements = new BetterTreeSet<>(false, GroupedElementInfo::compareTo);
+				BetterSortedSet<GroupedElementInfo> elements = BetterTreeSet
+					.<GroupedElementInfo> buildTreeSet(GroupedElementInfo::compareTo).build();
 				for (ElementId sourceElement : getValueManager().getSourceElements(theValueElement, getSourceCollection()))
 					elements.add(getSourceElementInfo(sourceElement));
 				MapEntryHandle<GroupedElementInfo, ElementId> source = theSources.getTerminalEntry(true);
@@ -605,7 +607,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 				}
 				for (GroupedElementInfo info : elements)
 					theSources.put(info, info.addValue(this));
-				BetterSortedSet<KeyEntry> keys = new BetterTreeSet<>(false, KeyEntry::compareInternal);
+				BetterSortedSet<KeyEntry> keys = BetterTreeSet.<KeyEntry> buildTreeSet(KeyEntry::compareInternal).build();
 				for (GroupedElementInfo info : theSources.keySet()) {
 					info.checkKeys();
 					keys.addAll(info.theKeys);
@@ -674,8 +676,8 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 
 		GroupedElementInfo(ElementId sourceElement) {
 			this.sourceElement = sourceElement;
-			theKeys = new BetterTreeSet<>(false, KeyEntry::compareTo);
-			theValues = new BetterTreeSet<>(false, ValueRef::compareTo);
+			theKeys = BetterTreeSet.<KeyEntry> buildTreeSet(KeyEntry::compareTo).build();
+			theValues = BetterTreeSet.<ValueRef> buildTreeSet(ValueRef::compareTo).build();
 		}
 
 		@Override
@@ -735,7 +737,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 
 		ValueCollection(KeyEntry entry) {
 			theEntry = entry;
-			theValues = new BetterTreeSet<>(false, ValueRef::compareTo);
+			theValues = BetterTreeSet.<ValueRef> buildTreeSet(ValueRef::compareTo).build();
 		}
 
 		void addValues(Collection<ValueRef> values, Object cause) {
@@ -886,6 +888,11 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		@Override
 		public long getStamp() {
 			return DefaultActiveMultiMap.this.getStamp();
+		}
+
+		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return getValueManager().getThreadConstraint();
 		}
 
 		@Override
@@ -1215,6 +1222,11 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		}
 
 		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return DefaultActiveMultiMap.this.getThreadConstraint();
+		}
+
+		@Override
 		public boolean isLockSupported() {
 			return DefaultActiveMultiMap.this.isLockSupported();
 		}
@@ -1487,6 +1499,11 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		@Override
 		public Equivalence<? super V> equivalence() {
 			return getValueManager().equivalence();
+		}
+
+		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return DefaultActiveMultiMap.this.getThreadConstraint();
 		}
 
 		@Override

@@ -12,8 +12,9 @@ import org.observe.collect.CollectionChangeEvent.ElementChange;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
-import org.qommons.collect.ListenerList;
+import org.qommons.collect.ReentrantNotificationException;
 import org.qommons.debug.Debug;
 import org.qommons.debug.Debug.DebugData;
 import org.qommons.tree.RedBlackNode;
@@ -513,7 +514,7 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 		});
 		Subscription collSub = collection.onChange(evt -> {
 			if (isFiring)
-				throw new ListenerList.ReentrantNotificationException(ObservableCollection.REENTRANT_EVENT_ERROR);
+				throw new ReentrantNotificationException(ObservableCollection.REENTRANT_EVENT_ERROR);
 			Causable cause = evt.getRootCausable();
 			Map<Object, Object> data = cause.onFinish(key);
 			Object newTracker = data.compute(SESSION_TRACKER_PROPERTY, (k, tracker) -> {
@@ -700,7 +701,7 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 		if (tracker == null || tracker.changes.size() == 0)
 			return;
 		if (isFiring)
-			throw new ListenerList.ReentrantNotificationException(ObservableCollection.REENTRANT_EVENT_ERROR);
+			throw new ReentrantNotificationException(ObservableCollection.REENTRANT_EVENT_ERROR);
 		CollectionChangeEvent<E> evt = new CollectionChangeEvent<>(tracker.type, tracker.changes.dump(), cause);
 		isFiring = true;
 		try (Transaction t = evt.use()) {
@@ -708,6 +709,11 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 		} finally {
 			isFiring = false;
 		}
+	}
+
+	@Override
+	public ThreadConstraint getThreadConstraint() {
+		return collection.getThreadConstraint();
 	}
 
 	@Override

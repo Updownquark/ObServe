@@ -64,8 +64,8 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		super(path, sourceLink);
 		theDef = def;
 		theSupplier = (Function<TestHelper, T>) ObservableChainTester.SUPPLIERS.get(def.type);
-		theElements = new BetterTreeList<>(false);
-		theElementsForCollection = new BetterTreeList<>(false);
+		theElements = BetterTreeList.<CollectionLinkElement<S, T>>build().build();
+		theElementsForCollection = BetterTreeList.<CollectionLinkElement<S, T>> build().build();
 		boolean passive = def.oneStepFlow.supportsPassive() && (helper == null || helper.getBoolean());
 		if (passive)
 			theOneStepCollection = def.oneStepFlow.collectPassive();
@@ -97,8 +97,8 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		super(path, sourceLink);
 		theDef = def;
 		theSupplier = (Function<TestHelper, T>) ObservableChainTester.SUPPLIERS.get(def.type);
-		theElements = new BetterTreeList<>(false);
-		theElementsForCollection = new BetterTreeList<>(false);
+		theElements = BetterTreeList.<CollectionLinkElement<S, T>> build().build();
+		theElementsForCollection = BetterTreeList.<CollectionLinkElement<S, T>> build().build();
 		theOneStepCollection = oneStepCollection;
 		theMultiStepCollection = multiStepCollection;
 

@@ -22,6 +22,8 @@ import org.qommons.LambdaUtils;
 import org.qommons.Lockable;
 import org.qommons.Stamped;
 import org.qommons.StringUtils;
+import org.qommons.ThreadConstrained;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.TriConsumer;
 import org.qommons.TriFunction;
@@ -2225,6 +2227,11 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 				@Override
 				protected Object createIdentity() {
 					return Identifiable.wrap(EngineImpl.this.getIdentity(), "noInitChanges");
+				}
+
+				@Override
+				public ThreadConstraint getThreadConstraint() {
+					return ThreadConstrained.getThreadConstraint(theTransformation.getArgs());
 				}
 
 				@Override

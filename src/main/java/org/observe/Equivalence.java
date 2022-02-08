@@ -12,6 +12,7 @@ import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
@@ -256,12 +257,12 @@ public interface Equivalence<E> {
 
 		@Override
 		public <E2 extends E> BetterSet<E2> createSet() {
-			return new BetterTreeSet<>(false, compare);
+			return BetterTreeSet.<E2> buildTreeSet(compare).build();
 		}
 
 		@Override
 		public <E2 extends E, V> BetterMap<E2, V> createMap() {
-			return new BetterTreeMap<>(false, compare);
+			return BetterTreeMap.<E2> build(compare).buildMap();
 		}
 
 		@Override
@@ -451,6 +452,11 @@ public interface Equivalence<E> {
 			if (theIdentity == null)
 				theIdentity = Identifiable.wrap(theWrapped.getIdentity(), "map", theMap);
 			return theIdentity;
+		}
+
+		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return theWrapped.getThreadConstraint();
 		}
 
 		@Override

@@ -74,15 +74,17 @@ import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.ObservableCollection;
 import org.observe.config.ObservableConfig;
 import org.observe.util.AbstractSafeObservableCollection;
+import org.observe.util.SafeObservableCollection;
 import org.observe.util.TypeTokens;
-import org.observe.util.UIOptimizedCollection;
 import org.qommons.Causable;
 import org.qommons.Causable.CausableKey;
 import org.qommons.LambdaUtils;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.ListenerList;
+import org.qommons.collect.ReentrantNotificationException;
 import org.xml.sax.SAXException;
 
 import com.google.common.reflect.TypeToken;
@@ -134,8 +136,8 @@ public class ObservableSwingUtils {
 	public static <E> AbstractSafeObservableCollection<E> safe(ObservableCollection<E> collection, Observable<?> until) {
 		if (collection instanceof AbstractSafeObservableCollection)
 			return (AbstractSafeObservableCollection<E>) collection;
-		// return new SafeObservableCollection<E>(collection, EventQueue::isDispatchThread, EventQueue::invokeLater, until);
-		return new UIOptimizedCollection<>(collection, EventQueue::isDispatchThread, EventQueue::invokeLater, until);
+		return new SafeObservableCollection<>(collection, ThreadConstraint.EDT, until);
+		// return new UIOptimizedCollection<>(collection, ThreadConstraint.EDT, until);
 	}
 
 	/**
@@ -879,7 +881,7 @@ public class ObservableSwingUtils {
 		/* There is the potential for a cycle here, in the case where 2 similar tables or lists are created
 		 * with the same (or same-sourced) model and selection.
 		 * E.g. if a model update on one collection causes a selection update which causes a model update on a second collection,
-		 * an IllegalStateException will be thrown due to the attempted recursive modification.
+		 * an ReentrantNotificationException will be thrown due to the attempted recursive modification.
 		 * I can't think of a great way to prevent the attempt from happening.
 		 * The ObservableCollection API provides the ability to determine if an element from one collection
 		 * is derived from another collection, but not if both collections are derived from a common source.
@@ -906,7 +908,7 @@ public class ObservableSwingUtils {
 				try {
 					if (e.getIndex0() <= selModel.getMinSelectionIndex() && e.getIndex1() >= selModel.getMinSelectionIndex())
 						selection.set(model.getElementAt(selModel.getMinSelectionIndex()), e);
-				} catch (ListenerList.ReentrantNotificationException ex) {
+				} catch (ReentrantNotificationException ex) {
 					// See the cycle comment above
 				} finally {
 					callbackLock[0] = false;
@@ -936,7 +938,7 @@ public class ObservableSwingUtils {
 					if (update != null) {
 						try {
 							update.accept(selModel.getMaxSelectionIndex());
-						} catch (ListenerList.ReentrantNotificationException ex) {
+						} catch (ReentrantNotificationException ex) {
 							// See the cycle comment above
 						}
 					}
@@ -1100,7 +1102,7 @@ public class ObservableSwingUtils {
 		if (configFileLoc == null) {
 			configFileLoc = defaultConfigLocation;
 		}
-		ObservableConfig config = ObservableConfig.createRoot("configName");
+		ObservableConfig config = ObservableConfig.createRoot("configName", ThreadConstraint.EDT);
 		ObservableConfig.XmlEncoding encoding = ObservableConfig.XmlEncoding.DEFAULT;
 		File configFile = new File(configFileLoc);
 		if (configFile.exists()) {

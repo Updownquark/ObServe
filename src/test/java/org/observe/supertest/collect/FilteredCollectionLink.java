@@ -9,7 +9,6 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 
 import org.observe.SettableValue;
-import org.observe.SimpleSettableValue;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.ChainLinkGenerator;
 import org.observe.supertest.ObservableChainLink;
@@ -44,8 +43,9 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> im
 		public <T, X> ObservableCollectionLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestValueType targetType,
 			TestHelper helper) {
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
-			SettableValue<Function<T, String>> filterValue = new SimpleSettableValue<>(
-				(TypeToken<Function<T, String>>) (TypeToken<?>) new TypeToken<Object>() {}, false);
+			SettableValue<Function<T, String>> filterValue = SettableValue
+				.build((TypeToken<Function<T, String>>) (TypeToken<?>) new TypeToken<Object>() {
+				}).build();
 			filterValue.set(FilteredCollectionLink.filterFor(sourceCL.getDef().type, helper), null);
 			boolean variableFilter = helper.getBoolean();
 			CollectionDataFlow<?, ?, T> derivedOneStepFlow = sourceCL.getCollection().flow();

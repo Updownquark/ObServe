@@ -35,6 +35,7 @@ import org.qommons.LambdaUtils;
 import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
 import org.qommons.Stamped;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
@@ -187,6 +188,11 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 	}
 
 	@Override
+	public ThreadConstraint getThreadConstraint() {
+		return theLock.getThreadConstraint();
+	}
+
+	@Override
 	public boolean isLockSupported() {
 		return true;
 	}
@@ -284,6 +290,11 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 					if (theChangesIdentity == null)
 						theChangesIdentity = Identifiable.wrap(ObservableConfigValue.this.getIdentity(), "noInitChanges");
 					return theChangesIdentity;
+				}
+
+				@Override
+				public ThreadConstraint getThreadConstraint() {
+					return ObservableConfigValue.this.getThreadConstraint();
 				}
 
 				@Override
@@ -437,7 +448,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 			theFormat = format;
 			theChildName = childName;
 
-			theElements = new BetterTreeMap<>(false, ElementId::compareTo);
+			theElements = BetterTreeMap.<ElementId> build(ElementId::compareTo).buildMap();
 			theListeners = ListenerList.build().allowReentrant().withFastSize(false).build();
 
 			theCollection = createCollection();
@@ -766,6 +777,11 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 			@Override
 			public long getStamp() {
 				return ObservableConfigBackedCollection.this.getStamp();
+			}
+
+			@Override
+			public ThreadConstraint getThreadConstraint() {
+				return OCBCCollection.this.getThreadConstraint();
 			}
 
 			@Override
@@ -1368,6 +1384,11 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		@Override
 		public Object getIdentity() {
 			return theWrapped.getIdentity();
+		}
+
+		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return theCollection.getBacking().getThreadConstraint();
 		}
 
 		@Override

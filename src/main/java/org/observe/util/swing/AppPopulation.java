@@ -52,6 +52,7 @@ import org.observe.util.TypeTokens;
 import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
 import org.qommons.QommonsUtils.TimePrecision;
+import org.qommons.ThreadConstraint;
 import org.qommons.TimeUtils;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.CircularArrayList;
@@ -235,7 +236,7 @@ public class AppPopulation {
 		}
 
 		public void build(BiConsumer<ObservableConfig, Consumer<Component>> app) {
-			ObservableConfig config = ObservableConfig.createRoot("config");
+			ObservableConfig config = ObservableConfig.createRoot("config", ThreadConstraint.EDT);
 			String configName = theConfigName;
 			if (configName != null) {
 				File configDir = theConfigDir;

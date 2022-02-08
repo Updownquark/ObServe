@@ -22,6 +22,8 @@ import org.qommons.LambdaUtils;
 import org.qommons.Lockable;
 import org.qommons.Lockable.CoreId;
 import org.qommons.Stamped;
+import org.qommons.ThreadConstrained;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.ElementId;
@@ -153,6 +155,11 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return theSource.getThreadConstraint();
+		}
+
+		@Override
 		public boolean isLockSupported() {
 			return theSource.isLockSupported();
 		}
@@ -266,6 +273,11 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return theParent.getThreadConstraint();
+		}
+
+		@Override
 		public boolean isLockSupported() {
 			return theParent.isLockSupported();
 		}
@@ -365,6 +377,11 @@ public class ObservableCollectionPassiveManagers {
 		@Override
 		public Equivalence<? super T> equivalence() {
 			return theEquivalence;
+		}
+
+		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return theParent.getThreadConstraint();
 		}
 
 		@Override
@@ -659,6 +676,11 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return ThreadConstrained.getThreadConstraint(theParent, theRefresh);
+		}
+
+		@Override
 		public boolean isLockSupported() {
 			return theParent.isLockSupported() && theRefresh.isLockSupported();
 		}
@@ -756,6 +778,11 @@ public class ObservableCollectionPassiveManagers {
 		@Override
 		public Equivalence<? super T> equivalence() {
 			return theParent.equivalence();
+		}
+
+		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return theParent.getThreadConstraint();
 		}
 
 		@Override

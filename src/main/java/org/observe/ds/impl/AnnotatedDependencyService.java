@@ -17,6 +17,7 @@ import org.observe.collect.ObservableCollection;
 import org.observe.ds.ComponentController;
 import org.observe.ds.DSComponent;
 import org.observe.util.TypeTokens;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.collect.RRWLockingStrategy;
 import org.qommons.ex.CheckedExceptionWrapper;
@@ -196,7 +197,7 @@ public class AnnotatedDependencyService extends DefaultTypedDependencyService<Ob
 	}
 
 	public AnnotatedDependencyService() {
-		this(new RRWLockingStrategy(new ReentrantReadWriteLock(), "DS"));
+		this(new RRWLockingStrategy(new ReentrantReadWriteLock(), "DS", ThreadConstraint.ANY));
 	}
 
 	public AnnotatedDependencyService(Transactable lock) {

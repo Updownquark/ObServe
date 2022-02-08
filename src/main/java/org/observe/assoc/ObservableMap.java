@@ -24,6 +24,7 @@ import org.observe.collect.SettableElement;
 import org.observe.util.ObservableUtils.SubscriptionCause;
 import org.observe.util.TypeTokens;
 import org.qommons.Identifiable;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterCollection.EmptyCollection;
@@ -237,6 +238,11 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 					}
 
 					@Override
+					public ThreadConstraint getThreadConstraint() {
+						return ObservableMap.this.getThreadConstraint();
+					}
+
+					@Override
 					public boolean isSafe() {
 						return ObservableMap.this.isLockSupported();
 					}
@@ -326,6 +332,11 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 										}
 									}
 								});
+							}
+
+							@Override
+							public ThreadConstraint getThreadConstraint() {
+								return Enabled.this.getThreadConstraint();
 							}
 
 							@Override
@@ -425,6 +436,11 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 							}
 							return changes.subscribe(observer);
 						}
+					}
+
+					@Override
+					public ThreadConstraint getThreadConstraint() {
+						return changes.getThreadConstraint();
 					}
 
 					@Override

@@ -31,6 +31,7 @@ import org.qommons.Lockable;
 import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
 import org.qommons.Stamped;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
@@ -280,6 +281,11 @@ public class ObservableConfigContent {
 				}
 
 				@Override
+				public ThreadConstraint getThreadConstraint() {
+					return theRoot.getThreadConstraint();
+				}
+
+				@Override
 				public boolean isSafe() {
 					return theRoot.isLockSupported();
 				}
@@ -371,6 +377,11 @@ public class ObservableConfigContent {
 					if(theChangesIdentity==null)
 						theChangesIdentity = Identifiable.wrap(ObservableConfigValue.this.getIdentity(), "noInitChanges");
 					return theChangesIdentity;
+				}
+
+				@Override
+				public ThreadConstraint getThreadConstraint() {
+					return theConfigChild.theRoot.getThreadConstraint();
 				}
 
 				@Override
@@ -489,6 +500,11 @@ public class ObservableConfigContent {
 		@Override
 		public TypeToken<ObservableConfig> getType() {
 			return ObservableConfig.TYPE;
+		}
+
+		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return theConfig.getThreadConstraint();
 		}
 
 		@Override

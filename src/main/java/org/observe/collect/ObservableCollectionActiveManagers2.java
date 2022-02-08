@@ -1,6 +1,7 @@
 package org.observe.collect;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -34,10 +35,13 @@ import org.observe.util.TypeTokens;
 import org.observe.util.WeakListening;
 import org.qommons.BiTuple;
 import org.qommons.Identifiable;
+import org.qommons.LambdaUtils;
 import org.qommons.Lockable;
 import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
 import org.qommons.Ternian;
+import org.qommons.ThreadConstrained;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
@@ -258,6 +262,11 @@ public class ObservableCollectionActiveManagers2 {
 		}
 
 		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return ThreadConstrained.getThreadConstraint(theParent, theFilter);
+		}
+
+		@Override
 		public boolean isLockSupported() {
 			return theParent.isLockSupported() || theFilter.isLockSupported();
 		}
@@ -410,15 +419,15 @@ public class ObservableCollectionActiveManagers2 {
 						boolean newIsElement = equivalence().isElement(evt.getNewValue());
 						IntersectionElement newEl = newIsElement
 							? theValues.computeIfAbsent((T) evt.getNewValue(), v -> new IntersectionElement(v)) : null;
-						if (newEl != null)
-							theRightElementValues.put(evt.getElementId(), newEl);
-						else if (element != null)
-							theRightElementValues.remove(evt.getElementId());
-						if (element != null)
-							element.decrementRight(evt.getElementId(), evt);
-						if (newIsElement)
-							newEl.incrementRight(evt.getElementId(), evt);
-						break;
+							if (newEl != null)
+								theRightElementValues.put(evt.getElementId(), newEl);
+							else if (element != null)
+								theRightElementValues.remove(evt.getElementId());
+							if (element != null)
+								element.decrementRight(evt.getElementId(), evt);
+							if (newIsElement)
+								newEl.incrementRight(evt.getElementId(), evt);
+							break;
 					}
 				}
 			}, action -> theFilter.subscribe(action, fromStart).removeAll());
@@ -455,6 +464,11 @@ public class ObservableCollectionActiveManagers2 {
 		@Override
 		public Equivalence<? super T> equivalence() {
 			return theParent.equivalence();
+		}
+
+		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return theParent.getThreadConstraint();
 		}
 
 		@Override
@@ -651,7 +665,7 @@ public class ObservableCollectionActiveManagers2 {
 		ActiveRefreshingCollectionManager(ActiveCollectionManager<E, ?, T> parent, Observable<?> refresh) {
 			theParent = parent;
 			theRefresh = refresh;
-			theElements = new BetterTreeList<>(false);
+			theElements = BetterTreeList.<RefreshingElement> build().build();
 		}
 
 		@Override
@@ -667,6 +681,11 @@ public class ObservableCollectionActiveManagers2 {
 		@Override
 		public Equivalence<? super T> equivalence() {
 			return theParent.equivalence();
+		}
+
+		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return ThreadConstrained.getThreadConstraint(theParent, theRefresh);
 		}
 
 		@Override
@@ -872,9 +891,10 @@ public class ObservableCollectionActiveManagers2 {
 
 			RefreshHolder(Observable<?> refresh) {
 				theElementId = theRefreshObservables.putEntry(refresh, this, false).getElementId();
-				elements = new BetterTreeSet<>(false, RefreshingElement::compareTo);
+				elements = BetterTreeSet.<RefreshingElement> buildTreeSet(RefreshingElement::compareTo).build();
 				theSub = theListening.withConsumer(r -> {
-					try (Transaction t = Lockable.lockAll(Lockable.lockable(theLock, ElementRefreshingCollectionManager.this),
+					try (Transaction t = Lockable.lockAll(
+						Lockable.lockable(theLock, ElementRefreshingCollectionManager.this, ThreadConstraint.ANY),
 						Lockable.lockable(theParent, false, null))) {
 						RefreshingElement setting = (RefreshingElement) theSettingElement.get();
 						if (setting != null && elements.contains(setting))
@@ -931,6 +951,11 @@ public class ObservableCollectionActiveManagers2 {
 		}
 
 		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return ThreadConstraint.ANY; // Can't know
+		}
+
+		@Override
 		public boolean isLockSupported() {
 			return true;
 		}
@@ -944,7 +969,7 @@ public class ObservableCollectionActiveManagers2 {
 			if (write)
 				return theParent.lock(write, cause);
 			else
-				return Lockable.lockAll(Lockable.lockable(theParent, write, cause), Lockable.lockable(theLock, this));
+				return Lockable.lockAll(Lockable.lockable(theParent, write, cause), Lockable.lockable(theLock, this, ThreadConstraint.ANY));
 		}
 
 		@Override
@@ -956,12 +981,13 @@ public class ObservableCollectionActiveManagers2 {
 			if (write)
 				return theParent.tryLock(write, cause);
 			else
-				return Lockable.tryLockAll(Lockable.lockable(theParent, write, cause), Lockable.lockable(theLock, this));
+				return Lockable.tryLockAll(Lockable.lockable(theParent, write, cause),
+					Lockable.lockable(theLock, this, ThreadConstraint.ANY));
 		}
 
 		@Override
 		public CoreId getCoreId() {
-			return Lockable.getCoreId(Lockable.lockable(theParent, false, null), Lockable.lockable(theLock, this));
+			return Lockable.getCoreId(Lockable.lockable(theParent, false, null), Lockable.lockable(theLock, this, ThreadConstraint.ANY));
 		}
 
 		Transaction lockRefresh() {
@@ -1210,6 +1236,14 @@ public class ObservableCollectionActiveManagers2 {
 		@Override
 		public Equivalence<? super T> equivalence() {
 			return Equivalence.DEFAULT;
+		}
+
+		@Override
+		public ThreadConstraint getThreadConstraint() {
+			if (theParent.getThreadConstraint() == ThreadConstraint.NONE) {
+				return ThreadConstrained.getThreadConstraint(theOuterElements);
+			} else
+				return ThreadConstraint.ANY; // Can't know
 		}
 
 		@Override
@@ -1780,6 +1814,11 @@ public class ObservableCollectionActiveManagers2 {
 			}
 
 			@Override
+			public ThreadConstraint getThreadConstraint() {
+				return manager.getThreadConstraint();
+			}
+
+			@Override
 			public Transaction lock(boolean write, Object cause) {
 				Transaction local = lockLocal();
 				Transaction flowLock = manager.lock(write, cause);
@@ -1867,7 +1906,8 @@ public class ObservableCollectionActiveManagers2 {
 					@Override
 					public void update(X oldValue, X newValue, Object cause) {
 						// Need to make sure that the flattened collection isn't firing at the same time as the child collection
-						try (Transaction parentT = Transactable.writeLockWithOwner(theParent, () -> theHolder, null)) {
+						try (Transaction parentT = Lockable.lockAll(Lockable.lockable(theParent),
+							() -> Arrays.asList(Lockable.lockable(theHolder)), LambdaUtils.identity())) {
 							if (!wasPriorityNotified && priorityUpdateReceiver != null) {
 								wasPriorityNotified = true;
 								priorityUpdateReceiver.valueUpdated(oldValue, newValue, cause);

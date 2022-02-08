@@ -8,6 +8,7 @@ import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionEvent;
 import org.qommons.Lockable.CoreId;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
@@ -151,6 +152,11 @@ public abstract class ObservableCollectionWrapper<E> implements ObservableCollec
 	@Override
 	public boolean isEmpty() {
 		return getWrapped().isEmpty();
+	}
+
+	@Override
+	public ThreadConstraint getThreadConstraint() {
+		return getWrapped().getThreadConstraint();
 	}
 
 	@Override

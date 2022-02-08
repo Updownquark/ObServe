@@ -203,7 +203,7 @@ public class ObservableSortedCollectionImpl {
 				return getWrapped().onChange(new Consumer<ObservableCollectionEvent<? extends E>>() {
 					private final BetterSortedSet<ElementId> thePresentElements;
 					{
-						thePresentElements = new BetterTreeSet<>(false, ElementId::compareTo);
+						thePresentElements = BetterTreeSet.<ElementId> buildTreeSet(ElementId::compareTo).build();
 						for (CollectionElement<E> el : elements())
 							thePresentElements.add(unwrap(el.getElementId()));
 					}
@@ -553,7 +553,7 @@ public class ObservableSortedCollectionImpl {
 		@Override
 		public <X> SortedDataFlow<E, T, X> transformEquivalent(TypeToken<X> target,
 			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ? extends Transformation<T, X>> transform,
-			Comparator<? super X> compare) {
+				Comparator<? super X> compare) {
 			Transformation<T, X> def = transform.apply(new ReversibleTransformationPrecursor<>());
 			return new SortedTransformOp<>(getSource(), this, target, def);
 		}
@@ -645,7 +645,7 @@ public class ObservableSortedCollectionImpl {
 		@Override
 		public <X> SortedDataFlow<E, E, X> transformEquivalent(TypeToken<X> target,
 			Function<? super ReversibleTransformationPrecursor<E, X, ?>, ? extends Transformation<E, X>> transform,
-			Comparator<? super X> compare) {
+				Comparator<? super X> compare) {
 			Transformation<E, X> def = transform.apply(new ReversibleTransformationPrecursor<>());
 			return new SortedTransformOp<>(getSource(), this, target, def);
 		}

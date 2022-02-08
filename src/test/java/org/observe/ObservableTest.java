@@ -9,10 +9,10 @@ import com.google.common.reflect.TypeToken;
 
 /** Tests observable classes in the org.observe package */
 public class ObservableTest {
-	/** Tests simple {@link SimpleSettableValue} functionality */
+	/** Tests simple {@link SettableValue} functionality */
 	@Test
 	public void settableValue() {
-		SimpleSettableValue<Integer> obs = new SimpleSettableValue<>(Integer.TYPE, false);
+		SettableValue<Integer> obs = SettableValue.build(Integer.TYPE).build();
 		obs.set(0, null);
 		int [] received = new int[] {0};
 		obs.changes().act(value -> received[0] = value.getNewValue());
@@ -25,7 +25,7 @@ public class ObservableTest {
 	/** Tests {@link ObservableValue#map(java.util.function.Function)} */
 	@Test
 	public void valueMap() {
-		SimpleSettableValue<Integer> obs = new SimpleSettableValue<>(Integer.TYPE, false);
+		SettableValue<Integer> obs = SettableValue.build(Integer.TYPE).build();
 		obs.set(0, null);
 		int [] received = new int[] {0};
 		obs.map(//
@@ -120,7 +120,7 @@ public class ObservableTest {
 	/** Tests {@link ObservableValue#takeUntil(Observable)} */
 	@Test
 	public void valueTakeUntil() {
-		SimpleSettableValue<Integer> obs = new SimpleSettableValue<>(Integer.TYPE, false);
+		SettableValue<Integer> obs = SettableValue.build(Integer.TYPE).build();
 		obs.set(0, null);
 		SimpleObservable<Boolean> stop = new SimpleObservable<>();
 		int [] received = new int[] {0};
@@ -208,11 +208,13 @@ public class ObservableTest {
 	/** Tests {@link ObservableValue#flatten(ObservableValue)} */
 	@Test
 	public void observableValueFlatten() {
-		SimpleSettableValue<ObservableValue<Integer>> outer = new SimpleSettableValue<>(new TypeToken<ObservableValue<Integer>>() {}, false);
-		SimpleSettableValue<Integer> inner1 = new SimpleSettableValue<>(Integer.TYPE, false);
+		SettableValue<ObservableValue<Integer>> outer = SettableValue
+			.<ObservableValue<Integer>> build(new TypeToken<ObservableValue<Integer>>() {
+			}).build();
+		SettableValue<Integer> inner1 = SettableValue.build(Integer.TYPE).build();
 		inner1.set(1, null);
 		outer.set(inner1, null);
-		SimpleSettableValue<Integer> inner2 = new SimpleSettableValue<>(Integer.TYPE, false);
+		SettableValue<Integer> inner2 = SettableValue.build(Integer.TYPE).build();
 		inner2.set(2, null);
 		int [] received = new int[1];
 		ObservableValue.flatten(outer).changes().act(value -> received[0] = value.getNewValue());
@@ -235,9 +237,9 @@ public class ObservableTest {
 	 */
 	@Test
 	public void observableFirstValue() {
-		SimpleSettableValue<Integer> v1 = new SimpleSettableValue<>(TypeToken.of(Integer.class), true);
-		SimpleSettableValue<Integer> v2 = new SimpleSettableValue<>(TypeToken.of(Integer.class), true);
-		SimpleSettableValue<Integer> v3 = new SimpleSettableValue<>(TypeToken.of(Integer.class), true);
+		SettableValue<Integer> v1 = SettableValue.build(TypeToken.of(Integer.class)).build();
+		SettableValue<Integer> v2 = SettableValue.build(TypeToken.of(Integer.class)).build();
+		SettableValue<Integer> v3 = SettableValue.build(TypeToken.of(Integer.class)).build();
 		ObservableValue<Integer> first = ObservableValue.firstValue(TypeToken.of(Integer.class), null, null, v1, v2, v3);
 
 		assertEquals(null, first.get());

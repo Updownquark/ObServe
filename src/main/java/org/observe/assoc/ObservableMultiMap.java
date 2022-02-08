@@ -31,6 +31,7 @@ import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
@@ -402,6 +403,12 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		@Override
 		public B withCollectionLocking(Function<Object, CollectionLockingStrategy> locking) {
 			theBackingBuilder.withCollectionLocking(locking);
+			return (B) this;
+		}
+
+		@Override
+		public B withThreadConstraint(ThreadConstraint threadConstraint) {
+			theBackingBuilder.withThreadConstraint(threadConstraint);
 			return (B) this;
 		}
 
@@ -1261,7 +1268,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 					sub = theObservableCombination.apply(values).changes().act(evt -> value = evt.getNewValue());
 				}
 			}
-			BetterSortedMap<ElementId, MapEntry> entries = new BetterTreeMap<>(false, ElementId::compareTo);
+			BetterSortedMap<ElementId, MapEntry> entries = BetterTreeMap.<ElementId> build(ElementId::compareTo).buildMap();
 			try (Transaction t = getSource().lock(false, null)) {
 				if (!populate) {
 					for (CollectionElement<K> keyEl : getSource().keySet().elements())

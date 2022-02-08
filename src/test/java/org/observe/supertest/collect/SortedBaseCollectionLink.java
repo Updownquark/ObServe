@@ -47,10 +47,10 @@ public class SortedBaseCollectionLink<T> extends BaseCollectionLink<T> {
 			ObservableCollection<X> base;
 			boolean distinct = helper.getBoolean();
 			if (distinct) {
-				BetterSortedSet<X> backing = new BetterTreeSet<>(true, compare);
+				BetterSortedSet<X> backing = BetterTreeSet.<X> buildTreeSet(compare).build();
 				base = new DefaultObservableSortedSet<>((TypeToken<X>) type.getType(), backing);
 			} else {
-				BetterSortedList<X> backing = new SortedTreeList<>(true, compare);
+				BetterSortedList<X> backing = SortedTreeList.<X> buildTreeList(compare).build();
 				base = new DefaultObservableCollection<>((TypeToken<X>) type.getType(), backing);
 			}
 			ObservableCollectionTestDef<X> def = new ObservableCollectionTestDef<>(type, base.flow(), base.flow(), true, true);

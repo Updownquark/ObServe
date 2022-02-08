@@ -6,6 +6,7 @@ import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
 import org.qommons.Identifiable;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
@@ -140,6 +141,11 @@ public interface ObservableElement<T> extends ObservableValue<T> {
 					@Override
 					public boolean isSafe() {
 						return true;
+					}
+
+					@Override
+					public ThreadConstraint getThreadConstraint() {
+						return ThreadConstraint.NONE;
 					}
 
 					@Override

@@ -18,6 +18,7 @@ import org.qommons.BiTuple;
 import org.qommons.Identifiable;
 import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
@@ -364,7 +365,7 @@ public class ObservableCollectionActiveManagers {
 
 		BaseCollectionManager(ObservableCollection<E> source) {
 			theSource = source;
-			theElementListeners = new BetterTreeMap<>(false, ElementId::compareTo);
+			theElementListeners = BetterTreeMap.<ElementId> build(ElementId::compareTo).buildMap();
 		}
 
 		protected ObservableCollection<E> getSource() {
@@ -374,6 +375,11 @@ public class ObservableCollectionActiveManagers {
 		@Override
 		public Object getIdentity() {
 			return Identifiable.wrap(theSource.getIdentity(), "activeManager");
+		}
+
+		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return theSource.getThreadConstraint();
 		}
 
 		@Override
@@ -595,6 +601,11 @@ public class ObservableCollectionActiveManagers {
 		}
 
 		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return theParent.getThreadConstraint();
+		}
+
+		@Override
 		public boolean isLockSupported() {
 			return theParent.isLockSupported();
 		}
@@ -709,7 +720,7 @@ public class ObservableCollectionActiveManagers {
 		protected SortedManager(ActiveCollectionManager<E, ?, T> parent, Comparator<? super T> compare) {
 			theParent = parent;
 			theCompare = compare;
-			theValues = new BetterTreeList<>(false);
+			theValues = BetterTreeList.<BiTuple<T, DerivedCollectionElement<T>>> build().build();
 			theTupleCompare = (t1, t2) -> {
 				int comp = theCompare.compare(t1.getValue1(), t2.getValue1());
 				if (comp == 0)
@@ -731,6 +742,11 @@ public class ObservableCollectionActiveManagers {
 		@Override
 		public Equivalence<? super T> equivalence() {
 			return theParent.equivalence();
+		}
+
+		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return theParent.getThreadConstraint();
 		}
 
 		@Override
@@ -1089,6 +1105,11 @@ public class ObservableCollectionActiveManagers {
 		}
 
 		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return theParent.getThreadConstraint();
+		}
+
+		@Override
 		public boolean isLockSupported() {
 			return theParent.isLockSupported();
 		}
@@ -1329,6 +1350,11 @@ public class ObservableCollectionActiveManagers {
 		}
 
 		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return theParent.getThreadConstraint();
+		}
+
+		@Override
 		public boolean isLockSupported() {
 			return theParent.isLockSupported();
 		}
@@ -1423,7 +1449,7 @@ public class ObservableCollectionActiveManagers {
 			Equivalence<? super T> equivalence) {
 			super(parent, targetType, def, equivalence);
 
-			theElements = new BetterTreeSet<>(false, TransformedElement::compareTo);
+			theElements = BetterTreeSet.<TransformedElement> buildTreeSet(TransformedElement::compareTo).build();
 		}
 
 		@Override

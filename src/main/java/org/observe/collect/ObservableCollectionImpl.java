@@ -1,6 +1,7 @@
 package org.observe.collect;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
@@ -42,10 +43,13 @@ import org.qommons.ConcurrentHashSet;
 import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.IdentityKey;
+import org.qommons.LambdaUtils;
 import org.qommons.Lockable;
 import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
 import org.qommons.Ternian;
+import org.qommons.ThreadConstrained;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
@@ -59,6 +63,7 @@ import org.qommons.collect.ElementId;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.collect.ReentrantNotificationException;
 import org.qommons.debug.Debug;
 import org.qommons.ex.CheckedExceptionWrapper;
 import org.qommons.tree.BetterTreeSet;
@@ -203,6 +208,11 @@ public final class ObservableCollectionImpl {
 						}
 
 						@Override
+						public ThreadConstraint getThreadConstraint() {
+							return theCollection.getThreadConstraint();
+						}
+
+						@Override
 						public boolean isSafe() {
 							return theCollection.isLockSupported();
 						}
@@ -322,6 +332,11 @@ public final class ObservableCollectionImpl {
 				@Override
 				protected Object createIdentity() {
 					return Identifiable.wrap(OnlyElement.this.getIdentity(), "elementChanges");
+				}
+
+				@Override
+				public ThreadConstraint getThreadConstraint() {
+					return theCollection.getThreadConstraint();
 				}
 
 				@Override
@@ -708,6 +723,11 @@ public final class ObservableCollectionImpl {
 				}
 
 				@Override
+				public ThreadConstraint getThreadConstraint() {
+					return theCollection.getThreadConstraint();
+				}
+
+				@Override
 				public boolean isSafe() {
 					return theCollection.isLockSupported();
 				}
@@ -886,6 +906,11 @@ public final class ObservableCollectionImpl {
 									}
 								}
 							});
+						}
+
+						@Override
+						public ThreadConstraint getThreadConstraint() {
+							return getCollection().getThreadConstraint();
 						}
 
 						@Override
@@ -1184,6 +1209,11 @@ public final class ObservableCollectionImpl {
 						init[0] = true;
 					}
 					return sub;
+				}
+
+				@Override
+				public ThreadConstraint getThreadConstraint() {
+					return theCollection.getThreadConstraint();
 				}
 
 				@Override
@@ -1570,6 +1600,11 @@ public final class ObservableCollectionImpl {
 				}
 
 				@Override
+				public ThreadConstraint getThreadConstraint() {
+					return ThreadConstrained.getThreadConstraint(theLeft, theRight);
+				}
+
+				@Override
 				public Transaction lock() {
 					return Lockable.lockAll(Lockable.lockable(theLeft), Lockable.lockable(theRight));
 				}
@@ -1705,6 +1740,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return getWrapped().getThreadConstraint();
+		}
+
+		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
 			try (Transaction t = lock(false, null)) {
 				return getWrapped().onChange(new ReversedSubscriber(observer, size()));
@@ -1784,6 +1824,7 @@ public final class ObservableCollectionImpl {
 		private final PassiveCollectionManager<E, ?, T> theFlow;
 		private final Equivalence<? super T> theEquivalence;
 		private final boolean isReversed;
+		volatile boolean isFiring;
 
 		/**
 		 * @param source The source collection
@@ -1832,23 +1873,34 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return theFlow.getThreadConstraint();
+		}
+
+		@Override
 		public boolean isLockSupported() {
-			return theSource.isLockSupported() && theFlow.isLockSupported();
+			return theFlow.isLockSupported();
 		}
 
 		@Override
 		public Transaction lock(boolean write, Object cause) {
-			return Lockable.lockAll(Lockable.lockable(theSource, write, cause), Lockable.lockable(theFlow, write, cause));
+			Transaction t = theFlow.lock(write, cause);
+			if (write && isFiring)
+				throw new ReentrantNotificationException(REENTRANT_EVENT_ERROR);
+			return t;
 		}
 
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
-			return Lockable.tryLockAll(Lockable.lockable(theSource, write, cause), Lockable.lockable(theFlow, write, cause));
+			Transaction t = theFlow.tryLock(write, cause);
+			if (write && t != null && isFiring)
+				throw new ReentrantNotificationException(REENTRANT_EVENT_ERROR);
+			return t;
 		}
 
 		@Override
 		public CoreId getCoreId() {
-			return Transactable.getCoreId(theSource, theFlow);
+			return theFlow.getCoreId();
 		}
 
 		@Override
@@ -1940,7 +1992,9 @@ public final class ObservableCollectionImpl {
 				before = temp;
 				first = !first;
 			}
-			return elementFor(theSource.move(mapId(valueEl), after, before, first, afterRemove), null);
+			try (Transaction t = lock(true, null)) {
+				return elementFor(theSource.move(mapId(valueEl), after, before, first, afterRemove), null);
+			}
 		}
 
 		@Override
@@ -2150,7 +2204,9 @@ public final class ObservableCollectionImpl {
 
 				@Override
 				public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
-					flowEl.set(value);
+					try (Transaction t = lock(true, null)) {
+						flowEl.set(value);
+					}
 				}
 
 				@Override
@@ -2160,7 +2216,9 @@ public final class ObservableCollectionImpl {
 
 				@Override
 				public void remove() throws UnsupportedOperationException {
-					flowEl.remove();
+					try (Transaction t = lock(true, null)) {
+						flowEl.remove();
+					}
 				}
 
 				@Override
@@ -2192,18 +2250,25 @@ public final class ObservableCollectionImpl {
 						return;
 					}
 					try (Transaction sourceLock = theSource.lock(false, evt)) {
-						currentMap[0] = evt.getNewValue();
-						CollectionElement<E> el = theSource.getTerminalElement(!isReversed);
-						int index = 0;
-						while (el != null) {
-							E sourceVal = el.get();
-							ObservableCollectionEvent<? extends T> evt2 = new ObservableCollectionEvent<>(mapId(el.getElementId()),
-								index++, CollectionChangeType.set, false, evt.getOldValue().apply(sourceVal),
-								currentMap[0].apply(sourceVal), evt);
-							try (Transaction evtT = evt2.use()) {
-								observer.accept(evt2);
+						if (isFiring)
+							throw new ReentrantNotificationException(REENTRANT_EVENT_ERROR);
+						isFiring = true;
+						try {
+							currentMap[0] = evt.getNewValue();
+							CollectionElement<E> el = theSource.getTerminalElement(!isReversed);
+							int index = 0;
+							while (el != null) {
+								E sourceVal = el.get();
+								ObservableCollectionEvent<? extends T> evt2 = new ObservableCollectionEvent<>(mapId(el.getElementId()),
+									index++, CollectionChangeType.set, false, evt.getOldValue().apply(sourceVal),
+									currentMap[0].apply(sourceVal), evt);
+								try (Transaction evtT = evt2.use()) {
+									observer.accept(evt2);
+								}
+								el = theSource.getAdjacentElement(el.getElementId(), !isReversed);
 							}
-							el = theSource.getAdjacentElement(el.getElementId(), !isReversed);
+						} finally {
+							isFiring = false;
 						}
 					}
 				});
@@ -2213,41 +2278,48 @@ public final class ObservableCollectionImpl {
 
 						@Override
 						public void accept(ObservableCollectionEvent<? extends E> evt) {
-							try (Transaction t = theFlow.lock(true, evt)) {
-								T oldValue, newValue;
-								switch (evt.getType()) {
-								case add:
-									newValue = currentMap[0].apply(evt.getNewValue());
-									oldValue = null;
-									break;
-								case remove:
-									oldValue = currentMap[0].apply(evt.getOldValue());
-									newValue = oldValue;
-									break;
-								case set:
-									BiTuple<T, T> values = theFlow.map(evt.getOldValue(), evt.getNewValue(), currentMap[0]);
-									if (values == null)
-										return;
-									oldValue = values.getValue1();
-									newValue = values.getValue2();
-									break;
-								default:
-									throw new IllegalStateException("Unrecognized collection change type: " + evt.getType());
-								}
-								int index;
-								if (!isReversed)
-									index = evt.getIndex();
-								else {
-									if (evt.getType() == CollectionChangeType.add)
-										theSize++;
-									index = theSize - evt.getIndex() - 1;
-									if (evt.getType() == CollectionChangeType.remove)
-										theSize--;
-								}
-								ObservableCollectionEvent<? extends T> evt2 = new ObservableCollectionEvent<>(mapId(evt.getElementId()),
-									index, evt.getType(), evt.isMove(), oldValue, newValue, evt);
-								try (Transaction evtT = evt2.use()) {
-									observer.accept(evt2);
+							try (Transaction t = theFlow.lock(false, evt)) {
+								if (isFiring)
+									throw new ReentrantNotificationException(REENTRANT_EVENT_ERROR);
+								isFiring = true;
+								try {
+									T oldValue, newValue;
+									switch (evt.getType()) {
+									case add:
+										newValue = currentMap[0].apply(evt.getNewValue());
+										oldValue = null;
+										break;
+									case remove:
+										oldValue = currentMap[0].apply(evt.getOldValue());
+										newValue = oldValue;
+										break;
+									case set:
+										BiTuple<T, T> values = theFlow.map(evt.getOldValue(), evt.getNewValue(), currentMap[0]);
+										if (values == null)
+											return;
+										oldValue = values.getValue1();
+										newValue = values.getValue2();
+										break;
+									default:
+										throw new IllegalStateException("Unrecognized collection change type: " + evt.getType());
+									}
+									int index;
+									if (!isReversed)
+										index = evt.getIndex();
+									else {
+										if (evt.getType() == CollectionChangeType.add)
+											theSize++;
+										index = theSize - evt.getIndex() - 1;
+										if (evt.getType() == CollectionChangeType.remove)
+											theSize--;
+									}
+									ObservableCollectionEvent<? extends T> evt2 = new ObservableCollectionEvent<>(mapId(evt.getElementId()),
+										index, evt.getType(), evt.isMove(), oldValue, newValue, evt);
+									try (Transaction evtT = evt2.use()) {
+										observer.accept(evt2);
+									}
+								} finally {
+									isFiring = false;
 								}
 							}
 						}
@@ -2356,7 +2428,7 @@ public final class ObservableCollectionImpl {
 		 */
 		public ActiveDerivedCollection(ActiveCollectionManager<?, ?, T> flow, Observable<?> until) {
 			theFlow = flow;
-			theDerivedElements = new BetterTreeSet<>(false, (e1, e2) -> e1.element.compareTo(e2.element));
+			theDerivedElements = BetterTreeSet.<DerivedElementHolder<T>> buildTreeSet((e1, e2) -> e1.element.compareTo(e2.element)).build();
 			theListeners = new ListenerList<>("Reentrancy not allowed");
 			theListenerCount = new AtomicInteger();
 			theEquivalence = flow.equivalence();
@@ -2492,17 +2564,26 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return theFlow.getThreadConstraint();
+		}
+
+		@Override
 		public boolean isLockSupported() {
 			return theFlow.isLockSupported();
 		}
 
 		@Override
 		public Transaction lock(boolean write, Object cause) {
+			if (write && theListeners.isFiring())
+				throw new ReentrantNotificationException(REENTRANT_EVENT_ERROR);
 			return theFlow.lock(write, cause);
 		}
 
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
+			if (write && theListeners.isFiring())
+				throw new ReentrantNotificationException(REENTRANT_EVENT_ERROR);
 			return theFlow.tryLock(write, cause);
 		}
 
@@ -2614,6 +2695,8 @@ public final class ObservableCollectionImpl {
 
 				@Override
 				public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
+					if (theListeners.isFiring())
+						throw new ReentrantNotificationException(REENTRANT_EVENT_ERROR);
 					el.element.set(value);
 				}
 
@@ -2624,6 +2707,8 @@ public final class ObservableCollectionImpl {
 
 				@Override
 				public void remove() throws UnsupportedOperationException {
+					if (theListeners.isFiring())
+						throw new ReentrantNotificationException(REENTRANT_EVENT_ERROR);
 					el.element.remove();
 				}
 
@@ -2727,6 +2812,8 @@ public final class ObservableCollectionImpl {
 		@Override
 		public CollectionElement<T> addElement(T value, ElementId after, ElementId before, boolean first)
 			throws UnsupportedOperationException, IllegalArgumentException {
+			if (theListeners.isFiring())
+				throw new ReentrantNotificationException(REENTRANT_EVENT_ERROR);
 			ObservableCollectionActiveManagers.DerivedCollectionElement<T> derived = theFlow.addElement(value, //
 				strip(after), strip(before), first);
 			return derived == null ? null : elementFor(idFromSynthetic(derived));
@@ -2741,6 +2828,8 @@ public final class ObservableCollectionImpl {
 		@Override
 		public CollectionElement<T> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
 			throws UnsupportedOperationException, IllegalArgumentException {
+			if (theListeners.isFiring())
+				throw new ReentrantNotificationException(REENTRANT_EVENT_ERROR);
 			ObservableCollectionActiveManagers.DerivedCollectionElement<T> derived = theFlow.move(//
 				strip(valueEl), strip(after), strip(before), first, afterRemove);
 			return elementFor(idFromSynthetic(derived));
@@ -2760,6 +2849,8 @@ public final class ObservableCollectionImpl {
 		public void clear() {
 			if (isEmpty())
 				return;
+			if (theListeners.isFiring())
+				throw new ReentrantNotificationException(REENTRANT_EVENT_ERROR);
 			Causable cause = Causable.simpleCause();
 			try (Transaction cst = cause.use(); Transaction t = lock(true, cause)) {
 				if (!theFlow.clear()) {
@@ -2773,6 +2864,8 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public void setValue(Collection<ElementId> elements, T value) {
+			if (theListeners.isFiring())
+				throw new ReentrantNotificationException(REENTRANT_EVENT_ERROR);
 			theFlow.setValues(//
 				elements.stream().map(el -> ((DerivedElementHolder<T>) el).element).collect(Collectors.toList()), value);
 		}
@@ -2873,18 +2966,34 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public ThreadConstraint getThreadConstraint() {
+			if (theCollectionObservable.getThreadConstraint() == ThreadConstraint.NONE)
+				return ThreadConstrained.getThreadConstraint(theCollectionObservable.get());
+			else
+				return ThreadConstraint.ANY; // Can't know
+		}
+
+		@Override
 		public boolean isLockSupported() {
 			return theCollectionObservable.isLockSupported();
 		}
 
 		@Override
 		public Transaction lock(boolean write, Object cause) {
-			return Transactable.writeLockWithOwner(theCollectionObservable, theCollectionObservable::get, cause);
+			if (write)
+				return Transactable.writeLockWithOwner(theCollectionObservable, theCollectionObservable::get, cause);
+			else
+				return Lockable.lockAll(theCollectionObservable, () -> Arrays.asList(Lockable.lockable(theCollectionObservable.get())),
+					LambdaUtils.identity());
 		}
 
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
-			return Transactable.tryWriteLockWithOwner(theCollectionObservable, theCollectionObservable::get, cause);
+			if (write)
+				return Transactable.tryWriteLockWithOwner(theCollectionObservable, theCollectionObservable::get, cause);
+			else
+				return Lockable.tryLockAll(theCollectionObservable, () -> Arrays.asList(Lockable.lockable(theCollectionObservable.get())),
+					LambdaUtils.identity());
 		}
 
 		@Override
@@ -3197,6 +3306,11 @@ public final class ObservableCollectionImpl {
 						s.append(debugName).append(": ");
 					debugMsg.accept(s);
 					System.out.println(s.toString());
+				}
+
+				@Override
+				public ThreadConstraint getThreadConstraint() {
+					return FlattenedValueCollection.this.getThreadConstraint();
 				}
 
 				@Override

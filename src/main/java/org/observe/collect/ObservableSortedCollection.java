@@ -203,7 +203,7 @@ public interface ObservableSortedCollection<E> extends ObservableCollection<E>, 
 	 * @return An immutable collection with the given values
 	 */
 	static <E> ObservableSortedCollection<E> of(TypeToken<E> type, Comparator<? super E> compare, Collection<? extends E> values) {
-		return ObservableCollection.create(type, new BetterTreeList<E>(false).withAll(values))//
+		return ObservableCollection.create(type, BetterTreeList.<E> build().build().withAll(values))//
 			.flow().distinctSorted(compare, false).unmodifiable(false).collect();
 	}
 
@@ -243,7 +243,7 @@ public interface ObservableSortedCollection<E> extends ObservableCollection<E>, 
 	 * @return A new sorted collection to back a collection created by {@link #create(TypeToken, Comparator)}
 	 */
 	static <E> BetterSortedList<E> createDefaultBacking(Comparator<? super E> compare) {
-		return new SortedTreeList<>(true, compare);
+		return SortedTreeList.<E> buildTreeList(compare).build();
 	}
 
 	/**

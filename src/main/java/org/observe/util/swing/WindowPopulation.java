@@ -3,6 +3,7 @@ package org.observe.util.swing;
 import java.awt.Component;
 import java.awt.Dialog;
 import java.awt.Dialog.ModalityType;
+import java.awt.EventQueue;
 import java.awt.Frame;
 import java.awt.Image;
 import java.awt.LayoutManager;
@@ -37,6 +38,7 @@ import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.observe.util.swing.PanelPopulation.Tooltipped;
 import org.observe.util.swing.PanelPopulation.UiAction;
 import org.observe.util.swing.PanelPopulation.WindowBuilder;
+import org.qommons.BreakpointHere;
 import org.qommons.Causable;
 import org.qommons.Transaction;
 
@@ -159,6 +161,9 @@ public class WindowPopulation {
 
 		@Override
 		public P withVContent(Consumer<PanelPopulator<?, ?>> content) {
+			if (!EventQueue.isDispatchThread())
+				System.err.println(
+					"Calling panel population off of the EDT from " + BreakpointHere.getCodeLine(1) + "--could cause threading problems!!");
 			PanelPopulator<?, ?> populator = PanelPopulation.populateVPanel(null, theUntil);
 			content.accept(populator);
 			return withContent(populator.getContainer());
@@ -166,6 +171,9 @@ public class WindowPopulation {
 
 		@Override
 		public P withHContent(LayoutManager layout, Consumer<PanelPopulator<?, ?>> content) {
+			if (!EventQueue.isDispatchThread())
+				System.err.println(
+					"Calling panel population off of the EDT from " + BreakpointHere.getCodeLine(1) + "--could cause threading problems!!");
 			PanelPopulator<?, ?> populator = PanelPopulation.populateHPanel(null, layout, theUntil);
 			content.accept(populator);
 			return withContent(populator.getContainer());

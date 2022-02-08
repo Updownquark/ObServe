@@ -40,6 +40,7 @@ import org.qommons.MethodRetrievingHandler;
 import org.qommons.QommonsUtils;
 import org.qommons.Stamped;
 import org.qommons.StringUtils;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
@@ -816,6 +817,11 @@ public class EntityReflector<E> {
 		}
 
 		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return theLock.getThreadConstraint();
+		}
+
+		@Override
 		public boolean isLockSupported() {
 			return theLock.isLockSupported();
 		}
@@ -880,6 +886,11 @@ public class EntityReflector<E> {
 			@Override
 			protected Object createIdentity() {
 				return Identifiable.wrap(ObservableFieldImpl.this.getIdentity(), "noInitChanges");
+			}
+
+			@Override
+			public ThreadConstraint getThreadConstraint() {
+				return ObservableFieldImpl.this.getThreadConstraint();
 			}
 
 			@Override
@@ -1902,7 +1913,8 @@ public class EntityReflector<E> {
 				}
 			}
 		}
-		BetterSortedSet<MethodInterpreter<E, ?>> methods = new BetterTreeSet<>(false, MethodInterpreter::compareTo);
+		BetterSortedSet<MethodInterpreter<E, ?>> methods = BetterTreeSet
+			.<MethodInterpreter<E, ?>> buildTreeSet(MethodInterpreter::compareTo).build();
 		for (int i = 0; i < fields.keySize(); i++) {
 			String fieldName = fields.keySet().get(i);
 			Method getter = fieldGetters.get(fieldName);

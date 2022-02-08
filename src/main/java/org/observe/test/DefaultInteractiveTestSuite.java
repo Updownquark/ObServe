@@ -19,6 +19,7 @@ import org.observe.config.ObservableConfig;
 import org.observe.config.ObservableConfig.XmlEncoding;
 import org.observe.config.ObservableConfigPath;
 import org.observe.config.SyncValueSet;
+import org.qommons.ThreadConstraint;
 import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
@@ -79,7 +80,8 @@ class DefaultInteractiveTestSuite implements InteractiveTestSuite {
 	public synchronized void addTestCase(InteractiveTest test, String configLocation) {
 		if (theConfigs.containsKey(test.getName()))
 			throw new IllegalArgumentException("A test named " + test.getName() + " already exists in this suite");
-		theConfigs.put(test.getName(), ObservableConfig.createRoot(test.getName(), null, __ -> new FastFailLockingStrategy()));
+		theConfigs.put(test.getName(),
+			ObservableConfig.createRoot(test.getName(), null, __ -> new FastFailLockingStrategy(theLocker.getThreadConstraint())));
 		theContent.add(test);
 		if (configLocation != null)
 			theConfigLocations.putIfAbsent(test.getName(), configLocation);
@@ -131,7 +133,7 @@ class DefaultInteractiveTestSuite implements InteractiveTestSuite {
 		String location = theConfigLocations.get(testName);
 		if (location != null) {
 			URL url = QommonsConfig.toUrl(location);
-			ObservableConfig xmlConfig = ObservableConfig.createRoot("", null, __ -> new FastFailLockingStrategy());
+			ObservableConfig xmlConfig = ObservableConfig.createRoot("", null, __ -> new FastFailLockingStrategy(ThreadConstraint.ANY));
 			try {
 				ObservableConfig.readXml(xmlConfig, url.openStream(), XmlEncoding.DEFAULT);
 			} catch (SAXException e) {
@@ -200,7 +202,8 @@ class DefaultInteractiveTestSuite implements InteractiveTestSuite {
 			});
 			BetterFile testResultsFile = getTestResultsFile(test.getClass());
 			if (testResultsFile.exists()) {
-				ObservableConfig resultsConfig = ObservableConfig.createRoot(test.getName(), null, __ -> new FastFailLockingStrategy());
+				ObservableConfig resultsConfig = ObservableConfig.createRoot(test.getName(), null,
+					__ -> new FastFailLockingStrategy(ThreadConstraint.ANY));
 				try {
 					ObservableConfig.readXml(resultsConfig, testResultsFile.read(), XmlEncoding.DEFAULT);
 				} catch (IOException | SAXException e) {
@@ -262,7 +265,8 @@ class DefaultInteractiveTestSuite implements InteractiveTestSuite {
 						}
 					}
 					// Write the results to XML
-					ObservableConfig resultsConfig = ObservableConfig.createRoot("results", null, __ -> new FastFailLockingStrategy());
+					ObservableConfig resultsConfig = ObservableConfig.createRoot("results", null,
+						__ -> new FastFailLockingStrategy(ThreadConstraint.ANY));
 					SimpleObservable<Void> until = SimpleObservable.build().build();
 					SyncValueSet<TestResult> configFailures = resultsConfig.asValue(TestResult.class).at("result").until(until)
 						.buildEntitySet(null);

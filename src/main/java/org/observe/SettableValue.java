@@ -15,6 +15,7 @@ import org.qommons.BiTuple;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.Lockable;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.TransactableBuilder;
 import org.qommons.Transaction;
@@ -524,6 +525,11 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 		}
 
 		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return theSource.getThreadConstraint();
+		}
+
+		@Override
 		public Object getIdentity() {
 			return theSource.getIdentity();
 		}
@@ -564,6 +570,11 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 		@Override
 		public TypeToken<T> getType() {
 			return theWrapped.getType();
+		}
+
+		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return theWrapped.getThreadConstraint();
 		}
 
 		@Override
@@ -854,6 +865,11 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 				else
 					return new Transactable() {
 					@Override
+					public ThreadConstraint getThreadConstraint() {
+						return value.getThreadConstraint();
+					}
+
+					@Override
 					public Transaction lock(boolean w, Object c) {
 						return value.lock();
 					}
@@ -881,6 +897,11 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 					return (SettableValue<? extends T>) value;
 				else
 					return new Transactable() {
+					@Override
+					public ThreadConstraint getThreadConstraint() {
+						return value.getThreadConstraint();
+					}
+
 					@Override
 					public Transaction lock(boolean w, Object c) {
 						return value.lock();
@@ -952,6 +973,11 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 		@Override
 		public TypeToken<T> getType() {
 			return theValue.getType();
+		}
+
+		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return theValue.getThreadConstraint();
 		}
 
 		@Override

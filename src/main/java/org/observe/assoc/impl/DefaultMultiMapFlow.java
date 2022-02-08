@@ -123,7 +123,7 @@ public class DefaultMultiMapFlow<S, K0, V0, K, V> implements MultiMapFlow<K, V> 
 		else {
 			// This is super hacky, but it's the easiest way I can think of to support map addition
 			// No worries about thread safety though, since anyone adding a value will obtain a write lock first
-			BetterSortedSet<K> keys = new BetterTreeSet<>(false, (k1, k2) -> 0);
+			BetterSortedSet<K> keys = BetterTreeSet.<K> buildTreeSet((k1, k2) -> 0).build();
 			CollectionElement<K> keyEl = keys.addElement(null, false);
 			ObservableSortedSet<K> keySet = ObservableSortedSet.create(theKeyFlow.getTargetType(), keys);
 			ObservableSet<K2> derivedKeys = keyMap.apply(keySet.flow()).collect();

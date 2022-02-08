@@ -6,14 +6,13 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.BooleanSupplier;
-import java.util.function.Consumer;
 
 import org.observe.Observable;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionEvent;
 import org.qommons.Causable;
 import org.qommons.Causable.CausableKey;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterSortedList.SortedSearchFilter;
 import org.qommons.collect.CollectionElement;
@@ -59,17 +58,16 @@ public class UIOptimizedCollection<E> extends AbstractSafeObservableCollection<E
 	private final CausableKey theFlushKey;
 	private final AtomicBoolean isFlushing;
 
-	public UIOptimizedCollection(ObservableCollection<E> collection, BooleanSupplier onEventThread, Consumer<Runnable> eventThreadExec,
-		Observable<?> until) {
-		super(collection, onEventThread);
+	public UIOptimizedCollection(ObservableCollection<E> collection, ThreadConstraint constraint, Observable<?> until) {
+		super(collection, constraint);
 		thePeriodicFlushTask = QommonsTimer.getCommonInstance().build(() -> {
 			if (doFlush())
 				scheduleFlush();
 		}, Duration.ofMillis(500), false).withThreading((task, timer) -> {
-			eventThreadExec.accept(task);
+			constraint.invokeLater(task);
 			return true;
 		});
-		theFlushKey = Causable.key((cause, values) -> eventThreadExec.accept(this::doFlush));
+		theFlushKey = Causable.key((cause, values) -> constraint.invokeLater(this::doFlush));
 		isFlushing = new AtomicBoolean();
 		theAddedElements = new HashSet<>();
 		theRemovedElements = new ArrayList<>();
@@ -94,8 +92,11 @@ public class UIOptimizedCollection<E> extends AbstractSafeObservableCollection<E
 			} catch (InterruptedException e) {
 			}
 		}
-		doHandleEvent(evt);
-		isFlushing.set(false);
+		try {
+			doHandleEvent(evt);
+		} finally {
+			isFlushing.set(false);
+		}
 		evt.getRootCausable().onFinish(theFlushKey);
 		scheduleFlush();
 	}

@@ -8,6 +8,7 @@ import org.observe.Equivalence;
 import org.observe.Subscription;
 import org.qommons.Causable;
 import org.qommons.CausalLock;
+import org.qommons.ThreadConstraint;
 import org.qommons.Lockable.CoreId;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
@@ -40,13 +41,14 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	private final BiFunction<ElementId, BetterCollection<?>, ElementId> theElementSource;
 	private final BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> theSourceElements;
 	private final Equivalence<? super E> theEquivalence;
+	private final ThreadConstraint theThreadConstraint;
 
 	/**
 	 * @param type The type for this collection
 	 * @param list The list to hold this collection's elements
 	 */
 	public DefaultObservableCollection(TypeToken<E> type, BetterList<E> list) {
-		this(type, list, null, null, null);
+		this(type, list, null, null, null, null);
 	}
 
 	/**
@@ -58,10 +60,10 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	 * @see #getElementsBySource(ElementId, BetterCollection)
 	 * @see #getSourceElements(ElementId, BetterCollection)
 	 */
-	public DefaultObservableCollection(TypeToken<E> type, BetterList<E> list, //
+	DefaultObservableCollection(TypeToken<E> type, BetterList<E> list, //
 		BiFunction<ElementId, BetterCollection<?>, ElementId> elementSource,
 		BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> sourceElements, //
-		Equivalence<? super E> equivalence) {
+		Equivalence<? super E> equivalence, ThreadConstraint constraint) {
 		theType = type;
 		if (list instanceof ObservableCollection)
 			throw new UnsupportedOperationException("The backing for an ObservableCollection cannot be observable");
@@ -71,6 +73,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 		theElementSource = elementSource;
 		theSourceElements = sourceElements;
 		theEquivalence = equivalence == null ? Equivalence.DEFAULT : equivalence;
+		theThreadConstraint = constraint;
 	}
 
 	/** @return This collection's backing values */
@@ -81,6 +84,11 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	@Override
 	public Object getIdentity() {
 		return theValues.getIdentity();
+	}
+
+	@Override
+	public ThreadConstraint getThreadConstraint() {
+		return theThreadConstraint;
 	}
 
 	@Override
@@ -215,6 +223,8 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	@Override
 	public CollectionElement<E> addElement(E value, ElementId after, ElementId before, boolean first)
 		throws UnsupportedOperationException, IllegalArgumentException {
+		if (theThreadConstraint != null && !theThreadConstraint.isEventThread())
+			throw new IllegalArgumentException("This collection may only be modified on " + theThreadConstraint);
 		try (Transaction t = lock(true, null)) {
 			CollectionElement<E> el = theValues.addElement(value, after, before, first);
 			if (el == null)
@@ -234,6 +244,8 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	@Override
 	public CollectionElement<E> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
 		throws UnsupportedOperationException, IllegalArgumentException {
+		if (theThreadConstraint != null && !theThreadConstraint.isEventThread())
+			throw new IllegalArgumentException("This collection may only be modified on " + theThreadConstraint);
 		try (Transaction t = lock(true, null)) {
 			E value = theValues.getElement(valueEl).get();
 			CollectionElement<E> el = theValues.move(valueEl, after, before, first, () -> {
@@ -259,6 +271,8 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 
 	@Override
 	public void clear() {
+		if (theThreadConstraint != null && !theThreadConstraint.isEventThread())
+			throw new IllegalArgumentException("This collection may only be modified on " + theThreadConstraint);
 		try (Transaction t = lock(true, null)) {
 			CollectionElement<E> el = getTerminalElement(true);
 			while (el != null) {
@@ -272,6 +286,8 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 
 	@Override
 	public void setValue(Collection<ElementId> elements, E value) {
+		if (theThreadConstraint != null && !theThreadConstraint.isEventThread())
+			throw new IllegalArgumentException("This collection may only be modified on " + theThreadConstraint);
 		for (ElementId el : elements)
 			mutableElement(el).set(value);
 	}
@@ -312,6 +328,8 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 
 			@Override
 			public void set(E value) throws UnsupportedOperationException, IllegalArgumentException {
+				if (theThreadConstraint != null && !theThreadConstraint.isEventThread())
+					throw new IllegalArgumentException("This collection may only be modified on " + theThreadConstraint);
 				E old = get();
 				if (value == old && theValues instanceof ValueStoredCollection) {
 					// A pure update on a value-stored collection may mean that the value has changed such that it needs to be moved
@@ -340,7 +358,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 
 							@Override
 							public void transferred(CollectionElement<E> element, Void data) {
-								fire(new ObservableCollectionEvent<>(element.getElementId(), 
+								fire(new ObservableCollectionEvent<>(element.getElementId(),
 									theValues.getElementsBefore(element.getElementId()), CollectionChangeType.add, false, null,
 									element.get(), op));
 							}
@@ -361,6 +379,8 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 
 			@Override
 			public void remove() throws UnsupportedOperationException {
+				if (theThreadConstraint != null && !theThreadConstraint.isEventThread())
+					throw new IllegalArgumentException("This collection may only be modified on " + theThreadConstraint);
 				try (Transaction t = lock(true, null)) {
 					E old = get();
 					valueEl.remove();

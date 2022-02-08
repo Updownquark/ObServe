@@ -24,8 +24,11 @@ import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
 import org.qommons.Identifiable;
+import org.qommons.LambdaUtils;
 import org.qommons.Lockable;
 import org.qommons.Stamped;
+import org.qommons.ThreadConstrained;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
 import org.qommons.collect.ListenerList;
@@ -39,7 +42,7 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <T> The compile-time type of this observable's value
  */
-public interface ObservableValue<T> extends java.util.function.Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable {
+public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable {
 	/** This class's wildcard {@link TypeToken} */
 	static TypeToken<ObservableValue<?>> TYPE = TypeTokens.get().keyFor(ObservableValue.class).wildCard();
 
@@ -60,6 +63,11 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 	 *         event for the value when subscribed (unless the value happens to change during subscription, which is allowed).
 	 */
 	Observable<ObservableValueEvent<T>> noInitChanges();
+
+	@Override
+	default ThreadConstraint getThreadConstraint() {
+		return noInitChanges().getThreadConstraint();
+	}
 
 	@Override
 	default boolean isLockSupported() {
@@ -97,6 +105,11 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 						observer.onCompleted(value.getNewValue());
 					}
 				});
+			}
+
+			@Override
+			public ThreadConstraint getThreadConstraint() {
+				return ObservableValue.this.getThreadConstraint();
 			}
 
 			@Override
@@ -686,6 +699,11 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 		protected abstract Object createIdentity();
 
 		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return theWrapped.getThreadConstraint();
+		}
+
+		@Override
 		public long getStamp() {
 			return theWrapped.getStamp();
 		}
@@ -740,6 +758,11 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 				}
 				return theNoInitChanges.subscribe(observer);
 			}
+		}
+
+		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return theNoInitChanges.getThreadConstraint();
 		}
 
 		@Override
@@ -949,6 +972,11 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 				}
 
 				@Override
+				public ThreadConstraint getThreadConstraint() {
+					return ThreadConstrained.getThreadConstraint(theSource, theEngine);
+				}
+
+				@Override
 				public Transaction lock() {
 					return Lockable.lockAll(theSource, theEngine);
 				}
@@ -1090,6 +1118,11 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 				}
 
 				@Override
+				public ThreadConstraint getThreadConstraint() {
+					return theWrapped.getThreadConstraint();
+				}
+
+				@Override
 				public boolean isSafe() {
 					return theWrapped.changes().isSafe() && theRefresh.isSafe();
 				}
@@ -1143,6 +1176,11 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 				theIdentity = Identifiable.idFor(theValue, () -> String.valueOf(theValue), () -> Objects.hashCode(theValue),
 					other -> Objects.equals(theValue, other));
 			return theIdentity;
+		}
+
+		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return ThreadConstraint.NONE;
 		}
 
 		@Override
@@ -1291,6 +1329,11 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 						}
 					}
 					return sub;
+				}
+
+				@Override
+				public ThreadConstraint getThreadConstraint() {
+					return theChanges.getThreadConstraint();
 				}
 
 				@Override
@@ -1473,9 +1516,9 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 													if (event.isInitial() && event2.isInitial())
 														toFire = withInitialEvent
 														? retObs.createInitialEvent(event2.getNewValue(), event2.getCauses()) : null;
-													else
-														toFire = retObs.createChangeEvent(innerOld, event2.getNewValue(),
-															event2.getCauses());
+														else
+															toFire = retObs.createChangeEvent(innerOld, event2.getNewValue(),
+																event2.getCauses());
 													if (toFire != null) {
 														try (Transaction t = toFire.use()) {
 															observer.onNext(toFire);
@@ -1498,8 +1541,8 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 									ObservableValueEvent<T> toFire;
 									if (event.isInitial())
 										toFire = withInitialEvent ? retObs.createInitialEvent(newValue, event.getCauses()) : null;
-									else
-										toFire = retObs.createChangeEvent((T) old[0], newValue, event.getCauses());
+										else
+											toFire = retObs.createChangeEvent((T) old[0], newValue, event.getCauses());
 									old[0] = newValue;
 									if (toFire != null) {
 										try (Transaction t = toFire.use()) {
@@ -1534,6 +1577,15 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 					outerSub.unsubscribe();
 					Subscription.unsubscribe(innerSub.getAndSet(null));
 				};
+			}
+
+			@Override
+			public ThreadConstraint getThreadConstraint() {
+				if (theValue.getThreadConstraint() == ThreadConstraint.NONE) {
+					ObservableValue<? extends T> obs = theValue.get();
+					return obs == null ? ThreadConstraint.NONE : obs.getThreadConstraint();
+				}
+				return ThreadConstraint.ANY; // Can't know
 			}
 
 			@Override
@@ -1746,6 +1798,11 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Type
 				return () -> {
 					Subscription.forAll(valueSubs).unsubscribe();
 				};
+			}
+
+			@Override
+			public ThreadConstraint getThreadConstraint() {
+				return ThreadConstrained.getThreadConstraint(null, Arrays.asList(theValues), LambdaUtils.identity());
 			}
 
 			@Override

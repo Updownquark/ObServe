@@ -240,7 +240,7 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableSort
 	static <E> ObservableSortedSet<E> of(TypeToken<E> type, Comparator<? super E> compare, Collection<? extends E> values) {
 		java.util.TreeSet<E> valueSet = new java.util.TreeSet<>(compare);
 		valueSet.addAll(values);
-		return ObservableCollection.create(type, new BetterTreeList<E>(false).withAll(valueSet))//
+		return ObservableCollection.create(type, BetterTreeList.<E> build().build().withAll(valueSet))//
 			.flow().distinctSorted(compare, false).unmodifiable(false).collect();
 	}
 
@@ -280,7 +280,7 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableSort
 	 * @return A new sorted set to back a collection created by {@link #create(TypeToken, Comparator)}
 	 */
 	static <E> BetterSortedSet<E> createDefaultBacking(Comparator<? super E> compare) {
-		return new BetterTreeSet<>(true, compare);
+		return BetterTreeSet.<E> buildTreeSet(compare).build();
 	}
 
 	/**

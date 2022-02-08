@@ -34,6 +34,8 @@ import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.Lockable;
 import org.qommons.Ternian;
+import org.qommons.ThreadConstrained;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
@@ -380,6 +382,11 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 			}
 
 			@Override
+			public ThreadConstraint getThreadConstraint() {
+				return ObservableCollection.this.getThreadConstraint();
+			}
+
+			@Override
 			public boolean isSafe() {
 				return ObservableCollection.this.isLockSupported();
 			}
@@ -679,7 +686,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 	 * @return A new list to back a collection created by {@link #create(TypeToken)}
 	 */
 	static <E> BetterList<E> createDefaultBacking() {
-		return new BetterTreeList<>(true);
+		return BetterTreeList.<E> build().build();
 	}
 
 	/**
@@ -757,6 +764,11 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 						break;
 					}
 				}, true).removeAll();
+			}
+
+			@Override
+			public ThreadConstraint getThreadConstraint() {
+				return ThreadConstrained.getThreadConstraint(coll, coll, LambdaUtils.identity());
 			}
 
 			@Override

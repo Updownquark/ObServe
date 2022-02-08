@@ -21,6 +21,7 @@ import org.observe.util.TypeTokens;
 import org.qommons.BreakpointHere;
 import org.qommons.QommonsTestUtils;
 import org.qommons.TestHelper;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.FastFailLockingStrategy;
@@ -37,7 +38,7 @@ public class ObservableConfigTest {
 	/** Initializes for testing */
 	@Before
 	public void initConfig() {
-		theConfig = ObservableConfig.createRoot("root");
+		theConfig = ObservableConfig.createRoot("root", ThreadConstraint.ANY);
 		theEncoding = XmlEncoding.DEFAULT;
 	}
 
@@ -488,7 +489,7 @@ public class ObservableConfigTest {
 		public ObservableConfigSuperTester() {
 			theEncoding = XmlEncoding.DEFAULT;
 			// Use unsafe locking for performance--we're not doing anything thread-unsafe here
-			theConfig = ObservableConfig.createRoot("test", null, __ -> new FastFailLockingStrategy());
+			theConfig = ObservableConfig.createRoot("test", null, __ -> new FastFailLockingStrategy(ThreadConstraint.ANY));
 			try {
 				ObservableConfig.readXml(theConfig, ObservableConfigTest.class.getResourceAsStream("TestValues.xml"), theEncoding);
 			} catch (IOException | SAXException e) {
@@ -818,7 +819,8 @@ public class ObservableConfigTest {
 			theText = entity1.getText();
 			theEntityField = deepCopy(entity1.getEntityField());
 			theTexts = new ArrayList<>(entity1.getTexts());
-			theListedEntities = ObservableCollection.create(TypeTokens.get().of(TestEntity4.class), new BetterTreeList<>(false));
+			theListedEntities = ObservableCollection.create(TypeTokens.get().of(TestEntity4.class),
+				BetterTreeList.<TestEntity4> build().build());
 			for (TestEntity4 te4 : entity1.getListedEntities().getValues())
 				theListedEntities.add(deepCopy(te4));
 

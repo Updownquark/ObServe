@@ -8,7 +8,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import org.observe.SimpleSettableValue;
+import org.observe.SettableValue;
 import org.observe.Transformation;
 import org.observe.Transformation.MaybeReversibleMapping;
 import org.observe.Transformation.TransformationPrecursor;
@@ -50,8 +50,9 @@ public class MappedCollectionLink<S, T> extends AbstractMappedCollectionLink<S, 
 			TestHelper helper) {
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
 			TypeTransformation<T, X> transform = MappedCollectionLink.transform(sourceCL.getDef().type, targetType, helper, true, false);
-			SimpleSettableValue<TypeTransformation<T, X>> txValue = new SimpleSettableValue<>(
-				(TypeToken<TypeTransformation<T, X>>) (TypeToken<?>) new TypeToken<Object>() {}, false);
+			SettableValue<TypeTransformation<T, X>> txValue = SettableValue
+				.build((TypeToken<TypeTransformation<T, X>>) (TypeToken<?>) new TypeToken<Object>() {
+				}).build();
 			txValue.set(transform, null);
 			boolean variableMap = helper.getBoolean();
 			CollectionDataFlow<?, ?, T> oneStepFlow = sourceCL.getCollection().flow();
@@ -120,7 +121,7 @@ public class MappedCollectionLink<S, T> extends AbstractMappedCollectionLink<S, 
 		}
 	};
 
-	private final SimpleSettableValue<TypeTransformation<S, T>> theMapValue;
+	private final SettableValue<TypeTransformation<S, T>> theMapValue;
 	private TypeTransformation<S, T> theCurrentMap;
 	private final boolean isMapVariable;
 	private final boolean isMapEquivalent;
@@ -140,7 +141,7 @@ public class MappedCollectionLink<S, T> extends AbstractMappedCollectionLink<S, 
 	 * @param options The options used to create the mapping
 	 */
 	public MappedCollectionLink(String path, ObservableCollectionLink<?, S> sourceLink, ObservableCollectionTestDef<T> def,
-		TestHelper helper, SimpleSettableValue<TypeTransformation<S, T>> mapValue, boolean mapVariable, boolean mapEquivalent,
+		TestHelper helper, SettableValue<TypeTransformation<S, T>> mapValue, boolean mapVariable, boolean mapEquivalent,
 		boolean reversible, Transformation<S, T> options) {
 		super(path, sourceLink, def, helper, options.isCached(), isInexactReversible(options));
 		theMapValue = mapValue;

@@ -15,7 +15,9 @@ import org.observe.collect.DataControlledCollection;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionBuilder;
 import org.observe.collect.ObservableCollectionBuilder.DataControlAutoRefresher;
+import org.observe.collect.ObservableCollectionBuilder.DataControlledCollectionBuilderImpl;
 import org.observe.util.TypeTokens;
+import org.qommons.ThreadConstraint;
 import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.StampedLockingStrategy;
 import org.qommons.ex.ExConsumer;
@@ -96,7 +98,7 @@ public class ObservableFile implements BetterFile {
 				if (DEFAULT_FILE_REFRESHER == null) {
 					DEFAULT_FILE_REFRESHER = new ObservableFileSet(//
 						new ObservableCollectionBuilder.DefaultDataControlAutoRefresher(Duration.ofSeconds(1)), null);
-					DEFAULT_FILE_REFRESHER.theLocking = new StampedLockingStrategy(DEFAULT_FILE_REFRESHER);
+					DEFAULT_FILE_REFRESHER.theLocking = new StampedLockingStrategy(DEFAULT_FILE_REFRESHER, ThreadConstraint.ANY);
 				}
 			}
 		}
@@ -223,12 +225,15 @@ public class ObservableFile implements BetterFile {
 			synchronized (this) {
 				contents = theContents == null ? null : theContents.get();
 				if (contents == null) {
-					contents = ObservableCollection.build(ObservableFile.class).withLocking(theFileSet.getLocking())
-						.withDescription("Directory content of " + getPath())//
-						.withData(() -> theFile.listFiles()).refreshOnAccess(false).autoRefreshWith(theFileSet.getRefresher())
-						.withEquals((f1, f2) -> f1.getName().equals(f2.getName())).withMaxRefreshFrequency(5)//
-						.build(f -> new ObservableFile(theFileSet, this, f), //
-							adjustment -> adjustment.commonUsesLeft((of, f) -> of.checkChanged()));
+					ObservableCollectionBuilder<ObservableFile, ?> builder = ObservableCollection.build(ObservableFile.class)
+						.withLocking(theFileSet.getLocking()).withDescription("Directory content of " + getPath());
+					DataControlledCollectionBuilderImpl<ObservableFile, ? extends BetterFile, ?> dataBuilder;
+					dataBuilder = (DataControlledCollectionBuilderImpl<ObservableFile, ? extends BetterFile, ?>) builder
+						.withData(() -> theFile.listFiles());
+					dataBuilder.refreshOnAccess(false).autoRefreshWith(theFileSet.getRefresher());
+					dataBuilder.withEquals((f1, f2) -> f1.getName().equals(f2.getName())).withMaxRefreshFrequency(5);
+					contents = dataBuilder.build(f -> new ObservableFile(theFileSet, this, f), //
+						adjustment -> adjustment.commonUsesLeft((of, f) -> of.checkChanged()));
 					theContents = new WeakReference<>(contents);
 				}
 			}
@@ -302,10 +307,13 @@ public class ObservableFile implements BetterFile {
 	}
 
 	public static DataControlledCollection<ObservableFile, ?> getRoots(FileDataSource dataSource) {
-		return ObservableCollection.build(ObservableFile.class).sortBy(BetterFile.DISTINCT_NUMBER_TOLERANT)
-			.withLocking(ObservableFile.getDefaultFileSet().getLocking()).withData(() -> BetterFile.getRoots(dataSource))
-			.autoRefreshWith(ObservableFile.getDefaultFileSet().getRefresher()).refreshOnAccess(false)
-			.withEquals((f1, f2) -> f1.getName().equals(f2.getName())).withMaxRefreshFrequency(5)
-			.build(b -> ObservableFile.observe(b), adjustment -> adjustment.commonUsesLeft((of, f) -> of.checkChanged()));
+		ObservableCollectionBuilder.SortedBuilder<ObservableFile, ?> builder = ObservableCollection.build(ObservableFile.class)
+			.sortBy(BetterFile.DISTINCT_NUMBER_TOLERANT).withLocking(ObservableFile.getDefaultFileSet().getLocking());
+		DataControlledCollectionBuilderImpl<ObservableFile, ? extends BetterFile, ?> dataBuilder;
+		dataBuilder = (DataControlledCollectionBuilderImpl<ObservableFile, ? extends BetterFile, ?>) builder
+			.withData(() -> BetterFile.getRoots(dataSource));
+		dataBuilder = dataBuilder.autoRefreshWith(ObservableFile.getDefaultFileSet().getRefresher()).refreshOnAccess(false);
+		dataBuilder = dataBuilder.withEquals((f1, f2) -> f1.getName().equals(f2.getName())).withMaxRefreshFrequency(5);
+		return dataBuilder.build(b -> ObservableFile.observe(b), adjustment -> adjustment.commonUsesLeft((of, f) -> of.checkChanged()));
 	}
 }

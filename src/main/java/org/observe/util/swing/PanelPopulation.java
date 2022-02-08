@@ -88,7 +88,6 @@ import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
 import org.observe.SettableValue.Builder;
 import org.observe.SimpleObservable;
-import org.observe.SimpleSettableValue;
 import org.observe.Subscription;
 import org.observe.TypedValueContainer;
 import org.observe.collect.CollectionChangeEvent;
@@ -104,6 +103,7 @@ import org.qommons.Identifiable;
 import org.qommons.IntList;
 import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
@@ -144,7 +144,7 @@ public class PanelPopulation {
 	public static <C extends Container> PanelPopulator<C, ?> populateVPanel(C panel, Observable<?> until) {
 		if (!EventQueue.isDispatchThread())
 			System.err.println(
-				"Calling panel population off of the EDT from " + BreakpointHere.getCodeLine() + "--could cause threading problems!!");
+				"Calling panel population off of the EDT from " + BreakpointHere.getCodeLine(1) + "--could cause threading problems!!");
 		if (panel == null)
 			panel = (C) new JPanel();
 		return new MigFieldPanel<>(panel, until == null ? Observable.empty() : until, new LazyLock());
@@ -153,14 +153,14 @@ public class PanelPopulation {
 	public static <C extends Container> PanelPopulator<C, ?> populateHPanel(C panel, String layoutType, Observable<?> until) {
 		if (!EventQueue.isDispatchThread())
 			System.err.println(
-				"Calling panel population off of the EDT from " + BreakpointHere.getCodeLine() + "--could cause threading problems!!");
+				"Calling panel population off of the EDT from " + BreakpointHere.getCodeLine(1) + "--could cause threading problems!!");
 		return populateHPanel(panel, layoutType == null ? null : makeLayout(layoutType), until);
 	}
 
 	public static <C extends Container> PanelPopulator<C, ?> populateHPanel(C panel, LayoutManager layout, Observable<?> until) {
 		if (!EventQueue.isDispatchThread())
 			System.err.println(
-				"Calling panel population off of the EDT from " + BreakpointHere.getCodeLine() + "--could cause threading problems!!");
+				"Calling panel population off of the EDT from " + BreakpointHere.getCodeLine(1) + "--could cause threading problems!!");
 		if (panel == null)
 			panel = (C) new JPanel(layout);
 		else if (layout != null)
@@ -179,14 +179,14 @@ public class PanelPopulation {
 	public static <C extends Container> PanelPopulator<C, ?> populatePanel(C panel, Observable<?> until) {
 		if (!EventQueue.isDispatchThread())
 			System.err.println(
-				"Calling panel population off of the EDT from " + BreakpointHere.getCodeLine() + "--could cause threading problems!!");
+				"Calling panel population off of the EDT from " + BreakpointHere.getCodeLine(1) + "--could cause threading problems!!");
 		return new SimpleHPanel<>(null, panel, new LazyLock(), until == null ? Observable.empty() : until);
 	}
 
 	public static <R> TableBuilder<R, ?> buildTable(ObservableCollection<R> rows) {
 		if (!EventQueue.isDispatchThread())
 			System.err.println(
-				"Calling panel population off of the EDT from " + BreakpointHere.getCodeLine() + "--could cause threading problems!!");
+				"Calling panel population off of the EDT from " + BreakpointHere.getCodeLine(1) + "--could cause threading problems!!");
 		return new SimpleTableBuilder<>(rows, new LazyLock());
 	}
 
@@ -195,7 +195,7 @@ public class PanelPopulation {
 		private Transactable theLock;
 
 		public LazyLock() {
-			this(o -> Transactable.transactable(new ReentrantReadWriteLock(), o));
+			this(o -> Transactable.transactable(new ReentrantReadWriteLock(), o, ThreadConstraint.EDT));
 		}
 
 		public LazyLock(Function<Object, Transactable> lockCreator) {
@@ -1332,7 +1332,8 @@ public class PanelPopulation {
 		public <T> ObservableCollection<T> getOrDeclareCollection(String name, TypeToken<T> type,
 			Function<ObservableCollectionBuilder<T, ?>, ? extends ObservableCollection<T>> builder) {
 			Transactable lock = theLock.get();
-			CollectionLockingStrategy locking = lock == null ? new FastFailLockingStrategy() : new RRWLockingStrategy(lock);
+			CollectionLockingStrategy locking = lock == null ? new FastFailLockingStrategy(ThreadConstraint.EDT)
+				: new RRWLockingStrategy(lock);
 			return this.getOrDeclare(name, ObservableCollection.class, type, () -> builder.apply(//
 				DefaultObservableCollection.build(type).withLocking(locking).withDescription(name)), true, true);
 		}
@@ -1635,7 +1636,7 @@ public class PanelPopulation {
 			theContainer = container;
 			theUntil = until == null ? Observable.empty() : until;
 			theLock = lock;
-			theCLS = new RRWLockingStrategy(lock);
+			theCLS = new RRWLockingStrategy(lock, ThreadConstraint.EDT);
 		}
 
 		@Override
@@ -1971,8 +1972,8 @@ public class PanelPopulation {
 		SimpleFieldEditor(String fieldName, E editor, Supplier<Transactable> lock) {
 			super(editor, lock);
 			theFieldName = fieldName == null ? null : ObservableValue.of(fieldName);
-			theSettableTooltip = new SimpleSettableValue<>(TypeTokens.get().keyFor(ObservableValue.class).parameterized(String.class),
-				true);
+			theSettableTooltip = SettableValue
+				.build(TypeTokens.get().keyFor(ObservableValue.class).<ObservableValue<String>> parameterized(String.class)).build();
 			theTooltip = ObservableValue.flatten(theSettableTooltip);
 		}
 
@@ -2165,7 +2166,7 @@ public class PanelPopulation {
 
 		public SimpleImageControl(String location) {
 			theTweakObservable = new SimpleObservable<>();
-			theSettableIcon = new SimpleSettableValue<>((Class<ObservableValue<? extends Icon>>) (Class<?>) ObservableValue.class, true);
+			theSettableIcon = SettableValue.build((Class<ObservableValue<? extends Icon>>) (Class<?>) ObservableValue.class).build();
 			setLocation(location);
 			theIcon = ObservableValue.flatten(theSettableIcon).refresh(theTweakObservable);
 			theWidth = -1;
@@ -3800,7 +3801,7 @@ public class PanelPopulation {
 			theWidget = widget;
 			theAction = action;
 			theSelectedValues = selectedValues;
-			theEnabledString = new SimpleSettableValue<>(String.class, true);
+			theEnabledString = SettableValue.build(String.class).build();
 			theObservableAction = new ObservableAction<Object>() {
 				@Override
 				public TypeToken<Object> getType() {
@@ -3907,7 +3908,7 @@ public class PanelPopulation {
 		public A withTooltip(Function<? super List<? extends R>, String> tooltip) {
 			theTooltip = tooltip;
 			if (tooltip != null)
-				theTooltipString = new SimpleSettableValue<>(String.class, true);
+				theTooltipString = SettableValue.build(String.class).build();
 			return (A) this;
 		}
 

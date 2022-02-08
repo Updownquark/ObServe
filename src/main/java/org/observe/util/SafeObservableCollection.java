@@ -1,12 +1,11 @@
 package org.observe.util;
 
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.function.BooleanSupplier;
-import java.util.function.Consumer;
 
 import org.observe.Observable;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionEvent;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.CollectionElement;
 
@@ -20,13 +19,11 @@ public class SafeObservableCollection<E> extends AbstractSafeObservableCollectio
 
 	/**
 	 * @param collection The backing collection
-	 * @param onEventThread A test that returns true only if the thread it is invoked from is acceptable for firing events directly
-	 * @param eventThreadExec An executor to invoke events on an acceptable event thread
+	 * @param constraint The thread constraint that this collection obeys
 	 * @param until An observable which, when fired, will stop the eventing on this collection and release its resources and listeners
 	 */
-	public SafeObservableCollection(ObservableCollection<E> collection, BooleanSupplier onEventThread, Consumer<Runnable> eventThreadExec,
-		Observable<?> until) {
-		super(collection, onEventThread);
+	public SafeObservableCollection(ObservableCollection<E> collection, ThreadConstraint constraint, Observable<?> until) {
+		super(collection, constraint);
 
 		theEventQueue = new ConcurrentLinkedQueue<>();
 

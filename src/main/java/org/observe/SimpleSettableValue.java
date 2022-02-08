@@ -2,8 +2,6 @@ package org.observe;
 
 import java.util.Collection;
 import java.util.Collections;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.observe.util.TypeTokens;
@@ -32,40 +30,12 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 
 	/**
 	 * @param type The type of the value
-	 * @param nullable Whether null can be assigned to the value
-	 */
-	public SimpleSettableValue(Class<T> type, boolean nullable) {
-		this(TypeTokens.get().of(type), nullable);
-	}
-
-	/**
-	 * @param type The type of the value
-	 * @param nullable Whether null can be assigned to the value
-	 */
-	public SimpleSettableValue(TypeToken<T> type, boolean nullable) {
-		this(type, nullable, new ReentrantReadWriteLock(), null);
-	}
-
-	/**
-	 * @param type The type of the value
+	 * @param description An optional description for this value's identity
 	 * @param nullable Whether null can be assigned to the value
 	 * @param lock The lock for this value
-	 * @param listeningOptions Listening options for this value's listener list
+	 * @param listening Listening builder for this value's listener list (may be null)
 	 */
-	public SimpleSettableValue(TypeToken<T> type, boolean nullable, ReentrantReadWriteLock lock,
-		Consumer<ListenerList.Builder> listeningOptions) {
-		this(type, "settable-value" + SettableValue.Builder.ID_GEN.getAndIncrement(), //
-			nullable, lock == null ? null : sv -> Transactable.transactable(lock, sv), listeningFor(listeningOptions));
-	}
-
-	private static ListenerList.Builder listeningFor(Consumer<ListenerList.Builder> listeningOptions) {
-		ListenerList.Builder listening = ListenerList.build();
-		if (listeningOptions != null)
-			listeningOptions.accept(listening);
-		return listening;
-	}
-
-	SimpleSettableValue(TypeToken<T> type, String description, boolean nullable, Function<Object, Transactable> lock,
+	protected SimpleSettableValue(TypeToken<T> type, String description, boolean nullable, Function<Object, Transactable> lock,
 		ListenerList.Builder listening) {
 		theType = type;
 		isNullable = nullable && !type.isPrimitive();

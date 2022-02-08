@@ -3,12 +3,12 @@ package org.observe;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedList;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Function;
 
 import org.observe.util.TypeTokens;
 import org.qommons.CausalLock;
 import org.qommons.Identifiable;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.ListenerList;
@@ -42,25 +42,6 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 
 	private Object theIdentity;
 	private Object theChangesIdentity;
-
-	/**
-	 * @param type The type of the value
-	 * @param nullable Whether null can be assigned to the value
-	 */
-	public VetoableSettableValue(TypeToken<T> type, boolean nullable) {
-		this(type, "settable-value" + SettableValue.Builder.ID_GEN.getAndIncrement(), //
-			nullable, ListenerList.build(), sv -> Transactable.transactable(new ReentrantReadWriteLock(), sv));
-	}
-
-	/**
-	 * @param type The type of the value
-	 * @param nullable Whether null can be assigned to the value
-	 * @param lock The lock for this value;
-	 */
-	public VetoableSettableValue(TypeToken<T> type, boolean nullable, Transactable lock) {
-		this(type, "settable-value" + SettableValue.Builder.ID_GEN.getAndIncrement(), //
-			nullable, ListenerList.build(), __ -> lock);
-	}
 
 	VetoableSettableValue(TypeToken<T> type, String description, boolean nullable, ListenerList.Builder listening,
 		Function<Object, Transactable> lock) {
@@ -257,6 +238,11 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 				else
 					return Subscription.NONE;
 			}
+		}
+
+		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return theLock == null ? ThreadConstraint.ANY : theLock.getThreadConstraint();
 		}
 
 		@Override

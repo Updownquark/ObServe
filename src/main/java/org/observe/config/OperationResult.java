@@ -14,6 +14,7 @@ import org.observe.Observable;
 import org.observe.Observer;
 import org.observe.SimpleObservable;
 import org.observe.Subscription;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.ListenerList;
 
@@ -417,6 +418,12 @@ public interface OperationResult<T> {
 							theObservers = ListenerList.build().build();
 						return theObservers.add(observer, false)::run;
 					}
+				}
+
+				@Override
+				public ThreadConstraint getThreadConstraint() {
+					OperationResult<? extends S> wrapped = theWrapped;
+					return wrapped == null ? ThreadConstraint.ANY : wrapped.watchStatus().getThreadConstraint();
 				}
 
 				@Override

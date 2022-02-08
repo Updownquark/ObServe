@@ -40,6 +40,8 @@ import org.qommons.LambdaUtils;
 import org.qommons.Lockable;
 import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
+import org.qommons.ThreadConstrained;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
@@ -1290,6 +1292,11 @@ public class ObservableCollectionDataFlowImpl {
 
 		protected Transformation<I, T> getTransformation() {
 			return theEngine.getTransformation();
+		}
+
+		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return ThreadConstrained.getThreadConstraint(theParent, theEngine);
 		}
 
 		@Override

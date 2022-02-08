@@ -6,7 +6,6 @@ import java.util.function.Function;
 
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
-import org.observe.SimpleSettableValue;
 import org.observe.XformOptions;
 import org.observe.supertest.ChainLinkGenerator;
 import org.observe.supertest.ObservableChainLink;
@@ -47,8 +46,9 @@ public class MappedValueLink<S, T> extends ObservableValueLink<S, T> implements 
 			TestHelper helper) {
 			ObservableValueLink<?, T> sourceVL = (ObservableValueLink<?, T>) sourceLink;
 			TypeTransformation<T, X> transform = MappedCollectionLink.transform(sourceVL.getType(), targetType, helper, true, false);
-			SimpleSettableValue<TypeTransformation<T, X>> txValue = new SimpleSettableValue<>(
-				(TypeToken<TypeTransformation<T, X>>) (TypeToken<?>) new TypeToken<Object>() {}, false);
+			SettableValue<TypeTransformation<T, X>> txValue = SettableValue
+				.build((TypeToken<TypeTransformation<T, X>>) (TypeToken<?>) new TypeToken<Object>() {
+				}).build();
 			txValue.set(transform, null);
 			boolean variableMap = helper.getBoolean();
 			boolean needsUpdateReeval = !sourceVL.isCheckingOldValues() || variableMap;

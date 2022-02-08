@@ -8,6 +8,7 @@ import org.observe.SimpleObservable;
 import org.qommons.Lockable;
 import org.qommons.Lockable.CoreId;
 import org.qommons.TestHelper;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 
@@ -75,6 +76,11 @@ public abstract class AbstractChainLink<S, T> implements ObservableChainLink<S, 
 	/** @return An observable that fires when this link is destroyed */
 	protected Observable<Void> getDestruction(){
 		return theDestruction;
+	}
+
+	@Override
+	public ThreadConstraint getThreadConstraint() {
+		return getLocking().getThreadConstraint(); // Probably not right, but we're not testing this
 	}
 
 	@Override

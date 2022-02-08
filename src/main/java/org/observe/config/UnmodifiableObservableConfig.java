@@ -6,6 +6,7 @@ import org.observe.Observable;
 import org.qommons.Identifiable;
 import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
@@ -52,6 +53,11 @@ public class UnmodifiableObservableConfig extends AbstractObservableConfig {
 	@Override
 	public CoreId getCoreId() {
 		return theWrapped.getCoreId();
+	}
+
+	@Override
+	public ThreadConstraint getThreadConstraint() {
+		return theWrapped.getThreadConstraint();
 	}
 
 	@Override
@@ -270,6 +276,11 @@ public class UnmodifiableObservableConfig extends AbstractObservableConfig {
 			if (before != null && before.compareTo(valueEl) < 0)
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 			return getElement(valueEl);
+		}
+
+		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return theBacking.getThreadConstraint();
 		}
 
 		@Override

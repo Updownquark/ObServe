@@ -14,6 +14,7 @@ import org.observe.Observable;
 import org.observe.Observer;
 import org.observe.SimpleObservable;
 import org.observe.Subscription;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.ListenerList;
 
@@ -286,6 +287,11 @@ public class WeakListening {
 			@Override
 			public Object getIdentity() {
 				return observable.getIdentity();
+			}
+
+			@Override
+			public ThreadConstraint getThreadConstraint() {
+				return observable.getThreadConstraint();
 			}
 
 			@Override

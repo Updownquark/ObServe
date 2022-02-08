@@ -45,8 +45,8 @@ public class FlattenedCollectionValuesLink<S, T> extends AbstractMappedCollectio
 			TestValueType type = targetType != null ? targetType : BaseCollectionLink.nextType(helper);
 			int bucketCount = helper.getInt(2, 10);
 			TypeToken<X> typeToken = (TypeToken<X>) type.getType();
-			BetterSortedMap<T, SettableValue<X>> buckets = new BetterTreeMap<>(false,
-				SortedCollectionLink.compare(sourceCL.getType(), helper));
+			BetterSortedMap<T, SettableValue<X>> buckets = BetterTreeMap.<T> build(SortedCollectionLink.compare(sourceCL.getType(), helper))
+				.buildMap();
 			Function<TestHelper, X> bucketValueGen = (Function<TestHelper, X>) ObservableChainTester.SUPPLIERS.get(type);
 			for (int i = 0; i < bucketCount; i++) {
 				T sourceValue = sourceCL.getValueSupplier().apply(helper);

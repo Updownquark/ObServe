@@ -52,7 +52,7 @@ public class ObservableListModel<E> implements ListModel<E> {
 		theWrapped = wrap;
 		isSafe = safe;
 		theCachedData = new ArrayList<>();
-		theListeners = new BetterTreeList<>(false);
+		theListeners = BetterTreeList.<ListDataListener> build().build();
 		thePendingUpdates = new AtomicInteger();
 	}
 

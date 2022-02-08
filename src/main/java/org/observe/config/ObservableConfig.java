@@ -48,6 +48,7 @@ import org.qommons.Causable;
 import org.qommons.Nameable;
 import org.qommons.Stamped;
 import org.qommons.StringUtils;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
@@ -1189,10 +1190,11 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 
 	/**
 	 * @param name The name for the root element
+	 * @param threadConstraint The thread constraint for the config to obey
 	 * @return A thread-safe, empty {@link ObservableConfig} object with the given name
 	 */
-	public static ObservableConfig createRoot(String name) {
-		return DefaultObservableConfig.createRoot(name);
+	public static ObservableConfig createRoot(String name, ThreadConstraint threadConstraint) {
+		return DefaultObservableConfig.createRoot(name, threadConstraint);
 	}
 
 	/**
@@ -1238,7 +1240,7 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 			if (replacements instanceof BetterSortedMap)
 				namedReplacements = (BetterSortedMap<String, String>) replacements;
 			else
-				namedReplacements = new BetterTreeMap<String, String>(false, String::compareTo).withAll(replacements);
+				namedReplacements = BetterTreeMap.<String> build(String::compareTo).<String> buildMap().withAll(replacements);
 			str = new StringBuilder();
 		}
 

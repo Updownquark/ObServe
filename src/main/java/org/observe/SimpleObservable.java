@@ -5,6 +5,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.qommons.Identifiable;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.TransactableBuilder;
 import org.qommons.Transaction;
@@ -24,12 +25,14 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 	/** Builds {@link SimpleObservable}s */
 	public static class Builder extends TransactableBuilder.Default<Builder> {
 		private ListenerList.Builder theListening;
+		private ThreadConstraint theThreadConstraint;
 		private boolean isInternalState;
 		private Object theIdentity;
 
 		Builder() {
 			super("observable");
 			theListening = ListenerList.build();
+			theThreadConstraint = ThreadConstraint.ANY;
 		}
 
 		/**
@@ -64,12 +67,18 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 		 * @return This builder
 		 */
 		public Builder withLocking(ReentrantReadWriteLock lock) {
-			return withLocking(o -> Transactable.transactable(lock, o));
+			return withLocking(o -> Transactable.transactable(lock, o, theThreadConstraint));
 		}
 
 		/** @return The observable */
 		public <T> SimpleObservable<T> build() {
 			return build(null);
+		}
+
+		@Override
+		public Builder withThreadConstraint(ThreadConstraint constraint) {
+			theThreadConstraint = constraint;
+			return this;
 		}
 
 		/**
@@ -120,7 +129,7 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 	 */
 	SimpleObservable(Consumer<? super Observer<? super T>> onSubscribe, Object identity, String description, boolean internalState,
 		ReentrantReadWriteLock lock, ListenerList.Builder listening) {
-		this(onSubscribe, identity, description, internalState, o -> Transactable.transactable(lock, o), listening);
+		this(onSubscribe, identity, description, internalState, o -> Transactable.transactable(lock, o, ThreadConstraint.ANY), listening);
 	}
 
 	/**
@@ -154,6 +163,11 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 	/** @return This observable's lock */
 	protected Transactable getLock() {
 		return theLock;
+	}
+
+	@Override
+	public ThreadConstraint getThreadConstraint() {
+		return theLock == null ? ThreadConstraint.ANY : theLock.getThreadConstraint();
 	}
 
 	@Override
@@ -246,6 +260,11 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 		@Override
 		public Subscription subscribe(Observer<? super T> observer) {
 			return theWrapped.subscribe(observer);
+		}
+
+		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return theWrapped.getThreadConstraint();
 		}
 
 		@Override

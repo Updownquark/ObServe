@@ -23,6 +23,7 @@ import org.observe.util.TypeTokens;
 import org.qommons.Identifiable;
 import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
@@ -262,6 +263,11 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 		MappedValueCollection(K key, BetterCollection<V0> sourceValues) {
 			theKey = key;
 			theSourceValues = sourceValues;
+		}
+
+		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return theSourceValues.getThreadConstraint();
 		}
 
 		@Override

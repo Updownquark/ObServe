@@ -424,7 +424,7 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> im
 
 		ValueElement(CollectionLinkElement<T, T> element) {
 			this.element = element;
-			sourceElements = new BetterTreeList<>(false);
+			sourceElements = BetterTreeList.<CollectionLinkElement<?, T>> build().build();
 		}
 
 		@Override

@@ -66,6 +66,7 @@ import org.qommons.BiTuple;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.SubClassMap2;
+import org.qommons.ThreadConstraint;
 import org.qommons.TimeUtils;
 import org.qommons.TimeUtils.TimeEvaluationOptions;
 import org.qommons.TriFunction;
@@ -352,7 +353,7 @@ public class ObservableModelQonfigParser {
 							}
 						}
 					}
-					ObservableConfig config = ObservableConfig.createRoot(configName);
+					ObservableConfig config = ObservableConfig.createRoot(configName, ThreadConstraint.EDT);
 					ObservableConfig.XmlEncoding encoding = ObservableConfig.XmlEncoding.DEFAULT;
 					boolean loaded = false;
 					if (configFile.exists()) {
@@ -2299,7 +2300,7 @@ public class ObservableModelQonfigParser {
 	}
 
 	BetterList<TypeToken<?>> argList(TypeToken<?>... init) {
-		return new BetterTreeList<TypeToken<?>>(false).with(init);
+		return BetterTreeList.<TypeToken<?>> build().build().with(init);
 	}
 
 	private interface ParsedTransformation {
