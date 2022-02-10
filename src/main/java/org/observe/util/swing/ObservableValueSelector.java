@@ -142,22 +142,11 @@ public class ObservableValueSelector<T, X> extends JPanel {
 
 	private boolean isIncludedByDefault;
 
-	/**
-	 * @param sourceRows The collection of values to select from
-	 * @param sourceColumns The collection of columns to display in the source table
-	 * @param destColumns The collection of columns to display in the included table
-	 * @param map The mapping function from source to included value
-	 * @param reEvalOnUpdate Whether to re-evaluate the mapping function when a source value is updated
-	 * @param until The observable that, when fired, will release this selector's resources
-	 * @param includedByDefault Whether initial and new values in the source collection will automatically be included
-	 * @param filterFormat A format to produce table controls (e.g. filtering) from text. If null, {@link TableContentControl#FORMAT} will
-	 *        be used as a default.
-	 */
-	public ObservableValueSelector(ObservableCollection<T> sourceRows, //
+	private ObservableValueSelector(ObservableCollection<T> sourceRows, //
 		ObservableCollection<? extends CategoryRenderStrategy<? super SelectableValue<T, X>, ?>> sourceColumns, //
 			ObservableCollection<? extends CategoryRenderStrategy<? super SelectableValue<T, X>, ?>> destColumns, //
 				Function<? super T, ? extends X> map, boolean reEvalOnUpdate, Observable<?> until, //
-				boolean includedByDefault, Format<TableContentControl> filterFormat) {
+				boolean includedByDefault, Format<TableContentControl> filterFormat, boolean commitOnType, String itemName) {
 		super(new JustifiedBoxLayout(false).crossJustified().mainJustified());
 		theSourceRows = sourceRows;
 		theMap = map;
@@ -205,16 +194,15 @@ public class ObservableValueSelector<T, X> extends JPanel {
 
 		PanelPopulation.populateHPanel(this, getLayout(), until)//
 		.addVPanel(
-			srcPanel -> srcPanel.addTextField(null, theFilterText, filterFormat == null ? TableContentControl.FORMAT : filterFormat, tf -> tf//
-				.modifyEditor(tfe -> {
+			srcPanel -> srcPanel.addTextField(null, theFilterText, filterFormat == null ? TableContentControl.FORMAT : filterFormat,
+				tf -> TableContentControl.configureSearchField(tf.fill(), commitOnType).modifyEditor(tfe -> {
 					theSearchField = tfe;
-					tfe.setCommitOnType(true).setEmptyText("Search or Sort...")
-					.withToolTip(TableContentControl.TABLE_CONTROL_TOOLTIP)
-					.setIcon(ObservableSwingUtils.getFixedIcon(getClass(), "/icons/search.png", 16, 16));
-				}).fill())//
+				}))//
 			.addTable(theSelectableValues, srcTbl -> {
 				theSourceTable = srcTbl.getEditor();
-				srcTbl.withColumns(sourceColumns).withFiltering(theFilterText).fill();
+						if (itemName != null)
+							srcTbl.withItemName(itemName);
+						srcTbl.withCountTitle("available").withColumns(sourceColumns).withFiltering(theFilterText).fill();
 			}).fill())//
 		.addVPanel(buttonPanel -> {
 			buttonPanel.getContainer().setLayout(new JustifiedBoxLayout(true));
@@ -228,7 +216,9 @@ public class ObservableValueSelector<T, X> extends JPanel {
 			.addComponent(null, theSelectionCountLabel, null)//
 			.addTable(theIncludedValues, destTbl -> {
 				theDestTable = destTbl.getEditor();
-				destTbl.withColumns(destColumns).fill();
+					if (itemName != null)
+						destTbl.withItemName(itemName);
+					destTbl.withCountTitle("included").withColumns(destColumns).fill();
 			}).fill());
 
 		ObservableTableModel<SelectableValue<T, X>> sourceModel = (ObservableTableModel<SelectableValue<T, X>>) theSourceTable.getModel();
@@ -552,5 +542,77 @@ public class ObservableValueSelector<T, X> extends JPanel {
 			theExcludeAllButton.setToolTipText("Exclude 1 included item");
 		else
 			theExcludeAllButton.setToolTipText("Exclude all " + includedCount + " included items");
+	}
+
+	public static <T, X> Builder<T, X> build(ObservableCollection<T> sourceRows, //
+		ObservableCollection<? extends CategoryRenderStrategy<? super SelectableValue<T, X>, ?>> sourceColumns, //
+		ObservableCollection<? extends CategoryRenderStrategy<? super SelectableValue<T, X>, ?>> destColumns, //
+		Function<? super T, ? extends X> map) {
+		return new Builder<>(sourceRows, sourceColumns, destColumns, map);
+	}
+
+	public static class Builder<T, X> {
+		private final ObservableCollection<T> theSourceRows;
+		private final ObservableCollection<? extends CategoryRenderStrategy<? super SelectableValue<T, X>, ?>> theSourceColumns;
+		private final ObservableCollection<? extends CategoryRenderStrategy<? super SelectableValue<T, X>, ?>> theDestColumns;
+		private final Function<? super T, ? extends X> theMap;
+		private boolean isReEvalOnUpdate;
+		private Observable<?> theUntil;
+		private boolean isIncludedByDefault;
+		private Format<TableContentControl> theFilterFormat;
+		private boolean isFilterCommitOnType;
+		private String theItemName;
+
+		Builder(ObservableCollection<T> sourceRows,
+			ObservableCollection<? extends CategoryRenderStrategy<? super SelectableValue<T, X>, ?>> sourceColumns,
+				ObservableCollection<? extends CategoryRenderStrategy<? super SelectableValue<T, X>, ?>> destColumns,
+					Function<? super T, ? extends X> map) {
+			theSourceRows = sourceRows;
+			theSourceColumns = sourceColumns;
+			theDestColumns = destColumns;
+			theMap = map;
+
+			isReEvalOnUpdate = true;
+			theUntil = Observable.empty();
+			isIncludedByDefault = false;
+			theFilterFormat = TableContentControl.FORMAT;
+			isFilterCommitOnType = true;
+			theItemName = null;
+		}
+
+		public Builder<T, X> reEvalOnUpdate(boolean reEvalOnUpdate) {
+			isReEvalOnUpdate = reEvalOnUpdate;
+			return this;
+		}
+
+		public Builder<T, X> withUntil(Observable<?> until) {
+			theUntil = until;
+			return this;
+		}
+
+		public Builder<T, X> includeAllByDefault(boolean includedByDefault) {
+			isIncludedByDefault = includedByDefault;
+			return this;
+		}
+
+		public Builder<T, X> withFilterFormat(Format<TableContentControl> filterFormat) {
+			theFilterFormat = filterFormat;
+			return this;
+		}
+
+		public Builder<T, X> withFilterCommitOnType(boolean filterCommitOnType) {
+			isFilterCommitOnType = filterCommitOnType;
+			return this;
+		}
+
+		public Builder<T, X> withItemName(String itemName) {
+			theItemName = itemName;
+			return this;
+		}
+
+		public ObservableValueSelector<T, X> build() {
+			return new ObservableValueSelector<>(theSourceRows, theSourceColumns, theDestColumns, theMap, isReEvalOnUpdate, theUntil,
+				isIncludedByDefault, theFilterFormat, isFilterCommitOnType, theItemName);
+		}
 	}
 }
