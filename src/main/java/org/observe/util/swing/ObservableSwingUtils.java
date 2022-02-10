@@ -74,8 +74,8 @@ import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.ObservableCollection;
 import org.observe.config.ObservableConfig;
 import org.observe.util.AbstractSafeObservableCollection;
-import org.observe.util.SafeObservableCollection;
 import org.observe.util.TypeTokens;
+import org.observe.util.UIOptimizedCollection;
 import org.qommons.Causable;
 import org.qommons.Causable.CausableKey;
 import org.qommons.LambdaUtils;
@@ -136,8 +136,8 @@ public class ObservableSwingUtils {
 	public static <E> AbstractSafeObservableCollection<E> safe(ObservableCollection<E> collection, Observable<?> until) {
 		if (collection instanceof AbstractSafeObservableCollection)
 			return (AbstractSafeObservableCollection<E>) collection;
-		return new SafeObservableCollection<>(collection, ThreadConstraint.EDT, until);
-		// return new UIOptimizedCollection<>(collection, ThreadConstraint.EDT, until);
+		// return new SafeObservableCollection<>(collection, ThreadConstraint.EDT, until);
+		return new UIOptimizedCollection<>(collection, ThreadConstraint.EDT, until);
 	}
 
 	/**
@@ -679,18 +679,24 @@ public class ObservableSwingUtils {
 		ObservableCollection<E> selection, Observable<?> until) {
 		Supplier<List<E>> selectionGetter = () -> getSelection(model, selectionModel.get(), null);
 		boolean[] callbackLock = new boolean[1];
+		boolean[] asyncSelection = new boolean[1];
 		Consumer<Object> syncSelection = cause -> {
 			List<E> selValues = selectionGetter.get();
 			try (Transaction selT = selection.lock(true, cause)) {
 				CollectionUtils.synchronize(selection, selValues, (v1, v2) -> equivalence.elementEquals(v1, v2))//
 				.simple(LambdaUtils.identity())//
 				.adjust();
+				asyncSelection[0] = false;
 			}
 		};
-		ListSelectionListener selListener = e -> {
+		ListSelectionListener[] selListener = new ListSelectionListener[1];
+		selListener[0] = e -> {
 			ListSelectionModel selModel = selectionModel.get();
-			if (selModel.getValueIsAdjusting() || callbackLock[0])
+			if (selModel.getValueIsAdjusting() || callbackLock[0]) {
+				asyncSelection[0] = true;
+				EventQueue.invokeLater(() -> selListener[0].valueChanged(e));
 				return;
+			}
 			callbackLock[0] = true;
 			try {
 				if (selModel.getMinSelectionIndex() < 0) {
@@ -711,14 +717,19 @@ public class ObservableSwingUtils {
 
 			@Override
 			public void contentsChanged(ListDataEvent e) {
+				if (asyncSelection[0]) {
+					// If the table model changes at the same time as the selection (e.g. when the user types something
+					// in the non-commit-on-type filter field and then clicks the table without pressing enter),
+					// the callbackLock will prevent the selection from updating while the contents change.
+					return;
+				}
 				int selIdx = 0;
 				callbackLock[0] = true;
 				ListSelectionModel selModel = selectionModel.get();
 				try (Transaction t = selection.lock(true, e)) {
 					for (int i = selModel.getMinSelectionIndex(); i <= selModel.getMaxSelectionIndex() && i <= e.getIndex1(); i++) {
 						if (selModel.isSelectedIndex(i)) {
-							if (i >= e.getIndex0())
-								selection.mutableElement(selection.getElement(selIdx).getElementId()).set(model.getElementAt(i));
+							selection.mutableElement(selection.getElement(selIdx).getElementId()).set(model.getElementAt(i));
 							selIdx++;
 						}
 					}
@@ -728,10 +739,10 @@ public class ObservableSwingUtils {
 			}
 		};
 		PropertyChangeListener selModelListener = evt -> {
-			((ListSelectionModel) evt.getOldValue()).removeListSelectionListener(selListener);
-			((ListSelectionModel) evt.getNewValue()).addListSelectionListener(selListener);
+			((ListSelectionModel) evt.getOldValue()).removeListSelectionListener(selListener[0]);
+			((ListSelectionModel) evt.getNewValue()).addListSelectionListener(selListener[0]);
 		};
-		selectionModel.get().addListSelectionListener(selListener);
+		selectionModel.get().addListSelectionListener(selListener[0]);
 		if (component != null)
 			component.addPropertyChangeListener("selectionModel", selModelListener);
 		model.addListDataListener(modelListener);
@@ -816,7 +827,7 @@ public class ObservableSwingUtils {
 		until.take(1).act(__ -> onEQ(() -> {
 			if (component != null)
 				component.removePropertyChangeListener("selectionModel", selModelListener);
-			selectionModel.get().removeListSelectionListener(selListener);
+			selectionModel.get().removeListSelectionListener(selListener[0]);
 			model.removeListDataListener(modelListener);
 		}));
 

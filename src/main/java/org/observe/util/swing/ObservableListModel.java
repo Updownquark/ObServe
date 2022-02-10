@@ -160,19 +160,31 @@ public class ObservableListModel<E> implements ListModel<E> {
 
 	private void intervalAdded(ListDataEvent event) {
 		for (ListDataListener listener : theListeners) {
-			listener.intervalAdded(event);
+			try {
+				listener.intervalAdded(event);
+			} catch (RuntimeException e) {
+				e.printStackTrace();
+			}
 		}
 	}
 
 	private void intervalRemoved(ListDataEvent event) {
 		for (ListDataListener listener : theListeners) {
-			listener.intervalRemoved(event);
+			try {
+				listener.intervalRemoved(event);
+			} catch (RuntimeException e) {
+				e.printStackTrace();
+			}
 		}
 	}
 
 	private void contentsChanged(ListDataEvent event) {
 		for (ListDataListener listener : theListeners) {
-			listener.contentsChanged(event);
+			try {
+				listener.contentsChanged(event);
+			} catch (RuntimeException e) {
+				e.printStackTrace();
+			}
 		}
 	}
 

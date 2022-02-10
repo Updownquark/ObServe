@@ -32,20 +32,31 @@ import com.google.common.reflect.TypeToken;
  * @param <E> The type of elements in the collection
  */
 public abstract class AbstractSafeObservableCollection<E> extends ObservableCollectionWrapper<E> {
+	/**
+	 * Represents an element in a {@link AbstractSafeObservableCollection}, which may or may not also be present in the source collection
+	 *
+	 * @param <E> The type of values in the collection
+	 */
 	protected static class ElementRef<E> {
 		private final ElementId sourceId;
 		private ElementId synthId;
 		private E value;
 
+		/**
+		 * @param sourceId The element ID in the source
+		 * @param value The value
+		 */
 		protected ElementRef(ElementId sourceId, E value) {
 			this.sourceId = sourceId;
 			this.value = value;
 		}
 
+		/** @return The element ID that this element represents in the source collection */
 		public ElementId getSourceId() {
 			return sourceId;
 		}
 
+		/** @return The element ID of this element in the safe collection */
 		public ElementId getSynthId() {
 			return synthId;
 		}
@@ -54,10 +65,12 @@ public abstract class AbstractSafeObservableCollection<E> extends ObservableColl
 			this.synthId = synthId;
 		}
 
+		/** @return The value of the element */
 		public E getValue() {
 			return value;
 		}
 
+		/** @param value The new value for the element */
 		public void setValue(E value) {
 			this.value = value;
 		}
@@ -68,8 +81,17 @@ public abstract class AbstractSafeObservableCollection<E> extends ObservableColl
 		}
 	}
 
+	/** The source collection whose data this safe collection represents */
 	protected final ObservableCollection<E> theCollection;
+	/**
+	 * The backing collection of elements that are present in this safe collection, which were at one time and may still be present in the
+	 * source collection
+	 */
 	protected final BetterTreeList<ElementRef<E>> theSyntheticBacking;
+	/**
+	 * The observable collection of elements that are present in this safe collection, which were at one time and may still be present in
+	 * the source collection
+	 */
 	protected final ObservableCollection<ElementRef<E>> theSyntheticCollection;
 
 	private final ThreadConstraint theThreadConstraint;
@@ -105,6 +127,11 @@ public abstract class AbstractSafeObservableCollection<E> extends ObservableColl
 			Debug.d().debug(this, true).merge(d);
 	}
 
+	/**
+	 * Initializes this collection's synchronization
+	 *
+	 * @param until An observable to cease synchronization
+	 */
 	protected void init(Observable<?> until) {
 		try (Transaction t = theCollection.lock(false, null)) {
 			init(theSyntheticCollection.flow()//
@@ -117,6 +144,18 @@ public abstract class AbstractSafeObservableCollection<E> extends ObservableColl
 			init[0] = false;
 			if (until != null)
 				until.take(1).act(__ -> collSub.unsubscribe());
+			if (hasQueuedEvents()) {
+				if (theThreadConstraint.isEventThread())
+					doFlush();
+				else {
+					do {
+						try {
+							Thread.sleep(20);
+						} catch (InterruptedException e) {
+						}
+					} while (hasQueuedEvents());
+				}
+			}
 		}
 	}
 
@@ -126,8 +165,18 @@ public abstract class AbstractSafeObservableCollection<E> extends ObservableColl
 	 */
 	public abstract boolean hasQueuedEvents();
 
+	/**
+	 * @param evt The event that occurred in the source collection
+	 * @param initial Whether the event is occurring during initialization of this safe collection (for elements that were already present
+	 *        in the source upon creation of the safe collection)
+	 */
 	protected abstract void handleEvent(ObservableCollectionEvent<? extends E> evt, boolean initial);
 
+	/**
+	 * Flushes this collection's events to the event thread
+	 * 
+	 * @return Whether anything was flushed, or also if the state of changes prevented flushing from occurring (should try again)
+	 */
 	protected abstract boolean doFlush();
 
 	@Override
@@ -135,14 +184,26 @@ public abstract class AbstractSafeObservableCollection<E> extends ObservableColl
 		return theThreadConstraint;
 	}
 
+	/** @return Whether events for this safe collection can be fired on the current thread */
 	public boolean isOnEventThread() {
-		return theThreadConstraint == null || theThreadConstraint.isEventThread();
+		return theThreadConstraint.isEventThread();
 	}
 
+	/**
+	 * @param element The new element in this safe collection
+	 * @param synthId The ID of the element in this collection
+	 */
 	protected void initialize(ElementRef<E> element, ElementId synthId) {
 		element.setSynthId(synthId);
 	}
 
+	/**
+	 * Creates a new element for this collection
+	 * 
+	 * @param sourceId The element ID in the source collection
+	 * @param value The value in the source collection
+	 * @return The new element
+	 */
 	protected ElementRef<E> createElement(ElementId sourceId, E value) {
 		return new ElementRef<>(sourceId, value);
 	}

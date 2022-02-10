@@ -17,6 +17,7 @@ import org.qommons.Transaction;
 import org.qommons.collect.BetterSortedList.SortedSearchFilter;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
+import org.qommons.collect.ReentrantNotificationException;
 import org.qommons.threading.QommonsTimer;
 
 /**
@@ -36,18 +37,23 @@ import org.qommons.threading.QommonsTimer;
  * @param <E> The type of value in the collection
  */
 public class UIOptimizedCollection<E> extends AbstractSafeObservableCollection<E> {
+	/**
+	 * Represents an element in a {@link UIOptimizedCollection}, which may or may not also be present in the source collection
+	 *
+	 * @param <E> The type of values in the collection
+	 */
 	protected static class UIElementRef<E> extends ElementRef<E> {
 		UIElementRef<E> thePreviousPresentElement;
 		UIElementRef<E> theNextPresentElement;
 		boolean isChanged;
 		boolean isRemoved;
 
+		/**
+		 * @param sourceId The element ID in the source
+		 * @param value The value
+		 */
 		public UIElementRef(ElementId sourceId, E value) {
 			super(sourceId, value);
-		}
-
-		public int compareBySynthOrder(UIElementRef<E> other) {
-			return getSynthId().compareTo(other.getSynthId());
 		}
 	}
 
@@ -58,6 +64,11 @@ public class UIOptimizedCollection<E> extends AbstractSafeObservableCollection<E
 	private final CausableKey theFlushKey;
 	private final AtomicBoolean isFlushing;
 
+	/**
+	 * @param collection The source collection to represent
+	 * @param constraint The thread constraint for this collection to fire events on
+	 * @param until The observable to cease this collection's synchronization
+	 */
 	public UIOptimizedCollection(ObservableCollection<E> collection, ThreadConstraint constraint, Observable<?> until) {
 		super(collection, constraint);
 		thePeriodicFlushTask = QommonsTimer.getCommonInstance().build(() -> {
@@ -67,7 +78,12 @@ public class UIOptimizedCollection<E> extends AbstractSafeObservableCollection<E
 			constraint.invokeLater(task);
 			return true;
 		});
-		theFlushKey = Causable.key((cause, values) -> constraint.invokeLater(this::doFlush));
+		theFlushKey = Causable.key((cause, values) -> {
+			if (constraint.isEventThread())
+				doFlush();
+			else
+				constraint.invokeLater(this::doFlush);
+		});
 		isFlushing = new AtomicBoolean();
 		theAddedElements = new HashSet<>();
 		theRemovedElements = new ArrayList<>();
@@ -76,7 +92,7 @@ public class UIOptimizedCollection<E> extends AbstractSafeObservableCollection<E
 	}
 
 	private void scheduleFlush() {
-		// thePeriodicFlushTask.times(2).setActive(true); TODO
+		thePeriodicFlushTask.times(2).setActive(true);
 	}
 
 	@Override
@@ -86,11 +102,15 @@ public class UIOptimizedCollection<E> extends AbstractSafeObservableCollection<E
 
 	@Override
 	protected void handleEvent(ObservableCollectionEvent<? extends E> evt, boolean initial) {
-		while (!isFlushing.compareAndSet(false, true)) {
-			try {
-				Thread.sleep(5);
-			} catch (InterruptedException e) {
-			}
+		if (!isFlushing.compareAndSet(false, true)) {
+			if (isOnEventThread())
+				throw new ReentrantNotificationException(REENTRANT_EVENT_ERROR);
+			do {
+				try {
+					Thread.sleep(5);
+				} catch (InterruptedException e) {
+				}
+			} while (!isFlushing.compareAndSet(false, true));
 		}
 		try {
 			doHandleEvent(evt);
@@ -191,7 +211,10 @@ public class UIOptimizedCollection<E> extends AbstractSafeObservableCollection<E
 			}
 		}
 		boolean flushed = false;
-		try (Transaction t = theSyntheticCollection.lock(true, null)) {
+		Transaction t = theSyntheticCollection.tryLock(true, null);
+		if (t == null)
+			return true; // We'll need to try again
+		try {
 			// First, the removals
 			if (!theRemovedElements.isEmpty()) {
 				flushed = true;
@@ -228,6 +251,7 @@ public class UIOptimizedCollection<E> extends AbstractSafeObservableCollection<E
 				theAddedElements.clear();
 			}
 		} finally {
+			t.close();
 			isFlushing.set(false);
 		}
 		return flushed;

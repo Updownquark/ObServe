@@ -184,8 +184,13 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 			theRootNode.changed();
 			TreeModelEvent event = new TreeModelEvent(this, new Object[] { theRoot.get() }, null, null);
 
-			for (TreeModelListener listener : theListeners)
-				listener.treeNodesChanged(event);
+			for (TreeModelListener listener : theListeners) {
+				try {
+					listener.treeNodesChanged(event);
+				} catch (RuntimeException e) {
+					e.printStackTrace();
+				}
+			}
 		} else {
 			theRootNode.dispose();
 			theNodes.remove(new IdentityKey<>(theRootNode.get()));
@@ -193,8 +198,13 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 			theNodes.put(new IdentityKey<>(newRoot), theRootNode);
 			TreeModelEvent event = new TreeModelEvent(this, new Object[] { theRoot.get() }, null, null);
 
-			for (TreeModelListener listener : theListeners)
-				listener.treeStructureChanged(event);
+			for (TreeModelListener listener : theListeners) {
+				try {
+					listener.treeStructureChanged(event);
+				} catch (RuntimeException e) {
+					e.printStackTrace();
+				}
+			}
 		}
 	}
 
@@ -293,8 +303,13 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 					if (indexes.length == 0)
 						indexes = null;
 					TreeModelEvent event = new TreeModelEvent(this, getPath(), indexes, values);
-					for (TreeModelListener listener : theListeners)
-						listener.treeNodesInserted(event);
+					for (TreeModelListener listener : theListeners) {
+						try {
+							listener.treeNodesInserted(event);
+						} catch (RuntimeException e) {
+							e.printStackTrace();
+						}
+					}
 				}
 
 				theChildren.changes().takeUntil(unsubscribe).act(event -> {
@@ -399,8 +414,13 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 					if (indexes.length == 0)
 						indexes = null;
 					TreeModelEvent event = new TreeModelEvent(this, getPath(), indexes, values);
-					for (TreeModelListener listener : theListeners)
-						listener.treeNodesRemoved(event);
+					for (TreeModelListener listener : theListeners) {
+						try {
+							listener.treeNodesRemoved(event);
+						} catch (RuntimeException e) {
+							e.printStackTrace();
+						}
+					}
 
 					for (TreeNode child : theChildNodes)
 						child.dispose();
@@ -421,8 +441,13 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 
 			TreeModelEvent event = new TreeModelEvent(this, getPath(), indexes, values);
 
-			for (TreeModelListener listener : theListeners)
-				listener.treeNodesInserted(event);
+			for (TreeModelListener listener : theListeners) {
+				try {
+					listener.treeNodesInserted(event);
+				} catch (RuntimeException e) {
+					e.printStackTrace();
+				}
+			}
 		}
 
 		private void removed(int[] indexes, Object[] values) {
@@ -437,8 +462,13 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 
 			TreeModelEvent event = new TreeModelEvent(this, getPath(), indexes, values);
 
-			for (TreeModelListener listener : theListeners)
-				listener.treeNodesRemoved(event);
+			for (TreeModelListener listener : theListeners) {
+				try {
+					listener.treeNodesRemoved(event);
+				} catch (RuntimeException e) {
+					e.printStackTrace();
+				}
+			}
 		}
 
 		private void changed(int[] indexes, Object[] values) {
@@ -448,8 +478,13 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 				indexes = null;
 			TreeModelEvent event = new TreeModelEvent(this, getPath(), indexes, values);
 
-			for (TreeModelListener listener : theListeners)
-				listener.treeNodesChanged(event);
+			for (TreeModelListener listener : theListeners) {
+				try {
+					listener.treeNodesChanged(event);
+				} catch (RuntimeException e) {
+					e.printStackTrace();
+				}
+			}
 
 			for (int i : indexes)
 				theChildNodes.get(i).changed();
