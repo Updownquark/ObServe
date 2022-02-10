@@ -915,13 +915,11 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 			long stamp = theSource.getStamp();
 			if (stamp == -1 || stamp != theSourceStamp) {
 				try (Transaction t = lock()) {
-					stamp = theSourceStamp;
-					if (stamp == -1 || stamp != theSourceStamp) {
-						theSourceStamp = stamp;
-						S source = theSource.get();
-						theCachedSource = source;
-						theElement.sourceChanged(theCachedSource, source, theEngine.get());
-					}
+					stamp = theSource.getStamp();
+					theSourceStamp = stamp;
+					S source = theSource.get();
+					theCachedSource = source;
+					theElement.sourceChanged(theCachedSource, source, theEngine.get());
 				}
 			}
 			return new BiTuple<>(theElement, state);
