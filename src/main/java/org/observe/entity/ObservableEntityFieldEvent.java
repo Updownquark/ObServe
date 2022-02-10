@@ -22,7 +22,7 @@ public class ObservableEntityFieldEvent<E, F> extends EntityReflector.EntityFiel
 	 */
 	public ObservableEntityFieldEvent(ObservableEntity<E> entity, ObservableEntityFieldType<E, F> field, F oldValue, F newValue,
 		Object cause) {
-		super(field.getIndex(), field.getFieldType(), oldValue, newValue, cause);
+		super(field.getIndex(), oldValue, newValue, cause);
 		theField = field;
 		theEntity = entity;
 	}
