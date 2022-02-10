@@ -13,7 +13,6 @@ import java.util.function.Supplier;
 import org.observe.Equivalence;
 import org.observe.Equivalence.SortedEquivalence;
 import org.observe.util.TypeTokens;
-import org.qommons.ThreadConstraint;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedList;
@@ -287,7 +286,6 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 	implements ObservableCollectionBuilder<E, B> {
 		private final TypeToken<E> theType;
 		private BetterList<E> theBacking;
-		private ThreadConstraint theThreadConstraint;
 		private Comparator<? super E> theSorting;
 		private BiFunction<ElementId, BetterCollection<?>, ElementId> theElementSource;
 		private BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> theSourceElements;
@@ -315,18 +313,11 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 			theElementSource = toCopy.theElementSource;
 			theSourceElements = toCopy.theSourceElements;
 			theEquivalence = toCopy.theEquivalence;
-			theThreadConstraint = ThreadConstraint.ANY;
 		}
 
 		@Override
 		public B withBacking(BetterList<E> backing) {
 			theBacking = backing;
-			return (B) this;
-		}
-
-		@Override
-		public B withThreadConstraint(ThreadConstraint constraint) {
-			theThreadConstraint = constraint;
 			return (B) this;
 		}
 
@@ -382,11 +373,6 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 			return backing;
 		}
 
-		/** @return The thread constraint for collections built with this builder */
-		protected ThreadConstraint getThreadConstraint() {
-			return theThreadConstraint;
-		}
-
 		/** @return The equivalence for the collection */
 		protected Equivalence<? super E> getEquivalence() {
 			return theEquivalence;
@@ -415,8 +401,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 					: BetterTreeList.build();
 				backing = builder.withDescription(getDescription()).withCollectionLocking(getLocker()).build();
 			}
-			return new DefaultObservableCollection<>(theType, backing, theElementSource, theSourceElements, theEquivalence,
-				theThreadConstraint);
+			return new DefaultObservableCollection<>(theType, backing, theElementSource, theSourceElements, theEquivalence);
 		}
 
 		@Override
@@ -597,7 +582,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 			else if (!(backing instanceof BetterSortedList))
 				throw new IllegalStateException("An ObservableSortedCollection must be backed by an instance of BetterSortedList");
 			return new DefaultObservableSortedCollection<>(getType(), (BetterSortedList<E>) backing, getElementSource(),
-				getSourceElements(), getThreadConstraint());
+				getSourceElements());
 		}
 
 		@Override
@@ -739,8 +724,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 				.build();
 			else if (!(backing instanceof BetterSortedSet))
 				throw new IllegalStateException("An ObservableSortedCollection must be backed by an instance of BetterSortedList");
-			return new DefaultObservableSortedSet<>(getType(), (BetterSortedSet<E>) backing, getElementSource(), getSourceElements(),
-				getThreadConstraint());
+			return new DefaultObservableSortedSet<>(getType(), (BetterSortedSet<E>) backing, getElementSource(), getSourceElements());
 		}
 
 		@Override
