@@ -863,6 +863,8 @@ public class PanelPopulation {
 
 		P withFiltering(ObservableValue<? extends TableContentControl> filter);
 
+		P withCountTitle(String displayedText);
+
 		ObservableCollection<R> getFilteredRows();
 
 		P withMove(boolean up, Consumer<DataAction<R, ?>> actionMod);

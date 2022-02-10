@@ -19,6 +19,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
+import javax.swing.BorderFactory;
 import javax.swing.BoundedRangeModel;
 import javax.swing.DropMode;
 import javax.swing.Icon;
@@ -28,6 +29,7 @@ import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.ListSelectionModel;
 import javax.swing.TransferHandler;
+import javax.swing.border.TitledBorder;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 import javax.swing.event.ListDataEvent;
@@ -81,6 +83,7 @@ implements TableBuilder<R, P> {
 	private ObservableCollection<R> theSelectionValues;
 	private List<Object> theActions;
 	private ObservableValue<? extends TableContentControl> theFilter;
+	private String theCountTitleDisplayedText;
 	private Dragging.SimpleTransferSource<R> theDragSource;
 	private Dragging.SimpleTransferAccepter<R, R, R> theDragAccepter;
 	private List<ObservableTableModel.RowMouseListener<? super R>> theMouseListeners;
@@ -90,7 +93,7 @@ implements TableBuilder<R, P> {
 	private boolean isScrollable;
 	private boolean isPromisedSafe;
 
-	private Component theBuiltComponent;
+	private JComponent theBuiltComponent;
 
 	SimpleTableBuilder(ObservableCollection<R> rows, Supplier<Transactable> lock) {
 		super(new JTable(), lock);
@@ -192,6 +195,12 @@ implements TableBuilder<R, P> {
 	@Override
 	public P withFiltering(ObservableValue<? extends TableContentControl> filter) {
 		theFilter = filter;
+		return (P) this;
+	}
+
+	@Override
+	public P withCountTitle(String displayedText) {
+		theCountTitleDisplayedText = displayedText;
 		return (P) this;
 	}
 
@@ -793,6 +802,34 @@ implements TableBuilder<R, P> {
 		} else
 			theBuiltComponent = scroll;
 		table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+
+		if (theCountTitleDisplayedText != null) {
+			String singularItemName = theItemName != null ? theItemName : "item";
+			String pluralItemName = StringUtils.pluralize(singularItemName);
+			TitledBorder border = BorderFactory.createTitledBorder(singularItemName);
+			if (filtered != null) {
+				theRows.observeSize()
+				.transform(int[].class, tx -> tx.combineWith(filtered.observeSize()).combine((sz, f) -> new int[] { sz, f }))//
+				.changes().takeUntil(until).act(evt -> {
+					int sz = evt.getNewValue()[0];
+					int f = evt.getNewValue()[1];
+					String text = f + " of " + sz + " " + (sz == 1 ? singularItemName : pluralItemName);
+					if (!theCountTitleDisplayedText.isEmpty())
+						text += " " + theCountTitleDisplayedText;
+					border.setTitle(text);
+					theBuiltComponent.repaint();
+				});
+			} else {
+				theRows.observeSize().changes().takeUntil(until).act(evt -> {
+					String text = evt.getNewValue() + " " + (evt.getNewValue() == 1 ? singularItemName : pluralItemName);
+					if (!theCountTitleDisplayedText.isEmpty())
+						text += " " + theCountTitleDisplayedText;
+					border.setTitle(text);
+					theBuiltComponent.repaint();
+				});
+			}
+			theBuiltComponent.setBorder(border);
+		}
 
 		// Set up transfer handling (DnD, copy/paste)
 		boolean draggable = theDragSource != null || theDragAccepter != null;

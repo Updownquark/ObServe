@@ -1,6 +1,5 @@
 package org.observe.util.swing;
 
-import java.awt.Color;
 import java.awt.EventQueue;
 import java.text.ParseException;
 import java.util.ArrayList;
@@ -30,7 +29,6 @@ import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
-import org.qommons.BiTuple;
 import org.qommons.BreakpointHere;
 import org.qommons.LambdaUtils;
 import org.qommons.Named;
@@ -187,9 +185,10 @@ public interface TableContentControl {
 		}
 	};
 
-	public static <F extends PanelPopulation.FieldEditor<ObservableTextField<TableContentControl>, F>> F configureSearchField(F field) {
-		return field.withTooltip(TableContentControl.TABLE_CONTROL_TOOLTIP).modifyEditor(tf2 -> tf2//
-			.setCommitOnType(true).setEmptyText("Search or Sort...")
+	public static <F extends PanelPopulation.FieldEditor<ObservableTextField<TableContentControl>, ?>> F configureSearchField(F field,
+		boolean commitOnType) {
+		return (F) field.fill().withTooltip(TableContentControl.TABLE_CONTROL_TOOLTIP).modifyEditor(tf2 -> tf2//
+			.setCommitOnType(commitOnType).setEmptyText("Search or Sort...")
 			.setIcon(ObservableSwingUtils.getFixedIcon(null, "/icons/search.png", 16, 16)));
 	}
 
@@ -479,7 +478,7 @@ public interface TableContentControl {
 			if (!category.searchGeneral())
 				return null;
 			SortedMatchSet matches = null;
-			for (int s = 0; s < toSearch.length() - theMatcher.length(); s++) {
+			for (int s = 0; s < toSearch.length(); s++) {
 				int c = s, m = 0;
 				while (m < theMatcher.length() && c < toSearch.length()) {
 					char matchCh = theMatcher.charAt(m);
@@ -1678,29 +1677,9 @@ public interface TableContentControl {
 				.withSize(640, 900)//
 				.withVContent(p -> p//
 					// .addTextField("Categories:", categories, new Format.ListFormat<>(Format.TEXT, ",", null), f -> f.fill())//
-					.addTextField("Filter", control, FORMAT, f -> f.fill().modifyEditor(tf -> tf.setCommitOnType(true)))//
+					.<TableContentControl> addTextField("Filter", control, FORMAT, tf -> configureSearchField(tf.fill(), true))//
 					.addTable(rows, table -> {
-						table.decorate(deco -> {
-							deco.withTitledBorder("Rows", Color.black);
-							Runnable[] install = new Runnable[1];
-							install[0] = () -> {
-								if (table.getFilteredRows() == null) {
-									EventQueue.invokeLater(install[0]);
-									return;
-								}
-								table.getRows().observeSize().transform((Class<BiTuple<Integer, Integer>>) (Class<?>) BiTuple.class,
-									tx -> tx.combineWith(table.getFilteredRows().observeSize()).combine((sz, f) -> new BiTuple<>(sz, f)))
-								.changes().act(evt -> {
-									int sz = evt.getNewValue().getValue1();
-									int f = evt.getNewValue().getValue2();
-									String title = "Displaying " + f + " of " + sz + " row" + (f == 1 ? "" : "s");
-									deco.withTitledBorder(title, Color.black);
-									if (table.getComponent() != null)
-										table.getComponent().repaint();
-								});
-							};
-							EventQueue.invokeLater(install[0]);
-						}).fill().withFiltering(control).withColumns(columns)//
+						table.withCountTitle("displayed").withItemName("row").fill().withFiltering(control).withColumns(columns)//
 						.withAdd(() -> new HashMap<>(), null)//
 						;
 					})//
