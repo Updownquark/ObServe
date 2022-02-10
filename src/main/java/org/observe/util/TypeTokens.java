@@ -682,6 +682,12 @@ public class TypeTokens {
 			return false;
 	}
 
+	/**
+	 * Converts from one type to another
+	 * 
+	 * @param <T> The source type
+	 * @param <X> The target type
+	 */
 	public static class TypeConverter<T, X> implements Function<T, X> {
 		private final TypeToken<X> theConvertedType;
 		private final Function<T, X> theConverter;
@@ -693,6 +699,7 @@ public class TypeTokens {
 			theName = name;
 		}
 
+		/** @return The {@link TypeToken} of the target type */
 		public TypeToken<X> getConvertedType() {
 			return theConvertedType;
 		}
