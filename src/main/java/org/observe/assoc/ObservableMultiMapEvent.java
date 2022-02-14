@@ -21,14 +21,17 @@ public class ObservableMultiMapEvent<K, V> extends ObservableMapEvent<K, V> {
 	 * @param type The type of the change (addition/removal/change)
 	 * @param move Whether this event represents either the removal of an entry in preparation for a move, or the re-addition of an entry
 	 *        that was just removed in the same move operation
+	 * @param oldKey The previous key. This will only be different from <code>key</code> if this event represents a modification to a key
+	 *        value that does not affect the contents of the key's values. In this case, {@link #getIndex()} will be -1 and
+	 *        {@link #getElementId()} will be null.
 	 * @param key The key under which a value was added/removed/changed
 	 * @param oldValue The value of the element before the change (for change type of {@link CollectionChangeType#set set} only)
 	 * @param newValue The value of the element after the change
 	 * @param cause The cause of the change
 	 */
 	public ObservableMultiMapEvent(ElementId keyElementId, ElementId valueElementId, int keyIndex, int valueIndex,
-		CollectionChangeType type, boolean move, K key, V oldValue, V newValue, Object cause) {
-		super(valueElementId, valueIndex, type, move, key, oldValue, newValue, cause);
+		CollectionChangeType type, boolean move, K oldKey, K key, V oldValue, V newValue, Object cause) {
+		super(valueElementId, valueIndex, type, move, oldKey, key, oldValue, newValue, cause);
 		theKeyElement = keyElementId;
 		theKeyIndex = keyIndex;
 	}

@@ -29,12 +29,21 @@ public class ObservableCollectionEvent<E> extends ObservableValueEvent<E> {
 	public ObservableCollectionEvent(ElementId elementId, int index, CollectionChangeType type, boolean move, E oldValue, E newValue,
 		Object... causes) {
 		super(type == CollectionChangeType.add, oldValue, newValue, causes);
-		if (index < 0)
-			throw new IndexOutOfBoundsException("" + index);
 		theElementId = elementId;
 		theIndex = index;
 		theType = type;
 		isMove = move;
+		checkIndex(index);
+	}
+
+	/**
+	 * Checks the index for this type and throws an exception if invalid
+	 * 
+	 * @param index The index passed to the constructor
+	 */
+	protected void checkIndex(int index) {
+		if (index < 0)
+			throw new IndexOutOfBoundsException("" + index);
 	}
 
 	/**

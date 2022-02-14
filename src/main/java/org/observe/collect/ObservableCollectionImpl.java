@@ -2446,7 +2446,9 @@ public final class ObservableCollectionImpl {
 					CollectionChangeType.add, initMove, null, el.get(), cause));
 				el.setListener(new CollectionElementListener<T>() {
 					@Override
-					public void update(T oldValue, T newValue, Object elCause) {
+					public void update(T oldValue, T newValue, Object elCause, boolean updateOnly) {
+						if (updateOnly)
+							return;
 						theModCount.incrementAndGet();
 						BinaryTreeNode<DerivedElementHolder<T>> left = holder[0].treeNode.getClosest(true);
 						BinaryTreeNode<DerivedElementHolder<T>> right = holder[0].treeNode.getClosest(false);

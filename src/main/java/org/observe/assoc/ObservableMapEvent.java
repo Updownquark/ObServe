@@ -11,6 +11,7 @@ import org.qommons.collect.ElementId;
  * @param <V> The value-type of the map
  */
 public class ObservableMapEvent<K, V> extends ObservableCollectionEvent<V> {
+	private final K theOldKey;
 	private final K theKey;
 
 	/**
@@ -19,15 +20,27 @@ public class ObservableMapEvent<K, V> extends ObservableCollectionEvent<V> {
 	 * @param type The type of the change (addition/removal/change)
 	 * @param move Whether this event represents either the removal of an entry in preparation for a move, or the re-addition of an entry
 	 *        that was just removed in the same move operation
+	 * @param oldKey The previous key. This will only be different from <code>key</code> if this event represents a modification to a key
+	 *        value that does not affect the contents of the key's values. In this case, {@link #getIndex()} will be -1
 	 * @param key The key under which a value was added/removed/changed
 	 * @param oldValue The value of the element before the change (for change type of {@link CollectionChangeType#set set} only)
 	 * @param newValue The value of the element after the change
 	 * @param cause The cause of the change
 	 */
 	public ObservableMapEvent(ElementId elementId, int index, CollectionChangeType type,
-		boolean move, K key, V oldValue, V newValue, Object cause) {
+		boolean move, K oldKey, K key, V oldValue, V newValue, Object cause) {
 		super(elementId, index, type, move, oldValue, newValue, cause);
+		theOldKey = oldKey;
 		theKey = key;
+	}
+
+	@Override
+	protected void checkIndex(int index) {
+	}
+
+	/** @return The previous key for the entry which was added/removed/changed */
+	public K getOldKey() {
+		return theOldKey;
 	}
 
 	/** @return The key for the entry which was added/removed/changed */

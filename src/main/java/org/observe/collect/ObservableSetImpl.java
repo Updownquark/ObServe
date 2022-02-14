@@ -999,20 +999,23 @@ public class ObservableSetImpl {
 					T oldValue = theActiveElement.get();
 					T newActiveValue = parentEl.get();
 					theActiveElement = parentEl;
-					if (oldValue != newActiveValue)
-						ObservableCollectionActiveManagers.update(theListener, oldValue, newActiveValue, cause);
-				} else
+					//Fire an internal-only event if there's not actually a change
+					ObservableCollectionActiveManagers.update(theListener, oldValue, newActiveValue, cause, oldValue == newActiveValue);
+				} else {
 					theDebug.act("add:no-effect").param("value", theValue).exec();
+					T value = theActiveElement.get();
+					ObservableCollectionActiveManagers.update(theListener, value, value, cause, true);
+				}
 
 				parentEl.setListener(new CollectionElementListener<T>() {
 					@Override
-					public void update(T oldValue, T newValue, Object innerCause) {
+					public void update(T oldValue, T newValue, Object innerCause, boolean internalOnly) {
 						T realOldValue = node.getValue();
 						theDebug.act("update").param("@", theValue).param("newValue", newValue).exec();
 						if (isInternallySetting) {
 							if (theActiveElement == parentEl) {
 								theDebug.act("update:trueUpdate").exec();
-								ObservableCollectionActiveManagers.update(theListener, realOldValue, newValue, innerCause);
+								ObservableCollectionActiveManagers.update(theListener, realOldValue, newValue, innerCause, internalOnly);
 							} else
 								theDebug.act("update:no-effect").exec();
 							theParentElements.mutableEntry(node.getElementId()).setValue(newValue);
@@ -1057,7 +1060,7 @@ public class ObservableSetImpl {
 								if (consistent.getAsBoolean()) {
 									theDebug.act("update:trueUpdate").exec();
 									theValue = newValue;
-									ObservableCollectionActiveManagers.update(theListener, realOldValue, newValue, innerCause);
+									ObservableCollectionActiveManagers.update(theListener, realOldValue, newValue, innerCause, false);
 								} else
 									reInsert = true;
 							} else {
@@ -1066,6 +1069,7 @@ public class ObservableSetImpl {
 							}
 							if (!reInsert) {
 								theParentElements.mutableEntry(node.getElementId()).setValue(newValue);
+								ObservableCollectionActiveManagers.update(theListener, realOldValue, newValue, innerCause, true);
 								parentUpdated(node, realOldValue, newValue, innerCause);
 							}
 						} else if (ue == null && theParentElements.size() == 1
@@ -1075,7 +1079,7 @@ public class ObservableSetImpl {
 							theDebug.act("update:move").exec();
 							moveTo(newValue);
 							theParentElements.mutableEntry(node.getElementId()).setValue(newValue);
-							ObservableCollectionActiveManagers.update(theListener, realOldValue, newValue, innerCause);
+							ObservableCollectionActiveManagers.update(theListener, realOldValue, newValue, innerCause, false);
 							parentUpdated(node, realOldValue, newValue, innerCause);
 							reInsert = false;
 						} else
@@ -1086,22 +1090,24 @@ public class ObservableSetImpl {
 							if (consistent.getAsBoolean()) {
 								// TODO
 							}
+							boolean updateActive = false;
 							if (theParentElements.isEmpty()) {
 								theDebug.act("update:remove").param("value", theValue).exec();
 								// This element is no longer represented
 								theElementsByValue.mutableEntry(theValueId).remove();
 								ObservableCollectionActiveManagers.removed(theListener, realOldValue, innerCause);
 								parentRemoved(node, realOldValue, innerCause);
-							} else if (theActiveElement == parentEl) {
-								Map.Entry<DerivedCollectionElement<T>, T> activeEntry = theParentElements.firstEntry();
-								theActiveElement = activeEntry.getKey();
-								theDebug.act("update:remove:repChange").exec();
-								theValue = activeEntry.getValue();
-								if (realOldValue != theValue)
-									ObservableCollectionActiveManagers.update(theListener, realOldValue, theValue, innerCause);
-								parentUpdated(node, realOldValue, newValue, innerCause);
-							} else
-								theDebug.act("update:remove:no-effect").exec();
+							} else {
+								updateActive = true;
+								if (theActiveElement == parentEl) {
+									Map.Entry<DerivedCollectionElement<T>, T> activeEntry = theParentElements.firstEntry();
+									theActiveElement = activeEntry.getKey();
+									theDebug.act("update:remove:repChange").exec();
+									theValue = activeEntry.getValue();
+									parentUpdated(node, realOldValue, newValue, innerCause);
+								} else
+									theDebug.act("update:remove:no-effect").exec();
+							}
 
 							if (ue == null) {
 								ue = createUniqueElement(newValue);
@@ -1112,6 +1118,11 @@ public class ObservableSetImpl {
 								theDebug.setField("internalAdd", true);
 								ue.addParent(parentEl, innerCause);
 								theDebug.setField("internalAdd", null);
+							}
+							if (updateActive) {
+								// Fire an internal-only event if there's no actual change
+								ObservableCollectionActiveManagers.update(theListener, realOldValue, theValue, innerCause,
+									realOldValue == theValue);
 							}
 						}
 					}
@@ -1142,9 +1153,11 @@ public class ObservableSetImpl {
 								// So we need to just remove and re-add this element
 								ObservableCollectionActiveManagers.removed(theListener, theValue, innerCause);
 								theAccepter.accept(UniqueElement.this, innerCause);
-							} else if (oldValue != theValue)
-								ObservableCollectionActiveManagers.update(theListener, oldValue, theValue, innerCause);
-						}
+							} else //Fire an internal-only event if there's no actual change
+								ObservableCollectionActiveManagers.update(theListener, oldValue, theValue, innerCause,
+									oldValue == theValue);
+						} else
+							ObservableCollectionActiveManagers.update(theListener, theValue, theValue, innerCause, true);
 					}
 				});
 				return node;

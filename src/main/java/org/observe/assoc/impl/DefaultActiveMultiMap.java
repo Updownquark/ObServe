@@ -1,8 +1,14 @@
 package org.observe.assoc.impl;
 
+import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Map;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -33,6 +39,7 @@ import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
+import org.qommons.collect.BetterHashMap;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterMap;
 import org.qommons.collect.BetterSet;
@@ -64,18 +71,17 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 
 	private final WeakListening.Builder theWeakListening;
 
-	private final BetterSortedSet<KeyEntry> theEntries;
 	private final BetterSortedSet<KeyEntry> theActiveEntries;
 
 	private final ObservableSet<K> theKeySet;
 
-	private final BetterSortedMap<ElementId, GroupedElementInfo> theElementInfo;
+	private final BetterMap<ElementId, Set<KeyEntry>> theKeysBySourceElement;
 
 	private long theStamp;
 	private int theValueSize;
 
 	private volatile boolean isNeedingNewKey;
-	private volatile ElementId theNewKeyId;
+	private volatile KeyEntry theNewKeyEntry;
 
 	private final ListenerList<Consumer<? super ObservableMultiMapEvent<? extends K, ? extends V>>> theMapListeners;
 	private final ListenerList<Consumer<? super ObservableCollectionEvent<? extends K>>> theKeySetListeners;
@@ -94,9 +100,8 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		theKeyManager = keyFlow.manageActive();
 		theValueManager = valueFlow.manageActive();
 
-		theEntries = BetterTreeSet.<KeyEntry> buildTreeSet(KeyEntry::compareBySource).build();
-		theActiveEntries = BetterTreeSet.<KeyEntry> buildTreeSet(KeyEntry::compareInternal).build();
-		theElementInfo = BetterTreeMap.<ElementId> build(ElementId::compareTo).buildMap();
+		theActiveEntries = BetterTreeSet.<KeyEntry> buildTreeSet(KeyEntry::compareBySource).build();
+		theKeysBySourceElement = BetterHashMap.build().buildMap();
 
 		theMapListeners = ListenerList.build().withFastSize(false).build();
 		theKeySetListeners = ListenerList.build().withFastSize(false).build();
@@ -110,16 +115,16 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 			public void accept(ObservableCollectionActiveManagers.DerivedCollectionElement<K> element, Object cause) {
 				KeyEntry entry = addKey(element, cause);
 				if (isNeedingNewKey)
-					theNewKeyId = entry.entryId;
+					theNewKeyEntry = entry;
 				element.setListener(new CollectionElementListener<K>() {
 					@Override
-					public void update(K oldValue, K newValue, Object updateCause) {
-						entry.updated(oldValue, newValue, updateCause);
+					public void update(K oldValue, K newValue, Object updateCause, boolean internalOnly) {
+						entry.updated(oldValue, newValue, updateCause, internalOnly);
 					}
 
 					@Override
 					public void removed(K value, Object removeCause) {
-						entry.removed(removeCause);
+						entry.removed(value, removeCause);
 					}
 				});
 			}
@@ -130,8 +135,8 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 				ValueRef ref = addValue(element, cause);
 				element.setListener(new CollectionElementListener<V>() {
 					@Override
-					public void update(V oldValue, V newValue, Object updateCause) {
-						ref.updated(oldValue, newValue, updateCause);
+					public void update(V oldValue, V newValue, Object updateCause, boolean internalOnly) {
+						ref.updated(oldValue, newValue, updateCause, internalOnly);
 					}
 
 					@Override
@@ -153,14 +158,6 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		}).build());
 	}
 
-	GroupedElementInfo getSourceElementInfo(ElementId sourceElement) {
-		MapEntryHandle<ElementId, GroupedElementInfo> srcEntry = theElementInfo.getOrPutEntry(sourceElement, GroupedElementInfo::new, null,
-			null, false, null);
-		GroupedElementInfo info = srcEntry.getValue();
-		info.elementInfoId = srcEntry.getElementId();
-		return info;
-	}
-
 	/** @return The new key set for this map */
 	protected ObservableSet<K> createKeySet() {
 		return new KeySet();
@@ -179,11 +176,6 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 	@Override
 	protected ActiveCollectionManager<?, ?, V> getValueManager() {
 		return theValueManager;
-	}
-
-	/** @return The set of all keys managed by this map, some of which may have no values and therefore may be absent from the key set */
-	protected BetterSortedSet<KeyEntry> getAllEntries() {
-		return theEntries;
 	}
 
 	/** @return The set of all keys managed by this map that have at least one value and therefore are included in the key set */
@@ -227,15 +219,15 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 			ObservableCollectionActiveManagers.DerivedCollectionElement<V> afterEl = getValueElement(afterKey, false);
 			ObservableCollectionActiveManagers.DerivedCollectionElement<V> beforeEl = getValueElement(beforeKey, true);
 			isNeedingNewKey = true;
-			ElementId newKeyId = null;
+			KeyEntry newKeyEntry = null;
 			getAddKey().accept(key);
 			for (V v : value.apply(key)) {
 				theValueManager.addElement(v, afterEl, beforeEl, first);
-				if (newKeyId == null) {
-					newKeyId = theNewKeyId;
-					if (newKeyId == null)
+				if (newKeyEntry == null) {
+					newKeyEntry = theNewKeyEntry;
+					if (newKeyEntry == null)
 						throw new IllegalStateException("Values added, but no new key");
-					theNewKeyId = null;
+					theNewKeyEntry = null;
 				}
 				first = true; // Add the next elements after
 				isNeedingNewKey = false;
@@ -243,7 +235,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 			getAddKey().clear();
 			if (added != null)
 				added.run();
-			return newKeyId == null ? null : theEntries.getElement(newKeyId).get();
+			return newKeyEntry;
 		}
 	}
 
@@ -301,20 +293,11 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 
 	private synchronized KeyEntry addKey(ObservableCollectionActiveManagers.DerivedCollectionElement<K> keyElement, Object cause) {
 		KeyEntry entry = new KeyEntry(keyElement);
-		entry.entryId = theEntries.addElement(entry, false).getElementId();
-		for (ElementId sourceElement : theKeyManager.getSourceElements(keyElement, getSourceCollection())) {
-			GroupedElementInfo info = getSourceElementInfo(sourceElement);
-			entry.addSource(info, info.addKey(entry), cause);
-		}
 		return entry;
 	}
 
 	private synchronized ValueRef addValue(ObservableCollectionActiveManagers.DerivedCollectionElement<V> valueElement, Object cause) {
-		ValueRef ref = new ValueRef(valueElement);
-		for (ElementId sourceElement : theValueManager.getSourceElements(valueElement, getSourceCollection())) {
-			GroupedElementInfo info = getSourceElementInfo(sourceElement);
-			ref.addSource(info, info.addValue(ref), cause);
-		}
+		ValueRef ref = new ValueRef(valueElement, cause);
 		return ref;
 	}
 
@@ -332,7 +315,9 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 
 		@Override
 		public int compareTo(ElementId o) {
-			return entry.activeEntryId.compareTo(((KeyEntryId) o).entry.activeEntryId);
+			if (entry.activeEntryId != null && ((KeyEntryId) o).entry.activeEntryId != null)
+				return entry.activeEntryId.compareTo(((KeyEntryId) o).entry.activeEntryId);
+			return entry.theKeyElement.compareTo(((KeyEntryId) o).entry.theKeyElement);
 		}
 
 		@Override
@@ -362,28 +347,34 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 	 */
 	protected class KeyEntry implements MultiEntryHandle<K, V> {
 		final ObservableCollectionActiveManagers.DerivedCollectionElement<K> theKeyElement;
+		/** These entries are references into {@link DefaultActiveMultiMap#theKeysBySourceElement}, not the source elements themselves */
+		final Set<ElementId> theSources;
 		final ValueCollection theValues;
-		final BetterSortedMap<GroupedElementInfo, ElementId> theSources;
 		final KeyEntryId theExposedId;
 
-		ElementId entryId;
 		ElementId activeEntryId;
+		private K theRemovedKey;
 
 		private MutableKeyEntry theMutableEntry;
 
 		KeyEntry(ObservableCollectionActiveManagers.DerivedCollectionElement<K> keyElement) {
 			theKeyElement = keyElement;
+			theSources = new HashSet<>();
 			theValues = new ValueCollection(this);
-			theSources = BetterTreeMap.<GroupedElementInfo> build(GroupedElementInfo::compareTo).buildMap();
 			theExposedId = new KeyEntryId(this);
+			updateSources();
 		}
 
-		int compareInternal(KeyEntry other) {
-			return entryId.compareTo(other.entryId);
+		int compareByEntry(KeyEntry other) {
+			return activeEntryId.compareTo(other.activeEntryId);
 		}
 
 		int compareBySource(KeyEntry other) {
 			return theKeyElement.compareTo(other.theKeyElement);
+		}
+
+		boolean isPresent() {
+			return !theSources.isEmpty();
 		}
 
 		@Override
@@ -393,7 +384,10 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 
 		@Override
 		public K getKey() {
-			return theKeyElement.get();
+			if (isPresent())
+				return theKeyElement.get();
+			else
+				return theRemovedKey;
 		}
 
 		@Override
@@ -423,38 +417,79 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 			}
 		}
 
-		void updated(K oldKey, K newKey, Object cause) {
+		private void updateSources() {
+			SortedSet<ElementId> newSources = new TreeSet<>();
+			for (ElementId source : getKeyManager().getSourceElements(theKeyElement, getSourceCollection())) {
+				if (source.isPresent())
+					newSources.add(source);
+			}
+			// Remove sources the key no longer represents
+			Iterator<ElementId> oldSourceIter = theSources.iterator();
+			while (oldSourceIter.hasNext()) {
+				ElementId source = oldSourceIter.next();
+				MapEntryHandle<ElementId, Set<KeyEntry>> sourceEntry = theKeysBySourceElement.getEntryById(source);
+				if (!newSources.remove(sourceEntry.getKey())) { // Remove so we don't add it next
+					// This key no longer represents the source
+					sourceEntry.getValue().remove(this);
+					if (sourceEntry.getValue().isEmpty())
+						theKeysBySourceElement.mutableEntry(source).remove();
+					oldSourceIter.remove();
+				}
+			}
+			// Register this key for new source elements
+			for (ElementId source : newSources) {
+				MapEntryHandle<ElementId, Set<KeyEntry>> sourceEntry = theKeysBySourceElement.getOrPutEntry(source, __ -> new HashSet<>(),
+					null, null, false, null);
+				sourceEntry.getValue().add(this);
+				theSources.add(sourceEntry.getElementId());
+			}
+		}
+
+		void updated(K oldKey, K newKey, Object cause, boolean internalOnly) {
 			synchronized (DefaultActiveMultiMap.this) {
-				if (activeEntryId != null && activeEntryId.isPresent() && !theKeyManager.equivalence().elementEquals(newKey, oldKey)) {
-					ListenerList<Consumer<? super ObservableCollectionEvent<? extends V>>> listeners = theValueListeners.get(oldKey);
-					if (listeners != null) {
-						int index = theValues.theValues.size() - 1;
-						for (CollectionElement<ValueRef> value : theValues.theValues.elements().reverse()) {
-							V v = value.get().get();
-							ObservableCollectionEvent<V> event = new ObservableCollectionEvent<>(value.getElementId(), index--, //
-								CollectionChangeType.remove, false, v, v, cause);
-							try (Transaction evtT = event.use()) {
-								listeners.forEach(//
-									listener -> listener.accept(event));
-							}
+				updateSources();
+
+				if (!internalOnly && !theSources.isEmpty() && activeEntryId != null && activeEntryId.isPresent()) {
+					int keyIndex = theActiveEntries.getElementsBefore(activeEntryId);
+					if (!theMapListeners.isEmpty()) {
+						ObservableMultiMapEvent<K, V> mapEvent = new ObservableMultiMapEvent<>(theExposedId, null, keyIndex, -1, //
+							CollectionChangeType.set, false, oldKey, newKey, null, null, cause);
+						try (Transaction evtT = mapEvent.use()) {
+							theMapListeners.forEach(//
+								listener -> listener.accept(mapEvent));
 						}
 					}
-					listeners = theValueListeners.get(newKey);
-					if (listeners != null) {
-						int index = 0;
-						for (CollectionElement<ValueRef> value : theValues.theValues.elements()) {
-							V v = value.get().get();
-							ObservableCollectionEvent<V> event = new ObservableCollectionEvent<>(value.getElementId(), index++, //
-								CollectionChangeType.add, false, null, v, cause);
-							try (Transaction evtT = event.use()) {
-								listeners.forEach(//
-									listener -> listener.accept(event));
+					if (!theKeyManager.equivalence().elementEquals(newKey, oldKey)) {
+						ListenerList<Consumer<? super ObservableCollectionEvent<? extends V>>> listeners = theValueListeners.get(oldKey);
+						if (listeners != null) {
+							int index = theValues.theValues.size() - 1;
+							for (CollectionElement<ValueRef> value : theValues.theValues.elements().reverse()) {
+								V v = value.get().get();
+								ObservableCollectionEvent<V> event = new ObservableCollectionEvent<>(value.getElementId(), index--, //
+									CollectionChangeType.remove, false, v, v, cause);
+								try (Transaction evtT = event.use()) {
+									listeners.forEach(//
+										listener -> listener.accept(event));
+								}
+							}
+						}
+						listeners = theValueListeners.get(newKey);
+						if (listeners != null) {
+							int index = 0;
+							for (CollectionElement<ValueRef> value : theValues.theValues.elements()) {
+								V v = value.get().get();
+								ObservableCollectionEvent<V> event = new ObservableCollectionEvent<>(value.getElementId(), index++, //
+									CollectionChangeType.add, false, null, v, cause);
+								try (Transaction evtT = event.use()) {
+									listeners.forEach(//
+										listener -> listener.accept(event));
+								}
 							}
 						}
 					}
 					if (!theKeySetListeners.isEmpty()) {
-						ObservableCollectionEvent<K> keyEvent = new ObservableCollectionEvent<>(theExposedId, //
-							theActiveEntries.getElementsBefore(activeEntryId), CollectionChangeType.set, false, oldKey, newKey, cause);
+						ObservableCollectionEvent<K> keyEvent = new ObservableCollectionEvent<>(theExposedId, keyIndex, //
+							CollectionChangeType.set, false, oldKey, newKey, cause);
 						try (Transaction evtT = keyEvent.use()) {
 							theKeySetListeners.forEach(//
 								listener -> listener.accept(keyEvent));
@@ -464,23 +499,20 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 			}
 		}
 
-		void removed(Object cause) {
+		void removed(K key, Object cause) {
 			synchronized (DefaultActiveMultiMap.this) {
-				if (activeEntryId != null && activeEntryId.isPresent()) {
-					K key = get();
-					int keyIndex = theActiveEntries.getElementsBefore(activeEntryId);
-					theValues.entryRemoved(get(), keyIndex, cause);
-					deactivate(key, keyIndex, cause);
+				theRemovedKey = key;
+				Iterator<ElementId> oldSourceIter = theSources.iterator();
+				while (oldSourceIter.hasNext()) {
+					ElementId source = oldSourceIter.next();
+					// This key no longer represents the source
+					MapEntryHandle<ElementId, Set<KeyEntry>> sourceEntry = theKeysBySourceElement.getEntryById(source);
+					sourceEntry.getValue().remove(this);
+					if (sourceEntry.getValue().isEmpty())
+						theKeysBySourceElement.mutableEntry(source).remove();
+					oldSourceIter.remove();
 				}
-				for (Map.Entry<GroupedElementInfo, ElementId> source : theSources.entrySet())
-					source.getKey().removeKey(source.getValue());
-				theEntries.mutableElement(entryId).remove();
 			}
-		}
-
-		void addSource(GroupedElementInfo sourceInfo, ElementId id, Object cause) {
-			theSources.put(sourceInfo, id);
-			theValues.addValues(sourceInfo.theValues, cause);
 		}
 
 		MutableCollectionElement<K> mutable() {
@@ -543,41 +575,27 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 	 */
 	protected class ValueRef implements Comparable<ValueRef> {
 		final ObservableCollectionActiveManagers.DerivedCollectionElement<V> theValueElement;
-		final BetterSortedMap<KeyEntry, ElementId> theKeys;
-		final BetterSortedMap<GroupedElementInfo, ElementId> theSources;
+		/** Values are the reference into {@link ValueCollection#theValues} for each key */
+		final BetterSortedMap<KeyEntry, ElementId> theKeyMembership;
 
-		ValueRef(ObservableCollectionActiveManagers.DerivedCollectionElement<V> valueElement) {
+		ValueRef(ObservableCollectionActiveManagers.DerivedCollectionElement<V> valueElement, Object cause) {
 			theValueElement = valueElement;
-			theKeys = BetterTreeMap.<KeyEntry> build((k1, k2) -> k1.entryId.compareTo(k2.entryId)).buildMap();
-			theSources = BetterTreeMap.<GroupedElementInfo> build(GroupedElementInfo::compareTo).buildMap();
-		}
+			theKeyMembership = BetterTreeMap.<KeyEntry> build(KeyEntry::compareByEntry).buildMap();
 
-		BetterSortedSet<KeyEntry> adjustKeys(V oldValue, Object cause) {
-			BetterSortedSet<KeyEntry> keys = BetterTreeSet.<KeyEntry> buildTreeSet(KeyEntry::compareInternal).build();
-			for (ElementId sourceElement : getValueManager().getSourceElements(theValueElement, getSourceCollection())) {
-				GroupedElementInfo info = getSourceElementInfo(sourceElement);
-				keys.addAll(info.theKeys);
-			}
-			// Remove this value in key entries that we don't belong to anymore
-			MapEntryHandle<KeyEntry, ElementId> currentKey = theKeys.getTerminalEntry(true);
-			TypeToken<K> keyType = getKeyType();
-			TypeToken<V> valueType = getValueType();
-			while (currentKey != null) {
-				if (!keys.remove(currentKey.getKey())) {
-					currentKey.getKey().theValues.valueRemoved(currentKey.getValue(), currentKey.getKey().get(), oldValue, keyType, //
-						valueType, theActiveEntries.getElementsBefore(currentKey.getKey().activeEntryId), cause);
-					theKeys.mutableEntry(currentKey.getElementId()).remove();
+			// Initialize and insert into all keys the new value belongs to
+			SortedSet<KeyEntry> newKeys = new TreeSet<>(KeyEntry::compareBySource);
+			for (ElementId source : getValueManager().getSourceElements(theValueElement, getSourceCollection())) {
+				if (source.isPresent()) {
+					Set<KeyEntry> sourceKeys = theKeysBySourceElement.get(source);
+					if (sourceKeys != null)
+						newKeys.addAll(sourceKeys);
 				}
-
-				currentKey = theKeys.getAdjacentEntry(currentKey.getElementId(), true);
 			}
-
-			return keys;
-		}
-
-		void addToKeys(BetterSortedSet<KeyEntry> keys, V value, Object cause) {
-			for (KeyEntry newKey : keys)
-				theKeys.put(newKey, newKey.theValues.addValue(this, value, cause).getElementId());
+			if (!newKeys.isEmpty()) {
+				V value = theValueElement.get();
+				for (KeyEntry key : newKeys)
+					theKeyMembership.put(key, key.theValues.addValue(this, value, cause).getElementId());
+			}
 		}
 
 		@Override
@@ -590,143 +608,70 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 			return theValueElement.get();
 		}
 
-		void updated(V oldValue, V newValue, Object cause) {
+		void updated(V oldValue, V newValue, Object cause, boolean internalOnly) {
 			synchronized (DefaultActiveMultiMap.this) {
 				// Check source elements and adjust against keys
-				BetterSortedSet<GroupedElementInfo> elements = BetterTreeSet
-					.<GroupedElementInfo> buildTreeSet(GroupedElementInfo::compareTo).build();
-				for (ElementId sourceElement : getValueManager().getSourceElements(theValueElement, getSourceCollection()))
-					elements.add(getSourceElementInfo(sourceElement));
-				MapEntryHandle<GroupedElementInfo, ElementId> source = theSources.getTerminalEntry(true);
-				while (source != null) {
-					if (!elements.remove(source.getKey())) {
-						source.getKey().removeValue(source.getElementId());
-						theSources.mutableEntry(source.getElementId()).remove();
+				Set<ElementId> sources = new HashSet<>();
+				SortedSet<KeyEntry> newKeys = new TreeSet<>();
+				for (ElementId source : getValueManager().getSourceElements(theValueElement, getSourceCollection())) {
+					if (sources.add(source) && source.isPresent()) {
+						Set<KeyEntry> sourceKeys = theKeysBySourceElement.get(source);
+						if (sourceKeys != null)
+							newKeys.addAll(sourceKeys);
 					}
-					source = theSources.getAdjacentEntry(source.getElementId(), true);
 				}
-				for (GroupedElementInfo info : elements)
-					theSources.put(info, info.addValue(this));
-				BetterSortedSet<KeyEntry> keys = BetterTreeSet.<KeyEntry> buildTreeSet(KeyEntry::compareInternal).build();
-				for (GroupedElementInfo info : theSources.keySet()) {
-					info.checkKeys();
-					keys.addAll(info.theKeys);
-				}
-				// Remove this value in key entries that we don't belong to anymore
-				MapEntryHandle<KeyEntry, ElementId> currentKey = theKeys.getTerminalEntry(true);
-				TypeToken<K> keyType = getKeyType();
-				TypeToken<V> valueType = getValueType();
-				while (currentKey != null) {
-					if (!keys.remove(currentKey.getKey())) {
-						currentKey.getKey().theValues.valueRemoved(currentKey.getValue(), currentKey.getKey().get(), oldValue, keyType, //
-							valueType, theActiveEntries.getElementsBefore(currentKey.getKey().activeEntryId), cause);
-						theKeys.mutableEntry(currentKey.getElementId()).remove();
+				// Remove this value from keys it no longer belongs to
+				TypeToken<K> keyType = null;
+				TypeToken<V> valueType = null;
+				MapEntryHandle<KeyEntry, ElementId> oldKey = theKeyMembership.getTerminalEntry(true);
+				List<MapEntryHandle<KeyEntry, ElementId>> updated = null;
+				while (oldKey != null) {
+					if (oldKey.getKey().isPresent() && newKeys.remove(oldKey.getKey())) {
+						if (!internalOnly) {
+							if (updated == null)
+								updated = new ArrayList<>();
+							updated.add(oldKey);
+						}
+					} else {
+						// This key no longer represents the source
+						oldKey.getKey().theValues.valueRemoved(oldKey.getValue(), oldKey.getKey().get(), oldValue, //
+							(keyType != null ? keyType : (keyType = getKeyType())),
+							(valueType != null ? valueType : (valueType = getValueType())), //
+							-1, cause);
+						theKeyMembership.mutableEntry(oldKey.getElementId()).remove();
 					}
-
-					currentKey = theKeys.getAdjacentEntry(currentKey.getElementId(), true);
+					oldKey = theKeyMembership.getAdjacentEntry(oldKey.getElementId(), true);
 				}
-
-				for (Map.Entry<KeyEntry, ElementId> entry : theKeys.entrySet()) {
-					if (entry.getKey().activeEntryId != null && entry.getKey().activeEntryId.isPresent())
-						entry.getKey().theValues.valueUpdated(entry.getValue(), oldValue, newValue, cause);
+				if (updated != null) {
+					// Fire updates for keys that this value still belongs to
+					for (MapEntryHandle<KeyEntry, ElementId> key : updated)
+						key.getKey().theValues.valueUpdated(key.getValue(), oldValue, newValue, cause);
 				}
-
-				// Add this value to keys that we didn't belong to before, but do now
-				addToKeys(keys, newValue, cause);
+				// Register this key for new source elements
+				for (KeyEntry key : newKeys)
+					theKeyMembership.put(key, key.theValues.addValue(this, newValue, cause).getElementId());
 			}
 		}
 
 		void removed(V value, Object cause) {
 			synchronized (DefaultActiveMultiMap.this) {
-				TypeToken<K> keyType = getKeyType();
-				TypeToken<V> valueType = getValueType();
-				CollectionElement<KeyEntry> keyEl = theKeys.keySet().getTerminalElement(true);
-				while (keyEl != null) {
-					MapEntryHandle<KeyEntry, ElementId> entry = theKeys.getEntryById(keyEl.getElementId());
-					keyEl = theKeys.keySet().getAdjacentElement(keyEl.getElementId(), true);
-					if (entry.getKey().activeEntryId != null && entry.getKey().activeEntryId.isPresent()) {
-						entry.getKey().theValues.valueRemoved(entry.getValue(), entry.getKey().get(), value, keyType, valueType, //
-							theActiveEntries.getElementsBefore(entry.getKey().activeEntryId), cause);
-					}
-					theKeys.mutableEntry(entry.getElementId()).remove();
+				TypeToken<K> keyType = null;
+				TypeToken<V> valueType = null;
+				MapEntryHandle<KeyEntry, ElementId> oldKey = theKeyMembership.getTerminalEntry(true);
+				while (oldKey != null) {
+					oldKey.getKey().theValues.valueRemoved(oldKey.getValue(), oldKey.getKey().get(), value, //
+						(keyType != null ? keyType : (keyType = getKeyType())),
+						(valueType != null ? valueType : (valueType = getValueType())), //
+						-1, cause);
+					theKeyMembership.mutableEntry(oldKey.getElementId()).remove();
+					oldKey = theKeyMembership.getAdjacentEntry(oldKey.getElementId(), true);
 				}
-				for (Map.Entry<GroupedElementInfo, ElementId> entry : theSources.entrySet())
-					entry.getKey().removeValue(entry.getValue());
 			}
-		}
-
-		void addSource(GroupedElementInfo sourceInfo, ElementId id, Object cause) {
-			theSources.put(sourceInfo, id);
-			for (KeyEntry key : sourceInfo.theKeys)
-				theKeys.computeIfAbsent(key, k -> k.theValues.addValue(this, get(), cause).getElementId());
 		}
 
 		@Override
 		public String toString() {
 			return String.valueOf(get());
-		}
-	}
-
-	/** Holds all information related to a particular element from the source collection, including the keys and values representing it */
-	protected class GroupedElementInfo implements Comparable<GroupedElementInfo> {
-		final ElementId sourceElement;
-		ElementId elementInfoId;
-		final BetterSortedSet<KeyEntry> theKeys;
-		final BetterSortedSet<ValueRef> theValues;
-
-		GroupedElementInfo(ElementId sourceElement) {
-			this.sourceElement = sourceElement;
-			theKeys = BetterTreeSet.<KeyEntry> buildTreeSet(KeyEntry::compareTo).build();
-			theValues = BetterTreeSet.<ValueRef> buildTreeSet(ValueRef::compareTo).build();
-		}
-
-		@Override
-		public int compareTo(GroupedElementInfo o) {
-			return sourceElement.compareTo(o.sourceElement);
-		}
-
-		ElementId addKey(KeyEntry key) {
-			return theKeys.addElement(key, false).getElementId();
-		}
-
-		void checkKeys() {
-			BetterSortedSet<ObservableCollectionActiveManagers.DerivedCollectionElement<K>> keyElements = BetterTreeSet
-				.<ObservableCollectionActiveManagers.DerivedCollectionElement<K>> buildTreeSet(ObservableCollectionActiveManagers.DerivedCollectionElement::compareTo)//
-				.build(getKeyManager().getElementsBySource(sourceElement, getSourceCollection()));
-			for (CollectionElement<KeyEntry> key : theKeys.elements()) {
-				CollectionElement<ObservableCollectionActiveManagers.DerivedCollectionElement<K>> keyEl = keyElements.search(key.get().theKeyElement,
-					SortedSearchFilter.OnlyMatch);
-				if (keyEl != null)
-					keyElements.mutableElement(keyEl.getElementId()).remove(); // Accounted for
-				else {
-					key.get().theSources.remove(this);
-					theKeys.mutableElement(key.getElementId()).remove();
-				}
-			}
-			for (ObservableCollectionActiveManagers.DerivedCollectionElement<K> newKey : keyElements) {
-				KeyEntry entry = theEntries.searchValue(k -> newKey.compareTo(k.theKeyElement), SortedSearchFilter.OnlyMatch);
-				entry.theSources.put(this, addKey(entry));
-			}
-		}
-
-		ElementId addValue(ValueRef value) {
-			checkKeys();
-			return theValues.addElement(value, false).getElementId();
-		}
-
-		void removeKey(ElementId keyId) {
-			theKeys.mutableElement(keyId).remove();
-			if (theValues.isEmpty() && theKeys.isEmpty() && elementInfoId.isPresent())
-				theElementInfo.mutableEntry(elementInfoId).remove();
-		}
-
-		void removeValue(ElementId valueId) {
-			theValues.mutableElement(valueId).remove();
-			if (theValues.isEmpty() && (theKeys.isEmpty() || !sourceElement.isPresent()) && elementInfoId.isPresent()) {
-				for (KeyEntry key : theKeys)
-					key.theSources.remove(this);
-				theElementInfo.mutableEntry(elementInfoId).remove();
-			}
 		}
 	}
 
@@ -740,18 +685,6 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 			theValues = BetterTreeSet.<ValueRef> buildTreeSet(ValueRef::compareTo).build();
 		}
 
-		void addValues(Collection<ValueRef> values, Object cause) {
-			if (values.isEmpty())
-				return;
-			TypeToken<K> keyType = getKeyType();
-			TypeToken<V> valueType = getValueType();
-			K key = theEntry.get();
-			boolean newKey = theEntry.activate(key);
-			int keyIndex = theActiveEntries.getElementsBefore(theEntry.activeEntryId);
-			for (ValueRef value : values)
-				addValue(value, keyType, valueType, keyIndex, key, value.get(), newKey, cause);
-		}
-
 		CollectionElement<ValueRef> addValue(ValueRef value, V val, Object cause) {
 			K key = theEntry.get();
 			boolean newKey = theEntry.activate(key);
@@ -762,7 +695,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		private CollectionElement<ValueRef> addValue(ValueRef value, TypeToken<K> keyType, TypeToken<V> valueType, int keyIndex, K key,
 			V val, boolean newKey, Object cause) {
 			CollectionElement<ValueRef> added = theValues.addElement(value, false);
-			value.theKeys.put(theEntry, added.getElementId());
+			theValueSize++;
 			if (keyIndex < 0)
 				keyIndex = theActiveEntries.getElementsBefore(theEntry.theExposedId);
 			int valueIndex = theValues.getElementsBefore(added.getElementId());
@@ -770,7 +703,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 			boolean move = cause instanceof ObservableCollectionEvent && ((ObservableCollectionEvent<?>) cause).isMove();
 			if (!theMapListeners.isEmpty()) {
 				ObservableMultiMapEvent<K, V> mapEvent = new ObservableMultiMapEvent<>(theEntry.theExposedId, addedId, keyIndex, valueIndex, //
-					CollectionChangeType.add, move, key, null, val, cause);
+					CollectionChangeType.add, move, key, key, null, val, cause);
 				try (Transaction evtT = mapEvent.use()) {
 					theMapListeners.forEach(//
 						listener -> listener.accept(mapEvent));
@@ -803,7 +736,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 			if (!theMapListeners.isEmpty()) {
 				ObservableMultiMapEvent<K, V> event = new ObservableMultiMapEvent<>(//
 					theEntry.theExposedId, valueId, theActiveEntries.getElementsBefore(theEntry.activeEntryId), valueIndex,
-					CollectionChangeType.set, false, key, oldValue, newValue, cause);
+					CollectionChangeType.set, false, key, key, oldValue, newValue, cause);
 				try (Transaction evtT = event.use()) {
 					theMapListeners.forEach(//
 						listener -> listener.accept(event));
@@ -823,14 +756,17 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		void valueRemoved(ElementId id, K key, V value, TypeToken<K> keyType, TypeToken<V> valueType, int keyIndex, Object cause) {
 			if (!id.isPresent())
 				return; // This can happen when the last value for a key is removed
+			theValueSize--;
 			ValueElementId valueId = new ValueElementId(id, theValues.getElement(id).get());
 			int valueIndex = theValues.getElementsBefore(id);
 			theValues.mutableElement(id).remove();
+			if (keyIndex < 0)
+				keyIndex = theActiveEntries.getElementsBefore(theEntry.activeEntryId);
 			boolean move = cause instanceof ObservableCollectionEvent && ((ObservableCollectionEvent<?>) cause).isMove();
 			if (!theMapListeners.isEmpty()) {
 				ObservableMultiMapEvent<K, V> event = new ObservableMultiMapEvent<>(//
 					theEntry.theExposedId, valueId, keyIndex, valueIndex, //
-					CollectionChangeType.remove, move, key, value, value, cause);
+					CollectionChangeType.remove, move, key, key, value, value, cause);
 				try (Transaction evtT = event.use()) {
 					theMapListeners.forEach(//
 						listener -> listener.accept(event));
@@ -853,15 +789,17 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 
 		void entryRemoved(K key, int keyIndex, Object cause) {
 			ListenerList<Consumer<? super ObservableCollectionEvent<? extends V>>> valueListeners = theValueListeners.get(key);
+			theValueSize -= theValues.size();
 			if (!theMapListeners.isEmpty() || valueListeners != null) {
 				int valueIndex = theValues.size() - 1;
 				for (CollectionElement<ValueRef> valueEl : theValues.elements().reverse()) {
 					ValueElementId valueId = new ValueElementId(valueEl.getElementId(), valueEl.get());
 					V val = valueEl.get().get();
+					valueEl.get().theKeyMembership.remove(theEntry);
 					if (!theMapListeners.isEmpty()) {
 						ObservableMultiMapEvent<K, V> event = new ObservableMultiMapEvent<>(//
 							theEntry.theExposedId, valueId, keyIndex, valueIndex, //
-							CollectionChangeType.remove, false, key, val, val, cause);
+							CollectionChangeType.remove, false, key, key, val, val, cause);
 						try (Transaction evtT = event.use()) {
 							theMapListeners.forEach(//
 								listener -> listener.accept(event));
@@ -877,6 +815,9 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 					}
 					theValues.mutableElement(valueEl.getElementId()).remove();
 				}
+			} else {
+				for (ValueRef value : theValues.reverse())
+					value.theKeyMembership.remove(theEntry);
 			}
 		}
 
@@ -1159,6 +1100,21 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 			@Override
 			public V get() {
 				return valueEl.get().get();
+			}
+
+			@Override
+			public int hashCode() {
+				return theId.hashCode();
+			}
+
+			@Override
+			public boolean equals(Object obj) {
+				return obj instanceof DefaultActiveMultiMap.ValueCollection.ValueElement && theId.equals(((ValueElement) obj).theId);
+			}
+
+			@Override
+			public String toString() {
+				return theId.toString();
 			}
 		}
 
@@ -1532,11 +1488,13 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		}
 
 		KeyEntry getCurrentEntry(boolean throwIfEmpty) {
-			if (theCurrentEntry == null || !theCurrentEntry.entryId.isPresent()) {
+			if (theCurrentEntry == null || theCurrentEntry.activeEntryId == null || !theCurrentEntry.activeEntryId.isPresent()
+				|| !getKeyManager().equivalence().elementEquals(theCurrentEntry.get(), theKey)) {
 				Comparable<ObservableCollectionActiveManagers.DerivedCollectionElement<K>> finder = getKeyManager().getElementFinder(theKey);
-				theCurrentEntry = getAllEntries().searchValue(entry -> finder.compareTo(entry.theKeyElement), SortedSearchFilter.OnlyMatch);
+				theCurrentEntry = theActiveEntries.searchValue(entry -> finder.compareTo(entry.theKeyElement),
+					SortedSearchFilter.OnlyMatch);
 			}
-			if (theCurrentEntry != null && theCurrentEntry.activeEntryId != null && theCurrentEntry.activeEntryId.isPresent())
+			if (theCurrentEntry != null)
 				return theCurrentEntry;
 			if (throwIfEmpty)
 				throw new NoSuchElementException();

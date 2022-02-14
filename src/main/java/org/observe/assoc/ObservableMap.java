@@ -112,7 +112,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 				int index = forward ? 0 : size() - 1;
 				for (CollectionElement<Map.Entry<K, V>> entryEl : entrySet().elements()) {
 					ObservableMultiMapEvent<K, V> mapEvent = new ObservableMultiMapEvent<>(entryEl.getElementId(), entryEl.getElementId(),
-						index, index, CollectionChangeType.add, false, entryEl.get().getKey(), null,
+						index, index, CollectionChangeType.add, false, entryEl.get().getKey(), entryEl.get().getKey(), null,
 						entryEl.get().getValue(), subCause);
 					try (Transaction mt = mapEvent.use()) {
 						action.accept(mapEvent);
@@ -135,8 +135,9 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 						int index = !forward ? 0 : size() - 1;
 						for (CollectionElement<Map.Entry<K, V>> entryEl : entrySet().elements()) {
 							ObservableMultiMapEvent<K, V> mapEvent = new ObservableMultiMapEvent<>(entryEl.getElementId(),
-								entryEl.getElementId(), index, index, CollectionChangeType.remove, false, entryEl.get().getKey(),
-								entryEl.get().getValue(), entryEl.get().getValue(), subCause);
+								entryEl.getElementId(), index, index, CollectionChangeType.remove, false, //
+								entryEl.get().getKey(), entryEl.get().getKey(), entryEl.get().getValue(), entryEl.get().getValue(),
+								subCause);
 							try (Transaction mt = mapEvent.use()) {
 								action.accept(mapEvent);
 							}
@@ -922,7 +923,8 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 			return theEntries.onChange(evt -> {
 				V oldValue = ((MapEntry) evt.getNewValue()).getOldValue();
 				ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent<>(evt.getElementId(), evt.getIndex(),
-					evt.getType(), evt.isMove(), evt.getNewValue().getKey(), oldValue, evt.getNewValue().getValue(), evt);
+					evt.getType(), evt.isMove(), evt.getOldValue().getKey(), evt.getNewValue().getKey(), oldValue,
+					evt.getNewValue().getValue(), evt);
 				try (Transaction t = mapEvent.use()) {
 					action.accept(mapEvent);
 				}

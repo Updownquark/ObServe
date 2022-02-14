@@ -334,24 +334,29 @@ public class ObservableCollectionActiveManagers {
 		 *        value, so this value might be a guess. If an element's actual previous value is important to a listener, it must be
 		 *        tracked independently.
 		 * @param newValue The new (current) value of the element
+		 * @param internalOnly If true, this signifies that the event causing this invocation should not normally be reported to a terminal
+		 *        result (e.g. the derived collection). This may happen in response to a change in a source collection which does not affect
+		 *        the content of the derived flow. Notification of the change may nevertheless be needed downstream for some purposes,
+		 *        especially derived gathered multi-maps. When this is true, most managers may simply pass it along, and most termination
+		 *        points may ignore it.
 		 * @param cause The cause of the change
 		 */
-		void update(E oldValue, E newValue, Object cause);
+		void update(E oldValue, E newValue, Object cause, boolean internalOnly);
 
 		/**
 		 * Alerts the derived collection that the element has been removed from the source flow
 		 *
 		 * @param value The element's previous value before it was removed. As with <code>oldValue</code> in the
-		 *        {@link #update(Object, Object, Object) update} method, this value is not guaranteed to be the last that the listener knew
-		 *        about.
+		 *        {@link #update(Object, Object, Object, boolean) update} method, this value is not guaranteed to be the last that the
+		 *        listener knew about.
 		 * @param cause The cause of the element's removal
 		 */
 		void removed(E value, Object cause);
 	}
 
-	static <T> void update(CollectionElementListener<T> listener, T oldValue, T newValue, Object cause) {
+	static <T> void update(CollectionElementListener<T> listener, T oldValue, T newValue, Object cause, boolean internalOnly) {
 		if (listener != null)
-			listener.update(oldValue, newValue, cause);
+			listener.update(oldValue, newValue, cause, internalOnly);
 	}
 
 	static <T> void removed(CollectionElementListener<T> listener, T value, Object cause) {
@@ -506,7 +511,7 @@ public class ObservableCollectionActiveManagers {
 				case set:
 					listener = theElementListeners.get(evt.getElementId());
 					if (listener != null)
-						listener.update(evt.getOldValue(), evt.getNewValue(), evt);
+						listener.update(evt.getOldValue(), evt.getNewValue(), evt, false);
 					break;
 				}
 			}, action -> theSource.subscribe(action, fromStart).removeAll());
@@ -963,7 +968,11 @@ public class ObservableCollectionActiveManagers {
 					theValueNode = insertIntoValues(parentEl.get(), parentEl);
 					theParentEl.setListener(new CollectionElementListener<T>() {
 						@Override
-						public void update(T oldValue, T newValue, Object cause) {
+						public void update(T oldValue, T newValue, Object cause, boolean internalOnly) {
+							if (internalOnly) {
+								ObservableCollectionActiveManagers.update(theListener, oldValue, newValue, cause, internalOnly);
+								return;
+							}
 							T realOldValue = theValueNode.get().getValue1();
 							if (!isInCorrectOrder(newValue, theParentEl)) {
 								// The order of this element has changed
@@ -984,7 +993,7 @@ public class ObservableCollectionActiveManagers {
 								theAccepter.accept(SortedElement.this, cause);
 							} else {
 								theValues.mutableNodeFor(theValueNode).set(new BiTuple<>(newValue, theParentEl));
-								ObservableCollectionActiveManagers.update(theListener, realOldValue, newValue, cause);
+								ObservableCollectionActiveManagers.update(theListener, realOldValue, newValue, cause, internalOnly);
 							}
 						}
 
@@ -1244,7 +1253,11 @@ public class ObservableCollectionActiveManagers {
 				if (!isSynthetic) {
 					theParentEl.setListener(new CollectionElementListener<T>() {
 						@Override
-						public void update(T oldValue, T newValue, Object cause) {
+						public void update(T oldValue, T newValue, Object cause, boolean internalOnly) {
+							if (internalOnly) {
+								ObservableCollectionActiveManagers.update(theListener, oldValue, newValue, cause, internalOnly);
+								return;
+							}
 							boolean oldIncluded = FilteredElement.this.included;
 							boolean newIncluded = theFilter.apply(newValue) == null;
 							FilteredElement.this.included = newIncluded;
@@ -1254,7 +1267,7 @@ public class ObservableCollectionActiveManagers {
 								theListener.removed(oldValue, cause);
 								theListener = null;
 							} else if (oldIncluded && newIncluded && theListener != null)
-								theListener.update(oldValue, newValue, cause);
+								theListener.update(oldValue, newValue, cause, false);
 						}
 
 						@Override
@@ -1593,10 +1606,16 @@ public class ObservableCollectionActiveManagers {
 				if (!synthetic) {
 					theParentEl.setListener(new CollectionElementListener<I>() {
 						@Override
-						public void update(I oldSource, I newSource, Object cause) {
+						public void update(I oldSource, I newSource, Object cause, boolean internalOnly) {
+							if (internalOnly) {
+								T value = transformElement.getCurrentValue(getEngine().get());
+								ObservableCollectionActiveManagers.update(theListener, value, value, cause, true);
+								return;
+							}
 							BiTuple<T, T> values = transformElement.sourceChanged(oldSource, newSource, getEngine().get());
 							if (values != null)
-								ObservableCollectionActiveManagers.update(theListener, values.getValue1(), values.getValue2(), cause);
+								ObservableCollectionActiveManagers.update(theListener, values.getValue1(), values.getValue2(), cause,
+									false);
 						}
 
 						@Override
@@ -1687,7 +1706,7 @@ public class ObservableCollectionActiveManagers {
 			void updated(Transformation.TransformationState oldState, Transformation.TransformationState newState, Object cause) {
 				BiTuple<T, T> values = transformElement.transformationStateChanged(oldState, newState);
 				if (values != null)
-					ObservableCollectionActiveManagers.update(theListener, values.getValue1(), values.getValue2(), cause);
+					ObservableCollectionActiveManagers.update(theListener, values.getValue1(), values.getValue2(), cause, true);
 			}
 
 			@Override
