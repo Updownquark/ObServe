@@ -577,23 +577,35 @@ public final class ObservableCollectionImpl {
 								boolean mayReplace;
 								boolean sameElement;
 								boolean better;
-								if (current == null) {
-									sameElement = false;
-									mayReplace = better = true;
-								} else if (current.getElementId().equals(evt.getElementId())) {
-									sameElement = true;
-									mayReplace = true;
-									better = evt.getType() == CollectionChangeType.set//
-										? theElementCompare.compare(new SimpleElement(evt.getElementId(), evt.getNewValue()), current) <= 0
-										: false;
-								} else {
-									sameElement = false;
-									mayReplace = better = theElementCompare
-										.compare(new SimpleElement(evt.getElementId(), evt.getNewValue()), current) < 0;
+								try {
+									if (current == null) {
+										sameElement = false;
+										mayReplace = better = true;
+									} else if (current.getElementId().equals(evt.getElementId())) {
+										sameElement = true;
+										mayReplace = true;
+										better = evt.getType() == CollectionChangeType.set//
+											? theElementCompare.compare(new SimpleElement(evt.getElementId(), evt.getNewValue()),
+												current) <= 0
+												: false;
+									} else {
+										sameElement = false;
+										mayReplace = better = theElementCompare
+											.compare(new SimpleElement(evt.getElementId(), evt.getNewValue()), current) < 0;
+									}
+								} catch (RuntimeException e) {
+									e.printStackTrace();
+									better = sameElement = mayReplace = false;
 								}
 								if (!mayReplace)
 									return; // Even if the new element's value matches, it wouldn't replace the current value
-								boolean matches = test(evt.isFinal() ? evt.getOldValue() : evt.getNewValue());
+								boolean matches;
+								try {
+									matches = test(evt.isFinal() ? evt.getOldValue() : evt.getNewValue());
+								} catch (RuntimeException e) {
+									e.printStackTrace();
+									matches = false;
+								}
 								if (!matches && !sameElement)
 									return;// If the new value doesn't match and it's not the current element, we don't care
 
@@ -666,8 +678,15 @@ public final class ObservableCollectionImpl {
 							}
 
 							void doRefresh(Object cause) {
-								if (!find(//
-									el -> setCurrentElement(new SimpleElement(el.getElementId(), el.get()), cause)))
+								boolean found;
+								try {
+									found = find(//
+										el -> setCurrentElement(new SimpleElement(el.getElementId(), el.get()), cause));
+								} catch (RuntimeException e) {
+									e.printStackTrace();
+									found = false;
+								}
+								if (!found)
 									setCurrentElement(null, cause);
 							}
 
@@ -675,8 +694,20 @@ public final class ObservableCollectionImpl {
 								SimpleElement oldElement = theCurrentElement;
 								ElementId oldId = oldElement == null ? null : oldElement.getElementId();
 								ElementId newId = element == null ? null : element.getElementId();
-								E oldVal = oldElement == null ? theDefault.get() : oldElement.get();
-								E newVal = element == null ? theDefault.get() : element.get();
+								E oldVal;
+								try {
+									oldVal = oldElement == null ? theDefault.get() : oldElement.get();
+								} catch (RuntimeException e) {
+									e.printStackTrace();
+									oldVal = null;
+								}
+								E newVal;
+								try {
+									newVal = element == null ? theDefault.get() : element.get();
+								} catch (RuntimeException e) {
+									e.printStackTrace();
+									newVal = null;
+								}
 								if (Objects.equals(oldId, newId) && oldVal == newVal)
 									return;
 								theCurrentElement = element;
@@ -808,7 +839,12 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		protected boolean useCachedMatch(E value) {
-			return theTest.test(value);
+			try {
+				return theTest.test(value);
+			} catch (RuntimeException e) {
+				e.printStackTrace();
+				return false;
+			}
 		}
 
 		@Override
@@ -1190,17 +1226,39 @@ public final class ObservableCollectionImpl {
 					boolean[] init = new boolean[1];
 					Causable.CausableKey key = Causable.key((root, values) -> {
 						T oldV = value.get();
-						T v = getValue((X) values.get("x"));
+						T v;
+						try {
+							v = getValue((X) values.get("x"));
+						} catch (RuntimeException e) {
+							v = null;
+							e.printStackTrace();
+						}
 						value.accept(v);
 						if (init[0])
 							fireChangeEvent(oldV, v, root, observer::onNext);
 					});
 					Subscription sub;
 					try (Transaction t = theCollection.lock(false, null)) {
-						x.accept(init());
-						value.accept(getValue(x.get()));
+						try {
+							x.accept(init());
+						} catch (RuntimeException e) {
+							x.accept(null);
+							e.printStackTrace();
+						}
+						try {
+							value.accept(getValue(x.get()));
+						} catch (RuntimeException e) {
+							value.accept(null);
+							e.printStackTrace();
+						}
 						sub = theCollection.onChange(evt -> {
-							X newX = update(x.get(), evt);
+							X newX;
+							try {
+								newX = update(x.get(), evt);
+							} catch (RuntimeException e) {
+								newX = null;
+								e.printStackTrace();
+							}
 							x.accept(newX);
 
 							Map<Object, Object> values = evt.getRootCausable().onFinish(key);
@@ -2259,9 +2317,22 @@ public final class ObservableCollectionImpl {
 							int index = 0;
 							while (el != null) {
 								E sourceVal = el.get();
+								T oldVal;
+								try {
+									oldVal = evt.getOldValue().apply(sourceVal);
+								} catch (RuntimeException e) {
+									oldVal = null;
+									e.printStackTrace();
+								}
+								T newVal;
+								try {
+									newVal = currentMap[0].apply(sourceVal);
+								} catch (RuntimeException e) {
+									newVal = null;
+									e.printStackTrace();
+								}
 								ObservableCollectionEvent<? extends T> evt2 = new ObservableCollectionEvent<>(mapId(el.getElementId()),
-									index++, CollectionChangeType.set, false, evt.getOldValue().apply(sourceVal),
-									currentMap[0].apply(sourceVal), evt);
+									index++, CollectionChangeType.set, false, oldVal, newVal, evt);
 								try (Transaction evtT = evt2.use()) {
 									observer.accept(evt2);
 								}
@@ -2286,15 +2357,31 @@ public final class ObservableCollectionImpl {
 									T oldValue, newValue;
 									switch (evt.getType()) {
 									case add:
-										newValue = currentMap[0].apply(evt.getNewValue());
+										try {
+											newValue = currentMap[0].apply(evt.getNewValue());
+										} catch (RuntimeException e) {
+											newValue = null;
+											e.printStackTrace();
+										}
 										oldValue = null;
 										break;
 									case remove:
-										oldValue = currentMap[0].apply(evt.getOldValue());
+										try {
+											oldValue = currentMap[0].apply(evt.getOldValue());
+										} catch (RuntimeException e) {
+											oldValue = null;
+											e.printStackTrace();
+										}
 										newValue = oldValue;
 										break;
 									case set:
-										BiTuple<T, T> values = theFlow.map(evt.getOldValue(), evt.getNewValue(), currentMap[0]);
+										BiTuple<T, T> values;
+										try {
+											values = theFlow.map(evt.getOldValue(), evt.getNewValue(), currentMap[0]);
+										} catch (RuntimeException e) {
+											e.printStackTrace();
+											values = null;
+										}
 										if (values == null)
 											return;
 										oldValue = values.getValue1();
@@ -2446,8 +2533,8 @@ public final class ObservableCollectionImpl {
 					CollectionChangeType.add, initMove, null, el.get(), cause));
 				el.setListener(new CollectionElementListener<T>() {
 					@Override
-					public void update(T oldValue, T newValue, Object elCause, boolean updateOnly) {
-						if (updateOnly)
+					public void update(T oldValue, T newValue, Object elCause, boolean internalOnly) {
+						if (internalOnly)
 							return;
 						theModCount.incrementAndGet();
 						BinaryTreeNode<DerivedElementHolder<T>> left = holder[0].treeNode.getClosest(true);

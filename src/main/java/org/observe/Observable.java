@@ -509,14 +509,26 @@ public interface Observable<T> extends Lockable, Identifiable {
 			return theWrapped.subscribe(new Observer<T>() {
 				@Override
 				public <V extends T> void onNext(V value) {
-					R mapped = theMap.apply(value);
+					R mapped;
+					try {
+						mapped = theMap.apply(value);
+					} catch (RuntimeException e) {
+						mapped = null;
+						e.printStackTrace();
+					}
 					if (mapped != null)
 						observer.onNext(mapped);
 				}
 
 				@Override
 				public <V extends T> void onCompleted(V value) {
-					R mapped = theMap.apply(value);
+					R mapped;
+					try {
+						mapped = theMap.apply(value);
+					} catch (RuntimeException e) {
+						mapped = null;
+						e.printStackTrace();
+					}
 					if (mapped != null)
 						observer.onCompleted(mapped);
 					else

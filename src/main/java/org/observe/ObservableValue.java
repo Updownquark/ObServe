@@ -1723,7 +1723,13 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 					private void event(ObservableValueEvent<? extends T> event, boolean complete) {
 						lock.lock();
 						try {
-							boolean found = !complete && theTest.test(event.getNewValue());
+							boolean found;
+							try {
+								found = !complete && theTest.test(event.getNewValue());
+							} catch (RuntimeException e) {
+								e.printStackTrace();
+								found = false;
+							}
 							int nextIndex = index + 1;
 							if (!found) {
 								while (nextIndex < theValues.length && finished[nextIndex])
@@ -1744,7 +1750,13 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 								} else if (allComplete) {
 									toFire = createChangeEvent((T) lastValue[0], (T) lastValue[0], event);
 								} else {
-									T def = theDefault.get();
+									T def;
+									try {
+										def = theDefault.get();
+									} catch (RuntimeException e) {
+										def = null;
+										e.printStackTrace();
+									}
 									if (!hasFiredInit[0])
 										toFire = createInitialEvent(def, event);
 									else if (def != lastValue[0])
