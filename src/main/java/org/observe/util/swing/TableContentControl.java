@@ -1501,6 +1501,11 @@ public interface TableContentControl {
 		}
 
 		@Override
+		public SortedMatchSet[] findMatches(List<? extends ValueRenderer<?>> categories, CharSequence[] texts) {
+			return null;
+		}
+
+		@Override
 		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence text) {
 			return null;
 		}
@@ -1562,6 +1567,11 @@ public interface TableContentControl {
 
 		public ColumnSorter(List<String> columns) {
 			theColumns = columns;
+		}
+
+		@Override
+		public SortedMatchSet[] findMatches(List<? extends ValueRenderer<?>> categories, CharSequence[] texts) {
+			return null;
 		}
 
 		@Override
@@ -1627,7 +1637,7 @@ public interface TableContentControl {
 				mut.mutateAttribute((map, v) -> map.put("A", v)).asText(Format.TEXT).withRowUpdate(true);
 			}).withWidths(50, 100, 150));
 		Random random = new Random();
-		int rowCount = 500000;
+		int rowCount = 50_000;
 		int lastPct = 0;
 		for (int i = 0; i < rowCount; i++) {
 			int pct = i * 100 / rowCount;

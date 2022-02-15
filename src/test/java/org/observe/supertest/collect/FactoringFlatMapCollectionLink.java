@@ -50,7 +50,7 @@ public class FactoringFlatMapCollectionLink extends AbstractFlatMappedCollection
 			// and eclipse flags it with a warning, but if I remove it, there's an error.
 			// But the error doesn't actually seem to be a compile error, because the class will still run.
 			@SuppressWarnings("cast")
-			ObservableCollection.CollectionDataFlow<?, ?, Integer> multiStepFlow = sourceCL
+			ObservableCollection.CollectionDataFlow<?, ?, Integer> multiStepFlow = (CollectionDataFlow<?, ?, Integer>) sourceCL
 			.getDef().multiStepFlow.flatMap(TypeTokens.get().INT, factorize);
 			ObservableCollectionTestDef<Integer> def = new ObservableCollectionTestDef<>(TestValueType.INT, oneStepFlow, multiStepFlow,
 				sourceCL.getDef().orderImportant, sourceCL.getDef().checkOldValues);
