@@ -79,7 +79,7 @@ public class TypeTokensTest {
 	/** Tests {@link TypeTokens#getCommonType(TypeToken [])} with complex types */
 	@Test
 	public void testComplexCommonType() {
-		Assert.assertEquals(new TypeToken<Collection<Map<Number, CharSequence>>>() {
+		Assert.assertEquals(new TypeToken<Collection<? extends Map<? extends Number, ? extends CharSequence>>>() {
 		}, //
 			TypeTokens.get().getCommonType(//
 				new TypeToken<List<HashMap<Integer, String>>>() {

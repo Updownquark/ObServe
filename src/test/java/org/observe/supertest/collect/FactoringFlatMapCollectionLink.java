@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 
 import org.junit.Assert;
 import org.observe.collect.ObservableCollection;
@@ -16,6 +17,7 @@ import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
 import org.observe.util.TypeTokens;
+import org.qommons.LambdaUtils;
 import org.qommons.TestHelper;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.io.CsvParser;
@@ -40,14 +42,16 @@ public class FactoringFlatMapCollectionLink extends AbstractFlatMappedCollection
 		public <T, X> ObservableCollectionLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestValueType targetType,
 			TestHelper helper) {
 			ObservableCollectionLink<?, Integer> sourceCL = (ObservableCollectionLink<?, Integer>) sourceLink;
+			Function<Integer, CollectionDataFlow<Integer, Integer, Integer>> factorize = LambdaUtils.printableFn(//
+				i -> getPrimeFactors(i).flow(), "factorize", null);
 			ObservableCollection.CollectionDataFlow<?, ?, Integer> oneStepFlow = sourceCL.getCollection().flow()
-				.flatMap(TypeTokens.get().INT, i -> getPrimeFactors(i).flow());
+				.flatMap(TypeTokens.get().INT, factorize);
 			// Eclipse is being stupid about whether this cast is needed or not. It definitely should not be necessary
 			// and eclipse flags it with a warning, but if I remove it, there's an error.
 			// But the error doesn't actually seem to be a compile error, because the class will still run.
 			@SuppressWarnings("cast")
-			ObservableCollection.CollectionDataFlow<?, ?, Integer> multiStepFlow = (CollectionDataFlow<?, ?, Integer>) sourceCL
-			.getDef().multiStepFlow.flatMap(TypeTokens.get().INT, i -> getPrimeFactors(i).flow());
+			ObservableCollection.CollectionDataFlow<?, ?, Integer> multiStepFlow = sourceCL
+			.getDef().multiStepFlow.flatMap(TypeTokens.get().INT, factorize);
 			ObservableCollectionTestDef<Integer> def = new ObservableCollectionTestDef<>(TestValueType.INT, oneStepFlow, multiStepFlow,
 				sourceCL.getDef().orderImportant, sourceCL.getDef().checkOldValues);
 			return (ObservableCollectionLink<T, X>) new FactoringFlatMapCollectionLink(path, sourceCL, def, helper);

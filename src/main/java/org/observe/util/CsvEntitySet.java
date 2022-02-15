@@ -533,6 +533,8 @@ public class CsvEntitySet implements AutoCloseable {
 		// Scan the directory for entities and parse the header info
 		if (theEntityDirectory.isDirectory()) {
 			for (File entityDir : theEntityDirectory.listFiles()) {
+				if (!entityDir.isDirectory())
+					continue;
 				File[] entityFiles = getEntityFiles(entityDir);
 				if (entityFiles.length > 0) {
 					try (Reader reader = new BufferedReader(new FileReader(entityFiles[0]))) {
@@ -1321,7 +1323,7 @@ public class CsvEntitySet implements AutoCloseable {
 
 	/**
 	 * Updates this entity set's index for external modifications
-	 * 
+	 *
 	 * @param format The entity type for which an entity has been added or removed
 	 * @param entity The new entity or the one that was deleted
 	 * @param add Whether the change was an addition or a deletion

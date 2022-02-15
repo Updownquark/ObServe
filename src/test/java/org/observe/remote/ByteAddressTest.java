@@ -22,8 +22,8 @@ public class ByteAddressTest implements Testable {
 	 */
 	@Test
 	public void testByteAddress() {
-		TestHelper.createTester(ByteAddressTest.class).withDebug(true).withFailurePersistence(true).withRandomCases(2_000)
-		.withMaxCaseDuration(Duration.ofSeconds(2))//
+		TestHelper.createTester(ByteAddressTest.class).withDebug(true).withFailurePersistence(true)//
+			.withMaxCaseDuration(Duration.ofSeconds(2)).withMaxTotalDuration(Duration.ofSeconds(10))//
 		.withPlacemarks("address").execute();
 	}
 

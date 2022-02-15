@@ -1120,7 +1120,8 @@ public class ObservableCollectionActiveManagers2 {
 						public void update(T oldValue, T newValue, Object cause, boolean internalOnly) {
 							try (Transaction t = lockRefresh()) {
 								ObservableCollectionActiveManagers.update(theListener, oldValue, newValue, cause, internalOnly);
-								updated(newValue);
+								if (!internalOnly)
+									updated(newValue);
 							}
 						}
 
@@ -1783,8 +1784,10 @@ public class ObservableCollectionActiveManagers2 {
 						if (manager == null)
 							return;
 						try (Transaction flatT = manager.lock(false, null)) {
-							for (FlattenedElement flatEl : theElements)
-								flatEl.sourceUpdated(oldValue, newValue, true, cause, true);
+							for (FlattenedElement flatEl : theElements) {
+								V elValue = flatEl.getParentValue();
+								flatEl.valueUpdated(elValue, elValue, cause, true);
+							}
 						}
 						return;
 					}
@@ -1952,20 +1955,15 @@ public class ObservableCollectionActiveManagers2 {
 			void sourceUpdated(I oldSource, I newSource, boolean update, Object cause, boolean internalOnly) {
 				if (theListener == null)
 					return;
-				T oldValue, newValue;
-				if (theOptions == null) {
-					oldValue = (T) oldSource;
-					newValue = (T) newSource;
-				} else if (theOptions.isCached()) {
-					oldValue = theDestCache;
-					if (theOptions.isReEvalOnUpdate())
-						newValue = theOptions.map(newSource, theCacheHandler.getSourceCache(), theDestCache);
-					else
-						newValue = theDestCache;
-				} else {
-					oldValue = theOptions.map(oldSource, theParentEl.get(), null);
+				// This is not called without options
+				T oldValue = theOptions.isCached() ? theDestCache : theOptions.map(oldSource, theParentEl.get(), null);
+				T newValue;
+				if (update && !theOptions.isReEvalOnUpdate())
+					newValue = theDestCache;
+				else if (theOptions.isCached())
+					newValue = theOptions.map(newSource, theCacheHandler.getSourceCache(), theDestCache);
+				else
 					newValue = theOptions.map(newSource, theParentEl.get(), null);
-				}
 				ObservableCollectionActiveManagers.update(theListener, oldValue, newValue, cause, internalOnly);
 			}
 

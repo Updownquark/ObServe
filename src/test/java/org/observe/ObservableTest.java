@@ -12,8 +12,7 @@ public class ObservableTest {
 	/** Tests simple {@link SettableValue} functionality */
 	@Test
 	public void settableValue() {
-		SettableValue<Integer> obs = SettableValue.build(Integer.TYPE).build();
-		obs.set(0, null);
+		SettableValue<Integer> obs = SettableValue.build(Integer.TYPE).withValue(0).build();
 		int [] received = new int[] {0};
 		obs.changes().act(value -> received[0] = value.getNewValue());
 		for(int i = 1; i < 10; i++) {
@@ -25,8 +24,7 @@ public class ObservableTest {
 	/** Tests {@link ObservableValue#map(java.util.function.Function)} */
 	@Test
 	public void valueMap() {
-		SettableValue<Integer> obs = SettableValue.build(Integer.TYPE).build();
-		obs.set(0, null);
+		SettableValue<Integer> obs = SettableValue.build(Integer.TYPE).withValue(0).build();
 		int [] received = new int[] {0};
 		obs.map(//
 			value -> value * 10//
@@ -120,8 +118,7 @@ public class ObservableTest {
 	/** Tests {@link ObservableValue#takeUntil(Observable)} */
 	@Test
 	public void valueTakeUntil() {
-		SettableValue<Integer> obs = SettableValue.build(Integer.TYPE).build();
-		obs.set(0, null);
+		SettableValue<Integer> obs = SettableValue.build(Integer.TYPE).withValue(0).build();
 		SimpleObservable<Boolean> stop = new SimpleObservable<>();
 		int [] received = new int[] {0};
 		int [] count = new int[1];
@@ -211,11 +208,9 @@ public class ObservableTest {
 		SettableValue<ObservableValue<Integer>> outer = SettableValue
 			.<ObservableValue<Integer>> build(new TypeToken<ObservableValue<Integer>>() {
 			}).build();
-		SettableValue<Integer> inner1 = SettableValue.build(Integer.TYPE).build();
-		inner1.set(1, null);
+		SettableValue<Integer> inner1 = SettableValue.build(Integer.TYPE).withValue(1).build();
 		outer.set(inner1, null);
-		SettableValue<Integer> inner2 = SettableValue.build(Integer.TYPE).build();
-		inner2.set(2, null);
+		SettableValue<Integer> inner2 = SettableValue.build(Integer.TYPE).withValue(2).build();
 		int [] received = new int[1];
 		ObservableValue.flatten(outer).changes().act(value -> received[0] = value.getNewValue());
 

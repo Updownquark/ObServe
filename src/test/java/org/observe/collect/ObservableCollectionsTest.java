@@ -467,11 +467,15 @@ public class ObservableCollectionsTest {
 						synced.remove(evt.getKey());
 					break;
 				case set:
-					values = synced.get(evt.getKey());
-					Assert.assertNotNull(values);
-					V oldValue = values.set(evt.getIndex(), evt.getNewValue());
-					if (!Objects.equals(evt.getOldValue(), oldValue))
-						assertEquals(evt.getOldValue(), oldValue);
+					if (evt.getIndex() < 0) {
+						synced.put(evt.getKey(), synced.remove(evt.getOldKey()));
+					} else {
+						values = synced.get(evt.getKey());
+						Assert.assertNotNull(values);
+						V oldValue = values.set(evt.getIndex(), evt.getNewValue());
+						if (!Objects.equals(evt.getOldValue(), oldValue))
+							assertEquals(evt.getOldValue(), oldValue);
+					}
 					break;
 				}
 			}
@@ -1018,8 +1022,7 @@ public class ObservableCollectionsTest {
 	@Test
 	public void observableSetCombine() {
 		ObservableSet<Integer> set = ObservableCollection.create(intType).flow().distinct().collect();
-		SettableValue<Integer> value1 = SettableValue.build(Integer.TYPE).build();
-		value1.set(1, null);
+		SettableValue<Integer> value1 = SettableValue.build(Integer.TYPE).withValue(1).build();
 		List<Integer> compare1 = new ArrayList<>();
 		Set<Integer> correct = new TreeSet<>();
 		set.flow()//
@@ -1469,8 +1472,7 @@ public class ObservableCollectionsTest {
 	@Test
 	public void observableListCombine() {
 		ObservableCollection<Integer> list = ObservableCollection.create(intType);
-		SettableValue<Integer> value1 = SettableValue.build(Integer.TYPE).build();
-		value1.set(1, null);
+		SettableValue<Integer> value1 = SettableValue.build(Integer.TYPE).withValue(1).build();
 		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>("combined", list.flow()//
 			.transform(intType, combine -> {
 				return combine.combineWith(value1).build((s, cv) -> s * cv.get(value1));
@@ -1642,16 +1644,11 @@ public class ObservableCollectionsTest {
 	@Test
 	public void flattenListValues() {
 		ObservableCollection<ObservableValue<Integer>> list = ObservableCollection.create(new TypeToken<ObservableValue<Integer>>() {});
-		SettableValue<Integer> value1 = SettableValue.build(Integer.TYPE).build();
-		value1.set(1, null);
-		SettableValue<Integer> value2 = SettableValue.build(Integer.TYPE).build();
-		value2.set(2, null);
-		SettableValue<Integer> value3 = SettableValue.build(Integer.TYPE).build();
-		value3.set(3, null);
-		SettableValue<Integer> value4 = SettableValue.build(Integer.TYPE).build();
-		value4.set(4, null);
-		SettableValue<Integer> value5 = SettableValue.build(Integer.TYPE).build();
-		value5.set(9, null);
+		SettableValue<Integer> value1 = SettableValue.build(Integer.TYPE).withValue(1).build();
+		SettableValue<Integer> value2 = SettableValue.build(Integer.TYPE).withValue(2).build();
+		SettableValue<Integer> value3 = SettableValue.build(Integer.TYPE).withValue(3).build();
+		SettableValue<Integer> value4 = SettableValue.build(Integer.TYPE).withValue(4).build();
+		SettableValue<Integer> value5 = SettableValue.build(Integer.TYPE).withValue(9).build();
 		list.addAll(java.util.Arrays.asList(value1, value2, value3, value4));
 
 		Integer [] received = new Integer[1];

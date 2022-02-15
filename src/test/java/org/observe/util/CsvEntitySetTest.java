@@ -32,6 +32,7 @@ public class CsvEntitySetTest {
 	static File setup() {
 		File directory = new File(System.getProperty("user.home") + "/" + CsvEntitySetTest.class.getSimpleName());
 		FileUtils.delete(directory, null);
+		directory.mkdirs();
 		return directory;
 	}
 
@@ -166,7 +167,7 @@ public class CsvEntitySetTest {
 	}
 
 	static class CsvEntityTestable implements Testable {
-		private static final int OPS = 10_000;
+		private static final int OPS = 1_000;
 		private static final int PROGRESS = OPS / 100;
 		private static final int PERCENT = OPS / 10;
 

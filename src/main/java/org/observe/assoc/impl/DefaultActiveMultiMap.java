@@ -272,6 +272,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 
 	@Override
 	protected void finalize() throws Throwable {
+		// TODO Move this functionality to java.lang.ref.Cleanable, BUT ONLY when JDK 8 is no longer supported
 		super.finalize();
 		theWeakListening.unsubscribe();
 	}
