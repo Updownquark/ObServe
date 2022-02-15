@@ -1780,6 +1780,8 @@ public class ObservableCollectionActiveManagers2 {
 			void updated(I oldValue, I newValue, Object cause, boolean internalOnly) {
 				try (Transaction parentT = theParent.lock(false, null); Transaction t = lockLocal()) {
 					if (internalOnly) {
+						if (manager == null)
+							return;
 						try (Transaction flatT = manager.lock(false, null)) {
 							for (FlattenedElement flatEl : theElements)
 								flatEl.sourceUpdated(oldValue, newValue, true, cause, true);
@@ -1950,15 +1952,20 @@ public class ObservableCollectionActiveManagers2 {
 			void sourceUpdated(I oldSource, I newSource, boolean update, Object cause, boolean internalOnly) {
 				if (theListener == null)
 					return;
-				// This is not called without options
-				T oldValue = theOptions.isCached() ? theDestCache : theOptions.map(oldSource, theParentEl.get(), null);
-				T newValue;
-				if (update && !theOptions.isReEvalOnUpdate())
-					newValue = theDestCache;
-				else if (theOptions.isCached())
-					newValue = theOptions.map(newSource, theCacheHandler.getSourceCache(), theDestCache);
-				else
+				T oldValue, newValue;
+				if (theOptions == null) {
+					oldValue = (T) oldSource;
+					newValue = (T) newSource;
+				} else if (theOptions.isCached()) {
+					oldValue = theDestCache;
+					if (theOptions.isReEvalOnUpdate())
+						newValue = theOptions.map(newSource, theCacheHandler.getSourceCache(), theDestCache);
+					else
+						newValue = theDestCache;
+				} else {
+					oldValue = theOptions.map(oldSource, theParentEl.get(), null);
 					newValue = theOptions.map(newSource, theParentEl.get(), null);
+				}
 				ObservableCollectionActiveManagers.update(theListener, oldValue, newValue, cause, internalOnly);
 			}
 

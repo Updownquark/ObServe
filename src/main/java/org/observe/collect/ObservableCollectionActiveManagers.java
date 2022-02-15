@@ -1232,7 +1232,15 @@ public class ObservableCollectionActiveManagers {
 		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
 			theElementAccepter = onElement;
 			theParent.begin(fromStart, (parentEl, cause) -> {
-				String msg = theFilter.apply(parentEl.get());
+				String msg;
+				try {
+					msg = theFilter.apply(parentEl.get());
+				} catch (RuntimeException e) {
+					msg = "Exception evaluating filter " + theFilter;
+					if (e.getMessage() != null)
+						msg += ": " + e.getMessage();
+					e.printStackTrace();
+				}
 				if (msg == null)
 					onElement.accept(new FilteredElement(parentEl, false, true), cause);
 				else
@@ -1259,7 +1267,13 @@ public class ObservableCollectionActiveManagers {
 								return;
 							}
 							boolean oldIncluded = FilteredElement.this.included;
-							boolean newIncluded = theFilter.apply(newValue) == null;
+							boolean newIncluded;
+							try {
+								newIncluded = theFilter.apply(newValue) == null;
+							} catch (RuntimeException e) {
+								newIncluded = false;
+								e.printStackTrace();
+							}
 							FilteredElement.this.included = newIncluded;
 							if (!oldIncluded && newIncluded) {
 								theElementAccepter.accept(FilteredElement.this, cause);
@@ -1706,7 +1720,7 @@ public class ObservableCollectionActiveManagers {
 			void updated(Transformation.TransformationState oldState, Transformation.TransformationState newState, Object cause) {
 				BiTuple<T, T> values = transformElement.transformationStateChanged(oldState, newState);
 				if (values != null)
-					ObservableCollectionActiveManagers.update(theListener, values.getValue1(), values.getValue2(), cause, true);
+					ObservableCollectionActiveManagers.update(theListener, values.getValue1(), values.getValue2(), cause, false);
 			}
 
 			@Override
