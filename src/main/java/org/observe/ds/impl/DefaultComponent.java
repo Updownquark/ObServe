@@ -43,7 +43,7 @@ class DefaultComponent<C> implements ComponentController<C> {
 		theStage = SettableValue.build(ComponentStage.class).withLocking(service.getComponents()).withValue(ComponentStage.Defined).build();
 		isAvailable = SettableValue.build(boolean.class).withLocking(service.getComponents()).withValue(available).build();
 
-		reset(available);
+		reset(available, null);
 	}
 
 	@Override
@@ -133,25 +133,24 @@ class DefaultComponent<C> implements ComponentController<C> {
 					"Component availability cannot be changed as a result of changes to the dependency service");
 			if (available) {
 				isAvailable.set(true, cause);
-				reset(true);
+				reset(true, cause);
 			}
 			if (available)
 				theService.activate(this, cause);
 			else
 				theService.deactivate(this, cause);
 			if (!available) {
-				for (DefaultDependency<C, ?> dep : theDependencies.values())
-					dep.clear(cause);
-				reset(false);
+				reset(false, cause);
 				isAvailable.set(false, cause);
 			}
 		}
 		return this;
 	}
 
-	private void reset(boolean available) {
+	private void reset(boolean available, Causable cause) {
 		theUnsatisfied = theDynamicUnsatisfied = 0;
 		for (DefaultDependency<C, ?> dep : theDependencies.values()) {
+			dep.clear(cause);
 			if (dep.getMinimum() > 0) {
 				theUnsatisfied++;
 				if (dep.isDynamic())
@@ -195,7 +194,7 @@ class DefaultComponent<C> implements ComponentController<C> {
 			theService.deactivate(this, cause);
 			for (DefaultDependency<C, ?> dep : theDependencies.values())
 				dep.clear(cause);
-			reset(false);
+			reset(false, cause);
 			isAvailable.set(false, cause);
 		}
 		theService.remove(this);

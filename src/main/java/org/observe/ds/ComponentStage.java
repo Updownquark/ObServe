@@ -46,7 +46,10 @@ public enum ComponentStage {
 	 * initializing
 	 */
 	Complete,
-	/** The component has unsatisfied required dependencies and the initial set of components has been completely defined */
+	/**
+	 * The component has unsatisfied required dependencies and the initial set of components has been completely defined. This is also the
+	 * stage for components that are {@link DSComponent#isAvailable() unavailable} components.
+	 */
 	Unsatisfied,
 	/** The component has been {@link ComponentController#remove() removed} */
 	Removed;

@@ -73,11 +73,11 @@ public class DSTesting {
 			})//
 			.build());
 
-		Assert.assertEquals(ComponentStage.Satisfied, a.getStage().get());
-		Assert.assertEquals(ComponentStage.Satisfied, b.getStage().get());
-		Assert.assertEquals(ComponentStage.Satisfied, c.getStage().get());
-		Assert.assertEquals(ComponentStage.Satisfied, d.getStage().get());
-		Assert.assertEquals(ComponentStage.Satisfied, e.getStage().get());
+		Assert.assertEquals(ComponentStage.Defined, a.getStage().get());
+		Assert.assertEquals(ComponentStage.Defined, b.getStage().get());
+		Assert.assertEquals(ComponentStage.Defined, c.getStage().get());
+		Assert.assertEquals(ComponentStage.Defined, d.getStage().get());
+		Assert.assertEquals(ComponentStage.Defined, e.getStage().get());
 
 		dds.init();
 
@@ -117,7 +117,7 @@ public class DSTesting {
 	@Test
 	public void randomTest() {
 		TestHelper.createTester(DSTestable.class).revisitKnownFailures(true).withDebug(true).withFailurePersistence(true)
-		.withPlacemarks("op").withMaxCaseDuration(Duration.ofSeconds(10)).withRandomCases(500).execute();
+		.withPlacemarks("op").withMaxCaseDuration(Duration.ofSeconds(10)).withRandomCases(500).execute().throwErrorIfFailed();
 	}
 
 	static class DSTestable implements Testable {
@@ -139,12 +139,18 @@ public class DSTesting {
 			int[] componentIndex = new int[1];
 			for (componentIndex[0] = 0; componentIndex[0] < componentCount; componentIndex[0]++) {
 				String name = "" + (char) ('A' + componentIndex[0]);
-				components.add(configureComponent(dds.inject(name, __ -> name), components.size(), services, helper));
+				components.add(configureComponent(//
+					dds.inject(name, __ -> name), components.size(), services, helper));
 			}
 
 			BetterSet<Dependency<String, ?>> path = BetterHashSet.build().buildSet();
 			checkState(dds, false, path);
+			if (helper.isReproducing())
+				System.out.println("initializing");
+			helper.placemark();
 			dds.init();
+			if (helper.isReproducing())
+				System.out.println("initialized");
 			checkState(dds, true, path);
 
 			int ops = helper.getInt(10, 100);
@@ -233,9 +239,14 @@ public class DSTesting {
 					Assert.assertFalse("Component " + comp.getName() + " should not be Defined after initialization", initialized);
 					break;
 				case Complete:
-				case Unsatisfied:
 					Assert.assertTrue("Component " + comp.getName() + " should not be " + comp.getStage().get() + " before initialization",
 						initialized);
+					break;
+				case Unsatisfied:
+					if (comp.isAvailable().get())
+						Assert.assertTrue(
+							"Component " + comp.getName() + " should not be " + comp.getStage().get() + " before initialization",
+							initialized);
 					break;
 				case PreSatisfied:
 					Assert.assertFalse("Component " + comp.getName() + " should not be PreSatisfied except during transition", true);
@@ -273,26 +284,28 @@ public class DSTesting {
 							count++;
 					}
 					if (count != dep.getProviders().size())
-						Assert.assertEquals(count, dep.getProviders().size());
+						Assert.assertEquals("Incorrect providers for " + dep + " " + dep.getProviders(), count, dep.getProviders().size());
 					if (count < dep.getMinimum())
 						unsatisfied++;
 				}
-				switch (comp.getStage().get()) {
-				case Defined:
-				case Unsatisfied:
-					Assert.assertNull(comp.getComponentValue());
-					if (unsatisfied == 0)
-						Assert.assertNotEquals(0, unsatisfied);
-					break;
-				case Satisfied:
-				case Complete:
-					if (unsatisfied != 0)
-						Assert.assertEquals(0, unsatisfied);
-					break;
-				default:// Handled at top
+				if (initialized) {
+					switch (comp.getStage().get()) {
+					case Defined:
+					case Unsatisfied:
+						Assert.assertNull(comp.getComponentValue());
+						if (unsatisfied == 0)
+							Assert.assertNotEquals(0, unsatisfied);
+						break;
+					case Satisfied:
+					case Complete:
+						if (unsatisfied != 0)
+							Assert.assertEquals(0, unsatisfied);
+						break;
+					default:// Handled at top
+					}
 				}
 				// Check for dynamic cycles that should have been activated
-				if (comp.isAvailable().get() && !comp.getStage().get().isActive()//
+				if (initialized && comp.isAvailable().get() && !comp.getStage().get().isActive()//
 					&& shouldBeSatisfied(dds, comp, path)) {
 					throw new AssertionError("Dynamic cycle detection failed: " + comp.getName() + " is not active");
 				}
@@ -353,7 +366,7 @@ public class DSTesting {
 					case Defined:
 					case Removed:
 					case Unsatisfied:
-						Assert.assertFalse("Non-satisfied dependency", true);
+						Assert.assertFalse("Non-satisfied dependency satisfier: " + dep + ": " + comp2, true);
 						break;
 					default:
 					}
@@ -393,7 +406,7 @@ public class DSTesting {
 				case Defined:
 				case Removed:
 				case Unsatisfied:
-					Assert.assertFalse("Non-satisfied dependency", true);
+					Assert.assertFalse("Non-satisfied dependency satisfier " + dep + ": " + comp2, true);
 					break;
 				default:
 				}

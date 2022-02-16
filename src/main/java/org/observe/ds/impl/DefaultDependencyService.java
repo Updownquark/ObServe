@@ -108,36 +108,16 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 			theStage.set(DependencyServiceStage.Initializing, cause);
 			isActivating = true;
 			try {
-				BetterSet<DefaultDependency<C, ?>> componentPath = BetterHashSet.build().buildSet();
+				BetterSet<?> componentPath = BetterHashSet.build().buildSet();
 				boolean progress = true;
 				while (progress) {
 					progress = false;
-					for (DefaultComponent<C> comp : theComponents) {
-						if (comp.getStage().get() != ComponentStage.Defined)
-							continue;
-						boolean allSatisified = true;
-						for (Service<?> dep : comp.getDependencies().keySet()) {
-							for (DefaultComponent<C> provider : theServiceProviders.getOrDefault(dep, Collections.emptyList())) {
-								if (provider.getStage().get() == ComponentStage.Defined) {
-									allSatisified = false;
-									break;
-								}
-							}
-							if (!allSatisified)
-								break;
-						}
-						if (allSatisified) {
-							progress = true;
-							if (comp.preInit(cause))
-								satisfied(comp, componentPath, cause);
-						}
-					}
+					for (DefaultComponent<C> comp : theComponents)
+						progress |= trySatisfyInitial(comp, (BetterSet<DefaultComponent<C>>) componentPath, cause);
 				}
 				for (DefaultComponent<C> comp : theComponents) {
-					if (comp.getStage().get() == ComponentStage.Defined) {
-						if (comp.preInit(cause))
-							satisfied(comp, componentPath, cause);
-					}
+					if (comp.getStage().get() == ComponentStage.Defined)
+						comp.preInit(cause);
 				}
 				theStage.set(DependencyServiceStage.PreInitialized, cause);
 				for (DefaultComponent<C> comp : theComponents) {
@@ -253,10 +233,7 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 				somethingSatisfied = false;
 				// Attempt to satisfy the component's dependencies with satisfied provider components
 				for (DefaultDependency<C, ?> dep : (Collection<DefaultDependency<C, ?>>) component.getDependencies().values()) {
-					List<DefaultComponent<C>> providers = theServiceProviders.get(dep.getTarget());
-					if (providers == null)
-						continue;
-					for (DefaultComponent<C> provider : providers) {
+					for (DefaultComponent<C> provider : theServiceProviders.getOrDefault(dep.getTarget(), Collections.emptyList())) {
 						if (provider.getUnsatisfied() == 0 && dep.satisfy(provider, cause))
 							somethingSatisfied = true;
 					}
@@ -266,8 +243,10 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 						// Satisfy other components' dependencies with this provider
 						wasSatisfied = true;
 						somethingSatisfied |= satisfied(component, componentPath, cause);
-					} else if (component.getUnsatisfied() == component.getDynamicUnsatisfied()
-						&& isInSatisfiedDynamicCycle(component, componentPath)) {
+					} else if (//
+						// The component itself may have unsatisfied non-dynamic dependencies because it is currently being activate
+						// component.getUnsatisfied() == component.getDynamicUnsatisfied() && //
+						isInSatisfiedDynamicCycle(component, componentPath)) {
 						wasSatisfied = true;
 						component.setStage(ComponentStage.PreSatisfied, cause);
 						satisfied(component, componentPath, cause);
@@ -280,15 +259,114 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 		runScheduledTasks();
 	}
 
+	boolean trySatisfyInitial(DefaultComponent<C> component, BetterSet<DefaultComponent<C>> componentPath, Object cause) {
+		if (!component.isAvailable().get())
+			return false;
+		boolean wasSatisfied = component.getStage().get() == ComponentStage.Satisfied;
+		// Attempt to satisfy the component's dependencies with satisfied provider components
+		for (DefaultDependency<C, ?> dep : (Collection<DefaultDependency<C, ?>>) component.getDependencies().values()) {
+			for (DefaultComponent<C> provider : theServiceProviders.getOrDefault(dep.getTarget(), Collections.emptyList())) {
+				if (provider.getStage().get().isActive())
+					dep.satisfy(provider, cause);
+			}
+		}
+		if (component.isAvailable().get() && component.getUnsatisfied() > 0
+			&& component.getUnsatisfied() == component.getDynamicUnsatisfied()) {
+			componentPath.add(component);
+			boolean allCycles = true;
+			for (DefaultDependency<C, ?> dep : (Collection<DefaultDependency<C, ?>>) component.getDependencies().values()) {
+				if (dep.isDynamic() && dep.getProviders().size() < dep.getMinimum() //
+					&& !hasDependencyCycles(dep, //
+						componentPath, dep.getMinimum() - dep.getProviders().size())) {
+					allCycles = false;
+					break;
+				}
+			}
+			if (allCycles) {
+				component.setStage(ComponentStage.PreSatisfied, cause);
+				for (DefaultDependency<C, ?> dep : (Collection<DefaultDependency<C, ?>>) component.getDependencies().values()) {
+					if (dep.isDynamic())
+						satisfyInitialDynamicCycles(dep, componentPath, cause);
+				}
+			}
+			componentPath.clear();
+		}
+		if (component.getUnsatisfied() == 0 && component.isAvailable().get() && !wasSatisfied) {
+			component.preInit(cause);
+			return true;
+		} else
+			return false;
+	}
+
+	private boolean hasDependencyCycles(DefaultDependency<C, ?> dep, BetterSet<DefaultComponent<C>> componentPath, int needed) {
+		boolean[] added = new boolean[1];
+		for (DefaultComponent<C> provider : theServiceProviders.getOrDefault(dep.getTarget(), Collections.emptyList())) {
+			if (dep.getProviders().contains(provider))
+				continue;
+			added[0] = false;
+			ElementId el = componentPath.getOrAdd(provider, null, null, false, () -> added[0] = true).getElementId();
+			if (!added[0]) { // Cycle detected
+				if (componentPath.getAdjacentElement(el, false) == null)
+					needed--;
+			} else {
+				try {
+					boolean allCycles = true;
+					for (DefaultDependency<C, ?> d2 : (Collection<DefaultDependency<C, ?>>) provider.getDependencies().values()) {
+						if (d2.getProviders().size() < d2.getMinimum() //
+							&& !hasDependencyCycles(d2, //
+								componentPath, d2.getMinimum() - d2.getProviders().size())) {
+							allCycles = false;
+							break;
+						}
+					}
+					if (allCycles)
+						needed--;
+				} finally {
+					componentPath.mutableElement(el).remove();
+				}
+			}
+			if (needed == 0)
+				break;
+		}
+		return needed == 0;
+	}
+
+	private void satisfyInitialDynamicCycles(DefaultDependency<C, ?> dep, BetterSet<DefaultComponent<C>> componentPath, Object cause) {
+		boolean[] added = new boolean[1];
+		for (DefaultComponent<C> provider : theServiceProviders.getOrDefault(dep.getTarget(), Collections.emptyList())) {
+			if (dep.getProviders().contains(provider))
+				continue;
+			added[0] = false;
+			ElementId el = componentPath.getOrAdd(provider, null, null, false, () -> added[0] = true).getElementId();
+			if (!added[0]) { // Cycle detected
+				if (componentPath.getAdjacentElement(el, false) == null)
+					dep.satisfy(provider, cause);
+			} else {
+				try {
+					for (DefaultDependency<C, ?> d2 : (Collection<DefaultDependency<C, ?>>) provider.getDependencies().values())
+						satisfyInitialDynamicCycles(d2, componentPath, cause);
+					if (provider.getUnsatisfied() == 0) {
+						if (!provider.getStage().get().isActive())
+							provider.preInit(cause);
+						dep.satisfy(provider, cause);
+					}
+				} finally {
+					componentPath.mutableElement(el).remove();
+				}
+			}
+		}
+	}
+
 	private boolean isInSatisfiedDynamicCycle(DefaultComponent<C> component, BetterSet<DefaultDependency<C, ?>> componentPath) {
 		for (DefaultDependency<C, ?> dep : (Collection<DefaultDependency<C, ?>>) component.getDependencies().values()) {
 			boolean[] added = new boolean[1];
 			ElementId el = componentPath.getOrAdd(dep, null, null, false, () -> added[0] = true).getElementId();
 			if (!added[0]) {
 				// We're in a cycle, but is it dynamic?
-				for (CollectionElement<DefaultDependency<C, ?>> dep2 = componentPath.getElement(el); dep2 != null; dep2 = componentPath
-					.getAdjacentElement(dep2.getElementId(), true)) {
-					if (dep.isDynamic())
+				for (CollectionElement<DefaultDependency<C, ?>> dep2 = componentPath.getElement(el); //
+					dep2 != null;//
+					dep2 = componentPath.getAdjacentElement(dep2.getElementId(), true)) {
+					if (dep2.get().isDynamic())
 						return true;
 				}
 				return false; // Static dependency
@@ -312,7 +390,7 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 				if (needed > 0)
 					return false;
 			} finally {
-				componentPath.remove(dep);
+				componentPath.mutableElement(el).remove();
 			}
 		}
 		return true;
@@ -333,8 +411,10 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 				if (!wasActive && getStage().get() != DependencyServiceStage.Uninitialized) {
 					if (dep.getRealOwner().getUnsatisfied() == 0)
 						satisfied(dep.getRealOwner(), componentPath, cause);
-					else if (dep.getRealOwner().getUnsatisfied() == dep.getRealOwner().getDynamicUnsatisfied()
-						&& isInSatisfiedDynamicCycle(dep.getRealOwner(), componentPath)) {
+					else if (//
+						// The dependency owner is currently being activated, so its dependency need not be dynamic
+						// dep.getRealOwner().getUnsatisfied() == dep.getRealOwner().getDynamicUnsatisfied() && //
+						isInSatisfiedDynamicCycle(dep.getRealOwner(), componentPath)) {
 						wasActive = true;
 						dep.getRealOwner().setStage(ComponentStage.PreSatisfied, cause);
 						satisfied(dep.getRealOwner(), componentPath, cause);
@@ -350,13 +430,14 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 			throw new IllegalStateException("Component availability cannot be changed as a result of changes to the dependency service");
 		isActivating = true;
 		try {
+			boolean wasSatisfied = component.getUnsatisfied() == 0;
 			// Unregister the component
 			for (Service<?> provided : component.getProvided())
 				theServiceProviders.get(provided).remove(component);
 			for (Dependency<C, ?> dep : component.getDependencies().values())
 				theDependents.get(dep.getTarget()).remove(dep);
 
-			if (component.getUnsatisfied() == 0)
+			if (wasSatisfied)
 				unsatisfied(component, cause);
 		} finally {
 			isActivating = false;

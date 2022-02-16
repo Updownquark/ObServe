@@ -16,6 +16,7 @@ import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.ds.ComponentController;
 import org.observe.ds.DSComponent;
+import org.observe.ds.DependencyService;
 import org.observe.util.TypeTokens;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
@@ -26,6 +27,17 @@ import org.qommons.osgi.ComponentBasedExecutor;
 import com.google.common.reflect.Invokable;
 import com.google.common.reflect.TypeToken;
 
+/**
+ * A {@link DependencyService} implementation that determines component dependencies and behavior based on annotations on the component
+ * class's methods.
+ *
+ * @see Component
+ * @see Dependency
+ * @see Activate
+ * @see Release
+ * @see Deactivate
+ * @see Dispose
+ */
 public class AnnotatedDependencyService extends DefaultTypedDependencyService<Object> implements ComponentBasedExecutor {
 	static class ComponentMethod<T> {
 		private final Invokable<T, ?> theMethod;
@@ -190,23 +202,29 @@ public class AnnotatedDependencyService extends DefaultTypedDependencyService<Ob
 			until.take(1).act(__ -> sub.unsubscribe());
 		}
 
-		private void release(ComponentController<Object> controller, S service) {
+		private void release(ComponentController<Object> controller, S serviceInstance) {
 			for (ComponentMethod<T> release : releases)
-				release.invoke(controller, service);
+				release.invoke(controller, serviceInstance);
 		}
 	}
 
+	/** Creates a dependency service with standard {@link ReentrantReadWriteLock} locking */
 	public AnnotatedDependencyService() {
 		this(new RRWLockingStrategy(new ReentrantReadWriteLock(), "DS", ThreadConstraint.ANY));
 	}
 
+	/**
+	 * Creates a dependency service with custom locking
+	 *
+	 * @param lock The lock to use to thread-safe this dependency service
+	 */
 	public AnnotatedDependencyService(Transactable lock) {
 		super(lock);
 	}
 
+	@Override
 	public AnnotatedDependencyService loadComponents(Class<?>... componentTypes) {
-		for (Class<?> componentType : componentTypes)
-			loadComponent(componentType);
+		ComponentBasedExecutor.super.loadComponents(componentTypes);
 		return this;
 	}
 
@@ -245,7 +263,11 @@ public class AnnotatedDependencyService extends DefaultTypedDependencyService<Ob
 			if (dispose != null) {
 				if (m.getParameterTypes().length != 0)
 					throw new IllegalStateException(componentType + ": Dispose methods cannot accept parameters");
-				if (!m.isAccessible())
+				// Though this is deprecated as of Java 9, the suggested alternate to this, AccessibleObject.canAccess(Object),
+				// requires a target object, which we don't have here.
+				@SuppressWarnings("deprecation")
+				boolean accessible = m.isAccessible();
+				if (!accessible)
 					m.setAccessible(true);
 				comp.disposes.add(new ComponentMethod<>(ct.method(m), false));
 				continue;
