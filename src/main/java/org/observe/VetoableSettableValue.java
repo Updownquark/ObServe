@@ -44,7 +44,7 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 	private Object theChangesIdentity;
 
 	VetoableSettableValue(TypeToken<T> type, String description, boolean nullable, ListenerList.Builder listening,
-		Function<Object, Transactable> lock) {
+		Function<Object, Transactable> lock, T initialValue) {
 		theType = type;
 		theDescription = description;
 		isNullable = nullable;
@@ -54,6 +54,7 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 			listening.forEachSafe(false).allowReentrant().withFastSize(false).withSyncType(ListenerList.SynchronizationType.NONE);
 		}
 		theListeners = listening.build();
+		theValue = initialValue;
 		isAlive = true;
 	}
 

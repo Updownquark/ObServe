@@ -42,7 +42,7 @@ public class DefaultObservableSortedSet<E> extends DefaultObservableCollection<E
 	}
 
 	DefaultObservableSortedSet(TypeToken<E> type, BetterSortedSet<E> sortedSet,
-		BiFunction<ElementId, BetterCollection<?>, ElementId> elementSource,
+		BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> elementSource,
 		BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> sourceElements) {
 		super(type, sortedSet, elementSource, sourceElements,
 			Equivalence.DEFAULT.sorted(TypeTokens.getRawType(type), sortedSet.comparator(), false));

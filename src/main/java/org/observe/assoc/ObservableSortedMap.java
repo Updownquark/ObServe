@@ -185,7 +185,7 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 				.build(ObservableMap.buildEntryType(getType(), getValueType()))//
 				.withBacking((BetterList<Map.Entry<K, V>>) (BetterList<?>) getBacking())//
 				.withDescription(getDescription());
-			builder.withElementSource(getElementSource()).withSourceElements(getSourceElements());
+			builder.withElementsBySource(getElementsBySource()).withSourceElements(getSourceElements());
 			builder.withCollectionLocking(getLocker());
 			return new DefaultObservableSortedMap<>(getType(), getValueType(), compare, //
 				builder.sortBy((entry1, entry2) -> compare.compare(entry1.getKey(), entry2.getKey()))//

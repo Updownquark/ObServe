@@ -1,6 +1,5 @@
 package org.observe.util.swing;
 
-import java.awt.EventQueue;
 import java.awt.event.MouseEvent;
 import java.beans.PropertyChangeListener;
 import java.util.ArrayList;
@@ -25,10 +24,10 @@ import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.observe.collect.ObservableCollection;
-import org.observe.util.AbstractSafeObservableCollection;
 import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
 import org.qommons.IdentityKey;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
@@ -122,7 +121,6 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 
 	private final Map<IdentityKey<T>, TreeNode> theNodes;
 	private final List<TreeModelListener> theListeners;
-	private boolean isPromisedSafe;
 
 	/** @param rootValue The root of the model */
 	public ObservableTreeModel(T rootValue) {
@@ -140,15 +138,7 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 		theRootNode = new TreeNode(null, root.get());
 		theNodes.put(new IdentityKey<>(theRootNode.get()), theRootNode);
 
-		root.noInitChanges().act(evt -> rootChanged(evt.getNewValue()));
-	}
-
-	/**
-	 * Represents a promise from the caller that the observable collections provided to this model will only ever fire on the AWT
-	 * {@link EventQueue} thread. This model may throw exceptions or report incorrect data if this promise is made and not kept.
-	 */
-	public void promiseSafe() {
-		isPromisedSafe = true;
+		root.noInitChanges().safe(ThreadConstraint.EDT).act(evt -> doRootChanged(evt.getNewValue()));
 	}
 
 	/** @return The observable value that is the root of this tree */
@@ -173,10 +163,7 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 	}
 
 	private void rootChanged(T newRoot) {
-		if (isPromisedSafe) {
-			doRootChanged(newRoot);
-		} else
-			ObservableSwingUtils.onEQ(() -> doRootChanged(newRoot));
+		ObservableSwingUtils.onEQ(() -> doRootChanged(newRoot));
 	}
 
 	private void doRootChanged(T newRoot) {
@@ -281,7 +268,7 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 
 			unsubscribe = SimpleObservable.build().build();
 			theChildren = ObservableTreeModel.this.getChildren(theValue);
-			if (!isPromisedSafe && theChildren != null && !(theChildren instanceof AbstractSafeObservableCollection))
+			if (theChildren != null)
 				theChildren = ObservableSwingUtils.safe(theChildren, unsubscribe);
 			init(false);
 		}

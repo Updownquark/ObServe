@@ -514,7 +514,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 				.build(buildEntryType(getType(), theValueType))//
 				.withBacking((BetterList<Map.Entry<K, V>>) (BetterList<?>) getBacking())//
 				.withDescription(getDescription());
-			entryBuilder.withElementSource(getElementSource()).withSourceElements(getSourceElements());
+			entryBuilder.withElementsBySource(getElementsBySource()).withSourceElements(getSourceElements());
 			entryBuilder.withCollectionLocking(getLocker());
 			if (compare != null)
 				entryBuilder = entryBuilder.sortBy((entry1, entry2) -> compare.compare(entry1.getKey(), entry2.getKey()));

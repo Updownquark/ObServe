@@ -200,9 +200,9 @@ public class ObservableValueSelector<T, X> extends JPanel {
 				}))//
 			.addTable(theSelectableValues, srcTbl -> {
 				theSourceTable = srcTbl.getEditor();
-						if (itemName != null)
-							srcTbl.withItemName(itemName);
-						srcTbl.withCountTitle("available").withColumns(sourceColumns).withFiltering(theFilterText).fill();
+				if (itemName != null)
+					srcTbl.withItemName(itemName);
+				srcTbl.withCountTitle("available").withColumns(sourceColumns).withFiltering(theFilterText).fill();
 			}).fill())//
 		.addVPanel(buttonPanel -> {
 			buttonPanel.getContainer().setLayout(new JustifiedBoxLayout(true));
@@ -216,9 +216,9 @@ public class ObservableValueSelector<T, X> extends JPanel {
 			.addComponent(null, theSelectionCountLabel, null)//
 			.addTable(theIncludedValues, destTbl -> {
 				theDestTable = destTbl.getEditor();
-					if (itemName != null)
-						destTbl.withItemName(itemName);
-					destTbl.withCountTitle("included").withColumns(destColumns).fill();
+				if (itemName != null)
+					destTbl.withItemName(itemName);
+				destTbl.withCountTitle("included").withColumns(destColumns).fill();
 			}).fill());
 
 		ObservableTableModel<SelectableValue<T, X>> sourceModel = (ObservableTableModel<SelectableValue<T, X>>) theSourceTable.getModel();
@@ -546,8 +546,8 @@ public class ObservableValueSelector<T, X> extends JPanel {
 
 	public static <T, X> Builder<T, X> build(ObservableCollection<T> sourceRows, //
 		ObservableCollection<? extends CategoryRenderStrategy<? super SelectableValue<T, X>, ?>> sourceColumns, //
-		ObservableCollection<? extends CategoryRenderStrategy<? super SelectableValue<T, X>, ?>> destColumns, //
-		Function<? super T, ? extends X> map) {
+			ObservableCollection<? extends CategoryRenderStrategy<? super SelectableValue<T, X>, ?>> destColumns, //
+				Function<? super T, ? extends X> map) {
 		return new Builder<>(sourceRows, sourceColumns, destColumns, map);
 	}
 
@@ -611,8 +611,9 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		}
 
 		public ObservableValueSelector<T, X> build() {
-			return new ObservableValueSelector<>(theSourceRows, theSourceColumns, theDestColumns, theMap, isReEvalOnUpdate, theUntil,
-				isIncludedByDefault, theFilterFormat, isFilterCommitOnType, theItemName);
+			return new ObservableValueSelector<>(ObservableSwingUtils.safe(theSourceRows, theUntil), //
+				ObservableSwingUtils.safe(theSourceColumns, theUntil), ObservableSwingUtils.safe(theDestColumns, theUntil),
+				theMap, isReEvalOnUpdate, theUntil, isIncludedByDefault, theFilterFormat, isFilterCommitOnType, theItemName);
 		}
 	}
 }

@@ -23,6 +23,7 @@ import org.observe.Transformation.TransformedElement;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
+import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.Lockable;
@@ -481,6 +482,17 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 	 */
 	default ObservableValue<T> refresh(Observable<?> refresh) {
 		return new RefreshingObservableValue<>(this, refresh);
+	}
+
+	/**
+	 * @param threading The thread constraint for the new observable to obey
+	 * @param until An observable to cease the safe observable's synchronization with this value
+	 * @return An observable value with same value as this one, but is safe for use on the given thread and fires its events there
+	 */
+	default ObservableValue<T> safe(ThreadConstraint threading, Observable<?> until) {
+		if (getThreadConstraint() == threading || getThreadConstraint() == ThreadConstraint.NONE)
+			return this;
+		return new SafeObservableValue<>(this, threading, until);
 	}
 
 	/**
@@ -1145,6 +1157,107 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 		@Override
 		public String toString() {
 			return theWrapped.toString();
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableValue#safe(ThreadConstraint, Observable)}
+	 *
+	 * @param <T> The type of the value
+	 */
+	class SafeObservableValue<T> extends WrappingObservableValue<T, T> {
+		private final ThreadConstraint theThreading;
+		private T theLastEventedValue;
+		private ObservableValueEvent<T> theLastEvent;
+		private final ListenerList<Consumer<ObservableValueEvent<T>>> theListeners;
+
+		public SafeObservableValue(ObservableValue<T> wrapped, ThreadConstraint threading, Observable<?> until) {
+			super(wrapped);
+			theThreading = threading;
+			theListeners = ListenerList.build().build();
+			Consumer<ObservableValueEvent<T>> listener = evt -> {
+				theLastEvent = evt;
+				if (theThreading.isEventThread())
+					fire(evt, true);
+				else
+					theThreading.invoke(() -> fire(evt, false));
+			};
+			if (until == null)
+				wrapped.changes().act(listener);
+			else
+				wrapped.changes().takeUntil(until).act(listener);
+		}
+
+		private void fire(ObservableValueEvent<T> evt, boolean fromEventThread) {
+			if (theLastEvent != evt)
+				return;
+			if (!fromEventThread)
+				evt = createChangeEvent(theLastEventedValue, evt.getNewValue(), Causable.broken(evt));
+			else if (theLastEventedValue != evt.getOldValue())
+				evt = createChangeEvent(theLastEventedValue, evt.getNewValue(), evt);
+			theLastEventedValue = evt.getNewValue();
+			try (Transaction t = evt == theLastEvent ? Transaction.NONE : evt.use()) {
+				ObservableValueEvent<T> fEvt = evt;
+				theListeners.forEach(//
+					listener -> listener.accept(fEvt));
+			}
+		}
+
+		@Override
+		public TypeToken<T> getType() {
+			return getWrapped().getType();
+		}
+
+		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getWrapped().getIdentity(), "safe", theThreading);
+		}
+
+		@Override
+		public T get() {
+			return getWrapped().get();
+		}
+
+		@Override
+		public Observable<ObservableValueEvent<T>> noInitChanges() {
+			class SafeChanges extends AbstractIdentifiable implements Observable<ObservableValueEvent<T>> {
+				@Override
+				protected Object createIdentity() {
+					return Identifiable.wrap(SafeObservableValue.this, "noInitChanges");
+				}
+
+				@Override
+				public ThreadConstraint getThreadConstraint() {
+					return theThreading;
+				}
+
+				@Override
+				public CoreId getCoreId() {
+					return getWrapped().getCoreId();
+				}
+
+				@Override
+				public boolean isSafe() {
+					return getWrapped().noInitChanges().isSafe();
+				}
+
+				@Override
+				public Transaction lock() {
+					return getWrapped().lock();
+				}
+
+				@Override
+				public Transaction tryLock() {
+					return getWrapped().tryLock();
+				}
+
+				@Override
+				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+					Runnable remove = theListeners.add(observer::onNext, true);
+					return remove::run;
+				}
+			}
+			return new SafeChanges();
 		}
 	}
 

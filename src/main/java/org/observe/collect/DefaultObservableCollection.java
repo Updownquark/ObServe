@@ -38,7 +38,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	private final BetterList<E> theValues;
 	private final CausalLock theLock;
 	private final org.qommons.collect.ListenerList<Consumer<? super ObservableCollectionEvent<? extends E>>> theObservers;
-	private final BiFunction<ElementId, BetterCollection<?>, ElementId> theElementSource;
+	private final BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> theElementsBySource;
 	private final BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> theSourceElements;
 	private final Equivalence<? super E> theEquivalence;
 
@@ -53,14 +53,14 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	/**
 	 * @param type The type for this collection
 	 * @param list The list to hold this collection's elements
-	 * @param elementSource The function to provide element sources for this collection
+	 * @param elementsBySource The function to provide element sources for this collection
 	 * @param sourceElements The function to provide source elements for elements in this collection
 	 * @param equivalence The equivalence for the collection
 	 * @see #getElementsBySource(ElementId, BetterCollection)
 	 * @see #getSourceElements(ElementId, BetterCollection)
 	 */
 	DefaultObservableCollection(TypeToken<E> type, BetterList<E> list, //
-		BiFunction<ElementId, BetterCollection<?>, ElementId> elementSource,
+		BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> elementsBySource,
 		BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> sourceElements, //
 		Equivalence<? super E> equivalence) {
 		theType = type;
@@ -69,7 +69,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 		theValues = list;
 		theLock = new CausalLock(list);
 		theObservers = new org.qommons.collect.ListenerList<>(ObservableCollection.REENTRANT_EVENT_ERROR);
-		theElementSource = elementSource;
+		theElementsBySource = elementsBySource;
 		theSourceElements = sourceElements;
 		theEquivalence = equivalence == null ? Equivalence.DEFAULT : equivalence;
 	}
@@ -187,16 +187,11 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	public BetterList<CollectionElement<E>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
 		if (sourceCollection == this)
 			return BetterList.of(getElement(sourceEl));
-		BetterList<CollectionElement<E>> els = theValues.getElementsBySource(sourceEl, sourceCollection);
-		if (!els.isEmpty())
-			return els;
-		if (theElementSource != null) {
-			ElementId el = theElementSource.apply(sourceEl, sourceCollection);
-			if (el == null)
-				return BetterList.empty();
-			return BetterList.of(getElement(el));
-		}
-		return BetterList.empty();
+		else if (theElementsBySource != null) {
+			BetterList<ElementId> els = theElementsBySource.apply(sourceEl, sourceCollection);
+			return els == null ? BetterList.empty() : BetterList.of(els.stream().map(this::getElement));
+		} else
+			return BetterList.empty();
 	}
 
 	@Override

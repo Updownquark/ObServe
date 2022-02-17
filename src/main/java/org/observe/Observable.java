@@ -210,6 +210,16 @@ public interface Observable<T> extends Lockable, Identifiable {
 	Transaction tryLock();
 
 	/**
+	 * @param threading The thread constraint for the new observable to obey
+	 * @return An observable that fires the same values as this one, but on the given thread
+	 */
+	default Observable<T> safe(ThreadConstraint threading) {
+		if (getThreadConstraint() == threading || getThreadConstraint() == ThreadConstraint.NONE)
+			return this;
+		return new SafeObservable<>(this, threading);
+	}
+
+	/**
 	 * @param <V> The super-type of all observables to or
 	 * @param obs The observables to combine
 	 * @return An observable that pushes a value each time any of the given observables pushes a value
@@ -865,6 +875,46 @@ public interface Observable<T> extends Lockable, Identifiable {
 				@Override
 				public <V extends T> void onCompleted(V value) {
 					observer.onCompleted(value);
+				}
+			});
+		}
+	}
+
+	/**
+	 * Implements {@link Observable#safe(ThreadConstraint)}
+	 *
+	 * @param <T> The type of the observable
+	 */
+	class SafeObservable<T> extends WrappingObservable<T, T> {
+		private final ThreadConstraint theThreading;
+
+		public SafeObservable(Observable<T> wrapped, ThreadConstraint threading) {
+			super(wrapped);
+			if (threading == ThreadConstraint.NONE)
+				throw new IllegalArgumentException("Cannot make a safe observable with threading " + threading);
+			theThreading = threading;
+		}
+
+		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getWrapped().getIdentity(), "safe", theThreading);
+		}
+
+		@Override
+		public Subscription subscribe(Observer<? super T> observer) {
+			return getWrapped().subscribe(new Observer<T>() {
+				@Override
+				public <V extends T> void onNext(V value) {
+					theThreading.invoke(() -> {
+						observer.onNext(value);
+					});
+				}
+
+				@Override
+				public <V extends T> void onCompleted(V value) {
+					theThreading.invoke(() -> {
+						observer.onCompleted(value);
+					});
 				}
 			});
 		}

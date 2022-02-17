@@ -51,8 +51,8 @@ public class SortedMatchSet {
 		if (move >= 6) {
 			System.arraycopy(theMatches, index, newMatches, index + 2, move);
 		} else if (move > 0) {
-			for (int i = theSize; i > index; i--)
-				newMatches[i] = theMatches[i - 1];
+			for (int i = theSize - 1; i >= index; i--)
+				newMatches[i + 2] = theMatches[i];
 		}
 		if (newCap) {
 			if (index >= 6) {
@@ -81,16 +81,17 @@ public class SortedMatchSet {
 			System.arraycopy(theMatches, 0, newMatches, 0, theSize);
 			theMatches = newMatches;
 		}
-		System.arraycopy(matches.theMatches, 0, theMatches, theSize, matches.theSize);
+		for (int i = 0; i < matches.theSize; i += 2)
+			add(matches.theMatches[i], matches.theMatches[i + 1]);
 		return this;
 	}
 
 	public TextMatch[] getMatches() {
 		int matchCount = theSize >> 1;
-				TextMatch[] copy = new TextMatch[matchCount];
-				for (int i = 0, j = 0; i < matchCount; i++)
-					copy[i] = new TextMatch(theMatches[j++], theMatches[j++]);
-				return copy;
+		TextMatch[] copy = new TextMatch[matchCount];
+		for (int i = 0, j = 0; i < matchCount; i++)
+			copy[i] = new TextMatch(theMatches[j++], theMatches[j++]);
+		return copy;
 	}
 
 	public int size() {

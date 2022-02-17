@@ -27,6 +27,7 @@ import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
+import org.qommons.ThreadConstraint;
 import org.qommons.io.Format;
 import org.qommons.io.SpinnerFormat;
 
@@ -70,7 +71,7 @@ public class ObservableTextEditor<E> {
 		theComponent = component;
 		theEnabledSetter = enabled;
 		theTooltipSetter = tooltip;
-		theValue = value;
+		theValue = value.safe(ThreadConstraint.EDT, until);
 		theFormat = format;
 		if (until == null)
 			until = Observable.empty;

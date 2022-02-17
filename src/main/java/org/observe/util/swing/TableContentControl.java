@@ -45,6 +45,7 @@ import com.google.common.reflect.TypeToken;
  * patterns, row sorting, and column sorting.
  */
 public interface TableContentControl {
+	/** A sample tooltip to use for a text box whose value is a {@link TableContentControl} */
 	public static final String TABLE_CONTROL_TOOLTIP = "<html>Enter text, numbers, or dates to filter the table rows.<br>\n"//
 		+ "Use <b>XXX-XXX</b> to enter a range of numbers or dates.<br>\n"//
 		+ "Use <b>abc*efg</b> to match any text with \"efg\" occurring after \"abc\".<br>\n"//
@@ -64,7 +65,6 @@ public interface TableContentControl {
 		E value;
 		SortedMatchSet[] matches;
 		boolean hasMatch;
-		boolean isFiltered;
 
 		public FilteredValue(E value, int columns) {
 			this.value = value;
@@ -83,10 +83,6 @@ public interface TableContentControl {
 			return hasMatch;
 		}
 
-		public boolean isFiltered() {
-			return isFiltered;
-		}
-
 		public int getColumns() {
 			return matches == null ? 0 : matches.length;
 		}
@@ -96,7 +92,7 @@ public interface TableContentControl {
 		}
 
 		public SortedMatchSet getMatches(int column) {
-			return matches[column];
+			return matches == null ? null : matches[column];
 		}
 
 		@Override
@@ -149,9 +145,15 @@ public interface TableContentControl {
 	 * @return An array of text matches for each category
 	 */
 	default SortedMatchSet[] findMatches(List<? extends ValueRenderer<?>> categories, CharSequence[] texts) {
-		SortedMatchSet[] matches = new SortedMatchSet[texts.length];
-		for (int i = 0; i < texts.length; i++)
-			matches[i] = findMatches(categories.get(i), texts[i]);
+		SortedMatchSet[] matches = null;
+		for (int i = 0; i < texts.length; i++) {
+			SortedMatchSet match = findMatches(categories.get(i), texts[i]);
+			if (match != null) {
+				if (matches == null)
+					matches = new SortedMatchSet[texts.length];
+				matches[i] = match;
+			}
+		}
 		return matches;
 	}
 
@@ -173,6 +175,7 @@ public interface TableContentControl {
 
 	public static final Pattern INT_RANGE_PATTERN = Pattern.compile("(?<i1>\\d+)\\-(?<i2>\\d+)");
 
+	/** A {@link Format} to parse {@link TableContentControl}s */
 	public static final Format<TableContentControl> FORMAT = new Format<TableContentControl>() {
 		@Override
 		public void append(StringBuilder text, TableContentControl value) {
@@ -185,6 +188,15 @@ public interface TableContentControl {
 		}
 	};
 
+	/**
+	 * Does some standard configuration on a text field for parsing {@link TableContentControl}s
+	 *
+	 * @param <F> The sub-type of field
+	 * @param field The field to configure
+	 * @param commitOnType Whether the text field should fire its new value each time the user types anything, or only when the user presses
+	 *        enter or de-focuses the field
+	 * @return The field
+	 */
 	public static <F extends PanelPopulation.FieldEditor<ObservableTextField<TableContentControl>, ?>> F configureSearchField(F field,
 		boolean commitOnType) {
 		return (F) field.fill().withTooltip(TableContentControl.TABLE_CONTROL_TOOLTIP).modifyEditor(tf2 -> tf2//
@@ -192,6 +204,12 @@ public interface TableContentControl {
 			.setIcon(ObservableSwingUtils.getFixedIcon(null, "/icons/search.png", 16, 16)));
 	}
 
+	/**
+	 * Parses a {@link TableContentControl} from text
+	 *
+	 * @param controlText The text to parse
+	 * @return The parsed {@link TableContentControl} represented by the text
+	 */
 	public static TableContentControl parseContentControl(CharSequence controlText) {
 		if (controlText == null || controlText.length() == 0)
 			return DEFAULT;
@@ -252,6 +270,12 @@ public interface TableContentControl {
 			return new RootFilter(controlText.toString().trim(), new AndFilter(splitFilters));
 	}
 
+	/**
+	 * Parses a single element of a {@link TableContentControl} from text
+	 *
+	 * @param filterText The text to parse
+	 * @return The parsed {@link TableContentControl} element
+	 */
 	public static TableContentControl _parseFilterElement(String filterText) {
 		ArrayList<TableContentControl> filters = new ArrayList<>();
 		filters.add(new SimpleFilter(filterText));
@@ -346,6 +370,15 @@ public interface TableContentControl {
 			return new OrFilter(filters.toArray(new TableContentControl[filters.size()]));
 	}
 
+	/**
+	 *
+	 * @param <E> The type of rows in the table
+	 * @param values The unfiltered rows for the table
+	 * @param render Supplies a renderer for each column in the table
+	 * @param filter The {@link TableContentControl} control value to apply
+	 * @param until An observable to release the subscriptions that this method creates
+	 * @return The filtered rows for the table
+	 */
 	public static <E> ObservableCollection<FilteredValue<E>> applyRowControl(ObservableCollection<E> values,
 		Supplier<? extends Collection<? extends ValueRenderer<? super E>>> render, ObservableValue<? extends TableContentControl> filter,
 			Observable<?> until) {
@@ -370,21 +403,19 @@ public interface TableContentControl {
 				} else
 					v = new FilteredValue<>(x, rendererList.size());
 				TableContentControl f = cv.get(filter);
-				v.isFiltered = false;
-				v.hasMatch = true;
 				CharSequence[] texts = new CharSequence[rendererList.size()];
 				i = 0;
 				for (ValueRenderer<? super E> r : rendererList)
 					texts[i++] = r.render(v.value);
 				v.matches = f.findMatches(rendererList, texts);
 				if (v.matches != null) {
-					v.isFiltered = true;
 					v.hasMatch = false;
 					for (i = 0; !v.hasMatch && i < texts.length; i++) {
 						if (v.matches[i] != null && v.matches[i].size() > 0)
 							v.hasMatch = true;
 					}
-				}
+				} else
+					v.hasMatch = !f.isSearch();
 				return v;
 			}, "toFilterValue", null)))//
 			.filter(LambdaUtils.printableFn(fv -> fv.hasMatch() ? null : "No match", "match", null))//
@@ -411,6 +442,14 @@ public interface TableContentControl {
 			}, () -> "rowSorting")).collectActive(until);
 	}
 
+	/**
+	 * @param <R> The type of rows in the table
+	 * @param <C> The type of columns in the table
+	 * @param columns The table columns to sort
+	 * @param filter The {@link TableContentControl} control value to apply
+	 * @param until An observable to release the subscriptions that this method creates
+	 * @return The sorted columns to use for the table
+	 */
 	public static <R, C extends CategoryRenderStrategy<? super R, ?>> ObservableCollection<C> applyColumnControl(
 		ObservableCollection<C> columns, ObservableValue<? extends TableContentControl> filter, Observable<?> until) {
 		ObservableValue<List<String>> colSorting = filter.transform(tx -> tx.cache(true).map(f -> f == null ? null : f.getColumnSorting()));
@@ -1373,7 +1412,7 @@ public interface TableContentControl {
 			for (TableContentControl content : theContent) {
 				SortedMatchSet[] match = content.findMatches(categories, texts);
 				if (match == null && content.isSearch())
-					return new SortedMatchSet[categories.size()];
+					return null;
 				if (match == null)
 					continue;
 				if (matches == null)
@@ -1601,101 +1640,92 @@ public interface TableContentControl {
 		}
 	}
 
+	/**
+	 * Displays a frame containing a filterable table with pre-populated row and column data. For testing
+	 *
+	 * @param args Command-line arguments, ignored
+	 */
 	public static void main(String... args) {
-		SettableValue<TableContentControl> control = SettableValue.build(TableContentControl.class).withValue(DEFAULT).build();
+		SettableValue<TableContentControl> control = SettableValue.build(TableContentControl.class).onEdt().withValue(DEFAULT).build();
 		control.noInitChanges().act(evt -> {
 			System.out.println(evt.getNewValue());
 		});
 		ObservableCollection<Map<String, String>> rows = ObservableCollection
-			.build(TypeTokens.get().keyFor(Map.class).<Map<String, String>> parameterized(String.class, String.class)).build();
+			.build(TypeTokens.get().keyFor(Map.class).<Map<String, String>> parameterized(String.class, String.class)).onEdt().build();
 		ObservableCollection<CategoryRenderStrategy<Map<String, String>, String>> columns = ObservableCollection
 			.build(TypeTokens.get().keyFor(CategoryRenderStrategy.class)
 				.<CategoryRenderStrategy<Map<String, String>, String>> parameterized(rows.getType(), TypeTokens.get().STRING))
-			.build();
-		columns.add(new CategoryRenderStrategy<Map<String, String>, String>("A", TypeTokens.get().STRING, map -> {
-			return map.get("A");
-		})//
-			.formatText(v -> v == null ? "" : v).withMutation(mut -> {
-				mut.mutateAttribute((map, v) -> map.put("A", v)).asText(Format.TEXT).withRowUpdate(true);
-			}).withWidths(50, 100, 150));
-		columns.add(new CategoryRenderStrategy<Map<String, String>, String>("B", TypeTokens.get().STRING, map -> {
-			return map.get("B");
-		})//
-			.formatText(v -> v == null ? "" : v).withMutation(mut -> {
-				mut.mutateAttribute((map, v) -> map.put("B", v)).asText(Format.TEXT).withRowUpdate(true);
-			}).withWidths(50, 100, 150));
-		columns.add(new CategoryRenderStrategy<Map<String, String>, String>("C", TypeTokens.get().STRING, map -> {
-			return map.get("C");
-		})//
-			.formatText(v -> v == null ? "" : v).withMutation(mut -> {
-				mut.mutateAttribute((map, v) -> map.put("D", v)).asText(Format.TEXT).withRowUpdate(true);
-			}).withWidths(50, 100, 150));
-		columns.add(new CategoryRenderStrategy<Map<String, String>, String>("D", TypeTokens.get().STRING, map -> {
-			return map.get("D");
-		})//
-			.formatText(v -> v == null ? "" : v).withMutation(mut -> {
-				mut.mutateAttribute((map, v) -> map.put("A", v)).asText(Format.TEXT).withRowUpdate(true);
-			}).withWidths(50, 100, 150));
-		Random random = new Random();
-		int rowCount = 50_000;
-		int lastPct = 0;
-		for (int i = 0; i < rowCount; i++) {
-			int pct = i * 100 / rowCount;
-			if (pct > lastPct) {
-				if (pct % 10 == 0)
-					System.out.print(pct);
-				else
-					System.out.print('.');
-				System.out.flush();
-				lastPct = pct;
-			}
-			long r = random.nextLong();
-			Map<String, String> row = new HashMap<>();
-			row.put("A", "" + r);
-			row.put("B", Long.toHexString(r));
-			row.put("C", new Date(r).toString());
-			char[] chs = new char[9];
-			int mask = 0x7f;
-			for (int j = 0; j < chs.length; j++) {
-				chs[chs.length - j - 1] = (char) (r & mask);
-				if (chs[chs.length - j - 1] < ' ')
-					chs[chs.length - j - 1] = ' ';
-				r >>>= 7;
-			}
-			row.put("D", new String(chs));
-			rows.add(row);
-		}
-		System.out.println();
-		// SettableValue<List<String>> categories = SettableValue
-		// .build(TypeTokens.get().keyFor(List.class).<List<String>> parameterized(String.class)).withValue(new ArrayList<>()).build();
-		// categories.noInitChanges().act(evt -> {
-		// CollectionUtils.synchronize(columns, evt.getNewValue(), (crs, cat) -> crs.getName().equals(cat))//
-		// .simple(cat -> new CategoryRenderStrategy<Map<String, String>, String>(cat, TypeTokens.get().STRING, map -> {
-		// return map.get(cat);
-		// })//
-		// .formatText(v -> v == null ? "" : v).withMutation(mut -> {
-		// mut.mutateAttribute((map, v) -> map.put(cat, v)).asText(Format.TEXT).withRowUpdate(true);
-		// }))//
-		// .rightOrder()//
-		// .commonUses(true, false)//
-		// .adjust();
-		// });
+			.onEdt().build();
 		EventQueue.invokeLater(() -> {
+			columns.add(new CategoryRenderStrategy<Map<String, String>, String>("A", TypeTokens.get().STRING, map -> {
+				return map.get("A");
+			})//
+				.formatText(v -> v == null ? "" : v).withMutation(mut -> {
+					mut.mutateAttribute((map, v) -> map.put("A", v)).asText(Format.TEXT).withRowUpdate(true);
+				}).withWidths(50, 100, 150));
+			columns.add(new CategoryRenderStrategy<Map<String, String>, String>("B", TypeTokens.get().STRING, map -> {
+				return map.get("B");
+			})//
+				.formatText(v -> v == null ? "" : v).withMutation(mut -> {
+					mut.mutateAttribute((map, v) -> map.put("B", v)).asText(Format.TEXT).withRowUpdate(true);
+				}).withWidths(50, 100, 150));
+			columns.add(new CategoryRenderStrategy<Map<String, String>, String>("C", TypeTokens.get().STRING, map -> {
+				return map.get("C");
+			})//
+				.formatText(v -> v == null ? "" : v).withMutation(mut -> {
+					mut.mutateAttribute((map, v) -> map.put("D", v)).asText(Format.TEXT).withRowUpdate(true);
+				}).withWidths(50, 100, 150));
+			columns.add(new CategoryRenderStrategy<Map<String, String>, String>("D", TypeTokens.get().STRING, map -> {
+				return map.get("D");
+			})//
+				.formatText(v -> v == null ? "" : v).withMutation(mut -> {
+					mut.mutateAttribute((map, v) -> map.put("A", v)).asText(Format.TEXT).withRowUpdate(true);
+				}).withWidths(50, 100, 150));
+			Random random = new Random();
+			int rowCount = 50_000;
+			int lastPct = 0;
+			for (int i = 0; i < rowCount; i++) {
+				int pct = i * 100 / rowCount;
+				if (pct > lastPct) {
+					if (pct % 10 == 0)
+						System.out.print(pct);
+					else
+						System.out.print('.');
+					System.out.flush();
+					lastPct = pct;
+				}
+				long r = random.nextLong();
+				Map<String, String> row = new HashMap<>();
+				row.put("A", "" + r);
+				row.put("B", Long.toHexString(r));
+				row.put("C", new Date(r).toString());
+				char[] chs = new char[9];
+				int mask = 0x7f;
+				for (int j = 0; j < chs.length; j++) {
+					chs[chs.length - j - 1] = (char) (r & mask);
+					if (chs[chs.length - j - 1] < ' ')
+						chs[chs.length - j - 1] = ' ';
+					r >>>= 7;
+				}
+				row.put("D", new String(chs));
+				rows.add(row);
+			}
+			System.out.println();
 			JFrame frame = ObservableSwingUtils.buildUI()//
 				.systemLandF()//
 				.withTitle(TableContentControl.class.getSimpleName() + " Tester")//
 				.withSize(640, 900)//
-				.withVContent(p -> p//
+				.withCloseAction(JFrame.EXIT_ON_CLOSE)//
+				.withVContent(p -> p.fill().fillV()//
 					// .addTextField("Categories:", categories, new Format.ListFormat<>(Format.TEXT, ",", null), f -> f.fill())//
 					.<TableContentControl> addTextField("Filter", control, FORMAT, tf -> configureSearchField(tf.fill(), true))//
 					.addTable(rows, table -> {
-						table.withCountTitle("displayed").withItemName("row").fill().withFiltering(control).withColumns(columns)//
+						table.fill().fillV().withCountTitle("displayed").withItemName("row").fill().withFiltering(control)
+						.withColumns(columns)//
 						.withAdd(() -> new HashMap<>(), null)//
 						;
 					})//
-					).getWindow();
-			frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-			frame.setVisible(true);
+					).run(null).getWindow();
 		});
 	}
 }

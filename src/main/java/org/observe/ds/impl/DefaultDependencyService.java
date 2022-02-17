@@ -244,7 +244,7 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 						wasSatisfied = true;
 						somethingSatisfied |= satisfied(component, componentPath, cause);
 					} else if (//
-						// The component itself may have unsatisfied non-dynamic dependencies because it is currently being activate
+						// The component itself may have unsatisfied non-dynamic dependencies because it is currently being activated
 						// component.getUnsatisfied() == component.getDynamicUnsatisfied() && //
 						isInSatisfiedDynamicCycle(component, componentPath)) {
 						wasSatisfied = true;
@@ -411,9 +411,7 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 				if (!wasActive && getStage().get() != DependencyServiceStage.Uninitialized) {
 					if (dep.getRealOwner().getUnsatisfied() == 0)
 						satisfied(dep.getRealOwner(), componentPath, cause);
-					else if (//
-						// The dependency owner is currently being activated, so its dependency need not be dynamic
-						// dep.getRealOwner().getUnsatisfied() == dep.getRealOwner().getDynamicUnsatisfied() && //
+					else if (dep.getRealOwner().getUnsatisfied() == dep.getRealOwner().getDynamicUnsatisfied() && //
 						isInSatisfiedDynamicCycle(dep.getRealOwner(), componentPath)) {
 						wasActive = true;
 						dep.getRealOwner().setStage(ComponentStage.PreSatisfied, cause);

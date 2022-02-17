@@ -28,6 +28,7 @@ import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.util.TypeTokens;
+import org.qommons.ThreadConstraint;
 import org.qommons.io.BetterFile;
 import org.qommons.io.FileUtils;
 import org.qommons.threading.QommonsTimer;
@@ -94,7 +95,7 @@ public class ObservableFileButton extends JButton {
 	 * @param until An observable that, when fired will release this button's resources
 	 */
 	public ObservableFileButton(SettableValue<File> value, boolean open, Observable<?> until) {
-		theValue = value;
+		theValue = value.safe(ThreadConstraint.EDT, until);
 		theUntil = until;
 		theFileWatchHandle = QommonsTimer.getCommonInstance().build(() -> {
 			File selected = theValue.get();

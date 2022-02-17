@@ -465,6 +465,13 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 		return new RefreshingSettableValue<>(this, refresh);
 	}
 
+	@Override
+	default SettableValue<T> safe(ThreadConstraint threading, Observable<?> until) {
+		if (getThreadConstraint() == threading || getThreadConstraint() == ThreadConstraint.NONE)
+			return this;
+		return new SafeSettableValue<>(this, threading, until);
+	}
+
 	/**
 	 * @param value An observable value that supplies settable values
 	 * @return A settable value that represents the current value in the inner observable
@@ -789,7 +796,7 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	/**
 	 * Implements {@link SettableValue#refresh(Observable)}
 	 *
-	 * @param <T> The type of value
+	 * @param <T> The type of the value
 	 */
 	class RefreshingSettableValue<T> extends RefreshingObservableValue<T> implements SettableValue<T> {
 		public RefreshingSettableValue(SettableValue<T> wrap, Observable<?> refresh) {
@@ -829,6 +836,68 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 		@Override
 		public ObservableValue<String> isEnabled() {
 			return getWrapped().isEnabled();
+		}
+	}
+
+	/**
+	 * Implements {@link SettableValue#safe(ThreadConstraint, Observable)}
+	 *
+	 * @param <T> The type of the value
+	 */
+	class SafeSettableValue<T> extends SafeObservableValue<T> implements SettableValue<T> {
+		private final Observable<?> theUntil;
+		private ObservableValue<String> isEnabled;
+
+		public SafeSettableValue(SettableValue<T> wrapped, ThreadConstraint threading, Observable<?> until) {
+			super(wrapped, threading, until);
+			theUntil = until;
+		}
+
+		@Override
+		protected SettableValue<T> getWrapped() {
+			return (SettableValue<T>) super.getWrapped();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			if (write && !getThreadConstraint().isEventThread())
+				throw new IllegalStateException(WRONG_THREAD_MESSAGE);
+			return getWrapped().lock(write, cause);
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, Object cause) {
+			if (write && !getThreadConstraint().isEventThread())
+				throw new IllegalStateException(WRONG_THREAD_MESSAGE);
+			return getWrapped().tryLock(write, cause);
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return getWrapped().isLockSupported();
+		}
+
+		@Override
+		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+			if (!getThreadConstraint().isEventThread())
+				throw new IllegalStateException(WRONG_THREAD_MESSAGE);
+			return getWrapped().set(value, cause);
+		}
+
+		@Override
+		public <V extends T> String isAcceptable(V value) {
+			return getWrapped().isAcceptable(value);
+		}
+
+		@Override
+		public ObservableValue<String> isEnabled() {
+			if (isEnabled == null) {
+				synchronized (this) {
+					if (isEnabled == null)
+						isEnabled = getWrapped().isEnabled().safe(getThreadConstraint(), theUntil);
+				}
+			}
+			return isEnabled;
 		}
 	}
 
@@ -1106,11 +1175,9 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 
 		public SettableValue<T> build() {
 			if (isVetoable)
-				return new VetoableSettableValue<>(theType, getDescription(), isNullable, theListenerBuilder, getLocker())
-					.withValue(theInitialValue, null);
+				return new VetoableSettableValue<>(theType, getDescription(), isNullable, theListenerBuilder, getLocker(), theInitialValue);
 			else
-				return new SimpleSettableValue<>(theType, getDescription(), isNullable, getLocker(), theListenerBuilder)
-					.withValue(theInitialValue, null);
+				return new SimpleSettableValue<>(theType, getDescription(), isNullable, getLocker(), theListenerBuilder, theInitialValue);
 		}
 	}
 }

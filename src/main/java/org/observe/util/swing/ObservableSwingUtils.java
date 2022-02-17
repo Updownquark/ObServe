@@ -73,9 +73,8 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.ObservableCollection;
 import org.observe.config.ObservableConfig;
-import org.observe.util.AbstractSafeObservableCollection;
+import org.observe.util.SafeObservableCollection;
 import org.observe.util.TypeTokens;
-import org.observe.util.UIOptimizedCollection;
 import org.qommons.Causable;
 import org.qommons.Causable.CausableKey;
 import org.qommons.LambdaUtils;
@@ -83,7 +82,6 @@ import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
 import org.qommons.collect.CollectionUtils;
-import org.qommons.collect.ListenerList;
 import org.qommons.collect.ReentrantNotificationException;
 import org.xml.sax.SAXException;
 
@@ -91,40 +89,13 @@ import com.google.common.reflect.TypeToken;
 
 /** Utilities for the org.observe.util.swing package */
 public class ObservableSwingUtils {
-	private static final ListenerList<Runnable> EDT_EVENTS = ListenerList.build()//
-		.allowReentrant() // Things running on the EDT by onEQ() may call onEQ()
-		.forEachSafe(false) // Since we're not preventing reentrancy or using skipCurrent, we don't need this weight
-		.withFastSize(false) // Not calling size()
-		// Since events will often come as a flood after user interaction, I think it's better to have one lock than two
-		.withSyncType(ListenerList.SynchronizationType.LIST)//
-		.build();
-
 	/**
 	 * Executes a task on the AWT/Swing event thread. If this thread *is* the event thread, the task is executed inline
 	 *
 	 * @param task The task to execute on the AWT {@link EventQueue}
 	 */
 	public static void onEQ(Runnable task) {
-		boolean queueEmpty = EDT_EVENTS.isEmpty();
-		// If the queue is not empty, we need to add the task to the queue instead of running it inline to avoid ordering problems
-		if (!queueEmpty || !EventQueue.isDispatchThread()) {
-			EDT_EVENTS.add(task, false);
-			if (queueEmpty)
-				EventQueue.invokeLater(ObservableSwingUtils::emptyEdtEvents);
-		} else
-			task.run();
-	}
-
-	private static void emptyEdtEvents() {
-		ListenerList.Element<Runnable> task = EDT_EVENTS.poll(0);
-		while (task != null) {
-			try {
-				task.get().run();
-			} catch (RuntimeException e) {
-				e.printStackTrace();
-			}
-			task = EDT_EVENTS.poll(0);
-		}
+		ThreadConstraint.EDT.invoke(task);
 	}
 
 	/**
@@ -133,11 +104,13 @@ public class ObservableSwingUtils {
 	 * @param until An observable to fire when we no longer need the swing-attached collection
 	 * @return A collection that provides the same data as the given collection, but only fires its events on the AWT {@link EventQueue}
 	 */
-	public static <E> AbstractSafeObservableCollection<E> safe(ObservableCollection<E> collection, Observable<?> until) {
-		if (collection instanceof AbstractSafeObservableCollection)
-			return (AbstractSafeObservableCollection<E>) collection;
+	public static <E> ObservableCollection<E> safe(ObservableCollection<E> collection, Observable<?> until) {
+		if (collection == null)
+			return null;
+		if (collection.getThreadConstraint() == ThreadConstraint.EDT || collection.getThreadConstraint() == ThreadConstraint.NONE)
+			return collection;
 		// return new SafeObservableCollection<>(collection, ThreadConstraint.EDT, until);
-		return new UIOptimizedCollection<>(collection, ThreadConstraint.EDT, until);
+		return new SafeObservableCollection<>(collection, ThreadConstraint.EDT, until);
 	}
 
 	/**
@@ -333,33 +306,37 @@ public class ObservableSwingUtils {
 	 * @return The subscription to {@link Subscription#unsubscribe() unsubscribe} to terminate the link
 	 */
 	public static Subscription checkFor(JToggleButton checkBox, ObservableValue<String> descrip, SettableValue<Boolean> selected) {
+		SimpleObservable<Void> until = SimpleObservable.build().build();
+		ObservableValue<String> safeDescrip = descrip.safe(ThreadConstraint.EDT, until);
+		SettableValue<Boolean> safeSelected = selected.safe(ThreadConstraint.EDT, until);
 		ActionListener action = evt -> {
-			selected.set(checkBox.isSelected(), evt);
+			safeSelected.set(checkBox.isSelected(), evt);
 		};
 		checkBox.addActionListener(action);
 		boolean[] callbackLock = new boolean[1];
 		Consumer<String> checkEnabled = enabled -> {
 			if (enabled == null) {
-				enabled = selected.isAcceptable(!checkBox.isSelected());
+				enabled = safeSelected.isAcceptable(!checkBox.isSelected());
 			}
 			checkBox.setEnabled(enabled == null);
-			checkBox.setToolTipText(enabled == null ? descrip.get() : enabled);
+			checkBox.setToolTipText(enabled == null ? safeDescrip.get() : enabled);
 		};
-		Subscription descripSub = descrip.changes().act(evt -> {
-			if (selected.isEnabled().get() == null)
+		Subscription descripSub = safeDescrip.changes().act(evt -> {
+			if (safeSelected.isEnabled().get() == null)
 				checkBox.setToolTipText(evt.getNewValue());
 		});
-		Subscription valueSub = selected.changes().act(evt -> {
+		Subscription valueSub = safeSelected.changes().act(evt -> {
 			if (!callbackLock[0])
 				checkBox.setSelected(evt.getNewValue() == null ? false : evt.getNewValue());
-			checkEnabled.accept(selected.isEnabled().get());
+			checkEnabled.accept(safeSelected.isEnabled().get());
 		});
-		Subscription enabledSub = selected.isEnabled().changes().act(evt -> checkEnabled.accept(evt.getNewValue()));
+		Subscription enabledSub = safeSelected.isEnabled().changes().act(evt -> checkEnabled.accept(evt.getNewValue()));
 		return () -> {
 			valueSub.unsubscribe();
 			enabledSub.unsubscribe();
 			descripSub.unsubscribe();
 			checkBox.removeActionListener(action);
+			until.onNext(null);
 		};
 	}
 
@@ -376,11 +353,13 @@ public class ObservableSwingUtils {
 	 * @return The subscription to {@link Subscription#unsubscribe() unsubscribe} to terminate the link
 	 */
 	public static <T> Subscription togglesFor(JToggleButton[] buttons, T[] options, String[] descrips, SettableValue<T> selected) {
+		SimpleObservable<Void> until = SimpleObservable.build().build();
+		SettableValue<T> safeSelected = selected.safe(ThreadConstraint.EDT, until);
 		ActionListener[] actions = new ActionListener[buttons.length];
 		for (int i = 0; i < buttons.length; i++) {
 			int index = i;
 			actions[i] = evt -> {
-				selected.set(options[index], evt);
+				safeSelected.set(options[index], evt);
 			};
 			buttons[i].addActionListener(actions[i]);
 		}
@@ -388,7 +367,7 @@ public class ObservableSwingUtils {
 			for (int i = 0; i < buttons.length; i++) {
 				String enabled_i = enabled;
 				if (enabled_i == null) {
-					enabled_i = selected.isAcceptable(options[i]);
+					enabled_i = safeSelected.isAcceptable(options[i]);
 				}
 				buttons[i].setEnabled(enabled_i == null);
 				if (enabled != null) {
@@ -400,19 +379,20 @@ public class ObservableSwingUtils {
 				}
 			}
 		};
-		Subscription selectedSub = selected.changes().act(evt -> {
+		Subscription selectedSub = safeSelected.changes().act(evt -> {
 			T value = evt.getNewValue();
 			for (int i = 0; i < options.length; i++) {
 				buttons[i].setSelected(Objects.equals(options[i], value));
 			}
-			checkEnabled.accept(selected.isEnabled().get());
+			checkEnabled.accept(safeSelected.isEnabled().get());
 		});
-		Subscription enabledSub = selected.isEnabled().changes().act(evt -> checkEnabled.accept(evt.getNewValue()));
+		Subscription enabledSub = safeSelected.isEnabled().changes().act(evt -> checkEnabled.accept(evt.getNewValue()));
 		return () -> {
 			selectedSub.unsubscribe();
 			enabledSub.unsubscribe();
 			for (int i = 0; i < buttons.length; i++)
 				buttons[i].removeActionListener(actions[i]);
+			until.onNext(null);
 		};
 	}
 
@@ -434,12 +414,13 @@ public class ObservableSwingUtils {
 		ObservableCollection<? extends T> safeValues;
 		SimpleObservable<Void> safeUntil = SimpleObservable.build().build();
 		subs.add(() -> safeUntil.onNext(null));
+		SettableValue<T> safeSelected = selected.safe(ThreadConstraint.EDT, safeUntil);
 		safeValues = safe(availableValues, safeUntil);
 		ObservableCollection<TB> buttons = safeValues.flow().transform(buttonType, tx -> tx.map((value, button) -> {
 			if (button == null)
 				button = buttonCreator.apply(value);
 			render.accept(button, value);
-			String enabled = selected.isEnabled().get();
+			String enabled = safeSelected.isEnabled().get();
 			if (enabled != null)
 				button.setToolTipText(enabled);
 			else if (descrip != null)
@@ -464,7 +445,7 @@ public class ObservableSwingUtils {
 			}
 		};
 		TriFunction<T, Integer, Object, Boolean>[] listener = new TriFunction[1];
-		subs.add(ObservableComboBoxModel.<T> hookUpComboData(safeValues, selected, index -> {
+		subs.add(ObservableComboBoxModel.<T> hookUpComboData(safeValues, safeSelected, index -> {
 			if (index >= 0)
 				buttons.get(index).setSelected(true);
 			else if (currentSelection[0] >= 0)
@@ -560,18 +541,20 @@ public class ObservableSwingUtils {
 	 */
 	public static <T> Subscription spinnerFor(JSpinner spinner, String descrip, SettableValue<T> value,
 		Function<? super T, ? extends T> purify) {
+		SimpleObservable<Void> until = SimpleObservable.build().build();
+		SettableValue<T> safeValue = value.safe(ThreadConstraint.EDT, until);
 		boolean[] callbackLock = new boolean[1];
 		ChangeListener changeListener = evt -> {
 			if (!callbackLock[0]) {
 				callbackLock[0] = true;
 				try {
 					T newValue = purify.apply((T) spinner.getValue());
-					String accept = value.isAcceptable(newValue);
+					String accept = safeValue.isAcceptable(newValue);
 					if (accept != null) {
 						JOptionPane.showMessageDialog(spinner.getParent(), accept, "Unacceptable Value", JOptionPane.ERROR_MESSAGE);
-						spinner.setValue(value.get());
+						spinner.setValue(safeValue.get());
 					} else {
-						value.set(newValue, evt);
+						safeValue.set(newValue, evt);
 					}
 				} finally {
 					callbackLock[0] = false;
@@ -580,7 +563,7 @@ public class ObservableSwingUtils {
 		};
 		spinner.addChangeListener(changeListener);
 
-		Subscription valueSub = value.changes().act(evt -> {
+		Subscription valueSub = safeValue.changes().act(evt -> {
 			if (!callbackLock[0]) {
 				callbackLock[0] = true;
 				try {
@@ -591,7 +574,7 @@ public class ObservableSwingUtils {
 				}
 			}
 		});
-		Subscription enabledSub = value.isEnabled().changes().act(evt -> {
+		Subscription enabledSub = safeValue.isEnabled().changes().act(evt -> {
 			String enabled = evt.getNewValue();
 			spinner.setEnabled(enabled == null);
 			spinner.setToolTipText(enabled != null ? enabled : descrip);
@@ -600,6 +583,7 @@ public class ObservableSwingUtils {
 			valueSub.unsubscribe();
 			enabledSub.unsubscribe();
 			spinner.removeChangeListener(changeListener);
+			until.onNext(null);
 		};
 	}
 
@@ -613,18 +597,20 @@ public class ObservableSwingUtils {
 	 * @return The subscription to {@link Subscription#unsubscribe() unsubscribe} to terminate the link
 	 */
 	public static Subscription sliderFor(JSlider slider, String descrip, SettableValue<Integer> value) {
+		SimpleObservable<Void> until = SimpleObservable.build().build();
+		SettableValue<Integer> safeValue = value.safe(ThreadConstraint.EDT, until);
 		boolean[] callbackLock = new boolean[1];
 		ChangeListener changeListener = evt -> {
 			if (!callbackLock[0] && !slider.getValueIsAdjusting()) {
 				callbackLock[0] = true;
 				try {
 					int newValue = slider.getValue();
-					String accept = value.isAcceptable(newValue);
+					String accept = safeValue.isAcceptable(newValue);
 					if (accept != null) {
 						JOptionPane.showMessageDialog(slider.getParent(), accept, "Unacceptable Value", JOptionPane.ERROR_MESSAGE);
-						slider.setValue(value.get());
+						slider.setValue(safeValue.get());
 					} else {
-						value.set(newValue, evt);
+						safeValue.set(newValue, evt);
 					}
 				} finally {
 					callbackLock[0] = false;
@@ -632,7 +618,7 @@ public class ObservableSwingUtils {
 			}
 		};
 		slider.addChangeListener(changeListener);
-		Subscription valueSub = value.changes().act(evt -> {
+		Subscription valueSub = safeValue.changes().act(evt -> {
 			if (!callbackLock[0]) {
 				callbackLock[0] = true;
 				try {
@@ -642,7 +628,7 @@ public class ObservableSwingUtils {
 				}
 			}
 		});
-		Subscription enabledSub = value.isEnabled().changes().act(evt -> {
+		Subscription enabledSub = safeValue.isEnabled().changes().act(evt -> {
 			String enabled = evt.getNewValue();
 			slider.setEnabled(enabled == null);
 			slider.setToolTipText(enabled != null ? enabled : descrip);
@@ -651,6 +637,7 @@ public class ObservableSwingUtils {
 			valueSub.unsubscribe();
 			enabledSub.unsubscribe();
 			slider.removeChangeListener(changeListener);
+			until.onNext(null);
 		};
 	}
 
@@ -677,13 +664,14 @@ public class ObservableSwingUtils {
 	public static <E> ObservableCollection<E> syncSelection(Component component, //
 		ListModel<E> model, Supplier<ListSelectionModel> selectionModel, Equivalence<? super E> equivalence,
 		ObservableCollection<E> selection, Observable<?> until) {
+		ObservableCollection<E> safeSelection = safe(selection, until);
 		Supplier<List<E>> selectionGetter = () -> getSelection(model, selectionModel.get(), null);
 		boolean[] callbackLock = new boolean[1];
 		boolean[] asyncSelection = new boolean[1];
 		Consumer<Object> syncSelection = cause -> {
 			List<E> selValues = selectionGetter.get();
-			try (Transaction selT = selection.lock(true, cause)) {
-				CollectionUtils.synchronize(selection, selValues, (v1, v2) -> equivalence.elementEquals(v1, v2))//
+			try (Transaction selT = safeSelection.lock(true, cause)) {
+				CollectionUtils.synchronize(safeSelection, selValues, (v1, v2) -> equivalence.elementEquals(v1, v2))//
 				.simple(LambdaUtils.identity())//
 				.adjust();
 				asyncSelection[0] = false;
@@ -700,7 +688,7 @@ public class ObservableSwingUtils {
 			callbackLock[0] = true;
 			try {
 				if (selModel.getMinSelectionIndex() < 0) {
-					selection.clear();
+					safeSelection.clear();
 					return;
 				}
 				syncSelection.accept(e);
@@ -726,10 +714,10 @@ public class ObservableSwingUtils {
 				int selIdx = 0;
 				callbackLock[0] = true;
 				ListSelectionModel selModel = selectionModel.get();
-				try (Transaction t = selection.lock(true, e)) {
+				try (Transaction t = safeSelection.lock(true, e)) {
 					for (int i = selModel.getMinSelectionIndex(); i <= selModel.getMaxSelectionIndex() && i <= e.getIndex1(); i++) {
 						if (selModel.isSelectedIndex(i)) {
-							selection.mutableElement(selection.getElement(selIdx).getElementId()).set(model.getElementAt(i));
+							safeSelection.mutableElement(safeSelection.getElement(selIdx).getElementId()).set(model.getElementAt(i));
 							selIdx++;
 						}
 					}
@@ -751,7 +739,7 @@ public class ObservableSwingUtils {
 			selectionModel.get().setValueIsAdjusting(false);
 			syncSelection.accept(c);
 		}));
-		selection.changes().takeUntil(until).act(evt -> onEQ(() -> {
+		safeSelection.changes().takeUntil(until).act(evt -> onEQ(() -> {
 			if (callbackLock[0])
 				return;
 			ListSelectionModel selModel = selectionModel.get();
@@ -871,6 +859,7 @@ public class ObservableSwingUtils {
 	public static <E> SettableValue<E> syncSelection(Component component, ListModel<E> model, Supplier<ListSelectionModel> selectionModel,
 		Equivalence<? super E> equivalence, SettableValue<E> selection, Observable<?> until, IntConsumer update,
 		boolean enforceSingleSelection) {
+		SettableValue<E> safeSelection = selection.safe(ThreadConstraint.EDT, until);
 		if (enforceSingleSelection)
 			selectionModel.get().setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 		boolean[] callbackLock = new boolean[1];
@@ -882,9 +871,9 @@ public class ObservableSwingUtils {
 			try {
 				if (selModel.getMinSelectionIndex() >= 0 && selModel.getMinSelectionIndex() == selModel.getMaxSelectionIndex()) {
 					E selectedValue = model.getElementAt(selModel.getMinSelectionIndex());
-					selection.set(selectedValue, e);
-				} else if (selection.get() != null)
-					selection.set(null, e);
+					safeSelection.set(selectedValue, e);
+				} else if (safeSelection.get() != null)
+					safeSelection.set(null, e);
 			} finally {
 				callbackLock[0] = false;
 			}
@@ -934,7 +923,7 @@ public class ObservableSwingUtils {
 		if (component != null)
 			component.addPropertyChangeListener("selectionModel", selModelListener);
 		model.addListDataListener(modelListener);
-		selection.changes().takeUntil(until).act(evt -> onEQ(() -> {
+		safeSelection.changes().takeUntil(until).act(evt -> onEQ(() -> {
 			if (callbackLock[0])
 				return;
 			callbackLock[0] = true;
@@ -986,14 +975,14 @@ public class ObservableSwingUtils {
 	private static class IconKey {
 		final Class<?> clazz;
 		final String location;
-		final int width;
-		final int height;
+		// final int width;
+		// final int height;
 
 		public IconKey(Class<?> clazz, String location, int width, int height) {
 			this.clazz = clazz;
 			this.location = location;
-			this.width = width;
-			this.height = height;
+			// this.width = width;
+			// this.height = height;
 		}
 
 		@Override

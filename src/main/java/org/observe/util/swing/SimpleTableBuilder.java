@@ -10,11 +10,11 @@ import java.awt.datatransfer.UnsupportedFlavorException;
 import java.awt.dnd.DnDConstants;
 import java.beans.PropertyChangeListener;
 import java.io.IOException;
+import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.function.BiConsumer;
-import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -42,7 +42,6 @@ import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
-import org.observe.util.AbstractSafeObservableCollection;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.Dragging.SimpleTransferAccepter;
 import org.observe.util.swing.Dragging.SimpleTransferSource;
@@ -75,7 +74,6 @@ class SimpleTableBuilder<R, P extends SimpleTableBuilder<R, P>> extends Abstract
 implements TableBuilder<R, P> {
 	private final ObservableCollection<R> theRows;
 	private ObservableCollection<R> theFilteredRows;
-	private BooleanSupplier hasQueuedEvents;
 	private String theItemName;
 	private Function<? super R, String> theNameFunction;
 	private ObservableCollection<? extends CategoryRenderStrategy<? super R, ?>> theColumns;
@@ -91,7 +89,6 @@ implements TableBuilder<R, P> {
 	private int theAdaptivePrefRowHeight;
 	private int theAdaptiveMaxRowHeight;
 	private boolean isScrollable;
-	private boolean isPromisedSafe;
 
 	private JComponent theBuiltComponent;
 
@@ -300,12 +297,8 @@ implements TableBuilder<R, P> {
 	@Override
 	public P withCopy(Function<? super R, ? extends R> copier, Consumer<DataAction<R, ?>> actionMod) {
 		return withMultiAction(values -> {
-			try (Transaction t = theRows.lock(true, null)) {
-				if (hasQueuedEvents.getAsBoolean()) { // If there are queued changes, we can't rely on indexes we get back from the model
-					simpleCopy(values, copier);
-				} else {// Ignore the given values and use the selection model so we get the indexes right in the case of duplicates
-					betterCopy(copier);
-				}
+			try (Transaction t = theFilteredRows.lock(true, null)) {
+				betterCopy(copier);
 			}
 		}, action -> {
 			String single = getItemName();
@@ -315,13 +308,6 @@ implements TableBuilder<R, P> {
 			if (actionMod != null)
 				actionMod.accept(action);
 		});
-	}
-
-	private void simpleCopy(List<? extends R> selection, Function<? super R, ? extends R> copier) {
-		for (R value : selection) {
-			R copy = copier.apply(value);
-			theRows.add(copy);
-		}
 	}
 
 	private void betterCopy(Function<? super R, ? extends R> copier) {
@@ -364,18 +350,16 @@ implements TableBuilder<R, P> {
 						return cell.getCellValue();
 					else if (!up && cell.getRowIndex() == theFilteredRows.size() - 1)
 						return cell.getCellValue();
-					try (Transaction t = theRows.lock(true, null)) {
-						if (!hasQueuedEvents.getAsBoolean()) {
-							CollectionElement<R> row = theRows.getElement(cell.getRowIndex());
-							CollectionElement<R> adj = theRows.getAdjacentElement(row.getElementId(), !up);
-							if (adj != null) {
-								CollectionElement<R> adj2 = theRows.getAdjacentElement(adj.getElementId(), !up);
-								theRows.move(row.getElementId(), up ? CollectionElement.getElementId(adj2) : adj.getElementId(),
-									up ? adj.getElementId() : CollectionElement.getElementId(adj2), up, null);
-								ListSelectionModel selModel = getEditor().getSelectionModel();
-								int newIdx = up ? cell.getRowIndex() - 1 : cell.getRowIndex() + 1;
-								selModel.addSelectionInterval(newIdx, newIdx);
-							}
+					try (Transaction t = theFilteredRows.lock(true, null)) {
+						CollectionElement<R> row = theRows.getElement(cell.getRowIndex());
+						CollectionElement<R> adj = theRows.getAdjacentElement(row.getElementId(), !up);
+						if (adj != null) {
+							CollectionElement<R> adj2 = theRows.getAdjacentElement(adj.getElementId(), !up);
+							theRows.move(row.getElementId(), up ? CollectionElement.getElementId(adj2) : adj.getElementId(),
+								up ? adj.getElementId() : CollectionElement.getElementId(adj2), up, null);
+							ListSelectionModel selModel = getEditor().getSelectionModel();
+							int newIdx = up ? cell.getRowIndex() - 1 : cell.getRowIndex() + 1;
+							selModel.addSelectionInterval(newIdx, newIdx);
 						}
 					}
 					return cell.getCellValue();
@@ -392,34 +376,30 @@ implements TableBuilder<R, P> {
 	@Override
 	public P withMoveToEnd(boolean up, Consumer<DataAction<R, ?>> actionMod) {
 		return withMultiAction(values -> {
-			try (Transaction t = theRows.lock(true, null)) {
-				if (hasQueuedEvents.getAsBoolean()) { // If there are queued changes, we can't rely on indexes we get back from the model
-				} else {// Ignore the given values and use the selection model so we get the indexes right in the case of duplicates
-					ListSelectionModel selModel = getEditor().getSelectionModel();
-					int selectionCount = 0;
-					ElementId varBound = null;
-					ElementId fixedBound = CollectionElement.getElementId(theRows.getTerminalElement(up));
-					int start = up ? selModel.getMinSelectionIndex() : selModel.getMaxSelectionIndex();
-					int end = up ? selModel.getMaxSelectionIndex() : selModel.getMinSelectionIndex();
-					int inc = up ? 1 : -1;
-					for (int i = start; i >= 0 && i != end; i += inc) {
-						if (!selModel.isSelectedIndex(i))
-							continue;
-						selectionCount++;
-						CollectionElement<R> move = theRows.getElement(i);
-						move = theRows.move(move.getElementId(), up ? varBound : fixedBound, up ? fixedBound : varBound, up, null);
-						varBound = move.getElementId();
-					}
-					if (selectionCount != 0)
-						selModel.setSelectionInterval(0, selectionCount - 1);
+			try (Transaction t = theFilteredRows.lock(true, null)) {
+				// Ignore the given values and use the selection model so we get the indexes right in the case of duplicates
+				ListSelectionModel selModel = getEditor().getSelectionModel();
+				int selectionCount = 0;
+				ElementId varBound = null;
+				ElementId fixedBound = CollectionElement.getElementId(theRows.getTerminalElement(up));
+				int start = up ? selModel.getMinSelectionIndex() : selModel.getMaxSelectionIndex();
+				int end = up ? selModel.getMaxSelectionIndex() : selModel.getMinSelectionIndex();
+				int inc = up ? 1 : -1;
+				for (int i = start; i >= 0 && i != end; i += inc) {
+					if (!selModel.isSelectedIndex(i))
+						continue;
+					selectionCount++;
+					CollectionElement<R> move = theRows.getElement(i);
+					move = theRows.move(move.getElementId(), up ? varBound : fixedBound, up ? fixedBound : varBound, up, null);
+					varBound = move.getElementId();
 				}
+				if (selectionCount != 0)
+					selModel.setSelectionInterval(0, selectionCount - 1);
 			}
 		}, action -> {
 			ObservableValue<String> enabled;
 			Supplier<String> enabledGet = () -> {
-				try (Transaction t = theRows.lock(false, null)) {
-					if (hasQueuedEvents.getAsBoolean())
-						return "Data set updating";
+				try (Transaction t = theFilteredRows.lock(false, null)) {
 					ListSelectionModel selModel = getEditor().getSelectionModel();
 					if (selModel.isSelectionEmpty())
 						return "Nothing selected";
@@ -510,12 +490,6 @@ implements TableBuilder<R, P> {
 	}
 
 	@Override
-	public P promiseSafe() {
-		isPromisedSafe = true;
-		return (P) this;
-	}
-
-	@Override
 	public Component getOrCreateComponent(Observable<?> until) {
 		if (theBuiltComponent != null)
 			return theBuiltComponent;
@@ -571,13 +545,7 @@ implements TableBuilder<R, P> {
 			});
 			ObservableCollection<TableContentControl.FilteredValue<R>> rawFiltered = TableContentControl.applyRowControl(theRows,
 				() -> renderers, theFilter.refresh(columnChanges), until);
-			if (!isPromisedSafe) {
-				filtered = ObservableSwingUtils.safe(rawFiltered, until);
-				hasQueuedEvents = ((AbstractSafeObservableCollection<?>) filtered)::hasQueuedEvents;
-			} else {
-				filtered = rawFiltered;
-				hasQueuedEvents = () -> false;
-			}
+			filtered = ObservableSwingUtils.safe(rawFiltered, until);
 			theFilteredRows = filtered.flow()
 				.transform(theRows.getType(),
 					tx -> tx.map(LambdaUtils.printableFn(f -> f.value, "value", null)).modifySource(FilteredValue::setValue))
@@ -585,13 +553,7 @@ implements TableBuilder<R, P> {
 		} else {
 			filtered = null;
 			columns = theColumns;
-			if (!isPromisedSafe) {
-				theFilteredRows = ObservableSwingUtils.safe(theRows, until);
-				hasQueuedEvents = ((AbstractSafeObservableCollection<?>) theFilteredRows)::hasQueuedEvents;
-			} else {
-				theFilteredRows = theRows;
-				hasQueuedEvents = () -> false;
-			}
+			theFilteredRows = ObservableSwingUtils.safe(theRows, until);
 		}
 		model = new ObservableTableModel<>(theFilteredRows, true, columns, columnsSafe);
 		JTable table = getEditor();
@@ -605,7 +567,7 @@ implements TableBuilder<R, P> {
 			@Override
 			public SortedMatchSet getEmphaticRegions(int row, int column) {
 				TableContentControl.FilteredValue<R> fv = filtered.get(row);
-				if (column >= fv.getColumns() || !fv.isFiltered())
+					if (column >= fv.getColumns())
 					return null;
 				return fv.getMatches(column);
 			}
@@ -804,6 +766,7 @@ implements TableBuilder<R, P> {
 		table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
 
 		if (theCountTitleDisplayedText != null) {
+			NumberFormat numberFormat = NumberFormat.getIntegerInstance();
 			String singularItemName = theItemName != null ? theItemName : "item";
 			String pluralItemName = StringUtils.pluralize(singularItemName);
 			TitledBorder border = BorderFactory.createTitledBorder(singularItemName);
@@ -813,7 +776,8 @@ implements TableBuilder<R, P> {
 				.changes().takeUntil(until).act(evt -> {
 					int sz = evt.getNewValue()[0];
 					int f = evt.getNewValue()[1];
-					String text = f + " of " + sz + " " + (sz == 1 ? singularItemName : pluralItemName);
+					String text = numberFormat.format(f) + " of " + numberFormat.format(sz) + " "
+						+ (sz == 1 ? singularItemName : pluralItemName);
 					if (!theCountTitleDisplayedText.isEmpty())
 						text += " " + theCountTitleDisplayedText;
 					border.setTitle(text);
@@ -821,7 +785,8 @@ implements TableBuilder<R, P> {
 				});
 			} else {
 				theRows.observeSize().changes().takeUntil(until).act(evt -> {
-					String text = evt.getNewValue() + " " + (evt.getNewValue() == 1 ? singularItemName : pluralItemName);
+					String text = numberFormat.format(evt.getNewValue()) + " "
+						+ (evt.getNewValue() == 1 ? singularItemName : pluralItemName);
 					if (!theCountTitleDisplayedText.isEmpty())
 						text += " " + theCountTitleDisplayedText;
 					border.setTitle(text);

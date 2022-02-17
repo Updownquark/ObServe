@@ -30,8 +30,8 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
-import org.observe.util.AbstractSafeObservableCollection;
 import org.observe.util.TypeTokens;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
 import org.qommons.collect.CollectionElement;
@@ -106,24 +106,21 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 	 */
 	public static <T> Subscription comboFor(JComboBox<T> comboBox, ObservableValue<String> descrip,
 		Function<? super T, String> valueTooltip, ObservableCollection<? extends T> availableValues, SettableValue<T> selected) {
+		SimpleObservable<Void> safeUntil = SimpleObservable.build().build();
 		List<Subscription> subs = new LinkedList<>();
-		ObservableCollection<? extends T> safeValues;
-		if (availableValues instanceof AbstractSafeObservableCollection)
-			safeValues = availableValues;
-		else {
-			SimpleObservable<Void> safeUntil = SimpleObservable.build().build();
-			safeValues = ObservableSwingUtils.safe(availableValues, safeUntil);
-			subs.add(() -> safeUntil.onNext(null));
-		}
+		subs.add(() -> safeUntil.onNext(null));
+		ObservableCollection<? extends T> safeValues = ObservableSwingUtils.safe(availableValues, safeUntil);
+		SettableValue<T> safeSelected = selected.safe(ThreadConstraint.EDT, safeUntil);
+		ObservableValue<String> safeDescrip = descrip.safe(ThreadConstraint.EDT, safeUntil);
 		ObservableComboBoxModel<? extends T> comboModel = new ObservableComboBoxModel<>(safeValues);
 		comboBox.setModel((ComboBoxModel<T>) comboModel);
 		boolean[] callbackLock = new boolean[1];
 		Consumer<String> checkEnabled = enabled -> {
 			comboBox.setEnabled(enabled == null);
-			comboBox.setToolTipText(enabled == null ? descrip.get() : enabled);
+			comboBox.setToolTipText(enabled == null ? safeDescrip.get() : enabled);
 		};
-		subs.add(descrip.changes().act(evt -> {
-			if (selected.isEnabled().get() == null)
+		subs.add(safeDescrip.safe(ThreadConstraint.EDT, safeUntil).changes().act(evt -> {
+			if (safeSelected.isEnabled().get() == null)
 				comboBox.setToolTipText(evt.getNewValue());
 		}));
 		// Pretty hacky here, but it's the only way I've found to display tooltips over expanded combo box items
@@ -140,7 +137,7 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 			}
 			popup = tempPopup;
 		}
-		subs.add(ObservableComboBoxModel.<T> hookUpComboData(safeValues, selected, index -> {
+		subs.add(ObservableComboBoxModel.<T> hookUpComboData(safeValues, safeSelected, index -> {
 			// Ignore update events when the popup is expanded
 			if (index != comboBox.getSelectedIndex() || (index >= 0 && comboBox.getSelectedItem() != safeValues.get(index))
 				|| !popup.isVisible())
@@ -159,12 +156,12 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 						callbackLock[0] = false;
 					}
 				} else
-					checkEnabled.accept(selected.isEnabled().get());
+					checkEnabled.accept(safeSelected.isEnabled().get());
 			};
 			comboBox.addItemListener(itemListener);
 			return () -> comboBox.removeItemListener(itemListener);
 		}, checkEnabled));
-		subs.add(selected.isEnabled().changes().act(evt -> ObservableSwingUtils.onEQ(() -> checkEnabled.accept(evt.getNewValue()))));
+		subs.add(safeSelected.isEnabled().changes().act(evt -> ObservableSwingUtils.onEQ(() -> checkEnabled.accept(evt.getNewValue()))));
 
 		ListCellRenderer<? super T> oldRenderer = comboBox.getRenderer();
 		comboBox.setRenderer(new ListCellRenderer<T>() {
@@ -173,7 +170,7 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 				boolean cellHasFocus) {
 				Component rendered = oldRenderer.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
 				if (index >= 0) {
-					String enabled = selected.isAcceptable(value);
+					String enabled = safeSelected.isAcceptable(value);
 					rendered.setEnabled(enabled == null);
 				}
 				return rendered;
@@ -205,7 +202,7 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 						return;
 					}
 					T item = comboModel.getElementAt(index);
-					String tooltip = selected.isAcceptable(item);
+					String tooltip = safeSelected.isAcceptable(item);
 					if (tooltip == null && valueTooltip != null)
 						tooltip = valueTooltip.apply(item);
 					String oldToolTip = popupList.getToolTipText();
@@ -274,15 +271,15 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 					CollectionElement<? extends T> found = availableValues.belongs(evt.getNewValue()) //
 						? ((ObservableCollection<T>) availableValues).getElement(evt.getNewValue(), true)//
 							: null;
-					if (found != null) {
-						currentSelectedElement[0] = found.getElementId();
-						currentSelected[0] = found.get();
-						setSelected.accept(availableValues.getElementsBefore(found.getElementId()));
-					} else {
-						currentSelectedElement[0] = null;
-						currentSelected[0] = null;
-						setSelected.accept(-1);
-					}
+						if (found != null) {
+							currentSelectedElement[0] = found.getElementId();
+							currentSelected[0] = found.get();
+							setSelected.accept(availableValues.getElementsBefore(found.getElementId()));
+						} else {
+							currentSelectedElement[0] = null;
+							currentSelected[0] = null;
+							setSelected.accept(-1);
+						}
 				} finally {
 					callbackLock[0] = false;
 				}

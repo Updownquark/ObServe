@@ -31,8 +31,7 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 		private ObservableCollection<ObservableGraph.Edge<N, E>> theBiEdges;
 
 		DefaultNode(DefaultObservableGraph<N, ?> graph, N value, ObservableCollection<ObservableGraph.Edge<N, E>> outEdges) {
-			super(theNodeType, null, true, __ -> graph, null);
-			set(value, null);
+			super(theNodeType, null, true, __ -> graph, null, value);
 			theOutgoingEdges = outEdges;
 		}
 
@@ -69,8 +68,7 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 
 		DefaultEdge(DefaultObservableGraph<N, ?> graph, ObservableGraph.Node<N, E> start, ObservableGraph.Node<N, E> end, boolean directed,
 			E value) {
-			super(theEdgeType, null, true, __ -> graph, null);
-			set(value, null);
+			super(theEdgeType, null, true, __ -> graph, null, value);
 			theStart = start;
 			theEnd = end;
 			isDirected = directed;

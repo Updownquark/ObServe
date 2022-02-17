@@ -780,15 +780,6 @@ public class PanelPopulation {
 		P withItemName(String itemName);
 
 		String getItemName();
-
-		/**
-		 * This method promises that the model backing this widged is known to only fire events on the UI's dedicated event thread. This
-		 * allows this widget to forego expensive thread safety checking, but at the expense of the stability of the UI, if the promise is
-		 * not kept.
-		 *
-		 * @return This widget builder
-		 */
-		P promiseSafe();
 	}
 
 	public interface ListWidgetBuilder<R, C extends Component, P extends ListWidgetBuilder<R, C, P>> {
@@ -3567,12 +3558,6 @@ public class PanelPopulation {
 		}
 
 		@Override
-		public P promiseSafe() {
-			// We don't handle thread safety yet
-			return (P) this;
-		}
-
-		@Override
 		public String getItemName() {
 			return theItemName;
 		}
@@ -4207,12 +4192,6 @@ public class PanelPopulation {
 		@Override
 		public boolean isExpanded(List<? extends F> path) {
 			return getEditor().isExpanded(new TreePath(path.toArray()));
-		}
-
-		@Override
-		public P promiseSafe() {
-			((PPTreeModel<F>) getEditor().getModel()).promiseSafe();
-			return (P) this;
 		}
 
 		@Override

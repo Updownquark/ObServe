@@ -88,7 +88,6 @@ implements TreeTableEditor<F, P> {
 	private int theAdaptivePrefRowHeight;
 	private int theAdaptiveMaxRowHeight;
 	private boolean isScrollable;
-	private boolean isPromisedSafe;
 
 	private Component theBuiltComponent;
 
@@ -261,12 +260,6 @@ implements TreeTableEditor<F, P> {
 	}
 
 	@Override
-	public P promiseSafe() {
-		isPromisedSafe = true;
-		return (P) this;
-	}
-
-	@Override
 	public Component getOrCreateComponent(Observable<?> until) {
 		if (theBuiltComponent != null)
 			return theBuiltComponent;
@@ -278,14 +271,11 @@ implements TreeTableEditor<F, P> {
 		if (theTreeColumn == null)
 			theTreeColumn = new CategoryRenderStrategy<>("Tree", theRoot.getType(), f -> f);
 		ObservableCollection<? extends CategoryRenderStrategy<? super F, ?>> columns = theColumns;
-		if (!isPromisedSafe)
-			columns = ObservableSwingUtils.safe(columns, until);
+		columns = ObservableSwingUtils.safe(columns, until);
 		columns = ObservableCollection.flattenCollections(columnType, //
 			ObservableCollection.of(columnType, theTreeColumn), //
 			columns).collect();
 		ObservableTreeTableModel<F> model = new ObservableTreeTableModel<>(new PPTreeModel(), columns, false);
-		if (isPromisedSafe)
-			model.getTreeModel().promiseSafe();
 		JXTreeTable table = getEditor();
 		table.setTreeTableModel(model);
 		if (theMouseListeners != null) {

@@ -110,7 +110,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 	 * @param elementSource A function to look up elements in the {@link #withBacking(BetterList) backing} collection by source element ID
 	 * @return This builder
 	 */
-	B withElementSource(BiFunction<ElementId, BetterCollection<?>, ElementId> elementSource);
+	B withElementsBySource(BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> elementSource);
 
 	/**
 	 * @param sourceElements A function to look up elements in a source collection from an element in the {@link #withBacking(BetterList)
@@ -287,7 +287,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 		private final TypeToken<E> theType;
 		private BetterList<E> theBacking;
 		private Comparator<? super E> theSorting;
-		private BiFunction<ElementId, BetterCollection<?>, ElementId> theElementSource;
+		private BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> theElementSource;
 		private BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> theSourceElements;
 		private Equivalence<? super E> theEquivalence;
 
@@ -333,7 +333,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 		}
 
 		@Override
-		public B withElementSource(BiFunction<ElementId, BetterCollection<?>, ElementId> elementSource) {
+		public B withElementsBySource(BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> elementSource) {
 			theElementSource = elementSource;
 			return (B) this;
 		}
@@ -379,7 +379,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 		}
 
 		/** @return The element source for the collection */
-		protected BiFunction<ElementId, BetterCollection<?>, ElementId> getElementSource() {
+		protected BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> getElementsBySource() {
 			return theElementSource;
 		}
 
@@ -581,7 +581,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 				.build();
 			else if (!(backing instanceof BetterSortedList))
 				throw new IllegalStateException("An ObservableSortedCollection must be backed by an instance of BetterSortedList");
-			return new DefaultObservableSortedCollection<>(getType(), (BetterSortedList<E>) backing, getElementSource(),
+			return new DefaultObservableSortedCollection<>(getType(), (BetterSortedList<E>) backing, getElementsBySource(),
 				getSourceElements());
 		}
 
@@ -724,7 +724,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 				.build();
 			else if (!(backing instanceof BetterSortedSet))
 				throw new IllegalStateException("An ObservableSortedCollection must be backed by an instance of BetterSortedList");
-			return new DefaultObservableSortedSet<>(getType(), (BetterSortedSet<E>) backing, getElementSource(), getSourceElements());
+			return new DefaultObservableSortedSet<>(getType(), (BetterSortedSet<E>) backing, getElementsBySource(), getSourceElements());
 		}
 
 		@Override

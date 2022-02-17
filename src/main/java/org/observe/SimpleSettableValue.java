@@ -34,14 +34,16 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 	 * @param nullable Whether null can be assigned to the value
 	 * @param lock The lock for this value
 	 * @param listening Listening builder for this value's listener list (may be null)
+	 * @param initialValue The initial value for this value
 	 */
 	protected SimpleSettableValue(TypeToken<T> type, String description, boolean nullable, Function<Object, Transactable> lock,
-		ListenerList.Builder listening) {
+		ListenerList.Builder listening, T initialValue) {
 		theType = type;
 		isNullable = nullable && !type.isPrimitive();
 		theIdentity = Identifiable.baseId(description, this);
 		theLock = lock == null ? null : new CausalLock(lock.apply(this));
 		theEventer = createEventer(theLock, listening);
+		theValue = initialValue;
 	}
 
 	@Override

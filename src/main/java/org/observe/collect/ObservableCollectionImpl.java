@@ -2433,12 +2433,6 @@ public final class ObservableCollectionImpl {
 	}
 
 	/**
-	 * Stores strong references to actively-derived collections on which listeners are installed, preventing the garbage-collection of these
-	 * collections since the listeners only contain weak references to their data sources.
-	 */
-	private static final Set<IdentityKey<ActiveDerivedCollection<?>>> STRONG_REFS = new ConcurrentHashSet<>();
-
-	/**
 	 * A derived collection, {@link ObservableCollection.CollectionDataFlow#collect() collected} from a
 	 * {@link ObservableCollection.CollectionDataFlow}. An active collection maintains a sorted collection of derived elements, enabling
 	 * complex and order-affecting operations like {@link ObservableCollection.CollectionDataFlow#sorted(Comparator) sort} and
@@ -2447,6 +2441,12 @@ public final class ObservableCollectionImpl {
 	 * @param <T> The type of values in the collection
 	 */
 	public static class ActiveDerivedCollection<T> extends AbstractIdentifiable implements DerivedCollection<T> {
+		/**
+		 * Stores strong references to actively-derived collections on which listeners are installed, preventing the garbage-collection of
+		 * these collections since the listeners only contain weak references to their data sources.
+		 */
+		private static final Set<IdentityKey<ActiveDerivedCollection<?>>> STRONG_REFS = new ConcurrentHashSet<>();
+
 		/**
 		 * Holds a {@link ObservableCollectionActiveManagers.DerivedCollectionElement}s for an {@link ActiveDerivedCollection}
 		 *
@@ -2506,7 +2506,7 @@ public final class ObservableCollectionImpl {
 		private final ListenerList<Consumer<? super ObservableCollectionEvent<? extends T>>> theListeners;
 		private final AtomicInteger theListenerCount;
 		private final Equivalence<? super T> theEquivalence;
-		private final AtomicLong theModCount;
+		private final AtomicLong theStamp;
 		private final WeakListening.Builder theWeakListening;
 
 		/**
@@ -2519,11 +2519,11 @@ public final class ObservableCollectionImpl {
 			theListeners = new ListenerList<>("Reentrancy not allowed");
 			theListenerCount = new AtomicInteger();
 			theEquivalence = flow.equivalence();
-			theModCount = new AtomicLong();
+			theStamp = new AtomicLong();
 
 			// Begin listening
 			ElementAccepter<T> onElement = (el, cause) -> {
-				theModCount.incrementAndGet();
+				theStamp.incrementAndGet();
 				DerivedElementHolder<T>[] holder = new DerivedElementHolder[] { createHolder(el) };
 				holder[0].treeNode = theDerivedElements.addElement(holder[0], false);
 				if (holder[0].treeNode == null)
@@ -2536,7 +2536,7 @@ public final class ObservableCollectionImpl {
 					public void update(T oldValue, T newValue, Object elCause, boolean internalOnly) {
 						if (internalOnly)
 							return;
-						theModCount.incrementAndGet();
+						theStamp.incrementAndGet();
 						BinaryTreeNode<DerivedElementHolder<T>> left = holder[0].treeNode.getClosest(true);
 						BinaryTreeNode<DerivedElementHolder<T>> right = holder[0].treeNode.getClosest(false);
 						if ((left != null && left.get().element.compareTo(holder[0].element) > 0)
@@ -2560,7 +2560,7 @@ public final class ObservableCollectionImpl {
 
 					@Override
 					public void removed(T value, Object elCause) {
-						theModCount.incrementAndGet();
+						theStamp.incrementAndGet();
 						int index = holder[0].treeNode.getNodesBefore();
 						if (holder[0].treeNode.getElementId().isPresent()) // May have been removed already
 							theDerivedElements.mutableElement(holder[0].treeNode.getElementId()).remove();
@@ -2683,7 +2683,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public long getStamp() {
-			return theModCount.get();
+			return theStamp.get();
 		}
 
 		@Override
