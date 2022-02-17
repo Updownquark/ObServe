@@ -5,7 +5,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.swing.ListModel;
 import javax.swing.event.ListDataEvent;
@@ -15,7 +14,6 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
-import org.observe.util.SafeObservableCollection;
 import org.qommons.Transaction;
 import org.qommons.tree.BetterTreeList;
 
@@ -31,29 +29,17 @@ public class ObservableListModel<E> implements ListModel<E> {
 	 * documenting the modification
 	 */
 	private final List<E> theCachedData;
-	private final boolean isSafe;
 	private final List<ListDataListener> theListeners;
 	private Subscription theListening;
-	private final AtomicInteger thePendingUpdates;
 	private volatile boolean isEventing;
 
 	/** @param wrap The observable collection to back this model */
 	public ObservableListModel(ObservableCollection<E> wrap) {
-		this(wrap, false);
-	}
-
-	/**
-	 * @param wrap The observable collection to back this model
-	 * @param safe Whether the collection is already {@link SafeObservableCollection safe}
-	 */
-	public ObservableListModel(ObservableCollection<E> wrap, boolean safe) {
 		if (wrap == null)
 			throw new NullPointerException();
 		theWrapped = wrap;
-		isSafe = safe;
 		theCachedData = new ArrayList<>();
 		theListeners = BetterTreeList.<ListDataListener> build().build();
-		thePendingUpdates = new AtomicInteger();
 	}
 
 	/** @return The observable list that this model wraps */
@@ -101,32 +87,16 @@ public class ObservableListModel<E> implements ListModel<E> {
 		});
 	}
 
-	/**
-	 * @return The number of update events that have occurred in the backing collection but are not yet represented in the EDT-safe list
-	 *         model
-	 */
-	public int getPendingUpdates() {
-		return thePendingUpdates.get();
-	}
-
 	private void beginListening() {
 		try (Transaction t = theWrapped.lock(false, null)) {
 			theCachedData.addAll(theWrapped);
-			theListening = theWrapped.changes().act(event -> {
-				// All internal data representation mutation and event firing must be done on the EDT
-				thePendingUpdates.getAndIncrement();
-				if (isSafe || (EventQueue.isDispatchThread() && !isEventing))
-					handleEvent(event);
-				else
-					EventQueue.invokeLater(() -> handleEvent(event));
-			});
+			theListening = theWrapped.changes().act(this::handleEvent);
 		}
 	}
 
 	private void handleEvent(CollectionChangeEvent<E> event) {
 		isEventing = true;
 		try {
-			thePendingUpdates.getAndDecrement();
 			Map<Integer, E> changesByIndex = new HashMap<>();
 			if (event.type != CollectionChangeType.remove) {
 				for (CollectionChangeEvent.ElementChange<E> el : event.elements)

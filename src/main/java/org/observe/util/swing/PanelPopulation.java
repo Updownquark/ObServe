@@ -1546,7 +1546,7 @@ public class PanelPopulation {
 
 		@Override
 		default <R> P addList(ObservableCollection<R> rows, Consumer<ListBuilder<R, ?>> list) {
-			SimpleListBuilder<R, ?> tb = new SimpleListBuilder<>(rows, getLock());
+			SimpleListBuilder<R, ?> tb = new SimpleListBuilder<>(ObservableSwingUtils.safe(rows, getUntil()), getLock());
 			list.accept(tb);
 			doAdd(tb);
 			return (P) this;
@@ -3491,12 +3491,7 @@ public class PanelPopulation {
 		public P withCopy(Function<? super R, ? extends R> copier, Consumer<DataAction<R, ?>> actionMod) {
 			return withMultiAction(values -> {
 				try (Transaction t = getEditor().getModel().getWrapped().lock(true, null)) {
-					if (getEditor().getModel().getPendingUpdates() > 0) {
-						// If there are queued changes, we can't rely on indexes we get back from the model
-						simpleCopy(values, copier);
-					} else {// Ignore the given values and use the selection model so we get the indexes right in the case of duplicates
-						betterCopy(copier);
-					}
+					betterCopy(copier);
 				}
 			}, action -> {
 				String single = getItemName();
@@ -3506,13 +3501,6 @@ public class PanelPopulation {
 				if (actionMod != null)
 					actionMod.accept(action);
 			});
-		}
-
-		private void simpleCopy(List<? extends R> selection, Function<? super R, ? extends R> copier) {
-			for (R value : selection) {
-				R copy = copier.apply(value);
-				getEditor().getModel().getWrapped().add(copy);
-			}
 		}
 
 		private void betterCopy(Function<? super R, ? extends R> copier) {

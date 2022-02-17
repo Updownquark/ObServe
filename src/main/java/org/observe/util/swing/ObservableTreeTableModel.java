@@ -60,14 +60,13 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 	/**
 	 * @param treeModel The tree model for this tree table models' hierarchy
 	 * @param columns The columns for the table
-	 * @param columnsSafe Whether the column collection will fire only on the EDT
 	 */
 	public ObservableTreeTableModel(ObservableTreeModel<T> treeModel,
-		ObservableCollection<? extends CategoryRenderStrategy<? super T, ?>> columns, boolean columnsSafe) {
+		ObservableCollection<? extends CategoryRenderStrategy<? super T, ?>> columns) {
 		theTreeModel = treeModel;
 		theColumns = columns;
 
-		theColumnModel = new ObservableListModel<>(columns, columnsSafe);
+		theColumnModel = new ObservableListModel<>(columns);
 
 		thePathMouseListeners = ListenerList.build().build();
 	}

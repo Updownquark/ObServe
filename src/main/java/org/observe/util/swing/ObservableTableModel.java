@@ -86,22 +86,11 @@ public class ObservableTableModel<R> implements TableModel {
 	 */
 	public ObservableTableModel(ObservableCollection<R> rows,
 		ObservableCollection<? extends CategoryRenderStrategy<? super R, ?>> columns) {
-		this(rows, false, columns, false);
-	}
-
-	/**
-	 * @param rows The row values for the table
-	 * @param rowsSafe Whether the row collection will fire only on the EDT
-	 * @param columns The columns for the table
-	 * @param columnsSafe Whether the column collection will fire only on the EDT
-	 */
-	public ObservableTableModel(ObservableCollection<R> rows, boolean rowsSafe, //
-		ObservableCollection<? extends CategoryRenderStrategy<? super R, ?>> columns, boolean columnsSafe) {
 		theRows = rows;
 		theColumns = columns;
 
-		theRowModel = new ObservableListModel<>(rows, rowsSafe);
-		theColumnModel = new ObservableListModel<>(columns, columnsSafe);
+		theRowModel = new ObservableListModel<>(rows);
+		theColumnModel = new ObservableListModel<>(columns);
 		theListeners = new ArrayList<>();
 
 		theRowMouseListeners = ListenerList.build().build();
@@ -197,14 +186,6 @@ public class ObservableTableModel<R> implements TableModel {
 		CategoryRenderStrategy<? super R, Object> column = (CategoryRenderStrategy<? super R, Object>) theColumnModel
 			.getElementAt(columnIndex);
 		try (Transaction t = theRows.lock(true, null)) {
-			if (theRowModel.getPendingUpdates() > 0) {
-				// The editing must happen on an element
-				// If row update events are pending, then the row at the given rowIndex may not be the element intended
-				// Therefore, we need to prevent this update
-				// We could just ignore this, but that would be confusing to the user
-				// Electing here to throw an exception instead
-				throw new IllegalStateException("Update events are pending--cannot edit value");
-			}
 			MutableCollectionElement<R> rowElement = theRows.mutableElement(theRows.getElement(rowIndex).getElementId());
 			column.getMutator().mutate(rowElement, aValue);
 		}

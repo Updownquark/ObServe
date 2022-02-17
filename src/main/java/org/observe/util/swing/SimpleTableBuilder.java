@@ -498,12 +498,10 @@ implements TableBuilder<R, P> {
 		ObservableTableModel<R> model;
 		ObservableCollection<TableContentControl.FilteredValue<R>> filtered;
 		ObservableCollection<? extends CategoryRenderStrategy<? super R, ?>> columns;
-		boolean columnsSafe = false;
 		if (theFilter != null) {
 			ObservableCollection<? extends CategoryRenderStrategy<? super R, ?>> fColumns = TableContentControl.applyColumnControl(
 				ObservableSwingUtils.safe(theColumns, until), theFilter, until);
 			columns = fColumns;
-			columnsSafe = true;
 			Observable<?> columnChanges = Observable.or(Observable.constant(null), fColumns.simpleChanges());
 			List<ValueRenderer<R>> renderers = new ArrayList<>();
 			columnChanges.act(__ -> {
@@ -552,10 +550,10 @@ implements TableBuilder<R, P> {
 				.collectActive(until);
 		} else {
 			filtered = null;
-			columns = theColumns;
+			columns = ObservableSwingUtils.safe(theColumns, until);
 			theFilteredRows = ObservableSwingUtils.safe(theRows, until);
 		}
-		model = new ObservableTableModel<>(theFilteredRows, true, columns, columnsSafe);
+		model = new ObservableTableModel<>(theFilteredRows, columns);
 		JTable table = getEditor();
 		table.setModel(model);
 		if(theMouseListeners!=null) {
@@ -567,7 +565,7 @@ implements TableBuilder<R, P> {
 			@Override
 			public SortedMatchSet getEmphaticRegions(int row, int column) {
 				TableContentControl.FilteredValue<R> fv = filtered.get(row);
-					if (column >= fv.getColumns())
+				if (column >= fv.getColumns())
 					return null;
 				return fv.getMatches(column);
 			}

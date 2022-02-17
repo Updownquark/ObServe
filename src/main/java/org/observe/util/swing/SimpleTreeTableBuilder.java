@@ -275,7 +275,7 @@ implements TreeTableEditor<F, P> {
 		columns = ObservableCollection.flattenCollections(columnType, //
 			ObservableCollection.of(columnType, theTreeColumn), //
 			columns).collect();
-		ObservableTreeTableModel<F> model = new ObservableTreeTableModel<>(new PPTreeModel(), columns, false);
+		ObservableTreeTableModel<F> model = new ObservableTreeTableModel<>(new PPTreeModel(), columns);
 		JXTreeTable table = getEditor();
 		table.setTreeTableModel(model);
 		if (theMouseListeners != null) {
