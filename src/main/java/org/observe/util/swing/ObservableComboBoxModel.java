@@ -109,7 +109,7 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 		SimpleObservable<Void> safeUntil = SimpleObservable.build().build();
 		List<Subscription> subs = new LinkedList<>();
 		subs.add(() -> safeUntil.onNext(null));
-		ObservableCollection<? extends T> safeValues = ObservableSwingUtils.safe(availableValues, safeUntil);
+		ObservableCollection<? extends T> safeValues = availableValues.safe(ThreadConstraint.EDT, safeUntil);
 		SettableValue<T> safeSelected = selected.safe(ThreadConstraint.EDT, safeUntil);
 		ObservableValue<String> safeDescrip = descrip.safe(ThreadConstraint.EDT, safeUntil);
 		ObservableComboBoxModel<? extends T> comboModel = new ObservableComboBoxModel<>(safeValues);

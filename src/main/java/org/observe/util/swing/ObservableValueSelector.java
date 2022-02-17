@@ -18,6 +18,7 @@ import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSortedSet;
+import org.qommons.ThreadConstraint;
 import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
@@ -611,8 +612,8 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		}
 
 		public ObservableValueSelector<T, X> build() {
-			return new ObservableValueSelector<>(ObservableSwingUtils.safe(theSourceRows, theUntil), //
-				ObservableSwingUtils.safe(theSourceColumns, theUntil), ObservableSwingUtils.safe(theDestColumns, theUntil),
+			return new ObservableValueSelector<>(theSourceRows.safe(ThreadConstraint.EDT, theUntil), //
+				theSourceColumns.safe(ThreadConstraint.EDT, theUntil), theDestColumns.safe(ThreadConstraint.EDT, theUntil),
 				theMap, isReEvalOnUpdate, theUntil, isIncludedByDefault, theFilterFormat, isFilterCommitOnType, theItemName);
 		}
 	}

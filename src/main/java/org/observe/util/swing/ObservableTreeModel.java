@@ -269,7 +269,7 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 			unsubscribe = SimpleObservable.build().build();
 			theChildren = ObservableTreeModel.this.getChildren(theValue);
 			if (theChildren != null)
-				theChildren = ObservableSwingUtils.safe(theChildren, unsubscribe);
+				theChildren = theChildren.safe(ThreadConstraint.EDT, unsubscribe);
 			init(false);
 		}
 

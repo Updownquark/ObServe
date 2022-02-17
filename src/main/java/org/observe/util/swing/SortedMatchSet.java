@@ -72,6 +72,8 @@ public class SortedMatchSet {
 	public SortedMatchSet addAll(SortedMatchSet matches) {
 		if (matches == null)
 			return this;
+		if (theMatches.length == 0)
+			throw new UnsupportedOperationException("Can't add to EMPTY");
 		if (theSize + matches.theSize > theMatches.length) {
 			int[] newMatches;
 			if (theSize > matches.theSize)

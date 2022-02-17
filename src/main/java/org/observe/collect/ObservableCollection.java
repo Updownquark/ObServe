@@ -28,6 +28,7 @@ import org.observe.collect.ObservableCollectionActiveManagers.ActiveCollectionMa
 import org.observe.collect.ObservableCollectionActiveManagers.ActiveValueStoredManager;
 import org.observe.collect.ObservableCollectionPassiveManagers.PassiveCollectionManager;
 import org.observe.util.ObservableUtils;
+import org.observe.util.SafeObservableCollection;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
@@ -298,6 +299,17 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 	default ObservableCollection<E> with(E... values) {
 		addAll(java.util.Arrays.asList(values));
 		return this;
+	}
+
+	/**
+	 * @param threading The thread constraint for the new collection to obey
+	 * @param until An observable to cease the safe observable's synchronization with this value
+	 * @return An observable collection with same values as this one, but is safe for use on the given thread and fires its events there
+	 */
+	default ObservableCollection<E> safe(ThreadConstraint threading, Observable<?> until) {
+		if (getThreadConstraint() == threading || getThreadConstraint() == ThreadConstraint.NONE)
+			return this;
+		return new SafeObservableCollection<>(this, threading, until);
 	}
 
 	/**

@@ -73,7 +73,6 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.ObservableCollection;
 import org.observe.config.ObservableConfig;
-import org.observe.util.SafeObservableCollection;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.Causable.CausableKey;
@@ -96,21 +95,6 @@ public class ObservableSwingUtils {
 	 */
 	public static void onEQ(Runnable task) {
 		ThreadConstraint.EDT.invoke(task);
-	}
-
-	/**
-	 * @param <E> The type of the collection
-	 * @param collection The collection to use with a swing widget
-	 * @param until An observable to fire when we no longer need the swing-attached collection
-	 * @return A collection that provides the same data as the given collection, but only fires its events on the AWT {@link EventQueue}
-	 */
-	public static <E> ObservableCollection<E> safe(ObservableCollection<E> collection, Observable<?> until) {
-		if (collection == null)
-			return null;
-		if (collection.getThreadConstraint() == ThreadConstraint.EDT || collection.getThreadConstraint() == ThreadConstraint.NONE)
-			return collection;
-		// return new SafeObservableCollection<>(collection, ThreadConstraint.EDT, until);
-		return new SafeObservableCollection<>(collection, ThreadConstraint.EDT, until);
 	}
 
 	/**
@@ -415,7 +399,7 @@ public class ObservableSwingUtils {
 		SimpleObservable<Void> safeUntil = SimpleObservable.build().build();
 		subs.add(() -> safeUntil.onNext(null));
 		SettableValue<T> safeSelected = selected.safe(ThreadConstraint.EDT, safeUntil);
-		safeValues = safe(availableValues, safeUntil);
+		safeValues = availableValues.safe(ThreadConstraint.EDT, safeUntil);
 		ObservableCollection<TB> buttons = safeValues.flow().transform(buttonType, tx -> tx.map((value, button) -> {
 			if (button == null)
 				button = buttonCreator.apply(value);
@@ -664,7 +648,7 @@ public class ObservableSwingUtils {
 	public static <E> ObservableCollection<E> syncSelection(Component component, //
 		ListModel<E> model, Supplier<ListSelectionModel> selectionModel, Equivalence<? super E> equivalence,
 		ObservableCollection<E> selection, Observable<?> until) {
-		ObservableCollection<E> safeSelection = safe(selection, until);
+		ObservableCollection<E> safeSelection = selection.safe(ThreadConstraint.EDT, until);
 		Supplier<List<E>> selectionGetter = () -> getSelection(model, selectionModel.get(), null);
 		boolean[] callbackLock = new boolean[1];
 		boolean[] asyncSelection = new boolean[1];
@@ -1070,6 +1054,7 @@ public class ObservableSwingUtils {
 		}
 	}
 
+	/** @return A builder for an observable-backed application */
 	public static AppPopulation.ObservableUiBuilder buildUI() {
 		return new AppPopulation.ObservableUiBuilder();
 	}
@@ -1279,6 +1264,7 @@ public class ObservableSwingUtils {
 		return new Rectangle(adjustedBTL.x, adjustedBTL.y, adjustedBBR.x - adjustedBTL.x, adjustedBBR.y - adjustedBTL.y);
 	}
 
+	/** @return The bounds for all graphics devices on the system */
 	public static List<Rectangle> getGraphicsBounds() {
 		List<Rectangle> bounds = new ArrayList<>();
 		for (GraphicsDevice device : GraphicsEnvironment.getLocalGraphicsEnvironment().getScreenDevices()) {
@@ -1289,6 +1275,10 @@ public class ObservableSwingUtils {
 		return bounds;
 	}
 
+	/**
+	 * @param bounds The bounds for all graphics devices on the system
+	 * @return The same bounds, but with no overlaps
+	 */
 	public static List<Rectangle> getExclusiveBounds(List<Rectangle> bounds) {
 		List<Rectangle> bounds2 = new ArrayList<>();
 		List<Rectangle> bounds3 = new ArrayList<>(bounds);

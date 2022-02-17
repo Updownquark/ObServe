@@ -45,6 +45,7 @@ import org.observe.util.swing.PanelPopulation.DataAction;
 import org.observe.util.swing.PanelPopulation.SimpleButtonEditor;
 import org.observe.util.swing.PanelPopulation.SimpleDataAction;
 import org.observe.util.swing.PanelPopulation.TreeTableEditor;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
@@ -271,7 +272,7 @@ implements TreeTableEditor<F, P> {
 		if (theTreeColumn == null)
 			theTreeColumn = new CategoryRenderStrategy<>("Tree", theRoot.getType(), f -> f);
 		ObservableCollection<? extends CategoryRenderStrategy<? super F, ?>> columns = theColumns;
-		columns = ObservableSwingUtils.safe(columns, until);
+		columns = columns.safe(ThreadConstraint.EDT, until);
 		columns = ObservableCollection.flattenCollections(columnType, //
 			ObservableCollection.of(columnType, theTreeColumn), //
 			columns).collect();

@@ -1546,7 +1546,7 @@ public class PanelPopulation {
 
 		@Override
 		default <R> P addList(ObservableCollection<R> rows, Consumer<ListBuilder<R, ?>> list) {
-			SimpleListBuilder<R, ?> tb = new SimpleListBuilder<>(ObservableSwingUtils.safe(rows, getUntil()), getLock());
+			SimpleListBuilder<R, ?> tb = new SimpleListBuilder<>(rows.safe(ThreadConstraint.EDT, getUntil()), getLock());
 			list.accept(tb);
 			doAdd(tb);
 			return (P) this;
@@ -2404,7 +2404,7 @@ public class PanelPopulation {
 		@Override
 		protected Component getOrCreateComponent(Observable<?> until) {
 			if (theButtons == null) {
-				ObservableCollection<? extends F> safeValues = ObservableSwingUtils.safe(theValues, until);
+				ObservableCollection<? extends F> safeValues = theValues.safe(ThreadConstraint.EDT, until);
 				ObservableCollection<TB>[] _buttons = new ObservableCollection[1];
 				Subscription valueSub = ObservableSwingUtils.togglesFor(safeValues, theValue, TypeTokens.get().of(theButtonType),
 					theButtonCreator, b -> _buttons[0] = b, this::render, this::getValueTooltip);

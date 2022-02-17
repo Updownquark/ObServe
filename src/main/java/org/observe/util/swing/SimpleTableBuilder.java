@@ -60,6 +60,7 @@ import org.qommons.ArrayUtils;
 import org.qommons.IntList;
 import org.qommons.LambdaUtils;
 import org.qommons.StringUtils;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
@@ -500,7 +501,7 @@ implements TableBuilder<R, P> {
 		ObservableCollection<? extends CategoryRenderStrategy<? super R, ?>> columns;
 		if (theFilter != null) {
 			ObservableCollection<? extends CategoryRenderStrategy<? super R, ?>> fColumns = TableContentControl.applyColumnControl(
-				ObservableSwingUtils.safe(theColumns, until), theFilter, until);
+				theColumns.safe(ThreadConstraint.EDT, until), theFilter, until);
 			columns = fColumns;
 			Observable<?> columnChanges = Observable.or(Observable.constant(null), fColumns.simpleChanges());
 			List<ValueRenderer<R>> renderers = new ArrayList<>();
@@ -543,15 +544,15 @@ implements TableBuilder<R, P> {
 			});
 			ObservableCollection<TableContentControl.FilteredValue<R>> rawFiltered = TableContentControl.applyRowControl(theRows,
 				() -> renderers, theFilter.refresh(columnChanges), until);
-			filtered = ObservableSwingUtils.safe(rawFiltered, until);
+			filtered = rawFiltered.safe(ThreadConstraint.EDT, until);
 			theFilteredRows = filtered.flow()
 				.transform(theRows.getType(),
 					tx -> tx.map(LambdaUtils.printableFn(f -> f.value, "value", null)).modifySource(FilteredValue::setValue))
 				.collectActive(until);
 		} else {
 			filtered = null;
-			columns = ObservableSwingUtils.safe(theColumns, until);
-			theFilteredRows = ObservableSwingUtils.safe(theRows, until);
+			columns = theColumns.safe(ThreadConstraint.EDT, until);
+			theFilteredRows = theRows.safe(ThreadConstraint.EDT, until);
 		}
 		model = new ObservableTableModel<>(theFilteredRows, columns);
 		JTable table = getEditor();
