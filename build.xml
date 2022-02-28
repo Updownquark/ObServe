@@ -30,7 +30,7 @@
 			<arg value="Java8Parser.g4" />
 		</java>
 	</target>
-    <target name="jar">
+	<target name="jar">
         <jar destfile="${jar.file}" filesetmanifest="mergewithoutmain">
             <manifest>
                 <attribute name="Class-Path" value="."/>
@@ -42,8 +42,26 @@
             		<attribute name="Implementation-Version" value="${app.version}" />
             	</section>
             </manifest>
-            <fileset dir="${dir.buildfile}/classes"/>
+            <fileset dir="${dir.buildfile}/target/classes"/>
             <fileset dir="${dir.buildfile}/src/main/java"/>
+            <fileset dir="${dir.buildfile}/src/main/resources"/>
+        </jar>
+	</target>
+    <target name="fat-jar">
+        <jar destfile="${jar.file}" filesetmanifest="mergewithoutmain">
+            <manifest>
+                <attribute name="Class-Path" value="."/>
+            	<section name="org/observe/">
+	            	<attribute name="Specification-Title" value="${app.name}" />
+            		<attribute name="Specification-Version" value="${app.version}" />
+            		<attribute name="Specification-Vendor" value="${app.vendor}" />
+            		<attribute name="Implementation-Title" value="org.observe" />
+            		<attribute name="Implementation-Version" value="${app.version}" />
+            	</section>
+            </manifest>
+            <fileset dir="${dir.buildfile}/target/classes"/>
+            <fileset dir="${dir.buildfile}/src/main/java"/>
+            <fileset dir="${dir.buildfile}/src/main/resources"/>
             <zipfileset excludes="META-INF/*.SF" src="${dir.buildfile}/lib/guava-18.0.jar"/>
             <zipfileset excludes="META-INF/*.SF" src="${dir.buildfile}/lib/miglayout-core-4.2.jar"/>
             <zipfileset excludes="META-INF/*.SF" src="${dir.buildfile}/lib/miglayout-swing-4.2.jar"/>

@@ -740,6 +740,16 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 	 * @param colls The collections to flatten
 	 * @return A collection containing all elements of the given collections
 	 */
+	static <E> CollectionDataFlow<?, ?, E> flattenCollections(Class<E> innerType, ObservableCollection<? extends E>... colls) {
+		return flattenCollections(TypeTokens.get().of(innerType), colls);
+	}
+
+	/**
+	 * @param <E> The super type of element in the collections
+	 * @param innerType The type of elements in the result
+	 * @param colls The collections to flatten
+	 * @return A collection containing all elements of the given collections
+	 */
 	static <E> CollectionDataFlow<?, ?, E> flattenCollections(TypeToken<E> innerType, ObservableCollection<? extends E>... colls) {
 		return of(TypeTokens.get().keyFor(ObservableCollection.class).parameterized(innerType), colls).flow().flatMap(innerType,
 			LambdaUtils.printableFn(ObservableCollection::flow, "flow", "flow"));

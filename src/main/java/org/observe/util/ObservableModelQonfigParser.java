@@ -148,7 +148,7 @@ public class ObservableModelQonfigParser {
 		DEFAULT_PARSERS.with(Float.class, simple((t, s) -> (float) Format.parseDouble(s, df)));
 		DEFAULT_PARSERS.with(String.class, simple((t, s) -> s));
 		DEFAULT_PARSERS.with(Duration.class, simple((t, s) -> TimeUtils.parseDuration(s)));
-		DEFAULT_PARSERS.with(Instant.class, simple((t, s) -> TimeUtils.parseFlexFormatTime(s, true, true, null).evaluate(Instant::now)));
+		DEFAULT_PARSERS.with(Instant.class, simple((t, s) -> TimeUtils.parseInstant(s, true, true, null).evaluate(Instant::now)));
 		DEFAULT_PARSERS.with(Enum.class, simple((t, s) -> parseEnum(t, s)));
 	}
 
@@ -1433,7 +1433,7 @@ public class ObservableModelQonfigParser {
 				options = options.with24HourFormat(element.getAttribute(obsTk.getAttribute("instant", "format-24h"), boolean.class));
 				String rteS = element.getAttributeText(obsTk.getAttribute("instant", "relative-eval-type"));
 				try {
-					options = options.withEvaluationType(TimeUtils.RelativeTimeEvaluation.valueOf(rteS));
+					options = options.withEvaluationType(TimeUtils.RelativeInstantEvaluation.valueOf(rteS));
 				} catch (IllegalArgumentException e) {
 					session.withWarning("Unrecognized relative evaluation type: '" + rteS);
 				}
@@ -1612,7 +1612,7 @@ public class ObservableModelQonfigParser {
 		}
 		SettableValue<Instant> selectedBackup = SettableValue.build(Instant.class).build();
 		Format<Instant> PAST_DATE_FORMAT = SpinnerFormat.flexDate(Instant::now, "EEE MMM dd, yyyy",
-			opts -> opts.withMaxResolution(TimeUtils.DateElementType.Second).withEvaluationType(TimeUtils.RelativeTimeEvaluation.Past));
+			opts -> opts.withMaxResolution(TimeUtils.DateElementType.Second).withEvaluationType(TimeUtils.RelativeInstantEvaluation.Past));
 		JFrame[] frame = new JFrame[1];
 		boolean[] backedUp = new boolean[1];
 		ObservableValue<String> title = app.getTitle().apply(msi);

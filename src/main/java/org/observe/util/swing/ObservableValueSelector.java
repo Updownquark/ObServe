@@ -5,7 +5,6 @@ import java.util.List;
 import java.util.function.Function;
 
 import javax.swing.JButton;
-import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTable;
 import javax.swing.event.ListDataEvent;
@@ -13,11 +12,13 @@ import javax.swing.event.ListDataListener;
 import javax.swing.event.ListSelectionListener;
 
 import org.observe.Observable;
+import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSortedSet;
+import org.qommons.StringUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.CollectionElement;
@@ -135,11 +136,11 @@ public class ObservableValueSelector<T, X> extends JPanel {
 	private final JButton theIncludeButton;
 	private final JButton theExcludeButton;
 	private final JButton theExcludeAllButton;
-	private final JLabel theSelectionCountLabel;
 	private ObservableTextField<TableContentControl> theSearchField;
 	private final SimpleObservable<Void> theSelectionChanges;
 
 	private final SettableValue<TableContentControl> theFilterText;
+	private final String theItemName;
 
 	private boolean isIncludedByDefault;
 
@@ -156,6 +157,7 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		theFilterText = SettableValue.build(TableContentControl.class).build().withValue(TableContentControl.DEFAULT, null);
 		theIncludedValues = theSelectableValues.flow().filter(sv -> sv.isIncluded() ? null : "Not Included").unmodifiable()
 			.collectActive(until);
+		theItemName = itemName;
 		isIncludedByDefault = includedByDefault;
 
 		List<Subscription> subs = new LinkedList<>();
@@ -191,7 +193,6 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		theIncludeButton = new JButton(">");
 		theExcludeButton = new JButton("<");
 		theExcludeAllButton = new JButton("<<");
-		theSelectionCountLabel = new JLabel();
 
 		PanelPopulation.populateHPanel(this, getLayout(), until)//
 		.addVPanel(
@@ -214,7 +215,10 @@ public class ObservableValueSelector<T, X> extends JPanel {
 			.fill();
 		})
 		.addVPanel(destPanel -> destPanel//
-			.addComponent(null, theSelectionCountLabel, null)//
+			// Invisible placeholder here to make the available and included tables the same height
+			.addHPanel(null, new JustifiedBoxLayout(false).setShowingInvisible(true), p -> p//
+				.addTextField(null, SettableValue.build(String.class).build(), Format.TEXT,
+					f -> f.visibleWhen(ObservableValue.of(false))))//
 			.addTable(theIncludedValues, destTbl -> {
 				theDestTable = destTbl.getEditor();
 				if (itemName != null)
@@ -500,7 +504,6 @@ public class ObservableValueSelector<T, X> extends JPanel {
 	void checkButtonStates() {
 		int totalCount = theSourceRows.size();
 		int includedCount = theIncludedValues.size();
-		theSelectionCountLabel.setText(includedCount + " of " + totalCount);
 
 		int excluded = totalCount - includedCount;
 		boolean hasSelection = !theSourceTable.getSelectionModel().isSelectionEmpty();
@@ -518,31 +521,35 @@ public class ObservableValueSelector<T, X> extends JPanel {
 				selectedExcluded++;
 		}
 
+		String singItem = theItemName != null ? theItemName : "item";
+		String plurItem = theItemName != null ? StringUtils.pluralize(singItem) : "items";
 		theIncludeAllButton.setEnabled(excluded > 0);
 		if (excluded == 0)
-			theIncludeAllButton.setToolTipText("All items included");
+			theIncludeAllButton.setToolTipText("All " + plurItem + " included");
 		else if (excluded == 0)
-			theIncludeAllButton.setToolTipText("Include 1 item");
+			theIncludeAllButton.setToolTipText("Include 1 " + singItem);
 		else
-			theIncludeAllButton.setToolTipText("Include all " + excluded + " excluded items");
+			theIncludeAllButton.setToolTipText("Include all " + excluded + " excluded " + plurItem);
 
 		theIncludeButton.setEnabled(selectedExcluded > 0);
 		theIncludeButton
-		.setToolTipText(selectedExcluded > 0 ? "Include " + selectedExcluded + " selected item" + (selectedExcluded == 1 ? "" : "s")
-			: (hasSelection ? "All selected items are included" : "No items selected"));
+			.setToolTipText(
+				selectedExcluded > 0 ? "Include " + selectedExcluded + " selected " + (selectedExcluded == 1 ? singItem : plurItem)
+					: (hasSelection ? "All selected " + plurItem + " are included" : "No " + plurItem + " selected"));
 
 		theExcludeButton.setEnabled(selectedIncluded > 0);
 		theExcludeButton
-		.setToolTipText(selectedIncluded > 0 ? "Exclude " + selectedIncluded + " selected item" + (selectedIncluded == 1 ? "" : "s")
-			: (hasSelection ? "No included items selected" : "No items selected"));
+			.setToolTipText(
+				selectedIncluded > 0 ? "Exclude " + selectedIncluded + " selected " + (selectedIncluded == 1 ? singItem : plurItem)
+					: (hasSelection ? "No included " + plurItem + " selected" : "No " + plurItem + " selected"));
 
 		theExcludeAllButton.setEnabled(includedCount > 0);
 		if (includedCount == 0)
-			theExcludeAllButton.setToolTipText("No items included");
+			theExcludeAllButton.setToolTipText("No " + plurItem + " included");
 		else if (includedCount == 0)
-			theExcludeAllButton.setToolTipText("Exclude 1 included item");
+			theExcludeAllButton.setToolTipText("Exclude 1 included " + singItem);
 		else
-			theExcludeAllButton.setToolTipText("Exclude all " + includedCount + " included items");
+			theExcludeAllButton.setToolTipText("Exclude all " + includedCount + " included " + plurItem);
 	}
 
 	public static <T, X> Builder<T, X> build(ObservableCollection<T> sourceRows, //

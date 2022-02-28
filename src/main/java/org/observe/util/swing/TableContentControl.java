@@ -2,11 +2,12 @@ package org.observe.util.swing;
 
 import java.awt.EventQueue;
 import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Calendar;
 import java.util.Collection;
 import java.util.Comparator;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -35,7 +36,7 @@ import org.qommons.Named;
 import org.qommons.StringUtils;
 import org.qommons.TimeUtils;
 import org.qommons.TimeUtils.ParsedDuration;
-import org.qommons.TimeUtils.ParsedTime;
+import org.qommons.TimeUtils.ParsedInstant;
 import org.qommons.io.Format;
 
 import com.google.common.reflect.TypeToken;
@@ -137,6 +138,102 @@ public interface TableContentControl {
 		public String toString() {
 			return String.valueOf(value);
 		}
+	}
+
+	public static <T> int compareColumnRenders(CharSequence col1, CharSequence col2) {
+		// The null and empty comparisons here are switched from typical, under the assumption that if the user is sorting by this column,
+		// they are most likely interested in rows with values in this column
+		if (col1 == null) {
+			if (col2 == null)
+				return 0;
+			return 1;
+		} else if (col2 == null)
+			return -1;
+		else if (col1.length() == 0) {
+			if (col2.length() == 0)
+				return 0;
+			else
+				return 1;
+		} else if (col2.length() == 0)
+			return -1;
+		else if (col1.charAt(0) == '-' && col2.charAt(0) != '-')
+			return -1;
+		else if (col2.charAt(0) == '-' && col1.charAt(0) != '-')
+			return 1;
+		else if (col1.equals(col2))
+			return 0;
+
+		/* A nice idea here, but there's no way to optimize instant parsing enough for this to be responsive.
+		try {
+			ParsedInstant time1 = TimeUtils.parseInstant(col1, false, false, null);
+			if (time1 != null) {
+				ParsedInstant time2 = TimeUtils.parseInstant(col2, false, false, null);
+				if (time2 != null) {
+					int comp = time1.compareTo(time2);
+					if (comp != 0)
+						return comp;
+					else if (time1.toString().length() == col1.length()) {
+						if (time2.toString().length() == col2.length())
+							return 0;
+						else
+							return -1;
+					} else if (time2.toString().length() == col2.length())
+						return 1;
+					else
+						return compareColumnRenders(//
+							StringUtils.cheapSubSequence(col1, time1.toString().length(), col1.length()),
+							StringUtils.cheapSubSequence(col2, time2.toString().length(), col2.length()));
+				}
+			}
+
+		Duration parsing isn't so bad performance-wise, but it's so niche I decided not to include it.
+			TimeUtils.ParsedDuration duration1 = TimeUtils.parseDuration(col1, false, false);
+			if (duration1 != null) {
+				TimeUtils.ParsedDuration duration2 = TimeUtils.parseDuration(col2, false, false);
+				if (duration2 != null) {
+					int comp = duration1.compareTo(duration2);
+					if (comp != 0)
+						return comp;
+					else if (duration1.toString().length() == col1.length()) {
+						if (duration2.toString().length() == col2.length())
+							return 0;
+						else
+							return -1;
+					} else if (duration2.toString().length() == col2.length())
+						return 1;
+					else
+						return compareColumnRenders(//
+							StringUtils.cheapSubSequence(col1, duration1.toString().length(), col1.length()),
+							StringUtils.cheapSubSequence(col2, duration2.toString().length(), col2.length()));
+				}
+			}
+		} catch (ParseException e) {
+			System.err.println("Should not get here!");
+			e.printStackTrace();
+		}*/
+
+		FoundDouble double1 = tryParseDouble(col1, 0);
+		if (double1 != null) {
+			FoundDouble double2 = tryParseDouble(col2, 0);
+			if (double2 != null) {
+				int comp = Double.compare(double1.minValue, double2.minValue);
+				if (comp != 0)
+					return comp;
+				else if (double1.toString().length() == col1.length()) {
+					if (double2.toString().length() == col2.length())
+						return 0;
+					else
+						return -1;
+				} else if (double2.toString().length() == col2.length())
+					return 1;
+				else
+					return compareColumnRenders(//
+						StringUtils.cheapSubSequence(col1, double1.toString().length(), col1.length()),
+						StringUtils.cheapSubSequence(col2, double2.toString().length(), col2.length()));
+			}
+		}
+
+		return StringUtils.compareNumberTolerant(col1, col2, true, true);
 	}
 
 	/**
@@ -294,9 +391,9 @@ public interface TableContentControl {
 				}
 			}
 		}
-		ParsedTime time;
+		ParsedInstant time;
 		try {
-			time = TimeUtils.parseFlexFormatTime(filterText, false, false, null);
+			time = TimeUtils.parseInstant(filterText, false, false, null);
 		} catch (ParseException e) {
 			throw new IllegalStateException(e); // Shouldn't happen
 		}
@@ -304,10 +401,10 @@ public interface TableContentControl {
 			if (time.toString().length() == filterText.length())
 				filters.add(new DateFilter(time));
 			else if (filterText.charAt(time.toString().length()) == '-') {
-				ParsedTime maxTime;
+				ParsedInstant maxTime;
 				int maxStart = time.toString().length() + 1;
 				try {
-					maxTime = TimeUtils.parseFlexFormatTime(filterText.substring(maxStart), true, false, null);
+					maxTime = TimeUtils.parseInstant(filterText.substring(maxStart), true, false, null);
 				} catch (ParseException e) {
 					throw new IllegalStateException(e); // Shouldn't happen
 				}
@@ -1088,9 +1185,9 @@ public interface TableContentControl {
 	}
 
 	public static class DateFilter implements TableContentControl {
-		private final TimeUtils.ParsedTime theTime;
+		private final TimeUtils.ParsedInstant theTime;
 
-		public DateFilter(ParsedTime time) {
+		public DateFilter(ParsedInstant time) {
 			theTime = time;
 		}
 
@@ -1100,9 +1197,9 @@ public interface TableContentControl {
 				return null;
 			SortedMatchSet matches = null;
 			for (int i = 0; i < text.length();) {
-				TimeUtils.ParsedTime time;
+				TimeUtils.ParsedInstant time;
 				try {
-					time = TimeUtils.parseFlexFormatTime(//
+					time = TimeUtils.parseInstant(//
 						text.subSequence(i, text.length()), false, false, null);
 				} catch (ParseException e) {
 					e.printStackTrace();
@@ -1141,10 +1238,10 @@ public interface TableContentControl {
 	}
 
 	public static class DateRangeFilter implements TableContentControl {
-		private final TimeUtils.ParsedTime theMinTime;
-		private final TimeUtils.ParsedTime theMaxTime;
+		private final TimeUtils.ParsedInstant theMinTime;
+		private final TimeUtils.ParsedInstant theMaxTime;
 
-		public DateRangeFilter(ParsedTime minTime, ParsedTime maxTime) {
+		public DateRangeFilter(ParsedInstant minTime, ParsedInstant maxTime) {
 			theMinTime = minTime;
 			theMaxTime = maxTime;
 		}
@@ -1156,9 +1253,9 @@ public interface TableContentControl {
 			SortedMatchSet matches = null;
 			for (int i = 0; i < text.length();) {
 				if (Character.isDigit(text.charAt(i))) {
-					TimeUtils.ParsedTime time;
+					TimeUtils.ParsedInstant time;
 					try {
-						time = TimeUtils.parseFlexFormatTime(text.subSequence(i, text.length()), false, false, null);
+						time = TimeUtils.parseInstant(text.subSequence(i, text.length()), false, false, null);
 					} catch (ParseException e) {
 						throw new IllegalStateException();
 					}
@@ -1674,15 +1771,17 @@ public interface TableContentControl {
 			})//
 				.formatText(v -> v == null ? "" : v).withMutation(mut -> {
 					mut.mutateAttribute((map, v) -> map.put("D", v)).asText(Format.TEXT).withRowUpdate(true);
-				}).withWidths(50, 100, 150));
+				}).withWidths(50, 150, 550));
 			columns.add(new CategoryRenderStrategy<Map<String, String>, String>("D", TypeTokens.get().STRING, map -> {
 				return map.get("D");
 			})//
 				.formatText(v -> v == null ? "" : v).withMutation(mut -> {
 					mut.mutateAttribute((map, v) -> map.put("A", v)).asText(Format.TEXT).withRowUpdate(true);
 				}).withWidths(50, 100, 150));
+			SimpleDateFormat dateFormat = new SimpleDateFormat("EEE MMM dd, yyyy HH:mm:ss");
+			Calendar cal = Calendar.getInstance();
 			Random random = new Random();
-			int rowCount = 50_000;
+			int rowCount = 10_000;
 			int lastPct = 0;
 			for (int i = 0; i < rowCount; i++) {
 				int pct = i * 100 / rowCount;
@@ -1696,36 +1795,49 @@ public interface TableContentControl {
 				}
 				long r = random.nextLong();
 				Map<String, String> row = new HashMap<>();
-				row.put("A", "" + r);
-				row.put("B", Long.toHexString(r));
-				row.put("C", new Date(r).toString());
-				char[] chs = new char[9];
-				int mask = 0x7f;
-				for (int j = 0; j < chs.length; j++) {
-					chs[chs.length - j - 1] = (char) (r & mask);
-					if (chs[chs.length - j - 1] < ' ')
-						chs[chs.length - j - 1] = ' ';
-					r >>>= 7;
+				if (random.nextDouble() < 0.99)
+					row.put("A", "" + r);
+				if (random.nextDouble() < 0.99)
+					row.put("B", Long.toHexString(r));
+				if (random.nextDouble() < 0.99) {
+					cal.setTimeInMillis(r);
+					int year = cal.get(Calendar.YEAR);
+					if (year > 99999999)
+						year = year % 100000000;
+					if (year < 1000)
+						year += 1000;
+					cal.set(Calendar.YEAR, year);
+					row.put("C", dateFormat.format(cal.getTime()));
 				}
-				row.put("D", new String(chs));
+				if (random.nextDouble() < 0.99) {
+					char[] chs = new char[9];
+					int mask = 0x7f;
+					for (int j = 0; j < chs.length; j++) {
+						chs[chs.length - j - 1] = (char) (r & mask);
+						if (chs[chs.length - j - 1] < ' ')
+							chs[chs.length - j - 1] = ' ';
+						r >>>= 7;
+					}
+					row.put("D", new String(chs));
+				}
 				rows.add(row);
 			}
 			System.out.println();
-			JFrame frame = ObservableSwingUtils.buildUI()//
-				.systemLandF()//
-				.withTitle(TableContentControl.class.getSimpleName() + " Tester")//
-				.withSize(640, 900)//
-				.withCloseAction(JFrame.EXIT_ON_CLOSE)//
-				.withVContent(p -> p.fill().fillV()//
-					// .addTextField("Categories:", categories, new Format.ListFormat<>(Format.TEXT, ",", null), f -> f.fill())//
-					.<TableContentControl> addTextField("Filter", control, FORMAT, tf -> configureSearchField(tf.fill(), true))//
-					.addTable(rows, table -> {
-						table.fill().fillV().withCountTitle("displayed").withItemName("row").fill().withFiltering(control)
-						.withColumns(columns)//
-						.withAdd(() -> new HashMap<>(), null)//
-						;
-					})//
-					).run(null).getWindow();
+			ObservableSwingUtils.buildUI()//
+			.systemLandF()//
+			.withTitle(TableContentControl.class.getSimpleName() + " Tester")//
+			.withSize(640, 900)//
+			.withCloseAction(JFrame.EXIT_ON_CLOSE)//
+			.withVContent(p -> p.fill().fillV()//
+				// .addTextField("Categories:", categories, new Format.ListFormat<>(Format.TEXT, ",", null), f -> f.fill())//
+				.<TableContentControl> addTextField("Filter", control, FORMAT, tf -> configureSearchField(tf.fill(), true))//
+				.addTable(rows, table -> {
+					table.fill().fillV().withCountTitle("displayed").withItemName("row").fill().withFiltering(control)
+					.withColumns(columns)//
+					.withAdd(() -> new HashMap<>(), null)//
+					;
+				})//
+				).run(null);
 		});
 	}
 }

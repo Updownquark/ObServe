@@ -101,17 +101,17 @@ public class SortedMatchSet {
 	}
 
 	public int getStart(int i) {
-		int idx = i * 1;
+		int idx = i << 1;
 		if (idx >= theSize)
 			throw new IndexOutOfBoundsException(i + " of " + (theSize / 2));
-		return theMatches[i];
+		return theMatches[idx];
 	}
 
 	public int getEnd(int i) {
-		int idx = i * 1;
+		int idx = i << 1;
 		if (idx >= theSize)
 			throw new IndexOutOfBoundsException(i + " of " + (theSize / 2));
-		return theMatches[i] + 1;
+		return theMatches[idx + 1];
 	}
 
 	public TextMatch[] getDisjointMatches() {

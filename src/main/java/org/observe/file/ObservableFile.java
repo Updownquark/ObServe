@@ -182,6 +182,11 @@ public class ObservableFile implements BetterFile {
 	}
 
 	@Override
+	public String getCheckSum(CheckSumType type, BooleanSupplier canceled) throws IOException {
+		return theFile.getCheckSum(type, canceled);
+	}
+
+	@Override
 	public ObservableFile getRoot() {
 		ObservableFile f = this;
 		BetterFile p = theFile.getParent();

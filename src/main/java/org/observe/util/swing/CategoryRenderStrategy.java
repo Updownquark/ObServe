@@ -12,6 +12,7 @@ import java.util.function.Supplier;
 import org.observe.Observable;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
+import org.observe.util.swing.TableContentControl.ValueRenderer;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.io.Format;
 
@@ -23,7 +24,7 @@ import com.google.common.reflect.TypeToken;
  * @param <R> The type of the table row values
  * @param <C> The type of the column value
  */
-public class CategoryRenderStrategy<R, C> {
+public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 	public class CategoryMutationStrategy {
 		private BiPredicate<? super R, ? super C> theEditability;
 		private BiFunction<? super R, ? super C, ? extends C> theAttributeMutator;
@@ -367,6 +368,7 @@ public class CategoryRenderStrategy<R, C> {
 		return column == null ? "" : column.toString();
 	}
 
+	@Override
 	public String getName() {
 		return theName;
 	}
@@ -575,6 +577,50 @@ public class CategoryRenderStrategy<R, C> {
 
 	public AddRowRenderer getAddRow() {
 		return theAddRow;
+	}
+
+	@Override
+	public boolean searchGeneral() {
+		return isFilterable();
+	}
+
+	@Override
+	public CharSequence render(R row) {
+		return print(row);
+	}
+
+	private boolean compareComparable = true;
+
+	@Override
+	public int compare(R row1, R row2) {
+		C val1 = getCategoryValue(row1);
+		C val2 = getCategoryValue(row2);
+		// First try to find ways to compare the column values
+		// The null and empty comparisons here are switched from typical, under the assumption that if the user is sorting by this column,
+		// they are most likely interested in rows with values in this column
+		if (val1 == null) {
+			if (val2 == null)
+				return 0;
+			else
+				return 1;
+		} else if (val2 == null)
+			return -1;
+		else if (val1.equals(val2))
+			return 0;
+		else if (val1 instanceof CharSequence && val2 instanceof CharSequence) {
+			return TableContentControl.compareColumnRenders((CharSequence) val1, (CharSequence) val2);
+		} else if (compareComparable && val1 instanceof Comparable && val2 instanceof Comparable) {
+			try {
+				return ((Comparable<Object>) val1).compareTo(val2);
+			} catch (ClassCastException e) {
+				// If this fails once, don't try it again--mixed comparables
+				compareComparable = false;
+			}
+		}
+		// If that didn't work, then compare the formatted text
+		String render1 = print(() -> row1, val1);
+		String render2 = print(() -> row2, val2);
+		return TableContentControl.compareColumnRenders(render1, render2);
 	}
 
 	@Override

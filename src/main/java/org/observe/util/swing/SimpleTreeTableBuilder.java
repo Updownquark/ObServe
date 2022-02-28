@@ -545,7 +545,7 @@ implements TreeTableEditor<F, P> {
 				TreePath path = rowIndex < 0 ? new TreePath(new Object[] { theRoot.get() }) : theTable.getPathForRow(rowIndex);
 				F target = (F) path.getLastPathComponent();
 				F parent;
-				ObservableCollection<? extends F> children;
+				ObservableCollection<F> children;
 				ElementId targetRow;
 				if (path.getPathCount() == 1) {
 					parent = null;
@@ -553,10 +553,9 @@ implements TreeTableEditor<F, P> {
 					targetRow = null;
 				} else {
 					parent = (F) path.getPathComponent(path.getPathCount() - 2);
-					children = theChildren.apply(parent);
-					int parentRow = theTable.getRowForPath(path.getParentPath());
+					children = (ObservableCollection<F>) theChildren.apply(parent);
 					try {
-						targetRow = children.getElement(rowIndex - parentRow - 1).getElementId();
+						targetRow = children.getElement((F) path.getLastPathComponent(), true).getElementId();
 					} catch (IndexOutOfBoundsException e) {
 						return false; // Out-of-sync
 					}
@@ -724,7 +723,7 @@ implements TreeTableEditor<F, P> {
 				TreePath path = rowIndex < 0 ? new TreePath(new Object[] { theRoot.get() }) : theTable.getPathForRow(rowIndex);
 				F target = (F) path.getLastPathComponent();
 				F parent;
-				ObservableCollection<? extends F> children;
+				ObservableCollection<F> children;
 				ElementId targetRow;
 				if (path.getPathCount() == 1) {
 					parent = null;
@@ -732,10 +731,9 @@ implements TreeTableEditor<F, P> {
 					targetRow = null;
 				} else {
 					parent = (F) path.getPathComponent(path.getPathCount() - 2);
-					children = theChildren.apply(parent);
-					int parentRow = theTable.getRowForPath(path.getParentPath());
+					children = (ObservableCollection<F>) theChildren.apply(parent);
 					try {
-						targetRow = children.getElement(rowIndex - parentRow - 1).getElementId();
+						targetRow = children.getElement((F) path.getLastPathComponent(), true).getElementId();
 					} catch (IndexOutOfBoundsException e) {
 						return false; // Out-of-sync
 					}

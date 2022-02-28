@@ -435,7 +435,7 @@ public class AppPopulation {
 			}
 			SettableValue<Instant> selectedBackup = SettableValue.build(Instant.class).build();
 			Format<Instant> PAST_DATE_FORMAT = SpinnerFormat.flexDate(Instant::now, "EEE MMM dd, yyyy",
-				opts -> opts.withMaxResolution(TimeUtils.DateElementType.Second).withEvaluationType(TimeUtils.RelativeTimeEvaluation.Past));
+				opts -> opts.withMaxResolution(TimeUtils.DateElementType.Second).withEvaluationType(TimeUtils.RelativeInstantEvaluation.Past));
 			JFrame[] frame = new JFrame[1];
 			boolean[] backedUp = new boolean[1];
 			frame[0] = WindowPopulation.populateWindow(null, null, false, false)//

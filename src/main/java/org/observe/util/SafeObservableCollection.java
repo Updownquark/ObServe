@@ -111,7 +111,8 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	private final List<ElementRef<E>> theChangedElements;
 	private final QommonsTimer.TaskHandle thePeriodicFlushTask;
 	private final CausableKey theFlushKey;
-	private final AtomicBoolean isFlushing;
+	private final AtomicBoolean theFlushLock;
+	private boolean isFlushing;
 	private long theStamp;
 
 
@@ -157,7 +158,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 			else
 				threadConstraint.invoke(this::doFlush);
 		});
-		isFlushing = new AtomicBoolean();
+		theFlushLock = new AtomicBoolean();
 		theAddedElements = new HashSet<>();
 		theRemovedElements = new ArrayList<>();
 		theChangedElements = new ArrayList<>();
@@ -222,7 +223,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	 *        in the source upon creation of the safe collection)
 	 */
 	protected void handleEvent(ObservableCollectionEvent<? extends E> evt, boolean initial) {
-		if (!isFlushing.compareAndSet(false, true)) {
+		if (!theFlushLock.compareAndSet(false, true)) {
 			if (isOnEventThread())
 				throw new ReentrantNotificationException(REENTRANT_EVENT_ERROR);
 			do {
@@ -230,12 +231,12 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 					Thread.sleep(5);
 				} catch (InterruptedException e) {
 				}
-			} while (!isFlushing.compareAndSet(false, true));
+			} while (!theFlushLock.compareAndSet(false, true));
 		}
 		try {
 			doHandleEvent(evt);
 		} finally {
-			isFlushing.set(false);
+			theFlushLock.set(false);
 		}
 		evt.getRootCausable().onFinish(theFlushKey);
 		scheduleFlush();
@@ -285,12 +286,15 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	 * @return Whether anything was flushed, or also if the state of changes prevented flushing from occurring (should try again)
 	 */
 	protected boolean doFlush() {
-		while (!isFlushing.compareAndSet(false, true)) {
+		while (!theFlushLock.compareAndSet(false, true)) {
+			if (isFlushing)
+				return false;
 			try {
 				Thread.sleep(5);
 			} catch (InterruptedException e) {
 			}
 		}
+		isFlushing = true;
 		boolean flushed = false;
 		try {
 			// First, the removals
@@ -330,7 +334,8 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 			}
 			theStamp = theCollection.getStamp();
 		} finally {
-			isFlushing.set(false);
+			isFlushing = false;
+			theFlushLock.set(false);
 		}
 		return flushed;
 	}
@@ -342,7 +347,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 		while (node != null) {
 			ElementRef<E> el = node.get();
 			int comp;
-			if (!el.sourceId.isPresent()) {
+			if (el.isRemoved) {
 				if (el.thePreviousPresentElement != null) {
 					comp = sourceId.compareTo(el.thePreviousPresentElement.sourceId);
 					if (comp == 0)

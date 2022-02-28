@@ -55,7 +55,6 @@ import org.observe.util.swing.PanelPopulation.SimpleDataAction;
 import org.observe.util.swing.PanelPopulation.SimpleHPanel;
 import org.observe.util.swing.PanelPopulation.TableBuilder;
 import org.observe.util.swing.TableContentControl.FilteredValue;
-import org.observe.util.swing.TableContentControl.ValueRenderer;
 import org.qommons.ArrayUtils;
 import org.qommons.IntList;
 import org.qommons.LambdaUtils;
@@ -504,46 +503,8 @@ implements TableBuilder<R, P> {
 				theColumns.safe(ThreadConstraint.EDT, until), theFilter, until);
 			columns = fColumns;
 			Observable<?> columnChanges = Observable.or(Observable.constant(null), fColumns.simpleChanges());
-			List<ValueRenderer<R>> renderers = new ArrayList<>();
-			columnChanges.act(__ -> {
-				renderers.clear();
-				for (CategoryRenderStrategy<? super R, ?> column : fColumns) {
-					renderers.add(new TableContentControl.ValueRenderer<R>() {
-						@Override
-						public String getName() {
-							return column.getName();
-						}
-
-						@Override
-						public boolean searchGeneral() {
-							return column.isFilterable();
-						}
-
-						@Override
-						public CharSequence render(R row) {
-							return column.print(row);
-						}
-
-						@Override
-						public int compare(R o1, R o2) {
-							Object c1 = column.getCategoryValue(o1);
-							Object c2 = column.getCategoryValue(o2);
-							if (c1 instanceof String && c2 instanceof String)
-								return StringUtils.compareNumberTolerant((String) c1, (String) c2, true, true);
-							else if (c1 instanceof Comparable && c2 instanceof Comparable) {
-								try {
-									return ((Comparable<Object>) c1).compareTo(c2);
-								} catch (ClassCastException e) {
-									// Ignore
-								}
-							}
-							return 0;
-						}
-					});
-				}
-			});
 			ObservableCollection<TableContentControl.FilteredValue<R>> rawFiltered = TableContentControl.applyRowControl(theRows,
-				() -> renderers, theFilter.refresh(columnChanges), until);
+				() -> columns, theFilter.refresh(columnChanges), until);
 			filtered = rawFiltered.safe(ThreadConstraint.EDT, until);
 			theFilteredRows = filtered.flow()
 				.transform(theRows.getType(),
