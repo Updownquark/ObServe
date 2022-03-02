@@ -181,7 +181,8 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 			} else if (theAttributeMutator != null)
 				theAttributeMutator.apply(oldRow, categoryValue);
 
-			if (newRow != oldRow || updateRowIfUnchanged)
+			if (newRow != oldRow || updateRowIfUnchanged //
+				&& rowElement.isAcceptable(newRow) == null) // Don't break if update is not supported
 				rowElement.set(newRow);
 		}
 

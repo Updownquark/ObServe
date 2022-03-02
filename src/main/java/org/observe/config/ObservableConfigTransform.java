@@ -781,7 +781,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 
 			@Override
 			public ThreadConstraint getThreadConstraint() {
-				return OCBCCollection.this.getThreadConstraint();
+				return ObservableConfigBackedCollection.this.getThreadConstraint();
 			}
 
 			@Override

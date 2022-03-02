@@ -36,6 +36,7 @@ import org.qommons.Transaction;
 import org.qommons.TriFunction;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
+import org.qommons.collect.ReentrantNotificationException;
 
 /**
  * A combo box model backed by an {@link ObservableCollection}
@@ -301,7 +302,11 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 							setSelected.accept(change.index);
 							if (selected.isAcceptable(change.newValue) == null) {
 								currentSelected[0] = change.newValue;
-								selected.set(change.newValue, evt);
+								try {
+									selected.set(change.newValue, evt);
+								} catch (ReentrantNotificationException e) {
+									// Have issues where the architecture doesn't have the capability to detect this reentrant situation
+								}
 							}
 						} finally {
 							callbackLock[0] = false;
