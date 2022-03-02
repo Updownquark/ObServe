@@ -221,6 +221,8 @@ public class AppPopulation {
 					first[0] = false;
 				} else
 					theAboutDialog.getWindow().setVisible(true);
+				theAboutDialog.getWindow().setSize(600, 400);
+				theAboutDialog.getWindow().setLocationRelativeTo(getWindow());
 			}, null)));
 			return this;
 		}
@@ -503,6 +505,7 @@ public class AppPopulation {
 						theLatestRelease = theLatestReleaseGetter.get();
 					else
 						theLatestRelease = null;
+					getWindow().setSize(600, 400);
 				});
 				theLatestVersionValue = ObservableValue.of(TypeTokens.get().of(Version.class), () -> theLatestRelease, //
 					() -> 1, // Hopefully nobody asks for the stamp
@@ -517,13 +520,13 @@ public class AppPopulation {
 				withVContent(content -> {
 					content.addLabel("Current Version:", theCurrentVersion.map(String.class, v -> (v == null ? "Unknown" : v)), Format.TEXT,
 						label -> label.visibleWhen(theCurrentVersion.map(v -> v != null)));
-					content.addVPanel(lvp -> lvp.fill().visibleWhen(theLatestVersionValue.map(v -> v != null))
+					content.addVPanel(lvp -> lvp.fill().fillV().visibleWhen(theLatestVersionValue.map(v -> v != null))
 						.decorate(deco -> deco.withTitledBorder("Latest Version", Color.black))//
 						.addLabel(null, theLatestVersionValue.map(v -> v == null ? "" : v.name), Format.TEXT, label -> label.fill())//
 						.addLabel(null, theLatestVersionValue.map(v -> v == null ? "" : v.title), Format.TEXT, label -> label.fill())//
 						.addTextArea(null,
-							SettableValue.asSettable(theLatestVersionValue.map(v -> v == null ? "" : wrap(v.description)), d -> null),
-							Format.TEXT, label -> label.fill().fillV().modifyEditor(ed -> ed.asHtml(true).setEditable(false)))//
+							SettableValue.asSettable(theLatestVersionValue.map(v -> v == null ? "" : v.description), d -> null),
+							Format.TEXT, label -> label.fill().fillV().modifyEditor(ed -> ed.setEditable(false)))//
 						.addButton("Upgrade", __ -> {
 							theUpgrader.get().accept(theLatestRelease);
 						}, btn -> btn.visibleWhen(theUpgrader
