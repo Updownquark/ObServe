@@ -167,9 +167,9 @@ public class DefaultExpressoParser implements ExpressoParser {
 			} else if (expression.getText().startsWith("0b")) {
 				radix = 2;
 				text = text.substring(1);
-			} else if (expression.getText().startsWith("0")) {
+			} else if (expression.getText().length() > 1 && expression.getText().startsWith("0")) {
 				radix = 8;
-				text = text.substring(2);
+				text = text.substring(1);
 			} else
 				radix = 10;
 			if (isLong)
@@ -1732,6 +1732,27 @@ public class DefaultExpressoParser implements ExpressoParser {
 				return theMethod.invoke(ctx, args);
 			}
 
+			protected <X> SettableValue<X> syntheticResultValue(TypeToken<X> type, SettableValue<?> ctxV, SettableValue<?>[] argVs,
+				Observable<?> changes) {
+				return SettableValue.asSettable(//
+					ObservableValue.of(type, () -> {
+						try {
+							return (X) invoke(ctxV, argVs);
+						} catch (Throwable e) {
+							e.printStackTrace();
+							return null;
+						}
+					}, () -> {
+						long stamp = ctxV == null ? 0 : ctxV.getStamp();
+						for (SettableValue<?> argV : argVs) {
+							if (argV != null)
+								stamp = Long.rotateLeft(stamp, 13) ^ argV.getStamp();
+						}
+						return stamp;
+					}, changes, () -> this).cached(), //
+					__ -> "Methods are not reversible");
+			}
+
 			@Override
 			public String toString() {
 				StringBuilder str = new StringBuilder();
@@ -1784,15 +1805,7 @@ public class DefaultExpressoParser implements ExpressoParser {
 
 			@Override
 			protected SettableValue<T> createModelValue(SettableValue<?> ctxV, SettableValue<?>[] argVs, Observable<Object> changes) {
-				CachingSupplier<T> supplier = new CachingSupplier<T>() {
-					@Override
-					protected T compute() throws IllegalAccessException, IllegalArgumentException, InvocationTargetException {
-						return invoke(ctxV, argVs);
-					}
-				};
-				return SettableValue.asSettable(//
-					ObservableValue.of(getType().getValueType(), supplier, supplier::getStamp, changes), //
-					__ -> "Methods are not reversible");
+				return syntheticResultValue(getType().getValueType(), ctxV, argVs, changes);
 			}
 		}
 
@@ -1804,62 +1817,25 @@ public class DefaultExpressoParser implements ExpressoParser {
 
 			@Override
 			protected MV createModelValue(SettableValue<?> ctxV, SettableValue<?>[] argVs, Observable<Object> changes) {
-				CachingSupplier<MV> supplier = new CachingSupplier<MV>() {
-					@Override
-					protected MV compute() throws IllegalAccessException, IllegalArgumentException, InvocationTargetException {
-						return invoke(ctxV, argVs);
-					}
-				};
 				if (getType().getModelType() == ModelTypes.Collection) {
-					ObservableValue<ObservableCollection<?>> value = ObservableValue.of(
-						TypeTokens.get().keyFor(ObservableCollection.class).parameterized(getType().getType(0)),
-						() -> (ObservableCollection<?>) supplier.get(), supplier::getStamp, changes);
+					ObservableValue<ObservableCollection<?>> value = syntheticResultValue(//
+						TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<?>> parameterized(getType().getType(0)),
+						ctxV, argVs, changes);
 					return (MV) ObservableCollection.flattenValue(value);
 				} else if (getType().getModelType() == ModelTypes.Set) {
-					ObservableValue<ObservableSet<?>> value = ObservableValue.of(
-						TypeTokens.get().keyFor(ObservableSet.class).parameterized(getType().getType(0)),
-						() -> (ObservableSet<?>) supplier.get(), supplier::getStamp, changes);
+					ObservableValue<ObservableSet<?>> value = syntheticResultValue(
+						TypeTokens.get().keyFor(ObservableSet.class).<ObservableSet<?>> parameterized(getType().getType(0)), ctxV, argVs,
+						changes);
 					return (MV) ObservableSet.flattenValue(value);
 				} else {
 					try {
-						return supplier.compute();
+						return invoke(ctxV, argVs);
 					} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
 						e.printStackTrace();
 						return (MV) ObservableCollection.of(getType().getType(0));
 					}
 				}
 			}
-		}
-
-		private static abstract class CachingSupplier<T> implements Supplier<T> {
-			private T theValue;
-			private boolean isDirty = true;
-			private long theStamp;
-
-			void dirty() {
-				isDirty = true;
-				theStamp++;
-			}
-
-			long getStamp() {
-				return theStamp;
-			}
-
-			@Override
-			public T get() {
-				if (isDirty) {
-					isDirty = false;
-					try {
-						theValue = compute();
-					} catch (Throwable e) {
-						e.printStackTrace();
-						theValue = null;
-					}
-				}
-				return theValue;
-			}
-
-			protected abstract T compute() throws IllegalAccessException, IllegalArgumentException, InvocationTargetException;
 		}
 	}
 

@@ -13,7 +13,7 @@ public interface CellDecorator<R, C> {
 		return (cell, deco) -> decorator.accept(deco);
 	}
 
-	void decorate(ModelCell<R, C> cell, ComponentDecorator decorator);
+	void decorate(ModelCell<? extends R, ? extends C> cell, ComponentDecorator decorator);
 
 	default CellDecorator<R, C> modify(CellDecorator<R, C> other) {
 		return (cell, decorator) -> {

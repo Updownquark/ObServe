@@ -37,7 +37,7 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 
 	ObservableCellRenderer<M, C> decorate(CellDecorator<M, C> decorator);
 
-	Component getCellRendererComponent(Component parent, ModelCell<M, C> cell, CellRenderContext ctx);
+	Component getCellRendererComponent(Component parent, ModelCell<? extends M, ? extends C> cell, CellRenderContext ctx);
 
 	@Override
 	default Component getListCellRendererComponent(JList<? extends C> list, C value, int index, boolean isSelected, boolean cellHasFocus) {
@@ -62,7 +62,7 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 			}
 
 			@Override
-			public Component getCellRendererComponent(Component parent, ModelCell<M, C> cell, CellRenderContext ctx) {
+			public Component getCellRendererComponent(Component parent, ModelCell<? extends M, ? extends C> cell, CellRenderContext ctx) {
 				Component rendered = renderer.getTableCellRendererComponent(parent instanceof JTable ? (JTable) parent : null,
 					cell.getCellValue(), cell.isSelected(), cell.hasFocus(), cell.getRowIndex(), cell.getColumnIndex());
 				rendered = tryEmphasize(rendered, ctx);
@@ -89,7 +89,7 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 			}
 
 			@Override
-			public Component getCellRendererComponent(Component parent, ModelCell<M, C> cell, CellRenderContext ctx) {
+			public Component getCellRendererComponent(Component parent, ModelCell<? extends M, ? extends C> cell, CellRenderContext ctx) {
 				Component rendered = renderer.getTreeCellRendererComponent(parent instanceof JTree ? (JTree) parent : null,
 					cell.getCellValue(), cell.isSelected(), cell.isExpanded(), cell.isLeaf(), cell.getRowIndex(), cell.hasFocus());
 				rendered = tryEmphasize(rendered, ctx);
@@ -138,12 +138,12 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 		}
 
 		@Override
-		public Component getCellRendererComponent(Component parent, ModelCell<M, C> cell, CellRenderContext ctx) {
+		public Component getCellRendererComponent(Component parent, ModelCell<? extends M, ? extends C> cell, CellRenderContext ctx) {
 			render(theComponent, parent, cell, ctx);
 			return theComponent;
 		}
 
-		protected abstract void render(R component, Component parent, ModelCell<M, C> cell, CellRenderContext ctx);
+		protected abstract void render(R component, Component parent, ModelCell<? extends M, ? extends C> cell, CellRenderContext ctx);
 	}
 
 	public static class DefaultObservableCellRenderer<M, C> implements ObservableCellRenderer<M, C> {
@@ -167,12 +167,13 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 		}
 
 		@Override
-		public Component getCellRendererComponent(Component parent, ModelCell<M, C> cell, CellRenderContext ctx) {
+		public Component getCellRendererComponent(Component parent, ModelCell<? extends M, ? extends C> cell, CellRenderContext ctx) {
 			if (theRevert != null) {
 				theRevert.run();
 				theRevert = null;
 			}
-			String rendered = renderAsText(cell::getModelValue, cell.getCellValue());
+			String rendered = renderAsText(//
+				cell::getModelValue, cell.getCellValue());
 			rendered = tryEmphasize(rendered, ctx);
 			Component c;
 			if (parent instanceof JTable) {
@@ -256,7 +257,7 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 		}
 
 		@Override
-		public Component getCellRendererComponent(Component parent, ModelCell<M, C> cell, CellRenderContext ctx) {
+		public Component getCellRendererComponent(Component parent, ModelCell<? extends M, ? extends C> cell, CellRenderContext ctx) {
 			if (theRevert != null) {
 				theRevert.run();
 				theRevert = null;
@@ -301,7 +302,7 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 		}
 
 		@Override
-		public Component getCellRendererComponent(Component parent, ModelCell<M, C> cell, CellRenderContext ctx) {
+		public Component getCellRendererComponent(Component parent, ModelCell<? extends M, ? extends C> cell, CellRenderContext ctx) {
 			if (theRevert != null) {
 				theRevert.run();
 				theRevert = null;
@@ -330,6 +331,11 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 			public String renderAsText(Supplier<? extends M> modelValue, C columnValue) {
 				return format.apply(modelValue.get(), columnValue);
 			}
+
+			@Override
+			public String toString() {
+				return format.toString();
+			}
 		}
 		return new BiFormattedCellRenderer();
 	}
@@ -343,6 +349,11 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 			@Override
 			public String renderAsText(Supplier<? extends M> modelValue, C columnValue) {
 				return format.apply(columnValue);
+			}
+
+			@Override
+			public String toString() {
+				return format.toString();
 			}
 		}
 		return new BiFormattedCellRenderer();

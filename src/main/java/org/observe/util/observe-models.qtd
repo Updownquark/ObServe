@@ -1,11 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <qonfig-def name="observe" root="models">
-	<patterns>
+	<value-types>
 		<pattern name="int">\d+</pattern> <!-- Positive integer -->
 		<pattern name="float">[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?</pattern>
 		<pattern name="variable">^[a-zA-Z_$][a-zA-Z_$0-9]*</pattern>
-	</patterns>
+
+		<external name="expression" />
+		<external name="expression-or-string" />
+	</value-types>
 
 	<add-ons>
 		<add-on name="map-model-value" requires="abst-model-value">

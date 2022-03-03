@@ -216,7 +216,9 @@ public interface ObservableExpression {
 				return ObservableModelSet.container(LambdaUtils.constantFn(value, theExpression.getText(), null),
 					(ModelInstanceType<M, MV>) ModelTypes.Value.forType(theValue.getClass()));
 			} else if (TypeTokens.get().isAssignable(type.getType(0), TypeTokens.get().of(theValue.getClass()))) {
-				MV value = (MV) createValue(type.getType(0), TypeTokens.get().cast(type.getType(0), theValue));
+				TypeTokens.TypeConverter<T, Object> convert = TypeTokens.get().getCast(TypeTokens.get().of((Class<T>) theValue.getClass()),
+					(TypeToken<Object>) type.getType(0));
+				MV value = (MV) createValue(type.getType(0), convert.apply(theValue));
 				return ObservableModelSet.container(LambdaUtils.constantFn(value, theExpression.getText(), null),
 					(ModelInstanceType<M, MV>) ModelTypes.Value.forType(theValue.getClass()));
 			} else

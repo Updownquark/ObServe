@@ -41,11 +41,11 @@ import com.google.common.reflect.TypeToken;
  */
 public class ObservableTableModel<R> implements TableModel {
 	private final ObservableCollection<R> theRows;
-	private final ObservableCollection<? extends CategoryRenderStrategy<? super R, ?>> theColumns;
+	private final ObservableCollection<? extends CategoryRenderStrategy<R, ?>> theColumns;
 
 	// No aspect of a table model may only change except the EDT. We'll delegate to ObservableListModel's logic to handle this safely.
 	private final ObservableListModel<R> theRowModel;
-	private final ObservableListModel<? extends CategoryRenderStrategy<? super R, ?>> theColumnModel;
+	private final ObservableListModel<? extends CategoryRenderStrategy<R, ?>> theColumnModel;
 	private final ListDataListener theRowModelListener;
 
 	private final List<TableModelListener> theListeners;
@@ -60,18 +60,19 @@ public class ObservableTableModel<R> implements TableModel {
 		this(rows, makeColumns(colNames, columns));
 	}
 
-	private static <R> ObservableCollection<? extends CategoryRenderStrategy<? super R, ?>> makeColumns(String[] colNames,
+	private static <R> ObservableCollection<? extends CategoryRenderStrategy<R, ?>> makeColumns(String[] colNames,
 		Function<? super R, ?>[] columnAccessors) {
 		if (colNames.length != columnAccessors.length) {
 			throw new IllegalArgumentException(
 				"Column names and columns do not have the same lengths (" + colNames.length + " and " + columnAccessors.length + ")");
 		}
-		CategoryRenderStrategy<? super R, ?>[] columns = new CategoryRenderStrategy[colNames.length];
+		CategoryRenderStrategy<R, ?>[] columns = new CategoryRenderStrategy[colNames.length];
 		for (int i = 0; i < columns.length; i++) {
 			columns[i] = new CategoryRenderStrategy<>(colNames[i], (TypeToken<Object>) detectColumnClass(columnAccessors[i]),
 				columnAccessors[i]);
 		}
-		return ObservableCollection.of(new TypeToken<CategoryRenderStrategy<? super R, ?>>() {}, columns);
+		return ObservableCollection.of(new TypeToken<CategoryRenderStrategy<R, ?>>() {
+		}, columns);
 	}
 
 	private static TypeToken<?> detectColumnClass(Function<?, ?> accessor) {
@@ -85,7 +86,7 @@ public class ObservableTableModel<R> implements TableModel {
 	 * @param columns The columns for the table
 	 */
 	public ObservableTableModel(ObservableCollection<R> rows,
-		ObservableCollection<? extends CategoryRenderStrategy<? super R, ?>> columns) {
+		ObservableCollection<? extends CategoryRenderStrategy<R, ?>> columns) {
 		theRows = rows;
 		theColumns = columns;
 
@@ -123,12 +124,12 @@ public class ObservableTableModel<R> implements TableModel {
 	}
 
 	/** @return This table model's columns */
-	public ObservableCollection<? extends CategoryRenderStrategy<? super R, ?>> getColumns() {
+	public ObservableCollection<? extends CategoryRenderStrategy<R, ?>> getColumns() {
 		return theColumns;
 	}
 
 	/** @return This table model's columns, in {@link ListModel} form */
-	public ObservableListModel<? extends CategoryRenderStrategy<? super R, ?>> getColumnModel() {
+	public ObservableListModel<? extends CategoryRenderStrategy<R, ?>> getColumnModel() {
 		return theColumnModel;
 	}
 
@@ -149,7 +150,7 @@ public class ObservableTableModel<R> implements TableModel {
 	 * @param index The index of the row to get
 	 * @return The column definition at the given index
 	 */
-	public CategoryRenderStrategy<? super R, ?> getColumn(int index) {
+	public CategoryRenderStrategy<R, ?> getColumn(int index) {
 		return theColumnModel.getElementAt(index);
 	}
 
@@ -249,7 +250,7 @@ public class ObservableTableModel<R> implements TableModel {
 		LinkedList<Subscription> subs = new LinkedList<>();
 		try (Transaction rowT = model.getRows().lock(false, null); Transaction colT = model.getColumns().lock(false, null)) {
 			for (int c = 0; c < model.getColumnCount(); c++) {
-				CategoryRenderStrategy<? super R, ?> column = model.getColumn(c);
+				CategoryRenderStrategy<R, ?> column = model.getColumn(c);
 				TableColumn tblColumn = table.getColumnModel().getColumn(c);
 				hookUp(table, tblColumn, column, model, ctx);
 			}
@@ -272,7 +273,7 @@ public class ObservableTableModel<R> implements TableModel {
 					}
 					for (int i = e.getIndex0(); i <= e.getIndex1(); i++) {
 						TableColumn column = new TableColumn(i);
-						CategoryRenderStrategy<? super R, ?> category = model.getColumnModel().getElementAt(i);
+						CategoryRenderStrategy<R, ?> category = model.getColumnModel().getElementAt(i);
 						hookUp(table, column, category, model, ctx);
 						table.getColumnModel().addColumn(column);
 					}
@@ -300,175 +301,52 @@ public class ObservableTableModel<R> implements TableModel {
 				@Override
 				public void contentsChanged(ListDataEvent e) {
 					for (int i = e.getIndex0(); i <= e.getIndex1(); i++)
-						hookUp(table, table.getColumnModel().getColumn(i), model.theColumnModel.getElementAt(i), model, ctx);
+						hookUp(table, table.getColumnModel().getColumn(i),
+							(CategoryRenderStrategy<R, Object>) model.theColumnModel.getElementAt(i), model, ctx);
 				}
 			};
 			model.getColumnModel().addListDataListener(columnListener);
 			subs.add(() -> {
 				model.getColumnModel().removeListDataListener(columnListener);
 			});
-			MouseAdapter ml = new MouseAdapter() {
-				class MouseClickStruct<C> {
-					private final ModelRow<R> theRow;
-					private final ModelCell<R, C> cell;
-					private final CategoryRenderStrategy<? super R, ? super C> theCategory;
-
-					MouseClickStruct(ModelRow<R> row, ModelCell<R, C> cell, CategoryRenderStrategy<? super R, ? super C> category) {
-						theRow=row;
-						this.cell = cell;
-						theCategory=category;
-					}
-
-					MouseClickStruct<C> clicked(MouseEvent e, MouseClickStruct<?> previous) {
-						if(theRow!=null)
-							model.theRowMouseListeners.forEach(listener -> listener.mouseClicked(theRow, e));
-						if(theCategory!=null && theCategory.getMouseListener()!=null)
-							theCategory.getMouseListener().mouseClicked(cell, e);
-						return this;
-					}
-
-					MouseClickStruct<C> pressed(MouseEvent e, MouseClickStruct<?> previous) {
-						if(theRow!=null)
-							model.theRowMouseListeners.forEach(listener -> listener.mousePressed(theRow, e));
-						if(theCategory!=null && theCategory.getMouseListener()!=null)
-							theCategory.getMouseListener().mousePressed(cell, e);
-						return this;
-					}
-
-					MouseClickStruct<C> released(MouseEvent e, MouseClickStruct<?> previous) {
-						if(theRow!=null)
-							model.theRowMouseListeners.forEach(listener -> listener.mouseReleased(theRow, e));
-						if(theCategory!=null && theCategory.getMouseListener()!=null)
-							theCategory.getMouseListener().mouseReleased(cell, e);
-						return this;
-					}
-
-					MouseClickStruct<C> entered(MouseEvent e, MouseClickStruct<?> previous) {
-						if(theRow!=null)
-							model.theRowMouseListeners.forEach(listener -> listener.mouseEntered(theRow, e));
-						if(theCategory!=null && theCategory.getMouseListener()!=null)
-							theCategory.getMouseListener().mouseEntered(cell, e);
-						return this;
-					}
-
-					MouseClickStruct<C> exited(MouseEvent e, MouseClickStruct<?> previous) {
-						if(theRow!=null)
-							model.theRowMouseListeners.forEach(listener -> listener.mouseExited(theRow, e));
-						if(theCategory!=null && theCategory.getMouseListener()!=null)
-							theCategory.getMouseListener().mouseExited(cell, e);
-						return this;
-					}
-
-					MouseClickStruct<C> moved(MouseEvent e, MouseClickStruct<?> previous) {
-						if(previous!=null && previous.theRow!=null) {
-							if(theRow!=null && theRow.getModelValue()==previous.theRow.getModelValue()) {
-								model.theRowMouseListeners.forEach(listener -> listener.mouseMoved(theRow, e));
-								if(previous.theCategory!=null && previous.theCategory==theCategory) {
-									if(theCategory!=null && theCategory.getMouseListener()!=null)
-										theCategory.getMouseListener().mouseMoved(cell, e);
-								} else {
-									previous.exitCell(e);
-									if(theCategory!=null && theCategory.getMouseListener()!=null)
-										theCategory.getMouseListener().mouseEntered(cell, e);
-								}
-							} else {
-								previous.exitRow(e);
-								if(theCategory!=null && theCategory.getMouseListener()!=null)
-									theCategory.getMouseListener().mouseEntered(cell, e);
-							}
-						} else {
-							if(theCategory!=null && theCategory.getMouseListener()!=null)
-								theCategory.getMouseListener().mouseEntered(cell, e);
-						}
-						return this;
-					}
-
-					void exitCell(MouseEvent e) {
-						if(theCategory!=null && theCategory.getMouseListener()!=null)
-							theCategory.getMouseListener().mouseExited(cell, e);
-					}
-
-					void exitRow(MouseEvent e) {
-						exitCell(e);
-						model.theRowMouseListeners.forEach(listener -> listener.mouseExited(theRow, e));
-					}
-				}
-
-				private MouseClickStruct<?> thePrevious;
-
+			MouseAdapter ml = new TableMouseListener<R>() {
 				@Override
-				public void mouseClicked(MouseEvent e) {
-					thePrevious = getValue(e, false).clicked(e, thePrevious);
+				protected ListenerList<RowMouseListener<? super R>> getRowListeners() {
+					return model.theRowMouseListeners;
 				}
 
 				@Override
-				public void mousePressed(MouseEvent e) {
-					thePrevious = getValue(e, false).pressed(e, thePrevious);
-				}
-
-				@Override
-				public void mouseReleased(MouseEvent e) {
-					thePrevious = getValue(e, false).released(e, thePrevious);
-				}
-
-				@Override
-				public void mouseEntered(MouseEvent e) {
-					thePrevious = getValue(e, false).entered(e, thePrevious);
-				}
-
-				@Override
-				public void mouseExited(MouseEvent e) {
-					thePrevious = getValue(e, false).exited(e, thePrevious);
-				}
-
-				@Override
-				public void mouseMoved(MouseEvent e) {
-					thePrevious = getValue(e, false).moved(e, thePrevious);
-				}
-
-				private <C> MouseClickStruct<C> getValue(MouseEvent evt, boolean movement) {
+				protected int getModelRow(MouseEvent evt) {
 					int row = table.rowAtPoint(evt.getPoint());
-					if (row < 0) {
-						return new MouseClickStruct<>(null, null, null);
-					}
-					row = table.convertRowIndexToModel(row);
-					R rowValue = model.getRow(row);
-					int column = table.columnAtPoint(evt.getPoint());
-					if (column < 0) {
-						if (model.theRowMouseListeners.isEmpty())
-							return new MouseClickStruct<>(null, null, null);
-						boolean selected = table.isRowSelected(row);
-						return new MouseClickStruct<>(new ModelRow.Default<>(() -> rowValue, row, selected, selected, true, true), null,
-							null);
-					}
-					column = table.convertColumnIndexToModel(column);
-					CategoryRenderStrategy<? super R, C> category = (CategoryRenderStrategy<? super R, C>) model
-						.getColumn(column);
-					if (movement && category.getMouseListener() instanceof CategoryRenderStrategy.CategoryClickAdapter) {
-						if (model.theRowMouseListeners.isEmpty())
-							return new MouseClickStruct<>(null, null, null);
-						boolean selected = table.isRowSelected(row);
-						return new MouseClickStruct<>(new ModelRow.Default<>(() -> rowValue, row, selected, selected, true, true), null,
-							null);
-					}
+					row = row < 0 ? row : table.convertRowIndexToModel(row);
+					return row;
+				}
 
-					C colValue = category.getCategoryValue(rowValue);
-					boolean enabled;
-					if (category.getMutator().getEditability() != null) {
-						enabled = category.getMutator().isEditable(rowValue, colValue);
-					} else {
-						enabled = true;
-					}
-					if (!enabled) {
-						if (model.theRowMouseListeners.isEmpty())
-							return new MouseClickStruct<>(null, null, null);
-						boolean selected = table.isRowSelected(row);
-						return new MouseClickStruct<>(new ModelRow.Default<>(() -> rowValue, row, selected, selected, true, true), null,
-							null);
-					}
-					boolean selected = table.isCellSelected(row, column);
-					ModelCell<R, C> cell = new ModelCell.Default<>(() -> rowValue, colValue, row, column, selected, selected, true, true);
-					return new MouseClickStruct<>(cell, cell, category);
+				@Override
+				protected int getModelColumn(MouseEvent evt) {
+					int col = table.columnAtPoint(evt.getPoint());
+					col = col < 0 ? col : table.convertColumnIndexToModel(col);
+					return col;
+				}
+
+				@Override
+				protected R getRowValue(int rowIndex) {
+					return model.getRowModel().getElementAt(rowIndex);
+				}
+
+				@Override
+				protected CategoryRenderStrategy<R, ?> getColumn(int columnIndex) {
+					return model.getColumnModel().getElementAt(columnIndex);
+				}
+
+				@Override
+				protected boolean isRowSelected(int rowIndex) {
+					return table.isRowSelected(rowIndex);
+				}
+
+				@Override
+				protected boolean isCellSelected(int rowIndex, int columnIndex) {
+					return table.isCellSelected(rowIndex, columnIndex);
 				}
 			};
 			table.addMouseListener(ml);
@@ -493,7 +371,9 @@ public class ObservableTableModel<R> implements TableModel {
 					row = table.convertRowIndexToModel(row);
 					column = table.convertColumnIndexToModel(column);
 					R rowValue = model.getRow(row);
-					table.setToolTipText(category.getTooltip(rowValue, category.getCategoryValue(rowValue)));
+					boolean selected = table.isRowSelected(row);
+					table.setToolTipText(category.getTooltip(new ModelCell.Default<>(//
+						() -> rowValue, category.getCategoryValue(rowValue), row, column, selected, selected, true, true)));
 				}
 			};
 			table.addMouseMotionListener(tableMML);
@@ -591,17 +471,17 @@ public class ObservableTableModel<R> implements TableModel {
 		return Subscription.forAll(subs.toArray(new Subscription[subs.size()]));
 	}
 
-	private static <R, C> void hookUp(JTable table, TableColumn tblColumn, CategoryRenderStrategy<? super R, ? extends C> column,
+	private static <R, C> void hookUp(JTable table, TableColumn tblColumn, CategoryRenderStrategy<R, C> column,
 		ObservableTableModel<R> model, TableRenderContext ctx) {
 		tblColumn.setHeaderValue(column.getName());
 		if (column.getIdentifier() != null)
 			tblColumn.setIdentifier(column.getIdentifier());
 		else
 			tblColumn.setIdentifier(column);
-		tblColumn.setCellRenderer(new ObservableTableCellRenderer<>(model, (CategoryRenderStrategy<R, C>) column, ctx));
+		tblColumn.setCellRenderer(new ObservableTableCellRenderer<>(model, column, ctx));
 		if (column.getMutator().getEditor() != null)
-			tblColumn.setCellEditor(column.getMutator().getEditor()//
-				.withValueTooltip((row, col) -> ((CategoryRenderStrategy<R, Object>) column).getTooltip((R) row, col)));
+			tblColumn.setCellEditor(column.getMutator().getEditor()
+				.withCellTooltip(column.getTooltipFn()));
 		if (column.getMinWidth() >= 0)
 			tblColumn.setMinWidth(column.getMinWidth());
 		if (column.getPrefWidth() >= 0)
@@ -710,5 +590,180 @@ public class ObservableTableModel<R> implements TableModel {
 		 * @return The start/end regions that should be emphasized in the rendered text
 		 */
 		SortedMatchSet getEmphaticRegions(int row, int column);
+	}
+
+	public static abstract class TableMouseListener<R> extends MouseAdapter {
+		class MouseClickStruct<C> {
+			private final ModelRow<R> theRow;
+			private final ModelCell<R, C> theCell;
+			private final CategoryRenderStrategy<R, C> theCategory;
+
+			MouseClickStruct(ModelRow<R> row, ModelCell<R, C> cell, CategoryRenderStrategy<R, C> category) {
+				theRow = row;
+				theCell = cell;
+				theCategory = category;
+			}
+
+			MouseClickStruct<C> clicked(MouseEvent e, MouseClickStruct<?> previous) {
+				if (theRow != null)
+					getRowListeners().forEach(listener -> listener.mouseClicked(theRow, e));
+				if (theCategory != null && theCategory.getMouseListener() != null)
+					theCategory.getMouseListener().mouseClicked(theCell, e);
+				return this;
+			}
+
+			MouseClickStruct<C> pressed(MouseEvent e, MouseClickStruct<?> previous) {
+				if (theRow != null)
+					getRowListeners().forEach(listener -> listener.mousePressed(theRow, e));
+				if (theCategory != null && theCategory.getMouseListener() != null)
+					theCategory.getMouseListener().mousePressed(theCell, e);
+				return this;
+			}
+
+			MouseClickStruct<C> released(MouseEvent e, MouseClickStruct<?> previous) {
+				if (theRow != null)
+					getRowListeners().forEach(listener -> listener.mouseReleased(theRow, e));
+				if (theCategory != null && theCategory.getMouseListener() != null)
+					theCategory.getMouseListener().mouseReleased(theCell, e);
+				return this;
+			}
+
+			MouseClickStruct<C> entered(MouseEvent e, MouseClickStruct<?> previous) {
+				if (theRow != null)
+					getRowListeners().forEach(listener -> listener.mouseEntered(theRow, e));
+				if (theCategory != null && theCategory.getMouseListener() != null)
+					theCategory.getMouseListener().mouseEntered(theCell, e);
+				return this;
+			}
+
+			MouseClickStruct<C> exited(MouseEvent e, MouseClickStruct<?> previous) {
+				if (theRow != null)
+					getRowListeners().forEach(listener -> listener.mouseExited(theRow, e));
+				if (theCategory != null && theCategory.getMouseListener() != null)
+					theCategory.getMouseListener().mouseExited(theCell, e);
+				return this;
+			}
+
+			MouseClickStruct<C> moved(MouseEvent e, MouseClickStruct<?> previous) {
+				if (previous != null && previous.theRow != null) {
+					if (theRow != null && theRow.getModelValue() == previous.theRow.getModelValue()) {
+						getRowListeners().forEach(listener -> listener.mouseMoved(theRow, e));
+						if (previous.theCategory != null && previous.theCategory == theCategory) {
+							if (theCategory != null && theCategory.getMouseListener() != null)
+								theCategory.getMouseListener().mouseMoved(theCell, e);
+						} else {
+							previous.exitCell(e);
+							if (theCategory != null && theCategory.getMouseListener() != null)
+								theCategory.getMouseListener().mouseEntered(theCell, e);
+						}
+					} else {
+						previous.exitRow(e);
+						getRowListeners().forEach(listener -> listener.mouseEntered(theRow, e));
+						if (theCategory != null && theCategory.getMouseListener() != null)
+							theCategory.getMouseListener().mouseEntered(theCell, e);
+					}
+				} else {
+					getRowListeners().forEach(listener -> listener.mouseEntered(theRow, e));
+					if (theCategory != null && theCategory.getMouseListener() != null)
+						theCategory.getMouseListener().mouseEntered(theCell, e);
+				}
+				return this;
+			}
+
+			void exitCell(MouseEvent e) {
+				if (theCategory != null && theCategory.getMouseListener() != null)
+					theCategory.getMouseListener().mouseExited(theCell, e);
+			}
+
+			void exitRow(MouseEvent e) {
+				exitCell(e);
+				getRowListeners().forEach(listener -> listener.mouseExited(theRow, e));
+			}
+		}
+
+		private MouseClickStruct<?> thePrevious;
+
+		protected abstract ListenerList<RowMouseListener<? super R>> getRowListeners();
+
+		protected abstract int getModelRow(MouseEvent evt);
+
+		protected abstract int getModelColumn(MouseEvent evt);
+
+		protected abstract R getRowValue(int rowIndex);
+
+		protected abstract CategoryRenderStrategy<R, ?> getColumn(int columnIndex);
+
+		protected abstract boolean isRowSelected(int rowIndex);
+
+		protected abstract boolean isCellSelected(int rowIndex, int columnIndex);
+
+		@Override
+		public void mouseClicked(MouseEvent e) {
+			thePrevious = getValue(e, false).clicked(e, thePrevious);
+		}
+
+		@Override
+		public void mousePressed(MouseEvent e) {
+			thePrevious = getValue(e, false).pressed(e, thePrevious);
+		}
+
+		@Override
+		public void mouseReleased(MouseEvent e) {
+			thePrevious = getValue(e, false).released(e, thePrevious);
+		}
+
+		@Override
+		public void mouseEntered(MouseEvent e) {
+			thePrevious = getValue(e, false).entered(e, thePrevious);
+		}
+
+		@Override
+		public void mouseExited(MouseEvent e) {
+			thePrevious = getValue(e, false).exited(e, thePrevious);
+		}
+
+		@Override
+		public void mouseMoved(MouseEvent e) {
+			thePrevious = getValue(e, false).moved(e, thePrevious);
+		}
+
+		private <C> MouseClickStruct<C> getValue(MouseEvent evt, boolean movement) {
+			int row = getModelRow(evt);
+			if (row < 0) {
+				return new MouseClickStruct<>(null, null, null);
+			}
+			R rowValue = getRowValue(row);
+			int column = getModelColumn(evt);
+			if (column < 0) {
+				if (getRowListeners().isEmpty())
+					return new MouseClickStruct<>(null, null, null);
+				boolean selected = isRowSelected(row);
+				return new MouseClickStruct<>(new ModelRow.Default<>(() -> rowValue, row, selected, selected, true, true), null, null);
+			}
+			CategoryRenderStrategy<R, C> category = (CategoryRenderStrategy<R, C>) getColumn(column);
+			if (movement && category.getMouseListener() instanceof CategoryRenderStrategy.CategoryClickAdapter) {
+				if (getRowListeners().isEmpty())
+					return new MouseClickStruct<>(null, null, null);
+				boolean selected = isRowSelected(row);
+				return new MouseClickStruct<>(new ModelRow.Default<>(() -> rowValue, row, selected, selected, true, true), null, null);
+			}
+
+			C colValue = category.getCategoryValue(rowValue);
+			boolean enabled;
+			if (category.getMutator().getEditability() != null) {
+				enabled = category.getMutator().isEditable(rowValue, colValue);
+			} else {
+				enabled = true;
+			}
+			if (!enabled) {
+				if (getRowListeners().isEmpty())
+					return new MouseClickStruct<>(null, null, null);
+				boolean selected = isRowSelected(row);
+				return new MouseClickStruct<>(new ModelRow.Default<>(() -> rowValue, row, selected, selected, true, true), null, null);
+			}
+			boolean selected = isCellSelected(row, column);
+			ModelCell<R, C> cell = new ModelCell.Default<>(() -> rowValue, colValue, row, column, selected, selected, true, true);
+			return new MouseClickStruct<>(cell, cell, category);
+		}
 	}
 }

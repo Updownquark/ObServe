@@ -541,7 +541,7 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 	 * @param changes The observable that signals that the value may have changed
 	 * @return An observable that supplies the value of the given supplier, firing change events when the given observable fires
 	 */
-	public static <X> ObservableValue<X> of(Class<X> type, Supplier<? extends X> value, LongSupplier stamp, Observable<?> changes) {
+	public static <X> SyntheticObservable<X> of(Class<X> type, Supplier<? extends X> value, LongSupplier stamp, Observable<?> changes) {
 		return of(TypeTokens.get().of(type), value, stamp, changes);
 	}
 
@@ -553,8 +553,22 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 	 * @param changes The observable that signals that the value may have changed
 	 * @return An observable that supplies the value of the given supplier, firing change events when the given observable fires
 	 */
-	public static <X> ObservableValue<X> of(TypeToken<X> type, Supplier<? extends X> value, LongSupplier stamp, Observable<?> changes) {
-		return new SyntheticObservable<>(type, value, stamp, changes);
+	public static <X> SyntheticObservable<X> of(TypeToken<X> type, Supplier<? extends X> value, LongSupplier stamp, Observable<?> changes) {
+		return of(type, value, stamp, changes, () -> Identifiable.wrap(changes.getIdentity(), "synthetic", value));
+	}
+
+	/**
+	 * @param <X> The compile-time type of the value to wrap
+	 * @param type The run-time type of the value to wrap
+	 * @param value Supplies the value for the observable
+	 * @param stamp The stamp for the synthetic value
+	 * @param changes The observable that signals that the value may have changed
+	 * @param identity The identity for the observable
+	 * @return An observable that supplies the value of the given supplier, firing change events when the given observable fires
+	 */
+	public static <X> SyntheticObservable<X> of(TypeToken<X> type, Supplier<? extends X> value, LongSupplier stamp, Observable<?> changes,
+		Supplier<?> identity) {
+		return new SyntheticObservable<>(type, value, stamp, changes, identity);
 	}
 
 	/**
@@ -1325,20 +1339,22 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 	 *
 	 * @param <T> The type of this value
 	 */
-	class SyntheticObservable<T> implements ObservableValue<T> {
+	class SyntheticObservable<T> extends AbstractIdentifiable implements ObservableValue<T> {
 		private final TypeToken<T> theType;
 		private final Supplier<? extends T> theValue;
 		private final LongSupplier theStamp;
 		private final Observable<?> theChanges;
-		private Object theIdentity;
+		private final Supplier<?> theIdentity;
 		private Object theChangeIdentity;
 		private Object theNoInitChangeIdentity;
 
-		public SyntheticObservable(TypeToken<T> type, Supplier<? extends T> value, LongSupplier stamp, Observable<?> changes) {
+		public SyntheticObservable(TypeToken<T> type, Supplier<? extends T> value, LongSupplier stamp, Observable<?> changes,
+			Supplier<?> identity) {
 			theType = type;
 			theValue = value;
 			theStamp = stamp;
 			theChanges = changes;
+			theIdentity = identity;
 		}
 
 		@Override
@@ -1352,10 +1368,8 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 		}
 
 		@Override
-		public Object getIdentity() {
-			if (theIdentity == null)
-				theIdentity = Identifiable.wrap(theChanges.getIdentity(), "synthetic", theValue);
-			return theIdentity;
+		protected Object createIdentity() {
+			return theIdentity.get();
 		}
 
 		@Override
@@ -1475,6 +1489,71 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 						return this;
 				}
 			};
+		}
+
+		/** @return A value the same as this, but which caches its synthetically-generated value for performance */
+		public ObservableValue<T> cached() {
+			return new CachedObservableValue<>(this);
+		}
+	}
+
+	/**
+	 * Implements {@link SyntheticObservable#cached()}
+	 *
+	 * @param <T> The type of the value
+	 */
+	class CachedObservableValue<T> implements ObservableValue<T> {
+		private final ObservableValue<T> theValue;
+		private volatile T theCachedValue;
+		private volatile long theCachedStamp;
+
+		public CachedObservableValue(ObservableValue<T> value) {
+			theValue = value;
+			theCachedStamp = value.getStamp() - 1;
+		}
+
+		@Override
+		public Object getIdentity() {
+			return theValue.getIdentity();
+		}
+
+		@Override
+		public TypeToken<T> getType() {
+			return theValue.getType();
+		}
+
+		@Override
+		public long getStamp() {
+			return theValue.getStamp();
+		}
+
+		@Override
+		public T get() {
+			if (theCachedStamp != theValue.getStamp()) {
+				theCachedValue = theValue.get();
+				theCachedStamp = theValue.getStamp();
+			}
+			return theCachedValue;
+		}
+
+		@Override
+		public Observable<ObservableValueEvent<T>> noInitChanges() {
+			return theValue.noInitChanges();
+		}
+
+		@Override
+		public int hashCode() {
+			return theValue.hashCode();
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return theValue.equals(obj);
+		}
+
+		@Override
+		public String toString() {
+			return theValue.toString();
 		}
 	}
 

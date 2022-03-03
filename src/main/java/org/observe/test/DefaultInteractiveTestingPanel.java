@@ -80,7 +80,7 @@ public class DefaultInteractiveTestingPanel extends JPanel {
 					return ObservableCollection.of(InteractiveTestOrSuite.class);
 			}, tree -> {
 				tree.fill().fillV().withItemName("Test").withLeafTest(tos -> tos instanceof InteractiveTest)
-				.renderWith(tos -> tos.getName());
+						.withRender(render -> render.formatText(tos -> tos.getName()));
 				tree.withSelection(theSelectedItem, false);
 			})).lastV(bottom -> bottom//
 				.addLabel("Current Test:", currentTest.map(test -> test == null ? "" : test.getName()), Format.TEXT,

@@ -10,6 +10,7 @@
 			<import>org.observe.util.swing.QuickSwingParser.QuickComponent</import>
 			<import>org.observe.collect.ObservableCollection</import>
 			<import>org.observe.util.swing.CategoryRenderStrategy</import>
+			<import>org.qommons.collect.BetterList</import>
 		</imports>
 		<models>
 			<ext-model name="ext">
@@ -27,18 +28,18 @@
 			</model>
 			<model name="internal">
 				<value name="boundsToggle" type="boolean">true</value>
-				<columns name="boundsColumns" type="QuickComponent" value-name="row" column-value-name="col">
-					<column name="Top Left" value="row.getLocation()" />
-					<column name="Size" value="row.getSize()" />
-					<column name="Min" value="row.getMinimumSize()" />
-					<column name="Pref" value="row.getPreferredSize()" />
-					<column name="Max" value="row.getMaximumSize()" />
+				<columns name="boundsColumns" type="BetterList{QuickComponent}" value-name="row" render-value-name="col">
+					<column name="Top Left" value="row.getLast().getLocation()" />
+					<column name="Size" value="row.getLast().getSize()" />
+					<column name="Min" value="row.getLast().getMinimumSize()" />
+					<column name="Pref" value="row.getLast().getPreferredSize()" />
+					<column name="Max" value="row.getLast().getMaximumSize()" />
 				</columns>
 				<transform name="toggleBoundsColumns" source="boundsToggle">
 					<map-to function="t->t ? boundsColumns : null" />
 					<flatten />
 				</transform>
-				<list name="componentColumnLists" type="ObservableCollection{? extends CategoryRenderStrategy{QuickComponent, ?}}">
+				<list name="componentColumnLists" type="ObservableCollection{? extends CategoryRenderStrategy{BetterList{QuickComponent}, ?}}">
 					<element>${toggleBoundsColumns}</element>
 				</list>
 				<transform name="componentColumns" source="componentColumnLists">
@@ -51,7 +52,7 @@
 		<box tab-id="components" tab-name="Components" layout="inline" orientation="vertical" main-align="justify" cross-align="justify">
 			<box layout="inline" orientation="horizontal" main-align="leading">
 			</box>
-			<tree-table root="ext.ui" value-name="row" column-value-name="col" children="row.getChildren()" parent="row.getParent()"
+			<tree-table root="ext.ui" value-name="row" render-value-name="col" children="col.getChildren()"
 				selection="debug.selectedComponent" columns="internal.componentColumns">
 			</tree-table>
 		</box>

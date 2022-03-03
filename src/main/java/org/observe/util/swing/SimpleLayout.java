@@ -6,6 +6,7 @@ import java.awt.Dimension;
 import java.awt.LayoutManager2;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -14,20 +15,21 @@ import org.observe.util.swing.QuickSize.SizeUnit;
 
 public class SimpleLayout implements LayoutManager2 {
 	public static class SimpleConstraints {
-		public final QuickPosition left;
-		public final QuickPosition right;
-		public final QuickPosition top;
-		public final QuickPosition bottom;
-		public final QuickSize minWidth;
-		public final QuickSize prefWidth;
-		public final QuickSize maxWidth;
-		public final QuickSize minHeight;
-		public final QuickSize prefHeight;
-		public final QuickSize maxHeight;
+		public final Supplier<QuickPosition> left;
+		public final Supplier<QuickPosition> right;
+		public final Supplier<QuickPosition> top;
+		public final Supplier<QuickPosition> bottom;
+		public final Supplier<QuickSize> minWidth;
+		public final Supplier<QuickSize> prefWidth;
+		public final Supplier<QuickSize> maxWidth;
+		public final Supplier<QuickSize> minHeight;
+		public final Supplier<QuickSize> prefHeight;
+		public final Supplier<QuickSize> maxHeight;
 
-		public SimpleConstraints(QuickPosition left, QuickPosition right, QuickPosition top, QuickPosition bottom, //
-			QuickSize minWidth, QuickSize prefWidth, QuickSize maxWidth, //
-			QuickSize minHeight, QuickSize prefHeight, QuickSize maxHeight) throws IllegalArgumentException {
+		public SimpleConstraints(Supplier<QuickPosition> left, Supplier<QuickPosition> right, //
+			Supplier<QuickPosition> top, Supplier<QuickPosition> bottom, //
+			Supplier<QuickSize> minWidth, Supplier<QuickSize> prefWidth, Supplier<QuickSize> maxWidth, //
+			Supplier<QuickSize> minHeight, Supplier<QuickSize> prefHeight, Supplier<QuickSize> maxHeight) throws IllegalArgumentException {
 			this.left = left;
 			this.right = right;
 			this.top = top;
@@ -41,23 +43,30 @@ public class SimpleLayout implements LayoutManager2 {
 		}
 
 		QuickPosition getPos(boolean vertical, boolean leading) {
+			Supplier<QuickPosition> pos;
 			if (vertical)
-				return leading ? top : bottom;
+				pos = leading ? top : bottom;
 			else
-				return leading ? left : right;
+				pos = leading ? left : right;
+			return pos == null ? null : pos.get();
 		}
 
 		QuickSize getSize(boolean vertical, int type) {
+			Supplier<QuickSize> size;
 			switch (type) {
 			case -1:
-				return vertical ? minHeight : minWidth;
+				size = vertical ? minHeight : minWidth;
+				break;
 			case 0:
-				return vertical ? prefHeight : prefWidth;
+				size = vertical ? prefHeight : prefWidth;
+				break;
 			case 1:
-				return vertical ? maxHeight : maxWidth;
+				size = vertical ? maxHeight : maxWidth;
+				break;
 			default:
 				throw new IllegalStateException("Expected -1, 0, or 1 for size type, not " + type);
 			}
+			return size == null ? null : size.get();
 		}
 
 		private static Pattern CONSTRAINT_PATTERN = Pattern.compile("(?<type>[a-zA-Z]+)[=:](?<value>.+)");
@@ -151,7 +160,19 @@ public class SimpleLayout implements LayoutManager2 {
 					throw new IllegalArgumentException("Unrecognized constraint type: " + type);
 				}
 			}
-			return new SimpleConstraints(left, right, top, bottom, minWidth, prefWidth, maxWidth, minHeight, prefHeight, maxHeight);
+			QuickPosition fLeft = left, fRight = right, fTop = top, fBottom = bottom;
+			QuickSize fMinW = minWidth, fPrefW = prefWidth, fMaxW = maxWidth, fMinH = minHeight, fPrefH = prefHeight, fMaxH = maxHeight;
+			return new SimpleConstraints(//
+				left == null ? null : () -> fLeft, //
+					right == null ? null : () -> fRight, //
+						top == null ? null : () -> fTop, //
+							bottom == null ? null : () -> fBottom, //
+								minWidth == null ? null : () -> fMinW, //
+									prefWidth == null ? null : () -> fPrefW, //
+										maxWidth == null ? null : () -> fMaxW, //
+											minHeight == null ? null : () -> fMinH, //
+												prefHeight == null ? null : () -> fPrefH, //
+													maxHeight == null ? null : () -> fMaxH);
 		}
 	}
 
@@ -208,13 +229,13 @@ public class SimpleLayout implements LayoutManager2 {
 				SimpleConstraints constraints = theConstraints.get(c);
 				if (constraints != null) {
 					if (first) {
-						if (!percentX && (constraints.left != null && constraints.left.type == PositionUnit.Percent)//
-							|| (constraints.right != null && constraints.right.type == PositionUnit.Percent)//
-							|| (constraints.minWidth != null && constraints.minWidth.type == SizeUnit.Percent))
+						if (!percentX && (constraints.left != null && constraints.left.get().type == PositionUnit.Percent)//
+							|| (constraints.right != null && constraints.right.get().type == PositionUnit.Percent)//
+							|| (constraints.minWidth != null && constraints.minWidth.get().type == SizeUnit.Percent))
 							percentX = true;
-						if (!percentY && (constraints.top != null && constraints.top.type == PositionUnit.Percent)//
-							|| (constraints.bottom != null && constraints.bottom.type == PositionUnit.Percent)//
-							|| (constraints.minHeight != null && constraints.minHeight.type == SizeUnit.Percent))
+						if (!percentY && (constraints.top != null && constraints.top.get().type == PositionUnit.Percent)//
+							|| (constraints.bottom != null && constraints.bottom.get().type == PositionUnit.Percent)//
+							|| (constraints.minHeight != null && constraints.minHeight.get().type == SizeUnit.Percent))
 							percentY = true;
 					}
 					if (first || percentX) {
@@ -293,21 +314,21 @@ public class SimpleLayout implements LayoutManager2 {
 		else
 			componentLayoutDim = 0;
 		QuickSize size = constraints.getSize(vertical, type);
-		if (constraints.left != null && (withPercent || constraints.left.type != PositionUnit.Percent)) {
-			sz = constraints.left.evaluate(containerSize);
-			if (constraints.left.type != PositionUnit.Lexips) {
+		if (constraints.left != null && (withPercent || constraints.left.get().type != PositionUnit.Percent)) {
+			sz = constraints.left.get().evaluate(containerSize);
+			if (constraints.left.get().type != PositionUnit.Lexips) {
 				if (size != null) {
 					if (withPercent || size.type != SizeUnit.Percent)
 						sz += size.evaluate(containerSize);
 				} else
 					sz += componentLayoutDim;
-				if (constraints.right != null && constraints.right.type != PositionUnit.Pixels
-					&& (withPercent || constraints.right.type != PositionUnit.Percent))
-					sz += constraints.right.evaluate(containerSize);
+				if (constraints.right != null && constraints.right.get().type != PositionUnit.Pixels
+					&& (withPercent || constraints.right.get().type != PositionUnit.Percent))
+					sz += constraints.right.get().evaluate(containerSize);
 			}
-		} else if (constraints.right != null && (withPercent || constraints.right.type != PositionUnit.Percent)) {
-			sz = (int) constraints.right.value;
-			if (constraints.right.type != PositionUnit.Pixels) {
+		} else if (constraints.right != null && (withPercent || constraints.right.get().type != PositionUnit.Percent)) {
+			sz = (int) constraints.right.get().value;
+			if (constraints.right.get().type != PositionUnit.Pixels) {
 				if (size != null) {
 					if (withPercent || size.type != SizeUnit.Percent)
 						sz += size.evaluate(containerSize);
@@ -323,48 +344,52 @@ public class SimpleLayout implements LayoutManager2 {
 
 	@Override
 	public void layoutContainer(Container parent) {
-		Dimension parentSize = parent.getSize();
 		for (Component c : parent.getComponents()) {
-			if (!c.isVisible())
-				continue;
-			SimpleConstraints constraints = theConstraints.get(c);
-			if (constraints != null) {
-				int x, w;
-				if (constraints.left != null) {
-					x = constraints.left.evaluate(parentSize.width);
-					if (constraints.right != null) {
-						int right = constraints.right.evaluate(parentSize.width);
-						w = right - x;
-					} else
-						w = evaluateSize(constraints, c, parentSize, false);
-				} else if (constraints.right != null) {
-					int right = constraints.right.evaluate(parentSize.width);
-					w = evaluateSize(constraints, c, parentSize, false);
-					x = right - w;
-				} else
-					x = 0;
+			layoutChild(parent, c);
+		}
+	}
 
-				int y, h;
-				if (constraints.top != null) {
-					y = constraints.top.evaluate(parentSize.height);
-					if (constraints.bottom != null) {
-						int right = constraints.bottom.evaluate(parentSize.height);
-						h = right - y;
-					} else
-						h = evaluateSize(constraints, c, parentSize, true);
-				} else if (constraints.bottom != null) {
-					int right = constraints.bottom.evaluate(parentSize.height);
-					h = evaluateSize(constraints, c, parentSize, true);
-					y = right - h;
+	public void layoutChild(Container parent, Component c) {
+		Dimension parentSize = parent.getSize();
+		if (!c.isVisible())
+			return;
+		SimpleConstraints constraints = theConstraints.get(c);
+		if (constraints != null) {
+			int x, w;
+			if (constraints.left != null) {
+				x = constraints.left.get().evaluate(parentSize.width);
+				if (constraints.right != null) {
+					int right = constraints.right.get().evaluate(parentSize.width);
+					w = right - x;
 				} else
-					y = 0;
-			} else {
-				Dimension ps = c.getPreferredSize();
-				if (ps != null)
-					c.setBounds(0, 0, ps.width, ps.height);
-				else
-					c.setBounds(0, 0, 0, 0);
-			}
+					w = evaluateSize(constraints, c, parentSize, false);
+			} else if (constraints.right != null) {
+				int right = constraints.right.get().evaluate(parentSize.width);
+				w = evaluateSize(constraints, c, parentSize, false);
+				x = right - w;
+			} else
+				x = 0;
+
+			int y, h;
+			if (constraints.top != null) {
+				y = constraints.top.get().evaluate(parentSize.height);
+				if (constraints.bottom != null) {
+					int right = constraints.bottom.get().evaluate(parentSize.height);
+					h = right - y;
+				} else
+					h = evaluateSize(constraints, c, parentSize, true);
+			} else if (constraints.bottom != null) {
+				int right = constraints.bottom.get().evaluate(parentSize.height);
+				h = evaluateSize(constraints, c, parentSize, true);
+				y = right - h;
+			} else
+				y = 0;
+		} else {
+			Dimension ps = c.getPreferredSize();
+			if (ps != null)
+				c.setBounds(0, 0, ps.width, ps.height);
+			else
+				c.setBounds(0, 0, 0, 0);
 		}
 	}
 
@@ -393,7 +418,7 @@ public class SimpleLayout implements LayoutManager2 {
 		} else {
 			size = constraints.getSize(vertical, 1);
 			if (constraints.maxWidth != null) {
-				int max = constraints.maxWidth.evaluate(vertical ? parentSize.height : parentSize.width);
+				int max = constraints.maxWidth.get().evaluate(vertical ? parentSize.height : parentSize.width);
 				if (max < sz)
 					sz = max;
 			}

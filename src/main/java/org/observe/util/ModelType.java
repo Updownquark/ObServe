@@ -269,7 +269,7 @@ public abstract class ModelType<M> implements Named {
 					} else {
 						trivial = false;
 						try {
-							casts[i] = (TypeConverter<Object, Object>) TypeTokens.get().getCast(target.getType(i), getType(i), true);
+							casts[i] = (TypeConverter<Object, Object>) TypeTokens.get().getCast(getType(i), target.getType(i), true);
 							params[i] = casts[i].getConvertedType();
 						} catch (IllegalArgumentException e) {
 							return null;
@@ -277,7 +277,7 @@ public abstract class ModelType<M> implements Named {
 					}
 					if (reversible) {
 						try {
-							reverses[i] = (TypeConverter<Object, Object>) TypeTokens.get().getCast(getType(i), params[i], true);
+							reverses[i] = (TypeConverter<Object, Object>) TypeTokens.get().getCast(params[i], getType(i), true);
 						} catch (IllegalArgumentException e) {
 							reversible = false;
 						}

@@ -1,17 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <qonfig-def name="quick" root="quick" extends:observe="../observe-models.qtd">
-	<patterns>
-		<pattern name="size">\d+(%|px)?</pattern>
-		<pattern name="position">\d+(%|px|xp)?</pattern>
-
+	<value-types>
 		<one-of name="window-close-action">
 			<literal>do-nothing</literal>
 			<literal>hide</literal>
 			<literal>dispose</literal>
 			<literal>exit</literal>
 		</one-of>
-	</patterns>
+
+		<external name="size" />
+		<external name="position" />
+	</value-types>
 
 	<add-ons>
 		<add-on name="h-positionable">
@@ -64,6 +64,7 @@
 		</element-def>
 
 		<element-def name="widget" abstract="true">
+			<attribute name="bg-color" type="expression" specify="optional" />
 			<attribute name="tooltip" type="expression-or-string" specify="optional" />
 			<attribute name="visible" type="expression" specify="optional" />
 			<attribute name="onClick" type="expression" specify="optional" />

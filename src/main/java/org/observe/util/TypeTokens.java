@@ -684,28 +684,28 @@ public class TypeTokens {
 
 	/**
 	 * Converts from one type to another
-	 * 
-	 * @param <T> The source type
-	 * @param <X> The target type
+	 *
+	 * @param <S> The source type
+	 * @param <T> The target type
 	 */
-	public static class TypeConverter<T, X> implements Function<T, X> {
-		private final TypeToken<X> theConvertedType;
-		private final Function<T, X> theConverter;
+	public static class TypeConverter<S, T> implements Function<S, T> {
+		private final TypeToken<T> theConvertedType;
+		private final Function<S, T> theConverter;
 		private final String theName;
 
-		TypeConverter(TypeToken<X> convertedType, String name, Function<T, X> converter) {
+		TypeConverter(TypeToken<T> convertedType, String name, Function<S, T> converter) {
 			theConvertedType = convertedType;
 			theConverter = converter;
 			theName = name;
 		}
 
 		/** @return The {@link TypeToken} of the target type */
-		public TypeToken<X> getConvertedType() {
+		public TypeToken<T> getConvertedType() {
 			return theConvertedType;
 		}
 
 		@Override
-		public X apply(T t) {
+		public T apply(S t) {
 			return theConverter.apply(t);
 		}
 
@@ -752,87 +752,87 @@ public class TypeTokens {
 		.get());
 
 	/**
+	 * @param <S> The compile-time type to cast from
 	 * @param <T> The compile-time type to cast to
-	 * @param <X> The compile-time type to cast from
-	 * @param right The type to cast from
-	 * @param left The type to cast to
+	 * @param source The type to cast from
+	 * @param target The type to cast to
 	 * @param safe For primitive right types, whether to use a safe value (0 or false) if the left value is null, as opposed to throwing a
 	 *        {@link NullPointerException}
 	 * @return A function that takes an instance of the right type and returns it as an instance of the left type, throwing a a
 	 *         {@link NullPointerException} if the right value is null and the left type is primitive
 	 * @throws IllegalArgumentException If values of the right type cannot be cast to the left type in general
 	 */
-	public <T, X> TypeConverter<T, X> getCast(TypeToken<T> right, TypeToken<X> left, boolean safe) throws IllegalArgumentException {
-		if (right.isAssignableFrom(left)) {
-			if (right.isPrimitive() && !left.isPrimitive()) {
-				X safeValue = safe ? (X) SAFE_VALUES.get(getRawType(left)) : null;
-				return new TypeConverter<>(left, "primitive-safe-cast", v -> {
+	public <S, T> TypeConverter<S, T> getCast(TypeToken<S> source, TypeToken<T> target, boolean safe) throws IllegalArgumentException {
+		if (target.isAssignableFrom(source)) {
+			if (target.isPrimitive() && !source.isPrimitive()) {
+				T safeValue = safe ? (T) SAFE_VALUES.get(getRawType(source)) : null;
+				return new TypeConverter<>((TypeToken<T>) source, "primitive-safe-cast", v -> {
 					if (v == null) {
 						if (safeValue != null)
 							return safeValue;
-						throw new NullPointerException("Cannot cast null to primitive type " + right);
+						throw new NullPointerException("Cannot cast null to primitive type " + source);
 					}
-					return (X) v;
+					return (T) v;
 				});
 			} else
-				return new TypeConverter<>(left, "no-op", v -> (X) v);
+				return new TypeConverter<>((TypeToken<T>) source, "no-op", v -> (T) v);
 		}
-		Class<?> primitiveRight = getRawType(unwrap(left));
-		Class<?> primitiveLeft = getRawType(unwrap(right));
-		Class<?> wrappedRight = getRawType(wrap(left));
-		Class<?> wrappedLeft = getRawType(wrap(right));
-		Function<T, T> nullCheck;
-		if (right.isPrimitive() && !left.isPrimitive()) {
-			T safeValue = safe ? (T) SAFE_VALUES.get(primitiveLeft) : null;
+		Class<?> primitiveTarget = getRawType(unwrap(target));
+		Class<?> primitiveSource = getRawType(unwrap(source));
+		Class<?> wrappedTarget = getRawType(wrap(target));
+		Class<?> wrappedSource = getRawType(wrap(source));
+		Function<S, S> nullCheck;
+		if (target.isPrimitive() && !source.isPrimitive()) {
+			S safeValue = safe ? (S) SAFE_VALUES.get(primitiveSource) : null;
 			nullCheck = v -> {
 				if (v == null) {
 					if (safeValue != null)
 						return safeValue;
-					throw new NullPointerException("Cannot cast null to primitive type " + right);
+					throw new NullPointerException("Cannot cast null to primitive type " + source);
 				}
 				return v;
 			};
 		} else {
 			nullCheck = v -> v;
 		}
-		if (!primitiveRight.isPrimitive())
-			throw new IllegalArgumentException("Cannot cast " + left + " to " + right);
-		else if (primitiveRight == primitiveLeft)
-			return new TypeConverter<>((TypeToken<X>) right, "wrapping-cast", v -> (X) nullCheck.apply(v));
-		else if (wrappedLeft.isAssignableFrom(wrappedRight))
-			return new TypeConverter<>((TypeToken<X>) TypeTokens.get().of(wrappedRight), "wrapping-cast", v -> (X) nullCheck.apply(v));
-		else if (!primitiveLeft.isPrimitive())
-			throw new IllegalArgumentException("Cannot cast " + left + " to " + right);
-		else if (primitiveRight == boolean.class)
-			throw new IllegalArgumentException("Cannot cast " + left + " to " + right);
-		Function<T, Number> toNumber;
-		if (primitiveRight == char.class) {
+		if (!primitiveSource.isPrimitive())
+			throw new IllegalArgumentException("Cannot cast " + source + " to " + target);
+		else if (primitiveSource == primitiveTarget)
+			return new TypeConverter<>((TypeToken<T>) source, "wrapping-cast", v -> (T) nullCheck.apply(v));
+		else if (wrappedTarget.isAssignableFrom(wrappedSource))
+			return new TypeConverter<>((TypeToken<T>) TypeTokens.get().of(wrappedSource), "wrapping-cast", v -> (T) nullCheck.apply(v));
+		else if (!primitiveTarget.isPrimitive())
+			throw new IllegalArgumentException("Cannot cast " + source + " to " + target);
+		else if (primitiveSource == boolean.class)
+			throw new IllegalArgumentException("Cannot cast " + source + " to " + target);
+		Function<S, Number> toNumber;
+		if (primitiveSource == char.class) {
 			toNumber = v -> Integer.valueOf(((Character) nullCheck.apply(v)).charValue());
 		} else {
 			toNumber = v -> (Number) nullCheck.apply(v);
 		}
-		Function<T, Object> fn;
-		if (primitiveLeft == double.class) {
+		Function<S, Object> fn;
+		if (primitiveTarget == double.class) {
 			fn = v -> toNumber.apply(v).doubleValue();
 			// Now left!=right and left!=double.class
-		} else if (primitiveRight == double.class || primitiveRight == float.class || primitiveRight == long.class)
-			throw new IllegalArgumentException("Cannot cast " + left + " to " + right);
+		} else if (primitiveSource == double.class || primitiveSource == float.class || primitiveSource == long.class)
+			throw new IllegalArgumentException("Cannot cast " + source + " to " + target);
 		// Now right can only be int, short, byte, or char
-		else if (primitiveLeft == long.class) {
+		else if (primitiveTarget == long.class) {
 			fn = v -> toNumber.apply(v).longValue();
-		} else if (primitiveLeft == int.class) {
+		} else if (primitiveTarget == int.class) {
 			fn = v -> toNumber.apply(v).intValue();
-		} else if (primitiveRight == byte.class) {
-			if (primitiveLeft == short.class) {
+		} else if (primitiveSource == byte.class) {
+			if (primitiveTarget == short.class) {
 				fn = v -> toNumber.apply(v).shortValue();
-			} else if (primitiveLeft == char.class) {
+			} else if (primitiveTarget == char.class) {
 				fn = v -> Character.valueOf((char) toNumber.apply(v).byteValue());
 			} else
-				throw new IllegalArgumentException("Cannot cast " + left + " to " + right);
+				throw new IllegalArgumentException("Cannot cast " + target + " to " + source);
 		} else
-			throw new IllegalArgumentException("Cannot cast " + left + " to " + right);
+			throw new IllegalArgumentException("Cannot cast " + target + " to " + source);
 
-		return new TypeConverter<>((TypeToken<X>) right, "primitive-cast", (Function<T, X>) fn);
+		return new TypeConverter<>(target, "primitive-cast", (Function<S, T>) fn);
 	}
 
 	/**

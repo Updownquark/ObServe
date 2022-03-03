@@ -17,7 +17,7 @@
 	</head>
 	<box layout="simple" opacity="0" onHover="selectedComponent.onMouse">
 		<box layout="simple" visible="selectedComponent.visible" opacity="0.25" bg-color="blue"
-			x="selectedComponent.x-1" y="selectedComponent.y-1"
+			left="selectedComponent.x-1" top="selectedComponent.y-1"
 			width="selectedComponent.width+2" height="selectedComponent.height+2"
 			tooltip="selectedComponent.tooltip"
 			/>

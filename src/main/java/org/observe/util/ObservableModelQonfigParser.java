@@ -1458,6 +1458,7 @@ public class ObservableModelQonfigParser {
 						model.with(name, formatInstanceType, literalGetter(formatType, format, "instant"));
 					}
 				} else {
+					// TODO This should just be a value that is evaluated when needed
 					relativeTo = ((ObservableExpression) relativeV).findMethod(Instant.class, model, cv)
 						.withOption(BetterList.empty(), null).find0();
 					model.with(name, formatInstanceType, (msi, extModels) -> {

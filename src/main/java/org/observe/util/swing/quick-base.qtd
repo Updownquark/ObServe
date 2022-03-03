@@ -5,7 +5,7 @@
 	Local URL ../../../../core/src/main/resources/quick.dtd
 -->
 <qonfig-def extends:core="quick-core.qtd">
-	<patterns>
+	<value-types>
 		<one-of name="pos-or-exp">
 			<explicit prefix="${" suffix="}">
 				<pattern name="expression" />
@@ -13,7 +13,7 @@
 			<pattern name="position" />
 		</one-of>
 		<pattern name="value-name">^[a-zA-Z_$][a-zA-Z_$0-9]*$</pattern>
-	</patterns>
+	</value-types>
 
 	<add-ons>
 		<add-on name="orientation" />
@@ -59,24 +59,32 @@
 			<child-def name="renderer" type="value-widget" inherits="renderer-value-override" min="0" />
 		</add-on>
 
-		<add-on name="tabular-widget" requires="multi-value-widget">
+		<add-on name="multi-value-renderable">
+			<attribute name="value-name" type="value-name" />
+		</add-on>
+		<add-on name="renderable-widget">
+			<attribute name="render-value-name" type="value-name" />
+		</add-on>
+		<add-on name="tabular-widget" requires="multi-value-widget" inherits="renderable-widget">
 			<attribute name="columns" type="expression" specify="optional" />
-			<attribute name="column-value-name" type="value-name" />
 			<child-def name="column" type="column" min="0" max="inf" />
 		</add-on>
-		<add-on name="column-edit-type" requires="edit" abstract="true">
+		<add-on name="column-edit-type" requires="column-edit" abstract="true">
 			<attribute name="function" type="expression" />
 			<attribute name="editable-if" type="expression" specify="optional" />
 			<attribute name="accept" type="expression" specify="optional" />
 		</add-on>
-		<add-on name="modify-row-value" requires="edit" inherits="column-edit-type">
+		<add-on name="modify-row-value" requires="column-edit" inherits="column-edit-type">
 			<attribute name="row-update" type="boolean" default="false" />
 		</add-on>
-		<add-on name="replace-row-value" requires="edit" inherits="column-edit-type">
+		<add-on name="replace-row-value" requires="column-edit" inherits="column-edit-type">
 			<attribute name="column-edit-type.function" type="expression" specify="optional" default="" />
 		</add-on>
 		<add-on name="column-editor" requires="value-widget">
 			<attribute name="value-widget.value" specify="forbidden" default="column" />
+		</add-on>
+		<add-on name="tree-column" requires="column">
+			<attribute name="column.value" specify="forbidden" default="org.qommons.collect.BetterList::getLast" />
 		</add-on>
 
 		<add-on name="field" requires="widget">
@@ -155,8 +163,7 @@
 		<element-def name="radio-buttons" extends="collection-selector-widget" />
 		<element-def name="toggle-buttons" extends="collection-selector-widget" />
 
-		<element-def name="multi-value-widget" extends="widget">
-			<attribute name="value-name" type="value-name" />
+		<element-def name="multi-value-widget" extends="widget" inherits="multi-value-renderable">
 			<attribute name="selection" type="expression" specify="optional" />
 		</element-def>
 		<element-def name="little-list" extends="multi-value-widget" inherits="single-rendering">
@@ -165,17 +172,17 @@
 		<element-def name="column" inherits="single-rendering">
 			<attribute name="single-rendering.render-value-name" specify="forbidden" default="none" />
 			<attribute name="name" type="string" />
-			<attribute name="value" type="expression" specify="optional" /> <!-- Unspecified means to use the row value for the column value -->
+			<!-- Unspecified value means to use the row value for the column value -->
+			<attribute name="value" type="expression" specify="optional" />
+			<!-- Unspecified format means render using toString(), uneditable -->
 			<attribute name="format" type="expression" specify="optional" />
-			<child-def name="edit" type="edit" min="0" />
+			<child-def name="edit" type="column-edit" min="0" />
 		</element-def>
-		<element-def name="edit">
+		<element-def name="column-edit">
 			<attribute name="type" type="column-edit-type" />
 			<child-def name="editor" type="value-widget" inherits="column-editor" />
 		</element-def>
-		<element-def name="columns" extends="int-model-value">
-			<attribute name="value-name" type="value-name" />
-			<attribute name="column-value-name" type="value-name" />
+		<element-def name="columns" extends="int-model-value" inherits="multi-value-renderable,renderable-widget,">
 			<child-def name="column" type="column" min="0" max="inf" />
 		</element-def>
 		<element-def name="value-action">
@@ -188,21 +195,20 @@
 			<attribute name="rows" type="expression" specify="required" />
 			<child-def name="action" type="value-action" min="0" max="inf" />
 		</element-def>
-		<element-def name="tree" extends="multi-value-widget">
+		<element-def name="tree" extends="multi-value-widget" inherits="renderable-widget">
 			<attribute name="root" type="expression" specify="required" />
 			<attribute name="children" type="expression" specify="required" />
-			<attribute name="parent" type="expression" specify="optional" />
+			<child-def name="tree-column" type="column" inherits="tree-column" min="0" max="1" />
 			<child-def name="action" type="value-action" min="0" max="inf" />
 		</element-def>
-		<element-def name="tree-table" extends="tree" inherits="tabular-widget">
-			<child-def name="tree-column" type="column" />
-		</element-def>
+		<element-def name="tree-table" extends="tree" inherits="tabular-widget" />
 
 		<!-- Containers -->
 		<element-def name="container" extends="widget" abstract="true">
 			<child-def name="content" type="widget" min="0" max="inf" />
 		</element-def>
 		<element-def name="box" extends="container">
+			<attribute name="opacity" type="expression" specify="optional" />
 			<attribute name="layout" type="layout" specify="required" />
 		</element-def>
 		<element-def name="field-panel" extends="container">

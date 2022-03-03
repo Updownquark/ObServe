@@ -941,14 +941,13 @@ public interface Observable<T> extends Lockable, Identifiable {
 
 		@Override
 		public ThreadConstraint getThreadConstraint() {
-			if (theObservables.length == 0)
-				return ThreadConstraint.NONE;
-			ThreadConstraint c = theObservables[0].getThreadConstraint();
-			if (c == null)
-				return null;
-			for (int i = 1; i < theObservables.length; i++) {
-				if (theObservables[i].getThreadConstraint() != c)
-					return null;
+			ThreadConstraint c = ThreadConstraint.NONE;
+			for (Observable<? extends V> obs : theObservables) {
+				ThreadConstraint obsC = obs.getThreadConstraint();
+				if (c == ThreadConstraint.NONE)
+					c = obsC;
+				else if (obsC != ThreadConstraint.NONE && c != obsC)
+					return ThreadConstraint.ANY;
 			}
 			return c;
 		}
@@ -966,7 +965,7 @@ public interface Observable<T> extends Lockable, Identifiable {
 					else if (j > index)
 						others[j - 1] = theObservables[j];
 				}
-				subs[i] = theObservables[i].subscribe(new Observer<V>() {
+				subs[i] = theObservables[i] == null ? Subscription.NONE : theObservables[i].subscribe(new Observer<V>() {
 					@Override
 					public <V2 extends V> void onNext(V2 value) {
 						try (Transaction t = Lockable.lockAll(others)) {
@@ -1001,7 +1000,7 @@ public interface Observable<T> extends Lockable, Identifiable {
 		@Override
 		public boolean isSafe() {
 			for (Observable<?> o : theObservables)
-				if (!o.isSafe())
+				if (o != null && !o.isSafe())
 					return false;
 			return true;
 		}

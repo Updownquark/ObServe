@@ -16,7 +16,6 @@ import java.awt.event.ComponentEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
-import java.awt.event.MouseMotionListener;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.io.File;
@@ -54,10 +53,8 @@ import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
-import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
-import javax.swing.JPopupMenu;
 import javax.swing.JProgressBar;
 import javax.swing.JRadioButton;
 import javax.swing.JScrollPane;
@@ -70,17 +67,12 @@ import javax.swing.JTree;
 import javax.swing.ListSelectionModel;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
-import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
 import javax.swing.event.ChangeListener;
-import javax.swing.tree.TreeCellRenderer;
-import javax.swing.tree.TreePath;
-import javax.swing.tree.TreeSelectionModel;
 
 import org.jdesktop.swingx.JXCollapsiblePane;
 import org.jdesktop.swingx.JXPanel;
 import org.jdesktop.swingx.JXTreeTable;
-import org.observe.Equivalence;
 import org.observe.Observable;
 import org.observe.ObservableAction;
 import org.observe.ObservableValue;
@@ -332,7 +324,13 @@ public class PanelPopulation {
 		<F> P addTree(ObservableValue<? extends F> root, Function<? super F, ? extends ObservableCollection<? extends F>> children,
 			Consumer<TreeEditor<F, ?>> modify);
 
+		<F> P addTree2(ObservableValue<? extends F> root,
+			Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children, Consumer<TreeEditor<F, ?>> modify);
+
 		<F> P addTreeTable(ObservableValue<F> root, Function<? super F, ? extends ObservableCollection<? extends F>> children,
+			Consumer<TreeTableEditor<F, ?>> modify);
+
+		<F> P addTreeTable2(ObservableValue<F> root, Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children,
 			Consumer<TreeTableEditor<F, ?>> modify);
 
 		P addTabs(Consumer<TabPaneEditor<JTabbedPane, ?>> tabs);
@@ -798,9 +796,9 @@ public class PanelPopulation {
 	}
 
 	public interface AbstractTableBuilder<R, C extends Component, P extends AbstractTableBuilder<R, C, P>> {
-		P withColumns(ObservableCollection<? extends CategoryRenderStrategy<? super R, ?>> columns);
+		P withColumns(ObservableCollection<? extends CategoryRenderStrategy<R, ?>> columns);
 
-		P withColumn(CategoryRenderStrategy<? super R, ?> column);
+		P withColumn(CategoryRenderStrategy<R, ?> column);
 
 		default <C> P withColumn(String name, TypeToken<C> type, Function<? super R, ? extends C> accessor, //
 			Consumer<CategoryRenderStrategy<R, C>> column) {
@@ -997,33 +995,20 @@ public class PanelPopulation {
 	extends CollectionWidgetBuilder<BetterList<F>, C, P> {
 		ObservableValue<? extends F> getRoot();
 
-		default P withSelection(SettableValue<F> selection, Function<? super F, ? extends F> parent, boolean enforceSingleSelection) {
-			return withSelection(selection.map(TypeTokens.get().keyFor(BetterList.class).parameterized(selection.getType()), //
-				s -> pathTo(s, parent, getRoot().get()), //
-				path -> path == null ? null : path.get(path.size() - 1), null), enforceSingleSelection);
+		CategoryRenderStrategy<BetterList<F>, F> getRender();
+
+		P withRender(CategoryRenderStrategy<BetterList<F>, F> render);
+
+		default P withRender(Consumer<CategoryRenderStrategy<BetterList<F>, F>> render) {
+			render.accept(getRender());
+			return (P) this;
 		}
 
-		default P withSelection(ObservableCollection<F> selection, Function<? super F, ? extends F> parent) {
-			return withSelection(selection.flow()
-				.<BetterList<F>> transform(TypeTokens.get().keyFor(BetterList.class).parameterized(selection.getType()), //
-					tx -> tx.cache(false).map(s -> pathTo(s, parent, getRoot().get())).withReverse(path -> path.get(path.size() - 1)))//
-				.collectPassive());
-		}
+		P withValueSelection(SettableValue<F> selection, boolean enforceSingleSelection);
+
+		P withValueSelection(ObservableCollection<F> selection);
 
 		P withLeafTest(Predicate<? super F> leafTest);
-
-		static <T> BetterList<T> pathTo(T value, Function<? super T, ? extends T> parent, T root) {
-			if (value == null)
-				return null;
-			LinkedList<T> path = new LinkedList<>();
-			while (true) {
-				path.addFirst(value);
-				if (value == null || value == root)
-					break;
-				value = parent.apply(value);
-			}
-			return BetterList.of(path);
-		}
 
 		boolean isVisible(List<? extends F> path);
 
@@ -1031,36 +1016,10 @@ public class PanelPopulation {
 	}
 
 	public interface TreeEditor<F, P extends TreeEditor<F, P>> extends AbstractTreeEditor<F, JTree, P> {
-		default P renderWith(Function<? super F, String> format) {
-			return renderWith(ObservableCellRenderer.formatted(format));
-		}
-
-		P renderWith(ObservableCellRenderer<BetterList<F>, F> renderer);
-
-		default P withValueTooltip(Function<? super F, String> tooltip) {
-			return withCellTooltip(tooltip == null ? null : cell -> tooltip.apply(cell.getCellValue()));
-		}
-
-		P withCellTooltip(Function<? super ModelCell<BetterList<F>, F>, String> tooltip);
 	}
 
 	public interface TreeTableEditor<F, P extends TreeTableEditor<F, P>>
-	extends AbstractTreeEditor<F, JXTreeTable, P>, AbstractTableBuilder<F, JXTreeTable, P> {
-		P withMouseListener(ObservableTreeModel.PathMouseListener<? super F> listener);
-
-		CategoryRenderStrategy<? super F, F> getTreeColumn();
-
-		default P withTreeColumn(String name, Consumer<CategoryRenderStrategy<? super F, F>> treeColumn) {
-			CategoryRenderStrategy<? super F, F> column = getTreeColumn();
-			if (column == null) {
-				column = new CategoryRenderStrategy<F, F>(name, (TypeToken<F>) getRoot().getType(), f -> f);
-				withTreeColumn(column);
-			}
-			treeColumn.accept(column);
-			return (P) this;
-		}
-
-		P withTreeColumn(CategoryRenderStrategy<? super F, F> column);
+	extends AbstractTreeEditor<F, JXTreeTable, P>, AbstractTableBuilder<BetterList<F>, JXTreeTable, P> {
 	}
 
 	public interface Alert {
@@ -1563,7 +1522,18 @@ public class PanelPopulation {
 		@Override
 		default <F> P addTree(ObservableValue<? extends F> root, Function<? super F, ? extends ObservableCollection<? extends F>> children,
 			Consumer<TreeEditor<F, ?>> modify) {
-			SimpleTreeEditor<F, ?> treeEditor = new SimpleTreeEditor<>(getLock(), root, children);
+			SimpleTreeBuilder<F, ?> treeEditor = SimpleTreeBuilder.createTree(getLock(), root, children);
+			if (modify != null)
+				modify.accept(treeEditor);
+			doAdd(treeEditor, null, null, false);
+			return (P) this;
+		}
+
+		@Override
+		default <F> P addTree2(ObservableValue<? extends F> root,
+			Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children,
+				Consumer<TreeEditor<F, ?>> modify) {
+			SimpleTreeBuilder<F, ?> treeEditor = SimpleTreeBuilder.createTree2(getLock(), root, children);
 			if (modify != null)
 				modify.accept(treeEditor);
 			doAdd(treeEditor, null, null, false);
@@ -1573,7 +1543,17 @@ public class PanelPopulation {
 		@Override
 		default <F> P addTreeTable(ObservableValue<F> root, Function<? super F, ? extends ObservableCollection<? extends F>> children,
 			Consumer<TreeTableEditor<F, ?>> modify) {
-			SimpleTreeTableBuilder<F, ?> treeTableEditor = new SimpleTreeTableBuilder<>(getLock(), root, children);
+			SimpleTreeTableBuilder<F, ?> treeTableEditor = SimpleTreeTableBuilder.createTreeTable(getLock(), root, children);
+			if (modify != null)
+				modify.accept(treeTableEditor);
+			doAdd(treeTableEditor, null, null, false);
+			return (P) this;
+		}
+
+		@Override
+		default <F> P addTreeTable2(ObservableValue<F> root,
+			Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children, Consumer<TreeTableEditor<F, ?>> modify) {
+			SimpleTreeTableBuilder<F, ?> treeTableEditor = SimpleTreeTableBuilder.createTreeTable2(getLock(), root, children);
 			if (modify != null)
 				modify.accept(treeTableEditor);
 			doAdd(treeTableEditor, null, null, false);
@@ -2704,7 +2684,8 @@ public class PanelPopulation {
 							selectedTab.tab.getOnSelect().set(true, evt);
 					}
 				};
-				getEditor().setSelectedIndex(0);
+				if (getEditor().getTabCount() > 0)
+					getEditor().setSelectedIndex(0);
 				initialized[0] = true;
 				theSelectedTabId.changes().takeUntil(until).act(evt -> {
 					Object tabID = evt.getNewValue();
@@ -4051,252 +4032,6 @@ public class PanelPopulation {
 				if (theButtonMod != null)
 					theButtonMod.accept(button);
 			});
-		}
-	}
-
-	static class SimpleTreeEditor<F, P extends SimpleTreeEditor<F, P>> extends AbstractComponentEditor<JTree, P>
-	implements TreeEditor<F, P> {
-		private final ObservableValue<? extends F> theRoot;
-		private JScrollPane theComponent;
-
-		private String theItemName;
-
-		private ObservableCellRenderer<BetterList<F>, F> theRenderer;
-		private Function<? super ModelCell<BetterList<F>, F>, String> theValueTooltip;
-		private SettableValue<BetterList<F>> theSingleSelection;
-		private boolean isSingleSelection;
-		private ObservableCollection<BetterList<F>> theMultiSelection;
-		private List<SimpleDataAction<BetterList<F>, ?>> theActions;
-
-		private JPanel thePanel;
-
-		public SimpleTreeEditor(Supplier<Transactable> lock, ObservableValue<? extends F> root,
-			Function<? super F, ? extends ObservableCollection<? extends F>> children) {
-			super(new JTree(new PPTreeModel<F>(root, children)), lock);
-			theRoot = root;
-			theActions = new ArrayList<>();
-		}
-
-		static class PPTreeModel<F> extends ObservableTreeModel<F> {
-			private final Function<? super F, ? extends ObservableCollection<? extends F>> theChildren;
-			private Predicate<? super F> theLeafTest;
-
-			PPTreeModel(ObservableValue<? extends F> root, Function<? super F, ? extends ObservableCollection<? extends F>> children) {
-				super(root);
-				theChildren = children;
-			}
-
-			@Override
-			protected ObservableCollection<? extends F> getChildren(F parent) {
-				return theChildren.apply(parent);
-			}
-
-			@Override
-			public void valueForPathChanged(TreePath path, Object newValue) {}
-
-			@Override
-			public boolean isLeaf(Object node) {
-				Predicate<? super F> leafTest = theLeafTest;
-				return leafTest != null && leafTest.test((F) node);
-			}
-
-			public void setLeafTest(Predicate<? super F> leafTest) {
-				theLeafTest = leafTest;
-			}
-		}
-
-		@Override
-		public List<BetterList<F>> getSelection() {
-			TreePath[] selection = getEditor().getSelectionPaths();
-			return BetterList.of(Arrays.stream(selection)//
-				.map(path -> (BetterList<F>) BetterList.of(path.getPath())));
-		}
-
-		@Override
-		public P withRemove(Consumer<? super List<? extends BetterList<F>>> deletion, Consumer<DataAction<BetterList<F>, ?>> actionMod) {
-			throw new UnsupportedOperationException("Not yet implemented");
-		}
-
-		@Override
-		public P withMultiAction(Consumer<? super List<? extends BetterList<F>>> action, Consumer<DataAction<BetterList<F>, ?>> actionMod) {
-			SimpleDataAction<BetterList<F>, ?> ta = new SimpleDataAction<>(this, action, this::getSelection);
-			actionMod.accept(ta);
-			theActions.add(ta);
-			return (P) this;
-		}
-
-		@Override
-		public P withItemName(String itemName) {
-			theItemName = itemName;
-			return (P) this;
-		}
-
-		@Override
-		public String getItemName() {
-			return theItemName;
-		}
-
-		@Override
-		public ObservableValue<? extends F> getRoot() {
-			return theRoot;
-		}
-
-		@Override
-		public P renderWith(ObservableCellRenderer<BetterList<F>, F> renderer) {
-			theRenderer = renderer;
-			return (P) this;
-		}
-
-		@Override
-		public P withCellTooltip(Function<? super ModelCell<BetterList<F>, F>, String> tooltip) {
-			theValueTooltip = tooltip;
-			return (P) this;
-		}
-
-		@Override
-		public P withSelection(SettableValue<BetterList<F>> selection, boolean enforceSingleSelection) {
-			theSingleSelection = selection;
-			isSingleSelection = enforceSingleSelection;
-			return (P) this;
-		}
-
-		@Override
-		public P withSelection(ObservableCollection<BetterList<F>> selection) {
-			theMultiSelection = selection;
-			return (P) this;
-		}
-
-		@Override
-		public P withLeafTest(Predicate<? super F> leafTest) {
-			((PPTreeModel<F>) getEditor().getModel()).setLeafTest(leafTest);
-			return (P) this;
-		}
-
-		@Override
-		public boolean isVisible(List<? extends F> path) {
-			return getEditor().isVisible(new TreePath(path.toArray()));
-		}
-
-		@Override
-		public boolean isExpanded(List<? extends F> path) {
-			return getEditor().isExpanded(new TreePath(path.toArray()));
-		}
-
-		@Override
-		protected Component getOrCreateComponent(Observable<?> until) {
-			if (theComponent != null)
-				return theComponent;
-			if (theRenderer != null)
-				getEditor().setCellRenderer(new ObservableTreeCellRenderer<>(theRenderer));
-			MouseMotionListener motion = new MouseAdapter() {
-				@Override
-				public void mouseEntered(MouseEvent e) {
-					mouseMoved(e);
-				}
-
-				@Override
-				public void mouseMoved(MouseEvent e) {
-					TreePath path = getEditor().getPathForLocation(e.getX(), e.getY());
-					if (path == null || theValueTooltip == null)
-						getEditor().setToolTipText(null);
-					else {
-						BetterList<F> list = BetterList.of((List<F>) Arrays.asList(path.getPath()));
-						int row = getEditor().getRowForLocation(e.getX(), e.getY());
-						F value = (F) path.getLastPathComponent();
-						ModelCell<BetterList<F>, F> cell = new ModelCell.Default<>(() -> list, value, row, 0,
-							getEditor().getSelectionModel().isRowSelected(row), false, !getEditor().isCollapsed(row),
-							getEditor().getModel().isLeaf(value));
-						getEditor().setToolTipText(theValueTooltip.apply(cell));
-					}
-				}
-			};
-			getEditor().addMouseMotionListener(motion);
-			until.take(1).act(__ -> getEditor().removeMouseMotionListener(motion));
-			if (theMultiSelection != null)
-				ObservableTreeModel.syncSelection(getEditor(), theMultiSelection, until);
-			if (theSingleSelection != null) {
-				ObservableTreeModel.syncSelection(getEditor(), theSingleSelection, false, Equivalence.DEFAULT, until);
-				if (isSingleSelection)
-					getEditor().getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
-			}
-			if (!theActions.isEmpty()) {
-				JPopupMenu popup = new JPopupMenu();
-				SimpleDataAction<BetterList<F>, ?>[] actions = theActions.toArray(new SimpleDataAction[theActions.size()]);
-				JMenuItem[] actionMenuItems = new JMenuItem[actions.length];
-				for (int a = 0; a < actions.length; a++) {
-					actionMenuItems[a] = new JMenuItem();
-					SimpleDataAction<BetterList<F>, ?> action = actions[a];
-					if (action.theButtonMod != null) {
-						SimpleButtonEditor<?, ?> buttonEditor = new SimpleButtonEditor<>(null, actionMenuItems[a], null,
-							action.theObservableAction, getLock(), false);
-						action.theButtonMod.accept(buttonEditor);
-						buttonEditor.getOrCreateComponent(until);
-					}
-					actionMenuItems[a].addActionListener(evt -> action.theObservableAction.act(evt));
-				}
-				getEditor().getSelectionModel().addTreeSelectionListener(evt -> {
-					List<BetterList<F>> selection = getSelection();
-					for (SimpleDataAction<BetterList<F>, ?> action : actions)
-						action.updateSelection(selection, evt);
-				});
-				getEditor().addMouseListener(new MouseAdapter() {
-					@Override
-					public void mouseClicked(MouseEvent evt) {
-						if (!SwingUtilities.isRightMouseButton(evt))
-							return;
-						popup.removeAll();
-						for (int a = 0; a < actions.length; a++) {
-							if (actions[a].isEnabled() == null)
-								popup.add(actionMenuItems[a]);
-						}
-						if (popup.getComponentCount() > 0)
-							popup.show(getEditor(), evt.getX(), evt.getY());
-					}
-				});
-			}
-			theComponent = new JScrollPane(decorate(getEditor()));
-			return theComponent;
-		}
-
-		@Override
-		public Component getComponent() {
-			return theComponent;
-		}
-
-		@Override
-		public ObservableValue<String> getTooltip() {
-			return null;
-		}
-
-		@Override
-		protected Component createFieldNameLabel(Observable<?> until) {
-			return null;
-		}
-
-		@Override
-		protected Component createPostLabel(Observable<?> until) {
-			return null;
-		}
-
-		static class ObservableTreeCellRenderer<F> implements TreeCellRenderer {
-			private final ObservableCellRenderer<BetterList<F>, F> theRenderer;
-
-			ObservableTreeCellRenderer(ObservableCellRenderer<BetterList<F>, F> renderer) {
-				theRenderer = renderer;
-			}
-
-			@Override
-			public Component getTreeCellRendererComponent(JTree tree, Object value, boolean selected, boolean expanded, boolean leaf,
-				int row, boolean hasFocus) {
-				Supplier<BetterList<F>> modelValue = () -> {
-					TreePath path = tree.getPathForRow(row);
-					BetterList<F> list = BetterList.of((List<F>) Arrays.asList(path.getPath()));
-					return list;
-				};
-				ModelCell<BetterList<F>, F> cell = new ModelCell.Default<>(modelValue, (F) value, row, 0, selected, hasFocus, expanded,
-					leaf);
-				return theRenderer.getCellRendererComponent(tree, cell, null);
-			}
 		}
 	}
 

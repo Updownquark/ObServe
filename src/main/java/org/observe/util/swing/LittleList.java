@@ -632,22 +632,24 @@ public class LittleList<E> extends JComponent implements Scrollable {
 		String getItemTooltip(int selected) {
 			E row;
 			ObservableCellRenderer<E, E> renderer;
+			ModelCell<E, E> cell;
 			if (selected < theModel.getSize()) {
 				row = theModel.getElementAt(selected);
-				String tt = theRenderStrategy.getTooltip(row, row);
+				cell = new ModelCell.Default<>(LambdaUtils.constantSupplier(row, () -> String.valueOf(row), row), row, selected, 0, //
+					theSelectionModel.isSelectedIndex(selected), theSelectionModel.isSelectedIndex(selected), true, true);
+				String tt = theRenderStrategy.getTooltip(cell);
 				if (tt != null)
 					return tt;
 				renderer = (ObservableCellRenderer<E, E>) theRenderStrategy.getRenderer();
 			} else if (selected == theModel.getSize() && theRenderStrategy.getAddRow() != null) {
 				row = theRenderStrategy.getAddRow().getEditSeedRow().get();
+				cell = new ModelCell.Default<>(LambdaUtils.constantSupplier(row, () -> String.valueOf(row), row), row, selected, 0, //
+					theSelectionModel.isSelectedIndex(selected), theSelectionModel.isSelectedIndex(selected), true, true);
 				renderer = (ObservableCellRenderer<E, E>) theRenderStrategy.getAddRow().getRenderer();
 			} else
 				throw new IndexOutOfBoundsException(selected + " of " + getComponentCount());
 
-			Component rendered = renderer.getCellRendererComponent(LittleList.this,
-				new ModelCell.Default<>(LambdaUtils.constantSupplier(row, () -> String.valueOf(row), row), row, selected, 0, //
-					theSelectionModel.isSelectedIndex(selected), theSelectionModel.isSelectedIndex(selected), true, true),
-				CellRenderContext.DEFAULT);
+			Component rendered = renderer.getCellRendererComponent(LittleList.this, cell, CellRenderContext.DEFAULT);
 			return rendered instanceof JComponent ? ((JComponent) rendered).getToolTipText() : null;
 		}
 

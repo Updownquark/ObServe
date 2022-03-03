@@ -13,6 +13,7 @@ import org.observe.Observable;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.TableContentControl.ValueRenderer;
+import org.qommons.LambdaUtils;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.io.Format;
 
@@ -31,8 +32,8 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 		private BiFunction<? super R, ? super C, ? extends R> theRowMutator;
 		private boolean updateRowIfUnchanged;
 
-		private ObservableCellEditor<R, ? super C> theEditor;
-		private BiFunction<? super R, ? super C, String> theEditorTooltip;
+		private ObservableCellEditor<R, C> theEditor;
+		private Function<? super ModelCell<? extends R, ? extends C>, String> theEditorTooltip;
 
 		private BiFunction<MutableCollectionElement<R>, ? super C, String> theValueFilter;
 		private Dragging.SimpleTransferAccepter<R, C, C> theDragAccepter;
@@ -77,7 +78,7 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 			return this;
 		}
 
-		public CategoryMutationStrategy withEditor(ObservableCellEditor<R, ? super C> editor) {
+		public CategoryMutationStrategy withEditor(ObservableCellEditor<R, C> editor) {
 			theEditor = editor;
 			return this;
 		}
@@ -85,14 +86,14 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 		public CategoryMutationStrategy asText(Format<C> format) {
 			withEditor(ObservableCellEditor.createTextEditor(format));
 			if (isRenderDefault)
-				formatText(format::format);
+				formatText(LambdaUtils.printableFn(format::format, format::toString, format));
 			return this;
 		}
 
 		public CategoryMutationStrategy asText(Format<C> format, Consumer<ObservableTextField<C>> textField) {
 			withEditor(ObservableCellEditor.createTextEditor(format, textField));
 			if (isRenderDefault)
-				formatText(format::format);
+				formatText(LambdaUtils.printableFn(format::format, format::toString, format));
 			return this;
 		}
 
@@ -156,6 +157,10 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 		}
 
 		public CategoryMutationStrategy withEditorTooltip(BiFunction<? super R, ? super C, String> tooltip) {
+			return withEditorTooltip(cell -> tooltip.apply(cell.getModelValue(), cell.getCellValue()));
+		}
+
+		public CategoryMutationStrategy withEditorTooltip(Function<? super ModelCell<? extends R, ? extends C>, String> tooltip) {
 			theEditorTooltip = tooltip;
 			return this;
 		}
@@ -186,16 +191,12 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 				rowElement.set(newRow);
 		}
 
-		public ObservableCellEditor<? super R, ? super C> getEditor() {
+		public ObservableCellEditor<R, C> getEditor() {
 			return theEditor;
 		}
 
-		public BiFunction<? super R, ? super C, String> getEditorTooltip() {
+		public Function<? super ModelCell<? extends R, ? extends C>, String> getEditorTooltip() {
 			return theEditorTooltip;
-		}
-
-		public void setEditorTooltip(BiFunction<? super R, ? super C, String> editorTooltip) {
-			theEditorTooltip = editorTooltip;
 		}
 
 		public BiPredicate<? super R, ? super C> getEditability() {
@@ -339,7 +340,7 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 	private CategoryMouseListener<? super R, ? super C> theMouseListener;
 	private CategoryKeyListener<? super R, ? super C> theKeyListener;
 	private String theHeaderTooltip;
-	private BiFunction<? super R, ? super C, String> theTooltip;
+	private Function<? super ModelCell<? extends R, ? extends C>, String> theTooltip;
 	private ObservableCellRenderer<R, C> theRenderer;
 	private boolean isRenderDefault;
 	private CellDecorator<R, C> theDecorator;
@@ -391,8 +392,12 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 		return theAccessor.apply(rowValue);
 	}
 
-	public String getTooltip(R row, C category) {
-		return theTooltip == null ? null : theTooltip.apply(row, category);
+	public Function<? super ModelCell<? extends R, ? extends C>, String> getTooltipFn() {
+		return theTooltip;
+	}
+
+	public String getTooltip(ModelCell<R, C> cell) {
+		return theTooltip == null ? null : theTooltip.apply(cell);
 	}
 
 	public CategoryMutationStrategy getMutator() {
@@ -426,6 +431,10 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 	}
 
 	public CategoryRenderStrategy<R, C> withValueTooltip(BiFunction<? super R, ? super C, String> tooltip) {
+		return withCellTooltip(cell -> tooltip.apply(cell.getModelValue(), cell.getCellValue()));
+	}
+
+	public CategoryRenderStrategy<R, C> withCellTooltip(Function<? super ModelCell<? extends R, ? extends C>, String> tooltip) {
 		theTooltip = tooltip;
 		return this;
 	}

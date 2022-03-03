@@ -1,6 +1,5 @@
 package org.observe.util.swing;
 
-import java.awt.event.MouseEvent;
 import java.beans.PropertyChangeListener;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -41,81 +40,6 @@ import com.google.common.reflect.TypeToken;
  * @param <T> The type of values in the tree
  */
 public abstract class ObservableTreeModel<T> implements TreeModel {
-	/**
-	 * A mouse listener for a tree
-	 *
-	 * @param <R> The type of the values in the tree
-	 */
-	public interface PathMouseListener<R> {
-		/**
-		 * @param path The row in the tree that the event occurred on
-		 * @param e The event
-		 */
-		void mouseClicked(ModelPath<? extends R> path, MouseEvent e);
-
-		/**
-		 * @param path The row in the tree that the event occurred on
-		 * @param e The event
-		 */
-		void mousePressed(ModelPath<? extends R> path, MouseEvent e);
-
-		/**
-		 * @param path The row in the tree that the event occurred on
-		 * @param e The event
-		 */
-		void mouseReleased(ModelPath<? extends R> path, MouseEvent e);
-
-		/**
-		 * @param path The row in the tree that the event occurred on
-		 * @param e The event
-		 */
-		void mouseEntered(ModelPath<? extends R> path, MouseEvent e);
-
-		/**
-		 * @param path The row in the tree that the event occurred on
-		 * @param e The event
-		 */
-		void mouseExited(ModelPath<? extends R> path, MouseEvent e);
-
-		/**
-		 * @param path The row in the tree that the event occurred on
-		 * @param e The event
-		 */
-		void mouseMoved(ModelPath<? extends R> path, MouseEvent e);
-	}
-
-	/**
-	 * A {@link PathMouseListener} with all its methods implemented, so only one (or a few) can be overridden instead of having to specify
-	 * empty methods
-	 *
-	 * @param <R> The type of values in the tree
-	 */
-	public static abstract class PathMouseAdapter<R> implements PathMouseListener<R> {
-		@Override
-		public void mouseClicked(ModelPath<? extends R> path, MouseEvent e) {
-		}
-
-		@Override
-		public void mousePressed(ModelPath<? extends R> path, MouseEvent e) {
-		}
-
-		@Override
-		public void mouseReleased(ModelPath<? extends R> path, MouseEvent e) {
-		}
-
-		@Override
-		public void mouseEntered(ModelPath<? extends R> path, MouseEvent e) {
-		}
-
-		@Override
-		public void mouseExited(ModelPath<? extends R> path, MouseEvent e) {
-		}
-
-		@Override
-		public void mouseMoved(ModelPath<? extends R> row, MouseEvent e) {
-		}
-	}
-
 	private final ObservableValue<? extends T> theRoot;
 	private TreeNode theRootNode;
 
@@ -155,6 +79,11 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 		if (value == null)
 			return null;
 		return theNodes.get(new IdentityKey<>(value));
+	}
+
+	public BetterList<T> getBetterPath(T value) {
+		TreeNode node = getNode(value);
+		return node == null ? null : node.getBetterPath();
 	}
 
 	/** Fires a change event on the root (but not the entire tree) */
@@ -241,6 +170,7 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 	class TreeNode {
 		private final TreeNode theParent;
 		private final T theValue;
+		private final int theDepth;
 		private final List<TreeNode> theChildNodes;
 		private ObservableCollection<? extends T> theChildren;
 		private SimpleObservable<Void> unsubscribe;
@@ -249,11 +179,16 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 		TreeNode(TreeNode parent, T value) {
 			theParent = parent;
 			theValue = value;
+			theDepth = parent == null ? 0 : parent.getDepth() + 1;
 			theChildNodes = new ArrayList<>();
 		}
 
 		T get() {
 			return theValue;
+		}
+
+		int getDepth() {
+			return theDepth;
 		}
 
 		ObservableCollection<? extends T> getChildren() {
@@ -370,7 +305,7 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 		}
 
 		TreePath getPath() {
-			ArrayList<Object> path = new ArrayList<>();
+			ArrayList<Object> path = new ArrayList<>(theDepth + 1);
 			TreeNode node = this;
 			do {
 				path.add(node.theValue);
@@ -378,6 +313,16 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 			} while (node != null);
 			Collections.reverse(path);
 			return new TreePath(path.toArray());
+		}
+
+		BetterList<T> getBetterPath() {
+			Object[] pathArray = new Object[theDepth + 1];
+			TreeNode node = this;
+			for (int i = theDepth; node != null; i--) {
+				pathArray[i] = node.get();
+				node = node.theParent;
+			}
+			return (BetterList<T>) (BetterList<?>) BetterList.of(pathArray);
 		}
 
 		void changed() {
@@ -498,6 +443,20 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 				}
 			});
 		}
+	}
+
+	/**
+	 * @param <T> The type of values in the tree model
+	 * @param treePath The tree path of a value in the tree
+	 * @return A BetterList containing the same data as the given tree path
+	 */
+	public static <T> BetterList<T> betterPath(TreePath treePath) {
+		if (treePath == null)
+			return null;
+		Object[] pathArray = new Object[treePath.getPathCount()];
+		for (int i = 0; i < pathArray.length; i++)
+			pathArray[i] = treePath.getPathComponent(i);
+		return (BetterList<T>) (BetterList<?>) BetterList.of(pathArray);
 	}
 
 	/**

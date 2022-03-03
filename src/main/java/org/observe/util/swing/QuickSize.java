@@ -2,6 +2,25 @@ package org.observe.util.swing;
 
 import java.util.Objects;
 
+import org.observe.SettableValue;
+import org.observe.expresso.Expression.ExpressoParseException;
+import org.observe.expresso.ExpressoParser;
+import org.observe.expresso.ObservableExpression;
+import org.observe.util.ClassView;
+import org.observe.util.ModelType.ModelInstanceType;
+import org.observe.util.ModelTypes;
+import org.observe.util.ObservableModelSet;
+import org.observe.util.ObservableModelSet.ModelSetInstance;
+import org.observe.util.ObservableModelSet.ValueContainer;
+import org.observe.util.TypeTokens;
+import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.config.CustomValueType;
+import org.qommons.config.QonfigInterpreter.QonfigInterpretationException;
+import org.qommons.config.QonfigParseSession;
+import org.qommons.config.QonfigToolkit;
+
+import com.google.common.reflect.TypeToken;
+
 public class QuickSize {
 	public enum SizeUnit {
 		Pixels("px"), Percent("%");
@@ -70,5 +89,75 @@ public class QuickSize {
 			}
 		}
 		return new QuickSize(Float.parseFloat(pos), type);
+	}
+
+	public static class SizeValueType implements CustomValueType {
+		private final ExpressoParser theParser;
+
+		public SizeValueType(ExpressoParser parser) {
+			theParser = parser;
+		}
+
+		@Override
+		public String getName() {
+			return "size";
+		}
+
+		@Override
+		public ObservableExpression parse(String value, QonfigToolkit tk, QonfigParseSession session) {
+			SizeUnit unit = null;
+			for (SizeUnit u : SizeUnit.values()) {
+				if (value.endsWith(u.name)) {
+					unit = u;
+					break;
+				}
+			}
+			if (unit != null)
+				value = value.substring(0, value.length() - unit.name.length()).trim();
+			ObservableExpression valueEx;
+			try {
+				valueEx = theParser.parse(value);
+			} catch (ExpressoParseException e) {
+				session.withError(e.getMessage(), e);
+				return null;
+			}
+			SizeUnit fUnit = unit == null ? SizeUnit.Pixels : unit;
+			return new ObservableExpression() {
+				@Override
+				public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ObservableModelSet models,
+					ClassView classView) throws QonfigInterpretationException {
+					throw new QonfigInterpretationException(StdMsg.UNSUPPORTED_OPERATION);
+				}
+
+				@Override
+				public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ObservableModelSet models,
+					ClassView classView) throws QonfigInterpretationException {
+					if (type.getModelType() != ModelTypes.Value)
+						throw new QonfigInterpretationException("Only values are supported");
+					else if (!(TypeTokens.getRawType(type.getType(0)).isAssignableFrom(QuickSize.class)))
+						throw new QonfigInterpretationException("Cannot cast SizeUnit to " + type.getType(0));
+					ValueContainer<SettableValue, SettableValue<Double>> valueC = valueEx
+						.evaluateInternal(ModelTypes.Value.forType(double.class), models, classView);
+					return (ValueContainer<M, MV>) new ValueContainer<SettableValue, SettableValue<QuickSize>>() {
+						@Override
+						public ModelInstanceType<SettableValue, SettableValue<QuickSize>> getType() {
+							return ModelTypes.Value.forType(QuickSize.class);
+						}
+
+						@Override
+						public SettableValue<QuickSize> get(ModelSetInstance models) {
+							return valueC.get(models).transformReversible(QuickSize.class, tx -> tx.cache(false)//
+								.map(dbl -> new QuickSize(dbl.floatValue(), fUnit))//
+								.withReverse(pos -> Double.valueOf(pos.value)));
+						}
+					};
+				}
+			};
+		}
+
+		@Override
+		public boolean isInstance(Object value) {
+			return value instanceof ObservableExpression;
+		}
 	}
 }

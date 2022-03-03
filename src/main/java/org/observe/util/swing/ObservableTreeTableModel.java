@@ -35,6 +35,8 @@ import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.CategoryRenderStrategy.CategoryKeyListener;
+import org.observe.util.swing.ObservableTableModel.RowMouseListener;
+import org.observe.util.swing.ObservableTableModel.TableMouseListener;
 import org.observe.util.swing.ObservableTableModel.TableRenderContext;
 import org.qommons.ArrayUtils;
 import org.qommons.Transaction;
@@ -51,24 +53,23 @@ import org.qommons.collect.MutableCollectionElement;
  */
 public class ObservableTreeTableModel<T> implements TreeTableModel {
 	private final ObservableTreeModel<T> theTreeModel;
-	private final ObservableCollection<? extends CategoryRenderStrategy<? super T, ?>> theColumns;
+	private final ObservableCollection<? extends CategoryRenderStrategy<BetterList<T>, ?>> theColumns;
 	// No aspect of this model may only change except on the EDT. We'll delegate to ObservableListModel's logic to handle this safely.
-	private final ObservableListModel<? extends CategoryRenderStrategy<? super T, ?>> theColumnModel;
+	private final ObservableListModel<? extends CategoryRenderStrategy<BetterList<T>, ?>> theColumnModel;
 
-	private final ListenerList<ObservableTreeModel.PathMouseListener<? super T>> thePathMouseListeners;
+	private final ListenerList<RowMouseListener<? super BetterList<T>>> theRowMouseListeners;
 
 	/**
 	 * @param treeModel The tree model for this tree table models' hierarchy
 	 * @param columns The columns for the table
 	 */
 	public ObservableTreeTableModel(ObservableTreeModel<T> treeModel,
-		ObservableCollection<? extends CategoryRenderStrategy<? super T, ?>> columns) {
+		ObservableCollection<? extends CategoryRenderStrategy<BetterList<T>, ?>> columns) {
 		theTreeModel = treeModel;
 		theColumns = columns;
 
 		theColumnModel = new ObservableListModel<>(columns);
-
-		thePathMouseListeners = ListenerList.build().build();
+		theRowMouseListeners = ListenerList.build().build();
 	}
 
 	/** @return The underlying tree model */
@@ -77,12 +78,12 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 	}
 
 	/** @return The collection of additional table columns */
-	public ObservableCollection<? extends CategoryRenderStrategy<? super T, ?>> getColumns() {
+	public ObservableCollection<? extends CategoryRenderStrategy<BetterList<T>, ?>> getColumns() {
 		return theColumns;
 	}
 
 	/** @return The additional table column, in an EDT-safe list model */
-	public ObservableListModel<? extends CategoryRenderStrategy<? super T, ?>> getColumnModel() {
+	public ObservableListModel<? extends CategoryRenderStrategy<BetterList<T>, ?>> getColumnModel() {
 		return theColumnModel;
 	}
 
@@ -90,7 +91,7 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 	 * @param columnIndex The index of the column to get
 	 * @return The column at the given index in the additional columns model
 	 */
-	public CategoryRenderStrategy<? super T, ?> getColumn(int columnIndex) {
+	public CategoryRenderStrategy<BetterList<T>, ?> getColumn(int columnIndex) {
 		return theColumnModel.getElementAt(columnIndex);
 	}
 
@@ -135,11 +136,11 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 	}
 
 	/**
-	 * @param mouseListener The listener to receive mouse events for each path
+	 * @param mouseListener The listener to receive mouse events for each row
 	 * @return A Runnable to execute to cease mouse listening
 	 */
-	public Runnable addMouseListener(ObservableTreeModel.PathMouseListener<? super T> mouseListener) {
-		return thePathMouseListeners.add(mouseListener, true);
+	public Runnable addMouseListener(RowMouseListener<? super BetterList<T>> mouseListener) {
+		return theRowMouseListeners.add(mouseListener, true);
 	}
 
 	@Override
@@ -164,7 +165,7 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 
 	@Override
 	public Object getValueAt(Object treeValue, int columnIndex) {
-		return theColumnModel.getElementAt(columnIndex).getCategoryValue((T) treeValue);
+		return theColumnModel.getElementAt(columnIndex).getCategoryValue(theTreeModel.getBetterPath((T) treeValue));
 	}
 
 	@Override
@@ -245,7 +246,7 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 		LinkedList<Subscription> subs = new LinkedList<>();
 		try (Transaction colT = model.getColumns().lock(false, null)) {
 			for (int c = 0; c < model.getColumnCount(); c++) {
-				CategoryRenderStrategy<? super R, ?> column = model.getColumn(c);
+				CategoryRenderStrategy<BetterList<R>, ?> column = model.getColumn(c);
 				TableColumn tblColumn = table.getColumnModel().getColumn(c);
 				hookUp(table, tblColumn, column, model, ctx);
 			}
@@ -268,7 +269,7 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 					}
 					for (int i = e.getIndex0(); i <= e.getIndex1(); i++) {
 						TableColumn column = new TableColumn(i);
-						CategoryRenderStrategy<? super R, ?> category = model.getColumnModel().getElementAt(i);
+						CategoryRenderStrategy<BetterList<R>, ?> category = model.getColumnModel().getElementAt(i);
 						hookUp(table, column, category, model, ctx);
 						table.getColumnModel().addColumn(column);
 					}
@@ -287,170 +288,52 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 				@Override
 				public void contentsChanged(ListDataEvent e) {
 					for (int i = e.getIndex0(); i <= e.getIndex1(); i++)
-						hookUp(table, table.getColumnModel().getColumn(i), model.theColumnModel.getElementAt(i), model, ctx);
+						hookUp(table, table.getColumnModel().getColumn(i),
+							(CategoryRenderStrategy<BetterList<R>, Object>) model.theColumnModel.getElementAt(i), model, ctx);
 				}
 			};
 			model.getColumnModel().addListDataListener(columnListener);
 			subs.add(() -> {
 				model.getColumnModel().removeListDataListener(columnListener);
 			});
-			MouseAdapter ml = new MouseAdapter() {
-				class MouseClickStruct<C> {
-					private final ModelPath<R> thePath;
-					private final ModelCell<R, C> cell;
-					private final CategoryRenderStrategy<? super R, ? super C> theCategory;
-
-					MouseClickStruct(ModelPath<R> path, ModelCell<R, C> cell, CategoryRenderStrategy<? super R, ? super C> category) {
-						thePath = path;
-						this.cell = cell;
-						theCategory = category;
-					}
-
-					MouseClickStruct<C> clicked(MouseEvent e, MouseClickStruct<?> previous) {
-						if (thePath != null)
-							model.thePathMouseListeners.forEach(listener -> listener.mouseClicked(thePath, e));
-						if (theCategory != null && theCategory.getMouseListener() != null)
-							theCategory.getMouseListener().mouseClicked(cell, e);
-						return this;
-					}
-
-					MouseClickStruct<C> pressed(MouseEvent e, MouseClickStruct<?> previous) {
-						if (thePath != null)
-							model.thePathMouseListeners.forEach(listener -> listener.mousePressed(thePath, e));
-						if (theCategory != null && theCategory.getMouseListener() != null)
-							theCategory.getMouseListener().mousePressed(cell, e);
-						return this;
-					}
-
-					MouseClickStruct<C> released(MouseEvent e, MouseClickStruct<?> previous) {
-						if (thePath != null)
-							model.thePathMouseListeners.forEach(listener -> listener.mouseReleased(thePath, e));
-						if (theCategory != null && theCategory.getMouseListener() != null)
-							theCategory.getMouseListener().mouseReleased(cell, e);
-						return this;
-					}
-
-					MouseClickStruct<C> entered(MouseEvent e, MouseClickStruct<?> previous) {
-						if (thePath != null)
-							model.thePathMouseListeners.forEach(listener -> listener.mouseEntered(thePath, e));
-						if (theCategory != null && theCategory.getMouseListener() != null)
-							theCategory.getMouseListener().mouseEntered(cell, e);
-						return this;
-					}
-
-					MouseClickStruct<C> exited(MouseEvent e, MouseClickStruct<?> previous) {
-						if (thePath != null)
-							model.thePathMouseListeners.forEach(listener -> listener.mouseExited(thePath, e));
-						if (theCategory != null && theCategory.getMouseListener() != null)
-							theCategory.getMouseListener().mouseExited(cell, e);
-						return this;
-					}
-
-					MouseClickStruct<C> moved(MouseEvent e, MouseClickStruct<?> previous) {
-						if (previous != null && previous.thePath != null) {
-							if (thePath != null && thePath.getModelValue() == previous.thePath.getModelValue()) {
-								model.thePathMouseListeners.forEach(listener -> listener.mouseMoved(thePath, e));
-								if (previous.theCategory != null && previous.theCategory == theCategory) {
-									if (theCategory != null && theCategory.getMouseListener() != null)
-										theCategory.getMouseListener().mouseMoved(cell, e);
-								} else {
-									previous.exitCell(e);
-									if (theCategory != null && theCategory.getMouseListener() != null)
-										theCategory.getMouseListener().mouseEntered(cell, e);
-								}
-							} else {
-								previous.exitRow(e);
-								if (theCategory != null && theCategory.getMouseListener() != null)
-									theCategory.getMouseListener().mouseEntered(cell, e);
-							}
-						} else {
-							if (theCategory != null && theCategory.getMouseListener() != null)
-								theCategory.getMouseListener().mouseEntered(cell, e);
-						}
-						return this;
-					}
-
-					void exitCell(MouseEvent e) {
-						if (theCategory != null && theCategory.getMouseListener() != null)
-							theCategory.getMouseListener().mouseExited(cell, e);
-					}
-
-					void exitRow(MouseEvent e) {
-						exitCell(e);
-						model.thePathMouseListeners.forEach(listener -> listener.mouseExited(thePath, e));
-					}
-				}
-
-				private MouseClickStruct<?> thePrevious;
-
+			MouseAdapter ml = new TableMouseListener<BetterList<R>>() {
 				@Override
-				public void mouseClicked(MouseEvent e) {
-					thePrevious = getValue(e, false).clicked(e, thePrevious);
+				protected ListenerList<RowMouseListener<? super BetterList<R>>> getRowListeners() {
+					return model.theRowMouseListeners;
 				}
 
 				@Override
-				public void mousePressed(MouseEvent e) {
-					thePrevious = getValue(e, false).pressed(e, thePrevious);
-				}
-
-				@Override
-				public void mouseReleased(MouseEvent e) {
-					thePrevious = getValue(e, false).released(e, thePrevious);
-				}
-
-				@Override
-				public void mouseEntered(MouseEvent e) {
-					thePrevious = getValue(e, false).entered(e, thePrevious);
-				}
-
-				@Override
-				public void mouseExited(MouseEvent e) {
-					thePrevious = getValue(e, false).exited(e, thePrevious);
-				}
-
-				@Override
-				public void mouseMoved(MouseEvent e) {
-					thePrevious = getValue(e, false).moved(e, thePrevious);
-				}
-
-				private <C> MouseClickStruct<C> getValue(MouseEvent evt, boolean movement) {
+				protected int getModelRow(MouseEvent evt) {
 					int row = table.rowAtPoint(evt.getPoint());
-					if (row < 0) {
-						return new MouseClickStruct<>(null, null, null);
-					}
-					row = table.convertRowIndexToModel(row);
-					TreePath path = table.getPathForRow(row);
-					R rowValue = (R) path.getLastPathComponent();
-					int column = table.columnAtPoint(evt.getPoint());
-					if (column < 0) {
-						if (model.thePathMouseListeners.isEmpty())
-							return new MouseClickStruct<>(null, null, null);
-						return new MouseClickStruct<>(new TreeTableModelPath<>(table, path), null, null);
-					}
-					column = table.convertColumnIndexToModel(column);
-					CategoryRenderStrategy<? super R, C> category = (CategoryRenderStrategy<? super R, C>) model.getColumn(column);
-					if (movement && category.getMouseListener() instanceof CategoryRenderStrategy.CategoryClickAdapter) {
-						if (model.thePathMouseListeners.isEmpty())
-							return new MouseClickStruct<>(null, null, null);
-						return new MouseClickStruct<>(new TreeTableModelPath<>(table, path), null, null);
-					}
+					row = row < 0 ? row : table.convertRowIndexToModel(row);
+					return row;
+				}
 
-					C colValue = category.getCategoryValue(rowValue);
-					boolean enabled;
-					if (category.getMutator().getEditability() != null) {
-						enabled = category.getMutator().isEditable(rowValue, colValue);
-					} else {
-						enabled = true;
-					}
-					if (!enabled) {
-						if (model.thePathMouseListeners.isEmpty())
-							return new MouseClickStruct<>(null, null, null);
-						return new MouseClickStruct<>(new TreeTableModelPath<>(table, path), null, null);
-					}
-					boolean selected = table.isCellSelected(row, column);
-					ModelPath<R> modelPath = new TreeTableModelPath<>(table, path);
-					ModelCell<R, C> cell = new ModelCell.Default<>(() -> rowValue, colValue, row, column, selected, selected, true, true);
-					return new MouseClickStruct<>(modelPath, cell, category);
+				@Override
+				protected int getModelColumn(MouseEvent evt) {
+					int col = table.columnAtPoint(evt.getPoint());
+					col = col < 0 ? col : table.convertColumnIndexToModel(col);
+					return col;
+				}
+
+				@Override
+				protected BetterList<R> getRowValue(int rowIndex) {
+					return ObservableTreeModel.betterPath(table.getPathForRow(rowIndex));
+				}
+
+				@Override
+				protected CategoryRenderStrategy<BetterList<R>, ?> getColumn(int columnIndex) {
+					return model.getColumnModel().getElementAt(columnIndex);
+				}
+
+				@Override
+				protected boolean isRowSelected(int rowIndex) {
+					return table.isRowSelected(rowIndex);
+				}
+
+				@Override
+				protected boolean isCellSelected(int rowIndex, int columnIndex) {
+					return table.isCellSelected(rowIndex, columnIndex);
 				}
 			};
 			table.addMouseListener(ml);
@@ -475,7 +358,11 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 					row = table.convertRowIndexToModel(row);
 					column = table.convertColumnIndexToModel(column);
 					R rowValue = (R) table.getPathForRow(row).getLastPathComponent();
-					table.setToolTipText(category.getTooltip(rowValue, category.getCategoryValue(rowValue)));
+					if (category.getTooltipFn() != null) {
+						boolean selected = table.isRowSelected(row);
+						table.setToolTipText(category.getTooltip(new ModelCell.Default<>(() -> rowValue,
+							category.getCategoryValue(rowValue), row, column, selected, selected, true, model.isLeaf(rowValue))));
+					}
 				}
 			};
 			table.addMouseMotionListener(tableMML);
@@ -573,20 +460,19 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 		return Subscription.forAll(subs.toArray(new Subscription[subs.size()]));
 	}
 
-	private static <R, C> void hookUp(JXTreeTable table, TableColumn tblColumn, CategoryRenderStrategy<? super R, ? extends C> column,
+	private static <R, C> void hookUp(JXTreeTable table, TableColumn tblColumn, CategoryRenderStrategy<BetterList<R>, C> column,
 		ObservableTreeTableModel<R> model, TableRenderContext ctx) {
 		tblColumn.setHeaderValue(column.getName());
 		if (column.getIdentifier() != null)
 			tblColumn.setIdentifier(column.getIdentifier());
 		else
 			tblColumn.setIdentifier(column);
-		ObservableTreeTableCellRenderer<R, C> renderer = new ObservableTreeTableCellRenderer<>((CategoryRenderStrategy<R, C>) column, ctx);
+		ObservableTreeTableCellRenderer<R, C> renderer = new ObservableTreeTableCellRenderer<>(column, ctx);
 		tblColumn.setCellRenderer(renderer);
 		if (tblColumn.getModelIndex() == table.getTreeTableModel().getHierarchicalColumn())
 			table.setTreeCellRenderer(renderer);
 		if (column.getMutator().getEditor() != null)
-			tblColumn.setCellEditor(column.getMutator().getEditor()//
-				.withValueTooltip((row, col) -> ((CategoryRenderStrategy<R, Object>) column).getTooltip((R) row, col)));
+			tblColumn.setCellEditor(column.getMutator().getEditor().withCellTooltip(column.getTooltipFn()));
 		if (column.getMinWidth() >= 0)
 			tblColumn.setMinWidth(column.getMinWidth());
 		if (column.getPrefWidth() >= 0)
@@ -598,14 +484,14 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 	}
 
 	private static class ObservableTreeTableCellRenderer<R, C> implements TableCellRenderer, TreeCellRenderer {
-		private final CategoryRenderStrategy<R, C> theColumn;
+		private final CategoryRenderStrategy<BetterList<R>, C> theColumn;
 		private final TableRenderContext theContext;
 		private ComponentDecorator theDecorator;
 		private Runnable theRevert;
 
 		private Component theLastRender;
 
-		ObservableTreeTableCellRenderer(CategoryRenderStrategy<R, C> column, TableRenderContext ctx) {
+		ObservableTreeTableCellRenderer(CategoryRenderStrategy<BetterList<R>, C> column, TableRenderContext ctx) {
 			theColumn = column;
 			theContext = ctx;
 		}
@@ -636,9 +522,11 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 				theLastRender.setForeground(null);
 				theLastRender = null;
 			}
-			ObservableCellRenderer<R, C> renderer = theColumn.getRenderer() != null ? (ObservableCellRenderer<R, C>) theColumn.getRenderer()
+			ObservableCellRenderer<? super BetterList<R>, ? super C> renderer = theColumn.getRenderer() != null ? theColumn.getRenderer()
 				: new ObservableCellRenderer.DefaultObservableCellRenderer<>((r, c) -> String.valueOf(c));
-			ModelCell<R, C> cell = new ModelCell.Default<>(() -> modelValue, (C) value, row, column, isSelected, hasFocus, expanded, leaf);
+			ModelCell<BetterList<R>, C> cell = new ModelCell.Default<>(//
+				() -> ((ObservableTreeTableModel<R>) ((JXTreeTable) component).getModel()).getTreeModel().getBetterPath(modelValue), //
+				(C) value, row, column, isSelected, hasFocus, expanded, leaf);
 			Component c = renderer.getCellRendererComponent(component, cell,
 				() -> theContext == null ? null : theContext.getEmphaticRegions(modelRow, modelColumn));
 			theLastRender = c;
@@ -653,55 +541,6 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 				theDecorator.reset();
 			}
 			return c;
-		}
-	}
-
-	static class TreeTableModelPath<T> implements ModelPath<T> {
-		private final JXTreeTable theTreeTable;
-		private final TreePath thePath;
-		private TreeTableModelPath<T> theParent;
-
-		TreeTableModelPath(JXTreeTable treeTable, TreePath path) {
-			theTreeTable = treeTable;
-			thePath = path;
-		}
-
-		@Override
-		public ModelPath<T> getParent() {
-			if (theParent == null) {
-				theParent = new TreeTableModelPath<>(theTreeTable, thePath.getParentPath());
-			}
-			return theParent;
-		}
-
-		@Override
-		public T getModelValue() {
-			return (T) thePath.getLastPathComponent();
-		}
-
-		@Override
-		public int getRowIndex() {
-			return theTreeTable.getRowForPath(thePath);
-		}
-
-		@Override
-		public boolean isSelected() {
-			return theTreeTable.getTreeSelectionModel().isPathSelected(thePath);
-		}
-
-		@Override
-		public boolean hasFocus() {
-			return isSelected();
-		}
-
-		@Override
-		public boolean isExpanded() {
-			return theTreeTable.isExpanded(thePath);
-		}
-
-		@Override
-		public boolean isLeaf() {
-			return theTreeTable.getTreeTableModel().isLeaf(thePath.getLastPathComponent());
 		}
 	}
 

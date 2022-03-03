@@ -76,7 +76,7 @@ implements TableBuilder<R, P> {
 	private ObservableCollection<R> theFilteredRows;
 	private String theItemName;
 	private Function<? super R, String> theNameFunction;
-	private ObservableCollection<? extends CategoryRenderStrategy<? super R, ?>> theColumns;
+	private ObservableCollection<? extends CategoryRenderStrategy<R, ?>> theColumns;
 	private SettableValue<R> theSelectionValue;
 	private ObservableCollection<R> theSelectionValues;
 	private List<Object> theActions;
@@ -127,7 +127,7 @@ implements TableBuilder<R, P> {
 	}
 
 	@Override
-	public P withColumns(ObservableCollection<? extends CategoryRenderStrategy<? super R, ?>> columns) {
+	public P withColumns(ObservableCollection<? extends CategoryRenderStrategy<R, ?>> columns) {
 		theColumns = columns;
 		return (P) this;
 	}
@@ -166,12 +166,12 @@ implements TableBuilder<R, P> {
 	}
 
 	@Override
-	public P withColumn(CategoryRenderStrategy<? super R, ?> column) {
+	public P withColumn(CategoryRenderStrategy<R, ?> column) {
 		if (theColumns == null)
-			theColumns = ObservableCollection.create(new TypeToken<CategoryRenderStrategy<? super R, ?>>() {
+			theColumns = ObservableCollection.create(new TypeToken<CategoryRenderStrategy<R, ?>>() {
 			}.where(new TypeParameter<R>() {
 			}, TypeTokens.get().wrap(theRows.getType())));
-		((ObservableCollection<CategoryRenderStrategy<? super R, ?>>) theColumns).add(column);
+		((ObservableCollection<CategoryRenderStrategy<R, ?>>) theColumns).add(column);
 		return (P) this;
 	}
 
@@ -340,12 +340,13 @@ implements TableBuilder<R, P> {
 
 	@Override
 	public P withMove(boolean up, Consumer<DataAction<R, ?>> actionMod) {
-		((ObservableCollection<CategoryRenderStrategy<? super R, ?>>) theColumns)
-		.add(new CategoryRenderStrategy<>(up ? "\u2191" : "\u2193", TypeTokens.get().OBJECT, v -> null)
-			.withHeaderTooltip("Move row " + (up ? "up" : "down")).decorateAll(deco -> deco.withIcon(PanelPopulation.getMoveIcon(up, 16)))//
+		CategoryRenderStrategy<R, Object> moveColumn = new CategoryRenderStrategy<R, Object>(up ? "\u2191" : "\u2193",
+			TypeTokens.get().OBJECT, v -> null)//
+			.withHeaderTooltip("Move row " + (up ? "up" : "down"))//
+			.decorateAll(deco -> deco.withIcon(PanelPopulation.getMoveIcon(up, 16)))//
 			.withWidths(15, 20, 20)//
-			.withMutation(
-				m -> m.mutateAttribute2((r, c) -> c).withEditor(ObservableCellEditor.createButtonCellEditor(__ -> null, cell -> {
+			.withMutation(m -> m.mutateAttribute2((r, c) -> c)
+				.withEditor(ObservableCellEditor.<R, Object> createButtonCellEditor(__ -> null, cell -> {
 					if (up && cell.getRowIndex() == 0)
 						return cell.getCellValue();
 					else if (!up && cell.getRowIndex() == theFilteredRows.size() - 1)
@@ -369,7 +370,8 @@ implements TableBuilder<R, P> {
 						deco.enabled(cell.getRowIndex() > 0);
 					else
 						deco.enabled(cell.getRowIndex() < theFilteredRows.size() - 1);
-				}))));
+				})));
+		((ObservableCollection<CategoryRenderStrategy<R, ?>>) theColumns).add(moveColumn);
 		return (P) this;
 	}
 
@@ -497,10 +499,11 @@ implements TableBuilder<R, P> {
 			throw new IllegalStateException("No columns configured");
 		ObservableTableModel<R> model;
 		ObservableCollection<TableContentControl.FilteredValue<R>> filtered;
-		ObservableCollection<? extends CategoryRenderStrategy<? super R, ?>> columns;
+		ObservableCollection<? extends CategoryRenderStrategy<R, ?>> columns;
 		if (theFilter != null) {
-			ObservableCollection<? extends CategoryRenderStrategy<? super R, ?>> fColumns = TableContentControl.applyColumnControl(
-				theColumns.safe(ThreadConstraint.EDT, until), theFilter, until);
+			ObservableCollection<? extends CategoryRenderStrategy<R, ?>> fColumns = TableContentControl
+				.applyColumnControl(
+					theColumns.safe(ThreadConstraint.EDT, until), theFilter, until);
 			columns = fColumns;
 			Observable<?> columnChanges = Observable.or(Observable.constant(null), fColumns.simpleChanges());
 			ObservableCollection<TableContentControl.FilteredValue<R>> rawFiltered = TableContentControl.applyRowControl(theRows,

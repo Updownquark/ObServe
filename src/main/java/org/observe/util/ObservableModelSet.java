@@ -10,6 +10,7 @@ import java.util.function.Function;
 
 import org.observe.Observable;
 import org.observe.util.ModelType.ModelInstanceType;
+import org.qommons.BreakpointHere;
 import org.qommons.Named;
 import org.qommons.QommonsUtils;
 import org.qommons.config.QonfigInterpreter.QonfigInterpretationException;
@@ -116,6 +117,8 @@ public interface ObservableModelSet {
 		final Map<String, Placeholder> theThings;
 
 		ExternalModelSet(ExternalModelSet root, String path, Map<String, Placeholder> things) {
+			if (!path.isEmpty() && path.charAt(0) == '.')
+				BreakpointHere.breakpoint();
 			theRoot = root == null ? this : root;
 			thePath = path;
 			theThings = things;
@@ -242,10 +245,11 @@ public interface ObservableModelSet {
 			if (root == null)
 				root = model;
 			for (Map.Entry<String, ExternalModelSet.Placeholder> thing : theThings.entrySet()) {
-				if (thing.getValue().type.getModelType() == ModelTypes.Model)
+				if (thing.getValue().type.getModelType() == ModelTypes.Model) {
+					String childPath = path.isEmpty() ? thing.getKey() : path + "." + thing.getKey();
 					things.put(thing.getKey(), new ExternalModelSet.Placeholder(ModelTypes.Model.instance(), //
-						((ExternalModelSetBuilder) thing.getValue().thing)._build(root, path + "." + thing.getKey())));
-				else
+						((ExternalModelSetBuilder) thing.getValue().thing)._build(root, childPath)));
+				} else
 					things.put(thing.getKey(), thing.getValue());
 			}
 			return model;

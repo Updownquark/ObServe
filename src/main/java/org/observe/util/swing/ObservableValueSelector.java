@@ -145,8 +145,8 @@ public class ObservableValueSelector<T, X> extends JPanel {
 	private boolean isIncludedByDefault;
 
 	private ObservableValueSelector(ObservableCollection<T> sourceRows, //
-		ObservableCollection<? extends CategoryRenderStrategy<? super SelectableValue<T, X>, ?>> sourceColumns, //
-			ObservableCollection<? extends CategoryRenderStrategy<? super SelectableValue<T, X>, ?>> destColumns, //
+		ObservableCollection<? extends CategoryRenderStrategy<SelectableValue<T, X>, ?>> sourceColumns, //
+		ObservableCollection<? extends CategoryRenderStrategy<SelectableValue<T, X>, ?>> destColumns, //
 				Function<? super T, ? extends X> map, boolean reEvalOnUpdate, Observable<?> until, //
 				boolean includedByDefault, Format<TableContentControl> filterFormat, boolean commitOnType, String itemName) {
 		super(new JustifiedBoxLayout(false).crossJustified().mainJustified());
@@ -533,15 +533,15 @@ public class ObservableValueSelector<T, X> extends JPanel {
 
 		theIncludeButton.setEnabled(selectedExcluded > 0);
 		theIncludeButton
-			.setToolTipText(
-				selectedExcluded > 0 ? "Include " + selectedExcluded + " selected " + (selectedExcluded == 1 ? singItem : plurItem)
-					: (hasSelection ? "All selected " + plurItem + " are included" : "No " + plurItem + " selected"));
+		.setToolTipText(
+			selectedExcluded > 0 ? "Include " + selectedExcluded + " selected " + (selectedExcluded == 1 ? singItem : plurItem)
+				: (hasSelection ? "All selected " + plurItem + " are included" : "No " + plurItem + " selected"));
 
 		theExcludeButton.setEnabled(selectedIncluded > 0);
 		theExcludeButton
-			.setToolTipText(
-				selectedIncluded > 0 ? "Exclude " + selectedIncluded + " selected " + (selectedIncluded == 1 ? singItem : plurItem)
-					: (hasSelection ? "No included " + plurItem + " selected" : "No " + plurItem + " selected"));
+		.setToolTipText(
+			selectedIncluded > 0 ? "Exclude " + selectedIncluded + " selected " + (selectedIncluded == 1 ? singItem : plurItem)
+				: (hasSelection ? "No included " + plurItem + " selected" : "No " + plurItem + " selected"));
 
 		theExcludeAllButton.setEnabled(includedCount > 0);
 		if (includedCount == 0)
@@ -553,16 +553,16 @@ public class ObservableValueSelector<T, X> extends JPanel {
 	}
 
 	public static <T, X> Builder<T, X> build(ObservableCollection<T> sourceRows, //
-		ObservableCollection<? extends CategoryRenderStrategy<? super SelectableValue<T, X>, ?>> sourceColumns, //
-			ObservableCollection<? extends CategoryRenderStrategy<? super SelectableValue<T, X>, ?>> destColumns, //
+		ObservableCollection<? extends CategoryRenderStrategy<SelectableValue<T, X>, ?>> sourceColumns, //
+		ObservableCollection<? extends CategoryRenderStrategy<SelectableValue<T, X>, ?>> destColumns, //
 				Function<? super T, ? extends X> map) {
 		return new Builder<>(sourceRows, sourceColumns, destColumns, map);
 	}
 
 	public static class Builder<T, X> {
 		private final ObservableCollection<T> theSourceRows;
-		private final ObservableCollection<? extends CategoryRenderStrategy<? super SelectableValue<T, X>, ?>> theSourceColumns;
-		private final ObservableCollection<? extends CategoryRenderStrategy<? super SelectableValue<T, X>, ?>> theDestColumns;
+		private final ObservableCollection<? extends CategoryRenderStrategy<SelectableValue<T, X>, ?>> theSourceColumns;
+		private final ObservableCollection<? extends CategoryRenderStrategy<SelectableValue<T, X>, ?>> theDestColumns;
 		private final Function<? super T, ? extends X> theMap;
 		private boolean isReEvalOnUpdate;
 		private Observable<?> theUntil;
@@ -572,8 +572,8 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		private String theItemName;
 
 		Builder(ObservableCollection<T> sourceRows,
-			ObservableCollection<? extends CategoryRenderStrategy<? super SelectableValue<T, X>, ?>> sourceColumns,
-				ObservableCollection<? extends CategoryRenderStrategy<? super SelectableValue<T, X>, ?>> destColumns,
+			ObservableCollection<? extends CategoryRenderStrategy<SelectableValue<T, X>, ?>> sourceColumns,
+			ObservableCollection<? extends CategoryRenderStrategy<SelectableValue<T, X>, ?>> destColumns,
 					Function<? super T, ? extends X> map) {
 			theSourceRows = sourceRows;
 			theSourceColumns = sourceColumns;
