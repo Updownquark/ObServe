@@ -20,12 +20,12 @@ public class JsonClientTransceiver<P>
 implements CollectionClientTransceiver<P, JsonClientTransceiver.JsonOp<P>> {
 	public static class JsonOp<P> {
 		final CollectionChangeType type;
-		final ByteList address1;
-		final ByteList address2;
+		final ByteAddress address1;
+		final ByteAddress address2;
 		final boolean first;
 		final P value;
 
-		public JsonOp(CollectionChangeType type, ByteList address1, ByteList address2, boolean first, P value) {
+		public JsonOp(CollectionChangeType type, ByteAddress address1, ByteAddress address2, boolean first, P value) {
 			this.type = type;
 			this.address1 = address1;
 			this.address2 = address2;
@@ -120,7 +120,7 @@ implements CollectionClientTransceiver<P, JsonClientTransceiver.JsonOp<P>> {
 		prop = reader.getNextProperty();
 		if (!"address".equals(prop))
 			throw new IllegalStateException("Unrecognized change format: " + prop);
-		ByteList address = ByteList.of(reader.parseString());
+		ByteAddress address = ByteAddress.of(reader.parseString());
 		CollectionChangeType type;
 		P oldValue, newValue;
 		switch (typeName) {
@@ -257,22 +257,22 @@ implements CollectionClientTransceiver<P, JsonClientTransceiver.JsonOp<P>> {
 	}
 
 	@Override
-	public JsonOp<P> add(P value, ByteList after, ByteList before, boolean first) {
+	public JsonOp<P> add(P value, ByteAddress after, ByteAddress before, boolean first) {
 		return new JsonOp<>(CollectionChangeType.add, after, before, first, value);
 	}
 
 	@Override
-	public JsonOp<P> remove(ByteList element) {
+	public JsonOp<P> remove(ByteAddress element) {
 		return new JsonOp<>(CollectionChangeType.remove, element, null, false, null);
 	}
 
 	@Override
-	public JsonOp<P> set(ByteList element, P value) {
+	public JsonOp<P> set(ByteAddress element, P value) {
 		return new JsonOp<>(CollectionChangeType.set, element, null, false, value);
 	}
 
 	@Override
-	public JsonOp<P> update(ByteList element) {
+	public JsonOp<P> update(ByteAddress element) {
 		return new JsonOp<>(CollectionChangeType.set, element, element, false, null);
 	}
 
@@ -371,7 +371,7 @@ implements CollectionClientTransceiver<P, JsonClientTransceiver.JsonOp<P>> {
 					return new OperationResultSet<>(changes, null, json.parseString());
 				case "success":
 					json.getNextProperty();
-					return new OperationResultSet<>(changes, ByteList.of(json.parseString()), null);
+					return new OperationResultSet<>(changes, ByteAddress.of(json.parseString()), null);
 				default:
 					throw new IllegalStateException("Unrecognized applyOperations result: " + type);
 				}

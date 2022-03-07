@@ -170,7 +170,8 @@ public class ObservableEntityExplorer extends JPanel {
 	protected void initEntityTypePanel(PanelPopulator<?, ?> panel) {
 		ObservableCollection<ObservableEntityFieldType<?, ?>> fields = ObservableCollection.flattenValue(theSelectedEntityType
 			.map(e -> ObservableCollection.of(FIELD_TYPE, e == null ? Collections.emptyList() : e.entity.getFields().allValues())));
-		SettableValue<EntityCondition<?>> condition = SettableValue.build(new TypeToken<EntityCondition<?>>() {}).safe(false).build();
+		SettableValue<EntityCondition<?>> condition = SettableValue.build(new TypeToken<EntityCondition<?>>() {
+		}).build();
 		ObservableTextField<EntityCondition<?>>[] conditionTF = new ObservableTextField[1];
 		theSelectedEntityType.noInitChanges()
 		.act(evt -> condition.set(evt.getNewValue() == null ? null : evt.getNewValue().entity.select(), evt));
@@ -459,7 +460,7 @@ public class ObservableEntityExplorer extends JPanel {
 					value);
 			}
 		};
-		ObservableCollection<Object> row = ObservableCollection.build(Object.class).safe(false).build().with((Object) null);
+		ObservableCollection<Object> row = ObservableCollection.build(Object.class).build().with((Object) null);
 		JPanel createPanel = PanelPopulation.populateVPanel((JPanel) null, null)//
 			.<Object> addTable(row, fieldTable -> {
 				for (ObservableEntityFieldType<E, ?> field : initCreator.getEntityType().getFields().allValues()) {
@@ -510,7 +511,7 @@ public class ObservableEntityExplorer extends JPanel {
 			if (results.getStatus() == ResultStatus.FAILED)
 				results.getFailure().printStackTrace();
 		});
-		SimpleObservable<Void> close = SimpleObservable.build().safe(false).build();
+		SimpleObservable<Void> close = SimpleObservable.build().build();
 		EntityRowUpdater<ObservableEntity<? extends E>, E> updater = new EntityRowUpdater<ObservableEntity<? extends E>, E>() {
 			@Override
 			public String isEnabled(ObservableEntity<? extends E> entity, int fieldIndex) {
@@ -527,7 +528,7 @@ public class ObservableEntityExplorer extends JPanel {
 				entity.set(fieldIndex, value, null);
 			}
 		};
-		SettableValue<String> deleteText = SettableValue.build(String.class).safe(false).withValue("Delete").build();
+		SettableValue<String> deleteText = SettableValue.build(String.class).withValue("Delete").build();
 		JPanel queryPanel = PanelPopulation.populateVPanel((JPanel) null, close)//
 			.addTable((ObservableCollection<ObservableEntity<E>>) results.getResult().getEntities(), entityTable -> {
 				entityTable.withIndexColumn("Row #", col -> col.formatText(idx -> String.valueOf(idx + 1)));
@@ -730,14 +731,15 @@ public class ObservableEntityExplorer extends JPanel {
 			} else if (targetEntity != null) {
 				editable = true;
 				column.withMutation(mutator -> mutator//
-					.dragAccept(drag -> drag.fromFlavor(new EntityFlavor(targetEntity), new Dragging.DataAccepterTransform<F>() {
+					.dragAccept(drag -> drag.fromFlavor(new EntityFlavor(targetEntity), new Dragging.DataAccepterTransform<R, F, F>() {
 						@Override
-						public boolean canAccept(Object value, DataFlavor flavor) {
+						public boolean canAccept(ModelCell<? extends R, ? extends F> targetCell, Object value, DataFlavor flavor) {
 							return true;
 						}
 
 						@Override
-						public F transform(Object value, DataFlavor flavor) throws IOException {
+						public F transform(ModelCell<? extends R, ? extends F> targetCell, Object value, DataFlavor flavor,
+							boolean testOnly) throws IOException {
 							return (F) value;
 						}
 					})));
@@ -779,7 +781,7 @@ public class ObservableEntityExplorer extends JPanel {
 		else if (type == boolean.class)
 			return (Format<V>) SpinnerFormat.BOOLEAN;
 		else if (type == Instant.class)
-			return (Format<V>) SpinnerFormat.flexDate(Instant::now, "ddMMMyyyy", TimeZone.getDefault());
+			return (Format<V>) SpinnerFormat.flexDate(Instant::now, "ddMMMyyyy", teo -> teo.withTimeZone(TimeZone.getDefault()));
 		else if (type == Duration.class)
 			return (Format<V>) SpinnerFormat.flexDuration(false);
 		else
@@ -796,7 +798,7 @@ public class ObservableEntityExplorer extends JPanel {
 	private <E, V> void showCollectionEditor(ObservableEntity<E> entity, String fieldName, ObservableCollection<V> collection,
 		Point locationOnScreen, Observable<?> expire) {
 		ObservableEntityType<V> targetEntity = theDataSet.get().getEntityType(TypeTokens.getRawType(collection.getType()));
-		SimpleObservable<Void> close = SimpleObservable.build().safe(false).build();
+		SimpleObservable<Void> close = SimpleObservable.build().build();
 		Observable<?> expire2 = Observable.or(expire, close);
 		PanelPopulation.PanelPopulator<?, ?> queryPanel = PanelPopulation.populateVPanel((JPanel) null, expire2)//
 			.addTable(collection, table -> {
@@ -823,9 +825,9 @@ public class ObservableEntityExplorer extends JPanel {
 							}
 						}));
 					table.dragAcceptRow(
-						rowDrag -> rowDrag.fromFlavor(new EntityFlavor(targetEntity), new Dragging.DataAccepterTransform<V>() {
+						rowDrag -> rowDrag.fromFlavor(new EntityFlavor(targetEntity), new Dragging.DataAccepterTransform<V, V, V>() {
 							@Override
-							public boolean canAccept(Object value, DataFlavor flavor) {
+							public boolean canAccept(ModelCell<? extends V, ? extends V> targetCell, Object value, DataFlavor flavor) {
 								if (value == null || !(flavor instanceof EntityFlavor)
 									|| !targetEntity.isAssignableFrom(((EntityFlavor) flavor).entity))
 									return false;
@@ -833,7 +835,8 @@ public class ObservableEntityExplorer extends JPanel {
 							}
 
 							@Override
-							public V transform(Object value, DataFlavor flavor) throws IOException {
+							public V transform(ModelCell<? extends V, ? extends V> targetCell, Object value, DataFlavor flavor,
+								boolean testOnly) throws IOException {
 								return (V) value;
 							}
 						}));
@@ -844,7 +847,7 @@ public class ObservableEntityExplorer extends JPanel {
 				table.withRemove(null, null);
 			});
 		if (targetEntity == null) {//
-			SettableValue<V> toAdd = SettableValue.build(collection.getType()).safe(false).build();
+			SettableValue<V> toAdd = SettableValue.build(collection.getType()).build();
 			Class<V> raw = TypeTokens.getRawType(collection.getType());
 			if (raw.isEnum()) {
 				queryPanel.addComboField("Add Value:", toAdd, c -> c.withPostButton("Add", __ -> {

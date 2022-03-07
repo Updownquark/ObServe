@@ -115,7 +115,7 @@ public class QueryResultsTree {
 			theSelection = selection;
 			isCount = count;
 			this.parent = parent;
-			children = BetterTreeList.<QueryResultNode> build().safe(false).build();
+			children = BetterTreeList.<QueryResultNode> build().build();
 		}
 
 		<E> QueryResults<E> getResults(EntityQuery<E> query) throws EntityOperationException {

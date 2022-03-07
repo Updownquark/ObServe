@@ -44,6 +44,7 @@ import org.observe.entity.impl.QueryResultsTree.QueryResultNode;
 import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.TypeTokens;
 import org.qommons.Ternian;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
@@ -72,7 +73,7 @@ class QueryResults<E> extends AbstractOperationResult<E, Object, Object> {
 		theListening = new AtomicInteger();
 		if (count) {
 			theExposedResults = theRawResults = null;
-			theRawCountResult = SettableValue.build(long.class).withLock(selection.getEntityType().getEntitySet()).withValue(0L).build();
+			theRawCountResult = SettableValue.build(long.class).withLocking(selection.getEntityType().getEntitySet()).withValue(0L).build();
 		} else {
 			theRawCountResult = null;
 			CollectionLockingStrategy locker = new RRWLockingStrategy(selection.getEntityType().getEntitySet());
@@ -81,7 +82,7 @@ class QueryResults<E> extends AbstractOperationResult<E, Object, Object> {
 				type = TypeTokens.get().keyFor(ObservableEntity.class).parameterized(selection.getEntityType().getEntityType());
 			else
 				type = (TypeToken<ObservableEntity<? extends E>>) (TypeToken<?>) ObservableEntity.TYPE;
-			theRawResults = ObservableSortedSet.build(type, ObservableEntity::compareTo).withLocker(locker).build();
+			theRawResults = ObservableSortedSet.build(type, ObservableEntity::compareTo).withLocking(locker).build();
 			theExposedResults = theRawResults.flow().filterMod(fm -> {
 				fm.noAdd("Results cannot be added to query results directly");
 				fm.filterRemove(ObservableEntity::canDelete);
@@ -714,6 +715,16 @@ class QueryResults<E> extends AbstractOperationResult<E, Object, Object> {
 					@Override
 					public Transaction tryLock() {
 						return superChanges.tryLock();
+					}
+
+					@Override
+					public CoreId getCoreId() {
+						return superChanges.getCoreId();
+					}
+
+					@Override
+					public ThreadConstraint getThreadConstraint() {
+						return superChanges.getThreadConstraint();
 					}
 				};
 			}

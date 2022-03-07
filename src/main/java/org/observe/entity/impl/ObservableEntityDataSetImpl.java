@@ -60,10 +60,12 @@ import org.observe.entity.SimpleFieldConstraint;
 import org.observe.util.EntityReflector;
 import org.observe.util.EntityReflector.ReflectedField;
 import org.observe.util.TypeTokens;
+import org.qommons.Lockable.CoreId;
 import org.qommons.MethodRetrievingHandler;
 import org.qommons.QommonsUtils;
 import org.qommons.Stamped;
 import org.qommons.StringUtils;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
@@ -96,7 +98,8 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 	private final SimpleObservable<List<EntityChange<?>>> theChanges;
 
 	private ObservableEntityDataSetImpl(ObservableEntityProvider implementation) {
-		theEntityTypes = new BetterTreeSet<>(true, (et1, et2) -> compareEntityTypes(et1.getName(), et2.getName()));
+		theEntityTypes = BetterTreeSet
+			.<ObservableEntityTypeImpl<?>> buildTreeSet((et1, et2) -> compareEntityTypes(et1.getName(), et2.getName())).build();
 		theClassMapping = new HashMap<>();
 		theImplementation = implementation;
 		theQueuedActions = new ArrayList<>();
@@ -135,6 +138,16 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 	public Transaction tryLock(boolean write, Object cause) {
 		Transaction t = theLock.tryLock(write, cause);
 		return t == null ? null : wrapTransaction(t, write);
+	}
+
+	@Override
+	public CoreId getCoreId() {
+		return theLock.getCoreId();
+	}
+
+	@Override
+	public ThreadConstraint getThreadConstraint() {
+		return theLock.getThreadConstraint();
 	}
 
 	/**
@@ -554,7 +567,7 @@ public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 
 		EntitySetBuilder(ObservableEntityProvider implementation) {
 			theEntitySet = new ObservableEntityDataSetImpl(implementation);
-			theLock = new StampedLockingStrategy(theEntitySet);
+			theLock = new StampedLockingStrategy(theEntitySet, ThreadConstraint.ANY);
 			theRefresh = Observable.empty();
 			isBuilding = true;
 		}

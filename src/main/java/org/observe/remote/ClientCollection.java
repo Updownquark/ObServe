@@ -13,14 +13,14 @@ import org.observe.Equivalence;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionEvent;
-import org.observe.remote.CollectionClientTransceiver.ByteList;
+import org.observe.remote.CollectionClientTransceiver.CollectionPollResult;
 import org.observe.remote.CollectionClientTransceiver.ConcurrentRemoteModException;
 import org.observe.remote.CollectionClientTransceiver.LockResult;
-import org.observe.remote.CollectionClientTransceiver.CollectionPollResult;
 import org.observe.remote.CollectionClientTransceiver.SerializedCollectionChange;
 import org.observe.util.ObservableCollectionWrapper;
 import org.qommons.Causable;
 import org.qommons.Lockable;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
@@ -45,12 +45,13 @@ public class ClientCollection<E, VP, CP, O> extends ObservableCollectionWrapper<
 
 	public ClientCollection(TypeToken<E> type, Equivalence<? super E> equivalence, CollectionConnectionSerializer<E, VP, CP> serializer,
 		CollectionClientTransceiver<VP, O> transceiver) {
-		theLock = new RRWLockingStrategy();
+		theLock = new RRWLockingStrategy(this, ThreadConstraint.ANY);
 		theSerializer = serializer;
 		theTransceiver = transceiver;
-		theElements = BetterTreeList.<ValueElement> build().safe(false).build();
-		theObservableElements = ObservableCollection.build(new TypeToken<ValueElement>() {}).withBacking(theElements).safe(false).build();
-		theValues = theObservableElements.flow().map(type, ve -> ve.theValue, opts -> opts.cache(false)).withEquivalence(equivalence)
+		theElements = BetterTreeList.<ValueElement> build().build();
+		theObservableElements = ObservableCollection.build(new TypeToken<ValueElement>() {
+		}).withBacking(theElements).build();
+		theValues = theObservableElements.flow().transform(type, tx -> tx.cache(false).map(ve -> ve.theValue)).withEquivalence(equivalence)
 			.collectPassive();
 		init(theValues);
 	}
@@ -175,6 +176,16 @@ public class ClientCollection<E, VP, CP, O> extends ObservableCollectionWrapper<
 				throw new CheckedExceptionWrapper(e);
 			}
 		}
+
+		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return ThreadConstraint.ANY;
+		}
+
+		@Override
+		public CoreId getCoreId() {
+			return new CoreId(theTransceiver);
+		}
 	}
 
 	@Override
@@ -199,8 +210,8 @@ public class ClientCollection<E, VP, CP, O> extends ObservableCollectionWrapper<
 		while (true) {
 			try {
 				try (Transaction t = lockLocal(false)) {
-					ByteList afterAddr = after == null ? null : theElements.getElement(after).get().address;
-					ByteList beforeAddr = before == null ? null : theElements.getElement(before).get().address;
+					ByteAddress afterAddr = after == null ? null : theElements.getElement(after).get().address;
+					ByteAddress beforeAddr = before == null ? null : theElements.getElement(before).get().address;
 					if (serialized == null)
 						serialized = theSerializer.serializeValue(value);
 					O query = theTransceiver.add(serialized, afterAddr, beforeAddr, false);
@@ -220,12 +231,12 @@ public class ClientCollection<E, VP, CP, O> extends ObservableCollectionWrapper<
 		VP serialized = null;
 		try (Transaction t = lockLocal(true)) {
 			while (true) {
-				ByteList afterAddr = after == null ? null : theElements.getElement(after).get().address;
-				ByteList beforeAddr = before == null ? null : theElements.getElement(before).get().address;
+				ByteAddress afterAddr = after == null ? null : theElements.getElement(after).get().address;
+				ByteAddress beforeAddr = before == null ? null : theElements.getElement(before).get().address;
 				if (serialized == null)
 					serialized = theSerializer.serializeValue(value);
 				O op = theTransceiver.add(serialized, afterAddr, beforeAddr, first);
-				ByteList added;
+				ByteAddress added;
 				try {
 					added = applyChanges(theTransceiver.applyOperations(Arrays.asList(op))).throwIfError().getElement();
 				} catch (IOException e) {
@@ -300,7 +311,7 @@ public class ClientCollection<E, VP, CP, O> extends ObservableCollectionWrapper<
 		try (Transaction t = lockLocal(true); //
 			Transaction ct = Transactable.lock(c, false, null)) {
 			while (true) {
-				ByteList afterAddr, beforeAddr;
+				ByteAddress afterAddr, beforeAddr;
 				if (isEmpty()) {
 					if (index != 0)
 						throw new IndexOutOfBoundsException(index + " of 0");
@@ -436,18 +447,18 @@ public class ClientCollection<E, VP, CP, O> extends ObservableCollectionWrapper<
 
 	class ValueElement implements MutableCollectionElement<E> {
 		final ElementId element;
-		final ByteList address;
+		final ByteAddress address;
 		E theValue;
 		E oldValue;
 
-		ValueElement(ByteList address, E value) {
+		ValueElement(ByteAddress address, E value) {
 			this.theValue = value;
 			this.address = address;
 			CollectionElement<ValueElement> newAfter = theElements.search(ve -> -ve.compareTo(address), SortedSearchFilter.Less);
 			element = theObservableElements.addElement(this, newAfter == null ? null : newAfter.getElementId(), null, true).getElementId();
 		}
 
-		public int compareTo(ByteList addr) {
+		public int compareTo(ByteAddress addr) {
 			int i;
 			for (i = 0; i < address.size() && i < addr.size(); i++) {
 				int comp = Byte.compare(address.get(i), addr.get(i));

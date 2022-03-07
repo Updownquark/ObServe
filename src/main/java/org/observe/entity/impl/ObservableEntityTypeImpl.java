@@ -63,7 +63,7 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 		theFields = fields;
 		theReflector = reflector;
 		theConstraints = constraints;
-		theEntitiesById = BetterTreeMap.<EntityIdentity<E>> build(EntityIdentity::compareTo).safe(false).buildMap();
+		theEntitiesById = BetterTreeMap.<EntityIdentity<E>> build(EntityIdentity::compareTo).buildMap();
 		theCollectedEntities = new ReferenceQueue<>();
 		theEntitiesByRef = new HashMap<>();
 	}
