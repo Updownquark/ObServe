@@ -136,7 +136,7 @@ public class ObservableCollectionServer<E, VP, CP> {
 			break;
 		}
 		CP persisted = theSerializer.serializeChange(new CollectionConnectionSerializer.SerializedCollectionChange<>(eventId,
-			new CollectionConnectionSerializer.ByteList(serverEl.get().address), event.getType(), event.getOldValue(), event.getNewValue(),
+			new ByteAddress(serverEl.get().address), event.getType(), event.getOldValue(), event.getNewValue(),
 			transactionEnd));
 		// Make a copy, because the clients could re-order themselves (by calling eventReceived) from the eventOccurred method
 		ClientHolder[] clients = theClients.toArray(new ObservableCollectionServer.ClientHolder[theClients.size()]);

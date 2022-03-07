@@ -54,7 +54,7 @@ public class CsvEntitySetTest {
 	 * @throws IOException If the entity type could not be added
 	 */
 	public static CsvEntitySet initSimpleEntitySet(CsvEntitySet entitySet) throws IOException {
-		entitySet.addEntityType("test1", BetterHashMap.build().<String, TypeToken<?>> buildMap()//
+		entitySet.addEntityType("test1", BetterHashMap.build().<String, TypeToken<?>> build()//
 			.with("id", TypeTokens.get().LONG)//
 			.with("name", TypeTokens.get().STRING)//
 			.with("values", new TypeToken<List<Integer>>() {

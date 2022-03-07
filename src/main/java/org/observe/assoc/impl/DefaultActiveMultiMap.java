@@ -101,7 +101,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		theValueManager = valueFlow.manageActive();
 
 		theActiveEntries = BetterTreeSet.<KeyEntry> buildTreeSet(KeyEntry::compareBySource).build();
-		theKeysBySourceElement = BetterHashMap.build().buildMap();
+		theKeysBySourceElement = BetterHashMap.build().build();
 
 		theMapListeners = ListenerList.build().withFastSize(false).build();
 		theKeySetListeners = ListenerList.build().withFastSize(false).build();

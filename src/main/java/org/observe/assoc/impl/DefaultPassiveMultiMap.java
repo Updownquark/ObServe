@@ -160,7 +160,7 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 			if(reversedKey.isAccepted())
 				return entryFor(theSourceMap.getOrPutEntry(reversedKey.result, k0->{
 					Iterable<? extends V> newValues=value.apply(theKeyManager.map().get().apply(k0));
-					return new Iterable<V0>(){
+					return new Iterable<V0>() {
 						@Override
 						public Iterator<V0> iterator() {
 							return new Iterator<V0>() {

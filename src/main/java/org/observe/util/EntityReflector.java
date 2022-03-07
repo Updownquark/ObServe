@@ -1514,7 +1514,7 @@ public class EntityReflector<E> {
 			}
 		}
 		static final ThreadLocal<BetterSet<MethodInvocation>> INVOCATIONS = ThreadLocal
-			.withInitial(() -> BetterHashSet.build().buildSet());
+			.withInitial(() -> BetterHashSet.build().build());
 
 		SyntheticMethodOverride(EntityReflector<E> reflector, Method method) {
 			super(reflector, method);

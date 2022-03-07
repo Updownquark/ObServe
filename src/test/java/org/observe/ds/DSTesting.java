@@ -143,7 +143,7 @@ public class DSTesting {
 					dds.inject(name, __ -> name), components.size(), services, helper));
 			}
 
-			BetterSet<Dependency<String, ?>> path = BetterHashSet.build().buildSet();
+			BetterSet<Dependency<String, ?>> path = BetterHashSet.build().build();
 			checkState(dds, false, path);
 			if (helper.isReproducing())
 				System.out.println("initializing");

@@ -108,7 +108,7 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 			theStage.set(DependencyServiceStage.Initializing, cause);
 			isActivating = true;
 			try {
-				BetterSet<?> componentPath = BetterHashSet.build().buildSet();
+				BetterSet<?> componentPath = BetterHashSet.build().build();
 				boolean progress = true;
 				while (progress) {
 					progress = false;
@@ -227,7 +227,7 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 				theDependents.computeIfAbsent(dep.getTarget(), __ -> new ArrayList<>()).add(dep);
 
 			boolean somethingSatisfied = getStage().get() != DependencyServiceStage.Uninitialized;
-			BetterSet<DefaultDependency<C, ?>> componentPath = BetterHashSet.build().buildSet();
+			BetterSet<DefaultDependency<C, ?>> componentPath = BetterHashSet.build().build();
 			boolean wasSatisfied = false;
 			while (somethingSatisfied) {
 				somethingSatisfied = false;

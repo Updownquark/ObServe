@@ -453,7 +453,7 @@ public class AppPopulation {
 						.withColumn("Date", Instant.class, t -> t,
 							col -> col.formatText(PAST_DATE_FORMAT::format).withWidths(80, 160, 500))//
 						.withColumn("Age", Instant.class, t -> t,
-							col -> col.formatText(t -> durationFormat.print(t)).withWidths(50, 90, 500))//
+							col -> col.formatText(t -> durationFormat.printAsDuration(t, Instant.now())).withWidths(50, 90, 500))//
 						.withSelection(selectedBackup, true);
 					}).addButton("Backup", __ -> {
 						isClosingWithoutSave = true;

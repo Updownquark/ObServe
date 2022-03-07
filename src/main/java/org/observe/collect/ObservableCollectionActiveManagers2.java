@@ -926,7 +926,7 @@ public class ObservableCollectionActiveManagers2 {
 		ElementRefreshingCollectionManager(ActiveCollectionManager<E, ?, T> parent, Function<? super T, ? extends Observable<?>> refresh) {
 			theParent = parent;
 			theRefresh = refresh;
-			theRefreshObservables = BetterHashMap.build().buildMap();
+			theRefreshObservables = BetterHashMap.build().build();
 			theLock = new ReentrantLock();
 			theSettingElement = () -> null;
 		}
@@ -1631,7 +1631,7 @@ public class ObservableCollectionActiveManagers2 {
 			throws UnsupportedOperationException, IllegalArgumentException {
 			if (theOptions == null) {
 				// Group by flattened collection
-				BetterMap<FlattenedHolder, List<DerivedCollectionElement<V>>> grouped = BetterHashMap.build().identity().buildMap();
+				BetterMap<FlattenedHolder, List<DerivedCollectionElement<V>>> grouped = BetterHashMap.build().identity().build();
 				for (DerivedCollectionElement<T> el : elements)
 					grouped.computeIfAbsent(((FlattenedElement) el).theHolder, h -> new ArrayList<>())
 					.add((DerivedCollectionElement<V>) ((FlattenedElement) el).theParentEl);
@@ -1640,7 +1640,7 @@ public class ObservableCollectionActiveManagers2 {
 					((ActiveCollectionManager<?, ?, V>) entry.getKey().manager).setValues(entry.getValue(), (V) newValue);
 			} else if (theOptions.getReverse() == null || !theOptions.getReverse().isStateful()) {
 				// Group by flattened collection
-				BetterMap<FlattenedHolder, List<FlattenedElement>> grouped = BetterHashMap.build().identity().buildMap();
+				BetterMap<FlattenedHolder, List<FlattenedElement>> grouped = BetterHashMap.build().identity().build();
 				for (DerivedCollectionElement<T> el : elements)
 					grouped.computeIfAbsent(((FlattenedElement) el).theHolder, h -> new ArrayList<>()).add((FlattenedElement) el);
 
