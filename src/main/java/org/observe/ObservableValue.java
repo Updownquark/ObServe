@@ -1187,6 +1187,8 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 
 		public SafeObservableValue(ObservableValue<T> wrapped, ThreadConstraint threading, Observable<?> until) {
 			super(wrapped);
+			if (!threading.supportsInvoke())
+				throw new IllegalArgumentException("Thread constraints for safe structures must be invokable");
 			theThreading = threading;
 			theListeners = ListenerList.build().build();
 			Consumer<ObservableValueEvent<T>> listener = evt -> {

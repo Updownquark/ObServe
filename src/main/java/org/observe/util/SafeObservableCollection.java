@@ -118,13 +118,15 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 
 	/**
 	 * @param collection The backing collection
-	 * @param threadConstraint The thread constraint for this collection
+	 * @param threading The thread constraint for this collection
 	 * @param until The observable to cease this collection's synchronization
 	 */
-	public SafeObservableCollection(ObservableCollection<E> collection, ThreadConstraint threadConstraint, Observable<?> until) {
+	public SafeObservableCollection(ObservableCollection<E> collection, ThreadConstraint threading, Observable<?> until) {
+		if (!threading.supportsInvoke())
+			throw new IllegalArgumentException("Thread constraints for safe structures must be invokable");
 		theCollection = collection;
-		theSyntheticBacking = BetterTreeList.<ElementRef<E>> build().withThreadConstraint(threadConstraint).build();
-		theThreadConstraint = threadConstraint;
+		theSyntheticBacking = BetterTreeList.<ElementRef<E>> build().withThreadConstraint(threading).build();
+		theThreadConstraint = threading;
 
 		ObservableCollectionBuilder<ElementRef<E>, ?> builder = DefaultObservableCollection
 			.build((TypeToken<ElementRef<E>>) (TypeToken<?>) TypeTokens.get().of(ElementRef.class))//
@@ -149,14 +151,14 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 			if (doFlush())
 				scheduleFlush();
 		}, Duration.ofMillis(500), false).withThreading((task, timer) -> {
-			threadConstraint.invoke(task);
+			threading.invoke(task);
 			return true;
 		});
 		theFlushKey = Causable.key((cause, values) -> {
-			if (threadConstraint.isEventThread())
+			if (threading.isEventThread())
 				doFlush();
 			else
-				threadConstraint.invoke(this::doFlush);
+				threading.invoke(this::doFlush);
 		});
 		theFlushLock = new AtomicBoolean();
 		theAddedElements = new HashSet<>();
