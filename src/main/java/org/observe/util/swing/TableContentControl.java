@@ -219,17 +219,17 @@ public interface TableContentControl {
 				int comp = Double.compare(double1.minValue, double2.minValue);
 				if (comp != 0)
 					return comp;
-				else if (double1.toString().length() == col1.length()) {
-					if (double2.toString().length() == col2.length())
+				else if (double1.end == col1.length()) {
+					if (double2.end == col2.length())
 						return 0;
 					else
 						return -1;
-				} else if (double2.toString().length() == col2.length())
+				} else if (double2.end == col2.length())
 					return 1;
 				else
 					return compareColumnRenders(//
-						StringUtils.cheapSubSequence(col1, double1.toString().length(), col1.length()),
-						StringUtils.cheapSubSequence(col2, double2.toString().length(), col2.length()));
+						StringUtils.cheapSubSequence(col1, double1.end, col1.length()),
+						StringUtils.cheapSubSequence(col2, double2.end, col2.length()));
 			}
 		}
 

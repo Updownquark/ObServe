@@ -890,9 +890,7 @@ public interface Observable<T> extends Lockable, Identifiable {
 
 		public SafeObservable(Observable<T> wrapped, ThreadConstraint threading) {
 			super(wrapped);
-			if (threading == ThreadConstraint.NONE)
-				throw new IllegalArgumentException("Cannot make a safe observable with threading " + threading);
-			else if (!threading.supportsInvoke())
+			if (!threading.supportsInvoke())
 				throw new IllegalArgumentException("Thread constraints for safe structures must be invokable");
 			theThreading = threading;
 		}
