@@ -195,6 +195,11 @@ public class ObservableSetImpl {
 		}
 
 		@Override
+		public DistinctDataFlow<E, T, T> catchUpdates(ThreadConstraint constraint) {
+			return new DistinctDataFlowWrapper<>(getSource(), super.catchUpdates(constraint), equivalence());
+		}
+
+		@Override
 		public boolean supportsPassive() {
 			return getParent().supportsPassive();
 		}
@@ -453,6 +458,11 @@ public class ObservableSetImpl {
 		}
 
 		@Override
+		public DistinctDataFlow<E, T, T> catchUpdates(ThreadConstraint constraint) {
+			return new DistinctDataFlowWrapper<>(getSource(), super.catchUpdates(constraint), equivalence());
+		}
+
+		@Override
 		public ActiveValueStoredManager<E, ?, T> manageActive() {
 			return new ActiveSetMgrPlaceholder<>(super.manageActive());
 		}
@@ -519,6 +529,11 @@ public class ObservableSetImpl {
 		@Override
 		public DistinctDataFlow<E, E, E> filterMod(Consumer<ModFilterBuilder<E>> options) {
 			return new DistinctDataFlowWrapper<>(getSource(), super.filterMod(options), equivalence());
+		}
+
+		@Override
+		public DistinctDataFlow<E, E, E> catchUpdates(ThreadConstraint constraint) {
+			return new DistinctDataFlowWrapper<>(getSource(), super.catchUpdates(constraint), equivalence());
 		}
 
 		@Override

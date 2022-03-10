@@ -685,6 +685,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public CollectionDataFlow<E, T, T> catchUpdates(ThreadConstraint constraint) {
+			return new UpdateCatchingOp<>(theSource, this, constraint);
+		}
+
+		@Override
 		public SortedDataFlow<E, T, T> sorted(Comparator<? super T> compare) {
 			return new ObservableSortedCollectionImpl.SortedOp<>(theSource, this, compare);
 		}
@@ -1222,6 +1227,38 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public ActiveCollectionManager<E, ?, T> manageActive() {
 			return new ObservableCollectionActiveManagers2.ActiveModFilteredManager<>(getParent().manageActive(), theOptions);
+		}
+	}
+
+	private static class UpdateCatchingOp<E, T> extends AbstractDataFlow<E, T, T> {
+		private final ThreadConstraint theConstraint;
+
+		UpdateCatchingOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, ThreadConstraint constraint) {
+			super(source, parent, parent.getTargetType(), parent.equivalence());
+			theConstraint = constraint;
+		}
+
+		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getParent().getIdentity(), "catchUpdates");
+		}
+
+		@Override
+		public boolean supportsPassive() {
+			// In a passive collection, the event capability is entirely managed by the active ancestor parent--the source collection.
+			// Since this operation is to NOT pass updates to the parent but still to propagate them to the descendants,
+			// passivity cannot be supported.
+			return false;
+		}
+
+		@Override
+		public PassiveCollectionManager<E, ?, T> managePassive() {
+			return null;
+		}
+
+		@Override
+		public ActiveCollectionManager<E, ?, T> manageActive() {
+			return new ObservableCollectionActiveManagers2.UpdateCatchingManager<>(getParent().manageActive(), theConstraint);
 		}
 	}
 

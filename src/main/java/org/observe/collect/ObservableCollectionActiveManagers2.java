@@ -26,6 +26,8 @@ import org.observe.Subscription;
 import org.observe.XformOptions;
 import org.observe.collect.FlatMapOptions.FlatMapDef;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
+import org.observe.collect.ObservableCollectionActiveManagers.AbstractSameTypeActiveManager;
+import org.observe.collect.ObservableCollectionActiveManagers.AbstractSameTypeElement;
 import org.observe.collect.ObservableCollectionActiveManagers.ActiveCollectionManager;
 import org.observe.collect.ObservableCollectionActiveManagers.CollectionElementListener;
 import org.observe.collect.ObservableCollectionActiveManagers.DerivedCollectionElement;
@@ -34,11 +36,11 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.ModFilterer;
 import org.observe.util.TypeTokens;
 import org.observe.util.WeakListening;
 import org.qommons.BiTuple;
+import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.Lockable;
 import org.qommons.Lockable.CoreId;
-import org.qommons.QommonsUtils;
 import org.qommons.Ternian;
 import org.qommons.ThreadConstrained;
 import org.qommons.ThreadConstraint;
@@ -263,7 +265,7 @@ public class ObservableCollectionActiveManagers2 {
 
 		@Override
 		public ThreadConstraint getThreadConstraint() {
-			return ThreadConstrained.getThreadConstraint(theParent, theFilter);
+			return ThreadConstraint.union(theParent.getThreadConstraint(), theFilter.getThreadConstraint());
 		}
 
 		@Override
@@ -441,60 +443,234 @@ public class ObservableCollectionActiveManagers2 {
 		}
 	}
 
-	static class ActiveModFilteredManager<E, T> implements ActiveCollectionManager<E, T, T> {
-		private final ActiveCollectionManager<E, ?, T> theParent;
+	static class UpdateCatchingManager<E, T> extends AbstractSameTypeActiveManager<E, T> {
+		private final ThreadConstraint theConstraint;
+		private final ThreadConstraint theUnionConstraint;
+		private final ReentrantLock theLock;
 
+		UpdateCatchingManager(ActiveCollectionManager<E, ?, T> parent, ThreadConstraint constraint) {
+			super(parent);
+			if (constraint != null) {
+				theConstraint = constraint;
+				theUnionConstraint = ThreadConstraint.union(parent.getThreadConstraint(), constraint);
+				theLock = new ReentrantLock();
+			} else {
+				theConstraint = theUnionConstraint = parent.getThreadConstraint();
+				theLock = null;
+			}
+		}
+
+		@Override
+		public Object getIdentity() {
+			return Identifiable.wrap(getParent().getIdentity(), "catchUpdates");
+		}
+
+		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return theUnionConstraint;
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, Object cause) {
+			if (theLock == null)
+				return getParent().tryLock(write, cause);
+			if (write) {
+				if (getParent().getThreadConstraint().isEventThread()) {
+					Transaction sourceWrite = getParent().tryLock(true, cause);
+					if (sourceWrite != null) {
+						theLock.lock();
+						return () -> {
+							sourceWrite.close();
+							theLock.unlock();
+						};
+					} else if (theConstraint.isEventThread()) {
+						Transaction sourceRead = getParent().tryLock(false, cause);
+						if (sourceRead == null)
+							return null;
+						theLock.lock();
+						return () -> {
+							sourceRead.close();
+							theLock.unlock();
+						};
+					} else
+						throw new IllegalStateException(WRONG_THREAD_MESSAGE);
+				} else if (theConstraint.isEventThread()) {
+					Transaction t = getParent().tryLock(false, cause);
+					if (t == null)
+						return null;
+					theLock.lock();
+					return () -> {
+						t.close();
+						theLock.unlock();
+					};
+				} else
+					throw new IllegalStateException(WRONG_THREAD_MESSAGE);
+			} else {
+				Transaction t = getParent().tryLock(false, cause);
+				if (t == null)
+					return null;
+				theLock.lock();
+				return () -> {
+					t.close();
+					theLock.unlock();
+				};
+			}
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			if (theLock == null)
+				return getParent().lock(write, cause);
+			if (write) {
+				if (getParent().getThreadConstraint().isEventThread()) {
+					Transaction sourceWrite = getParent().tryLock(true, cause);
+					if (sourceWrite != null) {
+						theLock.lock();
+						return () -> {
+							sourceWrite.close();
+							theLock.unlock();
+						};
+					} else if (theConstraint.isEventThread()) {
+						Transaction sourceRead = getParent().lock(false, cause);
+						theLock.lock();
+						return () -> {
+							sourceRead.close();
+							theLock.unlock();
+						};
+					} else
+						throw new IllegalStateException(WRONG_THREAD_MESSAGE);
+				} else if (theConstraint.isEventThread()) {
+					Transaction t = getParent().lock(false, cause);
+					theLock.lock();
+					return () -> {
+						t.close();
+						theLock.unlock();
+					};
+				} else
+					throw new IllegalStateException(WRONG_THREAD_MESSAGE);
+			} else {
+				Transaction t = getParent().lock(false, cause);
+				theLock.lock();
+				return () -> {
+					t.close();
+					theLock.unlock();
+				};
+			}
+		}
+
+		@Override
+		protected boolean areElementsWrapped() {
+			return true;
+		}
+
+		@Override
+		protected DerivedCollectionElement<T> wrap(DerivedCollectionElement<T> parentEl, boolean synthetic) {
+			return parentEl == null ? null : new UpdateCatchingElement(parentEl);
+		}
+
+		@Override
+		protected DerivedCollectionElement<T> peel(DerivedCollectionElement<T> myEl) {
+			return myEl == null ? null : ((UpdateCatchingElement) myEl).theParentEl;
+		}
+
+		@Override
+		public void setValues(Collection<DerivedCollectionElement<T>> elements, T newValue)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			boolean allUpdates;
+			if (theConstraint.isEventThread()) {
+				allUpdates = true;
+				for (DerivedCollectionElement<T> el : elements) {
+					if (el.get() != newValue) {
+						allUpdates = false;
+						break;
+					}
+				}
+			} else
+				allUpdates = false;
+			if (!allUpdates)
+				super.setValues(elements, newValue);
+			else {
+				Causable cause = Causable.simpleCause();
+				try (Transaction causeT = cause.use(); Transaction t = getParent().lock(false, cause)) {
+					theLock.lock();
+					try {
+						for (DerivedCollectionElement<T> el : elements)
+							((UpdateCatchingElement) el).update(newValue, cause);
+					} finally {
+						theLock.unlock();
+					}
+				}
+			}
+		}
+
+		class UpdateCatchingElement extends AbstractSameTypeElement<T> {
+			private CollectionElementListener<T> theListener;
+
+			UpdateCatchingElement(DerivedCollectionElement<T> parentEl) {
+				super(parentEl);
+			}
+
+			@Override
+			public void setListener(CollectionElementListener<T> listener) {
+				theListener = listener;
+				super.setListener(listener);
+			}
+
+			@Override
+			public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
+				if (value == get() && theConstraint.isEventThread()) {
+					Causable cause = Causable.simpleCause();
+					try (Transaction causeT = cause.use(); Transaction t = getParent().lock(false, cause)) {
+						theLock.lock();
+						try {
+							update(value, cause);
+						} finally {
+							theLock.unlock();
+						}
+					}
+				} else
+					super.set(value);
+			}
+
+			private void update(T value, Object cause) {
+				if (theListener != null)
+					theListener.update(value, value, cause, false);
+			}
+		}
+	}
+
+	static class ActiveModFilteredManager<E, T> extends AbstractSameTypeActiveManager<E, T> {
 		private final ModFilterer<T> theFilter;
 
 		ActiveModFilteredManager(ActiveCollectionManager<E, ?, T> parent, ModFilterer<T> filter) {
-			theParent = parent;
+			super(parent);
 			theFilter = filter;
 		}
 
 		@Override
 		public Object getIdentity() {
-			return Identifiable.wrap(theParent.getIdentity(), "filterMod", theFilter);
+			return Identifiable.wrap(getParent().getIdentity(), "filterMod", theFilter);
 		}
 
 		@Override
-		public TypeToken<T> getTargetType() {
-			return theParent.getTargetType();
+		protected boolean areElementsWrapped() {
+			return true;
 		}
 
 		@Override
-		public Equivalence<? super T> equivalence() {
-			return theParent.equivalence();
+		protected DerivedCollectionElement<T> wrap(DerivedCollectionElement<T> parentEl, boolean synthetic) {
+			return parentEl == null ? null : new ModFilteredElement(parentEl);
 		}
 
 		@Override
-		public ThreadConstraint getThreadConstraint() {
-			return theParent.getThreadConstraint();
-		}
-
-		@Override
-		public boolean isLockSupported() {
-			return theParent.isLockSupported();
-		}
-
-		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theParent.lock(write, cause);
-		}
-
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return theParent.tryLock(write, cause);
-		}
-
-		@Override
-		public CoreId getCoreId() {
-			return theParent.getCoreId();
+		protected DerivedCollectionElement<T> peel(DerivedCollectionElement<T> myEl) {
+			return myEl == null ? null : ((ModFilteredElement) myEl).theParentEl;
 		}
 
 		@Override
 		public boolean clear() {
 			if (!theFilter.isRemoveFiltered() && theFilter.getUnmodifiableMessage() == null)
-				return theParent.clear();
+				return getParent().clear();
 			if (theFilter.getUnmodifiableMessage() != null || theFilter.getRemoveMessage() != null)
 				return true;
 			else
@@ -503,40 +679,14 @@ public class ObservableCollectionActiveManagers2 {
 
 		@Override
 		public boolean isContentControlled() {
-			return !theFilter.isEmpty() || theParent.isContentControlled();
-		}
-
-		@Override
-		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
-			Comparable<DerivedCollectionElement<T>> parentFinder = theParent.getElementFinder(value);
-			if (parentFinder == null)
-				return null;
-			return el -> parentFinder.compareTo(((ModFilteredElement) el).theParentEl);
-		}
-
-		@Override
-		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
-			return QommonsUtils.map2(theParent.getElementsBySource(sourceEl, sourceCollection), el -> new ModFilteredElement(el));
-		}
-
-		@Override
-		public BetterList<ElementId> getSourceElements(DerivedCollectionElement<T> localElement, BetterCollection<?> sourceCollection) {
-			return theParent.getSourceElements(((ModFilteredElement) localElement).theParentEl, sourceCollection);
-		}
-
-		@Override
-		public DerivedCollectionElement<T> getEquivalentElement(DerivedCollectionElement<?> flowEl) {
-			if (!(flowEl instanceof ActiveModFilteredManager.ModFilteredElement))
-				return null;
-			DerivedCollectionElement<T> found = theParent.getEquivalentElement(((ModFilteredElement) flowEl).theParentEl);
-			return found == null ? null : new ModFilteredElement(found);
+			return !theFilter.isEmpty() || getParent().isContentControlled();
 		}
 
 		@Override
 		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
 			String msg = theFilter.canAdd(toAdd);
 			if (msg == null)
-				msg = theParent.canAdd(toAdd, strip(after), strip(before));
+				msg = super.canAdd(toAdd, after, before);
 			return msg;
 		}
 
@@ -544,16 +694,14 @@ public class ObservableCollectionActiveManagers2 {
 		public DerivedCollectionElement<T> addElement(T value, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before,
 			boolean first) {
 			theFilter.assertAdd(value);
-			DerivedCollectionElement<T> parentEl = theParent.addElement(value, strip(after), strip(before), first);
-			return parentEl == null ? null : new ModFilteredElement(parentEl);
+			return super.addElement(value, after, before, first);
 		}
 
 		@Override
 		public String canMove(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
 			String msg = theFilter.canMove();
 			if (msg == null)
-				return theParent.canMove(//
-					strip(valueEl), strip(after), strip(before));
+				return super.canMove(valueEl, after, before);
 			else if ((after == null || valueEl.compareTo(after) >= 0) && (before == null || valueEl.compareTo(before) <= 0))
 				return null;
 			return msg;
@@ -566,12 +714,7 @@ public class ObservableCollectionActiveManagers2 {
 				&& (before == null || valueEl.compareTo(before) <= 0))
 				return valueEl;
 			theFilter.assertMovable();
-			return new ModFilteredElement(theParent.move(//
-				strip(valueEl), strip(after), strip(before), first, afterRemove));
-		}
-
-		private DerivedCollectionElement<T> strip(DerivedCollectionElement<T> el) {
-			return el == null ? null : ((ModFilteredElement) el).theParentEl;
+			return super.move(valueEl, after, before, first, afterRemove);
 		}
 
 		@Override
@@ -579,35 +722,13 @@ public class ObservableCollectionActiveManagers2 {
 			throws UnsupportedOperationException, IllegalArgumentException {
 			for (DerivedCollectionElement<T> el : elements)
 				theFilter.assertSet(newValue, el::get);
-			theParent.setValues(//
+			getParent().setValues(//
 				elements.stream().map(el -> ((ModFilteredElement) el).theParentEl).collect(Collectors.toList()), newValue);
 		}
 
-		@Override
-		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
-			theParent.begin(fromStart, (parentEl, cause) -> onElement.accept(new ModFilteredElement(parentEl), cause), listening);
-		}
-
-		private class ModFilteredElement implements DerivedCollectionElement<T> {
-			final DerivedCollectionElement<T> theParentEl;
-
+		private class ModFilteredElement extends AbstractSameTypeElement<T> {
 			ModFilteredElement(DerivedCollectionElement<T> parentEl) {
-				theParentEl = parentEl;
-			}
-
-			@Override
-			public int compareTo(DerivedCollectionElement<T> o) {
-				return theParentEl.compareTo(((ModFilteredElement) o).theParentEl);
-			}
-
-			@Override
-			public void setListener(CollectionElementListener<T> listener) {
-				theParentEl.setListener(listener);
-			}
-
-			@Override
-			public T get() {
-				return theParentEl.get();
+				super(parentEl);
 			}
 
 			@Override
@@ -649,138 +770,67 @@ public class ObservableCollectionActiveManagers2 {
 					this::get);
 				theParentEl.remove();
 			}
-
-			@Override
-			public String toString() {
-				return theParentEl.toString();
-			}
 		}
 	}
 
-	static class ActiveRefreshingCollectionManager<E, T> implements ActiveCollectionManager<E, T, T> {
-		private final ActiveCollectionManager<E, ?, T> theParent;
+	static class ActiveRefreshingCollectionManager<E, T> extends AbstractSameTypeActiveManager<E, T> {
 		private final Observable<?> theRefresh;
 		private final BetterList<RefreshingElement> theElements;
 
 		ActiveRefreshingCollectionManager(ActiveCollectionManager<E, ?, T> parent, Observable<?> refresh) {
-			theParent = parent;
+			super(parent);
 			theRefresh = refresh;
 			theElements = BetterTreeList.<RefreshingElement> build().build();
 		}
 
 		@Override
 		public Object getIdentity() {
-			return Identifiable.wrap(theParent.getIdentity(), "refresh", theRefresh.getIdentity());
-		}
-
-		@Override
-		public TypeToken<T> getTargetType() {
-			return theParent.getTargetType();
-		}
-
-		@Override
-		public Equivalence<? super T> equivalence() {
-			return theParent.equivalence();
+			return Identifiable.wrap(getParent().getIdentity(), "refresh", theRefresh.getIdentity());
 		}
 
 		@Override
 		public ThreadConstraint getThreadConstraint() {
-			return ThreadConstrained.getThreadConstraint(theParent, theRefresh);
+			return ThreadConstrained.getThreadConstraint(getParent(), theRefresh);
 		}
 
 		@Override
 		public boolean isLockSupported() {
-			return theParent.isLockSupported() && theRefresh.isLockSupported();
+			return getParent().isLockSupported() && theRefresh.isLockSupported();
 		}
 
 		@Override
 		public Transaction lock(boolean write, Object cause) {
-			return Lockable.lockAll(Lockable.lockable(theParent, write, cause), theRefresh);
+			return Lockable.lockAll(Lockable.lockable(getParent(), write, cause), theRefresh);
 		}
 
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
-			return Lockable.tryLockAll(Lockable.lockable(theParent, write, cause), theRefresh);
+			return Lockable.tryLockAll(Lockable.lockable(getParent(), write, cause), theRefresh);
 		}
 
 		@Override
 		public CoreId getCoreId() {
-			return Lockable.getCoreId(Lockable.lockable(theParent, false, null), theRefresh);
+			return Lockable.getCoreId(Lockable.lockable(getParent(), false, null), theRefresh);
 		}
 
 		@Override
-		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
-			Comparable<DerivedCollectionElement<T>> parentFinder = theParent.getElementFinder(value);
-			if (parentFinder == null)
-				return null;
-			return el -> parentFinder.compareTo(((RefreshingElement) el).theParentEl);
+		protected boolean areElementsWrapped() {
+			return true;
 		}
 
 		@Override
-		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
-			return QommonsUtils.map2(theParent.getElementsBySource(sourceEl, sourceCollection), el -> new RefreshingElement(el, true));
+		protected DerivedCollectionElement<T> wrap(DerivedCollectionElement<T> parentEl, boolean synthetic) {
+			return parentEl == null ? null : new RefreshingElement(parentEl, synthetic);
 		}
 
 		@Override
-		public BetterList<ElementId> getSourceElements(DerivedCollectionElement<T> localElement, BetterCollection<?> sourceCollection) {
-			return theParent.getSourceElements(((RefreshingElement) localElement).theParentEl, sourceCollection);
-		}
-
-		@Override
-		public DerivedCollectionElement<T> getEquivalentElement(DerivedCollectionElement<?> flowEl) {
-			if (!(flowEl instanceof ActiveRefreshingCollectionManager.RefreshingElement))
-				return null;
-			DerivedCollectionElement<T> found = theParent.getEquivalentElement(((RefreshingElement) flowEl).theParentEl);
-			return found == null ? null : new RefreshingElement(found, true);
-		}
-
-		@Override
-		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
-			return theParent.canAdd(toAdd, strip(after), strip(before));
-		}
-
-		@Override
-		public boolean clear() {
-			return theParent.clear();
-		}
-
-		@Override
-		public boolean isContentControlled() {
-			return theParent.isContentControlled();
-		}
-
-		@Override
-		public DerivedCollectionElement<T> addElement(T value, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before,
-			boolean first) {
-			DerivedCollectionElement<T> parentEl = theParent.addElement(value, strip(after), strip(before), first);
-			return parentEl == null ? null : new RefreshingElement(parentEl, true);
-		}
-
-		@Override
-		public String canMove(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
-			return theParent.canMove(strip(valueEl), strip(after), strip(before));
-		}
-
-		@Override
-		public DerivedCollectionElement<T> move(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after,
-			DerivedCollectionElement<T> before, boolean first, Runnable afterRemove) {
-			return new RefreshingElement(theParent.move(strip(valueEl), strip(after), strip(before), first, afterRemove), true);
-		}
-
-		private DerivedCollectionElement<T> strip(DerivedCollectionElement<T> el) {
-			return el == null ? null : ((RefreshingElement) el).theParentEl;
-		}
-
-		@Override
-		public void setValues(Collection<DerivedCollectionElement<T>> elements, T newValue)
-			throws UnsupportedOperationException, IllegalArgumentException {
-			theParent.setValues(//
-				elements.stream().map(el -> ((RefreshingElement) el).theParentEl).collect(Collectors.toList()), newValue);
+		protected DerivedCollectionElement<T> peel(DerivedCollectionElement<T> myEl) {
+			return myEl == null ? null : ((RefreshingElement) myEl).theParentEl;
 		}
 
 		@Override
 		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
-			theParent.begin(fromStart, (parentEl, cause) -> {
+			getParent().begin(fromStart, (parentEl, cause) -> {
 				// Make sure the refresh doesn't fire while we're firing notifications from the parent change
 				try (Transaction t = theRefresh.lock()) {
 					onElement.accept(new RefreshingElement(parentEl, false), cause);
@@ -788,7 +838,7 @@ public class ObservableCollectionActiveManagers2 {
 			}, listening);
 			listening.withConsumer((Object r) -> {
 				// Make sure the parent doesn't fire while we're firing notifications from the refresh
-				try (Transaction t = theParent.lock(false, r)) {
+				try (Transaction t = getParent().lock(false, r)) {
 					// Refreshing should be done in element order
 					Collections.sort(theElements);
 					CollectionElement<RefreshingElement> el = theElements.getTerminalElement(true);
@@ -802,13 +852,12 @@ public class ObservableCollectionActiveManagers2 {
 			}, theRefresh::act);
 		}
 
-		private class RefreshingElement implements DerivedCollectionElement<T> {
-			final DerivedCollectionElement<T> theParentEl;
+		private class RefreshingElement extends AbstractSameTypeElement<T> {
 			private ElementId theElementId;
 			private CollectionElementListener<T> theListener;
 
 			RefreshingElement(DerivedCollectionElement<T> parent, boolean synthetic) {
-				theParentEl = parent;
+				super(parent);
 				if (!synthetic) {
 					theElementId = theElements.addElement(this, false).getElementId();
 					theParentEl.setListener(new CollectionElementListener<T>() {
@@ -837,53 +886,13 @@ public class ObservableCollectionActiveManagers2 {
 			}
 
 			@Override
-			public int compareTo(DerivedCollectionElement<T> o) {
-				return theParentEl.compareTo(((RefreshingElement) o).theParentEl);
-			}
-
-			@Override
 			public void setListener(CollectionElementListener<T> listener) {
 				theListener = listener;
-			}
-
-			@Override
-			public T get() {
-				return theParentEl.get();
-			}
-
-			@Override
-			public String isEnabled() {
-				return theParentEl.isEnabled();
-			}
-
-			@Override
-			public String isAcceptable(T value) {
-				return theParentEl.isAcceptable(value);
-			}
-
-			@Override
-			public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
-				theParentEl.set(value);
-			}
-
-			@Override
-			public String canRemove() {
-				return theParentEl.canRemove();
-			}
-
-			@Override
-			public void remove() throws UnsupportedOperationException {
-				theParentEl.remove();
-			}
-
-			@Override
-			public String toString() {
-				return theParentEl.toString();
 			}
 		}
 	}
 
-	static class ElementRefreshingCollectionManager<E, T> implements ActiveCollectionManager<E, T, T> {
+	static class ElementRefreshingCollectionManager<E, T> extends AbstractSameTypeActiveManager<E, T> {
 		private class RefreshHolder {
 			private final ElementId theElementId;
 			private final Subscription theSub;
@@ -895,7 +904,7 @@ public class ObservableCollectionActiveManagers2 {
 				theSub = theListening.withConsumer(r -> {
 					try (Transaction t = Lockable.lockAll(
 						Lockable.lockable(theLock, ElementRefreshingCollectionManager.this, ThreadConstraint.ANY),
-						Lockable.lockable(theParent, false, null))) {
+						Lockable.lockable(getParent(), false, null))) {
 						RefreshingElement setting = (RefreshingElement) theSettingElement.get();
 						if (setting != null && elements.contains(setting))
 							setting.refresh(r);
@@ -916,7 +925,6 @@ public class ObservableCollectionActiveManagers2 {
 			}
 		}
 
-		private final ActiveCollectionManager<E, ?, T> theParent;
 		private final Function<? super T, ? extends Observable<?>> theRefresh;
 		private final BetterMap<Observable<?>, RefreshHolder> theRefreshObservables;
 		private WeakListening theListening;
@@ -924,7 +932,7 @@ public class ObservableCollectionActiveManagers2 {
 		Supplier<DerivedCollectionElement<? extends T>> theSettingElement;
 
 		ElementRefreshingCollectionManager(ActiveCollectionManager<E, ?, T> parent, Function<? super T, ? extends Observable<?>> refresh) {
-			theParent = parent;
+			super(parent);
 			theRefresh = refresh;
 			theRefreshObservables = BetterHashMap.build().build();
 			theLock = new ReentrantLock();
@@ -937,17 +945,7 @@ public class ObservableCollectionActiveManagers2 {
 
 		@Override
 		public Object getIdentity() {
-			return Identifiable.wrap(theParent.getIdentity(), "refresh", theRefresh);
-		}
-
-		@Override
-		public TypeToken<T> getTargetType() {
-			return theParent.getTargetType();
-		}
-
-		@Override
-		public Equivalence<? super T> equivalence() {
-			return theParent.equivalence();
+			return Identifiable.wrap(getParent().getIdentity(), "refresh", theRefresh);
 		}
 
 		@Override
@@ -967,9 +965,10 @@ public class ObservableCollectionActiveManagers2 {
 			// If this lock method will obtain any exclusive locks, then locking the refresh lock is unnecessary,
 			// because incoming refresh updates obtain a read lock on the parent
 			if (write)
-				return theParent.lock(write, cause);
+				return getParent().lock(write, cause);
 			else
-				return Lockable.lockAll(Lockable.lockable(theParent, write, cause), Lockable.lockable(theLock, this, ThreadConstraint.ANY));
+				return Lockable.lockAll(Lockable.lockable(getParent(), write, cause),
+					Lockable.lockable(theLock, this, ThreadConstraint.ANY));
 		}
 
 		@Override
@@ -979,15 +978,15 @@ public class ObservableCollectionActiveManagers2 {
 			// If this lock method will obtain any exclusive locks, then locking the refresh lock is unnecessary,
 			// because incoming refresh updates obtain a read lock on the parent
 			if (write)
-				return theParent.tryLock(write, cause);
+				return getParent().tryLock(write, cause);
 			else
-				return Lockable.tryLockAll(Lockable.lockable(theParent, write, cause),
+				return Lockable.tryLockAll(Lockable.lockable(getParent(), write, cause),
 					Lockable.lockable(theLock, this, ThreadConstraint.ANY));
 		}
 
 		@Override
 		public CoreId getCoreId() {
-			return Lockable.getCoreId(Lockable.lockable(theParent, false, null), Lockable.lockable(theLock, this, ThreadConstraint.ANY));
+			return Lockable.getCoreId(Lockable.lockable(getParent(), false, null), Lockable.lockable(theLock, this, ThreadConstraint.ANY));
 		}
 
 		Transaction lockRefresh() {
@@ -995,86 +994,31 @@ public class ObservableCollectionActiveManagers2 {
 		}
 
 		@Override
-		public boolean isContentControlled() {
-			return theParent.isContentControlled();
+		protected boolean areElementsWrapped() {
+			return true;
 		}
 
 		@Override
-		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
-			Comparable<DerivedCollectionElement<T>> parentFinder = theParent.getElementFinder(value);
-			if (parentFinder == null)
-				return null;
-			return el -> parentFinder.compareTo(((RefreshingElement) el).theParentEl);
-		}
-
-		@Override
-		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
-			return QommonsUtils.map2(theParent.getElementsBySource(sourceEl, sourceCollection), el -> new RefreshingElement(el));
-		}
-
-		@Override
-		public BetterList<ElementId> getSourceElements(DerivedCollectionElement<T> localElement, BetterCollection<?> sourceCollection) {
-			return theParent.getSourceElements(((RefreshingElement) localElement).theParentEl, sourceCollection);
-		}
-
-		@Override
-		public DerivedCollectionElement<T> getEquivalentElement(DerivedCollectionElement<?> flowEl) {
-			if (!(flowEl instanceof ElementRefreshingCollectionManager.RefreshingElement))
-				return null;
-			DerivedCollectionElement<T> found = theParent.getEquivalentElement(((RefreshingElement) flowEl).theParentEl);
-			return found == null ? null : new RefreshingElement(found);
-		}
-
-		@Override
-		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
-			return theParent.canAdd(toAdd, strip(after), strip(before));
-		}
-
-		@Override
-		public boolean clear() {
-			return theParent.clear();
-		}
-
-		@Override
-		public DerivedCollectionElement<T> addElement(T value, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before,
-			boolean first) {
-			DerivedCollectionElement<T> parentEl = theParent.addElement(value, strip(after), strip(before), first);
+		protected DerivedCollectionElement<T> wrap(DerivedCollectionElement<T> parentEl, boolean synthetic) {
 			return parentEl == null ? null : new RefreshingElement(parentEl);
 		}
 
 		@Override
-		public String canMove(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
-			return theParent.canMove(strip(valueEl), strip(after), strip(before));
-		}
-
-		@Override
-		public DerivedCollectionElement<T> move(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after,
-			DerivedCollectionElement<T> before, boolean first, Runnable afterRemove) {
-			return new RefreshingElement(theParent.move(strip(valueEl), strip(after), strip(before), first, afterRemove));
-		}
-
-		private DerivedCollectionElement<T> strip(DerivedCollectionElement<T> el) {
-			return el == null ? null : ((RefreshingElement) el).theParentEl;
-		}
-
-		@Override
-		public void setValues(Collection<DerivedCollectionElement<T>> elements, T newValue)
-			throws UnsupportedOperationException, IllegalArgumentException {
-			theParent.setValues(elements.stream().map(el -> ((RefreshingElement) el).theParentEl).collect(Collectors.toList()), newValue);
+		protected DerivedCollectionElement<T> peel(DerivedCollectionElement<T> myEl) {
+			return myEl == null ? null : ((RefreshingElement) myEl).theParentEl;
 		}
 
 		@Override
 		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
 			theListening = listening;
-			theParent.begin(fromStart, (parentEl, cause) -> {
+			getParent().begin(fromStart, (parentEl, cause) -> {
 				try (Transaction t = lockRefresh()) {
 					onElement.accept(new RefreshingElement(parentEl), cause);
 				}
 			}, listening);
 		}
 
-		private class RefreshingElement implements DerivedCollectionElement<T> {
-			private final DerivedCollectionElement<T> theParentEl;
+		private class RefreshingElement extends AbstractSameTypeElement<T> {
 			private Observable<?> theCurrentRefresh;
 			private RefreshHolder theCurrentHolder;
 			private ElementId theElementId;
@@ -1082,7 +1026,7 @@ public class ObservableCollectionActiveManagers2 {
 			private boolean isInstalled;
 
 			RefreshingElement(DerivedCollectionElement<T> parentEl) {
-				theParentEl = parentEl;
+				super(parentEl);
 			}
 
 			/**
@@ -1155,49 +1099,9 @@ public class ObservableCollectionActiveManagers2 {
 			}
 
 			@Override
-			public int compareTo(DerivedCollectionElement<T> o) {
-				return theParentEl.compareTo(((RefreshingElement) o).theParentEl);
-			}
-
-			@Override
 			public void setListener(CollectionElementListener<T> listener) {
 				theListener = listener;
 				installOrUninstall();
-			}
-
-			@Override
-			public T get() {
-				return theParentEl.get();
-			}
-
-			@Override
-			public String isEnabled() {
-				return theParentEl.isEnabled();
-			}
-
-			@Override
-			public String isAcceptable(T value) {
-				return theParentEl.isAcceptable(value);
-			}
-
-			@Override
-			public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
-				theParentEl.set(value);
-			}
-
-			@Override
-			public String canRemove() {
-				return theParentEl.canRemove();
-			}
-
-			@Override
-			public void remove() throws UnsupportedOperationException {
-				theParentEl.remove();
-			}
-
-			@Override
-			public String toString() {
-				return theParentEl.toString();
 			}
 		}
 	}

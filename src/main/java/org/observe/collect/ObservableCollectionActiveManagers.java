@@ -579,164 +579,23 @@ public class ObservableCollectionActiveManagers {
 		}
 	}
 
-	static class ActiveReversedManager<E, T> implements ActiveCollectionManager<E, T, T> {
-		private final ActiveCollectionManager<E, ?, T> theParent;
-
-		ActiveReversedManager(ActiveCollectionManager<E, ?, T> parent) {
-			theParent = parent;
-		}
-
-		@Override
-		public Object getIdentity() {
-			return Identifiable.wrap(theParent.getIdentity(), "reverse");
-		}
-
-		@Override
-		public TypeToken<T> getTargetType() {
-			return theParent.getTargetType();
-		}
-
-		@Override
-		public Equivalence<? super T> equivalence() {
-			Equivalence<? super T> equiv = theParent.equivalence();
-			if (equiv instanceof Equivalence.SortedEquivalence)
-				return ((Equivalence.SortedEquivalence<? super T>) equiv).reverse();
-			else
-				return equiv;
-		}
-
-		@Override
-		public ThreadConstraint getThreadConstraint() {
-			return theParent.getThreadConstraint();
-		}
-
-		@Override
-		public boolean isLockSupported() {
-			return theParent.isLockSupported();
-		}
-
-		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theParent.lock(write, cause);
-		}
-
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return theParent.tryLock(write, cause);
-		}
-
-		@Override
-		public CoreId getCoreId() {
-			return theParent.getCoreId();
-		}
-
-		@Override
-		public boolean isContentControlled() {
-			return theParent.isContentControlled();
-		}
-
-		@Override
-		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
-			Comparable<DerivedCollectionElement<T>> parentFinder = theParent.getElementFinder(value);
-			if (parentFinder == null)
-				return null;
-			return el -> -parentFinder.compareTo(el.reverse());
-		}
-
-		@Override
-		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl,
-			BetterCollection<?> sourceCollection) {
-			return QommonsUtils.map2(theParent.getElementsBySource(sourceEl.reverse(), sourceCollection), el -> el.reverse());
-		}
-
-		@Override
-		public BetterList<ElementId> getSourceElements(DerivedCollectionElement<T> localElement,
-			BetterCollection<?> sourceCollection) {
-			return theParent.getSourceElements(localElement.reverse(), sourceCollection);
-		}
-
-		@Override
-		public DerivedCollectionElement<T> getEquivalentElement(DerivedCollectionElement<?> flowEl) {
-			return DerivedCollectionElement.reverse(theParent.getEquivalentElement(flowEl.reverse()));
-		}
-
-		@Override
-		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
-			return theParent.canAdd(toAdd, DerivedCollectionElement.reverse(before), DerivedCollectionElement.reverse(after));
-		}
-
-		@Override
-		public DerivedCollectionElement<T> addElement(T value, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before,
-			boolean first) {
-			DerivedCollectionElement<T> parentEl = theParent.addElement(value, DerivedCollectionElement.reverse(before),
-				DerivedCollectionElement.reverse(after), !first);
-			return parentEl == null ? null : parentEl.reverse();
-		}
-
-		@Override
-		public String canMove(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
-			return theParent.canMove(DerivedCollectionElement.reverse(valueEl), DerivedCollectionElement.reverse(before),
-				DerivedCollectionElement.reverse(after));
-		}
-
-		@Override
-		public DerivedCollectionElement<T> move(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after,
-			DerivedCollectionElement<T> before, boolean first, Runnable afterRemove) {
-			return theParent.move(DerivedCollectionElement.reverse(valueEl), DerivedCollectionElement.reverse(before),
-				DerivedCollectionElement.reverse(after), !first, afterRemove).reverse();
-		}
-
-		@Override
-		public boolean clear() {
-			return theParent.clear();
-		}
-
-		@Override
-		public void setValues(Collection<DerivedCollectionElement<T>> elements, T newValue)
-			throws UnsupportedOperationException, IllegalArgumentException {
-			theParent.setValues(//
-				elements.stream().map(el -> el.reverse()).collect(Collectors.toList()), newValue);
-		}
-
-		@Override
-		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
-			theParent.begin(!fromStart, (el, cause) -> onElement.accept(el.reverse(), cause), listening);
-		}
-	}
-
 	/**
-	 * An {@link ActiveCollectionManager active manager} that sorts its elements by value
+	 * Abstract class to eliminate boilerplate for managers with the same target type as their parent
 	 *
-	 * @param <E> The type of the source collection
-	 * @param <T> The type of this manager
+	 * @param <E> The source type of the manager
+	 * @param <T> The target type of the manager
 	 */
-	protected static class SortedManager<E, T> implements ActiveValueStoredManager<E, T, T> {
+	public static abstract class AbstractSameTypeActiveManager<E, T> implements ActiveCollectionManager<E, T, T> {
 		private final ActiveCollectionManager<E, ?, T> theParent;
-		private final Comparator<? super T> theCompare;
-		// Need to keep track of the values to enforce the set-does-not-reorder policy
-		private final BetterTreeList<BiTuple<T, DerivedCollectionElement<T>>> theValues;
-		private final Comparator<BiTuple<T, DerivedCollectionElement<T>>> theTupleCompare;
-		private ElementAccepter<T> theAccepter;
 
-		/**
-		 * @param parent The parent manager
-		 * @param compare The comparator to use to sort the elements
-		 */
-		protected SortedManager(ActiveCollectionManager<E, ?, T> parent, Comparator<? super T> compare) {
+		/** @param parent The parent manager */
+		public AbstractSameTypeActiveManager(ActiveCollectionManager<E, ?, T> parent) {
 			theParent = parent;
-			theCompare = compare;
-			theValues = BetterTreeList.<BiTuple<T, DerivedCollectionElement<T>>> build().build();
-			theTupleCompare = (t1, t2) -> {
-				int comp = theCompare.compare(t1.getValue1(), t2.getValue1());
-				if (comp == 0)
-					comp = t1.getValue2().compareTo(t2.getValue2());
-				return comp;
-			};
 		}
 
-		@Override
-		public Object getIdentity() {
-			return Identifiable.wrap(theParent.getIdentity(), "sorted", theCompare);
+		/** @return This manager's parent */
+		protected ActiveCollectionManager<E, ?, T> getParent() {
+			return theParent;
 		}
 
 		@Override
@@ -750,13 +609,8 @@ public class ObservableCollectionActiveManagers {
 		}
 
 		@Override
-		public ThreadConstraint getThreadConstraint() {
-			return theParent.getThreadConstraint();
-		}
-
-		@Override
-		public boolean isLockSupported() {
-			return theParent.isLockSupported();
+		public boolean isContentControlled() {
+			return theParent.isContentControlled();
 		}
 
 		@Override
@@ -772,6 +626,313 @@ public class ObservableCollectionActiveManagers {
 		@Override
 		public CoreId getCoreId() {
 			return theParent.getCoreId();
+		}
+
+		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return theParent.getThreadConstraint();
+		}
+
+		/** @return Whether this manager wraps its parent's elements */
+		protected abstract boolean areElementsWrapped();
+
+		/**
+		 * @param parentEl The parent element to wrap
+		 * @param synthetic Whether the element is to be synthetic--just a search or real and representative of the element in the
+		 *        collection
+		 * @return The wrapped element
+		 */
+		protected abstract DerivedCollectionElement<T> wrap(DerivedCollectionElement<T> parentEl, boolean synthetic);
+
+		/**
+		 * @param myEl The element of this flow
+		 * @return The parent element of the given element
+		 */
+		protected abstract DerivedCollectionElement<T> peel(DerivedCollectionElement<T> myEl);
+
+		@Override
+		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
+			if (!areElementsWrapped())
+				return theParent.getElementFinder(value);
+			Comparable<DerivedCollectionElement<T>> parentFinder = getParent().getElementFinder(value);
+			if (parentFinder == null)
+				return null;
+			return el -> parentFinder.compareTo(peel(el));
+		}
+
+		@Override
+		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
+			if (!areElementsWrapped())
+				return theParent.getElementsBySource(sourceEl, sourceCollection);
+			return QommonsUtils.map2(getParent().getElementsBySource(sourceEl, sourceCollection), el -> wrap(el, true));
+		}
+
+		@Override
+		public BetterList<ElementId> getSourceElements(DerivedCollectionElement<T> localElement, BetterCollection<?> sourceCollection) {
+			return theParent.getSourceElements(peel(localElement), sourceCollection);
+		}
+
+		@Override
+		public DerivedCollectionElement<T> getEquivalentElement(DerivedCollectionElement<?> flowEl) {
+			return theParent.getEquivalentElement(flowEl);
+		}
+
+		@Override
+		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
+			if (!areElementsWrapped())
+				return theParent.canAdd(toAdd, after, before);
+			return getParent().canAdd(toAdd, peel(after), peel(before));
+		}
+
+		@Override
+		public DerivedCollectionElement<T> addElement(T value, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before,
+			boolean first) {
+			if (!areElementsWrapped())
+				return theParent.addElement(value, after, before, first);
+			return wrap(getParent().addElement(value, peel(after), peel(before), first), true);
+		}
+
+		@Override
+		public String canMove(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
+			if (!areElementsWrapped())
+				return theParent.canMove(valueEl, after, before);
+			return getParent().canMove(peel(valueEl), peel(after), peel(before));
+		}
+
+		@Override
+		public DerivedCollectionElement<T> move(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after,
+			DerivedCollectionElement<T> before, boolean first, Runnable afterRemove) {
+			if (!areElementsWrapped())
+				return theParent.move(valueEl, after, before, first, afterRemove);
+			return wrap(getParent().move(peel(valueEl), peel(after), peel(before), first, afterRemove), true);
+		}
+
+		@Override
+		public void setValues(Collection<DerivedCollectionElement<T>> elements, T newValue)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			if (!areElementsWrapped())
+				theParent.setValues(elements, newValue);
+			else
+				getParent().setValues(//
+					elements.stream().map(this::peel).collect(Collectors.toList()), newValue);
+		}
+
+		@Override
+		public boolean clear() {
+			return theParent.clear();
+		}
+
+		@Override
+		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
+			if (!areElementsWrapped())
+				theParent.begin(fromStart, onElement, listening);
+			else
+				getParent().begin(fromStart, (el, cause) -> onElement.accept(wrap(el, false), cause), listening);
+		}
+	}
+
+	/**
+	 * A wrapping element that has the same type as its parent
+	 *
+	 * @param <T> The type of the element
+	 */
+	public static abstract class AbstractSameTypeElement<T> implements DerivedCollectionElement<T> {
+		/** The parent element */
+		protected final DerivedCollectionElement<T> theParentEl;
+
+		/** @param parentEl The parent element */
+		public AbstractSameTypeElement(DerivedCollectionElement<T> parentEl) {
+			theParentEl = parentEl;
+		}
+
+		@Override
+		public int compareTo(DerivedCollectionElement<T> o) {
+			return theParentEl.compareTo(((AbstractSameTypeElement<T>) o).theParentEl);
+		}
+
+		@Override
+		public void setListener(CollectionElementListener<T> listener) {
+			theParentEl.setListener(listener);
+		}
+
+		@Override
+		public T get() {
+			return theParentEl.get();
+		}
+
+		@Override
+		public String isEnabled() {
+			return theParentEl.isEnabled();
+		}
+
+		@Override
+		public String isAcceptable(T value) {
+			return theParentEl.isAcceptable(value);
+		}
+
+		@Override
+		public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
+			theParentEl.set(value);
+		}
+
+		@Override
+		public String canRemove() {
+			return theParentEl.canRemove();
+		}
+
+		@Override
+		public void remove() throws UnsupportedOperationException {
+			theParentEl.remove();
+		}
+
+		@Override
+		public int hashCode() {
+			return theParentEl.hashCode();
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return obj instanceof AbstractSameTypeElement && theParentEl.equals(((AbstractSameTypeElement<T>) obj).theParentEl);
+		}
+
+		@Override
+		public String toString() {
+			return theParentEl.toString();
+		}
+	}
+
+	static class ActiveReversedManager<E, T> extends AbstractSameTypeActiveManager<E, T> {
+		ActiveReversedManager(ActiveCollectionManager<E, ?, T> parent) {
+			super(parent);
+		}
+
+		@Override
+		public Object getIdentity() {
+			return Identifiable.wrap(getParent().getIdentity(), "reverse");
+		}
+
+		@Override
+		public Equivalence<? super T> equivalence() {
+			Equivalence<? super T> equiv = getParent().equivalence();
+			if (equiv instanceof Equivalence.SortedEquivalence)
+				return ((Equivalence.SortedEquivalence<? super T>) equiv).reverse();
+			else
+				return equiv;
+		}
+
+		@Override
+		protected boolean areElementsWrapped() {
+			return true;
+		}
+
+		@Override
+		protected DerivedCollectionElement<T> wrap(DerivedCollectionElement<T> parentEl, boolean synthetic) {
+			return parentEl == null ? null : parentEl.reverse();
+		}
+
+		@Override
+		protected DerivedCollectionElement<T> peel(DerivedCollectionElement<T> myEl) {
+			return myEl == null ? null : myEl.reverse();
+		}
+
+		@Override
+		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
+			Comparable<DerivedCollectionElement<T>> parentFinder = getParent().getElementFinder(value);
+			if (parentFinder == null)
+				return null;
+			return el -> -parentFinder.compareTo(el.reverse());
+		}
+
+		@Override
+		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl,
+			BetterCollection<?> sourceCollection) {
+			return QommonsUtils.map2(getParent().getElementsBySource(sourceEl.reverse(), sourceCollection), el -> el.reverse());
+		}
+
+		@Override
+		public DerivedCollectionElement<T> getEquivalentElement(DerivedCollectionElement<?> flowEl) {
+			return DerivedCollectionElement.reverse(getParent().getEquivalentElement(flowEl.reverse()));
+		}
+
+		@Override
+		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
+			return getParent().canAdd(toAdd, DerivedCollectionElement.reverse(before), DerivedCollectionElement.reverse(after));
+		}
+
+		@Override
+		public DerivedCollectionElement<T> addElement(T value, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before,
+			boolean first) {
+			DerivedCollectionElement<T> parentEl = getParent().addElement(value, DerivedCollectionElement.reverse(before),
+				DerivedCollectionElement.reverse(after), !first);
+			return parentEl == null ? null : parentEl.reverse();
+		}
+
+		@Override
+		public String canMove(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
+			return getParent().canMove(DerivedCollectionElement.reverse(valueEl), DerivedCollectionElement.reverse(before),
+				DerivedCollectionElement.reverse(after));
+		}
+
+		@Override
+		public DerivedCollectionElement<T> move(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after,
+			DerivedCollectionElement<T> before, boolean first, Runnable afterRemove) {
+			return getParent().move(DerivedCollectionElement.reverse(valueEl), DerivedCollectionElement.reverse(before),
+				DerivedCollectionElement.reverse(after), !first, afterRemove).reverse();
+		}
+
+		@Override
+		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
+			getParent().begin(!fromStart, (el, cause) -> onElement.accept(el.reverse(), cause), listening);
+		}
+	}
+
+	/**
+	 * An {@link ActiveCollectionManager active manager} that sorts its elements by value
+	 *
+	 * @param <E> The type of the source collection
+	 * @param <T> The type of this manager
+	 */
+	protected static class SortedManager<E, T> extends AbstractSameTypeActiveManager<E, T> implements ActiveValueStoredManager<E, T, T> {
+		private final Comparator<? super T> theCompare;
+		// Need to keep track of the values to enforce the set-does-not-reorder policy
+		private final BetterTreeList<BiTuple<T, DerivedCollectionElement<T>>> theValues;
+		private final Comparator<BiTuple<T, DerivedCollectionElement<T>>> theTupleCompare;
+		private ElementAccepter<T> theAccepter;
+
+		/**
+		 * @param parent The parent manager
+		 * @param compare The comparator to use to sort the elements
+		 */
+		protected SortedManager(ActiveCollectionManager<E, ?, T> parent, Comparator<? super T> compare) {
+			super(parent);
+			theCompare = compare;
+			theValues = BetterTreeList.<BiTuple<T, DerivedCollectionElement<T>>> build().build();
+			theTupleCompare = (t1, t2) -> {
+				int comp = theCompare.compare(t1.getValue1(), t2.getValue1());
+				if (comp == 0)
+					comp = t1.getValue2().compareTo(t2.getValue2());
+				return comp;
+			};
+		}
+
+		@Override
+		public Object getIdentity() {
+			return Identifiable.wrap(getParent().getIdentity(), "sorted", theCompare);
+		}
+
+		@Override
+		protected boolean areElementsWrapped() {
+			return true;
+		}
+
+		@Override
+		protected DerivedCollectionElement<T> wrap(DerivedCollectionElement<T> parentEl, boolean synthetic) {
+			return parentEl == null ? null : new SortedElement(parentEl, synthetic);
+		}
+
+		@Override
+		protected DerivedCollectionElement<T> peel(DerivedCollectionElement<T> myEl) {
+			return myEl == null ? null : ((SortedElement) myEl).theParentEl;
 		}
 
 		@Override
@@ -819,11 +980,6 @@ public class ObservableCollectionActiveManagers {
 		}
 
 		@Override
-		public boolean clear() {
-			return theParent.clear();
-		}
-
-		@Override
 		public boolean isContentControlled() {
 			return true;
 		}
@@ -837,25 +993,13 @@ public class ObservableCollectionActiveManagers {
 		}
 
 		@Override
-		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl,
-			BetterCollection<?> sourceCollection) {
-			return QommonsUtils.map2(theParent.getElementsBySource(sourceEl, sourceCollection), el -> new SortedElement(el, true));
-		}
-
-		@Override
-		public BetterList<ElementId> getSourceElements(DerivedCollectionElement<T> localElement,
-			BetterCollection<?> sourceCollection) {
-			return theParent.getSourceElements(((SortedElement) localElement).theParentEl, sourceCollection);
-		}
-
-		@Override
 		public DerivedCollectionElement<T> getEquivalentElement(DerivedCollectionElement<?> flowEl) {
 			if (!(flowEl instanceof SortedManager.SortedElement))
 				return null;
 			SortedElement other = (SortedElement) flowEl;
 			if (other.getMgr() == this)
 				return other;
-			DerivedCollectionElement<T> found = theParent.getEquivalentElement(other.theParentEl);
+			DerivedCollectionElement<T> found = getParent().getEquivalentElement(other.theParentEl);
 			return found == null ? null : new SortedElement(found, true);
 		}
 
@@ -871,7 +1015,7 @@ public class ObservableCollectionActiveManagers {
 				? ((SortedElement) after).theParentEl : null;
 				DerivedCollectionElement<T> requiredBefore = (before != null && beforeComp == 0)
 					? ((SortedElement) before).theParentEl : null;
-					return theParent.canAdd(toAdd, requiredAfter, requiredBefore);
+					return getParent().canAdd(toAdd, requiredAfter, requiredBefore);
 		}
 
 		@Override
@@ -892,13 +1036,13 @@ public class ObservableCollectionActiveManagers {
 					// that a position-less add will insert the new element in the right spot
 					DerivedCollectionElement<T> parentEl;
 					if (requiredAfter != null || requiredBefore != null)
-						parentEl = theParent.addElement(value, requiredAfter, requiredBefore, first);
-					else if (first && after != null && theParent.canAdd(value, ((SortedElement) after).theParentEl, null) == null)
-						parentEl = theParent.addElement(value, ((SortedElement) after).theParentEl, null, true);
-					else if (!first && before != null && theParent.canAdd(value, null, ((SortedElement) before).theParentEl) == null)
-						parentEl = theParent.addElement(value, null, ((SortedElement) before).theParentEl, false);
+						parentEl = getParent().addElement(value, requiredAfter, requiredBefore, first);
+					else if (first && after != null && getParent().canAdd(value, ((SortedElement) after).theParentEl, null) == null)
+						parentEl = getParent().addElement(value, ((SortedElement) after).theParentEl, null, true);
+					else if (!first && before != null && getParent().canAdd(value, null, ((SortedElement) before).theParentEl) == null)
+						parentEl = getParent().addElement(value, null, ((SortedElement) before).theParentEl, false);
 					else
-						parentEl = theParent.addElement(value, null, null, first);
+						parentEl = getParent().addElement(value, null, null, first);
 					return parentEl == null ? null : new SortedElement(parentEl, true);
 		}
 
@@ -914,7 +1058,7 @@ public class ObservableCollectionActiveManagers {
 				? ((SortedElement) after).theParentEl : null;
 				DerivedCollectionElement<T> requiredBefore = (before != null && beforeComp == 0)
 					? ((SortedElement) before).theParentEl : null;
-					return theParent.canMove(((SortedElement) valueEl).theParentEl, requiredAfter, requiredBefore);
+					return getParent().canMove(((SortedElement) valueEl).theParentEl, requiredAfter, requiredBefore);
 		}
 
 		@Override
@@ -930,20 +1074,14 @@ public class ObservableCollectionActiveManagers {
 				? ((SortedElement) after).theParentEl : null;
 				DerivedCollectionElement<T> requiredBefore = (before != null && beforeComp == 0)
 					? ((SortedElement) before).theParentEl : null;
-					return new SortedElement(theParent.move(//
+					return new SortedElement(getParent().move(//
 						((SortedElement) valueEl).theParentEl, requiredAfter, requiredBefore, first, afterRemove), true);
-		}
-
-		@Override
-		public void setValues(Collection<DerivedCollectionElement<T>> elements, T newValue)
-			throws UnsupportedOperationException, IllegalArgumentException {
-			theParent.setValues(elements.stream().map(el -> ((SortedElement) el).theParentEl).collect(Collectors.toList()), newValue);
 		}
 
 		@Override
 		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
 			theAccepter = onElement;
-			theParent.begin(fromStart, (parentEl, cause) -> onElement.accept(new SortedElement(parentEl, false), cause), listening);
+			super.begin(fromStart, onElement, listening);
 		}
 
 		private BinaryTreeNode<BiTuple<T, DerivedCollectionElement<T>>> insertIntoValues(T value, DerivedCollectionElement<T> parentEl) {
@@ -1088,54 +1226,18 @@ public class ObservableCollectionActiveManagers {
 		}
 	}
 
-	static class FilteredCollectionManager<E, T> implements ActiveCollectionManager<E, T, T> {
-		private final ActiveCollectionManager<E, ?, T> theParent;
+	static class FilteredCollectionManager<E, T> extends AbstractSameTypeActiveManager<E, T> {
 		private final Function<? super T, String> theFilter;
 		private ElementAccepter<T> theElementAccepter;
 
 		FilteredCollectionManager(ActiveCollectionManager<E, ?, T> parent, Function<? super T, String> filter) {
-			theParent = parent;
+			super(parent);
 			theFilter = filter;
 		}
 
 		@Override
 		public Object getIdentity() {
-			return Identifiable.wrap(theParent.getIdentity(), "filter", theFilter);
-		}
-
-		@Override
-		public TypeToken<T> getTargetType() {
-			return theParent.getTargetType();
-		}
-
-		@Override
-		public Equivalence<? super T> equivalence() {
-			return theParent.equivalence();
-		}
-
-		@Override
-		public ThreadConstraint getThreadConstraint() {
-			return theParent.getThreadConstraint();
-		}
-
-		@Override
-		public boolean isLockSupported() {
-			return theParent.isLockSupported();
-		}
-
-		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theParent.lock(write, cause);
-		}
-
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return theParent.tryLock(write, cause);
-		}
-
-		@Override
-		public CoreId getCoreId() {
-			return theParent.getCoreId();
+			return Identifiable.wrap(getParent().getIdentity(), "filter", theFilter);
 		}
 
 		@Override
@@ -1149,23 +1251,18 @@ public class ObservableCollectionActiveManagers {
 		}
 
 		@Override
-		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
-			Comparable<DerivedCollectionElement<T>> parentFinder = theParent.getElementFinder(value);
-			if (parentFinder == null)
-				return null;
-			return el -> parentFinder.compareTo(((FilteredElement) el).theParentEl);
+		protected boolean areElementsWrapped() {
+			return true;
 		}
 
 		@Override
-		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl,
-			BetterCollection<?> sourceCollection) {
-			return QommonsUtils.map2(theParent.getElementsBySource(sourceEl, sourceCollection), el -> new FilteredElement(el, true, true));
+		protected DerivedCollectionElement<T> wrap(DerivedCollectionElement<T> parentEl, boolean synthetic) {
+			return parentEl == null ? null : new FilteredElement(parentEl, synthetic, true);
 		}
 
 		@Override
-		public BetterList<ElementId> getSourceElements(DerivedCollectionElement<T> localElement,
-			BetterCollection<?> sourceCollection) {
-			return theParent.getSourceElements(((FilteredElement) localElement).theParentEl, sourceCollection);
+		protected DerivedCollectionElement<T> peel(DerivedCollectionElement<T> myEl) {
+			return myEl == null ? null : ((FilteredElement) myEl).theParentEl;
 		}
 
 		@Override
@@ -1175,7 +1272,7 @@ public class ObservableCollectionActiveManagers {
 			FilteredElement other = (FilteredElement) flowEl;
 			if (other.getMgr() == this)
 				return other;
-			DerivedCollectionElement<T> found = theParent.getEquivalentElement(other.theParentEl);
+			DerivedCollectionElement<T> found = getParent().getEquivalentElement(other.theParentEl);
 			if (found == null)
 				return null;
 			return new FilteredElement(found, true, true);
@@ -1185,8 +1282,7 @@ public class ObservableCollectionActiveManagers {
 		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
 			String msg = theFilter.apply(toAdd);
 			if (msg == null)
-				msg = theParent.canAdd(toAdd, //
-					strip(after), strip(before));
+				msg = super.canAdd(toAdd, after, before);
 			return msg;
 		}
 
@@ -1196,27 +1292,7 @@ public class ObservableCollectionActiveManagers {
 			String msg = theFilter.apply(value);
 			if (msg != null)
 				throw new IllegalArgumentException(msg);
-			DerivedCollectionElement<T> parentEl = theParent.addElement(value, //
-				strip(after), strip(before), first);
-			if (parentEl == null)
-				return null;
-			return new FilteredElement(parentEl, true, true);
-		}
-
-		@Override
-		public String canMove(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
-			return theParent.canMove(strip(valueEl), strip(after), strip(before));
-		}
-
-		@Override
-		public DerivedCollectionElement<T> move(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after,
-			DerivedCollectionElement<T> before, boolean first, Runnable afterRemove) {
-			return new FilteredElement(theParent.move(//
-				strip(valueEl), strip(after), strip(before), first, afterRemove), true, true);
-		}
-
-		private DerivedCollectionElement<T> strip(DerivedCollectionElement<T> el) {
-			return el == null ? null : ((FilteredElement) el).theParentEl;
+			return super.addElement(value, after, before, first);
 		}
 
 		@Override
@@ -1225,13 +1301,13 @@ public class ObservableCollectionActiveManagers {
 			String msg = theFilter.apply(newValue);
 			if (msg != null)
 				throw new IllegalArgumentException(msg);
-			theParent.setValues(elements.stream().map(el -> ((FilteredElement) el).theParentEl).collect(Collectors.toList()), newValue);
+			super.setValues(elements, newValue);
 		}
 
 		@Override
 		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
 			theElementAccepter = onElement;
-			theParent.begin(fromStart, (parentEl, cause) -> {
+			getParent().begin(fromStart, (parentEl, cause) -> {
 				String msg;
 				try {
 					msg = theFilter.apply(parentEl.get());
@@ -1248,14 +1324,13 @@ public class ObservableCollectionActiveManagers {
 			}, listening);
 		}
 
-		class FilteredElement implements DerivedCollectionElement<T> {
-			private final DerivedCollectionElement<T> theParentEl;
+		class FilteredElement extends AbstractSameTypeElement<T> {
 			private final boolean isSynthetic;
 			private boolean included;
 			private CollectionElementListener<T> theListener;
 
 			FilteredElement(DerivedCollectionElement<T> parentEl, boolean synthetic, boolean included) {
-				theParentEl = parentEl;
+				super(parentEl);
 				isSynthetic = synthetic;
 				this.included = included;
 				if (!isSynthetic) {
@@ -1300,23 +1375,8 @@ public class ObservableCollectionActiveManagers {
 			}
 
 			@Override
-			public int compareTo(DerivedCollectionElement<T> o) {
-				return theParentEl.compareTo(((FilteredElement) o).theParentEl);
-			}
-
-			@Override
 			public void setListener(CollectionElementListener<T> listener) {
 				theListener = listener;
-			}
-
-			@Override
-			public T get() {
-				return theParentEl.get();
-			}
-
-			@Override
-			public String isEnabled() {
-				return theParentEl.isEnabled();
 			}
 
 			@Override
@@ -1334,41 +1394,20 @@ public class ObservableCollectionActiveManagers {
 					throw new IllegalArgumentException(msg);
 				theParentEl.set(value);
 			}
-
-			@Override
-			public String canRemove() {
-				return theParentEl.canRemove();
-			}
-
-			@Override
-			public void remove() throws UnsupportedOperationException {
-				theParentEl.remove();
-			}
-
-			@Override
-			public String toString() {
-				return theParentEl.toString();
-			}
 		}
 	}
 
-	static class ActiveEquivalenceSwitchedManager<E, T> implements ActiveCollectionManager<E, T, T> {
-		private final ActiveCollectionManager<E, ?, T> theParent;
+	static class ActiveEquivalenceSwitchedManager<E, T> extends AbstractSameTypeActiveManager<E, T> {
 		private final Equivalence<? super T> theEquivalence;
 
 		ActiveEquivalenceSwitchedManager(ActiveCollectionManager<E, ?, T> parent, Equivalence<? super T> equivalence) {
-			theParent = parent;
+			super(parent);
 			theEquivalence = equivalence;
 		}
 
 		@Override
 		public Object getIdentity() {
-			return Identifiable.wrap(theParent.getIdentity(), "withEquivalence", theEquivalence);
-		}
-
-		@Override
-		public TypeToken<T> getTargetType() {
-			return theParent.getTargetType();
+			return Identifiable.wrap(getParent().getIdentity(), "withEquivalence", theEquivalence);
 		}
 
 		@Override
@@ -1377,93 +1416,23 @@ public class ObservableCollectionActiveManagers {
 		}
 
 		@Override
-		public ThreadConstraint getThreadConstraint() {
-			return theParent.getThreadConstraint();
-		}
-
-		@Override
-		public boolean isLockSupported() {
-			return theParent.isLockSupported();
-		}
-
-		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theParent.lock(write, cause);
-		}
-
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return theParent.tryLock(write, cause);
-		}
-
-		@Override
-		public CoreId getCoreId() {
-			return theParent.getCoreId();
-		}
-
-		@Override
-		public boolean clear() {
-			return theParent.clear();
-		}
-
-		@Override
-		public boolean isContentControlled() {
-			return theParent.isContentControlled();
-		}
-
-		@Override
 		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
 			return null;
 		}
 
 		@Override
-		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl,
-			BetterCollection<?> sourceCollection) {
-			return theParent.getElementsBySource(sourceEl, sourceCollection);
+		protected boolean areElementsWrapped() {
+			return false;
 		}
 
 		@Override
-		public BetterList<ElementId> getSourceElements(DerivedCollectionElement<T> localElement,
-			BetterCollection<?> sourceCollection) {
-			return theParent.getSourceElements(localElement, sourceCollection);
+		protected DerivedCollectionElement<T> wrap(DerivedCollectionElement<T> parentEl, boolean synthetic) {
+			return parentEl;
 		}
 
 		@Override
-		public DerivedCollectionElement<T> getEquivalentElement(DerivedCollectionElement<?> flowEl) {
-			return theParent.getEquivalentElement(flowEl);
-		}
-
-		@Override
-		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
-			return theParent.canAdd(toAdd, after, before);
-		}
-
-		@Override
-		public DerivedCollectionElement<T> addElement(T value, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before,
-			boolean first) {
-			return theParent.addElement(value, after, before, first);
-		}
-
-		@Override
-		public String canMove(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
-			return theParent.canMove(valueEl, after, before);
-		}
-
-		@Override
-		public DerivedCollectionElement<T> move(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after,
-			DerivedCollectionElement<T> before, boolean first, Runnable afterRemove) {
-			return theParent.move(valueEl, after, before, first, afterRemove);
-		}
-
-		@Override
-		public void setValues(Collection<DerivedCollectionElement<T>> elements, T newValue)
-			throws UnsupportedOperationException, IllegalArgumentException {
-			theParent.setValues(elements, newValue);
-		}
-
-		@Override
-		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
-			theParent.begin(fromStart, onElement, listening);
+		protected DerivedCollectionElement<T> peel(DerivedCollectionElement<T> myEl) {
+			return myEl;
 		}
 	}
 

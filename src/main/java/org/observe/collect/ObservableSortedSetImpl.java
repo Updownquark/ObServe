@@ -29,6 +29,7 @@ import org.observe.collect.ObservableSetImpl.DistinctBaseFlow;
 import org.observe.util.TypeTokens;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterSet;
@@ -315,6 +316,11 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
+		public DistinctSortedDataFlow<E, T, T> catchUpdates(ThreadConstraint constraint) {
+			return new DistinctSortedDataFlowWrapper<>(getSource(), super.catchUpdates(constraint), equivalence());
+		}
+
+		@Override
 		public ActiveValueStoredManager<E, ?, T> manageActive() {
 			return super.manageActive();
 		}
@@ -465,6 +471,11 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
+		public DistinctSortedDataFlow<E, T, T> catchUpdates(ThreadConstraint constraint) {
+			return new DistinctSortedDataFlowWrapper<>(getSource(), super.catchUpdates(constraint), equivalence());
+		}
+
+		@Override
 		public ActiveValueStoredManager<E, ?, T> manageActive() {
 			return super.manageActive();
 		}
@@ -555,6 +566,11 @@ public class ObservableSortedSetImpl {
 		@Override
 		public DistinctSortedDataFlow<E, E, E> filterMod(Consumer<ModFilterBuilder<E>> options) {
 			return new DistinctSortedDataFlowWrapper<>(getSource(), super.filterMod(options), comparator());
+		}
+
+		@Override
+		public DistinctSortedDataFlow<E, E, E> catchUpdates(ThreadConstraint constraint) {
+			return new DistinctSortedDataFlowWrapper<>(getSource(), super.catchUpdates(constraint), equivalence());
 		}
 
 		@Override

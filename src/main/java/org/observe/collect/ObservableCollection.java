@@ -1083,6 +1083,19 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		}
 
 		/**
+		 * @param constraint The thread constraint for updates from downstream. Since the updates do not flow upstream, we can play by our
+		 *        own rules to some extent. The resulting flow's thread constraint will be the
+		 *        {@link ThreadConstraint#union(ThreadConstraint...) union} of the source with this constraint. Null may be used to inherit
+		 *        the parent constraint.
+		 * @return An active flow with the same data and other properties as this flow, but which catches update operations from downstream
+		 *         (derived collections) and reports them to all downstream flows, but does not propagate them to the parent flow. This
+		 *         operation is useful when deriving collections where it is desirable to fire an update, but which updates do not affect
+		 *         the parent collection. This is especially handy when the parent collection does not support updates, e.g. see
+		 *         {@link #unmodifiable(boolean)}.
+		 */
+		CollectionDataFlow<E, T, T> catchUpdates(ThreadConstraint constraint);
+
+		/**
 		 * Allows control of whether and how the produced collection may be modified. The produced collection will still reflect
 		 * modifications made to the source collection.
 		 *
@@ -1355,6 +1368,9 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		DistinctDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options);
 
 		@Override
+		DistinctDataFlow<E, T, T> catchUpdates(ThreadConstraint constraint);
+
+		@Override
 		default ObservableSet<T> collect() {
 			return (ObservableSet<T>) CollectionDataFlow.super.collect();
 		}
@@ -1471,6 +1487,9 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		SortedDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options);
 
 		@Override
+		SortedDataFlow<E, T, T> catchUpdates(ThreadConstraint constraint);
+
+		@Override
 		default ObservableSortedCollection<T> collect() {
 			return (ObservableSortedCollection<T>) CollectionDataFlow.super.collect();
 		}
@@ -1568,6 +1587,9 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 
 		@Override
 		DistinctSortedDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options);
+
+		@Override
+		DistinctSortedDataFlow<E, T, T> catchUpdates(ThreadConstraint constraint);
 
 		@Override
 		default ObservableSortedSet<T> collect() {

@@ -30,6 +30,7 @@ import org.observe.collect.ObservableSetImpl.ActiveSetMgrPlaceholder;
 import org.observe.util.TypeTokens;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterCollections;
@@ -444,6 +445,11 @@ public class ObservableSortedCollectionImpl {
 		}
 
 		@Override
+		public SortedDataFlow<E, T, T> catchUpdates(ThreadConstraint constraint) {
+			return new SortedDataFlowWrapper<>(getSource(), super.catchUpdates(constraint), equivalence());
+		}
+
+		@Override
 		public boolean supportsPassive() {
 			return getParent().supportsPassive();
 		}
@@ -579,6 +585,11 @@ public class ObservableSortedCollectionImpl {
 		}
 
 		@Override
+		public SortedDataFlow<E, T, T> catchUpdates(ThreadConstraint constraint) {
+			return new SortedDataFlowWrapper<>(getSource(), super.catchUpdates(constraint), equivalence());
+		}
+
+		@Override
 		public ActiveValueStoredManager<E, ?, T> manageActive() {
 			return new ActiveSetMgrPlaceholder<>(super.manageActive());
 		}
@@ -668,6 +679,11 @@ public class ObservableSortedCollectionImpl {
 		@Override
 		public SortedDataFlow<E, E, E> filterMod(Consumer<ModFilterBuilder<E>> options) {
 			return new SortedDataFlowWrapper<>(getSource(), super.filterMod(options), comparator());
+		}
+
+		@Override
+		public SortedDataFlow<E, E, E> catchUpdates(ThreadConstraint constraint) {
+			return new SortedDataFlowWrapper<>(getSource(), super.catchUpdates(constraint), equivalence());
 		}
 
 		@Override
