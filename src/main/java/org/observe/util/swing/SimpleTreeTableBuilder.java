@@ -45,6 +45,7 @@ import org.observe.util.swing.PanelPopulation.DataAction;
 import org.observe.util.swing.PanelPopulation.SimpleButtonEditor;
 import org.observe.util.swing.PanelPopulation.SimpleDataAction;
 import org.observe.util.swing.PanelPopulation.TreeTableEditor;
+import org.qommons.LambdaUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
@@ -116,6 +117,8 @@ implements TreeTableEditor<F, P> {
 		theChildren2 = children2;
 		theLeafTest = __ -> false;
 		theActions = new ArrayList<>();
+		theTreeColumn = new CategoryRenderStrategy<>("Tree", root.getType(),
+			LambdaUtils.printableFn(BetterList::getLast, "BetterList::getLast", null));
 	}
 
 	class PPTreeModel extends ObservableTreeModel<F> {
@@ -451,12 +454,11 @@ implements TreeTableEditor<F, P> {
 			for (int a = 0; a < actions.length; a++) {
 				actionMenuItems[a] = new JMenuItem();
 				SimpleDataAction<BetterList<F>, ?> action = actions[a];
-				if (action.theButtonMod != null) {
-					SimpleButtonEditor<?, ?> buttonEditor = new SimpleButtonEditor<>(null, actionMenuItems[a], null,
-						action.theObservableAction, getLock(), false);
+				SimpleButtonEditor<?, ?> buttonEditor = new SimpleButtonEditor<>(null, actionMenuItems[a], null, action.theObservableAction,
+					getLock(), false);
+				if (action.theButtonMod != null)
 					action.theButtonMod.accept(buttonEditor);
-					buttonEditor.getOrCreateComponent(until);
-				}
+				buttonEditor.getOrCreateComponent(until);
 			}
 			getEditor().getTreeSelectionModel().addTreeSelectionListener(evt -> {
 				List<BetterList<F>> selection = getSelection();

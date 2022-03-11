@@ -170,9 +170,10 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 
 	@Override
 	public boolean isCellEditable(Object treeValue, int columnIndex) {
-		CategoryRenderStrategy<? super T, Object> column = (CategoryRenderStrategy<? super T, Object>) theColumnModel
+		CategoryRenderStrategy<? super BetterList<T>, Object> column = (CategoryRenderStrategy<? super BetterList<T>, Object>) theColumnModel
 			.getElementAt(columnIndex);
-		return column.getMutator().isEditable((T) treeValue, column.getCategoryValue((T) treeValue));
+		BetterList<T> path = theTreeModel.getBetterPath((T) treeValue);
+		return column.getMutator().isEditable(path, column.getCategoryValue(path));
 	}
 
 	@Override
@@ -243,6 +244,8 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 	 *         the table
 	 */
 	public static <R> Subscription hookUp(JXTreeTable table, ObservableTreeTableModel<R> model, TableRenderContext ctx) {
+		if (table.getTreeTableModel() != model)
+			table.setTreeTableModel(model);
 		LinkedList<Subscription> subs = new LinkedList<>();
 		try (Transaction colT = model.getColumns().lock(false, null)) {
 			for (int c = 0; c < model.getColumnCount(); c++) {
@@ -525,8 +528,14 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 			ObservableCellRenderer<? super BetterList<R>, ? super C> renderer = theColumn.getRenderer() != null ? theColumn.getRenderer()
 				: new ObservableCellRenderer.DefaultObservableCellRenderer<>((r, c) -> String.valueOf(c));
 			ModelCell<BetterList<R>, C> cell = new ModelCell.Default<>(//
-				() -> ((ObservableTreeTableModel<R>) ((JXTreeTable) component).getModel()).getTreeModel().getBetterPath(modelValue), //
-				(C) value, row, column, isSelected, hasFocus, expanded, leaf);
+				() -> {
+					ObservableTreeTableModel<R> model;
+					if (component instanceof JXTreeTable)
+						model = (ObservableTreeTableModel<R>) ((JXTreeTable) component).getTreeTableModel();
+					else
+						model = (ObservableTreeTableModel<R>) ((JTree) component).getModel();
+					return model.getTreeModel().getBetterPath(modelValue);
+				}, (C) value, row, column, isSelected, hasFocus, expanded, leaf);
 			Component c = renderer.getCellRendererComponent(component, cell,
 				() -> theContext == null ? null : theContext.getEmphaticRegions(modelRow, modelColumn));
 			theLastRender = c;

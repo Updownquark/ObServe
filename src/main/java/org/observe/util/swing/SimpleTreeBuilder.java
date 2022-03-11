@@ -265,12 +265,11 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 			for (int a = 0; a < actions.length; a++) {
 				actionMenuItems[a] = new JMenuItem();
 				SimpleDataAction<BetterList<F>, ?> action = actions[a];
-				if (action.theButtonMod != null) {
-					SimpleButtonEditor<?, ?> buttonEditor = new SimpleButtonEditor<>(null, actionMenuItems[a], null,
-						action.theObservableAction, getLock(), false);
+				SimpleButtonEditor<?, ?> buttonEditor = new SimpleButtonEditor<>(null, actionMenuItems[a], null, action.theObservableAction,
+					getLock(), false);
+				if (action.theButtonMod != null)
 					action.theButtonMod.accept(buttonEditor);
-					buttonEditor.getOrCreateComponent(until);
-				}
+				buttonEditor.getOrCreateComponent(until);
 				actionMenuItems[a].addActionListener(evt -> action.theObservableAction.act(evt));
 			}
 			getEditor().getSelectionModel().addTreeSelectionListener(evt -> {
