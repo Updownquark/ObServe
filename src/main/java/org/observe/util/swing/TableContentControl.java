@@ -1012,6 +1012,8 @@ public interface TableContentControl {
 		if (end < text.length() && (text.charAt(end) == 'E' || text.charAt(end) == 'e')) {
 			if (trivial)
 				return null;
+			boolean hasExp=false;
+			int preEnd=end;
 			end++;
 			expStart++;
 			expEnd++;
@@ -1020,9 +1022,12 @@ public interface TableContentControl {
 				expEnd++;
 			}
 			while (end < text.length() && text.charAt(end) >= '0' && text.charAt(end) <= '9') {
+				hasExp=true;
 				end++;
 				expEnd++;
 			}
+			if (!hasExp)
+				end = expEnd = preEnd;
 		}
 		double minValue = Double.parseDouble(text.subSequence(start, end).toString());
 		int exp = (expEnd == expStart) ? 0 : Integer.parseInt(text.subSequence(expStart, expEnd).toString());
