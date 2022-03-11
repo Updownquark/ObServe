@@ -252,7 +252,14 @@ public interface Equivalence<E> {
 
 		@Override
 		public boolean elementEquals(E element, Object value) {
-			return isElement(value) && compare.compare(element, (E) value) == 0;
+			if (element == value)
+				return true;
+			else if (element == null || value == null)
+				return false;
+			else if (!isElement(value))
+				return false;
+			else
+				return compare.compare(element, (E) value) == 0;
 		}
 
 		@Override
