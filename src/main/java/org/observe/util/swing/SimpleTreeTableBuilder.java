@@ -627,6 +627,68 @@ implements TreeTableEditor<F, P> {
 			return false;
 		}
 
+		class MutableTreeTableRow implements MutableCollectionElement<BetterList<F>> {
+			private final MutableCollectionElement<F> terminal;
+			private final BetterList<F> path;
+
+			public MutableTreeTableRow(MutableCollectionElement<F> terminal, BetterList<F> path) {
+				this.terminal = terminal;
+				this.path = path;
+			}
+
+			@Override
+			public ElementId getElementId() {
+				return terminal.getElementId();
+			}
+
+			@Override
+			public BetterList<F> get() {
+				return path;
+			}
+
+			@Override
+			public BetterCollection<BetterList<F>> getCollection() {
+				throw new IllegalStateException(StdMsg.UNSUPPORTED_OPERATION);
+			}
+
+			@Override
+			public String isEnabled() {
+				return terminal.isEnabled();
+			}
+
+			@Override
+			public String isAcceptable(BetterList<F> value) {
+				if (value.isEmpty())
+					return StdMsg.ILLEGAL_ELEMENT;
+				else
+					return terminal.isAcceptable(value.getLast());
+			}
+
+			@Override
+			public void set(BetterList<F> value) throws UnsupportedOperationException, IllegalArgumentException {
+				// Just ignore the rest of the path
+				if (value.isEmpty())
+					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+				else
+					terminal.set(value.getLast());
+			}
+
+			@Override
+			public String canRemove() {
+				return terminal.canRemove();
+			}
+
+			@Override
+			public void remove() throws UnsupportedOperationException {
+				terminal.remove();
+			}
+
+			@Override
+			public String toString() {
+				return terminal.toString();
+			}
+		}
+
 		private <C> boolean canImport(TransferSupport support, BetterList<F> parentPath, ObservableCollection<? extends F> children,
 			ElementId childEl, int rowIndex, CategoryRenderStrategy<BetterList<F>, C> column, boolean doImport) {
 			if (column.getMutator().getDragAccepter() == null)
@@ -665,14 +727,16 @@ implements TreeTableEditor<F, P> {
 					}
 					throw e;
 				}
-				if (newColValue == null || ((CategoryRenderStrategy<F, C>) column).getMutator()//
-					.isAcceptable(//
-						(MutableCollectionElement<F>) children.mutableElement(rowEl.getElementId()), newColValue.getFirst()) != null)
+				if (newColValue == null || column.getMutator().isAcceptable(//
+					new MutableTreeTableRow((MutableCollectionElement<F>) children.mutableElement(rowEl.getElementId()),
+						cell.getModelValue()),
+					newColValue.getFirst()) != null)
 					return false;
 				if (doImport) {
-					((CategoryRenderStrategy<F, C>) column).getMutator()//
-					.mutate(//
-						children.mutableElement(rowEl.getElementId()), newColValue.getFirst());
+					column.getMutator().mutate(//
+						new MutableTreeTableRow((MutableCollectionElement<F>) children.mutableElement(rowEl.getElementId()),
+							cell.getModelValue()),
+						newColValue.getFirst());
 				}
 				return true;
 			} else {
@@ -691,20 +755,20 @@ implements TreeTableEditor<F, P> {
 				} catch (IOException e) {
 					return false;
 				}
-				MutableCollectionElement<F> syntheticEl = new MutableCollectionElement<F>() {
+				MutableCollectionElement<BetterList<F>> syntheticRootEl = new MutableCollectionElement<BetterList<F>>() {
 					@Override
 					public ElementId getElementId() {
 						throw new IllegalStateException();
 					}
 
 					@Override
-					public F get() {
-						return theRoot.get();
+					public BetterList<F> get() {
+						return BetterList.of(theRoot.get());
 					}
 
 					@Override
-					public BetterCollection<F> getCollection() {
-						throw new IllegalStateException();
+					public BetterCollection<BetterList<F>> getCollection() {
+						throw new IllegalStateException(StdMsg.UNSUPPORTED_OPERATION);
 					}
 
 					@Override
@@ -716,17 +780,21 @@ implements TreeTableEditor<F, P> {
 					}
 
 					@Override
-					public String isAcceptable(F value) {
-						if (theRoot instanceof SettableValue)
-							return ((SettableValue<F>) theRoot).isAcceptable(value);
+					public String isAcceptable(BetterList<F> value) {
+						if (value.size() != 1)
+							return StdMsg.ILLEGAL_ELEMENT;
+						else if (theRoot instanceof SettableValue)
+							return ((SettableValue<F>) theRoot).isAcceptable(value.getLast());
 						else
 							return StdMsg.UNSUPPORTED_OPERATION;
 					}
 
 					@Override
-					public void set(F value) throws UnsupportedOperationException, IllegalArgumentException {
-						if (theRoot instanceof SettableValue)
-							((SettableValue<F>) theRoot).set(value, null);
+					public void set(BetterList<F> value) throws UnsupportedOperationException, IllegalArgumentException {
+						if (value.size() != 1)
+							throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+						else if (theRoot instanceof SettableValue)
+							((SettableValue<F>) theRoot).set(value.getLast(), null);
 						else
 							throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 					}
@@ -740,15 +808,18 @@ implements TreeTableEditor<F, P> {
 					public void remove() throws UnsupportedOperationException {
 						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 					}
+
+					@Override
+					public String toString() {
+						return theRoot.toString();
+					}
 				};
-				if (newColValue == null || ((CategoryRenderStrategy<F, C>) column).getMutator()//
-					.isAcceptable(//
-						syntheticEl, newColValue.getFirst()) != null)
+				if (newColValue == null || column.getMutator().isAcceptable(//
+					syntheticRootEl, newColValue.getFirst()) != null)
 					return false;
 				if (doImport) {
-					((CategoryRenderStrategy<F, C>) column).getMutator()//
-					.mutate(//
-						syntheticEl, newColValue.getFirst());
+					column.getMutator().mutate(//
+						syntheticRootEl, newColValue.getFirst());
 				}
 				return true;
 			}
