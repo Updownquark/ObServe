@@ -250,8 +250,7 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 			else
 				main += thePadding;
 			Dimension min = comp.getMinimumSize();
-			Dimension pref = comp.getPreferredSize();
-			main += getMain(pref);
+			main += getMain(min);
 			int compCross = getCross(min);
 			if (compCross > cross)
 				cross = compCross;
@@ -264,31 +263,63 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 
 	@Override
 	public Dimension maximumLayoutSize(Container parent) {
-		if (theMainAlign != Alignment.JUSTIFIED && theCrossAlign != Alignment.JUSTIFIED)
+		boolean computeMain = theMainAlign == Alignment.JUSTIFIED;
+		boolean computeCross = theCrossAlign == Alignment.JUSTIFIED;
+		if (!computeMain && !computeCross)
 			return new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE);
-		int main = 0;
-		int cross = theCrossAlign == Alignment.JUSTIFIED ? 0 : Integer.MAX_VALUE;
+		Insets insets = parent.getInsets();
+		int hIns = insets.left + insets.right + theMargin.left + theMargin.right;
+		int vIns = insets.top + insets.bottom + theMargin.top + theMargin.bottom;
+		int main = isVertical ? vIns : hIns;
+		int minOfMaxCross = computeCross ? 0 : Integer.MAX_VALUE;
+		int maxOfMinCross = 0;
 		boolean first = true;
 		for (Component comp : parent.getComponents()) {
 			if (!isShowingInvisible && !comp.isVisible())
 				continue;
-			if (first)
-				first = false;
-			else
-				main += thePadding;
 			Dimension max = comp.getMaximumSize();
-			Dimension pref = comp.getPreferredSize();
-			main += getMain(pref);
-			int compCross = getCross(max);
-			if (compCross > cross)
-				cross = compCross;
+			if (first) {
+				if (computeCross) {
+					minOfMaxCross = getCross(max);
+					Dimension min = comp.getMinimumSize();
+					maxOfMinCross = getCross(min);
+					if (minOfMaxCross <= maxOfMinCross)
+						computeCross = false;
+				}
+				first = false;
+			} else {
+				int compCross = getCross(max);
+				if (compCross < minOfMaxCross)
+					minOfMaxCross = compCross;
+				Dimension min = comp.getMinimumSize();
+				compCross = getCross(min);
+				if (compCross > maxOfMinCross)
+					maxOfMinCross = compCross;
+				if (minOfMaxCross <= maxOfMinCross)
+					computeCross = false;
+				main += thePadding;
+			}
+			if (computeMain) {
+				main += getMain(max);
+				if (main < 0) {
+					computeMain = false;
+					main = Integer.MAX_VALUE; // Gotta watch for overflow all through this method
+				} else if (main == Integer.MAX_VALUE)
+					computeMain = false;
+			}
+			if (!computeMain && !computeCross)
+				break;
 		}
 		if (theMainAlign != Alignment.JUSTIFIED)
 			main = Integer.MAX_VALUE;
-		Insets insets = parent.getInsets();
-		int hIns = insets.left + insets.right + theMargin.left + theMargin.right;
-		int vIns = insets.top + insets.bottom + theMargin.top + theMargin.bottom;
-		return new Dimension((isVertical ? cross : main) + hIns, (isVertical ? main : cross) + vIns);
+		if (maxOfMinCross > minOfMaxCross)
+			minOfMaxCross = maxOfMinCross;
+		minOfMaxCross += isVertical ? hIns : vIns;
+		if (minOfMaxCross < 0)
+			minOfMaxCross = Integer.MAX_VALUE;
+		int w = (isVertical ? minOfMaxCross : main);
+		int h = (isVertical ? main : minOfMaxCross);
+		return new Dimension(w, h);
 	}
 
 	@Override
@@ -358,7 +389,7 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 		int crossMargin = isVertical ? insets.left + theMargin.left : insets.top + theMargin.top;
 		for (int i = 0; i < components.size(); i++) {
 			int main = preferredMainSizes[i];
-			int cross = Math.max(preferredCrossSizes[i], parentCross);
+			int cross = Math.min(preferredCrossSizes[i], parentCross);
 			setBound(true, bounds, pos, main);
 			pos += getMain(bounds.getSize()) + pad;
 			switch (theCrossAlign) {
@@ -448,7 +479,7 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 			fPos = newFPos;
 			pos = Math.round(newFPos);
 
-			int cross = Math.max(preferredCrossSizes[i], parentCross);
+			int cross = Math.min(preferredCrossSizes[i], parentCross);
 			switch (theCrossAlign) {
 			case LEADING:
 				setBound(false, bounds, crossMargin, cross);
@@ -484,7 +515,7 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 		int crossMargin = isVertical ? insets.left + theMargin.left : insets.top + theMargin.top;
 		for (int i = 0; i < components.size(); i++) {
 			int main = Math.round(preferredMainSizes[i] * stretch);
-			int cross = Math.max(preferredCrossSizes[i], parentCross);
+			int cross = Math.min(preferredCrossSizes[i], parentCross);
 			setBound(true, bounds, pos, main);
 			pos += getMain(bounds.getSize()) + thePadding;
 			switch (theCrossAlign) {

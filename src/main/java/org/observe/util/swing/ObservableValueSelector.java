@@ -1,10 +1,20 @@
 package org.observe.util.swing;
 
+import java.awt.Dimension;
+import java.awt.EventQueue;
+import java.awt.LayoutManager2;
+import java.awt.Window;
+import java.text.SimpleDateFormat;
+import java.util.Calendar;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
+import java.util.Random;
 import java.util.function.Function;
 
 import javax.swing.JButton;
+import javax.swing.JFrame;
 import javax.swing.JPanel;
 import javax.swing.JTable;
 import javax.swing.event.ListDataEvent;
@@ -18,6 +28,8 @@ import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSortedSet;
+import org.observe.util.TypeTokens;
+import org.qommons.Colors;
 import org.qommons.StringUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.collect.BetterSortedList;
@@ -146,7 +158,7 @@ public class ObservableValueSelector<T, X> extends JPanel {
 
 	private ObservableValueSelector(ObservableCollection<T> sourceRows, //
 		ObservableCollection<? extends CategoryRenderStrategy<SelectableValue<T, X>, ?>> sourceColumns, //
-		ObservableCollection<? extends CategoryRenderStrategy<SelectableValue<T, X>, ?>> destColumns, //
+			ObservableCollection<? extends CategoryRenderStrategy<SelectableValue<T, X>, ?>> destColumns, //
 				Function<? super T, ? extends X> map, boolean reEvalOnUpdate, Observable<?> until, //
 				boolean includedByDefault, Format<TableContentControl> filterFormat, boolean commitOnType, String itemName) {
 		super(new JustifiedBoxLayout(false).crossJustified().mainJustified());
@@ -195,8 +207,9 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		theExcludeAllButton = new JButton("<<");
 
 		PanelPopulation.populateHPanel(this, getLayout(), until)//
-		.addVPanel(
-			srcPanel -> srcPanel.addTextField(null, theFilterText, filterFormat == null ? TableContentControl.FORMAT : filterFormat,
+		.addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(), //
+				srcPanel -> srcPanel.withName("OVS Source")
+			.addTextField(null, theFilterText, filterFormat == null ? TableContentControl.FORMAT : filterFormat,
 				tf -> TableContentControl.configureSearchField(tf.fill(), commitOnType).modifyEditor(tfe -> {
 					theSearchField = tfe;
 				}))//
@@ -206,25 +219,25 @@ public class ObservableValueSelector<T, X> extends JPanel {
 					srcTbl.withItemName(itemName);
 				srcTbl.withCountTitle("available").withColumns(sourceColumns).withFiltering(theFilterText).fill();
 			}).fill())//
-		.addVPanel(buttonPanel -> {
-			buttonPanel.getContainer().setLayout(new JustifiedBoxLayout(true));
-			buttonPanel.addComponent(null, theIncludeAllButton, null)//
-			.addComponent(null, theIncludeButton, null)//
-			.addComponent(null, theExcludeButton, null)//
-			.addComponent(null, theExcludeAllButton, null)//
-			.fill();
-		})
-		.addVPanel(destPanel -> destPanel//
-			// Invisible placeholder here to make the available and included tables the same height
-			.addHPanel(null, new JustifiedBoxLayout(false).setShowingInvisible(true), p -> p//
+		.addHPanel(null, new JustifiedBoxLayout(false).mainJustified().crossCenter().setMargin(2, 2, 2, 2),
+				buttonPanel -> buttonPanel.withName("OVS Buttons").fillV()//
+					.addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(), bp -> bp.withName("OVS Buttons 2")//
+				.addComponent(null, theIncludeAllButton, null)//
+				.addComponent(null, theIncludeButton, null)//
+				.addComponent(null, theExcludeButton, null)//
+				.addComponent(null, theExcludeAllButton, null)//
+				)//
+			).addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified().setShowingInvisible(true),
+				destPanel -> destPanel.withName("OVS Dest")//
+				// Invisible placeholder here to make the available and included tables the same height
 				.addTextField(null, SettableValue.build(String.class).build(), Format.TEXT,
-					f -> f.visibleWhen(ObservableValue.of(false))))//
-			.addTable(theIncludedValues, destTbl -> {
-				theDestTable = destTbl.getEditor();
-				if (itemName != null)
-					destTbl.withItemName(itemName);
-				destTbl.withCountTitle("included").withColumns(destColumns).fill();
-			}).fill());
+					f -> f.fill().visibleWhen(ObservableValue.of(false)))//
+				.addTable(theIncludedValues, destTbl -> {
+					theDestTable = destTbl.getEditor();
+					if (itemName != null)
+						destTbl.withItemName(itemName);
+					destTbl.withCountTitle("included").withColumns(destColumns).fill();
+				}).fill());
 
 		ObservableTableModel<SelectableValue<T, X>> sourceModel = (ObservableTableModel<SelectableValue<T, X>>) theSourceTable.getModel();
 		ObservableTableModel<SelectableValue<T, X>> destModel = (ObservableTableModel<SelectableValue<T, X>>) theDestTable.getModel();
@@ -552,9 +565,24 @@ public class ObservableValueSelector<T, X> extends JPanel {
 			theExcludeAllButton.setToolTipText("Exclude all " + includedCount + " included " + plurItem);
 	}
 
+	@Override
+	public Dimension getPreferredSize() {
+		return getLayout().preferredLayoutSize(this);
+	}
+
+	@Override
+	public Dimension getMinimumSize() {
+		return getLayout().minimumLayoutSize(this);
+	}
+
+	@Override
+	public Dimension getMaximumSize() {
+		return ((LayoutManager2) getLayout()).maximumLayoutSize(this);
+	}
+
 	public static <T, X> Builder<T, X> build(ObservableCollection<T> sourceRows, //
 		ObservableCollection<? extends CategoryRenderStrategy<SelectableValue<T, X>, ?>> sourceColumns, //
-		ObservableCollection<? extends CategoryRenderStrategy<SelectableValue<T, X>, ?>> destColumns, //
+			ObservableCollection<? extends CategoryRenderStrategy<SelectableValue<T, X>, ?>> destColumns, //
 				Function<? super T, ? extends X> map) {
 		return new Builder<>(sourceRows, sourceColumns, destColumns, map);
 	}
@@ -573,7 +601,7 @@ public class ObservableValueSelector<T, X> extends JPanel {
 
 		Builder(ObservableCollection<T> sourceRows,
 			ObservableCollection<? extends CategoryRenderStrategy<SelectableValue<T, X>, ?>> sourceColumns,
-			ObservableCollection<? extends CategoryRenderStrategy<SelectableValue<T, X>, ?>> destColumns,
+				ObservableCollection<? extends CategoryRenderStrategy<SelectableValue<T, X>, ?>> destColumns,
 					Function<? super T, ? extends X> map) {
 			theSourceRows = sourceRows;
 			theSourceColumns = sourceColumns;
@@ -623,5 +651,109 @@ public class ObservableValueSelector<T, X> extends JPanel {
 				theSourceColumns.safe(ThreadConstraint.EDT, theUntil), theDestColumns.safe(ThreadConstraint.EDT, theUntil),
 				theMap, isReEvalOnUpdate, theUntil, isIncludedByDefault, theFilterFormat, isFilterCommitOnType, theItemName);
 		}
+	}
+
+	public static void main(String... args) {
+		ObservableCollection<Map<String, String>> rows = ObservableCollection
+			.build(TypeTokens.get().keyFor(Map.class).<Map<String, String>> parameterized(String.class, String.class)).onEdt().build();
+		TypeToken<SelectableValue<Map<String, String>, Map<String, String>>> selValueType = TypeTokens.get().keyFor(SelectableValue.class)//
+			.parameterized(rows.getType(), rows.getType());
+		ObservableCollection<CategoryRenderStrategy<SelectableValue<Map<String, String>, Map<String, String>>, String>> columns = ObservableCollection
+			.build(TypeTokens.get().keyFor(CategoryRenderStrategy.class)
+				.<CategoryRenderStrategy<SelectableValue<Map<String, String>, Map<String, String>>, String>> parameterized(selValueType,
+					TypeTokens.get().STRING))
+			.onEdt().build();
+		EventQueue.invokeLater(() -> {
+			columns.add(new CategoryRenderStrategy<SelectableValue<Map<String, String>, Map<String, String>>, String>("A",
+				TypeTokens.get().STRING, map -> {
+					return map.getSource().get("A");
+				})//
+				.formatText(v -> v == null ? "" : v).withMutation(mut -> {
+					mut.mutateAttribute((map, v) -> map.getSource().put("A", v)).asText(Format.TEXT).withRowUpdate(true);
+				}).withWidths(50, 100, 150));
+			columns.add(new CategoryRenderStrategy<SelectableValue<Map<String, String>, Map<String, String>>, String>("B",
+				TypeTokens.get().STRING, map -> {
+					return map.getSource().get("B");
+				})//
+				.formatText(v -> v == null ? "" : v).withMutation(mut -> {
+					mut.mutateAttribute((map, v) -> map.getSource().put("B", v)).asText(Format.TEXT).withRowUpdate(true);
+				}).withWidths(50, 100, 150));
+			columns.add(new CategoryRenderStrategy<SelectableValue<Map<String, String>, Map<String, String>>, String>("C",
+				TypeTokens.get().STRING, map -> {
+					return map.getSource().get("C");
+				})//
+				.formatText(v -> v == null ? "" : v).withMutation(mut -> {
+					mut.mutateAttribute((map, v) -> map.getSource().put("D", v)).asText(Format.TEXT).withRowUpdate(true);
+				}).withWidths(50, 150, 550));
+			columns.add(new CategoryRenderStrategy<SelectableValue<Map<String, String>, Map<String, String>>, String>("D",
+				TypeTokens.get().STRING, map -> {
+					return map.getSource().get("D");
+				})//
+				.formatText(v -> v == null ? "" : v).withMutation(mut -> {
+					mut.mutateAttribute((map, v) -> map.getSource().put("A", v)).asText(Format.TEXT).withRowUpdate(true);
+				}).withWidths(50, 100, 150));
+			SimpleDateFormat dateFormat = new SimpleDateFormat("EEE MMM dd, yyyy HH:mm:ss");
+			Calendar cal = Calendar.getInstance();
+			Random random = new Random();
+			int rowCount = 10_000;
+			int lastPct = 0;
+			for (int i = 0; i < rowCount; i++) {
+				int pct = i * 100 / rowCount;
+				if (pct > lastPct) {
+					if (pct % 10 == 0)
+						System.out.print(pct);
+					else
+						System.out.print('.');
+					System.out.flush();
+					lastPct = pct;
+				}
+				long r = random.nextLong();
+				Map<String, String> row = new HashMap<>();
+				if (random.nextDouble() < 0.99)
+					row.put("A", "" + r);
+				if (random.nextDouble() < 0.99)
+					row.put("B", Long.toHexString(r));
+				if (random.nextDouble() < 0.99) {
+					cal.setTimeInMillis(r);
+					int year = cal.get(Calendar.YEAR);
+					if (year > 99999999)
+						year = year % 100000000;
+					if (year < 1000)
+						year += 1000;
+					cal.set(Calendar.YEAR, year);
+					row.put("C", dateFormat.format(cal.getTime()));
+				}
+				if (random.nextDouble() < 0.99) {
+					char[] chs = new char[9];
+					int mask = 0x7f;
+					for (int j = 0; j < chs.length; j++) {
+						chs[chs.length - j - 1] = (char) (r & mask);
+						if (chs[chs.length - j - 1] < ' ')
+							chs[chs.length - j - 1] = ' ';
+						r >>>= 7;
+					}
+					row.put("D", new String(chs));
+				}
+				rows.add(row);
+			}
+			System.out.println();
+			ObservableValueSelector<Map<String, String>, Map<String, String>> ovs = ObservableValueSelector
+				.<Map<String, String>, Map<String, String>> build(rows, columns,
+					ObservableCollection.of(columns.getType(),
+						new CategoryRenderStrategy<SelectableValue<Map<String, String>, Map<String, String>>, String>("Value",
+							TypeTokens.get().STRING, m -> m.getSource().toString()).withWidths(100, 200, 300)),
+					v -> v)
+				.build();
+			Window w = ObservableSwingUtils.buildUI()//
+				.systemLandF()//
+				.withTitle(ObservableValueSelector.class.getSimpleName() + " Tester")//
+				.withSize(1020, 900)//
+				.withCloseAction(JFrame.EXIT_ON_CLOSE)//
+				.withHContent(new JustifiedBoxLayout(false).mainJustified().crossJustified(),
+					p -> p.fill().fillV()//
+					.addComponent(null, ovs, c -> c.fill().fillV()))
+				.run(null).getWindow();
+			w.setBackground(Colors.tomato);
+		});
 	}
 }

@@ -75,6 +75,10 @@ public class WindowPopulation {
 			theDispose = SimpleObservable.build().build();
 			theUntil = Observable.or(until.takeUntil(theDispose), theDispose);
 			disposeOnClose(disposeOnClose);
+
+			theWindow.setLayout(new JustifiedBoxLayout(true).mainJustified().crossJustified());
+			if (theWindow instanceof RootPaneContainer)
+				((RootPaneContainer) theWindow).getContentPane().setLayout(new JustifiedBoxLayout(true).mainJustified().crossJustified());
 		}
 
 		@Override

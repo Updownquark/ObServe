@@ -1,6 +1,7 @@
 package org.observe.util.swing;
 
 import java.awt.Color;
+import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
@@ -259,6 +260,22 @@ public class ObservableTextField<E> extends JPasswordField {
 	@Override
 	public void setToolTipText(String text) {
 		theEditor.setToolTipText(text);
+	}
+
+	@Override
+	public Dimension getMinimumSize() {
+		Dimension dim = super.getMinimumSize();
+		if (dim != null)
+			dim.height = getPreferredSize().height;
+		return dim;
+	}
+
+	@Override
+	public Dimension getMaximumSize() {
+		Dimension dim = super.getMaximumSize();
+		if (dim != null)
+			dim.height = getPreferredSize().height;
+		return dim;
 	}
 
 	@Override

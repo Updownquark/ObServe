@@ -36,6 +36,7 @@ import javax.swing.event.ListDataEvent;
 import javax.swing.event.ListDataListener;
 import javax.swing.event.ListSelectionListener;
 import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.TableColumn;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
@@ -600,13 +601,13 @@ implements TableBuilder<R, P> {
 						}
 						BoundedRangeModel hbm = scroll.getHorizontalScrollBar().getModel();
 						isHSBVisible = hbm.getExtent() > hbm.getMaximum();
+						BoundedRangeModel vbm = scroll.getVerticalScrollBar().getModel();
+						isVSBVisible = vbm.getExtent() > vbm.getMaximum();
 						if (isHSBVisible) {
 							int sbh = scroll.getHorizontalScrollBar().getHeight();
 							minHeight += sbh;
 							maxHeight += sbh;
 						}
-						BoundedRangeModel vbm = scroll.getVerticalScrollBar().getModel();
-						isVSBVisible = vbm.getExtent() > vbm.getMaximum();
 						Dimension psvs = table.getPreferredScrollableViewportSize();
 						if (psvs.height != prefHeight) {
 							// int w = 0;
@@ -614,27 +615,10 @@ implements TableBuilder<R, P> {
 							// w += table.getColumnModel().getColumn(c).getWidth();
 							table.setPreferredScrollableViewportSize(new Dimension(psvs.width, prefHeight));
 						}
-						Dimension min = scroll.getMinimumSize();
-						if (min.height != minHeight) {
-							int w = 10;
-							if (isVSBVisible)
-								w += scroll.getVerticalScrollBar().getWidth();
-							scroll.getViewport().setMinimumSize(new Dimension(w, minHeight));
-						}
-						Dimension max = scroll.getMaximumSize();
-						if (max.height != maxHeight) {
-							int w = 0;
-							if (isVSBVisible)
-								w += scroll.getVerticalScrollBar().getWidth();
-							for (int c = 0; c < model.getColumnCount(); c++) {
-								w += table.getColumnModel().getColumn(c).getMaxWidth();
-								if (w < 0) {
-									w = Integer.MAX_VALUE;
-									break;
-								}
-							}
-							scroll.getViewport().setMaximumSize(new Dimension(w, maxHeight));
-						}
+						Dimension min = scroll.getViewport().getMinimumSize();
+						scroll.getViewport().setMinimumSize(new Dimension(min.width, minHeight));
+						Dimension max = scroll.getViewport().getMaximumSize();
+						scroll.getViewport().setMaximumSize(new Dimension(max.width, maxHeight));
 						if (scroll.getParent() != null)
 							scroll.getParent().revalidate();
 					}
@@ -646,6 +630,38 @@ implements TableBuilder<R, P> {
 				scroll.getVerticalScrollBar().getModel().addChangeListener(hal);
 				hal.adjustHeight();
 			}
+			Runnable adjustWidth = () -> {
+				int minW = 0, prefW = 0, maxW = 0;
+				for (int c = 0; c < table.getColumnModel().getColumnCount(); c++) {
+					TableColumn column = table.getColumnModel().getColumn(c);
+					minW += column.getMinWidth();
+					prefW += column.getPreferredWidth();
+					maxW += column.getMaxWidth();
+					if (maxW < 0)
+						maxW = Integer.MAX_VALUE;
+				}
+				BoundedRangeModel vbm = scroll.getVerticalScrollBar().getModel();
+				boolean vsbVisible = vbm.getExtent() > vbm.getMaximum();
+				if (vsbVisible) {
+					int sbw = scroll.getVerticalScrollBar().getWidth();
+					minW += sbw;
+					maxW += sbw;
+					if (maxW < 0)
+						maxW = Integer.MAX_VALUE;
+				}
+				Dimension psvs = table.getPreferredScrollableViewportSize();
+				Dimension min = scroll.getViewport().getMinimumSize();
+				Dimension max = scroll.getViewport().getMaximumSize();
+
+				if (psvs.width != prefW)
+					table.setPreferredScrollableViewportSize(new Dimension(prefW, psvs.height));
+
+				scroll.getViewport().setMinimumSize(new Dimension(minW, min.height));
+				scroll.getViewport().setMaximumSize(new Dimension(maxW, max.height));
+				scroll.setMaximumSize(new Dimension(maxW, max.height));
+			};
+			adjustWidth.run();
+			columns.simpleChanges().act(__ -> adjustWidth.run());
 		} else {
 			scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
 			scroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_NEVER);

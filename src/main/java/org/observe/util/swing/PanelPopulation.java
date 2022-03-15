@@ -138,7 +138,7 @@ public class PanelPopulation {
 			System.err.println(
 				"Calling panel population off of the EDT from " + BreakpointHere.getCodeLine(1) + "--could cause threading problems!!");
 		if (panel == null)
-			panel = (C) new JPanel();
+			panel = (C) new ConformingPanel();
 		return new MigFieldPanel<>(panel, until == null ? Observable.empty() : until, new LazyLock());
 	}
 
@@ -154,7 +154,7 @@ public class PanelPopulation {
 			System.err.println(
 				"Calling panel population off of the EDT from " + BreakpointHere.getCodeLine(1) + "--could cause threading problems!!");
 		if (panel == null)
-			panel = (C) new JPanel(layout);
+			panel = (C) new ConformingPanel(layout);
 		else if (layout != null)
 			panel.setLayout(layout);
 		return new SimpleHPanel<>(null, panel, new LazyLock(), until == null ? Observable.empty() : until);
@@ -448,6 +448,12 @@ public class PanelPopulation {
 					onClick.accept(evt);
 			});
 		}
+
+		/**
+		 * @param name The name for the component (typically for debugging)
+		 * @return This editor
+		 */
+		P withName(String name);
 	}
 
 	public interface ValueCache {
@@ -1571,7 +1577,7 @@ public class PanelPopulation {
 
 		@Override
 		default P addHPanel(String fieldName, LayoutManager layout, Consumer<PanelPopulator<JPanel, ?>> panel) {
-			SimpleHPanel<JPanel> subPanel = new SimpleHPanel<>(fieldName, new JPanel(layout), getLock(), getUntil());
+			SimpleHPanel<JPanel> subPanel = new SimpleHPanel<>(fieldName, new ConformingPanel(layout), getLock(), getUntil());
 			if (panel != null)
 				panel.accept(subPanel);
 			doAdd(subPanel);
@@ -1580,7 +1586,7 @@ public class PanelPopulation {
 
 		@Override
 		default P addVPanel(Consumer<PanelPopulator<JPanel, ?>> panel) {
-			MigFieldPanel<JPanel> subPanel = new MigFieldPanel<>(new JPanel(), getUntil(), getLock());
+			MigFieldPanel<JPanel> subPanel = new MigFieldPanel<>(new ConformingPanel(), getUntil(), getLock());
 			if (panel != null)
 				panel.accept(subPanel);
 			doAdd(subPanel, null, null, false);
@@ -1652,6 +1658,7 @@ public class PanelPopulation {
 		private boolean isFillV;
 		private ComponentDecorator theDecorator;
 		private Consumer<MouseEvent> theMouseListener;
+		private String theName;
 
 		private ObservableValue<Boolean> isVisible;
 
@@ -1736,7 +1743,15 @@ public class PanelPopulation {
 			return (P) this;
 		}
 
+		@Override
+		public P withName(String name) {
+			theName = name;
+			return (P) this;
+		}
+
 		protected Component decorate(Component c) {
+			if (theName != null)
+				c.setName(theName);
 			if (theDecorator != null)
 				theDecorator.decorate(c);
 			if (theMouseListener != null)
@@ -1847,7 +1862,7 @@ public class PanelPopulation {
 		MigFieldPanel(C container, Observable<?> until, Supplier<Transactable> lock) {
 			super(//
 				container = (container != null ? container
-					: (C) new JPanel(createMigLayout(true, () -> "install the layout before using this class"))), //
+					: (C) new ConformingPanel(createMigLayout(true, () -> "install the layout before using this class"))), //
 				lock);
 			theUntil = until == null ? Observable.empty() : until;
 			if (container.getLayout() == null || !MIG_LAYOUT_CLASS_NAME.equals(container.getLayout().getClass().getName())) {
@@ -2351,7 +2366,8 @@ public class PanelPopulation {
 		SimpleToggleButtonPanel(String fieldName, ObservableCollection<? extends F> values, SettableValue<F> value, Class<TB> buttonType,
 			Function<? super F, ? extends TB> buttonCreator, Supplier<Transactable> lock) {
 			super(fieldName, new HashMap<>(), lock);
-			thePanel = new JPanel(new JustifiedBoxLayout(false).setMainAlignment(JustifiedBoxLayout.Alignment.LEADING).crossJustified());
+			thePanel = new ConformingPanel(
+				new JustifiedBoxLayout(false).setMainAlignment(JustifiedBoxLayout.Alignment.LEADING).crossJustified());
 
 			theValue = value;
 			theValues = values;
@@ -2545,7 +2561,7 @@ public class PanelPopulation {
 		@Override
 		public P withHTab(Object tabID, int tabIndex, LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel,
 			Consumer<TabEditor<?>> tabModifier) {
-			SimpleHPanel<JPanel> hPanel = new SimpleHPanel<>(null, new JPanel(layout), theLock, theUntil);
+			SimpleHPanel<JPanel> hPanel = new SimpleHPanel<>(null, new ConformingPanel(layout), theLock, theUntil);
 			panel.accept(hPanel);
 			return withTabImpl(tabID, tabIndex, hPanel.getContainer(), tabModifier, hPanel);
 		}
@@ -2746,7 +2762,7 @@ public class PanelPopulation {
 			JComponent tabC = (JComponent) getEditor().getTabComponentAt(t);
 			if (removable) {
 				if (tabC == null) {
-					tabC = new JPanel(new JustifiedBoxLayout(false));
+					tabC = new ConformingPanel(new JustifiedBoxLayout(false));
 					JLabel title = new JLabel(getEditor().getTitleAt(t));
 					if (found.theName != null)
 						found.theName.changes().takeUntil(found.until).act(evt -> {
@@ -2904,7 +2920,7 @@ public class PanelPopulation {
 
 		@Override
 		public P firstH(LayoutManager layout, Consumer<PanelPopulator<?, ?>> hPanel) {
-			SimpleHPanel<JPanel> panel = new SimpleHPanel<>(null, new JPanel(layout), theLock, theUntil);
+			SimpleHPanel<JPanel> panel = new SimpleHPanel<>(null, new ConformingPanel(layout), theLock, theUntil);
 			hPanel.accept(panel);
 			first(panel.getOrCreateComponent(theUntil));
 			if (panel.isVisible() != null)
@@ -2933,7 +2949,7 @@ public class PanelPopulation {
 
 		@Override
 		public P lastH(LayoutManager layout, Consumer<PanelPopulator<?, ?>> hPanel) {
-			SimpleHPanel<JPanel> panel = new SimpleHPanel<>(null, new JPanel(layout), theLock, theUntil);
+			SimpleHPanel<JPanel> panel = new SimpleHPanel<>(null, new ConformingPanel(layout), theLock, theUntil);
 			hPanel.accept(panel);
 			last(panel.getOrCreateComponent(theUntil));
 			if (panel.isVisible() != null)
@@ -3200,7 +3216,7 @@ public class PanelPopulation {
 
 		@Override
 		public P withHContent(LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel) {
-			SimpleHPanel<JPanel> hPanel = new SimpleHPanel<>(null, new JPanel(layout), theLock, theUntil);
+			SimpleHPanel<JPanel> hPanel = new SimpleHPanel<>(null, new ConformingPanel(layout), theLock, theUntil);
 			panel.accept(hPanel);
 			withContent(hPanel.getOrCreateComponent(theUntil));
 			if (hPanel.isVisible() != null)
@@ -3242,9 +3258,10 @@ public class PanelPopulation {
 				theContentPanel = new MigFieldPanel(getEditor(), getUntil(), lock);
 			else
 				theContentPanel = new SimpleHPanel(null, getEditor(), lock, getUntil());
-			theOuterContainer = new MigFieldPanel(new JPanel(), until, lock);
+			theOuterContainer = new MigFieldPanel(new ConformingPanel(), until, lock);
 			theHeaderPanel = new SimpleHPanel(null,
-				new JPanel(new JustifiedBoxLayout(false).setMainAlignment(JustifiedBoxLayout.Alignment.LEADING)), getLock(), getUntil());
+				new ConformingPanel(new JustifiedBoxLayout(false).setMainAlignment(JustifiedBoxLayout.Alignment.LEADING)), getLock(),
+				getUntil());
 
 			theCollapsedIcon = ObservableSwingUtils.getFixedIcon(PanelPopulation.class, "/icons/circlePlus.png", 16, 16);
 			theExpandedIcon = ObservableSwingUtils.getFixedIcon(PanelPopulation.class, "/icons/circleMinus.png", 16, 16);
@@ -3730,6 +3747,11 @@ public class PanelPopulation {
 						if (msg != null)
 							theAction.putValue(Action.LONG_DESCRIPTION, msg);
 					}
+					return (P) this;
+				}
+
+				@Override
+				public P withName(String name) {
 					return (P) this;
 				}
 			}
