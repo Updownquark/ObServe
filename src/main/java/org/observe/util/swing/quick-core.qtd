@@ -64,13 +64,23 @@
 		</element-def>
 
 		<element-def name="widget" abstract="true">
-			<attribute name="bg-color" type="expression" specify="optional" />
+			<attribute name="bg-color" type="expression-or-string" specify="optional" />
 			<attribute name="tooltip" type="expression-or-string" specify="optional" />
 			<attribute name="visible" type="expression" specify="optional" />
 			<attribute name="onClick" type="expression" specify="optional" />
 			<attribute name="onHover" type="expression" specify="optional" />
 			<attribute name="onEnter" type="expression" specify="optional" />
 			<attribute name="onExit" type="expression" specify="optional" />
+			<child-def name="border" type="border" min="0" />
+		</element-def>
+
+		<element-def name="border" abstract="true" />
+		<element-def name="line-border" extends="border">
+			<attribute name="color" type="expression-or-string" default="black" />
+			<attribute name="thickness" type="expression" default="1" />
+		</element-def>
+		<element-def name="titled-border" extends="line-border">
+			<attribute name="title" type="expression-or-string" specify="required" />
 		</element-def>
 
 		<element-def name="quick">

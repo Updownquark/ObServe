@@ -102,6 +102,16 @@ public class ComponentDecorator {
 			this.roundedCorners = rounderCorners;
 			return this;
 		}
+
+		public ModifiableLineBorder setColor(Color color) {
+			lineColor = color;
+			return this;
+		}
+
+		public ModifiableLineBorder setThickness(int thickness) {
+			this.thickness = thickness;
+			return this;
+		}
 	}
 
 	public ComponentDecorator withBackground(Color bg) {

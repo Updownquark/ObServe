@@ -1,9 +1,11 @@
 package org.observe.util.swing;
 
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Dimension;
+import java.awt.EventQueue;
 import java.awt.Image;
 import java.awt.LayoutManager;
 import java.awt.Point;
@@ -28,13 +30,18 @@ import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import javax.swing.BorderFactory;
 import javax.swing.ImageIcon;
+import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JPanel;
+import javax.swing.JSplitPane;
 import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
 import javax.swing.WindowConstants;
+import javax.swing.border.Border;
+import javax.swing.border.TitledBorder;
 
 import org.observe.Observable;
 import org.observe.ObservableAction;
@@ -47,6 +54,7 @@ import org.observe.expresso.DefaultExpressoParser;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableExpression.MethodFinder;
 import org.observe.util.ClassView;
+import org.observe.util.ExpressionValueType;
 import org.observe.util.ModelType;
 import org.observe.util.ModelType.ModelInstanceType;
 import org.observe.util.ModelTypes;
@@ -56,10 +64,12 @@ import org.observe.util.ObservableModelSet.ExternalModelSet;
 import org.observe.util.ObservableModelSet.ModelSetInstance;
 import org.observe.util.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
+import org.observe.util.swing.ComponentDecorator.ModifiableLineBorder;
 import org.observe.util.swing.PanelPopulation.ComponentEditor;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.observe.util.swing.PanelPopulation.TabEditor;
 import org.observe.util.swing.PanelPopulation.WindowBuilder;
+import org.qommons.Colors;
 import org.qommons.collect.BetterList;
 import org.qommons.config.DefaultQonfigParser;
 import org.qommons.config.QommonsConfig;
@@ -674,12 +684,188 @@ public class QuickSwingParser {
 					"Unrecognized close-action: " + element.getAttributeText(core.getAttribute("window", "close-action")));
 			}
 			return doc;
+		}).modifyWith("widget", QuickComponentDef.class, (widget, element, session) -> {
+			ClassView cv = (ClassView) session.get("quick-cv");
+			ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
+			ObservableExpression tooltipX = session.getAttribute("tooltip", ObservableExpression.class);
+			ObservableExpression bgColorX = session.getAttribute("bg-color", ObservableExpression.class);
+			ObservableExpression visibleX = session.getAttribute("visible", ObservableExpression.class);
+			QuickBorder border = session.interpretChildren("border", QuickBorder.class).peekFirst();
+			ValueContainer<SettableValue, SettableValue<String>> tooltip = tooltipX == null ? null
+				: tooltipX.evaluate(ModelTypes.Value.forType(String.class), model, cv);
+			Function<ModelSetInstance, SettableValue<Color>> bgColor = parseColor(bgColorX, model, cv);
+			ValueContainer<SettableValue, SettableValue<Boolean>> visible = visibleX == null ? null
+				: visibleX.evaluate(ModelTypes.Value.forType(boolean.class), model, cv);
+			if (tooltip != null) {
+				widget.modify((comp, models) -> {
+					comp.withTooltip(tooltip.apply(models));
+				});
+			}
+			if (bgColor != null) {
+				widget.modify((comp, models) -> {
+					comp.modifyComponent(c -> {
+						ObservableValue<Color> color = bgColor.apply(models);
+						color.changes().takeUntil(models.getUntil()).act(evt -> {
+							Color colorV = evt.getNewValue();
+							c.setBackground(colorV == null ? Colors.transparent : colorV);
+							if (c instanceof JComponent)
+								((JComponent) c).setOpaque(colorV != null && colorV.getAlpha() > 0);
+						});
+					});
+				});
+			}
+			if (visible != null)
+				widget.modify((comp, models) -> {
+					comp.visibleWhen(visible.apply(models));
+				});
+			if (border != null)
+				widget.modify((comp, models) -> {
+					comp.modifyComponent(c -> {
+						if (c instanceof JComponent) {
+							JComponent jc = (JComponent) c;
+							border.apply(models).changes().takeUntil(models.getUntil()).act(evt -> {
+								if (evt.getNewValue() != jc.getBorder())
+									jc.setBorder(evt.getNewValue());
+								jc.repaint();
+							});
+						}
+					});
+				});
+			return widget;
+		}).createWith("line-border", QuickBorder.class, (element, session) -> {
+			ClassView cv = (ClassView) session.get("quick-cv");
+			ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
+			Function<ModelSetInstance, SettableValue<Color>> color = parseColor(session.getAttribute("color", ObservableExpression.class),
+				model, cv);
+			ObservableExpression thicknessX = session.getAttribute("thickness", ObservableExpression.class);
+			Function<ModelSetInstance, SettableValue<Integer>> thickness = thicknessX == null ? null
+				: thicknessX.evaluate(ModelTypes.Value.forType(int.class), model, cv);
+			return msi -> {
+				ModifiableLineBorder border = new ModifiableLineBorder(Color.black, 1, false);
+				SettableValue<Border> borderV = SettableValue.build(Border.class).withValue(border).build();
+				if (color != null) {
+					color.apply(msi).changes().takeUntil(msi.getUntil()).act(evt -> {
+						border.setColor(evt.getNewValue());
+						borderV.set(border, evt);
+					});
+				}
+				if (thickness != null) {
+					thickness.apply(msi).changes().takeUntil(msi.getUntil()).act(evt -> {
+						border.setThickness(evt.getNewValue());
+						borderV.set(border, evt);
+					});
+				}
+				return borderV;
+			};
+		}).createWith("titled-border", QuickBorder.class, (element, session) -> {
+			ClassView cv = (ClassView) session.get("quick-cv");
+			ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
+			ObservableExpression titleX = session.getAttribute("title", ObservableExpression.class);
+			Function<ModelSetInstance, SettableValue<Color>> color = parseColor(session.getAttribute("color", ObservableExpression.class),
+				model, cv);
+			ObservableExpression thicknessX = session.getAttribute("thickness", ObservableExpression.class);
+			Function<ModelSetInstance, SettableValue<String>> title = titleX.evaluate(ModelTypes.Value.forType(String.class), model, cv);
+			Function<ModelSetInstance, SettableValue<Integer>> thickness = thicknessX == null ? null
+				: thicknessX.evaluate(ModelTypes.Value.forType(int.class), model, cv);
+			return msi -> {
+				ModifiableLineBorder lineBorder = new ModifiableLineBorder(Color.black, 1, false);
+				TitledBorder border = BorderFactory.createTitledBorder(lineBorder, "");
+				SettableValue<Border> borderV = SettableValue.build(Border.class).withValue(border).build();
+				title.apply(msi).changes().takeUntil(msi.getUntil()).act(evt -> {
+					border.setTitle(evt.getNewValue());
+					borderV.set(border, evt);
+				});
+				if (color != null) {
+					color.apply(msi).changes().takeUntil(msi.getUntil()).act(evt -> {
+						lineBorder.setColor(evt.getNewValue());
+						border.setTitleColor(evt.getNewValue());
+						borderV.set(border, evt);
+					});
+				}
+				if (thickness != null) {
+					thickness.apply(msi).changes().takeUntil(msi.getUntil()).act(evt -> {
+						lineBorder.setThickness(evt.getNewValue());
+						borderV.set(border, evt);
+					});
+				}
+				return borderV;
+			};
 		});
 		if (BASE.isBuilt() && BASE.isValid() && interpreter.dependsOn(BASE.get()))
 			configureBase(interpreter.forToolkit(BASE.get()));
 		if (SWING.isBuilt() && SWING.isValid() && interpreter.dependsOn(SWING.get()))
 			configureSwing(interpreter.forToolkit(SWING.get()));
 		return interpreter;
+	}
+
+	public interface QuickBorder extends Function<ModelSetInstance, SettableValue<Border>> {
+	}
+
+	public static Function<ModelSetInstance, SettableValue<Color>> parseColor(ObservableExpression expression, ObservableModelSet model,
+		ClassView cv) throws QonfigInterpretationException {
+		if (expression == null)
+			return null;
+		Function<ModelSetInstance, SettableValue<Color>> colorValue;
+		Function<String, Color> colorParser = str -> {
+			try {
+				return Colors.parseIfColor(str);
+			} catch (ParseException e) {
+				System.err.println("Could not evaluate '" + str + "' as a color from " + expression + ": " + e.getMessage());
+				e.printStackTrace();
+				return Colors.transparent;
+			}
+		};
+		if (expression instanceof ExpressionValueType.Literal)
+			colorValue = expression.evaluate(ModelTypes.Value.forType(String.class), model, cv)//
+			.andThen(v -> SettableValue.asSettable(v.map(colorParser), __ -> "Cannot reverse color"));
+		else {
+			try {
+				colorValue = expression.evaluate(ModelTypes.Value.forType(Color.class), model, cv);
+			} catch (QonfigInterpretationException e1) {
+				// If it doesn't parse as a java color, parse it as a string and then parse that as a color
+				colorValue = expression.evaluate(ModelTypes.Value.forType(String.class), model, cv)//
+					.andThen(v -> SettableValue.asSettable(v.map(colorParser), __ -> "Cannot reverse color"));
+			}
+		}
+		return colorValue;
+	}
+
+	public static Function<ModelSetInstance, SettableValue<QuickPosition>> parsePosition(ObservableExpression expression,
+		ObservableModelSet model, ClassView cv) throws QonfigInterpretationException {
+		if (expression == null)
+			return null;
+		Function<ModelSetInstance, SettableValue<QuickPosition>> positionValue;
+		Function<String, QuickPosition> colorParser = str -> {
+			try {
+				return QuickPosition.parse(str);
+			} catch (NumberFormatException e) {
+				System.err.println("Could not evaluate '" + str + "' as a position from " + expression + ": " + e.getMessage());
+				e.printStackTrace();
+				// There's really no sensible default, but this is better than causing NPEs
+				return new QuickPosition(50, QuickPosition.PositionUnit.Percent);
+			}
+		};
+		if (expression instanceof ExpressionValueType.Literal)
+			positionValue = expression.evaluate(ModelTypes.Value.forType(String.class), model, cv)//
+			.andThen(v -> SettableValue.asSettable(v.map(colorParser), __ -> "Cannot reverse position"));
+		else {
+			try {
+				positionValue = expression.evaluate(ModelTypes.Value.forType(QuickPosition.class), model, cv);
+			} catch (QonfigInterpretationException e1) {
+				// If it doesn't parse as a position, try parsing as a number.
+				try {
+					positionValue = expression.evaluate(ModelTypes.Value.forType(int.class), model, cv)//
+						.andThen(v -> v.transformReversible(QuickPosition.class, tx -> tx
+							.map(d -> new QuickPosition(d, QuickPosition.PositionUnit.Pixels)).withReverse(pos -> Math.round(pos.value))));
+				} catch (QonfigInterpretationException e2) {
+					// If it doesn't parse as a position or a number, try parsing as a string and then parse that as a position
+					positionValue = expression.evaluate(ModelTypes.Value.forType(String.class), model, cv)//
+						.andThen(v -> v.transformReversible(QuickPosition.class,
+							tx -> tx.map(colorParser).withReverse(QuickPosition::toString)));
+				}
+			}
+		}
+		return positionValue;
 	}
 
 	@SuppressWarnings("rawtypes")
@@ -1037,16 +1223,132 @@ public class QuickSwingParser {
 			return null;
 		});
 		interpreter.createWith("split", QuickComponentDef.class, (element, session) -> {
+			ClassView cv = (ClassView) session.get("quick-cv");
+			ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
 			if (element.getChildrenByRole().get(base.getChild("split", "content").getDeclared()).size() != 2)
 				throw new UnsupportedOperationException("Currently only 2 (and exactly 2) contents are supported for split");
 			List<QuickComponentDef> children = session.interpretChildren("content", QuickComponentDef.class);
 			boolean vertical = session.getAttributeText("orientation").equals("vertical");
-			System.err.println("WARNING: split is not fully implemented!!"); // TODO
+			Function<ModelSetInstance, SettableValue<QuickPosition>> splitPos = parsePosition(
+				session.getAttribute("split-position", ObservableExpression.class), model, cv);
 			return new AbstractQuickComponentDef(element) {
 				@Override
 				public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
 					container.addSplit(vertical, split -> {
 						modify(split.fill().fillV(), builder);
+						if (splitPos != null) {
+							// This is more complicated than it makes sense to support in PanelPopulation,
+							// so we gotta do it here ourselves
+							split.modifyComponent(c -> {
+								boolean[] divCallbackLock = new boolean[1];
+								JSplitPane sp = (JSplitPane) c;
+								SettableValue<QuickPosition> pos = splitPos.apply(builder.getModels());
+								sp.addComponentListener(new ComponentAdapter() {
+									boolean init = true;
+
+									void init() {
+										init = false;
+										pos.changes().takeUntil(builder.getModels().getUntil()).act(evt -> {
+											if (divCallbackLock[0])
+												return;
+											ObservableSwingUtils.onEQ(() -> {
+												divCallbackLock[0] = true;
+												try {
+													sp.setDividerLocation(evt.getNewValue().evaluate(sp.getWidth()));
+												} finally {
+													divCallbackLock[0] = false;
+												}
+											});
+										});
+										sp.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, evt -> {
+											if (divCallbackLock[0])
+												return;
+											divCallbackLock[0] = true;
+											try {
+												int loc = sp.getDividerLocation();
+												QuickPosition p = pos.get();
+												switch (p.type) {
+												case Pixels:
+													pos.set(new QuickPosition(loc, p.type), evt);
+													break;
+												case Percent:
+													pos.set(new QuickPosition(loc * 100.0f / sp.getWidth(), p.type), evt);
+													break;
+												case Lexips:
+													pos.set(new QuickPosition(sp.getWidth() - loc, p.type), evt);
+													break;
+												}
+											} finally {
+												divCallbackLock[0] = false;
+											}
+										});
+
+										Component left = sp.getLeftComponent();
+										Component right = sp.getRightComponent();
+										left.addComponentListener(new ComponentAdapter() {
+											@Override
+											public void componentShown(ComponentEvent e) {
+												if (right.isVisible())
+													return;
+												EventQueue.invokeLater(() -> {
+													divCallbackLock[0] = true;
+													try {
+														sp.setDividerLocation(pos.get().evaluate(sp.getWidth()));
+													} finally {
+														divCallbackLock[0] = false;
+													}
+												});
+											}
+										});
+										right.addComponentListener(new ComponentAdapter() {
+											@Override
+											public void componentShown(ComponentEvent e) {
+												if (left.isVisible())
+													return;
+												EventQueue.invokeLater(() -> {
+													divCallbackLock[0] = true;
+													try {
+														sp.setDividerLocation(pos.get().evaluate(sp.getWidth()));
+													} finally {
+														divCallbackLock[0] = false;
+													}
+												});
+											}
+										});
+									}
+
+									@Override
+									public void componentShown(ComponentEvent e) {
+										if (init && sp.getWidth() != 0) {
+											init();
+										}
+										EventQueue.invokeLater(() -> {
+											divCallbackLock[0] = true;
+											try {
+												sp.setDividerLocation(pos.get().evaluate(sp.getWidth()));
+											} finally {
+												divCallbackLock[0] = false;
+											}
+										});
+									}
+
+									@Override
+									public void componentResized(ComponentEvent e) {
+										if (init && sp.getWidth() != 0) {
+											init();
+										}
+										if (divCallbackLock[0])
+											return;
+										divCallbackLock[0] = true;
+										try {
+											sp.setDividerLocation(pos.get().evaluate(sp.getWidth()));
+										} finally {
+											divCallbackLock[0] = false;
+										}
+									}
+								});
+							});
+						}
 						split.firstH(new JustifiedBoxLayout(true).mainJustified().crossJustified(), first -> {
 							QuickComponent.Builder child = QuickComponent.build(children.get(0), builder, builder.getModels());
 							children.get(0).install(first, child);
@@ -1276,7 +1578,7 @@ public class QuickSwingParser {
 		TypeToken<?> valueType;
 		ObservableExpression valueEx = session.getAttribute("value", ObservableExpression.class);
 		ValueContainer<SettableValue, ?> valueX;
-		if (valueEx != null)
+		if (valueEx != null && valueEx != ObservableExpression.EMPTY)
 			valueX = valueEx.evaluate(ModelTypes.Value.any(), model, cv);
 		else if (element.getValue() == null) {
 			session.withWarning("No value for label");

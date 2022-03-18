@@ -374,7 +374,7 @@ public class PanelPopulation {
 		C getContainer();
 	}
 
-	public interface ComponentEditor<E, P extends ComponentEditor<E, P>> {
+	public interface ComponentEditor<E, P extends ComponentEditor<E, P>> extends Tooltipped<P> {
 		E getEditor();
 
 		P visibleWhen(ObservableValue<Boolean> visible);
@@ -398,6 +398,8 @@ public class PanelPopulation {
 		P decorate(Consumer<ComponentDecorator> decoration);
 
 		P modifyEditor(Consumer<? super E> modify);
+
+		P modifyComponent(Consumer<Component> component);
 
 		Component getComponent();
 
@@ -1370,10 +1372,6 @@ public class PanelPopulation {
 			});
 			SimpleFieldEditor<JLabel, ?> fieldPanel = new SimpleFieldEditor<>(fieldName, label, getLock());
 			fieldPanel.getTooltip().changes().takeUntil(getUntil()).act(evt -> fieldPanel.getEditor().setToolTipText(evt.getNewValue()));
-			if (field instanceof SettableValue) {
-				((SettableValue<F>) field).isEnabled().combine((enabled, tt) -> enabled == null ? tt : enabled, fieldPanel.getTooltip())
-				.changes().takeUntil(getUntil()).act(evt -> label.setToolTipText(evt.getNewValue()));
-			}
 			if (modify != null)
 				modify.accept(fieldPanel);
 			doAdd(fieldPanel);
@@ -1656,6 +1654,10 @@ public class PanelPopulation {
 		private Object theLayoutConstraints;
 		private boolean isFillH;
 		private boolean isFillV;
+		private Consumer<Component> theComponentModifier;
+		private ObservableValue<String> theTooltip;
+		private boolean isTooltipHandled;
+		private SettableValue<ObservableValue<String>> theSettableTooltip;
 		private ComponentDecorator theDecorator;
 		private Consumer<MouseEvent> theMouseListener;
 		private String theName;
@@ -1666,6 +1668,9 @@ public class PanelPopulation {
 			theEditor = editor;
 			theLock = lock;
 			theValueCache = new SimpleValueCache(lock);
+			theSettableTooltip = SettableValue
+				.build(TypeTokens.get().keyFor(ObservableValue.class).<ObservableValue<String>> parameterized(String.class)).build();
+			theTooltip = ObservableValue.flatten(theSettableTooltip);
 		}
 
 		public Supplier<Transactable> getLock() {
@@ -1706,6 +1711,17 @@ public class PanelPopulation {
 		}
 
 		@Override
+		public P withTooltip(ObservableValue<String> tooltip) {
+			theSettableTooltip.set(tooltip, null);
+			return (P) this;
+		}
+
+		ObservableValue<String> getTooltip() {
+			isTooltipHandled = true;
+			return theTooltip;
+		}
+
+		@Override
 		public P decorate(Consumer<ComponentDecorator> decoration) {
 			if (theDecorator == null)
 				theDecorator = new ComponentDecorator();
@@ -1716,6 +1732,20 @@ public class PanelPopulation {
 		@Override
 		public P modifyEditor(Consumer<? super E> modify) {
 			modify.accept(getEditor());
+			return (P) this;
+		}
+
+		@Override
+		public P modifyComponent(Consumer<Component> component) {
+			if (theComponentModifier == null)
+				theComponentModifier = component;
+			else {
+				Consumer<Component> old = theComponentModifier;
+				theComponentModifier = comp -> {
+					old.accept(comp);
+					component.accept(comp);
+				};
+			}
 			return (P) this;
 		}
 
@@ -1781,6 +1811,8 @@ public class PanelPopulation {
 						theMouseListener.accept(e);
 					}
 				});
+			if (theComponentModifier != null)
+				theComponentModifier.accept(c);
 			return c;
 		}
 
@@ -1788,6 +1820,8 @@ public class PanelPopulation {
 			// Subclasses should override this if the editor is not a component or is not the component that should be added
 			if (!(theEditor instanceof Component))
 				throw new IllegalStateException("Editor is not a component");
+			if (!isTooltipHandled && theEditor instanceof JComponent)
+				theTooltip.changes().takeUntil(until).act(evt -> ((JComponent) theEditor).setToolTipText(evt.getNewValue()));
 			return decorate((Component) theEditor);
 		}
 
@@ -1810,8 +1844,6 @@ public class PanelPopulation {
 		protected ObservableValue<Boolean> isVisible() {
 			return isVisible;
 		}
-
-		public abstract ObservableValue<String> getTooltip();
 
 		protected abstract Component createFieldNameLabel(Observable<?> until);
 
@@ -1951,8 +1983,6 @@ public class PanelPopulation {
 	implements FieldEditor<E, P> {
 		private ObservableValue<String> theFieldName;
 		private Consumer<FontAdjuster<?>> theFieldLabelModifier;
-		private ObservableValue<String> theTooltip;
-		private SettableValue<ObservableValue<String>> theSettableTooltip;
 		private ObservableValue<String> thePostLabel;
 		private SimpleButtonEditor<JButton, ?> thePostButton;
 		private Consumer<FontAdjuster<?>> theFont;
@@ -1960,9 +1990,6 @@ public class PanelPopulation {
 		SimpleFieldEditor(String fieldName, E editor, Supplier<Transactable> lock) {
 			super(editor, lock);
 			theFieldName = fieldName == null ? null : ObservableValue.of(fieldName);
-			theSettableTooltip = SettableValue
-				.build(TypeTokens.get().keyFor(ObservableValue.class).<ObservableValue<String>> parameterized(String.class)).build();
-			theTooltip = ObservableValue.flatten(theSettableTooltip);
 		}
 
 		@Override
@@ -2019,17 +2046,6 @@ public class PanelPopulation {
 				};
 			}
 			return (P) this;
-		}
-
-		@Override
-		public P withTooltip(ObservableValue<String> tooltip) {
-			theSettableTooltip.set(tooltip, null);
-			return (P) this;
-		}
-
-		@Override
-		public ObservableValue<String> getTooltip() {
-			return theTooltip;
 		}
 
 		protected <C extends JComponent> C onFieldName(C fieldNameComponent, Consumer<String> fieldName, Observable<?> until) {
@@ -3697,6 +3713,11 @@ public class PanelPopulation {
 						theDecorator = new ComponentDecorator();
 					decoration.accept(theDecorator);
 					return (P) this;
+				}
+
+				@Override
+				public P modifyComponent(Consumer<Component> component) {
+					return (P) this; // TODO can we support this?
 				}
 
 				@Override
