@@ -26,6 +26,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Objects;
 import java.util.TimeZone;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -395,6 +396,8 @@ public class AppPopulation {
 				config.watch(ObservableConfigPath.buildPath(ObservableConfigPath.ANY_NAME).multi(true).build()).act(evt -> {
 					if (evt.changeType == CollectionChangeType.add && evt.getChangeTarget().isTrivial())
 						return;
+					else if (evt.changeType == CollectionChangeType.set && Objects.equals(evt.oldValue, evt.getChangeTarget().getValue()))
+						return; // Don't persist for updates
 					persistenceQueued[0] = true;
 					timer.doAfterInactivity(key, () -> {
 						try {

@@ -528,8 +528,11 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 						tooltip = category.getTooltip(cell);
 				} else
 					tooltip = null;
-				valueTooltip = c -> theValueTooltip
-					.apply(new ModelCell.Default<>(() -> modelValue, c, row, column, isSelected, isSelected, true, true));
+				if (theValueTooltip != null) {
+					valueTooltip = c -> theValueTooltip
+						.apply(new ModelCell.Default<>(() -> modelValue, c, row, column, isSelected, isSelected, true, true));
+				} else
+					valueTooltip = null;
 			} else {
 				modelValue = null;
 				valueFilter = null;

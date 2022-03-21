@@ -97,6 +97,14 @@ public class ObservableSwingUtils {
 		ThreadConstraint.EDT.invoke(task);
 	}
 
+	private static final Runnable FLUSH_TASK = () -> {
+	};
+
+	/** If the current thread is the Event Dispatch Thread, forces the task cache to be flushed */
+	public static void flushEQCache() {
+		ThreadConstraint.EDT.invoke(FLUSH_TASK);
+	}
+
 	/**
 	 * @param text The text to create the label with
 	 * @return The LabelHolder to use to configure the label
@@ -851,6 +859,7 @@ public class ObservableSwingUtils {
 			ListSelectionModel selModel = selectionModel.get();
 			if (selModel.getValueIsAdjusting() || callbackLock[0])
 				return;
+			flushEQCache();
 			callbackLock[0] = true;
 			try {
 				if (selModel.getMinSelectionIndex() >= 0 && selModel.getMinSelectionIndex() == selModel.getMaxSelectionIndex()) {
@@ -888,6 +897,7 @@ public class ObservableSwingUtils {
 				ListSelectionModel selModel = selectionModel.get();
 				if (selModel.getMinSelectionIndex() < 0 || selModel.getMinSelectionIndex() != selModel.getMaxSelectionIndex())
 					return;
+				flushEQCache();
 				callbackLock[0] = true;
 				try {
 					if (e.getIndex0() <= selModel.getMinSelectionIndex() && e.getIndex1() >= selModel.getMinSelectionIndex())
@@ -910,6 +920,7 @@ public class ObservableSwingUtils {
 		safeSelection.changes().takeUntil(until).act(evt -> onEQ(() -> {
 			if (callbackLock[0])
 				return;
+			flushEQCache();
 			callbackLock[0] = true;
 			try {
 				ListSelectionModel selModel = selectionModel.get();

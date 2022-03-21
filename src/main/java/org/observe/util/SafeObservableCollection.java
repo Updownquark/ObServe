@@ -298,7 +298,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 		}
 		isFlushing = true;
 		boolean flushed = false;
-		try {
+		try (Transaction t = theSyntheticCollection.lock(true, null)) {
 			// First, the removals
 			if (!theRemovedElements.isEmpty()) {
 				flushed = true;

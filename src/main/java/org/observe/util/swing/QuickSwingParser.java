@@ -1237,7 +1237,9 @@ public class QuickSwingParser {
 					container.addSplit(vertical, split -> {
 						modify(split.fill().fillV(), builder);
 						if (splitPos != null) {
-							// This is more complicated than it makes sense to support in PanelPopulation,
+							// Because of the different units in the position we support here and how they're evaluated
+							// relative to the overall component width,
+							// this is more complicated than it makes sense to support in PanelPopulation,
 							// so we gotta do it here ourselves
 							split.modifyComponent(c -> {
 								boolean[] divCallbackLock = new boolean[1];

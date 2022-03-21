@@ -23,6 +23,9 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
+import org.observe.Transformation.ReverseQueryResult;
+import org.observe.Transformation.TransformReverse;
+import org.observe.Transformation.TransformationValues;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSet;
 import org.observe.expresso.Expression.ExpressoParseException;
@@ -39,6 +42,7 @@ import org.observe.util.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
 import org.observe.util.TypeTokens.TypeConverter;
 import org.qommons.Identifiable;
+import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
 import org.qommons.Transaction;
@@ -195,7 +199,11 @@ public class DefaultExpressoParser implements ExpressoParser {
 			else
 				return literalExpression(expression, evaluateEscape(escaped));
 		case "StringLiteral":
-			return literalExpression(expression, compileString(expression.search().get("StringCharacters").find().getComponents()));
+			Expression stringChars = expression.search().get("StringCharacters").findAny();
+			if (stringChars != null)
+				return literalExpression(expression, compileString(stringChars.getComponents()));
+			else
+				return literalExpression(expression, parseString(expression.getText().substring(1, expression.getText().length() - 1)));
 		case "NullLiteral":
 		case "'null'": // Really? Very strange type name
 			return literalExpression(expression, null);
@@ -582,6 +590,47 @@ public class DefaultExpressoParser implements ExpressoParser {
 		return str.toString();
 	}
 
+	private static String parseString(String content) {
+		StringBuilder str = null;
+		boolean escape = false;
+		int unicodeCh = 0;
+		int unicodeLen = -1;
+		for (int c = 0; c < content.length(); c++) {
+			char ch = content.charAt(c);
+			if (unicodeLen >= 0) {
+				unicodeCh = (unicodeCh << 4) | StringUtils.hexDigit(ch);
+				if (unicodeLen == 3) {
+					str.append((char) unicodeCh);
+					unicodeCh = 0;
+					unicodeLen = -1;
+				} else
+					unicodeLen++;
+			} else if (escape) {
+				escape = false;
+				switch (ch) {
+				case 'n':
+					str.append('\n');
+					break;
+				case 't':
+					str.append('\t');
+					break;
+				case '\\':
+					str.append('\\');
+					break;
+				case 'u':
+					unicodeLen = 0;
+					break;
+				}
+			} else if (ch == '\\') {
+				if (str == null)
+					str = new StringBuilder().append(content, 0, c);
+				escape = true;
+			} else if (str != null)
+				str.append(ch);
+		}
+		return str == null ? content : str.toString();
+	}
+
 	private static BetterList<String> extractNameSequence(Expression expression, BetterList<String> names) {
 		if (expression.getType().equals("Identifier")) {
 			names.add(expression.getText());
@@ -652,6 +701,16 @@ public class DefaultExpressoParser implements ExpressoParser {
 				// boolean
 				throw new QonfigInterpretationException("Binary operator '" + theOperator + "' is not implemented yet");
 			case "+":
+				if (TypeTokens.getRawType(type.getType(0)) == String.class) {
+					return (ValueContainer<M, MV>) appendString(//
+						theLeft.evaluate(
+							(ModelInstanceType<SettableValue, SettableValue<Object>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any(),
+							models, classView), //
+						theRight.evaluate(
+							(ModelInstanceType<SettableValue, SettableValue<Object>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any(),
+							models, classView));
+				}
+				//$FALL-THROUGH$
 			case "-":
 			case "*":
 			case "/":
@@ -679,6 +738,145 @@ public class DefaultExpressoParser implements ExpressoParser {
 			default:
 				throw new QonfigInterpretationException("Unrecognized operator: " + theOperator + " in expression " + this);
 			}
+		}
+
+		private static final String MIN_INT_STR = String.valueOf(Integer.MIN_VALUE).substring(1);
+		private static final String MAX_INT_STR = String.valueOf(Integer.MAX_VALUE);
+		private static final String MIN_LONG_STR = String.valueOf(Long.MIN_VALUE).substring(1);
+		private static final String MAX_LONG_STR = String.valueOf(Long.MAX_VALUE);
+
+		private static <L, R> ValueContainer<SettableValue, SettableValue<String>> appendString(
+			ValueContainer<SettableValue, SettableValue<L>> left, ValueContainer<SettableValue, SettableValue<R>> right)
+				throws QonfigInterpretationException {
+			// Unfortunately I don't support general string reversal here, but at least for some simple cases we can
+			if (TypeTokens.getRawType(right.getType().getType(0)) == String.class) {
+				Class<?> leftType = TypeTokens.get().unwrap(TypeTokens.getRawType(left.getType().getType(0)));
+				Function<String, L> reverse;
+				Function<String, String> accept;
+				String disabledMsg;
+				if (leftType == String.class || leftType == CharSequence.class) {
+					disabledMsg = null;
+					accept = s -> null;
+					reverse = s -> (L) s;
+				} else if (leftType == boolean.class) {
+					disabledMsg = null;
+					accept = s -> (s.equals("true") || s.equals("false")) ? null : "'true' or 'false' expected";
+					reverse = s -> (L) Boolean.valueOf(s);
+				} else if (leftType == int.class) {
+					disabledMsg = null;
+					accept = s -> {
+						int i = 0;
+						boolean neg = i < s.length() && s.charAt(i) == '-';
+						if (neg)
+							i++;
+						for (; i < s.length(); i++)
+							if (s.charAt(i) < '0' || s.charAt(i) > '9')
+								return "integer expected";
+						if (!neg && StringUtils.compareNumberTolerant(s, MAX_INT_STR, false, true) > 0)
+							return "integer is too large for int type";
+						else if (neg && StringUtils.compareNumberTolerant(StringUtils.cheapSubSequence(s, 1, s.length()), MIN_INT_STR,
+							false, true) > 0)
+							return "negative integer is too large for int type";
+						return null;
+					};
+					reverse = s -> (L) Integer.valueOf(s);
+				} else if (leftType == long.class) {
+					disabledMsg = null;
+					accept = s -> {
+						int i = 0;
+						boolean neg = i < s.length() && s.charAt(i) == '-';
+						if (neg)
+							i++;
+						for (; i < s.length(); i++)
+							if (s.charAt(i) < '0' || s.charAt(i) > '9')
+								return "integer expected";
+						if (!neg && StringUtils.compareNumberTolerant(s, MAX_LONG_STR, false, true) > 0)
+							return "integer is too large for long type";
+						else if (neg && StringUtils.compareNumberTolerant(StringUtils.cheapSubSequence(s, 1, s.length()), MIN_LONG_STR,
+							false, true) > 0)
+							return "negative integer is too large for long type";
+						return null;
+					};
+					reverse = s -> (L) Long.valueOf(s);
+				} else if (leftType == double.class) {
+					disabledMsg = null;
+					accept = s -> {
+						// Can't think of a better way to do this than to just parse it twice
+						try {
+							Double.parseDouble(s);
+							return null;
+						} catch (NumberFormatException e) {
+							return e.getMessage();
+						}
+					};
+					reverse = s -> (L) Double.valueOf(s);
+					// TODO Other standard types
+				} else {
+					disabledMsg = "Cannot parse type " + left.getType().getType(0);
+					reverse = null;
+					accept = null;
+				}
+				return new ValueContainer<SettableValue, SettableValue<String>>() {
+					@Override
+					public ModelInstanceType<SettableValue, SettableValue<String>> getType() {
+						return ModelTypes.Value.forType(String.class);
+					}
+
+					@Override
+					public SettableValue<String> get(ModelSetInstance models) {
+						SettableValue<L> leftV = left.apply(models);
+						SettableValue<R> rightV = right.apply(models);
+						if (reverse != null) {
+							return leftV.transformReversible(String.class, tx -> tx.combineWith(rightV).combine(LambdaUtils.printableBiFn(//
+								(v1, v2) -> new StringBuilder().append(v1).append(v2).toString(), "+", null))
+								.withReverse(new TransformReverse<L, String>() {
+									@Override
+									public boolean isStateful() {
+										return true;
+									}
+
+									@Override
+									public String isEnabled(TransformationValues<L, String> transformValues) {
+										return null;
+									}
+
+									@Override
+									public ReverseQueryResult<L> reverse(String newValue, TransformationValues<L, String> transformValues,
+										boolean add, boolean test) {
+										String end = String.valueOf(transformValues.get(rightV));
+										if (!newValue.endsWith(end))
+											return ReverseQueryResult.reject("String does not end with '" + end + "'");
+										String leftS = newValue.substring(0, newValue.length() - end.length());
+										String msg = accept.apply(leftS);
+										if (msg != null)
+											return ReverseQueryResult.reject(msg);
+										return ReverseQueryResult.value(reverse.apply(leftS));
+									}
+								}));
+						} else
+							return SettableValue.asSettable(//
+								leftV.transform(String.class, tx -> tx.combineWith(rightV).combine(LambdaUtils.printableBiFn(//
+									(v1, v2) -> new StringBuilder().append(v1).append(v2).toString(), "+", null))),
+								__ -> disabledMsg);
+					}
+				};
+			} else
+				return new ValueContainer<SettableValue, SettableValue<String>>() {
+				@Override
+				public ModelInstanceType<SettableValue, SettableValue<String>> getType() {
+					return ModelTypes.Value.forType(String.class);
+				}
+
+				@Override
+				public SettableValue<String> get(ModelSetInstance models) {
+					SettableValue<L> leftV = left.apply(models);
+					SettableValue<R> rightV = right.apply(models);
+					return SettableValue.asSettable(//
+						leftV.transform(String.class, tx -> tx.combineWith(rightV).combine(LambdaUtils.printableBiFn(//
+							(v1, v2) -> new StringBuilder().append(v1).append(v2).toString(), "+", null))),
+						__ -> "Cannot reverse string");
+				}
+			};
 		}
 
 		private ValueContainer<SettableValue, SettableValue<Boolean>> logicalOp(ValueContainer<SettableValue, SettableValue<Boolean>> left,

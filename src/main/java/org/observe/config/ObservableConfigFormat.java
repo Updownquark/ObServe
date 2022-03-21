@@ -177,10 +177,12 @@ public interface ObservableConfigFormat<E> {
 		 */
 		default <V> ObservableConfigParseContext<V> forChild(ConfigChildGetter child,
 			ObservableConfigEvent childChange, V previousValue, Consumer<V> delayedAccept) {
-			ObservableValue<? extends ObservableConfig> childConfig = getConfig().transform(ObservableConfig.class,
-				tx -> tx.cache(false).map(LambdaUtils.printableFn(c -> {
-					return child.getChild(c, false, false);
-				}, child::toString, child)));
+			ObservableValue<? extends ObservableConfig> childConfig = ObservableValue.flatten(getConfig().transform(
+				tx -> tx.cache(false).map(LambdaUtils.printableFn(parent -> child.observeChild(parent), child::toString, child))));
+			// = getConfig().transform(ObservableConfig.class,
+			// tx -> tx.cache(false).map(LambdaUtils.printableFn(c -> {
+			// return child.getChild(c, false, false);
+			// }, child::toString, child)));
 			Function<Boolean, ? extends ObservableConfig> childCreate = LambdaUtils.printableFn(trivial -> {
 				return child.getChild(getConfig(true, trivial), true, trivial);
 			}, () -> getConfig() + "." + child, null);
@@ -205,10 +207,18 @@ public interface ObservableConfigFormat<E> {
 				childChange = null;
 			else
 				childChange = getChange().asFromChild();
-			return forChild(new Impl.ConfigChildGetterWrapper((config, create, trivial) -> {
-				if (config == null && !create)
-					return null;
-				return config.getChild(childName, create, child -> child.setTrivial(trivial));
+			return forChild(new Impl.ConfigChildGetterWrapper(new ConfigChildGetter() {
+				@Override
+				public ObservableValue<ObservableConfig> observeChild(ObservableConfig parent) {
+					return parent == null ? null : parent.observeDescendant(childName);
+				}
+
+				@Override
+				public ObservableConfig getChild(ObservableConfig parent, boolean create, boolean trivial) {
+					if (parent == null && !create)
+						return null;
+					return parent.getChild(childName, create, child -> child.setTrivial(trivial));
+				}
 			}, () -> childName), childChange, previousValue, delayedAccept);
 		}
 
@@ -222,8 +232,17 @@ public interface ObservableConfigFormat<E> {
 		 * @return The new child context
 		 */
 		default <V> ObservableConfigParseContext<V> forChild(ObservableConfig child, V previousValue, Consumer<V> delayedAccept) {
-			return forChild(new Impl.ConfigChildGetterWrapper((parent, create, trivial) -> child, () -> "child"), null, previousValue,
-				delayedAccept);
+			return forChild(new Impl.ConfigChildGetterWrapper(new ConfigChildGetter() {
+				@Override
+				public ObservableValue<? extends ObservableConfig> observeChild(ObservableConfig parent) {
+					return ObservableValue.of(child);
+				}
+
+				@Override
+				public ObservableConfig getChild(ObservableConfig parent, boolean create, boolean trivial) {
+					return child;
+				}
+			}, () -> "child"), null, previousValue, delayedAccept);
 		}
 
 		/**
@@ -238,6 +257,8 @@ public interface ObservableConfigFormat<E> {
 	 * contexts
 	 */
 	interface ConfigChildGetter {
+		ObservableValue<? extends ObservableConfig> observeChild(ObservableConfig parent);
+
 		ObservableConfig getChild(ObservableConfig parent, boolean create, boolean trivial);
 	}
 
@@ -1292,10 +1313,18 @@ public interface ObservableConfigFormat<E> {
 			SubFormat<? extends T> format = formatFor(c);
 			if (format == null)
 				throw new ParseException("No sub-format found matching " + c, 0);
-			return ((SubFormat<T>) format).format.parse(ctx.forChild((parent, create, trivial) -> {
-				if (create)
-					format.moldConfig(parent);
-				return parent;
+			return ((SubFormat<T>) format).format.parse(ctx.forChild(new ConfigChildGetter() {
+				@Override
+				public ObservableValue<? extends ObservableConfig> observeChild(ObservableConfig parent) {
+					return ObservableValue.of(parent);
+				}
+
+				@Override
+				public ObservableConfig getChild(ObservableConfig parent, boolean create, boolean trivial) {
+					if (create)
+						format.moldConfig(parent);
+					return parent;
+				}
 			}, ctx.getChange(), format.applies(ctx.getPreviousValue()) ? ctx.getPreviousValue() : null, ctx::linkedReference));
 		}
 
@@ -1411,6 +1440,11 @@ public interface ObservableConfigFormat<E> {
 			ConfigChildGetterWrapper(ConfigChildGetter wrapped, Supplier<String> toString) {
 				theWrapped = wrapped;
 				this.toString = toString;
+			}
+
+			@Override
+			public ObservableValue<? extends ObservableConfig> observeChild(ObservableConfig parent) {
+				return theWrapped.observeChild(parent);
 			}
 
 			@Override
@@ -1886,10 +1920,18 @@ public interface ObservableConfigFormat<E> {
 				} else {
 					EntitySubFormat<? extends E> subFormat = formatFor(c);
 					if (subFormat != null) {
-						return ((EntitySubFormat<E>) subFormat).format.parse(ctx.forChild((parent, create, trivial) -> {
-							if (create)
-								subFormat.moldConfig(parent);
-							return parent;
+						return ((EntitySubFormat<E>) subFormat).format.parse(ctx.forChild(new ConfigChildGetter() {
+							@Override
+							public ObservableValue<? extends ObservableConfig> observeChild(ObservableConfig parent) {
+								return ObservableValue.of(parent);
+							}
+
+							@Override
+							public ObservableConfig getChild(ObservableConfig parent, boolean create, boolean trivial) {
+								if (create)
+									subFormat.moldConfig(parent);
+								return parent;
+							}
 						}, ctx.getChange(), subFormat.applies(ctx.getPreviousValue()) ? ctx.getPreviousValue() : null,
 							ctx::linkedReference));
 					}
