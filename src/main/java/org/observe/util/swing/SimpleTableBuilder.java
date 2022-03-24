@@ -755,8 +755,17 @@ implements TableBuilder<R, P> {
 				.changes().takeUntil(until).act(evt -> {
 					int sz = evt.getNewValue()[0];
 					int f = evt.getNewValue()[1];
-					String text = numberFormat.format(f) + " of " + numberFormat.format(sz) + " "
-						+ (sz == 1 ? singularItemName : pluralItemName);
+					String text;
+					if (theFilter.get() != TableContentControl.DEFAULT) {// Filtering active
+						if (f != sz)
+							text = numberFormat.format(f) + " of ";
+						else if(sz > 1)
+							text = "All ";
+						else
+							text = "";
+					} else
+						text = "";
+					text += numberFormat.format(sz) + " " + (sz == 1 ? singularItemName : pluralItemName);
 					if (!theCountTitleDisplayedText.isEmpty())
 						text += " " + theCountTitleDisplayedText;
 					border.setTitle(text);

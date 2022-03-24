@@ -207,6 +207,8 @@ public interface Equivalence<E> {
 		private final Comparator<? super E> compare;
 
 		ComparatorEquivalence(Equivalence<? super E> parent, Class<E> type, boolean nullable, Comparator<? super E> compare) {
+			if (compare == null)
+				throw new NullPointerException();
 			theParentEquivalence = parent;
 			if (type.isPrimitive())
 				type = TypeTokens.get().wrap(type);

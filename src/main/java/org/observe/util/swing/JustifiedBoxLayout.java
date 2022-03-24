@@ -9,6 +9,8 @@ import java.awt.Rectangle;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.qommons.ArrayUtils;
+
 /**
  * A very simple layout that lays out components in a column or a row, with support for 4 different {@link Alignment alignments} in each
  * dimension
@@ -30,6 +32,8 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 	private Alignment theMainAlign;
 	private Alignment theCrossAlign;
 	private boolean isStretchingEqual;
+	private boolean isFillForced;
+	private boolean isDebugging;
 
 	private final Insets theMargin;
 	private int thePadding;
@@ -103,6 +107,30 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 	 */
 	public JustifiedBoxLayout setCrossAlignment(Alignment crossAlignment) {
 		theCrossAlign = crossAlignment;
+		return this;
+	}
+
+	/** @return Whether this layout will stretch a container's contents to fill the container even beyond their maximum bounds if needed */
+	public boolean isFillForced() {
+		return isFillForced;
+	}
+
+	/**
+	 * @param fillForced Whether this layout should stretch the container's contents to fill the container even beyond their maximum bounds
+	 *        if needed
+	 * @return This layout, for chaining
+	 */
+	public JustifiedBoxLayout forceFill(boolean fillForced) {
+		isFillForced = fillForced;
+		return this;
+	}
+
+	/**
+	 * @param debugging Whether this layout should print info as it lays out its components
+	 * @return This layout
+	 */
+	public JustifiedBoxLayout debug(boolean debugging) {
+		isDebugging = debugging;
 		return this;
 	}
 
@@ -280,9 +308,9 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 			Dimension max = comp.getMaximumSize();
 			if (first) {
 				if (computeCross) {
-					minOfMaxCross = getCross(max);
+					minOfMaxCross = Math.min(minOfMaxCross, getCross(max));
 					Dimension min = comp.getMinimumSize();
-					maxOfMinCross = getCross(min);
+					maxOfMinCross = Math.max(maxOfMinCross, getCross(min));
 					if (minOfMaxCross <= maxOfMinCross)
 						computeCross = false;
 				}
@@ -420,12 +448,16 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 			sizes[i] = size;
 			totalExtremeSize += size;
 		}
+		if (isDebugging) {
+			System.out.println("JBL" + hashCode() + ": prefMain=" + ArrayUtils.toString(preferredMainSizes) + ", prefCross="
+				+ ArrayUtils.toString(preferredCrossSizes) + ", pref" + (shrink ? "Min" : "Max") + "=" + ArrayUtils.toString(sizes));
+		}
 
 		Insets insets = parent.getInsets();
 		int margin = isVertical ? insets.top + theMargin.top : insets.left + theMargin.left;
 		float padding = thePadding;
 		int extraLength = margin * 2 + thePadding * (sizes.length - 1);
-		if (shrink == (totalExtremeSize + extraLength < parentLength)) {
+		if (isFillForced || shrink == (totalExtremeSize + extraLength < parentLength)) {
 			// The extreme size is more than sufficient to fit in or expand to the parent length
 			// Temper the extreme size to the right amount
 			float num = parentLength - preferredLength;
@@ -555,13 +587,16 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 	}
 
 	@Override
-	public void addLayoutComponent(String name, Component comp) {}
+	public void addLayoutComponent(String name, Component comp) {
+	}
 
 	@Override
-	public void removeLayoutComponent(Component comp) {}
+	public void removeLayoutComponent(Component comp) {
+	}
 
 	@Override
-	public void addLayoutComponent(Component comp, Object constraints) {}
+	public void addLayoutComponent(Component comp, Object constraints) {
+	}
 
 	@Override
 	public float getLayoutAlignmentX(Container target) {
@@ -574,5 +609,6 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 	}
 
 	@Override
-	public void invalidateLayout(Container target) {}
+	public void invalidateLayout(Container target) {
+	}
 }

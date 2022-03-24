@@ -276,7 +276,8 @@ public interface TableContentControl {
 	public static final Format<TableContentControl> FORMAT = new Format<TableContentControl>() {
 		@Override
 		public void append(StringBuilder text, TableContentControl value) {
-			text.append(value.toString());
+			if (value != null)
+				text.append(value.toString());
 		}
 
 		@Override

@@ -3,7 +3,6 @@ package org.observe.util.swing;
 import java.awt.Dimension;
 import java.awt.EventQueue;
 import java.awt.LayoutManager2;
-import java.awt.Window;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.HashMap;
@@ -14,6 +13,7 @@ import java.util.Random;
 import java.util.function.Function;
 
 import javax.swing.JButton;
+import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JPanel;
 import javax.swing.JTable;
@@ -37,6 +37,7 @@ import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.io.Format;
+import org.qommons.threading.QommonsTimer;
 
 import com.google.common.reflect.TypeToken;
 
@@ -161,7 +162,7 @@ public class ObservableValueSelector<T, X> extends JPanel {
 			ObservableCollection<? extends CategoryRenderStrategy<SelectableValue<T, X>, ?>> destColumns, //
 				Function<? super T, ? extends X> map, boolean reEvalOnUpdate, Observable<?> until, //
 				boolean includedByDefault, Format<TableContentControl> filterFormat, boolean commitOnType, String itemName) {
-		super(new JustifiedBoxLayout(false).crossJustified().mainJustified());
+		super(new JustifiedBoxLayout(false).crossJustified().mainJustified().forceFill(true));
 		theSourceRows = sourceRows;
 		theMap = map;
 		theSelectableValues = ObservableSortedSet.create(new TypeToken<SelectableValue<T, X>>() {
@@ -207,8 +208,8 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		theExcludeAllButton = new JButton("<<");
 
 		PanelPopulation.populateHPanel(this, getLayout(), until)//
-		.addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(), //
-				srcPanel -> srcPanel.withName("OVS Source")
+		.addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified().forceFill(true), //
+			srcPanel -> srcPanel.withName("OVS Source")
 			.addTextField(null, theFilterText, filterFormat == null ? TableContentControl.FORMAT : filterFormat,
 				tf -> TableContentControl.configureSearchField(tf.fill(), commitOnType).modifyEditor(tfe -> {
 					theSearchField = tfe;
@@ -219,19 +220,21 @@ public class ObservableValueSelector<T, X> extends JPanel {
 					srcTbl.withItemName(itemName);
 				srcTbl.withCountTitle("available").withColumns(sourceColumns).withFiltering(theFilterText).fill();
 			}).fill())//
-		.addHPanel(null, new JustifiedBoxLayout(false).mainJustified().crossCenter().setMargin(2, 2, 2, 2),
-				buttonPanel -> buttonPanel.withName("OVS Buttons").fillV()//
-					.addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(), bp -> bp.withName("OVS Buttons 2")//
+		.addHPanel(null, new JustifiedBoxLayout(false).mainJustified().forceFill(true).crossCenter().setMargin(2, 2, 2, 2),
+			buttonPanel -> buttonPanel.withName("OVS Buttons").fillV()//
+			.addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(), bp -> bp.withName("OVS Buttons 2")//
 				.addComponent(null, theIncludeAllButton, null)//
 				.addComponent(null, theIncludeButton, null)//
 				.addComponent(null, theExcludeButton, null)//
 				.addComponent(null, theExcludeAllButton, null)//
 				)//
-			).addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified().setShowingInvisible(true),
+			).addHPanel(null,
+				new JustifiedBoxLayout(true).mainJustified().crossJustified().forceFill(true).setShowingInvisible(true),
 				destPanel -> destPanel.withName("OVS Dest")//
 				// Invisible placeholder here to make the available and included tables the same height
-				.addTextField(null, SettableValue.build(String.class).build(), Format.TEXT,
-					f -> f.fill().visibleWhen(ObservableValue.of(false)))//
+				.addTextField(null, SettableValue.build(TableContentControl.class).build(),
+					filterFormat == null ? TableContentControl.FORMAT : filterFormat,
+						f -> TableContentControl.configureSearchField(f.fill(), commitOnType).visibleWhen(ObservableValue.of(false)))//
 				.addTable(theIncludedValues, destTbl -> {
 					theDestTable = destTbl.getEditor();
 					if (itemName != null)
@@ -334,36 +337,29 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		theSelectionChanges = new SimpleObservable<>();
 
 		boolean[] selectCallbackLock = new boolean[1];
+		int[] minMaxSelectionChange = new int[] { -1, -1 };
+		Object selectionUpdateId = new Object();
 		ListSelectionListener leftLSL = evt -> {
 			if (selectCallbackLock[0])
 				return;
-			boolean change = false;
-			selectCallbackLock[0] = true;
-			try {
-				for (int i = evt.getFirstIndex(); i <= evt.getLastIndex() && i < sourceModel.getRowModel().getSize(); i++) {
-					SelectableValue<T, X> sv = sourceModel.getRowModel().getElementAt(i);
-					if (sv.selected == theSourceTable.getSelectionModel().isSelectedIndex(i))
-						continue;
-					change = true;
-					sv.selected = !sv.selected;
-					if (sv.isIncluded()) {
-						int includedIndex = theIncludedValues.getElementsBefore(sv.includedAddress);
-						if (sv.selected)
-							theDestTable.getSelectionModel().addSelectionInterval(includedIndex, includedIndex);
-						else
-							theDestTable.getSelectionModel().removeSelectionInterval(includedIndex, includedIndex);
-					}
-				}
-			} finally {
-				selectCallbackLock[0] = false;
-			}
-			if (change)
-				theSelectionChanges.onNext(null);
+			if (minMaxSelectionChange[0] < 0 || evt.getFirstIndex() < minMaxSelectionChange[0])
+				minMaxSelectionChange[0] = evt.getFirstIndex();
+			if (minMaxSelectionChange[1] < 0 || evt.getLastIndex() > minMaxSelectionChange[1])
+				minMaxSelectionChange[1] = evt.getLastIndex();
+			QommonsTimer.getCommonInstance().doAfterInactivity(selectionUpdateId, () -> ObservableSwingUtils.onEQ(() -> {
+				int min = minMaxSelectionChange[0];
+				int max = minMaxSelectionChange[1];
+				if (min < 0 || max < 0)
+					return;
+				minMaxSelectionChange[0] = -1;
+				minMaxSelectionChange[1] = -1;
+				adjustSelectionFromLeft(min, max, selectCallbackLock);
+			}), 100);
 		};
 		theSourceTable.getSelectionModel().addListSelectionListener(leftLSL);
 		subs.add(() -> theSourceTable.getSelectionModel().removeListSelectionListener(leftLSL));
 		ListSelectionListener rightLSL = evt -> {
-			if (selectCallbackLock[0])
+			if (selectCallbackLock[0] || evt.getValueIsAdjusting())
 				return;
 			boolean change = false;
 			selectCallbackLock[0] = true;
@@ -434,6 +430,37 @@ public class ObservableValueSelector<T, X> extends JPanel {
 				selectCallbackLock[0] = false;
 			}
 		});
+	}
+
+	private void adjustSelectionFromLeft(int min, int max, boolean[] selectCallbackLock) {
+		// This may be called after a whole lot of events, so while the indexes should be the super set of the range,
+		// anything may have happened to the rows, so we need to be careful with these indexes
+		if (min >= theDisplayedValues.size())
+			return;
+		boolean change = false;
+		selectCallbackLock[0] = true;
+		// If we can obtain a lock on the source collection
+		try {
+			SelectableValue<T, X> sv = theDisplayedValues.get(min);
+			for (int i = min; i <= max && sv != null; //
+				i++, sv = CollectionElement.get(theDisplayedValues.getAdjacentElement(sv.displayedAddress, true))) {
+				if (sv.selected == theSourceTable.getSelectionModel().isSelectedIndex(i))
+					continue; // No change here
+				change = true;
+				sv.selected = !sv.selected;
+				if (sv.isIncluded()) {
+					int includedIndex = theIncludedValues.getElementsBefore(sv.includedAddress);
+					if (sv.selected)
+						theDestTable.getSelectionModel().addSelectionInterval(includedIndex, includedIndex);
+					else
+						theDestTable.getSelectionModel().removeSelectionInterval(includedIndex, includedIndex);
+				}
+			}
+		} finally {
+			selectCallbackLock[0] = false;
+		}
+		if (change)
+			theSelectionChanges.onNext(null);
 	}
 
 	/** @return The collection of source values that are currently displayed to the user (i.e. not filtered) */
@@ -580,6 +607,17 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		return ((LayoutManager2) getLayout()).maximumLayoutSize(this);
 	}
 
+	/**
+	 * Builds a value selector widget
+	 *
+	 * @param <T> The type of values to select from
+	 * @param <X> The type of selected values
+	 * @param sourceRows The collection of values to select from
+	 * @param sourceColumns The columns for the values to select from
+	 * @param destColumns The columns for the selected values
+	 * @param map The function to produce selected values from selectable ones
+	 * @return The builder to build the widget
+	 */
 	public static <T, X> Builder<T, X> build(ObservableCollection<T> sourceRows, //
 		ObservableCollection<? extends CategoryRenderStrategy<SelectableValue<T, X>, ?>> sourceColumns, //
 			ObservableCollection<? extends CategoryRenderStrategy<SelectableValue<T, X>, ?>> destColumns, //
@@ -587,6 +625,12 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		return new Builder<>(sourceRows, sourceColumns, destColumns, map);
 	}
 
+	/**
+	 * Builds an {@link ObservableValueSelector}
+	 *
+	 * @param <T> The type of values to select from
+	 * @param <X> The type of selected values
+	 */
 	public static class Builder<T, X> {
 		private final ObservableCollection<T> theSourceRows;
 		private final ObservableCollection<? extends CategoryRenderStrategy<SelectableValue<T, X>, ?>> theSourceColumns;
@@ -616,21 +660,37 @@ public class ObservableValueSelector<T, X> extends JPanel {
 			theItemName = null;
 		}
 
+		/**
+		 * @param reEvalOnUpdate Whether to re-evaluate the mapping function in response to an update event on the selectable values
+		 * @return This builder
+		 */
 		public Builder<T, X> reEvalOnUpdate(boolean reEvalOnUpdate) {
 			isReEvalOnUpdate = reEvalOnUpdate;
 			return this;
 		}
 
+		/**
+		 * @param until The observable to release all the widget's resources when it fires
+		 * @return This builder
+		 */
 		public Builder<T, X> withUntil(Observable<?> until) {
 			theUntil = until;
 			return this;
 		}
 
+		/**
+		 * @param includedByDefault Whether the selector should initially include all selectable values
+		 * @return This builder
+		 */
 		public Builder<T, X> includeAllByDefault(boolean includedByDefault) {
 			isIncludedByDefault = includedByDefault;
 			return this;
 		}
 
+		/**
+		 * @param filterFormat Override for the table content control format
+		 * @return This builder
+		 */
 		public Builder<T, X> withFilterFormat(Format<TableContentControl> filterFormat) {
 			theFilterFormat = filterFormat;
 			return this;
@@ -646,6 +706,7 @@ public class ObservableValueSelector<T, X> extends JPanel {
 			return this;
 		}
 
+		/** @return The build value selector */
 		public ObservableValueSelector<T, X> build() {
 			return new ObservableValueSelector<>(theSourceRows.safe(ThreadConstraint.EDT, theUntil), //
 				theSourceColumns.safe(ThreadConstraint.EDT, theUntil), theDestColumns.safe(ThreadConstraint.EDT, theUntil),
@@ -653,6 +714,11 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		}
 	}
 
+	/**
+	 * Simple program to pop up an {@link ObservableValueSelector} to test layouts and functionality
+	 *
+	 * @param args Command-line arguments, ignored
+	 */
 	public static void main(String... args) {
 		ObservableCollection<Map<String, String>> rows = ObservableCollection
 			.build(TypeTokens.get().keyFor(Map.class).<Map<String, String>> parameterized(String.class, String.class)).onEdt().build();
@@ -744,16 +810,20 @@ public class ObservableValueSelector<T, X> extends JPanel {
 							TypeTokens.get().STRING, m -> m.getSource().toString()).withWidths(100, 200, 300)),
 					v -> v)
 				.build();
-			Window w = ObservableSwingUtils.buildUI()//
+			JFrame w = ObservableSwingUtils.buildUI()//
 				.systemLandF()//
 				.withTitle(ObservableValueSelector.class.getSimpleName() + " Tester")//
 				.withSize(1020, 900)//
 				.withCloseAction(JFrame.EXIT_ON_CLOSE)//
-				.withHContent(new JustifiedBoxLayout(false).mainJustified().crossJustified(),
+				.withHContent(new JustifiedBoxLayout(false).mainJustified().crossJustified().forceFill(true),
 					p -> p.fill().fillV()//
 					.addComponent(null, ovs, c -> c.fill().fillV()))
 				.run(null).getWindow();
+			w.setOpacity(1.0f);
 			w.setBackground(Colors.tomato);
+			if (w.getContentPane() instanceof JComponent)
+				((JComponent) w.getContentPane()).setOpaque(true);
+			w.getContentPane().setBackground(Colors.orange);
 		});
 	}
 }

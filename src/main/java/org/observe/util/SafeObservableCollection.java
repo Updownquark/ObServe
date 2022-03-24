@@ -3,8 +3,10 @@ package org.observe.util;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -14,6 +16,7 @@ import org.observe.collect.DefaultObservableCollection;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionBuilder;
 import org.observe.collect.ObservableCollectionEvent;
+import org.observe.util.swing.ObservableSwingUtils;
 import org.qommons.Causable;
 import org.qommons.Causable.CausableKey;
 import org.qommons.Identifiable;
@@ -50,8 +53,8 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	protected static class ElementRef<E> {
 		final ElementId sourceId;
 		ElementId synthId;
-		ElementRef<E> thePreviousPresentElement;
-		ElementRef<E> theNextPresentElement;
+		// ElementRef<E> thePreviousPresentElement;
+		// ElementRef<E> theNextPresentElement;
 		boolean isChanged;
 		boolean isRemoved;
 		private E value;
@@ -102,6 +105,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	 * the source collection
 	 */
 	protected final ObservableCollection<ElementRef<E>> theSyntheticCollection;
+	private final Map<ElementId, ElementRef<E>> theElementsBySource;
 
 	private final ThreadConstraint theThreadConstraint;
 	private Object theIdentity;
@@ -161,6 +165,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 				threading.invoke(this::doFlush);
 		});
 		theFlushLock = new AtomicBoolean();
+		theElementsBySource = new HashMap<>(Math.max(10, collection.size() * 4 / 3));
 		theAddedElements = new HashSet<>();
 		theRemovedElements = new ArrayList<>();
 		theChangedElements = new ArrayList<>();
@@ -255,7 +260,8 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 			ElementRef<E> found = findRef(evt.getElementId());
 			found.isRemoved = true;
 			theRemovedElements.add(found);
-			ElementRef<E> adj = found.thePreviousPresentElement;
+			// Adjust next/previous pointers
+			/*ElementRef<E> adj = found.thePreviousPresentElement;
 			if (adj == null)
 				adj = theSyntheticBacking.getTerminalElement(true).get();
 			while (adj != found) {
@@ -268,7 +274,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 			while (adj != found) {
 				adj.thePreviousPresentElement = found.thePreviousPresentElement;
 				adj = theSyntheticBacking.getAdjacentElement(adj.getSynthId(), false).get();
-			}
+			}*/
 			break;
 		case set:
 			if (theAddedElements.contains(evt.getElementId()))
@@ -288,6 +294,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	 * @return Whether anything was flushed, or also if the state of changes prevented flushing from occurring (should try again)
 	 */
 	protected boolean doFlush() {
+		ObservableSwingUtils.flushEQCache();
 		while (!theFlushLock.compareAndSet(false, true)) {
 			if (isFlushing)
 				return false;
@@ -302,8 +309,10 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 			// First, the removals
 			if (!theRemovedElements.isEmpty()) {
 				flushed = true;
-				for (ElementRef<E> removedEl : theRemovedElements)
+				for (ElementRef<E> removedEl : theRemovedElements) {
 					theSyntheticCollection.mutableElement(removedEl.getSynthId()).remove();
+					theElementsBySource.remove(removedEl.sourceId);
+				}
 				theRemovedElements.clear();
 			}
 
@@ -343,6 +352,9 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	}
 
 	private ElementRef<E> findRef(ElementId sourceId) {
+		return theElementsBySource.get(sourceId);
+		/* This code was (I thought) a pretty slick way of navigating a tree whose elements might not actually be in the source
+		 * It's a binary search, and it turns out quite slow for large collections, so I replaced it with a simple hash map.
 		ElementId begin = theSyntheticBacking.getTerminalElement(true).getElementId();
 		ElementId end = theSyntheticBacking.getTerminalElement(false).getElementId();
 		CollectionElement<ElementRef<E>> node = theSyntheticBacking.getRoot();
@@ -386,7 +398,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 					return null;
 			}
 		}
-		return null;
+		return null;*/
 	}
 
 	@Override
@@ -405,13 +417,14 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	 */
 	protected void initialize(ElementRef<E> element, ElementId synthId) {
 		// This is only called when no removed elements are present
+		theElementsBySource.put(element.sourceId, element);
 		element.setSynthId(synthId);
-		element.thePreviousPresentElement = CollectionElement.get(theSyntheticBacking.getAdjacentElement(synthId, false));
-		if (element.thePreviousPresentElement != null)
-			element.thePreviousPresentElement.theNextPresentElement = element;
-		element.theNextPresentElement = CollectionElement.get(theSyntheticBacking.getAdjacentElement(synthId, true));
-		if (element.theNextPresentElement != null)
-			element.theNextPresentElement.thePreviousPresentElement = element;
+		// element.thePreviousPresentElement = CollectionElement.get(theSyntheticBacking.getAdjacentElement(synthId, false));
+		// if (element.thePreviousPresentElement != null)
+		// element.thePreviousPresentElement.theNextPresentElement = element;
+		// element.theNextPresentElement = CollectionElement.get(theSyntheticBacking.getAdjacentElement(synthId, true));
+		// if (element.theNextPresentElement != null)
+		// element.theNextPresentElement.thePreviousPresentElement = element;
 	}
 
 	/**

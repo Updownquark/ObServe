@@ -168,9 +168,15 @@ public class WindowPopulation {
 			if (!EventQueue.isDispatchThread())
 				System.err.println(
 					"Calling panel population off of the EDT from " + BreakpointHere.getCodeLine(1) + "--could cause threading problems!!");
-			PanelPopulator<?, ?> populator = PanelPopulation.populateVPanel(null, theUntil);
+			PanelPopulator<?, ?> populator;
+			if (theWindow instanceof RootPaneContainer)
+				populator = PanelPopulation.populateVPanel(((RootPaneContainer) theWindow).getContentPane(), theUntil);
+			else
+				populator = PanelPopulation.populateVPanel(null, theUntil);
 			content.accept(populator);
-			return withContent(populator.getContainer());
+			if (!(theWindow instanceof RootPaneContainer))
+				withContent(populator.getContainer());
+			return (P) this;
 		}
 
 		@Override
@@ -178,9 +184,15 @@ public class WindowPopulation {
 			if (!EventQueue.isDispatchThread())
 				System.err.println(
 					"Calling panel population off of the EDT from " + BreakpointHere.getCodeLine(1) + "--could cause threading problems!!");
-			PanelPopulator<?, ?> populator = PanelPopulation.populateHPanel(null, layout, theUntil);
+			PanelPopulator<?, ?> populator;
+			if (theWindow instanceof RootPaneContainer)
+				populator = PanelPopulation.populateHPanel(((RootPaneContainer) theWindow).getContentPane(), layout, theUntil);
+			else
+				populator = PanelPopulation.populateHPanel(null, layout, theUntil);
 			content.accept(populator);
-			return withContent(populator.getContainer());
+			if (!(theWindow instanceof RootPaneContainer))
+				withContent(populator.getContainer());
+			return (P) this;
 		}
 
 		@Override
