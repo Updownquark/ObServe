@@ -1818,6 +1818,9 @@ public class QuickSwingParser {
 				throw new QonfigInterpretationException(
 					"Value " + selectionEx + ", type " + selection.getType() + " cannot be used for tree selection");
 		}
+		ObservableExpression leafX = session.getAttribute("leaf", ObservableExpression.class);
+		ValueContainer<SettableValue, SettableValue<Boolean>> leaf = leafX == null ? null
+			: leafX.evaluate(ModelTypes.Value.forType(boolean.class), wModel, cv);
 		treeMaker.configure(wModel, root);
 		return new AbstractQuickComponentDef(element) {
 			@Override
@@ -1835,6 +1838,20 @@ public class QuickSwingParser {
 						return children.apply(nodeModel);
 					}, tree -> {
 						modify(tree.fill().fillV(), builder);
+						if (leaf != null) {
+							tree.withLeafTest(value -> {
+								SettableValue<T> nodeValue = SettableValue.asSettable(ObservableValue.of(valueType, value),
+									__ -> "Can't modify here");
+								// TODO Just hacking this one in here
+								SettableValue<BetterList<T>> pathValue = SettableValue
+									.asSettable(ObservableValue.of(pathType, BetterList.of(value)), __ -> "Can't modify here");
+								ModelSetInstance nodeModel = wModel.wrap(builder.getModels())//
+									.with(pathPlaceholder, pathValue)//
+									.with(cellPlaceholder, nodeValue)//
+									.build();
+								return leaf.apply(nodeModel).get();
+							});
+						}
 						if (treeColumn != null)
 							tree.withRender(treeColumn.apply(builder.getModels()));
 						if (singleSelectionV != null)

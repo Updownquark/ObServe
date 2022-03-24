@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -415,6 +416,11 @@ public class DefaultExpressoParser implements ExpressoParser {
 			return base;
 		case "primaryNoNewArray":
 		case "primaryNoNewArray_lfno_primary":
+			if (expression.getComponents().size() == 3 && expression.getComponents().getFirst().getText().equals("(")) {
+				// Parenthetical
+				return _parse(expression.getComponents().get(1));
+			}
+			//$FALL-THROUGH$
 		case "primaryNoNewArray_lfno_arrayAccess":
 		case "primaryNoNewArray_lfno_primary_lfno_arrayAccess_lfno_primary":
 			//					String lastName = expression.getComponents().getLast().toString();
@@ -508,22 +514,9 @@ public class DefaultExpressoParser implements ExpressoParser {
 		case "preIncrementExpression":
 		case "preDecrementExpression":
 		case "unaryExpressionNotPlusMinus":
-			//		if (expression.getComponents().size() != 2)
-			//			throw new CompilationException(expression,
-			//				"Unrecognized expression with " + expression.getComponents().size() + " components");
-			//		operator = expression.getComponents().getFirst().toString();
-			//		ex = null;
-			//		for (TypeToken<?> unaryTargetType : theOperations.getUnaryTargetTypes(targetType, operator, true)) {
-			//			try {
-			//				TypedStatement<E, ?> operand = evaluate(expression.getComponents().getLast(), env, unaryTargetType);
-			//				UnaryOperation<?, X> op = theOperations.unaryOperation(operand.getReturnType(), operator, true);
-			//				return unaryOperation(expression, (UnaryOperation<Object, X>) op, (TypedStatement<E, Object>) operand);
-			//			} catch (CompilationException e) {
-			//				if (ex == null)
-			//					ex = e;
-			//			}
-			//		}
-			//		throw ex;
+			operator = expression.getComponents().getFirst().getText();
+			ObservableExpression operand = _parse(expression.getComponents().getLast());
+			return new UnaryOperator(operator, operand, true);
 		case "postfixExpression":
 		case "postIncrementExpression":
 		case "postDecrementExpression":
@@ -641,6 +634,86 @@ public class DefaultExpressoParser implements ExpressoParser {
 		return names;
 	}
 
+	public static class UnaryOperator implements ObservableExpression {
+		private final String theOperator;
+		private final ObservableExpression theOperand;
+		private final boolean isPrefix;
+
+		public UnaryOperator(String operator, ObservableExpression operand, boolean prefix) {
+			theOperator = operator;
+			theOperand = operand;
+			isPrefix = prefix;
+		}
+
+		public String getOperator() {
+			return theOperator;
+		}
+
+		public ObservableExpression getOperand() {
+			return theOperand;
+		}
+
+		public boolean isPrefix() {
+			return isPrefix;
+		}
+
+		@Override
+		public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ObservableModelSet models,
+			ClassView classView) throws QonfigInterpretationException {
+			if (type.getModelType() != ModelTypes.Value)
+				throw new QonfigInterpretationException("Cannot evaluate a unary operator as anything but a value: " + type);
+			switch (theOperator) {
+			case "!":
+				if (TypeTokens.get().isAssignable(type.getType(0), TypeTokens.get().BOOLEAN)) {
+					ValueContainer<SettableValue, SettableValue<Boolean>> op = theOperand.evaluate(ModelTypes.Value.forType(boolean.class),
+						models, classView);
+					return (ValueContainer<M, MV>) new ValueContainer<SettableValue, SettableValue<Boolean>>() {
+						@Override
+						public ModelInstanceType<SettableValue, SettableValue<Boolean>> getType() {
+							return op.getType();
+						}
+
+						@Override
+						public SettableValue<Boolean> get(ModelSetInstance models) {
+							return op.get(models).transformReversible(boolean.class, tx -> tx
+								.map(LambdaUtils.printableFn(b -> !b, "!", "!")).withReverse(LambdaUtils.printableFn(b -> !b, "!", "!")));
+						}
+					};
+				}
+			}
+			throw new QonfigInterpretationException("This unary operator is not implemented");
+		}
+
+		@Override
+		public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ObservableModelSet models,
+			ClassView classView) throws QonfigInterpretationException {
+			throw new QonfigInterpretationException("Not supported for unary operators");
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(theOperator, theOperand, isPrefix);
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (obj == this)
+				return true;
+			else if (!(obj instanceof UnaryOperator))
+				return false;
+			UnaryOperator other = (UnaryOperator) obj;
+			return theOperator.equals(other.theOperator) && theOperand.equals(other.theOperand) && isPrefix == other.isPrefix;
+		}
+
+		@Override
+		public String toString() {
+			if (isPrefix)
+				return theOperator + theOperand;
+			else
+				return theOperand + theOperator;
+		}
+	}
+
 	public static class BinaryOperator implements ObservableExpression {
 		private final String theOperator;
 		private final ObservableExpression theLeft;
@@ -701,6 +774,8 @@ public class DefaultExpressoParser implements ExpressoParser {
 				// boolean
 				throw new QonfigInterpretationException("Binary operator '" + theOperator + "' is not implemented yet");
 			case "+":
+				// TODO This is very wrong. Should be querying the arguments to see what the return type should be, not the result.
+				// This code should go down in the mathOp() function as a special case of the plus operator.
 				if (TypeTokens.getRawType(type.getType(0)) == String.class) {
 					return (ValueContainer<M, MV>) appendString(//
 						theLeft.evaluate(
