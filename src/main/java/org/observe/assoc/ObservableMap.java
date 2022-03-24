@@ -490,6 +490,17 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 	}
 
 	/**
+	 * Creates a builder to build an unconstrained {@link ObservableMap}
+	 *
+	 * @param keyType The key type for the map
+	 * @param valueType The value type for the map
+	 * @return The builder to build the map
+	 */
+	static <K, V> Builder<K, V, ?> build(Class<K> keyType, Class<V> valueType) {
+		return build(TypeTokens.get().of(keyType), TypeTokens.get().of(valueType));
+	}
+
+	/**
 	 * Builds an unconstrained {@link ObservableMap}
 	 *
 	 * @param <K> The key type for the map
@@ -717,10 +728,18 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 
 		public DefaultObservableMap(TypeToken<K> keyType, TypeToken<V> valueType, Equivalence<? super K> keyEquivalence,
 			ObservableCollection<Map.Entry<K, V>> entries) {
+			if (keyEquivalence == null)
+				throw new NullPointerException();
 			theValueType = valueType;
 			if (keyEquivalence instanceof Equivalence.SortedEquivalence) {
 				Comparator<? super K> compare = ((Equivalence.SortedEquivalence<? super K>) keyEquivalence).comparator();
-				theEntries = entries.flow().distinctSorted((entry1, entry2) -> compare.compare(entry1.getKey(), entry2.getKey()), true)
+				if (compare == null)
+					throw new NullPointerException();
+				theEntries = entries.flow().distinctSorted((entry1, entry2) -> {
+					entry1.getKey();
+					entry2.getKey();
+					return compare.compare(entry1.getKey(), entry2.getKey());
+				}, true)
 					.collect();
 			} else
 				theEntries = entries.flow().distinct().collect();
@@ -815,8 +834,12 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 		@Override
 		public MapEntryHandle<K, V> getOrPutEntry(K key, Function<? super K, ? extends V> value, ElementId afterKey, ElementId beforeKey,
 			boolean first, Runnable added) {
-			CollectionElement<Map.Entry<K, V>> entryEl = theEntries.getOrAdd(new SimpleMapEntry<>(key, value.apply(key)), afterKey,
-				beforeKey, first, added);
+			SimpleMapEntry<K, V> entry = new SimpleMapEntry<>(key, null, true);
+			CollectionElement<Map.Entry<K, V>> entryEl = theEntries.getOrAdd(entry, afterKey, beforeKey, first, () -> {
+				entry.setValue(value.apply(key));
+				if (added != null)
+					added.run();
+			});
 			return entryEl == null ? null : handleFor(entryEl);
 		}
 

@@ -137,6 +137,18 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 	}
 
 	/**
+	 * Creates a builder to build an unconstrained {@link ObservableSortedMap}
+	 *
+	 * @param keyType The key type for the map
+	 * @param valueType The value type for the map
+	 * @param sorting The sorting for the map's keys
+	 * @return The builder to build the map
+	 */
+	static <K, V> Builder<K, V, ?> build(Class<K> keyType, Class<V> valueType, Comparator<? super K> sorting) {
+		return build(TypeTokens.get().of(keyType), TypeTokens.get().of(valueType), sorting);
+	}
+
+	/**
 	 * Builds an unconstrained {@link ObservableMap}
 	 *
 	 * @param <K> The key type for the map
@@ -158,6 +170,11 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 		@Override
 		public B withEquivalence(Equivalence<? super K> equivalence) {
 			throw new UnsupportedOperationException("Equivalence is determined by the comparator");
+		}
+
+		@Override
+		protected Comparator<? super K> getSorting() {
+			return getEquivalence().comparator();
 		}
 
 		@Override
