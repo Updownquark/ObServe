@@ -1,22 +1,83 @@
 package org.observe.util;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 
 import org.observe.Observable;
 import org.observe.util.ModelType.ModelInstanceType;
 import org.qommons.BreakpointHere;
 import org.qommons.Named;
 import org.qommons.QommonsUtils;
+import org.qommons.config.CustomValueType;
 import org.qommons.config.QonfigInterpreter.QonfigInterpretationException;
+import org.qommons.config.QonfigParseSession;
+import org.qommons.config.QonfigToolkit;
 import org.qommons.ex.ExConsumer;
 
 public interface ObservableModelSet {
+	interface NameChecker {
+		void checkName(String name) throws IllegalArgumentException;
+	}
+
+	public static class JavaNameChecker implements NameChecker {
+		public static final Pattern IDENTIFIER_PATTERN = Pattern.compile("^([a-zA-Z_$][a-zA-Z\\d_$]*)$");
+		public static final Set<String> JAVA_KEY_WORDS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(//
+			"abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class", "const", "continue", //
+			"default", "do", "double", "else", "enum", "extends", "final", "finally", "float", "for", "goto", //
+			"if", "implements", "import", "instanceof", "int", "interface", "long", "native", "new", //
+			"package", "private", "protected", "public", "return", "short", "static", "strictfp", "super", "switch", "synchronized", //
+			"this", "throw", "throws", "transient", "try", "void", "volatile", "while")));
+
+		public static void checkJavaName(String name) throws IllegalArgumentException {
+			if (!IDENTIFIER_PATTERN.matcher(name).matches())
+				throw new IllegalArgumentException("'" + name + "' is not a valid identifier");
+			else if (JAVA_KEY_WORDS.contains(name))
+				throw new IllegalArgumentException("'" + name + "' is a reserved word and cannot be used as an identifier");
+		}
+
+		@Override
+		public void checkName(String name) throws IllegalArgumentException {
+			checkJavaName(name);
+		}
+
+		@Override
+		public String toString() {
+			return "Java Name Checker";
+		}
+	}
+
+	public static final JavaNameChecker JAVA_NAME_CHECKER = new JavaNameChecker();
+	public static final CustomValueType JAVA_IDENTIFIER_TYPE = new CustomValueType() {
+		@Override
+		public String getName() {
+			return "identifier";
+		}
+
+		@Override
+		public Object parse(String value, QonfigToolkit tk, QonfigParseSession session) {
+			try {
+				JavaNameChecker.checkJavaName(value);
+			} catch (IllegalArgumentException e) {
+				session.withError(e.getMessage());
+			}
+			return value;
+		}
+
+		@Override
+		public boolean isInstance(Object value) {
+			return value instanceof String;
+		}
+	};
+
 	interface ValueContainer<M, MV extends M> extends Function<ModelSetInstance, MV> {
 		ModelInstanceType<M, MV> getType();
 
@@ -74,6 +135,8 @@ public interface ObservableModelSet {
 
 	ValueContainer<?, ?> get(String path, boolean required) throws QonfigInterpretationException;
 
+	NameChecker getNameChecker();
+
 	default <M> ValueContainer<M, ?> get(String path, ModelType<M> type) throws QonfigInterpretationException {
 		ValueContainer<?, ?> thing = get(path, true);
 		if (thing.getType().getModelType() != type)
@@ -91,12 +154,12 @@ public interface ObservableModelSet {
 
 	ModelSetInstance createInstance(ExternalModelSet extModel, Observable<?> until);
 
-	public static Builder build() {
-		return new Default.DefaultBuilder(null, null, "");
+	public static Builder build(NameChecker nameChecker) {
+		return new Default.DefaultBuilder(null, null, "", nameChecker);
 	}
 
-	public static ExternalModelSetBuilder buildExternal() {
-		return new ExternalModelSetBuilder(null, "");
+	public static ExternalModelSetBuilder buildExternal(NameChecker nameChecker) {
+		return new ExternalModelSetBuilder(null, "", nameChecker);
 	}
 
 	public abstract class ModelSetInstance {
@@ -115,17 +178,24 @@ public interface ObservableModelSet {
 		final ExternalModelSet theRoot;
 		private final String thePath;
 		final Map<String, Placeholder> theThings;
+		/** Checker for model and value names */
+		protected final NameChecker theNameChecker;
 
-		ExternalModelSet(ExternalModelSet root, String path, Map<String, Placeholder> things) {
+		ExternalModelSet(ExternalModelSet root, String path, Map<String, Placeholder> things, NameChecker nameChecker) {
 			if (!path.isEmpty() && path.charAt(0) == '.')
 				BreakpointHere.breakpoint();
 			theRoot = root == null ? this : root;
 			thePath = path;
 			theThings = things;
+			theNameChecker=nameChecker;
 		}
 
 		public String getPath() {
 			return thePath;
+		}
+
+		public NameChecker getNameChecker() {
+			return theNameChecker;
 		}
 
 		public <M> M get(String path, ModelInstanceType<?, ?> type) throws QonfigInterpretationException {
@@ -134,6 +204,7 @@ public interface ObservableModelSet {
 				ExternalModelSet subModel = theRoot.getSubModel(path.substring(0, dot));
 				return subModel.get(path.substring(dot + 1), type);
 			}
+			theNameChecker.checkName(path);
 			Placeholder thing = theThings.get(path);
 			if (thing == null)
 				throw new QonfigInterpretationException("No such " + type + " declared: '" + pathTo(path) + "'");
@@ -150,6 +221,7 @@ public interface ObservableModelSet {
 				modelName = path.substring(0, dot);
 			} else
 				modelName = path;
+			theNameChecker.checkName(modelName);
 			Placeholder subModel = theThings.get(modelName);
 			if (subModel == null)
 				throw new QonfigInterpretationException("No such sub-model declared: '" + pathTo(modelName) + "'");
@@ -202,12 +274,13 @@ public interface ObservableModelSet {
 	}
 
 	public class ExternalModelSetBuilder extends ExternalModelSet {
-		ExternalModelSetBuilder(ExternalModelSetBuilder root, String path) {
-			super(root, path, new LinkedHashMap<>());
+		ExternalModelSetBuilder(ExternalModelSetBuilder root, String path, NameChecker nameChecker) {
+			super(root, path, new LinkedHashMap<>(), nameChecker);
 		}
 
 		public <M, MV extends M> ExternalModelSetBuilder with(String name, ModelInstanceType<M, MV> type, MV item)
 			throws QonfigInterpretationException {
+			theNameChecker.checkName(name);
 			if (theThings.containsKey(name))
 				throw new QonfigInterpretationException(
 					"A value of type " + theThings.get(name).type + " has already been added as '" + name + "'");
@@ -217,20 +290,22 @@ public interface ObservableModelSet {
 
 		public ExternalModelSetBuilder withSubModel(String name,
 			ExConsumer<ExternalModelSetBuilder, QonfigInterpretationException> modelBuilder) throws QonfigInterpretationException {
+			theNameChecker.checkName(name);
 			if (theThings.containsKey(name))
 				throw new QonfigInterpretationException(
 					"A value of type " + theThings.get(name).type + " has already been added as '" + name + "'");
-			ExternalModelSetBuilder subModel = new ExternalModelSetBuilder((ExternalModelSetBuilder) theRoot, pathTo(name));
+			ExternalModelSetBuilder subModel = new ExternalModelSetBuilder((ExternalModelSetBuilder) theRoot, pathTo(name), theNameChecker);
 			theThings.put(name, new ExternalModelSet.Placeholder(ModelTypes.Model.instance(), subModel));
 			modelBuilder.accept(subModel);
 			return this;
 		}
 
 		public ExternalModelSetBuilder addSubModel(String name) throws QonfigInterpretationException {
+			theNameChecker.checkName(name);
 			if (theThings.containsKey(name))
 				throw new QonfigInterpretationException(
 					"A value of type " + theThings.get(name).type + " has already been added as '" + name + "'");
-			ExternalModelSetBuilder subModel = new ExternalModelSetBuilder((ExternalModelSetBuilder) theRoot, pathTo(name));
+			ExternalModelSetBuilder subModel = new ExternalModelSetBuilder((ExternalModelSetBuilder) theRoot, pathTo(name), theNameChecker);
 			theThings.put(name, new ExternalModelSet.Placeholder(ModelTypes.Model.instance(), subModel));
 			return subModel;
 		}
@@ -241,7 +316,7 @@ public interface ObservableModelSet {
 
 		private ExternalModelSet _build(ExternalModelSet root, String path) {
 			Map<String, ExternalModelSet.Placeholder> things = new LinkedHashMap<>(theThings.size() * 3 / 2 + 1);
-			ExternalModelSet model = new ExternalModelSet(root, path, Collections.unmodifiableMap(things));
+			ExternalModelSet model = new ExternalModelSet(root, path, Collections.unmodifiableMap(things), theNameChecker);
 			if (root == null)
 				root = model;
 			for (Map.Entry<String, ExternalModelSet.Placeholder> thing : theThings.entrySet()) {
@@ -272,19 +347,26 @@ public interface ObservableModelSet {
 		protected final String thePath;
 		protected final Map<String, Placeholder<?, ?>> theThings;
 		protected final Function<ModelSetInstance, ?> theModelConfiguration;
+		protected final NameChecker theNameChecker;
 
 		protected Default(Default root, Default parent, String path, Map<String, Placeholder<?, ?>> things,
-			Function<ModelSetInstance, ?> modifiableConfiguration) {
+			Function<ModelSetInstance, ?> modifiableConfiguration, NameChecker nameChecker) {
 			theRoot = root == null ? this : root;
 			theParent = parent;
 			thePath = path;
 			theThings = things;
 			theModelConfiguration = modifiableConfiguration;
+			theNameChecker = nameChecker;
 		}
 
 		@Override
 		public Default getParent() {
 			return theParent;
+		}
+
+		@Override
+		public NameChecker getNameChecker() {
+			return theNameChecker;
 		}
 
 		@Override
@@ -294,6 +376,7 @@ public interface ObservableModelSet {
 				Default subModel = theRoot.getSubModel(path.substring(0, dot), required);
 				return subModel == null ? null : subModel.get(path.substring(dot + 1), required);
 			}
+			theNameChecker.checkName(path);
 			ValueContainer<?, ?> thing = theThings.get(path);
 			if (thing == null && theRoot != this) {
 				Placeholder<?, ?> p = theRoot.theThings.get(path);
@@ -312,6 +395,7 @@ public interface ObservableModelSet {
 				modelName = path.substring(0, dot);
 			} else
 				modelName = path;
+			theNameChecker.checkName(modelName);
 			Placeholder<?, ?> subModel = theThings.get(modelName);
 			if (subModel == null) {
 				if (required)
@@ -464,8 +548,8 @@ public interface ObservableModelSet {
 		static class DefaultBuilder extends Default implements Builder {
 			private Function<ModelSetInstance, ?> theModelConfiguration;
 
-			private DefaultBuilder(DefaultBuilder root, DefaultBuilder parent, String path) {
-				super(root, parent, path, new LinkedHashMap<>(), null);
+			private DefaultBuilder(DefaultBuilder root, DefaultBuilder parent, String path, NameChecker nameChecker) {
+				super(root, parent, path, new LinkedHashMap<>(), null, nameChecker);
 			}
 
 			@Override
@@ -476,6 +560,7 @@ public interface ObservableModelSet {
 
 			@Override
 			public <M, MV extends M> Builder with(String name, ModelInstanceType<M, MV> type, ValueGetter<MV> getter) {
+				theNameChecker.checkName(name);
 				if (theThings.containsKey(name))
 					throw new IllegalArgumentException(
 						"A value of type " + theThings.get(name).getType() + " has already been added as '" + name + "'");
@@ -485,9 +570,10 @@ public interface ObservableModelSet {
 
 			@Override
 			public Builder createSubModel(String name) {
+				theNameChecker.checkName(name);
 				Placeholder<?, ?> thing = theThings.get(name);
 				if (thing == null) {
-					DefaultBuilder subModel = new DefaultBuilder((DefaultBuilder) theRoot, this, pathTo(name));
+					DefaultBuilder subModel = new DefaultBuilder((DefaultBuilder) theRoot, this, pathTo(name), theNameChecker);
 					theThings.put(name, new PlaceholderImpl<>(pathTo(name), ModelTypes.Model.instance(), null, subModel));
 					return subModel;
 				} else if (thing.getModel() != null)
@@ -520,7 +606,7 @@ public interface ObservableModelSet {
 
 			protected Default create(Default root, Default parent, String path, Map<String, Placeholder<?, ?>> things,
 				Function<ModelSetInstance, ?> modelConfiguration) {
-				return new Default(root, parent, path, Collections.unmodifiableMap(things), modelConfiguration);
+				return new Default(root, parent, path, Collections.unmodifiableMap(things), modelConfiguration, theNameChecker);
 			}
 		}
 	}
@@ -554,7 +640,7 @@ public interface ObservableModelSet {
 		DefaultWrapped(DefaultWrapped root, DefaultWrapped parent, String path, Map<String, Placeholder<?, ?>> things,
 			ObservableModelSet wrapped, Function<ModelSetInstance, ?> modelConfiguration,
 			Map<String, ModelValuePlaceholderImpl<?, ?>> placeholders) {
-			super(root, parent, path, things, modelConfiguration);
+			super(root, parent, path, things, modelConfiguration, wrapped.getNameChecker());
 			theWrapped = wrapped;
 			thePlaceholders = placeholders;
 		}
@@ -562,7 +648,7 @@ public interface ObservableModelSet {
 		@Override
 		public ValueContainer<?, ?> get(String path, boolean required) throws QonfigInterpretationException {
 			ValueContainer<?, ?> thing = null;
-			if (path.indexOf(',') < 0)
+			if (path.indexOf('.') < 0)
 				thing = thePlaceholders.get(path);
 			if (thing == null)
 				thing = super.get(path, false);
@@ -586,15 +672,14 @@ public interface ObservableModelSet {
 			private final Map<String, ModelValuePlaceholderImpl<?, ?>> thePlaceholders;
 
 			public DWBuilder(ObservableModelSet wrapped) {
-				super(null, null, ""); // Currently, wrapped models are only supported for the root
+				super(null, null, "", wrapped.getNameChecker()); // Currently, wrapped models are only supported for the root
 				theWrapped = wrapped;
 				thePlaceholders = new LinkedHashMap<>();
 			}
 
 			@Override
 			public <M, MV extends M> ModelValuePlaceholder<M, MV> withPlaceholder(String name, ModelInstanceType<M, MV> type) {
-				if (name.indexOf(',') >= 0)
-					throw new IllegalArgumentException("Bad variable name: " + name);
+				theNameChecker.checkName(name);
 				if (thePlaceholders.get(name) != null)
 					throw new IllegalArgumentException("A placeholder named '" + name + "' is already added");
 				ModelValuePlaceholderImpl<M, MV> placeholder = new ModelValuePlaceholderImpl<>(name, type);

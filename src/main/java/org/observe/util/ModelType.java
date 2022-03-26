@@ -309,13 +309,14 @@ public abstract class ModelType<M> implements Named {
 			if (modelConverter == null)
 				return null;
 			ModelInstanceConverter<M, M2> firstConverter = modelConverter.convert(this, target);
-			ModelConverter<M2, M2> selfConverter = (ModelConverter<M2, M2>) SELF_CONVERSION_TARGETS.get(target.getModelType());
-			ModelInstanceConverter<M2, M2> selfInstConverter = selfConverter == null ? null
-				: selfConverter.convert(firstConverter.getType(), target);
-			if (selfInstConverter != null)
-				return firstConverter.and(selfInstConverter);
-			else
+			if (firstConverter == null)
+				return null;
+			if (firstConverter.getType().equals(target))
 				return firstConverter;
+			ModelInstanceConverter<M2, M2> secondConverter = firstConverter.getType().convert(target);
+			if (secondConverter == null)
+				return null;
+			return firstConverter.and(secondConverter);
 		}
 
 		public <M2, MV2 extends M2> ValueContainer<M2, MV2> as(ValueContainer<M, MV> source, ModelInstanceType<M2, MV2> targetType)

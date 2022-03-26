@@ -1017,6 +1017,25 @@ public class ObservableSwingUtils {
 		ImageIcon icon = iconRef == null ? null : iconRef.get();
 		if (icon == null) {
 			URL searchUrl = (clazz != null ? clazz : ObservableSwingUtils.class).getResource(location);
+			if (searchUrl == null) {
+				String otherLocation;
+				if (location.startsWith("/"))
+					otherLocation = location.substring(1);
+				else
+					otherLocation = "/" + location;
+				searchUrl = (clazz != null ? clazz : ObservableSwingUtils.class).getResource(otherLocation);
+			}
+			if (searchUrl == null && clazz != null) {
+				searchUrl = ObservableSwingUtils.class.getResource(location);
+				if (searchUrl == null) {
+					String otherLocation;
+					if (location.startsWith("/"))
+						otherLocation = location.substring(1);
+					else
+						otherLocation = "/" + location;
+					searchUrl = ObservableSwingUtils.class.getResource(otherLocation);
+				}
+			}
 			icon = searchUrl != null ? new ImageIcon(searchUrl) : null;
 			iconRef = new WeakReference<>(icon);
 			CACHED_ICONS.put(key, iconRef);

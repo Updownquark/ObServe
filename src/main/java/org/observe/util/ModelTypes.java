@@ -116,6 +116,11 @@ public class ModelTypes {
 		}
 
 		@Override
+		public ModelInstanceType<ObservableAction, ObservableAction<?>> any() {
+			return (ModelInstanceType<ObservableAction, ObservableAction<?>>) super.any();
+		}
+
+		@Override
 		public <V> ModelInstanceType.SingleTyped<ObservableAction, V, ObservableAction<V>> forType(TypeToken<V> type) {
 			return (ModelInstanceType.SingleTyped<ObservableAction, V, ObservableAction<V>>) super.forType(type);
 		}

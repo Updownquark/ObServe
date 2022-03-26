@@ -1633,7 +1633,12 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 		}
 
 		private T get(ObservableValue<? extends T> value) {
-			return value != null ? value.get() : theDefaultValue.get();
+			if (value != null)
+				return value.get();
+			else if (theDefaultValue != null)
+				return theDefaultValue.get();
+			else
+				return null;
 		}
 
 		@Override

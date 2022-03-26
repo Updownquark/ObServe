@@ -27,14 +27,15 @@ public class QuickTests {
 		theParser = new DefaultQonfigParser()//
 			.withToolkit(ObservableModelQonfigParser.TOOLKIT.get(), QuickSwingParser.CORE.get(), QuickSwingParser.BASE.get(),
 				QuickSwingParser.SWING.get());
-		QonfigInterpreter.Builder builder = QonfigInterpreter.build(QuickSwingParser.BASE.get(), QuickSwingParser.SWING.get());
+		QonfigInterpreter.Builder builder = QonfigInterpreter.build(QuickTests.class, QuickSwingParser.BASE.get(),
+			QuickSwingParser.SWING.get());
 		new QuickSwingParser().configureInterpreter(builder);
 		theInterpreter = builder.build();
 	}
 
 	@Test
 	public void testSuperBasic() throws IOException, QonfigParseException, QonfigInterpretationException {
-		ObservableModelSet.ExternalModelSetBuilder extModels = ObservableModelSet.buildExternal();
+		ObservableModelSet.ExternalModelSetBuilder extModels = ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER);
 		extModels.addSubModel("extModel").with("value1", ModelTypes.Value.forType(double.class),
 			SettableValue.build(double.class).withDescription("extModel.value1").withValue(42.0).build());
 		testQuick("super-basic.qml", extModels.build());

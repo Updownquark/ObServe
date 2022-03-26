@@ -510,6 +510,28 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	}
 
 	/**
+	 * @param <T> The type of the value
+	 * @param type The type of the value
+	 * @param value The value
+	 * @param disabled The {@link SettableValue#isEnabled() disabled} message
+	 * @return An unmodifiable settable value
+	 */
+	public static <T> SettableValue<T> of(TypeToken<T> type, T value, String disabled) {
+		return asSettable(ObservableValue.of(type, value), LambdaUtils.constantFn(disabled, disabled, disabled));
+	}
+
+	/**
+	 * @param <T> The type of the value
+	 * @param type The type of the value
+	 * @param value The value
+	 * @param disabled The {@link SettableValue#isEnabled() disabled} message
+	 * @return An unmodifiable settable value
+	 */
+	public static <T> SettableValue<T> of(Class<T> type, T value, String disabled) {
+		return of(TypeTokens.get().of(type), value, disabled);
+	}
+
+	/**
 	 * Implements {@link SettableValue#unsettable()}
 	 *
 	 * @param <T> The type of the value

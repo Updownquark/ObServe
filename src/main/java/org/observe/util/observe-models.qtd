@@ -2,10 +2,10 @@
 
 <qonfig-def name="observe" root="models">
 	<value-types>
-		<pattern name="int">\d+</pattern> <!-- Positive integer -->
+		<pattern name="int">\d{1,7}</pattern> <!-- Positive integer -->
 		<pattern name="float">[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?</pattern>
-		<pattern name="variable">^[a-zA-Z_$][a-zA-Z_$0-9]*</pattern>
 
+		<external name="identifier" />
 		<external name="expression" />
 		<external name="expression-or-string" />
 	</value-types>
@@ -92,6 +92,7 @@
 			<attribute name="relative-to" type="expression-or-string" specify="optional" />
 		</add-on>
 		<add-on name="regex-format" inherits="format-type" requires="format" />
+		<add-on name="regex-format-string" inherits="format-type" requires="format" />
 		<add-on name="validate-type" abstract="true" />
 		<add-on name="regex-validation" inherits="validate-type">
 			<attribute name="pattern" type="expression-or-string" />
@@ -119,7 +120,7 @@
 		<!-- Values and transformations -->
 		<element-def name="abst-model-value" abstract="true">
 			<attribute name="type" type="string" specify="required" />
-			<attribute name="name" type="variable" specify="required" />
+			<attribute name="name" type="identifier" specify="required" />
 		</element-def>
 		<element-def name="ext-model-value" extends="abst-model-value" abstract="true" />
 		<element-def name="ext-event" extends="ext-model-value" />
@@ -264,7 +265,7 @@
 		</element-def>
 
 		<element-def name="abst-model" abstract="true">
-			<attribute name="name" type="string" specify="required" />
+			<attribute name="name" type="identifier" specify="required" />
 			<child-def name="value" type="abst-model-value" min="0" max="inf" />
 		</element-def>
 		<element-def name="ext-model" extends="abst-model">

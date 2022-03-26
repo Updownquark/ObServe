@@ -742,6 +742,10 @@ public class DefaultExpressoParser implements ExpressoParser {
 			ClassView classView) throws QonfigInterpretationException {
 			if (type.getModelType() != ModelTypes.Value)
 				throw new QonfigInterpretationException("Cannot evaluate a binary operator as anything but a value: " + type);
+			ValueContainer<SettableValue, SettableValue<?>> left = theLeft.evaluate(ModelTypes.Value.any(), models, classView);
+			ValueContainer<SettableValue, SettableValue<?>> right = theRight.evaluate(ModelTypes.Value.any(), models, classView);
+			TypeToken<?> resultType = TypeTokens.get().getCommonType(left.getType().getType(0), right.getType().getType(0));
+			Class<?> rawResult = TypeTokens.get().unwrap(TypeTokens.getRawType(resultType));
 			// & | && || ^ + - * / % == != < > <= >= << >> >>>
 			Class<?> leftType;
 			switch (theOperator) {
@@ -749,12 +753,6 @@ public class DefaultExpressoParser implements ExpressoParser {
 			case "|":
 			case "^": {
 				// int, long, or boolean args, return type same
-				ValueContainer<SettableValue, SettableValue<?>> left = theLeft
-					.evaluate((ModelInstanceType<SettableValue, SettableValue<?>>) type, models, classView);
-				ValueContainer<SettableValue, SettableValue<?>> right = theRight
-					.evaluate((ModelInstanceType<SettableValue, SettableValue<?>>) type, models, classView);
-				TypeToken<?> resultType = TypeTokens.get().getCommonType(left.getType().getType(0), right.getType().getType(0));
-				Class<?> rawResult = TypeTokens.get().unwrap(TypeTokens.getRawType(resultType));
 				if (rawResult == boolean.class)
 					return (ValueContainer<M, MV>) logicalOp((ValueContainer<SettableValue, SettableValue<Boolean>>) (Function<?, ?>) left,
 						(ValueContainer<SettableValue, SettableValue<Boolean>>) (Function<?, ?>) right);
@@ -771,19 +769,17 @@ public class DefaultExpressoParser implements ExpressoParser {
 			}
 			case "&&":
 			case "||":
-				// boolean
-				throw new QonfigInterpretationException("Binary operator '" + theOperator + "' is not implemented yet");
+				if (!TypeTokens.get().isAssignable(TypeTokens.get().BOOLEAN, resultType))
+					throw new QonfigInterpretationException("Cannot apply binary operator '" + theOperator + "' to arguments of type "
+						+ left.getType().getType(0) + " and " + right.getType().getType(0));
+				return (ValueContainer<M, MV>) logicalOp((ValueContainer<SettableValue, SettableValue<Boolean>>) (Function<?, ?>) left,
+					(ValueContainer<SettableValue, SettableValue<Boolean>>) (Function<?, ?>) right);
 			case "+":
-				// TODO This is very wrong. Should be querying the arguments to see what the return type should be, not the result.
-				// This code should go down in the mathOp() function as a special case of the plus operator.
-				if (TypeTokens.getRawType(type.getType(0)) == String.class) {
+				if (TypeTokens.getRawType(left.getType().getType(0)) == String.class
+				|| TypeTokens.getRawType(right.getType().getType(0)) == String.class) {
 					return (ValueContainer<M, MV>) appendString(//
-						theLeft.evaluate(
-							(ModelInstanceType<SettableValue, SettableValue<Object>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any(),
-							models, classView), //
-						theRight.evaluate(
-							(ModelInstanceType<SettableValue, SettableValue<Object>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any(),
-							models, classView));
+						(ValueContainer<SettableValue, SettableValue<Object>>) (ValueContainer<?, ?>) left, //
+						(ValueContainer<SettableValue, SettableValue<Object>>) (ValueContainer<?, ?>) right);
 				}
 				//$FALL-THROUGH$
 			case "-":
@@ -791,14 +787,86 @@ public class DefaultExpressoParser implements ExpressoParser {
 			case "/":
 			case "%":
 				// number
-				ValueContainer<SettableValue, SettableValue<?>> left = theLeft
-				.evaluate((ModelInstanceType<SettableValue, SettableValue<?>>) type, models, classView);
-				ValueContainer<SettableValue, SettableValue<?>> right = theRight
-					.evaluate((ModelInstanceType<SettableValue, SettableValue<?>>) type, models, classView);
 				return (ValueContainer<M, MV>) mathOp((ValueContainer<SettableValue, SettableValue<Number>>) (Function<?, ?>) left,
 					(ValueContainer<SettableValue, SettableValue<Number>>) (Function<?, ?>) right);
 			case "==":
 			case "!=":
+				if (!TypeTokens.get().isAssignable(resultType, TypeTokens.get().BOOLEAN))
+					throw new QonfigInterpretationException(
+						"Cannot assign boolean result of binary operator '" + theOperator + "' to result of type " + resultType);
+				boolean primitive = left.getType().getType(0).isPrimitive() || right.getType().getType(0).isPrimitive();
+				boolean equalOp = theOperator.equals("==");
+				BiFunction<Object, Object, Boolean> op = (l, r) -> {
+					boolean equal;
+					if (primitive)
+						equal = Objects.equals(l, r);
+					else
+						equal = l == r;
+					return equal == equalOp;
+				};
+				Function<SettableValue<?>, TransformReverse<Object, Boolean>> reverse;
+				if (TypeTokens.get().isAssignable(left.getType().getType(0), right.getType().getType(0))) {
+					reverse = rightV -> new TransformReverse<Object, Boolean>() {
+						@Override
+						public boolean isStateful() {
+							return true;
+						}
+
+						@Override
+						public String isEnabled(TransformationValues<Object, Boolean> transformValues) {
+							return null;
+						}
+
+						@Override
+						public ReverseQueryResult<Object> reverse(Boolean newValue, TransformationValues<Object, Boolean> transformValues,
+							boolean add, boolean test) {
+							if (transformValues.hasPreviousResult() && transformValues.getPreviousResult() == equalOp)
+								return ReverseQueryResult.value(transformValues.getPreviousResult());
+							else if (newValue == equalOp)
+								return ReverseQueryResult.value(transformValues.get(rightV));
+							else
+								return ReverseQueryResult.value("Cannot set to arbitrary value");
+						}
+					};
+				} else {
+					reverse = rightV -> new TransformReverse<Object, Boolean>() {
+						@Override
+						public boolean isStateful() {
+							return true;
+						}
+
+						@Override
+						public String isEnabled(TransformationValues<Object, Boolean> transformValues) {
+							return null;
+						}
+
+						@Override
+						public ReverseQueryResult<Object> reverse(Boolean newValue, TransformationValues<Object, Boolean> transformValues,
+							boolean add, boolean test) {
+							if (transformValues.hasPreviousResult() && transformValues.getPreviousResult() == equalOp)
+								return ReverseQueryResult.value(transformValues.getPreviousResult());
+							else if (newValue == equalOp)
+								return ReverseQueryResult.reject("Cannot assign value of type " + right.getType().getType(0)
+									+ " to value of type " + left.getType().getType(0));
+							else
+								return ReverseQueryResult.value("Cannot set to arbitrary value");
+						}
+					};
+				}
+				return (ValueContainer<M, MV>) new ValueContainer<SettableValue, SettableValue<Boolean>>() {
+					@Override
+					public ModelInstanceType<SettableValue, SettableValue<Boolean>> getType() {
+						return ModelTypes.Value.forType(boolean.class);
+					}
+
+					@Override
+					public SettableValue<Boolean> get(ModelSetInstance models) {
+						SettableValue<?> leftV = left.apply(models);
+						SettableValue<?> rightV = right.apply(models);
+						return ((SettableValue<Object>) leftV).transformReversible(boolean.class,
+							tx -> tx.combineWith(rightV).combine(op).withReverse(reverse.apply(rightV)));
+					}
+				};
 			case "<":
 			case ">":
 			case "<=":
@@ -956,7 +1024,99 @@ public class DefaultExpressoParser implements ExpressoParser {
 
 		private ValueContainer<SettableValue, SettableValue<Boolean>> logicalOp(ValueContainer<SettableValue, SettableValue<Boolean>> left,
 			ValueContainer<SettableValue, SettableValue<Boolean>> right) throws QonfigInterpretationException {
-			throw new QonfigInterpretationException("Binary operator '" + theOperator + "' is not immplemented yet");
+			java.util.function.BinaryOperator<Boolean> op;
+			abstract class LogicalReverse implements TransformReverse<Boolean, Boolean> {
+				protected final SettableValue<Boolean> right;
+
+				LogicalReverse(SettableValue<Boolean> right) {
+					this.right = right;
+				}
+
+				@Override
+				public boolean isStateful() {
+					return false;
+				}
+
+				@Override
+				public String isEnabled(TransformationValues<Boolean, Boolean> transformValues) {
+					return null; // We support updates
+				}
+			}
+			;
+			Function<SettableValue<Boolean>, LogicalReverse> reverse;
+			switch (theOperator) {
+			case "|":
+			case "||":
+				op = (b1, b2) -> b1 || b2;
+				reverse = rightV -> new LogicalReverse(rightV) {
+					@Override
+					public ReverseQueryResult<Boolean> reverse(Boolean newValue, TransformationValues<Boolean, Boolean> transformValues,
+						boolean add, boolean test) {
+						if (newValue)
+							return ReverseQueryResult.value(newValue); // Setting left to true will do the trick
+						// Otherwise we need to set both to false
+						if (transformValues.get(right)) {
+							String accept = right.isAcceptable(false);
+							if (accept != null)
+								return ReverseQueryResult.reject(accept);
+							else if (!test)
+								right.set(false, null);
+						}
+						return ReverseQueryResult.value(newValue);
+					}
+				};
+				break;
+			case "&":
+			case "&&":
+				op = (b1, b2) -> b1 && b2;
+				reverse = rightV -> new LogicalReverse(rightV) {
+					@Override
+					public ReverseQueryResult<Boolean> reverse(Boolean newValue, TransformationValues<Boolean, Boolean> transformValues,
+						boolean add, boolean test) {
+						if (!newValue)
+							return ReverseQueryResult.value(newValue); // Setting left to false will do the trick
+						// Otherwise we need to set both to true
+						if (!transformValues.get(right)) {
+							String accept = right.isAcceptable(true);
+							if (accept != null)
+								return ReverseQueryResult.reject(accept);
+							else if (!test)
+								right.set(true, null);
+						}
+						return ReverseQueryResult.value(newValue);
+					}
+				};
+				break;
+			case "^":
+				op = (b1, b2) -> b1 ^ b2;
+				reverse = rightV -> new LogicalReverse(rightV) {
+					@Override
+					public ReverseQueryResult<Boolean> reverse(Boolean newValue, TransformationValues<Boolean, Boolean> transformValues,
+						boolean add, boolean test) {
+						if (newValue.booleanValue() == transformValues.get(right)) {
+							return ReverseQueryResult.value(!newValue);
+						} else
+							return ReverseQueryResult.value(newValue);
+					}
+				};
+				break;
+			default:
+				throw new QonfigInterpretationException("Unrecognized locigal operator '" + theOperator + "'");
+			}
+			return new ValueContainer<SettableValue, SettableValue<Boolean>>() {
+				@Override
+				public ModelInstanceType<SettableValue, SettableValue<Boolean>> getType() {
+					return left.getType();
+				}
+
+				@Override
+				public SettableValue<Boolean> get(ModelSetInstance models) {
+					SettableValue<Boolean> leftV = left.apply(models);
+					SettableValue<Boolean> rightV = right.apply(models);
+					return leftV.transformReversible(boolean.class,
+						tx -> tx.combineWith(rightV).combine(op).withReverse(reverse.apply(rightV)));
+				}
+			};
 		}
 
 		private ValueContainer<SettableValue, SettableValue<? extends Number>> longBitwiseOp(
@@ -1237,7 +1397,7 @@ public class DefaultExpressoParser implements ExpressoParser {
 						return (MV) SettableValue.flattenAsSettable(conditionX.map(
 							TypeTokens.get().keyFor(ObservableValue.class).<SettableValue<Object>> parameterized(resultType.getType(0)),
 							c -> {
-								if (c) {
+								if (c != null && c) {
 									if (values[0] == null)
 										values[0] = primaryV.get(msi);
 									return (SettableValue<Object>) values[0];
@@ -1250,7 +1410,7 @@ public class DefaultExpressoParser implements ExpressoParser {
 					} else if (primaryV.getType().getModelType() == ModelTypes.Collection) {
 						return (MV) ObservableCollection.flattenValue(conditionX.map(TypeTokens.get().keyFor(ObservableCollection.class)
 							.<ObservableCollection<Object>> parameterized(resultType.getType(0)), c -> {
-								if (c) {
+								if (c != null && c) {
 									if (values[0] == null)
 										values[0] = primaryV.get(msi);
 									return (ObservableCollection<Object>) values[0];
@@ -1264,7 +1424,7 @@ public class DefaultExpressoParser implements ExpressoParser {
 						return (MV) ObservableSet.flattenValue(conditionX.map(
 							TypeTokens.get().keyFor(ObservableSet.class).<ObservableSet<Object>> parameterized(resultType.getType(0)),
 							c -> {
-								if (c) {
+								if (c != null && c) {
 									if (values[0] == null)
 										values[0] = primaryV.get(msi);
 									return (ObservableSet<Object>) values[0];
@@ -1986,6 +2146,8 @@ public class DefaultExpressoParser implements ExpressoParser {
 					changeSources[changeSources.length - 1] = ctxV.noInitChanges();
 				for (int i = 0; i < argVs.length; i++) {
 					argVs[i] = theArguments.get(i).get(models);
+					if (argVs[i] == null)
+						throw new IllegalStateException("Caller provided a model set without variable " + theArguments.get(i).toString());
 					changeSources[i] = argVs[i].noInitChanges();
 				}
 				return createModelValue(ctxV, argVs, //
@@ -1997,8 +2159,11 @@ public class DefaultExpressoParser implements ExpressoParser {
 			protected T invoke(SettableValue<?> ctxV, SettableValue<?>[] argVs)
 				throws IllegalAccessException, IllegalArgumentException, InvocationTargetException {
 				Object ctx = ctxV == null ? null : ctxV.get();
-				if (ctx == null && ctxV != null)
-					throw new NullPointerException(ctxV + " is null, cannot call " + theMethod);
+				if (ctx == null && ctxV != null) {
+					// Although this is better in theory, all the conditionals needed to work around this are obnoxous
+					// throw new NullPointerException(ctxV + " is null, cannot call " + theMethod);
+					return null;
+				}
 				Object[] args = new Object[argVs.length];
 				for (int a = 0; a < args.length; a++)
 					args[a] = argVs[a].get();

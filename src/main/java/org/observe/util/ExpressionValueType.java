@@ -48,6 +48,11 @@ public class ExpressionValueType implements CustomValueType {
 		return value instanceof ObservableExpression;
 	}
 
+	@Override
+	public String toString() {
+		return theName;
+	}
+
 	public static class Literal extends ObservableExpression.LiteralExpression<String> {
 		public Literal(String value) {
 			super(org.observe.expresso.Expression.create("literal", value), value);

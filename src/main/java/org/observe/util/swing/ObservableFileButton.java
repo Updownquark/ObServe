@@ -301,6 +301,14 @@ public class ObservableFileButton extends JButton {
 	public void setEnabled(boolean enabled) {
 		isExternallyEnabled = enabled;
 		checkEnabled();
+		if (!enabled)
+			stopEditing();
+	}
+
+	/** Hides this file button's file chooser, if visible */
+	public void stopEditing() {
+		if (theFileChooser != null && theFileChooser.isVisible())
+			theFileChooser.setVisible(false);
 	}
 
 	/**

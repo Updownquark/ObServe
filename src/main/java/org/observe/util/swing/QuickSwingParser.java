@@ -7,8 +7,10 @@ import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.EventQueue;
 import java.awt.Image;
+import java.awt.Insets;
 import java.awt.LayoutManager;
 import java.awt.Point;
+import java.awt.TextComponent;
 import java.awt.Window;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
@@ -29,19 +31,24 @@ import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 import javax.swing.BorderFactory;
+import javax.swing.Icon;
 import javax.swing.ImageIcon;
+import javax.swing.JCheckBox;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JPanel;
 import javax.swing.JSplitPane;
+import javax.swing.JTable;
 import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
 import javax.swing.WindowConstants;
 import javax.swing.border.Border;
 import javax.swing.border.TitledBorder;
+import javax.swing.text.JTextComponent;
 
 import org.observe.Observable;
 import org.observe.ObservableAction;
@@ -62,9 +69,12 @@ import org.observe.util.ObservableModelQonfigParser;
 import org.observe.util.ObservableModelSet;
 import org.observe.util.ObservableModelSet.ExternalModelSet;
 import org.observe.util.ObservableModelSet.ModelSetInstance;
+import org.observe.util.ObservableModelSet.ModelValuePlaceholder;
 import org.observe.util.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.ComponentDecorator.ModifiableLineBorder;
+import org.observe.util.swing.ObservableCellEditor.DefaultObservableCellEditor;
+import org.observe.util.swing.ObservableCellEditor.EditorSubscription;
 import org.observe.util.swing.PanelPopulation.ComponentEditor;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.observe.util.swing.PanelPopulation.TabEditor;
@@ -73,6 +83,7 @@ import org.qommons.Colors;
 import org.qommons.collect.BetterList;
 import org.qommons.config.DefaultQonfigParser;
 import org.qommons.config.QommonsConfig;
+import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigChildDef;
 import org.qommons.config.QonfigElement;
@@ -122,9 +133,19 @@ public class QuickSwingParser {
 
 		void setFieldName(Function<ModelSetInstance, ? extends ObservableValue<String>> fieldName);
 
-		QuickComponentDef modify(BiConsumer<ComponentEditor<?, ?>, ModelSetInstance> modification);
+		QuickComponentDef modify(BiConsumer<ComponentEditor<?, ?>, QuickComponent.Builder> modification);
 
 		QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder);
+	}
+
+	public interface QuickValueEditorDef extends QuickComponentDef {
+		int getDefaultEditClicks();
+
+		void startEditing(QuickComponent component);
+
+		boolean flush(QuickComponent component);
+
+		void stopEditing(QuickComponent component);
 	}
 
 	public static class QuickComponent {
@@ -251,7 +272,7 @@ public class QuickSwingParser {
 	public static abstract class AbstractQuickComponentDef implements QuickComponentDef {
 		private final QonfigElement theElement;
 		private Function<ModelSetInstance, ? extends ObservableValue<String>> theFieldName;
-		private BiConsumer<ComponentEditor<?, ?>, ModelSetInstance> theModifications;
+		private BiConsumer<ComponentEditor<?, ?>, QuickComponent.Builder> theModifications;
 
 		public AbstractQuickComponentDef(QonfigElement element) {
 			theElement = element;
@@ -273,14 +294,14 @@ public class QuickSwingParser {
 		}
 
 		@Override
-		public AbstractQuickComponentDef modify(BiConsumer<ComponentEditor<?, ?>, ModelSetInstance> fieldModification) {
+		public AbstractQuickComponentDef modify(BiConsumer<ComponentEditor<?, ?>, QuickComponent.Builder> fieldModification) {
 			if (theModifications == null)
 				theModifications = fieldModification;
 			else {
-				BiConsumer<ComponentEditor<?, ?>, ModelSetInstance> old = theModifications;
-				theModifications = (field, models) -> {
-					old.accept(field, models);
-					fieldModification.accept(field, models);
+				BiConsumer<ComponentEditor<?, ?>, QuickComponent.Builder> old = theModifications;
+				theModifications = (field, builder) -> {
+					old.accept(field, builder);
+					fieldModification.accept(field, builder);
 				};
 			}
 			return this;
@@ -288,7 +309,7 @@ public class QuickSwingParser {
 
 		public void modify(ComponentEditor<?, ?> component, QuickComponent.Builder builder) {
 			if (theModifications != null)
-				theModifications.accept(component, builder.getModels());
+				theModifications.accept(component, builder);
 		}
 	}
 
@@ -302,6 +323,12 @@ public class QuickSwingParser {
 			if (getFieldName() != null && component instanceof PanelPopulation.FieldEditor)
 				((PanelPopulation.FieldEditor<?, ?>) component).withFieldName(getFieldName().apply(builder.getModels()));
 			super.modify(component, builder);
+		}
+	}
+
+	public static abstract class AbstractQuickValueEditor extends AbstractQuickField implements QuickValueEditorDef {
+		public AbstractQuickValueEditor(QonfigElement element) {
+			super(element);
 		}
 	}
 
@@ -366,7 +393,6 @@ public class QuickSwingParser {
 				throw new IllegalStateException("No interpreter configured for layout " + theLayoutName);
 			String fieldName = getFieldName() == null ? null : getFieldName().apply(builder.getModels()).get();
 			container.addHPanel(fieldName, theLayout.create(), thisContainer -> {
-				builder.withComponent(thisContainer.getComponent());
 				modify(thisContainer, builder);
 				populator.accept(thisContainer);
 			});
@@ -522,6 +548,9 @@ public class QuickSwingParser {
 
 		@Override
 		public QuickUiDef createUI(ExternalModelSet extModels) {
+			if (!(extModels.getNameChecker() instanceof ObservableModelSet.JavaNameChecker))
+				throw new IllegalArgumentException("Cannot use Quick with models that use anything but a "
+					+ ObservableModelSet.JavaNameChecker.class.getName() + " name checker");
 			return new QuickUiDef(this, extModels);
 		}
 	}
@@ -645,7 +674,7 @@ public class QuickSwingParser {
 				cv = ClassView.build().build();
 			ObservableModelSet model = session.interpretChildren("models", ObservableModelSet.class).peekFirst();
 			if (model == null)
-				model = ObservableModelSet.build().build();
+				model = ObservableModelSet.build(ObservableModelSet.JAVA_NAME_CHECKER).build();
 			return new QuickHeadSection(cv, model);
 		}).modifyWith("window", QuickDocument.class, (doc, element, session) -> {
 			ObservableModelSet model = doc.getHead().getModels();
@@ -685,6 +714,7 @@ public class QuickSwingParser {
 			}
 			return doc;
 		}).modifyWith("widget", QuickComponentDef.class, (widget, element, session) -> {
+			widget.modify((editor, builder) -> editor.modifyComponent(builder::withComponent));
 			ClassView cv = (ClassView) session.get("quick-cv");
 			ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
 			ObservableExpression tooltipX = session.getAttribute("tooltip", ObservableExpression.class);
@@ -697,15 +727,15 @@ public class QuickSwingParser {
 			ValueContainer<SettableValue, SettableValue<Boolean>> visible = visibleX == null ? null
 				: visibleX.evaluate(ModelTypes.Value.forType(boolean.class), model, cv);
 			if (tooltip != null) {
-				widget.modify((comp, models) -> {
-					comp.withTooltip(tooltip.apply(models));
+				widget.modify((comp, builder) -> {
+					comp.withTooltip(tooltip.apply(builder.getModels()));
 				});
 			}
 			if (bgColor != null) {
-				widget.modify((comp, models) -> {
+				widget.modify((comp, builder) -> {
 					comp.modifyComponent(c -> {
-						ObservableValue<Color> color = bgColor.apply(models);
-						color.changes().takeUntil(models.getUntil()).act(evt -> {
+						ObservableValue<Color> color = bgColor.apply(builder.getModels());
+						color.changes().takeUntil(builder.getModels().getUntil()).act(evt -> {
 							Color colorV = evt.getNewValue();
 							c.setBackground(colorV == null ? Colors.transparent : colorV);
 							if (c instanceof JComponent)
@@ -715,15 +745,15 @@ public class QuickSwingParser {
 				});
 			}
 			if (visible != null)
-				widget.modify((comp, models) -> {
-					comp.visibleWhen(visible.apply(models));
+				widget.modify((comp, builder) -> {
+					comp.visibleWhen(visible.apply(builder.getModels()));
 				});
 			if (border != null)
-				widget.modify((comp, models) -> {
+				widget.modify((comp, builder) -> {
 					comp.modifyComponent(c -> {
 						if (c instanceof JComponent) {
 							JComponent jc = (JComponent) c;
-							border.apply(models).changes().takeUntil(models.getUntil()).act(evt -> {
+							border.apply(builder.getModels()).changes().takeUntil(builder.getModels().getUntil()).act(evt -> {
 								if (evt.getNewValue() != jc.getBorder())
 									jc.setBorder(evt.getNewValue());
 								jc.repaint();
@@ -801,6 +831,39 @@ public class QuickSwingParser {
 	public interface QuickBorder extends Function<ModelSetInstance, SettableValue<Border>> {
 	}
 
+	public interface ColumnEditing<R, C> {
+		public void modifyColumn(CategoryRenderStrategy<R, C>.CategoryMutationStrategy mutation, ModelSetInstance models);
+	}
+
+	public static class ValueAction {
+		public final ObservableModelSet.Wrapped model;
+		public final ModelValuePlaceholder<ObservableCollection, ObservableCollection<Object>> valueListPlaceholder;
+		public final ValueContainer<SettableValue, SettableValue<String>> name;
+		public final Function<ModelSetInstance, SettableValue<Icon>> icon;
+		public final ValueContainer<ObservableAction, ObservableAction<?>> action;
+		public final ValueContainer<SettableValue, SettableValue<String>> enabled;
+		public final boolean allowForEmpty;
+		public final boolean allowForMultiple;
+		public final ValueContainer<SettableValue, SettableValue<String>> tooltip;
+
+		public ValueAction(ObservableModelSet.Wrapped model,
+			ModelValuePlaceholder<ObservableCollection, ObservableCollection<Object>> valueListPlaceholder,
+			ValueContainer<SettableValue, SettableValue<String>> name, Function<ModelSetInstance, SettableValue<Icon>> icon,
+			ValueContainer<ObservableAction, ObservableAction<?>> action,
+			ValueContainer<SettableValue, SettableValue<String>> enabled, boolean allowForEmpty, boolean allowForMultiple,
+			ValueContainer<SettableValue, SettableValue<String>> tooltip) {
+			this.model = model;
+			this.valueListPlaceholder = valueListPlaceholder;
+			this.name = name;
+			this.icon = icon;
+			this.action = action;
+			this.enabled = enabled;
+			this.allowForEmpty = allowForEmpty;
+			this.allowForMultiple = allowForMultiple;
+			this.tooltip = tooltip;
+		}
+	}
+
 	public static Function<ModelSetInstance, SettableValue<Color>> parseColor(ObservableExpression expression, ObservableModelSet model,
 		ClassView cv) throws QonfigInterpretationException {
 		if (expression == null)
@@ -866,6 +929,32 @@ public class QuickSwingParser {
 			}
 		}
 		return positionValue;
+	}
+
+	public static Function<ModelSetInstance, SettableValue<Icon>> parseIcon(ObservableExpression expression,
+		QonfigInterpretingSession session, ObservableModelSet model, ClassView cv) throws QonfigInterpretationException {
+		if (expression != null) {
+			ValueContainer<SettableValue, SettableValue<?>> iconV = expression.evaluate(ModelTypes.Value.any(), model, cv);
+			Class<?> iconType = TypeTokens.getRawType(iconV.getType().getType(0));
+			if (Icon.class.isAssignableFrom(iconType))
+				return (Function<ModelSetInstance, SettableValue<Icon>>) (ValueContainer<?, ?>) iconV;
+			else if (Image.class.isAssignableFrom(iconType)) {
+				return msi -> SettableValue.asSettable(iconV.apply(msi).map(img -> img == null ? null : new ImageIcon((Image) img)),
+					__ -> "unsettable");
+			} else if (URL.class.isAssignableFrom(iconType)) {
+				return msi -> SettableValue.asSettable(iconV.apply(msi).map(url -> url == null ? null : new ImageIcon((URL) url)),
+					__ -> "unsettable");
+			} else if (String.class.isAssignableFrom(iconType)) {
+				Class<?> callingClass = session.getInterpreter().getCallingClass();
+				return msi -> SettableValue.asSettable(iconV.apply(msi).map(loc -> loc == null ? null//
+					: ObservableSwingUtils.getFixedIcon(callingClass, (String) loc, 16, 16)), __ -> "unsettable");
+			} else {
+				session.withWarning("Cannot use value " + expression + ", type " + iconV.getType().getType(0) + " as an icon");
+				return msi -> SettableValue.of(Icon.class, null, "unsettable");
+			}
+		} else {
+			return msi -> SettableValue.of(Icon.class, null, "None provided");
+		}
 	}
 
 	@SuppressWarnings("rawtypes")
@@ -952,17 +1041,17 @@ public class QuickSwingParser {
 					: prefHeightX.evaluate(sizeType, model, cv);
 				ValueContainer<SettableValue, SettableValue<QuickSize>> maxHeightC = maxHeightX == null ? null
 					: maxHeightX.evaluate(sizeType, model, cv);
-				child.modify((ch, m) -> {
-					ObservableValue<QuickPosition> left = leftC == null ? null : leftC.apply(m);
-					ObservableValue<QuickPosition> right = rightC == null ? null : rightC.apply(m);
-					ObservableValue<QuickPosition> top = topC == null ? null : topC.apply(m);
-					ObservableValue<QuickPosition> bottom = bottomC == null ? null : bottomC.apply(m);
-					ObservableValue<QuickSize> minWidth = minWidthC == null ? null : minWidthC.apply(m);
-					ObservableValue<QuickSize> prefWidth = prefWidthC == null ? null : prefWidthC.apply(m);
-					ObservableValue<QuickSize> maxWidth = maxWidthC == null ? null : maxWidthC.apply(m);
-					ObservableValue<QuickSize> minHeight = minHeightC == null ? null : minHeightC.apply(m);
-					ObservableValue<QuickSize> prefHeight = prefHeightC == null ? null : prefHeightC.apply(m);
-					ObservableValue<QuickSize> maxHeight = maxHeightC == null ? null : maxHeightC.apply(m);
+				child.modify((ch, builder) -> {
+					ObservableValue<QuickPosition> left = leftC == null ? null : leftC.apply(builder.getModels());
+					ObservableValue<QuickPosition> right = rightC == null ? null : rightC.apply(builder.getModels());
+					ObservableValue<QuickPosition> top = topC == null ? null : topC.apply(builder.getModels());
+					ObservableValue<QuickPosition> bottom = bottomC == null ? null : bottomC.apply(builder.getModels());
+					ObservableValue<QuickSize> minWidth = minWidthC == null ? null : minWidthC.apply(builder.getModels());
+					ObservableValue<QuickSize> prefWidth = prefWidthC == null ? null : prefWidthC.apply(builder.getModels());
+					ObservableValue<QuickSize> maxWidth = maxWidthC == null ? null : maxWidthC.apply(builder.getModels());
+					ObservableValue<QuickSize> minHeight = minHeightC == null ? null : minHeightC.apply(builder.getModels());
+					ObservableValue<QuickSize> prefHeight = prefHeightC == null ? null : prefHeightC.apply(builder.getModels());
+					ObservableValue<QuickSize> maxHeight = maxHeightC == null ? null : maxHeightC.apply(builder.getModels());
 					ch.withLayoutConstraints(new SimpleLayout.SimpleConstraints(left, right, top, bottom, //
 						minWidth, prefWidth, maxWidth, minHeight, prefHeight, maxHeight));
 					Observable.or(//
@@ -976,7 +1065,7 @@ public class QuickSwingParser {
 													minHeight == null ? null : minHeight.noInitChanges(), //
 														prefHeight == null ? null : prefHeight.noInitChanges(), //
 															maxHeight == null ? null : maxHeight.noInitChanges()//
-						).takeUntil(m.getUntil()).act(__ -> {
+						).takeUntil(builder.getModels().getUntil()).act(__ -> {
 							Container parent = ch.getComponent().getParent();
 							if (parent != null && parent.getLayout() instanceof SimpleLayout) {
 								((SimpleLayout) parent.getLayout()).layoutChild(parent, ch.getComponent());
@@ -1024,6 +1113,36 @@ public class QuickSwingParser {
 			}
 			return value.setLayout(() -> layout);
 		});
+		interpreter.createWith("multi-value-action", ValueAction.class, (element, session) -> {
+			ClassView cv = (ClassView) session.get("quick-cv");
+			ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
+			TypeToken<Object> valueType = (TypeToken<Object>) session.get("model-type");
+			String valueListName = session.getAttributeText("value-list-name");
+			ObservableModelSet.WrappedBuilder actionModel = ObservableModelSet.wrap(model);
+			ModelValuePlaceholder<ObservableCollection, ObservableCollection<Object>> valueListNamePH = actionModel
+				.withPlaceholder(valueListName, ModelTypes.Collection.forType(valueType));
+			ObservableModelSet.Wrapped builtActionModel = actionModel.build();
+
+			ObservableExpression nameX = session.getAttribute("name", ObservableExpression.class);
+			ObservableExpression iconX = session.getAttribute("icon", ObservableExpression.class);
+			ObservableExpression actionX = session.getAttribute("action", ObservableExpression.class);
+			ObservableExpression enabledX = session.getAttribute("enabled", ObservableExpression.class);
+			ObservableExpression tooltipX = session.getAttribute("enabled", ObservableExpression.class);
+
+			ValueContainer<SettableValue, SettableValue<String>> nameV = nameX == null ? null
+				: nameX.evaluate(ModelTypes.Value.forType(String.class), model, cv);
+			Function<ModelSetInstance, SettableValue<Icon>> iconV = parseIcon(iconX, session, model, cv);
+			ValueContainer<ObservableAction, ObservableAction<?>> actionV = actionX.evaluate(ModelTypes.Action.any(), builtActionModel, cv);
+			ValueContainer<SettableValue, SettableValue<String>> enabledV = enabledX == null ? null
+				: enabledX.evaluate(ModelTypes.Value.forType(String.class), model, cv);
+			ValueContainer<SettableValue, SettableValue<String>> tooltipV = tooltipX == null ? null
+				: tooltipX.evaluate(ModelTypes.Value.forType(String.class), model, cv);
+
+			return new ValueAction(builtActionModel, valueListNamePH, nameV, iconV, actionV, enabledV, //
+				session.getAttribute("allow-for-empty", boolean.class), //
+				session.getAttribute("allow-for-multiple", boolean.class), //
+				tooltipV);
+		});
 		interpreter.createWith("label", QuickComponentDef.class, (element, session) -> evaluateLabel(element, session));
 		interpreter.createWith("text-field", QuickComponentDef.class, (element, session) -> {
 			ClassView cv = (ClassView) session.get("quick-cv");
@@ -1061,7 +1180,7 @@ public class QuickSwingParser {
 				format = ObservableModelQonfigParser.literalContainer(
 					ModelTypes.Value.forType((Class<Format<Object>>) (Class<?>) Format.class), (Format<Object>) f, type.getSimpleName());
 			}
-			return new AbstractQuickField(element) {
+			return new AbstractQuickValueEditor(element) {
 				@Override
 				public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
 					SettableValue<Object> realValue = value.apply(builder.getModels());
@@ -1077,6 +1196,35 @@ public class QuickSwingParser {
 								field.getEditor().withColumns(columns);
 						});
 					return builder.build();
+				}
+
+				@Override
+				public int getDefaultEditClicks() {
+					return 2;
+				}
+
+				@Override
+				public void startEditing(QuickComponent component) {
+					ObservableTextField<Object> field = (ObservableTextField<Object>) component.getComponent();
+					if (field.isSelectAllOnFocus())
+						field.selectAll();
+				}
+
+				@Override
+				public boolean flush(QuickComponent component) {
+					ObservableTextField<Object> field = (ObservableTextField<Object>) component.getComponent();
+					if (!field.isDirty()) { // No need to check the error or anything
+					} else if (field.getEditError() != null) {
+						field.redisplayErrorTooltip();
+						return false;
+					} else {
+						field.flushEdits(null);
+					}
+					return true;
+				}
+
+				@Override
+				public void stopEditing(QuickComponent component) {
 				}
 			};
 		}).createWith("button", QuickComponentDef.class, (element, session) -> {
@@ -1109,7 +1257,6 @@ public class QuickSwingParser {
 		});
 		interpreter.createWith("table", QuickComponentDef.class, (element, session) -> interpretTable(element, session));
 		interpreter.createWith("column", Function.class, (element, session) -> {
-			System.err.println("WARNING: column is not fully implemented!!"); // TODO
 			ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
 			ClassView cv = (ClassView) session.get("imports");
 			TypeToken<Object> modelType = (TypeToken<Object>) session.get("model-type");
@@ -1151,7 +1298,7 @@ public class QuickSwingParser {
 				// });
 				columnType = (TypeToken<Object>) colValue.getType().getType(0);
 				valueFn = msi -> {
-					SettableValue<Object> rowValue = SettableValue.build(modelType).build();
+					SettableValue<Object> rowValue = SettableValue.build(modelType).withDescription(rowValueName).build();
 					ModelSetInstance valueModelInst = valueModel.wrap(msi)//
 						.with(valueRowVP, rowValue)//
 						.build();
@@ -1167,36 +1314,179 @@ public class QuickSwingParser {
 			}
 			ObservableModelSet.ModelValuePlaceholder<SettableValue, SettableValue<Object>> cellRowVP = wb.withPlaceholder(cellValueName,
 				ModelTypes.Value.forType(columnType));
+			ObservableModelSet.ModelValuePlaceholder<SettableValue, SettableValue<Object>> subjectVP = wb.withPlaceholder("subject",
+				ModelTypes.Value.forType(columnType));
 			ObservableModelSet.Wrapped cellModel = wb.build();
-			ObservableExpression renderX = session.getAttribute("format", ObservableExpression.class);
-			Function<ModelSetInstance, BiFunction<? super Object, ? super Object, String>> renderFn;
-			if (renderX != null) {
-				ValueContainer<SettableValue, SettableValue<String>> renderC = renderX == null ? null
-					: renderX.evaluate(ModelTypes.Value.forType(String.class), cellModel, cv);
-				renderFn = msi -> {
-					SettableValue<Object> rowValue = SettableValue.build(modelType).build();
-					SettableValue<Object> cellValue = SettableValue.build(columnType).build();
-					ModelSetInstance cellModelInst = cellModel.wrap(msi)//
+
+			QuickComponentDef renderer;
+			session.put("quick-model", cellModel);
+			renderer = session.interpretChildren("renderer", QuickComponentDef.class).peekFirst();
+			ColumnEditing<Object, Object> editing;
+			QonfigElement columnEdit = session.getChildren("edit").peekFirst();
+			if (columnEdit != null) {
+				QonfigElement editorEl = columnEdit.getChildrenInRole(base, "column-edit", "editor").getFirst();
+				QuickComponentDef editor = session.getInterpreter().interpret(editorEl, QuickComponentDef.class);
+				if (!(editor instanceof QuickValueEditorDef))
+					throw new IllegalArgumentException(
+						"Use of '" + editorEl.getType().getName() + "' as a column editor is not implemented");
+				String editValueName = columnEdit.getAttributeText(base.getAttribute("column-edit", "edit-value-name"));
+				ObservableModelSet.ModelValuePlaceholder<SettableValue, SettableValue<Object>> editorValueVP = wb
+					.withPlaceholder(editValueName, ModelTypes.Value.forType(columnType));
+				ObservableModelSet.Wrapped editModel = wb.build();
+				session.put("quick-model", editModel);
+				ColumnEditing<Object, Object> editType = session.getInterpreter()
+					.parseAs(columnEdit, columnEdit.getAttribute(base, "column-edit", "type", QonfigAddOn.class), ColumnEditing.class);
+				editing = (column, models) -> {
+					// Hacky way of synthesizing the component
+					SettableValue<Object> rowValue = SettableValue.build(modelType).withDescription(rowValueName).build();
+					Function<Object, String>[] filter = new Function[1];
+					boolean[] currentlyEditing = new boolean[1];
+					SettableValue<Object> editorValue = DefaultObservableCellEditor.createEditorValue(columnType, filter,
+						builder -> builder.withDescription(editValueName));
+					SettableValue<Object> cellValue = SettableValue.build(columnType).withDescription(cellValueName).build();
+					ModelSetInstance cellModelInst = editModel.wrap(models)//
 						.with(valueRowVP, rowValue)//
 						.with(cellRowVP, cellValue)//
+						.with(subjectVP, editorValue)//
+						.with(editorValueVP, editorValue)//
 						.build();
-					SettableValue<String> renderV = renderC.get(cellModelInst);
-					return (row, cell) -> {
-						rowValue.set(row, null);
-						cellValue.set(cell, null);
-						return renderV.get();
-					};
+					editType.modifyColumn(column, cellModelInst);
+					QuickComponent.Builder editorBuilder = QuickComponent.build(editor, null, cellModelInst);
+					QuickComponent editorComp = editor.install(
+						PanelPopulation.populateHPanel(null, new JustifiedBoxLayout(false), cellModelInst.getUntil()), editorBuilder);
+					Component c = editorComp.getComponent();
+					Insets defMargin = c instanceof JTextComponent ? ((JTextComponent) c).getMargin() : null;
+					String clicksStr = columnEdit.getAttribute(base, "column-edit", "clicks", String.class);
+					int clicks = clicksStr != null ? Integer.parseInt(clicksStr) : ((QuickValueEditorDef) editor).getDefaultEditClicks();
+					ObservableCellEditor<Object, Object> oce = new DefaultObservableCellEditor<>(c, editorValue, //
+						new ObservableCellEditor.EditorInstallation<Object>() {
+						@Override
+						public EditorSubscription install(ObservableCellEditor<?, Object> cellEditor, Component component,
+							Function<Object, String> valueFilter, String tooltip, Function<? super Object, String> valueToolTip) {
+							ModelCell<Object, Object> cell = ((DefaultObservableCellEditor<Object, Object>) cellEditor)
+								.getEditingCell();
+							rowValue.set(cell.getModelValue(), null);
+							cellValue.set(cell.getCellValue(), null);
+							if (defMargin != null && component instanceof JTable) {
+								Insets margin = ((JTextComponent) c).getMargin();
+								if (margin.top != 0 || margin.bottom != 0) {
+									margin.top = 0;
+									margin.bottom = 0;
+									((JTextComponent) c).setMargin(margin);
+								}
+							} else if (defMargin != null)
+								((JTextComponent) c).setMargin(defMargin);
+							filter[0] = valueFilter;
+							if (c instanceof JComponent)
+								((JComponent) c).setToolTipText(tooltip);
+							currentlyEditing[0] = true;
+							return commit -> {
+								if (!((QuickValueEditorDef) editor).flush(editorComp))
+									return false;
+								filter[0] = null;
+								currentlyEditing[0] = false;
+								return true;
+							};
+						}
+					}, ObservableCellEditor.editWithClicks(clicks));
+					column.withEditor(oce);
+					column.clicks(clicks);
+					editorValue.noInitChanges().act(evt -> {
+						if (currentlyEditing[0]) {
+							((QuickValueEditorDef) editor).stopEditing(editorComp);
+							oce.stopCellEditing();
+						}
+					});
 				};
 			} else
-				renderFn = null;
+				editing = null;
+
 			return extModels -> {
 				CategoryRenderStrategy<Object, Object> column = new CategoryRenderStrategy<>(name, columnType,
 					valueFn.apply((ModelSetInstance) extModels));
-				if (renderFn != null)
-					column.formatText(renderFn.apply((ModelSetInstance) extModels));
+				if (renderer != null) {
+					// Hacky way of synthesizing the component
+					SettableValue<Object> rowValue = SettableValue.build(modelType).withDescription(rowValueName).build();
+					SettableValue<Object> cellValue = SettableValue.build(columnType).withDescription(cellValueName).build();
+					ModelSetInstance cellModelInst = cellModel.wrap((ModelSetInstance) extModels)//
+						.with(valueRowVP, rowValue)//
+						.with(cellRowVP, cellValue)//
+						.with(subjectVP, cellValue)//
+						.build();
+					QuickComponent.Builder renderBuilder = QuickComponent.build(renderer, null, cellModelInst);
+					QuickComponent renderComp = renderer.install(
+						PanelPopulation.populateHPanel(null, new JustifiedBoxLayout(false), cellModelInst.getUntil()), renderBuilder);
+					Component c = renderComp.getComponent();
+					BiFunction<Supplier<?>, Object, String> textRender;
+					boolean text = c instanceof TextComponent;
+					if (text) {
+						textRender = (row, col) -> {
+							rowValue.set(row.get(), null);
+							cellValue.set(col, null);
+							return ((TextComponent) c).getText();
+						};
+					} else
+						textRender = (row, col) -> String.valueOf(col);
+						column.withRenderer(new ObservableCellRenderer<Object, Object>() {
+							private List<CellDecorator<Object, Object>> theDecorators;
+
+							@Override
+							public String renderAsText(Supplier<? extends Object> modelValue, Object columnValue) {
+								return textRender.apply(modelValue, columnValue);
+							}
+
+							@Override
+							public Component getCellRendererComponent(Component parent, ModelCell<? extends Object, ? extends Object> cell,
+								CellRenderContext ctx) {
+								rowValue.set(cell.getModelValue(), null);
+								cellValue.set(cell.getCellValue(), null);
+								ObservableCellRenderer.tryEmphasize(c, ctx);
+								if (cell.isSelected()) {
+									if (c instanceof JComponent)
+										((JComponent) c).setOpaque(true);
+									c.setBackground(Color.blue);
+									c.setForeground(Color.white);
+								} else {
+									if (c instanceof JComponent)
+										((JComponent) c).setOpaque(false);
+									c.setBackground(Color.white);
+									c.setForeground(Color.black);
+								}
+								return c;
+							}
+
+							@Override
+							public ObservableCellRenderer<Object, Object> decorate(CellDecorator<Object, Object> decorator) {
+								if (theDecorators == null)
+									theDecorators = new ArrayList<>(3);
+								theDecorators.add(decorator);
+								return this;
+							}
+						});
+				}
+				if (editing != null)
+					column.withMutation(mut -> editing.modifyColumn(mut, (ModelSetInstance) extModels));
 				return column;
 			};
 		});
+		interpreter.createWith("modify-row-value", ColumnEditing.class, (element, session) -> {
+			System.err.println("WARNING: modify-row-value is not fully implemented!!"); // TODO
+			ObservableModelSet model = (ObservableModelSet) session.get("quick-model");
+			ClassView cv = (ClassView) session.get("imports");
+			TypeToken<Object> modelType = (TypeToken<Object>) session.get("model-type");
+			String editValueName = (String) session.get("edit-value-name");
+			ObservableExpression commitX = session.getAttribute("commit", ObservableExpression.class);
+			ObservableExpression editableIfX = session.getAttribute("editable-if", ObservableExpression.class);
+			ObservableExpression acceptX = session.getAttribute("accept", ObservableExpression.class);
+			ValueContainer<ObservableAction, ObservableAction<?>> commit = commitX.evaluate(ModelTypes.Action.any(), model, cv);
+			boolean rowUpdate = session.getAttribute("row-update", boolean.class);
+			return (column, models) -> { // TODO Not done here
+				ObservableAction<?> commitAction = commit.apply(models);
+				column.mutateAttribute((row, cell) -> commitAction.act(null));
+			};
+		});
+		// interpreter.createWith("replace-row-value", ColumnEditing.class, (element, session) -> { TODO
+		// });
 		interpreter.createWith("columns", Void.class, (element, session) -> {
 			ObservableModelSet.Builder models = (ObservableModelSet.Builder) session.get("model");
 			session.put("quick-model", models);
@@ -1400,7 +1690,7 @@ public class QuickSwingParser {
 			return new AbstractQuickComponentDef(element) {
 				@Override
 				public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
-					container.spacer(length, builder::withComponent);
+					container.spacer(length, null);
 					return builder.build();
 				}
 			};
@@ -1492,7 +1782,7 @@ public class QuickSwingParser {
 			value = session.getAttribute("value", ObservableExpression.class).evaluate(ModelTypes.Value.forType(boolean.class), model, cv);
 			ValueContainer<SettableValue, SettableValue<String>> text = session.interpretValue(ObservableExpression.class, true,
 				ex -> ex.evaluate(ModelTypes.Value.forType(String.class), model, cv));
-			return new AbstractQuickField(element) {
+			return new AbstractQuickValueEditor(element) {
 				@Override
 				public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
 					SettableValue<Boolean> realValue = value.apply(builder.getModels());
@@ -1502,9 +1792,28 @@ public class QuickSwingParser {
 								check.getEditor().setText(evt.getNewValue());
 							});
 						}
+						check.getEditor().setAlignmentX(JCheckBox.CENTER_ALIGNMENT); // TODO Is this right? Maybe only for cell editing
 						modify(check, builder);
 					});
 					return builder.build();
+				}
+
+				@Override
+				public int getDefaultEditClicks() {
+					return 1;
+				}
+
+				@Override
+				public void startEditing(QuickComponent component) {
+				}
+
+				@Override
+				public boolean flush(QuickComponent component) {
+					return true;
+				}
+
+				@Override
+				public void stopEditing(QuickComponent component) {
 				}
 			};
 		});
@@ -1561,13 +1870,33 @@ public class QuickSwingParser {
 			} else
 				throw new QonfigInterpretationException("Cannot use " + value + " as a File");
 			boolean open = element.getAttribute(base.getAttribute("file-button", "open"), boolean.class);
-			return new AbstractQuickField(element) {
+			return new AbstractQuickValueEditor(element) {
 				@Override
 				public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
 					container.addFileField(null, file.apply(builder.getModels()), open, fb -> {
 						modify(fb, builder);
 					});
 					return builder.build();
+				}
+
+				@Override
+				public void startEditing(QuickComponent component) {
+
+				}
+
+				@Override
+				public int getDefaultEditClicks() {
+					return 1;
+				}
+
+				@Override
+				public boolean flush(QuickComponent component) {
+					return true;
+				}
+
+				@Override
+				public void stopEditing(QuickComponent component) {
+					((ObservableFileButton) component.getComponent()).stopEditing();
 				}
 			};
 		});
@@ -1608,6 +1937,8 @@ public class QuickSwingParser {
 					ModelTypes.Value.forType(TypeTokens.get().keyFor(Format.class).parameterized(TypeTokens.get().wrap(valueType))), model,
 					cv);
 		}
+		ObservableExpression iconEx = session.getAttribute("icon", ObservableExpression.class);
+		Function<ModelSetInstance, SettableValue<Icon>> iconX = parseIcon(iconEx, session, model, cv);
 		return new AbstractQuickField(element) {
 			@Override
 			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
@@ -1617,8 +1948,10 @@ public class QuickSwingParser {
 				else
 					fieldName = null;
 				SettableValue<Object> valueV = value.apply(builder.getModels());
+				SettableValue<Icon> iconV = iconX.apply(builder.getModels());
 				container.addLabel(fieldName == null ? null : fieldName.get(), valueV, //
 					format.apply(builder.getModels()).get(), field -> {
+						iconV.changes().act(evt -> field.getEditor().setIcon(evt.getNewValue()));
 						modify(field, builder);
 					});
 				return builder.build();
@@ -1659,12 +1992,14 @@ public class QuickSwingParser {
 		TypeToken<CategoryRenderStrategy<Object, ?>> columnType = TypeTokens.get().keyFor(CategoryRenderStrategy.class)
 			.<CategoryRenderStrategy<Object, ?>> parameterized(rows.getType().getType(0), TypeTokens.get().WILDCARD);
 		ObservableExpression columnsX = session.getAttribute("columns", ObservableExpression.class);
-		Function<ModelSetInstance, ObservableCollection<CategoryRenderStrategy<Object, ?>>> columnsAttr//
-		= columnsX == null ? null : columnsX.evaluate(ModelTypes.Collection.forType(columnType), model, cv);
+		Function<ModelSetInstance, ObservableCollection<CategoryRenderStrategy<Object, ?>>> columnsAttr;
+		columnsAttr = columnsX == null ? null : columnsX.evaluate(ModelTypes.Collection.forType(columnType), model, cv);
 		session.put("model-type", rows.getType().getType(0));
 		List<Function<ModelSetInstance, CategoryRenderStrategy<Object, ?>>> columns = new ArrayList<>();
 		for (QonfigElement columnEl : session.getChildren("column"))
 			columns.add(session.getInterpreter().interpret(columnEl, Function.class));
+		// TODO Make a wrapped model set with variables for value-name and render-value-name
+		List<ValueAction> actions = session.interpretChildren("action", ValueAction.class);
 		return new AbstractQuickComponentDef(element) {
 			@Override
 			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
@@ -1683,6 +2018,45 @@ public class QuickSwingParser {
 					}
 					for (Function<ModelSetInstance, CategoryRenderStrategy<Object, ?>> column : columns)
 						table.withColumn(column.apply(builder.getModels()));
+					for (ValueAction action : actions) {
+						ObservableCollection<Object> actionValues = ObservableCollection
+							.build((TypeToken<Object>) rows.getType().getType(0)).build();
+						ModelSetInstance actionModel = action.model.wrap(builder.getModels())//
+							.with(action.valueListPlaceholder, actionValues)//
+							.build();
+						ObservableAction<?> a = action.action.apply(actionModel);
+						if (action.valueListPlaceholder != null) {
+							table.withMultiAction(values -> {
+								actionValues.clear();
+								actionValues.addAll(values);
+								a.act(null);
+							}, configAction -> {
+								configAction.allowForEmpty(action.allowForEmpty).allowForMultiple(action.allowForMultiple);
+								configAction.modifyButton(btn -> {
+									if (action.name != null)
+										btn.withText(action.name.apply(builder.getModels()));
+									if (action.icon != null)
+										btn.withIcon(action.icon.apply(builder.getModels()));
+									if (action.enabled != null)
+										btn.disableWith(action.enabled.apply(builder.getModels()));
+								});
+							});
+						} else {
+							table.withAction(value -> {
+								a.act(null);
+							}, configAction -> {
+								configAction.allowForEmpty(action.allowForEmpty).allowForMultiple(action.allowForMultiple);
+								configAction.modifyButton(btn -> {
+									if (action.name != null)
+										btn.withText(action.name.apply(builder.getModels()));
+									if (action.icon != null)
+										btn.withIcon(action.icon.apply(builder.getModels()));
+									if (action.enabled != null)
+										btn.disableWith(action.enabled.apply(builder.getModels()));
+								});
+							});
+						}
+					}
 				});
 				return builder.build();
 			}
@@ -2314,8 +2688,8 @@ public class QuickSwingParser {
 							switch (evt.type) {
 							case add:
 								for (int i = 0; i < evt.getValues().size(); i++) {
-									SettableValue<T> elValue = SettableValue.build(values.getType())
-										.withValue(evt.getValues().get(i)).build();
+									SettableValue<T> elValue = SettableValue.build(values.getType()).withValue(evt.getValues().get(i))
+										.build();
 									SimpleObservable<Void> tabUntil = SimpleObservable.build().build();
 									tabValuesI.add(evt.getIndexes()[i],
 										new TabValue<>(elValue,
@@ -2394,7 +2768,8 @@ public class QuickSwingParser {
 						if (theDebugDoc == null) {
 							QonfigParser debugParser = new DefaultQonfigParser().withToolkit(ObservableModelQonfigParser.TOOLKIT.get(),
 								CORE.get(), BASE.get(), swing);
-							QonfigInterpreter debugInterp = configureInterpreter(QonfigInterpreter.build(BASE.get(), swing)).build();
+							QonfigInterpreter debugInterp = configureInterpreter(
+								QonfigInterpreter.build(QuickSwingParser.class, BASE.get(), swing)).build();
 							URL debugXml = QuickSwingParser.class.getResource("quick-debug.qml");
 							try (InputStream in = debugXml.openStream()) {
 								theDebugDoc = debugInterp.interpret(//
@@ -2428,31 +2803,31 @@ public class QuickSwingParser {
 					xVal = x.evaluate(ModelTypes.Value.forType(int.class), superValue.getHead().getModels(),
 						superValue.getHead().getImports());
 				} else {
-					xVal = msi -> SettableValue.build(int.class).withValue(0).build();
+					xVal = msi -> SettableValue.build(int.class).withDescription("x").withValue(0).build();
 				}
 				if (y != null) {
 					yVal = y.evaluate(ModelTypes.Value.forType(int.class), superValue.getHead().getModels(),
 						superValue.getHead().getImports());
 				} else {
-					yVal = msi -> SettableValue.build(int.class).withValue(0).build();
+					yVal = msi -> SettableValue.build(int.class).withDescription("y").withValue(0).build();
 				}
 				if (w != null) {
 					wVal = w.evaluate(ModelTypes.Value.forType(int.class), superValue.getHead().getModels(),
 						superValue.getHead().getImports());
 				} else {
-					wVal = msi -> SettableValue.build(int.class).withValue(0).build();
+					wVal = msi -> SettableValue.build(int.class).withDescription("w").withValue(0).build();
 				}
 				if (h != null) {
 					hVal = h.evaluate(ModelTypes.Value.forType(int.class), superValue.getHead().getModels(),
 						superValue.getHead().getImports());
 				} else {
-					hVal = msi -> SettableValue.build(int.class).withValue(0).build();
+					hVal = msi -> SettableValue.build(int.class).withDescription("h").withValue(0).build();
 				}
 				if (v != null) {
 					vVal = v.evaluate(ModelTypes.Value.forType(boolean.class), superValue.getHead().getModels(),
 						superValue.getHead().getImports());
 				} else {
-					vVal = msi -> SettableValue.build(boolean.class).withValue(true).build();
+					vVal = msi -> SettableValue.build(boolean.class).withDescription("v").withValue(true).build();
 				}
 
 				Function<ModelSetInstance, SettableValue<QuickComponent>> selectedComponent = theDebugDoc.getHead().getModels()
@@ -2566,7 +2941,8 @@ public class QuickSwingParser {
 							}
 
 							ExternalModelSet createDebugModel() {
-								ObservableModelSet.ExternalModelSetBuilder debugExtModelsBuilder = ObservableModelSet.buildExternal();
+								ObservableModelSet.ExternalModelSetBuilder debugExtModelsBuilder = ObservableModelSet
+									.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER);
 								try {
 									ObservableModelSet.ExternalModelSetBuilder debugUiModels = debugExtModelsBuilder.addSubModel("ext");
 									debugUiModels.with("x", ModelTypes.Value.forType(int.class), xVal.apply(theContentUi.getModels()));
@@ -2588,11 +2964,12 @@ public class QuickSwingParser {
 
 							ExternalModelSet createOverlayModel() {
 								SettableValue<QuickComponent> component = selectedComponent.apply(theDebugUi.getModels());
-								SettableValue<Integer> x = SettableValue.build(int.class).withValue(0).build();
-								SettableValue<Integer> y = SettableValue.build(int.class).withValue(0).build();
-								SettableValue<Integer> w = SettableValue.build(int.class).withValue(0).build();
-								SettableValue<Integer> h = SettableValue.build(int.class).withValue(0).build();
-								SettableValue<Boolean> v = SettableValue.build(boolean.class).withValue(false).build();
+								SettableValue<Integer> x = SettableValue.build(int.class).withDescription("x").withValue(0).build();
+								SettableValue<Integer> y = SettableValue.build(int.class).withDescription("y").withValue(0).build();
+								SettableValue<Integer> w = SettableValue.build(int.class).withDescription("w").withValue(0).build();
+								SettableValue<Integer> h = SettableValue.build(int.class).withDescription("h").withValue(0).build();
+								SettableValue<Boolean> v = SettableValue.build(boolean.class).withDescription("v").withValue(false)
+									.build();
 								ComponentAdapter listener = new ComponentAdapter() {
 									@Override
 									public void componentResized(ComponentEvent e) {
@@ -2626,7 +3003,8 @@ public class QuickSwingParser {
 										h.set(c.getHeight(), evt);
 									}
 								});
-								ObservableModelSet.ExternalModelSetBuilder debugExtModelsBuilder = ObservableModelSet.buildExternal();
+								ObservableModelSet.ExternalModelSetBuilder debugExtModelsBuilder = ObservableModelSet
+									.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER);
 								try {
 									ObservableModelSet.ExternalModelSetBuilder debugUiModels = debugExtModelsBuilder
 										.addSubModel("selectedComponent");

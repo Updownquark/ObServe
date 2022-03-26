@@ -80,6 +80,8 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 	 * @return The edit test
 	 */
 	public static Predicate<EventObject> editWithClicks(int clickCount) {
+		if (clickCount == 0)
+			return editWithNotDrag();
 		return evt -> {
 			if (evt instanceof MouseEvent)
 				return ((MouseEvent) evt).getClickCount() >= clickCount;
@@ -574,7 +576,15 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 		}
 
 		public static <C> SettableValue<C> createEditorValue(Function<C, String>[] filter) {
-			return SettableValue.build((TypeToken<C>) TypeTokens.get().OBJECT).withListening(opts -> opts.forEachSafe(false)).build()//
+			return createEditorValue((TypeToken<C>) TypeTokens.get().OBJECT, filter, null);
+		}
+
+		public static <C> SettableValue<C> createEditorValue(TypeToken<C> type, Function<C, String>[] filter,
+			Consumer<SettableValue.Builder<C>> modify) {
+			SettableValue.Builder<C> builder = SettableValue.build(type).withListening(opts -> opts.forEachSafe(false));
+			if (modify != null)
+				modify.accept(builder);
+			return builder.build()//
 				.filterAccept(v -> {
 					if (filter[0] != null)
 						return filter[0].apply(v);

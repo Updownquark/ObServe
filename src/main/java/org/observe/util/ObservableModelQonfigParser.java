@@ -22,6 +22,7 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 
 import javax.swing.JFrame;
 
@@ -100,6 +101,7 @@ public class ObservableModelQonfigParser {
 	public static final ExpressoParser EXPRESSION_PARSER = new DefaultExpressoParser();
 
 	public static final QonfigToolkitAccess TOOLKIT = new QonfigToolkitAccess(ObservableModelQonfigParser.class, "observe-models.qtd")
+		.withCustomValueType(ObservableModelSet.JAVA_IDENTIFIER_TYPE)//
 		.withCustomValueType(new ExpressionValueType("expression", EXPRESSION_PARSER, false))//
 		.withCustomValueType(new ExpressionValueType("expression-or-string", EXPRESSION_PARSER, true));
 
@@ -239,7 +241,7 @@ public class ObservableModelQonfigParser {
 			return cv;
 		});
 		observeInterpreter.createWith("models", ObservableModelSet.class, (el, session) -> {
-			ObservableModelSet.Builder builder = ObservableModelSet.build();
+			ObservableModelSet.Builder builder = ObservableModelSet.build(ObservableModelSet.JAVA_NAME_CHECKER);
 			QonfigChildDef.Declared modelRole = obsTk.getChild("models", "model").getDeclared();
 			for (QonfigElement model : el.getChildrenByRole().get(modelRole)) {
 				ObservableModelSet.Builder subModel = builder
@@ -1518,6 +1520,27 @@ public class ObservableModelQonfigParser {
 				return null;
 			}
 		});
+		observeInterpreter.modifyWith("regex-format-string", Void.class, new QonfigInterpreter.QonfigValueModifier<Void>() {
+			@Override
+			public Void modifyValue(Void value, QonfigElement element, QonfigInterpretingSession session)
+				throws QonfigInterpretationException {
+				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.get("model");
+				String name = element.getAttributeText(obsTk.getAttribute("abst-model-value", "name"));
+				ModelInstanceType<SettableValue, SettableValue<Format<String>>> patternType = ModelTypes.Value
+					.forType(TypeTokens.get().keyFor(Format.class).<Format<String>> parameterized(String.class));
+				model.with(name, patternType, literalGetter(Format.validate(Format.TEXT, str -> {
+					if (str == null || str.isEmpty())
+						return null; // That's fine
+					try {
+						Pattern.compile(str);
+						return null;
+					} catch (PatternSyntaxException e) {
+						return e.getMessage();
+					}
+				}), "regex-format-string"));
+				return null;
+			}
+		});
 		observeInterpreter.createWith("simple-config-format", Void.class, new QonfigInterpreter.QonfigValueCreator<Void>() {
 			@Override
 			public Void createValue(QonfigElement element, QonfigInterpretingSession session) throws QonfigInterpretationException {
@@ -1632,7 +1655,7 @@ public class ObservableModelQonfigParser {
 					.withColumn("Date", Instant.class, t -> t,
 						col -> col.formatText(PAST_DATE_FORMAT::format).withWidths(80, 160, 500))//
 					.withColumn("Age", Instant.class, t -> t,
-								col -> col.formatText(t -> durationFormat.printAsDuration(t, Instant.now())).withWidths(50, 90, 500))//
+						col -> col.formatText(t -> durationFormat.printAsDuration(t, Instant.now())).withWidths(50, 90, 500))//
 					.withSelection(selectedBackup, true);
 				}).addButton("Backup", __ -> {
 					closingWithoutSave[0] = true;
