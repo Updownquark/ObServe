@@ -1,6 +1,7 @@
 package org.observe.util.swing;
 
 import java.awt.Component;
+import java.awt.EventQueue;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 import java.awt.event.MouseAdapter;
@@ -165,14 +166,14 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 
 	@Override
 	public Object getValueAt(Object treeValue, int columnIndex) {
-		return theColumnModel.getElementAt(columnIndex).getCategoryValue(theTreeModel.getBetterPath((T) treeValue));
+		return theColumnModel.getElementAt(columnIndex).getCategoryValue(theTreeModel.getBetterPath((T) treeValue, false));
 	}
 
 	@Override
 	public boolean isCellEditable(Object treeValue, int columnIndex) {
 		CategoryRenderStrategy<? super BetterList<T>, Object> column = (CategoryRenderStrategy<? super BetterList<T>, Object>) theColumnModel
 			.getElementAt(columnIndex);
-		BetterList<T> path = theTreeModel.getBetterPath((T) treeValue);
+		BetterList<T> path = theTreeModel.getBetterPath((T) treeValue, false);
 		return column.getMutator().isEditable(path, column.getCategoryValue(path));
 	}
 
@@ -534,7 +535,7 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 						model = (ObservableTreeTableModel<R>) ((JXTreeTable) component).getTreeTableModel();
 					else
 						model = (ObservableTreeTableModel<R>) ((JTree) component).getModel();
-					return model.getTreeModel().getBetterPath(modelValue);
+					return model.getTreeModel().getBetterPath(modelValue, false);
 				}, (C) value, row, column, isSelected, hasFocus, expanded, leaf);
 			Component c = renderer.getCellRendererComponent(component, cell,
 				() -> theContext == null ? null : theContext.getEmphaticRegions(modelRow, modelColumn));
@@ -568,11 +569,13 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 		// This is copied from ObservableTreeModel and only slightly modified to match the JXTreeTable class,
 		// but it's not really possible to consolidate this code, because though the JTree and JXTreeTable classes
 		// have similar tree APIs, they're not related by inheritance
+		ObservableTreeModel<T> model = ((ObservableTreeTableModel<T>) treeTable.getModel()).getTreeModel();
 		boolean[] callbackLock = new boolean[1];
 		TreeSelectionModel[] selectionModel = new TreeSelectionModel[] { treeTable.getTreeSelectionModel() };
 		TreeSelectionListener selListener = e -> {
 			if (callbackLock[0])
 				return;
+			ObservableSwingUtils.flushEQCache();
 			TreeSelectionModel selModel = selectionModel[0];
 			TreePath path;
 			if (selModel.isSelectionEmpty())
@@ -664,14 +667,14 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 				} else if (evt.getOldValue() == evt.getNewValue() && !selModel.isSelectionEmpty()//
 					&& (selModel.getSelectionCount() == 1 || !singularOnly)//
 					&& equivalence.elementEquals((T) selModel.getLeadSelectionPath().getLastPathComponent(), evt.getNewValue().getLast())) {
-					ObservableTreeModel<T> model = (ObservableTreeModel<T>) treeTable.getModel();
 					if (selModel.getLeadSelectionRow() == 0)
 						model.rootChanged();
 					else {
 						TreePath parentPath = selModel.getLeadSelectionPath().getParentPath();
 						int parentRow = treeTable.getRowForPath(parentPath);
 						int childIdx = treeTable.getRowForPath(selModel.getLeadSelectionPath()) - parentRow - 1;
-						ObservableCollection<? extends T> children = model.getNode((T) parentPath.getLastPathComponent()).getChildren();
+						ObservableCollection<? extends T> children = model.getNode((T) parentPath.getLastPathComponent(), false)
+							.getChildren();
 						MutableCollectionElement<T> el = (MutableCollectionElement<T>) children
 							.mutableElement(children.getElement(childIdx).getElementId());
 						if (el.isAcceptable(evt.getNewValue().getLast()) == null) {
@@ -682,12 +685,26 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 					}
 				} else {
 					TreePath path = new TreePath(evt.getNewValue().toArray());
-					int row = treeTable.getRowForPath(path);
-					if (row < 0) {
-						treeTable.expandPath(path);
-						selModel.setSelectionPath(path);
-						treeTable.scrollPathToVisible(path);
-					}
+					Runnable select = new Runnable() {
+						int tries = 0;
+
+						@Override
+						public void run() {
+							if (model.getNode((T) path.getLastPathComponent(), false) != null && treeTable.isExpanded(path.getParentPath()))
+								selModel.setSelectionPath(path);
+							else if (++tries < path.getPathCount() + 5) {
+								for (TreePath p = path.getParentPath(); p != null; p = p.getParentPath()) {
+									if (model.getNode((T) p.getLastPathComponent(), false) != null) {
+										if (!treeTable.isExpanded(p))
+											treeTable.expandPath(p);
+										break;
+									}
+								}
+								EventQueue.invokeLater(this);
+							}
+						}
+					};
+					EventQueue.invokeLater(select);
 				}
 			} finally {
 				callbackLock[0] = false;

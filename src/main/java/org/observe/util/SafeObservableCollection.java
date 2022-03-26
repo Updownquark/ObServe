@@ -118,7 +118,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	private final AtomicBoolean theFlushLock;
 	private boolean isFlushing;
 	private long theStamp;
-
+	private volatile boolean isFinished;
 
 	/**
 	 * @param collection The backing collection
@@ -185,13 +185,16 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 			init(theSyntheticCollection.flow()//
 				.map(theCollection.getType(), ref -> ref.value)// Allow caching so old and new values are consistent in update events
 				.withEquivalence(theCollection.equivalence())//
-				.collect());
+				.collectActive(until));
 
 			boolean[] init = new boolean[] { true };
 			Subscription collSub = theCollection.subscribe(evt -> handleEvent(evt, init[0]), true);
 			init[0] = false;
 			if (until != null)
-				until.take(1).act(__ -> collSub.unsubscribe());
+				until.take(1).act(__ -> {
+					isFinished = true;
+					collSub.unsubscribe();
+				});
 			if (hasQueuedEvents()) {
 				if (theThreadConstraint.isEventThread())
 					doFlush();
@@ -250,6 +253,8 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	}
 
 	private void doHandleEvent(ObservableCollectionEvent<? extends E> evt) {
+		if (isFinished)
+			return;
 		switch (evt.getType()) {
 		case add:
 			theAddedElements.add(evt.getElementId());
@@ -294,6 +299,8 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	 * @return Whether anything was flushed, or also if the state of changes prevented flushing from occurring (should try again)
 	 */
 	protected boolean doFlush() {
+		if (isFinished)
+			return false;
 		ObservableSwingUtils.flushEQCache();
 		while (!theFlushLock.compareAndSet(false, true)) {
 			if (isFlushing)
@@ -452,6 +459,8 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 
 	@Override
 	public Transaction lock(boolean write, Object cause) {
+		if (write && isFinished)
+			throw new IllegalStateException(StdMsg.UNSUPPORTED_OPERATION);
 		Transaction t = Transactable.combine(theCollection, theSyntheticCollection).lock(write, cause);
 		// In the case of a read lock on the event thread, this would not be safe if theSyntheticCollection actually performed locking,
 		// because we obtained a read lock on it which is not generally upgradable to a write lock that is needed by the flush.
@@ -463,6 +472,8 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 
 	@Override
 	public Transaction tryLock(boolean write, Object cause) {
+		if (write && isFinished)
+			throw new IllegalStateException(StdMsg.UNSUPPORTED_OPERATION);
 		Transaction t = Transactable.combine(theCollection, theSyntheticCollection).tryLock(write, cause);
 		if (t != null && (write || theThreadConstraint.isEventThread()))
 			doFlush();

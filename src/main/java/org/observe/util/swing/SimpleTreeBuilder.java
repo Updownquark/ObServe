@@ -33,6 +33,7 @@ import org.observe.util.swing.PanelPopulation.SimpleButtonEditor;
 import org.observe.util.swing.PanelPopulation.SimpleDataAction;
 import org.observe.util.swing.PanelPopulation.TreeEditor;
 import org.qommons.LambdaUtils;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.collect.BetterList;
 
@@ -115,7 +116,10 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 
 		@Override
 		protected ObservableCollection<? extends F> getChildren(F parent) {
-			return theChildren.apply(getBetterPath(parent));
+			BetterList<F> path = getBetterPath(parent, false);
+			if (path == null)
+				throw new IllegalStateException("Asking for children of node " + parent + " which does not exist");
+			return theChildren.apply(path);
 		}
 	}
 
@@ -245,19 +249,20 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 			ObservableTreeModel.syncSelection(getEditor(),
 				theValueMultiSelection.flow()
 				.transform(TypeTokens.get().keyFor(BetterList.class).<BetterList<F>> parameterized(getRoot().getType()),
-					tx -> tx.map(v -> model.getBetterPath(v)))
+					tx -> tx.map(v -> model.getBetterPath(v, true)))
 				.filter(p -> p == null ? "Value not present" : null).collectActive(until),
 				until);
 		if (thePathSingleSelection != null)
 			ObservableTreeModel.syncSelection(getEditor(), thePathSingleSelection, false, Equivalence.DEFAULT, until);
 		if (theValueSingleSelection != null)
-			ObservableTreeModel.syncSelection(getEditor(), theValueSingleSelection.transformReversible(//
+			ObservableTreeModel.syncSelection(getEditor(), theValueSingleSelection.safe(ThreadConstraint.EDT, until).transformReversible(//
 				TypeTokens.get().keyFor(BetterList.class).<BetterList<F>> parameterized(getRoot().getType()),
-				tx -> tx.map(v -> model.getBetterPath(v)).withReverse(path -> path == null ? null : path.getLast())), false,
+				tx -> tx.map(v -> model.getBetterPath(v, true)).withReverse(path -> path == null ? null : path.getLast())), false,
 				Equivalence.DEFAULT, until);
 		if (isSingleSelection)
 			getEditor().getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
 
+		getEditor().setExpandsSelectedPaths(true);
 		if (!theActions.isEmpty()) {
 			JPopupMenu popup = new JPopupMenu();
 			SimpleDataAction<BetterList<F>, ?>[] actions = theActions.toArray(new SimpleDataAction[theActions.size()]);

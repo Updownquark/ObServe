@@ -130,7 +130,7 @@ implements TreeTableEditor<F, P> {
 		protected ObservableCollection<? extends F> getChildren(F parent) {
 			if (theChildren1 != null)
 				return theChildren1.apply(parent);
-			return theChildren2.apply(getBetterPath(parent));
+			return theChildren2.apply(getBetterPath(parent, false));
 		}
 
 		@Override
@@ -431,19 +431,18 @@ implements TreeTableEditor<F, P> {
 		if (thePathMultiSelection != null)
 			ObservableTreeTableModel.syncSelection(getEditor(), thePathMultiSelection, until);
 		if (theValueMultiSelection != null)
-			ObservableTreeTableModel.syncSelection(getEditor(),
-				theValueMultiSelection.flow()
-				.transform(TypeTokens.get().keyFor(BetterList.class).<BetterList<F>> parameterized(getRoot().getType()),
-					tx -> tx.map(v -> model.getTreeModel().getBetterPath(v)))
-				.filter(p -> p == null ? "Value not present" : null).collectActive(until),
-				until);
+			ObservableTreeTableModel.syncSelection(
+				getEditor(), theValueSingleSelection.safe(ThreadConstraint.EDT, until).transformReversible(//
+					TypeTokens.get().keyFor(BetterList.class).<BetterList<F>> parameterized(getRoot().getType()), tx -> tx
+					.map(v -> model.getTreeModel().getBetterPath(v, true)).withReverse(path -> path == null ? null : path.getLast())),
+				false, Equivalence.DEFAULT, until);
 		if (thePathSingleSelection != null)
 			ObservableTreeTableModel.syncSelection(getEditor(), thePathSingleSelection, false, Equivalence.DEFAULT, until);
 		if (theValueSingleSelection != null)
 			ObservableTreeTableModel.syncSelection(getEditor(), theValueSingleSelection.transformReversible(//
 				TypeTokens.get().keyFor(BetterList.class).<BetterList<F>> parameterized(getRoot().getType()),
-				tx -> tx.map(v -> model.getTreeModel().getBetterPath(v)).withReverse(path -> path == null ? null : path.getLast())), false,
-				Equivalence.DEFAULT, until);
+				tx -> tx.map(v -> model.getTreeModel().getBetterPath(v, true)).withReverse(path -> path == null ? null : path.getLast())),
+				false, Equivalence.DEFAULT, until);
 		if (isSingleSelection)
 			getEditor().getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
 

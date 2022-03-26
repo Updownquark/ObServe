@@ -1,9 +1,11 @@
 package org.observe.util.swing;
 
+import java.awt.EventQueue;
 import java.beans.PropertyChangeListener;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -75,14 +77,27 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 		return theRoot.get();
 	}
 
-	TreeNode getNode(T value) {
+	TreeNode getNode(T value, boolean searchDeeply) {
 		if (value == null)
 			return null;
-		return theNodes.get(new IdentityKey<>(value));
+		TreeNode found = theNodes.get(new IdentityKey<>(value));
+		if (found != null || !searchDeeply || !ThreadConstraint.EDT.isEventThread()) // Can't do the search off the EDT
+			return found;
+		LinkedList<TreeNode> queue = new LinkedList<>();
+		queue.add(theRootNode);
+		while (!queue.isEmpty()) {
+			TreeNode node = queue.poll();
+			for (TreeNode child : node.initChildren().getChildNodes()) {
+				if (child.get() == value)
+					return child;
+				queue.add(child);
+			}
+		}
+		return null;
 	}
 
-	public BetterList<T> getBetterPath(T value) {
-		TreeNode node = getNode(value);
+	public BetterList<T> getBetterPath(T value, boolean searchDeeply) {
+		TreeNode node = getNode(value, searchDeeply);
 		return node == null ? null : node.getBetterPath();
 	}
 
@@ -109,7 +124,8 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 			}
 		} else {
 			theRootNode.dispose();
-			theNodes.remove(new IdentityKey<>(theRootNode.get()));
+			if (!theNodes.isEmpty())
+				System.err.println("Discard missed nodes: " + theNodes.keySet());
 			theRootNode = new TreeNode(null, newRoot);
 			theNodes.put(new IdentityKey<>(newRoot), theRootNode);
 			TreeModelEvent event = new TreeModelEvent(this, new Object[] { theRoot.get() }, null, null);
@@ -126,19 +142,21 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 
 	@Override
 	public Object getChild(Object parent, int index) {
-		TreeNode node = getNode((T) parent);
+		TreeNode node = getNode((T) parent, false);
+		if (node == null)
+			System.err.println("Asking for child of node " + parent + ", which does not exist");
 		return node == null ? null : node.getChild(index);
 	}
 
 	@Override
 	public int getChildCount(Object parent) {
-		TreeNode node = getNode((T) parent);
+		TreeNode node = getNode((T) parent, false);
 		return node == null ? 0 : node.getChildCount();
 	}
 
 	@Override
 	public int getIndexOfChild(Object parent, Object child) {
-		TreeNode node = getNode((T) parent);
+		TreeNode node = getNode((T) parent, false);
 		return node == null ? -1 : node.indexOfChild(child);
 	}
 
@@ -161,10 +179,12 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 
 	/** Releases this model's observers placed on child collections */
 	public void dispose() {
-		TreeNode node = getNode(theRoot.get());
-		node.dispose();
-		theNodes.clear();
-		theListeners.clear();
+		ObservableSwingUtils.onEQ(() -> {
+			TreeNode node = getNode(theRoot.get(), false);
+			node.dispose();
+			theNodes.clear();
+			theListeners.clear();
+		});
 	}
 
 	class TreeNode {
@@ -172,6 +192,7 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 		private final T theValue;
 		private final int theDepth;
 		private final List<TreeNode> theChildNodes;
+		private ObservableCollection<? extends T> theUnsafeChildren;
 		private ObservableCollection<? extends T> theChildren;
 		private SimpleObservable<Void> unsubscribe;
 		private boolean areChildrenInitialized;
@@ -195,17 +216,21 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 			return theChildren;
 		}
 
-		private synchronized void initChildren() {
+		List<TreeNode> getChildNodes() {
+			return theChildNodes;
+		}
+
+		private TreeNode initChildren() {
 			if (areChildrenInitialized) {
-				return;
+				return this;
 			}
 			areChildrenInitialized = true;
 
 			unsubscribe = SimpleObservable.build().build();
-			theChildren = ObservableTreeModel.this.getChildren(theValue);
-			if (theChildren != null)
-				theChildren = theChildren.safe(ThreadConstraint.EDT, unsubscribe);
+			theUnsafeChildren = ObservableTreeModel.this.getChildren(theValue);
+			theChildren = theUnsafeChildren == null ? null : theUnsafeChildren.safe(ThreadConstraint.EDT, unsubscribe);
 			init(false);
+			return this;
 		}
 
 		void init(boolean withEvent) {
@@ -234,31 +259,33 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 					}
 				}
 
-				theChildren.changes().takeUntil(unsubscribe).act(event -> {
-					ObservableSwingUtils.onEQ(() -> {
-						int[] indexes = event.getIndexes();
-						switch (event.type) {
-						case add:
-							added(indexes, event.getValues().toArray());
-							break;
-						case remove:
-							removed(indexes, event.getValues().toArray());
-							break;
-						case set:
-							boolean justChanges = true;
-							for (int i = 0; i < indexes.length && justChanges; i++)
-								justChanges &= event.elements.get(i).oldValue == event.elements.get(i).newValue;
-							if (justChanges)
-								changed(indexes, event.getValues().toArray());
-							else {
-								for (int i = 0; i < indexes.length; i++) {
-									removed(new int[] { indexes[i] }, new Object[] { event.elements.get(i).oldValue });
-									added(new int[] { indexes[i] }, new Object[] { event.elements.get(i).newValue });
-								}
+				boolean[] unsubscribed = new boolean[1];
+				unsubscribe.act(__ -> unsubscribed[0] = true);
+				theChildren.changes().takeUntil(unsubscribe).act(event -> { // theChildren is already safe
+					if (unsubscribed[0])
+						return;
+					int[] indexes = event.getIndexes();
+					switch (event.type) {
+					case add:
+						added(indexes, event.getValues().toArray());
+						break;
+					case remove:
+						removed(indexes, event.getValues().toArray());
+						break;
+					case set:
+						boolean justChanges = true;
+						for (int i = 0; i < indexes.length && justChanges; i++)
+							justChanges &= event.elements.get(i).oldValue == event.elements.get(i).newValue;
+						if (justChanges)
+							changed(indexes, event.getValues().toArray());
+						else {
+							for (int i = 0; i < indexes.length; i++) {
+								removed(new int[] { indexes[i] }, new Object[] { event.elements.get(i).oldValue });
+								added(new int[] { indexes[i] }, new Object[] { event.elements.get(i).newValue });
 							}
-							break;
 						}
-					});
+						break;
+					}
 				});
 			}
 		}
@@ -329,8 +356,8 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 			if (!areChildrenInitialized)
 				return;
 			ObservableCollection<? extends T> children = ObservableTreeModel.this.getChildren(theValue);
-			if (theChildren == children
-				|| (children != null && theChildren != null && children.getIdentity().equals(theChildren.getIdentity())))
+			if (theUnsafeChildren == children
+				|| (children != null && theUnsafeChildren != null && children.getIdentity().equals(theUnsafeChildren.getIdentity())))
 				return;
 			try (Transaction t = Transactable.lock(theChildren, false, null); //
 				Transaction t2 = Transactable.lock(children, false, null)) {
@@ -358,7 +385,8 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 						child.dispose();
 					theChildNodes.clear();
 				}
-				theChildren = children;
+				theUnsafeChildren = children;
+				theChildren = theUnsafeChildren == null ? null : theUnsafeChildren.safe(ThreadConstraint.EDT, unsubscribe);
 				init(true);
 			}
 		}
@@ -471,11 +499,13 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 	 */
 	public static <T> void syncSelection(JTree tree, SettableValue<BetterList<T>> selection, boolean singularOnly,
 		Equivalence<? super T> equivalence, Observable<?> until) {
+		ObservableTreeModel<T> model = (ObservableTreeModel<T>) tree.getModel();
 		boolean[] callbackLock = new boolean[1];
 		TreeSelectionModel[] selectionModel = new TreeSelectionModel[] { tree.getSelectionModel() };
 		TreeSelectionListener selListener = e -> {
 			if (callbackLock[0])
 				return;
+			ObservableSwingUtils.flushEQCache();
 			TreeSelectionModel selModel = selectionModel[0];
 			TreePath path;
 			if (selModel.isSelectionEmpty())
@@ -506,6 +536,7 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 			public void treeNodesChanged(TreeModelEvent e) {
 				if (callbackLock[0])
 					return;
+				ObservableSwingUtils.flushEQCache();
 				int parentRow = tree.getRowForPath(e.getTreePath());
 				if (parentRow < 0 || !tree.isExpanded(parentRow))
 					return;
@@ -546,7 +577,7 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 				if (!Objects.equals(list, selection.get())) {
 					callbackLock[0] = true;
 					try {
-						selection.set(BetterList.of(list), e);
+						selection.set(list == null ? null : BetterList.of(list), e);
 					} finally {
 						callbackLock[0] = false;
 					}
@@ -559,8 +590,8 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 		};
 		selectionModel[0].addTreeSelectionListener(selListener);
 		tree.addPropertyChangeListener("selectionModel", selModelListener);
-		tree.getModel().addTreeModelListener(modelListener);
-		selection.changes().takeUntil(until).act(evt -> ObservableSwingUtils.onEQ(() -> {
+		model.addTreeModelListener(modelListener);
+		selection.changes().takeUntil(until).safe(ThreadConstraint.EDT).act(evt -> {
 			if (callbackLock[0])
 				return;
 			callbackLock[0] = true;
@@ -571,14 +602,14 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 				} else if (evt.getOldValue() == evt.getNewValue() && !selModel.isSelectionEmpty()//
 					&& (selModel.getSelectionCount() == 1 || !singularOnly)//
 					&& equivalence.elementEquals((T) selModel.getLeadSelectionPath().getLastPathComponent(), evt.getNewValue().getLast())) {
-					ObservableTreeModel<T> model = (ObservableTreeModel<T>) tree.getModel();
 					if (selModel.getLeadSelectionRow() == 0)
 						model.rootChanged();
 					else {
 						TreePath parentPath = selModel.getLeadSelectionPath().getParentPath();
 						int parentRow = tree.getRowForPath(parentPath);
 						int childIdx = tree.getRowForPath(selModel.getLeadSelectionPath()) - parentRow - 1;
-						ObservableCollection<? extends T> children = model.getNode((T) parentPath.getLastPathComponent()).getChildren();
+						ObservableCollection<? extends T> children = model.getNode((T) parentPath.getLastPathComponent(), false)
+							.getChildren();
 						MutableCollectionElement<T> el = (MutableCollectionElement<T>) children
 							.mutableElement(children.getElement(childIdx).getElementId());
 						if (el.isAcceptable(evt.getNewValue().getLast()) == null) {
@@ -589,22 +620,36 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 					}
 				} else {
 					TreePath path = new TreePath(evt.getNewValue().toArray());
-					int row = tree.getRowForPath(path);
-					if (row < 0) {
-						tree.expandPath(path);
-						selModel.setSelectionPath(path);
-						tree.scrollPathToVisible(path);
-					}
+					Runnable select = new Runnable() {
+						int tries = 0;
+
+						@Override
+						public void run() {
+							if (model.getNode((T) path.getLastPathComponent(), false) != null && tree.isExpanded(path.getParentPath()))
+								selModel.setSelectionPath(path);
+							else if (++tries < path.getPathCount() + 5) {
+								for (TreePath p = path.getParentPath(); p != null; p = p.getParentPath()) {
+									if (model.getNode((T) p.getLastPathComponent(), false) != null) {
+										if (!tree.isExpanded(p))
+											tree.expandPath(p);
+										break;
+									}
+								}
+								EventQueue.invokeLater(this);
+							}
+						}
+					};
+					EventQueue.invokeLater(select);
 				}
 			} finally {
 				callbackLock[0] = false;
 			}
-		}));
+		});
 
 		until.take(1).act(__ -> {
 			tree.removePropertyChangeListener("selectionModel", selModelListener);
 			selectionModel[0].removeTreeSelectionListener(selListener);
-			tree.getModel().removeTreeModelListener(modelListener);
+			model.removeTreeModelListener(modelListener);
 		});
 	}
 
