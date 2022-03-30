@@ -68,6 +68,17 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 			this.value = value;
 		}
 
+		/**
+		 * @param sourceId The element ID in the source
+		 * @param value The value
+		 * @param synthId The element ID in the synthetic (safe) collection
+		 */
+		protected ElementRef(ElementId sourceId, E value, ElementId synthId) {
+			this.sourceId = sourceId;
+			this.value = value;
+			this.synthId = synthId;
+		}
+
 		/** @return The element ID of this element in the safe collection */
 		public ElementId getSynthId() {
 			return synthId;
@@ -80,11 +91,6 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 		/** @return The value of the element */
 		public E getValue() {
 			return value;
-		}
-
-		/** @param value The new value for the element */
-		public void setValue(E value) {
-			this.value = value;
 		}
 
 		@Override
@@ -183,9 +189,9 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	protected void init(Observable<?> until) {
 		try (Transaction t = theCollection.lock(false, null)) {
 			init(theSyntheticCollection.flow()//
-				.map(theCollection.getType(), ref -> ref.value)// Allow caching so old and new values are consistent in update events
+				.transform(theCollection.getType(), tx -> tx.cache(false).map(ref -> ref.value))
 				.withEquivalence(theCollection.equivalence())//
-				.collectActive(until));
+				.collectPassive());
 
 			boolean[] init = new boolean[] { true };
 			Subscription collSub = theCollection.subscribe(evt -> handleEvent(evt, init[0]), true);
@@ -329,8 +335,10 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 				for (ElementRef<E> changedEl : theChangedElements) {
 					if (changedEl.isRemoved)
 						continue;
-					changedEl.setValue(theCollection.getElement(changedEl.sourceId).get());
-					theSyntheticCollection.mutableElement(changedEl.getSynthId()).set(changedEl);
+					// Make a whole new element because the passively-derived collection would otherwise
+					// report the new value for both the old and new values in the fired event
+					theSyntheticCollection.mutableElement(changedEl.getSynthId()).set(//
+						new ElementRef<>(changedEl.sourceId, theCollection.getElement(changedEl.sourceId).get(), changedEl.synthId));
 					changedEl.isChanged = false;
 				}
 				theChangedElements.clear();
@@ -508,7 +516,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 		if (collection == this)
 			return BetterList.of(localId);
 		try (Transaction t = lock(false, null)) {
-			ElementRef<E> ref = theSyntheticCollection.getElement(localId).get();
+			ElementRef<E> ref = theSyntheticBacking.getElement(localId).get();
 			// The source element may have been removed.
 			// Can't decide at the moment whether I should check that and return empty or let it throw the exception
 			return theCollection.getSourceElements(ref.sourceId, collection);
