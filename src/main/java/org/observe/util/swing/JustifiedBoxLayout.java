@@ -241,6 +241,30 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 		return this;
 	}
 
+	/**
+	 * @param component The component
+	 * @return The minimum size to use for the component
+	 */
+	protected Dimension getMinSize(Component component) {
+		return component.getMinimumSize();
+	}
+
+	/**
+	 * @param component The component
+	 * @return The preferred size to use for the component
+	 */
+	protected Dimension getPrefSize(Component component) {
+		return component.getPreferredSize();
+	}
+
+	/**
+	 * @param component The component
+	 * @return The maximum size to use for the component
+	 */
+	protected Dimension getMaxSize(Component component) {
+		return component.getMaximumSize();
+	}
+
 	@Override
 	public Dimension preferredLayoutSize(Container parent) {
 		int main = 0;
@@ -253,7 +277,7 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 				first = false;
 			else
 				main += thePadding;
-			Dimension pref = comp.getPreferredSize();
+			Dimension pref = getPrefSize(comp);
 			main += getMain(pref);
 			int compCross = getCross(pref);
 			if (compCross > cross)
@@ -277,7 +301,7 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 				first = false;
 			else
 				main += thePadding;
-			Dimension min = comp.getMinimumSize();
+			Dimension min = getMinSize(comp);
 			main += getMain(min);
 			int compCross = getCross(min);
 			if (compCross > cross)
@@ -299,17 +323,17 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 		int hIns = insets.left + insets.right + theMargin.left + theMargin.right;
 		int vIns = insets.top + insets.bottom + theMargin.top + theMargin.bottom;
 		int main = isVertical ? vIns : hIns;
-		int minOfMaxCross = computeCross ? 0 : Integer.MAX_VALUE;
+		int minOfMaxCross = computeCross ? Integer.MAX_VALUE : 0;
 		int maxOfMinCross = 0;
 		boolean first = true;
 		for (Component comp : parent.getComponents()) {
 			if (!isShowingInvisible && !comp.isVisible())
 				continue;
-			Dimension max = comp.getMaximumSize();
+			Dimension max = getMaxSize(comp);
 			if (first) {
 				if (computeCross) {
 					minOfMaxCross = Math.min(minOfMaxCross, getCross(max));
-					Dimension min = comp.getMinimumSize();
+					Dimension min = getMinSize(comp);
 					maxOfMinCross = Math.max(maxOfMinCross, getCross(min));
 					if (minOfMaxCross <= maxOfMinCross)
 						computeCross = false;
@@ -319,13 +343,14 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 				int compCross = getCross(max);
 				if (compCross < minOfMaxCross)
 					minOfMaxCross = compCross;
-				Dimension min = comp.getMinimumSize();
+				Dimension min = getMinSize(comp);
 				compCross = getCross(min);
 				if (compCross > maxOfMinCross)
 					maxOfMinCross = compCross;
 				if (minOfMaxCross <= maxOfMinCross)
 					computeCross = false;
-				main += thePadding;
+				if (computeMain && main < Integer.MAX_VALUE)
+					main += thePadding;
 			}
 			if (computeMain) {
 				main += getMain(max);
@@ -373,7 +398,7 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 				first = false;
 			else
 				totalLength += thePadding;
-			Dimension ps = components.get(i).getPreferredSize();
+			Dimension ps = getPrefSize(components.get(i));
 			preferredMainSizes[i] = getMain(ps);
 			preferredCrossSizes[i] = getCross(ps);
 			totalLength += preferredMainSizes[i];
@@ -444,7 +469,7 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 		float[] sizes = new float[components.size()];
 		long totalExtremeSize = 0;
 		for (int i = 0; i < components.size(); i++) {
-			int size = getMain(shrink ? components.get(i).getMinimumSize() : components.get(i).getMaximumSize());
+			int size = getMain(shrink ? getMinSize(components.get(i)) : getMaxSize(components.get(i)));
 			sizes[i] = size;
 			totalExtremeSize += size;
 		}

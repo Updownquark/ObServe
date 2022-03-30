@@ -1,5 +1,6 @@
 package org.observe.util.swing;
 
+import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Container;
@@ -89,6 +90,7 @@ import org.observe.collect.ObservableCollectionBuilder;
 import org.observe.config.ObservableConfig;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.ObservableSwingUtils.FontAdjuster;
+import org.observe.util.swing.PanelPopulation.SimpleCollapsePane;
 import org.qommons.BiTuple;
 import org.qommons.BreakpointHere;
 import org.qommons.Identifiable;
@@ -762,6 +764,8 @@ public class PanelPopulation {
 	public interface CollapsePanel<CP extends Container, C extends Container, P extends CollapsePanel<CP, C, P>>
 	extends PanelPopulator<C, P> {
 		P withCollapsed(SettableValue<Boolean> collapsed);
+
+		P animated(boolean animated);
 
 		P modifyCP(Consumer<CP> cp);
 
@@ -3254,12 +3258,41 @@ public class PanelPopulation {
 		}
 	}
 
+	private static class CollapsePaneOuterLayout extends JustifiedBoxLayout {
+		CollapsePaneOuterLayout() {
+			super(true);
+			mainJustified().crossJustified();
+		}
+
+		@Override
+		protected Dimension getMinSize(Component component) {
+			if (component instanceof JXCollapsiblePane && !((JXCollapsiblePane) component).isCollapsed())
+				return super.getMinSize(((JXCollapsiblePane) component).getContentPane());
+			return super.getMinSize(component);
+		}
+
+		@Override
+		protected Dimension getPrefSize(Component component) {
+			if (component instanceof JXCollapsiblePane && !((JXCollapsiblePane) component).isCollapsed())
+				return super.getPrefSize(((JXCollapsiblePane) component).getContentPane());
+			return super.getPrefSize(component);
+		}
+
+		@Override
+		protected Dimension getMaxSize(Component component) {
+			if (component instanceof JXCollapsiblePane && !((JXCollapsiblePane) component).isCollapsed())
+				return super.getMaxSize(((JXCollapsiblePane) component).getContentPane());
+			return super.getMaxSize(component);
+		}
+	}
+
 	static class SimpleCollapsePane extends AbstractComponentEditor<JXPanel, SimpleCollapsePane>
 	implements PartialPanelPopulatorImpl<JXPanel, SimpleCollapsePane>, CollapsePanel<JXCollapsiblePane, JXPanel, SimpleCollapsePane> {
 		private final JXCollapsiblePane theCollapsePane;
 		private final PartialPanelPopulatorImpl<JPanel, ?> theOuterContainer;
 		private final PartialPanelPopulatorImpl<JXPanel, ?> theContentPanel;
 		private SimpleHPanel<JPanel> theHeaderPanel;
+		private PanelPopulator<JPanel, ?> theExposedHeaderPanel;
 		private final Observable<?> theUntil;
 		private final SettableValue<Boolean> theInternalCollapsed;
 
@@ -3278,10 +3311,8 @@ public class PanelPopulation {
 				theContentPanel = new MigFieldPanel(getEditor(), getUntil(), lock);
 			else
 				theContentPanel = new SimpleHPanel(null, getEditor(), lock, getUntil());
-			theOuterContainer = new MigFieldPanel(new ConformingPanel(), until, lock);
-			theHeaderPanel = new SimpleHPanel(null,
-				new ConformingPanel(new JustifiedBoxLayout(false).setMainAlignment(JustifiedBoxLayout.Alignment.LEADING)), getLock(),
-				getUntil());
+			theOuterContainer = new SimpleHPanel(null, new ConformingPanel(new CollapsePaneOuterLayout()), lock, until);
+			theHeaderPanel = new SimpleHPanel(null, new ConformingPanel(new BorderLayout()), lock, until);
 
 			theCollapsedIcon = ObservableSwingUtils.getFixedIcon(PanelPopulation.class, "/icons/circlePlus.png", 16, 16);
 			theExpandedIcon = ObservableSwingUtils.getFixedIcon(PanelPopulation.class, "/icons/circleMinus.png", 16, 16);
@@ -3293,10 +3324,24 @@ public class PanelPopulation {
 				if (collapsed)
 					theCollapsePane.setVisible(false);
 			});
-			theHeaderPanel.fill().decorate(cd -> cd.bold().withFontSize(16))//
-			.addIcon(null, theInternalCollapsed.map(collapsed -> collapsed ? theCollapsedIcon : theExpandedIcon),
-				icon -> icon.withTooltip(theInternalCollapsed.map(collapsed -> collapsed ? "Expand" : "Collapse")))
-			.spacer(2);
+			MouseListener collapseMouseListener = new MouseAdapter() {
+				@Override
+				public void mouseClicked(MouseEvent e) {
+					theCollapsePane.setVisible(true);
+					theCollapsePane.setCollapsed(!theCollapsePane.isCollapsed());
+				}
+			};
+			theHeaderPanel.fill().addHPanel(null, new JustifiedBoxLayout(false), p -> p//
+				.decorate(cd -> cd.bold().withFontSize(16))//
+				.addIcon(null, theInternalCollapsed.map(collapsed -> collapsed ? theCollapsedIcon : theExpandedIcon), icon -> {
+					icon.withTooltip(theInternalCollapsed.map(collapsed -> collapsed ? "Expand" : "Collapse"));
+					icon.modifyComponent(c -> c.addMouseListener(collapseMouseListener));
+				})//
+				.spacer(2)//
+				.withLayoutConstraints(BorderLayout.WEST))//
+			.addHPanel(null, new JustifiedBoxLayout(false).mainJustified().crossJustified(),
+				p -> theExposedHeaderPanel = p.withLayoutConstraints(BorderLayout.CENTER));
+			theHeaderPanel.getComponent().addMouseListener(collapseMouseListener);
 			decorate(deco -> deco.withBorder(BorderFactory.createLineBorder(Color.black)));
 		}
 
@@ -3312,6 +3357,12 @@ public class PanelPopulation {
 		}
 
 		@Override
+		public SimpleCollapsePane animated(boolean animated) {
+			theCollapsePane.setAnimated(animated);
+			return this;
+		}
+
+		@Override
 		public SimpleCollapsePane modifyCP(Consumer<JXCollapsiblePane> cp) {
 			cp.accept(theCollapsePane);
 			return this;
@@ -3319,7 +3370,7 @@ public class PanelPopulation {
 
 		@Override
 		public SimpleCollapsePane withHeader(Consumer<PanelPopulator<JPanel, ?>> header) {
-			header.accept(theHeaderPanel);
+			header.accept(theExposedHeaderPanel);
 			return this;
 		}
 
@@ -3344,13 +3395,7 @@ public class PanelPopulation {
 				isInitialized = true;
 				theOuterContainer.doAdd(theHeaderPanel, null, null, false);
 				theOuterContainer.addComponent(null, theCollapsePane, c -> c.fill());
-				theHeaderPanel.getComponent().addMouseListener(new MouseAdapter() {
-					@Override
-					public void mouseClicked(MouseEvent e) {
-						theCollapsePane.setVisible(true);
-						theCollapsePane.setCollapsed(!theCollapsePane.isCollapsed());
-					}
-				});
+
 				SettableValue<Boolean> collapsed = isCollapsed;
 				if (collapsed != null) {
 					boolean[] feedback = new boolean[1];

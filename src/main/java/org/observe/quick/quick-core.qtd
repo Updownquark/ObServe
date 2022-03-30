@@ -64,6 +64,7 @@
 		</element-def>
 
 		<element-def name="widget" abstract="true">
+			<attribute name="name" type="string" specify="optional" /> <!-- For debugging -->
 			<attribute name="bg-color" type="expression-or-string" specify="optional" />
 			<attribute name="tooltip" type="expression-or-string" specify="optional" />
 			<attribute name="visible" type="expression" specify="optional" />

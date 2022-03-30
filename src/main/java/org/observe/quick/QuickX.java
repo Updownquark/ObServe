@@ -1,6 +1,7 @@
 package org.observe.quick;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -17,8 +18,10 @@ import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.quick.QuickContainer.AbstractQuickContainer;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.CategoryRenderStrategy;
+import org.observe.util.swing.JustifiedBoxLayout;
 import org.observe.util.swing.PanelPopulation;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.qommons.collect.BetterList;
@@ -29,15 +32,46 @@ import org.qommons.config.QonfigToolkitAccess;
 import com.google.common.reflect.TypeToken;
 
 public class QuickX extends QuickBase {
-	public static final QonfigToolkitAccess EXT = new QonfigToolkitAccess(QuickBase.class, "quick-x.qtd", QuickBase.BASE);
+	public static final QonfigToolkitAccess EXT = new QonfigToolkitAccess(QuickBase.class, "quick-ext.qtd", QuickBase.BASE);
 
 	@Override
 	public <QIS extends ExpressoSession<QIS>, B extends Builder<QIS, B>> B configureInterpreter(B interpreter) {
 		super.configureInterpreter(interpreter);
 		QonfigToolkit ext = EXT.get();
 		ExpressoInterpreter.Builder<?, ?> tkInt = interpreter.forToolkit(ext);
-		tkInt.createWith("tree-table", QuickComponentDef.class, this::interpretTreeTable);
+		tkInt.createWith("collapse-pane", QuickComponentDef.class, this::interpretCollapsePane)//
+		.createWith("tree-table", QuickComponentDef.class, this::interpretTreeTable)//
+		;
 		return interpreter;
+	}
+
+	private QuickComponentDef interpretCollapsePane(ExpressoSession<?> session) throws QonfigInterpretationException {
+		ValueContainer<SettableValue, SettableValue<Boolean>> collapsed = session.getAttributeAsValue("collapsed", boolean.class,
+			() -> mis -> SettableValue.build(boolean.class).withDescription("collapsed").build());
+		Boolean initCollapsed = session.getAttribute("init-collapsed", Boolean.class);
+		QuickComponentDef header = session.interpretChildren("header", QuickComponentDef.class).getFirst();
+		QuickComponentDef content = session.interpretChildren("content", QuickComponentDef.class).getFirst(); // Single content
+		return new AbstractQuickContainer(session.getElement(), Arrays.asList(header, content)) {
+			@Override
+			public QuickComponent installContainer(PanelPopulator<?, ?> container, QuickComponent.Builder builder,
+				Consumer<PanelPopulator<?, ?>> populator) {
+				container.addCollapsePanel(false, new JustifiedBoxLayout(true).mainJustified().crossJustified(), cp -> {
+					SettableValue<Boolean> collapsedV = collapsed.get(builder.getModels());
+					if (initCollapsed != null)
+						collapsedV.set(initCollapsed, null);
+					cp.withCollapsed(collapsedV);
+					QuickComponent.Builder headerBuilder = QuickComponent.build(header, builder, builder.getModels());
+					QuickComponent.Builder contentBuilder = QuickComponent.build(content, builder, builder.getModels());
+					cp.animated(false);
+					cp.withHeader(hp -> {
+						builder.withChild(header.install(hp, headerBuilder));
+					});
+					builder.withChild(content.install(cp, contentBuilder));
+					modify(cp, builder);
+				});
+				return builder.build();
+			}
+		};
 	}
 
 	private <T, E extends PanelPopulation.TreeTableEditor<T, E>> QuickComponentDef interpretTreeTable(ExpressoSession<?> session)

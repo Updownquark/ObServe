@@ -215,6 +215,7 @@ public class QuickCore extends ObservableModelQonfigParser {
 		widget.modify((editor, builder) -> editor.modifyComponent(builder::withComponent));
 		ClassView cv = session.getClassView();
 		ObservableModelSet model = session.getModels();
+		String name = session.getAttribute("name", String.class);
 		ObservableExpression tooltipX = session.getAttribute("tooltip", ObservableExpression.class);
 		ObservableExpression bgColorX = session.getAttribute("bg-color", ObservableExpression.class);
 		ObservableExpression visibleX = session.getAttribute("visible", ObservableExpression.class);
@@ -224,6 +225,11 @@ public class QuickCore extends ObservableModelQonfigParser {
 		Function<ModelSetInstance, SettableValue<Color>> bgColor = parseColor(bgColorX, model, cv);
 		ValueContainer<SettableValue, SettableValue<Boolean>> visible = visibleX == null ? null
 			: visibleX.evaluate(ModelTypes.Value.forType(boolean.class), model, cv);
+		if (name != null) {
+			widget.modify((comp, build) -> {
+				comp.modifyComponent(c -> c.setName(name));
+			});
+		}
 		if (tooltip != null) {
 			widget.modify((comp, builder) -> {
 				comp.withTooltip(tooltip.apply(builder.getModels()));

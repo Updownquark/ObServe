@@ -142,7 +142,7 @@ public class QuickBase extends QuickCore {
 		QonfigToolkit base = BASE.get();
 		ExpressoInterpreter.Builder<?, ?> tkInt = interpreter.forToolkit(base);
 		tkInt.createWith("box", QuickBox.class, this::interpretBox)//
-			.modifyWith("border", QuickBox.class, this::modifyBoxBorder)//
+		.modifyWith("border", QuickBox.class, this::modifyBoxBorder)//
 		.modifyWith("simple", QuickBox.class, this::modifyBoxSimple)//
 		.modifyWith("inline", QuickBox.class, this::modifyBoxInline)//
 		.createWith("multi-value-action", ValueAction.class, this::interpretMultiValueAction)//
@@ -771,7 +771,9 @@ public class QuickBase extends QuickCore {
 											EventQueue.invokeLater(() -> {
 												divCallbackLock[0] = true;
 												try {
-													sp.setDividerLocation(pos.get().evaluate(sp.getWidth()));
+													int target = pos.get().evaluate(vertical ? sp.getHeight() : sp.getWidth());
+													if (Math.abs(target - sp.getDividerLocation()) > 1)
+														sp.setDividerLocation(target);
 												} finally {
 													divCallbackLock[0] = false;
 												}
@@ -786,7 +788,9 @@ public class QuickBase extends QuickCore {
 											EventQueue.invokeLater(() -> {
 												divCallbackLock[0] = true;
 												try {
-													sp.setDividerLocation(pos.get().evaluate(sp.getWidth()));
+													int target = pos.get().evaluate(vertical ? sp.getHeight() : sp.getWidth());
+													if (Math.abs(target - sp.getDividerLocation()) > 1)
+														sp.setDividerLocation(target);
 												} finally {
 													divCallbackLock[0] = false;
 												}
@@ -803,7 +807,9 @@ public class QuickBase extends QuickCore {
 									EventQueue.invokeLater(() -> {
 										divCallbackLock[0] = true;
 										try {
-											sp.setDividerLocation(pos.get().evaluate(sp.getWidth()));
+											int target = pos.get().evaluate(vertical ? sp.getHeight() : sp.getWidth());
+											if (Math.abs(target - sp.getDividerLocation()) > 1)
+												sp.setDividerLocation(target);
 										} finally {
 											divCallbackLock[0] = false;
 										}
@@ -819,7 +825,9 @@ public class QuickBase extends QuickCore {
 										return;
 									divCallbackLock[0] = true;
 									try {
-										sp.setDividerLocation(pos.get().evaluate(sp.getWidth()));
+										int target = pos.get().evaluate(vertical ? sp.getHeight() : sp.getWidth());
+										if (Math.abs(target - sp.getDividerLocation()) > 1)
+											sp.setDividerLocation(target);
 									} finally {
 										divCallbackLock[0] = false;
 									}
@@ -828,6 +836,7 @@ public class QuickBase extends QuickCore {
 						});
 					}
 					split.firstH(new JustifiedBoxLayout(true).mainJustified().crossJustified(), first -> {
+						first.withName("split-left");
 						QuickComponent.Builder child = QuickComponent.build(children.get(0), builder, builder.getModels());
 						children.get(0).install(first, child);
 						builder.withChild(child.build());

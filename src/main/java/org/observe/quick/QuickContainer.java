@@ -26,7 +26,8 @@ public interface QuickContainer extends QuickComponentDef {
 
 	@Override
 	default QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
-		return installContainer(container, builder, thisContainer -> populateContainer(thisContainer, builder));
+		return installContainer(container, builder, //
+			thisContainer -> populateContainer(thisContainer, builder));
 	}
 
 	public abstract class AbstractQuickContainer extends AbstractQuickComponentDef implements QuickContainer {

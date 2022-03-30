@@ -22,6 +22,15 @@ public class ConformingPanel extends JPanel {
 		super(layout);
 	}
 
+	/**
+	 * @param name The name for this panel
+	 * @return This panel
+	 */
+	public ConformingPanel withName(String name) {
+		setName(name);
+		return this;
+	}
+
 	@Override
 	public void invalidate() {
 		isPrefSizeDirty = isMinSizeDirty = isMaxSizeDirty = true;
