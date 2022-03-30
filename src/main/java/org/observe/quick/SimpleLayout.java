@@ -1,4 +1,4 @@
-package org.observe.util.swing;
+package org.observe.quick;
 
 import java.awt.Component;
 import java.awt.Container;
@@ -10,8 +10,8 @@ import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.observe.util.swing.QuickPosition.PositionUnit;
-import org.observe.util.swing.QuickSize.SizeUnit;
+import org.observe.quick.QuickPosition.PositionUnit;
+import org.observe.quick.QuickSize.SizeUnit;
 
 public class SimpleLayout implements LayoutManager2 {
 	public static class SimpleConstraints {

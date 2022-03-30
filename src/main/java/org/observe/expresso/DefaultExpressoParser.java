@@ -30,16 +30,12 @@ import org.observe.Transformation.TransformationValues;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSet;
 import org.observe.expresso.Expression.ExpressoParseException;
+import org.observe.expresso.ModelType.ModelInstanceType;
+import org.observe.expresso.ModelType.ModelInstanceType.SingleTyped;
 import org.observe.expresso.ObservableExpression.Args;
-import org.observe.util.ClassView;
-import org.observe.util.ModelType.ModelInstanceType;
-import org.observe.util.ModelType.ModelInstanceType.SingleTyped;
-import org.observe.util.ModelTypes;
-import org.observe.util.ObservableModelQonfigParser;
-import org.observe.util.ObservableModelSet;
-import org.observe.util.ObservableModelSet.ModelSetInstance;
-import org.observe.util.ObservableModelSet.ModelValuePlaceholder;
-import org.observe.util.ObservableModelSet.ValueContainer;
+import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValuePlaceholder;
+import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
 import org.observe.util.TypeTokens.TypeConverter;
 import org.qommons.Identifiable;
@@ -49,7 +45,7 @@ import org.qommons.StringUtils;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
 import org.qommons.collect.BetterList;
-import org.qommons.config.QonfigInterpreter.QonfigInterpretationException;
+import org.qommons.config.QonfigInterpretationException;
 import org.qommons.tree.BetterTreeList;
 
 import com.google.common.reflect.TypeToken;
@@ -354,6 +350,7 @@ public class DefaultExpressoParser implements ExpressoParser {
 			//					return cast(expression, //
 			//						evaluate(expression.getComponents().getLast(), env, OBJECT), //
 			//						evaluateType(expression.getComponents().get(1), env));
+			throw new ExpressoParseException(expression, "Expression type '" + expression.getType() + "' not implemented yet");
 		case "primary":
 			//					TypedStatement<E, ?> expr = evaluate(expression.getComponents().getFirst(), env, OBJECT);
 			//					for (int i = 1; i < expression.getComponents().size(); i++) {
@@ -1983,7 +1980,7 @@ public class DefaultExpressoParser implements ExpressoParser {
 				}
 
 				@Override
-				public boolean matchesType(int arg, TypeToken<?> paramType) {
+				public boolean matchesType(int arg, TypeToken<?> paramType) throws QonfigInterpretationException {
 					ValueContainer<SettableValue, SettableValue<?>> c;
 					for (int i = 0; i < args[arg].size(); i++) {
 						c = args[arg].get(i);
@@ -1995,12 +1992,8 @@ public class DefaultExpressoParser implements ExpressoParser {
 						}
 					}
 					// Not found, try to evaluate it
-					try {
-						c = (ValueContainer<SettableValue, SettableValue<?>>) (ValueContainer<?, ?>) theArguments.get(arg)
-							.evaluate(ModelTypes.Value.forType(paramType), models, classView);
-					} catch (QonfigInterpretationException e) {
-						return false;
-					}
+					c = (ValueContainer<SettableValue, SettableValue<?>>) (ValueContainer<?, ?>) theArguments.get(arg)
+						.evaluate(ModelTypes.Value.forType(paramType), models, classView);
 					args[arg].add(0, c);
 					return true;
 				}
@@ -2414,92 +2407,106 @@ public class DefaultExpressoParser implements ExpressoParser {
 			if (!isStatic && !arg0Context && contextType == null)
 				continue;
 			TypeToken<?>[] paramTypes = null;
+			List<QonfigInterpretationException> errors = null;
 			for (int o = 0; o < argOptions.size(); o++) {
-				Args option = argOptions.get(o);
-				int methodArgCount = (!isStatic && arg0Context) ? option.size() - 1 : option.size();
-				if (methodArgCount < 0 || !checkArgCount(m.getParameterTypes().length, methodArgCount, m.isVarArgs()))
-					continue;
-				boolean ok = true;
-				if (isStatic) {
-					if (paramTypes == null) {
-						paramTypes = new TypeToken[m.getParameterTypes().length];
-						for (int p = 0; p < paramTypes.length; p++)
-							paramTypes[p] = TypeTokens.get().of(m.getGenericParameterTypes()[p]);
-					}
-					// All arguments are parameters
-					for (int a = 0; ok && a < option.size(); a++) {
-						int p = a;
-						TypeToken<?> paramType = p < paramTypes.length ? paramTypes[p] : paramTypes[paramTypes.length - 1];
-						if (!option.matchesType(a, paramType))
-							ok = false;
-					}
-					if (ok) {
-						TypeToken<?> returnType = TypeTokens.get().of(m.getGenericReturnType());
-						if (!voidTarget && !TypeTokens.get().isAssignable(targetType, returnType))
-							throw new QonfigInterpretationException("Return type " + returnType + " of method " + printSignature(m)
-							+ " cannot be assigned to type " + targetType);
-						return new MethodResult<>(m, o, false, (TypeToken<? extends T>) returnType);
-					}
-				} else {
-					if (arg0Context) {
-						// Use the first argument as context
-						contextType = option.resolveFirst();
+				try {
+					Args option = argOptions.get(o);
+					int methodArgCount = (!isStatic && arg0Context) ? option.size() - 1 : option.size();
+					if (methodArgCount < 0 || !checkArgCount(m.getParameterTypes().length, methodArgCount, m.isVarArgs()))
+						continue;
+					boolean ok = true;
+					if (isStatic) {
 						if (paramTypes == null) {
 							paramTypes = new TypeToken[m.getParameterTypes().length];
-							for (int p = 0; p < paramTypes.length; p++) {
-								paramTypes[p] = contextType.resolveType(m.getGenericParameterTypes()[p]);
-							}
+							for (int p = 0; p < paramTypes.length; p++)
+								paramTypes[p] = TypeTokens.get().of(m.getGenericParameterTypes()[p]);
 						}
-						ok = true;
-						if (!option.matchesType(0, contextType))
-							continue;
-						for (int a = 1; ok && a < option.size(); a++) {
-							int p = a - 1;
-							TypeToken<?> paramType = p < paramTypes.length ? paramTypes[p] : paramTypes[paramTypes.length - 1];
-							if (!option.matchesType(a, paramType))
-								ok = false;
-						}
-						if (ok) {
-							TypeToken<?> returnType;
-							if (!isStatic && contextType != null && !(contextType.getType() instanceof Class))
-								returnType = contextType.resolveType(m.getGenericReturnType());
-							else
-								returnType = TypeTokens.get().of(m.getGenericReturnType());
-							if (!voidTarget && !TypeTokens.get().isAssignable(targetType, returnType))
-								throw new QonfigInterpretationException("Return type " + returnType + " of method " + printSignature(m)
-								+ " cannot be assigned to type " + targetType);
-							return new MethodResult<>(m, o, true, (TypeToken<? extends T>) returnType);
-						}
-					} else {
-						// Ignore context (supplied by caller), all arguments are parameters
-						if (paramTypes == null) {
-							paramTypes = new TypeToken[m.getParameterTypes().length];
-							for (int p = 0; p < paramTypes.length; p++) {
-								if (!(contextType.getType() instanceof Class))
-									paramTypes[p] = contextType.resolveType(m.getGenericParameterTypes()[p]);
-								else
-									paramTypes[p] = TypeTokens.get().of(m.getGenericParameterTypes()[p]);
-							}
-						}
+						// All arguments are parameters
 						for (int a = 0; ok && a < option.size(); a++) {
 							int p = a;
 							TypeToken<?> paramType = p < paramTypes.length ? paramTypes[p] : paramTypes[paramTypes.length - 1];
 							if (!option.matchesType(a, paramType))
 								ok = false;
 						}
+
 						if (ok) {
-							TypeToken<?> returnType;
-							if (!(contextType.getType() instanceof Class))
-								returnType = contextType.resolveType(m.getGenericReturnType());
-							else
-								returnType = TypeTokens.get().of(m.getGenericReturnType());
+							TypeToken<?> returnType = TypeTokens.get().of(m.getGenericReturnType());
 							if (!voidTarget && !TypeTokens.get().isAssignable(targetType, returnType))
 								throw new QonfigInterpretationException("Return type " + returnType + " of method " + printSignature(m)
 								+ " cannot be assigned to type " + targetType);
 							return new MethodResult<>(m, o, false, (TypeToken<? extends T>) returnType);
 						}
+					} else {
+						if (arg0Context) {
+							// Use the first argument as context
+							contextType = option.resolveFirst();
+							if (paramTypes == null) {
+								paramTypes = new TypeToken[m.getParameterTypes().length];
+								for (int p = 0; p < paramTypes.length; p++) {
+									paramTypes[p] = contextType.resolveType(m.getGenericParameterTypes()[p]);
+								}
+							}
+							ok = true;
+							if (!option.matchesType(0, contextType))
+								continue;
+							for (int a = 1; ok && a < option.size(); a++) {
+								int p = a - 1;
+								TypeToken<?> paramType = p < paramTypes.length ? paramTypes[p] : paramTypes[paramTypes.length - 1];
+								if (!option.matchesType(a, paramType))
+									ok = false;
+							}
+							if (ok) {
+								TypeToken<?> returnType;
+								if (!isStatic && contextType != null && !(contextType.getType() instanceof Class))
+									returnType = contextType.resolveType(m.getGenericReturnType());
+								else
+									returnType = TypeTokens.get().of(m.getGenericReturnType());
+								if (!voidTarget && !TypeTokens.get().isAssignable(targetType, returnType))
+									throw new QonfigInterpretationException("Return type " + returnType + " of method " + printSignature(m)
+										+ " cannot be assigned to type " + targetType);
+								return new MethodResult<>(m, o, true, (TypeToken<? extends T>) returnType);
+							}
+						} else {
+							// Ignore context (supplied by caller), all arguments are parameters
+							if (paramTypes == null) {
+								paramTypes = new TypeToken[m.getParameterTypes().length];
+								for (int p = 0; p < paramTypes.length; p++) {
+									if (!(contextType.getType() instanceof Class))
+										paramTypes[p] = contextType.resolveType(m.getGenericParameterTypes()[p]);
+									else
+										paramTypes[p] = TypeTokens.get().of(m.getGenericParameterTypes()[p]);
+								}
+							}
+							for (int a = 0; ok && a < option.size(); a++) {
+								int p = a;
+								TypeToken<?> paramType = p < paramTypes.length ? paramTypes[p] : paramTypes[paramTypes.length - 1];
+								if (!option.matchesType(a, paramType))
+									ok = false;
+							}
+							if (ok) {
+								TypeToken<?> returnType;
+								if (!(contextType.getType() instanceof Class))
+									returnType = contextType.resolveType(m.getGenericReturnType());
+								else
+									returnType = TypeTokens.get().of(m.getGenericReturnType());
+								if (!voidTarget && !TypeTokens.get().isAssignable(targetType, returnType))
+									throw new QonfigInterpretationException("Return type " + returnType + " of method " + printSignature(m)
+										+ " cannot be assigned to type " + targetType);
+								return new MethodResult<>(m, o, false, (TypeToken<? extends T>) returnType);
+							}
+						}
 					}
+				} catch (QonfigInterpretationException e) {
+					if (errors == null)
+						errors = new ArrayList<>(3);
+					errors.add(e);
 				}
+			}
+			if (errors != null) {
+				QonfigInterpretationException ex = errors.get(0);
+				for (int i = 1; i < errors.size(); i++)
+					ex.addSuppressed(errors.get(i));
+				throw ex;
 			}
 		}
 		return null;

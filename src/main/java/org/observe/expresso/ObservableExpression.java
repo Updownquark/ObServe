@@ -8,17 +8,14 @@ import java.util.function.Supplier;
 
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
-import org.observe.util.ClassView;
-import org.observe.util.ModelType.ModelInstanceType;
-import org.observe.util.ModelTypes;
-import org.observe.util.ObservableModelSet;
-import org.observe.util.ObservableModelSet.ModelSetInstance;
-import org.observe.util.ObservableModelSet.ValueContainer;
+import org.observe.expresso.ModelType.ModelInstanceType;
+import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
 import org.qommons.LambdaUtils;
 import org.qommons.TriFunction;
 import org.qommons.collect.BetterList;
-import org.qommons.config.QonfigInterpreter.QonfigInterpretationException;
+import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
@@ -68,7 +65,7 @@ public interface ObservableExpression {
 	interface Args {
 		int size();
 
-		boolean matchesType(int arg, TypeToken<?> paramType);
+		boolean matchesType(int arg, TypeToken<?> paramType) throws QonfigInterpretationException;
 
 		TypeToken<?> resolveFirst() throws QonfigInterpretationException;
 	}

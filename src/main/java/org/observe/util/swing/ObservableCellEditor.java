@@ -329,7 +329,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 		return new CompositeCellEditor<>(model, defaultEditor);
 	}
 
-	class DefaultObservableCellEditor<M, C> implements ObservableCellEditor<M, C> {
+	public static class DefaultObservableCellEditor<M, C> implements ObservableCellEditor<M, C> {
 		private final Component theEditorComponent;
 		private final SettableValue<C> theEditorValue;
 		private final EditorInstallation<C> theInstallation;
@@ -343,7 +343,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 		private final List<CellEditorListener> theListeners;
 		private EditorSubscription theEditorSubscription;
 
-		DefaultObservableCellEditor(Component editorComponent, SettableValue<C> editorValue, EditorInstallation<C> installation,
+		public DefaultObservableCellEditor(Component editorComponent, SettableValue<C> editorValue, EditorInstallation<C> installation,
 			Predicate<EventObject> editTest) {
 			theEditorComponent = editorComponent;
 			theEditorValue = editorValue;

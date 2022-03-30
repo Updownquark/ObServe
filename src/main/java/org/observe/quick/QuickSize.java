@@ -1,21 +1,21 @@
-package org.observe.util.swing;
+package org.observe.quick;
 
 import java.util.Objects;
 
 import org.observe.SettableValue;
 import org.observe.expresso.Expression.ExpressoParseException;
+import org.observe.expresso.ModelType.ModelInstanceType;
+import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.expresso.ClassView;
 import org.observe.expresso.ExpressoParser;
+import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
-import org.observe.util.ClassView;
-import org.observe.util.ModelType.ModelInstanceType;
-import org.observe.util.ModelTypes;
-import org.observe.util.ObservableModelSet;
-import org.observe.util.ObservableModelSet.ModelSetInstance;
-import org.observe.util.ObservableModelSet.ValueContainer;
+import org.observe.expresso.ObservableModelSet;
 import org.observe.util.TypeTokens;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.config.CustomValueType;
-import org.qommons.config.QonfigInterpreter.QonfigInterpretationException;
+import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigParseSession;
 import org.qommons.config.QonfigToolkit;
 

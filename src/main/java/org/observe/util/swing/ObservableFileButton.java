@@ -339,18 +339,19 @@ public class ObservableFileButton extends JButton {
 
 	/** @param chooser The file chooser to configure before displaying in response to the user's click on this button */
 	protected void configureFileChooser(JFileChooser chooser) {
-		File value = getValue().get();
-		while (value != null && !value.exists())
-			value = value.getParentFile();
-		if (value != null) {
-			chooser.setCurrentDirectory(value.getParentFile());
-			chooser.setSelectedFile(value);
-		} else if (theInitDirectory != null)
-			chooser.setCurrentDirectory(new FileUtils.SyntheticFile(theInitDirectory));
 		chooser.setMultiSelectionEnabled(false);
 		chooser.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
 		chooser.setApproveButtonToolTipText(theTooltip);
 		chooser.setFileFilter(new ValueAcceptableFileFilter(theValue, theFileFilterDescrip));
+		File value = getValue().get();
+		while (value != null && !value.exists())
+			value = value.getParentFile();
+		if (value != null) {
+			File file = new File(value.getPath());
+			chooser.setCurrentDirectory(file.getParentFile());
+			chooser.setSelectedFile(file);
+		} else if (theInitDirectory != null)
+			chooser.setCurrentDirectory(new FileUtils.SyntheticFile(theInitDirectory));
 	}
 
 	@Override

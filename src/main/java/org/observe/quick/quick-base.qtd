@@ -208,7 +208,6 @@
 			<child-def name="action" type="value-action" min="0" max="inf" />
 			<attribute name="value-tooltip" type="expression" specify="optional" />
 		</element-def>
-		<element-def name="tree-table" extends="tree" inherits="tabular-widget" />
 
 		<!-- Containers -->
 		<element-def name="container" extends="widget" abstract="true">

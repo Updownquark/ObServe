@@ -1,4 +1,4 @@
-package org.observe.util;
+package org.observe.expresso;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -13,12 +13,12 @@ import java.util.function.Function;
 import java.util.regex.Pattern;
 
 import org.observe.Observable;
-import org.observe.util.ModelType.ModelInstanceType;
+import org.observe.expresso.ModelType.ModelInstanceType;
 import org.qommons.BreakpointHere;
 import org.qommons.Named;
 import org.qommons.QommonsUtils;
 import org.qommons.config.CustomValueType;
-import org.qommons.config.QonfigInterpreter.QonfigInterpretationException;
+import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigParseSession;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.ex.ExConsumer;

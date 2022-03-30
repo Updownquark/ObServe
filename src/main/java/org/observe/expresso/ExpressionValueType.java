@@ -1,8 +1,6 @@
-package org.observe.util;
+package org.observe.expresso;
 
 import org.observe.expresso.Expression.ExpressoParseException;
-import org.observe.expresso.ExpressoParser;
-import org.observe.expresso.ObservableExpression;
 import org.qommons.config.CustomValueType;
 import org.qommons.config.QonfigParseSession;
 import org.qommons.config.QonfigToolkit;

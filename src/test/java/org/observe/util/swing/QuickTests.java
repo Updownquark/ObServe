@@ -9,28 +9,29 @@ import javax.swing.JFrame;
 import org.junit.Before;
 import org.junit.Test;
 import org.observe.SettableValue;
-import org.observe.util.ModelTypes;
-import org.observe.util.ObservableModelQonfigParser;
-import org.observe.util.ObservableModelSet;
+import org.observe.expresso.ExpressoInterpreter;
+import org.observe.expresso.ModelTypes;
+import org.observe.expresso.ObservableModelQonfigParser;
+import org.observe.expresso.ObservableModelSet;
+import org.observe.quick.QuickBase;
+import org.observe.quick.QuickCore;
+import org.observe.quick.QuickDocument;
+import org.observe.quick.QuickSwing;
 import org.qommons.config.DefaultQonfigParser;
 import org.qommons.config.QonfigElement;
-import org.qommons.config.QonfigInterpreter;
-import org.qommons.config.QonfigInterpreter.QonfigInterpretationException;
+import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigParseException;
 
 public class QuickTests {
 	private DefaultQonfigParser theParser;
-	private QonfigInterpreter theInterpreter;
+	private ExpressoInterpreter<?> theInterpreter;
 
 	@Before
 	public void setup() {
 		theParser = new DefaultQonfigParser()//
-			.withToolkit(ObservableModelQonfigParser.TOOLKIT.get(), QuickSwingParser.CORE.get(), QuickSwingParser.BASE.get(),
-				QuickSwingParser.SWING.get());
-		QonfigInterpreter.Builder builder = QonfigInterpreter.build(QuickTests.class, QuickSwingParser.BASE.get(),
-			QuickSwingParser.SWING.get());
-		new QuickSwingParser().configureInterpreter(builder);
-		theInterpreter = builder.build();
+			.withToolkit(ObservableModelQonfigParser.OBSERVE.get(), QuickCore.CORE.get(), QuickBase.BASE.get(), QuickSwing.SWING.get());
+		theInterpreter = new QuickSwing()
+			.configureInterpreter(ExpressoInterpreter.build(QuickTests.class, QuickBase.BASE.get(), QuickSwing.SWING.get())).build();
 	}
 
 	@Test
@@ -48,7 +49,7 @@ public class QuickTests {
 		try (InputStream in = location.openStream()) {
 			element = theParser.parseDocument(location.toString(), in).getRoot();
 		}
-		QuickSwingParser.QuickDocument doc = theInterpreter.interpret(element, QuickSwingParser.QuickDocument.class);
+		QuickDocument doc = theInterpreter.interpret(element).interpret(QuickDocument.class);
 
 		JFrame frame = doc.createUI(extModels).createFrame();
 		frame.setSize(640, 480);

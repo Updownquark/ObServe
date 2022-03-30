@@ -91,7 +91,7 @@ public class ComponentDecorator {
 		return this;
 	}
 
-	static class ModifiableLineBorder extends LineBorder {
+	public static class ModifiableLineBorder extends LineBorder {
 		public ModifiableLineBorder(Color color, int thickness, boolean roundedCorners) {
 			super(color, thickness, roundedCorners);
 		}

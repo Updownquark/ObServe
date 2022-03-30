@@ -697,9 +697,13 @@ public class PanelPopulation {
 
 		ObservableValue<String> getName();
 
-		P setIcon(ObservableValue<Image> icon);
+		default P setImage(ObservableValue<Image> icon) {
+			return setIcon(icon == null ? null : icon.map(img -> new ImageIcon(img)));
+		}
 
-		ObservableValue<Image> getIcon();
+		P setIcon(ObservableValue<Icon> icon);
+
+		ObservableValue<Icon> getIcon();
 
 		P selectOn(Observable<?> select);
 
@@ -2536,7 +2540,7 @@ public class PanelPopulation {
 			SimpleObservable<Void> tabEnd;
 			boolean isRemovable;
 			ObservableValue<String> theName;
-			ObservableValue<Image> theIcon;
+			ObservableValue<Icon> theIcon;
 			Observable<?> until;
 			Consumer<Object> onRemove;
 
@@ -2629,7 +2633,7 @@ public class PanelPopulation {
 			tab.theIcon = t.getIcon();
 			if (tab.theIcon != null)
 				t.theIcon.changes().takeUntil(tabUntil).act(evt -> {
-					getEditor().setIconAt(getTabIndex(tabID), evt.getNewValue() == null ? null : new ImageIcon(evt.getNewValue()));
+					getEditor().setIconAt(getTabIndex(tabID), evt.getNewValue());
 				});
 			if (t.getSelection() != null) {
 				t.getSelection().takeUntil(tabUntil).act(__ -> ObservableSwingUtils.onEQ(() -> {
@@ -2786,7 +2790,7 @@ public class PanelPopulation {
 						});
 					if (found.theIcon != null)
 						found.theIcon.changes().takeUntil(found.until).act(evt -> {
-							title.setIcon(evt.getNewValue() == null ? null : new ImageIcon(evt.getNewValue()));
+							title.setIcon(evt.getNewValue());
 						});
 					tabC.add(title);
 					getEditor().setTabComponentAt(t, tabC);
@@ -2816,7 +2820,7 @@ public class PanelPopulation {
 		private final Object theID;
 		private final Component theComponent;
 		private ObservableValue<String> theName;
-		private ObservableValue<Image> theIcon;
+		private ObservableValue<Icon> theIcon;
 		private Observable<?> theSelection;
 		private SettableValue<Boolean> theOnSelect;
 		private boolean isRemovable;
@@ -2840,13 +2844,13 @@ public class PanelPopulation {
 		}
 
 		@Override
-		public P setIcon(ObservableValue<Image> icon) {
+		public P setIcon(ObservableValue<Icon> icon) {
 			theIcon = icon;
 			return (P) this;
 		}
 
 		@Override
-		public ObservableValue<Image> getIcon() {
+		public ObservableValue<Icon> getIcon() {
 			return theIcon;
 		}
 

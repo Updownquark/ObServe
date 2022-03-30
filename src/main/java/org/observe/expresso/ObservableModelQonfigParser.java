@@ -1,4 +1,4 @@
-package org.observe.util;
+package org.observe.expresso;
 
 import java.awt.Image;
 import java.awt.event.ComponentAdapter;
@@ -52,16 +52,15 @@ import org.observe.config.ObservableConfigParseSession;
 import org.observe.config.ObservableConfigPath;
 import org.observe.config.ObservableValueSet;
 import org.observe.config.SyncValueSet;
-import org.observe.expresso.DefaultExpressoParser;
-import org.observe.expresso.ExpressoParser;
-import org.observe.expresso.ObservableExpression;
+import org.observe.expresso.ExpressoInterpreter.ExpressoSession;
+import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableExpression.MethodFinder;
-import org.observe.util.ModelType.ModelInstanceType;
-import org.observe.util.ObservableModelSet.Builder;
-import org.observe.util.ObservableModelSet.ExternalModelSet;
-import org.observe.util.ObservableModelSet.ModelSetInstance;
-import org.observe.util.ObservableModelSet.ValueContainer;
-import org.observe.util.ObservableModelSet.ValueGetter;
+import org.observe.expresso.ObservableModelSet.Builder;
+import org.observe.expresso.ObservableModelSet.ExternalModelSet;
+import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.expresso.ObservableModelSet.ValueGetter;
+import org.observe.util.TypeTokens;
 import org.observe.util.swing.WindowPopulation;
 import org.qommons.BiTuple;
 import org.qommons.Identifiable;
@@ -76,12 +75,10 @@ import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.config.QommonsConfig;
 import org.qommons.config.QonfigAttributeDef;
-import org.qommons.config.QonfigChildDef;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigElementDef;
+import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreter;
-import org.qommons.config.QonfigInterpreter.QonfigInterpretationException;
-import org.qommons.config.QonfigInterpreter.QonfigInterpretingSession;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.QonfigToolkitAccess;
 import org.qommons.io.ArchiveEnabledFileSource;
@@ -100,7 +97,7 @@ import com.google.common.reflect.TypeToken;
 public class ObservableModelQonfigParser {
 	public static final ExpressoParser EXPRESSION_PARSER = new DefaultExpressoParser();
 
-	public static final QonfigToolkitAccess TOOLKIT = new QonfigToolkitAccess(ObservableModelQonfigParser.class, "observe-models.qtd")
+	public static final QonfigToolkitAccess OBSERVE = new QonfigToolkitAccess(ObservableModelQonfigParser.class, "observe-models.qtd")
 		.withCustomValueType(ObservableModelSet.JAVA_IDENTIFIER_TYPE)//
 		.withCustomValueType(new ExpressionValueType("expression", EXPRESSION_PARSER, false))//
 		.withCustomValueType(new ExpressionValueType("expression-or-string", EXPRESSION_PARSER, true));
@@ -219,10 +216,11 @@ public class ObservableModelQonfigParser {
 	}
 
 	@SuppressWarnings("rawtypes")
-	public QonfigInterpreter.Builder configureInterpreter(QonfigInterpreter.Builder interpreter) {
-		QonfigToolkit obsTk = TOOLKIT.get();
-		QonfigInterpreter.Builder observeInterpreter = interpreter.forToolkit(obsTk);
-		observeInterpreter.createWith("imports", ClassView.class, (el, session) -> {
+	public <QIS extends ExpressoInterpreter.ExpressoSession<QIS>, B extends ExpressoInterpreter.Builder<QIS, B>> B configureInterpreter(
+		B interpreter) {
+		QonfigToolkit obsTk = OBSERVE.get();
+		ExpressoInterpreter.Builder<?, ?> observeInterpreter = interpreter.forToolkit(obsTk);
+		observeInterpreter.createWith("imports", ClassView.class, session -> {
 			ClassView.Builder builder = ClassView.build();
 			for (QonfigElement imp : session.getChildren("import")) {
 				if (imp.getValueText().endsWith(".*"))
@@ -231,7 +229,7 @@ public class ObservableModelQonfigParser {
 					builder.withImport(imp.getValueText());
 			}
 			ClassView cv = builder.build();
-			session.putGlobal("imports", cv);
+			session.setClassView(cv);
 			TypeTokens.get().addClassRetriever(new TypeTokens.TypeRetriever() {
 				@Override
 				public Type getType(String typeName) {
@@ -240,53 +238,50 @@ public class ObservableModelQonfigParser {
 			});
 			return cv;
 		});
-		observeInterpreter.createWith("models", ObservableModelSet.class, (el, session) -> {
+		observeInterpreter.createWith("models", ObservableModelSet.class, session -> {
 			ObservableModelSet.Builder builder = ObservableModelSet.build(ObservableModelSet.JAVA_NAME_CHECKER);
-			QonfigChildDef.Declared modelRole = obsTk.getChild("models", "model").getDeclared();
-			for (QonfigElement model : el.getChildrenByRole().get(modelRole)) {
-				ObservableModelSet.Builder subModel = builder
-					.createSubModel(model.getAttributeText(modelRole.getType().getAttribute("name")));
-				session.put("model", subModel);
-				session.getInterpreter().interpret(model, ObservableModelSet.class);
+			for (ExpressoSession<?> model : session.forChildren("model")) {
+				ObservableModelSet.Builder subModel = builder.createSubModel(model.getAttributeText("name"));
+				model.setModels(subModel);
+				model.interpret(ObservableModelSet.class);
 			}
-			return builder.build();
-		}).createWith("abst-model", ObservableModelSet.class, (el, session) -> {
-			ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.get("model");
-			QonfigElementDef modelType = TOOLKIT.get().getElement("abst-model");
-			for (QonfigElement child : el.getChildren()) {
-				if (modelType.isAssignableFrom(child.getType())) {
-					ObservableModelSet.Builder subModel = model
-						.createSubModel(child.getAttributeText(obsTk.getAttribute("abst-model-value", "name")));
-					session.put("model", subModel);
-					session.getInterpreter().interpret(child, ObservableModelSet.class);
+			ObservableModelSet built = builder.build();
+			session.setModels(built);
+			return built;
+		}).createWith("abst-model", ObservableModelSet.class, session -> {
+			ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.getModels();
+			QonfigElementDef modelType = OBSERVE.get().getElement("abst-model");
+			for (ExpressoSession<?> child : session.forChildren()) {
+				if (modelType.isAssignableFrom(child.getElement().getType())) {
+					ObservableModelSet.Builder subModel = model.createSubModel(child.getAttributeText("name"));
+					child.setModels(subModel);
+					child.interpret(ObservableModelSet.class);
 				} else
-					session.getInterpreter().interpret(child, Void.class);
+					child.interpret(Void.class);
 			}
 			return model;
-		}).extend("abst-model", "ext-model", ObservableModelSet.class, ObservableModelSet.class, (s, el, session) -> {
+		}).extend("abst-model", "ext-model", ObservableModelSet.class, ObservableModelSet.class, (s, session) -> {
 			return s;
-		}).extend("abst-model", "model", ObservableModelSet.class, ObservableModelSet.class, (s, el, session) -> {
+		}).extend("abst-model", "model", ObservableModelSet.class, ObservableModelSet.class, (s, session) -> {
 			return s;
-		}).createWith("config", ObservableModelSet.class, new QonfigInterpreter.QonfigValueCreator<ObservableModelSet>() {
+		}).createWith("config", ObservableModelSet.class,
+			new QonfigInterpreter.QonfigValueCreator<ExpressoSession<?>, ObservableModelSet>() {
 			@Override
-			public ObservableModelSet createValue(QonfigElement el, QonfigInterpretingSession session)
+			public ObservableModelSet createValue(ExpressoSession<?> session)
 				throws QonfigInterpretationException {
-				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.get("model");
+				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.getModels();
 				session.put("config-model", true);
 				String configName = session.getAttributeText("config-name");
-				Function<ModelSetInstance, SettableValue<BetterFile>> configDir;
-				ObservableExpression configDirX = session.getAttribute("config-dir", ObservableExpression.class);
-				if (configDirX != null)
-					configDir = configDirX.evaluate(ModelTypes.Value.forType(BetterFile.class), model, (ClassView) session.get("imports"));
-				else {
-					configDir = msi -> {
-						String prop = System.getProperty(configName + ".config");
-						if (prop != null)
-							return literal(BetterFile.at(new NativeFileSource(), prop), prop);
-						else
-							return literal(BetterFile.at(new NativeFileSource(), "./" + configName), "./" + configName);
-					};
-				}
+				Function<ModelSetInstance, SettableValue<BetterFile>> configDir = session.getAttributeAsValue("config-dir",
+					BetterFile.class, () -> {
+						return msi -> {
+							String prop = System.getProperty(configName + ".config");
+							if (prop != null)
+								return literal(BetterFile.at(new NativeFileSource(), prop), prop);
+							else
+								return literal(BetterFile.at(new NativeFileSource(), "./" + configName), "./" + configName);
+						};
+					});
 				List<String> oldConfigNames = new ArrayList<>(2);
 				for (QonfigElement ch : session.getChildren("old-config-name"))
 					oldConfigNames.add(ch.getValueText());
@@ -388,14 +383,14 @@ public class ObservableModelQonfigParser {
 					}
 					return config;
 				});
-				QonfigElementDef modelType = TOOLKIT.get().getElement("abst-model");
-				for (QonfigElement child : el.getChildren()) {
-					if (modelType.isAssignableFrom(child.getType())) {
-						ObservableModelSet.Builder subModel = model.createSubModel(child.getAttributeText(modelType.getAttribute("name")));
-						session.put("model", subModel);
-						session.getInterpreter().interpret(child, ObservableModelSet.class);
+				QonfigElementDef modelType = OBSERVE.get().getElement("abst-model");
+				for (ExpressoSession<?> child : session.forChildren()) {
+					if (modelType.isAssignableFrom(child.getElement().getType())) {
+						ObservableModelSet.Builder subModel = model.createSubModel(child.getAttributeText("name"));
+						child.setModels(subModel);
+						child.interpret(ObservableModelSet.class);
 					} else
-						session.getInterpreter().interpret(child, Void.class);
+						child.interpret(Void.class);
 				}
 				return model;
 			}
@@ -446,46 +441,45 @@ public class ObservableModelQonfigParser {
 				}
 			}
 		});
-		abstract class TypedModelThing<T> implements QonfigInterpreter.QonfigValueCreator<Void> {
+		abstract class TypedModelThing<T> implements QonfigInterpreter.QonfigValueCreator<ExpressoSession<?>, Void> {
 			@Override
-			public Void createValue(QonfigElement element, QonfigInterpretingSession session) throws QonfigInterpretationException {
-				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.get("model");
-				ClassView cv = (ClassView) session.get("imports");
-				String name = element.getAttributeText(obsTk.getAttribute("abst-model-value", "name"));
-				TypeToken<?> type = parseType(element.getAttributeText(obsTk.getAttribute("abst-model-value", "type")), cv);
+			public Void createValue(ExpressoSession<?> session) throws QonfigInterpretationException {
+				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.getModels();
+				String name = session.getElement().getAttributeText(obsTk.getAttribute("abst-model-value", "name"));
+				TypeToken<?> type = parseType(session.getAttributeText("type"), session.getClassView());
 				String path;
 				if (session.get("config-model") != null) {
-					path = element.getAttributeText(obsTk.getAttribute("config-value", "config-path"));
+					path = session.getElement().getAttributeText(obsTk.getAttribute("config-value", "config-path"));
 					if (path == null)
 						path = name;
 					Function<ModelSetInstance, ObservableConfigFormat<Object>> format = parseConfigFormat(
-						element.getAttribute(obsTk.getAttribute("config-value", "format"), ObservableExpression.class), null, model,
-						cv, (TypeToken<Object>) type);
-					buildConfig(model, cv, name, (TypeToken<Object>) type, element, path, format);
+						session.getElement().getAttribute(obsTk.getAttribute("config-value", "format"), ObservableExpression.class), null,
+						model, session.getClassView(), (TypeToken<Object>) type);
+					buildConfig(model, name, (TypeToken<Object>) type, session, path, format);
 				} else {
 					path = model.getPath();
 					if (path == null)
 						path = name;
 					else
 						path = path + "." + name;
-					build(model, cv, name, type, element, name);
+					build(model, name, type, session, name);
 				}
 				return null;
 			}
 
-			abstract <V> void build(ObservableModelSet.Builder model, ClassView cv, String name, TypeToken<V> type, QonfigElement element,
+			abstract <V> void build(ObservableModelSet.Builder model, String name, TypeToken<V> type, ExpressoSession<?> session,
 				String path) throws QonfigInterpretationException;
 
-			abstract <V> void buildConfig(ObservableModelSet.Builder model, ClassView cv, String name, TypeToken<V> type,
-				QonfigElement element, String path, Function<ModelSetInstance, ObservableConfigFormat<V>> format)
+			abstract <V> void buildConfig(ObservableModelSet.Builder model, String name, TypeToken<V> type, ExpressoSession<?> session,
+				String path, Function<ModelSetInstance, ObservableConfigFormat<V>> format)
 					throws QonfigInterpretationException;
 		}
 		observeInterpreter.createWith("constant", Void.class, new TypedModelThing<SettableValue>() {
 			@Override
-			<V> void build(ObservableModelSet.Builder model, ClassView cv, String name, TypeToken<V> type, QonfigElement element,
+			<V> void build(ObservableModelSet.Builder model, String name, TypeToken<V> type, ExpressoSession<?> session,
 				String path) throws QonfigInterpretationException {
-				BiFunction<ModelSetInstance, ExternalModelSet, V> value = parseValue(model, cv, type,
-					(ObservableExpression) element.getValue());
+				BiFunction<ModelSetInstance, ExternalModelSet, V> value = parseValue(model, session.getClassView(), type,
+					(ObservableExpression) session.getElement().getValue());
 				model.with(name, ModelTypes.Value.forType(type), (modelSet, extModels) -> SettableValue
 					.asSettable(new ObservableValue.ConstantObservableValue<V>(type, value.apply(modelSet, extModels)) {
 						private Object theIdentity;
@@ -500,16 +494,16 @@ public class ObservableModelQonfigParser {
 			}
 
 			@Override
-			<V> void buildConfig(Builder model, ClassView cv, String name, TypeToken<V> type, QonfigElement element, String path,
+			<V> void buildConfig(Builder model, String name, TypeToken<V> type, ExpressoSession<?> session, String path,
 				Function<ModelSetInstance, ObservableConfigFormat<V>> format) throws QonfigInterpretationException {
-				build(model, cv, name, type, element, path);
+				build(model, name, type, session, path);
 			}
 		}).createWith("value", Void.class, new TypedModelThing<SettableValue>() {
 			@Override
-			<V> void build(ObservableModelSet.Builder model, ClassView cv, String name, TypeToken<V> type, QonfigElement element,
+			<V> void build(ObservableModelSet.Builder model, String name, TypeToken<V> type, ExpressoSession<?> session,
 				String path) throws QonfigInterpretationException {
-				BiFunction<ModelSetInstance, ExternalModelSet, V> value = parseValue(model, cv, type,
-					(ObservableExpression) element.getValue());
+				BiFunction<ModelSetInstance, ExternalModelSet, V> value = parseValue(model, session.getClassView(), type,
+					(ObservableExpression) session.getElement().getValue());
 				model.with(name, ModelTypes.Value.forType(type), (modelSet, extModels) -> {
 					SettableValue.Builder<V> builder = SettableValue.build(type);
 					builder.withDescription(path);
@@ -520,20 +514,20 @@ public class ObservableModelQonfigParser {
 			}
 
 			@Override
-			<V> void buildConfig(Builder model, ClassView cv, String name, TypeToken<V> type, QonfigElement element, String path,
+			<V> void buildConfig(Builder model, String name, TypeToken<V> type, ExpressoSession<?> session, String path,
 				Function<ModelSetInstance, ObservableConfigFormat<V>> format) throws QonfigInterpretationException {
-				if (element.getValue() != null)
+				if (session.getElement().getValue() != null)
 					System.err.println("WARNING: Config value " + model.pathTo(name) + " specifies a value, ignored");
 				Function<ModelSetInstance, SettableValue<V>> defaultX;
 				String defaultS;
 				QonfigAttributeDef defAttr = obsTk.getAttribute("config-value", "default");
-				if (element.getAttributes().get(defAttr) instanceof ExpressionValueType.Literal) {
+				if (session.getElement().getAttributes().get(defAttr) instanceof ExpressionValueType.Literal) {
 					defaultX = null;
-					defaultS = element.getAttributeText(defAttr);
-				} else if (element.getAttributes().get(defAttr) != null) {
+					defaultS = session.getElement().getAttributeText(defAttr);
+				} else if (session.getElement().getAttributes().get(defAttr) != null) {
 					defaultS = null;
-					defaultX = element.getAttribute(defAttr, ObservableExpression.class).evaluate(ModelTypes.Value.forType(type), model,
-						cv);
+					defaultX = session.getElement().getAttribute(defAttr, ObservableExpression.class)
+						.evaluate(ModelTypes.Value.forType(type), model, session.getClassView());
 				} else {
 					defaultS = null;
 					defaultX = null;
@@ -559,17 +553,17 @@ public class ObservableModelQonfigParser {
 			}
 		}).createWith("value-set", Void.class, new TypedModelThing<ObservableValueSet>() {
 			@Override
-			<V> void build(Builder model, ClassView cv, String name, TypeToken<V> type, QonfigElement element, String path)
+			<V> void build(Builder model, String name, TypeToken<V> type, ExpressoSession<?> session, String path)
 				throws QonfigInterpretationException {
 				throw new QonfigInterpretationException("value-sets can only be used under <config> elements");
 			}
 
 			@Override
-			<V> void buildConfig(Builder model, ClassView cv, String name, TypeToken<V> type, QonfigElement element, String path,
+			<V> void buildConfig(Builder model, String name, TypeToken<V> type, ExpressoSession<?> session, String path,
 				Function<ModelSetInstance, ObservableConfigFormat<V>> format) throws QonfigInterpretationException {
-				if (!element.getChildrenByRole().get(obsTk.getChild("value-set", "element").getDeclared()).isEmpty())
+				if (!session.getElement().getChildrenByRole().get(obsTk.getChild("value-set", "element").getDeclared()).isEmpty())
 					System.err.println("WARNING: Config value " + model.pathTo(name) + " specifies elements, ignored");
-				if (element.getAttributes().get(obsTk.getAttribute("config-value", "default")) != null)
+				if (session.getElement().getAttributes().get(obsTk.getAttribute("config-value", "default")) != null)
 					System.err.println("WARNING: Config entry-set " + model.pathTo(name) + " specifies default, ignored");
 				model.<ObservableValueSet, ObservableValueSet<V>> with(name, ModelTypes.ValueSet.forType(type), (msi, extModels) -> {
 					ObservableConfig config = (ObservableConfig) msi.getModelConfiguration();
@@ -583,20 +577,19 @@ public class ObservableModelQonfigParser {
 		});
 		abstract class CollectionCreator<C extends ObservableCollection> extends TypedModelThing<C> {
 			@Override
-			<V> void build(ObservableModelSet.Builder model, ClassView cv, String name, TypeToken<V> type, QonfigElement element,
+			<V> void build(ObservableModelSet.Builder model, String name, TypeToken<V> type, ExpressoSession<?> session,
 				String path) throws QonfigInterpretationException {
 				List<BiFunction<ModelSetInstance, ExternalModelSet, V>> values = new ArrayList<>();
-				QonfigChildDef.Declared elRole = obsTk.getChild("list", "element").getDeclared();
-				for (QonfigElement el : element.getChildrenByRole().get(elRole))
-					values.add(parseValue(model, cv, type, (ObservableExpression) el.getValue()));
-				prepare(type, element, model, cv);
-				add(model, cv, name, type, element, (modelSet, extModels) -> {
+				for (ExpressoSession<?> el : session.forChildren("element"))
+					values.add(parseValue(model, session.getClassView(), type, (ObservableExpression) el.getElement().getValue()));
+				prepare(type, session);
+				add(model, name, type, session, (modelSet, extModels) -> {
 					C collection = (C) create(type, modelSet).withDescription(path).build();
 					int i = 0;
-					for (QonfigElement el : element.getChildrenByRole().get(elRole)) {
+					for (ExpressoSession<?> el : session.forChildren("element")) {
 						if (!collection.add(values.get(i).apply(modelSet, extModels)))
-							System.err.println(
-								"Warning: Value " + el.getValue() + " already added to " + element.getType().getName() + " " + name);
+							System.err.println("Warning: Value " + el.getElement().getValue() + " already added to "
+								+ session.getElement().getType().getName() + " " + name);
 						i++;
 					}
 					return collection;
@@ -604,14 +597,14 @@ public class ObservableModelQonfigParser {
 			}
 
 			@Override
-			<V> void buildConfig(Builder model, ClassView cv, String name, TypeToken<V> type, QonfigElement element, String path,
+			<V> void buildConfig(Builder model, String name, TypeToken<V> type, ExpressoSession<?> session, String path,
 				Function<ModelSetInstance, ObservableConfigFormat<V>> format) throws QonfigInterpretationException {
-				if (!element.getChildrenByRole().get(obsTk.getChild("list", "element").getDeclared()).isEmpty())
+				if (!session.getElement().getChildrenByRole().get(obsTk.getChild("list", "element").getDeclared()).isEmpty())
 					System.err.println("WARNING: Config collection " + model.pathTo(name) + " specifies elements, ignored");
-				if (element.getAttributes().get(obsTk.getAttribute("config-value", "default")) != null)
+				if (session.getElement().getAttributes().get(obsTk.getAttribute("config-value", "default")) != null)
 					System.err.println("WARNING: Config collection " + model.pathTo(name) + " specifies default, ignored");
-				prepare(type, element, model, cv);
-				add(model, cv, name, type, element, (msi, extModels) -> {
+				prepare(type, session);
+				add(model, name, type, session, (msi, extModels) -> {
 					ObservableConfig config = (ObservableConfig) msi.getModelConfiguration();
 					ObservableConfigValueBuilder<V> valueBuilder = config.asValue(type);
 					valueBuilder.at(path);
@@ -622,13 +615,12 @@ public class ObservableModelQonfigParser {
 				});
 			}
 
-			protected <V> void prepare(TypeToken<V> type, QonfigElement element, ObservableModelSet models, ClassView cv)
-				throws QonfigInterpretationException {
+			protected <V> void prepare(TypeToken<V> type, ExpressoSession<?> session) throws QonfigInterpretationException {
 			}
 
 			abstract <V> ObservableCollectionBuilder<V, ?> create(TypeToken<V> type, ModelSetInstance models);
 
-			abstract <V> void add(ObservableModelSet.Builder model, ClassView cv, String name, TypeToken<V> type, QonfigElement element,
+			abstract <V> void add(ObservableModelSet.Builder model, String name, TypeToken<V> type, ExpressoSession<?> session,
 				ValueGetter<? extends C> collection);
 
 			abstract <V> C modify(ObservableCollection<V> collection, ModelSetInstance msi);
@@ -640,7 +632,7 @@ public class ObservableModelQonfigParser {
 			}
 
 			@Override
-			<V> void add(Builder model, ClassView cv, String name, TypeToken<V> type, QonfigElement element,
+			<V> void add(Builder model, String name, TypeToken<V> type, ExpressoSession<?> session,
 				ValueGetter<? extends ObservableCollection> collection) {
 				model.with(name, ModelTypes.Collection.forType(type), (ValueGetter<ObservableCollection<V>>) collection);
 			}
@@ -656,7 +648,7 @@ public class ObservableModelQonfigParser {
 			}
 
 			@Override
-			<V> void add(Builder model, ClassView cv, String name, TypeToken<V> type, QonfigElement element,
+			<V> void add(Builder model, String name, TypeToken<V> type, ExpressoSession<?> session,
 				ValueGetter<? extends ObservableSet> collection) {
 				model.with(name, ModelTypes.Set.forType(type), (ValueGetter<ObservableSet<V>>) collection);
 			}
@@ -669,10 +661,10 @@ public class ObservableModelQonfigParser {
 			private Function<ModelSetInstance, Comparator<Object>> theComparator;
 
 			@Override
-			protected <V> void prepare(TypeToken<V> type, QonfigElement element, ObservableModelSet models, ClassView cv)
+			protected <V> void prepare(TypeToken<V> type, ExpressoSession<?> session)
 				throws QonfigInterpretationException {
 				theComparator = parseComparator((TypeToken<Object>) type,
-					element.getAttribute(obsTk.getAttribute("sorted", "sort-with"), ObservableExpression.class), models, cv);
+					session.getAttribute("sort-with", ObservableExpression.class), session.getModels(), session.getClassView());
 			}
 
 			@Override
@@ -682,7 +674,7 @@ public class ObservableModelQonfigParser {
 			}
 
 			@Override
-			<V> void add(Builder model, ClassView cv, String name, TypeToken<V> type, QonfigElement element,
+			<V> void add(Builder model, String name, TypeToken<V> type, ExpressoSession<?> session,
 				ValueGetter<? extends ObservableSortedSet> collection) {
 				model.with(name, ModelTypes.SortedSet.forType(type), (ValueGetter<ObservableSortedSet<V>>) collection);
 			}
@@ -695,10 +687,10 @@ public class ObservableModelQonfigParser {
 			private Function<ModelSetInstance, Comparator<Object>> theComparator;
 
 			@Override
-			protected <V> void prepare(TypeToken<V> type, QonfigElement element, ObservableModelSet models, ClassView cv)
+			protected <V> void prepare(TypeToken<V> type, ExpressoSession<?> session)
 				throws QonfigInterpretationException {
 				theComparator = parseComparator((TypeToken<Object>) type,
-					element.getAttribute(obsTk.getAttribute("sorted", "sort-with"), ObservableExpression.class), models, cv);
+					session.getAttribute("sort-with", ObservableExpression.class), session.getModels(), session.getClassView());
 			}
 
 			@Override
@@ -708,7 +700,7 @@ public class ObservableModelQonfigParser {
 			}
 
 			@Override
-			<V> void add(Builder model, ClassView cv, String name, TypeToken<V> type, QonfigElement element,
+			<V> void add(Builder model, String name, TypeToken<V> type, ExpressoSession<?> session,
 				ValueGetter<? extends ObservableSortedCollection> collection) {
 				model.with(name, ModelTypes.SortedCollection.forType(type), (ValueGetter<ObservableSortedCollection<V>>) collection);
 			}
@@ -718,28 +710,28 @@ public class ObservableModelQonfigParser {
 				return collection.flow().sorted(theComparator.apply(msi)).collect();
 			}
 		});
-		abstract class BiTypedModelThing<T> implements QonfigInterpreter.QonfigValueCreator<Void> {
+		abstract class BiTypedModelThing<T> implements QonfigInterpreter.QonfigValueCreator<ExpressoSession<?>, Void> {
 			@Override
-			public Void createValue(QonfigElement element, QonfigInterpretingSession session) throws QonfigInterpretationException {
-				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.get("model");
-				ClassView cv = (ClassView) session.get("imports");
-				String name = element.getAttributeText(obsTk.getAttribute("abst-model-value", "name"));
-				TypeToken<?> keyType = parseType(element.getAttributeText(obsTk.getAttribute("map-model-value", "key-type")), cv);
-				TypeToken<?> valueType = parseType(element.getAttributeText(obsTk.getAttribute("abst-model-value", "type")), cv);
+			public Void createValue(ExpressoSession<?> session) throws QonfigInterpretationException {
+				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.getModels();
+				ClassView cv = session.getClassView();
+				String name = session.getAttributeText("name");
+				TypeToken<?> keyType = parseType(session.getAttributeText("key-type"), cv);
+				TypeToken<?> valueType = parseType(session.getAttributeText("type"), cv);
 				String path;
 				if (session.get("config-model") != null) {
-					path = element.getAttributeText(obsTk.getAttribute("config-value", "config-path"));
+					path = session.getElement().getAttributeText(obsTk.getAttribute("config-value", "config-path"));
 					if (path == null)
 						path = name;
 					Function<ModelSetInstance, ObservableConfigFormat<Object>> keyFormat = parseConfigFormat(
-						element.getAttribute(obsTk.getAttribute("config-value", "key-format"), ObservableExpression.class),
-						element.getAttributeText(obsTk.getAttribute("config-value", "key-default")), model, cv,
+						session.getElement().getAttribute(obsTk.getAttribute("config-value", "key-format"), ObservableExpression.class),
+						session.getElement().getAttributeText(obsTk.getAttribute("config-value", "key-default")), model, cv,
 						(TypeToken<Object>) keyType);
 					Function<ModelSetInstance, ObservableConfigFormat<Object>> valueFormat = parseConfigFormat(
-						element.getAttribute(obsTk.getAttribute("config-value", "format"), ObservableExpression.class),
-						element.getAttributeText(obsTk.getAttribute("config-value", "default")), model, cv,
+						session.getElement().getAttribute(obsTk.getAttribute("config-value", "format"), ObservableExpression.class),
+						session.getElement().getAttributeText(obsTk.getAttribute("config-value", "default")), model, cv,
 						(TypeToken<Object>) valueType);
-					buildConfig(model, cv, name, (TypeToken<Object>) keyType, (TypeToken<Object>) valueType, element, path, keyFormat,
+					buildConfig(model, name, (TypeToken<Object>) keyType, (TypeToken<Object>) valueType, session, path, keyFormat,
 						valueFormat);
 				} else {
 					path = model.getPath();
@@ -747,33 +739,32 @@ public class ObservableModelQonfigParser {
 						path = name;
 					else
 						path = path + "." + name;
-					build(model, cv, name, keyType, valueType, element, path);
+					build(model, name, keyType, valueType, session, path);
 				}
 				return null;
 			}
 
-			abstract <K, V> void build(ObservableModelSet.Builder model, ClassView cv, String name, TypeToken<K> keyType,
-				TypeToken<V> valueType, QonfigElement element, String path) throws QonfigInterpretationException;
+			abstract <K, V> void build(ObservableModelSet.Builder model, String name, TypeToken<K> keyType, TypeToken<V> valueType,
+				ExpressoSession<?> session, String path) throws QonfigInterpretationException;
 
-			abstract <K, V> void buildConfig(Builder model, ClassView cv, String name, TypeToken<K> keyType, TypeToken<V> valueType,
-				QonfigElement element, String path, Function<ModelSetInstance, ObservableConfigFormat<K>> keyFormat,
+			abstract <K, V> void buildConfig(Builder model, String name, TypeToken<K> keyType, TypeToken<V> valueType,
+				ExpressoSession<?> session, String path, Function<ModelSetInstance, ObservableConfigFormat<K>> keyFormat,
 				Function<ModelSetInstance, ObservableConfigFormat<V>> valueFormat) throws QonfigInterpretationException;
 		}
 		abstract class MapCreator<M extends ObservableMap> extends BiTypedModelThing<M> {
 			@Override
-			<K, V> void build(ObservableModelSet.Builder model, ClassView cv, String name, TypeToken<K> keyType, TypeToken<V> valueType,
-				QonfigElement element, String path) throws QonfigInterpretationException {
+			<K, V> void build(ObservableModelSet.Builder model, String name, TypeToken<K> keyType, TypeToken<V> valueType,
+				ExpressoSession<?> session, String path) throws QonfigInterpretationException {
 				List<BiTuple<BiFunction<ModelSetInstance, ExternalModelSet, K>, BiFunction<ModelSetInstance, ExternalModelSet, V>>> entries = new ArrayList<>();
-				QonfigChildDef.Declared entryRole = obsTk.getChild("map", "entry").getDeclared();
-				for (QonfigElement entry : element.getChildrenByRole().get(entryRole)) {
-					BiFunction<ModelSetInstance, ExternalModelSet, K> key = parseValue(model, cv, keyType,
-						entry.getAttribute(entryRole.getType().getAttribute("key"), ObservableExpression.class));
-					BiFunction<ModelSetInstance, ExternalModelSet, V> v = parseValue(model, cv, valueType,
-						entry.getAttribute(entryRole.getType().getAttribute("value"), ObservableExpression.class));
+				for (ExpressoSession<?> entry : session.forChildren("entry")) {
+					BiFunction<ModelSetInstance, ExternalModelSet, K> key = parseValue(model, session.getClassView(), keyType,
+						entry.getAttribute("key", ObservableExpression.class));
+					BiFunction<ModelSetInstance, ExternalModelSet, V> v = parseValue(model, session.getClassView(), valueType,
+						entry.getAttribute("value", ObservableExpression.class));
 					entries.add(new BiTuple<>(key, v));
 				}
-				prepare(keyType, valueType, element, model, cv);
-				add(model, cv, name, keyType, valueType, element, (modelSet, extModels) -> {
+				prepare(keyType, valueType, session);
+				add(model, name, keyType, valueType, session, (modelSet, extModels) -> {
 					M map = (M) create(keyType, valueType, modelSet).withDescription(path).build();
 					for (int i = 0; i < entries.size(); i++) {
 						BiTuple<BiFunction<ModelSetInstance, ExternalModelSet, K>, BiFunction<ModelSetInstance, ExternalModelSet, V>> entry = entries
@@ -781,22 +772,23 @@ public class ObservableModelQonfigParser {
 						Object key = entry.getValue1().apply(modelSet, extModels);
 						Object v = entry.getValue2().apply(modelSet, extModels);
 						if (map.put(key, v) != null)
-							System.err.println("Warning: Key " + key + " already used for " + element.getType().getName() + " " + name);
+							System.err.println(
+								"Warning: Key " + key + " already used for " + session.getElement().getType().getName() + " " + name);
 					}
 					return map;
 				});
 			}
 
 			@Override
-			<K, V> void buildConfig(Builder model, ClassView cv, String name, TypeToken<K> keyType, TypeToken<V> valueType,
-				QonfigElement element, String path, Function<ModelSetInstance, ObservableConfigFormat<K>> keyFormat,
+			<K, V> void buildConfig(Builder model, String name, TypeToken<K> keyType, TypeToken<V> valueType, ExpressoSession<?> session,
+				String path, Function<ModelSetInstance, ObservableConfigFormat<K>> keyFormat,
 				Function<ModelSetInstance, ObservableConfigFormat<V>> valueFormat) throws QonfigInterpretationException {
-				if (!element.getChildrenByRole().get(obsTk.getChild("map", "entry").getDeclared()).isEmpty())
+				if (!session.getElement().getChildrenByRole().get(obsTk.getChild("map", "entry").getDeclared()).isEmpty())
 					System.err.println("WARNING: Config value " + model.pathTo(name) + " specifies entries, ignored");
-				if (element.getAttributes().get(obsTk.getAttribute("config-value", "default")) != null)
+				if (session.getElement().getAttributes().get(obsTk.getAttribute("config-value", "default")) != null)
 					System.err.println("WARNING: Config map " + model.pathTo(name) + " specifies default, ignored");
-				prepare(keyType, valueType, element, model, cv);
-				add(model, cv, name, keyType, valueType, element, (msi, extModels) -> {
+				prepare(keyType, valueType, session);
+				add(model, name, keyType, valueType, session, (msi, extModels) -> {
 					ObservableConfig config = (ObservableConfig) msi.getModelConfiguration();
 					ObservableConfigMapBuilder<K, V> valueBuilder = config.asValue(valueType).asMap(keyType);
 					valueBuilder.at(path);
@@ -809,14 +801,14 @@ public class ObservableModelQonfigParser {
 				});
 			}
 
-			protected <K, V> void prepare(TypeToken<K> keyType, TypeToken<V> valueType, QonfigElement element, ObservableModelSet models,
-				ClassView cv) throws QonfigInterpretationException {
+			protected <K, V> void prepare(TypeToken<K> keyType, TypeToken<V> valueType, ExpressoSession<?> session)
+				throws QonfigInterpretationException {
 			}
 
 			abstract <K, V> ObservableMap.Builder<K, V, ?> create(TypeToken<K> keyType, TypeToken<V> valueType, ModelSetInstance models);
 
-			abstract <K, V> void add(ObservableModelSet.Builder model, ClassView cv, String name, TypeToken<K> keyType,
-				TypeToken<V> valueType, QonfigElement element, ValueGetter<? extends M> map);
+			abstract <K, V> void add(ObservableModelSet.Builder model, String name, TypeToken<K> keyType, TypeToken<V> valueType,
+				ExpressoSession<?> session, ValueGetter<? extends M> map);
 
 			protected abstract <K, V> M modify(ObservableMap<K, V> map, ModelSetInstance msi);
 		}
@@ -827,8 +819,8 @@ public class ObservableModelQonfigParser {
 			}
 
 			@Override
-			<K, V> void add(ObservableModelSet.Builder model, ClassView cv, String name, TypeToken<K> keyType, TypeToken<V> valueType,
-				QonfigElement element, ValueGetter<? extends ObservableMap> map) {
+			<K, V> void add(ObservableModelSet.Builder model, String name, TypeToken<K> keyType, TypeToken<V> valueType,
+				ExpressoSession<?> session, ValueGetter<? extends ObservableMap> map) {
 				model.with(name, ModelTypes.Map.forType(keyType, valueType), (ValueGetter<ObservableMap<K, V>>) map);
 			}
 
@@ -841,10 +833,10 @@ public class ObservableModelQonfigParser {
 			private Function<ModelSetInstance, Comparator<Object>> theComparator;
 
 			@Override
-			protected <K, V> void prepare(TypeToken<K> keyType, TypeToken<V> valueType, QonfigElement element, ObservableModelSet models,
-				ClassView cv) throws QonfigInterpretationException {
+			protected <K, V> void prepare(TypeToken<K> keyType, TypeToken<V> valueType, ExpressoSession<?> session)
+				throws QonfigInterpretationException {
 				theComparator = parseComparator((TypeToken<Object>) keyType,
-					element.getAttribute(obsTk.getAttribute("sorted", "sort-with"), ObservableExpression.class), models, cv);
+					session.getAttribute("sort-with", ObservableExpression.class), session.getModels(), session.getClassView());
 			}
 
 			@Override
@@ -854,8 +846,8 @@ public class ObservableModelQonfigParser {
 			}
 
 			@Override
-			<K, V> void add(ObservableModelSet.Builder model, ClassView cv, String name, TypeToken<K> keyType, TypeToken<V> valueType,
-				QonfigElement element, ValueGetter<? extends ObservableSortedMap> map) {
+			<K, V> void add(ObservableModelSet.Builder model, String name, TypeToken<K> keyType, TypeToken<V> valueType,
+				ExpressoSession<?> session, ValueGetter<? extends ObservableSortedMap> map) {
 				model.with(name, ModelTypes.SortedMap.forType(keyType, valueType), (ValueGetter<ObservableSortedMap<K, V>>) map);
 			}
 
@@ -867,19 +859,18 @@ public class ObservableModelQonfigParser {
 		});
 		abstract class MultiMapCreator<M extends ObservableMultiMap> extends BiTypedModelThing<M> {
 			@Override
-			<K, V> void build(ObservableModelSet.Builder model, ClassView cv, String name, TypeToken<K> keyType, TypeToken<V> valueType,
-				QonfigElement element, String path) throws QonfigInterpretationException {
+			<K, V> void build(ObservableModelSet.Builder model, String name, TypeToken<K> keyType, TypeToken<V> valueType,
+				ExpressoSession<?> session, String path) throws QonfigInterpretationException {
 				List<BiTuple<BiFunction<ModelSetInstance, ExternalModelSet, K>, BiFunction<ModelSetInstance, ExternalModelSet, V>>> entries = new ArrayList<>();
-				QonfigChildDef.Declared entryRole = obsTk.getChild("map", "entry").getDeclared();
-				for (QonfigElement entry : element.getChildrenByRole().get(entryRole)) {
-					BiFunction<ModelSetInstance, ExternalModelSet, K> key = parseValue(model, cv, keyType,
-						entry.getAttribute(entryRole.getType().getAttribute("key"), ObservableExpression.class));
-					BiFunction<ModelSetInstance, ExternalModelSet, V> v = parseValue(model, cv, valueType,
-						entry.getAttribute(entryRole.getType().getAttribute("value"), ObservableExpression.class));
+				for (ExpressoSession<?> entry : session.forChildren("entry")) {
+					BiFunction<ModelSetInstance, ExternalModelSet, K> key = parseValue(model, session.getClassView(), keyType,
+						entry.getAttribute("key", ObservableExpression.class));
+					BiFunction<ModelSetInstance, ExternalModelSet, V> v = parseValue(model, session.getClassView(), valueType,
+						entry.getAttribute("value", ObservableExpression.class));
 					entries.add(new BiTuple<>(key, v));
 				}
-				prepare(keyType, valueType, element, model, cv);
-				add(model, cv, name, keyType, valueType, element, (modelSet, extModels) -> {
+				prepare(keyType, valueType, session);
+				add(model, name, keyType, valueType, session, (modelSet, extModels) -> {
 					M map = (M) create(keyType, valueType, modelSet).withDescription(path).build(null);
 					for (int i = 0; i < entries.size(); i++) {
 						BiTuple<BiFunction<ModelSetInstance, ExternalModelSet, K>, BiFunction<ModelSetInstance, ExternalModelSet, V>> entry = entries
@@ -887,22 +878,23 @@ public class ObservableModelQonfigParser {
 						Object key = entry.getValue1().apply(modelSet, extModels);
 						Object v = entry.getValue2().apply(modelSet, extModels);
 						if (!map.add(key, v))
-							System.err.println("Warning: Key " + key + " already used for " + element.getType().getName() + " " + name);
+							System.err.println(
+								"Warning: Key " + key + " already used for " + session.getElement().getType().getName() + " " + name);
 					}
 					return map;
 				});
 			}
 
 			@Override
-			<K, V> void buildConfig(Builder model, ClassView cv, String name, TypeToken<K> keyType, TypeToken<V> valueType,
-				QonfigElement element, String path, Function<ModelSetInstance, ObservableConfigFormat<K>> keyFormat,
+			<K, V> void buildConfig(Builder model, String name, TypeToken<K> keyType, TypeToken<V> valueType, ExpressoSession<?> session,
+				String path, Function<ModelSetInstance, ObservableConfigFormat<K>> keyFormat,
 				Function<ModelSetInstance, ObservableConfigFormat<V>> valueFormat) throws QonfigInterpretationException {
-				if (!element.getChildrenByRole().get(obsTk.getChild("map", "entry").getDeclared()).isEmpty())
+				if (!session.getElement().getChildrenByRole().get(obsTk.getChild("map", "entry").getDeclared()).isEmpty())
 					System.err.println("WARNING: Config value " + model.pathTo(name) + " specifies entries, ignored");
-				if (element.getAttributes().get(obsTk.getAttribute("config-value", "default")) != null)
+				if (session.getElement().getAttributes().get(obsTk.getAttribute("config-value", "default")) != null)
 					System.err.println("WARNING: Config multi-map " + model.pathTo(name) + " specifies default, ignored");
-				prepare(keyType, valueType, element, model, cv);
-				add(model, cv, name, keyType, valueType, element, (msi, extModels) -> {
+				prepare(keyType, valueType, session);
+				add(model, name, keyType, valueType, session, (msi, extModels) -> {
 					ObservableConfig config = (ObservableConfig) msi.getModelConfiguration();
 					ObservableConfigMapBuilder<K, V> valueBuilder = config.asValue(valueType).asMap(keyType);
 					valueBuilder.at(path);
@@ -915,14 +907,14 @@ public class ObservableModelQonfigParser {
 				});
 			}
 
-			protected <K, V> void prepare(TypeToken<K> keyType, TypeToken<V> valueType, QonfigElement element, ObservableModelSet models,
-				ClassView cv) throws QonfigInterpretationException {
+			protected <K, V> void prepare(TypeToken<K> keyType, TypeToken<V> valueType, ExpressoSession<?> session)
+				throws QonfigInterpretationException {
 			}
 
 			abstract <K, V> ObservableMultiMap.Builder<K, V, ?> create(TypeToken<K> keyType, TypeToken<V> type, ModelSetInstance models);
 
-			abstract <K, V> void add(ObservableModelSet.Builder model, ClassView cv, String name, TypeToken<K> keyType,
-				TypeToken<V> valueType, QonfigElement element, ValueGetter<? extends M> map);
+			abstract <K, V> void add(ObservableModelSet.Builder model, String name, TypeToken<K> keyType, TypeToken<V> valueType,
+				ExpressoSession<?> session, ValueGetter<? extends M> map);
 
 			protected abstract <K, V> M modify(ObservableMultiMap<K, V> map, ModelSetInstance msi);
 		}
@@ -933,8 +925,8 @@ public class ObservableModelQonfigParser {
 			}
 
 			@Override
-			<K, V> void add(ObservableModelSet.Builder model, ClassView cv, String name, TypeToken<K> keyType, TypeToken<V> valueType,
-				QonfigElement element, ValueGetter<? extends ObservableMultiMap> map) {
+			<K, V> void add(ObservableModelSet.Builder model, String name, TypeToken<K> keyType, TypeToken<V> valueType,
+				ExpressoSession<?> session, ValueGetter<? extends ObservableMultiMap> map) {
 				model.with(name, ModelTypes.MultiMap.forType(keyType, valueType), (ValueGetter<ObservableMultiMap<K, V>>) map);
 			}
 
@@ -947,10 +939,10 @@ public class ObservableModelQonfigParser {
 			private Function<ModelSetInstance, Comparator<Object>> theComparator;
 
 			@Override
-			protected <K, V> void prepare(TypeToken<K> keyType, TypeToken<V> valueType, QonfigElement element, ObservableModelSet models,
-				ClassView cv) throws QonfigInterpretationException {
+			protected <K, V> void prepare(TypeToken<K> keyType, TypeToken<V> valueType, ExpressoSession<?> session)
+				throws QonfigInterpretationException {
 				theComparator = parseComparator((TypeToken<Object>) keyType,
-					element.getAttribute(obsTk.getAttribute("sorted", "sort-with"), ObservableExpression.class), models, cv);
+					session.getAttribute("sort-with", ObservableExpression.class), session.getModels(), session.getClassView());
 			}
 
 			@Override
@@ -960,8 +952,8 @@ public class ObservableModelQonfigParser {
 			}
 
 			@Override
-			<K, V> void add(ObservableModelSet.Builder model, ClassView cv, String name, TypeToken<K> keyType, TypeToken<V> valueType,
-				QonfigElement element, ValueGetter<? extends ObservableSortedMultiMap> map) {
+			<K, V> void add(ObservableModelSet.Builder model, String name, TypeToken<K> keyType, TypeToken<V> valueType,
+				ExpressoSession<?> session, ValueGetter<? extends ObservableSortedMultiMap> map) {
 				model.with(name, ModelTypes.SortedMultiMap.forType(keyType, valueType), (ValueGetter<ObservableSortedMultiMap<K, V>>) map);
 			}
 
@@ -971,20 +963,20 @@ public class ObservableModelQonfigParser {
 					.gather();
 			}
 		});
-		abstract class ExtModelValidator<T> implements QonfigInterpreter.QonfigValueCreator<Void> {
+		abstract class ExtModelValidator<T> implements QonfigInterpreter.QonfigValueCreator<ExpressoSession<?>, Void> {
 			@Override
-			public Void createValue(QonfigElement element, QonfigInterpretingSession session) throws QonfigInterpretationException {
-				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.get("model");
-				ClassView cv = (ClassView) session.get("imports");
-				String name = element.getAttributeText(obsTk.getAttribute("abst-model-value", "name"));
-				String typeS = element.getAttributeText(obsTk.getAttribute("abst-model-value", "type"));
+			public Void createValue(ExpressoSession<?> session) throws QonfigInterpretationException {
+				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.getModels();
+				ClassView cv = session.getClassView();
+				String name = session.getAttributeText("name");
+				String typeS = session.getAttributeText("type");
 				TypeToken<?> type = parseType(typeS, cv);
 				String path;
 				if (model.getPath() == null)
 					path = name;
 				else {
 					String pathBuilder = name;
-					QonfigElement modelEl = element.getParent();
+					QonfigElement modelEl = session.getElement().getParent();
 					while (modelEl != null && modelEl.getType().getName().equals("ext-model")) {
 						pathBuilder = modelEl.getAttributeText(obsTk.getAttribute("ext-model", "name")) + "." + pathBuilder;
 						modelEl = modelEl.getParent();
@@ -1109,14 +1101,14 @@ public class ObservableModelQonfigParser {
 				return extModels.get(name, ModelTypes.ValueSet.forType(type));
 			}
 		});
-		abstract class ExtBiTypedModelValidator<T> implements QonfigInterpreter.QonfigValueCreator<Void> {
+		abstract class ExtBiTypedModelValidator<T> implements QonfigInterpreter.QonfigValueCreator<ExpressoSession<?>, Void> {
 			@Override
-			public Void createValue(QonfigElement element, QonfigInterpretingSession session) throws QonfigInterpretationException {
-				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.get("model");
-				ClassView cv = (ClassView) session.get("imports");
-				String name = element.getAttributeText(obsTk.getAttribute("abst-model-value", "name"));
-				String keyTypeS = element.getAttributeText(obsTk.getAttribute("map-model-value", "key-type"));
-				String valueTypeS = element.getAttributeText(obsTk.getAttribute("abst-model-value", "type"));
+			public Void createValue(ExpressoSession<?> session) throws QonfigInterpretationException {
+				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.getModels();
+				ClassView cv = session.getClassView();
+				String name = session.getAttributeText("name");
+				String keyTypeS = session.getAttributeText("key-type");
+				String valueTypeS = session.getAttributeText("type");
 				TypeToken<?> keyType = parseType(keyTypeS, cv);
 				TypeToken<?> valueType = parseType(valueTypeS, cv);
 				String path;
@@ -1197,49 +1189,46 @@ public class ObservableModelQonfigParser {
 				return extModels.get(name, ModelTypes.SortedMultiMap.forType(keyType, valueType));
 			}
 		});
-		observeInterpreter.createWith("transform", Void.class, new QonfigInterpreter.QonfigValueCreator<Void>() {
+		observeInterpreter.createWith("transform", Void.class, new QonfigInterpreter.QonfigValueCreator<ExpressoSession<?>, Void>() {
 			@Override
-			public Void createValue(QonfigElement element, QonfigInterpretingSession session) throws QonfigInterpretationException {
-				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.get("model");
-				ClassView cv = (ClassView) session.get("imports");
-				String name = element.getAttributeText(obsTk.getAttribute("abst-model-value", "name"));
-				String sourceName = element.getAttributeText(obsTk.getAttribute("transform", "source"));
+			public Void createValue(ExpressoSession<?> session) throws QonfigInterpretationException {
+				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.getModels();
+				String name = session.getAttributeText("name");
+				String sourceName = session.getAttributeText("source");
 				ValueContainer<?, ?> source = model.get(sourceName, true);
 				ModelType<?> type = source.getType().getModelType();
 				if (type == ModelTypes.Event)
-					transformEvent((ValueContainer<Object, Observable<Object>>) source, element, model, cv, name, 0);
+					transformEvent((ValueContainer<Object, Observable<Object>>) source, session, name, 0, model);
 				else if (type == ModelTypes.Value)
-					transformValue((ValueContainer<Object, SettableValue<Object>>) source, element, model, cv, name, 0);
+					transformValue((ValueContainer<Object, SettableValue<Object>>) source, session, name, 0, model);
 				else if (type == ModelTypes.Collection || type == ModelTypes.SortedCollection || type == ModelTypes.Set
 					|| type == ModelTypes.SortedSet)
-					transformCollection((ValueContainer<Object, ObservableCollection<Object>>) source, element, model, cv, name, 0);
+					transformCollection((ValueContainer<Object, ObservableCollection<Object>>) source, session, name, 0, model);
 				else
 					throw new IllegalArgumentException("Transformation unsupported for source of type " + source.getType().getModelType());
 				return null;
 			}
 		});
-		observeInterpreter.createWith("file-source", Void.class, new QonfigInterpreter.QonfigValueCreator<Void>() {
+		observeInterpreter.createWith("file-source", Void.class, new QonfigInterpreter.QonfigValueCreator<ExpressoSession<?>, Void>() {
 			@Override
-			public Void createValue(QonfigElement element, QonfigInterpretingSession session) throws QonfigInterpretationException {
-				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.get("model");
-				String name = element.getAttributeText(obsTk.getAttribute("abst-model-value", "name"));
+			public Void createValue(ExpressoSession<?> session) throws QonfigInterpretationException {
+				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.getModels();
+				String name = session.getAttributeText("name");
 				ValueGetter<SettableValue<FileDataSource>> source;
-				switch (element.getAttributeText(obsTk.getAttribute("file-source", "type"))) {
+				switch (session.getAttributeText("type")) {
 				case "native":
 					source = (modelSet, extModels) -> literal(new NativeFileSource(), "native-file-source");
 					break;
 				case "sftp":
 					throw new UnsupportedOperationException("Not yet implemented");
 				default:
-					throw new IllegalArgumentException(
-						"Unrecognized file-source type: "
-							+ element.getAttributeText(obsTk.getAttribute("file-source", "type")));
+					throw new IllegalArgumentException("Unrecognized file-source type: " + session.getAttributeText("type"));
 				}
-				if (!element.getChildrenByRole().get(obsTk.getChild("file-source", "archive").getDeclared()).isEmpty()) {
+				if (!session.getElement().getChildrenByRole().get(obsTk.getChild("file-source", "archive").getDeclared()).isEmpty()) {
 					Set<String> archiveMethodStrs = new HashSet<>();
 					List<ArchiveEnabledFileSource.FileArchival> archiveMethods = new ArrayList<>(5);
-					for (QonfigElement archive : element.getChildrenByRole().get(obsTk.getChild("file-source", "archive").getDeclared())) {
-						String type = archive.getAttributeText(obsTk.getAttribute("archive-method", "type"));
+					for (ExpressoSession<?> archive : session.forChildren("archive")) {
+						String type = archive.getAttributeText("type");
 						if (!archiveMethodStrs.add(type))
 							continue;
 						switch (type) {
@@ -1257,10 +1246,10 @@ public class ObservableModelQonfigParser {
 						}
 					}
 					Function<ModelSetInstance, SettableValue<Integer>> maxZipDepth;
-					if (element.getAttributes().get(obsTk.getAttribute("file-source", "max-archive-depth")) == null)
+					if (session.getAttributeText("max-archive-depth") == null)
 						maxZipDepth = null;
 					else {
-						String mad = element.getAttributeText(obsTk.getAttribute("file-source", "max-archive-depth"));
+						String mad = session.getAttributeText("max-archive-depth");
 						int zipDepth;
 						try {
 							zipDepth = Integer.parseInt(mad);
@@ -1292,44 +1281,43 @@ public class ObservableModelQonfigParser {
 				return null;
 			}
 		});
-		observeInterpreter.createWith("format", Void.class, new QonfigInterpreter.QonfigValueCreator<Void>() {
+		observeInterpreter.createWith("format", Void.class, new QonfigInterpreter.QonfigValueCreator<ExpressoSession<?>, Void>() {
 			@Override
-			public Void createValue(QonfigElement element, QonfigInterpretingSession session) throws QonfigInterpretationException {
+			public Void createValue(ExpressoSession<?> session) throws QonfigInterpretationException {
 				return null;
 			}
 
 			@Override
-			public Void postModification(Void value, QonfigElement element, QonfigInterpretingSession session)
+			public Void postModification(Void value, ExpressoSession<?> session)
 				throws QonfigInterpretationException {
-				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.get("model");
-				String name = element.getAttributeText(obsTk.getAttribute("abst-model-value", "name"));
+				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.getModels();
+				String name = session.getAttributeText("name");
 				if (model.get(name, false) == null)
-					throw new QonfigInterpretationException(
-						"Modifier for type=" + element.getAttributeText(obsTk.getAttribute("format", "type"))
-						+ " not registered or did not create a format for " + name);
+					throw new QonfigInterpretationException("Modifier for type=" + session.getAttributeText("type")
+					+ " not registered or did not create a format for " + name);
 				return value;
 			}
 		});
-		observeInterpreter.modifyWith("text", Void.class, new QonfigInterpreter.QonfigValueModifier<Void>() {
+		observeInterpreter.modifyWith("text", Void.class, new QonfigInterpreter.QonfigValueModifier<ExpressoSession<?>, Void>() {
 			@Override
-			public Void modifyValue(Void value, QonfigElement element, QonfigInterpretingSession session)
+			public Void modifyValue(Void value, ExpressoSession<?> session)
 				throws QonfigInterpretationException {
-				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.get("model");
-				String name = element.getAttributeText(obsTk.getAttribute("abst-model-value", "name"));
+				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.getModels();
+				String name = session.getAttributeText("name");
 				model.with(name,
 					ModelTypes.Value.forType(TypeTokens.get().keyFor(Format.class).<Format<String>> parameterized(String.class)),
 					literalGetter(SpinnerFormat.NUMERICAL_TEXT, "text"));
 				return null;
 			}
 		});
-		observeInterpreter.modifyWith("int-format", Void.class, new QonfigInterpreter.QonfigValueModifier<Void>() {
+		observeInterpreter.modifyWith("int-format", Void.class, new QonfigInterpreter.QonfigValueModifier<ExpressoSession<?>, Void>() {
 			@Override
-			public Void modifyValue(Void value, QonfigElement element, QonfigInterpretingSession session)
+			public Void modifyValue(Void value, ExpressoSession<?> session)
 				throws QonfigInterpretationException {
-				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.get("model");
-				String name = element.getAttributeText(obsTk.getAttribute("abst-model-value", "name"));
+				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.getModels();
+				String name = session.getAttributeText("name");
 				SpinnerFormat.IntFormat format = SpinnerFormat.INT;
-				String sep=element.getAttributeText(obsTk.getAttribute("int-format", "grouping-separator"));
+				String sep = session.getAttributeText("grouping-separator");
 				if (sep != null) {
 					if (sep.length() != 0)
 						System.err.println("WARNING: grouping-separator must be a single character");
@@ -1342,14 +1330,14 @@ public class ObservableModelQonfigParser {
 				return null;
 			}
 		});
-		observeInterpreter.modifyWith("long-format", Void.class, new QonfigInterpreter.QonfigValueModifier<Void>() {
+		observeInterpreter.modifyWith("long-format", Void.class, new QonfigInterpreter.QonfigValueModifier<ExpressoSession<?>, Void>() {
 			@Override
-			public Void modifyValue(Void value, QonfigElement element, QonfigInterpretingSession session)
+			public Void modifyValue(Void value, ExpressoSession<?> session)
 				throws QonfigInterpretationException {
-				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.get("model");
-				String name = element.getAttributeText(obsTk.getAttribute("abst-model-value", "name"));
+				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.getModels();
+				String name = session.getAttributeText("name");
 				SpinnerFormat.LongFormat format = SpinnerFormat.LONG;
-				String sep = element.getAttributeText(obsTk.getAttribute("int-format", "grouping-separator"));
+				String sep = session.getAttributeText("grouping-separator");
 				if (sep != null) {
 					if (sep.length() != 0)
 						System.err.println("WARNING: grouping-separator must be a single character");
@@ -1361,30 +1349,30 @@ public class ObservableModelQonfigParser {
 				return null;
 			}
 		});
-		observeInterpreter.modifyWith("double", Void.class, new QonfigInterpreter.QonfigValueModifier<Void>() {
+		observeInterpreter.modifyWith("double", Void.class, new QonfigInterpreter.QonfigValueModifier<ExpressoSession<?>, Void>() {
 			@Override
-			public Void modifyValue(Void value, QonfigElement element, QonfigInterpretingSession session)
+			public Void modifyValue(Void value, ExpressoSession<?> session)
 				throws QonfigInterpretationException {
-				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.get("model");
-				String name = element.getAttributeText(obsTk.getAttribute("abst-model-value", "name"));
-				int sigDigs = Integer.parseInt(element.getAttributeText(obsTk.getAttribute("double", "sig-digs")));
+				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.getModels();
+				String name = session.getAttributeText("name");
+				int sigDigs = Integer.parseInt(session.getAttributeText("sig-digs"));
 				Format.SuperDoubleFormatBuilder builder = Format.doubleFormat(sigDigs);
-				String unit = element.getAttributeText(obsTk.getAttribute("double", "unit"));
-				boolean withMetricPrefixes = element.getAttribute(obsTk.getAttribute("double", "metric-prefixes"), boolean.class);
-				boolean withMetricPrefixesP2 = element.getAttribute(obsTk.getAttribute("double", "metric-prefixes-p2"), boolean.class);
-				QonfigChildDef.Declared prefixRole = obsTk.getChild("double", "prefix").getDeclared();
+				String unit = session.getAttributeText("unit");
+				boolean withMetricPrefixes = session.getAttribute("metric-prefixes", boolean.class);
+				boolean withMetricPrefixesP2 = session.getAttribute("metric-prefixes-p2", boolean.class);
+				List<? extends ExpressoSession<?>> prefixes = session.forChildren("prefix");
 				if (unit != null) {
-					builder.withUnit(unit, element.getAttribute(obsTk.getAttribute("double", "unit-required"), boolean.class));
+					builder.withUnit(unit, session.getAttribute("unit-required", boolean.class));
 					if (withMetricPrefixes) {
 						if (withMetricPrefixesP2)
 							session.withWarning("Both 'metric-prefixes' and 'metric-prefixes-p2' specified");
 						builder.withMetricPrefixes();
 					} else if (withMetricPrefixesP2)
 						builder.withMetricPrefixesPower2();
-					for (QonfigElement prefix : element.getChildrenByRole().get(prefixRole)) {
-						String prefixName = prefix.getAttributeText(prefixRole.getType().getAttribute("name"));
-						String expS = prefix.getAttributeText(prefixRole.getType().getAttribute("exp"));
-						String multS = prefix.getAttributeText(prefixRole.getType().getAttribute("mult"));
+					for (ExpressoSession<?> prefix : prefixes) {
+						String prefixName = prefix.getAttributeText("name");
+						String expS = prefix.getAttributeText("exp");
+						String multS = prefix.getAttributeText("mult");
 						if (expS != null) {
 							if (multS != null)
 								session.withWarning("Both 'exp' and 'mult' specified for prefix '" + prefixName + "'");
@@ -1399,7 +1387,7 @@ public class ObservableModelQonfigParser {
 						session.withWarning("'metric-prefixes' specified without a unit");
 					if (withMetricPrefixesP2)
 						session.withWarning("'metric-prefixes-p2' specified without a unit");
-					if (!element.getChildrenByRole().get(prefixRole).isEmpty())
+					if (!prefixes.isEmpty())
 						session.withWarning("prefixes specified without a unit");
 				}
 				TypeToken<Format<Double>> formatType = TypeTokens.get().keyFor(Format.class).<Format<Double>> parameterized(Double.class);
@@ -1408,16 +1396,16 @@ public class ObservableModelQonfigParser {
 				return null;
 			}
 		});
-		observeInterpreter.modifyWith("instant", Void.class, new QonfigInterpreter.QonfigValueModifier<Void>() {
+		observeInterpreter.modifyWith("instant", Void.class, new QonfigInterpreter.QonfigValueModifier<ExpressoSession<?>, Void>() {
 			@Override
-			public Void modifyValue(Void value, QonfigElement element, QonfigInterpretingSession session)
+			public Void modifyValue(Void value, ExpressoSession<?> session)
 				throws QonfigInterpretationException {
-				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.get("model");
-				ClassView cv = (ClassView) session.get("imports");
-				String name = element.getAttributeText(obsTk.getAttribute("abst-model-value", "name"));
-				String dayFormat = element.getAttributeText(obsTk.getAttribute("instant", "day-format"));
+				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.getModels();
+				ClassView cv = session.getClassView();
+				String name = session.getAttributeText("name");
+				String dayFormat = session.getAttributeText("day-format");
 				TimeEvaluationOptions options = TimeUtils.DEFAULT_OPTIONS;
-				String tzs = element.getAttributeText(obsTk.getAttribute("instant", "time-zone"));
+				String tzs = session.getAttributeText("time-zone");
 				if (tzs != null) {
 					TimeZone timeZone = TimeZone.getTimeZone(tzs);
 					if (timeZone.getRawOffset() == 0 && !timeZone.useDaylightTime()//
@@ -1427,13 +1415,13 @@ public class ObservableModelQonfigParser {
 				}
 				try {
 					options = options.withMaxResolution(
-						TimeUtils.DateElementType.valueOf(element.getAttributeText(obsTk.getAttribute("instant", "max-resolution"))));
+						TimeUtils.DateElementType.valueOf(session.getAttributeText("max-resolution")));
 				} catch (IllegalArgumentException e) {
 					session.withWarning(
-						"Unrecognized instant resolution: '" + element.getAttributeText(obsTk.getAttribute("instant", "max-resolution")));
+						"Unrecognized instant resolution: '" + session.getAttributeText("max-resolution"));
 				}
-				options = options.with24HourFormat(element.getAttribute(obsTk.getAttribute("instant", "format-24h"), boolean.class));
-				String rteS = element.getAttributeText(obsTk.getAttribute("instant", "relative-eval-type"));
+				options = options.with24HourFormat(session.getAttribute("format-24h", boolean.class));
+				String rteS = session.getAttributeText("relative-eval-type");
 				try {
 					options = options.withEvaluationType(TimeUtils.RelativeInstantEvaluation.valueOf(rteS));
 				} catch (IllegalArgumentException e) {
@@ -1445,13 +1433,13 @@ public class ObservableModelQonfigParser {
 					.<Format<Instant>> parameterized(Instant.class);
 				ModelInstanceType<SettableValue, SettableValue<Format<Instant>>> formatInstanceType = ModelTypes.Value.forType(formatType);
 				Function<ModelSetInstance, Supplier<Instant>> relativeTo;
-				Object relativeV = element.getAttributes().get(obsTk.getAttribute("instant", "relative-to"));
+				ObservableExpression relativeV = session.getAttribute("relative-to", ObservableExpression.class);
 				if (relativeV == null) {
 					model.with(name, formatInstanceType, literalGetter(formatType, format, "instant"));
-				} else if (relativeV instanceof String) {
+				} else if (relativeV instanceof ExpressionValueType.Literal) {
 					try {
-						Instant ri = format.parse((String) relativeV);
-						relativeTo = msi -> LambdaUtils.constantSupplier(ri, (String) relativeV, null);
+						Instant ri = format.parse(((ExpressionValueType.Literal) relativeV).getValue());
+						relativeTo = msi -> LambdaUtils.constantSupplier(ri, ((ExpressionValueType.Literal) relativeV).getValue(), null);
 						model.with(name, formatInstanceType, (msi, extModels) -> {
 							return literal(SpinnerFormat.flexDate(relativeTo.apply(msi), dayFormat, __ -> fOptions), "instant");
 						});
@@ -1461,7 +1449,7 @@ public class ObservableModelQonfigParser {
 					}
 				} else {
 					// TODO This should just be a value that is evaluated when needed
-					relativeTo = ((ObservableExpression) relativeV).findMethod(Instant.class, model, cv)
+					relativeTo = relativeV.findMethod(Instant.class, model, cv)
 						.withOption(BetterList.empty(), null).find0();
 					model.with(name, formatInstanceType, (msi, extModels) -> {
 						return literal(SpinnerFormat.flexDate(relativeTo.apply(msi), dayFormat, __ -> fOptions), "instant");
@@ -1470,30 +1458,28 @@ public class ObservableModelQonfigParser {
 				return null;
 			}
 		});
-		observeInterpreter.modifyWith("file", Void.class, new QonfigInterpreter.QonfigValueModifier<Void>() {
+		observeInterpreter.modifyWith("file", Void.class, new QonfigInterpreter.QonfigValueModifier<ExpressoSession<?>, Void>() {
 			@Override
-			public Void modifyValue(Void value, QonfigElement element, QonfigInterpretingSession session)
+			public Void modifyValue(Void value, ExpressoSession<?> session)
 				throws QonfigInterpretationException {
-				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.get("model");
-				ClassView cv = (ClassView) session.get("imports");
-				String name = element.getAttributeText(obsTk.getAttribute("abst-model-value", "name"));
+				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.getModels();
+				ClassView cv = session.getClassView();
+				String name = session.getAttributeText("name");
 				Function<ModelSetInstance, SettableValue<BetterFile.FileDataSource>> fileSource;
-				ObservableExpression fileSourceEx = element.getAttribute(obsTk.getAttribute("file", "file-source"),
-					ObservableExpression.class);
+				ObservableExpression fileSourceEx = session.getAttribute("file-source", ObservableExpression.class);
 				if (fileSourceEx != null)
 					fileSource = fileSourceEx.evaluate(//
 						ModelTypes.Value.forType(BetterFile.FileDataSource.class), model, cv);
 				else
 					fileSource = literalContainer(ModelTypes.Value.forType(BetterFile.FileDataSource.class), new NativeFileSource(),
 						"native");
-				ObservableExpression workingDirEx = element.getAttribute(obsTk.getAttribute("file", "working-dir"),
-					ObservableExpression.class);
+				ObservableExpression workingDirEx = session.getAttribute("working-dir", ObservableExpression.class);
 				Function<ModelSetInstance, SettableValue<String>> workingDir;
 				if (workingDirEx != null)
 					workingDir = workingDirEx.evaluate(ModelTypes.Value.forType(String.class), model, cv);
 				else
 					workingDir = null;
-				boolean allowEmpty = element.getAttribute(obsTk.getAttribute("file", "allow-empty"), boolean.class);
+				boolean allowEmpty = session.getAttribute("allow-empty", boolean.class);
 				TypeToken<Format<BetterFile>> fileFormatType = TypeTokens.get().keyFor(Format.class)
 					.<Format<BetterFile>> parameterized(BetterFile.class);
 				model.with(name, ModelTypes.Value.forType(fileFormatType), (models, extModels) -> {
@@ -1508,24 +1494,25 @@ public class ObservableModelQonfigParser {
 				return null;
 			}
 		});
-		observeInterpreter.modifyWith("regex-format", Void.class, new QonfigInterpreter.QonfigValueModifier<Void>() {
+		observeInterpreter.modifyWith("regex-format", Void.class, new QonfigInterpreter.QonfigValueModifier<ExpressoSession<?>, Void>() {
 			@Override
-			public Void modifyValue(Void value, QonfigElement element, QonfigInterpretingSession session)
+			public Void modifyValue(Void value, ExpressoSession<?> session)
 				throws QonfigInterpretationException {
-				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.get("model");
-				String name = element.getAttributeText(obsTk.getAttribute("abst-model-value", "name"));
+				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.getModels();
+				String name = session.getAttributeText("name");
 				ModelInstanceType<SettableValue, SettableValue<Format<Pattern>>> patternType = ModelTypes.Value
 					.forType(TypeTokens.get().keyFor(Format.class).<Format<Pattern>> parameterized(Pattern.class));
 				model.with(name, patternType, literalGetter(Format.PATTERN, "regex-format"));
 				return null;
 			}
 		});
-		observeInterpreter.modifyWith("regex-format-string", Void.class, new QonfigInterpreter.QonfigValueModifier<Void>() {
+		observeInterpreter.modifyWith("regex-format-string", Void.class,
+			new QonfigInterpreter.QonfigValueModifier<ExpressoSession<?>, Void>() {
 			@Override
-			public Void modifyValue(Void value, QonfigElement element, QonfigInterpretingSession session)
+			public Void modifyValue(Void value, ExpressoSession<?> session)
 				throws QonfigInterpretationException {
-				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.get("model");
-				String name = element.getAttributeText(obsTk.getAttribute("abst-model-value", "name"));
+				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.getModels();
+				String name = session.getAttributeText("name");
 				ModelInstanceType<SettableValue, SettableValue<Format<String>>> patternType = ModelTypes.Value
 					.forType(TypeTokens.get().keyFor(Format.class).<Format<String>> parameterized(String.class));
 				model.with(name, patternType, literalGetter(Format.validate(Format.TEXT, str -> {
@@ -1541,20 +1528,20 @@ public class ObservableModelQonfigParser {
 				return null;
 			}
 		});
-		observeInterpreter.createWith("simple-config-format", Void.class, new QonfigInterpreter.QonfigValueCreator<Void>() {
+		observeInterpreter.createWith("simple-config-format", Void.class,
+			new QonfigInterpreter.QonfigValueCreator<ExpressoSession<?>, Void>() {
 			@Override
-			public Void createValue(QonfigElement element, QonfigInterpretingSession session) throws QonfigInterpretationException {
-				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.get("model");
-				ClassView cv = (ClassView) session.get("imports");
-				String name = element.getAttributeText(obsTk.getAttribute("abst-model-value", "name"));
-				TypeToken<Object> valueType = (TypeToken<Object>) parseType(
-					element.getAttributeText(obsTk.getAttribute("abst-model-value", "type")), cv);
+			public Void createValue(ExpressoSession<?> session) throws QonfigInterpretationException {
+				ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.getModels();
+				ClassView cv = session.getClassView();
+				String name = session.getAttributeText("name");
+				TypeToken<Object> valueType = (TypeToken<Object>) parseType(session.getAttributeText("type"), cv);
 				ValueContainer<SettableValue, SettableValue<Format<Object>>> format;
 				ModelInstanceType<SettableValue, SettableValue<Format<Object>>> formatType = ModelTypes.Value
 					.forType(TypeTokens.get().keyFor(Format.class).parameterized(valueType));
 				Function<ModelSetInstance, Object> defaultValue;
-				String defaultS = element.getAttributeText(obsTk.getAttribute("config-value", "default"));
-				ObservableExpression formatEx = element.getAttribute(obsTk.getAttribute("config-value", "format"),
+				String defaultS = session.getElement().getAttributeText(obsTk.getAttribute("config-value", "default"));
+				ObservableExpression formatEx = session.getElement().getAttribute(obsTk.getAttribute("config-value", "format"),
 					ObservableExpression.class);
 				if (formatEx != null) {
 					format = formatEx.evaluate(formatType, model, cv);
@@ -1770,28 +1757,23 @@ public class ObservableModelQonfigParser {
 		}
 	}
 
-	private void transformEvent(ValueContainer<Object, Observable<Object>> source, QonfigElement transform,
-		ObservableModelSet.Builder model, ClassView cv, String name, int startOp) {
-		QonfigToolkit obsTk = TOOLKIT.get();
-		// skip
-		// noInit
-		// take
-		// takeUntil
-		List<QonfigElement> ops = (List<QonfigElement>) transform.getChildrenByRole().get(obsTk.getChild("transform", "op").getDeclared());
+	private void transformEvent(ValueContainer<Object, Observable<Object>> source, ExpressoSession<?> transform, String name, int startOp,
+		ObservableModelSet.Builder model) {
+		List<? extends ExpressoSession<?>> ops = transform.forChildren("op");
 		for (int i = startOp; i < ops.size(); i++) {
-			QonfigElement op = ops.get(i);
-			switch (op.getType().getName()) {
+			ExpressoSession<?> op = ops.get(i);
+			switch (op.getElement().getType().getName()) {
 			case "no-init":
 				model.with(name, ModelTypes.Event.forType((TypeToken<Object>) source.getType().getType(0)),
 					(modelSet, extModels) -> source.get(modelSet).noInit());
 				break;
 			case "skip":
-				int times = Integer.parseInt(op.getAttributeText(obsTk.getAttribute("skip", "times")));
+				int times = Integer.parseInt(op.getAttributeText("times"));
 				model.with(name, ModelTypes.Event.forType((TypeToken<Object>) source.getType().getType(0)),
 					(modelSet, extModels) -> source.get(modelSet).skip(times));
 				break;
 			case "take":
-				times = Integer.parseInt(op.getAttributeText(obsTk.getAttribute("take", "times")));
+				times = Integer.parseInt(op.getAttributeText("times"));
 				model.with(name, ModelTypes.Event.forType((TypeToken<Object>) source.getType().getType(0)),
 					(modelSet, extModels) -> source.get(modelSet).take(times));
 				break;
@@ -1799,16 +1781,14 @@ public class ObservableModelQonfigParser {
 				throw new UnsupportedOperationException("Not yet implemented");// TODO
 			case "map-to":
 				throw new UnsupportedOperationException("Not yet implemented");// TODO
-			case "refresh":
-				throw new UnsupportedOperationException("Not yet implemented");// TODO
 			case "filter":
 				throw new UnsupportedOperationException("Not yet implemented");// TODO
 			case "filter-by-type":
 				throw new UnsupportedOperationException("Not yet implemented");// TODO
 			case "flatten":
-				throw new UnsupportedOperationException("Not yet implemented");// TODO
 			case "unmodifiable":
 			case "reverse":
+			case "refresh":
 			case "refresh-each":
 			case "distinct":
 			case "sort":
@@ -1818,9 +1798,10 @@ public class ObservableModelQonfigParser {
 			case "cross":
 			case "where-contained":
 			case "group-by":
-				throw new IllegalArgumentException("Operation of type " + op.getType().getName() + " is not supported for values");
+				throw new IllegalArgumentException(
+					"Operation of type " + op.getElement().getType().getName() + " is not supported for events");
 			default:
-				throw new IllegalArgumentException("Unrecognized operation type: " + op.getType().getName());
+				throw new IllegalArgumentException("Unrecognized operation type: " + op.getElement().getType().getName());
 			}
 		}
 	}
@@ -1829,20 +1810,19 @@ public class ObservableModelQonfigParser {
 		SettableValue<Object> transform(SettableValue<Object> source, ModelSetInstance models);
 	}
 
-	private void transformValue(ValueContainer<Object, SettableValue<Object>> source, QonfigElement transform,
-		ObservableModelSet.Builder model, ClassView cv, String name, int startOp) throws QonfigInterpretationException {
-		QonfigToolkit obsTk = TOOLKIT.get();
+	private void transformValue(ValueContainer<Object, SettableValue<Object>> source, ExpressoSession<?> transform,
+		String name, int startOp, ObservableModelSet.Builder model) throws QonfigInterpretationException {
 		ValueTransform transformFn = (v, models) -> v;
 		TypeToken<Object> currentType = (TypeToken<Object>) source.getType().getType(0);
-		List<QonfigElement> ops = (List<QonfigElement>) transform.getChildrenByRole().get(obsTk.getChild("transform", "op").getDeclared());
+		List<? extends ExpressoSession<?>> ops = transform.forChildren("op");
 		for (int i = startOp; i < ops.size(); i++) {
-			QonfigElement op = ops.get(i);
+			ExpressoSession<?> op = ops.get(i);
 			ValueTransform prevTransformFn = transformFn;
-			switch (op.getType().getName()) {
+			switch (op.getElement().getType().getName()) {
 			case "take-until":
 				throw new UnsupportedOperationException("Not yet implemented");// TODO
 			case "map-to":
-				ParsedTransformation ptx = mapTransformation(currentType, op, model, cv);
+				ParsedTransformation ptx = mapTransformation(currentType, op);
 				if (ptx.isReversible()) {
 					transformFn = (v, models) -> prevTransformFn.transform(v, models).transformReversible(ptx.getTargetType(),
 						tx -> (Transformation.ReversibleTransformation<Object, Object>) ptx.transform(tx, models));
@@ -1856,13 +1836,12 @@ public class ObservableModelQonfigParser {
 				}
 				break;
 			case "refresh":
-				Function<ModelSetInstance, Observable<?>> refresh = op
-				.getAttribute(obsTk.getAttribute("refresh", "on"), ObservableExpression.class)
-				.evaluate(ModelTypes.Event.any(), model, cv);
+				Function<ModelSetInstance, Observable<?>> refresh = op.getAttribute("on", ObservableExpression.class)
+				.evaluate(ModelTypes.Event.any(), model, op.getClassView());
 				transformFn = (v, models) -> prevTransformFn.transform(v, models).refresh(refresh.apply(models));
 				break;
 			case "unmodifiable":
-				boolean allowUpdates = op.getAttribute(obsTk.getAttribute("unmodifiable", "allow-updates"), Boolean.class);
+				boolean allowUpdates = op.getAttribute("allow-updates", Boolean.class);
 				if (!allowUpdates) {
 					transformFn = (v, models) -> prevTransformFn.transform(v, models)
 						.disableWith(ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION));
@@ -1882,10 +1861,9 @@ public class ObservableModelQonfigParser {
 				System.err.println("WARNING: Value.flatten is not fully implemented!!  Some options may be ignored.");
 				Function<ModelSetInstance, Function<Object, Object>> function;
 				TypeToken<?> resultType;
-				if (op.getAttributes().get(obsTk.getAttribute("flatten", "function")) != null) {
-					MethodFinder<Object, Object, Object, Object> finder = op
-						.getAttribute(obsTk.getAttribute("flatten", "function"), ObservableExpression.class)
-						.<Object, Object, Object, Object> findMethod(TypeTokens.get().of(Object.class), model, cv)//
+				if (op.getAttribute("function", ObservableExpression.class) != null) {
+					MethodFinder<Object, Object, Object, Object> finder = op.getAttribute("function", ObservableExpression.class)
+						.<Object, Object, Object, Object> findMethod(TypeTokens.get().of(Object.class), model, op.getClassView())//
 						.withOption(BetterList.of(currentType), new ObservableExpression.ArgMaker<Object, Object, Object>() {
 							@Override
 							public void makeArgs(Object t, Object u, Object v, Object[] args, ModelSetInstance models) {
@@ -1899,7 +1877,7 @@ public class ObservableModelQonfigParser {
 					function = msi -> v -> v;
 				}
 				Class<?> resultClass = TypeTokens.getRawType(resultType);
-				boolean nullToNull = op.getAttribute(obsTk.getAttribute("flatten", "null-to-null"), boolean.class);
+				boolean nullToNull = op.getAttribute("null-to-null", boolean.class);
 				if (ObservableValue.class.isAssignableFrom(resultClass)) {
 					throw new UnsupportedOperationException("Not yet implemented");// TODO
 				} else if (ObservableCollection.class.isAssignableFrom(resultClass)) {
@@ -1929,7 +1907,7 @@ public class ObservableModelQonfigParser {
 								return ObservableCollection.flattenValue((ObservableValue<ObservableCollection<Object>>) txValue);
 						}
 					};
-					transformCollection(collectionContainer, transform, model, cv, name, i + 1);
+					transformCollection(collectionContainer, transform, name, i + 1, model);
 					return;
 				} else
 					throw new QonfigInterpretationException("Cannot flatten a value of type " + resultType);
@@ -1946,9 +1924,10 @@ public class ObservableModelQonfigParser {
 			case "cross":
 			case "where-contained":
 			case "group-by":
-				throw new IllegalArgumentException("Operation of type " + op.getType().getName() + " is not supported for values");
+				throw new IllegalArgumentException(
+					"Operation of type " + op.getElement().getType().getName() + " is not supported for values");
 			default:
-				throw new IllegalArgumentException("Unrecognized operation type: " + op.getType().getName());
+				throw new IllegalArgumentException("Unrecognized operation type: " + op.getElement().getType().getName());
 			}
 		}
 
@@ -1962,18 +1941,17 @@ public class ObservableModelQonfigParser {
 			ObservableCollection.CollectionDataFlow<Object, ?, Object> source, ModelSetInstance models);
 	}
 
-	private void transformCollection(ValueContainer<Object, ObservableCollection<Object>> source, QonfigElement transform,
-		ObservableModelSet.Builder model, ClassView cv, String name, int startOp) throws QonfigInterpretationException {
-		QonfigToolkit obsTk = TOOLKIT.get();
+	private void transformCollection(ValueContainer<Object, ObservableCollection<Object>> source, ExpressoSession<?> transform, String name,
+		int startOp, ObservableModelSet.Builder model) throws QonfigInterpretationException {
 		CollectionTransform transformFn = (src, models) -> src;
 		TypeToken<Object> currentType = (TypeToken<Object>) source.getType().getType(0);
-		List<QonfigElement> ops = (List<QonfigElement>) transform.getChildrenByRole().get(obsTk.getChild("transform", "op").getDeclared());
+		List<? extends ExpressoSession<?>> ops = transform.forChildren("op");
 		for (int i = startOp; i < ops.size(); i++) {
-			QonfigElement op = ops.get(i);
+			ExpressoSession<?> op = ops.get(i);
 			CollectionTransform prevTransform = transformFn;
-			switch (op.getType().getName()) {
+			switch (op.getElement().getType().getName()) {
 			case "map-to":
-				ParsedTransformation ptx = mapTransformation(currentType, op, model, cv);
+				ParsedTransformation ptx = mapTransformation(currentType, op);
 				transformFn = (src, models) -> prevTransform.transform(src, models).transform(ptx.getTargetType(),
 					tx -> ptx.transform(tx, models));
 				currentType = ptx.getTargetType();
@@ -1987,21 +1965,21 @@ public class ObservableModelQonfigParser {
 				break;
 			case "refresh":
 				Function<ModelSetInstance, Observable<?>> refresh = op
-				.getAttribute(obsTk.getAttribute("refresh", "on"), ObservableExpression.class)
-				.evaluate(ModelTypes.Event.any(), model, cv);
+				.getAttribute("on", ObservableExpression.class).evaluate(ModelTypes.Event.any(), model, op.getClassView());
 				transformFn = (v, models) -> prevTransform.transform(v, models).refresh(refresh.apply(models));
 				break;
 			case "refresh-each":
 				throw new UnsupportedOperationException("Not yet implemented");// TODO
 			case "distinct":
-				boolean useFirst = op.getAttribute(obsTk.getAttribute("distinct", "use-first"), Boolean.class);
-				boolean preserveSourceOrder = op.getAttribute(obsTk.getAttribute("distinct", "preserve-source-order"), Boolean.class);
-				ObservableExpression sortWith = op.getAttribute(obsTk.getAttribute("distinct", "sort-with"), ObservableExpression.class);
+				boolean useFirst = op.getAttribute("use-first", Boolean.class);
+				boolean preserveSourceOrder = op.getAttribute("preserve-source-order", Boolean.class);
+				ObservableExpression sortWith = op.getAttribute("sort-with", ObservableExpression.class);
 				if (sortWith != null) {
 					if (preserveSourceOrder)
 						System.err.println("WARNING: preserve-source-order cannot be used with sorted collections,"
 							+ " as order is determined by the values themselves");
-					Function<ModelSetInstance, Comparator<Object>> comparator = parseComparator(currentType, sortWith, model, cv);
+					Function<ModelSetInstance, Comparator<Object>> comparator = parseComparator(currentType, sortWith, model,
+						op.getClassView());
 					transformFn = (src, models) -> prevTransform.transform(src, models).distinctSorted(comparator.apply(models), useFirst);
 				} else
 					transformFn = (src, models) -> prevTransform.transform(src, models)
@@ -2009,13 +1987,13 @@ public class ObservableModelQonfigParser {
 					break;
 			case "sort":
 				Function<ModelSetInstance, Comparator<Object>> comparator = parseComparator(currentType,
-					op.getAttribute(obsTk.getAttribute("sort", "sort-with"), ObservableExpression.class), model, cv);
+					op.getAttribute("sort-with", ObservableExpression.class), model, op.getClassView());
 				transformFn = (src, models) -> prevTransform.transform(src, models).sorted(comparator.apply(models));
 				break;
 			case "with-equivalence":
 				throw new UnsupportedOperationException("Not yet implemented");// TODO
 			case "unmodifiable":
-				boolean allowUpdates = op.getAttribute(obsTk.getAttribute("unmodifiable", "allow-updates"), boolean.class);
+				boolean allowUpdates = op.getAttribute("allow-updates", boolean.class);
 				transformFn = (src, models) -> prevTransform.transform(src, models).unmodifiable(allowUpdates);
 				break;
 			case "filter-mod":
@@ -2026,10 +2004,9 @@ public class ObservableModelQonfigParser {
 				System.err.println("WARNING: Collection.flatten is not fully implemented!!  Some options may be ignored.");
 				Function<ModelSetInstance, Function<Object, Object>> function;
 				TypeToken<?> resultType;
-				if (op.getAttributes().get(obsTk.getAttribute("flatten", "function")) != null) {
-					MethodFinder<Object, Object, Object, Object> finder = op
-						.getAttribute(obsTk.getAttribute("flatten", "function"), ObservableExpression.class)
-						.<Object, Object, Object, Object> findMethod(TypeTokens.get().of(Object.class), model, cv)//
+				if (op.getAttribute("function", ObservableExpression.class) != null) {
+					MethodFinder<Object, Object, Object, Object> finder = op.getAttribute("function", ObservableExpression.class)
+						.<Object, Object, Object, Object> findMethod(TypeTokens.get().of(Object.class), model, op.getClassView())//
 						.withOption(BetterList.of(currentType), new ObservableExpression.ArgMaker<Object, Object, Object>() {
 							@Override
 							public void makeArgs(Object t, Object u, Object v, Object[] args, ModelSetInstance models) {
@@ -2067,12 +2044,13 @@ public class ObservableModelQonfigParser {
 			case "skip":
 			case "take":
 			case "take-until":
-				throw new IllegalArgumentException("Operation type " + op.getType().getName() + " is not supported for collections");
+				throw new IllegalArgumentException(
+					"Operation type " + op.getElement().getType().getName() + " is not supported for collections");
 			default:
-				throw new IllegalArgumentException("Unrecognized operation type: " + op.getType().getName());
+				throw new IllegalArgumentException("Unrecognized operation type: " + op.getElement().getType().getName());
 			}
 		}
-		Boolean active = transform.getAttribute(obsTk.getAttribute("transform", "active"), Boolean.class);
+		Boolean active = transform.getAttribute("active", Boolean.class);
 		CollectionTransform finalTransform = transformFn;
 		model.with(name, ModelTypes.Collection.forType(currentType), (models, extModels) -> {
 			ObservableCollection.CollectionDataFlow<Object, ?, Object> flow = finalTransform.transform(//
@@ -2086,21 +2064,20 @@ public class ObservableModelQonfigParser {
 		});
 	}
 
-	private ParsedTransformation mapTransformation(TypeToken<Object> currentType, QonfigElement op, ObservableModelSet model, ClassView cv)
+	private ParsedTransformation mapTransformation(TypeToken<Object> currentType, ExpressoSession<?> op)
 		throws QonfigInterpretationException {
-		QonfigToolkit obsTk = TOOLKIT.get();
-		List<ValueContainer<?, ? extends SettableValue<?>>> combined = new ArrayList<>(
-			op.getChildrenByRole().get(obsTk.getChild("map-to", "combined-value").getDeclared()).size());
-		for (QonfigElement combine : op.getChildrenByRole().get(obsTk.getChild("map-to", "combined-value").getDeclared())) {
-			String name = combine.getValue().toString();
-			combined.add(model.get(name, ModelTypes.Value));
+		List<? extends ExpressoSession<?>> combinedValues = op.forChildren("combined-value");
+		List<ValueContainer<?, ? extends SettableValue<?>>> combined = new ArrayList<>(combinedValues.size());
+		for (ExpressoSession<?> combine : combinedValues) {
+			String name = combine.getValueText();
+			combined.add(op.getModels().get(name, ModelTypes.Value));
 		}
 		TypeToken<?>[] argTypes = new TypeToken[combined.size()];
 		for (int i = 0; i < argTypes.length; i++)
 			argTypes[i] = combined.get(i).getType().getType(0);
 		MethodFinder<Object, TransformationValues<?, ?>, ?, Object> map;
-		map = op.getAttribute(obsTk.getAttribute("map-to", "function"), ObservableExpression.class).findMethod(TypeTokens.get().OBJECT,
-			model, cv);
+		map = op.getAttribute("function", ObservableExpression.class).findMethod(TypeTokens.get().OBJECT, op.getModels(),
+			op.getClassView());
 		map.withOption(argList(currentType).with(argTypes), (src, tv, __, args, models) -> {
 			args[0] = src;
 			for (int i = 0; i < combined.size(); i++)
@@ -2108,7 +2085,7 @@ public class ObservableModelQonfigParser {
 		});
 		Function<ModelSetInstance, BiFunction<Object, TransformationValues<?, ?>, Object>> mapFn = map.find2();
 		TypeToken<Object> targetType = (TypeToken<Object>) map.getResultType();
-		QonfigElement reverseEl = op.getChildrenByRole().get(obsTk.getChild("map-to", "reverse").getDeclared()).peekFirst();
+		ExpressoSession<?> reverseEl = op.forChildren("reverse").peekFirst();
 		return new ParsedTransformation() {
 			private boolean stateful;
 			private boolean inexact;
@@ -2122,11 +2099,12 @@ public class ObservableModelQonfigParser {
 			{
 				if (reverseEl != null) {//
 					boolean modifying;
-					String reverseType = reverseEl.getAttributeText(obsTk.getAttribute("map-reverse", "type"));
+					String reverseType = reverseEl.getAttributeText("type");
 					if (reverseType.equals("replace-source")) {
+						ExpressoSession<?> replaceSource = reverseEl.as("replace-source");
 						modifying = false;
-						stateful = reverseEl.getAttribute(obsTk.getAttribute("replace-source", "stateful"), Boolean.class);
-						inexact = reverseEl.getAttribute(obsTk.getAttribute("replace-source", "inexact"), Boolean.class);
+						stateful = replaceSource.getAttribute("stateful", Boolean.class);
+						inexact = replaceSource.getAttribute("inexact", Boolean.class);
 					} else if (reverseType.equals("modify-source")) {
 						modifying = true;
 						stateful = true;
@@ -2139,8 +2117,8 @@ public class ObservableModelQonfigParser {
 					if (modifying) {
 						reverseFn = null;
 						MethodFinder<Object, TransformationValues<?, ?>, ?, Void> reverse = reverseEl
-							.getAttribute(obsTk.getAttribute("map-reverse", "function"), ObservableExpression.class)
-							.findMethod(TypeTokens.get().VOID, model, cv);
+							.getAttribute("function", ObservableExpression.class)
+							.findMethod(TypeTokens.get().VOID, reverseEl.getModels(), reverseEl.getClassView());
 						reverse.withOption(argList(targetType, tvType), (r, tv, __, args, models) -> {
 							args[0] = r;
 							args[1] = tv;
@@ -2163,8 +2141,8 @@ public class ObservableModelQonfigParser {
 					} else {
 						reverseModifier = null;
 						MethodFinder<Object, TransformationValues<?, ?>, ?, Object> reverse = reverseEl
-							.getAttribute(obsTk.getAttribute("map-reverse", "function"), ObservableExpression.class)
-							.findMethod(currentType, model, cv);
+							.getAttribute("function", ObservableExpression.class)
+							.findMethod(currentType, reverseEl.getModels(), reverseEl.getClassView());
 						reverse.withOption(argList(targetType, tvType), (r, tv, __, args, models) -> {
 							args[0] = r;
 							args[1] = tv;
@@ -2184,10 +2162,11 @@ public class ObservableModelQonfigParser {
 						reverseFn = reverse.find2();
 					}
 
-					ObservableExpression enabledEx = reverseEl.getAttribute(obsTk.getAttribute("map-reverse", "enabled"),
-						ObservableExpression.class);
+					ObservableExpression enabledEx = reverseEl.getAttribute("enabled", ObservableExpression.class);
 					if (enabledEx != null) {
-						enabled = enabledEx.<TransformationValues<?, ?>, Void, Void, String> findMethod(TypeTokens.get().STRING, model, cv)//
+						enabled = enabledEx
+							.<TransformationValues<?, ?>, Void, Void, String> findMethod(TypeTokens.get().STRING, reverseEl.getModels(),
+								reverseEl.getClassView())//
 							.withOption(argList(tvType), (tv, __, ___, args, models) -> {
 								args[0] = tv;
 							}).withOption(argList(currentType).with(argTypes), (tv, __, ___, args, models) -> {
@@ -2199,11 +2178,10 @@ public class ObservableModelQonfigParser {
 									args[i] = combined.get(i);
 							}).find1();
 					}
-					ObservableExpression acceptEx = reverseEl.getAttribute(obsTk.getAttribute("map-reverse", "accept"),
-						ObservableExpression.class);
+					ObservableExpression acceptEx = reverseEl.getAttribute("accept", ObservableExpression.class);
 					if (acceptEx != null) {
 						MethodFinder<Object, TransformationValues<?, ?>, ?, String> acceptFinder = acceptEx
-							.findMethod(TypeTokens.get().STRING, model, cv);
+							.findMethod(TypeTokens.get().STRING, reverseEl.getModels(), reverseEl.getClassView());
 						acceptFinder.withOption(argList(targetType, tvType), (r, tv, __, args, models) -> {
 							args[0] = r;
 							args[1] = tv;
@@ -2222,10 +2200,11 @@ public class ObservableModelQonfigParser {
 						});
 						accept = acceptFinder.find2();
 					}
-					ObservableExpression createEx = reverseEl.getAttribute(obsTk.getAttribute("map-reverse", "create"),
-						ObservableExpression.class);
+					ObservableExpression createEx = reverseEl.getAttribute("create", ObservableExpression.class);
 					if (createEx != null) {
-						create = createEx.<Object, TransformationValues<?, ?>, Boolean, Object> findMethod(currentType, model, cv)//
+						create = createEx
+							.<Object, TransformationValues<?, ?>, Boolean, Object> findMethod(currentType, reverseEl.getModels(),
+								reverseEl.getClassView())//
 							.withOption(argList(targetType, tvType, TypeTokens.get().BOOLEAN), (r, tv, b, args, models) -> {
 								args[0] = r;
 								args[1] = tv;
@@ -2241,11 +2220,10 @@ public class ObservableModelQonfigParser {
 									args[i + 1] = combined.get(i);
 							}).find3();
 					}
-					ObservableExpression addAcceptEx = reverseEl.getAttribute(obsTk.getAttribute("map-reverse", "add-accept"),
-						ObservableExpression.class);
+					ObservableExpression addAcceptEx = reverseEl.getAttribute("add-accept", ObservableExpression.class);
 					if (addAcceptEx != null) {
 						MethodFinder<Object, TransformationValues<?, ?>, ?, String> addAcceptFinder = addAcceptEx
-							.findMethod(TypeTokens.get().STRING, model, cv);
+							.findMethod(TypeTokens.get().STRING, reverseEl.getModels(), reverseEl.getClassView());
 						addAcceptFinder.withOption(argList(targetType, tvType), (r, tv, __, args, models) -> {
 							args[0] = r;
 							args[1] = tv;
