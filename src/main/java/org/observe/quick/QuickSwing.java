@@ -49,7 +49,7 @@ public class QuickSwing extends QuickBase {
 		ExpressoInterpreter.Builder<?, ?> tkInt = interpreter.forToolkit(swing);
 		tkInt.extend(CORE.get().getElement("quick"), swing.getElement("quick-debug"), QuickDocument.class, QuickDocument.class, //
 			this::extendQuickDebug)//
-			.modifyWith("quick", QuickDocument.class, this::modifyQuickDocument)//
+		.modifyWith("quick", QuickDocument.class, this::modifyQuickDocument)//
 		;
 		return interpreter;
 	}
@@ -297,7 +297,7 @@ public class QuickSwing extends QuickBase {
 							debugUiModels.with("width", ModelTypes.Value.forType(int.class), w);
 							debugUiModels.with("height", ModelTypes.Value.forType(int.class), h);
 							debugUiModels.with("tooltip", ModelTypes.Value.forType(String.class),
-								ObservableModelQonfigParser.literal("Not yet implemented", "tooltip"));
+								ObservableModelSet.literal("Not yet implemented", "tooltip"));
 							debugUiModels.with("onMouse", ModelTypes.Action.forType(Void.class),
 								ObservableAction.of(TypeTokens.get().VOID, evt -> {
 									MouseEvent mEvt = (MouseEvent) evt;

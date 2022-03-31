@@ -360,7 +360,7 @@ public class QuickBase extends QuickCore {
 			else
 				throw new QonfigInterpretationException(
 					"No default format available for type " + value.getType().getType(0) + " -- format must be specified");
-			format = ObservableModelQonfigParser.literalContainer(ModelTypes.Value.forType((Class<Format<Object>>) (Class<?>) Format.class),
+			format = ObservableModelSet.literalContainer(ModelTypes.Value.forType((Class<Format<Object>>) (Class<?>) Format.class),
 				(Format<Object>) f, type.getSimpleName());
 		}
 		return new AbstractQuickValueEditor(session.getElement()) {
@@ -421,7 +421,7 @@ public class QuickBase extends QuickCore {
 			String txt = session.getValueText();
 			if (txt == null)
 				throw new IllegalArgumentException("Either 'text' attribute or element value must be specified");
-			buttonText = __ -> ObservableModelQonfigParser.literal(txt, txt);
+			buttonText = __ -> ObservableModelSet.literal(txt, txt);
 		} else
 			buttonText = valueX.evaluate(ModelTypes.Value.forType(String.class), model, cv);
 		Function<ModelSetInstance, ? extends ObservableAction> action = model.get(session.getAttributeText("action"), ModelTypes.Action);
@@ -925,7 +925,7 @@ public class QuickBase extends QuickCore {
 			else
 				throw new QonfigInterpretationException(
 					"No default format available for type " + value.getType().getType(0) + " -- format must be specified");
-			format = ObservableModelQonfigParser.literalContainer(ModelTypes.Value.forType((Class<Format<Object>>) (Class<?>) Format.class),
+			format = ObservableModelSet.literalContainer(ModelTypes.Value.forType((Class<Format<Object>>) (Class<?>) Format.class),
 				(Format<Object>) f, type.getSimpleName());
 		}
 		ValueContainer<SettableValue, SettableValue<Integer>> rows = session.interpretAttribute("rows", ObservableExpression.class, true,
@@ -1103,9 +1103,9 @@ public class QuickBase extends QuickCore {
 			valueX = valueEx.evaluate(ModelTypes.Value.any(), model, cv);
 		else if (session.getElement().getValue() == null) {
 			session.withWarning("No value for label");
-			valueX = ObservableModelQonfigParser.literalContainer(ModelTypes.Value.forType(String.class), "", "");
+			valueX = ObservableModelSet.literalContainer(ModelTypes.Value.forType(String.class), "", "");
 		} else
-			valueX = ObservableModelQonfigParser.literalContainer(ModelTypes.Value.forType(String.class), session.getValueText(),
+			valueX = ObservableModelSet.literalContainer(ModelTypes.Value.forType(String.class), session.getValueText(),
 				session.getValueText());
 		ObservableExpression formatX = session.getAttribute("format", ObservableExpression.class);
 		Function<ModelSetInstance, SettableValue<Format<Object>>> format;
@@ -1115,13 +1115,13 @@ public class QuickBase extends QuickCore {
 			String txt = session.getValueText();
 			if (txt == null)
 				throw new IllegalArgumentException("Either 'text' or 'value' must be specified");
-			value = __ -> ObservableModelQonfigParser.literal(txt, txt);
-			format = __ -> ObservableModelQonfigParser.literal((Format<Object>) (Format<?>) Format.TEXT, "<unspecified>");
+			value = __ -> ObservableModelSet.literal(txt, txt);
+			format = __ -> ObservableModelSet.literal((Format<Object>) (Format<?>) Format.TEXT, "<unspecified>");
 		} else {
 			value = valueX;
 			valueType = ((ValueContainer<?, ?>) value).getType().getType(0);
 			if (formatX == null || formatX == ObservableExpression.EMPTY) {
-				format = __ -> ObservableModelQonfigParser.literal((Format<Object>) (Format<?>) LABEL_FORMAT, "<unspecified>");
+				format = __ -> ObservableModelSet.literal((Format<Object>) (Format<?>) LABEL_FORMAT, "<unspecified>");
 			} else
 				format = formatX.evaluate(
 					ModelTypes.Value.forType(TypeTokens.get().keyFor(Format.class).parameterized(TypeTokens.get().wrap(valueType))), model,

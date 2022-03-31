@@ -339,7 +339,6 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 					// report the new value for both the old and new values in the fired event
 					theSyntheticCollection.mutableElement(changedEl.getSynthId()).set(//
 						new ElementRef<>(changedEl.sourceId, theCollection.getElement(changedEl.sourceId).get(), changedEl.synthId));
-					changedEl.isChanged = false;
 				}
 				theChangedElements.clear();
 			}

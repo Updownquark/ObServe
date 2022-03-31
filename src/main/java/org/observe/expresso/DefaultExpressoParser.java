@@ -1492,7 +1492,7 @@ public class DefaultExpressoParser implements ExpressoParser {
 						if (value.name().equals(theNames.getFirst())) {
 							return new ValueContainer<M, MV>() {
 								final ModelInstanceType<M, MV> retType = (ModelInstanceType<M, MV>) ModelTypes.Value.forType(paramType);
-								final MV retValue = (MV) ObservableModelQonfigParser.literal(value, value.name());
+								final MV retValue = (MV) ObservableModelSet.literal(value, value.name());
 
 								@Override
 								public ModelInstanceType<M, MV> getType() {
@@ -2463,7 +2463,7 @@ public class DefaultExpressoParser implements ExpressoParser {
 									returnType = TypeTokens.get().of(m.getGenericReturnType());
 								if (!voidTarget && !TypeTokens.get().isAssignable(targetType, returnType))
 									throw new QonfigInterpretationException("Return type " + returnType + " of method " + printSignature(m)
-										+ " cannot be assigned to type " + targetType);
+									+ " cannot be assigned to type " + targetType);
 								return new MethodResult<>(m, o, true, (TypeToken<? extends T>) returnType);
 							}
 						} else {
@@ -2491,7 +2491,7 @@ public class DefaultExpressoParser implements ExpressoParser {
 									returnType = TypeTokens.get().of(m.getGenericReturnType());
 								if (!voidTarget && !TypeTokens.get().isAssignable(targetType, returnType))
 									throw new QonfigInterpretationException("Return type " + returnType + " of method " + printSignature(m)
-										+ " cannot be assigned to type " + targetType);
+									+ " cannot be assigned to type " + targetType);
 								return new MethodResult<>(m, o, false, (TypeToken<? extends T>) returnType);
 							}
 						}
@@ -2573,7 +2573,7 @@ public class DefaultExpressoParser implements ExpressoParser {
 							ObservableModelSet.WrappedInstanceBuilder instBuilder = wrappedModels.wrap(msi);
 							for (int i = 0; i < theParameters.size(); i++)
 								instBuilder.with((ModelValuePlaceholder<SettableValue, SettableValue<Object>>) placeholders[i],
-									ObservableModelQonfigParser.literal((TypeToken<Object>) placeholders[i].getType().getType(0), args[i],
+									ObservableModelSet.literal((TypeToken<Object>) placeholders[i].getType().getType(0), args[i],
 										String.valueOf(args[i])));
 							ModelSetInstance wrappedMSI = instBuilder.build();
 							return body.apply(wrappedMSI).get();

@@ -162,53 +162,6 @@ public class ObservableModelQonfigParser {
 		theParsers.with(type, parser);
 		return this;
 	}
-
-	public static <T> SettableValue<T> literal(TypeToken<T> type, T value, String text) {
-		return SettableValue.asSettable(ObservableValue.of(value), __ -> "Literal value '" + text + "'");
-	}
-
-	public static <T> SettableValue<T> literal(T value, String text) {
-		return literal(TypeTokens.get().of((Class<T>) value.getClass()), value, text);
-	}
-
-	public static <T> ValueGetter<SettableValue<T>> literalGetter(T value, String text) {
-		return literalGetter(TypeTokens.get().of((Class<T>) value.getClass()), value, text);
-	}
-
-	public static <T> ValueGetter<SettableValue<T>> literalGetter(TypeToken<T> type, T value, String text) {
-		return new ValueGetter<SettableValue<T>>() {
-			private final SettableValue<T> theValue = literal(type, value, text);
-
-			@Override
-			public SettableValue<T> get(ModelSetInstance models, ExternalModelSet extModels) {
-				return theValue;
-			}
-
-			@Override
-			public String toString() {
-				return value.toString();
-			}
-		};
-	}
-
-	@SuppressWarnings("rawtypes")
-	public static <T> ValueContainer<SettableValue, SettableValue<T>> literalContainer(
-		ModelInstanceType<SettableValue, SettableValue<T>> type, T value, String text) {
-		return new ValueContainer<SettableValue, SettableValue<T>>() {
-			private final SettableValue<T> theValue = literal((TypeToken<T>) type.getType(0), value, text);
-
-			@Override
-			public ModelInstanceType<SettableValue, SettableValue<T>> getType() {
-				return type;
-			}
-
-			@Override
-			public SettableValue<T> get(ModelSetInstance extModels) {
-				return theValue;
-			}
-		};
-	}
-
 	public interface AppEnvironment {
 		Function<ModelSetInstance, ? extends ObservableValue<String>> getTitle();
 
@@ -277,9 +230,10 @@ public class ObservableModelQonfigParser {
 						return msi -> {
 							String prop = System.getProperty(configName + ".config");
 							if (prop != null)
-								return literal(BetterFile.at(new NativeFileSource(), prop), prop);
+									return ObservableModelSet.literal(BetterFile.at(new NativeFileSource(), prop), prop);
 							else
-								return literal(BetterFile.at(new NativeFileSource(), "./" + configName), "./" + configName);
+									return ObservableModelSet.literal(BetterFile.at(new NativeFileSource(), "./" + configName),
+										"./" + configName);
 						};
 					});
 				List<String> oldConfigNames = new ArrayList<>(2);
@@ -1217,7 +1171,7 @@ public class ObservableModelQonfigParser {
 				ValueGetter<SettableValue<FileDataSource>> source;
 				switch (session.getAttributeText("type")) {
 				case "native":
-					source = (modelSet, extModels) -> literal(new NativeFileSource(), "native-file-source");
+					source = (modelSet, extModels) -> ObservableModelSet.literal(new NativeFileSource(), "native-file-source");
 					break;
 				case "sftp":
 					throw new UnsupportedOperationException("Not yet implemented");
@@ -1258,7 +1212,7 @@ public class ObservableModelQonfigParser {
 						}
 						if (zipDepth >= 0) {
 							int finalZD = zipDepth;
-							maxZipDepth = models -> literal(finalZD, mad);
+							maxZipDepth = models -> ObservableModelSet.literal(finalZD, mad);
 						} else {
 							maxZipDepth = model.get(mad, ModelTypes.Value.forType(Integer.class));
 						}
@@ -1306,7 +1260,7 @@ public class ObservableModelQonfigParser {
 				String name = session.getAttributeText("name");
 				model.with(name,
 					ModelTypes.Value.forType(TypeTokens.get().keyFor(Format.class).<Format<String>> parameterized(String.class)),
-					literalGetter(SpinnerFormat.NUMERICAL_TEXT, "text"));
+					ObservableModelSet.literalGetter(SpinnerFormat.NUMERICAL_TEXT, "text"));
 				return null;
 			}
 		});
@@ -1326,7 +1280,7 @@ public class ObservableModelQonfigParser {
 				}
 				model.with(name,
 					ModelTypes.Value.forType(TypeTokens.get().keyFor(Format.class).<Format<Integer>> parameterized(Integer.class)),
-					literalGetter(format, "int"));
+					ObservableModelSet.literalGetter(format, "int"));
 				return null;
 			}
 		});
@@ -1345,7 +1299,7 @@ public class ObservableModelQonfigParser {
 						format = format.withGroupingSeparator(sep.charAt(0));
 				}
 				model.with(name, ModelTypes.Value.forType(TypeTokens.get().keyFor(Format.class).<Format<Long>> parameterized(Long.class)),
-					literalGetter(format, "long"));
+					ObservableModelSet.literalGetter(format, "long"));
 				return null;
 			}
 		});
@@ -1392,7 +1346,7 @@ public class ObservableModelQonfigParser {
 				}
 				TypeToken<Format<Double>> formatType = TypeTokens.get().keyFor(Format.class).<Format<Double>> parameterized(Double.class);
 				ModelInstanceType<SettableValue, SettableValue<Format<Double>>> formatInstanceType = ModelTypes.Value.forType(formatType);
-				model.with(name, formatInstanceType, literalGetter(formatType, builder.build(), "double"));
+				model.with(name, formatInstanceType, ObservableModelSet.literalGetter(formatType, builder.build(), "double"));
 				return null;
 			}
 		});
@@ -1435,24 +1389,26 @@ public class ObservableModelQonfigParser {
 				Function<ModelSetInstance, Supplier<Instant>> relativeTo;
 				ObservableExpression relativeV = session.getAttribute("relative-to", ObservableExpression.class);
 				if (relativeV == null) {
-					model.with(name, formatInstanceType, literalGetter(formatType, format, "instant"));
+					model.with(name, formatInstanceType, ObservableModelSet.literalGetter(formatType, format, "instant"));
 				} else if (relativeV instanceof ExpressionValueType.Literal) {
 					try {
 						Instant ri = format.parse(((ExpressionValueType.Literal) relativeV).getValue());
 						relativeTo = msi -> LambdaUtils.constantSupplier(ri, ((ExpressionValueType.Literal) relativeV).getValue(), null);
 						model.with(name, formatInstanceType, (msi, extModels) -> {
-							return literal(SpinnerFormat.flexDate(relativeTo.apply(msi), dayFormat, __ -> fOptions), "instant");
+							return ObservableModelSet.literal(SpinnerFormat.flexDate(relativeTo.apply(msi), dayFormat, __ -> fOptions),
+								"instant");
 						});
 					} catch (ParseException e) {
 						session.withWarning("Malformatted relative time: '" + relativeV, e);
-						model.with(name, formatInstanceType, literalGetter(formatType, format, "instant"));
+						model.with(name, formatInstanceType, ObservableModelSet.literalGetter(formatType, format, "instant"));
 					}
 				} else {
 					// TODO This should just be a value that is evaluated when needed
 					relativeTo = relativeV.findMethod(Instant.class, model, cv)
 						.withOption(BetterList.empty(), null).find0();
 					model.with(name, formatInstanceType, (msi, extModels) -> {
-						return literal(SpinnerFormat.flexDate(relativeTo.apply(msi), dayFormat, __ -> fOptions), "instant");
+						return ObservableModelSet.literal(SpinnerFormat.flexDate(relativeTo.apply(msi), dayFormat, __ -> fOptions),
+							"instant");
 					});
 				}
 				return null;
@@ -1471,8 +1427,8 @@ public class ObservableModelQonfigParser {
 					fileSource = fileSourceEx.evaluate(//
 						ModelTypes.Value.forType(BetterFile.FileDataSource.class), model, cv);
 				else
-					fileSource = literalContainer(ModelTypes.Value.forType(BetterFile.FileDataSource.class), new NativeFileSource(),
-						"native");
+					fileSource = ObservableModelSet.literalContainer(ModelTypes.Value.forType(BetterFile.FileDataSource.class),
+						new NativeFileSource(), "native");
 				ObservableExpression workingDirEx = session.getAttribute("working-dir", ObservableExpression.class);
 				Function<ModelSetInstance, SettableValue<String>> workingDir;
 				if (workingDirEx != null)
@@ -1502,7 +1458,7 @@ public class ObservableModelQonfigParser {
 				String name = session.getAttributeText("name");
 				ModelInstanceType<SettableValue, SettableValue<Format<Pattern>>> patternType = ModelTypes.Value
 					.forType(TypeTokens.get().keyFor(Format.class).<Format<Pattern>> parameterized(Pattern.class));
-				model.with(name, patternType, literalGetter(Format.PATTERN, "regex-format"));
+				model.with(name, patternType, ObservableModelSet.literalGetter(Format.PATTERN, "regex-format"));
 				return null;
 			}
 		});
@@ -1515,7 +1471,7 @@ public class ObservableModelQonfigParser {
 				String name = session.getAttributeText("name");
 				ModelInstanceType<SettableValue, SettableValue<Format<String>>> patternType = ModelTypes.Value
 					.forType(TypeTokens.get().keyFor(Format.class).<Format<String>> parameterized(String.class));
-				model.with(name, patternType, literalGetter(Format.validate(Format.TEXT, str -> {
+					model.with(name, patternType, ObservableModelSet.literalGetter(Format.validate(Format.TEXT, str -> {
 					if (str == null || str.isEmpty())
 						return null; // That's fine
 					try {
@@ -1580,7 +1536,7 @@ public class ObservableModelQonfigParser {
 					else
 						throw new QonfigInterpretationException(
 							"No default format available for type " + valueType + " -- please specify a format");
-					format = literalContainer(formatType, (Format<Object>) f, type.getSimpleName());
+						format = ObservableModelSet.literalContainer(formatType, (Format<Object>) f, type.getSimpleName());
 					if (defaultS == null)
 						defaultValue = null;
 					else {

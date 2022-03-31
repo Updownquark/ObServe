@@ -13,7 +13,10 @@ import java.util.function.Function;
 import java.util.regex.Pattern;
 
 import org.observe.Observable;
+import org.observe.ObservableValue;
+import org.observe.SettableValue;
 import org.observe.expresso.ModelType.ModelInstanceType;
+import org.observe.util.TypeTokens;
 import org.qommons.BreakpointHere;
 import org.qommons.Named;
 import org.qommons.QommonsUtils;
@@ -22,6 +25,8 @@ import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigParseSession;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.ex.ExConsumer;
+
+import com.google.common.reflect.TypeToken;
 
 public interface ObservableModelSet {
 	interface NameChecker {
@@ -125,6 +130,52 @@ public interface ObservableModelSet {
 			}
 		}
 		return new SyntheticValueContainer();
+	}
+
+	public static <T> SettableValue<T> literal(TypeToken<T> type, T value, String text) {
+		return SettableValue.asSettable(ObservableValue.of(value), __ -> "Literal value '" + text + "'");
+	}
+
+	public static <T> SettableValue<T> literal(T value, String text) {
+		return literal(TypeTokens.get().of((Class<T>) value.getClass()), value, text);
+	}
+
+	public static <T> ValueGetter<SettableValue<T>> literalGetter(T value, String text) {
+		return literalGetter(TypeTokens.get().of((Class<T>) value.getClass()), value, text);
+	}
+
+	public static <T> ValueGetter<SettableValue<T>> literalGetter(TypeToken<T> type, T value, String text) {
+		return new ValueGetter<SettableValue<T>>() {
+			private final SettableValue<T> theValue = literal(type, value, text);
+
+			@Override
+			public SettableValue<T> get(ModelSetInstance models, ExternalModelSet extModels) {
+				return theValue;
+			}
+
+			@Override
+			public String toString() {
+				return value.toString();
+			}
+		};
+	}
+
+	@SuppressWarnings("rawtypes")
+	public static <T> ValueContainer<SettableValue, SettableValue<T>> literalContainer(
+		ModelInstanceType<SettableValue, SettableValue<T>> type, T value, String text) {
+		return new ValueContainer<SettableValue, SettableValue<T>>() {
+			private final SettableValue<T> theValue = literal((TypeToken<T>) type.getType(0), value, text);
+
+			@Override
+			public ModelInstanceType<SettableValue, SettableValue<T>> getType() {
+				return type;
+			}
+
+			@Override
+			public SettableValue<T> get(ModelSetInstance extModels) {
+				return theValue;
+			}
+		};
 	}
 
 	ObservableModelSet getParent();
