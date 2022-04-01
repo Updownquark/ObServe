@@ -3,6 +3,7 @@ package org.observe.quick;
 import java.util.List;
 import java.util.function.Consumer;
 
+import org.observe.expresso.ObservableModelSet;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.qommons.config.QonfigElement;
 
@@ -10,8 +11,8 @@ public class QuickBox extends QuickContainer.AbstractQuickContainer {
 	private final String theLayoutName;
 	private QuickLayout theLayout;
 
-	public QuickBox(QonfigElement element, List<QuickComponentDef> children, String layoutName) {
-		super(element, children);
+	public QuickBox(QonfigElement element, ObservableModelSet.Wrapped models, List<QuickComponentDef> children, String layoutName) {
+		super(element, models, children);
 		theLayoutName = layoutName;
 	}
 

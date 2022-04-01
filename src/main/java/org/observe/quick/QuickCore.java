@@ -136,6 +136,19 @@ public class QuickCore extends ObservableModelQonfigParser {
 		}
 	}
 
+	public static ObservableModelSet.Wrapped parseLocalModel(ExpressoSession<?> widgetSession) throws QonfigInterpretationException {
+		ExpressoSession<?> modelSession = widgetSession.forChildren("model").peekFirst();
+		if (modelSession == null)
+			return null;
+		modelSession.put("local-variables", true);
+		ObservableModelSet.WrappedBuilder builder = ObservableModelSet.wrap(modelSession.getModels());
+		modelSession.setModels(builder);
+		modelSession.interpret(ObservableModelSet.class);
+		ObservableModelSet.Wrapped built = builder.build();
+		widgetSession.setModels(built);
+		return built;
+	}
+
 	@Override
 	public <QIS extends ExpressoInterpreter.ExpressoSession<QIS>, B extends ExpressoInterpreter.Builder<QIS, B>> B configureInterpreter(
 		B interpreter) {

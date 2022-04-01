@@ -55,6 +55,10 @@
 			<attribute name="visible" type="expression" specify="optional" />
 			<attribute name="close-action" type="window-close-action" default="hide" />
 		</add-on>
+
+		<add-on name="widget-local-variables" requires="model">
+			<attribute name="model.name" default="$LOCAL$" />
+		</add-on>
 	</add-ons>
 
 	<elements>
@@ -64,6 +68,7 @@
 		</element-def>
 
 		<element-def name="widget" abstract="true">
+			<child-def name="model" type="model" min="0" inherits="widget-local-variables" /> <!-- Local variables, visible to any children also -->
 			<attribute name="name" type="string" specify="optional" /> <!-- For debugging -->
 			<attribute name="bg-color" type="expression-or-string" specify="optional" />
 			<attribute name="tooltip" type="expression-or-string" specify="optional" />

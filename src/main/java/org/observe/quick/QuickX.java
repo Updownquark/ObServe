@@ -46,12 +46,13 @@ public class QuickX extends QuickBase {
 	}
 
 	private QuickComponentDef interpretCollapsePane(ExpressoSession<?> session) throws QonfigInterpretationException {
+		ObservableModelSet.Wrapped localModels = parseLocalModel(session);
 		ValueContainer<SettableValue, SettableValue<Boolean>> collapsed = session.getAttributeAsValue("collapsed", boolean.class,
 			() -> mis -> SettableValue.build(boolean.class).withDescription("collapsed").build());
 		Boolean initCollapsed = session.getAttribute("init-collapsed", Boolean.class);
 		QuickComponentDef header = session.interpretChildren("header", QuickComponentDef.class).getFirst();
 		QuickComponentDef content = session.interpretChildren("content", QuickComponentDef.class).getFirst(); // Single content
-		return new AbstractQuickContainer(session.getElement(), Arrays.asList(header, content)) {
+		return new AbstractQuickContainer(session.getElement(), localModels, Arrays.asList(header, content)) {
 			@Override
 			public QuickComponent installContainer(PanelPopulator<?, ?> container, QuickComponent.Builder builder,
 				Consumer<PanelPopulator<?, ?>> populator) {

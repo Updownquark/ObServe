@@ -34,7 +34,7 @@ import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelType.ModelInstanceType.SingleTyped;
 import org.observe.expresso.ObservableExpression.Args;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ModelValuePlaceholder;
+import org.observe.expresso.ObservableModelSet.RuntimeValuePlaceholder;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
 import org.observe.util.TypeTokens.TypeConverter;
@@ -2551,7 +2551,7 @@ public class DefaultExpressoParser implements ExpressoParser {
 							continue;
 						}
 						ObservableModelSet.WrappedBuilder wrappedModelsBuilder = ObservableModelSet.wrap(models);
-						ObservableModelSet.ModelValuePlaceholder<?, ?>[] placeholders = new ObservableModelSet.ModelValuePlaceholder[theParameters
+						ObservableModelSet.RuntimeValuePlaceholder<?, ?>[] placeholders = new ObservableModelSet.RuntimeValuePlaceholder[theParameters
 						                                                                                                             .size()];
 						for (int i = 0; i < theParameters.size(); i++)
 							placeholders[i] = configureParameter(wrappedModelsBuilder, theParameters.get(i), option.argTypes[i]);
@@ -2572,7 +2572,7 @@ public class DefaultExpressoParser implements ExpressoParser {
 								argMaker.makeArgs(p1, p2, p3, args, msi);
 							ObservableModelSet.WrappedInstanceBuilder instBuilder = wrappedModels.wrap(msi);
 							for (int i = 0; i < theParameters.size(); i++)
-								instBuilder.with((ModelValuePlaceholder<SettableValue, SettableValue<Object>>) placeholders[i],
+								instBuilder.with((RuntimeValuePlaceholder<SettableValue, SettableValue<Object>>) placeholders[i],
 									ObservableModelSet.literal((TypeToken<Object>) placeholders[i].getType().getType(0), args[i],
 										String.valueOf(args[i])));
 							ModelSetInstance wrappedMSI = instBuilder.build();
@@ -2587,10 +2587,10 @@ public class DefaultExpressoParser implements ExpressoParser {
 						throw new QonfigInterpretationException("No options given");
 				}
 
-				private <T> ModelValuePlaceholder<SettableValue, SettableValue<T>> configureParameter(
+				private <T> RuntimeValuePlaceholder<SettableValue, SettableValue<T>> configureParameter(
 					ObservableModelSet.WrappedBuilder modelBuilder, String paramName, TypeToken<T> paramType) {
 					ModelInstanceType<SettableValue, SettableValue<T>> type = ModelTypes.Value.forType(paramType);
-					return modelBuilder.withPlaceholder(paramName, type);
+					return modelBuilder.withRuntimeValue(paramName, type);
 				}
 			};
 		}

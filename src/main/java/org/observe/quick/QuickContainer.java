@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.function.Consumer;
 
 import org.observe.collect.ObservableCollection;
+import org.observe.expresso.ObservableModelSet;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.qommons.config.QonfigElement;
 
@@ -33,8 +34,8 @@ public interface QuickContainer extends QuickComponentDef {
 	public abstract class AbstractQuickContainer extends AbstractQuickComponentDef implements QuickContainer {
 		private final List<QuickComponentDef> theChildren;
 
-		public AbstractQuickContainer(QonfigElement element, List<QuickComponentDef> children) {
-			super(element);
+		public AbstractQuickContainer(QonfigElement element, ObservableModelSet.Wrapped models, List<QuickComponentDef> children) {
+			super(element, models);
 			theChildren = children;
 		}
 

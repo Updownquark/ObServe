@@ -90,7 +90,10 @@ public class QuickComponent {
 		public Builder(QuickComponentDef definition, QuickComponent.Builder parent, ModelSetInstance models) {
 			theDefinition = definition;
 			theParent = parent;
-			theModelsInstance = models;
+			if (theDefinition.getModels() != null)
+				theModelsInstance = theDefinition.getModels().wrap(models).build();
+			else
+				theModelsInstance = models;
 			theAttributeValues = new LinkedHashMap<>();
 			theChildren = ObservableCollection.build(QuickComponent.class).build();
 		}
