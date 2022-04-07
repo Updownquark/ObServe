@@ -1,15 +1,18 @@
 package org.observe;
 
+import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import org.observe.Transformation.ReverseQueryResult;
 import org.observe.Transformation.TransformationState;
 import org.observe.Transformation.TransformedElement;
+import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
 import org.qommons.Identifiable;
@@ -529,6 +532,32 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	 */
 	public static <T> SettableValue<T> of(Class<T> type, T value, String disabled) {
 		return of(TypeTokens.get().of(type), value, disabled);
+	}
+
+	/**
+	 * Creates an observable value that reflects the value of the first value in the given sequence passing the given test, or the value
+	 * given by the default if none of the values in the sequence pass. This can also be accomplished via:
+	 *
+	 * <code>
+	 * 	{@link ObservableCollection#of(TypeToken, Object...) ObservableCollection.of(type, values)}.collect()
+	 * {@link ObservableCollection#observeFind(Predicate) .observeFind(test, ()->null, true)}.find()
+	 * {{@link #map(Function) .mapV(v->v!=null ? v : def.get()}
+	 * </code>
+	 *
+	 * but this method only subscribes to the values in the sequence up to the one that has a passing value. This can be of great advantage
+	 * if one of the earlier values is likely to pass and some of the later values are expensive to compute.
+	 *
+	 * @param <T> The compile-time type of the value
+	 * @param type The run-time type of the value
+	 * @param test The test to for the value. If null, <code>v->v!=null</code> will be used
+	 * @param def Supplies a default value in the case that none of the values in the sequence pass the test. If null, a null default will
+	 *        be used.
+	 * @param values The sequence of ObservableValues to get the first passing value of
+	 * @return The observable for the first passing value in the sequence
+	 */
+	public static <T> SettableValue<T> firstValue(TypeToken<T> type, Predicate<? super T> test, Supplier<? extends T> def,
+		SettableValue<? extends T>... values) {
+		return new FirstSettableValue<>(type, values, test, def);
 	}
 
 	/**
@@ -1137,6 +1166,101 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 		@Override
 		public String toString() {
 			return theValue.toString();
+		}
+	}
+
+	class FirstSettableValue<T> extends FirstObservableValue<T> implements SettableValue<T> {
+		public FirstSettableValue(TypeToken<T> type, SettableValue<? extends T>[] values, Predicate<? super T> test,
+			Supplier<? extends T> def) {
+			super(type, values, test, def);
+		}
+
+		@Override
+		protected List<? extends SettableValue<? extends T>> getValues() {
+			return (List<? extends SettableValue<? extends T>>) super.getValues();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return Transactable.combine(getValues()).lock(write, cause);
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, Object cause) {
+			return Transactable.combine(getValues()).tryLock(write, cause);
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return Transactable.combine(getValues()).isLockSupported();
+		}
+
+		@Override
+		public ObservableValue<String> isEnabled() {
+			ObservableValue<BiTuple<T, String>>[] evs = new ObservableValue[getValues().size()];
+			for (int i = 0; i < evs.length; i++) {
+				ObservableValue<String> enabledI = getValues().get(i).isEnabled();
+				evs[i] = getValues().get(i).transform(tx -> tx.combineWith(enabledI).cache(false).combine((v, e) -> new BiTuple<>(v, e)));
+			}
+			return ObservableValue.firstValue((TypeToken<BiTuple<T, String>>) (TypeToken<?>) TypeTokens.get().of(BiTuple.class), tuple -> {
+				if (tuple.getValue2() == null)
+					return true;
+				else if (getTest().test(tuple.getValue1()))
+					return true;
+				else
+					return false;
+			}, null, evs).map(TypeTokens.get().STRING, tuple -> tuple == null ? StdMsg.UNSUPPORTED_OPERATION : tuple.getValue2());
+		}
+
+		@Override
+		public <V extends T> String isAcceptable(V value) {
+			String enabled = null;
+			for (SettableValue<? extends T> v : getValues()) {
+				if (TypeTokens.get().isInstance(v.getType(), value)) {
+					String msg = ((SettableValue<T>) v).isAcceptable(value);
+					if (msg == null)
+						return null;
+					else if (enabled == null)
+						enabled = msg;
+				}
+				if (getTest().test(v.get()))
+					return enabled;
+			}
+			if (enabled == null)
+				return StdMsg.UNSUPPORTED_OPERATION;
+			return enabled;
+		}
+
+		@Override
+		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+			String enabled = null;
+			boolean set = false;
+			T setValue = null;
+			for (SettableValue<? extends T> v : getValues()) {
+				T vValue = v.get();
+				boolean pass = getTest().test(vValue);
+				if (pass)
+					setValue = vValue;
+				if (TypeTokens.get().isInstance(v.getType(), value)) {
+					String msg = ((SettableValue<T>) v).isAcceptable(value);
+					if (msg == null)
+						return ((SettableValue<T>) v).set(value, cause);
+					else if (enabled == null)
+						enabled = msg;
+				}
+				if (pass) {
+					if (set)
+						return setValue;
+					else if (enabled != null)
+						throw new IllegalArgumentException(enabled);
+					else
+						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				}
+			}
+			if (enabled != null)
+				throw new IllegalArgumentException(enabled);
+			else
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 		}
 	}
 

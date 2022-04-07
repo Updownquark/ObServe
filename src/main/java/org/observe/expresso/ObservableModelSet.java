@@ -440,6 +440,10 @@ public interface ObservableModelSet {
 
 		<M, MV extends M> Builder with(String name, ModelInstanceType<M, MV> type, ValueGetter<MV> getter);
 
+		default <M, MV extends M> Builder with(String name, ValueContainer<M, MV> value) {
+			return with(name, value.getType(), (msi, ext) -> value.get(msi));
+		}
+
 		Builder createSubModel(String name);
 
 		ObservableModelSet build();

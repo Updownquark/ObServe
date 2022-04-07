@@ -1713,9 +1713,9 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 													if (event.isInitial() && event2.isInitial())
 														toFire = withInitialEvent
 														? retObs.createInitialEvent(event2.getNewValue(), event2.getCauses()) : null;
-														else
-															toFire = retObs.createChangeEvent(innerOld, event2.getNewValue(),
-																event2.getCauses());
+													else
+														toFire = retObs.createChangeEvent(innerOld, event2.getNewValue(),
+															event2.getCauses());
 													if (toFire != null) {
 														try (Transaction t = toFire.use()) {
 															observer.onNext(toFire);
@@ -1738,8 +1738,8 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 									ObservableValueEvent<T> toFire;
 									if (event.isInitial())
 										toFire = withInitialEvent ? retObs.createInitialEvent(newValue, event.getCauses()) : null;
-										else
-											toFire = retObs.createChangeEvent((T) old[0], newValue, event.getCauses());
+									else
+										toFire = retObs.createChangeEvent((T) old[0], newValue, event.getCauses());
 									old[0] = newValue;
 									if (toFire != null) {
 										try (Transaction t = toFire.use()) {
@@ -1829,6 +1829,19 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 			theValues = values;
 			theTest = test == null ? v -> v != null : test;
 			theDefault = def == null ? () -> null : def;
+		}
+
+		/** @return The component values of this value */
+		protected List<? extends ObservableValue<? extends T>> getValues() {
+			return Arrays.asList(theValues);
+		}
+
+		protected Predicate<? super T> getTest() {
+			return theTest;
+		}
+
+		protected Supplier<? extends T> getDefault() {
+			return theDefault;
 		}
 
 		@Override

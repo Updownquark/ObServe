@@ -235,8 +235,7 @@ public class ObservableModelQonfigParser {
 			for (ExpressoSession<?> child : session.forChildren()) {
 				if (child.fulfills(valueRole)) {
 					ValueContainer<?, ?> container = child.interpret(ValueContainer.class);
-					model.with(child.getAttributeText("model-element", "name"), (ModelInstanceType<Object, Object>) container.getType(),
-						(msi, ext) -> container.get(msi));
+					model.with(child.getAttributeText("model-element", "name"), container);
 				} else if (child.fulfills(subModelRole)) {
 					ObservableModelSet.Builder subModel = model.createSubModel(child.getAttributeText("abst-model", "name"));
 					child.setModels(subModel);
@@ -1191,22 +1190,18 @@ public class ObservableModelQonfigParser {
 
 	private ValueContainer<SettableValue, SettableValue<Object>> createFirstValue(ExpressoSession<?> session)
 		throws QonfigInterpretationException {
-		ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.getModels();
-		String name = session.getAttributeText("name");
 		List<ValueContainer<SettableValue, SettableValue<?>>> values = new ArrayList<>(5);
 		for (ExpressoSession<?> valueSession : session.forChildren("value"))
-			values.add(session.interpret(ValueContainer.class));
+			values.add(valueSession.interpret(ValueContainer.class));
 		TypeToken<Object> commonType = (TypeToken<Object>) TypeTokens.get()
 			.getCommonType(values.stream().map(v -> v.getType().getType(0)).collect(Collectors.toList()));
 		return new AbstractValueContainer<SettableValue, SettableValue<Object>>(ModelTypes.Value.forType(commonType)) {
 			@Override
 			public SettableValue<Object> get(ModelSetInstance models) {
-				ObservableValue<?>[] vs = new ObservableValue[values.size()];
+				SettableValue<?>[] vs = new SettableValue[values.size()];
 				for (int i = 0; i < vs.length; i++)
 					vs[i] = values.get(i).get(models);
-				// TODO We should be able to make this settable
-				return SettableValue.asSettable(ObservableValue.firstValue(commonType, v -> v != null, () -> null, vs),
-					__ -> "Not settable");
+				return SettableValue.firstValue(commonType, v -> v != null, () -> null, vs);
 			}
 		};
 	}
@@ -1231,7 +1226,6 @@ public class ObservableModelQonfigParser {
 	private ValueContainer<SettableValue, SettableValue<BetterFile.FileDataSource>> createFileSource(ExpressoSession<?> session)
 		throws QonfigInterpretationException {
 		ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.getModels();
-		String name = session.getAttributeText("name");
 		Function<ModelSetInstance, SettableValue<FileDataSource>> source;
 		switch (session.getAttributeText("type")) {
 		case "native":
@@ -1307,8 +1301,6 @@ public class ObservableModelQonfigParser {
 
 	private ValueContainer<SettableValue, SettableValue<Format<String>>> createTextFormat(ExpressoSession<?> session)
 		throws QonfigInterpretationException {
-		ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.getModels();
-		String name = session.getAttributeText("name");
 		ObservableModelSet.literalContainer(
 			ModelTypes.Value.forType(TypeTokens.get().keyFor(Format.class).<Format<String>> parameterized(String.class)),
 			SpinnerFormat.NUMERICAL_TEXT, "text");
@@ -1317,8 +1309,6 @@ public class ObservableModelQonfigParser {
 
 	private ValueContainer<SettableValue, SettableValue<Format<Integer>>> createIntFormat(ExpressoSession<?> session)
 		throws QonfigInterpretationException {
-		ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.getModels();
-		String name = session.getAttributeText("name");
 		SpinnerFormat.IntFormat format = SpinnerFormat.INT;
 		String sep = session.getAttributeText("grouping-separator");
 		if (sep != null) {
@@ -1334,8 +1324,6 @@ public class ObservableModelQonfigParser {
 
 	private ValueContainer<SettableValue, SettableValue<Format<Long>>> createLongFormat(ExpressoSession<?> session)
 		throws QonfigInterpretationException {
-		ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.getModels();
-		String name = session.getAttributeText("name");
 		SpinnerFormat.LongFormat format = SpinnerFormat.LONG;
 		String sep = session.getAttributeText("grouping-separator");
 		if (sep != null) {
@@ -1491,8 +1479,6 @@ public class ObservableModelQonfigParser {
 
 	private ValueContainer<SettableValue, SettableValue<Format<Pattern>>> createRegexFormat(ExpressoSession<?> session)
 		throws QonfigInterpretationException {
-		ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.getModels();
-		String name = session.getAttributeText("name");
 		return ObservableModelSet.literalContainer(
 			ModelTypes.Value.forType(TypeTokens.get().keyFor(Format.class).<Format<Pattern>> parameterized(Pattern.class)), Format.PATTERN,
 			"regex-format");
