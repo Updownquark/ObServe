@@ -136,10 +136,13 @@
 			<attribute name="icon" type="expression" specify="optional" />
 			<attribute name="icon-ref" type="string" specify="optional" />
 		</element-def>
-		<element-def name="text-field" extends="text-widget">
+		<element-def name="editable-text-widget" extends="text-widget">
+			<attribute name="commit-on-type" type="boolean" default="false" />
+		</element-def>
+		<element-def name="text-field" extends="editable-text-widget">
 			<attribute name="columns" type="int" specify="optional" />
 		</element-def>
-		<element-def name="text-area" extends="text-widget">
+		<element-def name="text-area" extends="editable-text-widget">
 			<attribute name="rows" type="expression" />
 			<attribute name="html" type="expression" />
 		</element-def>

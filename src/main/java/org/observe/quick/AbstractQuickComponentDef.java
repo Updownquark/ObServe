@@ -4,22 +4,30 @@ import java.util.function.BiConsumer;
 import java.util.function.Function;
 
 import org.observe.ObservableValue;
+import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.util.swing.PanelPopulation.ComponentEditor;
 import org.qommons.config.QonfigElement;
 
 public abstract class AbstractQuickComponentDef implements QuickComponentDef {
 	private final QonfigElement theElement;
+	private final ObservableModelSet.Wrapped theModels;
 	private Function<ModelSetInstance, ? extends ObservableValue<String>> theFieldName;
 	private BiConsumer<ComponentEditor<?, ?>, QuickComponent.Builder> theModifications;
 
-	public AbstractQuickComponentDef(QonfigElement element) {
+	public AbstractQuickComponentDef(QonfigElement element, ObservableModelSet.Wrapped models) {
 		theElement = element;
+		theModels = models;
 	}
 
 	@Override
 	public QonfigElement getElement() {
 		return theElement;
+	}
+
+	@Override
+	public ObservableModelSet.Wrapped getModels() {
+		return theModels;
 	}
 
 	@Override

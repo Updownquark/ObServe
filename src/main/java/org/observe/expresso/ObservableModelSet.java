@@ -11,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 
@@ -93,6 +94,40 @@ public interface ObservableModelSet {
 		@Override
 		default MV apply(ModelSetInstance models) {
 			return get(models);
+		}
+
+		default <M2, MV2 extends M2> ValueContainer<M2, MV2> map(ModelInstanceType<M2, MV2> type, Function<? super MV, ? extends MV2> map) {
+			ValueContainer<M, MV> outer = this;
+			return new AbstractValueContainer<M2, MV2>(type) {
+				@Override
+				public MV2 get(ModelSetInstance models) {
+					return map.apply(outer.get(models));
+				}
+			};
+		}
+
+		default <M2, MV2 extends M2> ValueContainer<M2, MV2> map(ModelInstanceType<M2, MV2> type,
+			BiFunction<? super MV, ModelSetInstance, ? extends MV2> map) {
+			ValueContainer<M, MV> outer = this;
+			return new AbstractValueContainer<M2, MV2>(type) {
+				@Override
+				public MV2 get(ModelSetInstance models) {
+					return map.apply(outer.get(models), models);
+				}
+			};
+		}
+	}
+
+	abstract class AbstractValueContainer<M, MV extends M> implements ValueContainer<M, MV> {
+		private final ModelInstanceType<M, MV> theType;
+
+		public AbstractValueContainer(ModelInstanceType<M, MV> type) {
+			theType = type;
+		}
+
+		@Override
+		public ModelInstanceType<M, MV> getType() {
+			return theType;
 		}
 	}
 

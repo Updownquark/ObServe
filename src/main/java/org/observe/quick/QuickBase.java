@@ -335,6 +335,7 @@ public class QuickBase extends QuickCore {
 		ValueContainer<SettableValue, ?> value = session.getAttribute("value", ModelTypes.Value.any(), null);
 		ObservableExpression formatX = session.getAttribute("format", ObservableExpression.class);
 		Function<ModelSetInstance, SettableValue<Format<Object>>> format;
+		boolean commitOnType = session.getAttribute("commit-on-type", boolean.class);
 		String columnsStr = session.getAttributeText("columns");
 		int columns = columnsStr == null ? -1 : Integer.parseInt(columnsStr);
 		if (formatX != null) {
@@ -374,6 +375,7 @@ public class QuickBase extends QuickCore {
 					fieldName = null;
 				container.addTextField(fieldName == null ? null : fieldName.get(), //
 					realValue, format.apply(builder.getModels()).get(), field -> {
+						field.modifyEditor(tf -> tf.setCommitOnType(commitOnType));
 						modify(field, builder);
 						if (columns > 0)
 							field.getEditor().withColumns(columns);
@@ -1769,11 +1771,11 @@ public class QuickBase extends QuickCore {
 		QonfigChildDef.Declared widgetDef = base.getChild("tabs", "content").getDeclared();
 		List<TypeToken<? extends T>> tabTypes = new ArrayList<>();
 		for (ExpressoSession<?> child : session.forChildren()) {
-			if (child.getElement().getParentRoles().contains(tabSetDef)) {
+			if (child.getElement().getDeclaredRoles().contains(tabSetDef)) {
 				MultiTabSet tabSet = MultiTabSet.parse(child.as("tab-set"));
 				tabTypes.add(tabSet.values.getType().getType(0));
 				tabs.add(tabSet);
-			} else if (child.getElement().getParentRoles().contains(widgetDef)) {
+			} else if (child.getElement().getDeclaredRoles().contains(widgetDef)) {
 				SingleTab tab = SingleTab.parse(child.as("tab"));
 				tabTypes.add(tab.tabId.getType().getType(0));
 				tabs.add(tab);

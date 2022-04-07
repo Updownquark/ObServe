@@ -99,8 +99,7 @@ public abstract class ExpressoInterpreter<QIS extends ExpressoInterpreter.Expres
 						return def.apply(models);
 					}
 				};
-			}
-			else if (!(value instanceof ObservableExpression))
+			} else if (!(value instanceof ObservableExpression))
 				throw new QonfigInterpretationException(
 					"Value of " + getElement() + " is a " + value.getClass().getName() + ", not an expression");
 			return ((ObservableExpression) value).evaluate(type, theModels, theClassView);
@@ -132,9 +131,8 @@ public abstract class ExpressoInterpreter<QIS extends ExpressoInterpreter.Expres
 			return getAttribute(attrName, ModelTypes.Collection.forType(type), defaultValue);
 		}
 
-		public <T> ValueContainer<ObservableCollection, ObservableCollection<T>> getAttributeAsCollection(String attrName,
-			Class<T> type, Supplier<Function<ModelSetInstance, ObservableCollection<T>>> defaultValue)
-				throws QonfigInterpretationException {
+		public <T> ValueContainer<ObservableCollection, ObservableCollection<T>> getAttributeAsCollection(String attrName, Class<T> type,
+			Supplier<Function<ModelSetInstance, ObservableCollection<T>>> defaultValue) throws QonfigInterpretationException {
 			return getAttributeAsCollection(attrName, TypeTokens.get().of(type), defaultValue);
 		}
 
@@ -151,7 +149,8 @@ public abstract class ExpressoInterpreter<QIS extends ExpressoInterpreter.Expres
 
 	private final ExpressoParser theExpressionParser;
 
-	protected ExpressoInterpreter(Class<?> callingClass, Map<QonfigElementOrAddOn, QonfigCreatorHolder<QIS, ?>> creators,
+	protected ExpressoInterpreter(Class<?> callingClass,
+		Map<QonfigElementOrAddOn, SubClassMap2<Object, QonfigCreatorHolder<QIS, ?>>> creators,
 		Map<QonfigElementOrAddOn, SubClassMap2<Object, QonfigModifierHolder<QIS, ?>>> modifiers, ExpressoParser expressionParser) {
 		super(callingClass, creators, modifiers);
 		theExpressionParser = expressionParser;
@@ -182,7 +181,8 @@ public abstract class ExpressoInterpreter<QIS extends ExpressoInterpreter.Expres
 		}
 
 		protected Builder(Class<?> callingClass, Set<QonfigToolkit> toolkits, QonfigToolkit toolkit,
-			StatusReportAccumulator<QonfigElementOrAddOn> status, Map<QonfigElementOrAddOn, QonfigCreatorHolder<QIS, ?>> creators,
+			StatusReportAccumulator<QonfigElementOrAddOn> status,
+			Map<QonfigElementOrAddOn, SubClassMap2<Object, QonfigCreatorHolder<QIS, ?>>> creators,
 			Map<QonfigElementOrAddOn, SubClassMap2<Object, QonfigModifierHolder<QIS, ?>>> modifiers, ExpressoParser expressionParser) {
 			super(callingClass, toolkits, toolkit, status, creators, modifiers);
 			theExpressionParser = expressionParser;
@@ -199,13 +199,15 @@ public abstract class ExpressoInterpreter<QIS extends ExpressoInterpreter.Expres
 
 		@Override
 		protected B builderFor(Class<?> callingClass, Set<QonfigToolkit> toolkits, QonfigToolkit toolkit,
-			StatusReportAccumulator<QonfigElementOrAddOn> status, Map<QonfigElementOrAddOn, QonfigCreatorHolder<QIS, ?>> creators,
+			StatusReportAccumulator<QonfigElementOrAddOn> status,
+			Map<QonfigElementOrAddOn, SubClassMap2<Object, QonfigCreatorHolder<QIS, ?>>> creators,
 			Map<QonfigElementOrAddOn, SubClassMap2<Object, QonfigModifierHolder<QIS, ?>>> modifiers) {
 			return builderFor(callingClass, toolkits, toolkit, status, creators, modifiers, theExpressionParser);
 		}
 
 		protected abstract B builderFor(Class<?> callingClass, Set<QonfigToolkit> toolkits, QonfigToolkit toolkit,
-			StatusReportAccumulator<QonfigElementOrAddOn> status, Map<QonfigElementOrAddOn, QonfigCreatorHolder<QIS, ?>> creators,
+			StatusReportAccumulator<QonfigElementOrAddOn> status,
+			Map<QonfigElementOrAddOn, SubClassMap2<Object, QonfigCreatorHolder<QIS, ?>>> creators,
 			Map<QonfigElementOrAddOn, SubClassMap2<Object, QonfigModifierHolder<QIS, ?>>> modifiers, ExpressoParser expressionParser);
 
 		@Override
@@ -228,7 +230,8 @@ public abstract class ExpressoInterpreter<QIS extends ExpressoInterpreter.Expres
 	}
 
 	public static class Default extends ExpressoInterpreter<ExpressoSessionDefault> {
-		protected Default(Class<?> callingClass, Map<QonfigElementOrAddOn, QonfigCreatorHolder<ExpressoSessionDefault, ?>> creators,
+		protected Default(Class<?> callingClass,
+			Map<QonfigElementOrAddOn, SubClassMap2<Object, QonfigCreatorHolder<ExpressoSessionDefault, ?>>> creators,
 			Map<QonfigElementOrAddOn, SubClassMap2<Object, QonfigModifierHolder<ExpressoSessionDefault, ?>>> modifiers,
 			ExpressoParser expressionParser) {
 			super(callingClass, creators, modifiers, expressionParser);
@@ -253,7 +256,7 @@ public abstract class ExpressoInterpreter<QIS extends ExpressoInterpreter.Expres
 
 		DefaultBuilder(Class<?> callingClass, Set<QonfigToolkit> toolkits, QonfigToolkit toolkit,
 			StatusReportAccumulator<QonfigElementOrAddOn> status,
-			Map<QonfigElementOrAddOn, QonfigCreatorHolder<ExpressoSessionDefault, ?>> creators,
+			Map<QonfigElementOrAddOn, SubClassMap2<Object, QonfigCreatorHolder<ExpressoSessionDefault, ?>>> creators,
 			Map<QonfigElementOrAddOn, SubClassMap2<Object, QonfigModifierHolder<ExpressoSessionDefault, ?>>> modifiers,
 			ExpressoParser expressionParser) {
 			super(callingClass, toolkits, toolkit, status, creators, modifiers, expressionParser);
@@ -262,7 +265,7 @@ public abstract class ExpressoInterpreter<QIS extends ExpressoInterpreter.Expres
 		@Override
 		protected DefaultBuilder builderFor(Class<?> callingClass, Set<QonfigToolkit> toolkits, QonfigToolkit toolkit,
 			StatusReportAccumulator<QonfigElementOrAddOn> status,
-			Map<QonfigElementOrAddOn, QonfigCreatorHolder<ExpressoSessionDefault, ?>> creators,
+			Map<QonfigElementOrAddOn, SubClassMap2<Object, QonfigCreatorHolder<ExpressoSessionDefault, ?>>> creators,
 			Map<QonfigElementOrAddOn, SubClassMap2<Object, QonfigModifierHolder<ExpressoSessionDefault, ?>>> modifiers,
 			ExpressoParser expressionParser) {
 			return new DefaultBuilder(callingClass, toolkits, toolkit, status, creators, modifiers, expressionParser);

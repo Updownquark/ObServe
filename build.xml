@@ -45,6 +45,8 @@
             <fileset dir="${dir.buildfile}/target/classes"/>
             <fileset dir="${dir.buildfile}/src/main/java"/>
             <fileset dir="${dir.buildfile}/src/main/resources"/>
+            <fileset dir="${dir.buildfile}/src/main/antlr"/>
+            <fileset dir="${dir.buildfile}/src/test/java"/>
         </jar>
 	</target>
     <target name="fat-jar">
@@ -62,6 +64,8 @@
             <fileset dir="${dir.buildfile}/target/classes"/>
             <fileset dir="${dir.buildfile}/src/main/java"/>
             <fileset dir="${dir.buildfile}/src/main/resources"/>
+            <fileset dir="${dir.buildfile}/src/main/antlr"/>
+            <fileset dir="${dir.buildfile}/src/test/java"/>
             <zipfileset excludes="META-INF/*.SF" src="${dir.buildfile}/lib/guava-18.0.jar"/>
             <zipfileset excludes="META-INF/*.SF" src="${dir.buildfile}/lib/miglayout-core-4.2.jar"/>
             <zipfileset excludes="META-INF/*.SF" src="${dir.buildfile}/lib/miglayout-swing-4.2.jar"/>

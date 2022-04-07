@@ -382,6 +382,11 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped {
 			return theConfig;
 		}
 
+		/** @return The path at which the value will be stored */
+		public ObservableConfigPath getPath() {
+			return thePath;
+		}
+
 		/**
 		 * @param format The format to use to persist and format the value from config
 		 * @return This builder
