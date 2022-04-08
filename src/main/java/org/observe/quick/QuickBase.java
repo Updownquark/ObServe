@@ -41,6 +41,7 @@ import org.observe.SimpleObservable;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ClassView;
 import org.observe.expresso.DefaultExpressoParser;
+import org.observe.expresso.Expresso;
 import org.observe.expresso.ExpressoInterpreter;
 import org.observe.expresso.ExpressoInterpreter.ExpressoSession;
 import org.observe.expresso.ModelType;
@@ -48,8 +49,8 @@ import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableExpression.MethodFinder;
-import org.observe.expresso.ObservableModelQonfigParser;
 import org.observe.expresso.ObservableModelSet;
+import org.observe.expresso.ObservableModelSet.AbstractValueContainer;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.RuntimeValuePlaceholder;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
@@ -153,7 +154,7 @@ public class QuickBase extends QuickCore {
 		.createWith("column", Column.class, this::interpretColumn)//
 		.createWith("modify-row-value", ColumnEditing.class, this::interpretRowModify)//
 		// .createWith("replace-row-value", ColumnEditing.class, this::interpretRowReplace) TODO
-		.createWith("columns", Void.class, this::interpretColumns)//
+		.createWith("columns", ValueContainer.class, this::interpretColumns)//
 		.createWith("split", QuickComponentDef.class, this::interpretSplit)//
 		.createWith("field-panel", QuickComponentDef.class, this::interpretFieldPanel)//
 		.modifyWith("field", QuickComponentDef.class, this::modifyField)//
@@ -675,11 +676,9 @@ public class QuickBase extends QuickCore {
 		};
 	}
 
-	private Void interpretColumns(ExpressoSession<?> session) throws QonfigInterpretationException {
-		ObservableModelSet.Builder models = (ObservableModelSet.Builder) session.get("model");
-		session.setModels(models);
-		ClassView cv = session.getClassView();
-		TypeToken<Object> rowType = (TypeToken<Object>) ObservableModelQonfigParser.parseType(session.getAttributeText("type"), cv);
+	private ValueContainer<ObservableCollection, ObservableCollection<CategoryRenderStrategy<Object, ?>>> interpretColumns(
+		ExpressoSession<?> session) throws QonfigInterpretationException {
+		TypeToken<Object> rowType = (TypeToken<Object>) Expresso.parseType(session.getAttributeText("type"));
 		session.put("model-type", rowType);
 		TypeToken<CategoryRenderStrategy<Object, ?>> columnType = TypeTokens.get().keyFor(CategoryRenderStrategy.class)
 			.<CategoryRenderStrategy<Object, ?>> parameterized(rowType, TypeTokens.get().WILDCARD);
@@ -687,18 +686,17 @@ public class QuickBase extends QuickCore {
 		session.put("value-name", rowValueName);
 		String colValueName = session.getAttributeText("render-value-name");
 		session.put("render-value-name", colValueName);
-		List<Function<ModelSetInstance, CategoryRenderStrategy<Object, ?>>> columns = new ArrayList<>();
-		for (ExpressoSession<?> columnEl : session.forChildren("column")) {
-			columns.add(columnEl.interpret(Function.class));
-		}
-		models.with(session.getAttributeText("name"), ModelTypes.Collection.forType(columnType), //
-			(msi, extModels) -> {
+		List<Column<Object, ?>> columns = session.interpretChildren("column", Column.class);
+		return new AbstractValueContainer<ObservableCollection, ObservableCollection<CategoryRenderStrategy<Object, ?>>>(
+			ModelTypes.Collection.forType(columnType)) {
+			@Override
+			public ObservableCollection<CategoryRenderStrategy<Object, ?>> get(ModelSetInstance models) {
 				List<CategoryRenderStrategy<Object, ?>> columnInstances = new ArrayList<>(columns.size());
-				for (Function<ModelSetInstance, CategoryRenderStrategy<Object, ?>> column : columns)
-					columnInstances.add(column.apply(msi));
+				for (Column<Object, ?> column : columns)
+					columnInstances.add(column.createColumn(models));
 				return ObservableCollection.of(columnType, columnInstances);
-			});
-		return null;
+			}
+		};
 	}
 
 	private QuickComponentDef interpretSplit(ExpressoSession<?> session) throws QonfigInterpretationException {

@@ -17,6 +17,7 @@
 
 		<add-on name="int-model-value" requires="model-value">
 			<attribute name="model-value.type" specify="optional" default="" />
+			<value type="expression-or-string" specify="optional" />
 		</add-on>
 		<add-on name="int-list" requires="list">
 			<child-def name="element" type="element" min="0" max="inf" />
@@ -39,9 +40,9 @@
 		<add-on name="config-value" requires="value" inherits="config-value">
 			<attribute name="default" type="expression-or-string" specify="optional" />
 		</add-on>
-		<add-on name="config-map" extends="model-value" inherits="config-value">
+		<add-on name="config-map" requires="map" extends="config-value" inherits="config-value">
+			<attribute name="config-value.default" specify="forbidden" />
 			<attribute name="key-format" type="expression" specify="optional" />
-			<attribute name="key-default" type="expression" specify="optional" />
 		</add-on>
 
 		<add-on name="map-reverse-type" abstract="true" />
@@ -184,6 +185,7 @@
 			<attribute name="config-dir" type="expression" specify="optional" />
 			<child-def name="old-config-name" type="old-config-name" min="0" max="inf" />
 			<child-mod child="abst-model.value" type="config-value" />
+			<attribute name="backup" type="boolean" default="true" />
 		</element-def>
 		<element-def name="old-config-name">
 			<value type="string" />

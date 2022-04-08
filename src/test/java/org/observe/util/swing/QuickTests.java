@@ -11,7 +11,7 @@ import org.junit.Test;
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpreter;
 import org.observe.expresso.ModelTypes;
-import org.observe.expresso.ObservableModelQonfigParser;
+import org.observe.expresso.Expresso;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.quick.QuickBase;
 import org.observe.quick.QuickCore;
@@ -29,7 +29,7 @@ public class QuickTests {
 	@Before
 	public void setup() {
 		theParser = new DefaultQonfigParser()//
-			.withToolkit(ObservableModelQonfigParser.OBSERVE.get(), QuickCore.CORE.get(), QuickBase.BASE.get(), QuickSwing.SWING.get());
+			.withToolkit(Expresso.EXPRESSO.get(), QuickCore.CORE.get(), QuickBase.BASE.get(), QuickSwing.SWING.get());
 		theInterpreter = new QuickSwing()
 			.configureInterpreter(ExpressoInterpreter.build(QuickTests.class, QuickBase.BASE.get(), QuickSwing.SWING.get())).build();
 	}

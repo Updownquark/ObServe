@@ -22,7 +22,7 @@ import org.observe.expresso.ExpressoInterpreter;
 import org.observe.expresso.ExpressoInterpreter.ExpressoSession;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelQonfigParser;
+import org.observe.expresso.Expresso;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
@@ -34,11 +34,11 @@ import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.QonfigToolkitAccess;
 
-public class QuickCore extends ObservableModelQonfigParser {
+public class QuickCore extends Expresso {
 	public static final QonfigToolkitAccess CORE = new QonfigToolkitAccess(QuickCore.class, "quick-core.qtd",
-		ObservableModelQonfigParser.OBSERVE).withCustomValueType(//
-			new QuickPosition.PositionValueType(ObservableModelQonfigParser.EXPRESSION_PARSER), //
-			new QuickSize.SizeValueType(ObservableModelQonfigParser.EXPRESSION_PARSER));
+		Expresso.EXPRESSO).withCustomValueType(//
+			new QuickPosition.PositionValueType(Expresso.EXPRESSION_PARSER), //
+			new QuickSize.SizeValueType(Expresso.EXPRESSION_PARSER));
 
 	public interface QuickBorder extends Function<ModelSetInstance, SettableValue<Border>> {
 	}

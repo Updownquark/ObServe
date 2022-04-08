@@ -22,7 +22,7 @@ import org.observe.expresso.ExpressoInterpreter;
 import org.observe.expresso.ExpressoInterpreter.ExpressoSession;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelQonfigParser;
+import org.observe.expresso.Expresso;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ExternalModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
@@ -58,7 +58,7 @@ public class QuickSwing extends QuickBase {
 		if (theDebugDoc == null) {
 			synchronized (QuickSwing.this) {
 				if (theDebugDoc == null) {
-					QonfigParser debugParser = new DefaultQonfigParser().withToolkit(ObservableModelQonfigParser.OBSERVE.get(), CORE.get(),
+					QonfigParser debugParser = new DefaultQonfigParser().withToolkit(Expresso.EXPRESSO.get(), CORE.get(),
 						BASE.get(), SWING.get());
 					ExpressoInterpreter<?> debugInterp = configureInterpreter(
 						ExpressoInterpreter.build(QuickSwing.class, BASE.get(), SWING.get())).build();
