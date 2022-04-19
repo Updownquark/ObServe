@@ -17,16 +17,17 @@ import org.observe.Subscription;
 import org.observe.Transformation;
 import org.observe.Transformation.ReversibleTransformation;
 import org.observe.Transformation.ReversibleTransformationPrecursor;
-import org.observe.collect.FlowOptions.UniqueOptions;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
 import org.observe.collect.ObservableCollection.ModFilterBuilder;
 import org.observe.collect.ObservableCollection.SortedDataFlow;
 import org.observe.collect.ObservableCollectionActiveManagers.ActiveValueStoredManager;
+import org.observe.collect.ObservableCollectionActiveManagers.DerivedCollectionElement;
 import org.observe.collect.ObservableCollectionBuilder.DataControlAutoRefresher;
 import org.observe.collect.ObservableCollectionDataFlowImpl.BaseCollectionDataFlow;
 import org.observe.collect.ObservableCollectionPassiveManagers.PassiveCollectionManager;
 import org.observe.collect.ObservableSetImpl.ActiveSetMgrPlaceholder;
+import org.observe.collect.ObservableSetImpl.ValueStoredBaseManager;
 import org.observe.util.TypeTokens;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
@@ -175,7 +176,7 @@ public class ObservableSortedCollectionImpl {
 		}
 
 		@Override
-		public Equivalence.SortedEquivalence<? super E> equivalence() {
+		public Equivalence<? super E> equivalence() {
 			return getWrapped().equivalence();
 		}
 
@@ -278,12 +279,15 @@ public class ObservableSortedCollectionImpl {
 	 */
 	public static class ReversedSortedCollection<E> extends ObservableCollectionImpl.ReversedObservableCollection<E>
 	implements ObservableSortedCollection<E> {
-		private final Equivalence.SortedEquivalence<? super E> theEquivalence;
+		private final Equivalence<? super E> theEquivalence;
 
 		/** @param wrap The sorted collection to reverse */
 		public ReversedSortedCollection(ObservableSortedCollection<E> wrap) {
 			super(wrap);
-			theEquivalence = wrap.equivalence().reverse();
+			if (wrap.equivalence() instanceof Equivalence.SortedEquivalence)
+				theEquivalence = ((Equivalence.SortedEquivalence<? super E>) wrap.equivalence()).reverse();
+			else
+				theEquivalence = wrap.equivalence();
 		}
 
 		@Override
@@ -292,13 +296,13 @@ public class ObservableSortedCollectionImpl {
 		}
 
 		@Override
-		public Equivalence.SortedEquivalence<? super E> equivalence() {
+		public Equivalence<? super E> equivalence() {
 			return theEquivalence;
 		}
 
 		@Override
 		public Comparator<? super E> comparator() {
-			return theEquivalence.comparator();
+			return getWrapped().comparator().reversed();
 		}
 
 		@Override
@@ -422,11 +426,6 @@ public class ObservableSortedCollectionImpl {
 				Comparator<? super X> compare) {
 			Transformation<T, X> def = transform.apply(new ReversibleTransformationPrecursor<>());
 			return new SortedTransformOp<>(getSource(), this, target, def);
-		}
-
-		@Override
-		public DistinctSortedDataFlow<E, T, T> distinct(Consumer<UniqueOptions> options) {
-			return (DistinctSortedDataFlow<E, T, T>) super.distinct();
 		}
 
 		@Override
@@ -575,11 +574,6 @@ public class ObservableSortedCollectionImpl {
 		}
 
 		@Override
-		public DistinctSortedDataFlow<E, T, T> distinct(Consumer<UniqueOptions> options) {
-			return (DistinctSortedDataFlow<E, T, T>) super.distinct(options);
-		}
-
-		@Override
 		public SortedDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options) {
 			return new SortedDataFlowWrapper<>(getSource(), super.filterMod(options), equivalence());
 		}
@@ -619,11 +613,6 @@ public class ObservableSortedCollectionImpl {
 		@Override
 		protected ObservableSortedCollection<E> getSource() {
 			return (ObservableSortedCollection<E>) super.getSource();
-		}
-
-		@Override
-		public Equivalence.SortedEquivalence<? super E> equivalence() {
-			return (SortedEquivalence<? super E>) super.equivalence();
 		}
 
 		@Override
@@ -672,18 +661,13 @@ public class ObservableSortedCollectionImpl {
 		}
 
 		@Override
-		public DistinctSortedDataFlow<E, E, E> distinct(Consumer<UniqueOptions> options) {
-			return (DistinctSortedDataFlow<E, E, E>) super.distinct(options);
-		}
-
-		@Override
 		public SortedDataFlow<E, E, E> filterMod(Consumer<ModFilterBuilder<E>> options) {
 			return new SortedDataFlowWrapper<>(getSource(), super.filterMod(options), comparator());
 		}
 
 		@Override
 		public SortedDataFlow<E, E, E> catchUpdates(ThreadConstraint constraint) {
-			return new SortedDataFlowWrapper<>(getSource(), super.catchUpdates(constraint), equivalence());
+			return new SortedDataFlowWrapper<>(getSource(), super.catchUpdates(constraint), comparator());
 		}
 
 		@Override
@@ -693,7 +677,7 @@ public class ObservableSortedCollectionImpl {
 
 		@Override
 		public ActiveValueStoredManager<E, ?, E> manageActive() {
-			return new ObservableSetImpl.ValueStoredBaseManager<>(getSource());
+			return new SortedBaseManager<>(getSource());
 		}
 
 		@Override
@@ -704,6 +688,28 @@ public class ObservableSortedCollectionImpl {
 		@Override
 		public ObservableSortedCollection<E> collectActive(Observable<?> until) {
 			return new ActiveDerivedSortedCollection<>(manageActive(), comparator(), until);
+		}
+	}
+
+	/**
+	 * Base active manager for sorted collections
+	 *
+	 * @param <E> The type of elements in the collection
+	 */
+	public static class SortedBaseManager<E> extends ValueStoredBaseManager<E> {
+		SortedBaseManager(ObservableSortedCollection<E> source) {
+			super(source);
+		}
+
+		@Override
+		protected ObservableSortedCollection<E> getSource() {
+			return (ObservableSortedCollection<E>) super.getSource();
+		}
+
+		@Override
+		public Comparable<DerivedCollectionElement<E>> getElementFinder(E value) {
+			return LambdaUtils.<DerivedCollectionElement<E>> printableComparable(el -> getSource().comparator().compare(value, el.get()),
+				() -> getSource().comparator().toString());
 		}
 	}
 
@@ -844,7 +850,7 @@ public class ObservableSortedCollectionImpl {
 	 */
 	public static class ActiveDerivedSortedCollection<T> extends ObservableCollectionImpl.ActiveDerivedCollection<T>
 	implements ObservableSortedCollection<T> {
-		private final Equivalence.SortedEquivalence<? super T> theEquivalence;
+		private final Comparator<? super T> theCompare;
 
 		/**
 		 * @param flow The active manager to drive this collection
@@ -853,9 +859,7 @@ public class ObservableSortedCollectionImpl {
 		 */
 		public ActiveDerivedSortedCollection(ActiveValueStoredManager<?, ?, T> flow, Comparator<? super T> compare, Observable<?> until) {
 			super(flow, until);
-			theEquivalence = flow.equivalence() instanceof Equivalence.SortedEquivalence
-				? (Equivalence.SortedEquivalence<? super T>) flow.equivalence()
-					: flow.equivalence().sorted(TypeTokens.getRawType(flow.getTargetType()), compare, true);
+			theCompare=compare;
 		}
 
 		@Override
@@ -864,13 +868,8 @@ public class ObservableSortedCollectionImpl {
 		}
 
 		@Override
-		public Equivalence.SortedEquivalence<? super T> equivalence() {
-			return theEquivalence;
-		}
-
-		@Override
 		public Comparator<? super T> comparator() {
-			return theEquivalence.comparator();
+			return theCompare;
 		}
 
 		@Override

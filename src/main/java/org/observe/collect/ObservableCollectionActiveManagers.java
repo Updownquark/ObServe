@@ -28,15 +28,28 @@ import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.ValueStoredCollection;
-import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BetterTreeMap;
 import org.qommons.tree.BetterTreeSet;
-import org.qommons.tree.BinaryTreeNode;
+import org.qommons.tree.SortedTreeList;
 
 import com.google.common.reflect.TypeToken;
 
 /** Contains some implementations of {@link ActiveCollectionManager} and its dependencies */
 public class ObservableCollectionActiveManagers {
+	private static boolean isStrictMode;
+
+	/** @return Whether strict mode is set, which governs performance-to-predictability decisions made by some derived collections */
+	public static boolean isStrictMode() {
+		return isStrictMode;
+	}
+
+	/**
+	 * @param strictMode Whether to set strict mode, which governs performance-to-predictability decisions made by some derived collections
+	 */
+	public static void setStrictMode(boolean strictMode) {
+		isStrictMode = strictMode;
+	}
+
 	private ObservableCollectionActiveManagers() {}
 
 	/**
@@ -895,9 +908,7 @@ public class ObservableCollectionActiveManagers {
 	protected static class SortedManager<E, T> extends AbstractSameTypeActiveManager<E, T> implements ActiveValueStoredManager<E, T, T> {
 		private final Comparator<? super T> theCompare;
 		// Need to keep track of the values to enforce the set-does-not-reorder policy
-		private final BetterTreeList<BiTuple<T, DerivedCollectionElement<T>>> theValues;
-		private final Comparator<BiTuple<T, DerivedCollectionElement<T>>> theTupleCompare;
-		private ElementAccepter<T> theAccepter;
+		private final SortedTreeList<SortedElement> theValues;
 
 		/**
 		 * @param parent The parent manager
@@ -906,13 +917,7 @@ public class ObservableCollectionActiveManagers {
 		protected SortedManager(ActiveCollectionManager<E, ?, T> parent, Comparator<? super T> compare) {
 			super(parent);
 			theCompare = compare;
-			theValues = BetterTreeList.<BiTuple<T, DerivedCollectionElement<T>>> build().build();
-			theTupleCompare = (t1, t2) -> {
-				int comp = theCompare.compare(t1.getValue1(), t2.getValue1());
-				if (comp == 0)
-					comp = t1.getValue2().compareTo(t2.getValue2());
-				return comp;
-			};
+			theValues = SortedTreeList.<SortedElement> buildTreeList(SortedElement::compareWithValue).build();
 		}
 
 		@Override
@@ -937,26 +942,26 @@ public class ObservableCollectionActiveManagers {
 
 		@Override
 		public boolean isConsistent(DerivedCollectionElement<T> element) {
-			return theValues.isConsistent(((SortedElement) element).theValueNode.getElementId(), theTupleCompare, false);
+			return theValues.isConsistent(((SortedElement) element).theValueElement);
 		}
 
 		@Override
 		public boolean checkConsistency() {
-			return theValues.checkConsistency(theTupleCompare, false);
+			return theValues.checkConsistency();
 		}
 
 		@Override
 		public <X> boolean repair(DerivedCollectionElement<T> element, RepairListener<T, X> listener) {
-			return theValues.repair(((SortedElement) element).theValueNode.getElementId(), theTupleCompare, false,
-				new SMRepairListener<>(listener));
+			return theValues.repair(//
+				((SortedElement) element).theValueElement, new SMRepairListener<>(listener));
 		}
 
 		@Override
 		public <X> boolean repair(RepairListener<T, X> listener) {
-			return theValues.repair(theTupleCompare, false, new SMRepairListener<>(listener));
+			return theValues.repair(new SMRepairListener<>(listener));
 		}
 
-		static class SMRepairListener<T, X> implements ValueStoredCollection.RepairListener<BiTuple<T, DerivedCollectionElement<T>>, X> {
+		static class SMRepairListener<T, X> implements ValueStoredCollection.RepairListener<SortedManager<?, T>.SortedElement, X> {
 			private final RepairListener<T, X> theWrapped;
 
 			SMRepairListener(RepairListener<T, X> wrapped) {
@@ -964,18 +969,18 @@ public class ObservableCollectionActiveManagers {
 			}
 
 			@Override
-			public X removed(CollectionElement<BiTuple<T, DerivedCollectionElement<T>>> element) {
-				return theWrapped.removed(element.get().getValue2());
+			public X removed(CollectionElement<SortedManager<?, T>.SortedElement> element) {
+				return theWrapped.removed(element.get().theParentEl);
 			}
 
 			@Override
-			public void disposed(BiTuple<T, DerivedCollectionElement<T>> value, X data) {
-				theWrapped.disposed(value.getValue1(), data);
+			public void disposed(SortedManager<?, T>.SortedElement value, X data) {
+				theWrapped.disposed(value.get(), data);
 			}
 
 			@Override
-			public void transferred(CollectionElement<BiTuple<T, DerivedCollectionElement<T>>> element, X data) {
-				theWrapped.transferred(element.get().getValue2(), data);
+			public void transferred(CollectionElement<SortedManager<?, T>.SortedElement> element, X data) {
+				theWrapped.transferred(element.get().theParentEl, data);
 			}
 		}
 
@@ -986,10 +991,13 @@ public class ObservableCollectionActiveManagers {
 
 		@Override
 		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
-			// Most likely, this manager's equivalence is not the same as its comparison order, so we can't take advantage of the
-			// sorting to find the element.
-			// And even if the parent could've found it, the order will be mixed up now.
-			return null;
+			Comparable<DerivedCollectionElement<T>> sourceFinder = getParent().getElementFinder(value);
+			return el -> {
+				int comp = theCompare.compare(value, el.get());
+				if (comp == 0 && sourceFinder != null)
+					comp = sourceFinder.compareTo(peel(el));
+				return comp;
+			};
 		}
 
 		@Override
@@ -1080,42 +1088,72 @@ public class ObservableCollectionActiveManagers {
 
 		@Override
 		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
-			theAccepter = onElement;
 			super.begin(fromStart, onElement, listening);
-		}
-
-		private BinaryTreeNode<BiTuple<T, DerivedCollectionElement<T>>> insertIntoValues(T value, DerivedCollectionElement<T> parentEl) {
-			BiTuple<T, DerivedCollectionElement<T>> tuple = new BiTuple<>(value, parentEl);
-			BinaryTreeNode<BiTuple<T, DerivedCollectionElement<T>>> node = theValues.getRoot();
-			if (node == null)
-				return theValues.addElement(tuple, false);
-			else {
-				node = node.findClosest(n -> theTupleCompare.compare(tuple, n.get()), true, false, null);
-				return theValues.getElement(theValues.mutableNodeFor(node).add(tuple, theTupleCompare.compare(tuple, node.get()) < 0));
-			}
 		}
 
 		class SortedElement implements DerivedCollectionElement<T> {
 			final DerivedCollectionElement<T> theParentEl;
-			private BinaryTreeNode<BiTuple<T, DerivedCollectionElement<T>>> theValueNode;
+			private T theValue;
+			private ElementId theValueElement;
 			private CollectionElementListener<T> theListener;
 
 			SortedElement(DerivedCollectionElement<T> parentEl, boolean synthetic) {
 				theParentEl = parentEl;
+				theValue = parentEl.get();
 				if (!synthetic) {
-					theValueNode = insertIntoValues(parentEl.get(), parentEl);
+					theValueElement = theValues.addElement(this, false).getElementId();
 					theParentEl.setListener(new CollectionElementListener<T>() {
 						@Override
 						public void update(T oldValue, T newValue, Object cause, boolean internalOnly) {
+							T realOldValue = theValue;
+							theValue = newValue;
 							if (internalOnly) {
-								ObservableCollectionActiveManagers.update(theListener, oldValue, newValue, cause, internalOnly);
+								ObservableCollectionActiveManagers.update(theListener, realOldValue, newValue, cause, true);
 								return;
 							}
-							T realOldValue = theValueNode.get().getValue1();
 							if (!isInCorrectOrder(newValue, theParentEl)) {
-								// The order of this element has changed
-								theValues.mutableNodeFor(theValueNode).remove();
-								theValueNode = insertIntoValues(newValue, theParentEl);
+								// The order of this element has changed.
+								// Might just be this element, but it also might be the whole sorting strategy that's changed.
+								// Do a repair to be safe.
+								// We don't need to fire events in response to the sorting changes,
+								// because the actively derived collection will also detect the mis-ordered state
+								// and will use the sorting to figure out where everything goes.
+								theValues.repair(theValueElement, //
+									new ValueStoredCollection.RepairListener<SortedElement, Void>() {
+									@Override
+									public Void removed(CollectionElement<SortedManager<E, T>.SortedElement> element) {
+										return null;
+									}
+
+									@Override
+									public void disposed(SortedManager<E, T>.SortedElement element, Void data) {
+										throw new IllegalStateException();
+									}
+
+									@Override
+									public void transferred(CollectionElement<SortedManager<E, T>.SortedElement> element, Void data) {
+										element.get().theValueElement = element.getElementId();
+									}
+								});
+								/* Update: Regarding the older comment below, the add/remove combo instead of update was done
+								 * for the benefit of the chain testing framework, which will randomly create chains of operations
+								 * which would make no sense in any real context, like 2 sorting operations chained together.
+								 * But it still made sense to address it because failures in the testing, even for ridiculous situations,
+								 * break the testing.
+								 *
+								 * However, in this case, reading and re-reading this verbose comment does't fully help me
+								 * to understand the problem I was actually solving here.
+								 *
+								 * I have just modified the actively-derived collection implementation to do a repair when it detects
+								 * reordering on update, instead of just removing and re-adding the updated value.
+								 * This is to fix a real-world issue that occurs when the entire ordering scheme
+								 * is changed at once (e.g. table sorting), so it's possible that what I thought was happening here before
+								 * was actually a manifestation of that bug.
+								 *
+								 * This code is preventing the derived collection from detecting the reordering (since no update is fired),
+								 * and since I'm no longer sure of its value, I'm removing it and just firing an update.
+								 * If the chain tester fails, maybe I'll have to revisit this.
+								 */
 								/* We could just do an update here and let the derived collection do the re-order.
 								 * But this would potentially be inconsistent in the case of child flows that also affect order.
 								 * E.g. the update could be swallowed by the derived flow and the element not reordered,
@@ -1123,23 +1161,21 @@ public class ObservableCollectionActiveManagers {
 								 * But the same flow order, collected in between, would yield different ordering
 								 * for the same set of operations.
 								 * The use case of such a situation is probably minuscule, since why would anyone apply a sorted flow
-								 * and then apply another order-governing flow on top of it.
+								 * and then apply another order-governing flow on top of it?
 								 * In such situations the benefit of just firing an update
 								 * instead of a remove/add is probably negligible.
 								 * So, to summarize, we'll fire an add/remove combo here instead of just an update. */
-								ObservableCollectionActiveManagers.removed(theListener, realOldValue, cause);
-								theAccepter.accept(SortedElement.this, cause);
-							} else {
-								theValues.mutableNodeFor(theValueNode).set(new BiTuple<>(newValue, theParentEl));
-								ObservableCollectionActiveManagers.update(theListener, realOldValue, newValue, cause, internalOnly);
-							}
+								// ObservableCollectionActiveManagers.removed(theListener, realOldValue, cause);
+								// theAccepter.accept(SortedElement.this, cause);
+							} // else {
+							ObservableCollectionActiveManagers.update(theListener, realOldValue, newValue, cause, false);
+							// }
 						}
 
 						@Override
 						public void removed(T value, Object cause) {
-							T realOldValue = theValueNode.get().getValue1();
-							theValues.mutableNodeFor(theValueNode).remove();
-							ObservableCollectionActiveManagers.removed(theListener, realOldValue, cause);
+							theValues.mutableElement(theValueElement).remove();
+							ObservableCollectionActiveManagers.removed(theListener, theValue, cause);
 						}
 					});
 				}
@@ -1150,27 +1186,32 @@ public class ObservableCollectionActiveManagers {
 			}
 
 			boolean isInCorrectOrder(T newValue, DerivedCollectionElement<T> parentEl) {
-				BiTuple<T, DerivedCollectionElement<T>> tuple = new BiTuple<>(newValue, parentEl);
-				BinaryTreeNode<BiTuple<T, DerivedCollectionElement<T>>> left = theValueNode
-					.getClosest(true);
-				BinaryTreeNode<BiTuple<T, DerivedCollectionElement<T>>> right = theValueNode
-					.getClosest(false);
-				return (left == null || theTupleCompare.compare(left.get(), tuple) <= 0)//
-					&& (right == null || theTupleCompare.compare(tuple, right.get()) <= 0);
+				SortedElement left = CollectionElement.get(theValues.getAdjacentElement(theValueElement, false));
+				SortedElement right = CollectionElement.get(theValues.getAdjacentElement(theValueElement, true));
+				return (left == null || compareWithValue(newValue, left) >= 0)//
+					&& (right == null || compareWithValue(newValue, right) <= 0);
+			}
+
+			int compareWithValue(SortedElement o) {
+				return compareWithValue(theValue, o);
+			}
+
+			int compareWithValue(T newValue, SortedElement o) {
+				if (this == o)
+					return 0;
+				int comp = theCompare.compare(newValue, o.theValue);
+				if (comp == 0)
+					comp = theParentEl.compareTo(o.theParentEl);
+				return comp;
 			}
 
 			@Override
 			public int compareTo(DerivedCollectionElement<T> o) {
 				SortedElement sorted = (SortedElement) o;
-				if (theValueNode != null && sorted.theValueNode != null)
-					return theValueNode.compareTo(sorted.theValueNode);
-				else { // Synthetic
-					BiTuple<T, DerivedCollectionElement<T>> tuple1 = theValueNode != null
-						? theValueNode.get() : new BiTuple<>(theParentEl.get(), theParentEl);
-						BiTuple<T, DerivedCollectionElement<T>> tuple2 = sorted.theValueNode != null
-							? sorted.theValueNode.get() : new BiTuple<>(sorted.theParentEl.get(), sorted.theParentEl);
-							return theTupleCompare.compare(tuple1, tuple2);
-				}
+				if (theValueElement != null && sorted.theValueElement != null)
+					return theValueElement.compareTo(sorted.theValueElement);
+				else
+					return compareWithValue(sorted); // One or both are synthetic
 			}
 
 			@Override
@@ -1180,10 +1221,7 @@ public class ObservableCollectionActiveManagers {
 
 			@Override
 			public T get() {
-				if (theValueNode != null)
-					return theValueNode.get().getValue1();
-				else
-					return theParentEl.get(); // Synthetic
+				return theValue;
 			}
 
 			@Override
@@ -1193,7 +1231,7 @@ public class ObservableCollectionActiveManagers {
 
 			@Override
 			public String isAcceptable(T value) {
-				if (theCompare.compare(theValueNode.get().getValue1(), value) != 0 && !isInCorrectOrder(value, theParentEl))
+				if (theCompare.compare(theValue, value) != 0 && !isInCorrectOrder(value, theParentEl))
 					return StdMsg.ILLEGAL_ELEMENT_POSITION;
 				return theParentEl.isAcceptable(value);
 			}
@@ -1203,10 +1241,10 @@ public class ObservableCollectionActiveManagers {
 				// It is not allowed to change the order of an element via set
 				// However, if the order has already been changed (e.g. due to changes in the value or the comparator),
 				// it is permitted (and required) to use set to notify the collection of the change
-				if (theCompare.compare(theValueNode.get().getValue1(), value) != 0 && !isInCorrectOrder(value, theParentEl))
+				if (theCompare.compare(theValue, value) != 0 && !isInCorrectOrder(value, theParentEl))
 					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+				// The value will be set again when the parent fires an update, but keep the old value until then
 				theParentEl.set(value);
-				theValues.mutableNodeFor(theValueNode).set(new BiTuple<>(value, theParentEl));
 			}
 
 			@Override
@@ -1221,7 +1259,7 @@ public class ObservableCollectionActiveManagers {
 
 			@Override
 			public String toString() {
-				return theParentEl.toString();
+				return theParentEl.toString() + "(" + theValue + ")";
 			}
 		}
 	}

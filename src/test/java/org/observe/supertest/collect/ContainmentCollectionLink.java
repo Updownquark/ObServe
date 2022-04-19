@@ -103,7 +103,7 @@ public class ContainmentCollectionLink<T> extends ObservableCollectionLink<T, T>
 		action.or(2, () -> {
 			if (helper.isReproducing())
 				System.out.print("Adjusting filter: ");
-			Set<T> filterCopy = getCollection().equivalence().createSet();
+			Set<T> filterCopy = theIntersection.equivalence().createSet();
 			filterCopy.addAll(theIntersection);
 			RandomAction filterAction = helper.createAction()//
 				.or(5, () -> {

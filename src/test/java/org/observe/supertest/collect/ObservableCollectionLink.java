@@ -52,6 +52,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 
 	private final BetterTreeList<CollectionLinkElement<S, T>> theElements;
 	private final BetterTreeList<CollectionLinkElement<S, T>> theElementsForCollection;
+	private boolean isDebugging;
 
 	/**
 	 * @param path The path for this link
@@ -123,6 +124,8 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		getCollection().subscribe(new Consumer<ObservableCollectionEvent<? extends T>>() {
 			@Override
 			public void accept(ObservableCollectionEvent<? extends T> evt) {
+				if (isDebugging)
+					System.out.println(getPath() + ": " + evt);
 				switch (evt.getType()) {
 				case add:
 					CollectionElement<CollectionLinkElement<S, T>> added;
@@ -349,6 +352,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			}).or(.2, () -> { // removeAll
 				int length = (int) helper.getDouble(0, 25, 100); // Tend smaller
 				List<T> values = new ArrayList<>(length);
+				// The removeAll method uses the equivalence of the given collection. See BetterCollection#removeAll(Collection).
 				Set<T> valueSet = new HashSet<>();
 				for (int i = 0; i < length; i++) {
 					T value = theSupplier.apply(helper);
@@ -373,7 +377,8 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 				// the more elements will be removed from the collection
 				int length = helper.getInt(0, 5000);
 				List<T> values = new ArrayList<>(length);
-				Set<T> valueSet = getCollection().equivalence().createSet();
+				// The retainAll method uses the equivalence of the given collection. See BetterCollection#retainAll(Collection).
+				Set<T> valueSet = new HashSet<>();
 				for (int i = 0; i < length; i++) {
 					T value = theSupplier.apply(helper);
 					values.add(value);

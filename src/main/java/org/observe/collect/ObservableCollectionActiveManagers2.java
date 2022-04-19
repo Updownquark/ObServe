@@ -50,10 +50,12 @@ import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterHashMap;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterMap;
+import org.qommons.collect.BetterMap.MapRepairListener;
 import org.qommons.collect.BetterSortedList.SortedSearchFilter;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
+import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.OptimisticContext;
 import org.qommons.tree.BetterTreeList;
@@ -72,54 +74,62 @@ public class ObservableCollectionActiveManagers2 {
 
 	static class IntersectionManager<E, T, X> implements ActiveCollectionManager<E, T, T> {
 		private class IntersectionElement {
-			private final T value;
-			final List<IntersectedCollectionElement> leftElements;
-			final List<ElementId> rightElements;
+			private ElementId valueEl;
+			final List<IntersectedCollectionElement> sourceElements;
+			final List<ElementId> filterElements;
 
-			IntersectionElement(T value) {
-				this.value = value;
-				leftElements = new ArrayList<>();
-				rightElements = new ArrayList<>();
+			IntersectionElement() {
+				sourceElements = new ArrayList<>(2);
+				filterElements = new ArrayList<>(2);
 			}
 
 			boolean isPresent() {
-				return rightElements.isEmpty() == isExclude;
+				return filterElements.isEmpty() == isExclude;
 			}
 
-			void incrementRight(ElementId rightEl, Object cause) {
-				boolean preEmpty = rightElements.isEmpty();
-				rightElements.add(rightEl);
+			X get() {
+				return theValues.getEntryById(valueEl).getKey();
+			}
+
+			void filterElementAdded(ElementId rightEl, Object cause) {
+				boolean preEmpty = filterElements.isEmpty();
+				filterElements.add(rightEl);
 				if (preEmpty)
 					presentChanged(cause);
 			}
 
-			void decrementRight(ElementId rightEl, Object cause) {
-				rightElements.remove(rightEl);
-				if (rightElements.isEmpty()) {
+			void filterElementRemoved(ElementId rightEl, Object cause) {
+				filterElements.remove(rightEl);
+				if (filterElements.isEmpty()) {
 					presentChanged(cause);
-					if (leftElements.isEmpty())
-						theValues.remove(value);
+					if (sourceElements.isEmpty())
+						theValues.mutableEntry(valueEl).remove();
 				}
 			}
 
-			void addLeft(IntersectedCollectionElement element) {
-				leftElements.add(element);
+			void sourceAdded(IntersectedCollectionElement element) {
+				sourceElements.add(element);
 			}
 
-			void removeLeft(IntersectedCollectionElement element) {
-				leftElements.remove(element);
-				if (leftElements.isEmpty() && rightElements.isEmpty())
-					theValues.remove(value);
+			void sourceRemoved(IntersectedCollectionElement element) {
+				sourceElements.remove(element);
+				if (sourceElements.isEmpty() && filterElements.isEmpty())
+					theValues.mutableEntry(valueEl).remove();
 			}
 
 			private void presentChanged(Object cause) {
 				if (isPresent()) {
-					for (IntersectedCollectionElement el : leftElements)
+					for (IntersectedCollectionElement el : sourceElements)
 						theAccepter.accept(el, cause);
 				} else {
-					for (IntersectedCollectionElement el : leftElements)
+					for (IntersectedCollectionElement el : sourceElements)
 						el.fireRemove(cause);
 				}
+			}
+
+			@Override
+			public String toString() {
+				return get() + " (" + sourceElements.size() + "/" + filterElements.size() + ")";
 			}
 		}
 
@@ -135,14 +145,24 @@ public class ObservableCollectionActiveManagers2 {
 					theParentEl.setListener(new CollectionElementListener<T>() {
 						@Override
 						public void update(T oldValue, T newValue, Object cause, boolean internalOnly) {
-							if (internalOnly || theEquivalence.elementEquals(intersection.value, newValue)) {
-								ObservableCollectionActiveManagers.update(theListener, oldValue, newValue, cause, internalOnly);
+							if (internalOnly) {
+								ObservableCollectionActiveManagers.update(theListener, oldValue, newValue, cause, true);
 							} else {
-								boolean oldPresent = intersection.isPresent();
-								intersection.removeLeft(IntersectedCollectionElement.this);
-								intersection = theValues.computeIfAbsent(newValue, v -> new IntersectionElement(newValue));
-								intersection.addLeft(IntersectedCollectionElement.this);
-								boolean newPresent = intersection.isPresent();
+								boolean oldPresent;
+								if (intersection == null)
+									oldPresent = isExclude;
+								else
+									oldPresent = intersection.isPresent();
+								if (intersection != null)
+									intersection.sourceRemoved(IntersectedCollectionElement.this);
+								intersection = theFilterEquivalence.isElement(newValue) ? intersection((X) newValue) : null;
+								if (intersection != null)
+									intersection.sourceAdded(IntersectedCollectionElement.this);
+								boolean newPresent;
+								if (intersection == null)
+									newPresent = isExclude;
+								else
+									newPresent = intersection.isPresent();
 								if (oldPresent && newPresent)
 									ObservableCollectionActiveManagers.update(theListener, oldValue, newValue, cause, false);
 								else if (oldPresent && !newPresent) {
@@ -157,9 +177,15 @@ public class ObservableCollectionActiveManagers2 {
 
 						@Override
 						public void removed(T value, Object cause) {
-							if (intersection.isPresent())
+							boolean wasPresent;
+							if (intersection == null)
+								wasPresent = isExclude;
+							else
+								wasPresent = intersection.isPresent();
+							if (wasPresent)
 								ObservableCollectionActiveManagers.removed(theListener, value, cause);
-							intersection.removeLeft(IntersectedCollectionElement.this);
+							if (intersection != null)
+								intersection.sourceRemoved(IntersectedCollectionElement.this);
 							intersection = null;
 						}
 					});
@@ -192,14 +218,15 @@ public class ObservableCollectionActiveManagers2 {
 
 			@Override
 			public String isAcceptable(T value) {
+				if (!theFilterEquivalence.isElement(value))
+					return isExclude ? null : StdMsg.ILLEGAL_ELEMENT;
 				String msg = theParentEl.isAcceptable(value);
 				if (msg != null)
 					return msg;
-				if (theEquivalence.elementEquals(theParentEl.get(), value))
+				if (theFilterEquivalence.isElement(theParentEl.get()) && theFilterEquivalence.elementEquals((X) theParentEl.get(), value))
 					return null;
 				IntersectionElement intersect = theValues.get(value);
-
-				boolean filterHas = intersect == null ? false : !intersect.rightElements.isEmpty();
+				boolean filterHas = intersect == null ? false : !intersect.filterElements.isEmpty();
 				if (filterHas == isExclude)
 					return StdMsg.ILLEGAL_ELEMENT;
 				return null;
@@ -207,9 +234,13 @@ public class ObservableCollectionActiveManagers2 {
 
 			@Override
 			public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
-				if (!theEquivalence.elementEquals(theParentEl.get(), value)) {
+				if (!theFilterEquivalence.isElement(value)) {
+					if (!isExclude)
+						throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+				} else if (theFilterEquivalence.isElement(theParentEl.get())
+					&& !theFilterEquivalence.elementEquals((X) theParentEl.get(), value)) {
 					IntersectionElement intersect = theValues.get(value);
-					boolean filterHas = intersect == null ? false : !intersect.rightElements.isEmpty();
+					boolean filterHas = intersect == null ? false : !intersect.filterElements.isEmpty();
 					if (filterHas == isExclude)
 						throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 				}
@@ -235,10 +266,10 @@ public class ObservableCollectionActiveManagers2 {
 
 		private final ActiveCollectionManager<E, ?, T> theParent;
 		private final ObservableCollection<X> theFilter;
-		private final Equivalence<? super T> theEquivalence; // Make this a field since we'll need it often
+		private final Equivalence<? super X> theFilterEquivalence; // Make this a field since we'll need it often
 		/** Whether a value's presence in the right causes the value in the left to be present (false) or absent (true) in the result */
 		private final boolean isExclude;
-		private final Map<T, IntersectionElement> theValues;
+		private final BetterMap<X, IntersectionElement> theValues;
 		// The following two fields are needed because the values may mutate
 		private final Map<ElementId, IntersectionElement> theRightElementValues;
 
@@ -247,9 +278,10 @@ public class ObservableCollectionActiveManagers2 {
 		IntersectionManager(ActiveCollectionManager<E, ?, T> parent, CollectionDataFlow<?, ?, X> filter, boolean exclude) {
 			theParent = parent;
 			theFilter = filter.collect();
-			theEquivalence = parent.equivalence();
+			theFilterEquivalence = filter.equivalence();
 			isExclude = exclude;
-			theValues = theEquivalence.createMap();
+			// Use the filter's equivalence, just like BetterCollection#removeAll(collection) and retainAll(Collection)
+			theValues = theFilterEquivalence.createMap();
 			theRightElementValues = new HashMap<>();
 		}
 
@@ -318,7 +350,7 @@ public class ObservableCollectionActiveManagers2 {
 					.map(el -> new IntersectedCollectionElement(el, null, true)), //
 					theFilter.getElementsBySource(sourceEl, sourceCollection).stream().flatMap(el -> {
 						IntersectionElement intEl = theRightElementValues.get(el.getElementId());
-						return intEl == null ? Stream.empty() : intEl.leftElements.stream();
+						return intEl == null ? Stream.empty() : intEl.sourceElements.stream();
 					}).distinct()));
 			}
 		}
@@ -327,7 +359,7 @@ public class ObservableCollectionActiveManagers2 {
 		public BetterList<ElementId> getSourceElements(DerivedCollectionElement<T> localElement, BetterCollection<?> sourceCollection) {
 			return BetterList.of(Stream.concat(//
 				theParent.getSourceElements(((IntersectedCollectionElement) localElement).theParentEl, sourceCollection).stream(), //
-				((IntersectedCollectionElement) localElement).intersection.rightElements.stream().flatMap(//
+				((IntersectedCollectionElement) localElement).intersection.filterElements.stream().flatMap(//
 					el -> theFilter.getSourceElements(el, sourceCollection).stream())//
 				));
 		}
@@ -342,8 +374,8 @@ public class ObservableCollectionActiveManagers2 {
 
 		@Override
 		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
-			IntersectionElement intersect = theValues.get(toAdd);
-			boolean filterHas = intersect == null ? false : !intersect.rightElements.isEmpty();
+			IntersectionElement intersect = theFilterEquivalence.isElement(toAdd) ? theValues.get(toAdd) : null;
+			boolean filterHas = intersect == null ? false : !intersect.filterElements.isEmpty();
 			if (filterHas == isExclude)
 				return StdMsg.ILLEGAL_ELEMENT;
 			return theParent.canAdd(toAdd, strip(after), strip(before));
@@ -352,8 +384,8 @@ public class ObservableCollectionActiveManagers2 {
 		@Override
 		public DerivedCollectionElement<T> addElement(T value, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before,
 			boolean first) {
-			IntersectionElement intersect = theValues.get(value);
-			boolean filterHas = intersect == null ? false : !intersect.rightElements.isEmpty();
+			IntersectionElement intersect = theFilterEquivalence.isElement(value) ? theValues.get(value) : null;
+			boolean filterHas = intersect == null ? false : !intersect.filterElements.isEmpty();
 			if (filterHas == isExclude)
 				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 			DerivedCollectionElement<T> parentEl = theParent.addElement(value, strip(after), strip(before), first);
@@ -378,18 +410,25 @@ public class ObservableCollectionActiveManagers2 {
 
 		@Override
 		public Equivalence<? super T> equivalence() {
-			return theEquivalence;
+			return theParent.equivalence(); // We don't actually switch the equivalence from the parent, we just filter on it
 		}
 
 		@Override
 		public void setValues(Collection<DerivedCollectionElement<T>> elements, T newValue)
 			throws UnsupportedOperationException, IllegalArgumentException {
-			IntersectionElement intersect = theValues.get(newValue);
-			boolean filterHas = intersect == null ? false : !intersect.rightElements.isEmpty();
+			IntersectionElement intersect = theFilterEquivalence.isElement(newValue) ? theValues.get(newValue) : null;
+			boolean filterHas = intersect == null ? false : !intersect.filterElements.isEmpty();
 			if (filterHas == isExclude)
 				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 			theParent.setValues(elements.stream().map(el -> ((IntersectedCollectionElement) el).theParentEl).collect(Collectors.toList()),
 				newValue);
+		}
+
+		IntersectionElement intersection(X value) {
+			MapEntryHandle<X, IntersectionElement> element = theValues.getOrPutEntry(value, v -> new IntersectionElement(), null, null,
+				false, null);
+			element.getValue().valueEl = element.getElementId();
+			return element.getValue();
 		}
 
 		@Override
@@ -402,41 +441,59 @@ public class ObservableCollectionActiveManagers2 {
 					IntersectionElement element;
 					switch (evt.getType()) {
 					case add:
-						if (!theEquivalence.isElement(evt.getNewValue()))
-							return;
-						element = theValues.computeIfAbsent((T) evt.getNewValue(), v -> new IntersectionElement(v));
-						element.incrementRight(evt.getElementId(), evt);
+						element = intersection(evt.getNewValue());
+						element.filterElementAdded(evt.getElementId(), evt);
 						theRightElementValues.put(evt.getElementId(), element);
 						break;
 					case remove:
 						element = theRightElementValues.remove(evt.getElementId());
-						if (element == null)
-							return; // Must not have belonged to the flow's equivalence
-						element.decrementRight(evt.getElementId(), evt);
+						element.filterElementRemoved(evt.getElementId(), evt);
 						break;
 					case set:
 						element = theRightElementValues.get(evt.getElementId());
-						if (element != null && theEquivalence.elementEquals(element.value, evt.getNewValue()))
-							return; // No change;
-						boolean newIsElement = equivalence().isElement(evt.getNewValue());
-						IntersectionElement newEl = newIsElement
-							? theValues.computeIfAbsent((T) evt.getNewValue(), v -> new IntersectionElement(v)) : null;
-							if (newEl != null)
-								theRightElementValues.put(evt.getElementId(), newEl);
-							else if (element != null)
-								theRightElementValues.remove(evt.getElementId());
-							if (element != null)
-								element.decrementRight(evt.getElementId(), evt);
-							if (newIsElement)
-								newEl.incrementRight(evt.getElementId(), evt);
-							break;
+						if (theFilterEquivalence.elementEquals(element.get(), evt.getNewValue())) {
+							// Check for change of the entire sort order
+							// We don't care about the order of the values, as it's just used for a filter,
+							// but we do need to maintain the set's integrity
+							theValues.repair(element.valueEl, new MapRepairListener<X, IntersectionElement, Void>() {
+								@Override
+								public Void removed(MapEntryHandle<X, IntersectionElement> removed) {
+									return null;
+								}
+
+								@Override
+								public void disposed(X key, IntersectionElement value, Void data) {
+									IntersectionElement newIntersect = theValues.get(key);
+									if (newIntersect != null) {
+										for (ElementId filterEl : value.filterElements) {
+											value.filterElementRemoved(filterEl, evt);
+											newIntersect.filterElementAdded(filterEl, evt);
+										}
+									} else {
+										for (ElementId filterEl : value.filterElements)
+											value.filterElementRemoved(filterEl, evt);
+									}
+								}
+
+								@Override
+								public void transferred(MapEntryHandle<X, IntersectionElement> readded, Void data) {
+									// Don't care
+								}
+							});
+							return;
+						}
+						element.filterElementRemoved(evt.getElementId(), evt);
+						IntersectionElement newEl = intersection(evt.getNewValue());
+						theRightElementValues.put(evt.getElementId(), newEl);
+						newEl.filterElementAdded(evt.getElementId(), evt);
+						break;
 					}
 				}
 			}, action -> theFilter.subscribe(action, fromStart).removeAll());
 			theParent.begin(fromStart, (parentEl, cause) -> {
-				IntersectionElement element = theValues.computeIfAbsent(parentEl.get(), v -> new IntersectionElement(v));
+				IntersectionElement element = theFilterEquivalence.isElement(parentEl.get()) ? intersection((X) parentEl.get()) : null;
 				IntersectedCollectionElement el = new IntersectedCollectionElement(parentEl, element, false);
-				element.addLeft(el);
+				element.sourceAdded(el);
 				if (element.isPresent())
 					onElement.accept(el, cause);
 			}, listening);
@@ -780,6 +837,9 @@ public class ObservableCollectionActiveManagers2 {
 		ActiveRefreshingCollectionManager(ActiveCollectionManager<E, ?, T> parent, Observable<?> refresh) {
 			super(parent);
 			theRefresh = refresh;
+			// if (ObservableCollectionActiveManagers.isStrictMode())
+			// theElements = SortedTreeList.<RefreshingElement> buildTreeList(RefreshingElement::compareTo).build();
+			// else
 			theElements = BetterTreeList.<RefreshingElement> build().build();
 		}
 

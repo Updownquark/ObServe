@@ -71,6 +71,11 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
+		public Equivalence.SortedEquivalence<? super E> equivalence() {
+			return (SortedEquivalence<? super E>) super.equivalence();
+		}
+
+		@Override
 		public boolean add(E value) {
 			return ObservableSortedSet.super.add(value);
 		}
@@ -580,7 +585,7 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public ActiveValueStoredManager<E, ?, E> manageActive() {
-			return super.manageActive();
+			return new ObservableSortedCollectionImpl.SortedBaseManager<>(getSource());
 		}
 
 		@Override

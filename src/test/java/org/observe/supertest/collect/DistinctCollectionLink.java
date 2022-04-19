@@ -58,6 +58,7 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> im
 			CollectionDataFlow<?, ?, T> oneStepFlow = sourceCL.getCollection().flow();
 			CollectionDataFlow<?, ?, T> multiStepFlow = sourceCL.getDef().multiStepFlow;
 			if (oneStepFlow.equivalence() instanceof Equivalence.SortedEquivalence) {
+				// Ensure we're testing hash-based distinct functionality--the distinctSorted test is separate and generated below
 				oneStepFlow = oneStepFlow.withEquivalence(Equivalence.DEFAULT);
 				multiStepFlow = multiStepFlow.withEquivalence(Equivalence.DEFAULT);
 			}
@@ -318,6 +319,7 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> im
 			searchValue = sourceOp.getValue();
 		else
 			searchValue = sourceOp.getOldValue();
+		// System.out.println(getPath() + ": " + sourceOp);
 		ValueElement valueEl = theValues.get(searchValue);
 		CollectionLinkElement<T, T> element;
 		switch (sourceOp.getType()) {
@@ -398,6 +400,44 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> im
 	}
 
 	@Override
+	public void validate(boolean transactionEnd) throws AssertionError {
+		// Some circumstances (e.g. tree repair after switching the sort order of a collection) can cause elements
+		// to disappear and reappear in unpredictable order on their way to their proper spot.
+		// To accommodate this, go through the elements and, for any that were unexpectedly added,
+		// look for equivalent elements that were unexpectedly removed.
+		Map<T, CollectionLinkElement<T, T>> unexpectedAdded = null;
+		for (CollectionLinkElement<T, T> el : getElements()) {
+			if (el.wasAdded() && !el.isAddExpected()) {
+				if (!el.isPresent()) {
+					el.expectAdded(el.getCollectionValue());
+					el.expectRemoval();
+				} else {
+					if (unexpectedAdded == null) {
+						unexpectedAdded = theHelper == null ? new HashMap<>() : new TreeMap<>(theHelper.getCompare());
+					}
+					unexpectedAdded.put(el.getCollectionValue(), el);
+				}
+			}
+		}
+		if (unexpectedAdded != null) {
+			for (CollectionLinkElement<T, T> el : getElements()) {
+				if (!el.isPresent() && !el.isRemoveExpected()) {
+					CollectionLinkElement<T, T> added = unexpectedAdded.remove(el.getValue());
+					if (added != null) { // Found a bubble. Resolve them together
+						Assert.assertEquals(added.getSourceElements().size(), el.getSourceElements().size());
+						added.expectAdded(el.getValue());
+						ValueElement valueEl = new ValueElement(added);
+						valueEl.sourceElements.addAll(added.getSourceElements());
+						theValues.put(el.getValue(), valueEl);
+						el.expectRemoval();
+					}
+				}
+			}
+		}
+		super.validate(transactionEnd);
+	}
+
+	@Override
 	protected void validate(CollectionLinkElement<T, T> element, boolean transactionEnd) {
 		checkOrder(element, null, null);
 	}
@@ -415,7 +455,7 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> im
 
 	@Override
 	public String toString() {
-		return "distinct" + (theHelper != null ? "Sorted" : "") + "(" + (isUsingFirst ? "first" : "") + ")";
+		return "distinct" + (theHelper != null ? "Sorted(" + theHelper.getCompare() : "(") + (isUsingFirst ? "first" : "") + ")";
 	}
 
 	class ValueElement {

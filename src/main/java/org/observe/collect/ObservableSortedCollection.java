@@ -7,7 +7,6 @@ import java.util.Iterator;
 import java.util.Spliterator;
 import java.util.function.Supplier;
 
-import org.observe.Equivalence;
 import org.observe.ObservableValue;
 import org.observe.util.TypeTokens;
 import org.qommons.collect.BetterSortedList;
@@ -27,9 +26,6 @@ import com.google.common.reflect.TypeToken;
 public interface ObservableSortedCollection<E> extends ObservableCollection<E>, BetterSortedList<E> {
 	/** This class's wildcard {@link TypeToken} */
 	static TypeToken<ObservableSortedCollection<?>> TYPE = TypeTokens.get().keyFor(ObservableSortedCollection.class).wildCard();
-
-	@Override
-	Equivalence.SortedEquivalence<? super E> equivalence();
 
 	@Override
 	default Iterator<E> iterator() {

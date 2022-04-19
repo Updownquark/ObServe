@@ -11,6 +11,7 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 import org.junit.Test;
+import org.observe.collect.ObservableCollectionActiveManagers;
 import org.observe.supertest.collect.BaseCollectionLink;
 import org.observe.supertest.collect.CollectionSourcedLink;
 import org.observe.supertest.collect.CombinedCollectionLink;
@@ -37,6 +38,7 @@ import org.qommons.TestHelper;
 import org.qommons.TestHelper.Testable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollections;
+import org.qommons.collect.ListenerList;
 import org.qommons.debug.Debug;
 
 /** Tests many of the classes in ObServe using randomly generated observable structure chains and randomly generated-data. */
@@ -114,6 +116,8 @@ public class ObservableChainTester implements Testable {
 	public void accept(TestHelper helper) {
 		BetterCollections.setSimplifyDuplicateOperations(false);
 		BetterCollections.setTesting(true);
+		ObservableCollectionActiveManagers.setStrictMode(true);
+		ListenerList.setSwallowExceptions(false);
 		boolean debugging = helper.isReproducing();
 		if (debugging)
 			Debug.d().start();// .watchFor(new Debugging());
@@ -143,12 +147,13 @@ public class ObservableChainTester implements Testable {
 			"Executing up to " + QommonsUtils.printTimeLength(testDuration.toMillis()) + " of tests with max " + maxFailures + " failures");
 		TestHelper.createTester(getClass())//
 		.withRandomCases(-1)// No case number limit
+			.withMaxRememberedFixes(100)// Help prevent regression on recent fixes
 		.withMaxCaseDuration(Duration.ofMinutes(3)) // Since we're using progress interval checking, this can be pretty long
 		.withMaxTotalDuration(testDuration)//
-		.withMaxProgressInterval(Duration.ofSeconds(10))// If a proess doesn't make any progress in 10s, something's wrong
+		.withMaxProgressInterval(Duration.ofSeconds(10))// If a process doesn't make any progress in 10s, something's wrong
 		.withMaxFailures(maxFailures)//
 		.withConcurrency(max -> max - 1)// Use all but 1 of the system's CPUs
-			.withPersistenceDir(new File("src/test/java/org/observe/supertest"), false)// Where to write the failure file
+		.withPersistenceDir(new File("src/test/java/org/observe/supertest"), false)// Where to write the failure file
 		.withPlacemarks("Transaction", "Modification").withDebug(true)//
 		.execute()//
 		.printResults().throwErrorIfFailed();

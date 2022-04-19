@@ -38,7 +38,7 @@ public class ObservableCollectionEvent<E> extends ObservableValueEvent<E> {
 
 	/**
 	 * Checks the index for this type and throws an exception if invalid
-	 * 
+	 *
 	 * @param index The index passed to the constructor
 	 */
 	protected void checkIndex(int index) {
@@ -92,7 +92,7 @@ public class ObservableCollectionEvent<E> extends ObservableValueEvent<E> {
 	@Override
 	public String toString() {
 		StringBuilder str = new StringBuilder();
-		str.append('[').append(theElementId).append(']');
+		str.append('[').append(theIndex).append(']');
 		switch (theType) {
 		case add:
 			str.append("+:").append(getNewValue());
@@ -104,6 +104,8 @@ public class ObservableCollectionEvent<E> extends ObservableValueEvent<E> {
 			str.append(':').append(getOldValue()).append("->").append(getNewValue());
 			break;
 		}
+		if (isMove)
+			str.append("(move)");
 		return str.toString();
 	}
 }

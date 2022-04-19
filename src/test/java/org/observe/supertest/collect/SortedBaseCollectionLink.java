@@ -185,6 +185,6 @@ public class SortedBaseCollectionLink<T> extends BaseCollectionLink<T> {
 
 	@Override
 	public String toString() {
-		return "sortedBase(" + getType() + (theDistinctValues == null ? "" : ", distinct") + ")";
+		return "sortedBase(" + getType() + " " + theHelper.getCompare() + (theDistinctValues == null ? "" : ", distinct") + ")";
 	}
 }

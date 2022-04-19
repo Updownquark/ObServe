@@ -887,13 +887,17 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		}
 
 		/**
-		 * Performs an intersection or exclusion operation. The result is {@link #supportsPassive() active}.
+		 * Performs an intersection or exclusion operation. The result is {@link #supportsPassive() active}. The filter operation is done
+		 * using the other flow's {@link ObservableCollection#equivalence()}. This is in keeping with the non-observable
+		 * {@link org.qommons.collect.BetterCollection#removeAll(Collection)} and
+		 * {@link org.qommons.collect.BetterCollection#retainAll(Collection)} methods. Use {@link #withEquivalence(Equivalence)} on the
+		 * parameter flow to change this. However, the resulting flow's equivalence is not changed from its parent.
 		 *
 		 * @param <X> The type of the collection to filter with
 		 * @param other The other collection to use to filter this flow's elements
 		 * @param include If true, the resulting flow will be an intersection of this flow's elements with those of the other collection,
-		 *        according to this flow's {@link ObservableCollection#equivalence()}. Otherwise the resulting flow will be all elements of
-		 *        this flow that are <b>NOT</b> included in the other collection.
+		 *        according to the the other flow's {@link ObservableCollection#equivalence()}. Otherwise the resulting flow will be all
+		 *        elements of this flow that are <b>NOT</b> included in the other collection.
 		 * @return The filtered data flow
 		 */
 		<X> CollectionDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include);
@@ -1396,9 +1400,6 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		Comparator<? super T> comparator();
 
 		@Override
-		Equivalence.SortedEquivalence<? super T> equivalence();
-
-		@Override
 		SortedDataFlow<E, T, T> reverse();
 
 		@Override
@@ -1417,9 +1418,6 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 
 		@Override
 		SortedDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh);
-
-		@Override
-		DistinctSortedDataFlow<E, T, T> distinct(Consumer<UniqueOptions> options);
 
 		default <X> SortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
 			Function<? super X, ? extends T> reverse) {
@@ -1511,6 +1509,9 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 	interface DistinctSortedDataFlow<E, I, T> extends DistinctDataFlow<E, I, T>, SortedDataFlow<E, I, T> {
 		@Override
 		DistinctSortedDataFlow<E, T, T> reverse();
+
+		@Override
+		Equivalence.SortedEquivalence<? super T> equivalence();
 
 		@Override
 		default <X> DistinctSortedDataFlow<E, ?, X> filter(Class<X> type) {

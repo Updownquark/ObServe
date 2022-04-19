@@ -60,7 +60,7 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 		theErrors = new LinkedList<>();
 		theLastKnownIndex = theCollectionLink.getElements().getElementsBefore(elementAddress);
 		wasAdded = true;
-		theCollectionValue = getCollectionValue();
+		theCollectionValue = getActualCollectionValue();
 
 		if (theCollectionLink.getSourceLink() instanceof ObservableCollectionLink) {
 			ObservableCollectionLink<?, S> source = (ObservableCollectionLink<?, S>) theCollectionLink.getSourceLink();
@@ -161,8 +161,16 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 		theDerivedElements[siblingIndex].add(derived);
 	}
 
-	/** @return The current value of the element in the actual collection */
+	/**
+	 * @return The current value of the element as reported by the collection's {@link ObservableCollection#onChange(Consumer) onChange}
+	 *         method
+	 */
 	public T getCollectionValue() {
+		return theCollectionValue;
+	}
+
+	/** @return The current value of the element in the actual collection */
+	public T getActualCollectionValue() {
 		return theCollectionLink.getCollection().getElement(theCollectionAddress).get();
 	}
 
@@ -256,14 +264,16 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 	 * @return This element
 	 */
 	public CollectionLinkElement<S, T> expectAdded(T value) {
-		if (isRemoveExpected)
+		if (isRemoveExpected && !wasRemoved)
 			isRemoveExpected = false;
 		else
 			isAddExpected++;
 		theValue = value;
-		ExpectedCollectionOperation<S, T> op = new ExpectedCollectionOperation<>(this, CollectionOpType.add, null, value);
-		for (CollectionSourcedLink<T, ?> derived : theCollectionLink.getDerivedLinks())
-			derived.expectFromSource(op);
+		if (!theCollectionLink.getDerivedLinks().isEmpty()) {
+			ExpectedCollectionOperation<S, T> op = new ExpectedCollectionOperation<>(this, CollectionOpType.add, null, value);
+			for (CollectionSourcedLink<T, ?> derived : theCollectionLink.getDerivedLinks())
+				derived.expectFromSource(op);
+		}
 		return this;
 	}
 
@@ -274,9 +284,11 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 	 */
 	public CollectionLinkElement<S, T> expectRemoval() {
 		isRemoveExpected = true;
-		ExpectedCollectionOperation<S, T> op = new ExpectedCollectionOperation<>(this, CollectionOpType.remove, theValue, theValue);
-		for (CollectionSourcedLink<T, ?> derived : theCollectionLink.getDerivedLinks())
-			derived.expectFromSource(op);
+		if (!theCollectionLink.getDerivedLinks().isEmpty()) {
+			ExpectedCollectionOperation<S, T> op = new ExpectedCollectionOperation<>(this, CollectionOpType.remove, theValue, theValue);
+			for (CollectionSourcedLink<T, ?> derived : theCollectionLink.getDerivedLinks())
+				derived.expectFromSource(op);
+		}
 		return this;
 	}
 
@@ -284,9 +296,11 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 	public void expectSet(T value) {
 		T oldValue = theValue;
 		theValue = value;
-		ExpectedCollectionOperation<S, T> op = new ExpectedCollectionOperation<>(this, CollectionOpType.set, oldValue, theValue);
-		for (CollectionSourcedLink<T, ?> derived : theCollectionLink.getDerivedLinks())
-			derived.expectFromSource(op);
+		if (!theCollectionLink.getDerivedLinks().isEmpty()) {
+			ExpectedCollectionOperation<S, T> op = new ExpectedCollectionOperation<>(this, CollectionOpType.set, oldValue, theValue);
+			for (CollectionSourcedLink<T, ?> derived : theCollectionLink.getDerivedLinks())
+				derived.expectFromSource(op);
+		}
 	}
 
 	/**
@@ -346,8 +360,8 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 				error("Expected addition too many times: " + isAddExpected);
 			}
 		} else if (wasAdded)
-			error("Unexpected addition");
-		else if (wasRemoved != isRemoveExpected) {
+			error("Unexpected addition of " + theCollectionValue);
+		if (wasRemoved != isRemoveExpected) {
 			if (isRemoveExpected)
 				error("Expected removal");
 			else
@@ -363,7 +377,7 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 			if (wasUpdated)
 				error(err -> err.append("Unexpected update from ").append(theValue));
 			else
-				error(err -> err.append("Expected update to ").append(theValue));
+				error(err -> err.append("Expected update to ").append(theCollectionValue));
 		}
 		if (!theErrors.isEmpty()) {
 			for (String err : theErrors)
@@ -406,7 +420,7 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 	public String toString() {
 		StringBuilder str = new StringBuilder();
 		if (wasAdded)
-			str.append("new");
+			str.append("new:").append(theCollectionValue);
 		else {
 			if (wasRemoved)
 				str.append("(-)");
