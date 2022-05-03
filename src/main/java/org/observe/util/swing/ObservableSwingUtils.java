@@ -224,7 +224,7 @@ public class ObservableSwingUtils {
 		 * @return This holder
 		 */
 		public FontAdjuster<C> withColor(Color color) {
-			if (!label.isForegroundSet() || Objects.equals(label.getForeground(), color))
+			if (!label.isForegroundSet() || !Objects.equals(label.getForeground(), color))
 				label.setForeground(color);
 			return this;
 		}
@@ -426,10 +426,13 @@ public class ObservableSwingUtils {
 		int[] currentSelection = new int[] { -1 };
 		Consumer<String> checkEnabled = enabled -> {
 			for (int i = 0; i < buttons.size(); i++) {
+				String bEnabled = enabled;
+				if (bEnabled == null)
+					bEnabled = selected.isAcceptable(availableValues.get(i));
 				TB button = buttons.get(i);
-				button.setEnabled(enabled == null);
-				if (enabled != null)
-					button.setToolTipText(enabled);
+				button.setEnabled(bEnabled == null);
+				if (bEnabled != null)
+					button.setToolTipText(bEnabled);
 				else if (descrip != null)
 					button.setToolTipText(descrip.apply(safeValues.get(i)));
 				else
@@ -663,9 +666,12 @@ public class ObservableSwingUtils {
 		Consumer<Object> syncSelection = cause -> {
 			List<E> selValues = selectionGetter.get();
 			try (Transaction selT = safeSelection.lock(true, cause)) {
-				CollectionUtils.synchronize(safeSelection, selValues, (v1, v2) -> equivalence.elementEquals(v1, v2))//
-				.simple(LambdaUtils.identity())//
-				.adjust();
+				CollectionUtils.SimpleAdjustment<E, E, RuntimeException> adjustment;
+				adjustment = CollectionUtils.synchronize(safeSelection, selValues, (v1, v2) -> equivalence.elementEquals(v1, v2))//
+					.simple(LambdaUtils.identity());
+				if (safeSelection.isContentControlled())
+					adjustment.addLast();
+				adjustment.adjust();
 				asyncSelection[0] = false;
 			}
 		};
@@ -729,80 +735,89 @@ public class ObservableSwingUtils {
 		syncSelection.accept(null);
 		CausableKey key = Causable.key((c, d) -> onEQ(() -> {
 			selectionModel.get().setValueIsAdjusting(false);
-			syncSelection.accept(c);
+			callbackLock[0] = true;
+			try {
+				syncSelection.accept(null);
+			} finally {
+				callbackLock[0] = false;
+			}
 		}));
-		safeSelection.changes().takeUntil(until).act(evt -> onEQ(() -> {
+		safeSelection.changes().takeUntil(until).act(evt -> {
 			if (callbackLock[0])
 				return;
 			ListSelectionModel selModel = selectionModel.get();
 			if (!selModel.getValueIsAdjusting())
 				selModel.setValueIsAdjusting(true);
 			evt.getRootCausable().onFinish(key);
-			callbackLock[0] = true;
-			try {
-				int intervalStart = -1;
-				switch (evt.type) {
-				case add:
-					for (int i = 0; i < model.getSize(); i++) {
-						if (selModel.isSelectedIndex(i)) {
-							if (intervalStart >= 0) {
+			onEQ(() -> {
+				if (callbackLock[0])
+					return;
+				callbackLock[0] = true;
+				try {
+					int intervalStart = -1;
+					switch (evt.type) {
+					case add:
+						for (int i = 0; i < model.getSize(); i++) {
+							if (selModel.isSelectedIndex(i)) {
+								if (intervalStart >= 0) {
+									selModel.addSelectionInterval(intervalStart, i - 1);
+									intervalStart = -1;
+								}
+								continue;
+							}
+							boolean added = false;
+							for (E value : evt.getValues()) {
+								if (equivalence.elementEquals(model.getElementAt(i), value)) {
+									added = true;
+									break;
+								}
+							}
+							if (added) {
+								if (intervalStart < 0)
+									intervalStart = i;
+							} else if (intervalStart >= 0) {
 								selModel.addSelectionInterval(intervalStart, i - 1);
 								intervalStart = -1;
 							}
-							continue;
 						}
-						boolean added = false;
-						for (E value : evt.getValues()) {
-							if (equivalence.elementEquals(model.getElementAt(i), value)) {
-								added = true;
-								break;
+						if (intervalStart >= 0)
+							selModel.addSelectionInterval(intervalStart, model.getSize() - 1);
+						break;
+					case remove:
+						for (int i = model.getSize() - 1; i >= 0; i--) {
+							if (!selModel.isSelectedIndex(i)) {
+								if (intervalStart >= 0) {
+									selModel.removeSelectionInterval(i + 1, intervalStart);
+									intervalStart = -1;
+								}
+								continue;
 							}
-						}
-						if (added) {
-							if (intervalStart < 0)
-								intervalStart = i;
-						} else if (intervalStart >= 0) {
-							selModel.addSelectionInterval(intervalStart, i - 1);
-							intervalStart = -1;
-						}
-					}
-					if (intervalStart >= 0)
-						selModel.addSelectionInterval(intervalStart, model.getSize() - 1);
-					break;
-				case remove:
-					for (int i = model.getSize() - 1; i >= 0; i--) {
-						if (!selModel.isSelectedIndex(i)) {
-							if (intervalStart >= 0) {
+							boolean removed = false;
+							for (E value : evt.getValues()) {
+								if (equivalence.elementEquals(model.getElementAt(i), value)) {
+									removed = true;
+									break;
+								}
+							}
+							if (removed) {
+								if (intervalStart < 0)
+									intervalStart = i;
+							} else if (intervalStart >= 0) {
 								selModel.removeSelectionInterval(i + 1, intervalStart);
 								intervalStart = -1;
 							}
-							continue;
 						}
-						boolean removed = false;
-						for (E value : evt.getValues()) {
-							if (equivalence.elementEquals(model.getElementAt(i), value)) {
-								removed = true;
-								break;
-							}
-						}
-						if (removed) {
-							if (intervalStart < 0)
-								intervalStart = i;
-						} else if (intervalStart >= 0) {
-							selModel.removeSelectionInterval(i + 1, intervalStart);
-							intervalStart = -1;
-						}
+						if (intervalStart >= 0)
+							selModel.removeSelectionInterval(0, intervalStart);
+						break;
+					case set:
+						break; // This doesn't have meaning here
 					}
-					if (intervalStart >= 0)
-						selModel.removeSelectionInterval(0, intervalStart);
-					break;
-				case set:
-					break; // This doesn't have meaning here
+				} finally {
+					callbackLock[0] = false;
 				}
-			} finally {
-				callbackLock[0] = false;
-			}
-		}));
+			});
+		});
 
 		until.take(1).act(__ -> onEQ(() -> {
 			if (component != null)

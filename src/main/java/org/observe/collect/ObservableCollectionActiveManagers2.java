@@ -898,6 +898,12 @@ public class ObservableCollectionActiveManagers2 {
 			}, listening);
 			listening.withConsumer((Object r) -> {
 				// Make sure the parent doesn't fire while we're firing notifications from the refresh
+				// Wrapping the event with a causable here allows listeners down the line to take actions after the entire refresh
+				Transaction extraT = null;
+				if (!(r instanceof Causable)) {
+					r = Causable.simpleCause(r);
+					extraT = ((Causable) r).use();
+				}
 				try (Transaction t = getParent().lock(false, r)) {
 					// Refreshing should be done in element order
 					Collections.sort(theElements);
@@ -908,6 +914,9 @@ public class ObservableCollectionActiveManagers2 {
 						el.get().refresh(r);
 						el = theElements.getAdjacentElement(el.getElementId(), true);
 					}
+				} finally {
+					if (extraT != null)
+						extraT.close();
 				}
 			}, theRefresh::act);
 		}

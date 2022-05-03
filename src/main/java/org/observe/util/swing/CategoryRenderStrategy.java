@@ -14,6 +14,7 @@ import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.TableContentControl.ValueRenderer;
 import org.qommons.LambdaUtils;
+import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.io.Format;
 
@@ -222,6 +223,8 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 	 * @param <C> The type of the category
 	 */
 	public interface CategoryMouseListener<R, C> {
+		boolean isMovementListener();
+
 		void mouseClicked(ModelCell<? extends R, ? extends C> cell, MouseEvent e);
 
 		void mousePressed(ModelCell<? extends R, ? extends C> cell, MouseEvent e);
@@ -243,6 +246,11 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 	 * @param <C> The type of the category
 	 */
 	public static abstract class CategoryMouseAdapter<R, C> implements CategoryMouseListener<R, C> {
+		@Override
+		public boolean isMovementListener() {
+			return true;
+		}
+
 		@Override
 		public void mouseClicked(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {}
 
@@ -289,6 +297,11 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 	 * @param <C> The type of the category
 	 */
 	public static abstract class CategoryClickAdapter<R, C> implements CategoryMouseListener<R, C> {
+		@Override
+		public boolean isMovementListener() {
+			return false;
+		}
+
 		@Override
 		public void mouseClicked(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {}
 
@@ -337,7 +350,7 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 	private final TypeToken<C> theType;
 	private final Function<? super R, ? extends C> theAccessor;
 	private final CategoryMutationStrategy theMutator;
-	private CategoryMouseListener<? super R, ? super C> theMouseListener;
+	private ListenerList<CategoryMouseListener<? super R, ? super C>> theMouseListeners;
 	private CategoryKeyListener<? super R, ? super C> theKeyListener;
 	private String theHeaderTooltip;
 	private Function<? super ModelCell<? extends R, ? extends C>, String> theTooltip;
@@ -416,8 +429,17 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 	}
 
 	public CategoryRenderStrategy<R, C> withMouseListener(CategoryMouseListener<? super R, ? super C> listener) {
-		theMouseListener = listener;
+		addMouseListener(listener);
 		return this;
+	}
+
+	public Runnable addMouseListener(CategoryMouseListener<? super R, ? super C> listener) {
+		if (theMouseListeners == null)
+			theMouseListeners = ListenerList.build().build();
+		return theMouseListeners.add(listener, true);
+	}
+
+	public void removeMouseListener(CategoryMouseListener<? super R, ? super C> listener) {
 	}
 
 	public CategoryRenderStrategy<R, C> withKeyListener(CategoryKeyListener<? super R, ? super C> listener) {
@@ -449,7 +471,55 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 	}
 
 	public CategoryMouseListener<? super R, ? super C> getMouseListener() {
-		return theMouseListener;
+		if (theMouseListeners == null)
+			return null;
+		return new CategoryMouseListener<R, C>() {
+			@Override
+			public boolean isMovementListener() {
+				boolean[] movement = new boolean[1];
+				theMouseListeners.forEach(l -> {
+					if (l.isMovementListener())
+						movement[0] = true;
+				});
+				return movement[0];
+			}
+
+			@Override
+			public void mousePressed(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {
+				theMouseListeners.forEach(//
+					l -> l.mousePressed(cell, e));
+			}
+
+			@Override
+			public void mouseReleased(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {
+				theMouseListeners.forEach(//
+					l -> l.mouseReleased(cell, e));
+			}
+
+			@Override
+			public void mouseClicked(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {
+				theMouseListeners.forEach(//
+					l -> l.mouseClicked(cell, e));
+			}
+
+			@Override
+			public void mouseEntered(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {
+				theMouseListeners.forEach(//
+					l -> l.mouseEntered(cell, e));
+			}
+
+			@Override
+			public void mouseExited(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {
+				theMouseListeners.forEach(//
+					l -> l.mouseExited(cell, e));
+			}
+
+			@Override
+			public void mouseMoved(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {
+				theMouseListeners.forEach(//
+					l -> l.mouseMoved(cell, e));
+			}
+		};
 	}
 
 	public CategoryKeyListener<? super R, ? super C> getKeyListener() {
@@ -602,12 +672,14 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 	private boolean compareComparable = true;
 
 	@Override
-	public int compare(R row1, R row2) {
+	public int compare(R row1, R row2, boolean reverse) {
 		C val1 = getCategoryValue(row1);
 		C val2 = getCategoryValue(row2);
 		// First try to find ways to compare the column values
 		// The null and empty comparisons here are switched from typical, under the assumption that if the user is sorting by this column,
 		// they are most likely interested in rows with values in this column
+		// Also, note that these do not respect the reverse parameter,
+		// again assuming that non-empty values are more relevant even for a reverse search
 		if (val1 == null) {
 			if (val2 == null)
 				return 0;
@@ -618,10 +690,11 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 		else if (val1.equals(val2))
 			return 0;
 		else if (val1 instanceof CharSequence && val2 instanceof CharSequence) {
-			return TableContentControl.compareColumnRenders((CharSequence) val1, (CharSequence) val2);
+			return TableContentControl.compareColumnRenders((CharSequence) val1, (CharSequence) val2, reverse);
 		} else if (compareComparable && val1 instanceof Comparable && val2 instanceof Comparable) {
 			try {
-				return ((Comparable<Object>) val1).compareTo(val2);
+				int comp = ((Comparable<Object>) val1).compareTo(val2);
+				return reverse ? -comp : comp;
 			} catch (ClassCastException e) {
 				// If this fails once, don't try it again--mixed comparables
 				compareComparable = false;
@@ -630,7 +703,7 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 		// If that didn't work, then compare the formatted text
 		String render1 = print(() -> row1, val1);
 		String render2 = print(() -> row2, val2);
-		return TableContentControl.compareColumnRenders(render1, render2);
+		return TableContentControl.compareColumnRenders(render1, render2, reverse);
 	}
 
 	@Override

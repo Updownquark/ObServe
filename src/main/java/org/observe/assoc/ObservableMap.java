@@ -738,7 +738,16 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 				theEntries = entries.flow().distinctSorted((entry1, entry2) -> {
 					entry1.getKey();
 					entry2.getKey();
-					return compare.compare(entry1.getKey(), entry2.getKey());
+					try {
+						return compare.compare(entry1.getKey(), entry2.getKey());
+					} catch (NullPointerException e) {
+						// This catch is here to facilitate debugging at this site.
+						// This is a pretty common error, especially when the comparator is a lambda
+						// that assumes non-null values (e.g. Integer::compareTo).
+						// In that case, the root of the stack will be the line above, not in the lambda,
+						// making interpreting the stack difficult.
+						throw e;
+					}
 				}, true)
 					.collect();
 			} else

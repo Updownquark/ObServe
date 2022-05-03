@@ -9,6 +9,9 @@ import java.awt.Rectangle;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.observe.dbug.Dbug;
+import org.observe.dbug.DbugAnchor;
+import org.observe.dbug.DbugAnchorType;
 import org.qommons.ArrayUtils;
 
 /**
@@ -16,6 +19,11 @@ import org.qommons.ArrayUtils;
  * dimension
  */
 public class JustifiedBoxLayout implements LayoutManager2 {
+	/** Anchor type for {@link Dbug}-based debugging */
+	public static final DbugAnchorType<JustifiedBoxLayout> DBUG = Dbug.common().anchor(JustifiedBoxLayout.class, a -> a//
+		.withEvent("minSize").withEvent("prefSize").withEvent("maxSize").withEvent("layout")//
+		);
+
 	/** The types of alignment {@link JustifiedBoxLayout} supports */
 	public static enum Alignment {
 		/** Aligns components toward the left or top */
@@ -38,6 +46,8 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 	private final Insets theMargin;
 	private int thePadding;
 	private boolean isShowingInvisible;
+
+	private final DbugAnchor<JustifiedBoxLayout> anchor = DBUG.instance(this);
 
 	/**
 	 * @param vertical Whether the layout will align components in a column or a row
@@ -267,6 +277,7 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 
 	@Override
 	public Dimension preferredLayoutSize(Container parent) {
+		anchor.event("prefSize", null);
 		int main = 0;
 		int cross = 0;
 		boolean first = true;
@@ -291,6 +302,7 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 
 	@Override
 	public Dimension minimumLayoutSize(Container parent) {
+		anchor.event("minSize", null);
 		int main = 0;
 		int cross = 0;
 		boolean first = true;
@@ -315,6 +327,7 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 
 	@Override
 	public Dimension maximumLayoutSize(Container parent) {
+		anchor.event("maxSize", null);
 		boolean computeMain = theMainAlign == Alignment.JUSTIFIED;
 		boolean computeCross = theCrossAlign == Alignment.JUSTIFIED;
 		if (!computeMain && !computeCross)
@@ -377,6 +390,7 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 
 	@Override
 	public void layoutContainer(Container parent) {
+		anchor.event("layout", null);
 		Dimension parentSize = parent.getSize();
 		if (parentSize.width == 0 || parentSize.height == 0)
 			return;

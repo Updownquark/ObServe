@@ -339,6 +339,11 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 				protected boolean isCellSelected(int rowIndex, int columnIndex) {
 					return table.isCellSelected(rowIndex, columnIndex);
 				}
+
+				@Override
+				protected <C> void setToolTip(String tooltip, boolean header) {
+					(header ? table.getTableHeader() : table).setToolTipText(tooltip);
+				}
 			};
 			table.addMouseListener(ml);
 			table.addMouseMotionListener(ml);

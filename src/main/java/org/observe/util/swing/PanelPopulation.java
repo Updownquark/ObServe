@@ -11,6 +11,7 @@ import java.awt.Image;
 import java.awt.Insets;
 import java.awt.LayoutManager;
 import java.awt.LayoutManager2;
+import java.awt.Point;
 import java.awt.Window;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
@@ -56,6 +57,7 @@ import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JProgressBar;
 import javax.swing.JRadioButton;
 import javax.swing.JScrollPane;
@@ -68,6 +70,7 @@ import javax.swing.JTree;
 import javax.swing.ListSelectionModel;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
 import javax.swing.event.ChangeListener;
 
@@ -88,9 +91,10 @@ import org.observe.collect.DefaultObservableCollection;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionBuilder;
 import org.observe.config.ObservableConfig;
+import org.observe.dbug.Dbug;
+import org.observe.dbug.DbugAnchorType;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.ObservableSwingUtils.FontAdjuster;
-import org.observe.util.swing.PanelPopulation.SimpleCollapsePane;
 import org.qommons.BiTuple;
 import org.qommons.BreakpointHere;
 import org.qommons.Identifiable;
@@ -218,14 +222,21 @@ public class PanelPopulation {
 			Consumer<FieldEditor<ObservableTextArea<F>, ?>> modify);
 
 		default P addLabel(String fieldName, String label, Consumer<FieldEditor<JLabel, ?>> modify) {
-			return addLabel(fieldName, ObservableValue.of(label), Format.TEXT, modify);
+			return addLabel(fieldName, ObservableValue.of(label), v -> v, modify);
 		}
 
-		<F> P addLabel(String fieldName, ObservableValue<F> field, Format<F> format, Consumer<FieldEditor<JLabel, ?>> modify);
+		default <F> P addLabel(String fieldName, ObservableValue<F> field, Format<F> format, Consumer<FieldEditor<JLabel, ?>> modify) {
+			return addLabel(fieldName, field, v -> format.format(v), modify);
+		}
+
+		<F> P addLabel(String fieldName, ObservableValue<F> field, Function<? super F, String> format,
+			Consumer<FieldEditor<JLabel, ?>> modify);
 
 		P addIcon(String fieldName, ObservableValue<Icon> icon, Consumer<FieldEditor<JLabel, ?>> modify);
 
 		P addCheckField(String fieldName, SettableValue<Boolean> field, Consumer<FieldEditor<JCheckBox, ?>> modify);
+
+		P addToggleButton(String fieldName, SettableValue<Boolean> field, String text, Consumer<ButtonEditor<JToggleButton, ?>> modify);
 
 		/* TODO
 		 * slider
@@ -362,6 +373,8 @@ public class PanelPopulation {
 
 		P addHPanel(String fieldName, LayoutManager layout, Consumer<PanelPopulator<JPanel, ?>> panel);
 
+		P addSettingsMenu(Consumer<SettingsMenu<JPanel, ?>> menu);
+
 		default P addCollapsePanel(boolean vertical, String layoutType, Consumer<CollapsePanel<JXCollapsiblePane, JXPanel, ?>> panel) {
 			return addCollapsePanel(vertical, makeLayout(layoutType), panel);
 		}
@@ -458,6 +471,9 @@ public class PanelPopulation {
 		 * @return This editor
 		 */
 		P withName(String name);
+	}
+
+	public interface SettingsMenu<C extends Container, P extends SettingsMenu<C, P>> extends PanelPopulator<C, P>, Iconized<P> {
 	}
 
 	public interface ValueCache {
@@ -782,14 +798,14 @@ public class PanelPopulation {
 
 		P withRemove(Consumer<? super List<? extends R>> deletion, Consumer<DataAction<R, ?>> actionMod);
 
-		default P withAction(Consumer<? super R> action, Consumer<DataAction<R, ?>> actionMod) {
-			return withMultiAction(values -> {
+		default P withAction(String actionName, Consumer<? super R> action, Consumer<DataAction<R, ?>> actionMod) {
+			return withMultiAction(actionName, values -> {
 				for (R value : values)
 					action.accept(value);
 			}, actionMod);
 		}
 
-		P withMultiAction(Consumer<? super List<? extends R>> action, Consumer<DataAction<R, ?>> actionMod);
+		P withMultiAction(String actionName, Consumer<? super List<? extends R>> action, Consumer<DataAction<R, ?>> actionMod);
 
 		P withItemName(String itemName);
 
@@ -836,6 +852,11 @@ public class PanelPopulation {
 
 	public interface TableBuilder<R, P extends TableBuilder<R, P>>
 	extends CollectionWidgetBuilder<R, JTable, P>, ListWidgetBuilder<R, JTable, P>, AbstractTableBuilder<R, JTable, P> {
+		@SuppressWarnings("rawtypes")
+		static final DbugAnchorType<TableBuilder> DBUG = Dbug.common().anchor(TableBuilder.class, a -> a//
+			.withField("type", true, false, TypeTokens.get().keyFor(TypeToken.class).wildCard())//
+		);
+
 		default P withNameColumn(Function<? super R, String> getName, BiConsumer<? super R, String> setName, boolean unique,
 			Consumer<CategoryRenderStrategy<R, String>> column) {
 			return withColumn("Name", String.class, getName, col -> {
@@ -906,9 +927,17 @@ public class PanelPopulation {
 		 */
 		A allowForAnyEnabled(boolean allowed);
 
+		/**
+		 * @param display Whether this action should be displayed to the user disabled or hidden completely when not enabled
+		 * @return This action
+		 */
+		A displayWhenDisabled(boolean display);
+
 		boolean isAllowedForMultiple();
 
 		boolean isAllowedForEmpty();
+
+		boolean isDisplayedWhenDisabled();
 
 		A allowWhen(Function<? super R, String> filter, Consumer<ActionEnablement<R>> operation);
 
@@ -1356,6 +1385,9 @@ public class PanelPopulation {
 			fieldPanel.getTooltip().changes().takeUntil(getUntil()).act(evt -> fieldPanel.getEditor().setToolTipText(evt.getNewValue()));
 			if (modify != null)
 				modify.accept(fieldPanel);
+			if (fieldPanel.isDecorated())
+				field.noInitChanges().safe(ThreadConstraint.EDT).takeUntil(getUntil())
+				.act(__ -> fieldPanel.decorate(fieldPanel.getComponent()));
 			doAdd(fieldPanel);
 			return (P) this;
 		}
@@ -1368,20 +1400,27 @@ public class PanelPopulation {
 			fieldPanel.getTooltip().changes().takeUntil(getUntil()).act(evt -> fieldPanel.getEditor().setToolTipText(evt.getNewValue()));
 			if (modify != null)
 				modify.accept(fieldPanel);
+			if (fieldPanel.isDecorated())
+				field.noInitChanges().safe(ThreadConstraint.EDT).takeUntil(getUntil())
+				.act(__ -> fieldPanel.decorate(fieldPanel.getComponent()));
 			doAdd(fieldPanel, true);
 			return (P) this;
 		}
 
 		@Override
-		default <F> P addLabel(String fieldName, ObservableValue<F> field, Format<F> format, Consumer<FieldEditor<JLabel, ?>> modify) {
+		default <F> P addLabel(String fieldName, ObservableValue<F> field, Function<? super F, String> format,
+			Consumer<FieldEditor<JLabel, ?>> modify) {
 			JLabel label = new JLabel();
 			field.changes().takeUntil(getUntil()).act(evt -> {
-				label.setText(format.format(evt.getNewValue()));
+				label.setText(format.apply(evt.getNewValue()));
 			});
 			SimpleFieldEditor<JLabel, ?> fieldPanel = new SimpleFieldEditor<>(fieldName, label, getLock());
 			fieldPanel.getTooltip().changes().takeUntil(getUntil()).act(evt -> fieldPanel.getEditor().setToolTipText(evt.getNewValue()));
 			if (modify != null)
 				modify.accept(fieldPanel);
+			if (fieldPanel.isDecorated())
+				field.noInitChanges().safe(ThreadConstraint.EDT).takeUntil(getUntil())
+				.act(__ -> fieldPanel.decorate(fieldPanel.getComponent()));
 			doAdd(fieldPanel);
 			return (P) this;
 		}
@@ -1398,6 +1437,9 @@ public class PanelPopulation {
 			}
 			if (modify != null)
 				modify.accept(fieldPanel);
+			if (fieldPanel.isDecorated())
+				icon.noInitChanges().safe(ThreadConstraint.EDT).takeUntil(getUntil())
+				.act(__ -> fieldPanel.decorate(fieldPanel.getComponent()));
 			doAdd(fieldPanel);
 			return (P) this;
 		}
@@ -1409,6 +1451,25 @@ public class PanelPopulation {
 			getUntil().take(1).act(__ -> sub.unsubscribe());
 			if (modify != null)
 				modify.accept(fieldPanel);
+			if (fieldPanel.isDecorated())
+				field.noInitChanges().safe(ThreadConstraint.EDT).takeUntil(getUntil())
+				.act(__ -> fieldPanel.decorate(fieldPanel.getComponent()));
+			doAdd(fieldPanel);
+			return (P) this;
+		}
+
+		@Override
+		default P addToggleButton(String fieldName, SettableValue<Boolean> field, String text,
+			Consumer<ButtonEditor<JToggleButton, ?>> modify) {
+			SimpleButtonEditor<JToggleButton, ?> fieldPanel = new SimpleButtonEditor<>(fieldName, new JToggleButton(), text,
+				ObservableAction.nullAction(TypeTokens.get().WILDCARD, null), getLock(), false);
+			Subscription sub = ObservableSwingUtils.checkFor(fieldPanel.getEditor(), fieldPanel.getTooltip(), field);
+			getUntil().take(1).act(__ -> sub.unsubscribe());
+			if (modify != null)
+				modify.accept(fieldPanel);
+			if (fieldPanel.isDecorated())
+				field.noInitChanges().safe(ThreadConstraint.EDT).takeUntil(getUntil())
+				.act(__ -> fieldPanel.decorate(fieldPanel.getComponent()));
 			doAdd(fieldPanel);
 			return (P) this;
 		}
@@ -1423,6 +1484,9 @@ public class PanelPopulation {
 			ObservableSwingUtils.spinnerFor(spinner, fieldPanel.getTooltip().get(), value, purifier);
 			if (modify != null)
 				modify.accept(fieldPanel);
+			if (fieldPanel.isDecorated())
+				value.noInitChanges().safe(ThreadConstraint.EDT).takeUntil(getUntil())
+				.act(__ -> fieldPanel.decorate(fieldPanel.getComponent()));
 			doAdd(fieldPanel);
 			return (P) this;
 		}
@@ -1441,6 +1505,9 @@ public class PanelPopulation {
 			Subscription sub = ObservableComboBoxModel.comboFor(fieldPanel.getEditor(), fieldPanel.getTooltip(), fieldPanel::getTooltip,
 				observableValues, value);
 			getUntil().take(1).act(__ -> sub.unsubscribe());
+			if (fieldPanel.isDecorated())
+				value.noInitChanges().safe(ThreadConstraint.EDT).takeUntil(getUntil())
+				.act(__ -> fieldPanel.decorate(fieldPanel.getComponent()));
 			doAdd(fieldPanel);
 			return (P) this;
 		}
@@ -1457,6 +1524,9 @@ public class PanelPopulation {
 				buttonType, buttonCreator, getLock());
 			if (modify != null)
 				modify.accept(radioPanel);
+			if (radioPanel.isDecorated())
+				value.noInitChanges().safe(ThreadConstraint.EDT).takeUntil(getUntil())
+				.act(__ -> radioPanel.decorate(radioPanel.getComponent()));
 			doAdd(radioPanel);
 			return (P) this;
 		}
@@ -1469,6 +1539,9 @@ public class PanelPopulation {
 			fieldPanel.getTooltip().changes().takeUntil(getUntil()).act(evt -> fieldPanel.getEditor().setToolTipText(evt.getNewValue()));
 			if (modify != null)
 				modify.accept(fieldPanel);
+			if (fieldPanel.isDecorated())
+				value.noInitChanges().safe(ThreadConstraint.EDT).takeUntil(getUntil())
+				.act(__ -> fieldPanel.decorate(fieldPanel.getComponent()));
 			doAdd(fieldPanel);
 			return (P) this;
 		}
@@ -1487,6 +1560,9 @@ public class PanelPopulation {
 		default P addProgressBar(String fieldName, Consumer<ProgressEditor<?>> progress) {
 			SimpleProgressEditor<?> editor=new SimpleProgressEditor<>(fieldName, getLock());
 			progress.accept(editor);
+			if (editor.isDecorated())
+				editor.getProgress().noInitChanges().safe(ThreadConstraint.EDT).takeUntil(getUntil())
+				.act(__ -> editor.decorate(editor.getComponent()));
 			doAdd(editor);
 			return (P) this;
 		}
@@ -1592,10 +1668,19 @@ public class PanelPopulation {
 
 		@Override
 		default P addVPanel(Consumer<PanelPopulator<JPanel, ?>> panel) {
-			MigFieldPanel<JPanel> subPanel = new MigFieldPanel<>(new ConformingPanel(), getUntil(), getLock());
+			MigFieldPanel<JPanel, ?> subPanel = new MigFieldPanel<>(new ConformingPanel(), getUntil(), getLock());
 			if (panel != null)
 				panel.accept(subPanel);
 			doAdd(subPanel, null, null, false);
+			return (P) this;
+		}
+
+		@Override
+		default P addSettingsMenu(Consumer<SettingsMenu<JPanel, ?>> menu) {
+			SettingsMenuImpl<JPanel, ?> settingsMenu = new SettingsMenuImpl<>(new ConformingPanel(), getUntil(), getLock());
+			if (menu != null)
+				menu.accept(settingsMenu);
+			doAdd(settingsMenu, null, null, false);
 			return (P) this;
 		}
 
@@ -1737,6 +1822,10 @@ public class PanelPopulation {
 			return (P) this;
 		}
 
+		boolean isDecorated() {
+			return theDecorator != null;
+		}
+
 		@Override
 		public P modifyEditor(Consumer<? super E> modify) {
 			modify.accept(getEditor());
@@ -1787,11 +1876,16 @@ public class PanelPopulation {
 			return (P) this;
 		}
 
+		private boolean decorated = false;
+
 		protected Component decorate(Component c) {
-			if (theName != null)
-				c.setName(theName);
 			if (theDecorator != null)
 				theDecorator.decorate(c);
+			if (decorated)
+				return c;
+			decorated = true;
+			if (theName != null)
+				c.setName(theName);
 			if (theMouseListener != null)
 				c.addMouseListener(new MouseListener() {
 					@Override
@@ -1895,8 +1989,8 @@ public class PanelPopulation {
 		}
 	}
 
-	static class MigFieldPanel<C extends Container> extends AbstractComponentEditor<C, MigFieldPanel<C>>
-	implements PartialPanelPopulatorImpl<C, MigFieldPanel<C>> {
+	static class MigFieldPanel<C extends Container, P extends MigFieldPanel<C, P>> extends AbstractComponentEditor<C, P>
+	implements PartialPanelPopulatorImpl<C, P> {
 		private final Observable<?> theUntil;
 
 		MigFieldPanel(C container, Observable<?> until, Supplier<Transactable> lock) {
@@ -1984,6 +2078,116 @@ public class PanelPopulation {
 		@Override
 		protected Component createPostLabel(Observable<?> until) {
 			return null;
+		}
+	}
+
+	static class SettingsMenuImpl<C extends Container, P extends SettingsMenuImpl<C, P>> extends MigFieldPanel<C, P>
+	implements SettingsMenu<C, P> {
+		private ObservableValue<? extends Icon> theIcon;
+		private JLabel theComponent;
+		private final JPopupMenu thePopup;
+		private final JLabel theMenuCloser;
+		private boolean hasShown;
+
+		SettingsMenuImpl(C container, Observable<?> until, Supplier<Transactable> lock) {
+			super(container, until, lock);
+			thePopup = new JPopupMenu();
+			theIcon = ObservableValue.of(Icon.class, ObservableSwingUtils.getFixedIcon(null, "icons/gear.png", 20, 20));
+			theMenuCloser = new JLabel();
+			theMenuCloser.addMouseListener(new MouseAdapter() {
+				@Override
+				public void mousePressed(MouseEvent e) {
+					if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 1) {
+						close();
+					}
+				}
+			});
+		}
+
+		@Override
+		public P withIcon(ObservableValue<? extends Icon> icon) {
+			theIcon = icon;
+			return (P) this;
+		}
+
+		@Override
+		protected Component getOrCreateComponent(Observable<?> until) {
+			if (theComponent != null)
+				return theComponent;
+
+			theComponent = new JLabel();
+			theIcon.changes().takeUntil(until).act(evt -> {
+				theComponent.setIcon(evt.getNewValue());
+				theMenuCloser.setIcon(evt.getNewValue());
+			});
+			if (getTooltip() != null) {
+				getTooltip().changes().takeUntil(until).act(evt -> {
+					theComponent.setToolTipText(evt.getNewValue());
+					theMenuCloser.setToolTipText(evt.getNewValue());
+				});
+			}
+			decorate(theComponent);
+			decorate(theMenuCloser);
+
+			thePopup.setLayout(new BorderLayout());
+			JPanel topPanel = new JPanel(new JustifiedBoxLayout(false).mainTrailing());
+			topPanel.add(theMenuCloser);
+			thePopup.add(topPanel, BorderLayout.NORTH);
+			thePopup.add(getContainer(), BorderLayout.CENTER);
+			thePopup.setBorder(BorderFactory.createLineBorder(Color.black, 2));
+			theComponent.addMouseListener(new MouseAdapter() {
+				@Override
+				public void mousePressed(MouseEvent e) {
+					if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 1) {
+						open();
+					}
+				}
+			});
+			return theComponent;
+		}
+
+		/** Opens the menu. Normally called internally. */
+		public void open() {
+			Runnable action = () -> {
+				Point gearRelPopup = getGearRelPopup();
+
+				thePopup.show(theComponent, -gearRelPopup.x, -gearRelPopup.y);
+
+				if (!hasShown) {
+					gearRelPopup = getGearRelPopup();
+					Point screenLoc = theComponent.getLocationOnScreen();
+					thePopup.setLocation(screenLoc.x - gearRelPopup.x, screenLoc.y - gearRelPopup.y);
+					hasShown = true;
+				}
+			};
+			if (EventQueue.isDispatchThread()) {
+				action.run();
+			} else {
+				EventQueue.invokeLater(action);
+			}
+		}
+
+		private Point getGearRelPopup() {
+			Point gearRelPopup = theMenuCloser.getLocation();
+			Component c = theMenuCloser.getParent();
+			while (c != thePopup) {
+				gearRelPopup.x += c.getLocation().x;
+				gearRelPopup.y += c.getLocation().y;
+				c = c.getParent();
+			}
+			return gearRelPopup;
+		}
+
+		/** Closes the menu. Normally called internally. */
+		public void close() {
+			Runnable action = () -> {
+				thePopup.setVisible(false);
+			};
+			if (EventQueue.isDispatchThread()) {
+				action.run();
+			} else {
+				EventQueue.invokeLater(action);
+			}
 		}
 	}
 
@@ -2483,6 +2687,10 @@ public class PanelPopulation {
 			return (P) this;
 		}
 
+		ObservableValue<Integer> getProgress() {
+			return theProgress;
+		}
+
 		@Override
 		public P indeterminate(ObservableValue<Boolean> indeterminate) {
 			isIndeterminate=indeterminate;
@@ -2577,7 +2785,7 @@ public class PanelPopulation {
 
 		@Override
 		public P withVTab(Object tabID, int tabIndex, Consumer<PanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier) {
-			MigFieldPanel<JPanel> fieldPanel = new MigFieldPanel<>(null, theUntil, theLock);
+			MigFieldPanel<JPanel, ?> fieldPanel = new MigFieldPanel<>(null, theUntil, theLock);
 			panel.accept(fieldPanel);
 			return withTabImpl(tabID, tabIndex, fieldPanel.getContainer(), tabModifier, fieldPanel);
 		}
@@ -2934,7 +3142,7 @@ public class PanelPopulation {
 
 		@Override
 		public P firstV(Consumer<PanelPopulator<?, ?>> vPanel) {
-			MigFieldPanel<JPanel> fieldPanel = new MigFieldPanel<>(null, theUntil, theLock);
+			MigFieldPanel<JPanel, ?> fieldPanel = new MigFieldPanel<>(null, theUntil, theLock);
 			vPanel.accept(fieldPanel);
 			first(fieldPanel.getOrCreateComponent(theUntil));
 			if (fieldPanel.isVisible() != null)
@@ -2963,7 +3171,7 @@ public class PanelPopulation {
 
 		@Override
 		public P lastV(Consumer<PanelPopulator<?, ?>> vPanel) {
-			MigFieldPanel<JPanel> fieldPanel = new MigFieldPanel<>(null, theUntil, theLock);
+			MigFieldPanel<JPanel, ?> fieldPanel = new MigFieldPanel<>(null, theUntil, theLock);
 			vPanel.accept(fieldPanel);
 			last(fieldPanel.getOrCreateComponent(theUntil));
 			if (fieldPanel.isVisible() != null)
@@ -3230,7 +3438,7 @@ public class PanelPopulation {
 
 		@Override
 		public P withVContent(Consumer<PanelPopulator<?, ?>> panel) {
-			MigFieldPanel<JPanel> fieldPanel = new MigFieldPanel<>(null, theUntil, theLock);
+			MigFieldPanel<JPanel, ?> fieldPanel = new MigFieldPanel<>(null, theUntil, theLock);
 			panel.accept(fieldPanel);
 			withContent(fieldPanel.getOrCreateComponent(theUntil));
 			if (fieldPanel.isVisible() != null)
@@ -3470,8 +3678,8 @@ public class PanelPopulation {
 		class ListItemAction<A extends SimpleDataAction<R, A>> extends SimpleDataAction<R, A> {
 			private final List<R> theActionItems;
 
-			ListItemAction(Consumer<? super List<? extends R>> action, Supplier<List<R>> selectedValues) {
-				super(SimpleListBuilder.this, action, selectedValues);
+			ListItemAction(String actionName, Consumer<? super List<? extends R>> action, Supplier<List<R>> selectedValues) {
+				super(actionName, SimpleListBuilder.this, action, selectedValues);
 				theActionItems = new ArrayList<>();
 			}
 
@@ -3542,7 +3750,7 @@ public class PanelPopulation {
 
 		@Override
 		public P withRemove(Consumer<? super List<? extends R>> deletion, Consumer<DataAction<R, ?>> actionMod) {
-			return withMultiAction(deletion, action -> {
+			return withMultiAction(null, deletion, action -> {
 				action.allowForMultiple(false).withTooltip(items -> "Remove selected " + getItemName())//
 				.modifyButton(button -> button.withIcon(getRemoveIcon(8)));
 				if (actionMod != null)
@@ -3552,7 +3760,7 @@ public class PanelPopulation {
 
 		@Override
 		public P withCopy(Function<? super R, ? extends R> copier, Consumer<DataAction<R, ?>> actionMod) {
-			return withMultiAction(values -> {
+			return withMultiAction(null, values -> {
 				try (Transaction t = getEditor().getModel().getWrapped().lock(true, null)) {
 					betterCopy(copier);
 				}
@@ -3591,11 +3799,11 @@ public class PanelPopulation {
 		}
 
 		@Override
-		public P withMultiAction(Consumer<? super List<? extends R>> action, Consumer<DataAction<R, ?>> actionMod) {
+		public P withMultiAction(String actionName, Consumer<? super List<? extends R>> action, Consumer<DataAction<R, ?>> actionMod) {
 			if(theActions==null)
 				theActions = new ArrayList<>();
 			ListItemAction<?>[] tableAction = new ListItemAction[1];
-			tableAction[0] = new ListItemAction(action, () -> tableAction[0].theActionItems);
+			tableAction[0] = new ListItemAction(actionName, action, () -> tableAction[0].theActionItems);
 			if (actionMod != null)
 				actionMod.accept(tableAction[0]);
 			theActions.add(tableAction[0]);
@@ -3831,6 +4039,7 @@ public class PanelPopulation {
 
 	static class SimpleDataAction<R, A extends SimpleDataAction<R, A>> implements DataAction<R, A> {
 		private final CollectionWidgetBuilder<R, ?, ?> theWidget;
+		private String theActionName;
 		final Consumer<? super List<? extends R>> theAction;
 		final Supplier<List<R>> theSelectedValues;
 		private Function<? super R, String> theEnablement;
@@ -3839,14 +4048,16 @@ public class PanelPopulation {
 		private boolean zeroAllowed;
 		private boolean multipleAllowed;
 		private boolean actWhenAnyEnabled;
+		private boolean isDisplayedWhenDisabled;
 		ObservableAction<?> theObservableAction;
 		SettableValue<String> theEnabledString;
 		SettableValue<String> theTooltipString;
 		Consumer<ButtonEditor<?, ?>> theButtonMod;
 
-		SimpleDataAction(CollectionWidgetBuilder<R, ?, ?> widget, Consumer<? super List<? extends R>> action,
+		SimpleDataAction(String actionName, CollectionWidgetBuilder<R, ?, ?> widget, Consumer<? super List<? extends R>> action,
 			Supplier<List<R>> selectedValues) {
 			theWidget = widget;
+			theActionName = actionName;
 			theAction = action;
 			theSelectedValues = selectedValues;
 			theEnabledString = SettableValue.build(String.class).build();
@@ -3870,6 +4081,7 @@ public class PanelPopulation {
 					return theEnabledString;
 				}
 			};
+			isDisplayedWhenDisabled = true;
 			multipleAllowed = true;
 		}
 
@@ -3885,6 +4097,11 @@ public class PanelPopulation {
 		@Override
 		public boolean isAllowedForEmpty() {
 			return multipleAllowed;
+		}
+
+		@Override
+		public boolean isDisplayedWhenDisabled() {
+			return isDisplayedWhenDisabled;
 		}
 
 		@Override
@@ -3949,6 +4166,12 @@ public class PanelPopulation {
 					return newFilter.apply(value);
 				};
 			}
+			return (A) this;
+		}
+
+		@Override
+		public A displayWhenDisabled(boolean displayedWhenDisabled) {
+			isDisplayedWhenDisabled = displayedWhenDisabled;
 			return (A) this;
 		}
 
@@ -4118,11 +4341,13 @@ public class PanelPopulation {
 		}
 
 		void addButton(PanelPopulator<?, ?> panel) {
-			panel.addButton((String) null, theObservableAction, button -> {
+			panel.addButton(theActionName, theObservableAction, button -> {
 				if (theTooltipString != null)
 					button.withTooltip(theTooltipString);
 				if (theButtonMod != null)
 					theButtonMod.accept(button);
+				if (!isDisplayedWhenDisabled)
+					button.visibleWhen(theObservableAction.isEnabled().map(e -> e == null));
 			});
 		}
 	}

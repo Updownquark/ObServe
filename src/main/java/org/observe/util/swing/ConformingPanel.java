@@ -3,6 +3,9 @@ package org.observe.util.swing;
 import java.awt.Dimension;
 import java.awt.LayoutManager;
 import java.awt.LayoutManager2;
+import java.awt.event.ContainerEvent;
+import java.awt.event.ContainerListener;
+import java.beans.PropertyChangeListener;
 
 import javax.swing.JPanel;
 
@@ -12,9 +15,28 @@ public class ConformingPanel extends JPanel {
 	private boolean isMinSizeDirty = true;
 	private boolean isMaxSizeDirty = true;
 
+	private final PropertyChangeListener invalidateListener = evt -> invalidate();
+
 	/** Creates a panel */
 	public ConformingPanel() {
 		super();
+		addContainerListener(new ContainerListener() {
+			@Override
+			public void componentRemoved(ContainerEvent e) {
+				e.getChild().removePropertyChangeListener("invalidate", invalidateListener);
+				e.getChild().removePropertyChangeListener("minimumSize", invalidateListener);
+				e.getChild().removePropertyChangeListener("preferredSize", invalidateListener);
+				e.getChild().removePropertyChangeListener("maximumSize", invalidateListener);
+			}
+
+			@Override
+			public void componentAdded(ContainerEvent e) {
+				e.getChild().addPropertyChangeListener("invalidate", invalidateListener);
+				e.getChild().addPropertyChangeListener("minimumSize", invalidateListener);
+				e.getChild().addPropertyChangeListener("preferredSize", invalidateListener);
+				e.getChild().addPropertyChangeListener("maximumSize", invalidateListener);
+			}
+		});
 	}
 
 	/** @param layout The layout for the panel */
@@ -35,6 +57,7 @@ public class ConformingPanel extends JPanel {
 	public void invalidate() {
 		isPrefSizeDirty = isMinSizeDirty = isMaxSizeDirty = true;
 		super.invalidate();
+		this.firePropertyChange("invalidate", null, null);
 	}
 
 	@Override

@@ -31,6 +31,11 @@ import org.qommons.ThreadConstraint;
 import org.qommons.io.Format;
 import org.qommons.io.SpinnerFormat;
 
+/**
+ * The backend logic of an observable text editor like a text field or text area
+ *
+ * @param <E> The type of value edited by this text component
+ */
 public class ObservableTextEditor<E> {
 	private final JTextComponent theComponent;
 	private final Consumer<Boolean> theEnabledSetter;
@@ -66,6 +71,14 @@ public class ObservableTextEditor<E> {
 	private long theStateStamp;
 	private SimpleObservable<Void> theStatusChange;
 
+	/**
+	 * @param component The text component this editor manages
+	 * @param value The value linked to this editor's text
+	 * @param format The format to use to translate between value and text
+	 * @param until An observable to release this editor's resources and listeners
+	 * @param enabled Called when the component's enablement should change
+	 * @param tooltip Called when the component's tooltip should change
+	 */
 	public ObservableTextEditor(JTextComponent component, SettableValue<E> value, Format<E> format, Observable<?> until, //
 		Consumer<Boolean> enabled, Consumer<String> tooltip) {
 		theComponent = component;
@@ -298,6 +311,7 @@ public class ObservableTextEditor<E> {
 		return this;
 	}
 
+	/** @return The error message displayed to the user */
 	public ObservableValue<String> getErrorState() {
 		if (theStatusChange == null) {
 			synchronized (this) {
@@ -308,11 +322,13 @@ public class ObservableTextEditor<E> {
 		return ObservableValue.of(TypeTokens.get().STRING, () -> theError, () -> theStateStamp, theStatusChange);
 	}
 
+	/** @param enabled Whether to allow the user to modify this editor when the value is enabled */
 	public void setEnabled(boolean enabled) {
 		isExternallyEnabled = enabled;
 		checkEnabled();
 	}
 
+	/** @param text The tooltip text to display to the user when there is no error or warning */
 	public void setToolTipText(String text) {
 		theToolTip = text;
 		setErrorState(theError, theWarningMsg);
@@ -328,6 +344,7 @@ public class ObservableTextEditor<E> {
 		setValue(theValue.get());
 	}
 
+	/** @return This editor's text */
 	public String getText() {
 		try {
 			return theComponent.getDocument().getText(0, theComponent.getDocument().getLength());
@@ -336,6 +353,12 @@ public class ObservableTextEditor<E> {
 		}
 	}
 
+	/**
+	 * Sets the text internally, not modifying the value
+	 *
+	 * @param text The text to display
+	 * @return This editor
+	 */
 	protected ObservableTextEditor<E> setText(String text) {
 		try {
 			Document doc = theComponent.getDocument();
@@ -345,6 +368,7 @@ public class ObservableTextEditor<E> {
 				doc.remove(0, doc.getLength());
 				doc.insertString(0, text, null);
 			}
+			theCachedText = text;
 		} catch (BadLocationException e) {
 			throw new IllegalStateException(e);
 		}
@@ -521,6 +545,10 @@ public class ObservableTextEditor<E> {
 		}
 	}
 
+	/**
+	 * @param up Whether to adjust the value up or down
+	 * @param cause The cause of the modification (e.g. a key event)
+	 */
 	protected void adjust(boolean up, Object cause) {
 		SpinnerFormat<E> spinnerFormat = (SpinnerFormat<E>) theFormat;
 		String text = getText();

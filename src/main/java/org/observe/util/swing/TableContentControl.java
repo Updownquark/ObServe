@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -29,14 +30,13 @@ import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
-import org.qommons.ArrayUtils;
-import org.qommons.BreakpointHere;
 import org.qommons.LambdaUtils;
 import org.qommons.Named;
 import org.qommons.StringUtils;
 import org.qommons.TimeUtils;
 import org.qommons.TimeUtils.ParsedDuration;
 import org.qommons.TimeUtils.ParsedInstant;
+import org.qommons.collect.BetterList;
 import org.qommons.io.Format;
 
 import com.google.common.reflect.TypeToken;
@@ -56,42 +56,76 @@ public interface TableContentControl {
 		+ "All filters are AND-ed.\n"//
 		+ "</html>";
 
-	public interface ValueRenderer<E> extends Named, Comparator<E> {
+	/**
+	 * Interface to interpret cell values from a filtering/sorting perspective. Typically a table column.
+	 * 
+	 * @param <E> The type of values this renderer understands
+	 */
+	public interface ValueRenderer<E> extends Named {
+		/** @return Whether filtering should happen against values in this rendering */
 		boolean searchGeneral();
 
+		/**
+		 * @param value The value to render
+		 * @return The text to represent the value
+		 */
 		CharSequence render(E value);
+
+		/**
+		 * Compares two values for row sorting. This interface doesn't extend {@link Comparator} because of the <code>reverse</code>
+		 * parameter, which is not just a trivial negation, but allows non-empty values to appear on top even for reversed sorting
+		 *
+		 * @param value1 The first value to compare
+		 * @param value2 The second value to compare
+		 * @param reverse Whether the sorting should be reversed
+		 * @return The relative ordering of the two values
+		 */
+		int compare(E value1, E value2, boolean reverse);
 	}
 
+	/**
+	 * A filtered table row
+	 * 
+	 * @param <E> The type of row value
+	 */
 	public static class FilteredValue<E> implements Comparable<FilteredValue<?>> {
 		E value;
 		SortedMatchSet[] matches;
 		boolean hasMatch;
 
+		/**
+		 * @param value The row value
+		 * @param columns The number of columns in the table
+		 */
 		public FilteredValue(E value, int columns) {
 			this.value = value;
 			matches = new SortedMatchSet[columns];
 		}
 
+		/** @return The row value */
 		public E getValue() {
 			return value;
 		}
 
+		/** @param value The row value */
 		public void setValue(E value) {
 			this.value = value;
 		}
 
+		/** @return Whether this match should be included in the filtered rows */
 		public boolean hasMatch() {
 			return hasMatch;
 		}
 
+		/** @return The number of columns in the table */
 		public int getColumns() {
 			return matches == null ? 0 : matches.length;
 		}
 
-		public boolean matches(int column) {
-			return matches[column] != null && matches[column].size() > 0;
-		}
-
+		/**
+		 * @param column The table column index
+		 * @return The matched ranges of the rendered text in the given column
+		 */
 		public SortedMatchSet getMatches(int column) {
 			return matches == null ? null : matches[column];
 		}
@@ -140,27 +174,33 @@ public interface TableContentControl {
 		}
 	}
 
-	public static <T> int compareColumnRenders(CharSequence col1, CharSequence col2) {
-		// The null and empty comparisons here are switched from typical, under the assumption that if the user is sorting by this column,
+	/**
+	 * Compares the rendered values of two rows in a column
+	 *
+	 * @param v1 The first value to compare
+	 * @param v2 The second value to compare
+	 * @param reverse Whether the search is to be reversed. This parameter is not the same as applying a negative to the return value, as
+	 *        non-empty values are prioritized even with a reverse search.
+	 * @return The sorting between the two renderings
+	 */
+	public static int compareColumnRenders(CharSequence v1, CharSequence v2, boolean reverse) {
+		// The null and empty comparisons here are switched from typical, under the assumption that if the user is sorting by a column,
 		// they are most likely interested in rows with values in this column
-		if (col1 == null) {
-			if (col2 == null)
-				return 0;
-			return 1;
-		} else if (col2 == null)
+		// Also, note that these do not respect the reverse parameter,
+		// again assuming that non-empty values are more relevant even in a reverse search
+		if (v1 == null)
+			return v2 == null ? 0 : 1;
+		else if (v2 == null)
 			return -1;
-		else if (col1.length() == 0) {
-			if (col2.length() == 0)
-				return 0;
-			else
-				return 1;
-		} else if (col2.length() == 0)
+		else if (v1.length() == 0)
+			return v2.length() == 0 ? 0 : 1;
+		else if (v2.length() == 0)
 			return -1;
-		else if (col1.charAt(0) == '-' && col2.charAt(0) != '-')
-			return -1;
-		else if (col2.charAt(0) == '-' && col1.charAt(0) != '-')
-			return 1;
-		else if (col1.equals(col2))
+		else if (v1.charAt(0) == '-' && v2.charAt(0) != '-')
+			return reverse ? 1 : -1;
+		else if (v2.charAt(0) == '-' && v1.charAt(0) != '-')
+			return reverse ? -1 : 1;
+		else if (v1.equals(v2))
 			return 0;
 
 		/* A nice idea here, but there's no way to optimize instant parsing enough for this to be responsive.
@@ -186,7 +226,8 @@ public interface TableContentControl {
 				}
 			}
 
-		Duration parsing isn't so bad performance-wise, but it's so niche I decided not to include it.
+			Duration parsing isn't so bad performance-wise, but it's so niche I decided it would likely only add confusion.
+			E.g. in random strings, a value starting with '1d' would appear after a value starting with '1m'
 			TimeUtils.ParsedDuration duration1 = TimeUtils.parseDuration(col1, false, false);
 			if (duration1 != null) {
 				TimeUtils.ParsedDuration duration2 = TimeUtils.parseDuration(col2, false, false);
@@ -212,28 +253,30 @@ public interface TableContentControl {
 			e.printStackTrace();
 		}*/
 
-		FoundDouble double1 = tryParseDouble(col1, 0);
+		int comp;
+		FoundDouble double1 = tryParseDouble(v1, 0);
 		if (double1 != null) {
-			FoundDouble double2 = tryParseDouble(col2, 0);
+			FoundDouble double2 = tryParseDouble(v2, 0);
 			if (double2 != null) {
-				int comp = Double.compare(double1.minValue, double2.minValue);
-				if (comp != 0)
-					return comp;
-				else if (double1.end == col1.length()) {
-					if (double2.end == col2.length())
-						return 0;
+				comp = Double.compare(double1.minValue, double2.minValue);
+				if (comp != 0) { //
+				} else if (double1.end == v1.length()) {
+					if (double2.end == v2.length())
+						comp = 0;
 					else
-						return -1;
-				} else if (double2.end == col2.length())
-					return 1;
+						comp = -1;
+				} else if (double2.end == v2.length())
+					comp = 1;
 				else
-					return compareColumnRenders(//
-						StringUtils.cheapSubSequence(col1, double1.end, col1.length()),
-						StringUtils.cheapSubSequence(col2, double2.end, col2.length()));
-			}
-		}
-
-		return StringUtils.compareNumberTolerant(col1, col2, true, true);
+					comp = compareColumnRenders(//
+						StringUtils.cheapSubSequence(v1, double1.end, v1.length()), //
+						StringUtils.cheapSubSequence(v2, double2.end, v2.length()), //
+						reverse);
+			} else
+				comp = StringUtils.compareNumberTolerant(v1, v2, true, true);
+		} else
+			comp = StringUtils.compareNumberTolerant(v1, v2, true, true);
+		return reverse ? -comp : comp;
 	}
 
 	/**
@@ -254,22 +297,60 @@ public interface TableContentControl {
 		return matches;
 	}
 
+	/**
+	 * @param category The column/renderer that rendered the value
+	 * @param text The rendered value
+	 * @return The matched ranges for the given category/value
+	 */
 	SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence text);
 
+	/** @return Whether this control object is a search/filter (as opposed to just a sort command) */
 	boolean isSearch();
 
+	/** @return The columns by which rows should be sorted for this control */
 	List<String> getRowSorting();
 
+	/** @return The columns that should be displayed first for this control */
 	List<String> getColumnSorting();
 
+	/**
+	 * @param other Another control object
+	 * @return A control object that displays rows only when both this and the other control display them
+	 */
+	default TableContentControl and(TableContentControl other) {
+		return new AndFilter(this, other);
+	}
+
+	/**
+	 * @param other Another control object
+	 * @return A control object that displays rows when either this or the other control display them
+	 */
 	default TableContentControl or(TableContentControl other) {
 		return new OrFilter(this, other);
 	}
 
+	/**
+	 * @param columnName The column name to sort by
+	 * @param root Whether this control object is the root control
+	 * @return A control object that filters identically to this, but whose sort for the given column is toggled: no sort or descending to
+	 *         ascending, ascending to descending
+	 */
+	default TableContentControl toggleSort(String columnName, boolean root) {
+		if (root)
+			return new RowSorter(Collections.singletonList(columnName.toLowerCase().replace(" ", ""))).and(this);
+		return this;
+	}
+
+	/**
+	 * @param category The column to filter on
+	 * @param filter The filter for the given column
+	 * @return A control object that implements the given filter
+	 */
 	public static TableContentControl of(String category, Predicate<CharSequence> filter) {
 		return new PredicateFilter(category, filter);
 	}
 
+	/** Pattern to search for int ranges in text */
 	public static final Pattern INT_RANGE_PATTERN = Pattern.compile("(?<i1>\\d+)\\-(?<i2>\\d+)");
 
 	/** A {@link Format} to parse {@link TableContentControl}s */
@@ -363,9 +444,9 @@ public interface TableContentControl {
 			splitFilters[i] = splitFilter;
 		}
 		if (splitFilters.length == 1)
-			return new RootFilter(controlText.toString().trim(), splitFilters[0]);
+			return splitFilters[0];
 		else
-			return new RootFilter(controlText.toString().trim(), new AndFilter(splitFilters));
+			return new AndFilter(splitFilters);
 	}
 
 	/**
@@ -379,16 +460,16 @@ public interface TableContentControl {
 		filters.add(new SimpleFilter(filterText));
 		Matcher m = INT_RANGE_PATTERN.matcher(filterText);
 		if (m.matches())
-			filters.add(new IntRangeFilter(m.group("i1"), m.group("i2")));
+			filters.add(new IntRangeFilter(filterText, m.group("i1"), m.group("i2")));
 		else {
 			FoundDouble flt = TableContentControl.tryParseDouble(filterText, 0);
 			if (flt != null) {
 				if (flt.end == filterText.length())
-					filters.add(new FloatRangeFilter(flt.minValue, flt.maxValue));
+					filters.add(new NumberRangeFilter(filterText, flt.minValue, flt.maxValue));
 				else if (filterText.charAt(flt.end) == '-') {
 					FoundDouble maxFlt = TableContentControl.tryParseDouble(filterText, flt.end + 1);
 					if (maxFlt != null && maxFlt.end == filterText.length())
-						filters.add(new FloatRangeFilter(flt.minValue, maxFlt.maxValue));
+						filters.add(new NumberRangeFilter(filterText, flt.minValue, maxFlt.maxValue));
 				}
 			}
 		}
@@ -410,7 +491,7 @@ public interface TableContentControl {
 					throw new IllegalStateException(e); // Shouldn't happen
 				}
 				if (maxTime != null && maxStart + maxTime.toString().length() == filterText.length()) {
-					filters.add(new DateRangeFilter(time, maxTime));
+					filters.add(new DateRangeFilter(filterText, time, maxTime));
 				}
 			}
 		}
@@ -424,7 +505,7 @@ public interface TableContentControl {
 		if (dashIdx <= 0) {
 			ParsedDuration duration;
 			try {
-				duration = TimeUtils.parseDuration(filterText);
+				duration = TimeUtils.parseDuration(filterText, false);
 			} catch (ParseException e) {
 				duration = null;
 			}
@@ -433,9 +514,9 @@ public interface TableContentControl {
 		}
 		if (dashIdx > 0) {
 			try {
-				ParsedDuration minDuration = TimeUtils.parseDuration(filterText.subSequence(0, dashIdx));
-				ParsedDuration maxDuration = TimeUtils.parseDuration(filterText.subSequence(dashIdx + 1, filterText.length()));
-				filters.add(new DurationRangeFilter(minDuration, maxDuration));
+				ParsedDuration minDuration = TimeUtils.parseDuration(filterText.subSequence(0, dashIdx), false);
+				ParsedDuration maxDuration = TimeUtils.parseDuration(filterText.subSequence(dashIdx + 1, filterText.length()), false);
+				filters.add(new DurationRangeFilter(filterText, minDuration, maxDuration));
 			} catch (ParseException e) {
 			}
 		}
@@ -481,6 +562,17 @@ public interface TableContentControl {
 		Supplier<? extends Collection<? extends ValueRenderer<? super E>>> render, ObservableValue<? extends TableContentControl> filter,
 			Observable<?> until) {
 		List<ValueRenderer<? super E>> rendererList = new ArrayList<>();
+		/*int[] tests = new int[2]; // DEBUGGING
+		int[] compares = new int[2];
+		Causable.CausableKey key = Causable.key((cause, __) -> {
+			System.out.println((tests[0] + tests[1]) + " values tested, " + tests[0] + " passed");
+			System.out.println((compares[0] + compares[1]) + " comparisons, " + compares[0] + " reordered");
+			tests[0] = tests[1] = 0;
+			compares[0] = compares[1] = 0;
+		});
+		filter.changes().act(evt -> {
+			evt.getRootCausable().onFinish(key);
+		});*/
 		return values.flow().transform((TypeToken<FilteredValue<E>>) (TypeToken<?>) TypeTokens.get().of(FilteredValue.class), //
 			combine -> combine.combineWith(filter).build(LambdaUtils.printableBiFn((x, cv) -> {
 				Collection<? extends ValueRenderer<? super E>> renders = render.get();
@@ -505,38 +597,40 @@ public interface TableContentControl {
 				i = 0;
 				for (ValueRenderer<? super E> r : rendererList)
 					texts[i++] = r.render(v.value);
-				v.matches = f.findMatches(rendererList, texts);
-				if (v.matches != null) {
+				if (f.isSearch()) {
 					v.hasMatch = false;
-					for (i = 0; !v.hasMatch && i < texts.length; i++) {
-						if (v.matches[i] != null && v.matches[i].size() > 0)
-							v.hasMatch = true;
+					v.matches = f.findMatches(rendererList, texts);
+					if (v.matches != null) {
+						for (i = 0; !v.hasMatch && i < texts.length; i++) {
+							if (v.matches[i] != null && v.matches[i].size() > 0)
+								v.hasMatch = true;
+						}
 					}
 				} else
-					v.hasMatch = !f.isSearch();
+					v.hasMatch = true; // No filtering
+				// tests[v.hasMatch ? 0 : 1]++;
 				return v;
 			}, "toFilterValue", null)))//
 			.filter(LambdaUtils.printableFn(fv -> fv.hasMatch() ? null : "No match", "match", null))//
 			.sorted(LambdaUtils.printableComparator((fv1, fv2) -> {
 				List<String> sorting = filter.get().getRowSorting();
-				if (sorting != null) {
-					Collection<? extends ValueRenderer<? super E>> renders = render.get();
-					for (String s : sorting) {
-						for (ValueRenderer<? super E> r : renders) {
-							int rSort = RowSorter.sortCategoryMatches(s, r.getName());
-							if (rSort != 0) {
-								int comp = r.compare(fv1.value, fv2.value);
-								if (comp != 0) {
-									if (rSort < 0)
-										return -comp;
-									else
-										return comp;
-								}
-							}
+				if (sorting == null || sorting.isEmpty())
+					return 0;
+				int comp = 0;
+				Collection<? extends ValueRenderer<? super E>> renders = render.get();
+				for (String s : sorting) {
+					for (ValueRenderer<? super E> r : renders) {
+						int rSort = RowSorter.sortCategoryMatches(s, r.getName());
+						if (rSort != 0) {
+							comp = r.compare(fv1.value, fv2.value, rSort < 0);
+							break;
 						}
 					}
+					if (comp != 0)
+						break;
 				}
-				return 0;
+				// compares[comp <= 0 ? 0 : 1]++;
+				return comp;
 			}, () -> "rowSorting")).collectActive(until);
 	}
 
@@ -569,6 +663,7 @@ public interface TableContentControl {
 			}, () -> "sortedColumns")).collectActive(until);
 	}
 
+	/** Control object that does no filtering or sorting */
 	public static final TableContentControl DEFAULT = new TableContentControl() {
 		@Override
 		public SortedMatchSet[] findMatches(List<? extends ValueRenderer<?>> category, CharSequence[] texts) {
@@ -596,14 +691,34 @@ public interface TableContentControl {
 		}
 
 		@Override
+		public TableContentControl and(TableContentControl other) {
+			return other;
+		}
+
+		@Override
+		public TableContentControl or(TableContentControl other) {
+			if (other.isSearch())
+				return this;
+			else
+				return other;
+		}
+
+		@Override
+		public TableContentControl toggleSort(String columnName, boolean root) {
+			return new RowSorter(Collections.singletonList(columnName.toLowerCase().replace(" ", "")));
+		}
+
+		@Override
 		public String toString() {
 			return "";
 		}
 	};
 
+	/** Simple text filter. Tolerates differences in whitespace and case. */
 	public static class SimpleFilter implements TableContentControl {
 		private final String theMatcher;
 
+		/** @param matcher The search string */
 		public SimpleFilter(String matcher) {
 			if (matcher.isEmpty())
 				throw new IllegalArgumentException("Cannot make an empty simple matcher");
@@ -662,46 +777,6 @@ public interface TableContentControl {
 		}
 	}
 
-	public static class RootFilter implements TableContentControl {
-		private final String theText;
-		private final TableContentControl theFilter;
-
-		public RootFilter(String text, TableContentControl filter) {
-			theText = text;
-			theFilter = filter;
-		}
-
-		@Override
-		public SortedMatchSet[] findMatches(List<? extends ValueRenderer<?>> categories, CharSequence[] texts) {
-			return theFilter.findMatches(categories, texts);
-		}
-
-		@Override
-		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence text) {
-			return theFilter.findMatches(category, text);
-		}
-
-		@Override
-		public boolean isSearch() {
-			return theFilter.isSearch();
-		}
-
-		@Override
-		public List<String> getRowSorting() {
-			return theFilter.getRowSorting();
-		}
-
-		@Override
-		public List<String> getColumnSorting() {
-			return theFilter.getColumnSorting();
-		}
-
-		@Override
-		public String toString() {
-			return theText;
-		}
-	}
-
 	/** Matches empty text */
 	public static class EmptyFilter implements TableContentControl {
 		@Override
@@ -732,6 +807,7 @@ public interface TableContentControl {
 		}
 	}
 
+	/** A filter on a specific category/column */
 	public static class CategoryFilter implements TableContentControl {
 		static class UnfilteredRenderer<E> implements ValueRenderer<E> {
 			final ValueRenderer<E> renderer;
@@ -756,17 +832,31 @@ public interface TableContentControl {
 			}
 
 			@Override
-			public int compare(E o1, E o2) {
-				return renderer.compare(o1, o2);
+			public int compare(E o1, E o2, boolean reverse) {
+				return renderer.compare(o1, o2, reverse);
 			}
 		}
 
 		private final String theCategory;
 		private final TableContentControl theFilter;
 
+		/**
+		 * @param category The name of the category to filter on
+		 * @param filter The filter to apply for the given category
+		 */
 		public CategoryFilter(String category, TableContentControl filter) {
 			theCategory = category;
 			theFilter = filter;
+		}
+
+		/** @return The name of the category this filter looks for */
+		public String getCategory() {
+			return theCategory;
+		}
+
+		/** @return The filter applied to the category's values */
+		public TableContentControl getFilter() {
+			return theFilter;
 		}
 
 		@Override
@@ -781,7 +871,12 @@ public interface TableContentControl {
 			return theFilter.findMatches(new UnfilteredRenderer<>(category), text);
 		}
 
-		public static boolean categoryMatches(String category, String test) {
+		/**
+		 * @param category The name of the category to search for
+		 * @param test The name of the category to test
+		 * @return Whether the given test category matches the given category search string
+		 */
+		public static boolean categoryMatches(CharSequence category, CharSequence test) {
 			int c, t;
 			for (c = 0, t = 0; c < category.length() && t < test.length();) {
 				if (t == test.length())
@@ -815,17 +910,31 @@ public interface TableContentControl {
 
 		@Override
 		public String toString() {
-			return new StringBuilder(theCategory).append(':').append(theFilter).toString();
+			StringBuilder str = new StringBuilder().append(theFilter.toString());
+			boolean quote = str.length() >= 2 && str.charAt(0) == '"' && str.charAt(str.length() - 1) == '"';
+			if (quote)
+				str.deleteCharAt(0).deleteCharAt(str.length() - 1);
+			str.insert(0, ':').insert(0, theCategory);
+			if (quote)
+				str.insert(0, '"').append('"');
+			return str.toString();
 		}
 	}
 
+	/** A simple pattern filter that interprets '*' as any character sequence */
 	public static class SimplePatternFilter implements TableContentControl {
 		private static final int CASE_DIFF = 'a' - 'A';
 
 		private final List<String> theSequence;
 
+		/** @param sequence The character sequences between '*' wildcards to match */
 		public SimplePatternFilter(List<String> sequence) {
 			theSequence = sequence;
+		}
+
+		/** @return The character sequences between '*' wildcards that this filter searches for */
+		public List<String> getSequence() {
+			return theSequence;
 		}
 
 		@Override
@@ -901,15 +1010,22 @@ public interface TableContentControl {
 
 		@Override
 		public String toString() {
-			return StringUtils.conversational("*", null).print(theSequence, StringBuilder::append).toString();
+			return StringUtils.print("*", theSequence, s -> s).toString();
 		}
 	}
 
+	/** A formal regex filter */
 	public static class FullPatternFilter implements TableContentControl {
 		private final Pattern thePattern;
 
+		/** @param pattern The pattern to search with */
 		public FullPatternFilter(Pattern pattern) {
 			thePattern = pattern;
+		}
+
+		/** @return The pattern this filter uses to search */
+		public Pattern getPattern() {
+			return thePattern;
 		}
 
 		@Override
@@ -953,11 +1069,20 @@ public interface TableContentControl {
 		}
 	}
 
-	class FoundDouble {
+	/** Represents a number in a text sequence */
+	public class FoundDouble {
+		/** The minimum double value that the text could represent */
 		public final double minValue;
+		/** The maximum double value that the text could represent */
 		public final double maxValue;
+		/** The end of the sub-sequence that matched to this number */
 		public final int end;
 
+		/**
+		 * @param minValue The minimum double value that the text could represent
+		 * @param maxValue The maximum double value that the text could represent
+		 * @param end The end of the sub-sequence that matched to this number
+		 */
 		public FoundDouble(double minValue, double maxValue, int end) {
 			this.minValue = minValue;
 			this.maxValue = maxValue;
@@ -965,6 +1090,12 @@ public interface TableContentControl {
 		}
 	}
 
+	/**
+	 * @param text The text to search
+	 * @param start The index to start the search at
+	 * @return The number found in the text at the given index, or null if the sub-sequence at <code>start</code> does not start with a
+	 *         number
+	 */
 	public static FoundDouble tryParseDouble(CharSequence text, int start) {
 		if (start >= text.length())
 			return null;
@@ -1027,11 +1158,11 @@ public interface TableContentControl {
 				end++;
 				expEnd++;
 			}
-			if (!hasExp)
-				end = expEnd = preEnd;
+			if (!hasExp || expEnd - expStart >= 20) // Can't accommodate massive exponents
+				end = expStart = expEnd = preEnd;
 		}
 		double minValue = Double.parseDouble(text.subSequence(start, end).toString());
-		int exp = (expEnd == expStart) ? 0 : Integer.parseInt(text.subSequence(expStart, expEnd).toString());
+		long exp = (expEnd == expStart) ? 0 : Long.parseLong(text.subSequence(expStart, expEnd).toString());
 		exp -= (decimalEnd - decimalStart);
 		double tolerance;
 		if (exp > -10 && exp < 10) {
@@ -1050,14 +1181,37 @@ public interface TableContentControl {
 		return new FoundDouble(minValue, maxValue, end);
 	}
 
-	public static class FloatRangeFilter implements TableContentControl {
+	/** Searches for a real (decimal) number in a range */
+	public static class NumberRangeFilter implements TableContentControl {
+		private final String theText;
 		private final double theMinValue;
 		private final double theMaxValue;
 
-		public FloatRangeFilter(double minValue, double maxValue) {
+		/**
+		 * @param text The text that the filter was parsed from, or null to generate the text representation
+		 * @param minValue The minimum value to search for
+		 * @param maxValue The maximum value to search for
+		 */
+		public NumberRangeFilter(String text, double minValue, double maxValue) {
 			int comp = Double.compare(minValue, maxValue);
 			theMinValue = (comp <= 0 ? minValue : maxValue);
 			theMaxValue = (comp <= 0 ? maxValue : minValue);
+			if (text != null)
+				theText = text;
+			else if (theMinValue == theMaxValue)
+				theText = String.valueOf(theMinValue);
+			else
+				theText = new StringBuilder().append(theMinValue).append('-').append(theMaxValue).toString();
+		}
+
+		/** @return The minimum value matched by this filter */
+		public double getMinValue() {
+			return theMinValue;
+		}
+
+		/** @return The maximum value matched by this filter */
+		public double getMaxValue() {
+			return theMaxValue;
 		}
 
 		@Override
@@ -1100,18 +1254,41 @@ public interface TableContentControl {
 
 		@Override
 		public String toString() {
-			return new StringBuilder().append(theMinValue).append('-').append(theMaxValue).toString();
+			return theText;
 		}
 	}
 
+	/** Searches for an integer in a range */
 	public static class IntRangeFilter implements TableContentControl {
+		private final String theText;
 		private final String theLow;
 		private final String theHigh;
 
-		public IntRangeFilter(String low, String high) {
+		/**
+		 * @param text The text that the filter was parsed from, or null to generate the text representation
+		 * @param low The minimum value to search for
+		 * @param high The maximum value to search for
+		 */
+		public IntRangeFilter(String text, String low, String high) {
 			int comp = StringUtils.compareNumberTolerant(low, high, true, true);
 			theLow = comp <= 0 ? low : high;
 			theHigh = comp <= 0 ? high : low;
+			if (text != null)
+				theText = text;
+			else if (theLow == theHigh)
+				theText = String.valueOf(theLow);
+			else
+				theText = new StringBuilder().append(theLow).append('-').append(theHigh).toString();
+		}
+
+		/** @return The minimum value matched by this filter */
+		public String getLow() {
+			return theLow;
+		}
+
+		/** @return The maximum value matched by this filter */
+		public String getHigh() {
+			return theHigh;
 		}
 
 		@Override
@@ -1186,15 +1363,22 @@ public interface TableContentControl {
 
 		@Override
 		public String toString() {
-			return new StringBuilder(theLow).append('-').append(theHigh).toString();
+			return theText;
 		}
 	}
 
+	/** Searches for a date */
 	public static class DateFilter implements TableContentControl {
 		private final TimeUtils.ParsedInstant theTime;
 
+		/** @param time The date to search for */
 		public DateFilter(ParsedInstant time) {
 			theTime = time;
+		}
+
+		/** @return The time that this filter searches for */
+		public TimeUtils.ParsedInstant getTime() {
+			return theTime;
 		}
 
 		@Override
@@ -1243,13 +1427,36 @@ public interface TableContentControl {
 		}
 	}
 
+	/** Searches for a date in a range */
 	public static class DateRangeFilter implements TableContentControl {
+		private final String theText;
 		private final TimeUtils.ParsedInstant theMinTime;
 		private final TimeUtils.ParsedInstant theMaxTime;
 
-		public DateRangeFilter(ParsedInstant minTime, ParsedInstant maxTime) {
+		/**
+		 * @param text The text that the filter was parsed from, or null to generate the text representation
+		 * @param minTime The minimum time to search for
+		 * @param maxTime The maximum time to search for
+		 */
+		public DateRangeFilter(String text, ParsedInstant minTime, ParsedInstant maxTime) {
 			theMinTime = minTime;
 			theMaxTime = maxTime;
+			if (text != null)
+				theText = text;
+			else if (theMinTime == theMaxTime)
+				theText = String.valueOf(theMinTime);
+			else
+				theText = new StringBuilder().append(theMinTime).append('-').append(theMaxTime).toString();
+		}
+
+		/** @return The minimum time matched by this filter */
+		public TimeUtils.ParsedInstant getMinTime() {
+			return theMinTime;
+		}
+
+		/** @return The maximum time matched by this filter */
+		public TimeUtils.ParsedInstant getMaxTime() {
+			return theMaxTime;
 		}
 
 		@Override
@@ -1296,15 +1503,22 @@ public interface TableContentControl {
 
 		@Override
 		public String toString() {
-			return new StringBuilder().append(theMinTime).append('-').append(theMaxTime).toString();
+			return theText;
 		}
 	}
 
+	/** Searches for a duration */
 	public static class DurationFilter implements TableContentControl {
 		private final TimeUtils.ParsedDuration theDuration;
 
+		/** @param duration The duration to search for */
 		public DurationFilter(ParsedDuration duration) {
 			theDuration = duration;
+		}
+
+		/** @return The date this filter searches for */
+		public TimeUtils.ParsedDuration getDuration() {
+			return theDuration;
 		}
 
 		@Override
@@ -1347,13 +1561,36 @@ public interface TableContentControl {
 		}
 	}
 
+	/** Searches for a duration in a range */
 	public static class DurationRangeFilter implements TableContentControl {
+		private final String theText;
 		private final TimeUtils.ParsedDuration theMinDuration;
 		private final TimeUtils.ParsedDuration theMaxDuration;
 
-		public DurationRangeFilter(ParsedDuration minDuration, ParsedDuration maxDuration) {
+		/**
+		 * @param text The text that the filter was parsed from, or null to generate the text representation
+		 * @param minDuration The minimum duration to search for
+		 * @param maxDuration The maximum duration to search for
+		 */
+		public DurationRangeFilter(String text, ParsedDuration minDuration, ParsedDuration maxDuration) {
 			theMinDuration = minDuration;
 			theMaxDuration = maxDuration;
+			if (text != null)
+				theText = text;
+			else if (theMinDuration == theMaxDuration)
+				theText = String.valueOf(theMinDuration);
+			else
+				theText = new StringBuilder().append(theMinDuration).append('-').append(theMaxDuration).toString();
+		}
+
+		/** @return The minimum duration matched by this filter */
+		public TimeUtils.ParsedDuration getMinDuration() {
+			return theMinDuration;
+		}
+
+		/** @return The maximum duration matched by this filter */
+		public TimeUtils.ParsedDuration getMaxDuration() {
+			return theMaxDuration;
 		}
 
 		@Override
@@ -1367,7 +1604,6 @@ public interface TableContentControl {
 					return null;
 			} catch (ParseException e) {
 				e.printStackTrace();
-				;
 				return null;
 			}
 			if (theMinDuration.compareTo(duration) <= 0 && theMaxDuration.compareTo(duration) >= 0) {
@@ -1393,18 +1629,22 @@ public interface TableContentControl {
 
 		@Override
 		public String toString() {
-			return new StringBuilder().append(theMinDuration).append('-').append(theMaxDuration).toString();
+			return theText;
 		}
 	}
 
+	/** A filter that matches rows that are matched by any of its component matchers */
 	public static class OrFilter implements TableContentControl {
-		private final TableContentControl[] theContent;
+		private final List<TableContentControl> theContent;
 
+		/** @param filters The component filters for this OR filter */
 		public OrFilter(TableContentControl... filters) {
-			theContent = filters;
-			for (TableContentControl c : filters)
-				if (c == null)
-					BreakpointHere.breakpoint();
+			theContent = BetterList.of(filters);
+		}
+
+		/** @return This OR filter's component filters */
+		public List<TableContentControl> getContent() {
+			return theContent;
 		}
 
 		@Override
@@ -1482,31 +1722,57 @@ public interface TableContentControl {
 		}
 
 		@Override
+		public TableContentControl toggleSort(String columnName, boolean root) {
+			TableContentControl[] newContent = null;
+			for (int i = 0; i < theContent.size(); i++) {
+				TableContentControl replaced = theContent.get(i).toggleSort(columnName, false);
+				if (replaced != theContent.get(i)) {
+					if (newContent == null)
+						newContent = theContent.toArray(new TableContentControl[theContent.size()]);
+					newContent[i] = replaced;
+				}
+			}
+			if (newContent != null)
+				return new OrFilter(newContent);
+			return TableContentControl.super.toggleSort(columnName, root);
+		}
+
+		@Override
 		public TableContentControl or(TableContentControl other) {
-			return new OrFilter(ArrayUtils.add(theContent, other));
+			TableContentControl[] newContent = new TableContentControl[theContent.size() + 1];
+			theContent.toArray(newContent);
+			newContent[theContent.size()] = other;
+			return new OrFilter(newContent);
 		}
 
 		@Override
 		public String toString() {
 			Set<String> printed = new HashSet<>();
 			StringBuilder str = new StringBuilder();
-			for (int i = 0; i < theContent.length; i++) {
-				String contentStr = theContent[i].toString();
+			for (int i = 0; i < theContent.size(); i++) {
+				String contentStr = theContent.get(i).toString();
 				if (printed.add(contentStr)) {
 					if (i > 0)
 						str.append(' ');
-					str.append(theContent[i]);
+					str.append(theContent.get(i));
 				}
 			}
 			return str.toString();
 		}
 	}
 
+	/** A filter that matches rows that are matched by all of its component matchers */
 	public static class AndFilter implements TableContentControl {
-		private final TableContentControl[] theContent;
+		private final List<TableContentControl> theContent;
 
+		/** @param filters The component filters for this AND filter */
 		public AndFilter(TableContentControl... filters) {
-			theContent = filters;
+			theContent = BetterList.of(filters);
+		}
+
+		/** @return This AND filter's component filters */
+		public List<TableContentControl> getContent() {
+			return theContent;
 		}
 
 		@Override
@@ -1588,28 +1854,67 @@ public interface TableContentControl {
 		}
 
 		@Override
+		public TableContentControl and(TableContentControl other) {
+			TableContentControl[] newContent = new TableContentControl[theContent.size() + 1];
+			theContent.toArray(newContent);
+			newContent[theContent.size()] = other;
+			return new AndFilter(newContent);
+		}
+
+		@Override
+		public TableContentControl toggleSort(String columnName, boolean root) {
+			TableContentControl[] newContent = null;
+			for (int i = 0; i < theContent.size(); i++) {
+				TableContentControl replaced = theContent.get(i).toggleSort(columnName, false);
+				if (replaced != theContent.get(i)) {
+					if (newContent == null)
+						newContent = theContent.toArray(new TableContentControl[theContent.size()]);
+					newContent[i] = replaced;
+				}
+			}
+			if (newContent != null)
+				return new AndFilter(newContent);
+			return TableContentControl.super.toggleSort(columnName, root);
+		}
+
+		@Override
 		public String toString() {
 			Set<String> printed = new HashSet<>();
 			StringBuilder str = new StringBuilder();
-			for (int i = 0; i < theContent.length; i++) {
-				String contentStr = theContent[i].toString();
+			for (int i = 0; i < theContent.size(); i++) {
+				String contentStr = theContent.get(i).toString();
 				if (printed.add(contentStr)) {
 					if (i > 0)
 						str.append(' ');
-					str.append(theContent[i]);
+					str.append(theContent.get(i));
 				}
 			}
 			return str.toString();
 		}
 	}
 
+	/** A filter that uses a custom predicate on rendered text */
 	public static class PredicateFilter implements TableContentControl {
 		private final String theCategory;
 		private final Predicate<CharSequence> theFilter;
 
+		/**
+		 * @param category The category to search in
+		 * @param filter The text filter to search with
+		 */
 		public PredicateFilter(String category, Predicate<CharSequence> filter) {
 			theCategory = category;
 			theFilter = filter;
+		}
+
+		/** @return The category this filter searches with */
+		public String getCategory() {
+			return theCategory;
+		}
+
+		/** @return The text filter used to search */
+		public Predicate<CharSequence> getFilter() {
+			return theFilter;
 		}
 
 		@Override
@@ -1635,11 +1940,18 @@ public interface TableContentControl {
 		}
 	}
 
+	/** Content control the sorts table rows by category values */
 	public static class RowSorter implements TableContentControl {
 		private final List<String> theSorting;
 
+		/** @param sorting The categories to sort by */
 		public RowSorter(List<String> sorting) {
 			theSorting = sorting;
+		}
+
+		/** @return The category sorting of this content control */
+		public List<String> getSorting() {
+			return theSorting;
 		}
 
 		@Override
@@ -1668,13 +1980,55 @@ public interface TableContentControl {
 		}
 
 		@Override
-		public String toString() {
-			StringBuilder str = new StringBuilder("sort:");
-			return StringUtils.conversational(",", null).print(str, theSorting, StringBuilder::append).toString();
+		public TableContentControl toggleSort(String columnName, boolean root) {
+			List<String> newSorting = null;
+			for (int s = 0; s < theSorting.size(); s++) {
+				String sort = theSorting.get(s);
+				int match = sortCategoryMatches(sort, columnName);
+				if (match != 0) {
+					if (newSorting == null)
+						newSorting = new ArrayList<>(theSorting);
+					switch (sort.charAt(0)) {
+					case '-':
+						sort = sort.substring(1);
+						break;
+					case '+':
+						sort = "-" + sort.substring(1);
+						break;
+					default:
+						sort = "-" + sort;
+						break;
+					}
+					newSorting.set(s, sort);
+				}
+			}
+			if (newSorting == null && root) {
+				newSorting = new ArrayList<>(theSorting.size() + 1);
+				newSorting.add(columnName.toLowerCase().replace(" ", ""));
+				newSorting.addAll(theSorting);
+			}
+			if (newSorting != null)
+				return new RowSorter(Collections.unmodifiableList(newSorting));
+			return TableContentControl.super.toggleSort(columnName, root);
 		}
 
+		@Override
+		public String toString() {
+			StringBuilder str = new StringBuilder("sort:");
+			StringUtils.print(str, ",", theSorting, StringBuilder::append);
+			if (str.indexOf(" ") >= 0)
+				str.insert(0, '"').append('"');
+			return str.toString();
+		}
+
+		/**
+		 * @param category The category to sort by
+		 * @param test The category to test
+		 * @return 0 if the given sort category does not match the test category, otherwise 1 to sort the category ascending, -1 to sort
+		 *         descending
+		 */
 		public static int sortCategoryMatches(String category, String test) {
-			if (sortCategoryMatches(category, 0, test))
+			if (CategoryFilter.categoryMatches(category, test))
 				return 1;
 			int sortPrefix = 0;
 			if (category.charAt(0) == '-')
@@ -1683,32 +2037,24 @@ public interface TableContentControl {
 				sortPrefix = 1;
 			if (sortPrefix == 0)
 				return 0;
-			else if (sortCategoryMatches(category, 1, test))
+			else if (CategoryFilter.categoryMatches(StringUtils.cheapSubSequence(category, 1, category.length()), test))
 				return sortPrefix;
 			return 0;
 		}
-
-		private static boolean sortCategoryMatches(String category, int start, String test) {
-			int c, t;
-			for (c = start, t = 0; c < category.length() && t < test.length();) {
-				if (Character.isWhitespace(test.charAt(t)))
-					t++;
-				else if (Character.toLowerCase(category.charAt(c)) != Character.toLowerCase(test.charAt(t)))
-					break;
-				else {
-					c++;
-					t++;
-				}
-			}
-			return c == category.length(); // Don't need to match the entire text, just the start
-		}
 	}
 
+	/** Prioritizes and sorts columns in a table */
 	public static class ColumnSorter implements TableContentControl {
 		private final List<String> theColumns;
 
+		/** @param columns The columns to prioritize/sort */
 		public ColumnSorter(List<String> columns) {
 			theColumns = columns;
+		}
+
+		/** @return The columns prioritized/sorted by this control */
+		public List<String> getColumns() {
+			return theColumns;
 		}
 
 		@Override
@@ -1739,7 +2085,10 @@ public interface TableContentControl {
 		@Override
 		public String toString() {
 			StringBuilder str = new StringBuilder("columns:");
-			return StringUtils.conversational(",", null).print(str, theColumns, StringBuilder::append).toString();
+			StringUtils.print(str, ",", theColumns, StringBuilder::append);
+			if (str.indexOf(" ") >= 0)
+				str.insert(0, '"').append('"');
+			return str.toString();
 		}
 	}
 
@@ -1776,13 +2125,19 @@ public interface TableContentControl {
 				return map.get("C");
 			})//
 				.formatText(v -> v == null ? "" : v).withMutation(mut -> {
-					mut.mutateAttribute((map, v) -> map.put("D", v)).asText(Format.TEXT).withRowUpdate(true);
+					mut.mutateAttribute((map, v) -> map.put("C", v)).asText(Format.TEXT).withRowUpdate(true);
 				}).withWidths(50, 150, 550));
 			columns.add(new CategoryRenderStrategy<Map<String, String>, String>("D", TypeTokens.get().STRING, map -> {
 				return map.get("D");
 			})//
 				.formatText(v -> v == null ? "" : v).withMutation(mut -> {
-					mut.mutateAttribute((map, v) -> map.put("A", v)).asText(Format.TEXT).withRowUpdate(true);
+					mut.mutateAttribute((map, v) -> map.put("D", v)).asText(Format.TEXT).withRowUpdate(true);
+				}).withWidths(50, 100, 150));
+			columns.add(new CategoryRenderStrategy<Map<String, String>, String>("OneSAF Type", TypeTokens.get().STRING, map -> {
+				return map.get("OneSAF Type");
+			})//
+				.formatText(v -> v == null ? "" : v).withMutation(mut -> {
+					mut.mutateAttribute((map, v) -> map.put("OneSAF Type", v)).asText(Format.TEXT).withRowUpdate(true);
 				}).withWidths(50, 100, 150));
 			SimpleDateFormat dateFormat = new SimpleDateFormat("EEE MMM dd, yyyy HH:mm:ss");
 			Calendar cal = Calendar.getInstance();
@@ -1826,6 +2181,29 @@ public interface TableContentControl {
 					}
 					row.put("D", new String(chs));
 				}
+				int t = (int) Math.round(random.nextDouble() * 6);
+				String s;
+				switch (t) {
+				case 0:
+					s = null;
+					break;
+				case 1:
+					s = "";
+					break;
+				case 2:
+					s = "RADAR";
+					break;
+				case 3:
+					s = "JAMMER";
+					break;
+				case 4:
+					s = "IADS";
+					break;
+				default:
+					s = "TELARS";
+					break;
+				}
+				row.put("OneSAF Type", s);
 				rows.add(row);
 			}
 			System.out.println();

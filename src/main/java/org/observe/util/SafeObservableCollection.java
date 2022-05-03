@@ -16,6 +16,9 @@ import org.observe.collect.DefaultObservableCollection;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionBuilder;
 import org.observe.collect.ObservableCollectionEvent;
+import org.observe.dbug.Dbug;
+import org.observe.dbug.DbugAnchor;
+import org.observe.dbug.DbugAnchorType;
 import org.observe.util.swing.ObservableSwingUtils;
 import org.qommons.Causable;
 import org.qommons.Causable.CausableKey;
@@ -45,6 +48,11 @@ import com.google.common.reflect.TypeToken;
  * @param <E> The type of elements in the collection
  */
 public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> {
+	public static DbugAnchorType<SafeObservableCollection> DBUG = Dbug.common().anchor(SafeObservableCollection.class, a -> a//
+		.withField("type", true, false, TypeTokens.get().keyFor(TypeToken.class).wildCard())//
+		.withEvent("handleEvent").withEvent("flush")//
+		);
+
 	/**
 	 * Represents an element in a {@link SafeObservableCollection}, which may or may not also be present in the source collection
 	 *
@@ -99,6 +107,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 		}
 	}
 
+	private final DbugAnchor<SafeObservableCollection> theAnchor;
 	/** The source collection whose data this safe collection represents */
 	protected final ObservableCollection<E> theCollection;
 	/**
@@ -134,6 +143,9 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	public SafeObservableCollection(ObservableCollection<E> collection, ThreadConstraint threading, Observable<?> until) {
 		if (!threading.supportsInvoke())
 			throw new IllegalArgumentException("Thread constraints for safe structures must be invokable");
+		theAnchor = DBUG.instance(this, a -> a//
+			.setField("type", collection.getType(), null)//
+			);
 		theCollection = collection;
 		theSyntheticBacking = BetterTreeList.<ElementRef<E>> build().withThreadConstraint(threading).build();
 		theThreadConstraint = threading;
@@ -261,6 +273,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	private void doHandleEvent(ObservableCollectionEvent<? extends E> evt) {
 		if (isFinished)
 			return;
+		theAnchor.event("handleEvent", evt);
 		switch (evt.getType()) {
 		case add:
 			theAddedElements.add(evt.getElementId());
@@ -316,6 +329,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 			} catch (InterruptedException e) {
 			}
 		}
+		theAnchor.event("flush", null);
 		isFlushing = true;
 		boolean flushed = false;
 		try (Transaction t = theSyntheticCollection.lock(true, null)) {
@@ -335,6 +349,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 				for (ElementRef<E> changedEl : theChangedElements) {
 					if (changedEl.isRemoved)
 						continue;
+					changedEl.isChanged = false;
 					// Make a whole new element because the passively-derived collection would otherwise
 					// report the new value for both the old and new values in the fired event
 					theSyntheticCollection.mutableElement(changedEl.getSynthId()).set(//

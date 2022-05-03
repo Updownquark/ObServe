@@ -3,17 +3,22 @@ package org.observe.util.swing;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.EventQueue;
 import java.awt.Rectangle;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
 import java.awt.datatransfer.UnsupportedFlavorException;
 import java.awt.dnd.DnDConstants;
+import java.awt.event.MouseEvent;
 import java.beans.PropertyChangeListener;
 import java.io.IOException;
 import java.text.NumberFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -42,8 +47,12 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.Subscription;
+import org.observe.collect.CollectionSubscription;
 import org.observe.collect.ObservableCollection;
+import org.observe.dbug.DbugAnchor;
+import org.observe.dbug.DbugAnchor.InstantiationTransaction;
 import org.observe.util.TypeTokens;
+import org.observe.util.swing.CategoryRenderStrategy.CategoryClickAdapter;
 import org.observe.util.swing.Dragging.SimpleTransferAccepter;
 import org.observe.util.swing.Dragging.SimpleTransferSource;
 import org.observe.util.swing.Dragging.TransferAccepter;
@@ -73,6 +82,8 @@ import com.google.common.reflect.TypeToken;
 
 class SimpleTableBuilder<R, P extends SimpleTableBuilder<R, P>> extends AbstractComponentEditor<JTable, P>
 implements TableBuilder<R, P> {
+	@SuppressWarnings("rawtypes")
+	private final DbugAnchor<TableBuilder> theAnchor;
 	private final ObservableCollection<R> theRows;
 	private ObservableCollection<R> theFilteredRows;
 	private String theItemName;
@@ -95,6 +106,9 @@ implements TableBuilder<R, P> {
 
 	SimpleTableBuilder(ObservableCollection<R> rows, Supplier<Transactable> lock) {
 		super(new JTable(), lock);
+		theAnchor = PanelPopulation.TableBuilder.DBUG.instance(this, a -> a//
+			.setField("type", rows.getType(), null)//
+			);
 		theRows = rows;
 		theActions = new LinkedList<>();
 		isScrollable = true;
@@ -233,7 +247,7 @@ implements TableBuilder<R, P> {
 
 	@Override
 	public P withAdd(Supplier<? extends R> creator, Consumer<DataAction<R, ?>> actionMod) {
-		return withMultiAction(values -> {
+		return withMultiAction(null, values -> {
 			R value = creator.get();
 			CollectionElement<R> el = findElement(value);
 			if (el == null) {
@@ -287,7 +301,7 @@ implements TableBuilder<R, P> {
 					theRows.remove(value);
 			};
 		}
-		return withMultiAction(deletion, action -> {
+		return withMultiAction(null, deletion, action -> {
 			action.allowForMultiple(true).withTooltip(items -> "Remove selected " + (items.size() == 1 ? single : plural))//
 			.modifyButton(button -> button.withIcon(PanelPopulation.getRemoveIcon(16)));
 			if (actionMod != null)
@@ -297,7 +311,7 @@ implements TableBuilder<R, P> {
 
 	@Override
 	public P withCopy(Function<? super R, ? extends R> copier, Consumer<DataAction<R, ?>> actionMod) {
-		return withMultiAction(values -> {
+		return withMultiAction(null, values -> {
 			try (Transaction t = theFilteredRows.lock(true, null)) {
 				betterCopy(copier);
 			}
@@ -378,7 +392,7 @@ implements TableBuilder<R, P> {
 
 	@Override
 	public P withMoveToEnd(boolean up, Consumer<DataAction<R, ?>> actionMod) {
-		return withMultiAction(values -> {
+		return withMultiAction(null, values -> {
 			try (Transaction t = theFilteredRows.lock(true, null)) {
 				// Ignore the given values and use the selection model so we get the indexes right in the case of duplicates
 				ListSelectionModel selModel = getEditor().getSelectionModel();
@@ -436,8 +450,8 @@ implements TableBuilder<R, P> {
 	}
 
 	@Override
-	public P withMultiAction(Consumer<? super List<? extends R>> action, Consumer<DataAction<R, ?>> actionMod) {
-		SimpleDataAction<R, ?> ta = new SimpleDataAction<>(this, action, this::getSelection);
+	public P withMultiAction(String actionName, Consumer<? super List<? extends R>> action, Consumer<DataAction<R, ?>> actionMod) {
+		SimpleDataAction<R, ?> ta = new SimpleDataAction<>(actionName, this, action, this::getSelection);
 		actionMod.accept(ta);
 		theActions.add(ta);
 		return (P) this;
@@ -492,19 +506,66 @@ implements TableBuilder<R, P> {
 		return null;
 	}
 
+	private static void handleColumnHeaderClick(ObservableValue<? extends TableContentControl> filter, String columnName, boolean checkType,
+		Object cause) {
+		TableContentControl filterV = filter.get();
+		TableContentControl sorted = filterV == null ? new TableContentControl.RowSorter(Arrays.asList(columnName))
+			: filterV.toggleSort(columnName, true);
+		if (checkType && TypeTokens.get().isInstance(filter.getType(), sorted))
+			return;
+		SettableValue<TableContentControl> settableFilter = (SettableValue<TableContentControl>) filter;
+		if (settableFilter.isAcceptable(sorted) == null)
+			settableFilter.set(sorted, cause);
+	}
+
 	@Override
 	public Component getOrCreateComponent(Observable<?> until) {
 		if (theBuiltComponent != null)
 			return theBuiltComponent;
 		if (theColumns == null)
 			throw new IllegalStateException("No columns configured");
+		InstantiationTransaction instantiating = theAnchor.instantiating();
 		ObservableTableModel<R> model;
 		ObservableCollection<TableContentControl.FilteredValue<R>> filtered;
 		ObservableCollection<? extends CategoryRenderStrategy<R, ?>> columns;
 		if (theFilter != null) {
+			ObservableCollection<? extends CategoryRenderStrategy<R, ?>> columns2 = theColumns.safe(ThreadConstraint.EDT, until);
+			if (theFilter instanceof SettableValue) {
+				Map<CategoryRenderStrategy<R, ?>, Runnable> headerListening = new HashMap<>();
+				boolean checkType = TypeTokens.getRawType(theFilter.getType()) != TableContentControl.class;
+				CollectionSubscription colClickSub = columns2.subscribe(evt -> {
+					switch (evt.getType()) {
+					case add:
+						headerListening.put(evt.getNewValue(), evt.getNewValue().addMouseListener(new CategoryClickAdapter<R, Object>() {
+							@Override
+							public void mouseClicked(ModelCell<? extends R, ? extends Object> cell, MouseEvent e) {
+								if (cell == null) // Looking for a mouse click on the column header
+									handleColumnHeaderClick(theFilter, evt.getNewValue().getName(), checkType, e);
+							}
+						}));
+						break;
+					case remove:
+						headerListening.remove(evt.getOldValue()).run();
+						break;
+					case set:
+						if (evt.getOldValue() != evt.getNewValue()) {
+							headerListening.remove(evt.getOldValue()).run();
+							headerListening.put(evt.getNewValue(),
+								evt.getNewValue().addMouseListener(new CategoryClickAdapter<R, Object>() {
+								@Override
+								public void mouseClicked(ModelCell<? extends R, ? extends Object> cell, MouseEvent e) {
+										if (cell == null) // Looking for a mouse click on the column header
+											handleColumnHeaderClick(theFilter, evt.getNewValue().getName(), checkType, e);
+								}
+								}));
+						}
+					}
+				}, true);
+				if (until != null)
+					until.take(1).act(__ -> colClickSub.unsubscribe(true));
+			}
 			ObservableCollection<? extends CategoryRenderStrategy<R, ?>> fColumns = TableContentControl
-				.applyColumnControl(
-					theColumns.safe(ThreadConstraint.EDT, until), theFilter, until);
+				.applyColumnControl(columns2, theFilter, until);
 			columns = fColumns;
 			Observable<?> columnChanges = Observable.or(Observable.constant(null), fColumns.simpleChanges());
 			ObservableCollection<TableContentControl.FilteredValue<R>> rawFiltered = TableContentControl.applyRowControl(theRows,
@@ -519,6 +580,7 @@ implements TableBuilder<R, P> {
 			columns = theColumns.safe(ThreadConstraint.EDT, until);
 			theFilteredRows = theRows.safe(ThreadConstraint.EDT, until);
 		}
+		instantiating.watchFor(ObservableListModel.DBUG, "model");
 		model = new ObservableTableModel<>(theFilteredRows, columns);
 		JTable table = getEditor();
 		table.setModel(model);
@@ -661,7 +723,7 @@ implements TableBuilder<R, P> {
 				scroll.setMaximumSize(new Dimension(maxW, max.height));
 			};
 			adjustWidth.run();
-			columns.simpleChanges().act(__ -> adjustWidth.run());
+			columns.simpleChanges().act(__ -> EventQueue.invokeLater(adjustWidth));
 		} else {
 			scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
 			scroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_NEVER);
@@ -700,8 +762,8 @@ implements TableBuilder<R, P> {
 				@Override
 				public void contentsChanged(ListDataEvent e) {
 					ListSelectionModel selModel = table.getSelectionModel();
-					if (selModel.getMinSelectionIndex() >= 0 && e.getIndex0() >= selModel.getMinSelectionIndex()
-						&& e.getIndex1() <= selModel.getMaxSelectionIndex()) {
+					if (selModel.getMinSelectionIndex() >= 0 && e.getIndex0() <= selModel.getMaxSelectionIndex()
+						&& e.getIndex1() >= selModel.getMinSelectionIndex()) {
 						List<R> selection = selectionGetter.get();
 						for (Object action : theActions) {
 							if (action instanceof SimpleDataAction)
@@ -800,6 +862,7 @@ implements TableBuilder<R, P> {
 			table.setTransferHandler(handler);
 		}
 
+		instantiating.close();
 		return decorate(theBuiltComponent);
 	}
 

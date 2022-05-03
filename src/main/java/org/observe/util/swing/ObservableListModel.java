@@ -14,8 +14,14 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
+import org.observe.dbug.Dbug;
+import org.observe.dbug.DbugAnchor;
+import org.observe.dbug.DbugAnchorType;
+import org.observe.util.TypeTokens;
 import org.qommons.Transaction;
 import org.qommons.tree.BetterTreeList;
+
+import com.google.common.reflect.TypeToken;
 
 /**
  * A swing ListModel backed by an {@link ObservableCollection}
@@ -23,6 +29,14 @@ import org.qommons.tree.BetterTreeList;
  * @param <E> The type of data in the collection
  */
 public class ObservableListModel<E> implements ListModel<E> {
+	/** Anchor type for {@link Dbug}-based debugging */
+	@SuppressWarnings("rawtypes")
+	public static final DbugAnchorType<ObservableListModel> DBUG = Dbug.common().anchor(ObservableListModel.class, a -> a//
+		.withField("type", true, false, TypeTokens.get().keyFor(TypeToken.class).wildCard())//
+		.withEvent("add").withEvent("remove").withEvent("set"));
+
+	@SuppressWarnings("rawtypes")
+	private final DbugAnchor<ObservableListModel> theAnchor;
 	private final ObservableCollection<E> theWrapped;
 	/**
 	 * This model must keep an independent representation of its data, which is only modified on the EDT, just before firing an event
@@ -35,6 +49,9 @@ public class ObservableListModel<E> implements ListModel<E> {
 
 	/** @param wrap The observable collection to back this model */
 	public ObservableListModel(ObservableCollection<E> wrap) {
+		theAnchor = DBUG.instance(this, a -> a//
+			.setField("type", wrap.getType(), null)//
+			);
 		if (wrap == null)
 			throw new NullPointerException();
 		theWrapped = wrap;
@@ -107,16 +124,19 @@ public class ObservableListModel<E> implements ListModel<E> {
 				ListDataEvent wrappedEvent = new ListDataEvent(ObservableListModel.this, getSwingType(event.type), indexes[0], indexes[1]);
 				switch (event.type) {
 				case add:
+					theAnchor.event("add", event);
 					for (int i = indexes[0]; i <= indexes[1]; i++)
 						theCachedData.add(i, changesByIndex.remove(i));
 					intervalAdded(wrappedEvent);
 					break;
 				case remove:
+					theAnchor.event("remove", event);
 					for (int i = indexes[1]; i >= indexes[0]; i--)
 						theCachedData.remove(i);
 					intervalRemoved(wrappedEvent);
 					break;
 				case set:
+					theAnchor.event("set", event);
 					for (int i = indexes[0]; i <= indexes[1]; i++)
 						theCachedData.set(i, changesByIndex.remove(i));
 					contentsChanged(wrappedEvent);

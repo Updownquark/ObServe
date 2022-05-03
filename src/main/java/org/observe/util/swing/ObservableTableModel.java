@@ -5,7 +5,6 @@ import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.awt.event.MouseMotionListener;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedList;
@@ -18,6 +17,7 @@ import javax.swing.event.ListDataEvent;
 import javax.swing.event.ListDataListener;
 import javax.swing.event.TableModelEvent;
 import javax.swing.event.TableModelListener;
+import javax.swing.table.JTableHeader;
 import javax.swing.table.TableCellRenderer;
 import javax.swing.table.TableColumn;
 import javax.swing.table.TableModel;
@@ -348,36 +348,22 @@ public class ObservableTableModel<R> implements TableModel {
 				protected boolean isCellSelected(int rowIndex, int columnIndex) {
 					return table.isCellSelected(rowIndex, columnIndex);
 				}
+
+				@Override
+				protected <C> void setToolTip(String tooltip, boolean header) {
+					(header ? table.getTableHeader() : table).setToolTipText(tooltip);
+				}
 			};
 			table.addMouseListener(ml);
 			table.addMouseMotionListener(ml);
-			subs.add(() -> table.removeMouseListener(ml));
-			subs.add(() -> table.removeMouseMotionListener(ml));
-			MouseMotionListener tableMML = new MouseAdapter() {
-				@Override
-				public void mouseMoved(MouseEvent evt) {
-					int row = table.rowAtPoint(evt.getPoint());
-					if (row < 0) {
-						table.setToolTipText(null);
-						return;
-					}
-					int column = table.columnAtPoint(evt.getPoint());
-					if (column < 0) {
-						table.setToolTipText(null);
-						return;
-					}
-					CategoryRenderStrategy<? super R, Object> category = (CategoryRenderStrategy<? super R, Object>) model
-						.getColumn(column);
-					row = table.convertRowIndexToModel(row);
-					column = table.convertColumnIndexToModel(column);
-					R rowValue = model.getRow(row);
-					boolean selected = table.isRowSelected(row);
-					table.setToolTipText(category.getTooltip(new ModelCell.Default<>(//
-						() -> rowValue, category.getCategoryValue(rowValue), row, column, selected, selected, true, true)));
-				}
-			};
-			table.addMouseMotionListener(tableMML);
-			subs.add(() -> table.removeMouseMotionListener(tableMML));
+			table.getTableHeader().addMouseListener(ml);
+			table.getTableHeader().addMouseMotionListener(ml);
+			subs.add(() -> {
+				table.removeMouseListener(ml);
+				table.removeMouseMotionListener(ml);
+				table.getTableHeader().removeMouseListener(ml);
+				table.getTableHeader().removeMouseMotionListener(ml);
+			});
 			KeyListener tableKL = new KeyListener() {
 				class KeyTypeStruct<C> {
 					private final ModelCell<R, C> cell;
@@ -451,22 +437,6 @@ public class ObservableTableModel<R> implements TableModel {
 			};
 			table.addKeyListener(tableKL);
 			subs.add(() -> table.removeKeyListener(tableKL));
-			MouseAdapter headerML = new MouseAdapter() {
-				@Override
-				public void mouseMoved(MouseEvent evt) {
-					int column = table.columnAtPoint(evt.getPoint());
-					if (column < 0) {
-						table.getTableHeader().setToolTipText(null);
-						return;
-					}
-					int modelColumn = table.convertColumnIndexToModel(column);
-					CategoryRenderStrategy<? super R, Object> category = (CategoryRenderStrategy<? super R, Object>) model
-						.getColumn(modelColumn);
-					table.getTableHeader().setToolTipText(category.getHeaderTooltip());
-				}
-			};
-			table.getTableHeader().addMouseMotionListener(headerML);
-			subs.add(() -> table.getTableHeader().removeMouseMotionListener(headerML));
 		}
 		return Subscription.forAll(subs.toArray(new Subscription[subs.size()]));
 	}
@@ -592,6 +562,11 @@ public class ObservableTableModel<R> implements TableModel {
 		SortedMatchSet getEmphaticRegions(int row, int column);
 	}
 
+	/**
+	 * A mouse listener on a table that handles column- and row-specific listeners and tooltips
+	 *
+	 * @param <R> The row type of the table
+	 */
 	public static abstract class TableMouseListener<R> extends MouseAdapter {
 		class MouseClickStruct<C> {
 			private final ModelRow<R> theRow;
@@ -629,11 +604,19 @@ public class ObservableTableModel<R> implements TableModel {
 			}
 
 			MouseClickStruct<C> entered(MouseEvent e, MouseClickStruct<?> previous) {
+				checkToolTip(theRow, theCell, theCategory);
 				if (theRow != null)
 					getRowListeners().forEach(listener -> listener.mouseEntered(theRow, e));
 				if (theCategory != null && theCategory.getMouseListener() != null)
 					theCategory.getMouseListener().mouseEntered(theCell, e);
 				return this;
+			}
+
+			private void checkToolTip(ModelRow<R> row, ModelCell<R, C> cell, CategoryRenderStrategy<R, C> category) {
+				if (row != null)
+					setToolTip(category.getTooltip(cell), false);
+				else if (category != null) // Column header
+					setToolTip(category.getHeaderTooltip(), true);
 			}
 
 			MouseClickStruct<C> exited(MouseEvent e, MouseClickStruct<?> previous) {
@@ -645,28 +628,35 @@ public class ObservableTableModel<R> implements TableModel {
 			}
 
 			MouseClickStruct<C> moved(MouseEvent e, MouseClickStruct<?> previous) {
+				boolean checkToolTip;
 				if (previous != null && previous.theRow != null) {
 					if (theRow != null && theRow.getModelValue() == previous.theRow.getModelValue()) {
 						getRowListeners().forEach(listener -> listener.mouseMoved(theRow, e));
 						if (previous.theCategory != null && previous.theCategory == theCategory) {
+							checkToolTip = false;
 							if (theCategory != null && theCategory.getMouseListener() != null)
 								theCategory.getMouseListener().mouseMoved(theCell, e);
 						} else {
+							checkToolTip = true;
 							previous.exitCell(e);
 							if (theCategory != null && theCategory.getMouseListener() != null)
 								theCategory.getMouseListener().mouseEntered(theCell, e);
 						}
 					} else {
+						checkToolTip = true;
 						previous.exitRow(e);
 						getRowListeners().forEach(listener -> listener.mouseEntered(theRow, e));
 						if (theCategory != null && theCategory.getMouseListener() != null)
 							theCategory.getMouseListener().mouseEntered(theCell, e);
 					}
 				} else {
+					checkToolTip = true;
 					getRowListeners().forEach(listener -> listener.mouseEntered(theRow, e));
 					if (theCategory != null && theCategory.getMouseListener() != null)
 						theCategory.getMouseListener().mouseEntered(theCell, e);
 				}
+				if (checkToolTip)
+					checkToolTip(theRow, theCell, theCategory);
 				return this;
 			}
 
@@ -696,6 +686,8 @@ public class ObservableTableModel<R> implements TableModel {
 		protected abstract boolean isRowSelected(int rowIndex);
 
 		protected abstract boolean isCellSelected(int rowIndex, int columnIndex);
+
+		protected abstract <C> void setToolTip(String tooltip, boolean header);
 
 		@Override
 		public void mouseClicked(MouseEvent e) {
@@ -728,12 +720,17 @@ public class ObservableTableModel<R> implements TableModel {
 		}
 
 		private <C> MouseClickStruct<C> getValue(MouseEvent evt, boolean movement) {
-			int row = getModelRow(evt);
+			int row;
+			if (evt.getComponent() instanceof JTableHeader)
+				row = -1;
+			else
+				row = getModelRow(evt);
+			int column = getModelColumn(evt);
 			if (row < 0) {
-				return new MouseClickStruct<>(null, null, null);
+				CategoryRenderStrategy<R, C> category = column < 0 ? null : (CategoryRenderStrategy<R, C>) getColumn(column);
+				return new MouseClickStruct<>(null, null, category);
 			}
 			R rowValue = getRowValue(row);
-			int column = getModelColumn(evt);
 			if (column < 0) {
 				if (getRowListeners().isEmpty())
 					return new MouseClickStruct<>(null, null, null);
@@ -741,7 +738,7 @@ public class ObservableTableModel<R> implements TableModel {
 				return new MouseClickStruct<>(new ModelRow.Default<>(() -> rowValue, row, selected, selected, true, true), null, null);
 			}
 			CategoryRenderStrategy<R, C> category = (CategoryRenderStrategy<R, C>) getColumn(column);
-			if (movement && category.getMouseListener() instanceof CategoryRenderStrategy.CategoryClickAdapter) {
+			if (movement && !category.getMouseListener().isMovementListener()) {
 				if (getRowListeners().isEmpty())
 					return new MouseClickStruct<>(null, null, null);
 				boolean selected = isRowSelected(row);

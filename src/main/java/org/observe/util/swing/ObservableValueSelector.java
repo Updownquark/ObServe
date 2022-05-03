@@ -28,10 +28,14 @@ import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSortedSet;
+import org.observe.dbug.Dbug;
+import org.observe.dbug.DbugAnchor;
+import org.observe.dbug.DbugAnchorType;
 import org.observe.util.TypeTokens;
 import org.qommons.Colors;
 import org.qommons.StringUtils;
 import org.qommons.ThreadConstraint;
+import org.qommons.Transaction;
 import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
@@ -65,6 +69,10 @@ import com.google.common.reflect.TypeToken;
  * @param <X> The type of the included value
  */
 public class ObservableValueSelector<T, X> extends JPanel {
+	/** Anchor type for {@link Dbug}-based debugging */
+	@SuppressWarnings("rawtypes")
+	public static DbugAnchorType<ObservableValueSelector> DBUG = Dbug.common().anchor(ObservableValueSelector.class, null);
+
 	/**
 	 * A value in an {@link ObservableValueSelector}
 	 *
@@ -81,7 +89,11 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		boolean included;
 		boolean selected;
 
-		SelectableValue(CollectionElement<T> sourceElement, boolean included) {
+		/**
+		 * @param sourceElement The source element for the value
+		 * @param included Whether the value is in the included set
+		 */
+		public SelectableValue(CollectionElement<T> sourceElement, boolean included) {
 			this.sourceElement = sourceElement;
 			this.included = included;
 		}
@@ -157,12 +169,14 @@ public class ObservableValueSelector<T, X> extends JPanel {
 
 	private boolean isIncludedByDefault;
 
+	@SuppressWarnings("rawtypes")
+	private final DbugAnchor<ObservableValueSelector> anchor = DBUG.instance(this);
+
 	private ObservableValueSelector(ObservableCollection<T> sourceRows, //
 		ObservableCollection<? extends CategoryRenderStrategy<SelectableValue<T, X>, ?>> sourceColumns, //
 			ObservableCollection<? extends CategoryRenderStrategy<SelectableValue<T, X>, ?>> destColumns, //
 				Function<? super T, ? extends X> map, boolean reEvalOnUpdate, Observable<?> until, //
 				boolean includedByDefault, Format<TableContentControl> filterFormat, boolean commitOnType, String itemName) {
-		super(new JustifiedBoxLayout(false).crossJustified().mainJustified().forceFill(true));
 		theSourceRows = sourceRows;
 		theMap = map;
 		theSelectableValues = ObservableSortedSet.create(new TypeToken<SelectableValue<T, X>>() {
@@ -207,7 +221,8 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		theExcludeButton = new JButton("<");
 		theExcludeAllButton = new JButton("<<");
 
-		PanelPopulation.populateHPanel(this, getLayout(), until)//
+		Transaction t = anchor.instantiating().watchFor(JustifiedBoxLayout.DBUG, "layout", tkn -> tkn.applyTo(1));
+		PanelPopulation.populateHPanel(this, new JustifiedBoxLayout(false).crossJustified().mainJustified().forceFill(true), until)//
 		.addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified().forceFill(true), //
 			srcPanel -> srcPanel.withName("OVS Source")
 			.addTextField(null, theFilterText, filterFormat == null ? TableContentControl.FORMAT : filterFormat,
@@ -430,6 +445,7 @@ public class ObservableValueSelector<T, X> extends JPanel {
 				selectCallbackLock[0] = false;
 			}
 		});
+		t.close();
 	}
 
 	private void adjustSelectionFromLeft(int min, int max, boolean[] selectCallbackLock) {
@@ -696,11 +712,20 @@ public class ObservableValueSelector<T, X> extends JPanel {
 			return this;
 		}
 
+		/**
+		 * @param filterCommitOnType Whether the search text box should cause the content in the table to change as the user types, as
+		 *        opposed to waiting for them to press enter
+		 * @return This builder
+		 */
 		public Builder<T, X> withFilterCommitOnType(boolean filterCommitOnType) {
 			isFilterCommitOnType = filterCommitOnType;
 			return this;
 		}
 
+		/**
+		 * @param itemName The name of items in this selector--may be used for some user-facing text
+		 * @return This builder
+		 */
 		public Builder<T, X> withItemName(String itemName) {
 			theItemName = itemName;
 			return this;
