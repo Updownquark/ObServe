@@ -54,6 +54,7 @@ import org.observe.expresso.ObservableModelSet.AbstractValueContainer;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.RuntimeValuePlaceholder;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.expresso.ObservableModelSet.ValueCreator;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.CategoryRenderStrategy;
 import org.observe.util.swing.CellDecorator;
@@ -154,7 +155,7 @@ public class QuickBase extends QuickCore {
 		.createWith("column", Column.class, this::interpretColumn)//
 		.createWith("modify-row-value", ColumnEditing.class, this::interpretRowModify)//
 		// .createWith("replace-row-value", ColumnEditing.class, this::interpretRowReplace) TODO
-		.createWith("columns", ValueContainer.class, this::interpretColumns)//
+		.createWith("columns", ValueCreator.class, this::interpretColumns)//
 		.createWith("split", QuickComponentDef.class, this::interpretSplit)//
 		.createWith("field-panel", QuickComponentDef.class, this::interpretFieldPanel)//
 		.modifyWith("field", QuickComponentDef.class, this::modifyField)//
@@ -420,7 +421,7 @@ public class QuickBase extends QuickCore {
 		ClassView cv = session.getClassView();
 		ObservableModelSet model = session.getModels();
 		Function<ModelSetInstance, SettableValue<String>> buttonText;
-		ObservableExpression valueX = session.getAttribute("text", ObservableExpression.class);
+		ObservableExpression valueX = session.getValue(ObservableExpression.class, null);
 		if (valueX == null) {
 			String txt = session.getValueText();
 			if (txt == null)
@@ -676,7 +677,7 @@ public class QuickBase extends QuickCore {
 		};
 	}
 
-	private ValueContainer<ObservableCollection, ObservableCollection<CategoryRenderStrategy<Object, ?>>> interpretColumns(
+	private ValueCreator<ObservableCollection, ObservableCollection<CategoryRenderStrategy<Object, ?>>> interpretColumns(
 		ExpressoSession<?> session) throws QonfigInterpretationException {
 		TypeToken<Object> rowType = (TypeToken<Object>) Expresso.parseType(session.getAttributeText("type"));
 		session.put("model-type", rowType);
@@ -687,7 +688,7 @@ public class QuickBase extends QuickCore {
 		String colValueName = session.getAttributeText("render-value-name");
 		session.put("render-value-name", colValueName);
 		List<Column<Object, ?>> columns = session.interpretChildren("column", Column.class);
-		return new AbstractValueContainer<ObservableCollection, ObservableCollection<CategoryRenderStrategy<Object, ?>>>(
+		return ()->new AbstractValueContainer<ObservableCollection, ObservableCollection<CategoryRenderStrategy<Object, ?>>>(
 			ModelTypes.Collection.forType(columnType)) {
 			@Override
 			public ObservableCollection<CategoryRenderStrategy<Object, ?>> get(ModelSetInstance models) {
@@ -1225,7 +1226,7 @@ public class QuickBase extends QuickCore {
 							.build();
 						ObservableAction<?> a = action.action.apply(actionModel);
 						if (action.valueListPlaceholder != null) {
-							table.withMultiAction(values -> {
+							table.withMultiAction(null, values -> {
 								actionValues.clear();
 								actionValues.addAll(values);
 								a.act(null);
@@ -1241,7 +1242,7 @@ public class QuickBase extends QuickCore {
 								});
 							});
 						} else {
-							table.withAction(value -> {
+							table.withAction(null, value -> {
 								a.act(null);
 							}, configAction -> {
 								configAction.allowForEmpty(action.allowForEmpty).allowForMultiple(action.allowForMultiple);

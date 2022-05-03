@@ -1780,7 +1780,7 @@ public class DefaultExpressoParser implements ExpressoParser {
 											//$FALL-THROUGH$
 										case 0:
 											if (voidTarget || targetType.isAssignableFrom(TypeTokens.get().of(m.getGenericReturnType()))) {
-												// TODO resultType
+												setResultType((TypeToken<T>) TypeTokens.get().of(m.getGenericReturnType()));
 												return msi -> (p1, p2, p3) -> {
 													try {
 														return voidTarget ? null : (T) finalM.invoke(null,
@@ -1808,7 +1808,7 @@ public class DefaultExpressoParser implements ExpressoParser {
 												option.argTypes[0])//
 												&& (voidTarget
 													|| targetType.isAssignableFrom(TypeTokens.get().of(m.getGenericReturnType())))) {
-												// TODO resultType
+												setResultType((TypeToken<T>) TypeTokens.get().of(m.getGenericReturnType()));
 												return msi -> (p1, p2, p3) -> {
 													try {
 														return voidTarget ? null : (T) finalM.invoke(null,
@@ -2552,7 +2552,7 @@ public class DefaultExpressoParser implements ExpressoParser {
 						}
 						ObservableModelSet.WrappedBuilder wrappedModelsBuilder = ObservableModelSet.wrap(models);
 						ObservableModelSet.RuntimeValuePlaceholder<?, ?>[] placeholders = new ObservableModelSet.RuntimeValuePlaceholder[theParameters
-						                                                                                                             .size()];
+						                                                                                                                 .size()];
 						for (int i = 0; i < theParameters.size(); i++)
 							placeholders[i] = configureParameter(wrappedModelsBuilder, theParameters.get(i), option.argTypes[i]);
 						ObservableModelSet.Wrapped wrappedModels = wrappedModelsBuilder.build();

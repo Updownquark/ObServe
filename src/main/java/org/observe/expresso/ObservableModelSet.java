@@ -118,6 +118,28 @@ public interface ObservableModelSet {
 		}
 	}
 
+	interface ValueCreator<M, MV extends M> {
+		ValueContainer<M, MV> createValue();
+
+		static <M, MV extends M> ValueCreator<M, MV> constant(ValueContainer<M, MV> container) {
+			return new ValueCreator<M, MV>() {
+				@Override
+				public ValueContainer<M, MV> createValue() {
+					return container;
+				}
+
+				@Override
+				public String toString() {
+					return container.toString();
+				}
+			};
+		}
+
+		static <T> ValueCreator<SettableValue, SettableValue<T>> literal(TypeToken<T> type, T value, String text) {
+			return constant(ObservableModelSet.literalContainer(ModelTypes.Value.forType(type), value, text));
+		}
+	}
+
 	abstract class AbstractValueContainer<M, MV extends M> implements ValueContainer<M, MV> {
 		private final ModelInstanceType<M, MV> theType;
 
@@ -444,6 +466,8 @@ public interface ObservableModelSet {
 			return with(name, value.getType(), (msi, ext) -> value.get(msi));
 		}
 
+		Builder withMaker(String name, ValueCreator<?, ?> maker);
+
 		Builder createSubModel(String name);
 
 		ObservableModelSet build();
@@ -552,7 +576,7 @@ public interface ObservableModelSet {
 					thing.getModel().install(modelSet, extModel);
 					modelSet.setModelConfiguration(modelConfig);
 				} else
-					modelSet.installThing(thing, thing.getGetter().get(modelSet, extModel));
+					modelSet.installThing(thing, thing.get(modelSet, extModel));
 			}
 		}
 
@@ -580,7 +604,7 @@ public interface ObservableModelSet {
 
 			Default getModel();
 
-			ValueGetter<MV> getGetter();
+			MV get(ModelSetInstanceBuilder modelSet, ExternalModelSet extModel);
 		}
 
 		static class PlaceholderImpl<M, MV extends M> implements Placeholder<M, MV> {
@@ -607,8 +631,8 @@ public interface ObservableModelSet {
 			}
 
 			@Override
-			public ValueGetter<MV> getGetter() {
-				return theGetter;
+			public MV get(ModelSetInstanceBuilder modelSet, ExternalModelSet extModel) {
+				return theGetter.get(modelSet, extModel);
 			}
 
 			@Override
@@ -624,6 +648,57 @@ public interface ObservableModelSet {
 			@Override
 			public String toString() {
 				return new StringBuilder(theType.toString()).append('@').append(thePath).toString();
+			}
+		}
+
+		static class MakerPlaceholderImpl<M, MV extends M> implements Placeholder<M, MV> {
+			private final String thePath;
+			private final ValueCreator<M, MV> theValueMaker;
+			private ValueContainer<M, MV> theValue;
+			private final Default theModel;
+
+			public MakerPlaceholderImpl(String path, ValueCreator<M, MV> value,
+				Default model) {
+				thePath = path;
+				theValueMaker = value;
+				theModel = model;
+			}
+
+			@Override
+			public String getPath() {
+				return thePath;
+			}
+
+			@Override
+			public Default getModel() {
+				return theModel;
+			}
+
+			@Override
+			public ModelInstanceType<M, MV> getType() {
+				if (theValue == null)
+					theValue = theValueMaker.createValue();
+				return theValue.getType();
+			}
+
+			@Override
+			public MV get(ModelSetInstanceBuilder modelSet, ExternalModelSet extModel) {
+				if (theValue == null)
+					theValue = theValueMaker.createValue();
+				return theValue.get(modelSet);
+			}
+
+			@Override
+			public MV get(ModelSetInstance models) {
+				return (MV) models.getThing(this);
+			}
+
+			@Override
+			public String toString() {
+				if (theValue != null)
+					return new StringBuilder(theValue.getType().toString()).append('@').append(thePath).toString();
+				else
+					return new StringBuilder("?").append('@').append(thePath).toString();
 			}
 		}
 
@@ -694,7 +769,7 @@ public interface ObservableModelSet {
 		}
 
 		static class DefaultBuilder extends Default implements Builder {
-			private Function<ModelSetInstance, ?> theModelConfiguration;
+			private Function<ModelSetInstance, ?> theModelConfigurationCreator;
 
 			private DefaultBuilder(DefaultBuilder root, DefaultBuilder parent, String path, NameChecker nameChecker) {
 				super(root, parent, path, new LinkedHashMap<>(), null, nameChecker);
@@ -702,7 +777,7 @@ public interface ObservableModelSet {
 
 			@Override
 			public Builder setModelConfiguration(Function<ModelSetInstance, ?> modelConfiguration) {
-				theModelConfiguration = modelConfiguration;
+				theModelConfigurationCreator = modelConfiguration;
 				return this;
 			}
 
@@ -713,6 +788,16 @@ public interface ObservableModelSet {
 					throw new IllegalArgumentException(
 						"A value of type " + theThings.get(name).getType() + " has already been added as '" + name + "'");
 				theThings.put(name, createPlaceholder(pathTo(name), type, getter, null));
+				return this;
+			}
+
+			@Override
+			public Builder withMaker(String name, ValueCreator<?, ?> maker) {
+				theNameChecker.checkName(name);
+				if (theThings.containsKey(name))
+					throw new IllegalArgumentException(
+						"A value of type " + theThings.get(name).getType() + " has already been added as '" + name + "'");
+				theThings.put(name, createMakerPlaceholder(pathTo(name), maker, null));
 				return this;
 			}
 
@@ -735,6 +820,11 @@ public interface ObservableModelSet {
 				return new PlaceholderImpl<>(path, type, getter, subModel);
 			}
 
+			protected <M, MV extends M> Placeholder<M, MV> createMakerPlaceholder(String path, ValueCreator<M, MV> maker,
+				Default subModel) {
+				return new MakerPlaceholderImpl<>(path, maker, subModel);
+			}
+
 			@Override
 			public ObservableModelSet build() {
 				return _build(null, null, thePath);
@@ -742,11 +832,12 @@ public interface ObservableModelSet {
 
 			private Default _build(Default root, Default parent, String path) {
 				Map<String, Placeholder<?, ?>> things = new LinkedHashMap<>(theThings.size() * 3 / 2 + 1);
-				Default model = create(root, parent, path, things, theModelConfiguration);
+				Default model = create(root, parent, path, things, theModelConfigurationCreator);
 				if (root == null)
 					root = model;
 				for (Map.Entry<String, Placeholder<?, ?>> thing : theThings.entrySet()) {
-					if (thing.getValue().getType().getModelType() == ModelTypes.Model)
+					if (things.containsKey(thing.getKey())) { // Already create dynamically
+					} else if (thing.getValue().getType().getModelType() == ModelTypes.Model)
 						things.put(thing.getKey(),
 							createPlaceholder(thing.getValue().getPath(), ModelTypes.Model.instance(), null,
 								((DefaultBuilder) thing.getValue().getModel())._build(root, model, //
@@ -866,6 +957,12 @@ public interface ObservableModelSet {
 			}
 
 			@Override
+			protected <M, MV extends M> Placeholder<M, MV> createMakerPlaceholder(String path, ValueCreator<M, MV> maker,
+				Default subModel) {
+				return new WrappedMakerPlaceholderImpl<>(path, maker, subModel, this);
+			}
+
+			@Override
 			public ValueContainer<?, ?> get(String path, boolean required) throws QonfigInterpretationException {
 				ValueContainer<?, ?> thing = null;
 				if (path.indexOf('.') < 0)
@@ -905,6 +1002,20 @@ public interface ObservableModelSet {
 			@Override
 			public Object getModelId() {
 				return theModelId;
+			}
+		}
+
+		static class WrappedMakerPlaceholderImpl<M, MV extends M> extends MakerPlaceholderImpl<M, MV> implements WrappedPlaceholder<M, MV> {
+			private final Object thePMModelId;
+
+			WrappedMakerPlaceholderImpl(String path, ValueCreator<M, MV> value, Default model, Object modelId) {
+				super(path, value, model);
+				thePMModelId = modelId;
+			}
+
+			@Override
+			public Object getModelId() {
+				return thePMModelId;
 			}
 		}
 
@@ -950,7 +1061,7 @@ public interface ObservableModelSet {
 			}
 
 			@Override
-			public ValueGetter<MV> getGetter() {
+			public MV get(ModelSetInstanceBuilder modelSet, ExternalModelSet extModel) {
 				throw new IllegalStateException();
 			}
 
@@ -965,7 +1076,7 @@ public interface ObservableModelSet {
 
 			private final Object theModelId;
 			private final ModelSetInstance theWrapped;
-			private final Map<WrappedPlaceholder<?, ?>, Object> theValues;
+			private final Map<Placeholder<?, ?>, Object> theValues;
 			private List<Observable<?>> theUntils;
 			private Object theModelConfig;
 
@@ -996,7 +1107,7 @@ public interface ObservableModelSet {
 
 			@Override
 			void installThing(Placeholder<?, ?> placeholder, Object thing) {
-				theValues.put((WrappedPlaceholderImpl<?, ?>) placeholder, thing);
+				theValues.put(placeholder, thing);
 			}
 
 			@Override
@@ -1027,7 +1138,7 @@ public interface ObservableModelSet {
 
 			@Override
 			public ModelSetInstance build() throws IllegalStateException {
-				for (Map.Entry<WrappedPlaceholder<?, ?>, Object> value : theValues.entrySet()) {
+				for (Map.Entry<Placeholder<?, ?>, Object> value : theValues.entrySet()) {
 					if (value.getValue() == UNFULFILLED)
 						throw new IllegalStateException("Placeholder " + value.getKey() + " is unfulfilled");
 				}
@@ -1047,10 +1158,10 @@ public interface ObservableModelSet {
 		static class WrappedMSI extends ModelSetInstance {
 			private final Object theModelId;
 			private final ModelSetInstance theWrapped;
-			private final Map<WrappedPlaceholder<?, ?>, Object> thePlaceholderValues;
+			private final Map<Placeholder<?, ?>, Object> thePlaceholderValues;
 			private final Observable<?> theUntil;
 
-			WrappedMSI(Object modelId, ModelSetInstance wrapped, Map<WrappedPlaceholder<?, ?>, Object> placeholderValues,
+			WrappedMSI(Object modelId, ModelSetInstance wrapped, Map<Placeholder<?, ?>, Object> placeholderValues,
 				Observable<?> until) {
 				theModelId = modelId;
 				theWrapped = wrapped;

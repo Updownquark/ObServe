@@ -17,12 +17,15 @@
 
 		<add-on name="int-model-value" requires="model-value">
 			<attribute name="model-value.type" specify="optional" default="" />
-			<value type="expression-or-string" specify="optional" />
 		</add-on>
-		<add-on name="int-list" requires="list">
+		<add-on name="allow-ext-model" abstract="true" />
+		<add-on name="ext-model-value" requires="model-value">
+			<value-mod specify="forbidden" /> <!-- External values are specified by code instantiating the model -->
+		</add-on>
+		<add-on name="int-list" requires="list" inherits="int-model-value">
 			<child-def name="element" type="element" min="0" max="inf" />
 		</add-on>
-		<add-on name="int-map" requires="map">
+		<add-on name="int-map" requires="map" inherits="int-model-value">
 			<attribute name="map.key-type" specify="optional" default="" />
 			<child-def name="entry" type="entry" min="0" max="inf" />
 		</add-on>
@@ -33,15 +36,15 @@
 			<attribute name="sort-with" type="expression" specify="optional" />
 		</add-on>
 
+		<add-on name="allow-config-model" abstract="true" />
 		<add-on name="config-model-value" requires="model-value">
 			<attribute name="config-path" type="string" specify="optional" />
 			<attribute name="format" type="expression" specify="optional" />
 		</add-on>
-		<add-on name="config-value" requires="value" inherits="config-value">
+		<add-on name="config-value" requires="value" inherits="config-model-value">
 			<attribute name="default" type="expression-or-string" specify="optional" />
 		</add-on>
-		<add-on name="config-map" requires="map" extends="config-value" inherits="config-value">
-			<attribute name="config-value.default" specify="forbidden" />
+		<add-on name="config-map" requires="map" inherits="config-model-value">
 			<attribute name="key-format" type="expression" specify="optional" />
 		</add-on>
 
@@ -144,16 +147,17 @@
 		</element-def>
 		<element-def name="model-value" abstract="true">
 			<attribute name="type" type="string" specify="required" />
+			<value type="expression-or-string" specify="optional" />
 		</element-def>
-		<element-def name="event" extends="model-value" />
-		<element-def name="action" extends="model-value" />
-		<element-def name="value" extends="model-value" />
-		<element-def name="list" extends="model-value" />
+		<element-def name="event" extends="model-value" inherits="allow-ext-model" />
+		<element-def name="action" extends="model-value" inherits="allow-ext-model" />
+		<element-def name="value" extends="model-value" inherits="allow-ext-model,allow-config-model" />
+		<element-def name="list" extends="model-value" inherits="allow-ext-model,allow-config-model" />
 		<element-def name="value-set" extends="list" />
 		<element-def name="set" extends="list" />
 		<element-def name="sorted-set" extends="set" />
 		<element-def name="sorted-list" extends="list" />
-		<element-def name="map" extends="model-value" inherits="map-model-value" />
+		<element-def name="map" extends="model-value" inherits="allow-ext-model,allow-config-model,map-model-value" />
 		<element-def name="sorted-map" extends="map" />
 		<element-def name="multi-map" extends="map" />
 		<element-def name="sorted-multi-map" extends="multi-map" />
@@ -162,14 +166,14 @@
 			 to the app.  Since they are only expectations of values that will be supplied externally,
 			 no values can be specified in the elements. -->
 		<element-def name="ext-model" extends="abst-model">
-			<child-def name="sub-model" type="ext-model" min="0" max="inf" />
+			<child-def name="sub-model" type="ext-model" min="0" max="inf" requires="allow-ext-model" />
 		</element-def>
 		<!-- Internal models.  These function as variables that are defined and sometimes instantiated inside the app. -->
 		<element-def name="model" extends="abst-model">
 			<child-def name="sub-model" type="model" min="0" max="inf" />
 		</element-def>
 		<element-def name="constant" extends="model-value">
-			<value type="expression-or-string" specify="required" />
+			<value-mod type="expression-or-string" specify="required" />
 		</element-def>
 		<element-def name="element">
 			<value type="expression-or-string" specify="required" />
@@ -184,21 +188,22 @@
 			<attribute name="config-name" type="string" specify="optional" />
 			<attribute name="config-dir" type="expression" specify="optional" />
 			<child-def name="old-config-name" type="old-config-name" min="0" max="inf" />
-			<child-mod child="abst-model.value" type="config-value" />
+			<child-mod child="abst-model.value" requires="allow-config-model" />
 			<attribute name="backup" type="boolean" default="true" />
 		</element-def>
 		<element-def name="old-config-name">
 			<value type="string" />
 		</element-def>
-		<element-def name="first-value" extends="int-model-value">
+		<element-def name="first-value" extends="model-value" inherits="int-model-value">
 			<!-- Type can be inferred from the super-type of the other values, but the user can specify it instead -->
-			<attribute name="int-model-value.type" specify="optional" default="" />
-			<child-def name="value" type="int-model-value" min="1" max="inf" />
+			<attribute name="model-value.type" specify="optional" default="" />
+			<value-mod specify="forbidden" />
+			<child-def name="value" type="model-value" min="1" max="inf" inherits="int-model-value" />
 		</element-def>
 		
 		<!-- Transformations.  These take values supplied by other models and perform some dynamic operation on the value(s) to produce
 			 a result that is a product of the source. -->
-		<element-def name="transform" extends="model-value">
+		<element-def name="transform" extends="model-value" inherits="int-model-value">
 			<attribute name="source" type="expression" specify="required" />
 			<!-- Type can be inferred from the transformation, but the user can specify that the result is a super-type instead -->
 			<attribute name="int-model-value.type" specify="optional" default="" />
@@ -291,8 +296,8 @@
 		<element-def name="archive-method">
 			<attribute name="type" type="archive-type" />
 		</element-def>
-		<element-def name="file-source" extends="int-model-value">
-			<attribute name="int-model-value.type" specify="forbidden" default="" />
+		<element-def name="file-source" extends="model-value">
+			<attribute name="model-value.type" specify="forbidden" default="" />
 			<attribute name="type" type="file-source-type" default="native" />
 			<attribute name="max-archive-depth" type="expression" default="10" />
 			<child-def name="archive" type="archive-method" min="0" max="inf" />
@@ -305,8 +310,8 @@
 		<element-def name="validate">
 			<attribute name="type" type="validate-type" />
 		</element-def>
-		<element-def name="format" extends="int-model-value">
-			<attribute name="int-model-value.type" specify="forbidden" default="" />
+		<element-def name="format" extends="model-value">
+			<attribute name="model-value.type" specify="forbidden" default="" />
 			<attribute name="type" type="format-type" />
 			<child-def name="validate" type="validate" min="0" max="inf" />
 		</element-def>
@@ -315,7 +320,7 @@
 			<attribute name="exp" type="int" specify="optional" />
 			<attribute name="multiplier" type="float" specify="optional" />
 		</element-def>
-		<element-def name="simple-config-format" extends="int-model-value">
+		<element-def name="simple-config-format" extends="model-value">
 			<!-- Optional because this can be supplied for some types -->
 			<attribute name="format" type="expression" specify="optional" />
 			<attribute name="default" type="string" specify="optional" />
@@ -323,6 +328,10 @@
 	</elements>
 
 	<auto-inheritance>
+		<auto-inherit inherits="ext-model-value">
+			<target element="model-value" role="ext-model.value" />
+		</auto-inherit>
+
 		<auto-inherit inherits="int-model-value">
 			<target element="model-value" role="model.value" />
 		</auto-inherit>
@@ -331,18 +340,6 @@
 		</auto-inherit>
 		<auto-inherit inherits="int-map">
 			<target element="map" role="model.value" />
-		</auto-inherit>
-		<auto-inherit inherits="sorted-set">
-			<target element="sorted-set" role="model.value" />
-		</auto-inherit>
-		<auto-inherit inherits="sorted-list">
-			<target element="sorted-set" role="model.value" />
-		</auto-inherit>
-		<auto-inherit inherits="sorted-map">
-			<target element="sorted-set" role="model.value" />
-		</auto-inherit>
-		<auto-inherit inherits="sorted-multi-map">
-			<target element="sorted-set" role="model.value" />
 		</auto-inherit>
 
 		<auto-inherit inherits="config-model-value">
@@ -353,18 +350,6 @@
 		</auto-inherit>
 		<auto-inherit inherits="config-map">
 			<target element="map" role="config.value" />
-		</auto-inherit>
-		<auto-inherit inherits="sorted-set">
-			<target element="sorted-set" role="config.value" />
-		</auto-inherit>
-		<auto-inherit inherits="sorted-list">
-			<target element="sorted-set" role="config.value" />
-		</auto-inherit>
-		<auto-inherit inherits="sorted-map">
-			<target element="sorted-set" role="config.value" />
-		</auto-inherit>
-		<auto-inherit inherits="sorted-multi-map">
-			<target element="sorted-set" role="config.value" />
 		</auto-inherit>
 	</auto-inheritance>
 </qonfig-def>

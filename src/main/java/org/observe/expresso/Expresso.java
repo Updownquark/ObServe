@@ -43,6 +43,7 @@ import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSortedCollection;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.config.ObservableConfig;
+import org.observe.config.ObservableConfig.ObservableConfigMapBuilder;
 import org.observe.config.ObservableConfig.ObservableConfigPersistence;
 import org.observe.config.ObservableConfig.ObservableConfigValueBuilder;
 import org.observe.config.ObservableConfigFormat;
@@ -55,10 +56,10 @@ import org.observe.expresso.ObservableExpression.MethodFinder;
 import org.observe.expresso.ObservableModelSet.AbstractValueContainer;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.expresso.ObservableModelSet.ValueCreator;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.WindowPopulation;
 import org.qommons.BiTuple;
-import org.qommons.LambdaUtils;
 import org.qommons.SubClassMap2;
 import org.qommons.ThreadConstraint;
 import org.qommons.TimeUtils;
@@ -103,7 +104,7 @@ public class Expresso {
 
 	public static final String PATH_KEY = "model-path";
 	public static final String VALUE_TYPE_KEY = "value-type";
-	public static final String KEY_TYPE_KEY = "value-type";
+	public static final String KEY_TYPE_KEY = "key-type";
 
 	public interface ExtModelValue<M> {
 		ModelInstanceType<M, ?> getType(ExpressoSession<?> session) throws QonfigInterpretationException;
@@ -233,8 +234,8 @@ public class Expresso {
 		configureExternalModels(observeInterpreter);
 		configureInternalModels(observeInterpreter);
 		configureConfigModels(observeInterpreter);
-		observeInterpreter.createWith("first-value", ValueContainer.class, this::createFirstValue);
-		observeInterpreter.createWith("transform", ValueContainer.class, this::createTransform);
+		observeInterpreter.createWith("first-value", ValueCreator.class, this::createFirstValue);
+		observeInterpreter.createWith("transform", ValueCreator.class, this::createTransform);
 		configureFormats(observeInterpreter);
 		return interpreter;
 	}
@@ -267,12 +268,12 @@ public class Expresso {
 			ObservableModelSet built = builder.build();
 			session.setModels(built);
 			return built;
-		}).modifyWith("abst-model-value", Object.class, new QonfigValueModifier<ExpressoSession<?>, Object>() {
+		}).modifyWith("model-value", Object.class, new QonfigValueModifier<ExpressoSession<?>, Object>() {
 			@Override
 			public void prepareSession(ExpressoSession<?> session) throws QonfigInterpretationException {
 				if (session.get(VALUE_TYPE_KEY) == null) {
 					String typeStr = session.getAttributeText("type");
-					if (typeStr != null)
+					if (typeStr != null && !typeStr.isEmpty())
 						session.put(VALUE_TYPE_KEY, parseType(typeStr));
 				}
 				if (session.isInstance("model-element"))
@@ -288,7 +289,7 @@ public class Expresso {
 			public void prepareSession(ExpressoSession<?> session) throws QonfigInterpretationException {
 				if (session.get(KEY_TYPE_KEY) == null) {
 					String typeStr = session.getAttributeText("key-type");
-					if (typeStr != null)
+					if (typeStr != null && !typeStr.isEmpty())
 						session.put(KEY_TYPE_KEY, parseType(typeStr));
 				}
 			}
@@ -310,7 +311,7 @@ public class Expresso {
 			for (ExpressoSession<?> child : session.forChildren()) {
 				if (child.fulfills(valueRole)) {
 					String name = child.getAttributeText("model-element", "name");
-					path.append(name);
+					path.append('.').append(name);
 					String childPath = path.toString();
 					path.setLength(pathLen);
 					ExtModelValue<?> container = child.interpret(ExtModelValue.class);
@@ -348,7 +349,7 @@ public class Expresso {
 
 	void configureInternalModels(ExpressoInterpreter.Builder<?, ?> interpreter) {
 		abstract class InternalCollectionValue<C extends ObservableCollection>
-		implements QonfigValueCreator<ExpressoSession<?>, ValueContainer<C, C>> {
+		implements QonfigValueCreator<ExpressoSession<?>, ValueCreator<C, C>> {
 			private final ModelType<C> theType;
 
 			protected InternalCollectionValue(ModelType<C> type) {
@@ -356,21 +357,30 @@ public class Expresso {
 			}
 
 			@Override
-			public ValueContainer<C, C> createValue(ExpressoSession<?> session) throws QonfigInterpretationException {
+			public ValueCreator<C, C> createValue(ExpressoSession<?> session) throws QonfigInterpretationException {
 				TypeToken<Object> type = session.get(VALUE_TYPE_KEY, TypeToken.class);
-				List<ValueContainer<SettableValue, SettableValue<Object>>> values = session.interpretChildren("element",
-					ValueContainer.class);
-				prepare(type, session);
-				return new AbstractValueContainer<C, C>((ModelInstanceType<C, C>) theType.forTypes(type)) {
-					@Override
-					public C get(ModelSetInstance models) {
-						C collection = (C) create(type, models).withDescription(session.get(PATH_KEY, String.class)).build();
-						for (ValueContainer<SettableValue, SettableValue<Object>> value : values) {
-							if (!collection.add(value.apply(models)))
-								System.err.println("Warning: Value " + value + " already added to " + session.get(PATH_KEY));
-						}
-						return collection;
+				List<ValueCreator<SettableValue, SettableValue<Object>>> elCreators = session.interpretChildren("element",
+					ValueCreator.class);
+				return () -> {
+					try {
+						prepare(type, session);
+					} catch (QonfigInterpretationException e) {
+						session.withError(e.getMessage(), e);
 					}
+					List<ValueContainer<SettableValue, SettableValue<Object>>> elContainers = new ArrayList<>(elCreators.size());
+					for (ValueCreator<SettableValue, SettableValue<Object>> creator : elCreators)
+						elContainers.add(creator.createValue());
+					return new AbstractValueContainer<C, C>((ModelInstanceType<C, C>) theType.forTypes(type)) {
+						@Override
+						public C get(ModelSetInstance models) {
+							C collection = (C) create(type, models).withDescription(session.get(PATH_KEY, String.class)).build();
+							for (ValueContainer<SettableValue, SettableValue<Object>> value : elContainers) {
+								if (!collection.add(value.apply(models)))
+									System.err.println("Warning: Value " + value + " already added to " + session.get(PATH_KEY));
+							}
+							return collection;
+						}
+					};
 				};
 			}
 
@@ -379,7 +389,7 @@ public class Expresso {
 
 			protected abstract <V> ObservableCollectionBuilder<V, ?> create(TypeToken<V> type, ModelSetInstance models);
 		}
-		abstract class InternalMapValue<M extends ObservableMap> implements QonfigValueCreator<ExpressoSession<?>, ValueContainer<M, M>> {
+		abstract class InternalMapValue<M extends ObservableMap> implements QonfigValueCreator<ExpressoSession<?>, ValueCreator<M, M>> {
 			private final ModelType<M> theType;
 
 			protected InternalMapValue(ModelType<M> type) {
@@ -387,26 +397,37 @@ public class Expresso {
 			}
 
 			@Override
-			public ValueContainer<M, M> createValue(ExpressoSession<?> session) throws QonfigInterpretationException {
+			public ValueCreator<M, M> createValue(ExpressoSession<?> session) throws QonfigInterpretationException {
 				TypeToken<Object> keyType = session.get(KEY_TYPE_KEY, TypeToken.class);
 				TypeToken<Object> valueType = session.get(VALUE_TYPE_KEY, TypeToken.class);
-				List<BiTuple<ValueContainer<SettableValue, SettableValue<Object>>, ValueContainer<SettableValue, SettableValue<Object>>>> entries;
-				entries = session.interpretChildren("entry", BiTuple.class);
-				prepare(keyType, valueType, session);
-				return new AbstractValueContainer<M, M>((ModelInstanceType<M, M>) theType.forTypes(keyType, valueType)) {
-					@Override
-					public M get(ModelSetInstance models) {
-						M map = (M) create(keyType, valueType, models).withDescription(session.get(PATH_KEY, String.class)).buildMap();
-						for (BiTuple<ValueContainer<SettableValue, SettableValue<Object>>, ValueContainer<SettableValue, SettableValue<Object>>> entry : entries) {
-							Object key = entry.getValue1().apply(models);
-							if (map.containsKey(key))
-								System.err
-								.println("Warning: Entry for key " + entry.getValue1() + " already added to " + session.get(PATH_KEY));
-							else
-								map.put(key, entry.getValue2().apply(models));
-						}
-						return map;
+				List<BiTuple<ValueCreator<SettableValue, SettableValue<Object>>, ValueCreator<SettableValue, SettableValue<Object>>>> entryCreators;
+				entryCreators = session.interpretChildren("entry", BiTuple.class);
+				return () -> {
+					List<BiTuple<ValueContainer<SettableValue, SettableValue<Object>>, ValueContainer<SettableValue, SettableValue<Object>>>> entryContainers;
+					entryContainers = new ArrayList<>(entryCreators.size());
+					for (BiTuple<ValueCreator<SettableValue, SettableValue<Object>>, ValueCreator<SettableValue, SettableValue<Object>>> entry : entryCreators) {
+						entryContainers.add(new BiTuple<>(entry.getValue1().createValue(), entry.getValue2().createValue()));
 					}
+					try {
+						prepare(keyType, valueType, session);
+					} catch (QonfigInterpretationException e) {
+						session.withError(e.getMessage(), e);
+					}
+					return new AbstractValueContainer<M, M>((ModelInstanceType<M, M>) theType.forTypes(keyType, valueType)) {
+						@Override
+						public M get(ModelSetInstance models) {
+							M map = (M) create(keyType, valueType, models).withDescription(session.get(PATH_KEY, String.class)).buildMap();
+							for (BiTuple<ValueContainer<SettableValue, SettableValue<Object>>, ValueContainer<SettableValue, SettableValue<Object>>> entry : entryContainers) {
+								Object key = entry.getValue1().apply(models);
+								if (map.containsKey(key))
+									System.err.println(
+										"Warning: Entry for key " + entry.getValue1() + " already added to " + session.get(PATH_KEY));
+								else
+									map.put(key, entry.getValue2().apply(models));
+							}
+							return map;
+						}
+					};
 				};
 			}
 
@@ -418,7 +439,7 @@ public class Expresso {
 				ModelSetInstance models);
 		}
 		abstract class InternalMultiMapValue<M extends ObservableMultiMap>
-		implements QonfigValueCreator<ExpressoSession<?>, ValueContainer<M, M>> {
+		implements QonfigValueCreator<ExpressoSession<?>, ValueCreator<M, M>> {
 			private final ModelType<M> theType;
 
 			protected InternalMultiMapValue(ModelType<M> type) {
@@ -426,22 +447,33 @@ public class Expresso {
 			}
 
 			@Override
-			public ValueContainer<M, M> createValue(ExpressoSession<?> session) throws QonfigInterpretationException {
+			public ValueCreator<M, M> createValue(ExpressoSession<?> session) throws QonfigInterpretationException {
 				TypeToken<Object> keyType = session.get(KEY_TYPE_KEY, TypeToken.class);
 				TypeToken<Object> valueType = session.get(VALUE_TYPE_KEY, TypeToken.class);
-				List<BiTuple<ValueContainer<SettableValue, SettableValue<Object>>, ValueContainer<SettableValue, SettableValue<Object>>>> entries;
-				entries = session.interpretChildren("entry", BiTuple.class);
-				prepare(keyType, valueType, session);
-				return new AbstractValueContainer<M, M>((ModelInstanceType<M, M>) theType.forTypes(keyType, valueType)) {
-					@Override
-					public M get(ModelSetInstance models) {
-						M map = (M) create(keyType, valueType, models).withDescription(session.get(PATH_KEY, String.class))
-							.build(models.getUntil());
-						for (BiTuple<ValueContainer<SettableValue, SettableValue<Object>>, ValueContainer<SettableValue, SettableValue<Object>>> entry : entries) {
-							map.add(entry.getValue1().apply(models), entry.getValue2().apply(models));
-						}
-						return map;
+				List<BiTuple<ValueCreator<SettableValue, SettableValue<Object>>, ValueCreator<SettableValue, SettableValue<Object>>>> entryCreators;
+				entryCreators = session.interpretChildren("entry", BiTuple.class);
+				return () -> {
+					List<BiTuple<ValueContainer<SettableValue, SettableValue<Object>>, ValueContainer<SettableValue, SettableValue<Object>>>> entryContainers;
+					entryContainers = new ArrayList<>(entryCreators.size());
+					for (BiTuple<ValueCreator<SettableValue, SettableValue<Object>>, ValueCreator<SettableValue, SettableValue<Object>>> entry : entryCreators) {
+						entryContainers.add(new BiTuple<>(entry.getValue1().createValue(), entry.getValue2().createValue()));
 					}
+					try {
+						prepare(keyType, valueType, session);
+					} catch (QonfigInterpretationException e) {
+						session.withError(e.getMessage(), e);
+					}
+					return new AbstractValueContainer<M, M>((ModelInstanceType<M, M>) theType.forTypes(keyType, valueType)) {
+						@Override
+						public M get(ModelSetInstance models) {
+							M map = (M) create(keyType, valueType, models).withDescription(session.get(PATH_KEY, String.class))
+								.build(models.getUntil());
+							for (BiTuple<ValueContainer<SettableValue, SettableValue<Object>>, ValueContainer<SettableValue, SettableValue<Object>>> entry : entryContainers) {
+								map.add(entry.getValue1().apply(models), entry.getValue2().apply(models));
+							}
+							return map;
+						}
+					};
 				};
 			}
 
@@ -458,8 +490,8 @@ public class Expresso {
 			QonfigChildDef valueRole = session.getRole("value");
 			for (ExpressoSession<?> child : session.forChildren()) {
 				if (child.fulfills(valueRole)) {
-					ValueContainer<?, ?> container = child.interpret(ValueContainer.class);
-					model.with(child.getAttributeText("model-element", "name"), container);
+					ValueCreator<?, ?> container = child.interpret(ValueCreator.class);
+					model.withMaker(child.getAttributeText("model-element", "name"), container);
 				} else if (child.fulfills(subModelRole)) {
 					ObservableModelSet.Builder subModel = model.createSubModel(child.getAttributeText("abst-model", "name"));
 					child.setModels(subModel);
@@ -467,27 +499,39 @@ public class Expresso {
 				}
 			}
 			return model;
-		}).createWith("constant", ValueContainer.class, session -> {
-			return parseValue(//
+		}).createWith("constant", ValueCreator.class, session -> {
+			return ValueCreator.constant(parseValue(//
 				session.getModels(), session.getClassView(), (TypeToken<Object>) session.get(VALUE_TYPE_KEY),
-				session.getValue(ObservableExpression.class, null));
-		}).createWith("value", ValueContainer.class, session -> {
+				session.getValue(ObservableExpression.class, null)));
+		}).createWith("value", ValueCreator.class, session -> () -> {
 			TypeToken<Object> type = (TypeToken<Object>) session.get(VALUE_TYPE_KEY);
 			ObservableExpression valueX = (ObservableExpression) session.getElement().getValue();
 			ValueContainer<SettableValue, SettableValue<Object>> value;
-			value = valueX == null ? null : parseValue(//
-				session.getModels(), session.getClassView(), type, valueX);
-			return new ObservableModelSet.AbstractValueContainer<SettableValue, SettableValue<Object>>(value.getType()) {
+			try {
+				value = valueX == null ? null : parseValue(//
+					session.getModels(), session.getClassView(), type, valueX);
+			} catch (QonfigInterpretationException e) {
+				session.withError(e.getMessage(), e);
+				value = null;
+			}
+			if (value == null && type == null) {
+				session.withError("Either a type or a value must be specified");
+				return null;
+			}
+			ValueContainer<SettableValue, SettableValue<Object>> value2 = value;
+			ModelInstanceType<SettableValue, SettableValue<Object>> fType = type != null ? ModelTypes.Value.forType(type)
+				: (ModelInstanceType<SettableValue, SettableValue<Object>>) value.getType();
+			return new ObservableModelSet.AbstractValueContainer<SettableValue, SettableValue<Object>>(fType) {
 				@Override
 				public SettableValue<Object> get(ModelSetInstance models) {
-					SettableValue.Builder<Object> builder = SettableValue.build((TypeToken<Object>) value.getType().getType(0))
-						.withDescription((String) session.get(PATH_KEY));
-					if (value != null)
-						builder.withValue(value.apply(models).get());
+					SettableValue.Builder<Object> builder = SettableValue.build((TypeToken<Object>) fType.getType(0));
+					builder.withDescription((String) session.get(PATH_KEY));
+					if (value2 != null)
+						builder.withValue(value2.apply(models).get());
 					return builder.build();
 				}
 			};
-		}).createWith("value-set", ValueContainer.class, session -> {
+		}).createWith("value-set", ValueCreator.class, session -> () -> {
 			TypeToken<Object> type = session.get(VALUE_TYPE_KEY, TypeToken.class);
 			return new AbstractValueContainer<ObservableValueSet, ObservableValueSet<Object>>(ModelTypes.ValueSet.forType(type)) {
 				@Override
@@ -500,21 +544,26 @@ public class Expresso {
 					return config.asValue(type).buildEntitySet(null);
 				}
 			};
-		}).createWith("element", ValueContainer.class, session -> {
-			return parseValue(//
-				session.getModels(), session.getClassView(), (TypeToken<Object>) session.get(VALUE_TYPE_KEY),
-				session.getValue(ObservableExpression.class, null));
-		}).createWith("list", ValueContainer.class, new InternalCollectionValue<ObservableCollection>(ModelTypes.Collection) {
+		}).createWith("element", ValueCreator.class, session -> () -> {
+			try {
+				return parseValue(//
+					session.getModels(), session.getClassView(), (TypeToken<Object>) session.get(VALUE_TYPE_KEY),
+					session.getValue(ObservableExpression.class, null));
+			} catch (QonfigInterpretationException e) {
+				session.withError(e.getMessage(), e);
+				return null;
+			}
+		}).createWith("list", ValueCreator.class, new InternalCollectionValue<ObservableCollection>(ModelTypes.Collection) {
 			@Override
 			protected <V> ObservableCollectionBuilder<V, ?> create(TypeToken<V> type, ModelSetInstance models) {
 				return ObservableCollection.build(type);
 			}
-		}).createWith("set", ValueContainer.class, new InternalCollectionValue<ObservableSet>(ModelTypes.Set) {
+		}).createWith("set", ValueCreator.class, new InternalCollectionValue<ObservableSet>(ModelTypes.Set) {
 			@Override
 			protected <V> ObservableCollectionBuilder<V, ?> create(TypeToken<V> type, ModelSetInstance models) {
 				return ObservableSet.build(type);
 			}
-		}).createWith("sorted-set", ValueContainer.class, new InternalCollectionValue<ObservableSortedSet>(ModelTypes.SortedSet) {
+		}).createWith("sorted-set", ValueCreator.class, new InternalCollectionValue<ObservableSortedSet>(ModelTypes.SortedSet) {
 			private Function<ModelSetInstance, Comparator<Object>> theComparator;
 
 			@Override
@@ -527,7 +576,7 @@ public class Expresso {
 			protected <V> ObservableCollectionBuilder<V, ?> create(TypeToken<V> type, ModelSetInstance models) {
 				return ObservableSortedSet.build(type, (Comparator<? super V>) theComparator);
 			}
-		}).createWith("sorted-list", ValueContainer.class,
+		}).createWith("sorted-list", ValueCreator.class,
 			new InternalCollectionValue<ObservableSortedCollection>(ModelTypes.SortedCollection) {
 			private Function<ModelSetInstance, Comparator<Object>> theComparator;
 
@@ -549,13 +598,13 @@ public class Expresso {
 			ValueContainer<SettableValue, SettableValue<Object>> value = parseValue(//
 				session.getModels(), session.getClassView(), valueType, session.getValue(ObservableExpression.class, null));
 			return new BiTuple<>(key, value);
-		}).createWith("map", ValueContainer.class, new InternalMapValue<ObservableMap>(ModelTypes.Map) {
+		}).createWith("map", ValueCreator.class, new InternalMapValue<ObservableMap>(ModelTypes.Map) {
 			@Override
 			protected <K, V> ObservableMap.Builder<K, V, ?> create(TypeToken<K> keyType, TypeToken<V> valueType,
 				ModelSetInstance models) {
 				return ObservableMap.build(keyType, valueType);
 			}
-		}).createWith("sorted-map", ValueContainer.class, new InternalMapValue<ObservableSortedMap>(ModelTypes.SortedMap) {
+		}).createWith("sorted-map", ValueCreator.class, new InternalMapValue<ObservableSortedMap>(ModelTypes.SortedMap) {
 			private Function<ModelSetInstance, Comparator<Object>> theComparator;
 
 			@Override
@@ -570,13 +619,13 @@ public class Expresso {
 				ModelSetInstance models) {
 				return ObservableSortedMap.build(keyType, valueType, theComparator.apply(models));
 			}
-		}).createWith("multi-map", ValueContainer.class, new InternalMultiMapValue<ObservableMultiMap>(ModelTypes.MultiMap) {
+		}).createWith("multi-map", ValueCreator.class, new InternalMultiMapValue<ObservableMultiMap>(ModelTypes.MultiMap) {
 			@Override
 			protected <K, V> ObservableMultiMap.Builder<K, V, ?> create(TypeToken<K> keyType, TypeToken<V> valueType,
 				ModelSetInstance models) {
 				return ObservableMultiMap.build(keyType, valueType);
 			}
-		}).createWith("sorted-multi-map", ValueContainer.class, new InternalMultiMapValue<ObservableMultiMap>(ModelTypes.MultiMap) {
+		}).createWith("sorted-multi-map", ValueCreator.class, new InternalMultiMapValue<ObservableMultiMap>(ModelTypes.MultiMap) {
 			private Function<ModelSetInstance, Comparator<Object>> theComparator;
 
 			@Override
@@ -621,7 +670,7 @@ public class Expresso {
 			protected abstract <V> C modify(ObservableCollection<V> collection, ModelSetInstance msi);
 		}
 		interpreter//
-		.createWith("simple-config-format", ValueContainer.class, this::createSimpleConfigFormat)//
+		.createWith("simple-config-format", ValueCreator.class, this::createSimpleConfigFormat)//
 		.createWith("config", ObservableModelSet.class, new ConfigModelCreator())//
 		.createWith("value", ConfigModelValue.class, session -> {
 			TypeToken<Object> type = session.get(VALUE_TYPE_KEY, TypeToken.class);
@@ -688,13 +737,17 @@ public class Expresso {
 			TypeToken<Object> keyType = session.get(KEY_TYPE_KEY, TypeToken.class);
 			TypeToken<Object> valueType = session.get(VALUE_TYPE_KEY, TypeToken.class);
 			ConfigFormatProducer<Object> keyFormat = ConfigModelCreator.parseConfigFormat(
-				session.getAttribute("key-format", ObservableExpression.class), null, session.getModels(), session.getClassView(),
-				keyType);
+				session.as("config-map").getAttribute("key-format", ObservableExpression.class), null, session.getModels(),
+				session.getClassView(), keyType);
 			return new AbstractConfigModelValue<ObservableMap, ObservableMap<Object, Object>>(
 				ModelTypes.Map.forType(keyType, valueType)) {
 				@Override
 				public ObservableMap<Object, Object> create(ObservableConfigValueBuilder<?> config, ModelSetInstance msi) {
-					return (ObservableMap<Object, Object>) config.asMap(keyType).withKeyFormat(keyFormat.getFormat(msi)).buildMap(null);
+					ObservableConfigMapBuilder<Object, Object> mapBuilder = (ObservableConfigMapBuilder<Object, Object>) config
+						.asMap(keyType);
+					if (keyFormat != null)
+						mapBuilder.withKeyFormat(keyFormat.getFormat(msi));
+					return mapBuilder.buildMap(null);
 				}
 			};
 		}).createWith("sorted-map", ConfigModelValue.class, session -> {
@@ -703,8 +756,8 @@ public class Expresso {
 			TypeToken<Object> keyType = session.get(KEY_TYPE_KEY, TypeToken.class);
 			TypeToken<Object> valueType = session.get(VALUE_TYPE_KEY, TypeToken.class);
 			ConfigFormatProducer<Object> keyFormat = ConfigModelCreator.parseConfigFormat(
-				session.getAttribute("key-format", ObservableExpression.class), null, session.getModels(), session.getClassView(),
-				keyType);
+				session.as("config-map").getAttribute("key-format", ObservableExpression.class), null, session.getModels(),
+				session.getClassView(), keyType);
 			return new AbstractConfigModelValue<ObservableMultiMap, ObservableMultiMap<Object, Object>>(
 				ModelTypes.MultiMap.forType(keyType, valueType)) {
 				@Override
@@ -837,24 +890,44 @@ public class Expresso {
 				return config;
 			});
 			for (ExpressoSession<?> child : session.forChildren("value")) {
-				child = child.as("config-value");
-				String name = child.getAttributeText("model-element", "name");
-				String path = child.getAttributeText("config-path");
+				ExpressoSession<?> childSession = child.as("config-model-value");
+				String name = childSession.getAttributeText("model-element", "name");
+				String path = childSession.getAttributeText("config-path");
 				if (path == null)
 					path = name;
-				String typeStr = session.getAttributeText("type");
+				String typeStr = childSession.getAttributeText("type");
 				TypeToken<Object> type = (TypeToken<Object>) parseType(typeStr);
-				session.put(VALUE_TYPE_KEY, type);
-				ConfigFormatProducer<Object> format = parseConfigFormat(session.getAttribute("format", ObservableExpression.class), null,
-					model, session.getClassView(), type);
-				ConfigModelValue<Object, Object> configValue = child.interpret(ConfigModelValue.class);
 				String fPath = path;
-				model.with(name, configValue.getType(), (msi, ext) -> {
-					ObservableConfig config = (ObservableConfig) msi.getModelConfiguration();
-					ObservableConfig.ObservableConfigValueBuilder<Object> builder = config.asValue(type).at(fPath).until(msi.getUntil());
-					if (format != null)
-						builder.withFormat(format.getFormat(msi));
-					return configValue.create(builder, msi);
+				model.withMaker(name, new ValueCreator<Object, Object>() {
+					@Override
+					public ValueContainer<Object, Object> createValue() {
+						childSession.put(VALUE_TYPE_KEY, type);
+						try {
+							ConfigFormatProducer<Object> format = parseConfigFormat(
+								childSession.getAttribute("format", ObservableExpression.class), null, model, childSession.getClassView(),
+								type);
+							ConfigModelValue<Object, Object> configValue = child.interpret(ConfigModelValue.class);
+							return new ValueContainer<Object, Object>() {
+								@Override
+								public ModelInstanceType<Object, Object> getType() {
+									return configValue.getType();
+								}
+
+								@Override
+								public Object get(ModelSetInstance msi) {
+									ObservableConfig config = (ObservableConfig) msi.getModelConfiguration();
+									ObservableConfig.ObservableConfigValueBuilder<Object> builder = config.asValue(type).at(fPath)
+										.until(msi.getUntil());
+									if (format != null)
+										builder.withFormat(format.getFormat(msi));
+									return configValue.create(builder, msi);
+								}
+							};
+						} catch (QonfigInterpretationException e) {
+							childSession.withError(e.getMessage(), e);
+							return null;
+						}
+					}
 				});
 			}
 			return model;
@@ -1023,123 +1096,155 @@ public class Expresso {
 
 	}
 
-	private ValueContainer<SettableValue, SettableValue<ObservableConfigFormat<Object>>> createSimpleConfigFormat(
-		ExpressoSession<?> session) throws QonfigInterpretationException {
+	private ValueCreator<SettableValue, SettableValue<ObservableConfigFormat<Object>>> createSimpleConfigFormat(ExpressoSession<?> session)
+		throws QonfigInterpretationException {
 		TypeToken<Object> valueType = (TypeToken<Object>) parseType(session.getAttributeText("type"));
-		ValueContainer<SettableValue, SettableValue<Format<Object>>> format;
 		ModelInstanceType<SettableValue, SettableValue<Format<Object>>> formatType = ModelTypes.Value
 			.forType(TypeTokens.get().keyFor(Format.class).parameterized(valueType));
-		Function<ModelSetInstance, Object> defaultValue;
-		ExpressoSession<?> configValueSession = session.as("config-value");
-		String defaultS = configValueSession.getAttributeText("default");
-		ObservableExpression formatEx = configValueSession.getAttribute("format", ObservableExpression.class);
-		if (formatEx != null) {
-			format = formatEx.evaluate(formatType, session.getModels(), session.getClassView());
-			defaultValue = defaultS == null ? null : msi -> {
-				Format<Object> f = format.get(msi).get();
-				try {
-					return f.parse(defaultS);
-				} catch (ParseException e) {
-					System.err.println("Could not parse default value '" + defaultS + "' with format " + f);
-					e.printStackTrace();
-					return null;
-				}
-			};
-		} else {
-			// see if there's an obvious choice by type
-			Format<?> f;
-			Class<?> type = TypeTokens.get().unwrap(TypeTokens.getRawType(valueType));
-			if (type == String.class)
-				f = SpinnerFormat.NUMERICAL_TEXT;
-			else if (type == int.class)
-				f = SpinnerFormat.INT;
-			else if (type == long.class)
-				f = SpinnerFormat.LONG;
-			else if (type == double.class)
-				f = Format.doubleFormat(4).build();
-			else if (type == float.class)
-				f = Format.doubleFormat(4).buildFloat();
-			else if (type == boolean.class)
-				f = Format.BOOLEAN;
-			else if (Enum.class.isAssignableFrom(type))
-				f = Format.enumFormat((Class<Enum<?>>) type);
-			else if (type == Instant.class)
-				f = SpinnerFormat.flexDate(Instant::now, "EEE MMM dd, yyyy", null);
-			else if (type == Duration.class)
-				f = SpinnerFormat.flexDuration(false);
-			else
-				throw new QonfigInterpretationException(
-					"No default format available for type " + valueType + " -- please specify a format");
-			format = ObservableModelSet.literalContainer(formatType, (Format<Object>) f, type.getSimpleName());
-			if (defaultS == null)
-				defaultValue = null;
-			else {
-				Object defaultV;
-				try {
-					defaultV = f.parse(defaultS);
-				} catch (ParseException e) {
-					throw new QonfigInterpretationException(e);
-				}
-				if (!(TypeTokens.get().isInstance(valueType, defaultV)))
-					throw new QonfigInterpretationException(
-						"default value '" + defaultS + ", type " + defaultV.getClass() + ", is incompatible with value type " + valueType);
-				defaultValue = msi -> defaultV;
-			}
-		}
+		String defaultS = session.getAttributeText("default");
 		TypeToken<ObservableConfigFormat<Object>> ocfType = TypeTokens.get().keyFor(ObservableConfigFormat.class)
 			.<ObservableConfigFormat<Object>> parameterized(valueType);
-		return new ObservableModelSet.AbstractValueContainer<SettableValue, SettableValue<ObservableConfigFormat<Object>>>(
-			ModelTypes.Value.forType(ocfType)) {
-			@Override
-			public SettableValue<ObservableConfigFormat<Object>> get(ModelSetInstance models) {
-				SettableValue<Format<Object>> formatObj = format.get(models);
-				Supplier<Object> defaultV = defaultValue == null ? null : () -> defaultValue.apply(models);
-				return SettableValue.asSettable(formatObj.transform(ocfType, tx -> tx.nullToNull(true)//
-					.map(f -> ObservableConfigFormat.ofQommonFormat(f, defaultV))), __ -> "Not reversible");
+		ObservableExpression formatEx = session.getAttribute("format", ObservableExpression.class);
+		return () -> {
+			ValueContainer<SettableValue, SettableValue<Format<Object>>> format;
+			Function<ModelSetInstance, Object> defaultValue;
+			if (formatEx != null) {
+				try {
+					format = formatEx.evaluate(formatType, session.getModels(), session.getClassView());
+				} catch (QonfigInterpretationException e) {
+					session.withError(e.getMessage(), e);
+					return null;
+				}
+				defaultValue = defaultS == null ? null : msi -> {
+					Format<Object> f = format.get(msi).get();
+					try {
+						return f.parse(defaultS);
+					} catch (ParseException e) {
+						System.err.println("Could not parse default value '" + defaultS + "' with format " + f);
+						e.printStackTrace();
+						return null;
+					}
+				};
+			} else {
+				// see if there's an obvious choice by type
+				Format<?> f;
+				Class<?> type = TypeTokens.get().unwrap(TypeTokens.getRawType(valueType));
+				if (type == String.class)
+					f = SpinnerFormat.NUMERICAL_TEXT;
+				else if (type == int.class)
+					f = SpinnerFormat.INT;
+				else if (type == long.class)
+					f = SpinnerFormat.LONG;
+				else if (type == double.class)
+					f = Format.doubleFormat(4).build();
+				else if (type == float.class)
+					f = Format.doubleFormat(4).buildFloat();
+				else if (type == boolean.class)
+					f = Format.BOOLEAN;
+				else if (Enum.class.isAssignableFrom(type))
+					f = Format.enumFormat((Class<Enum<?>>) type);
+				else if (type == Instant.class)
+					f = SpinnerFormat.flexDate(Instant::now, "EEE MMM dd, yyyy", null);
+				else if (type == Duration.class)
+					f = SpinnerFormat.flexDuration(false);
+				else {
+					session.withError("No default format available for type " + valueType + " -- please specify a format");
+					return null;
+				}
+				format = ObservableModelSet.literalContainer(formatType, (Format<Object>) f, type.getSimpleName());
+				if (defaultS == null)
+					defaultValue = null;
+				else {
+					Object defaultV;
+					try {
+						defaultV = f.parse(defaultS);
+					} catch (ParseException e) {
+						session.withError(e.getMessage(), e);
+						return null;
+					}
+					if (!(TypeTokens.get().isInstance(valueType, defaultV))) {
+						session.withError("default value '" + defaultS + ", type " + defaultV.getClass()
+						+ ", is incompatible with value type " + valueType);
+						return null;
+					}
+					defaultValue = msi -> defaultV;
+				}
 			}
+			return new ObservableModelSet.AbstractValueContainer<SettableValue, SettableValue<ObservableConfigFormat<Object>>>(
+				ModelTypes.Value.forType(ocfType)) {
+				@Override
+				public SettableValue<ObservableConfigFormat<Object>> get(ModelSetInstance models) {
+					SettableValue<Format<Object>> formatObj = format.get(models);
+					Supplier<Object> defaultV = defaultValue == null ? null : () -> defaultValue.apply(models);
+					return SettableValue.asSettable(formatObj.transform(ocfType, tx -> tx.nullToNull(true)//
+						.map(f -> ObservableConfigFormat.ofQommonFormat(f, defaultV))), __ -> "Not reversible");
+				}
+			};
 		};
 	}
 
-	private ValueContainer<SettableValue, SettableValue<Object>> createFirstValue(ExpressoSession<?> session)
+	private ValueCreator<SettableValue, SettableValue<Object>> createFirstValue(ExpressoSession<?> session)
 		throws QonfigInterpretationException {
-		List<ValueContainer<SettableValue, SettableValue<?>>> values = session.interpretChildren("value", ValueContainer.class);
-		TypeToken<Object> commonType = (TypeToken<Object>) TypeTokens.get()
-			.getCommonType(values.stream().map(v -> v.getType().getType(0)).collect(Collectors.toList()));
-		return new AbstractValueContainer<SettableValue, SettableValue<Object>>(ModelTypes.Value.forType(commonType)) {
-			@Override
-			public SettableValue<Object> get(ModelSetInstance models) {
-				SettableValue<?>[] vs = new SettableValue[values.size()];
-				for (int i = 0; i < vs.length; i++)
-					vs[i] = values.get(i).get(models);
-				return SettableValue.firstValue(commonType, v -> v != null, () -> null, vs);
-			}
+		List<ValueCreator<SettableValue, SettableValue<?>>> valueCreators = session.interpretChildren("value", ValueCreator.class);
+		return () -> {
+			List<ValueContainer<SettableValue, SettableValue<?>>> valueContainers = valueCreators.stream()//
+				.map(ValueCreator::createValue).collect(Collectors.toList());
+			TypeToken<Object> commonType = (TypeToken<Object>) TypeTokens.get()
+				.getCommonType(valueContainers.stream().map(v -> v.getType().getType(0)).collect(Collectors.toList()));
+			return new AbstractValueContainer<SettableValue, SettableValue<Object>>(ModelTypes.Value.forType(commonType)) {
+				@Override
+				public SettableValue<Object> get(ModelSetInstance models) {
+					SettableValue<?>[] vs = new SettableValue[valueCreators.size()];
+					for (int i = 0; i < vs.length; i++)
+						vs[i] = valueContainers.get(i).get(models);
+					return SettableValue.firstValue(commonType, v -> v != null, () -> null, vs);
+				}
+			};
 		};
 	}
 
-	private ValueContainer<?, ?> createTransform(ExpressoSession<?> session) throws QonfigInterpretationException {
-		String name = session.getAttributeText("name");
-		String sourceName = session.getAttributeText("source");
-		ValueContainer<?, ?> source = session.getModels().get(sourceName, true);
-		ModelType<?> type = source.getType().getModelType();
-		if (type == ModelTypes.Event)
-			transformEvent((ValueContainer<Observable, Observable<Object>>) source, session, name, 0);
-		else if (type == ModelTypes.Value)
-			transformValue((ValueContainer<SettableValue, SettableValue<Object>>) source, session, name, 0);
-		else if (type == ModelTypes.Collection || type == ModelTypes.SortedCollection || type == ModelTypes.Set
-			|| type == ModelTypes.SortedSet)
-			transformCollection((ValueContainer<ObservableCollection, ObservableCollection<Object>>) source, session, name, 0);
-		else
-			throw new IllegalArgumentException("Transformation unsupported for source of type " + source.getType().getModelType());
-		return null;
+	private ValueCreator<?, ?> createTransform(ExpressoSession<?> session) throws QonfigInterpretationException {
+		ObservableExpression sourceX = session.getAttribute("source", ObservableExpression.class);
+		return new ValueCreator<Object, Object>() {
+			@Override
+			public ValueContainer<Object, Object> createValue() {
+				ValueContainer<?, ?> source = null;
+				try {
+					if (sourceX instanceof DefaultExpressoParser.NameExpression)
+						source = session.getModels().get(sourceX.toString(), false);
+					if (source == null)
+						source = sourceX.evaluate(ModelTypes.Value.any(), session.getModels(), session.getClassView());
+					ModelType<?> type = source.getType().getModelType();
+					if (type == ModelTypes.Event)
+						return (ValueContainer<Object, Object>) transformEvent((ValueContainer<Observable, Observable<Object>>) source,
+							session, 0);
+					else if (type == ModelTypes.Value)
+						return (ValueContainer<Object, Object>) transformValue(
+							(ValueContainer<SettableValue, SettableValue<Object>>) source, session, 0);
+					else if (type == ModelTypes.Collection || type == ModelTypes.SortedCollection || type == ModelTypes.Set
+						|| type == ModelTypes.SortedSet) // TODO Support transformation for ValueSets
+						return (ValueContainer<Object, Object>) (ValueContainer<?, ?>) transformCollection(
+							(ValueContainer<ObservableCollection, ObservableCollection<Object>>) source, session, 0);
+					else
+						throw new IllegalArgumentException(
+							"Transformation unsupported for source of type " + source.getType().getModelType());
+				} catch (QonfigInterpretationException e) {
+					session.withError(e.getMessage(), e);
+					return null;
+				}
+			}
+		};
 	}
 
 	private void configureFormats(ExpressoInterpreter.Builder<?, ?> interpreter) {
-		interpreter.createWith("file-source", ValueContainer.class, this::createFileSource);
-		interpreter.createWith("text", ValueContainer.class, session -> {
-			return ObservableModelSet.literalContainer(
+		interpreter.delegateToType("format", "type", ValueCreator.class);
+		interpreter.createWith("file-source", ValueCreator.class, this::createFileSource);
+		interpreter.createWith("text", ValueCreator.class, session -> {
+			return ValueCreator.constant(ObservableModelSet.literalContainer(
 				ModelTypes.Value.forType(TypeTokens.get().keyFor(Format.class).<Format<String>> parameterized(String.class)),
-				SpinnerFormat.NUMERICAL_TEXT, "text");
-		}).createWith("int-format", ValueContainer.class, session -> {
+				SpinnerFormat.NUMERICAL_TEXT, "text"));
+		});
+		interpreter.createWith("int-format", ValueCreator.class, session -> {
 			SpinnerFormat.IntFormat format = SpinnerFormat.INT;
 			String sep = session.getAttributeText("grouping-separator");
 			if (sep != null) {
@@ -1148,10 +1253,11 @@ public class Expresso {
 				else
 					format = format.withGroupingSeparator(sep.charAt(0));
 			}
-			return ObservableModelSet.literalContainer(
+			return ValueCreator.constant(ObservableModelSet.literalContainer(
 				ModelTypes.Value.forType(TypeTokens.get().keyFor(Format.class).<Format<Integer>> parameterized(Integer.class)), format,
-				"int");
-		}).createWith("long-format", ValueContainer.class, session -> {
+				"int"));
+		});
+		interpreter.createWith("long-format", ValueCreator.class, session -> {
 			SpinnerFormat.LongFormat format = SpinnerFormat.LONG;
 			String sep = session.getAttributeText("grouping-separator");
 			if (sep != null) {
@@ -1160,18 +1266,18 @@ public class Expresso {
 				else
 					format = format.withGroupingSeparator(sep.charAt(0));
 			}
-			return ObservableModelSet.literalContainer(
-				ModelTypes.Value.forType(TypeTokens.get().keyFor(Format.class).<Format<Long>> parameterized(Long.class)), format, "long");
-		}).createWith("double", ValueContainer.class, this::createDoubleFormat)//
-		.createWith("instant", ValueContainer.class, this::createInstantFormat)//
-		.createWith("file", ValueContainer.class, this::createFileFormat)//
-		.createWith("regex-format", ValueContainer.class, session -> {
-			return ObservableModelSet.literalContainer(
-				ModelTypes.Value.forType(TypeTokens.get().keyFor(Format.class).<Format<Pattern>> parameterized(Pattern.class)),
+			return ValueCreator.constant(ObservableModelSet.literalContainer(
+				ModelTypes.Value.forType(TypeTokens.get().keyFor(Format.class).<Format<Long>> parameterized(Long.class)), format, "long"));
+		});
+		interpreter.createWith("double", ValueCreator.class, this::createDoubleFormat);
+		interpreter.createWith("instant", ValueCreator.class, this::createInstantFormat);
+		interpreter.createWith("file", ValueCreator.class, this::createFileFormat);
+		interpreter.createWith("regex-format", ValueCreator.class, session -> {
+			return ValueCreator.literal(TypeTokens.get().keyFor(Format.class).<Format<Pattern>> parameterized(Pattern.class),
 				Format.PATTERN, "regex-format");
-		}).createWith("regex-format-string", ValueContainer.class, session -> {
-			return ObservableModelSet.literalContainer(
-				ModelTypes.Value.forType(TypeTokens.get().keyFor(Format.class).<Format<String>> parameterized(String.class)), //
+		});
+		interpreter.createWith("regex-format-string", ValueCreator.class, session -> {
+			return ValueCreator.literal(TypeTokens.get().keyFor(Format.class).<Format<String>> parameterized(String.class), //
 				Format.validate(Format.TEXT, str -> {
 					if (str == null || str.isEmpty())
 						return null; // That's fine
@@ -1182,17 +1288,16 @@ public class Expresso {
 						return e.getMessage();
 					}
 				}), "regex-format-string");
-		})//
-		;
+		});
 	}
 
-	private ValueContainer<SettableValue, SettableValue<BetterFile.FileDataSource>> createFileSource(ExpressoSession<?> session)
+	private ValueCreator<SettableValue, SettableValue<BetterFile.FileDataSource>> createFileSource(ExpressoSession<?> session)
 		throws QonfigInterpretationException {
 		ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.getModels();
-		Function<ModelSetInstance, SettableValue<FileDataSource>> source;
+		Supplier<Function<ModelSetInstance, SettableValue<FileDataSource>>> source;
 		switch (session.getAttributeText("type")) {
 		case "native":
-			source = modelSet -> ObservableModelSet.literal(new NativeFileSource(), "native-file-source");
+			source = () -> modelSet -> ObservableModelSet.literal(new NativeFileSource(), "native-file-source");
 			break;
 		case "sftp":
 			throw new UnsupportedOperationException("Not yet implemented");
@@ -1220,49 +1325,49 @@ public class Expresso {
 					System.err.println("Unrecognized archive-method: " + type);
 				}
 			}
-			Function<ModelSetInstance, SettableValue<Integer>> maxZipDepth;
-			if (session.getAttributeText("max-archive-depth") == null)
-				maxZipDepth = null;
-			else {
-				String mad = session.getAttributeText("max-archive-depth");
-				int zipDepth;
+			ObservableExpression mad = session.getAttribute("max-archive-depth", ObservableExpression.class);
+			Supplier<Function<ModelSetInstance, SettableValue<Integer>>> maxZipDepth = () -> {
 				try {
-					zipDepth = Integer.parseInt(mad);
-				} catch (NumberFormatException e) {
-					zipDepth = -1;
+					return mad.evaluate(ModelTypes.Value.forType(int.class), model, session.getClassView());
+				} catch (QonfigInterpretationException e) {
+					session.withError(e.getMessage(), e);
+					return __ -> ObservableModelSet.literal(TypeTokens.get().INT, 10, "10");
 				}
-				if (zipDepth >= 0) {
-					int finalZD = zipDepth;
-					maxZipDepth = models -> ObservableModelSet.literal(finalZD, mad);
-				} else {
-					maxZipDepth = model.get(mad, ModelTypes.Value.forType(Integer.class));
-				}
-			}
-			Function<ModelSetInstance, SettableValue<FileDataSource>> root = source;
-			source = modelSet -> root.apply(modelSet).transformReversible(FileDataSource.class, //
-				tx -> tx.nullToNull(true).map(fs -> {
-					ArchiveEnabledFileSource aefs = new ArchiveEnabledFileSource(fs).withArchival(archiveMethods);
-					if (maxZipDepth != null) {
-						SettableValue<Integer> zd = maxZipDepth.apply(modelSet);
-						zd.takeUntil(modelSet.getUntil()).changes().act(evt -> {
-							if (evt.getNewValue() != null)
-								aefs.setMaxArchiveDepth(evt.getNewValue());
-						});
-					}
-					return aefs;
-				}).replaceSource(aefs -> null, rev -> rev.disableWith(tv -> "Not settable")));
+			};
+
+			Supplier<Function<ModelSetInstance, SettableValue<FileDataSource>>> root = source;
+			source = () -> {
+				Function<ModelSetInstance, SettableValue<Integer>> mzd = maxZipDepth == null ? null : maxZipDepth.get();
+				return modelSet -> {
+					SettableValue<Integer> zd = mzd == null ? null : mzd.apply(modelSet);
+					return root.get().apply(modelSet).transformReversible(FileDataSource.class, //
+						tx -> tx.nullToNull(true).map(fs -> {
+							ArchiveEnabledFileSource aefs = new ArchiveEnabledFileSource(fs).withArchival(archiveMethods);
+							if (zd != null) {
+								zd.takeUntil(modelSet.getUntil()).changes().act(evt -> {
+									if (evt.getNewValue() != null)
+										aefs.setMaxArchiveDepth(evt.getNewValue());
+								});
+							}
+							return aefs;
+						}).replaceSource(aefs -> null, rev -> rev.disableWith(tv -> "Not settable")));
+				};
+			};
 		}
-		Function<ModelSetInstance, SettableValue<FileDataSource>> fSource = source;
-		return new ObservableModelSet.AbstractValueContainer<SettableValue, SettableValue<BetterFile.FileDataSource>>(
-			ModelTypes.Value.forType(FileDataSource.class)) {
-			@Override
-			public SettableValue<FileDataSource> get(ModelSetInstance models) {
-				return fSource.apply(models);
-			}
+		Supplier<Function<ModelSetInstance, SettableValue<FileDataSource>>> fSource = source;
+		return () -> {
+			Function<ModelSetInstance, SettableValue<FileDataSource>> fSource2 = fSource.get();
+			return new ObservableModelSet.AbstractValueContainer<SettableValue, SettableValue<BetterFile.FileDataSource>>(
+				ModelTypes.Value.forType(FileDataSource.class)) {
+				@Override
+				public SettableValue<FileDataSource> get(ModelSetInstance models) {
+					return fSource2.apply(models);
+				}
+			};
 		};
 	}
 
-	private ValueContainer<SettableValue, SettableValue<Format<Double>>> createDoubleFormat(ExpressoSession<?> session)
+	private ValueCreator<SettableValue, SettableValue<Format<Double>>> createDoubleFormat(ExpressoSession<?> session)
 		throws QonfigInterpretationException {
 		int sigDigs = Integer.parseInt(session.getAttributeText("sig-digs"));
 		Format.SuperDoubleFormatBuilder builder = Format.doubleFormat(sigDigs);
@@ -1299,12 +1404,11 @@ public class Expresso {
 			if (!prefixes.isEmpty())
 				session.withWarning("prefixes specified without a unit");
 		}
-		return ObservableModelSet.literalContainer(
-			ModelTypes.Value.forType(TypeTokens.get().keyFor(Format.class).<Format<Double>> parameterized(Double.class)), builder.build(),
+		return ValueCreator.literal(TypeTokens.get().keyFor(Format.class).<Format<Double>> parameterized(Double.class), builder.build(),
 			"double");
 	}
 
-	private ValueContainer<SettableValue, SettableValue<Format<Instant>>> createInstantFormat(ExpressoSession<?> session)
+	private ValueCreator<SettableValue, SettableValue<Format<Instant>>> createInstantFormat(ExpressoSession<?> session)
 		throws QonfigInterpretationException {
 		ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.getModels();
 		ClassView cv = session.getClassView();
@@ -1334,78 +1438,95 @@ public class Expresso {
 		SpinnerFormat<Instant> format = SpinnerFormat.flexDate(Instant::now, dayFormat, __ -> fOptions);
 		TypeToken<Format<Instant>> formatType = TypeTokens.get().keyFor(Format.class).<Format<Instant>> parameterized(Instant.class);
 		ModelInstanceType<SettableValue, SettableValue<Format<Instant>>> formatInstanceType = ModelTypes.Value.forType(formatType);
-		Function<ModelSetInstance, Supplier<Instant>> relativeTo;
 		ObservableExpression relativeV = session.getAttribute("relative-to", ObservableExpression.class);
 		if (relativeV == null) {
-			return ObservableModelSet.literalContainer(formatInstanceType, format, "instant");
+			return ValueCreator.literal(formatType, format, "instant");
 		} else if (relativeV instanceof ExpressionValueType.Literal) {
 			try {
 				Instant ri = format.parse(((ExpressionValueType.Literal) relativeV).getValue());
-				relativeTo = msi -> LambdaUtils.constantSupplier(ri, ((ExpressionValueType.Literal) relativeV).getValue(), null);
-				return new ObservableModelSet.AbstractValueContainer<SettableValue, SettableValue<Format<Instant>>>(formatInstanceType) {
-					@Override
-					public SettableValue<Format<Instant>> get(ModelSetInstance models) {
-						return ObservableModelSet.literal(SpinnerFormat.flexDate(relativeTo.apply(models), dayFormat, __ -> fOptions),
-							"instant");
-					}
-				};
+				return ValueCreator.literal(formatType, SpinnerFormat.flexDate(() -> ri, dayFormat, __ -> fOptions), "instant");
 			} catch (ParseException e) {
 				session.withWarning("Malformatted relative time: '" + relativeV, e);
-				return ObservableModelSet.literalContainer(formatInstanceType, format, "instant");
+				return ValueCreator.literal(formatType, format, "instant");
 			}
 		} else {
 			// TODO This should just be a value that is evaluated when needed
-			relativeTo = relativeV.findMethod(Instant.class, model, cv).withOption(BetterList.empty(), null).find0();
-			return new ObservableModelSet.AbstractValueContainer<SettableValue, SettableValue<Format<Instant>>>(formatInstanceType) {
-				@Override
-				public SettableValue<Format<Instant>> get(ModelSetInstance models) {
-					return ObservableModelSet.literal(SpinnerFormat.flexDate(relativeTo.apply(models), dayFormat, __ -> fOptions),
-						"instant");
+			return () -> {
+				Function<ModelSetInstance, Supplier<Instant>> relativeTo;
+				try {
+					relativeTo = relativeV.findMethod(Instant.class, model, cv).withOption(BetterList.empty(), null).find0();
+				} catch (QonfigInterpretationException e) {
+					session.withError(e.getMessage(), e);
+					relativeTo = msi -> Instant::now;
 				}
+				Function<ModelSetInstance, Supplier<Instant>> relativeTo2 = relativeTo;
+				;
+				return new ObservableModelSet.AbstractValueContainer<SettableValue, SettableValue<Format<Instant>>>(formatInstanceType) {
+					@Override
+					public SettableValue<Format<Instant>> get(ModelSetInstance models) {
+						return ObservableModelSet.literal(SpinnerFormat.flexDate(relativeTo2.apply(models), dayFormat, __ -> fOptions),
+							"instant");
+					}
+				};
 			};
 		}
 	}
 
-	private ValueContainer<SettableValue, SettableValue<Format<BetterFile>>> createFileFormat(ExpressoSession<?> session)
+	private ValueCreator<SettableValue, SettableValue<Format<BetterFile>>> createFileFormat(ExpressoSession<?> session)
 		throws QonfigInterpretationException {
 		ObservableModelSet model = session.getModels();
 		ClassView cv = session.getClassView();
-		Function<ModelSetInstance, SettableValue<BetterFile.FileDataSource>> fileSource;
 		ObservableExpression fileSourceEx = session.getAttribute("file-source", ObservableExpression.class);
-		if (fileSourceEx != null)
-			fileSource = fileSourceEx.evaluate(//
-				ModelTypes.Value.forType(BetterFile.FileDataSource.class), model, cv);
-		else
-			fileSource = ObservableModelSet.literalContainer(ModelTypes.Value.forType(BetterFile.FileDataSource.class),
-				new NativeFileSource(), "native");
 		ObservableExpression workingDirEx = session.getAttribute("working-dir", ObservableExpression.class);
-		Function<ModelSetInstance, SettableValue<String>> workingDir;
-		if (workingDirEx != null)
-			workingDir = workingDirEx.evaluate(ModelTypes.Value.forType(String.class), model, cv);
-		else
-			workingDir = null;
 		boolean allowEmpty = session.getAttribute("allow-empty", boolean.class);
-		TypeToken<Format<BetterFile>> fileFormatType = TypeTokens.get().keyFor(Format.class)
-			.<Format<BetterFile>> parameterized(BetterFile.class);
-		return new ObservableModelSet.AbstractValueContainer<SettableValue, SettableValue<Format<BetterFile>>>(
-			ModelTypes.Value.forType(fileFormatType)) {
-			@Override
-			public SettableValue<Format<BetterFile>> get(ModelSetInstance models) {
-				SettableValue<BetterFile.FileDataSource> fds = fileSource.apply(models);
-				return SettableValue.asSettable(//
-					fds.transform(fileFormatType, tx -> tx.map(fs -> {
-						BetterFile workingDirFile = BetterFile.at(fs, workingDir == null ? "." : workingDir.apply(models).get());
-						return new BetterFile.FileFormat(fs, workingDirFile, allowEmpty);
-					})), //
-					__ -> "Not reversible");
+		return () -> {
+			Function<ModelSetInstance, SettableValue<BetterFile.FileDataSource>> fileSource;
+			Function<ModelSetInstance, SettableValue<String>> workingDir;
+			try {
+				if (fileSourceEx != null)
+					fileSource = fileSourceEx.evaluate(//
+						ModelTypes.Value.forType(BetterFile.FileDataSource.class), model, cv);
+				else
+					fileSource = ObservableModelSet.literalContainer(ModelTypes.Value.forType(BetterFile.FileDataSource.class),
+						new NativeFileSource(), "native");
+			} catch (QonfigInterpretationException e) {
+				session.withError(e.getMessage(), e);
+				fileSource = ObservableModelSet.literalContainer(ModelTypes.Value.forType(BetterFile.FileDataSource.class),
+					new NativeFileSource(), "native");
 			}
+			try {
+				if (workingDirEx != null)
+					workingDir = workingDirEx.evaluate(ModelTypes.Value.forType(String.class), model, cv);
+				else
+					workingDir = null;
+			} catch (QonfigInterpretationException e) {
+				session.withError(e.getMessage(), e);
+				workingDir = null;
+			}
+			Function<ModelSetInstance, SettableValue<BetterFile.FileDataSource>> fileSource2 = fileSource;
+			Function<ModelSetInstance, SettableValue<String>> workingDir2 = workingDir;
+			TypeToken<Format<BetterFile>> fileFormatType = TypeTokens.get().keyFor(Format.class)
+				.<Format<BetterFile>> parameterized(BetterFile.class);
+			return new ObservableModelSet.AbstractValueContainer<SettableValue, SettableValue<Format<BetterFile>>>(
+				ModelTypes.Value.forType(fileFormatType)) {
+				@Override
+				public SettableValue<Format<BetterFile>> get(ModelSetInstance models) {
+					SettableValue<BetterFile.FileDataSource> fds = fileSource2.apply(models);
+					return SettableValue.asSettable(//
+						fds.transform(fileFormatType, tx -> tx.map(fs -> {
+							BetterFile workingDirFile = BetterFile.at(fs, workingDir2 == null ? "." : workingDir2.apply(models).get());
+							return new BetterFile.FileFormat(fs, workingDirFile, allowEmpty);
+						})), //
+						__ -> "Not reversible");
+				}
+			};
 		};
 	}
 
 	public static TypeToken<?> parseType(String text) throws QonfigInterpretationException {
 		// '{' and '}' aren't used for java types, and '<' in particular can't be used in XML as-is,
 		// so this replacement makes it easier to specify generic types in XML
-		text=text.replaceAll("\\{", "<").replaceAll("\\}", ">");
+		text = text.replaceAll("\\{", "<").replaceAll("\\}", ">");
 		try {
 			return TypeTokens.get().parseType(text);
 		} catch (ParseException e) {
@@ -1424,17 +1545,20 @@ public class Expresso {
 		else if (expression instanceof ExpressionValueType.Literal) {
 			if (type == null)
 				throw new QonfigInterpretationException("type must be specified if value is not an expression");
-			ValueParser parser = theParsers.get(TypeTokens.get().wrap(TypeTokens.getRawType(type)), false);
+			ValueParser parser = theParsers.get(TypeTokens.get().wrap(TypeTokens.getRawType(type)), SubClassMap2.TypeMatch.SUB_TYPE);
 			if (parser == null)
 				throw new QonfigInterpretationException("No parser configured for type " + type);
 			T value = parser.parseModelValue(type, expression.toString());
 			return ObservableModelSet.literalContainer(ModelTypes.Value.forType(type), value, expression.toString());
 		} else
-			return expression.evaluate(ModelTypes.Value.forType(type), models, cv);
+			return expression.evaluate(
+				type == null ? (ModelInstanceType<SettableValue, SettableValue<T>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any()
+					: ModelTypes.Value.forType(type),
+					models, cv);
 	}
 
 	private ValueContainer<?, ?> transformEvent(ValueContainer<Observable, Observable<Object>> source, ExpressoSession<?> transform,
-		String name, int startOp) {
+		int startOp) {
 		List<? extends ExpressoSession<?>> ops = transform.forChildren("op");
 		for (int i = startOp; i < ops.size(); i++) {
 			ExpressoSession<?> op = ops.get(i);
@@ -1485,7 +1609,7 @@ public class Expresso {
 	}
 
 	private ValueContainer<?, ?> transformValue(ValueContainer<SettableValue, SettableValue<Object>> source, ExpressoSession<?> transform,
-		String name, int startOp) throws QonfigInterpretationException {
+		int startOp) throws QonfigInterpretationException {
 		ValueTransform transformFn = (v, models) -> v;
 		TypeToken<Object> currentType = (TypeToken<Object>) source.getType().getType(0);
 		List<? extends ExpressoSession<?>> ops = transform.forChildren("op");
@@ -1582,7 +1706,7 @@ public class Expresso {
 								return ObservableCollection.flattenValue((ObservableValue<ObservableCollection<Object>>) txValue);
 						}
 					};
-					return transformCollection(collectionContainer, transform, name, i + 1);
+					return transformCollection(collectionContainer, transform, i + 1);
 				} else
 					throw new QonfigInterpretationException("Cannot flatten a value of type " + resultType);
 				// transformFn=(v, models)->prevTransformFn.transform(v, models).fl
@@ -1615,7 +1739,7 @@ public class Expresso {
 	}
 
 	private ValueContainer<ObservableCollection, ObservableCollection<Object>> transformCollection(
-		ValueContainer<ObservableCollection, ObservableCollection<Object>> source, ExpressoSession<?> transform, String name, int startOp)
+		ValueContainer<ObservableCollection, ObservableCollection<Object>> source, ExpressoSession<?> transform, int startOp)
 			throws QonfigInterpretationException {
 		CollectionTransform transformFn = (src, models) -> src;
 		TypeToken<Object> currentType = (TypeToken<Object>) source.getType().getType(0);

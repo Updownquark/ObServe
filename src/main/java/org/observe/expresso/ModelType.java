@@ -387,6 +387,8 @@ public abstract class ModelType<M> implements Named {
 			private final TypeToken<V> theValueType;
 
 			SingleTyped(TypeToken<V> valueType) {
+				if (valueType == null)
+					throw new NullPointerException();
 				theValueType = valueType;
 			}
 
@@ -417,6 +419,8 @@ public abstract class ModelType<M> implements Named {
 			private final TypeToken<V> theValueType;
 
 			DoubleTyped(TypeToken<K> keyType, TypeToken<V> valueType) {
+				if (keyType == null || valueType == null)
+					throw new NullPointerException();
 				theKeyType = keyType;
 				theValueType = valueType;
 			}
@@ -454,8 +458,6 @@ public abstract class ModelType<M> implements Named {
 		}
 	}
 
-	// Event(Observable.class),
-	// Action(ObservableAction.class),
 	private static final Map<String, ModelType<?>> MODEL_TYPES_BY_NAME = Collections.synchronizedMap(new LinkedHashMap<>());
 	private static final Map<Class<?>, ModelType<?>> MODEL_TYPES_BY_TYPE = Collections.synchronizedMap(new LinkedHashMap<>());
 	private static final List<ModelType<?>> ALL_MODEL_TYPES = Collections.synchronizedList(new ArrayList<>());

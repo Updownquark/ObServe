@@ -110,8 +110,7 @@
 			<attribute name="length" type="int" />
 		</element-def>
 		<element-def name="button" extends="widget">
-			<value type="string" specify="optional" />
-			<attribute name="text" type="expression" specify="optional" />
+			<value type="expression-or-string" specify="optional" />
 			<attribute name="action" type="expression" specify="required" />
 		</element-def>
 
@@ -120,8 +119,12 @@
 			<attribute name="value" type="expression" specify="required" />
 			<attribute name="disable-with" type="expression" specify="optional" />
 		</element-def>
+		
 		<element-def name="check-box" extends="value-widget">
 			<value type="expression-or-string" specify="optional" />
+		</element-def>
+		<element-def name="toggle-button" extends="value-widget">
+			<value type="expression-or-string" />
 		</element-def>
 		<element-def name="file-button" extends="value-widget">
 			<attribute name="open" type="boolean" />
@@ -184,7 +187,7 @@
 			<child-def name="editor" type="value-widget" inherits="column-editor" />
 			<attribute name="clicks" type="int" specify="optional" />
 		</element-def>
-		<element-def name="columns" extends="int-model-value" inherits="multi-value-renderable,renderable-widget,">
+		<element-def name="columns" extends="model-value" inherits="int-model-value,multi-value-renderable,renderable-widget,">
 			<child-def name="column" type="column" min="0" max="inf" />
 		</element-def>
 		<element-def name="value-action">
