@@ -48,6 +48,8 @@ import com.google.common.reflect.TypeToken;
  * @param <E> The type of elements in the collection
  */
 public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> {
+	/** Anchor type for {@link Dbug}-based debugging */
+	@SuppressWarnings("rawtypes")
 	public static DbugAnchorType<SafeObservableCollection> DBUG = Dbug.common().anchor(SafeObservableCollection.class, a -> a//
 		.withField("type", true, false, TypeTokens.get().keyFor(TypeToken.class).wildCard())//
 		.withEvent("handleEvent").withEvent("flush")//
@@ -107,6 +109,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 		}
 	}
 
+	@SuppressWarnings("rawtypes")
 	private final DbugAnchor<SafeObservableCollection> theAnchor;
 	/** The source collection whose data this safe collection represents */
 	protected final ObservableCollection<E> theCollection;

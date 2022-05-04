@@ -1169,6 +1169,11 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 		}
 	}
 
+	/**
+	 * Implements {@link SettableValue#firstValue(TypeToken, Predicate, Supplier, SettableValue...)}
+	 * 
+	 * @param <T> The type of the value
+	 */
 	class FirstSettableValue<T> extends FirstObservableValue<T> implements SettableValue<T> {
 		public FirstSettableValue(TypeToken<T> type, SettableValue<? extends T>[] values, Predicate<? super T> test,
 			Supplier<? extends T> def) {
