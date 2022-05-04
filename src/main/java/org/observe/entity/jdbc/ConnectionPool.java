@@ -1,5 +1,6 @@
 package org.observe.entity.jdbc;
 
+import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -28,6 +29,8 @@ public interface ConnectionPool {
 
 		void dispose();
 	}
+
+	Connection connect() throws SQLException;
 
 	<T> T connect(SqlAction<T> action) throws SQLException, EntityOperationException;
 

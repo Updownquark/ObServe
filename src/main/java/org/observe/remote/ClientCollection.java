@@ -89,7 +89,7 @@ public class ClientCollection<E, VP, CP, O> extends ObservableCollectionWrapper<
 					valueEl.get().oldValue = null;
 					break;
 				}
-				theTransceiver.setLastChange(change.eventId);
+				theTransceiver.setLastChange(change.stamp);
 			}
 		}
 		return changes;
@@ -101,8 +101,8 @@ public class ClientCollection<E, VP, CP, O> extends ObservableCollectionWrapper<
 			switch (evt.getType()) {
 			case set:
 				ValueElement el = theElements.getElement(evt.getElementId()).get();
-				ObservableCollectionEvent<E> overrideEvt = new ObservableCollectionEvent<>(evt.getElementId(), getType(), evt.getIndex(),
-					evt.getType(), el.oldValue, el.theValue, evt.getCause());
+				ObservableCollectionEvent<E> overrideEvt = new ObservableCollectionEvent<>(evt.getElementId(), evt.getIndex(),
+					evt.getType(), evt.isMove(), el.oldValue, el.theValue, evt.getCauses().peekFirst());
 				try (Transaction evtT = Causable.use(overrideEvt)) {
 					observer.accept(overrideEvt);
 				}

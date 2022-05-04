@@ -14,6 +14,13 @@ import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.tree.BetterTreeList;
 
+/**
+ * Serves the content of a local {@link ObservableCollection} to clients
+ *
+ * @param <E> The type of the collection's values
+ * @param <VP> The type of the serialized value
+ * @param <CP> The type of the serialized change event
+ */
 public class ObservableCollectionServer<E, VP, CP> {
 	public interface Client<P> {
 		void eventOccurred(P event);
@@ -136,7 +143,7 @@ public class ObservableCollectionServer<E, VP, CP> {
 			break;
 		}
 		CP persisted = theSerializer.serializeChange(new CollectionConnectionSerializer.SerializedCollectionChange<>(eventId,
-			new ByteAddress(serverEl.get().address), event.getType(), event.getOldValue(), event.getNewValue(),
+			new ByteAddress(serverEl.get().address), event.getType(), event.isMove(), event.getOldValue(), event.getNewValue(),
 			transactionEnd));
 		// Make a copy, because the clients could re-order themselves (by calling eventReceived) from the eventOccurred method
 		ClientHolder[] clients = theClients.toArray(new ObservableCollectionServer.ClientHolder[theClients.size()]);

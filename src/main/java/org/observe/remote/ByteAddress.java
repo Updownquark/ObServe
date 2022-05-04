@@ -1,5 +1,7 @@
 package org.observe.remote;
 
+import java.io.IOException;
+import java.io.OutputStream;
 import java.util.Arrays;
 
 import org.qommons.StringUtils;
@@ -34,11 +36,19 @@ public final class ByteAddress implements Comparable<ByteAddress> {
 
 	/**
 	 * Copies this address into another byte array
-	 * 
+	 *
 	 * @param into The byte array into which to copy this address
 	 */
 	public void copy(byte[] into) {
 		System.arraycopy(bytes, 0, into, 0, bytes.length);
+	}
+
+	/**
+	 * @param out The output stream to write to
+	 * @throws IOException If the stream throws an exception
+	 */
+	public void write(OutputStream out) throws IOException {
+		out.write(bytes);
 	}
 
 	@Override
@@ -85,7 +95,7 @@ public final class ByteAddress implements Comparable<ByteAddress> {
 
 	/**
 	 * Parses a hex-encoded address (e.g. produced by {@link #toString()})
-	 * 
+	 *
 	 * @param address The hex-encoded address to parse
 	 * @return The parsed byte address
 	 */

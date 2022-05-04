@@ -2,14 +2,12 @@ package org.observe.entity.jdbc;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.sql.Savepoint;
 import java.sql.Statement;
 import java.util.function.Function;
 
 import org.observe.config.OperationResult;
 import org.observe.entity.EntityOperationException;
-import org.observe.entity.jdbc.JdbcEntityProvider.PreparedSqlAction;
-import org.observe.entity.jdbc.JdbcEntityProvider.PreparedSqlOperation;
-import org.observe.entity.jdbc.JdbcEntityProvider.SqlAction;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.threading.ElasticExecutor;
@@ -49,13 +47,11 @@ public class DefaultConnectionPool implements ConnectionPool {
 			theSqlError = sqlError;
 		}
 
-		public void run(Statement stmt) {
+		public void run(Connection conn) {
 			if (!begin())
 				return;
-			T result;
 			try {
-				result = theAction.execute(stmt, //
-					() -> checkCanceled(true, true));
+				T result = doAction(conn, theAction);
 				fulfilled(result);
 			} catch (SQLException e) {
 				failed(theSqlError.apply(e));
@@ -68,24 +64,20 @@ public class DefaultConnectionPool implements ConnectionPool {
 	}
 
 	private class AsyncTaskExecutor implements TaskExecutor<AsyncTask<?>> {
-		private final Connection theConnection;
+		private final Connection theExecutorConnection;
 
 		AsyncTaskExecutor(Connection connection) {
-			theConnection = connection;
+			theExecutorConnection = connection;
 		}
 
 		@Override
 		public void execute(AsyncTask<?> task) {
-			try (Statement stmt = theConnection.createStatement()) {
-				task.run(stmt);
-			} catch (SQLException e) {
-				throw new IllegalStateException("Could not create or close statement");
-			}
+			task.run(theExecutorConnection);
 		}
 
 		@Override
 		public void close() throws Exception {
-			theConnection.close();
+			theExecutorConnection.close();
 		}
 	}
 
@@ -100,14 +92,18 @@ public class DefaultConnectionPool implements ConnectionPool {
 		theSynchronousConnectionList = BetterTreeList.<Connection> build().safe(false).build();
 		theSynchronousConnections = ThreadLocal.withInitial(() -> {
 			try {
-				return new SynchronousConnection(theSynchronousConnectionList.addElement(theConnection.getConnection(), false));
+				Connection conn = theConnection.getConnection();
+				conn.setAutoCommit(false);
+				return new SynchronousConnection(theSynchronousConnectionList.addElement(conn, false));
 			} catch (SQLException e) {
 				throw new IllegalStateException("Lost connection", e);
 			}
 		});
 		theAsyncExecutor = new ElasticExecutor<>(name, () -> {
 			try {
-				return new AsyncTaskExecutor(theConnection.getConnection());
+				Connection conn = theConnection.getConnection();
+				conn.setAutoCommit(false);
+				return new AsyncTaskExecutor(conn);
 			} catch (SQLException e) {
 				throw new IllegalStateException("Lost connection", e);
 			}
@@ -118,9 +114,19 @@ public class DefaultConnectionPool implements ConnectionPool {
 	public <T> T connect(SqlAction<T> action) throws SQLException, EntityOperationException {
 		if (isClosed)
 			throw new IllegalStateException("This pool has been closed");
-		try (Statement stmt = theSynchronousConnections.get().connection.get().createStatement()) {
-			return action.execute(stmt, JdbcEntityProvider.ALWAYS_FALSE);
+		Connection conn = theSynchronousConnections.get().connection.get();
+		return doAction(conn, action);
+	}
+
+	static <T> T doAction(Connection conn, SqlAction<T> action) throws SQLException, EntityOperationException {
+		Savepoint savepoint = conn.setSavepoint("pool");
+		try (Statement stmt = conn.createStatement()) {
+			T returned = action.execute(stmt, JdbcEntityProvider.ALWAYS_FALSE);
+			conn.commit();
+			return returned;
 		} catch (RuntimeException | Error e) {
+			conn.rollback(savepoint);
+			conn.releaseSavepoint(savepoint);
 			throw new EntityOperationException(e);
 		}
 	}
