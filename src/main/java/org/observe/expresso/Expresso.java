@@ -60,7 +60,7 @@ import org.observe.expresso.ObservableModelSet.ValueCreator;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.WindowPopulation;
 import org.qommons.BiTuple;
-import org.qommons.SubClassMap2;
+import org.qommons.ClassMap;
 import org.qommons.ThreadConstraint;
 import org.qommons.TimeUtils;
 import org.qommons.TimeUtils.TimeEvaluationOptions;
@@ -187,9 +187,9 @@ public class Expresso {
 		return parser;
 	}
 
-	private static final SubClassMap2<Object, ValueParser> DEFAULT_PARSERS;
+	private static final ClassMap<Object, ValueParser> DEFAULT_PARSERS;
 	static {
-		DEFAULT_PARSERS = new SubClassMap2<>(Object.class);
+		DEFAULT_PARSERS = new ClassMap<>(Object.class);
 		DEFAULT_PARSERS.with(Boolean.class, simple((t, s) -> {
 			if ("true".equals(s))
 				return Boolean.TRUE;
@@ -208,10 +208,10 @@ public class Expresso {
 		DEFAULT_PARSERS.with(Enum.class, simple((t, s) -> parseEnum(t, s)));
 	}
 
-	private final SubClassMap2<Object, ValueParser> theParsers;
+	private final ClassMap<Object, ValueParser> theParsers;
 
 	public Expresso() {
-		theParsers = new SubClassMap2<>(Object.class);
+		theParsers = new ClassMap<>(Object.class);
 		theParsers.putAll(DEFAULT_PARSERS);
 	}
 
@@ -1545,7 +1545,7 @@ public class Expresso {
 		else if (expression instanceof ExpressionValueType.Literal) {
 			if (type == null)
 				throw new QonfigInterpretationException("type must be specified if value is not an expression");
-			ValueParser parser = theParsers.get(TypeTokens.get().wrap(TypeTokens.getRawType(type)), SubClassMap2.TypeMatch.SUB_TYPE);
+			ValueParser parser = theParsers.get(TypeTokens.get().wrap(TypeTokens.getRawType(type)), ClassMap.TypeMatch.SUB_TYPE);
 			if (parser == null)
 				throw new QonfigInterpretationException("No parser configured for type " + type);
 			T value = parser.parseModelValue(type, expression.toString());

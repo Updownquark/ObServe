@@ -766,17 +766,48 @@ public class QuickBase extends QuickCore {
 
 									Component left = sp.getLeftComponent();
 									Component right = sp.getRightComponent();
+									EventQueue.invokeLater(() -> {
+										divCallbackLock[0] = true;
+										try {
+											if (left.isVisible()) {
+												if (right.isVisible()) {
+													int target = pos.get().evaluate(vertical ? sp.getHeight() : sp.getWidth());
+													if (Math.abs(target - sp.getDividerLocation()) > 1)
+														sp.setDividerLocation(target);
+												} else
+													sp.setDividerLocation(vertical ? sp.getHeight() : sp.getWidth());
+											} else if (right.isVisible())
+												sp.setDividerLocation(0);
+										} finally {
+											divCallbackLock[0] = false;
+										}
+									});
 									left.addComponentListener(new ComponentAdapter() {
 										@Override
 										public void componentShown(ComponentEvent e) {
-											if (right.isVisible())
+											if (divCallbackLock[0])
 												return;
 											EventQueue.invokeLater(() -> {
 												divCallbackLock[0] = true;
 												try {
-													int target = pos.get().evaluate(vertical ? sp.getHeight() : sp.getWidth());
-													if (Math.abs(target - sp.getDividerLocation()) > 1)
-														sp.setDividerLocation(target);
+													if (right.isVisible()) {
+														int target = pos.get().evaluate(vertical ? sp.getHeight() : sp.getWidth());
+														if (Math.abs(target - sp.getDividerLocation()) > 1)
+															sp.setDividerLocation(target);
+													} else
+														sp.setDividerLocation(vertical ? sp.getHeight() : sp.getWidth());
+												} finally {
+													divCallbackLock[0] = false;
+												}
+											});
+										}
+
+										@Override
+										public void componentHidden(ComponentEvent e) {
+											EventQueue.invokeLater(() -> {
+												divCallbackLock[0] = true;
+												try {
+													sp.setDividerLocation(0);
 												} finally {
 													divCallbackLock[0] = false;
 												}
@@ -786,14 +817,29 @@ public class QuickBase extends QuickCore {
 									right.addComponentListener(new ComponentAdapter() {
 										@Override
 										public void componentShown(ComponentEvent e) {
-											if (left.isVisible())
+											if (divCallbackLock[0])
 												return;
 											EventQueue.invokeLater(() -> {
 												divCallbackLock[0] = true;
 												try {
-													int target = pos.get().evaluate(vertical ? sp.getHeight() : sp.getWidth());
-													if (Math.abs(target - sp.getDividerLocation()) > 1)
-														sp.setDividerLocation(target);
+													if (left.isVisible()) {
+														int target = pos.get().evaluate(vertical ? sp.getHeight() : sp.getWidth());
+														if (Math.abs(target - sp.getDividerLocation()) > 1)
+															sp.setDividerLocation(target);
+													} else
+														sp.setDividerLocation(0);
+												} finally {
+													divCallbackLock[0] = false;
+												}
+											});
+										}
+
+										@Override
+										public void componentHidden(ComponentEvent e) {
+											EventQueue.invokeLater(() -> {
+												divCallbackLock[0] = true;
+												try {
+													sp.setDividerLocation(vertical ? sp.getHeight() : sp.getWidth());
 												} finally {
 													divCallbackLock[0] = false;
 												}

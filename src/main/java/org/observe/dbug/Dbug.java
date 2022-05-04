@@ -11,7 +11,7 @@ import java.util.function.Function;
 import org.observe.dbug.DbugAnchor.DbugInstanceTokenizer;
 import org.observe.dbug.DbugAnchor.InstantiationTransaction;
 import org.qommons.Named;
-import org.qommons.SubClassMap2;
+import org.qommons.ClassMap;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.collect.BetterList;
@@ -69,7 +69,7 @@ public class Dbug implements Named {
 
 	private final String theName;
 	private final Transactable theLock;
-	private final SubClassMap2<Object, DbugAnchorType<?>> theAnchors;
+	private final ClassMap<Object, DbugAnchorType<?>> theAnchors;
 	private final ThreadLocal<Instantiation> theInstantiations;
 
 	public Dbug(String name, Transactable lock) {
@@ -79,7 +79,7 @@ public class Dbug implements Named {
 	public Dbug(String name, Function<? super Dbug, ? extends Transactable> lock) {
 		theName = name;
 		theLock = lock.apply(this);
-		theAnchors = new SubClassMap2<>(Object.class);
+		theAnchors = new ClassMap<>(Object.class);
 		theInstantiations = ThreadLocal.withInitial(Instantiation::new);
 	}
 
@@ -96,7 +96,7 @@ public class Dbug implements Named {
 	 * @return The anchor type
 	 */
 	public synchronized <A> DbugAnchorType<A> anchor(Class<A> type, Consumer<DbugAnchorType.Builder<A>> builder) {
-		DbugAnchorType<?> existing = theAnchors.get(type, SubClassMap2.TypeMatch.EXACT);
+		DbugAnchorType<?> existing = theAnchors.get(type, ClassMap.TypeMatch.EXACT);
 		if (existing != null)
 			throw new IllegalArgumentException(
 				"An anchor has already been configured for type " + type.getName() + " in this Dbug");
@@ -116,7 +116,7 @@ public class Dbug implements Named {
 	 * @return The Dbug anchor type for the given java type, if it has been declared
 	 */
 	public synchronized <A> DbugAnchorType<? super A> getAnchor(Class<A> type, boolean throwIfNotFound) {
-		DbugAnchorType<? super A> anchor = (DbugAnchorType<? super A>) theAnchors.get(type, SubClassMap2.TypeMatch.SUPER_TYPE);
+		DbugAnchorType<? super A> anchor = (DbugAnchorType<? super A>) theAnchors.get(type, ClassMap.TypeMatch.SUPER_TYPE);
 		if (anchor == null && throwIfNotFound)
 			throw new IllegalArgumentException("No anchor for type " + type.getName());
 		return anchor;
@@ -138,11 +138,11 @@ public class Dbug implements Named {
 
 	static class Instantiation {
 		private final List<List<DbugToken>> theCurrentTokens;
-		private final SubClassMap2<Object, List<? extends DbugInstanceTokenizer<?>>> theTokenizers;
+		private final ClassMap<Object, List<? extends DbugInstanceTokenizer<?>>> theTokenizers;
 
 		Instantiation() {
 			theCurrentTokens = new ArrayList<>();
-			theTokenizers = new SubClassMap2<>(Object.class);
+			theTokenizers = new ClassMap<>(Object.class);
 		}
 
 		InstantiationStackItem instantiatingFor(Set<DbugToken> tokens) {
@@ -161,7 +161,7 @@ public class Dbug implements Named {
 
 		<A> void getTokens(DbugAnchor<A> anchor, Set<DbugToken> tokens) {
 			List<DbugInstanceTokenizer<A>> tokenizers = (List<DbugInstanceTokenizer<A>>) theTokenizers.get(anchor.getType().getType(),
-				SubClassMap2.TypeMatch.SUPER_TYPE);
+				ClassMap.TypeMatch.SUPER_TYPE);
 			if (tokenizers != null && !tokenizers.isEmpty()) {
 				for (DbugInstanceTokenizer<A> tokenizer : tokenizers) {
 					if (tokenizer.applies(anchor, anchor.getInstance())) {
