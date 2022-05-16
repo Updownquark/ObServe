@@ -273,11 +273,21 @@ public interface ObservableModelSet {
 	}
 
 	public abstract class ModelSetInstance {
+		public abstract ObservableModelSet getModel();
+
 		public abstract Object getModelConfiguration();
 
 		public abstract Observable<?> getUntil();
 
 		protected abstract Object getThing(Default.Placeholder<?, ?> placeholder);
+
+		public <M, MV extends M> MV get(String path, ModelInstanceType<M, MV> type) {
+			try {
+				return (MV) getThing((Default.Placeholder<?, ?>) getModel().get(path, type));
+			} catch (QonfigInterpretationException e) {
+				throw new IllegalArgumentException(e.getMessage(), e);
+			}
+		}
 	}
 
 	abstract class ModelSetInstanceBuilder extends ModelSetInstance {
@@ -563,7 +573,7 @@ public interface ObservableModelSet {
 		public ModelSetInstance createInstance(ExternalModelSet extModel, Observable<?> until) {
 			if (until == null)
 				until = Observable.empty();
-			DefaultModelSetInstanceBuilder modelSet = new DefaultModelSetInstanceBuilder(until);
+			DefaultModelSetInstanceBuilder modelSet = new DefaultModelSetInstanceBuilder(this, until);
 			install(modelSet, extModel);
 			return modelSet.build();
 		}
@@ -703,13 +713,20 @@ public interface ObservableModelSet {
 		}
 
 		static class DefaultModelSetInstanceBuilder extends ModelSetInstanceBuilder {
+			private final ObservableModelSet theModel;
 			private final Map<Default.Placeholder<?, ?>, Object> theThings;
 			private Object theModelConfiguration;
 			private final Observable<?> theUntil;
 
-			DefaultModelSetInstanceBuilder(Observable<?> until) {
+			DefaultModelSetInstanceBuilder(ObservableModelSet model, Observable<?> until) {
+				theModel = model;
 				theThings = new LinkedHashMap<>();
 				theUntil = until;
+			}
+
+			@Override
+			public ObservableModelSet getModel() {
+				return theModel;
 			}
 
 			@Override
@@ -739,17 +756,24 @@ public interface ObservableModelSet {
 
 			@Override
 			ModelSetInstance build() {
-				return new DefaultModelSetInstance(QommonsUtils.unmodifiableCopy(theThings), theUntil);
+				return new DefaultModelSetInstance(theModel, QommonsUtils.unmodifiableCopy(theThings), theUntil);
 			}
 		}
 
 		static class DefaultModelSetInstance extends ModelSetInstance {
+			private final ObservableModelSet theModel;
 			private final Map<Default.Placeholder<?, ?>, Object> theThings;
 			private final Observable<?> theUntil;
 
-			DefaultModelSetInstance(Map<Placeholder<?, ?>, Object> things, Observable<?> until) {
+			DefaultModelSetInstance(ObservableModelSet model, Map<Placeholder<?, ?>, Object> things, Observable<?> until) {
+				theModel = model;
 				theThings = things;
 				theUntil = until;
+			}
+
+			@Override
+			public ObservableModelSet getModel() {
+				return theModel;
 			}
 
 			@Override
@@ -912,7 +936,7 @@ public interface ObservableModelSet {
 
 		@Override
 		public WrappedInstanceBuilder wrap(ModelSetInstance msi) {
-			WrappedInstanceBuilderImpl instBuilder = new WrappedInstanceBuilderImpl(theModelId, msi, thePlaceholders.values());
+			WrappedInstanceBuilderImpl instBuilder = new WrappedInstanceBuilderImpl(this, theModelId, msi, thePlaceholders.values());
 			install(instBuilder, buildExternal(theNameChecker).build());
 			return instBuilder;
 		}
@@ -1074,18 +1098,26 @@ public interface ObservableModelSet {
 		static class WrappedInstanceBuilderImpl extends ModelSetInstanceBuilder implements WrappedInstanceBuilder {
 			private static Object UNFULFILLED = new Object();
 
+			private final ObservableModelSet theModel;
 			private final Object theModelId;
 			private final ModelSetInstance theWrapped;
 			private final Map<Placeholder<?, ?>, Object> theValues;
 			private List<Observable<?>> theUntils;
 			private Object theModelConfig;
 
-			WrappedInstanceBuilderImpl(Object modelId, ModelSetInstance wrapped, Collection<RuntimePlaceholderImpl<?, ?>> placeholders) {
+			WrappedInstanceBuilderImpl(ObservableModelSet model, Object modelId, ModelSetInstance wrapped,
+				Collection<RuntimePlaceholderImpl<?, ?>> placeholders) {
+				theModel = model;
 				theModelId = modelId;
 				theWrapped = wrapped;
 				theValues = new LinkedHashMap<>();
 				for (RuntimePlaceholderImpl<?, ?> placeholder : placeholders)
 					theValues.put(placeholder, UNFULFILLED);
+			}
+
+			@Override
+			public ObservableModelSet getModel() {
+				return theModel;
 			}
 
 			@Override
@@ -1151,22 +1183,29 @@ public interface ObservableModelSet {
 					until = Observable.or(theUntils.toArray(new Observable[theUntils.size()]));
 					theUntils.remove(0);
 				}
-				return new WrappedMSI(theModelId, theWrapped, QommonsUtils.unmodifiableCopy(theValues), until);
+				return new WrappedMSI(theModel, theModelId, theWrapped, QommonsUtils.unmodifiableCopy(theValues), until);
 			}
 		}
 
 		static class WrappedMSI extends ModelSetInstance {
+			private final ObservableModelSet theModel;
 			private final Object theModelId;
 			private final ModelSetInstance theWrapped;
 			private final Map<Placeholder<?, ?>, Object> thePlaceholderValues;
 			private final Observable<?> theUntil;
 
-			WrappedMSI(Object modelId, ModelSetInstance wrapped, Map<Placeholder<?, ?>, Object> placeholderValues,
+			WrappedMSI(ObservableModelSet model, Object modelId, ModelSetInstance wrapped, Map<Placeholder<?, ?>, Object> placeholderValues,
 				Observable<?> until) {
+				theModel = model;
 				theModelId = modelId;
 				theWrapped = wrapped;
 				thePlaceholderValues = placeholderValues;
 				theUntil = until;
+			}
+
+			@Override
+			public ObservableModelSet getModel() {
+				return theModel;
 			}
 
 			@Override

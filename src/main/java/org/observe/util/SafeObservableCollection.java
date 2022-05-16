@@ -180,9 +180,11 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 			return true;
 		});
 		theFlushKey = Causable.key((cause, values) -> {
-			if (threading.isEventThread())
-				doFlush();
-			else
+			if (threading.isEventThread()) {
+				try (Transaction t = theSyntheticCollection.lock(true, cause)) { // For causality
+					doFlush();
+				}
+			} else
 				threading.invoke(this::doFlush);
 		});
 		theFlushLock = new AtomicBoolean();

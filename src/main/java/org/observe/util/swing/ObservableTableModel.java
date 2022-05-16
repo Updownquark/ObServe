@@ -613,7 +613,7 @@ public class ObservableTableModel<R> implements TableModel {
 			}
 
 			private void checkToolTip(ModelRow<R> row, ModelCell<R, C> cell, CategoryRenderStrategy<R, C> category) {
-				if (row != null)
+				if (row != null && category != null)
 					setToolTip(category.getTooltip(cell), false);
 				else if (category != null) // Column header
 					setToolTip(category.getHeaderTooltip(), true);

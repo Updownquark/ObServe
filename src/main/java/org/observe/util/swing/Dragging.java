@@ -372,7 +372,7 @@ public class Dragging {
 		@Override
 		public TransferAppearance<E> withDragIcon(String imageLocation, Consumer<ImageControl> imgConfig) {
 			theImageLocation = imageLocation;
-			theImageControl = new PanelPopulation.SimpleImageControl(imageLocation);
+			theImageControl = new PanelPopulationImpl.SimpleImageControl(imageLocation);
 			if (imgConfig != null)
 				imgConfig.accept(theImageControl);
 			return this;

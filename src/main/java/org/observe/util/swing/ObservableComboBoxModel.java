@@ -140,8 +140,8 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 		}
 		subs.add(ObservableComboBoxModel.<T> hookUpComboData(safeValues, safeSelected, index -> {
 			// Ignore update events when the popup is expanded
-			if (index != comboBox.getSelectedIndex() || (index >= 0 && comboBox.getSelectedItem() != safeValues.get(index))
-				|| !popup.isVisible())
+			if ((index != comboBox.getSelectedIndex() || (index >= 0 && comboBox.getSelectedItem() != safeValues.get(index))
+				|| !popup.isVisible()) && index < comboBox.getItemCount())
 				comboBox.setSelectedIndex(index);
 		}, listener -> {
 			ItemListener itemListener = evt -> {

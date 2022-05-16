@@ -58,7 +58,7 @@ public interface TableContentControl {
 
 	/**
 	 * Interface to interpret cell values from a filtering/sorting perspective. Typically a table column.
-	 * 
+	 *
 	 * @param <E> The type of values this renderer understands
 	 */
 	public interface ValueRenderer<E> extends Named {
@@ -85,7 +85,7 @@ public interface TableContentControl {
 
 	/**
 	 * A filtered table row
-	 * 
+	 *
 	 * @param <E> The type of row value
 	 */
 	public static class FilteredValue<E> implements Comparable<FilteredValue<?>> {
@@ -378,6 +378,8 @@ public interface TableContentControl {
 	 */
 	public static <F extends PanelPopulation.FieldEditor<ObservableTextField<TableContentControl>, ?>> F configureSearchField(F field,
 		boolean commitOnType) {
+		if (field.getEditor().getValue().get() == null)
+			field.getEditor().getValue().set(TableContentControl.DEFAULT, null);
 		return (F) field.fill().withTooltip(TableContentControl.TABLE_CONTROL_TOOLTIP).modifyEditor(tf2 -> tf2//
 			.setCommitOnType(commitOnType).setEmptyText("Search or Sort...")
 			.setIcon(ObservableSwingUtils.getFixedIcon(null, "/icons/search.png", 16, 16)));
