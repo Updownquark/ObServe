@@ -10,8 +10,8 @@ import java.util.function.Function;
 
 import org.observe.dbug.DbugAnchor.DbugInstanceTokenizer;
 import org.observe.dbug.DbugAnchor.InstantiationTransaction;
-import org.qommons.Named;
 import org.qommons.ClassMap;
+import org.qommons.Named;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.collect.BetterList;
@@ -69,7 +69,7 @@ public class Dbug implements Named {
 
 	private final String theName;
 	private final Transactable theLock;
-	private final ClassMap<Object, DbugAnchorType<?>> theAnchors;
+	private final ClassMap<DbugAnchorType<?>> theAnchors;
 	private final ThreadLocal<Instantiation> theInstantiations;
 
 	public Dbug(String name, Transactable lock) {
@@ -79,7 +79,7 @@ public class Dbug implements Named {
 	public Dbug(String name, Function<? super Dbug, ? extends Transactable> lock) {
 		theName = name;
 		theLock = lock.apply(this);
-		theAnchors = new ClassMap<>(Object.class);
+		theAnchors = new ClassMap<>();
 		theInstantiations = ThreadLocal.withInitial(Instantiation::new);
 	}
 
@@ -138,11 +138,11 @@ public class Dbug implements Named {
 
 	static class Instantiation {
 		private final List<List<DbugToken>> theCurrentTokens;
-		private final ClassMap<Object, List<? extends DbugInstanceTokenizer<?>>> theTokenizers;
+		private final ClassMap<List<? extends DbugInstanceTokenizer<?>>> theTokenizers;
 
 		Instantiation() {
 			theCurrentTokens = new ArrayList<>();
-			theTokenizers = new ClassMap<>(Object.class);
+			theTokenizers = new ClassMap<>();
 		}
 
 		InstantiationStackItem instantiatingFor(Set<DbugToken> tokens) {

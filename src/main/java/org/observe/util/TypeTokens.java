@@ -537,6 +537,8 @@ public class TypeTokens {
 			return (Class<T>) Short.class;
 		else if (type == char.class)
 			return (Class<T>) Character.class;
+		else if (type == void.class)
+			return (Class<T>) Void.class;
 		else
 			throw new IllegalStateException("Unrecognized primitive type: " + type);
 	}
@@ -564,6 +566,8 @@ public class TypeTokens {
 			return (Class<T>) short.class;
 		else if (type == Character.class)
 			return (Class<T>) char.class;
+		else if (type == Void.class)
+			return (Class<T>) void.class;
 		else
 			return type;
 	}

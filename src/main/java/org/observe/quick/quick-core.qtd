@@ -51,7 +51,7 @@
 			<attribute name="y" type="expression" specify="optional" />
 			<attribute name="height" type="expression" specify="optional" />
 			<attribute name="width" type="expression" specify="optional" />
-			<attribute name="title" type="expression-or-string" specify="optional" />
+			<attribute name="title" type="expression" specify="optional" />
 			<attribute name="visible" type="expression" specify="optional" />
 			<attribute name="close-action" type="window-close-action" default="hide" />
 		</add-on>
@@ -70,8 +70,8 @@
 		<element-def name="widget" abstract="true">
 			<child-def name="model" type="model" min="0" inherits="widget-local-variables" /> <!-- Local variables, visible to any children also -->
 			<attribute name="name" type="string" specify="optional" /> <!-- For debugging -->
-			<attribute name="bg-color" type="expression-or-string" specify="optional" />
-			<attribute name="tooltip" type="expression-or-string" specify="optional" />
+			<attribute name="bg-color" type="expression" specify="optional" />
+			<attribute name="tooltip" type="expression" specify="optional" />
 			<attribute name="visible" type="expression" specify="optional" />
 			<attribute name="onClick" type="expression" specify="optional" />
 			<attribute name="onHover" type="expression" specify="optional" />
@@ -82,11 +82,11 @@
 
 		<element-def name="border" abstract="true" />
 		<element-def name="line-border" extends="border">
-			<attribute name="color" type="expression-or-string" default="black" />
+			<attribute name="color" type="expression" default="`black`" />
 			<attribute name="thickness" type="expression" default="1" />
 		</element-def>
 		<element-def name="titled-border" extends="line-border">
-			<attribute name="title" type="expression-or-string" specify="required" />
+			<attribute name="title" type="expression" specify="required" />
 		</element-def>
 
 		<element-def name="quick">

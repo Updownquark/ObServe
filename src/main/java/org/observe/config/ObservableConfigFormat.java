@@ -1475,7 +1475,7 @@ public interface ObservableConfigFormat<E> {
 			}
 		}
 
-		static class SimpleConfigFormat<T> implements ObservableConfigFormat<T> {
+		public static class SimpleConfigFormat<T> implements ObservableConfigFormat<T> {
 			public final Format<T> format;
 			public final Supplier<? extends T> defaultValue;
 

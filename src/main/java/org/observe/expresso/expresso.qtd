@@ -22,6 +22,9 @@
 		<add-on name="ext-model-value" requires="model-value">
 			<value-mod specify="forbidden" /> <!-- External values are specified by code instantiating the model -->
 		</add-on>
+		<add-on name="int-value" requires="value" inherits="int-model-value">
+			<attribute name="init" type="expression" specify="optional" />
+		</add-on>
 		<add-on name="int-list" requires="list" inherits="int-model-value">
 			<child-def name="element" type="element" min="0" max="inf" />
 		</add-on>
@@ -42,7 +45,7 @@
 			<attribute name="format" type="expression" specify="optional" />
 		</add-on>
 		<add-on name="config-value" requires="value" inherits="config-model-value">
-			<attribute name="default" type="expression-or-string" specify="optional" />
+			<attribute name="default" type="expression" specify="optional" />
 		</add-on>
 		<add-on name="config-map" requires="map" inherits="config-model-value">
 			<attribute name="key-format" type="expression" specify="optional" />
@@ -83,9 +86,9 @@
 		<add-on name="file-source-type" requires="file-source" abstract="true" />
 		<add-on name="native" inherits="file-source-type" requires="file-source" />
 		<add-on name="sftp" inherits="file-source-type" requires="file-source">
-			<attribute name="host" type="expression-or-string" />
-			<attribute name="user" type="expression-or-string" />
-			<attribute name="password" type="expression-or-string" />
+			<attribute name="host" type="expression" />
+			<attribute name="user" type="expression" />
+			<attribute name="password" type="expression" />
 			<attribute name="connecting" type="expression" />
 		</add-on>
 		<add-on name="archive-type" requires="archive-method" />
@@ -119,13 +122,13 @@
 			<attribute name="max-resolution" type="string" default="Second" />
 			<attribute name="format-24h" type="boolean" default="false" />
 			<attribute name="relative-eval-type" type="string" default="Closest" />
-			<attribute name="relative-to" type="expression-or-string" specify="optional" />
+			<attribute name="relative-to" type="expression" specify="optional" />
 		</add-on>
 		<add-on name="regex-format" inherits="format-type" requires="format" />
 		<add-on name="regex-format-string" inherits="format-type" requires="format" />
 		<add-on name="validate-type" abstract="true" />
 		<add-on name="regex-validation" inherits="validate-type">
-			<attribute name="pattern" type="expression-or-string" />
+			<attribute name="pattern" type="expression" />
 		</add-on>
 		<add-on name="filter-validation" inherits="validate-type">
 			<attribute name="filter" type="expression" />
@@ -147,7 +150,7 @@
 		</element-def>
 		<element-def name="model-value" abstract="true">
 			<attribute name="type" type="string" specify="required" />
-			<value type="expression-or-string" specify="optional" />
+			<value type="expression" specify="optional" />
 		</element-def>
 		<element-def name="event" extends="model-value" inherits="allow-ext-model" />
 		<element-def name="action" extends="model-value" inherits="allow-ext-model" />
@@ -173,13 +176,13 @@
 			<child-def name="sub-model" type="model" min="0" max="inf" />
 		</element-def>
 		<element-def name="constant" extends="model-value">
-			<value-mod type="expression-or-string" specify="required" />
+			<value-mod type="expression" specify="required" />
 		</element-def>
 		<element-def name="element">
-			<value type="expression-or-string" specify="required" />
+			<value type="expression" specify="required" />
 		</element-def>
 		<element-def name="entry" extends="element">
-			<attribute name="key" type="expression-or-string" />
+			<attribute name="key" type="expression" />
 		</element-def>
 		<!-- Config models.  These function similarly to internal models, except that they represent persistent values from
 			 ObservableConfig.  Some of these allow specification of default values, but these are only used if the persistent data
@@ -334,6 +337,9 @@
 
 		<auto-inherit inherits="int-model-value">
 			<target element="model-value" role="model.value" />
+		</auto-inherit>
+		<auto-inherit inherits="int-value">
+			<target element="value" role="model.value" />
 		</auto-inherit>
 		<auto-inherit inherits="int-list">
 			<target element="list" role="model.value" />

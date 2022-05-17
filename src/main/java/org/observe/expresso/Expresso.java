@@ -7,7 +7,6 @@ import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Type;
-import java.text.DecimalFormat;
 import java.text.ParseException;
 import java.time.Duration;
 import java.time.Instant;
@@ -60,7 +59,6 @@ import org.observe.expresso.ObservableModelSet.ValueCreator;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.WindowPopulation;
 import org.qommons.BiTuple;
-import org.qommons.ClassMap;
 import org.qommons.ThreadConstraint;
 import org.qommons.TimeUtils;
 import org.qommons.TimeUtils.TimeEvaluationOptions;
@@ -94,7 +92,7 @@ import com.google.common.reflect.TypeToken;
 /** Qonfig Interpretation for the Expresso API */
 @SuppressWarnings("rawtypes")
 public class Expresso {
-	public static final ExpressoParser EXPRESSION_PARSER = new DefaultExpressoParser();
+	public static final ExpressoParser EXPRESSION_PARSER = new DefaultExpressoParser().withDefaultNonStructuredParsing();
 
 	/** The Expresso Qonfig toolkit */
 	public static final QonfigToolkitAccess EXPRESSO = new QonfigToolkitAccess(Expresso.class, "expresso.qtd")
@@ -162,6 +160,10 @@ public class Expresso {
 	}
 
 	public interface ValueParser {
+		default boolean canParse(TypeToken<?> type, String text) {
+			return true;
+		}
+
 		<T> T parseModelValue(TypeToken<T> type, String text) throws QonfigInterpretationException;
 	}
 
@@ -187,39 +189,6 @@ public class Expresso {
 		return parser;
 	}
 
-	private static final ClassMap<Object, ValueParser> DEFAULT_PARSERS;
-	static {
-		DEFAULT_PARSERS = new ClassMap<>(Object.class);
-		DEFAULT_PARSERS.with(Boolean.class, simple((t, s) -> {
-			if ("true".equals(s))
-				return Boolean.TRUE;
-			else if ("false".equals(s))
-				return Boolean.FALSE;
-			throw new ParseException("Unrecognized boolean value: '" + s + "'", 0);
-		}));
-		DEFAULT_PARSERS.with(Integer.class, simple((t, s) -> Format.INT.parse(s)));
-		DEFAULT_PARSERS.with(Long.class, simple((t, s) -> Format.LONG.parse(s)));
-		DecimalFormat df = new DecimalFormat("0.#######");
-		DEFAULT_PARSERS.with(Double.class, simple((t, s) -> Format.parseDouble(s, df)));
-		DEFAULT_PARSERS.with(Float.class, simple((t, s) -> (float) Format.parseDouble(s, df)));
-		DEFAULT_PARSERS.with(String.class, simple((t, s) -> s));
-		DEFAULT_PARSERS.with(Duration.class, simple((t, s) -> TimeUtils.parseDuration(s)));
-		DEFAULT_PARSERS.with(Instant.class, simple((t, s) -> TimeUtils.parseInstant(s, true, true, null).evaluate(Instant::now)));
-		DEFAULT_PARSERS.with(Enum.class, simple((t, s) -> parseEnum(t, s)));
-	}
-
-	private final ClassMap<Object, ValueParser> theParsers;
-
-	public Expresso() {
-		theParsers = new ClassMap<>(Object.class);
-		theParsers.putAll(DEFAULT_PARSERS);
-	}
-
-	public Expresso withParser(Class<?> type, ValueParser parser) {
-		theParsers.with(type, parser);
-		return this;
-	}
-
 	public interface AppEnvironment {
 		Function<ModelSetInstance, ? extends ObservableValue<String>> getTitle();
 
@@ -228,6 +197,7 @@ public class Expresso {
 
 	public <QIS extends ExpressoInterpreter.ExpressoSession<QIS>, B extends ExpressoInterpreter.Builder<QIS, B>> B configureInterpreter(
 		B interpreter) {
+		interpreter.withExpressionParser(EXPRESSION_PARSER);
 		configureBaseModels(interpreter.forToolkit(EXPRESSO.get()));
 		QonfigToolkit obsTk = EXPRESSO.get();
 		ExpressoInterpreter.Builder<?, ?> observeInterpreter = interpreter.forToolkit(obsTk);
@@ -506,6 +476,9 @@ public class Expresso {
 		}).createWith("value", ValueCreator.class, session -> () -> {
 			TypeToken<Object> type = (TypeToken<Object>) session.get(VALUE_TYPE_KEY);
 			ObservableExpression valueX = (ObservableExpression) session.getElement().getValue();
+			ObservableExpression initX = session.as("int-value").getAttribute("init", ObservableExpression.class);
+			if (initX != null && valueX != null)
+				session.withWarning("Either a value or an init value may be specified, but not both.  Initial value will be ignored.");
 			ValueContainer<SettableValue, SettableValue<Object>> value;
 			try {
 				value = valueX == null ? null : parseValue(//
@@ -514,23 +487,50 @@ public class Expresso {
 				session.withError(e.getMessage(), e);
 				value = null;
 			}
-			if (value == null && type == null) {
+			ValueContainer<SettableValue, SettableValue<Object>> init;
+			try {
+				init = initX == null ? null : parseValue(//
+					session.getModels(), session.getClassView(), type, initX);
+			} catch (QonfigInterpretationException e) {
+				session.withError(e.getMessage(), e);
+				init = null;
+			}
+			if (value == null && init == null && type == null) {
 				session.withError("Either a type or a value must be specified");
 				return null;
 			}
-			ValueContainer<SettableValue, SettableValue<Object>> value2 = value;
-			ModelInstanceType<SettableValue, SettableValue<Object>> fType = type != null ? ModelTypes.Value.forType(type)
-				: (ModelInstanceType<SettableValue, SettableValue<Object>>) value.getType();
+			ValueContainer<SettableValue, SettableValue<Object>> fValue = value;
+			ValueContainer<SettableValue, SettableValue<Object>> fInit = init;
+			ModelInstanceType<SettableValue, SettableValue<Object>> fType;
+			if (type != null)
+				fType = ModelTypes.Value.forType(type);
+			else if (value != null)
+				fType = value.getType();
+			else
+				fType = init.getType();
 			return new ObservableModelSet.AbstractValueContainer<SettableValue, SettableValue<Object>>(fType) {
 				@Override
 				public SettableValue<Object> get(ModelSetInstance models) {
+					if (fValue != null)
+						return fValue.get(models);
 					SettableValue.Builder<Object> builder = SettableValue.build((TypeToken<Object>) fType.getType(0));
 					builder.withDescription((String) session.get(PATH_KEY));
-					if (value2 != null)
-						builder.withValue(value2.apply(models).get());
+					if (fInit != null)
+						builder.withValue(fInit.apply(models).get());
 					return builder.build();
 				}
 			};
+		}).createWith("action", ValueCreator.class, session -> () -> {
+			TypeToken<Object> type = (TypeToken<Object>) session.get(VALUE_TYPE_KEY);
+			ObservableExpression valueX = (ObservableExpression) session.getElement().getValue();
+			try {
+				return valueX.evaluate(
+					ModelTypes.Action.forType(type == null ? (TypeToken<Object>) (TypeToken<?>) TypeTokens.get().VOID : type),
+					session.getModels(), session.getClassView());
+			} catch (QonfigInterpretationException e) {
+				session.withError(e.getMessage(), e);
+				return null;
+			}
 		}).createWith("value-set", ValueCreator.class, session -> () -> {
 			TypeToken<Object> type = session.get(VALUE_TYPE_KEY, TypeToken.class);
 			return new AbstractValueContainer<ObservableValueSet, ObservableValueSet<Object>>(ModelTypes.ValueSet.forType(type)) {
@@ -674,16 +674,42 @@ public class Expresso {
 		.createWith("config", ObservableModelSet.class, new ConfigModelCreator())//
 		.createWith("value", ConfigModelValue.class, session -> {
 			TypeToken<Object> type = session.get(VALUE_TYPE_KEY, TypeToken.class);
-			ObservableExpression defaultX = session.getValue(ObservableExpression.class, null);
+			ObservableExpression defaultX = session.as("config-value").getAttribute("default", ObservableExpression.class);
 			ValueContainer<SettableValue, SettableValue<Object>> defaultV;
-			defaultV = defaultX == null ? null : parseValue(//
-				session.getModels(), session.getClassView(), type, defaultX);
+			Format<Object>[] format = new Format[1];
+			if (defaultX != null) {
+				// If the format is a simple text format, add the ability to parse literals with it
+				NonStructuredParser nsp = format == null ? null : new NonStructuredParser() {
+					@Override
+					public boolean canParse(TypeToken<?> type2, String text) {
+						return format[0] != null;
+					}
+
+					@Override
+					public <T> ObservableValue<? extends T> parse(TypeToken<T> type2, String text) throws ParseException {
+						return ObservableValue.of(type2, (T) format[0].parse(text));
+					}
+				};
+				if (format != null && session.getInterpreter().getExpressionParser() instanceof DefaultExpressoParser)
+					((DefaultExpressoParser) session.getInterpreter().getExpressionParser())
+					.withNonStructuredParser(TypeTokens.getRawType(type), nsp);
+				defaultV = defaultX == null ? null : parseValue(//
+					session.getModels(), session.getClassView(), type, defaultX);
+				if (format != null && session.getInterpreter().getExpressionParser() instanceof DefaultExpressoParser)
+					((DefaultExpressoParser) session.getInterpreter().getExpressionParser())
+					.removeNonStructuredParser(TypeTokens.getRawType(type), nsp);
+			} else
+				defaultV = null;
 			return new AbstractConfigModelValue<SettableValue, SettableValue<Object>>(ModelTypes.Value.forType(type)) {
 				@Override
 				public SettableValue<Object> create(ObservableConfigValueBuilder<?> config, ModelSetInstance msi) {
 					SettableValue<Object> built = (SettableValue<Object>) config.buildValue(null);
-					if (defaultV != null && config.getConfig().getChild(config.getPath(), false, null) == null)
+					if (defaultV != null && config.getConfig().getChild(config.getPath(), false, null) == null) {
+						if (config.getFormat() instanceof ObservableConfigFormat.Impl.SimpleConfigFormat)
+							format[0] = ((ObservableConfigFormat.Impl.SimpleConfigFormat<Object>) config.getFormat()).format;
 						built.set(defaultV.apply(msi).get(), null);
+						format[0] = null;
+					}
 					return built;
 				}
 			};
@@ -1542,19 +1568,9 @@ public class Expresso {
 		ObservableExpression expression) throws QonfigInterpretationException {
 		if (expression == null)
 			return null;
-		else if (expression instanceof ExpressionValueType.Literal) {
-			if (type == null)
-				throw new QonfigInterpretationException("type must be specified if value is not an expression");
-			ValueParser parser = theParsers.get(TypeTokens.get().wrap(TypeTokens.getRawType(type)), ClassMap.TypeMatch.SUB_TYPE);
-			if (parser == null)
-				throw new QonfigInterpretationException("No parser configured for type " + type);
-			T value = parser.parseModelValue(type, expression.toString());
-			return ObservableModelSet.literalContainer(ModelTypes.Value.forType(type), value, expression.toString());
-		} else
-			return expression.evaluate(
-				type == null ? (ModelInstanceType<SettableValue, SettableValue<T>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any()
-					: ModelTypes.Value.forType(type),
-					models, cv);
+		return expression
+			.evaluate(type == null ? (ModelInstanceType<SettableValue, SettableValue<T>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any()
+				: ModelTypes.Value.forType(type), models, cv);
 	}
 
 	private ValueContainer<?, ?> transformEvent(ValueContainer<Observable, Observable<Object>> source, ExpressoSession<?> transform,

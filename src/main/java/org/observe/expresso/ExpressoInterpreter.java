@@ -11,8 +11,8 @@ import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
-import org.qommons.StatusReportAccumulator;
 import org.qommons.ClassMap;
+import org.qommons.StatusReportAccumulator;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -150,8 +150,8 @@ public abstract class ExpressoInterpreter<QIS extends ExpressoInterpreter.Expres
 	private final ExpressoParser theExpressionParser;
 
 	protected ExpressoInterpreter(Class<?> callingClass,
-		Map<QonfigElementOrAddOn, ClassMap<Object, QonfigCreatorHolder<QIS, ?>>> creators,
-		Map<QonfigElementOrAddOn, ClassMap<Object, QonfigModifierHolder<QIS, ?>>> modifiers, ExpressoParser expressionParser) {
+		Map<QonfigElementOrAddOn, ClassMap<QonfigCreatorHolder<QIS, ?>>> creators,
+		Map<QonfigElementOrAddOn, ClassMap<QonfigModifierHolder<QIS, ?>>> modifiers, ExpressoParser expressionParser) {
 		super(callingClass, creators, modifiers);
 		theExpressionParser = expressionParser;
 	}
@@ -182,8 +182,8 @@ public abstract class ExpressoInterpreter<QIS extends ExpressoInterpreter.Expres
 
 		protected Builder(Class<?> callingClass, Set<QonfigToolkit> toolkits, QonfigToolkit toolkit,
 			StatusReportAccumulator<QonfigElementOrAddOn> status,
-			Map<QonfigElementOrAddOn, ClassMap<Object, QonfigCreatorHolder<QIS, ?>>> creators,
-			Map<QonfigElementOrAddOn, ClassMap<Object, QonfigModifierHolder<QIS, ?>>> modifiers, ExpressoParser expressionParser) {
+			Map<QonfigElementOrAddOn, ClassMap<QonfigCreatorHolder<QIS, ?>>> creators,
+			Map<QonfigElementOrAddOn, ClassMap<QonfigModifierHolder<QIS, ?>>> modifiers, ExpressoParser expressionParser) {
 			super(callingClass, toolkits, toolkit, status, creators, modifiers);
 			theExpressionParser = expressionParser;
 		}
@@ -200,15 +200,15 @@ public abstract class ExpressoInterpreter<QIS extends ExpressoInterpreter.Expres
 		@Override
 		protected B builderFor(Class<?> callingClass, Set<QonfigToolkit> toolkits, QonfigToolkit toolkit,
 			StatusReportAccumulator<QonfigElementOrAddOn> status,
-			Map<QonfigElementOrAddOn, ClassMap<Object, QonfigCreatorHolder<QIS, ?>>> creators,
-			Map<QonfigElementOrAddOn, ClassMap<Object, QonfigModifierHolder<QIS, ?>>> modifiers) {
+			Map<QonfigElementOrAddOn, ClassMap<QonfigCreatorHolder<QIS, ?>>> creators,
+			Map<QonfigElementOrAddOn, ClassMap<QonfigModifierHolder<QIS, ?>>> modifiers) {
 			return builderFor(callingClass, toolkits, toolkit, status, creators, modifiers, theExpressionParser);
 		}
 
 		protected abstract B builderFor(Class<?> callingClass, Set<QonfigToolkit> toolkits, QonfigToolkit toolkit,
 			StatusReportAccumulator<QonfigElementOrAddOn> status,
-			Map<QonfigElementOrAddOn, ClassMap<Object, QonfigCreatorHolder<QIS, ?>>> creators,
-			Map<QonfigElementOrAddOn, ClassMap<Object, QonfigModifierHolder<QIS, ?>>> modifiers, ExpressoParser expressionParser);
+			Map<QonfigElementOrAddOn, ClassMap<QonfigCreatorHolder<QIS, ?>>> creators,
+			Map<QonfigElementOrAddOn, ClassMap<QonfigModifierHolder<QIS, ?>>> modifiers, ExpressoParser expressionParser);
 
 		@Override
 		public abstract ExpressoInterpreter<QIS> create();
@@ -231,8 +231,8 @@ public abstract class ExpressoInterpreter<QIS extends ExpressoInterpreter.Expres
 
 	public static class Default extends ExpressoInterpreter<ExpressoSessionDefault> {
 		protected Default(Class<?> callingClass,
-			Map<QonfigElementOrAddOn, ClassMap<Object, QonfigCreatorHolder<ExpressoSessionDefault, ?>>> creators,
-			Map<QonfigElementOrAddOn, ClassMap<Object, QonfigModifierHolder<ExpressoSessionDefault, ?>>> modifiers,
+			Map<QonfigElementOrAddOn, ClassMap<QonfigCreatorHolder<ExpressoSessionDefault, ?>>> creators,
+			Map<QonfigElementOrAddOn, ClassMap<QonfigModifierHolder<ExpressoSessionDefault, ?>>> modifiers,
 			ExpressoParser expressionParser) {
 			super(callingClass, creators, modifiers, expressionParser);
 		}
@@ -256,8 +256,8 @@ public abstract class ExpressoInterpreter<QIS extends ExpressoInterpreter.Expres
 
 		DefaultBuilder(Class<?> callingClass, Set<QonfigToolkit> toolkits, QonfigToolkit toolkit,
 			StatusReportAccumulator<QonfigElementOrAddOn> status,
-			Map<QonfigElementOrAddOn, ClassMap<Object, QonfigCreatorHolder<ExpressoSessionDefault, ?>>> creators,
-			Map<QonfigElementOrAddOn, ClassMap<Object, QonfigModifierHolder<ExpressoSessionDefault, ?>>> modifiers,
+			Map<QonfigElementOrAddOn, ClassMap<QonfigCreatorHolder<ExpressoSessionDefault, ?>>> creators,
+			Map<QonfigElementOrAddOn, ClassMap<QonfigModifierHolder<ExpressoSessionDefault, ?>>> modifiers,
 			ExpressoParser expressionParser) {
 			super(callingClass, toolkits, toolkit, status, creators, modifiers, expressionParser);
 		}
@@ -265,8 +265,8 @@ public abstract class ExpressoInterpreter<QIS extends ExpressoInterpreter.Expres
 		@Override
 		protected DefaultBuilder builderFor(Class<?> callingClass, Set<QonfigToolkit> toolkits, QonfigToolkit toolkit,
 			StatusReportAccumulator<QonfigElementOrAddOn> status,
-			Map<QonfigElementOrAddOn, ClassMap<Object, QonfigCreatorHolder<ExpressoSessionDefault, ?>>> creators,
-			Map<QonfigElementOrAddOn, ClassMap<Object, QonfigModifierHolder<ExpressoSessionDefault, ?>>> modifiers,
+			Map<QonfigElementOrAddOn, ClassMap<QonfigCreatorHolder<ExpressoSessionDefault, ?>>> creators,
+			Map<QonfigElementOrAddOn, ClassMap<QonfigModifierHolder<ExpressoSessionDefault, ?>>> modifiers,
 			ExpressoParser expressionParser) {
 			return new DefaultBuilder(callingClass, toolkits, toolkit, status, creators, modifiers, expressionParser);
 		}
@@ -274,7 +274,7 @@ public abstract class ExpressoInterpreter<QIS extends ExpressoInterpreter.Expres
 		@Override
 		public Default create() {
 			return new Default(getCallingClass(), getCreators(), getModifiers(),
-				getExpressionParser() == null ? new DefaultExpressoParser() : getExpressionParser());
+				getExpressionParser() == null ? new DefaultExpressoParser().withDefaultNonStructuredParsing() : getExpressionParser());
 		}
 	}
 }

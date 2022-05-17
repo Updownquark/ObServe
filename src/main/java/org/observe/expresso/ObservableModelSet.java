@@ -283,7 +283,7 @@ public interface ObservableModelSet {
 
 		public <M, MV extends M> MV get(String path, ModelInstanceType<M, MV> type) {
 			try {
-				return (MV) getThing((Default.Placeholder<?, ?>) getModel().get(path, type));
+				return getModel().get(path, type).get(this);
 			} catch (QonfigInterpretationException e) {
 				throw new IllegalArgumentException(e.getMessage(), e);
 			}

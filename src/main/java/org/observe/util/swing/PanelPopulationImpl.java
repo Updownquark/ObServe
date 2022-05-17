@@ -3342,6 +3342,7 @@ class PanelPopulationImpl {
 		@Override
 		public void display() {
 			Icon icon = theImage == null ? null : theImage.getIcon().get();
+			EventQueue.invokeLater(theComponent::requestFocus);
 			if (icon != null)
 				JOptionPane.showMessageDialog(theComponent, theMessage, theTitle, getJOptionType(), icon);
 			else
