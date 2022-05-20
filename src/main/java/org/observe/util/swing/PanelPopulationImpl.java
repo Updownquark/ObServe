@@ -1353,13 +1353,19 @@ class PanelPopulationImpl {
 				MultiThumbModel<Double> model = getEditor().getModel();
 				for (int i = model.getThumbCount() - 1; i >= 0; i--)
 					model.removeThumb(i);
-				theMinValue.changes().takeUntil(until).act(evt -> {
-					model.setMinimumValue(evt.getNewValue().floatValue());
-				});
-				theMaxValue.changes().takeUntil(until).act(evt -> {
-					model.setMaximumValue(evt.getNewValue().floatValue());
-				});
 				ObservableCollection<Double> safeValues = theValues.safe(ThreadConstraint.EDT, until);
+				// The JXMultiThumbSlider doesn't actually handle minimum value correctly,
+				// so we have to set it to zero and offset all the values by it.
+				theMinValue.safe(ThreadConstraint.EDT, until).changes().takeUntil(until).act(evt -> {
+					model.setMaximumValue(theMaxValue.get().floatValue() - evt.getNewValue().floatValue());
+					if (model.getThumbCount() > 0) {
+						for (int i = 0; i < safeValues.size(); i++)
+							model.getThumbAt(0).setPosition(safeValues.get(i).floatValue() - theMinValue.get().floatValue());
+					}
+				});
+				theMaxValue.safe(ThreadConstraint.EDT, until).changes().takeUntil(until).act(evt -> {
+					model.setMaximumValue(evt.getNewValue().floatValue() - theMinValue.get().floatValue());
+				});
 				JPanel trackRenderer = new JPanel() {
 					@Override
 					public void paint(Graphics g) {
@@ -1427,7 +1433,7 @@ class PanelPopulationImpl {
 							return;
 						MutableCollectionElement<Double> element = safeValues
 							.mutableElement(safeValues.getElement(event.getIndex()).getElementId());
-						if (element.isAcceptable((double) event.getThumb().getPosition()) == null) {
+						if (element.isAcceptable(theMinValue.get() + event.getThumb().getPosition()) == null) {
 							if (theThumbIndex >= 0 && theThumbIndex != event.getIndex())
 								flush();
 							theThumbIndex = event.getIndex();
@@ -1435,7 +1441,7 @@ class PanelPopulationImpl {
 						} else {
 							callbackLock[0] = true;
 							try {
-								model.getThumbAt(event.getIndex()).setPosition(element.get().floatValue());
+								model.getThumbAt(event.getIndex()).setPosition(element.get().floatValue() - theMinValue.get().floatValue());
 							} finally {
 								callbackLock[0] = false;
 							}
@@ -1447,11 +1453,11 @@ class PanelPopulationImpl {
 						try (Transaction t = safeValues.lock(true, null)) {
 							MutableCollectionElement<Double> element = safeValues
 								.mutableElement(safeValues.getElement(theThumbIndex).getElementId());
-							double pos = model.getThumbAt(theThumbIndex).getPosition();
+							double pos = model.getThumbAt(theThumbIndex).getPosition() + theMinValue.get();
 							if (element.isAcceptable(pos) == null)
 								element.set(pos);
 							else
-								model.getThumbAt(theThumbIndex).setPosition(element.get().floatValue());
+								model.getThumbAt(theThumbIndex).setPosition(element.get().floatValue() - theMinValue.get().floatValue());
 							theThumbIndex = -1;
 						} finally {
 							callbackLock[0] = false;
@@ -1493,7 +1499,7 @@ class PanelPopulationImpl {
 				} else
 					value = theMaxValue.get();
 			}
-			return value;
+			return value - theMinValue.get();
 		}
 	}
 
