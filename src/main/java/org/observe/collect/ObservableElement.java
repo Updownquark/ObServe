@@ -149,6 +149,11 @@ public interface ObservableElement<T> extends ObservableValue<T> {
 					}
 
 					@Override
+					public boolean isEventing() {
+						return false;
+					}
+
+					@Override
 					public Transaction lock() {
 						return Transaction.NONE;
 					}

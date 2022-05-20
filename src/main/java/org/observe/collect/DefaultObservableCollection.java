@@ -90,6 +90,11 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	}
 
 	@Override
+	public boolean isEventing() {
+		return theObservers.isFiring();
+	}
+
+	@Override
 	public boolean isLockSupported() {
 		return theLock.isLockSupported();
 	}

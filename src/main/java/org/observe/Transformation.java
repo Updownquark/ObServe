@@ -2235,6 +2235,11 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 				}
 
 				@Override
+				public boolean isEventing() {
+					return theChanges.isFiring();
+				}
+
+				@Override
 				public boolean isSafe() {
 					return EngineImpl.this.isLockSupported();
 				}

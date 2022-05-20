@@ -160,6 +160,11 @@ public abstract class ObservableCollectionWrapper<E> implements ObservableCollec
 	}
 
 	@Override
+	public boolean isEventing() {
+		return getWrapped().isEventing();
+	}
+
+	@Override
 	public Transaction lock(boolean write, Object cause) {
 		return getWrapped().lock(write, cause);
 	}

@@ -9,6 +9,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.observe.Equivalence;
+import org.observe.Eventable;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.Subscription;
@@ -61,7 +62,7 @@ import com.google.common.reflect.TypeToken;
  * @param <K> The type of key used by this map
  * @param <V> The type of values stored in this map
  */
-public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
+public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventable {
 	/** This class's wildcard {@link TypeToken} */
 	static TypeToken<ObservableMap<?, ?>> TYPE = TypeTokens.get().keyFor(ObservableMap.class).wildCard();
 
@@ -129,6 +130,11 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 			public EmptyMultiEntry(K key, TypeToken<V> valueType) {
 				theKey = key;
 				init(ObservableCollection.of(valueType));
+			}
+
+			@Override
+			public boolean isEventing() {
+				return false;
 			}
 
 			@Override
@@ -531,6 +537,11 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		}
 
 		@Override
+		public boolean isEventing() {
+			return getMap().isEventing();
+		}
+
+		@Override
 		public TypeToken<MultiEntryHandle<K, V>> getType() {
 			return (TypeToken<MultiEntryHandle<K, V>>) (TypeToken<?>) getMap().getEntryType();
 		}
@@ -712,6 +723,11 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		}
 
 		@Override
+		public boolean isEventing() {
+			return getMap().isEventing();
+		}
+
+		@Override
 		public TypeToken<MultiEntryValueHandle<K, V>> getType() {
 			return getMap().getEntryValueType();
 		}
@@ -879,6 +895,11 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		}
 
 		@Override
+		public boolean isEventing() {
+			return getSource().isEventing();
+		}
+
+		@Override
 		public TypeToken<K> getKeyType() {
 			return getSource().getKeyType();
 		}
@@ -978,6 +999,11 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		@Override
 		protected ObservableMultiMap<K, V> getSource() {
 			return (ObservableMultiMap<K, V>) super.getSource();
+		}
+
+		@Override
+		public boolean isEventing() {
+			return getSource().isEventing();
 		}
 
 		@Override
@@ -1139,6 +1165,11 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		@Override
 		protected ObservableMultiMap<K, V> getSource() {
 			return (ObservableMultiMap<K, V>) super.getSource();
+		}
+
+		@Override
+		public boolean isEventing() {
+			return getSource().isEventing();
 		}
 
 		@Override

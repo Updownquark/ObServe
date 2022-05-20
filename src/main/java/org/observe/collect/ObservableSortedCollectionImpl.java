@@ -166,6 +166,11 @@ public class ObservableSortedCollectionImpl {
 		}
 
 		@Override
+		public boolean isEventing() {
+			return getWrapped().isEventing();
+		}
+
+		@Override
 		public boolean isLockSupported() {
 			return getWrapped().isLockSupported();
 		}

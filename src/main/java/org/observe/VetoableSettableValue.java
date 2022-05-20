@@ -247,6 +247,11 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 		}
 
 		@Override
+		public boolean isEventing() {
+			return theListeners.isFiring();
+		}
+
+		@Override
 		public boolean isSafe() {
 			return theLock != null;
 		}

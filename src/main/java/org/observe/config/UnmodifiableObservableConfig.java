@@ -41,6 +41,11 @@ public class UnmodifiableObservableConfig extends AbstractObservableConfig {
 	}
 
 	@Override
+	public boolean isEventing() {
+		return theWrapped.isEventing();
+	}
+
+	@Override
 	public Transaction lock(boolean write, Object cause) {
 		return theWrapped.lock(false, cause);
 	}

@@ -213,6 +213,11 @@ public final class ObservableCollectionImpl {
 						}
 
 						@Override
+						public boolean isEventing() {
+							return theCollection.isEventing();
+						}
+
+						@Override
 						public boolean isSafe() {
 							return theCollection.isLockSupported();
 						}
@@ -337,6 +342,11 @@ public final class ObservableCollectionImpl {
 				@Override
 				public ThreadConstraint getThreadConstraint() {
 					return theCollection.getThreadConstraint();
+				}
+
+				@Override
+				public boolean isEventing() {
+					return theCollection.isEventing();
 				}
 
 				@Override
@@ -524,6 +534,11 @@ public final class ObservableCollectionImpl {
 		@Override
 		public Observable<ObservableElementEvent<E>> elementChanges() {
 			class ElementChanges extends AbstractIdentifiable implements Observable<ObservableElementEvent<E>> {
+				@Override
+				public boolean isEventing() {
+					return theCollection.isEventing() || theRefresh.isEventing();
+				}
+
 				@Override
 				protected Object createIdentity() {
 					if (theChangesIdentity == null)
@@ -954,6 +969,11 @@ public final class ObservableCollectionImpl {
 						}
 
 						@Override
+						public boolean isEventing() {
+							return getCollection().isEventing();
+						}
+
+						@Override
 						public boolean isSafe() {
 							return getCollection().isLockSupported();
 						}
@@ -1216,6 +1236,11 @@ public final class ObservableCollectionImpl {
 					if (theChangesIdentity == null)
 						theChangesIdentity = Identifiable.wrap(ReducedValue.this.getIdentity(), "noInitChanges");
 					return theChangesIdentity;
+				}
+
+				@Override
+				public boolean isEventing() {
+					return theCollection.isEventing();
 				}
 
 				@Override
@@ -1630,6 +1655,11 @@ public final class ObservableCollectionImpl {
 				}
 
 				@Override
+				public boolean isEventing() {
+					return theLeft.isEventing() || theRight.isEventing();
+				}
+
+				@Override
 				public boolean isSafe() {
 					return theLeft.isLockSupported() && theRight.isLockSupported();
 				}
@@ -1807,6 +1837,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public boolean isEventing() {
+			return getWrapped().isEventing();
+		}
+
+		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
 			try (Transaction t = lock(false, null)) {
 				return getWrapped().onChange(new ReversedSubscriber(observer, size()));
@@ -1937,6 +1972,11 @@ public final class ObservableCollectionImpl {
 		@Override
 		public ThreadConstraint getThreadConstraint() {
 			return theFlow.getThreadConstraint();
+		}
+
+		@Override
+		public boolean isEventing() {
+			return theFlow.isEventing();
 		}
 
 		@Override
@@ -2559,7 +2599,7 @@ public final class ObservableCollectionImpl {
 									T value = element.get()==holder[0] ? oldValue : element.get().get();
 									// We know this is a move because elements are always distinct
 									fireListeners(new ObservableCollectionEvent<>(element.get(), index, CollectionChangeType.remove,
-											true, value, value, elCause));
+										true, value, value, elCause));
 									return null;
 								}
 
@@ -2694,6 +2734,11 @@ public final class ObservableCollectionImpl {
 		@Override
 		public ThreadConstraint getThreadConstraint() {
 			return theFlow.getThreadConstraint();
+		}
+
+		@Override
+		public boolean isEventing() {
+			return theListeners.isFiring();
 		}
 
 		@Override
@@ -3036,6 +3081,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public boolean isEventing() {
+			return false;
+		}
+
+		@Override
 		public Equivalence<? super E> equivalence() {
 			return Equivalence.DEFAULT;
 		}
@@ -3100,6 +3150,14 @@ public final class ObservableCollectionImpl {
 				return ThreadConstrained.getThreadConstraint(theCollectionObservable.get());
 			else
 				return ThreadConstraint.ANY; // Can't know
+		}
+
+		@Override
+		public boolean isEventing() {
+			if (theCollectionObservable.isEventing())
+				return true;
+			ObservableCollection<? extends E> coll = theCollectionObservable.get();
+			return coll != null && coll.isEventing();
 		}
 
 		@Override
@@ -3440,6 +3498,11 @@ public final class ObservableCollectionImpl {
 				@Override
 				public ThreadConstraint getThreadConstraint() {
 					return FlattenedValueCollection.this.getThreadConstraint();
+				}
+
+				@Override
+				public boolean isEventing() {
+					return FlattenedValueCollection.this.isEventing();
 				}
 
 				@Override

@@ -2,6 +2,7 @@ package org.observe.assoc;
 
 import java.util.Objects;
 
+import org.observe.Eventable;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
@@ -22,7 +23,7 @@ import com.google.common.reflect.TypeToken;
  * @param <N> The type of values stored in the nodes of the graph
  * @param <E> The type of values stored in the edges of the graph
  */
-public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
+public interface ObservableGraph<N, E> extends TransactableGraph<N, E>, Eventable {
 	/**
 	 * A node in a graph
 	 *
@@ -270,6 +271,11 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 		ObservableGraph<N, E> source = this;
 		return new ObservableGraph<N, E>() {
 			@Override
+			public boolean isEventing() {
+				return source.isEventing();
+			}
+
+			@Override
 			public ObservableCollection<? extends ObservableGraph.Node<N, E>> getNodes() {
 				return source.getNodes().flow()
 					.transform((TypeToken<ObservableGraph.Node<N, E>>) source.getNodes().getType(), //
@@ -313,6 +319,11 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 		ObservableCollection<Edge<N, E>> edges = ObservableCollection.of(edgeType2);
 		ObservableCollection<N> nodeValues = ObservableCollection.of(nodeType);
 		return new ObservableGraph<N, E>() {
+			@Override
+			public boolean isEventing() {
+				return nodes.isEventing() || edges.isEventing();
+			}
+
 			@Override
 			public ObservableCollection<Node<N, E>> getNodes() {
 				return nodes;

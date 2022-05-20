@@ -436,6 +436,11 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	}
 
 	@Override
+	public boolean isEventing() {
+		return theSyntheticCollection.isEventing();
+	}
+
+	@Override
 	public ThreadConstraint getThreadConstraint() {
 		return theThreadConstraint;
 	}

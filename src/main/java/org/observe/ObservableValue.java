@@ -43,7 +43,7 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <T> The compile-time type of this observable's value
  */
-public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable {
+public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Eventable {
 	/** This class's wildcard {@link TypeToken} */
 	static TypeToken<ObservableValue<?>> TYPE = TypeTokens.get().keyFor(ObservableValue.class).wildCard();
 
@@ -68,6 +68,11 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 	@Override
 	default ThreadConstraint getThreadConstraint() {
 		return noInitChanges().getThreadConstraint();
+	}
+
+	@Override
+	default boolean isEventing() {
+		return noInitChanges().isEventing();
 	}
 
 	@Override
@@ -111,6 +116,11 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 			@Override
 			public ThreadConstraint getThreadConstraint() {
 				return ObservableValue.this.getThreadConstraint();
+			}
+
+			@Override
+			public boolean isEventing() {
+				return ObservableValue.this.isEventing();
 			}
 
 			@Override
@@ -769,6 +779,11 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 		}
 
 		@Override
+		public boolean isEventing() {
+			return theNoInitChanges.isEventing();
+		}
+
+		@Override
 		public Object getIdentity() {
 			if (theIdentity == null)
 				theIdentity = Identifiable.wrap(theValue.getIdentity(), "changes");
@@ -981,6 +996,11 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 		public Observable<ObservableValueEvent<T>> noInitChanges() {
 			class Changes extends AbstractIdentifiable implements Observable<ObservableValueEvent<T>> {
 				@Override
+				public boolean isEventing() {
+					return theSource.isEventing() || theEngine.isEventing();
+				}
+
+				@Override
 				public Object createIdentity() {
 					return Identifiable.wrap(TransformedObservableValue.this.getIdentity(), "noInitChanges");
 				}
@@ -1096,6 +1116,11 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 		@Override
 		public Observable<ObservableValueEvent<T>> noInitChanges() {
 			return new Observable<ObservableValueEvent<T>>() {
+				@Override
+				public boolean isEventing() {
+					return getWrapped().isEventing() && theRefresh.isEventing();
+				}
+
 				@Override
 				public Object getIdentity() {
 					if (theChangesIdentity == null)
@@ -1240,6 +1265,11 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 				@Override
 				protected Object createIdentity() {
 					return Identifiable.wrap(SafeObservableValue.this, "noInitChanges");
+				}
+
+				@Override
+				public boolean isEventing() {
+					return theListeners.isFiring();
 				}
 
 				@Override
@@ -1461,6 +1491,11 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 				@Override
 				public ThreadConstraint getThreadConstraint() {
 					return theChanges.getThreadConstraint();
+				}
+
+				@Override
+				public boolean isEventing() {
+					return theChanges.isEventing();
 				}
 
 				@Override
@@ -1713,9 +1748,9 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 													if (event.isInitial() && event2.isInitial())
 														toFire = withInitialEvent
 														? retObs.createInitialEvent(event2.getNewValue(), event2.getCauses()) : null;
-													else
-														toFire = retObs.createChangeEvent(innerOld, event2.getNewValue(),
-															event2.getCauses());
+														else
+															toFire = retObs.createChangeEvent(innerOld, event2.getNewValue(),
+																event2.getCauses());
 													if (toFire != null) {
 														try (Transaction t = toFire.use()) {
 															observer.onNext(toFire);
@@ -1738,8 +1773,8 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 									ObservableValueEvent<T> toFire;
 									if (event.isInitial())
 										toFire = withInitialEvent ? retObs.createInitialEvent(newValue, event.getCauses()) : null;
-									else
-										toFire = retObs.createChangeEvent((T) old[0], newValue, event.getCauses());
+										else
+											toFire = retObs.createChangeEvent((T) old[0], newValue, event.getCauses());
 									old[0] = newValue;
 									if (toFire != null) {
 										try (Transaction t = toFire.use()) {
@@ -1783,6 +1818,14 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 					return obs == null ? ThreadConstraint.NONE : obs.getThreadConstraint();
 				}
 				return ThreadConstraint.ANY; // Can't know
+			}
+
+			@Override
+			public boolean isEventing() {
+				if (theValue.isEventing())
+					return true;
+				ObservableValue<?> content = theValue.get();
+				return content != null && content.isEventing();
 			}
 
 			@Override
@@ -2025,6 +2068,14 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 			@Override
 			public ThreadConstraint getThreadConstraint() {
 				return ThreadConstrained.getThreadConstraint(null, Arrays.asList(theValues), LambdaUtils.identity());
+			}
+
+			@Override
+			public boolean isEventing() {
+				for (ObservableValue<? extends T> value : theValues)
+					if (value != null && value.isEventing())
+						return true;
+				return false;
 			}
 
 			@Override

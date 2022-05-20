@@ -13,6 +13,7 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import org.observe.Equivalence;
+import org.observe.Eventable;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.Observer;
@@ -82,7 +83,7 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <E> The type of element in the collection
  */
-public interface ObservableCollection<E> extends BetterList<E>, TypedValueContainer<E> {
+public interface ObservableCollection<E> extends BetterList<E>, TypedValueContainer<E>, Eventable {
 	/** This class's wildcard {@link TypeToken} */
 	static TypeToken<ObservableCollection<?>> TYPE = TypeTokens.get().keyFor(ObservableCollection.class).wildCard();
 
@@ -396,6 +397,11 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 			@Override
 			public ThreadConstraint getThreadConstraint() {
 				return ObservableCollection.this.getThreadConstraint();
+			}
+
+			@Override
+			public boolean isEventing() {
+				return ObservableCollection.this.isEventing();
 			}
 
 			@Override
@@ -791,6 +797,19 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 			@Override
 			public ThreadConstraint getThreadConstraint() {
 				return ThreadConstrained.getThreadConstraint(coll, coll, LambdaUtils.identity());
+			}
+
+			@Override
+			public boolean isEventing() {
+				if (coll.isEventing())
+					return true;
+				try (Transaction t = coll.lock(false, null)) {
+					for (Observable<? extends T> obs : coll) {
+						if (obs.isEventing())
+							return true;
+					}
+					return false;
+				}
 			}
 
 			@Override

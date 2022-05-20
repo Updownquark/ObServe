@@ -32,7 +32,7 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <T> The type of values this observable provides
  */
-public interface Observable<T> extends Lockable, Identifiable {
+public interface Observable<T> extends Lockable, Identifiable, Eventable {
 	/** This class's wildcard {@link TypeToken} */
 	static TypeToken<Observable<?>> TYPE = TypeTokens.get().keyFor(Observable.class).wildCard();
 
@@ -256,6 +256,11 @@ public interface Observable<T> extends Lockable, Identifiable {
 			}
 
 			@Override
+			public boolean isEventing() {
+				return false;
+			}
+
+			@Override
 			public boolean isSafe() {
 				return true;
 			}
@@ -312,6 +317,11 @@ public interface Observable<T> extends Lockable, Identifiable {
 		@Override
 		public ThreadConstraint getThreadConstraint() {
 			return ThreadConstraint.NONE;
+		}
+
+		@Override
+		public boolean isEventing() {
+			return false;
 		}
 
 		@Override
@@ -390,6 +400,11 @@ public interface Observable<T> extends Lockable, Identifiable {
 		@Override
 		public ThreadConstraint getThreadConstraint() {
 			return theWrapped.getThreadConstraint();
+		}
+
+		@Override
+		public boolean isEventing() {
+			return theWrapped.isEventing();
 		}
 
 		@Override
@@ -669,6 +684,15 @@ public interface Observable<T> extends Lockable, Identifiable {
 		@Override
 		public ThreadConstraint getThreadConstraint() {
 			return ThreadConstrained.getThreadConstraint(theComposed);
+		}
+
+		@Override
+		public boolean isEventing() {
+			for (Observable<?> comp : theComposed) {
+				if (comp.isEventing())
+					return true;
+			}
+			return false;
 		}
 
 		@Override
@@ -953,6 +977,15 @@ public interface Observable<T> extends Lockable, Identifiable {
 		}
 
 		@Override
+		public boolean isEventing() {
+			for (Observable<? extends V> obs : theObservables) {
+				if (obs != null && obs.isEventing())
+					return true;
+			}
+			return false;
+		}
+
+		@Override
 		public Subscription subscribe(Observer<? super V> observer) {
 			Subscription[] subs = new Subscription[theObservables.length];
 			boolean[] init = new boolean[] { true };
@@ -1046,6 +1079,11 @@ public interface Observable<T> extends Lockable, Identifiable {
 			return null; // We can't know
 		}
 
+		@Override
+		public boolean isEventing() {
+			return theWrapper.isEventing(); // Best guess, can't know for sure
+		}
+
 		protected Observable<? extends Observable<? extends T>> getWrapper() {
 			return theWrapper;
 		}
@@ -1118,7 +1156,12 @@ public interface Observable<T> extends Lockable, Identifiable {
 
 		@Override
 		public ThreadConstraint getThreadConstraint() {
-			return null;
+			return ThreadConstraint.ANY;
+		}
+
+		@Override
+		public boolean isEventing() {
+			return false;
 		}
 
 		@Override
@@ -1271,6 +1314,11 @@ public interface Observable<T> extends Lockable, Identifiable {
 				return ThreadConstraint.EDT;
 			else
 				return ThreadConstraint.ANY;
+		}
+
+		@Override
+		public boolean isEventing() {
+			return theObservers.isFiring();
 		}
 
 		@Override

@@ -27,6 +27,7 @@ import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.parsers.SAXParser;
 import javax.xml.parsers.SAXParserFactory;
 
+import org.observe.Eventable;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.Observer;
@@ -83,7 +84,7 @@ import com.google.common.reflect.TypeToken;
  * configurable collections of child configurations as standard observable structures.
  * </p>
  */
-public interface ObservableConfig extends Nameable, Transactable, Stamped {
+public interface ObservableConfig extends Nameable, Transactable, Stamped, Eventable {
 	/** {@link TypeToken}&lt;ObservableConfig> */
 	public static final TypeToken<ObservableConfig> TYPE = TypeTokens.get().of(ObservableConfig.class);
 

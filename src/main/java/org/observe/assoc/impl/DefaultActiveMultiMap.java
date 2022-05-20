@@ -1184,6 +1184,11 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		}
 
 		@Override
+		public boolean isEventing() {
+			return DefaultActiveMultiMap.this.isEventing();
+		}
+
+		@Override
 		public boolean isLockSupported() {
 			return DefaultActiveMultiMap.this.isLockSupported();
 		}
@@ -1461,6 +1466,11 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		@Override
 		public ThreadConstraint getThreadConstraint() {
 			return DefaultActiveMultiMap.this.getThreadConstraint();
+		}
+
+		@Override
+		public boolean isEventing() {
+			return DefaultActiveMultiMap.this.isEventing();
 		}
 
 		@Override

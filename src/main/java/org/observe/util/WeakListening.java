@@ -275,6 +275,11 @@ public class WeakListening {
 				.withFastSize(false).build();
 
 			@Override
+			public boolean isEventing() {
+				return theObservers.isFiring();
+			}
+
+			@Override
 			public Subscription subscribe(Observer<? super T> observer) {
 				Runnable remove = theObservers.add(observer, false);
 				Subscription weakObs = observeWeakly(observer, observable);

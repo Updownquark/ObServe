@@ -86,6 +86,11 @@ class DefaultObservableConfig extends AbstractObservableConfig {
 	}
 
 	@Override
+	public boolean isEventing() {
+		return theListeners.isFiring();
+	}
+
+	@Override
 	public boolean isLockSupported() {
 		return theContent.isLockSupported();
 	}
@@ -298,6 +303,11 @@ class DefaultObservableConfig extends AbstractObservableConfig {
 		@Override
 		public ThreadConstraint getThreadConstraint() {
 			return theConfig.getThreadConstraint();
+		}
+
+		@Override
+		public boolean isEventing() {
+			return theConfig.isEventing();
 		}
 
 		@Override

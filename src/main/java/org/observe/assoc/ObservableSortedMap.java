@@ -283,6 +283,11 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 		}
 
 		@Override
+		public boolean isEventing() {
+			return theWrapped.isEventing();
+		}
+
+		@Override
 		public boolean isLockSupported() {
 			return theWrapped.isLockSupported();
 		}
@@ -429,6 +434,11 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 		@Override
 		protected ObservableSortedMap<K, V> getSource() {
 			return (ObservableSortedMap<K, V>) super.getSource();
+		}
+
+		@Override
+		public boolean isEventing() {
+			return getSource().isEventing();
 		}
 
 		@Override

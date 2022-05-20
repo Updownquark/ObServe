@@ -8,6 +8,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.observe.Equivalence;
+import org.observe.Eventable;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
@@ -57,7 +58,7 @@ import org.qommons.tree.BetterTreeMap;
 import com.google.common.reflect.TypeToken;
 
 /** A super class for observable structures backed by an {@link ObservableConfig} */
-public abstract class ObservableConfigTransform implements Transactable, Stamped {
+public abstract class ObservableConfigTransform implements Transactable, Stamped, Eventable {
 	private final Transactable theLock;
 	private final ObservableConfigParseSession theSession;
 	private final ObservableValue<? extends ObservableConfig> theParent;
@@ -193,6 +194,12 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 	}
 
 	@Override
+	public boolean isEventing() {
+		ObservableConfig config = theParent.get();
+		return config != null && config.isEventing();
+	}
+
+	@Override
 	public boolean isLockSupported() {
 		return true;
 	}
@@ -295,6 +302,11 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 				@Override
 				public ThreadConstraint getThreadConstraint() {
 					return ObservableConfigValue.this.getThreadConstraint();
+				}
+
+				@Override
+				public boolean isEventing() {
+					return ObservableConfigValue.this.isEventing();
 				}
 
 				@Override
@@ -785,6 +797,11 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 			}
 
 			@Override
+			public boolean isEventing() {
+				return ObservableConfigBackedCollection.this.isEventing();
+			}
+
+			@Override
 			public boolean isLockSupported() {
 				return true;
 			}
@@ -1271,6 +1288,11 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		}
 
 		@Override
+		public boolean isEventing() {
+			return theCollection.isEventing();
+		}
+
+		@Override
 		public boolean isLockSupported() {
 			return theCollection.getBacking().isLockSupported();
 		}
@@ -1389,6 +1411,11 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		@Override
 		public ThreadConstraint getThreadConstraint() {
 			return theCollection.getBacking().getThreadConstraint();
+		}
+
+		@Override
+		public boolean isEventing() {
+			return theCollection.isEventing();
 		}
 
 		@Override

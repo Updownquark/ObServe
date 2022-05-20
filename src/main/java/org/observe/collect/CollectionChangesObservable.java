@@ -717,6 +717,11 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 	}
 
 	@Override
+	public boolean isEventing() {
+		return isFiring;
+	}
+
+	@Override
 	public boolean isSafe() {
 		return collection.isLockSupported();
 	}

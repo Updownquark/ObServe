@@ -409,6 +409,11 @@ public interface OperationResult<T> {
 				}
 
 				@Override
+				public boolean isEventing() {
+					return theObservers.isFiring();
+				}
+
+				@Override
 				public Subscription subscribe(Observer<? super OperationResult<T>> observer) {
 					synchronized (WrapperResult.this) {
 						OperationResult<? extends S> wrapped = theWrapped;

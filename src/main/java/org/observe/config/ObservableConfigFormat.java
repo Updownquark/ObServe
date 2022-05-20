@@ -2252,6 +2252,12 @@ public interface ObservableConfigFormat<E> {
 				}
 
 				@Override
+				public boolean isEventing(int fieldIndex) {
+					ObservableConfig config = theContext.getConfig().get();
+					return config != null && config.isEventing();
+				}
+
+				@Override
 				public Transactable getLock(int fieldIndex) {
 					// If we ever try to support hierarchical locks or anything, this should be the field config's lock
 					return theContext.getLock();
