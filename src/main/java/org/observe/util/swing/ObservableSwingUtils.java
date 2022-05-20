@@ -706,7 +706,8 @@ public class ObservableSwingUtils {
 					// in the non-commit-on-type filter field and then clicks the table without pressing enter),
 					// the callbackLock will prevent the selection from updating while the contents change.
 					return;
-				}
+				} else if (safeSelection.isEventing())
+					return;
 				int selIdx = 0;
 				callbackLock[0] = true;
 				ListSelectionModel selModel = selectionModel.get();
@@ -861,30 +862,42 @@ public class ObservableSwingUtils {
 	 * </p>
 	 */
 	public static class SyncCause extends Causable.AbstractCausable {
-		private final Object theSync;
+		private final Object theModel;
+		private final Object theSelection;
 
 		/**
-		 * @param sync An object that represents the synchronization operation
+		 * @param model The model object being synchronized
+		 * @param selection The selection object being synchronized
 		 * @param cause The cause to wrap
 		 */
-		public SyncCause(Object sync, Object cause) {
+		public SyncCause(Object model, Object selection, Object cause) {
 			super(cause instanceof Causable && ((Causable) cause).isTerminated() ? Causable.broken(cause) : cause);
-			theSync = sync;
-		}
-
-		/** @return The object representing the synchronization operation */
-		public Object getSync() {
-			return theSync;
+			theModel = model;
+			theSelection = selection;
 		}
 
 		/**
-		 * @param cause The cause to test
-		 * @param sync The object representing the synchronization operation
-		 * @return Whether the cause was effected by the synchronization operation
+		 * @param cause The cause to check
+		 * @param model The model to check
+		 * @return Whether the given cause was caused by a change in the given model
 		 */
-		public static boolean isSyncCause(Object cause, Object sync) {
+		public static boolean isModelCause(Object cause, Object model) {
 			return cause instanceof Causable && ((Causable) cause).getCauseLike(c -> {
-				if (c instanceof SyncCause && ((SyncCause) c).getSync() == sync)
+				if (c instanceof SyncCause && ((SyncCause) c).theModel.equals(model))
+					return c;
+				else
+					return null;
+			}) != null;
+		}
+
+		/**
+		 * @param cause The cause to check
+		 * @param selection The selection to check
+		 * @return Whether the given cause was caused by a change in the given selection
+		 */
+		public static boolean isSelectionCause(Object cause, Object selection) {
+			return cause instanceof Causable && ((Causable) cause).getCauseLike(c -> {
+				if (c instanceof SyncCause && ((SyncCause) c).theSelection.equals(selection))
 					return c;
 				else
 					return null;
@@ -939,7 +952,8 @@ public class ObservableSwingUtils {
 				callbackLock[0] = false;
 			}
 		};
-		Object thisSync = new Object();
+		Object modelObj = model instanceof ObservableListModel ? ((ObservableListModel<E>) model).getWrapped().getIdentity() : model;
+		Object selObj = selection.getIdentity();
 		ListDataListener modelListener = new ListDataListener() {
 			@Override
 			public void intervalRemoved(ListDataEvent e) {}
@@ -949,14 +963,14 @@ public class ObservableSwingUtils {
 
 			@Override
 			public void contentsChanged(ListDataEvent e) {
-				if (callbackLock[0] || SyncCause.isSyncCause(e, thisSync))
+				if (callbackLock[0] || SyncCause.isSelectionCause(e, selObj) || selection.isEventing())
 					return;
 				ListSelectionModel selModel = selectionModel.get();
 				if (selModel.getMinSelectionIndex() < 0 || selModel.getMinSelectionIndex() != selModel.getMaxSelectionIndex())
 					return;
 				flushEQCache();
 				callbackLock[0] = true;
-				SyncCause cause = new SyncCause(thisSync, e);
+				SyncCause cause = new SyncCause(modelObj, selObj, e);
 				try (Transaction t = cause.use()) {
 					if (e.getIndex0() <= selModel.getMinSelectionIndex() && e.getIndex1() >= selModel.getMinSelectionIndex())
 						selection.set(model.getElementAt(selModel.getMinSelectionIndex()), cause);
@@ -974,7 +988,8 @@ public class ObservableSwingUtils {
 			component.addPropertyChangeListener("selectionModel", selModelListener);
 		model.addListDataListener(modelListener);
 		safeSelection.changes().takeUntil(until).act(evt -> {
-			if (callbackLock[0] || SyncCause.isSyncCause(evt, thisSync))
+			if (callbackLock[0] || SyncCause.isModelCause(evt, modelObj)
+				|| (model instanceof ObservableListModel && ((ObservableListModel<E>) model).getWrapped().isEventing()))
 				return;
 			onEQ(() -> {
 				flushEQCache();
@@ -988,7 +1003,7 @@ public class ObservableSwingUtils {
 						&& !selModel.isSelectionEmpty() && selModel.getMinSelectionIndex() == selModel.getMaxSelectionIndex()//
 						&& equivalence.elementEquals(model.getElementAt(selModel.getMinSelectionIndex()), evt.getNewValue())) {
 						if (update != null) {
-							SyncCause cause = new SyncCause(thisSync, evt);
+							SyncCause cause = new SyncCause(modelObj, selObj, evt);
 							try (Transaction t = cause.use()) {
 								update.update(selModel.getMaxSelectionIndex(), cause);
 							}
