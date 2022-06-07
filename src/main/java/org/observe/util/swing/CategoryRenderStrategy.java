@@ -529,7 +529,7 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 	public CategoryRenderStrategy<R, C> withRenderer(ObservableCellRenderer<R, C> renderer) {
 		isRenderDefault = false;
 		theRenderer = renderer;
-		if (theRenderer != null)
+		if (theRenderer != null && theDecorator != null)
 			theRenderer.decorate(theDecorator);
 		return this;
 	}
@@ -541,7 +541,7 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 			theDecorator = decorator;
 		else
 			theDecorator = theDecorator.modify(decorator);
-		if (theRenderer != null)
+		if (theRenderer != null && theDecorator != null)
 			theRenderer.decorate(theDecorator);
 		return this;
 	}

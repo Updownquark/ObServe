@@ -1,5 +1,6 @@
 package org.observe.util.swing;
 
+import java.awt.Color;
 import java.awt.Component;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -154,16 +155,20 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 
 		private CellDecorator<M, C> theDecorator;
 		private ComponentDecorator theComponentDecorator;
-		private final BiFunction<? super Supplier<? extends M>, C, String> theTextRenderer;
+		private final Function<? super ModelCell<? extends M, ? extends C>, String> theTextRenderer;
 		private Runnable theRevert;
 
 		public DefaultObservableCellRenderer(BiFunction<? super Supplier<? extends M>, C, String> textRenderer) {
+			this(cell -> textRenderer.apply((Supplier<? extends M>) cell::getModelValue, cell.getCellValue()));
+		}
+
+		public DefaultObservableCellRenderer(Function<? super ModelCell<? extends M, ? extends C>, String> textRenderer) {
 			theTextRenderer = textRenderer;
 		}
 
 		@Override
 		public String renderAsText(Supplier<? extends M> modelValue, C columnValue) {
-			return theTextRenderer.apply(modelValue, columnValue);
+			return theTextRenderer.apply(new ModelCell.Default<M, C>(modelValue, columnValue, 0, 0, false, false, false, false));
 		}
 
 		@Override
@@ -321,6 +326,22 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 		}
 	}
 
+	class LinkCellRenderer<M, C> extends DefaultObservableCellRenderer<M, C> {
+		public LinkCellRenderer(BiFunction<? super Supplier<? extends M>, C, String> textRenderer) {
+			super(textRenderer);
+			decorateLink();
+		}
+
+		public LinkCellRenderer(Function<? super ModelCell<? extends M, ? extends C>, String> textRenderer) {
+			super(textRenderer);
+			decorateLink();
+		}
+
+		protected void decorateLink() {
+			decorate((cell, deco) -> deco.withForeground(Color.blue).underline());
+		}
+	}
+
 	public static <M, C> DefaultObservableCellRenderer<M, C> formatted(BiFunction<? super M, ? super C, String> format) {
 		class BiFormattedCellRenderer extends DefaultObservableCellRenderer<M, C> {
 			public BiFormattedCellRenderer() {
@@ -365,5 +386,9 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 
 	public static <M, C> ObservableCellRenderer<M, C> buttonRenderer(Function<? super ModelCell<? extends M, ? extends C>, String> text) {
 		return new ButtonCellRenderer<>(text);
+	}
+
+	public static <M, C> ObservableCellRenderer<M, C> linkRenderer(Function<? super ModelCell<? extends M, ? extends C>, String> text) {
+		return new LinkCellRenderer<>(text);
 	}
 }

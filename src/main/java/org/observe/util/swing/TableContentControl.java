@@ -613,7 +613,7 @@ public interface TableContentControl {
 				// tests[v.hasMatch ? 0 : 1]++;
 				return v;
 			}, "toFilterValue", null)))//
-			.filter(LambdaUtils.printableFn(fv -> fv.hasMatch() ? null : "No match", "match", null))//
+			.filter(LambdaUtils.printableFn(fv -> (fv != null && fv.hasMatch()) ? null : "No match", "match", null))//
 			.sorted(LambdaUtils.printableComparator((fv1, fv2) -> {
 				List<String> sorting = filter.get().getRowSorting();
 				if (sorting == null || sorting.isEmpty())

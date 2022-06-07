@@ -2236,7 +2236,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 
 				@Override
 				public boolean isEventing() {
-					return theChanges.isFiring();
+					return theChanges != null && theChanges.isFiring();
 				}
 
 				@Override

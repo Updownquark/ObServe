@@ -810,7 +810,63 @@ public class ObservableSwingUtils {
 							selModel.removeSelectionInterval(0, intervalStart);
 						break;
 					case set:
-						break; // This doesn't have meaning here
+						if (evt.getOldValues().equals(evt.getValues()))
+							break; // Not relevant
+						// Remove old values
+						for (int i = model.getSize() - 1; i >= 0; i--) {
+							if (!selModel.isSelectedIndex(i)) {
+								if (intervalStart >= 0) {
+									selModel.removeSelectionInterval(i + 1, intervalStart);
+									intervalStart = -1;
+								}
+								continue;
+							}
+							boolean removed = false;
+							for (E value : evt.getOldValues()) {
+								if (!evt.getValues().contains(value) && equivalence.elementEquals(model.getElementAt(i), value)) {
+									removed = true;
+									break;
+								}
+							}
+							if (removed) {
+								if (intervalStart < 0)
+									intervalStart = i;
+							} else if (intervalStart >= 0) {
+								selModel.removeSelectionInterval(i + 1, intervalStart);
+								intervalStart = -1;
+							}
+						}
+						if (intervalStart >= 0)
+							selModel.removeSelectionInterval(0, intervalStart);
+
+						// Add new values
+						intervalStart = -1;
+						for (int i = 0; i < model.getSize(); i++) {
+							if (selModel.isSelectedIndex(i)) {
+								if (intervalStart >= 0) {
+									selModel.addSelectionInterval(intervalStart, i - 1);
+									intervalStart = -1;
+								}
+								continue;
+							}
+							boolean added = false;
+							for (E value : evt.getValues()) {
+								if (!evt.getOldValues().contains(value) && equivalence.elementEquals(model.getElementAt(i), value)) {
+									added = true;
+									break;
+								}
+							}
+							if (added) {
+								if (intervalStart < 0)
+									intervalStart = i;
+							} else if (intervalStart >= 0) {
+								selModel.addSelectionInterval(intervalStart, i - 1);
+								intervalStart = -1;
+							}
+						}
+						if (intervalStart >= 0)
+							selModel.addSelectionInterval(intervalStart, model.getSize() - 1);
+						break;
 					}
 				} finally {
 					callbackLock[0] = false;
