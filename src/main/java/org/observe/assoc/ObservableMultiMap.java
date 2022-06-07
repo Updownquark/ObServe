@@ -29,6 +29,7 @@ import org.observe.collect.SettableElement;
 import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.ObservableUtils.SubscriptionCause;
 import org.observe.util.TypeTokens;
+import org.qommons.BiTuple;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
@@ -40,6 +41,7 @@ import org.qommons.collect.BetterMap;
 import org.qommons.collect.BetterMultiMap;
 import org.qommons.collect.BetterSet;
 import org.qommons.collect.BetterSortedMap;
+import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.CollectionBuilder;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.CollectionLockingStrategy;
@@ -53,6 +55,7 @@ import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.SimpleMapEntry;
 import org.qommons.collect.SimpleMultiEntry;
 import org.qommons.tree.BetterTreeMap;
+import org.qommons.tree.BetterTreeSet;
 
 import com.google.common.reflect.TypeToken;
 
@@ -299,6 +302,44 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 		return new ObservableMultiMapValues<>(this);
 	}
 
+	/**
+	 * @param until An observable to release this method's resources when fired
+	 * @return An unmodifiable collection of all values mapped to all keys in this multi-map
+	 */
+	default ObservableCollection<V> observeValues(Observable<?> until) {
+		ObservableCollectionBuilder<V, ?> builder = ObservableCollection.build(getValueType()).withThreadConstraint(getThreadConstraint());
+		ObservableCollection<V> values = builder.build();
+		BetterSortedSet<BiTuple<ElementId, ElementId>> elements = BetterTreeSet.<BiTuple<ElementId, ElementId>> buildTreeSet((el1, el2) -> {
+			int comp = el1.getValue1().compareTo(el2.getValue1());
+			if (comp == 0)
+				return el1.getValue2().compareTo(el2.getValue2());
+			return comp;
+		}).build();
+		Subscription sub = subscribe(evt -> {
+			try (Transaction t = values.lock(true, evt)) {
+				switch (evt.getType()) {
+				case add:
+					CollectionElement<BiTuple<ElementId, ElementId>> el = elements
+					.addElement(new BiTuple<>(evt.getKeyElement(), evt.getElementId()), false);
+					values.add(elements.getElementsBefore(el.getElementId()), evt.getNewValue());
+					break;
+				case remove:
+					el = elements.getElement(new BiTuple<>(evt.getKeyElement(), evt.getElementId()), true);
+					values.remove(elements.getElementsBefore(el.getElementId()));
+					elements.mutableElement(el.getElementId()).remove();
+					break;
+				case set:
+					el = elements.getElement(new BiTuple<>(evt.getKeyElement(), evt.getElementId()), true);
+					values.set(elements.getElementsBefore(el.getElementId()), evt.getNewValue());
+					break;
+				}
+			}
+		}, true, true);
+		if (until != null)
+			until.take(1).act(__ -> sub.unsubscribe());
+		return values.flow().unmodifiable(false).collect();
+	}
+
 	/** @return A collection of plain (non-observable) {@link java.util.Map.Entry entries}, one for each value in this map */
 	default ObservableCollection<MultiEntryValueHandle<K, V>> observeSingleEntries() {
 		return new ObservableSingleEntryCollection<>(this);
@@ -329,7 +370,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 	 * @return An observable that fires a value whenever anything in this structure changes. This observable will only fire 1 event per
 	 *         transaction.
 	 */
-	default Observable<Object> changes() {
+	default Observable<Causable> changes() {
 		return entrySet().simpleChanges();
 	}
 

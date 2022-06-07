@@ -24,6 +24,7 @@ import org.observe.collect.ObservableSet;
 import org.observe.collect.SettableElement;
 import org.observe.util.ObservableUtils.SubscriptionCause;
 import org.observe.util.TypeTokens;
+import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
@@ -490,7 +491,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable {
 	 * @return An observable that fires a (null) value whenever anything in this structure changes. This observable will only fire 1 event
 	 *         per transaction.
 	 */
-	default Observable<Object> changes() {
+	default Observable<Causable> changes() {
 		return values().simpleChanges();
 	}
 

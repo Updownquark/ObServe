@@ -3534,7 +3534,7 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public Observable<Object> simpleChanges() {
+		public Observable<Causable> simpleChanges() {
 			return ObservableValue
 				.flattenObservableValue(theCollectionObservable.map(coll -> coll != null ? coll.simpleChanges() : Observable.empty()));
 		}

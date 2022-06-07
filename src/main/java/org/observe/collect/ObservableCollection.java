@@ -376,15 +376,15 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 	 * @return An observable that fires a value (the {@link Causable#getRootCause() root cause} event of the change) whenever anything in
 	 *         this collection changes. Unlike {@link #changes()}, this observable will only fire 1 event per transaction.
 	 */
-	default Observable<Object> simpleChanges() {
-		class SimpleChanges extends AbstractIdentifiable implements Observable<Object> {
+	default Observable<Causable> simpleChanges() {
+		class SimpleChanges extends AbstractIdentifiable implements Observable<Causable> {
 			@Override
 			protected Object createIdentity() {
 				return Identifiable.wrap(ObservableCollection.this.getIdentity(), "simpleChanges");
 			}
 
 			@Override
-			public Subscription subscribe(Observer<Object> observer) {
+			public Subscription subscribe(Observer<? super Causable> observer) {
 				Causable.CausableKey key = Causable.key((root, values) -> {
 					observer.onNext(root);
 				});

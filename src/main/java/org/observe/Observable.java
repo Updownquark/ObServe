@@ -229,6 +229,16 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 	}
 
 	/**
+	 * @param obs The observable to watch
+	 * @return An observable that fires when the source's root causable finishes.
+	 * @see Causable#getRootCausable()
+	 * @see Causable#onFinish(org.qommons.Causable.CausableKey)
+	 */
+	public static Observable<Causable> onRootFinish(Observable<? extends Causable> obs) {
+		return new CausableRootFinish((Observable<Causable>) obs);
+	}
+
+	/**
 	 * @param <T> The type of the observable to create
 	 * @param value The value for the observable
 	 * @return An observable that pushes the given value as soon as it is subscribed to and never completes
@@ -1054,6 +1064,35 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 		}
 	};
 
+	/** Implements {@link Observable#onRootFinish(Observable)} */
+	class CausableRootFinish extends WrappingObservable<Causable, Causable> {
+		public CausableRootFinish(Observable<Causable> wrapped) {
+			super(wrapped);
+		}
+
+		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getWrapped().getIdentity(), "onRootFinish");
+		}
+
+		@Override
+		public Subscription subscribe(Observer<? super Causable> observer) {
+			Causable.CausableKey key = Causable.key((cause, values) -> {
+				observer.onNext(cause);
+			});
+			return getWrapped().subscribe(new Observer<Causable>() {
+				@Override
+				public <V extends Causable> void onNext(V value) {
+					value.getRootCausable().onFinish(key);
+				}
+
+				@Override
+				public <V extends Causable> void onCompleted(V value) {
+					observer.onCompleted(value);
+				}
+			});
+		}
+	}
 	/**
 	 * Implements {@link Observable#flatten(Observable)}
 	 *
