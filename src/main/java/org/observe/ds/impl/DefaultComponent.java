@@ -12,7 +12,6 @@ import org.observe.ds.ComponentStage;
 import org.observe.ds.DSComponent;
 import org.observe.ds.Dependency;
 import org.observe.ds.DependencyService;
-import org.observe.ds.DependencyServiceStage;
 import org.observe.ds.Service;
 import org.qommons.Causable;
 import org.qommons.Transaction;
@@ -43,7 +42,15 @@ class DefaultComponent<C> implements ComponentController<C> {
 		theStage = SettableValue.build(ComponentStage.class).withLocking(service.getComponents()).withValue(ComponentStage.Defined).build();
 		isAvailable = SettableValue.build(boolean.class).withLocking(service.getComponents()).withValue(available).build();
 
-		reset(available, null);
+		theUnsatisfied = theDynamicUnsatisfied = 0;
+		for (DefaultDependency<C, ?> dep : theDependencies.values()) {
+			dep.clear(null);
+			if (dep.getMinimum() > 0) {
+				theUnsatisfied++;
+				if (dep.isDynamic())
+					theDynamicUnsatisfied++;
+			}
+		}
 	}
 
 	@Override
@@ -96,11 +103,16 @@ class DefaultComponent<C> implements ComponentController<C> {
 		return isAvailable.unsettable();
 	}
 
-	void setStage(ComponentStage stage, Object cause) {
+	void setStage(ComponentStage stage, Object cause, boolean withUpdate) {
+		if (stage == theStage.get()) {
+			if (withUpdate)
+				theStage.set(stage, cause);
+			return;
+		}
+
 		switch (stage) {
 		case PreSatisfied:
 		case Satisfied:
-		case Complete:
 			if (theComponentValue == null) {
 				theComponentValue = theSupplier.apply(this);
 				if (theComponentValue == null)
@@ -132,44 +144,16 @@ class DefaultComponent<C> implements ComponentController<C> {
 				throw new IllegalStateException(
 					"Component availability cannot be changed as a result of changes to the dependency service");
 			if (available) {
-				isAvailable.set(true, cause);
-				reset(true, cause);
-			}
-			if (available)
-				theService.activate(this, cause);
-			else
-				theService.deactivate(this, cause);
-			if (!available) {
-				reset(false, cause);
-				isAvailable.set(false, cause);
+				isAvailable.set(available, cause);
+				if (getStage().get() == ComponentStage.Unavailable)
+					theService.activate(this, cause);
+			} else {
+				if (getStage().get().isActive())
+					theService.deactivate(this, cause, ComponentStage.Unavailable);
+				isAvailable.set(available, cause);
 			}
 		}
 		return this;
-	}
-
-	private void reset(boolean available, Causable cause) {
-		theUnsatisfied = theDynamicUnsatisfied = 0;
-		for (DefaultDependency<C, ?> dep : theDependencies.values()) {
-			dep.clear(cause);
-			if (dep.getMinimum() > 0) {
-				theUnsatisfied++;
-				if (dep.isDynamic())
-					theDynamicUnsatisfied++;
-			}
-		}
-		if (!available)
-			setStage(ComponentStage.Unsatisfied, null);
-		else if (theService.getStage().get() == DependencyServiceStage.Uninitialized)
-			setStage(ComponentStage.Defined, null);
-		else
-			setStage(theUnsatisfied == 0 ? ComponentStage.Complete : ComponentStage.Unsatisfied, null);
-	}
-
-	boolean preInit(Object cause) {
-		if (!isAvailable.get())
-			return false;
-		setStage(theUnsatisfied == 0 ? ComponentStage.Satisfied : ComponentStage.Unsatisfied, cause);
-		return theUnsatisfied == 0;
 	}
 
 	@Override
@@ -191,14 +175,25 @@ class DefaultComponent<C> implements ComponentController<C> {
 			if (theService.isActivating())
 				throw new IllegalStateException(
 					"Component availability cannot be changed as a result of changes to the dependency service");
-			theService.deactivate(this, cause);
+			theService.deactivate(this, cause, ComponentStage.Removed);
 			for (DefaultDependency<C, ?> dep : theDependencies.values())
 				dep.clear(cause);
-			reset(false, cause);
 			isAvailable.set(false, cause);
-		}
-		theService.remove(this);
-		setStage(ComponentStage.Removed, cause);
+		} else
+			theService.deactivate(this, cause, ComponentStage.Removed);
+	}
+
+	@Override
+	public int hashCode() {
+		return super.hashCode();
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (obj instanceof DefaultComponentWrapper)
+			return equals(((DefaultComponentWrapper<?>) obj).theComponent);
+		else
+			return super.equals(obj);
 	}
 
 	@Override
@@ -219,8 +214,6 @@ class DefaultComponent<C> implements ComponentController<C> {
 			theUnsatisfied--;
 			if (dynamic)
 				theDynamicUnsatisfied--;
-			if (theUnsatisfied == 0)
-				nowSatisfied(cause);
 		} else {
 			theUnsatisfied++;
 			if (dynamic)
@@ -230,26 +223,10 @@ class DefaultComponent<C> implements ComponentController<C> {
 			// if (theUnsatisfied == 1)
 			// theStage.set(theService.isInitialized() ? ComponentStage.Defined : ComponentStage.Unsatisfied, null);
 		}
+
 	}
 
 	void dependencyModified(Object cause) {
-		if (theUnsatisfied == 0)
-			nowSatisfied(cause);
-	}
-
-	void nowSatisfied(Object cause) {
-		switch (theService.getStage().get()) {
-		case Uninitialized:
-			break;
-		case Initializing:
-		case PreInitialized:
-			if (getStage().get() != ComponentStage.Defined)
-				setStage(ComponentStage.Satisfied, cause);
-			break;
-		case Initialized:
-			setStage(ComponentStage.Complete, cause);
-			break;
-		}
 	}
 
 	static class DefaultComponentWrapper<C> implements DSComponent<C> {

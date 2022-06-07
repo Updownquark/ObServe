@@ -107,6 +107,26 @@ public class AnnotatedDependencyService extends DefaultTypedDependencyService<Ob
 		}
 	}
 
+	class ComponentActivate<T> extends ComponentMethod<T> {
+		private final String theLoadStatus;
+
+		ComponentActivate(Invokable<T, ?> m, boolean constructor, String loadStatus) {
+			super(m, constructor);
+			theLoadStatus = loadStatus;
+		}
+
+		@Override
+		Object invoke(ComponentController<Object> controller, Object param) {
+			String preStatus = theLoadStatus;
+			theCurrentLoadStatus = theLoadStatus;
+			try {
+				return super.invoke(controller, param);
+			} finally {
+				theCurrentLoadStatus = preStatus;
+			}
+		}
+	}
+
 	enum StageChangeType {
 		Activate, Deactivate;
 	}
@@ -208,6 +228,8 @@ public class AnnotatedDependencyService extends DefaultTypedDependencyService<Ob
 		}
 	}
 
+	String theCurrentLoadStatus;
+
 	/** Creates a dependency service with standard {@link ReentrantReadWriteLock} locking */
 	public AnnotatedDependencyService() {
 		this(new RRWLockingStrategy(new ReentrantReadWriteLock(), "DS", ThreadConstraint.ANY));
@@ -288,7 +310,12 @@ public class AnnotatedDependencyService extends DefaultTypedDependencyService<Ob
 			}
 			Activate activate = m.getAnnotation(Activate.class);
 			if (activate != null) {
-				ComponentMethod<T> cm = new ComponentMethod<>(ct.method(m), false);
+				String loadStatus;
+				if (compAnn != null && !compAnn.loadStatus().isEmpty())
+					loadStatus = compAnn.loadStatus();
+				else
+					loadStatus = "Initializing " + componentType.getSimpleName();
+				ComponentActivate<T> cm = new ComponentActivate<>(ct.method(m), false, loadStatus);
 				if (cm.getType() != null)
 					throw new IllegalArgumentException(componentType + ": Activate method " + cm + " has too many parameters");
 				comp.stageChanges.computeIfAbsent(StageChangeType.Activate, __ -> new ArrayList<>(2)).add(cm);
@@ -328,6 +355,21 @@ public class AnnotatedDependencyService extends DefaultTypedDependencyService<Ob
 			provide(builder, (Class<? super T>) intf);
 	}
 
+	@Override
+	public String getLoadStatus() {
+		switch (getStage().get()) {
+		case Uninitialized:
+			return "Loading...";
+		case Initializing:
+			String loading = theCurrentLoadStatus;
+			if (loading == null)
+				return "Initializing...";
+			return loading;
+		case Initialized:
+			return "Loaded";
+		}
+		return "Loaded";
+	}
 
 	@Override
 	public Object loadingComplete(Set<String> startComponents) {
