@@ -2410,7 +2410,7 @@ class PanelPopulationImpl {
 			if (isContentSet)
 				throw new IllegalStateException("Content has already been configured");
 			isContentSet = true;
-			getEditor().add(component);
+			getEditor().setViewportView(component);
 			return (P) this;
 		}
 	}

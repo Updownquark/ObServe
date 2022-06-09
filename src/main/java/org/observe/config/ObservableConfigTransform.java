@@ -1,5 +1,6 @@
 package org.observe.config;
 
+import java.lang.reflect.Proxy;
 import java.text.ParseException;
 import java.util.Collection;
 import java.util.Iterator;
@@ -1121,8 +1122,12 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 
 				@Override
 				public SyncValueCreator<E, E2> copy(E template) {
-					theTemplate = (ObservableConfig) getFormat().getEntityType().getAssociated(template,
-						EntityConfigFormat.ENTITY_CONFIG_KEY);
+					if (Proxy.isProxyClass(template.getClass())) {
+						theTemplate = (ObservableConfig) getFormat().getEntityType().getAssociated(template,
+							EntityConfigFormat.ENTITY_CONFIG_KEY);
+					} else {
+						super.copy(template);
+					}
 					return this;
 				}
 

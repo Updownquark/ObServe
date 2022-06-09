@@ -573,7 +573,8 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		ObservableTableModel<SelectableValue<T, X>> srcModel = (ObservableTableModel<SelectableValue<T, X>>) theSourceTable.getModel();
 		for (int i = theSourceTable.getSelectionModel().getMinSelectionIndex(); i >= 0
 			&& i <= theSourceTable.getSelectionModel().getMaxSelectionIndex(); i++) {
-			if (theSourceTable.getSelectionModel().isSelectedIndex(i) && !srcModel.getRowModel().getElementAt(i).included)
+			if (i < srcModel.getRowModel().getSize() && theSourceTable.getSelectionModel().isSelectedIndex(i)
+				&& !srcModel.getRowModel().getElementAt(i).included)
 				selectedExcluded++;
 		}
 
