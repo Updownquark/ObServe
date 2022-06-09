@@ -51,7 +51,7 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 		theLock = lock == null ? null : new CausalLock(lock.apply(this));
 		if (theLock != null) {
 			// We secure this list ourselves, so no need for any thread-safety
-			listening.forEachSafe(false).allowReentrant().withFastSize(false).withSyncType(ListenerList.SynchronizationType.NONE);
+			listening.forEachSafe(false).allowReentrant().withFastSize(false).withSync(false);
 		}
 		theListeners = listening.build();
 		theValue = initialValue;

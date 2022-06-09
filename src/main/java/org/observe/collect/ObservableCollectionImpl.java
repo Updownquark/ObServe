@@ -2561,7 +2561,7 @@ public final class ObservableCollectionImpl {
 		public ActiveDerivedCollection(ActiveCollectionManager<?, ?, T> flow, Observable<?> until) {
 			theFlow = flow;
 			theDerivedElements = BetterTreeSet.<DerivedElementHolder<T>> buildTreeSet((e1, e2) -> e1.element.compareTo(e2.element)).build();
-			theListeners = new ListenerList<>("Reentrancy not allowed");
+			theListeners = ListenerList.build().reentrancyError(ObservableCollection.REENTRANT_EVENT_ERROR).build();
 			theListenerCount = new AtomicInteger();
 			theEquivalence = flow.equivalence();
 			theStamp = new AtomicLong();
