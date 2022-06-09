@@ -18,35 +18,41 @@ import javax.swing.UnsupportedLookAndFeelException;
 
 import org.observe.ObservableAction;
 import org.observe.SettableValue;
-import org.observe.expresso.ExpressoInterpreter;
+import org.observe.expresso.Expresso;
 import org.observe.expresso.ExpressoInterpreter.ExpressoSession;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.Expresso;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ExternalModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.quick.QuickInterpreter.QuickSession;
 import org.observe.util.TypeTokens;
+import org.qommons.ArrayUtils;
 import org.qommons.config.DefaultQonfigParser;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
+import org.qommons.config.QonfigInterpreter;
 import org.qommons.config.QonfigParseException;
 import org.qommons.config.QonfigParser;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.QonfigToolkitAccess;
 
-public class QuickSwing extends QuickBase {
+public class QuickSwing<QIS extends QuickSession<?>> extends QuickBase<QIS> {
 	public static final QonfigToolkitAccess SWING = new QonfigToolkitAccess(QuickSwing.class, "quick-swing.qtd", CORE);
 
 	private QuickDocument theDebugDoc;
 	private QuickDocument theDebugOverlayDoc;
 
 	@Override
-	public <QIS extends ExpressoInterpreter.ExpressoSession<QIS>, B extends ExpressoInterpreter.Builder<QIS, B>> B configureInterpreter(
-		B interpreter) {
+	public QuickInterpreter.Builder<QIS, ?> createInterpreter(Class<?> callingClass, QonfigToolkit... others) {
+		return super.createInterpreter(callingClass, ArrayUtils.add(others, 0, SWING.get()));
+	}
+
+	@Override
+	public <B extends QonfigInterpreter.Builder<? extends QIS, B>> B configureInterpreter(B interpreter) {
 		super.configureInterpreter(interpreter);
 		QonfigToolkit swing = SWING.get();
-		ExpressoInterpreter.Builder<?, ?> tkInt = interpreter.forToolkit(swing);
+		QonfigInterpreter.Builder<? extends QIS, ?> tkInt = interpreter.forToolkit(swing);
 		tkInt.extend(CORE.get().getElement("quick"), swing.getElement("quick-debug"), QuickDocument.class, QuickDocument.class, //
 			this::extendQuickDebug)//
 		.modifyWith("quick", QuickDocument.class, this::modifyQuickDocument)//
@@ -54,14 +60,13 @@ public class QuickSwing extends QuickBase {
 		return interpreter;
 	}
 
-	private QuickDocument extendQuickDebug(QuickDocument doc, ExpressoSession<?> session) throws QonfigInterpretationException {
+	private QuickDocument extendQuickDebug(QuickDocument doc, QIS session) throws QonfigInterpretationException {
 		if (theDebugDoc == null) {
 			synchronized (QuickSwing.this) {
 				if (theDebugDoc == null) {
 					QonfigParser debugParser = new DefaultQonfigParser().withToolkit(Expresso.EXPRESSO.get(), CORE.get(),
 						BASE.get(), SWING.get());
-					ExpressoInterpreter<?> debugInterp = configureInterpreter(
-						ExpressoInterpreter.build(QuickSwing.class, BASE.get(), SWING.get())).build();
+					QuickInterpreter<QIS> debugInterp = createInterpreter(QuickSwing.class).build();
 					URL debugXml = QuickSwing.class.getResource("quick-debug.qml");
 					try (InputStream in = debugXml.openStream()) {
 						theDebugDoc = debugInterp.interpret(debugParser.parseDocument(debugXml.toString(), in).getRoot())//

@@ -1,6 +1,7 @@
 package org.observe.expresso;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -22,6 +23,11 @@ import com.google.common.reflect.TypeToken;
 public interface ObservableExpression {
 	ObservableExpression EMPTY = new ObservableExpression() {
 		@Override
+		public List<? extends ObservableExpression> getChildren() {
+			return Collections.emptyList();
+		}
+
+		@Override
 		public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ObservableModelSet models,
 			ClassView classView) throws QonfigInterpretationException {
 			return null;
@@ -38,6 +44,8 @@ public interface ObservableExpression {
 			return "null";
 		}
 	};
+
+	List<? extends ObservableExpression> getChildren();
 
 	default <M, MV extends M> ValueContainer<M, MV> evaluate(ModelInstanceType<M, MV> type, ObservableModelSet models, ClassView classView)
 		throws QonfigInterpretationException {
@@ -196,6 +204,11 @@ public interface ObservableExpression {
 
 		public T getValue() {
 			return theValue;
+		}
+
+		@Override
+		public List<? extends ObservableExpression> getChildren() {
+			return Collections.emptyList();
 		}
 
 		@Override

@@ -21,7 +21,7 @@ import org.qommons.config.QonfigToolkit;
 
 import com.google.common.reflect.TypeToken;
 
-public abstract class ExpressoInterpreter<QIS extends ExpressoInterpreter.ExpressoSession<QIS>> extends QonfigInterpreter<QIS> {
+public abstract class ExpressoInterpreter<QIS extends ExpressoInterpreter.ExpressoSession<?>> extends QonfigInterpreter<QIS> {
 	public static abstract class ExpressoSession<QIS extends ExpressoSession<QIS>>
 	extends QonfigInterpreter.QonfigInterpretingSession<QIS> {
 		private ObservableModelSet theModels;
@@ -33,7 +33,7 @@ public abstract class ExpressoInterpreter<QIS extends ExpressoInterpreter.Expres
 			theClassView = ((ExpressoSession<?>) parent).theClassView;
 		}
 
-		protected ExpressoSession(QonfigInterpreter<QIS> interpreter, QonfigElement root) {
+		protected ExpressoSession(ExpressoInterpreter<QIS> interpreter, QonfigElement root) {
 			super(interpreter, root);
 		}
 
@@ -167,11 +167,11 @@ public abstract class ExpressoInterpreter<QIS extends ExpressoInterpreter.Expres
 	 * @param toolkits The toolkits that the interpreter will be able to interpret documents of
 	 * @return A builder
 	 */
-	public static DefaultBuilder build(Class<?> callingClass, QonfigToolkit... toolkits) {
+	public static Builder<?, ?> build(Class<?> callingClass, QonfigToolkit... toolkits) {
 		return new DefaultBuilder(callingClass, null, toolkits);
 	}
 
-	public static abstract class Builder<QIS extends ExpressoSession<QIS>, B extends Builder<QIS, B>>
+	public static abstract class Builder<QIS extends ExpressoSession<?>, B extends Builder<QIS, B>>
 	extends QonfigInterpreter.Builder<QIS, B> {
 		private ExpressoParser theExpressionParser;
 
@@ -190,6 +190,10 @@ public abstract class ExpressoInterpreter<QIS extends ExpressoInterpreter.Expres
 
 		public ExpressoParser getExpressionParser() {
 			return theExpressionParser;
+		}
+
+		protected ExpressoParser getOrCreateExpressionParser() {
+			return theExpressionParser == null ? new DefaultExpressoParser().withDefaultNonStructuredParsing() : theExpressionParser;
 		}
 
 		public B withExpressionParser(ExpressoParser expressionParser) {
@@ -224,13 +228,13 @@ public abstract class ExpressoInterpreter<QIS extends ExpressoInterpreter.Expres
 			super(parent, element, type, childIndex);
 		}
 
-		ExpressoSessionDefault(QonfigInterpreter<ExpressoSessionDefault> interpreter, QonfigElement root) {
+		ExpressoSessionDefault(ExpressoInterpreter<ExpressoSessionDefault> interpreter, QonfigElement root) {
 			super(interpreter, root);
 		}
 	}
 
 	public static class Default extends ExpressoInterpreter<ExpressoSessionDefault> {
-		protected Default(Class<?> callingClass,
+		Default(Class<?> callingClass,
 			Map<QonfigElementOrAddOn, ClassMap<QonfigCreatorHolder<ExpressoSessionDefault, ?>>> creators,
 			Map<QonfigElementOrAddOn, ClassMap<QonfigModifierHolder<ExpressoSessionDefault, ?>>> modifiers,
 			ExpressoParser expressionParser) {
@@ -273,8 +277,7 @@ public abstract class ExpressoInterpreter<QIS extends ExpressoInterpreter.Expres
 
 		@Override
 		public Default create() {
-			return new Default(getCallingClass(), getCreators(), getModifiers(),
-				getExpressionParser() == null ? new DefaultExpressoParser().withDefaultNonStructuredParsing() : getExpressionParser());
+			return new Default(getCallingClass(), getCreators(), getModifiers(), getOrCreateExpressionParser());
 		}
 	}
 }

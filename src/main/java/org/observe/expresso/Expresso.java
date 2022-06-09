@@ -58,6 +58,7 @@ import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.expresso.ObservableModelSet.ValueCreator;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.WindowPopulation;
+import org.qommons.ArrayUtils;
 import org.qommons.BiTuple;
 import org.qommons.ThreadConstraint;
 import org.qommons.TimeUtils;
@@ -70,6 +71,7 @@ import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.config.QommonsConfig;
 import org.qommons.config.QonfigChildDef;
 import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigInterpretation;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreter;
 import org.qommons.config.QonfigInterpreter.QonfigValueCreator;
@@ -91,7 +93,7 @@ import com.google.common.reflect.TypeToken;
 
 /** Qonfig Interpretation for the Expresso API */
 @SuppressWarnings("rawtypes")
-public class Expresso {
+public class Expresso<QIS extends ExpressoSession<?>> implements QonfigInterpretation<QIS> {
 	public static final ExpressoParser EXPRESSION_PARSER = new DefaultExpressoParser().withDefaultNonStructuredParsing();
 
 	/** The Expresso Qonfig toolkit */
@@ -104,6 +106,12 @@ public class Expresso {
 	public static final String VALUE_TYPE_KEY = "value-type";
 	public static final String KEY_TYPE_KEY = "key-type";
 
+	/**
+	 * Provided to {@link ExpressoInterpreter.Builder#createWith(org.qommons.config.QonfigElementOrAddOn, Class, QonfigValueCreator)} to
+	 * support using an element type as a child of an &lt;ext-model> element.
+	 *
+	 * @param <M> The model type of the result
+	 */
 	public interface ExtModelValue<M> {
 		ModelInstanceType<M, ?> getType(ExpressoSession<?> session) throws QonfigInterpretationException;
 
@@ -136,6 +144,13 @@ public class Expresso {
 		}
 	}
 
+	/**
+	 * Provided to {@link ExpressoInterpreter.Builder#createWith(org.qommons.config.QonfigElementOrAddOn, Class, QonfigValueCreator)} to
+	 * support using an element type as a child of a &lt;config-model> element.
+	 *
+	 * @param <M> The model type of the result
+	 * @param <MV> The value type of the result
+	 */
 	public interface ConfigModelValue<M, MV extends M> {
 		ModelInstanceType<M, MV> getType();
 
@@ -159,48 +174,18 @@ public class Expresso {
 		}
 	}
 
-	public interface ValueParser {
-		default boolean canParse(TypeToken<?> type, String text) {
-			return true;
-		}
-
-		<T> T parseModelValue(TypeToken<T> type, String text) throws QonfigInterpretationException;
-	}
-
-	public interface SimpleValueParser extends ValueParser {
-		@Override
-		default <T> T parseModelValue(TypeToken<T> type, String text) throws QonfigInterpretationException {
-
-			T value;
-			try {
-				value = (T) parseValue(type, text);
-			} catch (ParseException e) {
-				throw new QonfigInterpretationException(e);
-			}
-			if (value != null && !TypeTokens.get().isInstance(type, value))
-				throw new IllegalStateException("Parser " + this + " parsed a value of type " + value.getClass() + " for type " + type);
-			return value;
-		}
-
-		Object parseValue(TypeToken<?> type, String text) throws ParseException;
-	}
-
-	public static SimpleValueParser simple(SimpleValueParser parser) {
-		return parser;
-	}
-
 	public interface AppEnvironment {
 		Function<ModelSetInstance, ? extends ObservableValue<String>> getTitle();
 
 		Function<ModelSetInstance, ? extends ObservableValue<Image>> getIcon();
 	}
 
-	public <QIS extends ExpressoInterpreter.ExpressoSession<QIS>, B extends ExpressoInterpreter.Builder<QIS, B>> B configureInterpreter(
-		B interpreter) {
-		interpreter.withExpressionParser(EXPRESSION_PARSER);
+	@Override
+	public <B extends QonfigInterpreter.Builder<? extends QIS, B>> B configureInterpreter(B interpreter) {
+		((ExpressoInterpreter.Builder) interpreter).withExpressionParser(EXPRESSION_PARSER);
 		configureBaseModels(interpreter.forToolkit(EXPRESSO.get()));
 		QonfigToolkit obsTk = EXPRESSO.get();
-		ExpressoInterpreter.Builder<?, ?> observeInterpreter = interpreter.forToolkit(obsTk);
+		B observeInterpreter = interpreter.forToolkit(obsTk);
 		configureExternalModels(observeInterpreter);
 		configureInternalModels(observeInterpreter);
 		configureConfigModels(observeInterpreter);
@@ -210,7 +195,12 @@ public class Expresso {
 		return interpreter;
 	}
 
-	void configureBaseModels(ExpressoInterpreter.Builder<?, ?> interpreter) {
+	@Override
+	public ExpressoInterpreter.Builder<QIS, ?> createInterpreter(Class<?> callingClass, QonfigToolkit... others) {
+		return (ExpressoInterpreter.Builder<QIS, ?>) ExpressoInterpreter.build(callingClass, ArrayUtils.add(others, 0, EXPRESSO.get()));
+	}
+
+	void configureBaseModels(QonfigInterpreter.Builder<? extends ExpressoSession<?>, ?> interpreter) {
 		interpreter.createWith("imports", ClassView.class, session -> {
 			ClassView.Builder builder = ClassView.build().withWildcardImport("java.lang");
 			for (QonfigElement imp : session.getChildren("import")) {
@@ -244,7 +234,7 @@ public class Expresso {
 				if (session.get(VALUE_TYPE_KEY) == null) {
 					String typeStr = session.getAttributeText("type");
 					if (typeStr != null && !typeStr.isEmpty())
-						session.put(VALUE_TYPE_KEY, parseType(typeStr));
+						session.put(VALUE_TYPE_KEY, parseType(typeStr, session.getModels(), session.getClassView()));
 				}
 				if (session.isInstance("model-element"))
 					session.put(PATH_KEY, session.getModels().getPath() + "." + session.getAttributeText("model-element", "name"));
@@ -260,7 +250,7 @@ public class Expresso {
 				if (session.get(KEY_TYPE_KEY) == null) {
 					String typeStr = session.getAttributeText("key-type");
 					if (typeStr != null && !typeStr.isEmpty())
-						session.put(KEY_TYPE_KEY, parseType(typeStr));
+						session.put(KEY_TYPE_KEY, parseType(typeStr, session.getModels(), session.getClassView()));
 				}
 			}
 
@@ -271,7 +261,7 @@ public class Expresso {
 		});
 	}
 
-	void configureExternalModels(ExpressoInterpreter.Builder<?, ?> interpreter) {
+	void configureExternalModels(QonfigInterpreter.Builder<? extends ExpressoSession<?>, ?> interpreter) {
 		interpreter.createWith("ext-model", ObservableModelSet.class, session -> {
 			ObservableModelSet.Builder model = (ObservableModelSet.Builder) session.getModels();
 			QonfigChildDef subModelRole = session.getRole("sub-model");
@@ -317,7 +307,7 @@ public class Expresso {
 		;
 	}
 
-	void configureInternalModels(ExpressoInterpreter.Builder<?, ?> interpreter) {
+	void configureInternalModels(QonfigInterpreter.Builder<? extends ExpressoSession<?>, ?> interpreter) {
 		abstract class InternalCollectionValue<C extends ObservableCollection>
 		implements QonfigValueCreator<ExpressoSession<?>, ValueCreator<C, C>> {
 			private final ModelType<C> theType;
@@ -643,7 +633,7 @@ public class Expresso {
 		});
 	}
 
-	void configureConfigModels(ExpressoInterpreter.Builder<?, ?> interpreter) {
+	void configureConfigModels(QonfigInterpreter.Builder<? extends ExpressoSession<?>, ?> interpreter) {
 		abstract class ConfigCollectionValue<C extends ObservableCollection>
 		implements QonfigValueCreator<ExpressoSession<?>, ConfigModelValue<C, C>> {
 			private final ModelType<C> theType;
@@ -922,7 +912,7 @@ public class Expresso {
 				if (path == null)
 					path = name;
 				String typeStr = childSession.getAttributeText("type");
-				TypeToken<Object> type = (TypeToken<Object>) parseType(typeStr);
+				TypeToken<Object> type = (TypeToken<Object>) parseType(typeStr, session.getModels(), session.getClassView());
 				String fPath = path;
 				model.withMaker(name, new ValueCreator<Object, Object>() {
 					@Override
@@ -1124,7 +1114,8 @@ public class Expresso {
 
 	private ValueCreator<SettableValue, SettableValue<ObservableConfigFormat<Object>>> createSimpleConfigFormat(ExpressoSession<?> session)
 		throws QonfigInterpretationException {
-		TypeToken<Object> valueType = (TypeToken<Object>) parseType(session.getAttributeText("type"));
+		TypeToken<Object> valueType = (TypeToken<Object>) parseType(session.getAttributeText("type"), session.getModels(),
+			session.getClassView());
 		ModelInstanceType<SettableValue, SettableValue<Format<Object>>> formatType = ModelTypes.Value
 			.forType(TypeTokens.get().keyFor(Format.class).parameterized(valueType));
 		String defaultS = session.getAttributeText("default");
@@ -1262,7 +1253,7 @@ public class Expresso {
 		};
 	}
 
-	private void configureFormats(ExpressoInterpreter.Builder<?, ?> interpreter) {
+	private void configureFormats(QonfigInterpreter.Builder<? extends ExpressoSession<?>, ?> interpreter) {
 		interpreter.delegateToType("format", "type", ValueCreator.class);
 		interpreter.createWith("file-source", ValueCreator.class, this::createFileSource);
 		interpreter.createWith("text", ValueCreator.class, session -> {
@@ -1549,19 +1540,15 @@ public class Expresso {
 		};
 	}
 
-	public static TypeToken<?> parseType(String text) throws QonfigInterpretationException {
-		// '{' and '}' aren't used for java types, and '<' in particular can't be used in XML as-is,
-		// so this replacement makes it easier to specify generic types in XML
-		text = text.replaceAll("\\{", "<").replaceAll("\\}", ">");
+	public static TypeToken<?> parseType(String text, ObservableModelSet models, ClassView cv) throws QonfigInterpretationException {
+		VariableType vbl;
 		try {
-			return TypeTokens.get().parseType(text);
+			vbl = VariableType.parseType(text, cv);
 		} catch (ParseException e) {
-			try {
-				return TypeTokens.get().parseType("java.lang." + text);
-			} catch (ParseException e2) {
-				throw new QonfigInterpretationException(text + ": " + e.getMessage(), e);
-			}
+			throw new QonfigInterpretationException("Could not parse type '" + text + "'", e);
 		}
+		TypeToken<?> type = vbl.getType(models);
+		return type;
 	}
 
 	<T> ValueContainer<SettableValue, SettableValue<T>> parseValue(ObservableModelSet models, ClassView cv, TypeToken<T> type,

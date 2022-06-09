@@ -27,7 +27,7 @@ public class ExpressoTests {
 	public void setup() {
 		theParser = new DefaultQonfigParser()//
 			.withToolkit(Expresso.EXPRESSO.get(), QuickCore.CORE.get(), QuickBase.BASE.get());
-		theInterpreter = new QuickBase().configureInterpreter(ExpressoInterpreter.build(QuickTests.class, QuickBase.BASE.get())).build();
+		theInterpreter = new QuickBase<>().createInterpreter(QuickTests.class).build();
 	}
 
 	@Test

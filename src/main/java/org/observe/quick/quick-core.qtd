@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<qonfig-def root="quick" extends:observe="../expresso/expresso.qtd">
+<qonfig-def root="quick,style-sheet" extends:observe="../expresso/expresso.qtd">
 	<value-types>
 		<one-of name="window-close-action">
 			<literal>do-nothing</literal>
@@ -11,6 +11,11 @@
 
 		<external name="size" />
 		<external name="position" />
+
+		<pattern name="element-name">[a-zA-Z_\\-]+</pattern>
+		<pattern name="widget-name">((?&lt;ns&gt;[a-zA-Z_\\-]+)\:)?(?&lt;widget&gt;[a-zA-Z_\\-]+)</pattern>
+		<pattern name="style-attr">(((?&lt;ns&gt;[a-zA-Z_\\-]+)\:)?(?&lt;widget&gt;[a-zA-Z_\\-]+)\.)?(?&lt;attr&gt;[a-zA-Z_\\-]+)</pattern>
+		<pattern name="role-path">(((?&lt;ns&gt;[a-zA-Z_\\-]+)\:)?(?&lt;widget&gt;[a-zA-Z_\\-]+)\.)(?&lt;role&gt;[a-zA-Z_\\-\\.]+)</pattern>
 	</value-types>
 
 	<add-ons>
@@ -45,6 +50,22 @@
 			<attribute name="max-pref-length" type="size" specify="optional" />
 			<attribute name="max-length" type="size" specify="optional" />
 		</add-on>
+		
+		<add-on name="element-data-value" requires="model-value">
+			<value-mod specify="forbidden" />
+		</add-on>
+
+		<add-on name="element-style" requires="style">
+			<attribute name="element" type="widget-name" specify="forbidden" />
+			<attribute name="role" type="role-path" specify="forbidden" />
+			<child-mod child="sub-style" inherits="element-style" />
+		</add-on>
+
+		<add-on name="styled">
+			<element-meta name="widget-model" type="widget-model" min="0" />
+			<element-meta name="styles" type="styles" min="0" />
+			<child-def name="style" type="style" inherits="element-style" min="0" max="inf" />
+		</add-on>
 
 		<add-on name="window">
 			<attribute name="x" type="expression" specify="optional" />
@@ -56,21 +77,74 @@
 			<attribute name="close-action" type="window-close-action" default="hide" />
 		</add-on>
 
+		<add-on name="widget-model-value" requires="model-value">
+			<attribute name="priority" type="int" specify="required" />
+			<value-mod specify="forbidden" />
+		</add-on>
+
 		<add-on name="widget-local-variables" requires="model">
 			<attribute name="model.name" default="$LOCAL$" />
 		</add-on>
 	</add-ons>
 
 	<elements>
+		<element-def name="widget-model" extends="abst-model">
+			<attribute name="abst-model.name" default="$TYPE$" />
+			<child-mod child="value" inherits="widget-model-value" />
+		</element-def>
+
+		<element-def name="style-attribute">
+			<attribute name="name" type="element-name" specify="required" />
+			<attribute name="type" type="string" specify="required" />
+			<attribute name="trickle-down" type="boolean" default="false" />
+		</element-def>
+
+		<element-def name="styles">
+			<child-def name="style-attribute" type="style-attribute" min="0" max="inf" />
+		</element-def>
+
+		<element-def name="style">
+			<attribute name="element" type="widget-name" specify="optional" />
+			<attribute name="role" type="role-path" specify="optional" />
+			<attribute name="attr" type="style-attr" specify="optional" />
+			<attribute name="condition" type="expression" specify="optional" />
+			<attribute name="style-set" type="string" specify="optional" />
+			<value type="expression" specify="optional" />
+			<child-def name="sub-style" type="style" min="0" max="inf" />
+		</element-def>
+
+		<element-def name="style-set">
+			<attribute name="name" type="identifier" specify="required" />
+			<child-def name="style" type="style" />
+		</element-def>
+
+		<element-def name="import-style-sheet">
+			<attribute name="name" type="identifier" specify="required" />
+			<attribute name="ref" type="string" specify="required" />
+		</element-def>
+
+		<element-def name="style-sheet">
+			<child-def name="style-sheet-ref" type="import-style-sheet" min="0" max="inf" />
+			<child-def name="style-set" type="style-set" min="0" max="inf" />
+			<child-def name="style" type="style" min="0" max="inf" />
+		</element-def>
+
 		<element-def name="head">
 			<child-def name="imports" type="imports" min="0" />
 			<child-def name="models" type="models" min="0" /> <!-- Don't know what you could do without models, but whatever -->
+			<child-def name="style-sheet" type="style-sheet" min="0" />
 		</element-def>
 
-		<element-def name="widget" abstract="true">
+		<element-def name="widget" abstract="true" inherits="styled">
+			<widget-model>
+				<value name="focused" type="boolean" />
+			</widget-model>
+			<styles>
+				<style-attribute name="bg-color" type="java.awt.Color" />
+				<style-attribute name="fg-color" type="java.awt.Color" />
+			</styles>
 			<child-def name="model" type="model" min="0" inherits="widget-local-variables" /> <!-- Local variables, visible to any children also -->
 			<attribute name="name" type="string" specify="optional" /> <!-- For debugging -->
-			<attribute name="bg-color" type="expression" specify="optional" />
 			<attribute name="tooltip" type="expression" specify="optional" />
 			<attribute name="visible" type="expression" specify="optional" />
 			<attribute name="onClick" type="expression" specify="optional" />
@@ -80,11 +154,13 @@
 			<child-def name="border" type="border" min="0" />
 		</element-def>
 
-		<element-def name="border" abstract="true" />
-		<element-def name="line-border" extends="border">
-			<attribute name="color" type="expression" default="`black`" />
-			<attribute name="thickness" type="expression" default="1" />
+		<element-def name="border" abstract="true" inherits="styled">
+			<styles>
+				<style-attribute name="border-color" type="java.awt.Color" />
+				<style-attribute name="thickness" type="int" />
+			</styles>
 		</element-def>
+		<element-def name="line-border" extends="border" />
 		<element-def name="titled-border" extends="line-border">
 			<attribute name="title" type="expression" specify="required" />
 		</element-def>

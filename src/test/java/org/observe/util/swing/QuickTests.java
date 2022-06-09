@@ -9,13 +9,14 @@ import javax.swing.JFrame;
 import org.junit.Before;
 import org.junit.Test;
 import org.observe.SettableValue;
+import org.observe.expresso.Expresso;
 import org.observe.expresso.ExpressoInterpreter;
 import org.observe.expresso.ModelTypes;
-import org.observe.expresso.Expresso;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.quick.QuickBase;
 import org.observe.quick.QuickCore;
 import org.observe.quick.QuickDocument;
+import org.observe.quick.QuickInterpreter;
 import org.observe.quick.QuickSwing;
 import org.qommons.config.DefaultQonfigParser;
 import org.qommons.config.QonfigElement;
@@ -30,8 +31,8 @@ public class QuickTests {
 	public void setup() {
 		theParser = new DefaultQonfigParser()//
 			.withToolkit(Expresso.EXPRESSO.get(), QuickCore.CORE.get(), QuickBase.BASE.get(), QuickSwing.SWING.get());
-		theInterpreter = new QuickSwing()
-			.configureInterpreter(ExpressoInterpreter.build(QuickTests.class, QuickBase.BASE.get(), QuickSwing.SWING.get())).build();
+		theInterpreter = QuickInterpreter.build(QuickTests.class, QuickBase.BASE.get(), QuickSwing.SWING.get())//
+			.configure(new QuickSwing<>()).build();
 	}
 
 	@Test

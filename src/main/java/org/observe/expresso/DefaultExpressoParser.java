@@ -958,6 +958,11 @@ public class DefaultExpressoParser implements ExpressoParser {
 		}
 
 		@Override
+		public List<? extends ObservableExpression> getChildren() {
+			return Collections.emptyList();
+		}
+
+		@Override
 		public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ObservableModelSet models,
 			ClassView classView) throws QonfigInterpretationException {
 			if (type.getModelType() != ModelTypes.Value)
@@ -1053,6 +1058,11 @@ public class DefaultExpressoParser implements ExpressoParser {
 		}
 
 		@Override
+		public List<? extends ObservableExpression> getChildren() {
+			return Collections.singletonList(theOperand);
+		}
+
+		@Override
 		public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ObservableModelSet models,
 			ClassView classView) throws QonfigInterpretationException {
 			if (type.getModelType() != ModelTypes.Value)
@@ -1130,6 +1140,11 @@ public class DefaultExpressoParser implements ExpressoParser {
 
 		public ObservableExpression getRight() {
 			return theRight;
+		}
+
+		@Override
+		public List<? extends ObservableExpression> getChildren() {
+			return QommonsUtils.unmodifiableCopy(theLeft, theRight);
 		}
 
 		@Override
@@ -1744,6 +1759,11 @@ public class DefaultExpressoParser implements ExpressoParser {
 		}
 
 		@Override
+		public List<? extends ObservableExpression> getChildren() {
+			return QommonsUtils.unmodifiableCopy(theCondition, thePrimary, theSecondary);
+		}
+
+		@Override
 		public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ObservableModelSet models,
 			ClassView classView) throws QonfigInterpretationException {
 			if (type != null && (type.getModelType() == ModelTypes.Value || type.getModelType() == ModelTypes.Collection
@@ -1863,6 +1883,11 @@ public class DefaultExpressoParser implements ExpressoParser {
 
 		public BetterList<String> getNames() {
 			return theNames;
+		}
+
+		@Override
+		public List<? extends ObservableExpression> getChildren() {
+			return theContext == null ? Collections.emptyList() : QommonsUtils.unmodifiableCopy(theContext);
 		}
 
 		/* Order of operations:
@@ -2341,6 +2366,11 @@ public class DefaultExpressoParser implements ExpressoParser {
 		}
 
 		@Override
+		public List<? extends ObservableExpression> getChildren() {
+			return QommonsUtils.unmodifiableCopy(theContext, theValue);
+		}
+
+		@Override
 		public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ObservableModelSet models,
 			ClassView classView) throws QonfigInterpretationException {
 			if (type.getModelType() != ModelTypes.Action)
@@ -2669,6 +2699,15 @@ public class DefaultExpressoParser implements ExpressoParser {
 		}
 
 		@Override
+		public List<? extends ObservableExpression> getChildren() {
+			List<ObservableExpression> children = new ArrayList<>(getArguments().size() + (theContext == null ? 0 : 1));
+			if (theContext != null)
+				children.add(theContext);
+			children.addAll(getArguments());
+			return Collections.unmodifiableList(children);
+		}
+
+		@Override
 		protected <M, MV extends M> ValueContainer<M, MV> evaluateInternal2(ModelInstanceType<M, MV> type, ObservableModelSet models,
 			ClassView classView, ArgOption args, TypeToken<?> targetType) throws QonfigInterpretationException {
 			if (theContext != null) {
@@ -2789,6 +2828,11 @@ public class DefaultExpressoParser implements ExpressoParser {
 		}
 
 		@Override
+		public List<? extends ObservableExpression> getChildren() {
+			return getArguments();
+		}
+
+		@Override
 		public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ObservableModelSet models,
 			ClassView classView) throws QonfigInterpretationException {
 			throw new QonfigInterpretationException("Not implemented");
@@ -2865,6 +2909,11 @@ public class DefaultExpressoParser implements ExpressoParser {
 
 		public List<String> getTypeArgs() {
 			return theTypeArgs;
+		}
+
+		@Override
+		public List<? extends ObservableExpression> getChildren() {
+			return Collections.singletonList(theContext);
 		}
 
 		@Override
@@ -3169,6 +3218,11 @@ public class DefaultExpressoParser implements ExpressoParser {
 
 		public ObservableExpression getBody() {
 			return theBody;
+		}
+
+		@Override
+		public List<? extends ObservableExpression> getChildren() {
+			return Collections.singletonList(theBody);
 		}
 
 		@Override

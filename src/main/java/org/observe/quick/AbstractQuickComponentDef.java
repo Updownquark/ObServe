@@ -6,18 +6,21 @@ import java.util.function.Function;
 import org.observe.ObservableValue;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.quick.style.QuickElementStyle;
 import org.observe.util.swing.PanelPopulation.ComponentEditor;
 import org.qommons.config.QonfigElement;
 
 public abstract class AbstractQuickComponentDef implements QuickComponentDef {
 	private final QonfigElement theElement;
 	private final ObservableModelSet.Wrapped theModels;
+	private final QuickElementStyle theStyle;
 	private Function<ModelSetInstance, ? extends ObservableValue<String>> theFieldName;
 	private BiConsumer<ComponentEditor<?, ?>, QuickComponent.Builder> theModifications;
 
-	public AbstractQuickComponentDef(QonfigElement element, ObservableModelSet.Wrapped models) {
+	public AbstractQuickComponentDef(QonfigElement element, ObservableModelSet.Wrapped models, QuickElementStyle style) {
 		theElement = element;
 		theModels = models;
+		theStyle = style;
 	}
 
 	@Override
@@ -28,6 +31,11 @@ public abstract class AbstractQuickComponentDef implements QuickComponentDef {
 	@Override
 	public ObservableModelSet.Wrapped getModels() {
 		return theModels;
+	}
+
+	@Override
+	public QuickElementStyle getStyle() {
+		return theStyle;
 	}
 
 	@Override

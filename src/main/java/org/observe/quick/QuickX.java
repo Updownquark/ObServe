@@ -10,8 +10,6 @@ import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ClassView;
-import org.observe.expresso.ExpressoInterpreter;
-import org.observe.expresso.ExpressoInterpreter.Builder;
 import org.observe.expresso.ExpressoInterpreter.ExpressoSession;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
@@ -19,6 +17,7 @@ import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.quick.QuickContainer.AbstractQuickContainer;
+import org.observe.quick.QuickInterpreter.QuickSession;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.CategoryRenderStrategy;
 import org.observe.util.swing.JustifiedBoxLayout;
@@ -26,33 +25,35 @@ import org.observe.util.swing.PanelPopulation;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.qommons.collect.BetterList;
 import org.qommons.config.QonfigInterpretationException;
+import org.qommons.config.QonfigInterpreter;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.QonfigToolkitAccess;
 
 import com.google.common.reflect.TypeToken;
 
-public class QuickX extends QuickBase {
+public class QuickX<QIS extends QuickSession<?>> extends QuickBase<QIS> {
 	public static final QonfigToolkitAccess EXT = new QonfigToolkitAccess(QuickBase.class, "quick-ext.qtd", QuickBase.BASE);
 
 	@Override
-	public <QIS extends ExpressoSession<QIS>, B extends Builder<QIS, B>> B configureInterpreter(B interpreter) {
+	public <B extends QonfigInterpreter.Builder<? extends QIS, B>> B configureInterpreter(B interpreter) {
 		super.configureInterpreter(interpreter);
 		QonfigToolkit ext = EXT.get();
-		ExpressoInterpreter.Builder<?, ?> tkInt = interpreter.forToolkit(ext);
+		B tkInt = interpreter.forToolkit(ext);
 		tkInt.createWith("collapse-pane", QuickComponentDef.class, this::interpretCollapsePane)//
 		.createWith("tree-table", QuickComponentDef.class, this::interpretTreeTable)//
 		;
 		return interpreter;
 	}
 
-	private QuickComponentDef interpretCollapsePane(ExpressoSession<?> session) throws QonfigInterpretationException {
-		ObservableModelSet.Wrapped localModels = parseLocalModel(session);
+	private QuickComponentDef interpretCollapsePane(QIS session) throws QonfigInterpretationException {
+		ObservableModelSet.Wrapped localModels = session.getLocalModels();
 		ValueContainer<SettableValue, SettableValue<Boolean>> collapsed = session.getAttributeAsValue("collapsed", boolean.class,
 			() -> mis -> SettableValue.build(boolean.class).withDescription("collapsed").build());
 		Boolean initCollapsed = session.getAttribute("init-collapsed", Boolean.class);
 		QuickComponentDef header = session.interpretChildren("header", QuickComponentDef.class).getFirst();
 		QuickComponentDef content = session.interpretChildren("content", QuickComponentDef.class).getFirst(); // Single content
-		return new AbstractQuickContainer(session.getElement(), localModels, Arrays.asList(header, content)) {
+		return new AbstractQuickContainer(session.getElement(), localModels, session.getStyle(),
+			Arrays.asList(header, content)) {
 			@Override
 			public QuickComponent installContainer(PanelPopulator<?, ?> container, QuickComponent.Builder builder,
 				Consumer<PanelPopulator<?, ?>> populator) {
@@ -75,7 +76,7 @@ public class QuickX extends QuickBase {
 		};
 	}
 
-	private <T, E extends PanelPopulation.TreeTableEditor<T, E>> QuickComponentDef interpretTreeTable(ExpressoSession<?> session)
+	private <T, E extends PanelPopulation.TreeTableEditor<T, E>> QuickComponentDef interpretTreeTable(QIS session)
 		throws QonfigInterpretationException {
 		return interpretAbstractTree(session, new TreeMaker<T, E>() {
 			TypeToken<CategoryRenderStrategy<BetterList<T>, ?>> columnType;

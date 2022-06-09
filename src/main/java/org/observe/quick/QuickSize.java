@@ -1,17 +1,19 @@
 package org.observe.quick;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.Objects;
 
 import org.observe.SettableValue;
-import org.observe.expresso.Expression.ExpressoParseException;
-import org.observe.expresso.ModelType.ModelInstanceType;
-import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.expresso.ClassView;
+import org.observe.expresso.Expression.ExpressoParseException;
 import org.observe.expresso.ExpressoParser;
+import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet;
+import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.config.CustomValueType;
@@ -123,6 +125,11 @@ public class QuickSize {
 			}
 			SizeUnit fUnit = unit == null ? SizeUnit.Pixels : unit;
 			return new ObservableExpression() {
+				@Override
+				public List<? extends ObservableExpression> getChildren() {
+					return Collections.singletonList(valueEx);
+				}
+
 				@Override
 				public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ObservableModelSet models,
 					ClassView classView) throws QonfigInterpretationException {
