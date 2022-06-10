@@ -8,11 +8,11 @@ import java.util.Set;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ClassView;
-import org.observe.expresso.DefaultExpressoParser;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.expresso.ops.NameExpression;
 import org.qommons.StringUtils;
 import org.qommons.config.QonfigChildDef;
 import org.qommons.config.QonfigElement;
@@ -51,8 +51,8 @@ public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 
 	private static void findModelValues(ObservableExpression ex, Set<QuickModelValue<?, ?>> modelValues, ObservableModelSet models)
 		throws QonfigInterpretationException {
-		if (ex instanceof DefaultExpressoParser.NameExpression && ((DefaultExpressoParser.NameExpression) ex).getContext() == null) {
-			String name = ((DefaultExpressoParser.NameExpression) ex).getNames().getFirst();
+		if (ex instanceof NameExpression && ((NameExpression) ex).getContext() == null) {
+			String name = ((NameExpression) ex).getNames().getFirst();
 			ValueContainer<?, ?> value = models.get(name, false);
 			if (value instanceof QuickModelValue)
 				modelValues.add((QuickModelValue<?, ?>) value);

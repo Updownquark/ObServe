@@ -40,7 +40,6 @@ import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ClassView;
-import org.observe.expresso.DefaultExpressoParser;
 import org.observe.expresso.Expresso;
 import org.observe.expresso.ExpressoInterpreter.ExpressoSession;
 import org.observe.expresso.ModelType;
@@ -54,6 +53,8 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.RuntimeValuePlaceholder;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.expresso.ObservableModelSet.ValueCreator;
+import org.observe.expresso.ops.LambdaExpression;
+import org.observe.expresso.ops.MethodReferenceExpression;
 import org.observe.quick.QuickInterpreter.QuickSession;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.CategoryRenderStrategy;
@@ -469,7 +470,7 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 		ObservableModelSet.Wrapped valueModel = wb.build();
 		TypeToken<Object> columnType;
 		Function<ModelSetInstance, Function<Object, Object>> valueFn;
-		if (valueX instanceof DefaultExpressoParser.LambdaExpression || valueX instanceof DefaultExpressoParser.MethodReferenceExpression) {
+		if (valueX instanceof LambdaExpression || valueX instanceof MethodReferenceExpression) {
 			MethodFinder<Object, Object, Object, Object> finder = valueX.findMethod(TypeTokens.get().OBJECT, model, cv)//
 				.withOption(BetterList.of(modelType), new ObservableExpression.ArgMaker<Object, Object, Object>() {
 					@Override

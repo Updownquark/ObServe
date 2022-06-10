@@ -56,6 +56,7 @@ import org.observe.expresso.ObservableModelSet.AbstractValueContainer;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.expresso.ObservableModelSet.ValueCreator;
+import org.observe.expresso.ops.NameExpression;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.WindowPopulation;
 import org.qommons.ArrayUtils;
@@ -1227,7 +1228,7 @@ public class Expresso<QIS extends ExpressoSession<?>> implements QonfigInterpret
 			public ValueContainer<Object, Object> createValue() {
 				ValueContainer<?, ?> source = null;
 				try {
-					if (sourceX instanceof DefaultExpressoParser.NameExpression)
+					if (sourceX instanceof NameExpression)
 						source = session.getModels().get(sourceX.toString(), false);
 					if (source == null)
 						source = sourceX.evaluate(ModelTypes.Value.any(), session.getModels(), session.getClassView());

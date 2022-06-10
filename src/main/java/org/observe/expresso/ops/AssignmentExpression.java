@@ -1,0 +1,83 @@
+package org.observe.expresso.ops;
+
+import java.util.List;
+
+import org.observe.ObservableAction;
+import org.observe.SettableValue;
+import org.observe.expresso.ClassView;
+import org.observe.expresso.ModelType;
+import org.observe.expresso.ModelTypes;
+import org.observe.expresso.ObservableExpression;
+import org.observe.expresso.ObservableModelSet;
+import org.observe.expresso.ModelType.ModelInstanceType;
+import org.observe.expresso.ObservableExpression.MethodFinder;
+import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.util.TypeTokens;
+import org.qommons.QommonsUtils;
+import org.qommons.config.QonfigInterpretationException;
+
+import com.google.common.reflect.TypeToken;
+
+public class AssignmentExpression implements ObservableExpression {
+	private final ObservableExpression theContext;
+	private final ObservableExpression theValue;
+
+	public AssignmentExpression(ObservableExpression context, ObservableExpression value) {
+		theContext = context;
+		theValue = value;
+	}
+
+	public ObservableExpression getContext() {
+		return theContext;
+	}
+
+	public ObservableExpression getValue() {
+		return theValue;
+	}
+
+	@Override
+	public List<? extends ObservableExpression> getChildren() {
+		return QommonsUtils.unmodifiableCopy(theContext, theValue);
+	}
+
+	@Override
+	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ObservableModelSet models,
+		ClassView classView) throws QonfigInterpretationException {
+		if (type.getModelType() != ModelTypes.Action)
+			throw new QonfigInterpretationException("Assignments cannot be used as " + type.getModelType() + "s");
+		ValueContainer<SettableValue, SettableValue<Object>> context = theContext.evaluate(
+			(ModelInstanceType<SettableValue, SettableValue<Object>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any(), models,
+			classView);
+		boolean isVoid = type.getType(0).getType() == void.class || type.getType(0).getType() == Void.class;
+		if (!isVoid && !TypeTokens.get().isAssignable(type.getType(0), context.getType().getType(0)))
+			throw new QonfigInterpretationException(
+				"Cannot assign " + context + ", type " + context.getType().getType(0) + " to " + type.getType(0));
+		ValueContainer<SettableValue, SettableValue<Object>> value = theValue.evaluate(
+			ModelTypes.Value.forType((TypeToken<Object>) TypeTokens.get().getExtendsWildcard(context.getType().getType(0))), models,
+			classView);
+		return (ValueContainer<M, MV>) new ValueContainer<ObservableAction, ObservableAction<?>>() {
+			@Override
+			public ModelInstanceType<ObservableAction, ObservableAction<?>> getType() {
+				if (isVoid)
+					return (ModelInstanceType<ObservableAction, ObservableAction<?>>) type;
+				else
+					return (ModelInstanceType<ObservableAction, ObservableAction<?>>) (ModelInstanceType<?, ?>) ModelTypes.Action
+						.forType(context.getType().getType(0));
+			}
+
+			@Override
+			public ObservableAction<?> get(ModelSetInstance models) {
+				SettableValue<Object> ctxValue = context.get(models);
+				SettableValue<Object> valueValue = value.get(models);
+				return ctxValue.assignmentTo(valueValue);
+			}
+		};
+	}
+
+	@Override
+	public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ObservableModelSet models,
+		ClassView classView) throws QonfigInterpretationException {
+		throw new QonfigInterpretationException("Not implemented");
+	}
+}

@@ -1,0 +1,514 @@
+package org.observe.expresso.ops;
+
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.Collections;
+import java.util.List;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Supplier;
+
+import org.observe.Observable;
+import org.observe.ObservableValue;
+import org.observe.ObservableValueEvent;
+import org.observe.SettableValue;
+import org.observe.SimpleObservable;
+import org.observe.expresso.ClassView;
+import org.observe.expresso.ModelType.ModelInstanceType;
+import org.observe.expresso.ModelTypes;
+import org.observe.expresso.ObservableExpression;
+import org.observe.expresso.ObservableModelSet;
+import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.util.TypeTokens;
+import org.qommons.Identifiable;
+import org.qommons.QommonsUtils;
+import org.qommons.StringUtils;
+import org.qommons.Transaction;
+import org.qommons.TriFunction;
+import org.qommons.collect.BetterList;
+import org.qommons.config.QonfigInterpretationException;
+
+import com.google.common.reflect.TypeToken;
+
+public class NameExpression implements ObservableExpression {
+	private final ObservableExpression theContext;
+	private final BetterList<String> theNames;
+
+	public NameExpression(ObservableExpression ctx, BetterList<String> names) {
+		theContext = ctx;
+		theNames = names;
+	}
+
+	public ObservableExpression getContext() {
+		return theContext;
+	}
+
+	public BetterList<String> getNames() {
+		return theNames;
+	}
+
+	@Override
+	public List<? extends ObservableExpression> getChildren() {
+		return theContext == null ? Collections.emptyList() : QommonsUtils.unmodifiableCopy(theContext);
+	}
+
+	/* Order of operations:
+	 * Model value
+	 * Statically-imported variable
+	 *
+	 */
+
+	@Override
+	public <M, MV extends M> ObservableModelSet.ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
+		ObservableModelSet models, ClassView classView) throws QonfigInterpretationException {
+		ValueContainer<?, ?> mv = null;
+		if (theContext != null)
+			mv = theContext.evaluate(ModelTypes.Value.any(), models, classView);
+		if (mv == null)
+			mv = models.get(theNames.getFirst(), false);
+		if (mv != null)
+			return evaluateModel(//
+				mv, 1, new StringBuilder(theNames.get(0)), type, models);
+		// Allow unqualified enum value references
+		if (theNames.size() == 1 && type.getModelType() == ModelTypes.Value) {
+			Class<?> paramType = TypeTokens.getRawType(type.getType(0));
+			if (paramType != null && paramType.isEnum()) {
+				for (Enum<?> value : ((Class<? extends Enum<?>>) paramType).getEnumConstants()) {
+					if (value.name().equals(theNames.getFirst())) {
+						return new ValueContainer<M, MV>() {
+							final ModelInstanceType<M, MV> retType = (ModelInstanceType<M, MV>) ModelTypes.Value.forType(paramType);
+							final MV retValue = (MV) ObservableModelSet.literal(value, value.name());
+
+							@Override
+							public ModelInstanceType<M, MV> getType() {
+								return retType;
+							}
+
+							@Override
+							public MV get(ModelSetInstance extModels) {
+								return retValue;
+							}
+						};
+					}
+				}
+			}
+		}
+		Field field = classView.getImportedStaticField(theNames.getFirst());
+		if (field != null)
+			return evaluateField(field, TypeTokens.get().of(field.getGenericType()), null, 1, type);
+		StringBuilder typeName = new StringBuilder().append(theNames.get(0));
+		Class<?> clazz = classView.getType(typeName.toString());
+		int i;
+		for (i = 1; i < theNames.size() - 1; i++) {
+			typeName.append(theNames.get(i));
+			clazz = classView.getType(typeName.toString());
+		}
+		if (clazz == null)
+			throw new QonfigInterpretationException("'" + theNames.get(0) + "' cannot be resolved to a variable ");
+		try {
+			field = clazz.getField(theNames.get(i));
+		} catch (NoSuchFieldException e) {
+			throw new QonfigInterpretationException("'" + theNames.get(i) + "' cannot be resolved or is not a field");
+		} catch (SecurityException e) {
+			throw new QonfigInterpretationException(clazz.getName() + "." + theNames.get(i) + " cannot be accessed", e);
+		}
+		return evaluateField(field, TypeTokens.get().of(field.getGenericType()), null, 1, type);
+	}
+
+	private <M, MV extends M> ObservableModelSet.ValueContainer<M, MV> evaluateModel(ValueContainer<?, ?> mv, int nameIndex,
+		StringBuilder path, ModelInstanceType<M, MV> type, ObservableModelSet models) throws QonfigInterpretationException {
+		if (nameIndex == theNames.size())
+			return models.get(toString(), type);
+		if (mv.getType().getModelType() == ModelTypes.Model) {
+			path.append('.').append(theNames.get(nameIndex));
+			ValueContainer<?, ?> nextMV = models.get(path.toString(), false);
+			if (nextMV != null)
+				return evaluateModel(nextMV, nameIndex + 1, path, type, models);
+			throw new QonfigInterpretationException("'" + theNames.get(nameIndex) + "' cannot be resolved or is not a model value");
+		} else if (mv.getType().getModelType() == ModelTypes.Value) {
+			Field field;
+			try {
+				field = TypeTokens.getRawType(mv.getType().getType(0)).getField(theNames.get(nameIndex));
+			} catch (NoSuchFieldException e) {
+				throw new QonfigInterpretationException(getPath(nameIndex) + "' cannot be resolved or is not a field");
+			} catch (SecurityException e) {
+				throw new QonfigInterpretationException(getPath(nameIndex) + " cannot be accessed", e);
+			}
+			return evaluateField(field, mv.getType().getType(0).resolveType(field.getGenericType()), //
+				msi -> (SettableValue<?>) mv.get(msi), nameIndex + 1, type);
+		} else
+			throw new QonfigInterpretationException(
+				"Cannot evaluate field '" + theNames.get(nameIndex + 1) + "' against model of type " + mv.getType());
+	}
+
+	private <M, MV extends M, F> ValueContainer<M, MV> evaluateField(Field field, TypeToken<F> fieldType,
+		Function<ModelSetInstance, ? extends SettableValue<?>> context, int nameIndex, ModelInstanceType<M, MV> type)
+			throws QonfigInterpretationException {
+		if (!field.isAccessible()) {
+			try {
+				field.setAccessible(true);
+			} catch (SecurityException e) {
+				throw new QonfigInterpretationException("Could not access field " + getPath(nameIndex), e);
+			}
+		}
+		if (nameIndex == theNames.size() - 1) {
+			if (type.getModelType() == ModelTypes.Value) {
+				return ObservableModelSet.<M, MV> container(
+					(Function<ModelSetInstance, MV>) getFieldValue(field, fieldType, context, type.getType(0)),
+					(ModelInstanceType<M, MV>) ModelTypes.Value.forType(fieldType));
+			} else
+				throw new IllegalStateException("Only Value types supported by fields currently"); // TODO
+		}
+		Field newField;
+		try {
+			newField = TypeTokens.getRawType(fieldType).getField(theNames.get(nameIndex));
+		} catch (NoSuchFieldException e) {
+			throw new QonfigInterpretationException(getPath(nameIndex) + "' cannot be resolved or is not a field");
+		} catch (SecurityException e) {
+			throw new QonfigInterpretationException(getPath(nameIndex) + " cannot be accessed", e);
+		}
+		return evaluateField(newField, fieldType.resolveType(newField.getGenericType()), //
+			getFieldValue(field, fieldType, context, null), nameIndex + 1, type);
+	}
+
+	String getPath(int upToIndex) {
+		StringBuilder str = new StringBuilder();
+		for (int i = 0; i <= upToIndex; i++) {
+			if (i > 0)
+				str.append('.');
+			str.append(theNames.get(i));
+		}
+		return str.toString();
+	}
+
+	@Override
+	public String toString() {
+		return StringUtils.print(null, ".", theNames, StringBuilder::append).toString();
+	}
+
+	private <F, M> Function<ModelSetInstance, SettableValue<M>> getFieldValue(Field field, TypeToken<F> fieldType,
+		Function<ModelSetInstance, ? extends SettableValue<?>> context, TypeToken<M> targetType) {
+		if (targetType == null || fieldType.equals(targetType)) {
+			if (context == null)
+				return msi -> (SettableValue<M>) new NameExpression.FieldValue<>(field, fieldType, null, null);
+				return msi -> (SettableValue<M>) context.apply(msi).transformReversible(fieldType, tx -> tx.nullToNull(true).map(ctx -> {
+					try {
+						return (F) field.get(ctx);
+					} catch (IllegalAccessException e) {
+						throw new IllegalStateException("Could not access field " + field.getName(), e);
+					}
+				}).modifySource((ctx, newFieldValue) -> {
+					try {
+						field.set(ctx, newFieldValue);
+					} catch (IllegalAccessException e) {
+						throw new IllegalStateException("Could not access field " + field.getName(), e);
+					}
+				}));
+		} else if (TypeTokens.get().isAssignable(targetType, fieldType)) {
+			Function<F, M> cast = TypeTokens.get().getCast(fieldType, targetType, true);
+			if (TypeTokens.get().isAssignable(fieldType, targetType)) {
+				Function<M, F> reverse = TypeTokens.get().getCast(targetType, fieldType, true);
+				if (context == null)
+					return msi -> (SettableValue<M>) new NameExpression.FieldValue<>(field, fieldType, cast, reverse);
+					return msi -> context.apply(msi).transformReversible(targetType, tx -> tx.nullToNull(true).map(ctx -> {
+						try {
+							return cast.apply((F) field.get(ctx));
+						} catch (IllegalAccessException e) {
+							throw new IllegalStateException("Could not access field " + field.getName(), e);
+						}
+					}).modifySource((ctx, newFieldValue) -> {
+						try {
+							field.set(ctx, reverse.apply(newFieldValue));
+						} catch (IllegalAccessException e) {
+							throw new IllegalStateException("Could not access field " + field.getName(), e);
+						}
+					}));
+			} else {
+				if (context == null)
+					return msi -> (SettableValue<M>) new NameExpression.FieldValue<>(field, fieldType, cast, null);
+					return msi -> (SettableValue<M>) context.apply(msi).transform((TypeToken<Object>) targetType,
+						tx -> tx.nullToNull(true).map(ctx -> {
+							try {
+								return cast.apply((F) field.get(ctx));
+							} catch (IllegalAccessException e) {
+								throw new IllegalStateException("Could not access field " + field.getName(), e);
+							}
+						}));
+			}
+		} else
+			throw new IllegalStateException(
+				"Cannot convert from SettableValue<" + fieldType + "> to SettableValue<" + targetType + ">");
+	}
+
+	@Override
+	public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ObservableModelSet models,
+		ClassView classView) throws QonfigInterpretationException {
+		boolean voidTarget = TypeTokens.get().unwrap(TypeTokens.getRawType(targetType)) == void.class;
+		return new MethodFinder<P1, P2, P3, T>(targetType) {
+			@Override
+			public Function<ModelSetInstance, TriFunction<P1, P2, P3, T>> find3() throws QonfigInterpretationException {
+				ValueContainer<?, ?> mv = models.get(toString(), false);
+				if (mv != null) {
+					for (MethodOption option : theOptions) {
+						switch (option.size()) {
+						case 0:
+							if (mv.getType().getModelType() == ModelTypes.Value) {
+								if (targetType.isAssignableFrom(mv.getType().getType(0))) {
+									// TODO resultType
+									return msi -> (p1, p2, p3) -> ((SettableValue<T>) mv.apply(msi)).get();
+								} else if (TypeTokens.get().isAssignable(targetType, mv.getType().getType(0))) {
+									ValueContainer<?, SettableValue<T>> mv2 = models.get(toString(),
+										ModelTypes.Value.forType(targetType));
+									// TODO resultType
+									return msi -> (p1, p2, p3) -> mv2.apply(msi).get();
+								} else if (Supplier.class.isAssignableFrom(TypeTokens.getRawType(mv.getType().getType(0)))
+									&& TypeTokens.get().isAssignable(targetType,
+										mv.getType().getType(0).resolveType(Supplier.class.getTypeParameters()[0]))) {
+									// TODO resultType
+									return msi -> (p1, p2, p3) -> ((SettableValue<Supplier<? extends T>>) mv.apply(msi)).get().get();
+								} else if (voidTarget
+									&& Runnable.class.isAssignableFrom(TypeTokens.getRawType(mv.getType().getType(0)))) {
+									// TODO resultType
+									return msi -> (p1, p2, p3) -> {
+										((SettableValue<? extends Runnable>) mv.apply(msi)).get().run();
+										return null;
+									};
+								} else
+									continue;
+							} else if (targetType.isAssignableFrom(TypeTokens.get().keyFor(mv.getType().getModelType().modelType)
+								.parameterized(mv.getType().getType(0)))) {
+								// TODO resultType
+								return msi -> (p1, p2, p3) -> (T) mv.apply(msi);
+							} else
+								continue;
+						case 1:
+							if (mv.getType().getModelType() == ModelTypes.Value) {
+								if (Function.class.isAssignableFrom(TypeTokens.getRawType(mv.getType().getType(0)))
+									&& TypeTokens.get().isAssignable(
+										mv.getType().getType(0).resolveType(Function.class.getTypeParameters()[0]), option.resolve(0))//
+									&& TypeTokens.get().isAssignable(targetType,
+										mv.getType().getType(0).resolveType(Function.class.getTypeParameters()[1]))) {
+									// TODO resultType
+									return msi -> (p1, p2, p3) -> {
+										Object[] args = new Object[1];
+										option.getArgMaker().makeArgs(p1, p2, p3, args, msi);
+										return ((SettableValue<Function<Object, ? extends T>>) mv.apply(msi)).get().apply(args[0]);
+									};
+								} else if (voidTarget
+									&& Consumer.class.isAssignableFrom(TypeTokens.getRawType(mv.getType().getType(0)))) {
+									// TODO resultType
+									return msi -> (p1, p2, p3) -> {
+										Object[] args = new Object[1];
+										option.getArgMaker().makeArgs(p1, p2, p3, args, msi);
+										((SettableValue<? extends Consumer<Object>>) mv.apply(msi)).get().accept(args[0]);
+										return null;
+									};
+								} else
+									continue;
+							} else
+								continue;
+						case 2:
+						default:
+							// TODO
+						}
+					}
+				} else if (theNames.size() == 1) {
+					for (Method m : classView.getImportedStaticMethods(theNames.getFirst())) {
+						Method finalM = m;
+						for (MethodOption option : theOptions) {
+							switch (option.size()) {
+							case 0:
+								if (!Modifier.isStatic(m.getModifiers()))
+									continue;
+								switch (m.getParameterTypes().length) {
+								case 0:
+									if (voidTarget || targetType.isAssignableFrom(TypeTokens.get().of(m.getGenericReturnType()))) {
+										// TODO resultType
+										return msi -> (p1, p2, p3) -> {
+											try {
+												return voidTarget ? null : (T) finalM.invoke(null);
+											} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
+												throw new IllegalStateException("Could not invoke " + finalM, e);
+											}
+										};
+									} else
+										continue;
+								default:
+									continue;
+								}
+							case 1:
+							case 2:
+							default:
+								// TODO
+							}
+						}
+					}
+				} else {
+					// TODO evaluate model value for names.length-1, then use that context to find a method
+					Class<?> type = classView.getType(getPath(theNames.size() - 2));
+					if (type != null) {
+						Method[] methods = type.getMethods();
+						for (Method m : methods) {
+							if (!m.getName().equals(theNames.getLast()))
+								continue;
+							if (!Modifier.isStatic(m.getModifiers()))
+								continue;
+							Method finalM = m;
+							for (MethodOption option : theOptions) {
+								switch (option.size()) {
+								case 0:
+									switch (m.getParameterTypes().length) {
+									case 1:
+										if (!m.isVarArgs())
+											continue;
+										//$FALL-THROUGH$
+									case 0:
+										if (voidTarget || targetType.isAssignableFrom(TypeTokens.get().of(m.getGenericReturnType()))) {
+											setResultType((TypeToken<T>) TypeTokens.get().of(m.getGenericReturnType()));
+											return msi -> (p1, p2, p3) -> {
+												try {
+													return voidTarget ? null : (T) finalM.invoke(null,
+														m.isVarArgs() ? new Object[] { new Object[0] } : new Object[0]);
+												} catch (IllegalAccessException | IllegalArgumentException
+													| InvocationTargetException e) {
+													throw new IllegalStateException("Could not invoke " + finalM, e);
+												}
+											};
+										} else
+											continue;
+									default:
+										continue;
+									}
+								case 1:
+									switch (m.getParameterTypes().length) {
+									case 0:
+										continue;
+									case 2:
+										if (!m.isVarArgs())
+											continue;
+										//$FALL-THROUGH$
+									case 1:
+										if (TypeTokens.get().isAssignable(TypeTokens.get().of(m.getGenericParameterTypes()[0]),
+											option.resolve(0))//
+											&& (voidTarget
+												|| targetType.isAssignableFrom(TypeTokens.get().of(m.getGenericReturnType())))) {
+											setResultType((TypeToken<T>) TypeTokens.get().of(m.getGenericReturnType()));
+											return msi -> (p1, p2, p3) -> {
+												try {
+													return voidTarget ? null : (T) finalM.invoke(null,
+														m.isVarArgs() ? new Object[] { p1, new Object[0] } : new Object[] { p1 });
+												} catch (IllegalAccessException | IllegalArgumentException
+													| InvocationTargetException e) {
+													throw new IllegalStateException("Could not invoke " + finalM, e);
+												}
+											};
+										} else
+											continue;
+									default:
+										continue;
+									}
+								case 2:
+								default:
+									// TODO
+								}
+							}
+						}
+					}
+				}
+				throw new QonfigInterpretationException("Could not parse method from " + NameExpression.this.toString());
+			}
+		};
+	}
+
+	public static class FieldValue<M, F> extends Identifiable.AbstractIdentifiable implements SettableValue<F> {
+		private final Field theField;
+		private final TypeToken<F> theType;
+		private final Function<F, M> theCast;
+		private final Function<M, F> theReverse;
+		private final SimpleObservable<ObservableValueEvent<F>> theChanges;
+		private long theStamp;
+
+		FieldValue(Field field, TypeToken<F> type, Function<F, M> cast, Function<M, F> reverse) {
+			theField = field;
+			theType = type;
+			theCast = cast;
+			theReverse = reverse;
+			theChanges = SimpleObservable.build().build();
+		}
+
+		@Override
+		protected Object createIdentity() {
+			return Identifiable.baseId(theField.getName(), theField);
+		}
+
+		@Override
+		public TypeToken<F> getType() {
+			return theType;
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return false;
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return Transaction.NONE;
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, Object cause) {
+			return Transaction.NONE;
+		}
+
+		@Override
+		public F get() {
+			try {
+				return (F) theField.get(null);
+			} catch (IllegalArgumentException | IllegalAccessException e) {
+				throw new IllegalStateException("Could not access field " + theField.getName(), e);
+			}
+		}
+
+		@Override
+		public Observable<ObservableValueEvent<F>> noInitChanges() {
+			return theChanges.readOnly();
+		}
+
+		@Override
+		public long getStamp() {
+			return theStamp;
+		}
+
+		@Override
+		public ObservableValue<String> isEnabled() {
+			if (Modifier.isFinal(theField.getModifiers()))
+				return ObservableValue.of("Final field cannot be assigned");
+			return SettableValue.ALWAYS_ENABLED;
+		}
+
+		@Override
+		public <V extends F> String isAcceptable(V value) {
+			if (Modifier.isFinal(theField.getModifiers()))
+				return "Final field cannot be assigned";
+			return null;
+		}
+
+		@Override
+		public <V extends F> F set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+			F previous;
+			try {
+				previous = (F) theField.get(null);
+				theField.set(null, value);
+			} catch (IllegalAccessException e) {
+				throw new IllegalStateException("Could not access field " + theField.getName(), e);
+			}
+			theChanges.onNext(this.createChangeEvent(previous, value, cause));
+			theStamp++;
+			return null;
+		}
+	}
+}

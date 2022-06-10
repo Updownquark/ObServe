@@ -32,7 +32,6 @@ import javax.swing.border.TitledBorder;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.expresso.ClassView;
-import org.observe.expresso.DefaultExpressoParser;
 import org.observe.expresso.ExpressionValueType;
 import org.observe.expresso.Expresso;
 import org.observe.expresso.ExpressoInterpreter.ExpressoSession;
@@ -41,14 +40,16 @@ import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.expresso.ops.BinaryOperator;
+import org.observe.expresso.ops.BinaryOperatorSet;
 import org.observe.quick.QuickInterpreter.QuickSession;
 import org.observe.quick.style.QuickElementStyle;
 import org.observe.quick.style.QuickElementStyle.QuickElementStyleAttribute;
+import org.observe.quick.style.QuickStyleAttribute;
 import org.observe.quick.style.QuickStyleSet;
 import org.observe.quick.style.QuickStyleSheet;
 import org.observe.quick.style.QuickStyleType;
 import org.observe.quick.style.QuickStyleValue;
-import org.observe.quick.style.QuickStyleAttribute;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.ComponentDecorator.ModifiableLineBorder;
 import org.observe.util.swing.ObservableSwingUtils;
@@ -472,7 +473,7 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 		ObservableExpression newCondition = session.getAttribute("condition", ObservableExpression.class);
 		if (newCondition != null) {
 			if (condition != null)
-				condition = new DefaultExpressoParser.BinaryOperator("&&", condition, newCondition);
+				condition = new BinaryOperator("&&", condition, newCondition, BinaryOperatorSet.STANDARD_JAVA);
 			else
 				condition = newCondition;
 			session.put(STYLE_CONDITION, condition);
@@ -559,7 +560,8 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 							ObservableExpression sc;
 							if (theCondition != null) {
 								if (style.getCondition() != null)
-									sc = new DefaultExpressoParser.BinaryOperator("&&", theCondition, style.getConditionExpression());
+									sc = new BinaryOperator("&&", theCondition, style.getConditionExpression(),
+										BinaryOperatorSet.STANDARD_JAVA);
 								else
 									sc = theCondition;
 							} else

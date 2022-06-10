@@ -75,7 +75,7 @@ public interface ObservableExpression {
 
 		boolean matchesType(int arg, TypeToken<?> paramType) throws QonfigInterpretationException;
 
-		TypeToken<?> resolveFirst() throws QonfigInterpretationException;
+		TypeToken<?> resolve(int arg) throws QonfigInterpretationException;
 	}
 
 	abstract class MethodFinder<P1, P2, P3, T> {
@@ -156,8 +156,8 @@ public interface ObservableExpression {
 		}
 
 		protected class MethodOption implements Args {
-			final TypeToken<?>[] argTypes;
-			final ArgMaker<P1, P2, P3> argMaker;
+			private final TypeToken<?>[] argTypes;
+			private final ArgMaker<P1, P2, P3> argMaker;
 
 			MethodOption(TypeToken<?>[] argTypes, ArgMaker<P1, P2, P3> argMaker) {
 				this.argTypes = argTypes;
@@ -170,8 +170,8 @@ public interface ObservableExpression {
 			}
 
 			@Override
-			public TypeToken<?> resolveFirst() {
-				return argTypes[0];
+			public TypeToken<?> resolve(int arg) throws QonfigInterpretationException {
+				return argTypes[arg];
 			}
 
 			@Override
