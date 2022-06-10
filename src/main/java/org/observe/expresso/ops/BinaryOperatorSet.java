@@ -761,6 +761,21 @@ public class BinaryOperatorSet {
 			withDoubleComparisonOp(">", (s1, s2) -> unwrapD(s1) > unwrapD(s2));
 			withDoubleComparisonOp(">=", (s1, s2) -> unwrapD(s1) >= unwrapD(s2));
 
+			// Bit shifting
+			withIntArithmeticOp("<<", (s1, s2) -> unwrapI(s1) << unwrapI(s2), (s, s2, r) -> unwrapI(r) >>> unwrapI(s2), null);
+			withIntArithmeticOp(">>", (s1, s2) -> unwrapI(s1) >> unwrapI(s2), (s, s2, r) -> unwrapI(r) << unwrapI(s2), null);
+			withIntArithmeticOp(">>", (s1, s2) -> unwrapI(s1) >>> unwrapI(s2), (s, s2, r) -> unwrapI(r) << unwrapI(s2), null);
+			withLongArithmeticOp("<<", (s1, s2) -> unwrapL(s1) << unwrapL(s2), (s, s2, r) -> unwrapL(r) >>> unwrapL(s2), null);
+			withLongArithmeticOp(">>", (s1, s2) -> unwrapL(s1) >> unwrapL(s2), (s, s2, r) -> unwrapL(r) << unwrapL(s2), null);
+			withLongArithmeticOp(">>", (s1, s2) -> unwrapL(s1) >>> unwrapL(s2), (s, s2, r) -> unwrapL(r) << unwrapL(s2), null);
+
+			// Bitwise operators
+			withIntArithmeticOp("|", (s1, s2) -> unwrapI(s1) | unwrapI(s2), (s, s2, r) -> unwrapI(r), (s, s2, r) -> {
+				if ((unwrapI(r) & ~unwrapI(s2)) != 0)
+					return "Invalid bitwise operator reverse";
+				return null;
+			});
+
 			// String append
 			with2("+", String.class, Object.class, String.class, (s1, s2) -> s1 + s2, null, (s, s2, r) -> "Cannot reverse string append");
 			with2("+", Object.class, String.class, String.class, (s1, s2) -> s1 + s2, null, (s, s2, r) -> "Cannot reverse string append");
