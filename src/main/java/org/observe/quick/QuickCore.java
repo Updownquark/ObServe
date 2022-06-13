@@ -114,7 +114,7 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 			try {
 				theValues = get();
 			} finally {
-				stack.remove(this);
+				stack.remove(new IdentityKey<>(this));
 			}
 			return this;
 		}
@@ -276,6 +276,7 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 		ObservableModelSet model = session.interpretChildren("models", ObservableModelSet.class).peekFirst();
 		if (model == null)
 			model = ObservableModelSet.build(ObservableModelSet.JAVA_NAME_CHECKER).build();
+		session.setModels(model);
 		QuickStyleSheet styleSheet;
 		if (session.getChildren("style-sheet").isEmpty())
 			styleSheet = QuickStyleSheet.EMPTY;
@@ -461,7 +462,7 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 			// TODO test for compatibility with the role path, if specified
 			session.put(STYLE_ELEMENT_TYPE, element);
 		}
-		String roleName = session.getAttributeText("role");
+		String roleName = session.getAttributeText("role-path");
 		if (roleName != null) {
 			if (rolePath != null)
 				throw new QonfigInterpretationException("Cannot specify a role (" + roleName + ") if an ancestor style has ("
@@ -497,19 +498,25 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 				else if (attrs.size() > 1)
 					throw new QonfigInterpretationException("Multiple style attributes found matching '" + attrName + "'");
 				attr = attrs.iterator().next();
-			} else if (element == null)
-				throw new QonfigInterpretationException("Cannot specify an attribute without an element for context");
-			else {
+			} else if (element != null) {
 				try {
 					attr = element.getAttribute(attrName);
 				} catch (IllegalArgumentException e) {
 					throw new QonfigInterpretationException(e.getMessage());
 				}
-			}
+			} else if (rolePath != null && !rolePath.isEmpty()) {
+				element = styleSet.styled(rolePath.get(rolePath.size() - 1).getType(), session);
+				try {
+					attr = element.getAttribute(attrName);
+				} catch (IllegalArgumentException e) {
+					throw new QonfigInterpretationException(e.getMessage());
+				}
+			} else
+				throw new QonfigInterpretationException("Cannot specify an attribute without an element for context");
 			session.put(STYLE_ATTRIBUTE, attr);
 		}
 		ObservableExpression value = session.getValue(ObservableExpression.class, null);
-		if (value != null && attr == null)
+		if ((value != null && value != ObservableExpression.EMPTY) && attr == null)
 			throw new QonfigInterpretationException("Cannot specify a style value without an attribute");
 		String styleSetName = session.getAttributeText("style-set");
 		List<QuickStyleValue<?>> styleSetRef;
@@ -537,7 +544,7 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 			@Override
 			protected List<QuickStyleValue<?>> get() throws QonfigInterpretationException {
 				List<QuickStyleValue<?>> values = new ArrayList<>();
-				if (value != null) {
+				if (value != null && value != ObservableExpression.EMPTY) {
 					values.add(new QuickStyleValue<>(styleSheet, theAttr, theElement, theRolePath, theCondition, value,
 						session.getModels(), session.getClassView()));
 				}
@@ -571,7 +578,7 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 						}
 					}
 				}
-				for (StyleValues child : session.interpretChildren("sub-style", StyleValues.class))
+				for (StyleValues child : subStyles)
 					values.addAll(child);
 				return values;
 			}

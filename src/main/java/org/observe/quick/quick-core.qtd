@@ -57,7 +57,7 @@
 
 		<add-on name="element-style" requires="style">
 			<attribute name="element" type="widget-name" specify="forbidden" />
-			<attribute name="role" type="role-path" specify="forbidden" />
+			<attribute name="role-path" type="role-path" specify="forbidden" />
 			<child-mod child="sub-style" inherits="element-style" />
 		</add-on>
 
@@ -105,7 +105,7 @@
 
 		<element-def name="style">
 			<attribute name="element" type="widget-name" specify="optional" />
-			<attribute name="role" type="role-path" specify="optional" />
+			<attribute name="role-path" type="role-path" specify="optional" />
 			<attribute name="attr" type="style-attr" specify="optional" />
 			<attribute name="condition" type="expression" specify="optional" />
 			<attribute name="style-set" type="string" specify="optional" />
