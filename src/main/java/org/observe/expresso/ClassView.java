@@ -48,6 +48,10 @@ public class ClassView {
 		return Collections.emptyList();
 	}
 
+	/**
+	 * @param typeName The name to get the type for
+	 * @return The type corresponding to the given name, or null if no such type could be found in this view
+	 */
 	public Class<?> getType(String typeName) {
 		Class<?> type;
 		if (theTypeCache == null)

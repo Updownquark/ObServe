@@ -18,9 +18,12 @@ import org.observe.expresso.Expression.ExpressoParseException;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.expresso.ops.ArrayAccessExpression;
 import org.observe.expresso.ops.AssignmentExpression;
 import org.observe.expresso.ops.BinaryOperator;
 import org.observe.expresso.ops.BinaryOperatorSet;
+import org.observe.expresso.ops.CastExpression;
+import org.observe.expresso.ops.ClassInstanceExpression;
 import org.observe.expresso.ops.ConditionalExpression;
 import org.observe.expresso.ops.ConstructorInvocation;
 import org.observe.expresso.ops.InstanceofExpression;
@@ -131,26 +134,32 @@ public class DefaultExpressoParser implements ExpressoParser {
 						throw new ExpressoParseException(creator, "Constructor invocation type parameters are not supported");
 					else if (creator.getComponent("classCreatorRest", "classBody") != null)
 						throw new ExpressoParseException(creator, "Anonymous inner classes are not supported");
-					StringBuilder typeName = new StringBuilder();
-					typeArgs = null;
-					for (Expression ch : creator.getComponent("createdName").getComponents()) {
-						if ("typeArgumentsOrDiamond".equals(ch.getType())) {
-							typeArgs = new ArrayList<>();
-							for (Expression t : ch.getComponents("typeArguments", "typeArgument"))
-								typeArgs.add(t.getText());
-						} else if (typeArgs != null)
-							throw new ExpressoParseException(expression, "Non-static member constructors are not supported yet");
-						else {
-							if (typeName.length() > 0)
-								typeName.append('.');
-							typeName.append(ch.getText());
+					else {
+						StringBuilder typeName = new StringBuilder();
+						typeArgs = null;
+						for (Expression ch : creator.getComponent("createdName").getComponents()) {
+							if ("typeArgumentsOrDiamond".equals(ch.getType())) {
+								typeArgs = new ArrayList<>();
+								for (Expression t : ch.getComponents("typeArguments", "typeArgument"))
+									typeArgs.add(t.getText());
+							} else if (typeArgs != null)
+								throw new ExpressoParseException(expression, "Non-static member constructors are not supported yet");
+							else {
+								if (typeName.length() > 0)
+									typeName.append('.');
+								typeName.append(ch.getText());
+							}
+						}
+						if (creator.getComponent("arrayCreatorRest") != null) {
+							throw new ExpressoParseException(expression, "Array creation is not yet implemented"); // TODO
+						} else {
+							args = new ArrayList<>();
+							for (Expression arg : creator.getComponents("classCreatorRest", "arguments", "expressionList", "expression")) {
+								args.add(_parse(arg));
+							}
+							return new ConstructorInvocation(typeName.toString(), typeArgs, args);
 						}
 					}
-					args = new ArrayList<>();
-					for (Expression arg : creator.getComponents("classCreatorRest", "arguments", "expressionList", "expression")) {
-						args.add(_parse(arg));
-					}
-					return new ConstructorInvocation(typeName.toString(), typeArgs, args);
 				}
 				switch (expression.getComponents().getLast().getText()) {
 				case "++":
@@ -160,6 +169,11 @@ public class DefaultExpressoParser implements ExpressoParser {
 				}
 				throw new IllegalStateException("Unhandled expression type: " + expression.getType() + " " + expression);
 			default:
+				if ("(".equals(expression.getComponents().getFirst().getText())) {
+					String type = parseType(expression);
+					ObservableExpression value = _parse(expression.getComponents().getLast());
+					return new CastExpression(value, type);
+				}
 				switch (expression.getComponents().get(1).getText()) {
 				case ".":
 					ObservableExpression context = _parse(expression.getComponents().getFirst());
@@ -228,13 +242,16 @@ public class DefaultExpressoParser implements ExpressoParser {
 					return new BinaryOperator(expression.getComponents().get(1).getText(), left, right, theBinaryOperators);
 				case "instanceof":
 					left = _parse(expression.getComponents().getFirst());
-					String type = expression.getComponents().getLast().getText();
-					return new InstanceofExpression(left, type);
+					return new InstanceofExpression(left, parseType(expression.getComponents().getLast()));
 				case "?":
 					ObservableExpression condition = _parse(expression.getComponents().getFirst());
 					ObservableExpression primary = _parse(expression.getComponents().get(2));
 					ObservableExpression secondary = _parse(expression.getComponents().getLast());
 					return new ConditionalExpression(condition, primary, secondary);
+				case "[":
+					ObservableExpression array = _parse(expression.getComponents().getFirst());
+					ObservableExpression index = _parse(expression.getComponents().get(2));
+					return new ArrayAccessExpression(array, index);
 				case "::":
 					context = _parse(expression.getComponents().getFirst());
 					if (expression.getComponent("typeArguments") != null) {
@@ -272,14 +289,8 @@ public class DefaultExpressoParser implements ExpressoParser {
 				case ")":
 					return _parse(expression.getComponents().get(1));
 				case "class":
-					// TODO This is not good, because it should use the class view at evaluation time to get the type
 					child = expression.getComponents().getFirst();
-					try {
-						return literalExpression(expression, TypeTokens.get().parseType(child.getText()));
-					} catch (ParseException e) {
-						throw new ExpressoParseException(child.getStartIndex() + e.getErrorOffset(), child.getEndIndex(), child.getType(),
-							child.getText(), e.getMessage());
-					}
+					return new ClassInstanceExpression(parseType(child));
 				}
 				break;
 			}
@@ -525,7 +536,7 @@ public class DefaultExpressoParser implements ExpressoParser {
 					throw new ExpressoParseException(target, "'super' is not allowed");
 				else if ("super".equals(expression.getComponents().get(1).toString()))
 					throw new ExpressoParseException(expression.getComponents().get(1), "'super' is not allowed");
-				else // TODO Failed to account for static method invocation (with type context) here
+				else // T O D O Failed to account for static method invocation (with type context) here
 					context = parseOld(target);
 			}
 			List<String> typeArgs;
@@ -1036,5 +1047,31 @@ public class DefaultExpressoParser implements ExpressoParser {
 		public String toString() {
 			return theExpression.toString();
 		}
+	}
+
+	public static String parseType(Expression expression) throws ExpressoParseException {
+		BetterList<Expression> typeType = expression.getComponents("typeType");
+		if (typeType.isEmpty())
+			typeType = expression.getComponents("pattern", "typeType");
+		if (typeType.isEmpty())
+			throw new ExpressoParseException(expression, "Unrecognized type expression");
+		else if (typeType.size() > 1)
+			throw new ExpressoParseException(expression, "Unsupported multi-type expression");
+		Expression typeName = typeType.getFirst().getComponent("classOrInterfaceType");
+		if (typeName == null)
+			typeName = typeType.getFirst().getComponent("primitiveType");
+		if (typeName == null)
+			throw new ExpressoParseException(expression, "Unrecognized type expression");
+		int arrayDim = 0;
+		for (Expression child : typeType.getFirst().getComponents()) {
+			if ("[".equals(child.getText()))
+				arrayDim++;
+		}
+		if (arrayDim == 0)
+			return typeName.getText();
+		StringBuilder type = new StringBuilder(typeName.getText());
+		for (int i = 0; i < arrayDim; i++)
+			type.append("[]");
+		return type.toString();
 	}
 }

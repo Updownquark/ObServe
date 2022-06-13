@@ -1,5 +1,6 @@
 package org.observe.expresso.ops;
 
+import java.text.ParseException;
 import java.util.Collections;
 import java.util.List;
 
@@ -24,6 +25,14 @@ public class InstanceofExpression implements ObservableExpression {
 		theType = type;
 	}
 
+	public ObservableExpression getLeft() {
+		return theLeft;
+	}
+
+	public String getType() {
+		return theType;
+	}
+
 	@Override
 	public List<? extends ObservableExpression> getChildren() {
 		return Collections.singletonList(theLeft);
@@ -35,7 +44,12 @@ public class InstanceofExpression implements ObservableExpression {
 		if (type.getModelType() != ModelTypes.Value && !TypeTokens.get().isAssignable(type.getType(0), TypeTokens.get().BOOLEAN))
 			throw new QonfigInterpretationException("instanceof expressions can only be evaluated to Value<Boolean>");
 		ValueContainer<SettableValue, SettableValue<?>> leftValue = theLeft.evaluate(ModelTypes.Value.any(), models, classView);
-		Class<?> testType = classView.getType(theType);
+		Class<?> testType;
+		try {
+			testType = TypeTokens.getRawType(TypeTokens.get().parseType(theType));
+		} catch (ParseException e) {
+			throw new QonfigInterpretationException(e.getMessage(), e);
+		}
 		ValueContainer<SettableValue, SettableValue<Boolean>> container = leftValue.map(ModelTypes.Value.forType(boolean.class),
 			(lv, msi) -> {
 				return SettableValue.asSettable(lv.map(TypeTokens.get().BOOLEAN, v -> v != null && testType.isInstance(v)),
