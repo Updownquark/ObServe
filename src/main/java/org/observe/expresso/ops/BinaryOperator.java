@@ -14,6 +14,7 @@ import org.observe.Transformation.ReverseQueryResult;
 import org.observe.Transformation.TransformReverse;
 import org.observe.Transformation.TransformationValues;
 import org.observe.expresso.ClassView;
+import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
@@ -34,13 +35,11 @@ public class BinaryOperator implements ObservableExpression {
 	private final String theOperator;
 	private final ObservableExpression theLeft;
 	private final ObservableExpression theRight;
-	private final BinaryOperatorSet theOperatorSet;
 
-	public BinaryOperator(String operator, ObservableExpression left, ObservableExpression right, BinaryOperatorSet operatorSet) {
+	public BinaryOperator(String operator, ObservableExpression left, ObservableExpression right) {
 		theOperator = operator;
 		theLeft = left;
 		theRight = right;
-		theOperatorSet = operatorSet;
 	}
 
 	public String getOperator() {
@@ -61,8 +60,8 @@ public class BinaryOperator implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ObservableModelSet models,
-		ClassView classView) throws QonfigInterpretationException {
+	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
+		throws QonfigInterpretationException {
 		boolean action = theOperator.charAt(theOperator.length() - 1) == '=';
 		if (action) {
 			switch (theOperator) {
@@ -75,7 +74,7 @@ public class BinaryOperator implements ObservableExpression {
 			}
 		}
 		String operator = action ? theOperator.substring(0, theOperator.length() - 1) : theOperator;
-		Set<Class<?>> types = theOperatorSet.getSupportedSourceTypes(operator);
+		Set<Class<?>> types = env.getBinaryOperators().getSupportedSourceTypes(operator);
 		TypeToken<?> targetOpType;
 		switch (types.size()) {
 		case 0:
@@ -87,10 +86,9 @@ public class BinaryOperator implements ObservableExpression {
 			targetOpType = TypeTokens.get().WILDCARD;
 			break;
 		}
-		ValueContainer<SettableValue, ? extends SettableValue<?>> left = theLeft.evaluate(ModelTypes.Value.forType(targetOpType), models,
-			classView);
+		ValueContainer<SettableValue, ? extends SettableValue<?>> left = theLeft.evaluate(ModelTypes.Value.forType(targetOpType), env);
 		Class<?> leftType = TypeTokens.getRawType(left.getType().getType(0));
-		types = theOperatorSet.getSupportedOperandTypes(operator, leftType);
+		types = env.getBinaryOperators().getSupportedOperandTypes(operator, leftType);
 		switch (types.size()) {
 		case 0:
 			throw new QonfigInterpretationException(
@@ -102,9 +100,8 @@ public class BinaryOperator implements ObservableExpression {
 			targetOpType = TypeTokens.get().WILDCARD;
 			break;
 		}
-		ValueContainer<SettableValue, ? extends SettableValue<?>> right = theRight.evaluate(ModelTypes.Value.forType(targetOpType), models,
-			classView);
-		BinaryOp<Object, Object, Object> op = (BinaryOp<Object, Object, Object>) theOperatorSet.getOperator(operator, leftType, //
+		ValueContainer<SettableValue, ? extends SettableValue<?>> right = theRight.evaluate(ModelTypes.Value.forType(targetOpType), env);
+		BinaryOp<Object, Object, Object> op = (BinaryOp<Object, Object, Object>) env.getBinaryOperators().getOperator(operator, leftType, //
 			TypeTokens.getRawType(right.getType().getType(0)));
 		if (op == null)
 			throw new QonfigInterpretationException(
@@ -207,12 +204,12 @@ public class BinaryOperator implements ObservableExpression {
 		}
 	}
 
-	private <M, MV extends M> ValueContainer<M, MV> oldEvaluate(ModelInstanceType<M, MV> type, ObservableModelSet models,
-		ClassView classView) throws QonfigInterpretationException {
+	private <M, MV extends M> ValueContainer<M, MV> oldEvaluate(ModelInstanceType<M, MV> type, ExpressoEnv env)
+		throws QonfigInterpretationException {
 		if (type.getModelType() != ModelTypes.Value)
 			throw new QonfigInterpretationException("Cannot evaluate a binary operator as anything but a value: " + type);
-		ValueContainer<SettableValue, SettableValue<?>> left = theLeft.evaluate(ModelTypes.Value.any(), models, classView);
-		ValueContainer<SettableValue, SettableValue<?>> right = theRight.evaluate(ModelTypes.Value.any(), models, classView);
+		ValueContainer<SettableValue, SettableValue<?>> left = theLeft.evaluate(ModelTypes.Value.any(), env);
+		ValueContainer<SettableValue, SettableValue<?>> right = theRight.evaluate(ModelTypes.Value.any(), env);
 		TypeToken<?> resultType = TypeTokens.get().getCommonType(left.getType().getType(0), right.getType().getType(0));
 		Class<?> rawResult = TypeTokens.get().unwrap(TypeTokens.getRawType(resultType));
 		// & | && || ^ + - * / % == != < > <= >= << >> >>>
@@ -807,8 +804,8 @@ public class BinaryOperator implements ObservableExpression {
 	}
 
 	@Override
-	public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ObservableModelSet models,
-		ClassView classView) throws QonfigInterpretationException {
+	public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ExpressoEnv env)
+		throws QonfigInterpretationException {
 		throw new QonfigInterpretationException("Not supported for binary operators");
 	}
 

@@ -15,7 +15,7 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
-import org.observe.expresso.ClassView;
+import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
@@ -62,16 +62,16 @@ public class NameExpression implements ObservableExpression {
 	 */
 
 	@Override
-	public <M, MV extends M> ObservableModelSet.ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
-		ObservableModelSet models, ClassView classView) throws QonfigInterpretationException {
+	public <M, MV extends M> ObservableModelSet.ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
+		throws QonfigInterpretationException {
 		ValueContainer<?, ?> mv = null;
 		if (theContext != null)
-			mv = theContext.evaluate(ModelTypes.Value.any(), models, classView);
+			mv = theContext.evaluate(ModelTypes.Value.any(), env);
 		if (mv == null)
-			mv = models.get(theNames.getFirst(), false);
+			mv = env.getModels().get(theNames.getFirst(), false);
 		if (mv != null)
 			return evaluateModel(//
-				mv, 1, new StringBuilder(theNames.get(0)), type, models);
+				mv, 1, new StringBuilder(theNames.get(0)), type, env.getModels());
 		// Allow unqualified enum value references
 		if (theNames.size() == 1 && type.getModelType() == ModelTypes.Value) {
 			Class<?> paramType = TypeTokens.getRawType(type.getType(0));
@@ -96,15 +96,15 @@ public class NameExpression implements ObservableExpression {
 				}
 			}
 		}
-		Field field = classView.getImportedStaticField(theNames.getFirst());
+		Field field = env.getClassView().getImportedStaticField(theNames.getFirst());
 		if (field != null)
 			return evaluateField(field, TypeTokens.get().of(field.getGenericType()), null, 1, type);
 		StringBuilder typeName = new StringBuilder().append(theNames.get(0));
-		Class<?> clazz = classView.getType(typeName.toString());
+		Class<?> clazz = env.getClassView().getType(typeName.toString());
 		int i;
 		for (i = 1; i < theNames.size() - 1; i++) {
 			typeName.append(theNames.get(i));
-			clazz = classView.getType(typeName.toString());
+			clazz = env.getClassView().getType(typeName.toString());
 		}
 		if (clazz == null)
 			throw new QonfigInterpretationException("'" + theNames.get(0) + "' cannot be resolved to a variable ");
@@ -244,13 +244,13 @@ public class NameExpression implements ObservableExpression {
 	}
 
 	@Override
-	public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ObservableModelSet models,
-		ClassView classView) throws QonfigInterpretationException {
+	public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ExpressoEnv env)
+		throws QonfigInterpretationException {
 		boolean voidTarget = TypeTokens.get().unwrap(TypeTokens.getRawType(targetType)) == void.class;
 		return new MethodFinder<P1, P2, P3, T>(targetType) {
 			@Override
 			public Function<ModelSetInstance, TriFunction<P1, P2, P3, T>> find3() throws QonfigInterpretationException {
-				ValueContainer<?, ?> mv = models.get(toString(), false);
+				ValueContainer<?, ?> mv = env.getModels().get(toString(), false);
 				if (mv != null) {
 					for (MethodOption option : theOptions) {
 						switch (option.size()) {
@@ -260,7 +260,7 @@ public class NameExpression implements ObservableExpression {
 									// TODO resultType
 									return msi -> (p1, p2, p3) -> ((SettableValue<T>) mv.apply(msi)).get();
 								} else if (TypeTokens.get().isAssignable(targetType, mv.getType().getType(0))) {
-									ValueContainer<?, SettableValue<T>> mv2 = models.get(toString(),
+									ValueContainer<?, SettableValue<T>> mv2 = env.getModels().get(toString(),
 										ModelTypes.Value.forType(targetType));
 									// TODO resultType
 									return msi -> (p1, p2, p3) -> mv2.apply(msi).get();
@@ -316,7 +316,7 @@ public class NameExpression implements ObservableExpression {
 						}
 					}
 				} else if (theNames.size() == 1) {
-					for (Method m : classView.getImportedStaticMethods(theNames.getFirst())) {
+					for (Method m : env.getClassView().getImportedStaticMethods(theNames.getFirst())) {
 						Method finalM = m;
 						for (MethodOption option : theOptions) {
 							switch (option.size()) {
@@ -348,7 +348,7 @@ public class NameExpression implements ObservableExpression {
 					}
 				} else {
 					// TODO evaluate model value for names.length-1, then use that context to find a method
-					Class<?> type = classView.getType(getPath(theNames.size() - 2));
+					Class<?> type = env.getClassView().getType(getPath(theNames.size() - 2));
 					if (type != null) {
 						Method[] methods = type.getMethods();
 						for (Method m : methods) {

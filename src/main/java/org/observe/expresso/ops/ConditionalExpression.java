@@ -6,14 +6,10 @@ import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSet;
-import org.observe.expresso.ClassView;
-import org.observe.expresso.ModelType;
+import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelSet;
-import org.observe.expresso.ModelType.ModelInstanceType;
-import org.observe.expresso.ObservableExpression.LiteralExpression;
-import org.observe.expresso.ObservableExpression.MethodFinder;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
@@ -51,17 +47,17 @@ public class ConditionalExpression implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ObservableModelSet models,
-		ClassView classView) throws QonfigInterpretationException {
+	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
+		throws QonfigInterpretationException {
 		if (type != null && (type.getModelType() == ModelTypes.Value || type.getModelType() == ModelTypes.Collection
 			|| type.getModelType() == ModelTypes.Set)) {//
 		} else
 			throw new QonfigInterpretationException(
 				"Conditional expressions not supported for model type " + type.getModelType() + " (" + this + ")");
 		ValueContainer<SettableValue, SettableValue<Boolean>> conditionV = theCondition.evaluate(//
-			ModelTypes.Value.forType(boolean.class), models, classView);
-		ValueContainer<M, MV> primaryV = thePrimary.evaluate(type, models, classView);
-		ValueContainer<M, MV> secondaryV = theSecondary.evaluate(type, models, classView);
+			ModelTypes.Value.forType(boolean.class), env);
+		ValueContainer<M, MV> primaryV = thePrimary.evaluate(type, env);
+		ValueContainer<M, MV> secondaryV = theSecondary.evaluate(type, env);
 		// TODO reconcile compatible model types, like Collection and Set
 		if (primaryV.getType().getModelType() != secondaryV.getType().getModelType())
 			throw new QonfigInterpretationException("Incompatible expressions: " + thePrimary + ", evaluated to " + primaryV.getType()
@@ -144,8 +140,8 @@ public class ConditionalExpression implements ObservableExpression {
 	}
 
 	@Override
-	public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ObservableModelSet models,
-		ClassView classView) throws QonfigInterpretationException {
+	public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ExpressoEnv env)
+		throws QonfigInterpretationException {
 		throw new QonfigInterpretationException("Not supported for conditionals");
 	}
 

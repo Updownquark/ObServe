@@ -16,14 +16,11 @@ import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSet;
-import org.observe.expresso.ClassView;
-import org.observe.expresso.ModelType;
-import org.observe.expresso.ModelTypes;
-import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelSet;
+import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelType.ModelInstanceType.SingleTyped;
-import org.observe.expresso.ObservableExpression.Args;
+import org.observe.expresso.ModelTypes;
+import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
@@ -50,25 +47,23 @@ public abstract class Invocation implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ObservableModelSet models,
-		ClassView classView) throws QonfigInterpretationException {
+	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
+		throws QonfigInterpretationException {
 		TypeToken<?> targetType;
 		if (type.getModelType() == ModelTypes.Action || type.getModelType() == ModelTypes.Value)
 			targetType = type.getType(0);
 		else
 			targetType = TypeTokens.get().keyFor(type.getModelType().modelType).parameterized(type.getTypeList());
-		return evaluateInternal2(type, models, classView, new ArgOption(models, classView), targetType);
+		return evaluateInternal2(type, env, new ArgOption(env), targetType);
 	}
 
 	protected class ArgOption implements Args {
-		final ObservableModelSet theModels;
-		final ClassView theClassView;
+		final ExpressoEnv theEnv;
 		public final List<ValueContainer<SettableValue, SettableValue<?>>>[] args;
 		private final ValueContainer<SettableValue, SettableValue<?>>[] resolved;
 
-		ArgOption(ObservableModelSet models, ClassView classView) {
-			theModels = models;
-			theClassView = classView;
+		ArgOption(ExpressoEnv env) {
+			theEnv = env;
 			args = new List[theArguments.size()];
 			resolved = new ValueContainer[theArguments.size()];
 			for (int a = 0; a < theArguments.size(); a++)
@@ -94,7 +89,7 @@ public abstract class Invocation implements ObservableExpression {
 			}
 			// Not found, try to evaluate it
 			c = (ValueContainer<SettableValue, SettableValue<?>>) (ValueContainer<?, ?>) theArguments.get(arg)
-				.evaluate(ModelTypes.Value.forType(paramType), theModels, theClassView);
+				.evaluate(ModelTypes.Value.forType(paramType), theEnv);
 			args[arg].add(0, c);
 			return true;
 		}
@@ -102,13 +97,13 @@ public abstract class Invocation implements ObservableExpression {
 		@Override
 		public TypeToken<?> resolve(int arg) throws QonfigInterpretationException {
 			if (resolved[arg] == null)
-				resolved[arg] = theArguments.get(arg).evaluate(ModelTypes.Value.any(), theModels, theClassView);
+				resolved[arg] = theArguments.get(arg).evaluate(ModelTypes.Value.any(), theEnv);
 			return resolved[arg].getType().getType(0);
 		}
 	}
 
-	protected abstract <M, MV extends M> ValueContainer<M, MV> evaluateInternal2(ModelInstanceType<M, MV> type, ObservableModelSet models,
-		ClassView classView, ArgOption args, TypeToken<?> targetType) throws QonfigInterpretationException;
+	protected abstract <M, MV extends M> ValueContainer<M, MV> evaluateInternal2(ModelInstanceType<M, MV> type, ExpressoEnv env,
+		ArgOption args, TypeToken<?> targetType) throws QonfigInterpretationException;
 
 	public static String printSignature(Executable method) {
 		StringBuilder str = new StringBuilder(method.getName()).append('(');
@@ -128,8 +123,8 @@ public abstract class Invocation implements ObservableExpression {
 	}
 
 	public static <M extends Executable, T> Invocation.MethodResult<M, ? extends T> findMethod(M[] methods, String methodName,
-		TypeToken<?> contextType, boolean arg0Context, List<? extends Args> argOptions, TypeToken<T> targetType, ObservableModelSet models,
-		ClassView classView, ExecutableImpl<M> impl) throws QonfigInterpretationException {
+		TypeToken<?> contextType, boolean arg0Context, List<? extends Args> argOptions, TypeToken<T> targetType, ExpressoEnv env,
+		ExecutableImpl<M> impl) throws QonfigInterpretationException {
 		Class<T> rawTarget = TypeTokens.get().wrap(TypeTokens.getRawType(targetType));
 		boolean voidTarget = rawTarget == Void.class;
 		for (M m : methods) {

@@ -2,17 +2,21 @@ package org.observe.quick;
 
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Font;
 import java.awt.Image;
+import java.awt.font.TextAttribute;
 import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.text.AttributedCharacterIterator;
 import java.text.ParseException;
 import java.util.AbstractList;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -34,6 +38,7 @@ import org.observe.SettableValue;
 import org.observe.expresso.ClassView;
 import org.observe.expresso.ExpressionValueType;
 import org.observe.expresso.Expresso;
+import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ExpressoInterpreter.ExpressoSession;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
@@ -41,7 +46,6 @@ import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.expresso.ops.BinaryOperator;
-import org.observe.expresso.ops.BinaryOperatorSet;
 import org.observe.quick.QuickInterpreter.QuickSession;
 import org.observe.quick.style.QuickElementStyle;
 import org.observe.quick.style.QuickElementStyle.QuickElementStyleAttribute;
@@ -71,8 +75,8 @@ import org.qommons.config.QonfigToolkit;
 import org.qommons.config.QonfigToolkitAccess;
 
 public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
-	public static final QonfigToolkitAccess CORE = new QonfigToolkitAccess(QuickCore.class, "quick-core.qtd",
-		Expresso.EXPRESSO).withCustomValueType(//
+	public static final QonfigToolkitAccess CORE = new QonfigToolkitAccess(QuickCore.class, "quick-core.qtd", Expresso.EXPRESSO)
+		.withCustomValueType(//
 			new QuickPosition.PositionValueType(Expresso.EXPRESSION_PARSER), //
 			new QuickSize.SizeValueType(Expresso.EXPRESSION_PARSER));
 
@@ -136,8 +140,8 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 		}
 	}
 
-	public static Function<ModelSetInstance, SettableValue<Color>> parseColor(ObservableExpression expression, ObservableModelSet model,
-		ClassView cv) throws QonfigInterpretationException {
+	public static Function<ModelSetInstance, SettableValue<Color>> parseColor(ObservableExpression expression, ExpressoEnv env)
+		throws QonfigInterpretationException {
 		if (expression == null)
 			return null;
 		Function<ModelSetInstance, SettableValue<Color>> colorValue;
@@ -151,14 +155,14 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 			}
 		};
 		if (expression instanceof ExpressionValueType.Literal)
-			colorValue = expression.evaluate(ModelTypes.Value.forType(String.class), model, cv)//
+			colorValue = expression.evaluate(ModelTypes.Value.forType(String.class), env)//
 			.andThen(v -> SettableValue.asSettable(v.map(colorParser), __ -> "Cannot reverse color"));
 		else {
 			try {
-				colorValue = expression.evaluate(ModelTypes.Value.forType(Color.class), model, cv);
+				colorValue = expression.evaluate(ModelTypes.Value.forType(Color.class), env);
 			} catch (QonfigInterpretationException e1) {
 				// If it doesn't parse as a java color, parse it as a string and then parse that as a color
-				colorValue = expression.evaluate(ModelTypes.Value.forType(String.class), model, cv)//
+				colorValue = expression.evaluate(ModelTypes.Value.forType(String.class), env)//
 					.andThen(v -> SettableValue.asSettable(v.map(colorParser), __ -> "Cannot reverse color"));
 			}
 		}
@@ -166,7 +170,7 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 	}
 
 	public static Function<ModelSetInstance, SettableValue<QuickPosition>> parsePosition(ObservableExpression expression,
-		ObservableModelSet model, ClassView cv) throws QonfigInterpretationException {
+		ExpressoEnv env) throws QonfigInterpretationException {
 		if (expression == null)
 			return null;
 		Function<ModelSetInstance, SettableValue<QuickPosition>> positionValue;
@@ -181,20 +185,20 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 			}
 		};
 		if (expression instanceof ExpressionValueType.Literal)
-			positionValue = expression.evaluate(ModelTypes.Value.forType(String.class), model, cv)//
+			positionValue = expression.evaluate(ModelTypes.Value.forType(String.class), env)//
 			.andThen(v -> SettableValue.asSettable(v.map(colorParser), __ -> "Cannot reverse position"));
 		else {
 			try {
-				positionValue = expression.evaluate(ModelTypes.Value.forType(QuickPosition.class), model, cv);
+				positionValue = expression.evaluate(ModelTypes.Value.forType(QuickPosition.class), env);
 			} catch (QonfigInterpretationException e1) {
 				// If it doesn't parse as a position, try parsing as a number.
 				try {
-					positionValue = expression.evaluate(ModelTypes.Value.forType(int.class), model, cv)//
+					positionValue = expression.evaluate(ModelTypes.Value.forType(int.class), env)//
 						.andThen(v -> v.transformReversible(QuickPosition.class, tx -> tx
 							.map(d -> new QuickPosition(d, QuickPosition.PositionUnit.Pixels)).withReverse(pos -> Math.round(pos.value))));
 				} catch (QonfigInterpretationException e2) {
 					// If it doesn't parse as a position or a number, try parsing as a string and then parse that as a position
-					positionValue = expression.evaluate(ModelTypes.Value.forType(String.class), model, cv)//
+					positionValue = expression.evaluate(ModelTypes.Value.forType(String.class), env)//
 						.andThen(v -> v.transformReversible(QuickPosition.class,
 							tx -> tx.map(colorParser).withReverse(QuickPosition::toString)));
 				}
@@ -204,9 +208,9 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 	}
 
 	public static Function<ModelSetInstance, SettableValue<Icon>> parseIcon(ObservableExpression expression, ExpressoSession<?> session,
-		ObservableModelSet model, ClassView cv) throws QonfigInterpretationException {
+		ExpressoEnv env) throws QonfigInterpretationException {
 		if (expression != null) {
-			ValueContainer<SettableValue, SettableValue<?>> iconV = expression.evaluate(ModelTypes.Value.any(), model, cv);
+			ValueContainer<SettableValue, SettableValue<?>> iconV = expression.evaluate(ModelTypes.Value.any(), env);
 			Class<?> iconType = TypeTokens.getRawType(iconV.getType().getType(0));
 			if (Icon.class.isAssignableFrom(iconType))
 				return (Function<ModelSetInstance, SettableValue<Icon>>) (ValueContainer<?, ?>) iconV;
@@ -243,6 +247,7 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 		.createWith("head", QuickHeadSection.class, this::interpretHead)//
 		.modifyWith("window", QuickDocument.class, this::modifyWindow)//
 		.modifyWith("widget", QuickComponentDef.class, this::modifyWidget)//
+		.modifyWith("text-widget", QuickComponentDef.class, this::modifyTextWidget)//
 		.createWith("line-border", QuickBorder.class, this::interpretLineBorder)//
 		.createWith("titled-border", QuickBorder.class, this::interpretTitledBorder)//
 		;
@@ -259,8 +264,7 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 
 	private QuickDocument interpretQuick(QIS session) throws QonfigInterpretationException {
 		QuickHeadSection head = session.interpretChildren("head", QuickHeadSection.class).getFirst();
-		session.setClassView(head.getImports());
-		session.setModels(head.getModels());
+		session.setModels(head.getModels(), head.getImports());
 		session.setStyleSheet(head.getStyleSheet());
 		session.put(STYLE_SHEET, head.getStyleSheet());
 		QuickDocument doc = new QuickDocument.QuickDocumentImpl(session.getElement(), head, //
@@ -272,11 +276,11 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 		ClassView cv = session.interpretChildren("imports", ClassView.class).peekFirst();
 		if (cv == null)
 			cv = ClassView.build().withWildcardImport("java.lang").build();
-		session.setClassView(cv);
+		session.setModels(null, cv);
 		ObservableModelSet model = session.interpretChildren("models", ObservableModelSet.class).peekFirst();
 		if (model == null)
 			model = ObservableModelSet.build(ObservableModelSet.JAVA_NAME_CHECKER).build();
-		session.setModels(model);
+		session.setModels(model, null);
 		QuickStyleSheet styleSheet;
 		if (session.getChildren("style-sheet").isEmpty())
 			styleSheet = QuickStyleSheet.EMPTY;
@@ -287,23 +291,22 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 	}
 
 	private QuickDocument modifyWindow(QuickDocument doc, QIS session) throws QonfigInterpretationException {
-		ObservableModelSet model = doc.getHead().getModels();
 		ObservableExpression visibleEx = session.getAttribute("visible", ObservableExpression.class);
 		if (visibleEx != null)
 			doc.setVisible(
-				visibleEx.evaluate(ModelTypes.Value.forType(Boolean.class), doc.getHead().getModels(), doc.getHead().getImports()));
+				visibleEx.evaluate(ModelTypes.Value.forType(Boolean.class), session.getExpressoEnv()));
 		ObservableExpression titleEx = session.getAttribute("title", ObservableExpression.class);
 		if (titleEx != null)
-			doc.setTitle(titleEx.evaluate(ModelTypes.Value.forType(String.class), model, doc.getHead().getImports()));
+			doc.setTitle(titleEx.evaluate(ModelTypes.Value.forType(String.class), session.getExpressoEnv()));
 		doc.withBounds(//
 			session.interpretAttribute("x", ObservableExpression.class, true,
-				ex -> ex.evaluate(ModelTypes.Value.forType(Integer.class), model, doc.getHead().getImports())), //
+				ex -> ex.evaluate(ModelTypes.Value.forType(Integer.class), session.getExpressoEnv())), //
 			session.interpretAttribute("y", ObservableExpression.class, true,
-				ex -> ex.evaluate(ModelTypes.Value.forType(Integer.class), model, doc.getHead().getImports())), //
+				ex -> ex.evaluate(ModelTypes.Value.forType(Integer.class), session.getExpressoEnv())), //
 			session.interpretAttribute("width", ObservableExpression.class, true,
-				ex -> ex.evaluate(ModelTypes.Value.forType(Integer.class), model, doc.getHead().getImports())), //
+				ex -> ex.evaluate(ModelTypes.Value.forType(Integer.class), session.getExpressoEnv())), //
 			session.interpretAttribute("height", ObservableExpression.class, true,
-				ex -> ex.evaluate(ModelTypes.Value.forType(Integer.class), model, doc.getHead().getImports())) //
+				ex -> ex.evaluate(ModelTypes.Value.forType(Integer.class), session.getExpressoEnv())) //
 			);
 		switch (session.getAttributeText("close-action")) {
 		case "do-nothing":
@@ -326,16 +329,14 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 
 	private QuickComponentDef modifyWidget(QuickComponentDef widget, QIS session) throws QonfigInterpretationException {
 		widget.modify((editor, builder) -> editor.modifyComponent(builder::withComponent));
-		ClassView cv = session.getClassView();
-		ObservableModelSet model = session.getModels();
 		String name = session.getAttribute("name", String.class);
 		ObservableExpression tooltipX = session.getAttribute("tooltip", ObservableExpression.class);
 		ObservableExpression visibleX = session.getAttribute("visible", ObservableExpression.class);
 		QuickBorder border = session.interpretChildren("border", QuickBorder.class).peekFirst();
 		ValueContainer<SettableValue, SettableValue<String>> tooltip = tooltipX == null ? null
-			: tooltipX.evaluate(ModelTypes.Value.forType(String.class), model, cv);
+			: tooltipX.evaluate(ModelTypes.Value.forType(String.class), session.getExpressoEnv());
 		ValueContainer<SettableValue, SettableValue<Boolean>> visible = visibleX == null ? null
-			: visibleX.evaluate(ModelTypes.Value.forType(boolean.class), model, cv);
+			: visibleX.evaluate(ModelTypes.Value.forType(boolean.class), session.getExpressoEnv());
 		if (name != null) {
 			widget.modify((comp, build) -> {
 				comp.modifyComponent(c -> c.setName(name));
@@ -347,13 +348,12 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 			});
 		}
 		QuickElementStyleAttribute<? extends Color> bgColorStyle = widget.getStyle()
-			.get(session.getStyleAttribute(null, "bg-color", Color.class));
+			.get(session.getStyleAttribute(null, "color", Color.class));
 		widget.modify((comp, builder) -> {
 			comp.modifyComponent(c -> {
 				Color defaultBG = c.getBackground();
 				boolean defaultOpaque = c instanceof JComponent && ((JComponent) c).isOpaque();
 				ObservableValue<? extends Color> bgColor = bgColorStyle.evaluate(builder.getModels());
-				// ObservableValue<Color> color = bgColor.apply(builder.getModels());
 				bgColor.changes().takeUntil(builder.getModels().getUntil()).act(evt -> {
 					Color colorV = evt.getNewValue();
 					c.setBackground(colorV == null ? defaultBG : colorV);
@@ -383,6 +383,79 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 		return widget;
 	}
 
+	private QuickComponentDef modifyTextWidget(QuickComponentDef widget, QIS session) throws QonfigInterpretationException {
+		QuickElementStyleAttribute<? extends Color> fontColorStyle = widget.getStyle()
+			.get(session.getStyleAttribute(null, "font-color", Color.class));
+		QuickElementStyleAttribute<? extends Double> fontSizeStyle = widget.getStyle()
+			.get(session.getStyleAttribute(null, "font-size", double.class));
+		QuickElementStyleAttribute<? extends Double> fontWeightStyle = widget.getStyle()
+			.get(session.getStyleAttribute(null, "font-weight", double.class));
+		QuickElementStyleAttribute<? extends Double> fontSlantStyle = widget.getStyle()
+			.get(session.getStyleAttribute(null, "font-slant", double.class));
+
+		widget.modify((comp, builder) -> {
+			comp.modifyComponent(c -> {
+				Font defaultFont = c.getFont();
+				ObservableValue<? extends Color> fontColor = fontColorStyle.evaluate(builder.getModels());
+				ObservableValue<? extends Double> fontSize = fontSizeStyle.evaluate(builder.getModels());
+				ObservableValue<? extends Double> fontWeight = fontWeightStyle.evaluate(builder.getModels());
+				ObservableValue<? extends Double> fontSlant = fontSlantStyle.evaluate(builder.getModels());
+				ObservableValue<Font> font = getFont(defaultFont, fontColor, fontSize, fontWeight, fontSlant);
+				font.changes().takeUntil(builder.getModels().getUntil()).act(evt -> {
+					c.setFont(evt.getNewValue());
+					c.invalidate();
+				});
+			});
+		});
+		return widget;
+	}
+
+	public static ObservableValue<Font> getFont(Font baseFont, ObservableValue<? extends Color> color,
+		ObservableValue<? extends Double> size, ObservableValue<? extends Double> weight, ObservableValue<? extends Double> slant) {
+		return ObservableValue.assemble(TypeTokens.get().of(java.awt.Font.class), () -> {
+			Map<AttributedCharacterIterator.Attribute, Object> attribs = new HashMap<>();
+			Color c = color.get();
+			Double sz = size.get();
+			Double w = weight.get();
+			Double s = slant.get();
+			if (c == null && sz == null && w == null && s == null)
+				return baseFont;
+			// attribs.put(TextAttribute.FAMILY, family.get());
+			if (sz != null)
+				attribs.put(TextAttribute.SIZE, sz);
+			attribs.put(TextAttribute.BACKGROUND, Colors.transparent);
+			if (c != null)
+				attribs.put(TextAttribute.FOREGROUND, c);
+			// if(kerning.get())
+			// attribs.put(TextAttribute.KERNING, TextAttribute.KERNING_ON);
+			// if(ligs.get())
+			// attribs.put(TextAttribute.LIGATURES, TextAttribute.LIGATURES_ON);
+			// switch (underline.get()) {
+			// case none:
+			// break;
+			// case on:
+			// attribs.put(TextAttribute.INPUT_METHOD_UNDERLINE, TextAttribute.UNDERLINE_LOW_ONE_PIXEL);
+			// break;
+			// case heavy:
+			// attribs.put(TextAttribute.INPUT_METHOD_UNDERLINE, TextAttribute.UNDERLINE_LOW_TWO_PIXEL);
+			// break;
+			// case dashed:
+			// attribs.put(TextAttribute.INPUT_METHOD_UNDERLINE, TextAttribute.UNDERLINE_LOW_DASHED);
+			// break;
+			// case dotted:
+			// attribs.put(TextAttribute.INPUT_METHOD_UNDERLINE, TextAttribute.UNDERLINE_LOW_DOTTED);
+			// break;
+			// }
+			if (w != null)
+				attribs.put(TextAttribute.WEIGHT, w);
+			// attribs.put(TextAttribute.STRIKETHROUGH, strike.get());
+			if (s != null)
+				attribs.put(TextAttribute.POSTURE, s);
+			System.out.println("w=" + w + ", s=" + s);
+			return baseFont.deriveFont(attribs);
+		}, /*family,*/ color, /*kerning, ligs, underline,*/ size, weight, /*strike,*/ slant);
+	}
+
 	private QuickBorder interpretLineBorder(QIS session) throws QonfigInterpretationException {
 		QuickElementStyle style = session.getStyle();
 		QuickElementStyleAttribute<? extends Color> colorStyle = style.get(session.getStyleAttribute(null, "border-color", Color.class));
@@ -404,21 +477,38 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 	}
 
 	private QuickBorder interpretTitledBorder(QIS session) throws QonfigInterpretationException {
-		ClassView cv = session.getClassView();
-		ObservableModelSet model = session.getModels();
 		ObservableExpression titleX = session.getAttribute("title", ObservableExpression.class);
-		Function<ModelSetInstance, SettableValue<String>> title = titleX.evaluate(ModelTypes.Value.forType(String.class), model, cv);
+		Function<ModelSetInstance, SettableValue<String>> title = titleX.evaluate(ModelTypes.Value.forType(String.class),
+			session.getExpressoEnv());
 		QuickElementStyle style = session.getStyle();
 		QuickElementStyleAttribute<? extends Color> colorStyle = style.get(session.getStyleAttribute(null, "border-color", Color.class));
 		QuickElementStyleAttribute<? extends Integer> thicknessStyle = style
 			.get(session.getStyleAttribute(null, "thickness", Integer.class));
+		QuickElementStyleAttribute<? extends Color> fontColorStyle = style.get(session.getStyleAttribute(null, "font-color", Color.class));
+		QuickElementStyleAttribute<? extends Double> fontSizeStyle = style.get(session.getStyleAttribute(null, "font-size", double.class));
+		QuickElementStyleAttribute<? extends Double> fontWeightStyle = style
+			.get(session.getStyleAttribute(null, "font-weight", double.class));
+		QuickElementStyleAttribute<? extends Double> fontSlantStyle = style
+			.get(session.getStyleAttribute(null, "font-slant", double.class));
+
 		return (comp, msi) -> {
 			ModifiableLineBorder lineBorder = new ModifiableLineBorder(Color.black, 1, false);
 			TitledBorder border = BorderFactory.createTitledBorder(lineBorder, "");
+			Font defaultFont = border.getTitleFont();
+			ObservableValue<? extends Color> fontColor = fontColorStyle.evaluate(msi);
+			ObservableValue<? extends Double> fontSize = fontSizeStyle.evaluate(msi);
+			ObservableValue<? extends Double> fontWeight = fontWeightStyle.evaluate(msi);
+			ObservableValue<? extends Double> fontSlant = fontSlantStyle.evaluate(msi);
+			ObservableValue<Font> font = getFont(defaultFont, fontColor, fontSize, fontWeight, fontSlant);
 			SettableValue<Border> borderV = SettableValue.build(Border.class).withValue(border).build();
 			title.apply(msi).changes().takeUntil(msi.getUntil()).act(evt -> {
 				border.setTitle(evt.getNewValue());
 				borderV.set(border, evt);
+				comp.repaint();
+			});
+			font.changes().takeUntil(msi.getUntil()).act(evt -> {
+				border.setTitleFont(evt.getNewValue());
+				comp.invalidate();
 				comp.repaint();
 			});
 			colorStyle.evaluate(msi).changes().takeUntil(msi.getUntil()).act(evt -> {
@@ -474,7 +564,7 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 		ObservableExpression newCondition = session.getAttribute("condition", ObservableExpression.class);
 		if (newCondition != null) {
 			if (condition != null)
-				condition = new BinaryOperator("&&", condition, newCondition, BinaryOperatorSet.STANDARD_JAVA);
+				condition = new BinaryOperator("&&", condition, newCondition);
 			else
 				condition = newCondition;
 			session.put(STYLE_CONDITION, condition);
@@ -544,10 +634,9 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 			@Override
 			protected List<QuickStyleValue<?>> get() throws QonfigInterpretationException {
 				List<QuickStyleValue<?>> values = new ArrayList<>();
-				if (value != null && value != ObservableExpression.EMPTY) {
-					values.add(new QuickStyleValue<>(styleSheet, theAttr, theElement, theRolePath, theCondition, value,
-						session.getModels(), session.getClassView()));
-				}
+				if (value != null && value != ObservableExpression.EMPTY)
+					values.add(
+						new QuickStyleValue<>(styleSheet, theAttr, theElement, theRolePath, theCondition, value, session.getExpressoEnv()));
 				if (styleSetRef != null) {
 					if (theElement == null && theRolePath == null && theCondition == null)
 						values.addAll(styleSetRef);
@@ -558,8 +647,8 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 								if (style.getElement().isAssignableFrom(theElement))
 									el = theElement;
 								else if (!theElement.isAssignableFrom(style.getElement()))
-									throw new QonfigInterpretationException("Style element " + theElement
-										+ " is not compatible with style set element " + style.getElement());
+									throw new QonfigInterpretationException(
+										"Style element " + theElement + " is not compatible with style set element " + style.getElement());
 							}
 							if (theRolePath != null && style.getRolePath() != null && !theRolePath.equals(style.getRolePath()))
 								throw new QonfigInterpretationException(
@@ -567,14 +656,13 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 							ObservableExpression sc;
 							if (theCondition != null) {
 								if (style.getCondition() != null)
-									sc = new BinaryOperator("&&", theCondition, style.getConditionExpression(),
-										BinaryOperatorSet.STANDARD_JAVA);
+									sc = new BinaryOperator("&&", theCondition, style.getConditionExpression());
 								else
 									sc = theCondition;
 							} else
 								sc = style.getConditionExpression();
 							values.add(new QuickStyleValue<>(styleSheet, style.getAttribute(), el, style.getRolePath(), sc,
-								style.getValueExpression(), session.getModels(), session.getClassView()));
+								style.getValueExpression(), session.getExpressoEnv()));
 						}
 					}
 				}
@@ -587,7 +675,7 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 
 	private List<QonfigChildDef> parseRolePath(QIS session, String roleName) throws QonfigInterpretationException {
 		String[] split = roleName.split("\\.");
-		MultiInheritanceSet<QonfigElementOrAddOn> roleEls=MultiInheritanceSet.create(QonfigElementOrAddOn::isAssignableFrom);
+		MultiInheritanceSet<QonfigElementOrAddOn> roleEls = MultiInheritanceSet.create(QonfigElementOrAddOn::isAssignableFrom);
 		MultiInheritanceSet<QonfigElementOrAddOn> elsToAdd = MultiInheritanceSet.create(QonfigElementOrAddOn::isAssignableFrom);
 		try {
 			QonfigElementOrAddOn roleEl = session.getElement().getDocument().getDocToolkit().getElementOrAddOn(split[0].trim());

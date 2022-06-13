@@ -5,20 +5,11 @@ import java.util.Arrays;
 import java.util.List;
 
 import org.observe.SettableValue;
-import org.observe.expresso.ClassView;
-import org.observe.expresso.ModelType;
+import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelSet;
-import org.observe.expresso.ModelType.ModelInstanceType;
-import org.observe.expresso.ObservableExpression.MethodFinder;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
-import org.observe.expresso.ops.Invocation.ArgOption;
-import org.observe.expresso.ops.Invocation.ExecutableImpl;
-import org.observe.expresso.ops.Invocation.InvocationActionContainer;
-import org.observe.expresso.ops.Invocation.InvocationThingContainer;
-import org.observe.expresso.ops.Invocation.InvocationValueContainer;
-import org.observe.expresso.ops.Invocation.MethodResult;
 import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
@@ -41,19 +32,19 @@ public class ConstructorInvocation extends Invocation {
 	}
 
 	@Override
-	public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ObservableModelSet models,
-		ClassView classView) throws QonfigInterpretationException {
+	public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ExpressoEnv env)
+		throws QonfigInterpretationException {
 		throw new QonfigInterpretationException("Not implemented");
 	}
 
 	@Override
-	protected <M, MV extends M> ValueContainer<M, MV> evaluateInternal2(ModelInstanceType<M, MV> type, ObservableModelSet models,
-		ClassView classView, ArgOption args, TypeToken<?> targetType) throws QonfigInterpretationException {
-		Class<?> constructorType = classView.getType(theType);
+	protected <M, MV extends M> ValueContainer<M, MV> evaluateInternal2(ModelInstanceType<M, MV> type, ExpressoEnv env, ArgOption args,
+		TypeToken<?> targetType) throws QonfigInterpretationException {
+		Class<?> constructorType = env.getClassView().getType(theType);
 		if (constructorType == null)
 			throw new QonfigInterpretationException("No such type found: " + theType);
 		Invocation.MethodResult<Constructor, ?> result = Invocation.findMethod(constructorType.getConstructors(), null, null, true,
-			Arrays.asList(args), targetType, models, classView, Invocation.ExecutableImpl.CONSTRUCTOR);
+			Arrays.asList(args), targetType, env, Invocation.ExecutableImpl.CONSTRUCTOR);
 		if (result != null) {
 			ValueContainer<SettableValue, SettableValue<?>>[] realArgs = new ValueContainer[getArguments().size()];
 			for (int a = 0; a < realArgs.length; a++)

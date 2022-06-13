@@ -9,7 +9,6 @@ import java.util.function.Function;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
-import org.observe.expresso.ClassView;
 import org.observe.expresso.ExpressoInterpreter.ExpressoSession;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
@@ -86,12 +85,12 @@ public class QuickX<QIS extends QuickSession<?>> extends QuickBase<QIS> {
 			@Override
 			public void configure(ObservableModelSet model, ValueContainer<SettableValue, ? extends SettableValue<T>> root)
 				throws QonfigInterpretationException {
-				ClassView cv = (ClassView) session.get("imports");
 				TypeToken<T> type = (TypeToken<T>) root.getType().getType(0);
 				columnType = TypeTokens.get().keyFor(CategoryRenderStrategy.class).<CategoryRenderStrategy<BetterList<T>, ?>> parameterized(//
 					TypeTokens.get().keyFor(BetterList.class).parameterized(type), TypeTokens.get().WILDCARD);
 				ObservableExpression columnsX = session.getAttribute("columns", ObservableExpression.class);
-				columnsAttr = columnsX == null ? null : columnsX.evaluate(ModelTypes.Collection.forType(columnType), model, cv);
+				columnsAttr = columnsX == null ? null
+					: columnsX.evaluate(ModelTypes.Collection.forType(columnType), session.getExpressoEnv());
 				session.put("model-type", type);
 				for (ExpressoSession<?> columnEl : session.forChildren("column"))
 					columns.add(columnEl.interpret(Column.class));

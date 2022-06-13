@@ -7,20 +7,11 @@ import java.util.Collections;
 import java.util.List;
 
 import org.observe.SettableValue;
-import org.observe.expresso.ClassView;
-import org.observe.expresso.ModelType;
+import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelSet;
-import org.observe.expresso.ModelType.ModelInstanceType;
-import org.observe.expresso.ObservableExpression.MethodFinder;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
-import org.observe.expresso.ops.Invocation.ArgOption;
-import org.observe.expresso.ops.Invocation.ExecutableImpl;
-import org.observe.expresso.ops.Invocation.InvocationActionContainer;
-import org.observe.expresso.ops.Invocation.InvocationThingContainer;
-import org.observe.expresso.ops.Invocation.InvocationValueContainer;
-import org.observe.expresso.ops.Invocation.MethodResult;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -55,14 +46,14 @@ public class MethodInvocation extends Invocation {
 	}
 
 	@Override
-	protected <M, MV extends M> ValueContainer<M, MV> evaluateInternal2(ModelInstanceType<M, MV> type, ObservableModelSet models,
-		ClassView classView, ArgOption args, TypeToken<?> targetType) throws QonfigInterpretationException {
+	protected <M, MV extends M> ValueContainer<M, MV> evaluateInternal2(ModelInstanceType<M, MV> type, ExpressoEnv env, ArgOption args,
+		TypeToken<?> targetType) throws QonfigInterpretationException {
 		if (theContext != null) {
 			if (theContext instanceof NameExpression) {
-				Class<?> clazz = classView.getType(theContext.toString());
+				Class<?> clazz = env.getClassView().getType(theContext.toString());
 				if (clazz != null) {
 					Invocation.MethodResult<Method, ?> result = Invocation.findMethod(clazz.getMethods(), theMethodName,
-						TypeTokens.get().of(clazz), true, Arrays.asList(args), targetType, models, classView, Invocation.ExecutableImpl.METHOD);
+						TypeTokens.get().of(clazz), true, Arrays.asList(args), targetType, env, Invocation.ExecutableImpl.METHOD);
 					if (result != null) {
 						ValueContainer<SettableValue, SettableValue<?>>[] realArgs = new ValueContainer[getArguments().size()];
 						for (int a = 0; a < realArgs.length; a++)
@@ -84,10 +75,10 @@ public class MethodInvocation extends Invocation {
 					throw new QonfigInterpretationException("No such method " + printSignature() + " in class " + clazz.getName());
 				}
 			}
-			ValueContainer<SettableValue, SettableValue<?>> ctx = theContext.evaluate(ModelTypes.Value.any(), models, classView);
+			ValueContainer<SettableValue, SettableValue<?>> ctx = theContext.evaluate(ModelTypes.Value.any(), env);
 			Invocation.MethodResult<Method, ?> result = Invocation.findMethod(
 				TypeTokens.getRawType(ctx.getType().getType(0)).getMethods(), theMethodName, ctx.getType().getType(0), false,
-				Arrays.asList(args), targetType, models, classView, Invocation.ExecutableImpl.METHOD);
+				Arrays.asList(args), targetType, env, Invocation.ExecutableImpl.METHOD);
 			if (result != null) {
 				ValueContainer<SettableValue, SettableValue<?>>[] realArgs = new ValueContainer[getArguments().size()];
 				for (int a = 0; a < realArgs.length; a++)
@@ -108,9 +99,9 @@ public class MethodInvocation extends Invocation {
 			}
 			throw new QonfigInterpretationException("No such method " + printSignature() + " in type " + ctx.getType().getType(0));
 		} else {
-			List<Method> methods = classView.getImportedStaticMethods(theMethodName);
+			List<Method> methods = env.getClassView().getImportedStaticMethods(theMethodName);
 			Invocation.MethodResult<Method, ?> result = Invocation.findMethod(methods.toArray(new Method[methods.size()]),
-				theMethodName, null, true, Arrays.asList(args), targetType, models, classView, Invocation.ExecutableImpl.METHOD);
+				theMethodName, null, true, Arrays.asList(args), targetType, env, Invocation.ExecutableImpl.METHOD);
 			if (result != null) {
 				ValueContainer<SettableValue, SettableValue<?>>[] realArgs = new ValueContainer[getArguments().size()];
 				for (int a = 0; a < realArgs.length; a++)
@@ -134,8 +125,8 @@ public class MethodInvocation extends Invocation {
 	}
 
 	@Override
-	public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ObservableModelSet models,
-		ClassView classView) throws QonfigInterpretationException {
+	public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ExpressoEnv env)
+		throws QonfigInterpretationException {
 		throw new QonfigInterpretationException("Not implemented.  Are you sure you didn't mean to use the resolution operator (::)?");
 	}
 

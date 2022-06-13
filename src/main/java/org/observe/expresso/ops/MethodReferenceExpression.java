@@ -7,11 +7,10 @@ import java.util.List;
 import java.util.function.Function;
 
 import org.observe.SettableValue;
-import org.observe.expresso.ClassView;
+import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
@@ -50,23 +49,23 @@ public class MethodReferenceExpression implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ObservableModelSet models,
-		ClassView classView) throws QonfigInterpretationException {
+	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
+		throws QonfigInterpretationException {
 		throw new QonfigInterpretationException("Not implemented");
 	}
 
 	@Override
-	public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ObservableModelSet models,
-		ClassView classView) throws QonfigInterpretationException {
+	public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ExpressoEnv env)
+		throws QonfigInterpretationException {
 		return new MethodFinder<P1, P2, P3, T>(targetType) {
 			@Override
 			public Function<ModelSetInstance, TriFunction<P1, P2, P3, T>> find3() throws QonfigInterpretationException {
 				boolean voidTarget = TypeTokens.get().unwrap(TypeTokens.getRawType(targetType)) == void.class;
 				if (theContext instanceof NameExpression) {
-					Class<?> type = classView.getType(theContext.toString());
+					Class<?> type = env.getClassView().getType(theContext.toString());
 					if (type != null) {
 						Invocation.MethodResult<Method, ? extends T> result = Invocation.findMethod(type.getMethods(), theMethodName,
-							TypeTokens.get().of(type), true, theOptions, targetType, models, classView, Invocation.ExecutableImpl.METHOD);
+							TypeTokens.get().of(type), true, theOptions, targetType, env, Invocation.ExecutableImpl.METHOD);
 						if (result != null) {
 							setResultType(result.returnType);
 							MethodOption option = theOptions.get(result.argListOption);
@@ -93,10 +92,10 @@ public class MethodReferenceExpression implements ObservableExpression {
 							"No such method matching: " + MethodReferenceExpression.this + " on class " + type.getName());
 					}
 				}
-				ValueContainer<SettableValue, SettableValue<?>> ctx = theContext.evaluate(ModelTypes.Value.any(), models, classView);
+				ValueContainer<SettableValue, SettableValue<?>> ctx = theContext.evaluate(ModelTypes.Value.any(), env);
 				Invocation.MethodResult<Method, ? extends T> result = Invocation.findMethod(//
 					TypeTokens.getRawType(ctx.getType().getType(0)).getMethods(), theMethodName, ctx.getType().getType(0), true,
-					theOptions, targetType, models, classView, Invocation.ExecutableImpl.METHOD);
+					theOptions, targetType, env, Invocation.ExecutableImpl.METHOD);
 				if (result != null) {
 					setResultType(result.returnType);
 					MethodOption option = theOptions.get(result.argListOption);

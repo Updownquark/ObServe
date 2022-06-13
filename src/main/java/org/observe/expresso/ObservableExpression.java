@@ -28,14 +28,14 @@ public interface ObservableExpression {
 		}
 
 		@Override
-		public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ObservableModelSet models,
-			ClassView classView) throws QonfigInterpretationException {
-			return null;
+		public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
+			throws QonfigInterpretationException {
+			throw new QonfigInterpretationException("Empty expression");
 		}
 
 		@Override
-		public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ObservableModelSet models,
-			ClassView classView) throws QonfigInterpretationException {
+		public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ExpressoEnv env)
+			throws QonfigInterpretationException {
 			throw new QonfigInterpretationException("Empty expression");
 		}
 
@@ -47,23 +47,22 @@ public interface ObservableExpression {
 
 	List<? extends ObservableExpression> getChildren();
 
-	default <M, MV extends M> ValueContainer<M, MV> evaluate(ModelInstanceType<M, MV> type, ObservableModelSet models, ClassView classView)
+	default <M, MV extends M> ValueContainer<M, MV> evaluate(ModelInstanceType<M, MV> type, ExpressoEnv env)
 		throws QonfigInterpretationException {
-		ValueContainer<M, MV> value = evaluateInternal(type, models, classView);
+		ValueContainer<M, MV> value = evaluateInternal(type, env);
 		if (value == null)
 			return null;
 		return value.getType().as(value, type);
 	}
 
-	<M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ObservableModelSet models,
-		ClassView classView) throws QonfigInterpretationException;
-
-	<P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ObservableModelSet models, ClassView classView)
+	<M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
 		throws QonfigInterpretationException;
 
-	default <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(Class<T> targetType, ObservableModelSet models, ClassView classView)
+	<P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ExpressoEnv env) throws QonfigInterpretationException;
+
+	default <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(Class<T> targetType, ExpressoEnv env)
 		throws QonfigInterpretationException {
-		return findMethod(TypeTokens.get().of(targetType), models, classView);
+		return findMethod(TypeTokens.get().of(targetType), env);
 	}
 
 	interface ArgMaker<T, U, V> {
@@ -212,8 +211,8 @@ public interface ObservableExpression {
 		}
 
 		@Override
-		public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ObservableModelSet models,
-			ClassView classView) throws QonfigInterpretationException {
+		public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
+			throws QonfigInterpretationException {
 			if (type.getModelType() != ModelTypes.Value)
 				throw new QonfigInterpretationException("'" + theExpression.getText() + "' cannot be evaluated as a " + type);
 			if (theValue == null) {
@@ -236,8 +235,8 @@ public interface ObservableExpression {
 		}
 
 		@Override
-		public <P1, P2, P3, T2> MethodFinder<P1, P2, P3, T2> findMethod(TypeToken<T2> targetType, ObservableModelSet models,
-			ClassView classView) throws QonfigInterpretationException {
+		public <P1, P2, P3, T2> MethodFinder<P1, P2, P3, T2> findMethod(TypeToken<T2> targetType, ExpressoEnv env)
+			throws QonfigInterpretationException {
 			if (!TypeTokens.get().isInstance(targetType, theValue))
 				throw new QonfigInterpretationException("'" + theValue + "' is not an instance of " + targetType);
 			return new MethodFinder<P1, P2, P3, T2>(targetType) {

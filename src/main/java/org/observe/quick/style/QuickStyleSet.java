@@ -98,7 +98,7 @@ public class QuickStyleSet {
 					continue;
 				}
 				declaredAttributes.put(name, new QuickStyleAttribute<>(styled, name, //
-					Expresso.parseType(styleAttr.getAttributeText(typeAttr), session.getModels(), session.getClassView()), //
+					Expresso.parseType(styleAttr.getAttributeText(typeAttr), session.getExpressoEnv()), //
 					styleAttr.getAttribute(trickleAttr, boolean.class)));
 			}
 		}
@@ -121,41 +121,41 @@ public class QuickStyleSet {
 	private void configureModelInterpretation(Builder<?, ?> interpreterBuilder, ExpressoSession<?> session) {
 		interpreterBuilder.createWith("action", ModelInstanceType.class, session2 -> {
 			return ModelTypes.Action
-				.forType(Expresso.parseType(session2.getAttributeText("type"), session.getModels(), session.getClassView()));
+				.forType(Expresso.parseType(session2.getAttributeText("type"), session.getExpressoEnv()));
 		}).createWith("value", ModelInstanceType.class, session2 -> {
 			return ModelTypes.Value
-				.forType(Expresso.parseType(session2.getAttributeText("type"), session.getModels(), session.getClassView()));
+				.forType(Expresso.parseType(session2.getAttributeText("type"), session.getExpressoEnv()));
 		}).createWith("list", ModelInstanceType.class, session2 -> {
 			return ModelTypes.Collection
-				.forType(Expresso.parseType(session2.getAttributeText("type"), session.getModels(), session.getClassView()));
+				.forType(Expresso.parseType(session2.getAttributeText("type"), session.getExpressoEnv()));
 		}).createWith("sorted-list", ModelInstanceType.class, session2 -> {
 			return ModelTypes.SortedCollection
-				.forType(Expresso.parseType(session2.getAttributeText("type"), session.getModels(), session.getClassView()));
+				.forType(Expresso.parseType(session2.getAttributeText("type"), session.getExpressoEnv()));
 		}).createWith("set", ModelInstanceType.class, session2 -> {
 			return ModelTypes.Set
-				.forType(Expresso.parseType(session2.getAttributeText("type"), session.getModels(), session.getClassView()));
+				.forType(Expresso.parseType(session2.getAttributeText("type"), session.getExpressoEnv()));
 		}).createWith("sorted-set", ModelInstanceType.class, session2 -> {
 			return ModelTypes.SortedSet
-				.forType(Expresso.parseType(session2.getAttributeText("type"), session.getModels(), session.getClassView()));
+				.forType(Expresso.parseType(session2.getAttributeText("type"), session.getExpressoEnv()));
 		}).createWith("map", ModelInstanceType.class, session2 -> {
 			return ModelTypes.Map.forType(//
-				Expresso.parseType(session2.getAttributeText("key-type"), session.getModels(), session.getClassView()), //
-				Expresso.parseType(session2.getAttributeText("type"), session.getModels(), session.getClassView())//
+				Expresso.parseType(session2.getAttributeText("key-type"), session.getExpressoEnv()), //
+				Expresso.parseType(session2.getAttributeText("type"), session.getExpressoEnv())//
 				);
 		}).createWith("sorted-map", ModelInstanceType.class, session2 -> {
 			return ModelTypes.SortedMap.forType(//
-				Expresso.parseType(session2.getAttributeText("key-type"), session.getModels(), session.getClassView()), //
-				Expresso.parseType(session2.getAttributeText("type"), session.getModels(), session.getClassView())//
+				Expresso.parseType(session2.getAttributeText("key-type"), session.getExpressoEnv()), //
+				Expresso.parseType(session2.getAttributeText("type"), session.getExpressoEnv())//
 				);
 		}).createWith("multi-map", ModelInstanceType.class, session2 -> {
 			return ModelTypes.MultiMap.forType(//
-				Expresso.parseType(session2.getAttributeText("key-type"), session.getModels(), session.getClassView()), //
-				Expresso.parseType(session2.getAttributeText("type"), session.getModels(), session.getClassView())//
+				Expresso.parseType(session2.getAttributeText("key-type"), session.getExpressoEnv()), //
+				Expresso.parseType(session2.getAttributeText("type"), session.getExpressoEnv())//
 				);
 		}).createWith("sorted-multi-map", ModelInstanceType.class, session2 -> {
 			return ModelTypes.SortedMultiMap.forType(//
-				Expresso.parseType(session2.getAttributeText("key-type"), session.getModels(), session.getClassView()), //
-				Expresso.parseType(session2.getAttributeText("type"), session.getModels(), session.getClassView())//
+				Expresso.parseType(session2.getAttributeText("key-type"), session.getExpressoEnv()), //
+				Expresso.parseType(session2.getAttributeText("type"), session.getExpressoEnv())//
 				);
 		});
 	}

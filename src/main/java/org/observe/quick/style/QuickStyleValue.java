@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Set;
 
 import org.observe.SettableValue;
-import org.observe.expresso.ClassView;
+import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet;
@@ -33,19 +33,19 @@ public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 
 	public QuickStyleValue(QuickStyleSheet styleSheet, QuickStyleAttribute<T> attribute, QonfigElementOrAddOn element,
 		List<QonfigChildDef> rolePath, ObservableExpression condition, ObservableExpression value, //
-		ObservableModelSet models, ClassView classView) throws QonfigInterpretationException {
+		ExpressoEnv env) throws QonfigInterpretationException {
 		theStyleSheet = styleSheet;
 		theAttribute = attribute;
 		theElement = element;
-		theRolePath = rolePath;
+		theRolePath = rolePath == null ? Collections.emptyList() : rolePath;
 		theConditionExpression = condition;
 		theValueExpression = value;
-		theCondition = condition == null ? null : condition.evaluate(ModelTypes.Value.forType(boolean.class), models, classView);
-		theValue = value.evaluate(ModelTypes.Value.forType(attribute.getType()), models, classView);
+		theCondition = condition == null ? null : condition.evaluate(ModelTypes.Value.forType(boolean.class), env);
+		theValue = value.evaluate(ModelTypes.Value.forType(attribute.getType()), env);
 		Set<QuickModelValue<?, ?>> modelValues = new LinkedHashSet<>();
 		if (theConditionExpression != null)
-			findModelValues(theConditionExpression, modelValues, models);
-		findModelValues(theValueExpression, modelValues, models);
+			findModelValues(theConditionExpression, modelValues, env.getModels());
+		findModelValues(theValueExpression, modelValues, env.getModels());
 		theUsedModelValues = Collections.unmodifiableSet(modelValues);
 	}
 

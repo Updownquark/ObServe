@@ -97,27 +97,27 @@ public class QuickSwing<QIS extends QuickSession<?>> extends QuickBase<QIS> {
 		ObservableExpression h = session.getAttribute("debug-height", ObservableExpression.class);
 		ObservableExpression v = session.getAttribute("debug-visible", ObservableExpression.class);
 		if (x != null) {
-			xVal = x.evaluate(ModelTypes.Value.forType(int.class), doc.getHead().getModels(), doc.getHead().getImports());
+			xVal = x.evaluate(ModelTypes.Value.forType(int.class), session.getExpressoEnv());
 		} else {
 			xVal = msi -> SettableValue.build(int.class).withDescription("x").withValue(0).build();
 		}
 		if (y != null) {
-			yVal = y.evaluate(ModelTypes.Value.forType(int.class), doc.getHead().getModels(), doc.getHead().getImports());
+			yVal = y.evaluate(ModelTypes.Value.forType(int.class), session.getExpressoEnv());
 		} else {
 			yVal = msi -> SettableValue.build(int.class).withDescription("y").withValue(0).build();
 		}
 		if (w != null) {
-			wVal = w.evaluate(ModelTypes.Value.forType(int.class), doc.getHead().getModels(), doc.getHead().getImports());
+			wVal = w.evaluate(ModelTypes.Value.forType(int.class), session.getExpressoEnv());
 		} else {
 			wVal = msi -> SettableValue.build(int.class).withDescription("w").withValue(0).build();
 		}
 		if (h != null) {
-			hVal = h.evaluate(ModelTypes.Value.forType(int.class), doc.getHead().getModels(), doc.getHead().getImports());
+			hVal = h.evaluate(ModelTypes.Value.forType(int.class), session.getExpressoEnv());
 		} else {
 			hVal = msi -> SettableValue.build(int.class).withDescription("h").withValue(0).build();
 		}
 		if (v != null) {
-			vVal = v.evaluate(ModelTypes.Value.forType(boolean.class), doc.getHead().getModels(), doc.getHead().getImports());
+			vVal = v.evaluate(ModelTypes.Value.forType(boolean.class), session.getExpressoEnv());
 		} else {
 			vVal = msi -> SettableValue.build(boolean.class).withDescription("v").withValue(true).build();
 		}

@@ -10,6 +10,8 @@ import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.expresso.ops.BinaryOperatorSet;
+import org.observe.expresso.ops.UnaryOperatorSet;
 import org.observe.util.TypeTokens;
 import org.qommons.ClassMap;
 import org.qommons.StatusReportAccumulator;
@@ -24,17 +26,16 @@ import com.google.common.reflect.TypeToken;
 public abstract class ExpressoInterpreter<QIS extends ExpressoInterpreter.ExpressoSession<?>> extends QonfigInterpreter<QIS> {
 	public static abstract class ExpressoSession<QIS extends ExpressoSession<QIS>>
 	extends QonfigInterpreter.QonfigInterpretingSession<QIS> {
-		private ObservableModelSet theModels;
-		private ClassView theClassView;
+		private ExpressoEnv theEnv;
 
 		protected ExpressoSession(QIS parent, QonfigElement element, QonfigElementOrAddOn type, int childIndex) {
 			super(parent, element, type, childIndex);
-			theModels = ((ExpressoSession<?>) parent).theModels;
-			theClassView = ((ExpressoSession<?>) parent).theClassView;
+			theEnv = ((ExpressoSession<?>) parent).theEnv;
 		}
 
-		protected ExpressoSession(ExpressoInterpreter<QIS> interpreter, QonfigElement root) {
+		protected ExpressoSession(ExpressoInterpreter<QIS> interpreter, QonfigElement root, ExpressoEnv env) {
 			super(interpreter, root);
+			theEnv = env;
 		}
 
 		@Override
@@ -42,21 +43,13 @@ public abstract class ExpressoInterpreter<QIS extends ExpressoInterpreter.Expres
 			return (ExpressoInterpreter<QIS>) super.getInterpreter();
 		}
 
-		public ObservableModelSet getModels() {
-			return theModels;
+		public ExpressoEnv getExpressoEnv() {
+			return theEnv;
 		}
 
-		public QIS setModels(ObservableModelSet models) {
-			theModels = models;
+		public QIS setModels(ObservableModelSet models, ClassView classView) {
+			theEnv = theEnv.with(models, classView);
 			return (QIS) this;
-		}
-
-		public ClassView getClassView() {
-			return theClassView;
-		}
-
-		public void setClassView(ClassView classView) {
-			theClassView = classView;
 		}
 
 		public <M, MV extends M> ValueContainer<M, MV> getAttribute(String attrName, ModelInstanceType<M, MV> type,
@@ -77,7 +70,7 @@ public abstract class ExpressoInterpreter<QIS extends ExpressoInterpreter.Expres
 					}
 				};
 			}
-			return expression.evaluate(type, theModels, theClassView);
+			return expression.evaluate(type, theEnv);
 		}
 
 		public <M, MV extends M> ValueContainer<M, MV> getValue(ModelInstanceType<M, MV> type,
@@ -102,7 +95,7 @@ public abstract class ExpressoInterpreter<QIS extends ExpressoInterpreter.Expres
 			} else if (!(value instanceof ObservableExpression))
 				throw new QonfigInterpretationException(
 					"Value of " + getElement() + " is a " + value.getClass().getName() + ", not an expression");
-			return ((ObservableExpression) value).evaluate(type, theModels, theClassView);
+			return ((ObservableExpression) value).evaluate(type, theEnv);
 		}
 
 		public <T> ValueContainer<SettableValue, SettableValue<T>> getAttributeAsValue(String attrName, TypeToken<T> type,
@@ -147,17 +140,17 @@ public abstract class ExpressoInterpreter<QIS extends ExpressoInterpreter.Expres
 		}
 	}
 
-	private final ExpressoParser theExpressionParser;
+	private final ExpressoEnv theExpressoEnv;
 
 	protected ExpressoInterpreter(Class<?> callingClass,
 		Map<QonfigElementOrAddOn, ClassMap<QonfigCreatorHolder<QIS, ?>>> creators,
-		Map<QonfigElementOrAddOn, ClassMap<QonfigModifierHolder<QIS, ?>>> modifiers, ExpressoParser expressionParser) {
+		Map<QonfigElementOrAddOn, ClassMap<QonfigModifierHolder<QIS, ?>>> modifiers, ExpressoEnv env) {
 		super(callingClass, creators, modifiers);
-		theExpressionParser = expressionParser;
+		theExpressoEnv = env;
 	}
 
-	public ExpressoParser getExpressionParser() {
-		return theExpressionParser;
+	public ExpressoEnv getExpressoEnv() {
+		return theExpressoEnv;
 	}
 
 	/**
@@ -173,31 +166,40 @@ public abstract class ExpressoInterpreter<QIS extends ExpressoInterpreter.Expres
 
 	public static abstract class Builder<QIS extends ExpressoSession<?>, B extends Builder<QIS, B>>
 	extends QonfigInterpreter.Builder<QIS, B> {
-		private ExpressoParser theExpressionParser;
+		private ExpressoEnv theExpressoEnv;
 
-		protected Builder(Class<?> callingClass, ExpressoParser expressionParser, QonfigToolkit... toolkits) {
+		protected Builder(Class<?> callingClass, ExpressoEnv expressoEnv, QonfigToolkit... toolkits) {
 			super(callingClass, toolkits);
-			theExpressionParser = expressionParser;
+			theExpressoEnv = expressoEnv;
 		}
 
 		protected Builder(Class<?> callingClass, Set<QonfigToolkit> toolkits, QonfigToolkit toolkit,
 			StatusReportAccumulator<QonfigElementOrAddOn> status,
 			Map<QonfigElementOrAddOn, ClassMap<QonfigCreatorHolder<QIS, ?>>> creators,
-			Map<QonfigElementOrAddOn, ClassMap<QonfigModifierHolder<QIS, ?>>> modifiers, ExpressoParser expressionParser) {
+			Map<QonfigElementOrAddOn, ClassMap<QonfigModifierHolder<QIS, ?>>> modifiers, ExpressoEnv expressoEnv) {
 			super(callingClass, toolkits, toolkit, status, creators, modifiers);
-			theExpressionParser = expressionParser;
+			theExpressoEnv = expressoEnv;
 		}
 
-		public ExpressoParser getExpressionParser() {
-			return theExpressionParser;
+		public ExpressoEnv getExpressoEnv() {
+			return theExpressoEnv;
 		}
 
-		protected ExpressoParser getOrCreateExpressionParser() {
-			return theExpressionParser == null ? new DefaultExpressoParser().withDefaultNonStructuredParsing() : theExpressionParser;
+		protected ExpressoEnv getOrCreateExpressoEnv() {
+			if (theExpressoEnv == null)
+				theExpressoEnv = createExpressoEnv();
+			return theExpressoEnv;
 		}
 
-		public B withExpressionParser(ExpressoParser expressionParser) {
-			theExpressionParser = expressionParser;
+		protected ExpressoEnv createExpressoEnv() {
+			return new ExpressoEnv(null, null, //
+				UnaryOperatorSet.build().withStandardJavaOps().build(), //
+				BinaryOperatorSet.STANDARD_JAVA)//
+				.withDefaultNonStructuredParsing();
+		}
+
+		public B withExpresoEnv(ExpressoEnv expressoEnv) {
+			theExpressoEnv = expressoEnv;
 			return (B) this;
 		}
 
@@ -206,13 +208,13 @@ public abstract class ExpressoInterpreter<QIS extends ExpressoInterpreter.Expres
 			StatusReportAccumulator<QonfigElementOrAddOn> status,
 			Map<QonfigElementOrAddOn, ClassMap<QonfigCreatorHolder<QIS, ?>>> creators,
 			Map<QonfigElementOrAddOn, ClassMap<QonfigModifierHolder<QIS, ?>>> modifiers) {
-			return builderFor(callingClass, toolkits, toolkit, status, creators, modifiers, theExpressionParser);
+			return builderFor(callingClass, toolkits, toolkit, status, creators, modifiers, theExpressoEnv);
 		}
 
 		protected abstract B builderFor(Class<?> callingClass, Set<QonfigToolkit> toolkits, QonfigToolkit toolkit,
 			StatusReportAccumulator<QonfigElementOrAddOn> status,
 			Map<QonfigElementOrAddOn, ClassMap<QonfigCreatorHolder<QIS, ?>>> creators,
-			Map<QonfigElementOrAddOn, ClassMap<QonfigModifierHolder<QIS, ?>>> modifiers, ExpressoParser expressionParser);
+			Map<QonfigElementOrAddOn, ClassMap<QonfigModifierHolder<QIS, ?>>> modifiers, ExpressoEnv env);
 
 		@Override
 		public abstract ExpressoInterpreter<QIS> create();
@@ -228,8 +230,8 @@ public abstract class ExpressoInterpreter<QIS extends ExpressoInterpreter.Expres
 			super(parent, element, type, childIndex);
 		}
 
-		ExpressoSessionDefault(ExpressoInterpreter<ExpressoSessionDefault> interpreter, QonfigElement root) {
-			super(interpreter, root);
+		ExpressoSessionDefault(ExpressoInterpreter<ExpressoSessionDefault> interpreter, QonfigElement root, ExpressoEnv expressoEnv) {
+			super(interpreter, root, expressoEnv);
 		}
 	}
 
@@ -237,13 +239,13 @@ public abstract class ExpressoInterpreter<QIS extends ExpressoInterpreter.Expres
 		Default(Class<?> callingClass,
 			Map<QonfigElementOrAddOn, ClassMap<QonfigCreatorHolder<ExpressoSessionDefault, ?>>> creators,
 			Map<QonfigElementOrAddOn, ClassMap<QonfigModifierHolder<ExpressoSessionDefault, ?>>> modifiers,
-			ExpressoParser expressionParser) {
-			super(callingClass, creators, modifiers, expressionParser);
+			ExpressoEnv expressoEnv) {
+			super(callingClass, creators, modifiers, expressoEnv);
 		}
 
 		@Override
 		public ExpressoSessionDefault interpret(QonfigElement element) {
-			return new ExpressoSessionDefault(this, element);
+			return new ExpressoSessionDefault(this, element, getExpressoEnv());
 		}
 
 		@Override
@@ -254,16 +256,16 @@ public abstract class ExpressoInterpreter<QIS extends ExpressoInterpreter.Expres
 	}
 
 	public static class DefaultBuilder extends Builder<ExpressoSessionDefault, DefaultBuilder> {
-		DefaultBuilder(Class<?> callingClass, ExpressoParser expressionParser, QonfigToolkit... toolkits) {
-			super(callingClass, expressionParser, toolkits);
+		DefaultBuilder(Class<?> callingClass, ExpressoEnv expressoEnv, QonfigToolkit... toolkits) {
+			super(callingClass, expressoEnv, toolkits);
 		}
 
 		DefaultBuilder(Class<?> callingClass, Set<QonfigToolkit> toolkits, QonfigToolkit toolkit,
 			StatusReportAccumulator<QonfigElementOrAddOn> status,
 			Map<QonfigElementOrAddOn, ClassMap<QonfigCreatorHolder<ExpressoSessionDefault, ?>>> creators,
 			Map<QonfigElementOrAddOn, ClassMap<QonfigModifierHolder<ExpressoSessionDefault, ?>>> modifiers,
-			ExpressoParser expressionParser) {
-			super(callingClass, toolkits, toolkit, status, creators, modifiers, expressionParser);
+			ExpressoEnv expressoEnv) {
+			super(callingClass, toolkits, toolkit, status, creators, modifiers, expressoEnv);
 		}
 
 		@Override
@@ -271,13 +273,13 @@ public abstract class ExpressoInterpreter<QIS extends ExpressoInterpreter.Expres
 			StatusReportAccumulator<QonfigElementOrAddOn> status,
 			Map<QonfigElementOrAddOn, ClassMap<QonfigCreatorHolder<ExpressoSessionDefault, ?>>> creators,
 			Map<QonfigElementOrAddOn, ClassMap<QonfigModifierHolder<ExpressoSessionDefault, ?>>> modifiers,
-			ExpressoParser expressionParser) {
-			return new DefaultBuilder(callingClass, toolkits, toolkit, status, creators, modifiers, expressionParser);
+			ExpressoEnv expressoEnv) {
+			return new DefaultBuilder(callingClass, toolkits, toolkit, status, creators, modifiers, expressoEnv);
 		}
 
 		@Override
 		public Default create() {
-			return new Default(getCallingClass(), getCreators(), getModifiers(), getOrCreateExpressionParser());
+			return new Default(getCallingClass(), getCreators(), getModifiers(), getOrCreateExpressoEnv());
 		}
 	}
 }

@@ -9,11 +9,10 @@ import java.util.function.Function;
 import org.observe.ObservableAction;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
-import org.observe.expresso.ClassView;
+import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.expresso.ops.UnaryOperatorSet.UnaryOp;
 import org.observe.util.TypeTokens;
@@ -25,13 +24,11 @@ public class UnaryOperator implements ObservableExpression {
 	private final String theOperator;
 	private final ObservableExpression theOperand;
 	private final boolean isPrefix;
-	private final UnaryOperatorSet theOperatorSet;
 
-	public UnaryOperator(String operator, ObservableExpression operand, boolean prefix, UnaryOperatorSet operatorSet) {
+	public UnaryOperator(String operator, ObservableExpression operand, boolean prefix) {
 		theOperator = operator;
 		theOperand = operand;
 		isPrefix = prefix;
-		theOperatorSet = operatorSet;
 	}
 
 	public String getOperator() {
@@ -52,9 +49,9 @@ public class UnaryOperator implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ObservableModelSet models,
-		ClassView classView) throws QonfigInterpretationException {
-		Set<Class<?>> types = theOperatorSet.getSupportedSourceTypes(theOperator);
+	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
+		throws QonfigInterpretationException {
+		Set<Class<?>> types = env.getUnaryOperators().getSupportedSourceTypes(theOperator);
 		TypeToken<?> targetOpType;
 		switch (types.size()) {
 		case 0:
@@ -67,28 +64,29 @@ public class UnaryOperator implements ObservableExpression {
 			break;
 		}
 		return (ValueContainer<M, MV>) doOperation(type, //
-			theOperand.evaluate(ModelTypes.Value.forType(targetOpType), models, classView), models, classView);
+			theOperand.evaluate(ModelTypes.Value.forType(targetOpType), env), env);
 	}
 
 	private <M, MV extends M, S> MV doOperation(ModelInstanceType<M, MV> type, ValueContainer<SettableValue, SettableValue<S>> op,
-		ObservableModelSet models, ClassView classView) throws QonfigInterpretationException {
-		UnaryOp<S, ?> operator = theOperatorSet.getOperator(theOperator, (Class<S>) TypeTokens.getRawType(op.getType().getType(0)));
+		ExpressoEnv env) throws QonfigInterpretationException {
+		UnaryOp<S, ?> operator = env.getUnaryOperators().getOperator(theOperator,
+			(Class<S>) TypeTokens.getRawType(op.getType().getType(0)));
 		if (operator == null)
 			throw new QonfigInterpretationException(
 				"Unary operator " + theOperator + " is not supported for operand type " + op.getType().getType(0));
 		else if (operator.isActionOnly()) {
 			if (type.getModelType() != ModelTypes.Action)
 				throw new QonfigInterpretationException("Unary operator " + theOperator + " can only be evaluated as an action");
-			return (MV) evaluateAction(type.getType(0), op, (UnaryOp<S, S>) operator, models, classView);
+			return (MV) evaluateAction(type.getType(0), op, (UnaryOp<S, S>) operator, env);
 		} else {
 			if (!operator.isActionOnly() && type.getModelType() != ModelTypes.Value)
 				throw new QonfigInterpretationException("Unary operator " + theOperator + " can only be evaluated as a value");
-			return (MV) evaluateValue((TypeToken<Object>) type.getType(0), op, (UnaryOp<S, Object>) operator, models, classView);
+			return (MV) evaluateValue((TypeToken<Object>) type.getType(0), op, (UnaryOp<S, Object>) operator, env);
 		}
 	}
 
 	private <T, A> ValueContainer<ObservableAction, ObservableAction<A>> evaluateAction(TypeToken<A> actionType,
-		ValueContainer<SettableValue, SettableValue<T>> op, UnaryOp<T, T> operator, ObservableModelSet models, ClassView classView)
+		ValueContainer<SettableValue, SettableValue<T>> op, UnaryOp<T, T> operator, ExpressoEnv env)
 			throws QonfigInterpretationException {
 		boolean voidAction = TypeTokens.get().unwrap(TypeTokens.getRawType(actionType)) == void.class;
 		if (!voidAction) {
@@ -129,7 +127,7 @@ public class UnaryOperator implements ObservableExpression {
 	}
 
 	private <S, T> ValueContainer<SettableValue, SettableValue<T>> evaluateValue(TypeToken<T> type,
-		ValueContainer<SettableValue, SettableValue<S>> op, UnaryOp<S, T> operator, ObservableModelSet models, ClassView classView)
+		ValueContainer<SettableValue, SettableValue<S>> op, UnaryOp<S, T> operator, ExpressoEnv env)
 			throws QonfigInterpretationException {
 		if (TypeTokens.get().isAssignable(type, TypeTokens.get().of(operator.getTargetType())))
 			type = TypeTokens.get().of(operator.getTargetType());
@@ -173,8 +171,8 @@ public class UnaryOperator implements ObservableExpression {
 	}
 
 	@Override
-	public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ObservableModelSet models,
-		ClassView classView) throws QonfigInterpretationException {
+	public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ExpressoEnv env)
+		throws QonfigInterpretationException {
 		throw new QonfigInterpretationException("Not supported for unary operators");
 	}
 

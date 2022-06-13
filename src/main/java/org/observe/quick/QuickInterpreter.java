@@ -6,15 +6,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ExpressoInterpreter;
-import org.observe.expresso.ExpressoParser;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.quick.QuickCore.StyleValues;
+import org.observe.quick.style.FontValueParser;
 import org.observe.quick.style.QuickElementStyle;
+import org.observe.quick.style.QuickStyleAttribute;
 import org.observe.quick.style.QuickStyleSet;
 import org.observe.quick.style.QuickStyleSheet;
 import org.observe.quick.style.QuickStyleValue;
-import org.observe.quick.style.QuickStyleAttribute;
 import org.qommons.ClassMap;
 import org.qommons.StatusReportAccumulator;
 import org.qommons.config.QonfigAddOn;
@@ -40,8 +41,8 @@ public abstract class QuickInterpreter<QIS extends QuickInterpreter.QuickSession
 			theStyleSheet = ((QuickSession<?>) parent).theStyleSheet;
 		}
 
-		protected QuickSession(QuickInterpreter<QIS> interpreter, QonfigElement root) {
-			super(interpreter, root);
+		protected QuickSession(QuickInterpreter<QIS> interpreter, QonfigElement root, ExpressoEnv env) {
+			super(interpreter, root, env);
 			isStyled = root.isInstance(STYLED);
 		}
 
@@ -71,11 +72,11 @@ public abstract class QuickInterpreter<QIS extends QuickInterpreter.QuickSession
 					theLocalModels = null;
 				else {
 					modelSession.put("local-variables", true);
-					ObservableModelSet.WrappedBuilder builder = ObservableModelSet.wrap(modelSession.getModels());
-					modelSession.setModels(builder);
+					ObservableModelSet.WrappedBuilder builder = ObservableModelSet.wrap(modelSession.getExpressoEnv().getModels());
+					modelSession.setModels(builder, null);
 					modelSession.interpret(ObservableModelSet.class);
 					ObservableModelSet.Wrapped built = builder.build();
-					setModels(built);
+					setModels(built, null);
 					theLocalModels = built;
 				}
 			}
@@ -128,9 +129,9 @@ public abstract class QuickInterpreter<QIS extends QuickInterpreter.QuickSession
 	private final QuickStyleSet theStyleSet;
 
 	protected QuickInterpreter(Class<?> callingClass, Map<QonfigElementOrAddOn, ClassMap<QonfigCreatorHolder<QIS, ?>>> creators,
-		Map<QonfigElementOrAddOn, ClassMap<QonfigModifierHolder<QIS, ?>>> modifiers, ExpressoParser expressionParser,
+		Map<QonfigElementOrAddOn, ClassMap<QonfigModifierHolder<QIS, ?>>> modifiers, ExpressoEnv expressoEnv,
 		QuickStyleSet styleSet) {
-		super(callingClass, creators, modifiers, expressionParser);
+		super(callingClass, creators, modifiers, expressoEnv);
 		theStyleSet = styleSet;
 	}
 
@@ -146,16 +147,16 @@ public abstract class QuickInterpreter<QIS extends QuickInterpreter.QuickSession
 	extends ExpressoInterpreter.Builder<QIS, B> {
 		private QuickStyleSet theStyleSet;
 
-		protected Builder(Class<?> callingClass, ExpressoParser expressionParser, QuickStyleSet styleSet, QonfigToolkit... toolkits) {
-			super(callingClass, expressionParser, toolkits);
+		protected Builder(Class<?> callingClass, ExpressoEnv expressoEnv, QuickStyleSet styleSet, QonfigToolkit... toolkits) {
+			super(callingClass, expressoEnv, toolkits);
 			theStyleSet = styleSet;
 		}
 
 		protected Builder(Class<?> callingClass, Set<QonfigToolkit> toolkits, QonfigToolkit toolkit,
 			StatusReportAccumulator<QonfigElementOrAddOn> status, Map<QonfigElementOrAddOn, ClassMap<QonfigCreatorHolder<QIS, ?>>> creators,
-			Map<QonfigElementOrAddOn, ClassMap<QonfigModifierHolder<QIS, ?>>> modifiers, ExpressoParser expressionParser,
+			Map<QonfigElementOrAddOn, ClassMap<QonfigModifierHolder<QIS, ?>>> modifiers, ExpressoEnv expressoEnv,
 			QuickStyleSet styleSet) {
-			super(callingClass, toolkits, toolkit, status, creators, modifiers, expressionParser);
+			super(callingClass, toolkits, toolkit, status, creators, modifiers, expressoEnv);
 			theStyleSet = styleSet;
 		}
 
@@ -175,13 +176,13 @@ public abstract class QuickInterpreter<QIS extends QuickInterpreter.QuickSession
 		@Override
 		protected B builderFor(Class<?> callingClass, Set<QonfigToolkit> toolkits, QonfigToolkit toolkit,
 			StatusReportAccumulator<QonfigElementOrAddOn> status, Map<QonfigElementOrAddOn, ClassMap<QonfigCreatorHolder<QIS, ?>>> creators,
-			Map<QonfigElementOrAddOn, ClassMap<QonfigModifierHolder<QIS, ?>>> modifiers, ExpressoParser expressionParser) {
-			return builderFor(callingClass, toolkits, toolkit, status, creators, modifiers, expressionParser, theStyleSet);
+			Map<QonfigElementOrAddOn, ClassMap<QonfigModifierHolder<QIS, ?>>> modifiers, ExpressoEnv expressoEnv) {
+			return builderFor(callingClass, toolkits, toolkit, status, creators, modifiers, expressoEnv, theStyleSet);
 		}
 
 		protected abstract B builderFor(Class<?> callingClass, Set<QonfigToolkit> toolkits, QonfigToolkit toolkit,
 			StatusReportAccumulator<QonfigElementOrAddOn> status, Map<QonfigElementOrAddOn, ClassMap<QonfigCreatorHolder<QIS, ?>>> creators,
-			Map<QonfigElementOrAddOn, ClassMap<QonfigModifierHolder<QIS, ?>>> modifiers, ExpressoParser expressionParser,
+			Map<QonfigElementOrAddOn, ClassMap<QonfigModifierHolder<QIS, ?>>> modifiers, ExpressoEnv expressoEnv,
 			QuickStyleSet styleSet);
 
 		@Override
@@ -194,8 +195,8 @@ public abstract class QuickInterpreter<QIS extends QuickInterpreter.QuickSession
 	}
 
 	public static class QuickSessionDefault extends QuickSession<QuickSessionDefault> {
-		QuickSessionDefault(QuickInterpreter<QuickSessionDefault> interpreter, QonfigElement root) {
-			super(interpreter, root);
+		QuickSessionDefault(QuickInterpreter<QuickSessionDefault> interpreter, QonfigElement root, ExpressoEnv expressoEnv) {
+			super(interpreter, root, expressoEnv);
 		}
 
 		QuickSessionDefault(QuickSessionDefault parent, QonfigElement element, QonfigElementOrAddOn type, int childIndex) {
@@ -205,14 +206,14 @@ public abstract class QuickInterpreter<QIS extends QuickInterpreter.QuickSession
 
 	public static class Default extends QuickInterpreter<QuickSessionDefault> {
 		Default(Class<?> callingClass, Map<QonfigElementOrAddOn, ClassMap<QonfigCreatorHolder<QuickSessionDefault, ?>>> creators,
-			Map<QonfigElementOrAddOn, ClassMap<QonfigModifierHolder<QuickSessionDefault, ?>>> modifiers, ExpressoParser expressionParser,
+			Map<QonfigElementOrAddOn, ClassMap<QonfigModifierHolder<QuickSessionDefault, ?>>> modifiers, ExpressoEnv expressoEnv,
 			QuickStyleSet styleSet) {
-			super(callingClass, creators, modifiers, expressionParser, styleSet);
+			super(callingClass, creators, modifiers, expressoEnv, styleSet);
 		}
 
 		@Override
 		public QuickSessionDefault interpret(QonfigElement element) {
-			return new QuickSessionDefault(this, element);
+			return new QuickSessionDefault(this, element, getExpressoEnv());
 		}
 
 		@Override
@@ -223,30 +224,35 @@ public abstract class QuickInterpreter<QIS extends QuickInterpreter.QuickSession
 	}
 
 	public static class DefaultBuilder extends Builder<QuickSessionDefault, DefaultBuilder> {
-		DefaultBuilder(Class<?> callingClass, ExpressoParser expressionParser, QuickStyleSet styleSet, QonfigToolkit... toolkits) {
-			super(callingClass, expressionParser, styleSet, toolkits);
+		DefaultBuilder(Class<?> callingClass, ExpressoEnv expressoEnv, QuickStyleSet styleSet, QonfigToolkit... toolkits) {
+			super(callingClass, expressoEnv, styleSet, toolkits);
 		}
 
 		DefaultBuilder(Class<?> callingClass, Set<QonfigToolkit> toolkits, QonfigToolkit toolkit,
 			StatusReportAccumulator<QonfigElementOrAddOn> status,
 			Map<QonfigElementOrAddOn, ClassMap<QonfigCreatorHolder<QuickSessionDefault, ?>>> creators,
-			Map<QonfigElementOrAddOn, ClassMap<QonfigModifierHolder<QuickSessionDefault, ?>>> modifiers, ExpressoParser expressionParser,
+			Map<QonfigElementOrAddOn, ClassMap<QonfigModifierHolder<QuickSessionDefault, ?>>> modifiers, ExpressoEnv expressoEnv,
 			QuickStyleSet styleSet) {
-			super(callingClass, toolkits, toolkit, status, creators, modifiers, expressionParser, styleSet);
+			super(callingClass, toolkits, toolkit, status, creators, modifiers, expressoEnv, styleSet);
+		}
+
+		@Override
+		protected ExpressoEnv createExpressoEnv() {
+			return super.createExpressoEnv().withNonStructuredParser(double.class, new FontValueParser());
 		}
 
 		@Override
 		protected DefaultBuilder builderFor(Class<?> callingClass, Set<QonfigToolkit> toolkits, QonfigToolkit toolkit,
 			StatusReportAccumulator<QonfigElementOrAddOn> status,
 			Map<QonfigElementOrAddOn, ClassMap<QonfigCreatorHolder<QuickSessionDefault, ?>>> creators,
-			Map<QonfigElementOrAddOn, ClassMap<QonfigModifierHolder<QuickSessionDefault, ?>>> modifiers, ExpressoParser expressionParser,
+			Map<QonfigElementOrAddOn, ClassMap<QonfigModifierHolder<QuickSessionDefault, ?>>> modifiers, ExpressoEnv expressoEnv,
 			QuickStyleSet styleSet) {
-			return new DefaultBuilder(callingClass, toolkits, toolkit, status, creators, modifiers, expressionParser, styleSet);
+			return new DefaultBuilder(callingClass, toolkits, toolkit, status, creators, modifiers, expressoEnv, styleSet);
 		}
 
 		@Override
 		public QuickInterpreter<QuickSessionDefault> create() {
-			return new Default(getCallingClass(), getCreators(), getModifiers(), getOrCreateExpressionParser(), getOrCreateStyleSet());
+			return new Default(getCallingClass(), getCreators(), getModifiers(), getOrCreateExpressoEnv(), getOrCreateStyleSet());
 		}
 	}
 }

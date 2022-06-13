@@ -115,11 +115,6 @@
 		</element-def>
 
 		<!-- Editors -->
-		<element-def name="value-widget" extends="widget" abstract="true" >
-			<attribute name="value" type="expression" specify="required" />
-			<attribute name="disable-with" type="expression" specify="optional" />
-		</element-def>
-		
 		<element-def name="check-box" extends="value-widget">
 			<value type="expression" specify="optional" />
 		</element-def>
@@ -128,10 +123,6 @@
 		</element-def>
 		<element-def name="file-button" extends="value-widget">
 			<attribute name="open" type="boolean" />
-		</element-def>
-		<element-def name="text-widget" extends="value-widget" abstract="true">
-			<attribute name="format" type="expression" specify="optional" />
-			<attribute name="editable" type="expression" specify="optional" />
 		</element-def>
 		<element-def name="label" extends="text-widget">
 			<value type="string" specify="optional" />

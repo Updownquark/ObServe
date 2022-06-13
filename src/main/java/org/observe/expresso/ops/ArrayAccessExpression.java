@@ -5,11 +5,10 @@ import java.util.Collections;
 import java.util.List;
 
 import org.observe.SettableValue;
-import org.observe.expresso.ClassView;
+import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
@@ -40,21 +39,20 @@ public class ArrayAccessExpression implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ObservableModelSet models,
-		ClassView classView) throws QonfigInterpretationException {
+	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
+		throws QonfigInterpretationException {
 		if (type.getModelType() != ModelTypes.Value)
 			throw new QonfigInterpretationException("An array access expression can only be evaluated as a value");
 
 		ValueContainer<SettableValue, ? extends SettableValue<?>> arrayValue = theArray.evaluate(ModelTypes.Value.forType(//
-			TypeTokens.get().getArrayType(type.getType(0), 1)), models, classView);
-		ValueContainer<SettableValue, SettableValue<Integer>> indexValue = theIndex.evaluate(ModelTypes.Value.forType(int.class), models,
-			classView);
-		return (ValueContainer<M, MV>) this.<Object> doEval(arrayValue, indexValue, models, classView);
+			TypeTokens.get().getArrayType(type.getType(0), 1)), env);
+		ValueContainer<SettableValue, SettableValue<Integer>> indexValue = theIndex.evaluate(ModelTypes.Value.forType(int.class), env);
+		return (ValueContainer<M, MV>) this.<Object> doEval(arrayValue, indexValue, env);
 	}
 
 	private <T> ValueContainer<SettableValue, SettableValue<T>> doEval(
 		ValueContainer<SettableValue, ? extends SettableValue<T[]>> arrayValue,
-			ValueContainer<SettableValue, SettableValue<Integer>> indexValue, ObservableModelSet models, ClassView classView) {
+		ValueContainer<SettableValue, SettableValue<Integer>> indexValue, ExpressoEnv env) {
 		TypeToken<T> targetType = (TypeToken<T>) arrayValue.getType().getType(0).getComponentType();
 		ModelInstanceType<SettableValue, SettableValue<T>> targetModelType = ModelTypes.Value.forType(targetType);
 		return new ValueContainer<SettableValue, SettableValue<T>>() {
@@ -92,7 +90,7 @@ public class ArrayAccessExpression implements ObservableExpression {
 	}
 
 	@Override
-	public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ObservableModelSet models, ClassView classView)
+	public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ExpressoEnv env)
 		throws QonfigInterpretationException {
 		throw new QonfigInterpretationException("Not supported for array access expressions");
 	}

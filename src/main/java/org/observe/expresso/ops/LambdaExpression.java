@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.function.Function;
 
 import org.observe.SettableValue;
-import org.observe.expresso.ClassView;
+import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
@@ -41,14 +41,14 @@ public class LambdaExpression implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ObservableModelSet models,
-		ClassView classView) throws QonfigInterpretationException {
+	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
+		throws QonfigInterpretationException {
 		throw new QonfigInterpretationException("Not yet implemented");
 	}
 
 	@Override
-	public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ObservableModelSet models,
-		ClassView classView) throws QonfigInterpretationException {
+	public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ExpressoEnv env)
+		throws QonfigInterpretationException {
 		return new MethodFinder<P1, P2, P3, T>(targetType) {
 			@Override
 			public Function<ModelSetInstance, TriFunction<P1, P2, P3, T>> find3() throws QonfigInterpretationException {
@@ -61,7 +61,7 @@ public class LambdaExpression implements ObservableExpression {
 								+ option.size();
 						continue;
 					}
-					ObservableModelSet.WrappedBuilder wrappedModelsBuilder = ObservableModelSet.wrap(models);
+					ObservableModelSet.WrappedBuilder wrappedModelsBuilder = ObservableModelSet.wrap(env.getModels());
 					ObservableModelSet.RuntimeValuePlaceholder<?, ?>[] placeholders = new ObservableModelSet.RuntimeValuePlaceholder[theParameters
 					                                                                                                                 .size()];
 					for (int i = 0; i < theParameters.size(); i++)
@@ -69,7 +69,7 @@ public class LambdaExpression implements ObservableExpression {
 					ObservableModelSet.Wrapped wrappedModels = wrappedModelsBuilder.build();
 					ValueContainer<SettableValue, SettableValue<T>> body;
 					try {
-						body = theBody.evaluate(ModelTypes.Value.forType(targetType), wrappedModels, classView);
+						body = theBody.evaluate(ModelTypes.Value.forType(targetType), env.with(wrappedModels, null));
 					} catch (QonfigInterpretationException e) {
 						if (ex == null)
 							ex = e;

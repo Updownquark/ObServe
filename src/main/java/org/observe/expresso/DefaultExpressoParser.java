@@ -1,90 +1,32 @@
 package org.observe.expresso;
 
-import java.awt.Color;
-import java.text.ParseException;
-import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.function.Function;
 
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.tree.ParseTree;
-import org.observe.ObservableValue;
-import org.observe.SettableValue;
 import org.observe.expresso.Expression.ExpressoParseException;
-import org.observe.expresso.ModelType.ModelInstanceType;
-import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.expresso.ops.ArrayAccessExpression;
 import org.observe.expresso.ops.AssignmentExpression;
 import org.observe.expresso.ops.BinaryOperator;
-import org.observe.expresso.ops.BinaryOperatorSet;
 import org.observe.expresso.ops.CastExpression;
 import org.observe.expresso.ops.ClassInstanceExpression;
 import org.observe.expresso.ops.ConditionalExpression;
 import org.observe.expresso.ops.ConstructorInvocation;
+import org.observe.expresso.ops.ExternalLiteral;
 import org.observe.expresso.ops.InstanceofExpression;
 import org.observe.expresso.ops.LambdaExpression;
 import org.observe.expresso.ops.MethodInvocation;
 import org.observe.expresso.ops.MethodReferenceExpression;
 import org.observe.expresso.ops.NameExpression;
 import org.observe.expresso.ops.UnaryOperator;
-import org.observe.expresso.ops.UnaryOperatorSet;
-import org.observe.util.TypeTokens;
-import org.qommons.ClassMap;
-import org.qommons.Colors;
-import org.qommons.LambdaUtils;
 import org.qommons.StringUtils;
-import org.qommons.TimeUtils;
-import org.qommons.TriFunction;
 import org.qommons.collect.BetterList;
-import org.qommons.config.QonfigInterpretationException;
 import org.qommons.tree.BetterTreeList;
 
-import com.google.common.reflect.TypeToken;
-
 public class DefaultExpressoParser implements ExpressoParser {
-	private final ClassMap<List<NonStructuredParser>> theNonStructuredParsers;
-	private final UnaryOperatorSet theUnaryOperators;
-	private final BinaryOperatorSet theBinaryOperators;
-
-	public DefaultExpressoParser() {
-		theNonStructuredParsers = new ClassMap<>();
-		theUnaryOperators = UnaryOperatorSet.build().withStandardJavaOps().build();
-		theBinaryOperators = BinaryOperatorSet.STANDARD_JAVA;
-	}
-
-	public DefaultExpressoParser withNonStructuredParser(Class<?> type, NonStructuredParser parser) {
-		theNonStructuredParsers.computeIfAbsent(type, () -> new ArrayList<>(3)).add(parser);
-		return this;
-	}
-
-	public DefaultExpressoParser removeNonStructuredParser(Class<?> type, NonStructuredParser parser) {
-		theNonStructuredParsers.getOrDefault(type, ClassMap.TypeMatch.EXACT, Collections.emptyList()).remove(parser);
-		return this;
-	}
-
-	public DefaultExpressoParser withDefaultNonStructuredParsing() {
-		withNonStructuredParser(String.class, NonStructuredParser.simple((t, s) -> s));
-		withNonStructuredParser(Duration.class, NonStructuredParser.simple((t, s) -> TimeUtils.parseDuration(s)));
-		withNonStructuredParser(Instant.class,
-			NonStructuredParser.simple((t, s) -> TimeUtils.parseInstant(s, true, true, null).evaluate(Instant::now)));
-		withNonStructuredParser(Enum.class, NonStructuredParser.simple((t, s) -> parseEnum(t, s)));
-		withNonStructuredParser(Color.class, NonStructuredParser.simple((t, s) -> Colors.parseColor(s)));
-		return this;
-	}
-
-	private static <E extends Enum<E>> E parseEnum(TypeToken<?> type, String text) throws ParseException {
-		try {
-			return Enum.valueOf((Class<E>) TypeTokens.getRawType(type), text);
-		} catch (IllegalArgumentException e) {
-			throw new ParseException(e.getMessage(), 0);
-		}
-	}
-
 	@Override
 	public ObservableExpression parse(String text) throws ExpressoParseException {
 		if (text.trim().isEmpty())
@@ -127,7 +69,7 @@ public class DefaultExpressoParser implements ExpressoParser {
 				case "++":
 				case "--":
 					ObservableExpression operand = _parse(expression.getComponents().getLast());
-					return new UnaryOperator(expression.getComponents().getFirst().getText(), operand, true, theUnaryOperators);
+					return new UnaryOperator(expression.getComponents().getFirst().getText(), operand, true);
 				case "new":
 					Expression creator = expression.getComponents().get(1);
 					if (creator.getComponent("nonWildcardTypeArguments") != null)
@@ -165,7 +107,7 @@ public class DefaultExpressoParser implements ExpressoParser {
 				case "++":
 				case "--":
 					ObservableExpression operand = _parse(expression.getComponents().getFirst());
-					return new UnaryOperator(expression.getComponents().getLast().getText(), operand, false, theUnaryOperators);
+					return new UnaryOperator(expression.getComponents().getLast().getText(), operand, false);
 				}
 				throw new IllegalStateException("Unhandled expression type: " + expression.getType() + " " + expression);
 			default:
@@ -239,7 +181,7 @@ public class DefaultExpressoParser implements ExpressoParser {
 				case ">>>=":
 					ObservableExpression left = _parse(expression.getComponents().getFirst());
 					ObservableExpression right = _parse(expression.getComponents().getLast());
-					return new BinaryOperator(expression.getComponents().get(1).getText(), left, right, theBinaryOperators);
+					return new BinaryOperator(expression.getComponents().get(1).getText(), left, right);
 				case "instanceof":
 					left = _parse(expression.getComponents().getFirst());
 					return new InstanceofExpression(left, parseType(expression.getComponents().getLast()));
@@ -812,20 +754,20 @@ public class DefaultExpressoParser implements ExpressoParser {
 			String operator = expression.getComponents().get(1).toString();
 			ObservableExpression left = _parse(expression.getComponents().getFirst());
 			ObservableExpression right = _parse(expression.getComponents().getLast());
-			return new BinaryOperator(operator, left, right, theBinaryOperators);
+			return new BinaryOperator(operator, left, right);
 			// Unary operation types
 		case "'!'":
 			operator = expression.getType().substring(1, expression.getType().length() - 1);
 			left = _parse(expression.getComponents().getFirst());
 			right = _parse(expression.getComponents().getLast());
-			return new BinaryOperator(operator, left, right, theBinaryOperators);
+			return new BinaryOperator(operator, left, right);
 		case "unaryExpression":
 		case "preIncrementExpression":
 		case "preDecrementExpression":
 		case "unaryExpressionNotPlusMinus":
 			operator = expression.getComponents().getFirst().getText();
 			ObservableExpression operand = _parse(expression.getComponents().getLast());
-			return new UnaryOperator(operator, operand, true, theUnaryOperators);
+			return new UnaryOperator(operator, operand, true);
 		case "postfixExpression":
 		case "postIncrementExpression":
 		case "postDecrementExpression":
@@ -953,100 +895,6 @@ public class DefaultExpressoParser implements ExpressoParser {
 		for (Expression comp : expression.getComponents())
 			extractNameSequence(comp, names);
 		return names;
-	}
-
-	public class ExternalLiteral implements ObservableExpression {
-		private final Expression theExpression;
-		private final String theText;
-
-		public ExternalLiteral(Expression expression, String text) {
-			theExpression = expression;
-			theText = text;
-		}
-
-		public Expression getExpression() {
-			return theExpression;
-		}
-
-		public String getText() {
-			return theText;
-		}
-
-		@Override
-		public List<? extends ObservableExpression> getChildren() {
-			return Collections.emptyList();
-		}
-
-		@Override
-		public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ObservableModelSet models,
-			ClassView classView) throws QonfigInterpretationException {
-			if (type.getModelType() != ModelTypes.Value)
-				throw new QonfigInterpretationException("'" + theExpression.getText() + "' cannot be evaluated as a " + type);
-			ObservableValue<?> value = parseValue(type.getType(0));
-			return ObservableModelSet.container(LambdaUtils.constantFn(//
-				(MV) SettableValue.asSettable(value, __ -> "Literal value cannot be modified"), theExpression.getText(), null), //
-				(ModelInstanceType<M, MV>) ModelTypes.Value.forType(value.getType()));
-		}
-
-		@Override
-		public <P1, P2, P3, T2> MethodFinder<P1, P2, P3, T2> findMethod(TypeToken<T2> targetType, ObservableModelSet models,
-			ClassView classView) throws QonfigInterpretationException {
-			ObservableValue<?> value = parseValue(targetType);
-			return new MethodFinder<P1, P2, P3, T2>(targetType) {
-				@Override
-				public Function<ModelSetInstance, TriFunction<P1, P2, P3, T2>> find3() throws QonfigInterpretationException {
-					for (MethodOption option : theOptions) {
-						if (option.size() == 0)
-							return __ -> (p1, p2, p3) -> (T2) value.get();
-					}
-					throw new QonfigInterpretationException("No zero-parameter option for literal `" + theText + "`");
-				}
-			};
-		}
-
-		public <T> ObservableValue<? extends T> parseValue(TypeToken<T> asType) throws QonfigInterpretationException {
-			// Get all parsers that may possibly be able to generate an appropriate value
-			List<List<NonStructuredParser>> parsers = theNonStructuredParsers.getAll(TypeTokens.getRawType(asType), null);
-			if (parsers.isEmpty())
-				throw new QonfigInterpretationException("No literal parsers available for type " + asType);
-			NonStructuredParser parser = null;
-			for (List<NonStructuredParser> list : parsers) {
-				for (NonStructuredParser p : list) {
-					if (p.canParse(asType, theText)) {
-						parser = p;
-						break;
-					}
-				}
-			}
-			if (parser == null)
-				throw new QonfigInterpretationException("No literal parsers for value `" + theText + "` as type " + asType);
-			ObservableValue<? extends T> value;
-			try {
-				value = parser.parse(asType, theText);
-			} catch (ParseException e) {
-				throw new QonfigInterpretationException("Literal parsing failed for value `" + theText + "` as type " + asType, e);
-			}
-			return value;
-		}
-
-		@Override
-		public int hashCode() {
-			return theText.hashCode();
-		}
-
-		@Override
-		public boolean equals(Object obj) {
-			if (obj == this)
-				return true;
-			else if (!(obj instanceof ExternalLiteral))
-				return false;
-			return theText.equals(((ExternalLiteral) obj).theText);
-		}
-
-		@Override
-		public String toString() {
-			return theExpression.toString();
-		}
 	}
 
 	public static String parseType(Expression expression) throws ExpressoParseException {
