@@ -1,5 +1,6 @@
 package org.observe.util;
 
+import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -136,15 +137,18 @@ public class ObservableUtils {
 				return;
 			// This outer transaction is because locking once for a series of changes
 			// is much more efficient than repeatedly locking for each change
-			evt.getRootCausable().onFinish(ck).computeIfAbsent("c2Transaction",
-				k -> {
-					ObservableCollectionLinkEvent linkEvt = new ObservableCollectionLinkEvent(c1, evt.getRootCausable());
-					return c2.lock(true, linkEvt);
-				});
+			Map<Object, Object> data = evt.getRootCausable().onFinish(ck);
+			ObservableCollectionLinkEvent linkEvt = (ObservableCollectionLinkEvent) data.computeIfAbsent("c2LinkEvt",
+				__ -> new ObservableCollectionLinkEvent(c1, evt.getRootCausable()));
+			data.computeIfAbsent("c2Transaction", k -> {
+				Transaction linkEvtT = linkEvt.use();
+				Transaction cTrans = c2.lock(true, linkEvt);
+				return Transaction.and(cTrans, linkEvtT);
+			});
 			// The inner transaction is so that each c1 change is causably linked to a particular c2 change
-			ObservableCollectionLinkEvent linkEvt = new ObservableCollectionLinkEvent(c1, evt);
-			try (Transaction linkEvtT = linkEvt.use();
-				Transaction evtT = c2.lock(true, linkEvt)) {
+			ObservableCollectionLinkEvent innerLinkEvt = new ObservableCollectionLinkEvent(c1, evt);
+			try (Transaction linkEvtT = innerLinkEvt.use(); //
+				Transaction evtT = c2.lock(true, innerLinkEvt)) {
 				isLinkChanging[0] = true;
 				try {
 					switch (evt.getType()) {
@@ -171,12 +175,18 @@ public class ObservableUtils {
 				return;
 			// This outer transaction is because locking once for a series of changes
 			// is much more efficient than repeatedly locking for each change
-			evt.getRootCausable().onFinish(ck).computeIfAbsent("c1Transaction",
-				k -> c2.lock(true, new ObservableCollectionLinkEvent(c2, evt.getRootCausable())));
+			Map<Object, Object> data = evt.getRootCausable().onFinish(ck);
+			ObservableCollectionLinkEvent linkEvt = (ObservableCollectionLinkEvent) data.computeIfAbsent("c1LinkEvt",
+				__ -> new ObservableCollectionLinkEvent(c1, evt.getRootCausable()));
+			data.computeIfAbsent("c1Transaction", k -> {
+				Transaction linkEvtT = linkEvt.use();
+				Transaction cTrans = c1.lock(true, linkEvt);
+				return Transaction.and(cTrans, linkEvtT);
+			});
 			// The inner transaction is so that each c2 change is causably linked to a particular c1 change
-			ObservableCollectionLinkEvent linkEvt = new ObservableCollectionLinkEvent(c2, evt);
-			try (Transaction linkEvtT = linkEvt.use();
-				Transaction evtT = c1.lock(true, linkEvt)) {
+			ObservableCollectionLinkEvent innerLinkEvt = new ObservableCollectionLinkEvent(c2, evt);
+			try (Transaction linkEvtT = innerLinkEvt.use(); //
+				Transaction evtT = c1.lock(true, innerLinkEvt)) {
 				isLinkChanging[0] = true;
 				try {
 					switch (evt.getType()) {
