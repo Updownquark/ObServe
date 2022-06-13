@@ -23,6 +23,7 @@ import org.observe.expresso.ops.BinaryOperator;
 import org.observe.expresso.ops.BinaryOperatorSet;
 import org.observe.expresso.ops.ConditionalExpression;
 import org.observe.expresso.ops.ConstructorInvocation;
+import org.observe.expresso.ops.InstanceofExpression;
 import org.observe.expresso.ops.LambdaExpression;
 import org.observe.expresso.ops.MethodInvocation;
 import org.observe.expresso.ops.MethodReferenceExpression;
@@ -38,7 +39,6 @@ import org.qommons.TimeUtils;
 import org.qommons.TriFunction;
 import org.qommons.collect.BetterList;
 import org.qommons.config.QonfigInterpretationException;
-import org.qommons.io.Format;
 import org.qommons.tree.BetterTreeList;
 
 import com.google.common.reflect.TypeToken;
@@ -65,7 +65,6 @@ public class DefaultExpressoParser implements ExpressoParser {
 	}
 
 	public DefaultExpressoParser withDefaultNonStructuredParsing() {
-		withNonStructuredParser(Integer.class, NonStructuredParser.simple((t, s) -> Format.INT.parse(s))); // TODO REMOVE
 		withNonStructuredParser(String.class, NonStructuredParser.simple((t, s) -> s));
 		withNonStructuredParser(Duration.class, NonStructuredParser.simple((t, s) -> TimeUtils.parseDuration(s)));
 		withNonStructuredParser(Instant.class,
@@ -228,7 +227,9 @@ public class DefaultExpressoParser implements ExpressoParser {
 					ObservableExpression right = _parse(expression.getComponents().getLast());
 					return new BinaryOperator(expression.getComponents().get(1).getText(), left, right, theBinaryOperators);
 				case "instanceof":
-					throw new ExpressoParseException(expression, "instanceof is not yet implemented");
+					left = _parse(expression.getComponents().getFirst());
+					String type = expression.getComponents().getLast().getText();
+					return new InstanceofExpression(left, type);
 				case "?":
 					ObservableExpression condition = _parse(expression.getComponents().getFirst());
 					ObservableExpression primary = _parse(expression.getComponents().get(2));
