@@ -1554,7 +1554,7 @@ public class Expresso<QIS extends ExpressoSession<?>> implements QonfigInterpret
 	}
 
 	private ValueContainer<?, ?> transformEvent(ValueContainer<Observable, Observable<Object>> source, ExpressoSession<?> transform,
-		int startOp) {
+		int startOp) throws QonfigInterpretationException {
 		List<? extends ExpressoSession<?>> ops = transform.forChildren("op");
 		for (int i = startOp; i < ops.size(); i++) {
 			ExpressoSession<?> op = ops.get(i);

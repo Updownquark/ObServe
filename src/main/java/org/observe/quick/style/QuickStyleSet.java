@@ -1,18 +1,22 @@
 package org.observe.quick.style;
 
+import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Consumer;
+import java.util.Set;
 
+import org.observe.SettableValue;
 import org.observe.expresso.Expresso;
 import org.observe.expresso.ExpressoInterpreter.ExpressoSession;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.quick.QuickCore;
+import org.observe.util.TypeTokens;
 import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterHashMultiMap;
 import org.qommons.collect.BetterMultiMap;
@@ -24,17 +28,19 @@ import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreter;
 import org.qommons.config.QonfigInterpreter.Builder;
 
+import com.google.common.reflect.TypeToken;
+
 public class QuickStyleSet {
+	public static final QonfigAddOn STYLED = QuickCore.CORE.get().getAddOn("styled");
+
 	interface StyleModelValues {
-		<M, MV extends M> StyleModelValues withModelValue(QuickModelValue<M, MV> modelValue, MV value);
+		<T> StyleModelValues withModelValue(QuickModelValue<T> modelValue, SettableValue<T> value);
 	}
 
 	private final Map<QonfigElementOrAddOn, QuickStyleType> theStyleTypes;
-	private final ThreadLocal<Map<QuickModelValue<?, ?>, Object>> theModelValues;
 
 	public QuickStyleSet() {
 		theStyleTypes = new HashMap<>();
-		theModelValues = ThreadLocal.withInitial(HashMap::new);
 	}
 
 	public synchronized QuickStyleType styled(QonfigElementOrAddOn element, ExpressoSession<?> session)
@@ -44,18 +50,26 @@ public class QuickStyleSet {
 			return styled;
 		else if (session == null)
 			return null;
+		else if (!STYLED.isAssignableFrom(element))
+			return null;
 		List<QuickStyleType> parents = new ArrayList<>();
 		QonfigElementOrAddOn superEl = element.getSuperElement();
-		if (superEl != null)
-			parents.add(styled(superEl, session));
-		for (QonfigAddOn inh : element.getInheritance())
-			parents.add(styled(inh, session));
+		if (superEl != null) {
+			QuickStyleType parent = styled(superEl, session);
+			if (parent != null)
+				parents.add(parent);
+		}
+		for (QonfigAddOn inh : element.getInheritance()) {
+			QuickStyleType parent = styled(inh, session);
+			if (parent != null)
+				parents.add(parent);
+		}
 		if (parents.isEmpty())
 			parents = Collections.emptyList();
 		else
 			parents = Collections.unmodifiableList(parents);
-		Map<String, QuickModelValue<?, ?>> declaredModelValues = new LinkedHashMap<>();
-		Map<String, QuickModelValue<?, ?>> modelValues = new LinkedHashMap<>();
+		Map<String, QuickModelValue<?>> declaredModelValues = new LinkedHashMap<>();
+		Map<String, QuickModelValue<?>> modelValues = new LinkedHashMap<>();
 		Map<String, QuickStyleAttribute<?>> declaredAttributes = new LinkedHashMap<>();
 		BetterMultiMap<String, QuickStyleAttribute<?>> attributes = BetterHashMultiMap.<String, QuickStyleAttribute<?>> build().buildMultiMap();
 		styled = new QuickStyleType(this, element, parents, Collections.unmodifiableMap(declaredModelValues),
@@ -68,8 +82,8 @@ public class QuickStyleSet {
 			QonfigInterpreter.Builder<?, ?> interpreterBuilder = QonfigInterpreter.build(QuickStyleSet.class, QuickCore.CORE.get())
 				.forToolkit(QuickCore.CORE.get());
 			configureModelInterpretation(interpreterBuilder, session);
-			QonfigInterpreter<?> interpreter = interpreterBuilder.build();
 			QonfigAttributeDef.Declared nameAttr = Expresso.EXPRESSO.get().getAddOn("model-element").getAttribute("name").getDeclared();
+			QonfigAttributeDef.Declared typeAttr = Expresso.EXPRESSO.get().getElement("model-value").getAttribute("type").getDeclared();
 			QonfigAttributeDef.Declared priorityAttr = QuickCore.CORE.get().getAddOn("widget-model-value").getAttribute("priority")
 				.getDeclared();
 			for (QonfigElement modelV : modelEl.getChildrenInRole(Expresso.EXPRESSO.get(), "model", "value")) {
@@ -78,7 +92,12 @@ public class QuickStyleSet {
 					session.withError("Multiple model values named '" + name + "' declared");
 					continue;
 				}
-				ModelInstanceType<?, ?> type = interpreter.interpret(modelV).interpret(ModelInstanceType.class);
+				TypeToken<?> type;
+				try {
+					type = TypeTokens.get().parseType(modelV.getAttributeText(typeAttr));
+				} catch (IllegalArgumentException | ParseException e) {
+					throw new QonfigInterpretationException("Could not parse type of style model value '" + name + "'", e);
+				}
 				declaredModelValues.put(name, new QuickModelValue<>(styled, name, type, //
 					Integer.parseInt(modelV.getAttributeText(priorityAttr))));
 			}
@@ -106,7 +125,7 @@ public class QuickStyleSet {
 		attributes.putAll(declaredAttributes);
 
 		for (QuickStyleType parent : parents) {
-			for (QuickModelValue<?, ?> mv : parent.getModelValues().values()) {
+			for (QuickModelValue<?> mv : parent.getModelValues().values()) {
 				if (modelValues.containsKey(mv.getName()))
 					session.withWarning("Model value " + mv + " is name-eclipsed by " + modelValues.get(mv.getName()));
 				else
@@ -116,6 +135,19 @@ public class QuickStyleSet {
 		}
 		theStyleTypes.put(element, styled);
 		return styled;
+	}
+
+	public Set<QuickModelValue<?>> getModelValues(QonfigElement element, ExpressoSession<?> session) throws QonfigInterpretationException {
+		Set<QuickModelValue<?>> modelValues = new LinkedHashSet<>();
+		QuickStyleType type = styled(element.getType(), session);
+		if (type != null)
+			modelValues.addAll(type.getModelValues().values());
+		for (QonfigAddOn inh : element.getInheritance().values()) {
+			type = styled(element.getType(), session);
+			if (type != null)
+				modelValues.addAll(type.getModelValues().values());
+		}
+		return Collections.unmodifiableSet(modelValues);
 	}
 
 	private void configureModelInterpretation(Builder<?, ?> interpreterBuilder, ExpressoSession<?> session) {
@@ -158,26 +190,5 @@ public class QuickStyleSet {
 				Expresso.parseType(session2.getAttributeText("type"), session.getExpressoEnv())//
 				);
 		});
-	}
-
-	public QuickStyleSet withModelValues(Consumer<StyleModelValues> modelValues) {
-		Map<QuickModelValue<?, ?>, Object> values = theModelValues.get();
-		values.clear();
-		modelValues.accept(new StyleModelValues() {
-			@Override
-			public <M, MV extends M> StyleModelValues withModelValue(QuickModelValue<M, MV> modelValue, MV value) {
-				values.put(modelValue, value);
-				return this;
-			}
-		});
-		return this;
-	}
-
-	public <M, MV extends M> MV getModelValue(QuickModelValue<M, MV> modelValue) {
-		Map<QuickModelValue<?, ?>, Object> values = theModelValues.get();
-		MV value = (MV) values.get(modelValue);
-		if (value == null)
-			throw new IllegalStateException("Model value '" + modelValue + "' has not been installed by the interpretation");
-		return value;
 	}
 }

@@ -603,6 +603,42 @@ public class TypeTokens {
 	}
 
 	/**
+	 * @param <T> The type of value to get
+	 * @param type The type of value to get
+	 * @return A default value for the given type, accommodating primitives, which cannot be null
+	 */
+	public <T> T getPrimitiveDefault(TypeToken<T> type) {
+		return getPrimitiveDefault(getRawType(type));
+	}
+
+	/**
+	 * @param <T> The type of value to get
+	 * @param type The type of value to get
+	 * @return A default value for the given type, accommodating primitives, which cannot be null
+	 */
+	public <T> T getPrimitiveDefault(Class<T> type) {
+		type = unwrap(type);
+		if (type == boolean.class)
+			return (T) Boolean.FALSE;
+		else if (type == int.class)
+			return (T) Integer.valueOf(0);
+		else if (type == long.class)
+			return (T) Long.valueOf(0);
+		else if (type == double.class)
+			return (T) Double.valueOf(0);
+		else if (type == float.class)
+			return (T) Float.valueOf(0);
+		else if (type == char.class)
+			return (T) Character.valueOf(' ');
+		else if (type == byte.class)
+			return (T) Byte.valueOf((byte) 0);
+		else if (type == short.class)
+			return (T) Short.valueOf((short) 0);
+		else
+			return null;
+	}
+
+	/**
 	 * Checks the value against the type's raw type
 	 *
 	 * @param type The type to check against

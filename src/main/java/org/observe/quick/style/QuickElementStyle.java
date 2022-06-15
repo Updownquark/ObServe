@@ -42,6 +42,8 @@ public class QuickElementStyle {
 			values.computeIfAbsent(attr, __ -> SortedTreeList.<QuickStyleValue<?>> buildTreeList(QuickStyleValue::compareTo).build());
 		for (QonfigAddOn inh : element.getInheritance().getExpanded(QonfigAddOn::getInheritance)) {
 			type = theStyleSet.styled(inh, session);
+			if (type == null)
+				continue;
 			for (QuickStyleAttribute<?> attr : type.getAttributes().values())
 				values.computeIfAbsent(attr, __ -> SortedTreeList.<QuickStyleValue<?>> buildTreeList(QuickStyleValue::compareTo).build());
 		}

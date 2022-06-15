@@ -148,7 +148,8 @@
 
 		<element-def name="widget" abstract="true" inherits="with-text">
 			<widget-model>
-				<value name="focused" type="boolean" />
+				<value name="hovered" type="boolean" priority="0" />
+				<value name="focused" type="boolean" priority="0" />
 			</widget-model>
 			<styles>
 				<style-attribute name="color" type="java.awt.Color" />

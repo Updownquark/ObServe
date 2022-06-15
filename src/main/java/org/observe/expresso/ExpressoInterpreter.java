@@ -28,12 +28,14 @@ public abstract class ExpressoInterpreter<QIS extends ExpressoInterpreter.Expres
 	extends QonfigInterpreter.QonfigInterpretingSession<QIS> {
 		private ExpressoEnv theEnv;
 
-		protected ExpressoSession(QIS parent, QonfigElement element, QonfigElementOrAddOn type, int childIndex) {
+		protected ExpressoSession(QIS parent, QonfigElement element, QonfigElementOrAddOn type, int childIndex)
+			throws QonfigInterpretationException {
 			super(parent, element, type, childIndex);
 			theEnv = ((ExpressoSession<?>) parent).theEnv;
 		}
 
-		protected ExpressoSession(ExpressoInterpreter<QIS> interpreter, QonfigElement root, ExpressoEnv env) {
+		protected ExpressoSession(ExpressoInterpreter<QIS> interpreter, QonfigElement root, ExpressoEnv env)
+			throws QonfigInterpretationException {
 			super(interpreter, root);
 			theEnv = env;
 		}
@@ -226,11 +228,13 @@ public abstract class ExpressoInterpreter<QIS extends ExpressoInterpreter.Expres
 	}
 
 	public static class ExpressoSessionDefault extends ExpressoSession<ExpressoSessionDefault> {
-		ExpressoSessionDefault(ExpressoSessionDefault parent, QonfigElement element, QonfigElementOrAddOn type, int childIndex) {
+		ExpressoSessionDefault(ExpressoSessionDefault parent, QonfigElement element, QonfigElementOrAddOn type, int childIndex)
+			throws QonfigInterpretationException {
 			super(parent, element, type, childIndex);
 		}
 
-		ExpressoSessionDefault(ExpressoInterpreter<ExpressoSessionDefault> interpreter, QonfigElement root, ExpressoEnv expressoEnv) {
+		ExpressoSessionDefault(ExpressoInterpreter<ExpressoSessionDefault> interpreter, QonfigElement root, ExpressoEnv expressoEnv)
+			throws QonfigInterpretationException {
 			super(interpreter, root, expressoEnv);
 		}
 	}
@@ -244,13 +248,13 @@ public abstract class ExpressoInterpreter<QIS extends ExpressoInterpreter.Expres
 		}
 
 		@Override
-		public ExpressoSessionDefault interpret(QonfigElement element) {
+		public ExpressoSessionDefault interpret(QonfigElement element) throws QonfigInterpretationException {
 			return new ExpressoSessionDefault(this, element, getExpressoEnv());
 		}
 
 		@Override
 		protected ExpressoSessionDefault interpret(ExpressoSessionDefault parent, QonfigElement element, QonfigElementOrAddOn type,
-			int childIndex) {
+			int childIndex) throws QonfigInterpretationException {
 			return new ExpressoSessionDefault(parent, element, type, childIndex);
 		}
 	}

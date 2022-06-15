@@ -1,5 +1,6 @@
 package org.observe.quick.style;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
@@ -29,7 +30,7 @@ public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 	private final ValueContainer<SettableValue, SettableValue<Boolean>> theCondition;
 	private final ObservableExpression theValueExpression;
 	private final ValueContainer<SettableValue, ? extends SettableValue<? extends T>> theValue;
-	private final Set<QuickModelValue<?, ?>> theUsedModelValues;
+	private final List<QuickModelValue<?>> theUsedModelValues;
 
 	public QuickStyleValue(QuickStyleSheet styleSheet, QuickStyleAttribute<T> attribute, QonfigElementOrAddOn element,
 		List<QonfigChildDef> rolePath, ObservableExpression condition, ObservableExpression value, //
@@ -42,20 +43,23 @@ public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 		theValueExpression = value;
 		theCondition = condition == null ? null : condition.evaluate(ModelTypes.Value.forType(boolean.class), env);
 		theValue = value.evaluate(ModelTypes.Value.forType(attribute.getType()), env);
-		Set<QuickModelValue<?, ?>> modelValues = new LinkedHashSet<>();
+		Set<QuickModelValue<?>> modelValues = new LinkedHashSet<>();
 		if (theConditionExpression != null)
 			findModelValues(theConditionExpression, modelValues, env.getModels());
 		findModelValues(theValueExpression, modelValues, env.getModels());
-		theUsedModelValues = Collections.unmodifiableSet(modelValues);
+		List<QuickModelValue<?>> sortedModelValues = new ArrayList<>(modelValues.size());
+		sortedModelValues.addAll(modelValues);
+		Collections.sort(sortedModelValues, (mv1, mv2) -> -Integer.compare(mv1.getPriority(), mv2.getPriority()));
+		theUsedModelValues = Collections.unmodifiableList(sortedModelValues);
 	}
 
-	private static void findModelValues(ObservableExpression ex, Set<QuickModelValue<?, ?>> modelValues, ObservableModelSet models)
+	private static void findModelValues(ObservableExpression ex, Set<QuickModelValue<?>> modelValues, ObservableModelSet models)
 		throws QonfigInterpretationException {
 		if (ex instanceof NameExpression && ((NameExpression) ex).getContext() == null) {
 			String name = ((NameExpression) ex).getNames().getFirst();
 			ValueContainer<?, ?> value = models.get(name, false);
 			if (value instanceof QuickModelValue)
-				modelValues.add((QuickModelValue<?, ?>) value);
+				modelValues.add((QuickModelValue<?>) value);
 		} else {
 			for (ObservableExpression child : ex.getChildren())
 				findModelValues(child, modelValues, models);
@@ -94,15 +98,15 @@ public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 		return theValue;
 	}
 
-	public Set<QuickModelValue<?, ?>> getUsedModelValues() {
+	public List<QuickModelValue<?>> getUsedModelValues() {
 		return theUsedModelValues;
 	}
 
 	@Override
 	public int compareTo(QuickStyleValue<?> o) {
 		// Most importantly, compare the priority of model values used in the condition and value
-		Iterator<QuickModelValue<?, ?>> iter1 = theUsedModelValues.iterator();
-		Iterator<QuickModelValue<?, ?>> iter2 = o.theUsedModelValues.iterator();
+		Iterator<QuickModelValue<?>> iter1 = theUsedModelValues.iterator();
+		Iterator<QuickModelValue<?>> iter2 = o.theUsedModelValues.iterator();
 		int comp = 0;
 		while (comp == 0) {
 			if (iter1.hasNext()) {

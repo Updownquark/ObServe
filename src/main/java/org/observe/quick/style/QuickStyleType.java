@@ -17,13 +17,13 @@ public class QuickStyleType {
 	private final QuickStyleSet theStyleSet;
 	private final QonfigElementOrAddOn theElement;
 	private final List<QuickStyleType> theSuperElements;
-	private final Map<String, QuickModelValue<?, ?>> theDeclaredModelValues;
-	private final Map<String, QuickModelValue<?, ?>> theModelValues;
+	private final Map<String, QuickModelValue<?>> theDeclaredModelValues;
+	private final Map<String, QuickModelValue<?>> theModelValues;
 	private final Map<String, QuickStyleAttribute<?>> theDeclaredAttributes;
 	private final BetterMultiMap<String, QuickStyleAttribute<?>> theAttributes;
 
 	QuickStyleType(QuickStyleSet styleSet, QonfigElementOrAddOn element, List<QuickStyleType> superElements, //
-		Map<String, QuickModelValue<?, ?>> declaredModelValues, Map<String, QuickModelValue<?, ?>> modelValues, //
+		Map<String, QuickModelValue<?>> declaredModelValues, Map<String, QuickModelValue<?>> modelValues, //
 		Map<String, QuickStyleAttribute<?>> declaredAttributes, BetterMultiMap<String, QuickStyleAttribute<?>> attributes) {
 		theStyleSet = styleSet;
 		theElement = element;
@@ -46,11 +46,11 @@ public class QuickStyleType {
 		return theSuperElements;
 	}
 
-	public Map<String, QuickModelValue<?, ?>> getDeclaredModelValues() {
+	public Map<String, QuickModelValue<?>> getDeclaredModelValues() {
 		return theDeclaredModelValues;
 	}
 
-	public Map<String, QuickModelValue<?, ?>> getModelValues() {
+	public Map<String, QuickModelValue<?>> getModelValues() {
 		return theModelValues;
 	}
 
@@ -122,6 +122,44 @@ public class QuickStyleType {
 
 	public <T> QuickStyleAttribute<? extends T> getAttribute(String name, Class<T> type) {
 		return getAttribute(name, TypeTokens.get().of(type));
+	}
+
+	public QuickModelValue<?> getModelValue(String name) {
+		int dot = name.indexOf('.');
+		if (dot < 0) {
+			QuickModelValue<?> mv = theDeclaredModelValues.get(name);
+			if (mv != null)
+				return mv;
+			mv = theModelValues.get(name);
+			if (mv == null)
+				throw new IllegalArgumentException("No such style model value: " + theElement + "." + name);
+			return mv;
+		} else {
+			String elName = name.substring(0, dot);
+			QonfigElementOrAddOn el = theElement.getDeclarer().getElementOrAddOn(elName);
+			if (el == null)
+				throw new IllegalArgumentException("No such element or add-on '" + elName + "'");
+			QuickStyleType styled;
+			try {
+				styled = theStyleSet.styled(el, null);
+			} catch (QonfigInterpretationException e) {
+				throw new IllegalStateException("Shouldn't happen", e);
+			}
+			if (styled == null)
+				throw new IllegalArgumentException(theElement + " is not related to " + elName);
+			return styled.getModelValue(name.substring(dot + 1));
+		}
+	}
+
+	public <T> QuickModelValue<T> getModelValue(String name, TypeToken<T> type) {
+		QuickModelValue<?> mv = getModelValue(name);
+		if (!type.equals(mv.getValueType()))
+			throw new IllegalArgumentException("Model value" + theElement + "." + name + " is of type " + mv.getType() + ", not " + type);
+		return (QuickModelValue<T>) mv;
+	}
+
+	public <T> QuickModelValue<T> getModelValue(String name, Class<T> type) {
+		return getModelValue(name, TypeTokens.get().of(type));
 	}
 
 	@Override

@@ -1,93 +1,150 @@
 package org.observe.quick;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.observe.ObservableValue;
+import org.observe.SettableValue;
 import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ExpressoInterpreter;
+import org.observe.expresso.ModelType.ModelInstanceType;
+import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet;
+import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.quick.QuickCore.StyleValues;
 import org.observe.quick.style.FontValueParser;
 import org.observe.quick.style.QuickElementStyle;
+import org.observe.quick.style.QuickModelValue;
+import org.observe.quick.style.QuickModelValue.Satisfier;
 import org.observe.quick.style.QuickStyleAttribute;
 import org.observe.quick.style.QuickStyleSet;
 import org.observe.quick.style.QuickStyleSheet;
 import org.observe.quick.style.QuickStyleValue;
+import org.observe.util.TypeTokens;
 import org.qommons.ClassMap;
 import org.qommons.StatusReportAccumulator;
-import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigElementDef;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigToolkit;
 
 public abstract class QuickInterpreter<QIS extends QuickInterpreter.QuickSession<?>> extends ExpressoInterpreter<QIS> {
 	public static final String STYLE_ELEMENT = "quick-style-element";
-	public static final QonfigAddOn STYLED = QuickCore.CORE.get().getAddOn("styled");
+	public static final QonfigElementDef WIDGET = QuickCore.CORE.get().getElement("widget");
 
 	public static class QuickSession<QIS extends QuickSession<QIS>> extends ExpressoSession<QIS> {
 		private final boolean isStyled;
-		private boolean checkedLocalModels;
+		private final boolean isWidget;
 		private ObservableModelSet.Wrapped theLocalModels;
 		private QuickStyleSheet theStyleSheet;
 		private QuickElementStyle theStyle;
+		private final Set<QuickModelValue<?>> theModelValues;
+		private final Map<QuickModelValue<?>, WidgetModelValueImpl<?>> theModelValueImpls;
 
-		protected QuickSession(QIS parent, QonfigElement element, QonfigElementOrAddOn type, int childIndex) {
+		protected QuickSession(QIS parent, QonfigElement element, QonfigElementOrAddOn type, int childIndex)
+			throws QonfigInterpretationException {
 			super(parent, element, type, childIndex);
-			isStyled = parent.getElement() == getElement() ? ((QuickSession<?>) parent).isStyled : element.isInstance(STYLED);
 			theStyleSheet = ((QuickSession<?>) parent).theStyleSheet;
-		}
-
-		protected QuickSession(QuickInterpreter<QIS> interpreter, QonfigElement root, ExpressoEnv env) {
-			super(interpreter, root, env);
-			isStyled = root.isInstance(STYLED);
-		}
-
-		@Override
-		public QuickInterpreter<QIS> getInterpreter() {
-			return (QuickInterpreter<QIS>) super.getInterpreter();
-		}
-
-		public QuickStyleSheet getStyleSheet() {
-			return theStyleSheet;
-		}
-
-		public QIS setStyleSheet(QuickStyleSheet styleSheet) {
-			theStyleSheet = styleSheet;
-			return (QIS) this;
-		}
-
-		public ObservableModelSet.Wrapped getLocalModels() throws QonfigInterpretationException {
-			if (!isStyled || checkedLocalModels)
-				return theLocalModels;
-			checkedLocalModels = true;
-			if (getParent() != null && getElement() == getParent().getElement())
-				theLocalModels = getParent().getLocalModels();
-			else {
-				ExpressoSession<?> modelSession = forChildren("model").peekFirst();
-				if (modelSession == null)
-					theLocalModels = null;
-				else {
-					modelSession.put("local-variables", true);
-					ObservableModelSet.WrappedBuilder builder = ObservableModelSet.wrap(modelSession.getExpressoEnv().getModels());
-					modelSession.setModels(builder, null);
-					modelSession.interpret(ObservableModelSet.class);
-					ObservableModelSet.Wrapped built = builder.build();
-					setModels(built, null);
-					theLocalModels = built;
+			if (parent.getElement() == getElement()) {
+				QuickSession<?> qp = parent;
+				isStyled = qp.isStyled;
+				isWidget = qp.isWidget;
+				theModelValues = qp.theModelValues;
+				theModelValueImpls = qp.theModelValueImpls;
+				theLocalModels = qp.theLocalModels;
+			} else {
+				isStyled = element.isInstance(QuickStyleSet.STYLED);
+				if (isStyled) {
+					isWidget = element.isInstance(WIDGET);
+					theModelValues = new HashSet<>();
+					theModelValueImpls = new HashMap<>();
+					initStyleData();
+				} else {
+					isWidget = false;
+					theModelValues = Collections.emptySet();
+					theModelValueImpls = Collections.emptyMap();
 				}
 			}
-			return theLocalModels;
 		}
 
-		public QuickElementStyle getStyle() throws QonfigInterpretationException {
+		protected QuickSession(QuickInterpreter<QIS> interpreter, QonfigElement root, ExpressoEnv env)
+			throws QonfigInterpretationException {
+			super(interpreter, root, env);
+			isStyled = root.isInstance(QuickStyleSet.STYLED);
+			isWidget = root.isInstance(WIDGET);
+			theModelValues = new HashSet<>();
+			theModelValueImpls = new HashMap<>();
+			initStyleData();
+		}
+
+		private void initStyleData() throws QonfigInterpretationException {
 			if (!isStyled)
-				return null;
-			else if (theStyle != null)
-				return theStyle;
+				return;
+			else if (getParent() != null && getElement() == getParent().getElement()) {
+				theLocalModels = getParent().getLocalModels();
+				theStyle = getParent().getStyle();
+				return;
+			}
+			ObservableModelSet.WrappedBuilder builder = null;
+			Collection<QuickModelValue<?>> modelValues = getInterpreter().getStyleSet().getModelValues(getElement(), this);
+			if (!modelValues.isEmpty()) {
+				builder = ObservableModelSet.wrap(getExpressoEnv().getModels());
+				builder.withCustomValue(QuickModelValue.SATISFIER_PLACEHOLDER,
+					new ValueContainer<SettableValue, SettableValue<QuickModelValue.Satisfier>>() {
+						@Override
+						public ModelInstanceType<SettableValue, SettableValue<Satisfier>> getType() {
+							return ModelTypes.Value.forType(QuickModelValue.Satisfier.class);
+						}
+
+						@Override
+						public SettableValue<Satisfier> get(ModelSetInstance models) {
+							return SettableValue.of(QuickModelValue.Satisfier.class, new QuickModelValue.Satisfier() {
+								@Override
+								public <T> ObservableValue<T> satisfy(QuickModelValue<T> value) {
+									WidgetModelValueImpl<T> impl = (WidgetModelValueImpl<T>) theModelValueImpls.get(value);
+									if (impl == null) {
+										System.err.println("Model value '" + value + "' not implemented for " + QuickSession.this);
+										if (TypeTokens.get().unwrap(value.getValueType()).isPrimitive())
+											return SettableValue.of(value.getValueType(),
+												TypeTokens.get().getPrimitiveDefault(value.getValueType()), "Not reversible");
+										else
+											return SettableValue.of(value.getValueType(), null, "Not reversible");
+								}
+									return impl.createModelValue();
+								}
+							}, "Not settable");
+						}
+					});
+				for (QuickModelValue<?> mv : modelValues) {
+					builder.withCustomValue(mv.getName(), mv);
+					theModelValues.add(mv);
+				}
+			}
+			if (isWidget) {
+				QIS modelSession = forChildren("model").peekFirst();
+				if (modelSession != null) {
+					if (builder == null)
+						builder = ObservableModelSet.wrap(modelSession.getExpressoEnv().getModels());
+					modelSession.put("local-variables", true);
+					modelSession.setModels(builder, null);
+					modelSession.interpret(ObservableModelSet.class);
+				}
+			}
+			if (builder != null) {
+				ObservableModelSet.Wrapped built = builder.build();
+				setModels(built, null);
+				theLocalModels = built;
+			} else
+				theLocalModels = null;
+
 			// Parse style values, if any
 			put(STYLE_ELEMENT, getElement());
 			List<QuickStyleValue<?>> declared = null;
@@ -109,6 +166,27 @@ public abstract class QuickInterpreter<QIS extends QuickInterpreter.QuickSession
 			// Create QuickElementStyle and put into session
 			theStyle = new QuickElementStyle(getInterpreter().getStyleSet(), Collections.unmodifiableList(declared),
 				parent, theStyleSheet, getElement(), this);
+		}
+
+		@Override
+		public QuickInterpreter<QIS> getInterpreter() {
+			return (QuickInterpreter<QIS>) super.getInterpreter();
+		}
+
+		public QuickStyleSheet getStyleSheet() {
+			return theStyleSheet;
+		}
+
+		public QIS setStyleSheet(QuickStyleSheet styleSheet) {
+			theStyleSheet = styleSheet;
+			return (QIS) this;
+		}
+
+		public ObservableModelSet.Wrapped getLocalModels() {
+			return theLocalModels;
+		}
+
+		public QuickElementStyle getStyle() {
 			return theStyle;
 		}
 
@@ -123,6 +201,26 @@ public abstract class QuickInterpreter<QIS extends QuickInterpreter.QuickSession
 				return getInterpreter().getStyleSet().styled(el, this).getAttribute(name, type);
 			}
 			return getInterpreter().getStyleSet().styled(getType(), this).getAttribute(name, type);
+		}
+
+		public <T> QuickModelValue<T> getStyleModelValue(String element, String name, Class<T> type)
+			throws QonfigInterpretationException {
+			if (element != null) {
+				QonfigElementOrAddOn el = getElement().getDocument().getDocToolkit().getElementOrAddOn(element);
+				if (el == null)
+					throw new QonfigInterpretationException("No such element or add-on '" + element + "'");
+				else if (!getElement().isInstance(el))
+					throw new QonfigInterpretationException("This element is not an instance of  '" + element + "'");
+				return getInterpreter().getStyleSet().styled(el, this).getModelValue(name, type);
+			}
+			return getInterpreter().getStyleSet().styled(getType(), this).getModelValue(name, type);
+		}
+
+		public <T> QIS support(QuickModelValue<T> modelValue, WidgetModelValueImpl<T> value) {
+			if (!theModelValues.contains(modelValue))
+				throw new IllegalArgumentException("Style model value " + modelValue + " does not apply to this element");
+			theModelValueImpls.put(modelValue, value);
+			return (QIS) this;
 		}
 	}
 
@@ -195,11 +293,13 @@ public abstract class QuickInterpreter<QIS extends QuickInterpreter.QuickSession
 	}
 
 	public static class QuickSessionDefault extends QuickSession<QuickSessionDefault> {
-		QuickSessionDefault(QuickInterpreter<QuickSessionDefault> interpreter, QonfigElement root, ExpressoEnv expressoEnv) {
+		QuickSessionDefault(QuickInterpreter<QuickSessionDefault> interpreter, QonfigElement root, ExpressoEnv expressoEnv)
+			throws QonfigInterpretationException {
 			super(interpreter, root, expressoEnv);
 		}
 
-		QuickSessionDefault(QuickSessionDefault parent, QonfigElement element, QonfigElementOrAddOn type, int childIndex) {
+		QuickSessionDefault(QuickSessionDefault parent, QonfigElement element, QonfigElementOrAddOn type, int childIndex)
+			throws QonfigInterpretationException {
 			super(parent, element, type, childIndex);
 		}
 	}
@@ -212,13 +312,13 @@ public abstract class QuickInterpreter<QIS extends QuickInterpreter.QuickSession
 		}
 
 		@Override
-		public QuickSessionDefault interpret(QonfigElement element) {
+		public QuickSessionDefault interpret(QonfigElement element) throws QonfigInterpretationException {
 			return new QuickSessionDefault(this, element, getExpressoEnv());
 		}
 
 		@Override
 		protected QuickSessionDefault interpret(QuickSessionDefault parent, QonfigElement element, QonfigElementOrAddOn type,
-			int childIndex) {
+			int childIndex) throws QonfigInterpretationException {
 			return new QuickSessionDefault(parent, element, type, childIndex);
 		}
 	}
@@ -254,5 +354,9 @@ public abstract class QuickInterpreter<QIS extends QuickInterpreter.QuickSession
 		public QuickInterpreter<QuickSessionDefault> create() {
 			return new Default(getCallingClass(), getCreators(), getModifiers(), getOrCreateExpressoEnv(), getOrCreateStyleSet());
 		}
+	}
+
+	public interface WidgetModelValueImpl<T> {
+		ObservableValue<T> createModelValue();
 	}
 }

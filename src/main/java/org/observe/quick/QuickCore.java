@@ -3,7 +3,15 @@ package org.observe.quick;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Font;
+import java.awt.IllegalComponentStateException;
 import java.awt.Image;
+import java.awt.MouseInfo;
+import java.awt.Point;
+import java.awt.event.FocusEvent;
+import java.awt.event.FocusListener;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseListener;
 import java.awt.font.TextAttribute;
 import java.io.BufferedInputStream;
 import java.io.IOException;
@@ -23,6 +31,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BiConsumer;
 import java.util.function.Function;
 
 import javax.swing.BorderFactory;
@@ -35,6 +44,7 @@ import javax.swing.border.TitledBorder;
 
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
+import org.observe.Subscription;
 import org.observe.expresso.ClassView;
 import org.observe.expresso.ExpressionValueType;
 import org.observe.expresso.Expresso;
@@ -49,6 +59,7 @@ import org.observe.expresso.ops.BinaryOperator;
 import org.observe.quick.QuickInterpreter.QuickSession;
 import org.observe.quick.style.QuickElementStyle;
 import org.observe.quick.style.QuickElementStyle.QuickElementStyleAttribute;
+import org.observe.quick.style.QuickModelValue;
 import org.observe.quick.style.QuickStyleAttribute;
 import org.observe.quick.style.QuickStyleSet;
 import org.observe.quick.style.QuickStyleSheet;
@@ -59,9 +70,12 @@ import org.observe.util.swing.ComponentDecorator.ModifiableLineBorder;
 import org.observe.util.swing.ObservableSwingUtils;
 import org.qommons.ArrayUtils;
 import org.qommons.Colors;
+import org.qommons.Identifiable;
 import org.qommons.IdentityKey;
 import org.qommons.MultiInheritanceSet;
 import org.qommons.QommonsUtils;
+import org.qommons.ThreadConstraint;
+import org.qommons.Transactable;
 import org.qommons.config.DefaultQonfigParser;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigChildDef;
@@ -85,7 +99,6 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 	}
 
 	public static final String STYLE_NAME = "quick-style-name";
-	public static final String STYLE_SHEET = "quick-style-sheet";
 	public static final String STYLE_ELEMENT_TYPE = "quick-style-element-type";
 	public static final String STYLE_ROLE = "quick-style-role";
 	public static final String STYLE_CONDITION = "quick-style-condition";
@@ -266,7 +279,6 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 		QuickHeadSection head = session.interpretChildren("head", QuickHeadSection.class).getFirst();
 		session.setModels(head.getModels(), head.getImports());
 		session.setStyleSheet(head.getStyleSheet());
-		session.put(STYLE_SHEET, head.getStyleSheet());
 		QuickDocument doc = new QuickDocument.QuickDocumentImpl(session.getElement(), head, //
 			session.interpretChildren("root", QuickComponentDef.class).getFirst());
 		return doc;
@@ -349,7 +361,89 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 		}
 		QuickElementStyleAttribute<? extends Color> bgColorStyle = widget.getStyle()
 			.get(session.getStyleAttribute(null, "color", Color.class));
+		QuickModelValue<Boolean> hovered = session.getStyleModelValue("widget", "hovered", boolean.class);
+		QuickModelValue<Boolean> focused = session.getStyleModelValue("widget", "focused", boolean.class);
 		widget.modify((comp, builder) -> {
+			// Install style model values
+			session.support(hovered, () -> new ObservableValue.LazyObservableValue<Boolean>(TypeTokens.get().BOOLEAN,
+				Transactable.noLock(ThreadConstraint.EDT)) {
+				@Override
+				protected Object createIdentity() {
+					return Identifiable.wrap(comp.getComponent(), hovered.getName());
+				}
+
+				@Override
+				protected Boolean getSpontaneous() {
+					Component c = comp.getComponent();
+					boolean compVisible;
+					if (c instanceof JComponent)
+						compVisible = ((JComponent) c).isShowing();
+					else
+						compVisible = c.isVisible();
+					if (!compVisible)
+						return false;
+					Point screenPos;
+					try {
+						screenPos = c.getLocationOnScreen();
+					} catch (IllegalComponentStateException e) {
+						return false;
+					}
+					if (screenPos == null)
+						return false;
+					Point mousePos = MouseInfo.getPointerInfo().getLocation();
+					if (mousePos == null || mousePos.x < screenPos.x || mousePos.y < screenPos.y)
+						return false;
+					return mousePos.x < screenPos.x + c.getWidth() && mousePos.y < screenPos.y + c.getHeight();
+				}
+
+				@Override
+				protected Subscription subscribe(BiConsumer<Boolean, Object> listener) {
+					MouseListener mouseListener = new MouseAdapter() {
+						@Override
+						public void mouseEntered(MouseEvent e) {
+							listener.accept(true, e);
+						}
+
+						@Override
+						public void mouseExited(MouseEvent e) {
+							listener.accept(false, e);
+						}
+					};
+					comp.getComponent().addMouseListener(mouseListener);
+					return () -> comp.getComponent().removeMouseListener(mouseListener);
+				}
+			});
+			session.support(focused, () -> new ObservableValue.LazyObservableValue<Boolean>(TypeTokens.get().BOOLEAN,
+				Transactable.noLock(ThreadConstraint.EDT)) {
+				@Override
+				protected Object createIdentity() {
+					return Identifiable.wrap(comp.getComponent(), focused.getName());
+				}
+
+				@Override
+				protected Boolean getSpontaneous() {
+					return comp.getComponent().isFocusOwner();
+				}
+
+				@Override
+				protected Subscription subscribe(BiConsumer<Boolean, Object> listener) {
+					FocusListener focusListener = new FocusListener() {
+						@Override
+						public void focusGained(FocusEvent e) {
+							listener.accept(true, e);
+						}
+
+						@Override
+						public void focusLost(FocusEvent e) {
+							listener.accept(false, e);
+						}
+					};
+					comp.getComponent().addFocusListener(focusListener);
+					return () -> comp.getComponent().removeFocusListener(focusListener);
+				}
+			});
+
+			// Set style
 			comp.modifyComponent(c -> {
 				Color defaultBG = c.getBackground();
 				boolean defaultOpaque = c instanceof JComponent && ((JComponent) c).isOpaque();
@@ -529,7 +623,7 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 
 	private StyleValues interpretStyle(QIS session) throws QonfigInterpretationException {
 		QuickStyleSet styleSet = session.getInterpreter().getStyleSet();
-		QuickStyleSheet styleSheet = session.get(STYLE_SHEET, QuickStyleSheet.class);
+		QuickStyleSheet styleSheet = session.getStyleSheet();
 		QuickStyleType element = session.get(STYLE_ELEMENT_TYPE, QuickStyleType.class);
 		List<QonfigChildDef> rolePath = session.get(STYLE_ROLE, List.class);
 		ObservableExpression condition = session.get(STYLE_CONDITION, ObservableExpression.class);
@@ -581,7 +675,9 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 				for (QonfigAddOn inh : el.getInheritance().values()) {
 					if (attrs.size() > 1)
 						break;
-					attrs.addAll(styleSet.styled(inh, session).getAttributes(attrName));
+					QuickStyleType styleType = styleSet.styled(inh, session);
+					if (styleType != null)
+						attrs.addAll(styleType.getAttributes(attrName));
 				}
 				if (attrs.isEmpty())
 					throw new QonfigInterpretationException("No such style attribute: '" + attrName + "'");
@@ -597,7 +693,8 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 			} else if (rolePath != null && !rolePath.isEmpty()) {
 				element = styleSet.styled(rolePath.get(rolePath.size() - 1).getType(), session);
 				try {
-					attr = element.getAttribute(attrName);
+					if (element != null)
+						attr = element.getAttribute(attrName);
 				} catch (IllegalArgumentException e) {
 					throw new QonfigInterpretationException(e.getMessage());
 				}
@@ -777,7 +874,7 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 		List<QuickStyleValue<?>> values = new ArrayList<>();
 		QuickStyleSheet styleSheet = new QuickStyleSheet((URL) session.get(STYLE_SHEET_REF), Collections.unmodifiableMap(styleSets),
 			Collections.unmodifiableList(values), Collections.unmodifiableMap(imports));
-		session.put(STYLE_SHEET, styleSheet);
+		session.setStyleSheet(styleSheet);
 		for (StyleValues sv : session.interpretChildren("style", StyleValues.class)) {
 			sv.init();
 			values.addAll(sv);

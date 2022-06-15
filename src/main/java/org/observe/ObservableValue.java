@@ -11,6 +11,7 @@ import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -30,6 +31,7 @@ import org.qommons.Lockable;
 import org.qommons.Stamped;
 import org.qommons.ThreadConstrained;
 import org.qommons.ThreadConstraint;
+import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
 import org.qommons.collect.ListenerList;
@@ -2098,5 +2100,143 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 				return Lockable.getCoreId(null, () -> Arrays.asList(theValues), ObservableValue::noInitChanges);
 			}
 		}
+	}
+
+	/**
+	 * A partial {@link ObservableValue} implementation that makes it as easy as possible to implement one from scratch
+	 *
+	 * @param <T> The type of the value
+	 */
+	abstract class LazyObservableValue<T> extends AbstractIdentifiable implements ObservableValue<T> {
+		private final TypeToken<T> theType;
+		private final Transactable theLock;
+		private final ListenerList<Observer<? super ObservableValueEvent<T>>> theListeners;
+		volatile boolean isValueUpToDate;
+		volatile T theLastRememberedValue;
+		volatile long theStamp;
+
+		public LazyObservableValue(TypeToken<T> type, Transactable lock) {
+			theType = type;
+			theLock = lock;
+			theStamp = -1;
+			theListeners = ListenerList.build().withInUse(new ListenerList.InUseListener() {
+				private Subscription theSub;
+
+				@Override
+				public void inUseChanged(boolean inUse) {
+					if (inUse) {
+						theSub = subscribe((value, cause) -> {
+							T oldValue = theLastRememberedValue;
+							theLastRememberedValue = value;
+							theStamp++;
+							isValueUpToDate = true;
+							ObservableValueEvent<T> event = new ObservableValueEvent<>(false, oldValue, value, cause);
+							try (Transaction t = event.use()) {
+								fire(event);
+							}
+						});
+					} else {
+						isValueUpToDate = false;
+						theSub.unsubscribe();
+						theSub = null;
+					}
+				}
+			}).build();
+		}
+
+		@Override
+		public TypeToken<T> getType() {
+			return theType;
+		}
+
+		@Override
+		public long getStamp() {
+			if (isValueUpToDate)
+				return theStamp;
+			T value = getSpontaneous();
+			if (theStamp == -1 || value != theLastRememberedValue) {
+				theLastRememberedValue = value;
+				theStamp++;
+			}
+			return theStamp;
+		}
+
+		@Override
+		public T get() {
+			if (isValueUpToDate)
+				return theLastRememberedValue;
+			T value = getSpontaneous();
+			theLastRememberedValue = value;
+			if (theStamp < 0)
+				theStamp = 0;
+			return value;
+		}
+
+		@Override
+		public Observable<ObservableValueEvent<T>> noInitChanges() {
+			class LOVChanges extends AbstractIdentifiable implements Observable<ObservableValueEvent<T>> {
+				@Override
+				protected Object createIdentity() {
+					return Identifiable.wrap(LazyObservableValue.this.getIdentity(), "noInitChanges");
+				}
+
+				@Override
+				public CoreId getCoreId() {
+					return theLock.getCoreId();
+				}
+
+				@Override
+				public ThreadConstraint getThreadConstraint() {
+					return theLock.getThreadConstraint();
+				}
+
+				@Override
+				public boolean isEventing() {
+					return theListeners.isFiring();
+				}
+
+				@Override
+				public boolean isSafe() {
+					return theLock.isLockSupported();
+				}
+
+				@Override
+				public Transaction lock() {
+					return theLock.lock(false, null);
+				}
+
+				@Override
+				public Transaction tryLock() {
+					return theLock.tryLock(false, null);
+				}
+
+				@Override
+				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+					Runnable remove = theListeners.add(observer, true);
+					return remove::run;
+				}
+			}
+			return new LOVChanges();
+		}
+
+		void fire(ObservableValueEvent<T> event) {
+			theListeners.forEach(//
+				l -> l.onNext(event));
+		}
+
+		/**
+		 * Grabs the value for this observable when it is not being listened to
+		 *
+		 * @return The current value for this observable
+		 */
+		protected abstract T getSpontaneous();
+
+		/**
+		 * Installs a listener for the value when this value is being listened to
+		 *
+		 * @param listener The listener to notify when the value of the observable changes
+		 * @return A subscription to remove the listener
+		 */
+		protected abstract Subscription subscribe(BiConsumer<T, Object> listener);
 	}
 }
