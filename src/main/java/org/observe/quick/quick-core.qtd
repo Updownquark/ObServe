@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<qonfig-def root="quick,style-sheet" extends:observe="../expresso/expresso.qtd">
+<qonfig-def name="Quick-Core" root="quick,style-sheet" extends:expresso="Expresso">
 	<value-types>
 		<one-of name="window-close-action">
 			<literal>do-nothing</literal>
