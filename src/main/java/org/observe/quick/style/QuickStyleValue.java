@@ -17,14 +17,13 @@ import org.observe.expresso.ops.NameExpression;
 import org.qommons.StringUtils;
 import org.qommons.config.QonfigChildDef;
 import org.qommons.config.QonfigElement;
-import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 /** Represents a conditional value for a style attribute in quick */
 public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 	private final QuickStyleSheet theStyleSheet;
 	private final QuickStyleAttribute<T> theAttribute;
-	private final QonfigElementOrAddOn theElement;
+	private final QuickStyleType theElement;
 	private final List<QonfigChildDef> theRolePath;
 	private final ObservableExpression theConditionExpression;
 	private final ValueContainer<SettableValue, SettableValue<Boolean>> theCondition;
@@ -32,7 +31,7 @@ public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 	private final ValueContainer<SettableValue, ? extends SettableValue<? extends T>> theValue;
 	private final List<QuickModelValue<?>> theUsedModelValues;
 
-	public QuickStyleValue(QuickStyleSheet styleSheet, QuickStyleAttribute<T> attribute, QonfigElementOrAddOn element,
+	public QuickStyleValue(QuickStyleSheet styleSheet, QuickStyleAttribute<T> attribute, QuickStyleType element,
 		List<QonfigChildDef> rolePath, ObservableExpression condition, ObservableExpression value, //
 		ExpressoEnv env) throws QonfigInterpretationException {
 		theStyleSheet = styleSheet;
@@ -41,6 +40,13 @@ public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 		theRolePath = rolePath == null ? Collections.emptyList() : rolePath;
 		theConditionExpression = condition;
 		theValueExpression = value;
+		if (element != null && !element.getModelValues().isEmpty()) {
+			// We don't need to worry about satisfying anything here. The model values just need to be available for the link level.
+			ObservableModelSet.WrappedBuilder wrappedBuilder = ObservableModelSet.wrap(env.getModels());
+			for (QuickModelValue<?> mv : element.getModelValues().values())
+				wrappedBuilder.withCustomValue(mv.getName(), mv);
+			env = env.with(wrappedBuilder.build(), null);
+		}
 		theCondition = condition == null ? null : condition.evaluate(ModelTypes.Value.forType(boolean.class), env);
 		theValue = value.evaluate(ModelTypes.Value.forType(attribute.getType()), env);
 		Set<QuickModelValue<?>> modelValues = new LinkedHashSet<>();
@@ -74,7 +80,7 @@ public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 		return theAttribute;
 	}
 
-	public QonfigElementOrAddOn getElement() {
+	public QuickStyleType getElement() {
 		return theElement;
 	}
 
@@ -125,18 +131,8 @@ public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 			comp = -Integer.compare(theRolePath.size(), o.theRolePath.size());
 		// Compare the specificity of the element type
 		if (comp == 0 && theElement != o.theElement) {
-			int thisDepth = 0;
-			QonfigElementOrAddOn el = theElement;
-			while (el != null) {
-				thisDepth++;
-				el = el.getSuperElement();
-			}
-			int oDepth = 0;
-			el = o.theElement;
-			while (el != null) {
-				thisDepth++;
-				el = el.getSuperElement();
-			}
+			int thisDepth = getDepth(theElement);
+			int oDepth = getDepth(o.theElement);
 			comp = -Integer.compare(thisDepth, oDepth);
 		}
 		// Compare the source style sheets
@@ -162,8 +158,15 @@ public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 		return comp;
 	}
 
+	private int getDepth(QuickStyleType element) {
+		int maxDepth = 1;
+		for (QuickStyleType superEl : element.getSuperElements())
+			maxDepth = Math.max(maxDepth, getDepth(superEl) + 1);
+		return maxDepth;
+	}
+
 	public boolean applies(QonfigElement element) {
-		if (theElement != null && !element.isInstance(theElement))
+		if (theElement != null && !element.isInstance(theElement.getElement()))
 			return false;
 		if (!theRolePath.isEmpty()) {
 			QonfigElement el = element;
@@ -184,7 +187,7 @@ public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 		StringBuilder str = new StringBuilder();
 		if (!theRolePath.isEmpty()) {
 			printRolePath(theRolePath, str);
-			if (theElement != null && theElement != theRolePath.get(theRolePath.size() - 1).getType())
+			if (theElement != null && theElement.getElement() != theRolePath.get(theRolePath.size() - 1).getType())
 				str.append('[').append(theElement).append(']');
 		} else
 			str.append(theElement);

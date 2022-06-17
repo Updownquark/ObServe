@@ -3,31 +3,24 @@ package org.observe.quick;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ExpressoInterpreter;
-import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet;
-import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.quick.QuickCore.StyleValues;
 import org.observe.quick.style.FontValueParser;
 import org.observe.quick.style.QuickElementStyle;
 import org.observe.quick.style.QuickModelValue;
-import org.observe.quick.style.QuickModelValue.Satisfier;
 import org.observe.quick.style.QuickStyleAttribute;
 import org.observe.quick.style.QuickStyleSet;
 import org.observe.quick.style.QuickStyleSheet;
 import org.observe.quick.style.QuickStyleValue;
-import org.observe.util.TypeTokens;
 import org.qommons.ClassMap;
 import org.qommons.StatusReportAccumulator;
 import org.qommons.config.QonfigElement;
@@ -47,7 +40,7 @@ public abstract class QuickInterpreter<QIS extends QuickInterpreter.QuickSession
 		private QuickStyleSheet theStyleSheet;
 		private QuickElementStyle theStyle;
 		private final Set<QuickModelValue<?>> theModelValues;
-		private final Map<QuickModelValue<?>, WidgetModelValueImpl<?>> theModelValueImpls;
+		private ObservableModelSet.RuntimeValuePlaceholder<SettableValue, SettableValue<QuickModelValue.Satisfier>> theSatisfierPlaceholder;
 
 		protected QuickSession(QIS parent, QonfigElement element, QonfigElementOrAddOn type, int childIndex)
 			throws QonfigInterpretationException {
@@ -58,19 +51,17 @@ public abstract class QuickInterpreter<QIS extends QuickInterpreter.QuickSession
 				isStyled = qp.isStyled;
 				isWidget = qp.isWidget;
 				theModelValues = qp.theModelValues;
-				theModelValueImpls = qp.theModelValueImpls;
 				theLocalModels = qp.theLocalModels;
+				theSatisfierPlaceholder = qp.theSatisfierPlaceholder;
 			} else {
 				isStyled = element.isInstance(QuickStyleSet.STYLED);
 				if (isStyled) {
 					isWidget = element.isInstance(WIDGET);
 					theModelValues = new HashSet<>();
-					theModelValueImpls = new HashMap<>();
 					initStyleData();
 				} else {
 					isWidget = false;
 					theModelValues = Collections.emptySet();
-					theModelValueImpls = Collections.emptyMap();
 				}
 			}
 		}
@@ -81,7 +72,6 @@ public abstract class QuickInterpreter<QIS extends QuickInterpreter.QuickSession
 			isStyled = root.isInstance(QuickStyleSet.STYLED);
 			isWidget = root.isInstance(WIDGET);
 			theModelValues = new HashSet<>();
-			theModelValueImpls = new HashMap<>();
 			initStyleData();
 		}
 
@@ -97,32 +87,8 @@ public abstract class QuickInterpreter<QIS extends QuickInterpreter.QuickSession
 			Collection<QuickModelValue<?>> modelValues = getInterpreter().getStyleSet().getModelValues(getElement(), this);
 			if (!modelValues.isEmpty()) {
 				builder = ObservableModelSet.wrap(getExpressoEnv().getModels());
-				builder.withCustomValue(QuickModelValue.SATISFIER_PLACEHOLDER,
-					new ValueContainer<SettableValue, SettableValue<QuickModelValue.Satisfier>>() {
-						@Override
-						public ModelInstanceType<SettableValue, SettableValue<Satisfier>> getType() {
-							return ModelTypes.Value.forType(QuickModelValue.Satisfier.class);
-						}
-
-						@Override
-						public SettableValue<Satisfier> get(ModelSetInstance models) {
-							return SettableValue.of(QuickModelValue.Satisfier.class, new QuickModelValue.Satisfier() {
-								@Override
-								public <T> ObservableValue<T> satisfy(QuickModelValue<T> value) {
-									WidgetModelValueImpl<T> impl = (WidgetModelValueImpl<T>) theModelValueImpls.get(value);
-									if (impl == null) {
-										System.err.println("Model value '" + value + "' not implemented for " + QuickSession.this);
-										if (TypeTokens.get().unwrap(value.getValueType()).isPrimitive())
-											return SettableValue.of(value.getValueType(),
-												TypeTokens.get().getPrimitiveDefault(value.getValueType()), "Not reversible");
-										else
-											return SettableValue.of(value.getValueType(), null, "Not reversible");
-								}
-									return impl.createModelValue();
-								}
-							}, "Not settable");
-						}
-					});
+				theSatisfierPlaceholder = builder.withRuntimeValue(QuickModelValue.SATISFIER_PLACEHOLDER,
+					ModelTypes.Value.forType(QuickModelValue.Satisfier.class));
 				for (QuickModelValue<?> mv : modelValues) {
 					builder.withCustomValue(mv.getName(), mv);
 					theModelValues.add(mv);
@@ -166,6 +132,14 @@ public abstract class QuickInterpreter<QIS extends QuickInterpreter.QuickSession
 			// Create QuickElementStyle and put into session
 			theStyle = new QuickElementStyle(getInterpreter().getStyleSet(), Collections.unmodifiableList(declared),
 				parent, theStyleSheet, getElement(), this);
+		}
+
+		public Set<QuickModelValue<?>> getModelValues() {
+			return Collections.unmodifiableSet(theModelValues);
+		}
+
+		public ObservableModelSet.RuntimeValuePlaceholder<SettableValue, SettableValue<QuickModelValue.Satisfier>> getSatisfierPlaceholder() {
+			return theSatisfierPlaceholder;
 		}
 
 		@Override
@@ -214,13 +188,6 @@ public abstract class QuickInterpreter<QIS extends QuickInterpreter.QuickSession
 				return getInterpreter().getStyleSet().styled(el, this).getModelValue(name, type);
 			}
 			return getInterpreter().getStyleSet().styled(getType(), this).getModelValue(name, type);
-		}
-
-		public <T> QIS support(QuickModelValue<T> modelValue, WidgetModelValueImpl<T> value) {
-			if (!theModelValues.contains(modelValue))
-				throw new IllegalArgumentException("Style model value " + modelValue + " does not apply to this element");
-			theModelValueImpls.put(modelValue, value);
-			return (QIS) this;
 		}
 	}
 
@@ -354,9 +321,5 @@ public abstract class QuickInterpreter<QIS extends QuickInterpreter.QuickSession
 		public QuickInterpreter<QuickSessionDefault> create() {
 			return new Default(getCallingClass(), getCreators(), getModifiers(), getOrCreateExpressoEnv(), getOrCreateStyleSet());
 		}
-	}
-
-	public interface WidgetModelValueImpl<T> {
-		ObservableValue<T> createModelValue();
 	}
 }

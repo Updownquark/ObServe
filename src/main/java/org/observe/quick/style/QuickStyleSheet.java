@@ -62,6 +62,10 @@ public class QuickStyleSheet {
 			if (ssv.applies(element))
 				values.add(ssv);
 		}
+		for (QuickStyleSheet imported : theImportedStyleSheets.values()) {
+			values.addAll(imported.getValues(element));
+		}
+		// TODO Style sets?
 		return values;
 	}
 }

@@ -55,6 +55,7 @@ import org.observe.expresso.ObservableModelSet.ValueCreator;
 import org.observe.expresso.ops.LambdaExpression;
 import org.observe.expresso.ops.MethodReferenceExpression;
 import org.observe.quick.QuickInterpreter.QuickSession;
+import org.observe.quick.style.QuickModelValue;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.CategoryRenderStrategy;
 import org.observe.util.swing.CellDecorator;
@@ -178,10 +179,8 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 	}
 
 	private QuickBox interpretBox(QIS session) throws QonfigInterpretationException {
-		ObservableModelSet.Wrapped localModels = session.getLocalModels();
 		List<QuickComponentDef> children = session.interpretChildren("content", QuickComponentDef.class);
-		return new QuickBox(session.getElement(), localModels, session.getStyle(), children,
-			session.getAttributeText("layout"));
+		return new QuickBox(session, children, session.getAttributeText("layout"));
 	}
 
 	private QuickBox modifyBoxBorder(QuickBox box, ExpressoSession<?> session) throws QonfigInterpretationException {
@@ -337,7 +336,6 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 	}
 
 	private QuickComponentDef interpretTextField(QIS session) throws QonfigInterpretationException {
-		ObservableModelSet.Wrapped localModels = session.getLocalModels();
 		ValueContainer<SettableValue, ?> value = session.getAttribute("value", ModelTypes.Value.any(), null);
 		ObservableExpression formatX = session.getAttribute("format", ObservableExpression.class);
 		Function<ModelSetInstance, SettableValue<Format<Object>>> format;
@@ -371,7 +369,7 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 			format = ObservableModelSet.literalContainer(ModelTypes.Value.forType((Class<Format<Object>>) (Class<?>) Format.class),
 				(Format<Object>) f, type.getSimpleName());
 		}
-		return new AbstractQuickValueEditor(session.getElement(), localModels, session.getStyle()) {
+		return new AbstractQuickValueEditor(session) {
 			@Override
 			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
 				SettableValue<Object> realValue = value.apply(builder.getModels());
@@ -422,7 +420,6 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 	}
 
 	private QuickComponentDef interpretButton(QIS session) throws QonfigInterpretationException {
-		ObservableModelSet.Wrapped localModels = session.getLocalModels();
 		Function<ModelSetInstance, SettableValue<String>> buttonText;
 		ObservableExpression valueX = session.getValue(ObservableExpression.class, null);
 		if (valueX == null) {
@@ -434,7 +431,7 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 			buttonText = valueX.evaluate(ModelTypes.Value.forType(String.class), session.getExpressoEnv());
 		Function<ModelSetInstance, ? extends ObservableAction> action = session.getExpressoEnv().getModels()
 			.get(session.getAttributeText("action"), ModelTypes.Action);
-		return new AbstractQuickComponentDef(session.getElement(), localModels, session.getStyle()) {
+		return new AbstractQuickComponentDef(session) {
 			@Override
 			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
 				ObservableValue<String> text = buttonText.apply(builder.getModels());
@@ -508,9 +505,19 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 			ModelTypes.Value.forType(columnType));
 		ObservableModelSet.Wrapped cellModel = wb.build();
 
-		QuickComponentDef renderer;
+		QuickModelValue<Boolean> focused = session.getInterpreter().getStyleSet().styled(QuickInterpreter.WIDGET, session)
+			.getModelValue("focused", boolean.class);
+		QuickModelValue<Boolean> selected = session.getInterpreter().getStyleSet()
+			.styled(BASE.get().getElementOrAddOn("renderer-value-override"), session).getModelValue("selected", boolean.class);
+		QuickComponentDef.SimpleModelValueSupport<Boolean> focusedSupport = new QuickComponentDef.SimpleModelValueSupport<>(boolean.class,
+			false);
+		QuickComponentDef.SimpleModelValueSupport<Boolean> selectedSupport = new QuickComponentDef.SimpleModelValueSupport<>(boolean.class,
+			false);
 		session.setModels(cellModel, null);
-		renderer = session.interpretChildren("renderer", QuickComponentDef.class).peekFirst();
+		QuickComponentDef renderer = session.forChildren("renderer", BASE.get().getElement("label"), null).getFirst()
+			.interpret(QuickComponentDef.class);
+		renderer.support(focused, focusedSupport);
+		renderer.support(selected, selectedSupport);
 		ColumnEditing<Object, Object> editing;
 		ExpressoSession<?> columnEdit = session.forChildren("edit").peekFirst();
 		if (columnEdit != null) {
@@ -519,9 +526,11 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 			if (!(editor instanceof QuickValueEditorDef))
 				throw new IllegalArgumentException(
 					"Use of '" + editorSession.getElement().getType().getName() + "' as a column editor is not implemented");
+			editor.support(focused, focusedSupport);
+			editor.support(selected, selectedSupport);
 			String editValueName = columnEdit.getAttributeText("edit-value-name");
-			ObservableModelSet.RuntimeValuePlaceholder<SettableValue, SettableValue<Object>> editorValueVP = wb.withRuntimeValue(editValueName,
-				ModelTypes.Value.forType(columnType));
+			ObservableModelSet.RuntimeValuePlaceholder<SettableValue, SettableValue<Object>> editorValueVP = wb
+				.withRuntimeValue(editValueName, ModelTypes.Value.forType(columnType));
 			ObservableModelSet.Wrapped editModel = wb.build();
 			columnEdit.setModels(editModel, null);
 			editorSession.setModels(editModel, null);
@@ -549,7 +558,7 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 				Insets defMargin = c instanceof JTextComponent ? ((JTextComponent) c).getMargin() : null;
 				String clicksStr = columnEdit.getAttribute("clicks", String.class);
 				int clicks = clicksStr != null ? Integer.parseInt(clicksStr) : ((QuickValueEditorDef) editor).getDefaultEditClicks();
-				ObservableCellEditor<Object, Object> oce = new DefaultObservableCellEditor<>(c, editorValue, //
+				ObservableCellEditor<Object, Object> oce = new DefaultObservableCellEditor<Object, Object>(c, editorValue, //
 					new ObservableCellEditor.EditorInstallation<Object>() {
 					@Override
 					public EditorSubscription install(ObservableCellEditor<?, Object> cellEditor, Component component,
@@ -578,7 +587,13 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 							return true;
 						};
 					}
-				}, ObservableCellEditor.editWithClicks(clicks));
+				}, ObservableCellEditor.editWithClicks(clicks)) {
+					@Override
+					protected void renderingValue(Object value, boolean selected2, boolean expanded, boolean leaf, int row, int column2) {
+						focusedSupport.getValue().set(selected2, null);
+						selectedSupport.getValue().set(selected2, null);
+					}
+				};
 				column.withEditor(oce);
 				column.clicks(clicks);
 				editorValue.noInitChanges().act(evt -> {
@@ -592,70 +607,72 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 			editing = null;
 
 		UIDefaults ui = UIManager.getDefaults();
-		Color selectionBackground = ui.getColor("List.selectionBackground");
-		Color selectionForeground = ui.getColor("List.selectionForeground");
+		Color defaultSelectionBackground = ui.getColor("List.selectionBackground");
+		Color defaultSelectionForeground = ui.getColor("List.selectionForeground");
 		return extModels -> {
 			CategoryRenderStrategy<Object, Object> column = new CategoryRenderStrategy<>(name, columnType, valueFn.apply(extModels));
-			if (renderer != null) {
-				// Hacky way of synthesizing the component
-				SettableValue<Object> rowValue = SettableValue.build(modelType).withDescription(rowValueName).build();
-				SettableValue<Object> cellValue = SettableValue.build(columnType).withDescription(cellValueName).build();
-				ModelSetInstance cellModelInst = cellModel.wrap(extModels)//
-					.with(valueRowVP, rowValue)//
-					.with(cellRowVP, cellValue)//
-					.with(subjectVP, cellValue)//
-					.build();
-				QuickComponent.Builder renderBuilder = QuickComponent.build(renderer, null, cellModelInst);
-				QuickComponent renderComp = renderer
-					.install(PanelPopulation.populateHPanel(null, new JustifiedBoxLayout(false), cellModelInst.getUntil()), renderBuilder);
-				Component c = renderComp.getComponent();
-				BiFunction<Supplier<?>, Object, String> textRender;
-				boolean text = c instanceof TextComponent;
-				if (text) {
-					textRender = (row, col) -> {
-						rowValue.set(row.get(), null);
-						cellValue.set(col, null);
-						return ((TextComponent) c).getText();
-					};
-				} else
-					textRender = (row, col) -> String.valueOf(col);
-					column.withRenderer(new ObservableCellRenderer<Object, Object>() {
-						private List<CellDecorator<Object, Object>> theDecorators;
-
-						@Override
-						public String renderAsText(Supplier<? extends Object> modelValue, Object columnValue) {
-							return textRender.apply(modelValue, columnValue);
-						}
-
-						@Override
-						public Component getCellRendererComponent(Component parent, ModelCell<? extends Object, ? extends Object> cell,
-							CellRenderContext ctx) {
-							rowValue.set(cell.getModelValue(), null);
-							cellValue.set(cell.getCellValue(), null);
-							ObservableCellRenderer.tryEmphasize(c, ctx);
-							if (cell.isSelected()) {
-								if (c instanceof JComponent)
-									((JComponent) c).setOpaque(true);
-								c.setBackground(selectionBackground);
-								c.setForeground(selectionForeground);
-							} else {
-								if (c instanceof JComponent)
-									((JComponent) c).setOpaque(false);
-								c.setBackground(Color.white);
-								c.setForeground(Color.black);
-							}
-							return c;
-						}
-
-						@Override
-						public ObservableCellRenderer<Object, Object> decorate(CellDecorator<Object, Object> decorator) {
-							if (theDecorators == null)
-								theDecorators = new ArrayList<>(3);
-							theDecorators.add(decorator);
-							return this;
-						}
-					});
+			// Hacky way of synthesizing the component
+			SettableValue<Object> rowValue = SettableValue.build(modelType).withDescription(rowValueName).build();
+			SettableValue<Object> cellValue = SettableValue.build(columnType).withDescription(cellValueName).build();
+			ModelSetInstance cellModelInst = cellModel.wrap(extModels)//
+				.with(valueRowVP, rowValue)//
+				.with(cellRowVP, cellValue)//
+				.with(subjectVP, cellValue)//
+				.build();
+			QuickComponent.Builder renderBuilder = QuickComponent.build(renderer, null, cellModelInst);
+			QuickComponent renderComp = renderer
+				.install(PanelPopulation.populateHPanel(null, new JustifiedBoxLayout(false), cellModelInst.getUntil()), renderBuilder);
+			Component c = renderComp.getComponent();
+			BiFunction<Supplier<?>, Object, String> textRender;
+			boolean text = c instanceof TextComponent;
+			if (text) {
+				textRender = (row, col) -> {
+					rowValue.set(row.get(), null);
+					cellValue.set(col, null);
+					return ((TextComponent) c).getText();
+				};
+			} else {
+				textRender = (row, col) -> String.valueOf(col);
 			}
+			column.withRenderer(new ObservableCellRenderer<Object, Object>() {
+				private List<CellDecorator<Object, Object>> theDecorators;
+
+				@Override
+				public String renderAsText(Supplier<? extends Object> modelValue, Object columnValue) {
+					return textRender.apply(modelValue, columnValue);
+				}
+
+				@Override
+				public Component getCellRendererComponent(Component parent, ModelCell<? extends Object, ? extends Object> cell,
+					CellRenderContext ctx) {
+					// Not sure if this does any good, but these are what the colors should look like without any styles mucking with them
+					if (cell.isSelected()) {
+						if (c instanceof JComponent)
+							((JComponent) c).setOpaque(true);
+						c.setBackground(defaultSelectionBackground);
+						c.setForeground(defaultSelectionForeground);
+					} else {
+						if (c instanceof JComponent)
+							((JComponent) c).setOpaque(false);
+						c.setBackground(Color.white);
+						c.setForeground(Color.black);
+					}
+					rowValue.set(cell.getModelValue(), null);
+					cellValue.set(cell.getCellValue(), null);
+					focusedSupport.getValue().set(cell.isSelected(), null);
+					selectedSupport.getValue().set(cell.isSelected(), null);
+					ObservableCellRenderer.tryEmphasize(c, ctx);
+					return c;
+				}
+
+				@Override
+				public ObservableCellRenderer<Object, Object> decorate(CellDecorator<Object, Object> decorator) {
+					if (theDecorators == null)
+						theDecorators = new ArrayList<>(3);
+					theDecorators.add(decorator);
+					return this;
+				}
+			});
 			if (editing != null)
 				column.withMutation(mut -> editing.modifyColumn(mut, extModels));
 			return column;
@@ -677,8 +694,8 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 		};
 	}
 
-	private ValueCreator<ObservableCollection, ObservableCollection<CategoryRenderStrategy<Object, ?>>> interpretColumns(
-		QIS session) throws QonfigInterpretationException {
+	private ValueCreator<ObservableCollection, ObservableCollection<CategoryRenderStrategy<Object, ?>>> interpretColumns(QIS session)
+		throws QonfigInterpretationException {
 		TypeToken<Object> rowType = (TypeToken<Object>) Expresso.parseType(session.getAttributeText("type"), session.getExpressoEnv());
 		session.put("model-type", rowType);
 		TypeToken<CategoryRenderStrategy<Object, ?>> columnType = TypeTokens.get().keyFor(CategoryRenderStrategy.class)
@@ -688,7 +705,7 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 		String colValueName = session.getAttributeText("render-value-name");
 		session.put("render-value-name", colValueName);
 		List<Column<Object, ?>> columns = session.interpretChildren("column", Column.class);
-		return ()->new AbstractValueContainer<ObservableCollection, ObservableCollection<CategoryRenderStrategy<Object, ?>>>(
+		return () -> new AbstractValueContainer<ObservableCollection, ObservableCollection<CategoryRenderStrategy<Object, ?>>>(
 			ModelTypes.Collection.forType(columnType)) {
 			@Override
 			public ObservableCollection<CategoryRenderStrategy<Object, ?>> get(ModelSetInstance models) {
@@ -701,14 +718,13 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 	}
 
 	private QuickComponentDef interpretSplit(QIS session) throws QonfigInterpretationException {
-		ObservableModelSet.Wrapped localModels = session.getLocalModels();
 		if (session.getChildren("content").size() != 2)
 			throw new UnsupportedOperationException("Currently only 2 (and exactly 2) contents are supported for split");
 		List<QuickComponentDef> children = session.interpretChildren("content", QuickComponentDef.class);
 		boolean vertical = session.getAttributeText("orientation").equals("vertical");
 		Function<ModelSetInstance, SettableValue<QuickPosition>> splitPos = parsePosition(
 			session.getAttribute("split-position", ObservableExpression.class), session.getExpressoEnv());
-		return new AbstractQuickComponentDef(session.getElement(), localModels, session.getStyle()) {
+		return new AbstractQuickComponentDef(session) {
 			@Override
 			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
 				container.addSplit(vertical, split -> {
@@ -900,10 +916,9 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 	}
 
 	private QuickComponentDef interpretFieldPanel(QIS session) throws QonfigInterpretationException {
-		ObservableModelSet.Wrapped localModels = session.getLocalModels();
 		List<QuickComponentDef> children = session.interpretChildren("content", QuickComponentDef.class);
 		System.err.println("WARNING: field-panel is not fully implemented!!"); // TODO
-		return new AbstractQuickComponentDef(session.getElement(), localModels, session.getStyle()) {
+		return new AbstractQuickComponentDef(session) {
 			@Override
 			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
 				container.addVPanel(panel -> {
@@ -930,9 +945,8 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 	}
 
 	private QuickComponentDef interpretSpacer(QIS session) throws QonfigInterpretationException {
-		ObservableModelSet.Wrapped localModels = session.getLocalModels();
 		int length = Integer.parseInt(session.getAttributeText("length"));
-		return new AbstractQuickComponentDef(session.getElement(), localModels, session.getStyle()) {
+		return new AbstractQuickComponentDef(session) {
 			@Override
 			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
 				container.spacer(length, null);
@@ -942,7 +956,6 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 	}
 
 	private QuickComponentDef interpretTextArea(QIS session) throws QonfigInterpretationException {
-		ObservableModelSet.Wrapped localModels = session.getLocalModels();
 		ValueContainer<SettableValue, ?> value;
 		ObservableExpression valueX = session.getAttribute("value", ObservableExpression.class);
 		ObservableExpression formatX = session.getAttribute("format", ObservableExpression.class);
@@ -980,7 +993,7 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 			ex -> ex.evaluate(ModelTypes.Value.forType(Boolean.class), session.getExpressoEnv()));
 		ValueContainer<SettableValue, SettableValue<Boolean>> editable = session.interpretAttribute("editable", ObservableExpression.class,
 			true, ex -> ex.evaluate(ModelTypes.Value.forType(Boolean.class), session.getExpressoEnv()));
-		return new AbstractQuickField(session.getElement(), localModels, session.getStyle()) {
+		return new AbstractQuickField(session) {
 			@Override
 			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
 				ObservableValue<String> fieldName;
@@ -1016,13 +1029,12 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 	}
 
 	private QuickComponentDef interpretCheckBox(QIS session) throws QonfigInterpretationException {
-		ObservableModelSet.Wrapped localModels = session.getLocalModels();
 		ValueContainer<SettableValue, SettableValue<Boolean>> value;
 		value = session.getAttribute("value", ObservableExpression.class).evaluate(ModelTypes.Value.forType(boolean.class),
 			session.getExpressoEnv());
 		ValueContainer<SettableValue, SettableValue<String>> text = session.interpretValue(ObservableExpression.class, true,
 			ex -> ex.evaluate(ModelTypes.Value.forType(String.class), session.getExpressoEnv()));
-		return new AbstractQuickValueEditor(session.getElement(), localModels, session.getStyle()) {
+		return new AbstractQuickValueEditor(session) {
 			@Override
 			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
 				SettableValue<Boolean> realValue = value.apply(builder.getModels());
@@ -1060,14 +1072,13 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 
 	private QuickComponentDef interpretRadioButtons(QIS session) throws QonfigInterpretationException {
 		System.err.println("WARNING: radio-buttons is not fully implemented!!"); // TODO
-		ObservableModelSet.Wrapped localModels = session.getLocalModels();
 		ValueContainer<SettableValue, ? extends SettableValue<Object>> value;
 		value = (ValueContainer<SettableValue, ? extends SettableValue<Object>>) session.getAttribute("value", ObservableExpression.class)//
 			.evaluate(ModelTypes.Value.any(), session.getExpressoEnv());
 		ValueContainer<SettableValue, SettableValue<Object[]>> values = session.getAttribute("values", ObservableExpression.class).evaluate(
 			ModelTypes.Value.forType((TypeToken<Object[]>) TypeTokens.get().getArrayType(value.getType().getType(0), 1)),
 			session.getExpressoEnv());
-		return new AbstractQuickField(session.getElement(), localModels, session.getStyle()) {
+		return new AbstractQuickField(session) {
 			@Override
 			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
 				SettableValue<Object> realValue = value.apply(builder.getModels());
@@ -1083,7 +1094,6 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 	}
 
 	private QuickComponentDef interpretFileButton(QIS session) throws QonfigInterpretationException {
-		ObservableModelSet.Wrapped localModels = session.getLocalModels();
 		ValueContainer<SettableValue, ? extends SettableValue<Object>> value;
 		value = (ValueContainer<SettableValue, ? extends SettableValue<Object>>) session.getAttribute("value", ObservableExpression.class)//
 			.evaluate(ModelTypes.Value.any(), session.getExpressoEnv());
@@ -1106,7 +1116,7 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 		} else
 			throw new QonfigInterpretationException("Cannot use " + value + " as a File");
 		boolean open = session.getAttribute("open", boolean.class);
-		return new AbstractQuickValueEditor(session.getElement(), localModels, session.getStyle()) {
+		return new AbstractQuickValueEditor(session) {
 			@Override
 			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
 				container.addFileField(null, file.apply(builder.getModels()), open, fb -> {
@@ -1138,7 +1148,6 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 	}
 
 	private QuickComponentDef evaluateLabel(QIS session) throws QonfigInterpretationException {
-		ObservableModelSet.Wrapped localModels = session.getLocalModels();
 		Function<ModelSetInstance, ? extends SettableValue> value;
 		TypeToken<?> valueType;
 		ObservableExpression valueEx = session.getAttribute("value", ObservableExpression.class);
@@ -1173,7 +1182,7 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 		}
 		ObservableExpression iconEx = session.getAttribute("icon", ObservableExpression.class);
 		Function<ModelSetInstance, SettableValue<Icon>> iconX = parseIcon(iconEx, session, session.getExpressoEnv());
-		return new AbstractQuickField(session.getElement(), localModels, session.getStyle()) {
+		return new AbstractQuickField(session) {
 			@Override
 			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
 				ObservableValue<String> fieldName;
@@ -1194,7 +1203,6 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 	}
 
 	private <T> QuickComponentDef interpretTable(QIS session) throws QonfigInterpretationException {
-		ObservableModelSet.Wrapped localModels = session.getLocalModels();
 		ValueContainer<ObservableCollection, ? extends ObservableCollection<T>> rows = (ValueContainer<ObservableCollection, ? extends ObservableCollection<T>>) session
 			.getAttribute("rows", ObservableExpression.class).evaluate(ModelTypes.Collection.any(), session.getExpressoEnv());
 		String valueName = session.getAttributeText("value-name");
@@ -1232,7 +1240,7 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 			columns.add(columnEl.interpret(Column.class));
 		// TODO Make a wrapped model set with variables for value-name and render-value-name
 		List<ValueAction> actions = session.interpretChildren("action", ValueAction.class);
-		return new AbstractQuickComponentDef(session.getElement(), localModels, session.getStyle()) {
+		return new AbstractQuickComponentDef(session) {
 			@Override
 			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
 				container.addTable((ObservableCollection<Object>) rows.apply(builder.getModels()), table -> {
@@ -1320,8 +1328,6 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 
 	protected <T, E extends PanelPopulation.AbstractTreeEditor<T, ?, E>> QuickComponentDef interpretAbstractTree(QIS session,
 		TreeMaker<T, E> treeMaker) throws QonfigInterpretationException {
-		ObservableModelSet.Wrapped localModels = session.getLocalModels();
-		QonfigToolkit base = BASE.get();
 		System.err.println("WARNING: " + session.getElement().getType().getName() + " is not fully implemented!!"); // TODO
 		ValueContainer<SettableValue, ? extends SettableValue<T>> root = (ValueContainer<SettableValue, ? extends SettableValue<T>>) session
 			.getAttribute("root", ObservableExpression.class).evaluate(ModelTypes.Value.any(), session.getExpressoEnv());
@@ -1339,9 +1345,8 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 		ObservableModelSet.Wrapped wModel = wb.build();
 
 		Function<ModelSetInstance, ? extends ObservableCollection<? extends T>> children;
-		children = session.getAttribute("children", ObservableExpression.class)
-			.evaluate(ModelTypes.Collection.forType(TypeTokens.get().getExtendsWildcard(valueType)),
-				session.getExpressoEnv().with(wModel, null));
+		children = session.getAttribute("children", ObservableExpression.class).evaluate(
+			ModelTypes.Collection.forType(TypeTokens.get().getExtendsWildcard(valueType)), session.getExpressoEnv().with(wModel, null));
 		Column<BetterList<T>, T> treeColumn;
 		if (!session.getChildren("tree-column").isEmpty()) {
 			session.put("model-type", pathType);
@@ -1388,7 +1393,7 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 		ValueContainer<SettableValue, SettableValue<Boolean>> leaf = leafX == null ? null
 			: leafX.evaluate(ModelTypes.Value.forType(boolean.class), session.getExpressoEnv().with(wModel, null));
 		treeMaker.configure(wModel, root);
-		return new AbstractQuickComponentDef(session.getElement(), localModels, session.getStyle()) {
+		return new AbstractQuickComponentDef(session) {
 			@Override
 			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
 				treeMaker.makeTree(//
@@ -1693,8 +1698,8 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 					if (ex == null) {
 						return msi -> String::valueOf;
 					} else {
-						return ex.<T, Object, Object, String> findMethod(String.class, tabSet.getExpressoEnv())
-							.withOption0().withOption1((TypeToken<T>) values.getType().getType(0), a -> a)//
+						return ex.<T, Object, Object, String> findMethod(String.class, tabSet.getExpressoEnv()).withOption0()
+							.withOption1((TypeToken<T>) values.getType().getType(0), a -> a)//
 							.find1();
 					}
 				});
@@ -1791,7 +1796,6 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 	}
 
 	private <T> QuickComponentDef interpretTabs(QIS session) throws QonfigInterpretationException {
-		ObservableModelSet.Wrapped localModels = session.getLocalModels();
 		QonfigToolkit base = BASE.get();
 		List<TabSet<? extends T>> tabs = new ArrayList<>();
 		QonfigChildDef.Declared tabSetDef = base.getChild("tabs", "tab-set").getDeclared();
@@ -1811,7 +1815,7 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 		TypeToken<T> tabType = TypeTokens.get().getCommonType(tabTypes);
 		ValueContainer<SettableValue, SettableValue<T>> selection = session.interpretAttribute("selected", ObservableExpression.class, true,
 			ex -> ex.evaluate(ModelTypes.Value.forType(TypeTokens.get().getSuperWildcard(tabType)), session.getExpressoEnv()));
-		return new AbstractQuickComponentDef(session.getElement(), localModels, session.getStyle()) {
+		return new AbstractQuickComponentDef(session) {
 			@Override
 			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
 				TypeToken<TabValue<? extends T>> tabValueType = TypeTokens.get().keyFor(TabValue.class)

@@ -445,6 +445,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 				theEditorSubscription.uninstall(false);
 				theEditorSubscription = null;
 			}
+			renderingValue(modelValue, selected, false, true, rowIndex, 0);
 			ObservableListModel<E> model = list.getModel();
 			CategoryRenderStrategy<E, E> category = list.getRenderStrategy();
 			Function<C, String> valueFilter;
@@ -504,6 +505,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 				theEditorSubscription.uninstall(false);
 				theEditorSubscription = null;
 			}
+			renderingValue(value, isSelected, false, true, row, column);
 			TableModel model = table.getModel();
 			M modelValue;
 			Function<C, String> valueFilter;
@@ -563,6 +565,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 				theEditorSubscription.uninstall(false);
 				theEditorSubscription = null;
 			}
+			renderingValue(value, isSelected, expanded, leaf, row, 0);
 			// TODO See if there's a way to get the information needed for the value filter and tooltip somewhere
 			theEditingCell = new ModelCell.Default<>(() -> (M) value, (C) value, row, 0, isSelected, isSelected, expanded, leaf);
 			theEditorValue.set((C) value, null);
@@ -573,6 +576,9 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			}
 			theEditorSubscription = theInstallation.install(this, tree, null, null, null);
 			return theEditorComponent;
+		}
+
+		protected void renderingValue(Object value, boolean selected, boolean expanded, boolean leaf, int row, int column) {
 		}
 
 		public static <C> SettableValue<C> createEditorValue(Function<C, String>[] filter) {

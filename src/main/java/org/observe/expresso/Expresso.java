@@ -467,7 +467,8 @@ public class Expresso<QIS extends ExpressoSession<?>> implements QonfigInterpret
 		}).createWith("value", ValueCreator.class, session -> () -> {
 			TypeToken<Object> type = (TypeToken<Object>) session.get(VALUE_TYPE_KEY);
 			ObservableExpression valueX = (ObservableExpression) session.getElement().getValue();
-			ObservableExpression initX = session.as("int-value").getAttribute("init", ObservableExpression.class);
+			ObservableExpression initX = session.isInstance("int-value")
+				? session.as("int-value").getAttribute("init", ObservableExpression.class) : null;
 			if (initX != null && valueX != null)
 				session.withWarning("Either a value or an init value may be specified, but not both.  Initial value will be ignored.");
 			ValueContainer<SettableValue, SettableValue<Object>> value;

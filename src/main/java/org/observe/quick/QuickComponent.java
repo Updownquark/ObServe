@@ -4,13 +4,19 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Point;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.function.Function;
 
 import org.observe.ObservableValue;
+import org.observe.SettableValue;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.quick.style.QuickModelValue;
+import org.observe.util.TypeTokens;
+import org.qommons.BiTuple;
 import org.qommons.config.QonfigAttributeDef;
 
 public class QuickComponent {
@@ -78,24 +84,25 @@ public class QuickComponent {
 		return new Builder(def, parent, models);
 	}
 
-	public static class Builder {
+	public static class Builder implements QuickModelValue.Satisfier {
 		private final QuickComponentDef theDefinition;
 		private final QuickComponent.Builder theParent;
 		private final ModelSetInstance theModelsInstance;
 		private Component theComponent;
 		private final Map<QonfigAttributeDef, Object> theAttributeValues;
 		private final ObservableCollection<QuickComponent> theChildren;
+		private final Map<QuickModelValue<?>, BiTuple<? extends Function<Component, ? extends ObservableValue<?>>, ? extends ObservableValue<?>>> theModelValues;
 		private QuickComponent theBuilt;
 
 		public Builder(QuickComponentDef definition, QuickComponent.Builder parent, ModelSetInstance models) {
 			theDefinition = definition;
 			theParent = parent;
-			if (theDefinition.getModels() != null)
-				theModelsInstance = theDefinition.getModels().wrap(models).build();
-			else
-				theModelsInstance = models;
+			theModelsInstance = theDefinition.getModels().wrap(models)//
+				.with(theDefinition.getSatisfierPlaceholder(), SettableValue.of(QuickModelValue.Satisfier.class, this, "Not reversible"))//
+				.build();
 			theAttributeValues = new LinkedHashMap<>();
 			theChildren = ObservableCollection.build(QuickComponent.class).build();
+			theModelValues = new HashMap<>();
 		}
 
 		public ModelSetInstance getModels() {
@@ -118,6 +125,34 @@ public class QuickComponent {
 				throw new IllegalStateException("Already built");
 			theChildren.add(component);
 			return this;
+		}
+
+		public <T> Function<Component, ObservableValue<T>> getSupport(QuickModelValue<T> modelValue) {
+			return _getSupport(modelValue).getValue1();
+		}
+
+		@Override
+		public <T> ObservableValue<T> satisfy(QuickModelValue<T> modelValue) {
+			return _getSupport(modelValue).getValue2();
+		}
+
+		private <T> BiTuple<Function<Component, ObservableValue<T>>, ObservableValue<T>> _getSupport(QuickModelValue<T> modelValue) {
+			BiTuple<Function<Component, ObservableValue<T>>, ObservableValue<T>> tuple;
+			tuple = (BiTuple<Function<Component, ObservableValue<T>>, ObservableValue<T>>) theModelValues.get(modelValue);
+			if (tuple == null) {
+				Function<Component, ObservableValue<T>> support = theDefinition.getSupport(modelValue);
+				if (support == null) {
+					if (!theDefinition.getElement().isInstance(modelValue.getStyle().getElement()))
+						throw new IllegalArgumentException(
+							"Model value " + modelValue + " is not applicable to this element (" + theDefinition.getElement() + ")");
+					System.err.println("Model value " + modelValue + " has not been supported for " + theDefinition.getElement());
+					tuple = new BiTuple<>(null,
+						ObservableValue.of(modelValue.getValueType(), TypeTokens.get().getPrimitiveDefault(modelValue.getValueType())));
+				} else
+					tuple = new BiTuple<>(support, support.apply(theComponent));
+				theModelValues.put(modelValue, tuple);
+			}
+			return tuple;
 		}
 
 		public QuickComponent.Builder withComponent(Component component) {

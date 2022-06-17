@@ -261,4 +261,8 @@ public interface ObservableExpression {
 			return String.valueOf(theValue);
 		}
 	}
+
+	static boolean isSpecified(ObservableExpression expression) {
+		return expression != null && expression != EMPTY;
+	}
 }

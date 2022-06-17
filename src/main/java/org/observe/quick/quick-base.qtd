@@ -51,9 +51,12 @@
 		</add-on>
 
 		<add-on name="renderer-value-override" requires="value-widget">
+			<widget-model>
+				<value name="selected" type="boolean" priority="1" />
+			</widget-model>
 			<attribute name="value-widget.value" default="subject" specify="optional" />
 		</add-on>
-		<add-on name="single-rendering">
+		<add-on name="single-rendering" inherits="styled">
 			<attribute name="render-value-name" type="identifier" />
 			<child-def name="renderer" type="value-widget" inherits="renderer-value-override" min="0" />
 		</add-on>
@@ -79,9 +82,7 @@
 		<add-on name="replace-row-value" requires="column-edit" inherits="column-edit-type">
 			<attribute name="column-edit-type.commit" type="expression" specify="optional" default="" />
 		</add-on>
-		<add-on name="column-editor" requires="value-widget">
-			<attribute name="value-widget.value" specify="forbidden" default="subject" />
-		</add-on>
+		<add-on name="column-editor" requires="value-widget" inherits="renderer-value-override" />
 		<add-on name="tree-column" requires="column">
 			<attribute name="column.value" specify="forbidden" default="org.qommons.collect.BetterList::getLast" />
 		</add-on>

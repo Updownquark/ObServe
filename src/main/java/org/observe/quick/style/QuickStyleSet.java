@@ -143,7 +143,7 @@ public class QuickStyleSet {
 		if (type != null)
 			modelValues.addAll(type.getModelValues().values());
 		for (QonfigAddOn inh : element.getInheritance().values()) {
-			type = styled(element.getType(), session);
+			type = styled(inh, session);
 			if (type != null)
 				modelValues.addAll(type.getModelValues().values());
 		}

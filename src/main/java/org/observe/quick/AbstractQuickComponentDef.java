@@ -1,14 +1,21 @@
 package org.observe.quick;
 
+import java.awt.Component;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
 import org.observe.ObservableValue;
+import org.observe.SettableValue;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.quick.QuickInterpreter.QuickSession;
 import org.observe.quick.style.QuickElementStyle;
+import org.observe.quick.style.QuickModelValue;
 import org.observe.util.swing.PanelPopulation.ComponentEditor;
 import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigInterpretationException;
 
 public abstract class AbstractQuickComponentDef implements QuickComponentDef {
 	private final QonfigElement theElement;
@@ -16,11 +23,15 @@ public abstract class AbstractQuickComponentDef implements QuickComponentDef {
 	private final QuickElementStyle theStyle;
 	private Function<ModelSetInstance, ? extends ObservableValue<String>> theFieldName;
 	private BiConsumer<ComponentEditor<?, ?>, QuickComponent.Builder> theModifications;
+	private final ObservableModelSet.RuntimeValuePlaceholder<SettableValue, SettableValue<QuickModelValue.Satisfier>> theSatisfierPlaceholder;
+	private final Map<QuickModelValue<?>, Function<Component, ? extends ObservableValue<?>>> theModelImplementations;
 
-	public AbstractQuickComponentDef(QonfigElement element, ObservableModelSet.Wrapped models, QuickElementStyle style) {
-		theElement = element;
-		theModels = models;
-		theStyle = style;
+	public AbstractQuickComponentDef(QuickSession<?> session) {
+		theElement = session.getElement();
+		theModels = session.getLocalModels();
+		theStyle = session.getStyle();
+		theSatisfierPlaceholder = session.getSatisfierPlaceholder();
+		theModelImplementations = new HashMap<>();
 	}
 
 	@Override
@@ -60,6 +71,25 @@ public abstract class AbstractQuickComponentDef implements QuickComponentDef {
 			};
 		}
 		return this;
+	}
+
+	@Override
+	public ObservableModelSet.RuntimeValuePlaceholder<SettableValue, SettableValue<QuickModelValue.Satisfier>> getSatisfierPlaceholder() {
+		return theSatisfierPlaceholder;
+	}
+
+	@Override
+	public <T> QuickComponentDef support(QuickModelValue<T> modelValue, Function<Component, ObservableValue<T>> value)
+		throws QonfigInterpretationException {
+		if (!theElement.isInstance(modelValue.getStyle().getElement()))
+			throw new QonfigInterpretationException("Model value " + modelValue + " does not apply to this element (" + theElement + ")");
+		theModelImplementations.put(modelValue, value);
+		return this;
+	}
+
+	@Override
+	public <T> Function<Component, ObservableValue<T>> getSupport(QuickModelValue<T> modelValue) {
+		return (Function<Component, ObservableValue<T>>) theModelImplementations.get(modelValue);
 	}
 
 	public void modify(ComponentEditor<?, ?> component, QuickComponent.Builder builder) {
