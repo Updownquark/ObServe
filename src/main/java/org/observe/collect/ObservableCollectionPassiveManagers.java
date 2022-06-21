@@ -17,6 +17,7 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionOperation;
 import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
 import org.observe.collect.ObservableCollectionDataFlowImpl.MapWithParent;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ModFilterer;
+import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
@@ -511,9 +512,11 @@ public class ObservableCollectionPassiveManagers {
 
 		@Override
 		public ObservableValue<? extends Function<? super E, ? extends T>> map() {
-			return getParent().map().transform(tx -> tx.combineWith(getEngine()).combine((parentMap, state) -> {
-				return new TransformedMap(parentMap, state);
-			}));
+			return getParent().map().transform(//
+				(TypeToken<Function<? super E, ? extends T>>) (TypeToken<?>) TypeTokens.get().of(Function.class), //
+				tx -> tx.combineWith(getEngine()).combine((parentMap, state) -> {
+					return new TransformedMap(parentMap, state);
+				}));
 		}
 
 		@Override
