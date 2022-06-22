@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<qonfig-def name="Expresso" root="models">
+<qonfig-def name="Expresso" version="0.1" root="models">
 	<value-types>
 		<pattern name="int">\d{1,7}</pattern> <!-- Positive integer -->
 		<pattern name="float">[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?</pattern>

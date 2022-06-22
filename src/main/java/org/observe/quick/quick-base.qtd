@@ -4,7 +4,7 @@
 	GitHub URL https://github.com/Updownquark/Quick/releases/download/v1.0.0/quick.qtd
 	Local URL ../../../../core/src/main/resources/quick.dtd
 -->
-<qonfig-def name="Quick-Base" extends:core="Quick-Core">
+<qonfig-def name="Quick-Base" version="0.1" extends:core="Quick-Core v0.1">
 	<value-types>
 		<one-of name="pos-or-exp">
 			<explicit prefix="${" suffix="}">
@@ -52,7 +52,7 @@
 
 		<add-on name="renderer-value-override" requires="value-widget">
 			<widget-model>
-				<value name="selected" type="boolean" priority="1" />
+				<value name="selected" type="boolean" priority="100" />
 			</widget-model>
 			<attribute name="value-widget.value" default="subject" specify="optional" />
 		</add-on>
@@ -131,6 +131,9 @@
 			<attribute name="icon" type="expression-or-string" specify="optional" />
 		</element-def>
 		<element-def name="editable-text-widget" extends="text-widget">
+			<widget-model>
+				<value name="error" type="boolean" priority="0" />
+			</widget-model>
 			<attribute name="commit-on-type" type="boolean" default="false" />
 		</element-def>
 		<element-def name="text-field" extends="editable-text-widget">

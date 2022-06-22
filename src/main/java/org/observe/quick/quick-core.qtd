@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<qonfig-def name="Quick-Core" root="quick,style-sheet" extends:expresso="Expresso">
+<qonfig-def name="Quick-Core" version="0.1" root="quick,style-sheet" extends:expresso="Expresso v0.1">
 	<value-types>
 		<one-of name="window-close-action">
 			<literal>do-nothing</literal>
@@ -150,6 +150,8 @@
 			<widget-model>
 				<value name="hovered" type="boolean" priority="0" />
 				<value name="focused" type="boolean" priority="0" />
+				<value name="pressed" type="boolean" priority="10" />
+				<value name="rightPressed" type="boolean" priority="11" />
 			</widget-model>
 			<styles>
 				<style-attribute name="color" type="java.awt.Color" />
