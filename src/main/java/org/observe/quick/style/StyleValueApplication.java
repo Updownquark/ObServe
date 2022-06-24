@@ -30,7 +30,7 @@ import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 public class StyleValueApplication {
-	public static MultiInheritanceSet.Inheritance<QonfigElementOrAddOn> STYLE_INHERITANCE = (el1, el2) -> el2.isAssignableFrom(el1);
+	public static MultiInheritanceSet.Inheritance<QonfigElementOrAddOn> STYLE_INHERITANCE = QonfigElementOrAddOn::isAssignableFrom;
 	public static final StyleValueApplication ALL = new StyleValueApplication(null, null, MultiInheritanceSet.empty(), null, null, 0,
 		Collections.emptyList());
 	public static final ObservableValue<Boolean> TRUE = ObservableValue.of(boolean.class, true);
@@ -203,11 +203,11 @@ public class StyleValueApplication {
 		if (theCondition == null)
 			newCondition = condition;
 		else
-			newCondition = new BinaryOperator("||", theCondition, condition);
+			newCondition = new BinaryOperator("&&", theCondition, condition);
 
 		Set<QuickModelValue<?>> mvs = new LinkedHashSet<>();
 		// We don't need to worry about satisfying anything here. The model values just need to be available for the link level.
-		int complexity = findModelValues(condition, mvs, availableModelValues);
+		int complexity = findModelValues(newCondition, mvs, availableModelValues);
 		List<QuickModelValue<?>> mvList = new ArrayList<>(mvs.size() + (theParent == null ? 0 : theParent.getModelValues().size()));
 		mvList.addAll(mvs);
 		if (theParent != null) {
@@ -269,11 +269,15 @@ public class StyleValueApplication {
 						str.append(", ").append(type.getName());
 					count++;
 				}
-				if (lastType != null)
-					str.append(lastType);
-				else if (count > 1)
-					str.append(']');
 			}
+			if (lastType != null) {
+				if (theRole != null)
+					str.append('[');
+				str.append(lastType);
+				if (theRole != null)
+					str.append(']');
+			} else if (count > 1)
+				str.append(']');
 		}
 		if (theCondition != null)
 			str.append('(').append(theCondition).append(')');

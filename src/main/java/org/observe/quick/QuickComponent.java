@@ -163,6 +163,8 @@ public class QuickComponent {
 		}
 
 		public QuickComponent.Builder withComponent(Component component) {
+			if (theComponent == component)
+				return this;
 			if (theBuilt != null)
 				throw new IllegalStateException("Already built");
 			theComponent = component;

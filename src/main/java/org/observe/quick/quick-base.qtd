@@ -211,9 +211,6 @@
 		</element-def>
 
 		<!-- Containers -->
-		<element-def name="container" extends="widget" abstract="true">
-			<child-def name="content" type="widget" min="0" max="inf" />
-		</element-def>
 		<element-def name="box" extends="container">
 			<attribute name="opacity" type="expression" specify="optional" />
 			<attribute name="layout" type="layout" specify="required" />

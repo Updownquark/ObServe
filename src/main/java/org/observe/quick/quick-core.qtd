@@ -167,6 +167,9 @@
 			<attribute name="onExit" type="expression" specify="optional" />
 			<child-def name="border" type="border" min="0" />
 		</element-def>
+		<element-def name="container" extends="widget" abstract="true">
+			<child-def name="content" type="widget" min="0" max="inf" />
+		</element-def>
 
 		<element-def name="border" abstract="true" inherits="styled">
 			<styles>
