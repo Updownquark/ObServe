@@ -100,43 +100,43 @@ public abstract class ExpressoInterpreter<QIS extends ExpressoInterpreter.Expres
 			return ((ObservableExpression) value).evaluate(type, theEnv);
 		}
 
-		public <T> ValueContainer<SettableValue, SettableValue<T>> getAttributeAsValue(String attrName, TypeToken<T> type,
+		public <T> ValueContainer<SettableValue<?>, SettableValue<T>> getAttributeAsValue(String attrName, TypeToken<T> type,
 			Supplier<Function<ModelSetInstance, SettableValue<T>>> defaultValue) throws QonfigInterpretationException {
 			return getAttribute(attrName, ModelTypes.Value.forType(type), defaultValue);
 		}
 
-		public <T> ValueContainer<SettableValue, SettableValue<T>> getAttributeAsValue(String attrName, Class<T> type,
+		public <T> ValueContainer<SettableValue<?>, SettableValue<T>> getAttributeAsValue(String attrName, Class<T> type,
 			Supplier<Function<ModelSetInstance, SettableValue<T>>> defaultValue) throws QonfigInterpretationException {
 			return getAttributeAsValue(attrName, TypeTokens.get().of(type), defaultValue);
 		}
 
-		public <T> ValueContainer<SettableValue, SettableValue<T>> getValueAsValue(TypeToken<T> type,
+		public <T> ValueContainer<SettableValue<?>, SettableValue<T>> getValueAsValue(TypeToken<T> type,
 			Supplier<Function<ModelSetInstance, SettableValue<T>>> defaultValue) throws QonfigInterpretationException {
 			return getValue(ModelTypes.Value.forType(type), defaultValue);
 		}
 
-		public <T> ValueContainer<SettableValue, SettableValue<T>> getValueAsValue(Class<T> type,
+		public <T> ValueContainer<SettableValue<?>, SettableValue<T>> getValueAsValue(Class<T> type,
 			Supplier<Function<ModelSetInstance, SettableValue<T>>> defaultValue) throws QonfigInterpretationException {
 			return getValueAsValue(TypeTokens.get().of(type), defaultValue);
 		}
 
-		public <T> ValueContainer<ObservableCollection, ObservableCollection<T>> getAttributeAsCollection(String attrName,
+		public <T> ValueContainer<ObservableCollection<?>, ObservableCollection<T>> getAttributeAsCollection(String attrName,
 			TypeToken<T> type, Supplier<Function<ModelSetInstance, ObservableCollection<T>>> defaultValue)
 				throws QonfigInterpretationException {
 			return getAttribute(attrName, ModelTypes.Collection.forType(type), defaultValue);
 		}
 
-		public <T> ValueContainer<ObservableCollection, ObservableCollection<T>> getAttributeAsCollection(String attrName, Class<T> type,
+		public <T> ValueContainer<ObservableCollection<?>, ObservableCollection<T>> getAttributeAsCollection(String attrName, Class<T> type,
 			Supplier<Function<ModelSetInstance, ObservableCollection<T>>> defaultValue) throws QonfigInterpretationException {
 			return getAttributeAsCollection(attrName, TypeTokens.get().of(type), defaultValue);
 		}
 
-		public <T> ValueContainer<ObservableCollection, ObservableCollection<T>> getValueAsCollection(TypeToken<T> type,
+		public <T> ValueContainer<ObservableCollection<?>, ObservableCollection<T>> getValueAsCollection(TypeToken<T> type,
 			Supplier<Function<ModelSetInstance, ObservableCollection<T>>> defaultValue) throws QonfigInterpretationException {
 			return getValue(ModelTypes.Collection.forType(type), defaultValue);
 		}
 
-		public <T> ValueContainer<ObservableCollection, ObservableCollection<T>> getValueAsCollection(Class<T> type,
+		public <T> ValueContainer<ObservableCollection<?>, ObservableCollection<T>> getValueAsCollection(Class<T> type,
 			Supplier<Function<ModelSetInstance, ObservableCollection<T>>> defaultValue) throws QonfigInterpretationException {
 			return getValueAsCollection(TypeTokens.get().of(type), defaultValue);
 		}

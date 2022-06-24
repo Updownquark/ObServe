@@ -55,7 +55,7 @@ public class MethodInvocation extends Invocation {
 					Invocation.MethodResult<Method, ?> result = Invocation.findMethod(clazz.getMethods(), theMethodName,
 						TypeTokens.get().of(clazz), true, Arrays.asList(args), targetType, env, Invocation.ExecutableImpl.METHOD);
 					if (result != null) {
-						ValueContainer<SettableValue, SettableValue<?>>[] realArgs = new ValueContainer[getArguments().size()];
+						ValueContainer<SettableValue<?>, SettableValue<?>>[] realArgs = new ValueContainer[getArguments().size()];
 						for (int a = 0; a < realArgs.length; a++)
 							realArgs[a] = args.args[a].get(0);
 						if (type.getModelType() == ModelTypes.Value)
@@ -75,12 +75,12 @@ public class MethodInvocation extends Invocation {
 					throw new QonfigInterpretationException("No such method " + printSignature() + " in class " + clazz.getName());
 				}
 			}
-			ValueContainer<SettableValue, SettableValue<?>> ctx = theContext.evaluate(ModelTypes.Value.any(), env);
+			ValueContainer<SettableValue<?>, SettableValue<?>> ctx = theContext.evaluate(ModelTypes.Value.any(), env);
 			Invocation.MethodResult<Method, ?> result = Invocation.findMethod(
 				TypeTokens.getRawType(ctx.getType().getType(0)).getMethods(), theMethodName, ctx.getType().getType(0), false,
 				Arrays.asList(args), targetType, env, Invocation.ExecutableImpl.METHOD);
 			if (result != null) {
-				ValueContainer<SettableValue, SettableValue<?>>[] realArgs = new ValueContainer[getArguments().size()];
+				ValueContainer<SettableValue<?>, SettableValue<?>>[] realArgs = new ValueContainer[getArguments().size()];
 				for (int a = 0; a < realArgs.length; a++)
 					realArgs[a] = args.args[a].get(0);
 				if (type.getModelType() == ModelTypes.Value)
@@ -103,7 +103,7 @@ public class MethodInvocation extends Invocation {
 			Invocation.MethodResult<Method, ?> result = Invocation.findMethod(methods.toArray(new Method[methods.size()]),
 				theMethodName, null, true, Arrays.asList(args), targetType, env, Invocation.ExecutableImpl.METHOD);
 			if (result != null) {
-				ValueContainer<SettableValue, SettableValue<?>>[] realArgs = new ValueContainer[getArguments().size()];
+				ValueContainer<SettableValue<?>, SettableValue<?>>[] realArgs = new ValueContainer[getArguments().size()];
 				for (int a = 0; a < realArgs.length; a++)
 					realArgs[a] = args.args[a].get(0);
 				if (type.getModelType() == ModelTypes.Value)

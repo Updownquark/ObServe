@@ -4,7 +4,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
-import java.util.function.Function;
 
 import org.observe.ObservableAction;
 import org.observe.ObservableValue;
@@ -67,7 +66,7 @@ public class UnaryOperator implements ObservableExpression {
 			theOperand.evaluate(ModelTypes.Value.forType(targetOpType), env), env);
 	}
 
-	private <M, MV extends M, S> MV doOperation(ModelInstanceType<M, MV> type, ValueContainer<SettableValue, SettableValue<S>> op,
+	private <M, MV extends M, S> MV doOperation(ModelInstanceType<M, MV> type, ValueContainer<SettableValue<?>, SettableValue<S>> op,
 		ExpressoEnv env) throws QonfigInterpretationException {
 		UnaryOp<S, ?> operator = env.getUnaryOperators().getOperator(theOperator,
 			(Class<S>) TypeTokens.getRawType(op.getType().getType(0)));
@@ -85,8 +84,8 @@ public class UnaryOperator implements ObservableExpression {
 		}
 	}
 
-	private <T, A> ValueContainer<ObservableAction, ObservableAction<A>> evaluateAction(TypeToken<A> actionType,
-		ValueContainer<SettableValue, SettableValue<T>> op, UnaryOp<T, T> operator, ExpressoEnv env)
+	private <T, A> ValueContainer<ObservableAction<?>, ObservableAction<A>> evaluateAction(TypeToken<A> actionType,
+		ValueContainer<SettableValue<?>, SettableValue<T>> op, UnaryOp<T, T> operator, ExpressoEnv env)
 			throws QonfigInterpretationException {
 		boolean voidAction = TypeTokens.get().unwrap(TypeTokens.getRawType(actionType)) == void.class;
 		if (!voidAction) {
@@ -126,8 +125,8 @@ public class UnaryOperator implements ObservableExpression {
 		});
 	}
 
-	private <S, T> ValueContainer<SettableValue, SettableValue<T>> evaluateValue(TypeToken<T> type,
-		ValueContainer<SettableValue, SettableValue<S>> op, UnaryOp<S, T> operator, ExpressoEnv env)
+	private <S, T> ValueContainer<SettableValue<?>, SettableValue<T>> evaluateValue(TypeToken<T> type,
+		ValueContainer<SettableValue<?>, SettableValue<S>> op, UnaryOp<S, T> operator, ExpressoEnv env)
 			throws QonfigInterpretationException {
 		if (TypeTokens.get().isAssignable(type, TypeTokens.get().of(operator.getTargetType())))
 			type = TypeTokens.get().of(operator.getTargetType());
@@ -137,37 +136,6 @@ public class UnaryOperator implements ObservableExpression {
 		TypeToken<T> fType = type;
 		return op.map(ModelTypes.Value.forType(type), opV -> opV.transformReversible(fType, tx -> tx//
 			.map(operator::apply).withReverse(operator::reverse)));
-	}
-
-	private <T, A> ValueContainer<ObservableAction, ObservableAction<A>> incDec(ValueContainer<SettableValue, SettableValue<T>> op,
-		Function<T, T> opFn, ModelInstanceType<ObservableAction, ObservableAction<A>> resultType, boolean voidAction) {
-		boolean prefix = isPrefix;
-		return op.map(resultType, opV -> {
-			ObservableAction<T> assignmentAction = opV.assignmentTo(opV.map(opFn));
-			return new ObservableAction<A>() {
-				@Override
-				public TypeToken<A> getType() {
-					return (TypeToken<A>) resultType.getType(0);
-				}
-
-				@Override
-				public A act(Object cause) throws IllegalStateException {
-					T newValue = opFn.apply(opV.get());
-					T oldValue = opV.set(newValue, cause);
-					if (voidAction)
-						return null;
-					else if (prefix)
-						return (A) newValue;
-					else
-						return (A) oldValue;
-				}
-
-				@Override
-				public ObservableValue<String> isEnabled() {
-					return assignmentAction.isEnabled();
-				}
-			};
-		});
 	}
 
 	@Override

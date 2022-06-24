@@ -86,7 +86,7 @@ public class QuickComponent {
 
 	public static class Builder implements QuickModelValue.Satisfier {
 		private final QuickComponentDef theDefinition;
-		private final QuickComponent.Builder theParent;
+		private final Builder theParent;
 		private final ModelSetInstance theModelsInstance;
 		private Component theComponent;
 		private final Map<QonfigAttributeDef, Object> theAttributeValues;
@@ -94,7 +94,7 @@ public class QuickComponent {
 		private final Map<QuickModelValue<?>, BiTuple<? extends Function<Component, ? extends ObservableValue<?>>, ? extends ObservableValue<?>>> theModelValues;
 		private QuickComponent theBuilt;
 
-		public Builder(QuickComponentDef definition, QuickComponent.Builder parent, ModelSetInstance models) {
+		public Builder(QuickComponentDef definition, Builder parent, ModelSetInstance models) {
 			theDefinition = definition;
 			theParent = parent;
 			theModelsInstance = theDefinition.getModels().wrap(models)//
@@ -107,6 +107,13 @@ public class QuickComponent {
 
 		public ModelSetInstance getModels() {
 			return theModelsInstance;
+		}
+
+		public ModelSetInstance getParentModels(int depth) {
+			Builder b = this;
+			for (int i = 0; i <= depth && b != null; i++)
+				b = b.theParent;
+			return b.getModels();
 		}
 
 		public ObservableCollection<QuickComponent> getChildren() {

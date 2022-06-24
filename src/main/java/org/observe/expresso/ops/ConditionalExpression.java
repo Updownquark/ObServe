@@ -54,7 +54,7 @@ public class ConditionalExpression implements ObservableExpression {
 		} else
 			throw new QonfigInterpretationException(
 				"Conditional expressions not supported for model type " + type.getModelType() + " (" + this + ")");
-		ValueContainer<SettableValue, SettableValue<Boolean>> conditionV = theCondition.evaluate(//
+		ValueContainer<SettableValue<?>, SettableValue<Boolean>> conditionV = theCondition.evaluate(//
 			ModelTypes.Value.forType(boolean.class), env);
 		ValueContainer<M, MV> primaryV = thePrimary.evaluate(type, env);
 		ValueContainer<M, MV> secondaryV = theSecondary.evaluate(type, env);

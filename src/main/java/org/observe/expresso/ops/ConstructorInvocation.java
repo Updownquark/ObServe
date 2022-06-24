@@ -43,10 +43,10 @@ public class ConstructorInvocation extends Invocation {
 		Class<?> constructorType = env.getClassView().getType(theType);
 		if (constructorType == null)
 			throw new QonfigInterpretationException("No such type found: " + theType);
-		Invocation.MethodResult<Constructor, ?> result = Invocation.findMethod(constructorType.getConstructors(), null, null, true,
+		Invocation.MethodResult<Constructor<?>, ?> result = Invocation.findMethod(constructorType.getConstructors(), null, null, true,
 			Arrays.asList(args), targetType, env, Invocation.ExecutableImpl.CONSTRUCTOR);
 		if (result != null) {
-			ValueContainer<SettableValue, SettableValue<?>>[] realArgs = new ValueContainer[getArguments().size()];
+			ValueContainer<SettableValue<?>, SettableValue<?>>[] realArgs = new ValueContainer[getArguments().size()];
 			for (int a = 0; a < realArgs.length; a++)
 				realArgs[a] = args.args[a].get(0);
 			if (type.getModelType() == ModelTypes.Value)
@@ -59,7 +59,7 @@ public class ConstructorInvocation extends Invocation {
 				TypeToken<?>[] paramTypes = new TypeToken[type.getModelType().getTypeCount()];
 				for (int i = 0; i < paramTypes.length; i++)
 					paramTypes[i] = result.returnType.resolveType(type.getModelType().modelType.getTypeParameters()[i]);
-				return new InvocationThingContainer<>((Invocation.MethodResult<Constructor, MV>) result, null, Arrays.asList(realArgs),
+				return new InvocationThingContainer<>((Invocation.MethodResult<Constructor<?>, MV>) result, null, Arrays.asList(realArgs),
 					(ModelInstanceType<M, MV>) type.getModelType().forTypes(paramTypes), Invocation.ExecutableImpl.CONSTRUCTOR);
 			}
 		}

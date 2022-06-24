@@ -59,8 +59,8 @@ public abstract class Invocation implements ObservableExpression {
 
 	protected class ArgOption implements Args {
 		final ExpressoEnv theEnv;
-		public final List<ValueContainer<SettableValue, SettableValue<?>>>[] args;
-		private final ValueContainer<SettableValue, SettableValue<?>>[] resolved;
+		public final List<ValueContainer<SettableValue<?>, SettableValue<?>>>[] args;
+		private final ValueContainer<SettableValue<?>, SettableValue<?>>[] resolved;
 
 		ArgOption(ExpressoEnv env) {
 			theEnv = env;
@@ -77,7 +77,7 @@ public abstract class Invocation implements ObservableExpression {
 
 		@Override
 		public boolean matchesType(int arg, TypeToken<?> paramType) throws QonfigInterpretationException {
-			ValueContainer<SettableValue, SettableValue<?>> c;
+			ValueContainer<SettableValue<?>, SettableValue<?>> c;
 			for (int i = 0; i < args[arg].size(); i++) {
 				c = args[arg].get(i);
 				if (TypeTokens.get().isAssignable(paramType, c.getType().getType(i))) {
@@ -88,7 +88,7 @@ public abstract class Invocation implements ObservableExpression {
 				}
 			}
 			// Not found, try to evaluate it
-			c = (ValueContainer<SettableValue, SettableValue<?>>) (ValueContainer<?, ?>) theArguments.get(arg)
+			c = (ValueContainer<SettableValue<?>, SettableValue<?>>) (ValueContainer<?, ?>) theArguments.get(arg)
 				.evaluate(ModelTypes.Value.forType(paramType), theEnv);
 			args[arg].add(0, c);
 			return true;
@@ -241,15 +241,15 @@ public abstract class Invocation implements ObservableExpression {
 
 	public static abstract class InvocationContainer<X extends Executable, M, T, MV extends M> implements ValueContainer<M, MV> {
 		private final Invocation.MethodResult<X, T> theMethod;
-		private final ValueContainer<SettableValue, SettableValue<?>> theContext;
-		private final List<ValueContainer<SettableValue, SettableValue<?>>> theArguments;
+		private final ValueContainer<SettableValue<?>, SettableValue<?>> theContext;
+		private final List<ValueContainer<SettableValue<?>, SettableValue<?>>> theArguments;
 		private final ModelInstanceType<M, MV> theType;
 		private final Invocation.ExecutableImpl<X> theImpl;
 		private boolean isUpdatingContext;
 		private T theCachedValue;
 
-		public InvocationContainer(Invocation.MethodResult<X, T> method, ValueContainer<SettableValue, SettableValue<?>> context,
-			List<ValueContainer<SettableValue, SettableValue<?>>> arguments, ModelInstanceType<M, MV> type,
+		public InvocationContainer(Invocation.MethodResult<X, T> method, ValueContainer<SettableValue<?>, SettableValue<?>> context,
+			List<ValueContainer<SettableValue<?>, SettableValue<?>>> arguments, ModelInstanceType<M, MV> type,
 			Invocation.ExecutableImpl<X> impl) {
 			theMethod = method;
 			theArguments = arguments;
@@ -357,15 +357,15 @@ public abstract class Invocation implements ObservableExpression {
 	}
 
 	public static class InvocationActionContainer<X extends Executable, T>
-	extends Invocation.InvocationContainer<X, ObservableAction, T, ObservableAction<T>> {
-		public InvocationActionContainer(Invocation.MethodResult<X, T> method, ValueContainer<SettableValue, SettableValue<?>> context,
-			List<ValueContainer<SettableValue, SettableValue<?>>> arguments, Invocation.ExecutableImpl<X> impl) {
+		extends Invocation.InvocationContainer<X, ObservableAction<?>, T, ObservableAction<T>> {
+		public InvocationActionContainer(Invocation.MethodResult<X, T> method, ValueContainer<SettableValue<?>, SettableValue<?>> context,
+			List<ValueContainer<SettableValue<?>, SettableValue<?>>> arguments, Invocation.ExecutableImpl<X> impl) {
 			super(method, context, arguments, ModelTypes.Action.forType(method.returnType), impl);
 		}
 
 		@Override
-		public ModelInstanceType.SingleTyped<ObservableAction, T, ObservableAction<T>> getType() {
-			return (SingleTyped<ObservableAction, T, ObservableAction<T>>) super.getType();
+		public ModelInstanceType.SingleTyped<ObservableAction<?>, T, ObservableAction<T>> getType() {
+			return (SingleTyped<ObservableAction<?>, T, ObservableAction<T>>) super.getType();
 		}
 
 		@Override
@@ -382,15 +382,15 @@ public abstract class Invocation implements ObservableExpression {
 	}
 
 	public static class InvocationValueContainer<X extends Executable, T>
-	extends Invocation.InvocationContainer<X, SettableValue, T, SettableValue<T>> {
-		public InvocationValueContainer(Invocation.MethodResult<X, T> method, ValueContainer<SettableValue, SettableValue<?>> context,
-			List<ValueContainer<SettableValue, SettableValue<?>>> arguments, Invocation.ExecutableImpl<X> impl) {
+		extends Invocation.InvocationContainer<X, SettableValue<?>, T, SettableValue<T>> {
+		public InvocationValueContainer(Invocation.MethodResult<X, T> method, ValueContainer<SettableValue<?>, SettableValue<?>> context,
+			List<ValueContainer<SettableValue<?>, SettableValue<?>>> arguments, Invocation.ExecutableImpl<X> impl) {
 			super(method, context, arguments, ModelTypes.Value.forType(method.returnType), impl);
 		}
 
 		@Override
-		public ModelInstanceType.SingleTyped<SettableValue, T, SettableValue<T>> getType() {
-			return (SingleTyped<SettableValue, T, SettableValue<T>>) super.getType();
+		public ModelInstanceType.SingleTyped<SettableValue<?>, T, SettableValue<T>> getType() {
+			return (SingleTyped<SettableValue<?>, T, SettableValue<T>>) super.getType();
 		}
 
 		@Override
@@ -401,8 +401,8 @@ public abstract class Invocation implements ObservableExpression {
 
 	public static class InvocationThingContainer<X extends Executable, M, MV extends M>
 	extends Invocation.InvocationContainer<X, M, MV, MV> {
-		public InvocationThingContainer(Invocation.MethodResult<X, MV> method, ValueContainer<SettableValue, SettableValue<?>> context,
-			List<ValueContainer<SettableValue, SettableValue<?>>> arguments, ModelInstanceType<M, MV> type,
+		public InvocationThingContainer(Invocation.MethodResult<X, MV> method, ValueContainer<SettableValue<?>, SettableValue<?>> context,
+			List<ValueContainer<SettableValue<?>, SettableValue<?>>> arguments, ModelInstanceType<M, MV> type,
 			Invocation.ExecutableImpl<X> impl) {
 			super(method, context, arguments, type, impl);
 		}
@@ -468,19 +468,19 @@ public abstract class Invocation implements ObservableExpression {
 			}
 		};
 
-		static ExecutableImpl<Constructor> CONSTRUCTOR = new ExecutableImpl<Constructor>() {
+		static ExecutableImpl<Constructor<?>> CONSTRUCTOR = new ExecutableImpl<Constructor<?>>() {
 			@Override
-			public boolean isStatic(Constructor method) {
+			public boolean isStatic(Constructor<?> method) {
 				return true;
 			}
 
 			@Override
-			public Type getReturnType(Constructor method) {
+			public Type getReturnType(Constructor<?> method) {
 				return method.getDeclaringClass();
 			}
 
 			@Override
-			public Object execute(Constructor method, Object context, Object[] args)
+			public Object execute(Constructor<?> method, Object context, Object[] args)
 				throws IllegalAccessException, IllegalArgumentException, InvocationTargetException, InstantiationException {
 				Object[] args2 = context == null ? args : ArrayUtils.add(args, 0, context);
 				return method.newInstance(args2);

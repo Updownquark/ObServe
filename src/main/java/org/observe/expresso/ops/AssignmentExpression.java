@@ -43,21 +43,21 @@ public class AssignmentExpression implements ObservableExpression {
 		throws QonfigInterpretationException {
 		if (type.getModelType() != ModelTypes.Action)
 			throw new QonfigInterpretationException("Assignments cannot be used as " + type.getModelType() + "s");
-		ValueContainer<SettableValue, SettableValue<Object>> context = theContext
-			.evaluate((ModelInstanceType<SettableValue, SettableValue<Object>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any(), env);
+		ValueContainer<SettableValue<?>, SettableValue<Object>> context = theContext
+			.evaluate((ModelInstanceType<SettableValue<?>, SettableValue<Object>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any(), env);
 		boolean isVoid = type.getType(0).getType() == void.class || type.getType(0).getType() == Void.class;
 		if (!isVoid && !TypeTokens.get().isAssignable(type.getType(0), context.getType().getType(0)))
 			throw new QonfigInterpretationException(
 				"Cannot assign " + context + ", type " + context.getType().getType(0) + " to " + type.getType(0));
-		ValueContainer<SettableValue, SettableValue<Object>> value = theValue
+		ValueContainer<SettableValue<?>, SettableValue<Object>> value = theValue
 			.evaluate(ModelTypes.Value.forType((TypeToken<Object>) TypeTokens.get().getExtendsWildcard(context.getType().getType(0))), env);
-		return (ValueContainer<M, MV>) new ValueContainer<ObservableAction, ObservableAction<?>>() {
+		return (ValueContainer<M, MV>) new ValueContainer<ObservableAction<?>, ObservableAction<?>>() {
 			@Override
-			public ModelInstanceType<ObservableAction, ObservableAction<?>> getType() {
+			public ModelInstanceType<ObservableAction<?>, ObservableAction<?>> getType() {
 				if (isVoid)
-					return (ModelInstanceType<ObservableAction, ObservableAction<?>>) type;
+					return (ModelInstanceType<ObservableAction<?>, ObservableAction<?>>) type;
 				else
-					return (ModelInstanceType<ObservableAction, ObservableAction<?>>) (ModelInstanceType<?, ?>) ModelTypes.Action
+					return (ModelInstanceType<ObservableAction<?>, ObservableAction<?>>) (ModelInstanceType<?, ?>) ModelTypes.Action
 						.forType(context.getType().getType(0));
 			}
 

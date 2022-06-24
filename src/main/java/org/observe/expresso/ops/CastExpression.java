@@ -42,10 +42,10 @@ public class CastExpression implements ObservableExpression {
 		throws QonfigInterpretationException {
 		if (type.getModelType() != ModelTypes.Value)
 			throw new QonfigInterpretationException("A cast expression can only be evaluated as a value");
-		return (ValueContainer<M, MV>) doEval((ModelInstanceType<SettableValue, SettableValue<?>>) type, env);
+		return (ValueContainer<M, MV>) doEval((ModelInstanceType<SettableValue<?>, SettableValue<?>>) type, env);
 	}
 
-	private <S, T> ValueContainer<SettableValue, SettableValue<T>> doEval(ModelInstanceType<SettableValue, SettableValue<?>> type,
+	private <S, T> ValueContainer<SettableValue<?>, SettableValue<T>> doEval(ModelInstanceType<SettableValue<?>, SettableValue<?>> type,
 		ExpressoEnv env) throws QonfigInterpretationException {
 		TypeToken<T> valueType;
 		try {
@@ -55,7 +55,7 @@ public class CastExpression implements ObservableExpression {
 		}
 		if (!TypeTokens.get().isAssignable(type.getType(0), valueType))
 			throw new QonfigInterpretationException("Cannot assign " + valueType + " to " + type.getType(0));
-		ValueContainer<SettableValue, SettableValue<S>> valueContainer = (ValueContainer<SettableValue, SettableValue<S>>) (ValueContainer<?, ?>) theValue
+		ValueContainer<SettableValue<?>, SettableValue<S>> valueContainer = (ValueContainer<SettableValue<?>, SettableValue<S>>) (ValueContainer<?, ?>) theValue
 			.evaluate(ModelTypes.Value.any(), env);
 		TypeToken<S> sourceType = (TypeToken<S>) valueContainer.getType().getType(0);
 		if (!TypeTokens.get().isAssignable(sourceType, valueType)//

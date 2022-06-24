@@ -40,7 +40,7 @@ public abstract class QuickInterpreter<QIS extends QuickInterpreter.QuickSession
 		private QuickStyleSheet theStyleSheet;
 		private QuickElementStyle theStyle;
 		private final Set<QuickModelValue<?>> theModelValues;
-		private ObservableModelSet.RuntimeValuePlaceholder<SettableValue, SettableValue<QuickModelValue.Satisfier>> theSatisfierPlaceholder;
+		private ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<QuickModelValue.Satisfier>> theSatisfierPlaceholder;
 
 		protected QuickSession(QIS parent, QonfigElement element, QonfigElementOrAddOn type, int childIndex)
 			throws QonfigInterpretationException {
@@ -138,7 +138,7 @@ public abstract class QuickInterpreter<QIS extends QuickInterpreter.QuickSession
 			return Collections.unmodifiableSet(theModelValues);
 		}
 
-		public ObservableModelSet.RuntimeValuePlaceholder<SettableValue, SettableValue<QuickModelValue.Satisfier>> getSatisfierPlaceholder() {
+		public ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<QuickModelValue.Satisfier>> getSatisfierPlaceholder() {
 			return theSatisfierPlaceholder;
 		}
 

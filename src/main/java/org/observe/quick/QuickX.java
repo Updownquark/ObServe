@@ -45,7 +45,7 @@ public class QuickX<QIS extends QuickSession<?>> extends QuickBase<QIS> {
 	}
 
 	private QuickComponentDef interpretCollapsePane(QIS session) throws QonfigInterpretationException {
-		ValueContainer<SettableValue, SettableValue<Boolean>> collapsed = session.getAttributeAsValue("collapsed", boolean.class,
+		ValueContainer<SettableValue<?>, SettableValue<Boolean>> collapsed = session.getAttributeAsValue("collapsed", boolean.class,
 			() -> mis -> SettableValue.build(boolean.class).withDescription("collapsed").build());
 		Boolean initCollapsed = session.getAttribute("init-collapsed", Boolean.class);
 		QuickComponentDef header = session.interpretChildren("header", QuickComponentDef.class).getFirst();
@@ -81,7 +81,7 @@ public class QuickX<QIS extends QuickSession<?>> extends QuickBase<QIS> {
 			List<Column<BetterList<T>, ?>> columns = new ArrayList<>();
 
 			@Override
-			public void configure(ObservableModelSet model, ValueContainer<SettableValue, ? extends SettableValue<T>> root)
+			public void configure(ObservableModelSet model, ValueContainer<SettableValue<?>, ? extends SettableValue<T>> root)
 				throws QonfigInterpretationException {
 				TypeToken<T> type = (TypeToken<T>) root.getType().getType(0);
 				columnType = TypeTokens.get().keyFor(CategoryRenderStrategy.class).<CategoryRenderStrategy<BetterList<T>, ?>> parameterized(//

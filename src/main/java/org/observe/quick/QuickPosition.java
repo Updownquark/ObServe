@@ -145,11 +145,11 @@ public class QuickPosition {
 						throw new QonfigInterpretationException("Only values are supported");
 					else if (!(TypeTokens.getRawType(type.getType(0)).isAssignableFrom(QuickPosition.class)))
 						throw new QonfigInterpretationException("Cannot cast QuickPosition to " + type.getType(0));
-					ValueContainer<SettableValue, SettableValue<Double>> valueC = valueEx
+					ValueContainer<SettableValue<?>, SettableValue<Double>> valueC = valueEx
 						.evaluateInternal(ModelTypes.Value.forType(double.class), env);
-					return (ValueContainer<M, MV>) new ValueContainer<SettableValue, SettableValue<QuickPosition>>() {
+					return (ValueContainer<M, MV>) new ValueContainer<SettableValue<?>, SettableValue<QuickPosition>>() {
 						@Override
-						public ModelInstanceType<SettableValue, SettableValue<QuickPosition>> getType() {
+						public ModelInstanceType<SettableValue<?>, SettableValue<QuickPosition>> getType() {
 							return ModelTypes.Value.forType(QuickPosition.class);
 						}
 

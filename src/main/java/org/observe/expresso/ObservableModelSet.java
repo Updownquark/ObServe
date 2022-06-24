@@ -135,7 +135,7 @@ public interface ObservableModelSet {
 			};
 		}
 
-		static <T> ValueCreator<SettableValue, SettableValue<T>> literal(TypeToken<T> type, T value, String text) {
+		static <T> ValueCreator<SettableValue<?>, SettableValue<T>> literal(TypeToken<T> type, T value, String text) {
 			return constant(ObservableModelSet.literalContainer(ModelTypes.Value.forType(type), value, text));
 		}
 	}
@@ -219,14 +219,13 @@ public interface ObservableModelSet {
 		};
 	}
 
-	@SuppressWarnings("rawtypes")
-	public static <T> ValueContainer<SettableValue, SettableValue<T>> literalContainer(
-		ModelInstanceType<SettableValue, SettableValue<T>> type, T value, String text) {
-		return new ValueContainer<SettableValue, SettableValue<T>>() {
+	public static <T> ValueContainer<SettableValue<?>, SettableValue<T>> literalContainer(
+		ModelInstanceType<SettableValue<?>, SettableValue<T>> type, T value, String text) {
+		return new ValueContainer<SettableValue<?>, SettableValue<T>>() {
 			private final SettableValue<T> theValue = literal((TypeToken<T>) type.getType(0), value, text);
 
 			@Override
-			public ModelInstanceType<SettableValue, SettableValue<T>> getType() {
+			public ModelInstanceType<SettableValue<?>, SettableValue<T>> getType() {
 				return type;
 			}
 

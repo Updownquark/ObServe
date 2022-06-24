@@ -31,7 +31,7 @@ public interface QuickComponentDef {
 
 	QuickComponentDef modify(BiConsumer<ComponentEditor<?, ?>, QuickComponent.Builder> modification);
 
-	ObservableModelSet.RuntimeValuePlaceholder<SettableValue, SettableValue<QuickModelValue.Satisfier>> getSatisfierPlaceholder();
+	ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<QuickModelValue.Satisfier>> getSatisfierPlaceholder();
 
 	<T> QuickComponentDef support(QuickModelValue<T> modelValue, Function<Component, ObservableValue<T>> value)
 		throws QonfigInterpretationException;

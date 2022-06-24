@@ -11,7 +11,7 @@ import org.qommons.Named;
 
 import com.google.common.reflect.TypeToken;
 
-public class QuickModelValue<T> implements Named, ValueContainer<SettableValue, SettableValue<T>> {
+public class QuickModelValue<T> implements Named, ValueContainer<SettableValue<?>, SettableValue<T>> {
 	public interface Satisfier {
 		<T> ObservableValue<T> satisfy(QuickModelValue<T> value);
 	}
@@ -21,7 +21,7 @@ public class QuickModelValue<T> implements Named, ValueContainer<SettableValue, 
 	private final QuickStyleType theStyle;
 	private final String theName;
 	private final TypeToken<T> theValueType;
-	private final ModelInstanceType<SettableValue, SettableValue<T>> theModelType;
+	private final ModelInstanceType<SettableValue<?>, SettableValue<T>> theModelType;
 	private final int thePriority;
 
 	public QuickModelValue(QuickStyleType style, String name, TypeToken<T> type, int priority) {
@@ -46,7 +46,7 @@ public class QuickModelValue<T> implements Named, ValueContainer<SettableValue, 
 	}
 
 	@Override
-	public ModelInstanceType<SettableValue, SettableValue<T>> getType() {
+	public ModelInstanceType<SettableValue<?>, SettableValue<T>> getType() {
 		return theModelType;
 	}
 

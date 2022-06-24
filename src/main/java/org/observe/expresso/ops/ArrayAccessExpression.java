@@ -44,20 +44,20 @@ public class ArrayAccessExpression implements ObservableExpression {
 		if (type.getModelType() != ModelTypes.Value)
 			throw new QonfigInterpretationException("An array access expression can only be evaluated as a value");
 
-		ValueContainer<SettableValue, ? extends SettableValue<?>> arrayValue = theArray.evaluate(ModelTypes.Value.forType(//
-			TypeTokens.get().getArrayType(type.getType(0), 1)), env);
-		ValueContainer<SettableValue, SettableValue<Integer>> indexValue = theIndex.evaluate(ModelTypes.Value.forType(int.class), env);
+		ValueContainer<SettableValue<?>, ? extends SettableValue<Object[]>> arrayValue = theArray.evaluate(ModelTypes.Value.forType(//
+			(TypeToken<Object[]>) TypeTokens.get().getArrayType(type.getType(0), 1)), env);
+		ValueContainer<SettableValue<?>, SettableValue<Integer>> indexValue = theIndex.evaluate(ModelTypes.Value.forType(int.class), env);
 		return (ValueContainer<M, MV>) this.<Object> doEval(arrayValue, indexValue, env);
 	}
 
-	private <T> ValueContainer<SettableValue, SettableValue<T>> doEval(
-		ValueContainer<SettableValue, ? extends SettableValue<T[]>> arrayValue,
-		ValueContainer<SettableValue, SettableValue<Integer>> indexValue, ExpressoEnv env) {
+	private <T> ValueContainer<SettableValue<?>, SettableValue<T>> doEval(
+		ValueContainer<SettableValue<?>, ? extends SettableValue<T[]>> arrayValue,
+			ValueContainer<SettableValue<?>, SettableValue<Integer>> indexValue, ExpressoEnv env) {
 		TypeToken<T> targetType = (TypeToken<T>) arrayValue.getType().getType(0).getComponentType();
-		ModelInstanceType<SettableValue, SettableValue<T>> targetModelType = ModelTypes.Value.forType(targetType);
-		return new ValueContainer<SettableValue, SettableValue<T>>() {
+		ModelInstanceType<SettableValue<?>, SettableValue<T>> targetModelType = ModelTypes.Value.forType(targetType);
+		return new ValueContainer<SettableValue<?>, SettableValue<T>>() {
 			@Override
-			public ModelInstanceType<SettableValue, SettableValue<T>> getType() {
+			public ModelInstanceType<SettableValue<?>, SettableValue<T>> getType() {
 				return targetModelType;
 			}
 

@@ -23,7 +23,7 @@ public abstract class AbstractQuickComponentDef implements QuickComponentDef {
 	private final QuickElementStyle theStyle;
 	private Function<ModelSetInstance, ? extends ObservableValue<String>> theFieldName;
 	private BiConsumer<ComponentEditor<?, ?>, QuickComponent.Builder> theModifications;
-	private final ObservableModelSet.RuntimeValuePlaceholder<SettableValue, SettableValue<QuickModelValue.Satisfier>> theSatisfierPlaceholder;
+	private final ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<QuickModelValue.Satisfier>> theSatisfierPlaceholder;
 	private final Map<QuickModelValue<?>, Function<Component, ? extends ObservableValue<?>>> theModelImplementations;
 
 	public AbstractQuickComponentDef(QuickSession<?> session) {
@@ -74,7 +74,7 @@ public abstract class AbstractQuickComponentDef implements QuickComponentDef {
 	}
 
 	@Override
-	public ObservableModelSet.RuntimeValuePlaceholder<SettableValue, SettableValue<QuickModelValue.Satisfier>> getSatisfierPlaceholder() {
+	public ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<QuickModelValue.Satisfier>> getSatisfierPlaceholder() {
 		return theSatisfierPlaceholder;
 	}
 

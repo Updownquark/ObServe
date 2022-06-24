@@ -56,7 +56,6 @@ import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
-import org.observe.expresso.ops.BinaryOperator;
 import org.observe.quick.QuickInterpreter.QuickSession;
 import org.observe.quick.style.QuickElementStyle;
 import org.observe.quick.style.QuickElementStyle.QuickElementStyleAttribute;
@@ -66,6 +65,7 @@ import org.observe.quick.style.QuickStyleSet;
 import org.observe.quick.style.QuickStyleSheet;
 import org.observe.quick.style.QuickStyleType;
 import org.observe.quick.style.QuickStyleValue;
+import org.observe.quick.style.StyleValueApplication;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.ComponentDecorator.ModifiableLineBorder;
 import org.observe.util.swing.ObservableSwingUtils;
@@ -73,10 +73,11 @@ import org.qommons.ArrayUtils;
 import org.qommons.Colors;
 import org.qommons.Identifiable;
 import org.qommons.IdentityKey;
-import org.qommons.MultiInheritanceSet;
 import org.qommons.QommonsUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
+import org.qommons.collect.BetterHashMultiMap;
+import org.qommons.collect.MultiMap;
 import org.qommons.config.DefaultQonfigParser;
 import org.qommons.config.QommonsConfig;
 import org.qommons.config.QonfigAddOn;
@@ -97,13 +98,11 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 			new QuickSize.SizeValueType(Expresso.EXPRESSION_PARSER));
 
 	public interface QuickBorder {
-		ObservableValue<Border> createBorder(Component component, ModelSetInstance models);
+		ObservableValue<Border> createBorder(Component component, QuickComponent.Builder builder);
 	}
 
 	public static final String STYLE_NAME = "quick-style-name";
-	public static final String STYLE_ELEMENT_TYPE = "quick-style-element-type";
-	public static final String STYLE_ROLE = "quick-style-role";
-	public static final String STYLE_CONDITION = "quick-style-condition";
+	public static final String STYLE_APPLICATION = "quick-parent-style-application";
 	public static final String STYLE_ATTRIBUTE = "quick-style-attribute";
 	public static final String STYLE_SHEET_REF = "quick-style-sheet-ref";
 
@@ -196,7 +195,7 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 	public static Function<ModelSetInstance, SettableValue<Icon>> parseIcon(ObservableExpression expression, ExpressoSession<?> session,
 		ExpressoEnv env) throws QonfigInterpretationException {
 		if (expression != null) {
-			ValueContainer<SettableValue, SettableValue<?>> iconV = expression.evaluate(ModelTypes.Value.any(), env);
+			ValueContainer<SettableValue<?>, SettableValue<?>> iconV = expression.evaluate(ModelTypes.Value.any(), env);
 			Class<?> iconType = TypeTokens.getRawType(iconV.getType().getType(0));
 			if (Icon.class.isAssignableFrom(iconType))
 				return (Function<ModelSetInstance, SettableValue<Icon>>) (ValueContainer<?, ?>) iconV;
@@ -351,9 +350,9 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 		ObservableExpression tooltipX = session.getAttribute("tooltip", ObservableExpression.class);
 		ObservableExpression visibleX = session.getAttribute("visible", ObservableExpression.class);
 		QuickBorder border = session.interpretChildren("border", QuickBorder.class).peekFirst();
-		ValueContainer<SettableValue, SettableValue<String>> tooltip = tooltipX == null ? null
+		ValueContainer<SettableValue<?>, SettableValue<String>> tooltip = tooltipX == null ? null
 			: tooltipX.evaluate(ModelTypes.Value.forType(String.class), session.getExpressoEnv());
-		ValueContainer<SettableValue, SettableValue<Boolean>> visible = visibleX == null ? null
+		ValueContainer<SettableValue<?>, SettableValue<Boolean>> visible = visibleX == null ? null
 			: visibleX.evaluate(ModelTypes.Value.forType(boolean.class), session.getExpressoEnv());
 		if (name != null) {
 			widget.modify((comp, build) -> {
@@ -523,7 +522,7 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 			comp.modifyComponent(c -> {
 				Color defaultBG = c.getBackground();
 				boolean defaultOpaque = c instanceof JComponent && ((JComponent) c).isOpaque();
-				ObservableValue<? extends Color> bgColor = bgColorStyle.evaluate(builder.getModels());
+				ObservableValue<? extends Color> bgColor = bgColorStyle.evaluate(builder.getModels(), builder::getParentModels);
 				bgColor.changes().takeUntil(builder.getModels().getUntil()).act(evt -> {
 					Color colorV = evt.getNewValue();
 					if (colorV != null) {
@@ -548,7 +547,7 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 				comp.modifyComponent(c -> {
 					if (c instanceof JComponent) {
 						JComponent jc = (JComponent) c;
-						border.createBorder(c, builder.getModels()).changes().takeUntil(builder.getModels().getUntil()).act(evt -> {
+						border.createBorder(c, builder).changes().takeUntil(builder.getModels().getUntil()).act(evt -> {
 							if (evt.getNewValue() != jc.getBorder())
 								jc.setBorder(evt.getNewValue());
 							jc.repaint();
@@ -572,10 +571,10 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 		widget.modify((comp, builder) -> {
 			comp.modifyComponent(c -> {
 				Font defaultFont = c.getFont();
-				ObservableValue<? extends Color> fontColor = fontColorStyle.evaluate(builder.getModels());
-				ObservableValue<? extends Double> fontSize = fontSizeStyle.evaluate(builder.getModels());
-				ObservableValue<? extends Double> fontWeight = fontWeightStyle.evaluate(builder.getModels());
-				ObservableValue<? extends Double> fontSlant = fontSlantStyle.evaluate(builder.getModels());
+				ObservableValue<? extends Color> fontColor = fontColorStyle.evaluate(builder.getModels(), builder::getParentModels);
+				ObservableValue<? extends Double> fontSize = fontSizeStyle.evaluate(builder.getModels(), builder::getParentModels);
+				ObservableValue<? extends Double> fontWeight = fontWeightStyle.evaluate(builder.getModels(), builder::getParentModels);
+				ObservableValue<? extends Double> fontSlant = fontSlantStyle.evaluate(builder.getModels(), builder::getParentModels);
 				ObservableValue<Font> font = getFont(defaultFont, fontColor, fontSize, fontWeight, fontSlant);
 				font.changes().takeUntil(builder.getModels().getUntil()).act(evt -> {
 					c.setFont(evt.getNewValue());
@@ -636,14 +635,16 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 		QuickElementStyleAttribute<? extends Color> colorStyle = style.get(session.getStyleAttribute(null, "border-color", Color.class));
 		QuickElementStyleAttribute<? extends Integer> thicknessStyle = style
 			.get(session.getStyleAttribute(null, "thickness", Integer.class));
-		return (comp, msi) -> {
+		return (comp, builder) -> {
 			ModifiableLineBorder border = new ModifiableLineBorder(Color.black, 1, false);
 			SettableValue<Border> borderV = SettableValue.build(Border.class).withValue(border).build();
-			colorStyle.evaluate(msi).changes().takeUntil(msi.getUntil()).act(evt -> {
+			colorStyle.evaluate(builder.getModels(), builder::getParentModels).changes().takeUntil(builder.getModels().getUntil())
+			.act(evt -> {
 				border.setColor(evt.getNewValue());
 				borderV.set(border, evt);
 			});
-			thicknessStyle.evaluate(msi).changes().takeUntil(msi.getUntil()).act(evt -> {
+			thicknessStyle.evaluate(builder.getModels(), builder::getParentModels).changes().takeUntil(builder.getModels().getUntil())
+			.act(evt -> {
 				border.setThickness(evt.getNewValue());
 				borderV.set(border, evt);
 			});
@@ -666,34 +667,36 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 		QuickElementStyleAttribute<? extends Double> fontSlantStyle = style
 			.get(session.getStyleAttribute(null, "font-slant", double.class));
 
-		return (comp, msi) -> {
+		return (comp, builder) -> {
 			ModifiableLineBorder lineBorder = new ModifiableLineBorder(Color.black, 1, false);
 			TitledBorder border = BorderFactory.createTitledBorder(lineBorder, "");
 			Font defaultFont = border.getTitleFont();
-			ObservableValue<? extends Color> fontColor = fontColorStyle.evaluate(msi);
-			ObservableValue<? extends Double> fontSize = fontSizeStyle.evaluate(msi);
-			ObservableValue<? extends Double> fontWeight = fontWeightStyle.evaluate(msi);
-			ObservableValue<? extends Double> fontSlant = fontSlantStyle.evaluate(msi);
+			ObservableValue<? extends Color> fontColor = fontColorStyle.evaluate(builder.getModels(), builder::getParentModels);
+			ObservableValue<? extends Double> fontSize = fontSizeStyle.evaluate(builder.getModels(), builder::getParentModels);
+			ObservableValue<? extends Double> fontWeight = fontWeightStyle.evaluate(builder.getModels(), builder::getParentModels);
+			ObservableValue<? extends Double> fontSlant = fontSlantStyle.evaluate(builder.getModels(), builder::getParentModels);
 			ObservableValue<Font> font = getFont(defaultFont, fontColor, fontSize, fontWeight, fontSlant);
 			SettableValue<Border> borderV = SettableValue.build(Border.class).withValue(border).build();
-			title.apply(msi).changes().takeUntil(msi.getUntil()).act(evt -> {
+			title.apply(builder.getModels()).changes().takeUntil(builder.getModels().getUntil()).act(evt -> {
 				border.setTitle(evt.getNewValue());
 				borderV.set(border, evt);
 				comp.repaint();
 			});
-			font.changes().takeUntil(msi.getUntil()).act(evt -> {
+			font.changes().takeUntil(builder.getModels().getUntil()).act(evt -> {
 				border.setTitleFont(evt.getNewValue());
 				comp.invalidate();
 				comp.repaint();
 			});
-			colorStyle.evaluate(msi).changes().takeUntil(msi.getUntil()).act(evt -> {
+			colorStyle.evaluate(builder.getModels(), builder::getParentModels).changes().takeUntil(builder.getModels().getUntil())
+			.act(evt -> {
 				Color c = evt.getNewValue() == null ? Color.black : evt.getNewValue();
 				lineBorder.setColor(c);
 				border.setTitleColor(c);
 				borderV.set(border, evt);
 				comp.repaint();
 			});
-			thicknessStyle.evaluate(msi).changes().takeUntil(msi.getUntil()).act(evt -> {
+			thicknessStyle.evaluate(builder.getModels(), builder::getParentModels).changes().takeUntil(builder.getModels().getUntil())
+			.act(evt -> {
 				lineBorder.setThickness(evt.getNewValue() == null ? 1 : evt.getNewValue());
 				borderV.set(border, evt);
 				comp.repaint();
@@ -705,11 +708,31 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 	private StyleValues interpretStyle(QIS session) throws QonfigInterpretationException {
 		QuickStyleSet styleSet = session.getInterpreter().getStyleSet();
 		QuickStyleSheet styleSheet = session.getStyleSheet();
-		QuickStyleType element = session.get(STYLE_ELEMENT_TYPE, QuickStyleType.class);
-		List<QonfigChildDef> rolePath = session.get(STYLE_ROLE, List.class);
-		ObservableExpression condition = session.get(STYLE_CONDITION, ObservableExpression.class);
+		StyleValueApplication application = session.get(STYLE_APPLICATION, StyleValueApplication.class);
+		if (application == null)
+			application = StyleValueApplication.ALL;
 		QuickStyleAttribute<?> attr = session.get(STYLE_ATTRIBUTE, QuickStyleAttribute.class);
+		QonfigElement element = (QonfigElement) session.get(QuickInterpreter.STYLE_ELEMENT);
 
+		String rolePath = session.getAttributeText("child");
+		if (rolePath != null) {
+			if (application == null)
+				throw new QonfigInterpretationException("Cannot specify a style role without a type above it");
+			for (String roleName : rolePath.split("\\.")) {
+				roleName = roleName.trim();
+				QonfigChildDef child = null;
+				if (application.getRole() != null)
+					child = application.getRole().getType().getChild(roleName);
+				for (QonfigElementOrAddOn type : application.getTypes().values()) {
+					if (child != null)
+						break;
+					child = type.getChild(roleName);
+				}
+				if (child == null)
+					throw new QonfigInterpretationException("No such role '" + roleName + "' for parent style " + application);
+				application = application.forChild(child);
+			}
+		}
 		String elName = session.getAttributeText("element");
 		if (elName != null) {
 			QonfigElementOrAddOn el;
@@ -720,67 +743,60 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 			} catch (IllegalArgumentException e) {
 				throw new QonfigInterpretationException(e.getMessage());
 			}
-			if (element != null && !element.getElement().isAssignableFrom(el))
-				throw new QonfigInterpretationException("Cannot specify an element (" + elName
-					+ " that is not an extension of one specified in an ancestor style (" + element.getElement() + ")");
-			element = styleSet.styled(el, session);
-			// TODO test for compatibility with the role path, if specified
-			session.put(STYLE_ELEMENT_TYPE, element);
-		}
-		String roleName = session.getAttributeText("role-path");
-		if (roleName != null) {
-			if (rolePath != null)
-				throw new QonfigInterpretationException("Cannot specify a role (" + roleName + ") if an ancestor style has ("
-					+ QuickStyleValue.printRolePath(rolePath, null) + ")");
-			rolePath = parseRolePath(session, roleName);
-			// TODO test for compatibility with the element, if specified
-			session.put(STYLE_ROLE, rolePath);
+			application = application.forType(el);
 		}
 		ObservableExpression newCondition = session.getAttribute("condition", ObservableExpression.class);
 		if (newCondition != null) {
-			if (condition != null)
-				condition = new BinaryOperator("&&", condition, newCondition);
-			else
-				condition = newCondition;
-			session.put(STYLE_CONDITION, condition);
+			MultiMap<String, QuickModelValue<?>> availableModelValues = BetterHashMultiMap.<String, QuickModelValue<?>> build()
+				.buildMultiMap();
+			for (QonfigElementOrAddOn type : application.getTypes().values()) {
+				QuickStyleType styled = styleSet.styled(type, session);
+				availableModelValues.putAll(styled.getModelValues());
+			}
+			if (element != null) {
+				QuickStyleType styled = styleSet.styled(element.getType(), session);
+				availableModelValues.putAll(styled.getModelValues());
+				for (QonfigAddOn inh : element.getInheritance().values()) {
+					styled = styleSet.styled(inh, session);
+					availableModelValues.putAll(styled.getModelValues());
+				}
+			}
+			application = application.forCondition(newCondition, session.getExpressoEnv(), availableModelValues);
 		}
+		session.put(STYLE_APPLICATION, application);
+
 		String attrName = session.getAttributeText("attr");
 		if (attrName != null) {
 			if (attr != null)
 				throw new QonfigInterpretationException(
 					"Cannot specify an attribute (" + attrName + ") if an ancestor style has (" + attr + ")");
-			QonfigElement el = (QonfigElement) session.get(QuickInterpreter.STYLE_ELEMENT);
-			if (el != null) {
-				Set<QuickStyleAttribute<?>> attrs = new HashSet<>();
-				attrs.addAll(styleSet.styled(el.getType(), session).getAttributes(attrName));
-				for (QonfigAddOn inh : el.getInheritance().values()) {
+
+			Set<QuickStyleAttribute<?>> attrs = new HashSet<>();
+			if (element != null) {
+				QuickStyleType styled = styleSet.styled(element.getType(), session);
+				if (styled != null)
+					attrs.addAll(styleSet.styled(element.getType(), session).getAttributes(attrName));
+				for (QonfigAddOn inh : element.getInheritance().values()) {
 					if (attrs.size() > 1)
 						break;
-					QuickStyleType styleType = styleSet.styled(inh, session);
-					if (styleType != null)
-						attrs.addAll(styleType.getAttributes(attrName));
+					styled = styleSet.styled(inh, session);
+					if (styled != null)
+						attrs.addAll(styled.getAttributes(attrName));
 				}
-				if (attrs.isEmpty())
-					throw new QonfigInterpretationException("No such style attribute: '" + attrName + "'");
-				else if (attrs.size() > 1)
-					throw new QonfigInterpretationException("Multiple style attributes found matching '" + attrName + "'");
-				attr = attrs.iterator().next();
-			} else if (element != null) {
-				try {
-					attr = element.getAttribute(attrName);
-				} catch (IllegalArgumentException e) {
-					throw new QonfigInterpretationException(e.getMessage());
+			} else {
+				for (QonfigElementOrAddOn type : application.getTypes().values()) {
+					if (attrs.size() > 1)
+						break;
+					QuickStyleType styled = styleSet.styled(type, session);
+					if (styled != null)
+						attrs.addAll(styled.getAttributes(attrName));
 				}
-			} else if (rolePath != null && !rolePath.isEmpty()) {
-				element = styleSet.styled(rolePath.get(rolePath.size() - 1).getType(), session);
-				try {
-					if (element != null)
-						attr = element.getAttribute(attrName);
-				} catch (IllegalArgumentException e) {
-					throw new QonfigInterpretationException(e.getMessage());
-				}
-			} else
-				throw new QonfigInterpretationException("Cannot specify an attribute without an element for context");
+			}
+			if (attrs.isEmpty())
+				throw new QonfigInterpretationException("No such style attribute: '" + attrName + "'");
+			else if (attrs.size() > 1)
+				throw new QonfigInterpretationException("Multiple style attributes found matching '" + attrName + "'");
+			attr = attrs.iterator().next();
 			session.put(STYLE_ATTRIBUTE, attr);
 		}
 		ObservableExpression value = session.getValue(ObservableExpression.class, null);
@@ -804,89 +820,22 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 		for (StyleValues subStyle : subStyles)
 			subStyle.init();
 
+		StyleValueApplication theApplication = application;
 		QuickStyleAttribute<?> theAttr = attr;
-		QuickStyleType theElement = element == null ? null : element;
-		List<QonfigChildDef> theRolePath = rolePath;
-		ObservableExpression theCondition = condition;
 		return new StyleValues((String) session.get(STYLE_NAME)) {
 			@Override
 			protected List<QuickStyleValue<?>> get() throws QonfigInterpretationException {
 				List<QuickStyleValue<?>> values = new ArrayList<>();
 				if (value != null && value != ObservableExpression.EMPTY)
 					values.add(
-						new QuickStyleValue<>(styleSheet, theAttr, theElement, theRolePath, theCondition, value, session.getExpressoEnv()));
-				if (styleSetRef != null) {
-					if (theElement == null && theRolePath == null && theCondition == null)
-						values.addAll(styleSetRef);
-					else {
-						for (QuickStyleValue<?> style : styleSetRef) {
-							QuickStyleType el = style.getElement();
-							if (theElement != null) {
-								if (style.getElement().getElement().isAssignableFrom(theElement.getElement()))
-									el = theElement;
-								else if (!theElement.getElement().isAssignableFrom(style.getElement().getElement()))
-									throw new QonfigInterpretationException(
-										"Style element " + theElement + " is not compatible with style set element " + style.getElement());
-							}
-							if (theRolePath != null && style.getRolePath() != null && !theRolePath.equals(style.getRolePath()))
-								throw new QonfigInterpretationException(
-									"Style role " + theRolePath + " is not compatible with style set role " + style.getRolePath());
-							ObservableExpression sc;
-							if (theCondition != null) {
-								if (style.getCondition() != null)
-									sc = new BinaryOperator("&&", theCondition, style.getConditionExpression());
-								else
-									sc = theCondition;
-							} else
-								sc = style.getConditionExpression();
-							values.add(new QuickStyleValue<>(styleSheet, style.getAttribute(), el, style.getRolePath(), sc,
-								style.getValueExpression(), session.getExpressoEnv()));
-						}
-					}
-				}
+						new QuickStyleValue<>(styleSheet, theApplication, theAttr, value, session.getExpressoEnv()));
+				if (styleSetRef != null)
+					values.addAll(styleSetRef);
 				for (StyleValues child : subStyles)
 					values.addAll(child);
 				return values;
 			}
 		};
-	}
-
-	private List<QonfigChildDef> parseRolePath(QIS session, String roleName) throws QonfigInterpretationException {
-		String[] split = roleName.split("\\.");
-		MultiInheritanceSet<QonfigElementOrAddOn> roleEls = MultiInheritanceSet.create(QonfigElementOrAddOn::isAssignableFrom);
-		MultiInheritanceSet<QonfigElementOrAddOn> elsToAdd = MultiInheritanceSet.create(QonfigElementOrAddOn::isAssignableFrom);
-		try {
-			QonfigElementOrAddOn roleEl = session.getElement().getDocument().getDocToolkit().getElementOrAddOn(split[0].trim());
-			if (roleEl == null)
-				throw new QonfigInterpretationException("No such element found: " + split[0].trim());
-			roleEls.add(roleEl);
-		} catch (IllegalArgumentException e) {
-			throw new QonfigInterpretationException(e.getMessage());
-		}
-		List<QonfigChildDef> rolePath = new ArrayList<>();
-		MultiInheritanceSet<QonfigChildDef> children = MultiInheritanceSet.create(QonfigChildDef::isFulfilledBy);
-		for (int i = 1; i < split.length; i++) {
-			for (QonfigElementOrAddOn el : roleEls.values())
-				children.addAll(el.getChildrenByName().get(split[i].trim()));
-			if (children.isEmpty())
-				throw new QonfigInterpretationException("No such role found: " + printElOptions(roleEls.values()) + "." + split[i].trim());
-			else if (children.size() > 1)
-				throw new QonfigInterpretationException(
-					"Multiple roles found matching: " + printElOptions(roleEls.values()) + "." + split[i].trim());
-			QonfigChildDef child = children.values().iterator().next();
-			children.clear();
-			rolePath.add(child);
-			roleEls.clear();
-			roleEls.add(child.getType());
-			roleEls.addAll(child.getInheritance());
-			do {
-				elsToAdd.clear();
-				for (QonfigElementOrAddOn el : roleEls.values())
-					elsToAdd.addAll(
-						session.getElement().getDocument().getDocToolkit().getAutoInheritance(el, Collections.singleton(child)).values());
-			} while (roleEls.addAll(elsToAdd.values()) > 0);
-		}
-		return Collections.unmodifiableList(rolePath);
 	}
 
 	private static String printElOptions(Collection<QonfigElementOrAddOn> roleEls) {

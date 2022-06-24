@@ -59,7 +59,7 @@ public class QuickStyleSheet {
 	public final List<QuickStyleValue<?>> getValues(QonfigElement element) {
 		List<QuickStyleValue<?>> values = new ArrayList<>();
 		for (QuickStyleValue<?> ssv : theValues) {
-			if (ssv.applies(element))
+			if (ssv.getApplication().applies(element))
 				values.add(ssv);
 		}
 		for (QuickStyleSheet imported : theImportedStyleSheets.values()) {

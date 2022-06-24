@@ -67,7 +67,7 @@ public class LambdaExpression implements ObservableExpression {
 					for (int i = 0; i < theParameters.size(); i++)
 						placeholders[i] = configureParameter(wrappedModelsBuilder, theParameters.get(i), option.resolve(i));
 					ObservableModelSet.Wrapped wrappedModels = wrappedModelsBuilder.build();
-					ValueContainer<SettableValue, SettableValue<T>> body;
+					ValueContainer<SettableValue<?>, SettableValue<T>> body;
 					try {
 						body = theBody.evaluate(ModelTypes.Value.forType(targetType), env.with(wrappedModels, null));
 					} catch (QonfigInterpretationException e) {
@@ -83,7 +83,7 @@ public class LambdaExpression implements ObservableExpression {
 							argMaker.makeArgs(p1, p2, p3, args, msi);
 						ObservableModelSet.WrappedInstanceBuilder instBuilder = wrappedModels.wrap(msi);
 						for (int i = 0; i < theParameters.size(); i++)
-							instBuilder.with((RuntimeValuePlaceholder<SettableValue, SettableValue<Object>>) placeholders[i],
+							instBuilder.with((RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>) placeholders[i],
 								ObservableModelSet.literal((TypeToken<Object>) placeholders[i].getType().getType(0), args[i],
 									String.valueOf(args[i])));
 						ModelSetInstance wrappedMSI = instBuilder.build();
@@ -98,9 +98,9 @@ public class LambdaExpression implements ObservableExpression {
 					throw new QonfigInterpretationException("No options given");
 			}
 
-			private <T> RuntimeValuePlaceholder<SettableValue, SettableValue<T>> configureParameter(
-				ObservableModelSet.WrappedBuilder modelBuilder, String paramName, TypeToken<T> paramType) {
-				ModelInstanceType<SettableValue, SettableValue<T>> type = ModelTypes.Value.forType(paramType);
+			private <T2> RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T2>> configureParameter(
+				ObservableModelSet.WrappedBuilder modelBuilder, String paramName, TypeToken<T2> paramType) {
+				ModelInstanceType<SettableValue<?>, SettableValue<T2>> type = ModelTypes.Value.forType(paramType);
 				return modelBuilder.withRuntimeValue(paramName, type);
 			}
 		};

@@ -92,7 +92,7 @@ public class MethodReferenceExpression implements ObservableExpression {
 							"No such method matching: " + MethodReferenceExpression.this + " on class " + type.getName());
 					}
 				}
-				ValueContainer<SettableValue, SettableValue<?>> ctx = theContext.evaluate(ModelTypes.Value.any(), env);
+				ValueContainer<SettableValue<?>, SettableValue<?>> ctx = theContext.evaluate(ModelTypes.Value.any(), env);
 				Invocation.MethodResult<Method, ? extends T> result = Invocation.findMethod(//
 					TypeTokens.getRawType(ctx.getType().getType(0)).getMethods(), theMethodName, ctx.getType().getType(0), true,
 					theOptions, targetType, env, Invocation.ExecutableImpl.METHOD);

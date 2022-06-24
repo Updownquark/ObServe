@@ -142,11 +142,11 @@ public class QuickSize {
 						throw new QonfigInterpretationException("Only values are supported");
 					else if (!(TypeTokens.getRawType(type.getType(0)).isAssignableFrom(QuickSize.class)))
 						throw new QonfigInterpretationException("Cannot cast SizeUnit to " + type.getType(0));
-					ValueContainer<SettableValue, SettableValue<Double>> valueC = valueEx
+					ValueContainer<SettableValue<?>, SettableValue<Double>> valueC = valueEx
 						.evaluateInternal(ModelTypes.Value.forType(double.class), env);
-					return (ValueContainer<M, MV>) new ValueContainer<SettableValue, SettableValue<QuickSize>>() {
+					return (ValueContainer<M, MV>) new ValueContainer<SettableValue<?>, SettableValue<QuickSize>>() {
 						@Override
-						public ModelInstanceType<SettableValue, SettableValue<QuickSize>> getType() {
+						public ModelInstanceType<SettableValue<?>, SettableValue<QuickSize>> getType() {
 							return ModelTypes.Value.forType(QuickSize.class);
 						}
 

@@ -16,42 +16,26 @@ import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.expresso.ops.NameExpression;
 import org.qommons.StringUtils;
 import org.qommons.config.QonfigChildDef;
-import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 
 /** Represents a conditional value for a style attribute in quick */
 public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 	private final QuickStyleSheet theStyleSheet;
+	private final StyleValueApplication theApplication;
 	private final QuickStyleAttribute<T> theAttribute;
-	private final QuickStyleType theElement;
-	private final List<QonfigChildDef> theRolePath;
-	private final ObservableExpression theConditionExpression;
-	private final ValueContainer<SettableValue, SettableValue<Boolean>> theCondition;
 	private final ObservableExpression theValueExpression;
-	private final ValueContainer<SettableValue, ? extends SettableValue<? extends T>> theValue;
+	private final ValueContainer<SettableValue<?>, ? extends SettableValue<? extends T>> theValue;
 	private final List<QuickModelValue<?>> theUsedModelValues;
 
-	public QuickStyleValue(QuickStyleSheet styleSheet, QuickStyleAttribute<T> attribute, QuickStyleType element,
-		List<QonfigChildDef> rolePath, ObservableExpression condition, ObservableExpression value, //
-		ExpressoEnv env) throws QonfigInterpretationException {
+	public QuickStyleValue(QuickStyleSheet styleSheet, StyleValueApplication application, QuickStyleAttribute<T> attribute,
+		ObservableExpression value, ExpressoEnv env) throws QonfigInterpretationException {
 		theStyleSheet = styleSheet;
+		theApplication = application;
 		theAttribute = attribute;
-		theElement = element;
-		theRolePath = rolePath == null ? Collections.emptyList() : rolePath;
-		theConditionExpression = condition;
 		theValueExpression = value;
-		if (element != null && !element.getModelValues().isEmpty()) {
-			// We don't need to worry about satisfying anything here. The model values just need to be available for the link level.
-			ObservableModelSet.WrappedBuilder wrappedBuilder = ObservableModelSet.wrap(env.getModels());
-			for (QuickModelValue<?> mv : element.getModelValues().values())
-				wrappedBuilder.withCustomValue(mv.getName(), mv);
-			env = env.with(wrappedBuilder.build(), null);
-		}
-		theCondition = condition == null ? null : condition.evaluate(ModelTypes.Value.forType(boolean.class), env);
 		theValue = value.evaluate(ModelTypes.Value.forType(attribute.getType()), env);
 		Set<QuickModelValue<?>> modelValues = new LinkedHashSet<>();
-		if (theConditionExpression != null)
-			findModelValues(theConditionExpression, modelValues, env.getModels());
+		modelValues.addAll(theApplication.getModelValues());
 		findModelValues(theValueExpression, modelValues, env.getModels());
 		List<QuickModelValue<?>> sortedModelValues = new ArrayList<>(modelValues.size());
 		sortedModelValues.addAll(modelValues);
@@ -76,31 +60,19 @@ public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 		return theStyleSheet;
 	}
 
+	public StyleValueApplication getApplication() {
+		return theApplication;
+	}
+
 	public QuickStyleAttribute<T> getAttribute() {
 		return theAttribute;
-	}
-
-	public QuickStyleType getElement() {
-		return theElement;
-	}
-
-	public List<QonfigChildDef> getRolePath() {
-		return theRolePath;
-	}
-
-	public ObservableExpression getConditionExpression() {
-		return theConditionExpression;
-	}
-
-	public ValueContainer<SettableValue, SettableValue<Boolean>> getCondition() {
-		return theCondition;
 	}
 
 	public ObservableExpression getValueExpression() {
 		return theValueExpression;
 	}
 
-	public ValueContainer<SettableValue, ? extends SettableValue<? extends T>> getValue() {
+	public ValueContainer<SettableValue<?>, ? extends SettableValue<? extends T>> getValue() {
 		return theValue;
 	}
 
@@ -126,15 +98,15 @@ public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 				break;
 			}
 		}
-		// Compare the specificity of the role path
+		// Compare the complexity of the condition
 		if (comp == 0)
-			comp = -Integer.compare(theRolePath.size(), o.theRolePath.size());
-		// Compare the specificity of the element type
-		if (comp == 0 && theElement != o.theElement) {
-			int thisDepth = getDepth(theElement);
-			int oDepth = getDepth(o.theElement);
-			comp = -Integer.compare(thisDepth, oDepth);
-		}
+			comp = -Integer.compare(theApplication.getConditionComplexity(), o.theApplication.getConditionComplexity());
+		// Compare the complexity of the role path
+		if (comp == 0)
+			comp = -Integer.compare(theApplication.getDepth(), o.theApplication.getDepth());
+		// Compare the complexity of the element type
+		if (comp == 0)
+			comp = -Integer.compare(theApplication.getTypeComplexity(), o.theApplication.getTypeComplexity());
 		// Compare the source style sheets
 		if (comp == 0) {
 			if (theStyleSheet == null) {
@@ -158,45 +130,10 @@ public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 		return comp;
 	}
 
-	private int getDepth(QuickStyleType element) {
-		int maxDepth = 1;
-		for (QuickStyleType superEl : element.getSuperElements())
-			maxDepth = Math.max(maxDepth, getDepth(superEl) + 1);
-		return maxDepth;
-	}
-
-	public boolean applies(QonfigElement element) {
-		if (theElement != null && !element.isInstance(theElement.getElement()))
-			return false;
-		if (!theRolePath.isEmpty()) {
-			QonfigElement el = element;
-			for (int i = theRolePath.size() - 1; i >= 0; i--) {
-				QonfigChildDef role = theRolePath.get(i);
-				if (!el.getDeclaredRoles().contains(role.getDeclared()))
-					return false;
-				el = el.getParent();
-				if (!el.isInstance(role.getOwner()))
-					return false;
-			}
-		}
-		return true;
-	}
-
 	@Override
 	public String toString() {
-		StringBuilder str = new StringBuilder();
-		if (!theRolePath.isEmpty()) {
-			printRolePath(theRolePath, str);
-			if (theElement != null && theElement.getElement() != theRolePath.get(theRolePath.size() - 1).getType())
-				str.append('[').append(theElement).append(']');
-		} else
-			str.append(theElement);
-		str.append('.').append(theAttribute.getName());
-		if (theConditionExpression != null && !(theConditionExpression instanceof ObservableExpression.LiteralExpression))
-			str.append('(').append(theCondition).append(')');
-		str.append('=');
-		str.append(theValueExpression);
-		return str.toString();
+		return new StringBuilder(theApplication.toString()).append(':').append(theAttribute.getName()).append('=')
+			.append(theValueExpression).toString();
 	}
 
 	public static StringBuilder printRolePath(List<QonfigChildDef> rolePath, StringBuilder str) {
