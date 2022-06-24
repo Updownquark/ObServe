@@ -16,7 +16,7 @@
 		</add-on>
 
 		<add-on name="int-model-value" requires="model-value">
-			<attribute name="model-value.type" specify="optional" default="" />
+			<attr-mod name="model-value.type" specify="optional" default="" />
 		</add-on>
 		<add-on name="allow-ext-model" abstract="true" />
 		<add-on name="ext-model-value" requires="model-value">
@@ -29,7 +29,7 @@
 			<child-def name="element" type="element" min="0" max="inf" />
 		</add-on>
 		<add-on name="int-map" requires="map" inherits="int-model-value">
-			<attribute name="map.key-type" specify="optional" default="" />
+			<attr-mod name="map.key-type" specify="optional" default="" />
 			<child-def name="entry" type="entry" min="0" max="inf" />
 		</add-on>
 		<add-on name="map-model-value" requires="model-value">
@@ -199,7 +199,7 @@
 		</element-def>
 		<element-def name="first-value" extends="model-value" inherits="int-model-value">
 			<!-- Type can be inferred from the super-type of the other values, but the user can specify it instead -->
-			<attribute name="model-value.type" specify="optional" default="" />
+			<attr-mod name="model-value.type" specify="optional" default="" />
 			<value-mod specify="forbidden" />
 			<child-def name="value" type="model-value" min="1" max="inf" inherits="int-model-value" />
 		</element-def>
@@ -209,7 +209,7 @@
 		<element-def name="transform" extends="model-value" inherits="int-model-value">
 			<attribute name="source" type="expression" specify="required" />
 			<!-- Type can be inferred from the transformation, but the user can specify that the result is a super-type instead -->
-			<attribute name="int-model-value.type" specify="optional" default="" />
+			<attr-mod name="int-model-value.type" specify="optional" default="" />
 			<!-- Default of this attribute is whatever the flow prefers -->
 			<attribute name="active" type="boolean" specify="optional" />
 			<child-def name="op" type="operation" min="0" max="inf" /> <!-- Allow min=0 to facilitate aliases -->
@@ -300,7 +300,7 @@
 			<attribute name="type" type="archive-type" />
 		</element-def>
 		<element-def name="file-source" extends="model-value">
-			<attribute name="model-value.type" specify="forbidden" default="" />
+			<attr-mod name="model-value.type" specify="forbidden" default="" />
 			<attribute name="type" type="file-source-type" default="native" />
 			<attribute name="max-archive-depth" type="expression" default="10" />
 			<child-def name="archive" type="archive-method" min="0" max="inf" />
@@ -314,7 +314,7 @@
 			<attribute name="type" type="validate-type" />
 		</element-def>
 		<element-def name="format" extends="model-value">
-			<attribute name="model-value.type" specify="forbidden" default="" />
+			<attr-mod name="model-value.type" specify="forbidden" default="" />
 			<attribute name="type" type="format-type" />
 			<child-def name="validate" type="validate" min="0" max="inf" />
 		</element-def>

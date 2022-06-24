@@ -15,7 +15,7 @@
 		<pattern name="element-name">[a-zA-Z_\\-]+</pattern>
 		<pattern name="widget-name">((?&lt;ns&gt;[a-zA-Z_\\-]+)\:)?(?&lt;widget&gt;[a-zA-Z_\\-]+)</pattern>
 		<pattern name="style-attr">(((?&lt;ns&gt;[a-zA-Z_\\-]+)\:)?(?&lt;widget&gt;[a-zA-Z_\\-]+)\.)?(?&lt;attr&gt;[a-zA-Z_\\-]+)</pattern>
-		<pattern name="role-path">(((?&lt;ns&gt;[a-zA-Z_\\-]+)\:)?(?&lt;widget&gt;[a-zA-Z_\\-]+)\.)(?&lt;role&gt;[a-zA-Z_\\-\\.]+)</pattern>
+		<pattern name="role-path">([a-zA-Z_\\-]+)(\.[a-zA-Z_\\-]+)*</pattern>
 	</value-types>
 
 	<add-ons>
@@ -56,8 +56,8 @@
 		</add-on>
 
 		<add-on name="element-style" requires="style">
-			<attribute name="element" type="widget-name" specify="forbidden" />
-			<attribute name="role-path" type="role-path" specify="forbidden" />
+			<attr-mod name="element" specify="forbidden" />
+			<attr-mod name="child" specify="forbidden" />
 			<child-mod child="sub-style" inherits="element-style" />
 		</add-on>
 
@@ -83,7 +83,7 @@
 		</add-on>
 
 		<add-on name="widget-local-variables" requires="model">
-			<attribute name="model.name" default="$LOCAL$" />
+			<attr-mod name="model.name" default="$LOCAL$" />
 		</add-on>
 
 		<add-on name="with-text" inherits="styled" abstract="true">
@@ -99,7 +99,7 @@
 	<elements>
 		<!-- Some building blocks for styles, etc. -->
 		<element-def name="widget-model" extends="abst-model">
-			<attribute name="abst-model.name" default="$TYPE$" />
+			<attr-mod name="abst-model.name" default="$TYPE$" />
 			<child-mod child="value" inherits="widget-model-value" />
 		</element-def>
 
@@ -115,7 +115,7 @@
 
 		<element-def name="style">
 			<attribute name="element" type="widget-name" specify="optional" />
-			<attribute name="role-path" type="role-path" specify="optional" />
+			<attribute name="child" type="role-path" specify="optional" />
 			<attribute name="attr" type="style-attr" specify="optional" />
 			<attribute name="condition" type="expression" specify="optional" />
 			<attribute name="style-set" type="string" specify="optional" />

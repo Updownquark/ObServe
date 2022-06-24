@@ -54,7 +54,7 @@
 			<widget-model>
 				<value name="selected" type="boolean" priority="100" />
 			</widget-model>
-			<attribute name="value-widget.value" default="subject" specify="optional" />
+			<attr-mod name="value-widget.value" default="subject" specify="optional" />
 		</add-on>
 		<add-on name="single-rendering" inherits="styled">
 			<attribute name="render-value-name" type="identifier" />
@@ -80,11 +80,11 @@
 			<attribute name="row-update" type="boolean" default="false" />
 		</add-on>
 		<add-on name="replace-row-value" requires="column-edit" inherits="column-edit-type">
-			<attribute name="column-edit-type.commit" type="expression" specify="optional" default="" />
+			<attr-mod name="column-edit-type.commit" specify="optional" default="" />
 		</add-on>
 		<add-on name="column-editor" requires="value-widget" inherits="renderer-value-override" />
 		<add-on name="tree-column" requires="column">
-			<attribute name="column.value" specify="forbidden" default="org.qommons.collect.BetterList::getLast" />
+			<attr-mod name="column.value" specify="forbidden" default="org.qommons.collect.BetterList::getLast" />
 		</add-on>
 
 		<add-on name="field" requires="widget">
@@ -127,12 +127,13 @@
 		</element-def>
 		<element-def name="label" extends="text-widget">
 			<value type="string" specify="optional" />
-			<attribute name="value-widget.value" specify="optional" default="" />
+			<attr-mod name="value-widget.value" specify="optional" default="" />
 			<attribute name="icon" type="expression-or-string" specify="optional" />
 		</element-def>
 		<element-def name="editable-text-widget" extends="text-widget">
 			<widget-model>
-				<value name="error" type="boolean" priority="0" />
+				<value name="error" type="String" priority="10000" />
+				<value name="warning" type="String" priority="5000" />
 			</widget-model>
 			<attribute name="commit-on-type" type="boolean" default="false" />
 		</element-def>
@@ -169,7 +170,7 @@
 			<attribute name="values" type="expression" specify="required" />
 		</element-def>
 		<element-def name="column" inherits="single-rendering">
-			<attribute name="single-rendering.render-value-name" specify="forbidden" default="none" />
+			<attr-mod name="single-rendering.render-value-name" specify="forbidden" default="none" />
 			<attribute name="name" type="string" />
 			<!-- Unspecified value means to use the row value for the column value -->
 			<attribute name="value" type="expression" specify="optional" />
