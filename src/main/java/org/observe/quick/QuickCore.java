@@ -31,7 +31,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.BiConsumer;
-import java.util.function.Consumer;
 import java.util.function.Function;
 
 import javax.swing.BorderFactory;
@@ -56,6 +55,7 @@ import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.quick.QuickComponentDef.ModelValueSupport;
 import org.observe.quick.QuickInterpreter.QuickSession;
 import org.observe.quick.style.QuickElementStyle;
 import org.observe.quick.style.QuickElementStyle.QuickElementStyleAttribute;
@@ -372,7 +372,7 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 		QuickModelValue<Boolean> rightPressed = session.getStyleModelValue("widget", "rightPressed", boolean.class);
 		initMouseListening();
 		// Install style model value support
-		class MouseValueSupport extends ObservableValue.LazyObservableValue<Boolean> implements Consumer<Component>, MouseListener {
+		class MouseValueSupport extends ObservableValue.LazyObservableValue<Boolean> implements ModelValueSupport<Boolean>, MouseListener {
 			private Component theComponent;
 			private final QuickModelValue<Boolean> theModelValue;
 			private final Boolean theButton;
@@ -386,7 +386,7 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 			}
 
 			@Override
-			public void accept(Component component) {
+			public void install(Component component) {
 				theComponent = component;
 				if (theListener != null)
 					setListening(true);
@@ -520,59 +520,86 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 			public void mouseClicked(MouseEvent e) {
 			}
 		}
-		MouseValueSupport hoverSupport = new MouseValueSupport(hovered, null);
-		widget.modify((editor, builder) -> editor.modifyComponent(hoverSupport));
-		widget.support(hovered, comp -> hoverSupport);
-		MouseValueSupport leftPressedSupport = new MouseValueSupport(pressed, true);
-		widget.modify((editor, builder) -> editor.modifyComponent(leftPressedSupport));
-		widget.support(pressed, comp -> leftPressedSupport);
-		MouseValueSupport rightPressedSupport = new MouseValueSupport(rightPressed, false);
-		widget.modify((editor, builder) -> editor.modifyComponent(rightPressedSupport));
-		widget.support(rightPressed, comp -> rightPressedSupport);
-		widget.support(focused,
-			comp -> new ObservableValue.LazyObservableValue<Boolean>(TypeTokens.get().BOOLEAN, Transactable.noLock(ThreadConstraint.EDT)) {
-				@Override
-				protected Object createIdentity() {
-					return Identifiable.wrap(comp, focused.getName());
-				}
+		widget.support(hovered, () -> new MouseValueSupport(hovered, null));
+		widget.support(pressed, () -> new MouseValueSupport(pressed, true));
+		widget.support(rightPressed, () -> new MouseValueSupport(rightPressed, false));
+		class FocusSupport extends ObservableValue.LazyObservableValue<Boolean> implements ModelValueSupport<Boolean>, FocusListener {
+			private Component theComponent;
+			private BiConsumer<Boolean, Object> theListener;
+			private boolean isListening;
 
-				@Override
-				protected Boolean getSpontaneous() {
-					return comp.isFocusOwner();
-				}
+			FocusSupport() {
+				super(TypeTokens.get().BOOLEAN, Transactable.noLock(ThreadConstraint.EDT));
+			}
 
-				@Override
-				protected Subscription subscribe(BiConsumer<Boolean, Object> listener) {
-					FocusListener focusListener = new FocusListener() {
-						@Override
-						public void focusGained(FocusEvent e) {
-							listener.accept(true, e);
-						}
+			@Override
+			public void install(Component component) {
+				theComponent = component;
+				if (theListener != null)
+					setListening(true);
+			}
 
-						@Override
-						public void focusLost(FocusEvent e) {
-							listener.accept(false, e);
-						}
-					};
-					comp.addFocusListener(focusListener);
-					return () -> comp.removeFocusListener(focusListener);
-				}
-			});
+			@Override
+			protected Object createIdentity() {
+				return Identifiable.wrap(theComponent, focused.getName());
+			}
+
+			@Override
+			protected Boolean getSpontaneous() {
+				return theComponent != null && theComponent.isFocusOwner();
+			}
+
+			@Override
+			protected Subscription subscribe(BiConsumer<Boolean, Object> listener) {
+				theListener = listener;
+				setListening(true);
+				return () -> setListening(false);
+			}
+
+			private void setListening(boolean listening) {
+				if (listening == isListening)
+					return;
+				if (listening && (theComponent == null || theListener == null))
+					return;
+				isListening = listening;
+				if (listening)
+					theComponent.addFocusListener(this);
+				else if (theComponent != null)
+					theComponent.removeFocusListener(this);
+				if (!listening)
+					theListener = null;
+			}
+
+			@Override
+			public void focusGained(FocusEvent e) {
+				if (theListener != null)
+					theListener.accept(true, e);
+			}
+
+			@Override
+			public void focusLost(FocusEvent e) {
+				if (theListener != null)
+					theListener.accept(false, e);
+			}
+		}
+		widget.support(focused, () -> new FocusSupport());
 		widget.modify((comp, builder) -> {
 			// Set style
 			comp.modifyComponent(c -> {
-				Color defaultBG = c.getBackground();
 				boolean defaultOpaque = c instanceof JComponent && ((JComponent) c).isOpaque();
-				ObservableValue<? extends Color> bgColor = bgColorStyle.evaluate(builder.getModels(), builder::getParentModels);
+				ObservableValue<? extends Color> bgColor = bgColorStyle.evaluate(builder.getModels());
+				Color[] oldBG = new Color[] { c.getBackground() };
 				bgColor.changes().takeUntil(builder.getModels().getUntil()).act(evt -> {
+					if (evt.getOldValue() == null)
+						oldBG[0] = c.getBackground();
 					Color colorV = evt.getNewValue();
 					if (colorV != null) {
 						c.setBackground(colorV);
 						if (c instanceof JComponent)
 							((JComponent) c).setOpaque(colorV.getAlpha() > 0);
 						c.repaint();
-					} else if (c.getBackground() == evt.getOldValue()) { // If this is set by someone else, don't override with the original
-						c.setBackground(defaultBG);
+					} else {
+						c.setBackground(oldBG[0]);
 						if (c instanceof JComponent)
 							((JComponent) c).setOpaque(defaultOpaque);
 					}
@@ -612,10 +639,10 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 		widget.modify((comp, builder) -> {
 			comp.modifyComponent(c -> {
 				Font defaultFont = c.getFont();
-				ObservableValue<? extends Color> fontColor = fontColorStyle.evaluate(builder.getModels(), builder::getParentModels);
-				ObservableValue<? extends Double> fontSize = fontSizeStyle.evaluate(builder.getModels(), builder::getParentModels);
-				ObservableValue<? extends Double> fontWeight = fontWeightStyle.evaluate(builder.getModels(), builder::getParentModels);
-				ObservableValue<? extends Double> fontSlant = fontSlantStyle.evaluate(builder.getModels(), builder::getParentModels);
+				ObservableValue<? extends Color> fontColor = fontColorStyle.evaluate(builder.getModels());
+				ObservableValue<? extends Double> fontSize = fontSizeStyle.evaluate(builder.getModels());
+				ObservableValue<? extends Double> fontWeight = fontWeightStyle.evaluate(builder.getModels());
+				ObservableValue<? extends Double> fontSlant = fontSlantStyle.evaluate(builder.getModels());
 				ObservableValue<Font> font = getFont(defaultFont, fontColor, fontSize, fontWeight, fontSlant);
 				font.changes().takeUntil(builder.getModels().getUntil()).act(evt -> {
 					c.setFont(evt.getNewValue());
@@ -679,12 +706,12 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 		return (comp, builder) -> {
 			ModifiableLineBorder border = new ModifiableLineBorder(Color.black, 1, false);
 			SettableValue<Border> borderV = SettableValue.build(Border.class).withValue(border).build();
-			colorStyle.evaluate(builder.getModels(), builder::getParentModels).changes().takeUntil(builder.getModels().getUntil())
+			colorStyle.evaluate(builder.getModels()).changes().takeUntil(builder.getModels().getUntil())
 			.act(evt -> {
 				border.setColor(evt.getNewValue());
 				borderV.set(border, evt);
 			});
-			thicknessStyle.evaluate(builder.getModels(), builder::getParentModels).changes().takeUntil(builder.getModels().getUntil())
+			thicknessStyle.evaluate(builder.getModels()).changes().takeUntil(builder.getModels().getUntil())
 			.act(evt -> {
 				border.setThickness(evt.getNewValue());
 				borderV.set(border, evt);
@@ -712,10 +739,10 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 			ModifiableLineBorder lineBorder = new ModifiableLineBorder(Color.black, 1, false);
 			TitledBorder border = BorderFactory.createTitledBorder(lineBorder, "");
 			Font defaultFont = border.getTitleFont();
-			ObservableValue<? extends Color> fontColor = fontColorStyle.evaluate(builder.getModels(), builder::getParentModels);
-			ObservableValue<? extends Double> fontSize = fontSizeStyle.evaluate(builder.getModels(), builder::getParentModels);
-			ObservableValue<? extends Double> fontWeight = fontWeightStyle.evaluate(builder.getModels(), builder::getParentModels);
-			ObservableValue<? extends Double> fontSlant = fontSlantStyle.evaluate(builder.getModels(), builder::getParentModels);
+			ObservableValue<? extends Color> fontColor = fontColorStyle.evaluate(builder.getModels());
+			ObservableValue<? extends Double> fontSize = fontSizeStyle.evaluate(builder.getModels());
+			ObservableValue<? extends Double> fontWeight = fontWeightStyle.evaluate(builder.getModels());
+			ObservableValue<? extends Double> fontSlant = fontSlantStyle.evaluate(builder.getModels());
 			ObservableValue<Font> font = getFont(defaultFont, fontColor, fontSize, fontWeight, fontSlant);
 			SettableValue<Border> borderV = SettableValue.build(Border.class).withValue(border).build();
 			title.apply(builder.getModels()).changes().takeUntil(builder.getModels().getUntil()).act(evt -> {
@@ -728,7 +755,7 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 				comp.invalidate();
 				comp.repaint();
 			});
-			colorStyle.evaluate(builder.getModels(), builder::getParentModels).changes().takeUntil(builder.getModels().getUntil())
+			colorStyle.evaluate(builder.getModels()).changes().takeUntil(builder.getModels().getUntil())
 			.act(evt -> {
 				Color c = evt.getNewValue() == null ? Color.black : evt.getNewValue();
 				lineBorder.setColor(c);
@@ -736,7 +763,7 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 				borderV.set(border, evt);
 				comp.repaint();
 			});
-			thicknessStyle.evaluate(builder.getModels(), builder::getParentModels).changes().takeUntil(builder.getModels().getUntil())
+			thicknessStyle.evaluate(builder.getModels()).changes().takeUntil(builder.getModels().getUntil())
 			.act(evt -> {
 				lineBorder.setThickness(evt.getNewValue() == null ? 1 : evt.getNewValue());
 				borderV.set(border, evt);

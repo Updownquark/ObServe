@@ -61,7 +61,7 @@ public class LambdaExpression implements ObservableExpression {
 								+ option.size();
 						continue;
 					}
-					ObservableModelSet.WrappedBuilder wrappedModelsBuilder = ObservableModelSet.wrap(env.getModels());
+					ObservableModelSet.WrappedBuilder wrappedModelsBuilder = env.getModels().wrap();
 					ObservableModelSet.RuntimeValuePlaceholder<?, ?>[] placeholders = new ObservableModelSet.RuntimeValuePlaceholder[theParameters
 					                                                                                                                 .size()];
 					for (int i = 0; i < theParameters.size(); i++)

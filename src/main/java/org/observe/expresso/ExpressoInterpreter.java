@@ -24,6 +24,41 @@ import org.qommons.config.QonfigToolkit;
 import com.google.common.reflect.TypeToken;
 
 public abstract class ExpressoInterpreter<QIS extends ExpressoInterpreter.ExpressoSession<?>> extends QonfigInterpreter<QIS> {
+	public static final String PARENT_MODEL_NAME = "__PARENT$MODEL$INSTANCE";
+	public static final ValueContainer<SettableValue<?>, SettableValue<ModelSetInstance>> PARENT_MODEL = new ValueContainer<SettableValue<?>, SettableValue<ModelSetInstance>>() {
+		private final ModelInstanceType<SettableValue<?>, SettableValue<ModelSetInstance>> theType = ModelTypes.Value
+			.forType(ModelSetInstance.class);
+		@Override
+		public ModelInstanceType<SettableValue<?>, SettableValue<ModelSetInstance>> getType() {
+			return theType;
+		}
+
+		@Override
+		public SettableValue<ModelSetInstance> get(ModelSetInstance models) {
+			throw new IllegalStateException("Parent model was not installed");
+		}
+
+		@Override
+		public String toString() {
+			return PARENT_MODEL_NAME;
+		}
+	};
+
+	public static ModelSetInstance getParentModels(ModelSetInstance models) {
+		return models.get(PARENT_MODEL_NAME, PARENT_MODEL.getType()).get();
+	}
+
+	public static ObservableModelSet.WrappedBuilder createChildModel(ObservableModelSet parentModels) {
+		return parentModels.wrap()//
+			.withCustomValue(PARENT_MODEL_NAME, PARENT_MODEL);
+	}
+
+	public static ObservableModelSet.WrappedInstanceBuilder createChildModelInstance(ObservableModelSet.Wrapped models,
+		ModelSetInstance parentModelInstance) {
+		return models.wrap(parentModelInstance)//
+			.withCustom(PARENT_MODEL, SettableValue.of(ModelSetInstance.class, parentModelInstance, "Not Reversible"));
+	}
+
 	public static abstract class ExpressoSession<QIS extends ExpressoSession<QIS>>
 	extends QonfigInterpreter.QonfigInterpretingSession<QIS> {
 		private ExpressoEnv theEnv;

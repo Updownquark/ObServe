@@ -8,10 +8,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.observe.SettableValue;
 import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ExpressoInterpreter;
-import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.quick.QuickCore.StyleValues;
 import org.observe.quick.style.FontValueParser;
@@ -36,11 +34,9 @@ public abstract class QuickInterpreter<QIS extends QuickInterpreter.QuickSession
 	public static class QuickSession<QIS extends QuickSession<QIS>> extends ExpressoSession<QIS> {
 		private final boolean isStyled;
 		private final boolean isWidget;
-		private ObservableModelSet.Wrapped theLocalModels;
 		private QuickStyleSheet theStyleSheet;
 		private QuickElementStyle theStyle;
 		private final Set<QuickModelValue<?>> theModelValues;
-		private ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<QuickModelValue.Satisfier>> theSatisfierPlaceholder;
 
 		protected QuickSession(QIS parent, QonfigElement element, QonfigElementOrAddOn type, int childIndex)
 			throws QonfigInterpretationException {
@@ -51,8 +47,6 @@ public abstract class QuickInterpreter<QIS extends QuickInterpreter.QuickSession
 				isStyled = qp.isStyled;
 				isWidget = qp.isWidget;
 				theModelValues = qp.theModelValues;
-				theLocalModels = qp.theLocalModels;
-				theSatisfierPlaceholder = qp.theSatisfierPlaceholder;
 			} else {
 				isStyled = element.isInstance(QuickStyleSet.STYLED);
 				if (isStyled) {
@@ -79,16 +73,14 @@ public abstract class QuickInterpreter<QIS extends QuickInterpreter.QuickSession
 			if (!isStyled)
 				return;
 			else if (getParent() != null && getElement() == getParent().getElement()) {
-				theLocalModels = getParent().getLocalModels();
 				theStyle = getParent().getStyle();
 				return;
 			}
-			ObservableModelSet.WrappedBuilder builder = null;
+			ObservableModelSet.WrappedBuilder builder = getExpressoEnv().getModels().wrap();
+			builder.withCustomValue(ExpressoInterpreter.PARENT_MODEL_NAME, ExpressoInterpreter.PARENT_MODEL);
 			Collection<QuickModelValue<?>> modelValues = getInterpreter().getStyleSet().getModelValues(getElement(), this);
 			if (!modelValues.isEmpty()) {
-				builder = ObservableModelSet.wrap(getExpressoEnv().getModels());
-				theSatisfierPlaceholder = builder.withRuntimeValue(QuickModelValue.SATISFIER_PLACEHOLDER,
-					ModelTypes.Value.forType(QuickModelValue.Satisfier.class));
+				builder.withCustomValue(QuickModelValue.SATISFIER_PLACEHOLDER_NAME, QuickModelValue.SATISFIER_PLACEHOLDER);
 				for (QuickModelValue<?> mv : modelValues) {
 					builder.withCustomValue(mv.getName(), mv);
 					theModelValues.add(mv);
@@ -97,9 +89,6 @@ public abstract class QuickInterpreter<QIS extends QuickInterpreter.QuickSession
 			if (isWidget) {
 				QIS modelSession = forChildren("model").peekFirst();
 				if (modelSession != null) {
-					if (builder == null)
-						builder = ObservableModelSet.wrap(modelSession.getExpressoEnv().getModels());
-					modelSession.put("local-variables", true);
 					modelSession.setModels(builder, null);
 					modelSession.interpret(ObservableModelSet.class);
 				}
@@ -107,9 +96,7 @@ public abstract class QuickInterpreter<QIS extends QuickInterpreter.QuickSession
 			if (builder != null) {
 				ObservableModelSet.Wrapped built = builder.build();
 				setModels(built, null);
-				theLocalModels = built;
-			} else
-				theLocalModels = null;
+			}
 
 			// Parse style values, if any
 			put(STYLE_ELEMENT, getElement());
@@ -138,10 +125,6 @@ public abstract class QuickInterpreter<QIS extends QuickInterpreter.QuickSession
 			return Collections.unmodifiableSet(theModelValues);
 		}
 
-		public ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<QuickModelValue.Satisfier>> getSatisfierPlaceholder() {
-			return theSatisfierPlaceholder;
-		}
-
 		@Override
 		public QuickInterpreter<QIS> getInterpreter() {
 			return (QuickInterpreter<QIS>) super.getInterpreter();
@@ -154,10 +137,6 @@ public abstract class QuickInterpreter<QIS extends QuickInterpreter.QuickSession
 		public QIS setStyleSheet(QuickStyleSheet styleSheet) {
 			theStyleSheet = styleSheet;
 			return (QIS) this;
-		}
-
-		public ObservableModelSet.Wrapped getLocalModels() {
-			return theLocalModels;
 		}
 
 		public QuickElementStyle getStyle() {

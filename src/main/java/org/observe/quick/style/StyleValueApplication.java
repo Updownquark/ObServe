@@ -8,11 +8,11 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.function.IntFunction;
 
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.ExpressoInterpreter;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet;
@@ -148,12 +148,12 @@ public class StyleValueApplication {
 		return theModelValues;
 	}
 
-	public ObservableValue<Boolean> getCondition(ModelSetInstance model, IntFunction<ModelSetInstance> parentModel) {
+	public ObservableValue<Boolean> getCondition(ModelSetInstance model) {
 		ObservableValue<Boolean> parentCond;
 		if (theParent == null)
 			parentCond = TRUE;
 		else
-			parentCond = theParent.getCondition(parentModel.apply(0), depth -> parentModel.apply(depth + 1));
+			parentCond = theParent.getCondition(ExpressoInterpreter.getParentModels(model));
 
 		ObservableValue<Boolean> localCond;
 		if (theCondition != null)
@@ -216,7 +216,7 @@ public class StyleValueApplication {
 		}
 		if (!mvs.isEmpty()) {
 			// We don't need to worry about satisfying anything here. The model values just need to be available for the link level.
-			ObservableModelSet.WrappedBuilder wrappedBuilder = ObservableModelSet.wrap(env.getModels());
+			ObservableModelSet.WrappedBuilder wrappedBuilder = env.getModels().wrap();
 			for (QuickModelValue<?> mv : mvs)
 				wrappedBuilder.withCustomValue(mv.getName(), mv);
 			env = env.with(wrappedBuilder.build(), null);

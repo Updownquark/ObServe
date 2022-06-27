@@ -7,17 +7,21 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.function.Function;
+import java.util.function.Supplier;
 
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.collect.ObservableCollection;
+import org.observe.expresso.ExpressoInterpreter;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.quick.QuickComponentDef.ModelValueSupport;
 import org.observe.quick.style.QuickModelValue;
 import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
 import org.qommons.config.QonfigAttributeDef;
+
+import com.google.common.reflect.TypeToken;
 
 public class QuickComponent {
 	private final QuickComponentDef theDefinition;
@@ -31,7 +35,6 @@ public class QuickComponent {
 
 	public QuickComponent(QuickComponentDef definition, QuickComponent.Builder parent, Component component,
 		Map<QonfigAttributeDef, Object> attributeValues, ObservableCollection<QuickComponent> children) {
-		super();
 		theDefinition = definition;
 		theParent = parent;
 		theComponent = component;
@@ -91,14 +94,17 @@ public class QuickComponent {
 		private Component theComponent;
 		private final Map<QonfigAttributeDef, Object> theAttributeValues;
 		private final ObservableCollection<QuickComponent> theChildren;
-		private final Map<QuickModelValue<?>, BiTuple<? extends Function<Component, ? extends ObservableValue<?>>, ? extends ObservableValue<?>>> theModelValues;
+		private final Map<QuickModelValue<?>, BiTuple<? extends Supplier<? extends ModelValueSupport<?>>, ? extends ModelValueSupport<?>>> theModelValues;
 		private QuickComponent theBuilt;
 
 		public Builder(QuickComponentDef definition, Builder parent, ModelSetInstance models) {
 			theDefinition = definition;
 			theParent = parent;
 			theModelsInstance = theDefinition.getModels().wrap(models)//
-				.with(theDefinition.getSatisfierPlaceholder(), SettableValue.of(QuickModelValue.Satisfier.class, this, "Not reversible"))//
+				.withCustom(ExpressoInterpreter.PARENT_MODEL,
+					SettableValue.of(ModelSetInstance.class, parent == null ? null : parent.getModels(), "Not Reversible"))//
+				.withCustom(QuickModelValue.SATISFIER_PLACEHOLDER,
+					SettableValue.of(QuickModelValue.Satisfier.class, this, "Not reversible"))//
 				.build();
 			theAttributeValues = new LinkedHashMap<>();
 			theChildren = ObservableCollection.build(QuickComponent.class).build();
@@ -107,13 +113,6 @@ public class QuickComponent {
 
 		public ModelSetInstance getModels() {
 			return theModelsInstance;
-		}
-
-		public ModelSetInstance getParentModels(int depth) {
-			Builder b = this;
-			for (int i = 0; i <= depth && b != null; i++)
-				b = b.theParent;
-			return b.getModels();
 		}
 
 		public ObservableCollection<QuickComponent> getChildren() {
@@ -134,7 +133,7 @@ public class QuickComponent {
 			return this;
 		}
 
-		public <T> Function<Component, ObservableValue<T>> getSupport(QuickModelValue<T> modelValue) {
+		public <T> Supplier<ModelValueSupport<T>> getSupport(QuickModelValue<T> modelValue) {
 			return _getSupport(modelValue).getValue1();
 		}
 
@@ -143,20 +142,23 @@ public class QuickComponent {
 			return _getSupport(modelValue).getValue2();
 		}
 
-		private <T> BiTuple<Function<Component, ObservableValue<T>>, ObservableValue<T>> _getSupport(QuickModelValue<T> modelValue) {
-			BiTuple<Function<Component, ObservableValue<T>>, ObservableValue<T>> tuple;
-			tuple = (BiTuple<Function<Component, ObservableValue<T>>, ObservableValue<T>>) theModelValues.get(modelValue);
+		private <T> BiTuple<Supplier<ModelValueSupport<T>>, ModelValueSupport<T>> _getSupport(QuickModelValue<T> modelValue) {
+			BiTuple<Supplier<ModelValueSupport<T>>, ModelValueSupport<T>> tuple;
+			tuple = (BiTuple<Supplier<ModelValueSupport<T>>, ModelValueSupport<T>>) theModelValues.get(modelValue);
 			if (tuple == null) {
-				Function<Component, ObservableValue<T>> support = theDefinition.getSupport(modelValue);
+				Supplier<ModelValueSupport<T>> support = theDefinition.getSupport(modelValue);
 				if (support == null) {
 					if (!theDefinition.getElement().isInstance(modelValue.getStyle().getElement()))
 						throw new IllegalArgumentException(
 							"Model value " + modelValue + " is not applicable to this element (" + theDefinition.getElement() + ")");
 					System.err.println("Model value " + modelValue + " has not been supported for " + theDefinition.getElement());
-					tuple = new BiTuple<>(null,
-						ObservableValue.of(modelValue.getValueType(), TypeTokens.get().getPrimitiveDefault(modelValue.getValueType())));
-				} else
-					tuple = new BiTuple<>(support, support.apply(theComponent));
+					tuple = new BiTuple<>(null, new DefaultModelSupport<>(modelValue.getValueType()));
+				} else {
+					ModelValueSupport<T> sv = support.get();
+					if (theComponent != null)
+						sv.install(theComponent);
+					tuple = new BiTuple<>(support, sv);
+				}
 				theModelValues.put(modelValue, tuple);
 			}
 			return tuple;
@@ -168,6 +170,9 @@ public class QuickComponent {
 			if (theBuilt != null)
 				throw new IllegalStateException("Already built");
 			theComponent = component;
+			for (BiTuple<? extends Supplier<? extends ModelValueSupport<?>>, ? extends ModelValueSupport<?>> tuple : theModelValues
+				.values())
+				tuple.getValue2().install(theComponent);
 			return this;
 		}
 
@@ -180,6 +185,21 @@ public class QuickComponent {
 				throw new IllegalStateException("Already built");
 			return new QuickComponent(theDefinition, theParent, theComponent, Collections.unmodifiableMap(theAttributeValues),
 				theChildren.flow().unmodifiable().collect());
+		}
+
+		@Override
+		public String toString() {
+			return "Building " + theDefinition.toString();
+		}
+	}
+
+	static class DefaultModelSupport<T> extends ObservableValue.ConstantObservableValue<T> implements ModelValueSupport<T> {
+		public DefaultModelSupport(TypeToken<T> type) {
+			super(type, TypeTokens.get().getPrimitiveDefault(type));
+		}
+
+		@Override
+		public void install(Component component) {
 		}
 	}
 }

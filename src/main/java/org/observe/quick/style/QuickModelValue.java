@@ -16,7 +16,25 @@ public class QuickModelValue<T> implements Named, ValueContainer<SettableValue<?
 		<T> ObservableValue<T> satisfy(QuickModelValue<T> value);
 	}
 
-	public static final String SATISFIER_PLACEHOLDER = QuickModelValue.class.getSimpleName() + "$SATISFIER_PLACEHOLDER";
+	public static final String SATISFIER_PLACEHOLDER_NAME = QuickModelValue.class.getSimpleName() + "$SATISFIER_PLACEHOLDER";
+	public static final ValueContainer<SettableValue<?>, SettableValue<Satisfier>> SATISFIER_PLACEHOLDER = new ValueContainer<SettableValue<?>, SettableValue<Satisfier>>() {
+		private final ModelInstanceType<SettableValue<?>, SettableValue<Satisfier>> theType = ModelTypes.Value.forType(Satisfier.class);
+
+		@Override
+		public ModelInstanceType<SettableValue<?>, SettableValue<Satisfier>> getType() {
+			return theType;
+		}
+
+		@Override
+		public SettableValue<Satisfier> get(ModelSetInstance models) {
+			throw new IllegalStateException("Model value satisfier not installed");
+		}
+
+		@Override
+		public String toString() {
+			return SATISFIER_PLACEHOLDER_NAME;
+		}
+	};
 
 	private final QuickStyleType theStyle;
 	private final String theName;
@@ -52,7 +70,7 @@ public class QuickModelValue<T> implements Named, ValueContainer<SettableValue<?
 
 	@Override
 	public SettableValue<T> get(ModelSetInstance models) {
-		Satisfier satisfier = models.get(SATISFIER_PLACEHOLDER, ModelTypes.Value.forType(Satisfier.class)).get();
+		Satisfier satisfier = models.get(SATISFIER_PLACEHOLDER_NAME, ModelTypes.Value.forType(Satisfier.class)).get();
 		ObservableValue<T> value = satisfier.satisfy(this);
 		if (value instanceof SettableValue)
 			return (SettableValue<T>) value;

@@ -5,10 +5,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.IntFunction;
 
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
+import org.observe.expresso.ExpressoInterpreter;
 import org.observe.expresso.ExpressoInterpreter.ExpressoSession;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.util.TypeTokens;
@@ -131,15 +131,15 @@ public class QuickElementStyle {
 			return theInherited;
 		}
 
-		public ObservableValue<T> evaluate(ModelSetInstance models, IntFunction<ModelSetInstance> parentModels) {
+		public ObservableValue<T> evaluate(ModelSetInstance models) {
 			ObservableValue<ConditionalValue<T>>[] values = new ObservableValue[theValues.size() + (theInherited == null ? 0 : 1)];
 			for (int i = 0; i < theValues.size(); i++) {
-				ObservableValue<Boolean> condition = theValues.get(i).getApplication().getCondition(models, parentModels);
+				ObservableValue<Boolean> condition = theValues.get(i).getApplication().getCondition(models);
 				SettableValue<? extends T> value = theValues.get(i).getValue().get(models);
 				values[i] = condition.map(pass -> new ConditionalValue<>(pass, value));
 			}
 			if (theInherited != null) {
-				ObservableValue<T> value = theInherited.evaluate(parentModels.apply(0), depth -> parentModels.apply(depth + 1));
+				ObservableValue<T> value = theInherited.evaluate(ExpressoInterpreter.getParentModels(models));
 				values[theValues.size()] = ObservableValue.of(new ConditionalValue<>(true, value));
 			}
 			ObservableValue<ConditionalValue<T>> conditionalValue = ObservableValue.firstValue(

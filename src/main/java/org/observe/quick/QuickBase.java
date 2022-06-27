@@ -40,6 +40,7 @@ import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.Expresso;
+import org.observe.expresso.ExpressoInterpreter;
 import org.observe.expresso.ExpressoInterpreter.ExpressoSession;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
@@ -311,7 +312,7 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 	private ValueAction interpretMultiValueAction(ExpressoSession<?> session) throws QonfigInterpretationException {
 		TypeToken<Object> valueType = (TypeToken<Object>) session.get("model-type");
 		String valueListName = session.getAttributeText("value-list-name");
-		ObservableModelSet.WrappedBuilder actionModel = ObservableModelSet.wrap(session.getExpressoEnv().getModels());
+		ObservableModelSet.WrappedBuilder actionModel = session.getExpressoEnv().getModels().wrap();
 		RuntimeValuePlaceholder<ObservableCollection<?>, ObservableCollection<Object>> valueListNamePH = actionModel
 			.withRuntimeValue(valueListName, ModelTypes.Collection.forType(valueType));
 		ObservableModelSet.Wrapped builtActionModel = actionModel.build();
@@ -424,9 +425,11 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 
 	private QuickComponentDef modifyTextEditor(QuickComponentDef component, QIS session) throws QonfigInterpretationException {
 		component.support(session.getStyleModelValue("editable-text-widget", "error", String.class),
-			comp -> ((ObservableTextEditorWidget<?, ?>) comp).getErrorState());
+			() -> new QuickComponentDef.ProducerModelValueSupport<>(TypeTokens.get().STRING,
+				comp -> ((ObservableTextEditorWidget<?, ?>) comp).getErrorState(), null));
 		component.support(session.getStyleModelValue("editable-text-widget", "warning", String.class),
-			comp -> ((ObservableTextEditorWidget<?, ?>) comp).getWarningState());
+			() -> new QuickComponentDef.ProducerModelValueSupport<>(TypeTokens.get().STRING,
+				comp -> ((ObservableTextEditorWidget<?, ?>) comp).getWarningState(), null));
 		return component;
 	}
 
@@ -466,7 +469,7 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 		if (modelType == null || rowValueName == null || cellValueName == null)
 			throw new IllegalStateException(
 				"column intepretation expects 'model-type', 'value-name', and 'render-value-name' session values");
-		ObservableModelSet.WrappedBuilder wb = ObservableModelSet.wrap(session.getExpressoEnv().getModels());
+		ObservableModelSet.WrappedBuilder wb = session.getExpressoEnv().getModels().wrap();
 		ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>> valueRowVP = wb.withRuntimeValue(rowValueName,
 			ModelTypes.Value.forType(modelType));
 		ObservableModelSet.Wrapped valueModel = wb.build();
@@ -532,6 +535,12 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 		ColumnEditing<Object, Object> editing;
 		ExpressoSession<?> columnEdit = session.forChildren("edit").peekFirst();
 		if (columnEdit != null) {
+			String editValueName = columnEdit.getAttributeText("edit-value-name");
+			ObservableModelSet.WrappedBuilder editorModelsB = columnEdit.getExpressoEnv().getModels().wrap();
+			ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>> editorValueVP = editorModelsB
+				.withRuntimeValue(editValueName, ModelTypes.Value.forType(columnType));
+			ObservableModelSet.Wrapped editorModels = editorModelsB.build();
+			columnEdit.setModels(editorModels, null);
 			ExpressoSession<?> editorSession = columnEdit.forChildren("editor").getFirst();
 			QuickComponentDef editor = editorSession.interpret(QuickComponentDef.class);
 			if (!(editor instanceof QuickValueEditorDef))
@@ -539,12 +548,6 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 					"Use of '" + editorSession.getElement().getType().getName() + "' as a column editor is not implemented");
 			editor.support(focused, focusedSupport);
 			editor.support(selected, selectedSupport);
-			String editValueName = columnEdit.getAttributeText("edit-value-name");
-			ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>> editorValueVP = wb
-				.withRuntimeValue(editValueName, ModelTypes.Value.forType(columnType));
-			ObservableModelSet.Wrapped editModel = wb.build();
-			columnEdit.setModels(editModel, null);
-			editorSession.setModels(editModel, null);
 			ColumnEditing<Object, Object> editType = columnEdit.as(columnEdit.getAttribute("type", QonfigAddOn.class))
 				.interpret(ColumnEditing.class);
 			editing = (column, models) -> {
@@ -555,16 +558,24 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 				SettableValue<Object> editorValue = DefaultObservableCellEditor.createEditorValue(columnType, filter,
 					builder -> builder.withDescription(editValueName));
 				SettableValue<Object> cellValue = SettableValue.build(columnType).withDescription(cellValueName).build();
-				ModelSetInstance cellModelInst = editModel.wrap(models)//
-					.with(valueRowVP, rowValue)//
-					.with(cellRowVP, cellValue)//
-					.with(subjectVP, editorValue)//
+				ModelSetInstance editModelInst = editorModels.wrap(//
+					editor.getModels().wrap(//
+						cellModel.wrap(models)//
+							.with(valueRowVP, rowValue)//
+							.with(cellRowVP, cellValue)//
+							.with(subjectVP, editorValue)//
+							.build())//
+					.withCustom(ExpressoInterpreter.PARENT_MODEL, SettableValue.of(ModelSetInstance.class, models, "Not Reversible"))//
+					.build())//
 					.with(editorValueVP, editorValue)//
 					.build();
-				editType.modifyColumn(column, cellModelInst);
-				QuickComponent.Builder editorBuilder = QuickComponent.build(editor, null, cellModelInst);
+				editType.modifyColumn(column, editModelInst);
+				QuickComponent.Builder editorBuilder = QuickComponent.build(editor, null, editModelInst);
 				QuickComponent editorComp = editor
-					.install(PanelPopulation.populateHPanel(null, new JustifiedBoxLayout(false), cellModelInst.getUntil()), editorBuilder);
+					.install(PanelPopulation.populateHPanel(null, new JustifiedBoxLayout(false), editModelInst.getUntil()), editorBuilder);
+				SettableValue<Boolean> focusV = QuickComponentDef.getIfSupported(focused.apply(editorBuilder.getModels()), focusedSupport);
+				SettableValue<Boolean> selectedV = QuickComponentDef.getIfSupported(selected.apply(editorBuilder.getModels()),
+					selectedSupport);
 				Component c = editorComp.getComponent();
 				Insets defMargin = c instanceof JTextComponent ? ((JTextComponent) c).getMargin() : null;
 				String clicksStr = columnEdit.getAttribute("clicks", String.class);
@@ -601,8 +612,10 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 				}, ObservableCellEditor.editWithClicks(clicks)) {
 					@Override
 					protected void renderingValue(Object value, boolean selected2, boolean expanded, boolean leaf, int row, int column2) {
-						focusedSupport.getValue().set(selected2, null);
-						selectedSupport.getValue().set(selected2, null);
+						if (focusV != null)
+							focusV.set(selected2, null);
+						if (selectedV != null)
+							selectedV.set(selected2, null);
 					}
 				};
 				column.withEditor(oce);
@@ -625,7 +638,9 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 			// Hacky way of synthesizing the component
 			SettableValue<Object> rowValue = SettableValue.build(modelType).withDescription(rowValueName).build();
 			SettableValue<Object> cellValue = SettableValue.build(columnType).withDescription(cellValueName).build();
-			ModelSetInstance cellModelInst = cellModel.wrap(extModels)//
+			ModelSetInstance cellModelInst = cellModel.wrap(renderer.getModels().wrap(extModels)//
+				.withCustom(ExpressoInterpreter.PARENT_MODEL, SettableValue.of(ModelSetInstance.class, extModels, "Not Reversible"))//
+				.build())//
 				.with(valueRowVP, rowValue)//
 				.with(cellRowVP, cellValue)//
 				.with(subjectVP, cellValue)//
@@ -645,6 +660,8 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 			} else {
 				textRender = (row, col) -> String.valueOf(col);
 			}
+			SettableValue<Boolean> focusV = QuickComponentDef.getIfSupported(focused.apply(renderBuilder.getModels()), focusedSupport);
+			SettableValue<Boolean> selectedV = QuickComponentDef.getIfSupported(selected.apply(renderBuilder.getModels()), selectedSupport);
 			column.withRenderer(new ObservableCellRenderer<Object, Object>() {
 				private List<CellDecorator<Object, Object>> theDecorators;
 
@@ -670,8 +687,10 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 					}
 					rowValue.set(cell.getModelValue(), null);
 					cellValue.set(cell.getCellValue(), null);
-					focusedSupport.getValue().set(cell.isSelected(), null);
-					selectedSupport.getValue().set(cell.isSelected(), null);
+					if (focusV != null)
+						focusV.set(cell.isSelected(), null);
+					if (selectedV != null)
+						selectedV.set(cell.isSelected(), null);
 					ObservableCellRenderer.tryEmphasize(c, ctx);
 					return c;
 				}
@@ -1353,7 +1372,7 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 		session.put("value-name", valueName);
 		String renderValueName = session.getAttributeText("render-value-name");
 		session.put("render-value-name", renderValueName);
-		ObservableModelSet.WrappedBuilder wb = ObservableModelSet.wrap(session.getExpressoEnv().getModels());
+		ObservableModelSet.WrappedBuilder wb = session.getExpressoEnv().getModels().wrap();
 		ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<BetterList<T>>> pathPlaceholder = wb
 			.withRuntimeValue(valueName, ModelTypes.Value.forType(pathType));
 		ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> cellPlaceholder = wb.withRuntimeValue(
@@ -1564,7 +1583,7 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 			ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> tvp;
 			if (tab.getElement().isInstance(base.getElementOrAddOn("single-rendering"))) {
 				renderValueName = tab.getAttributeText("render-value-name");
-				ObservableModelSet.WrappedBuilder wb = ObservableModelSet.wrap(tab.getExpressoEnv().getModels());
+				ObservableModelSet.WrappedBuilder wb = tab.getExpressoEnv().getModels().wrap();
 				tvp = wb.withRuntimeValue(renderValueName, ModelTypes.Value.forType((TypeToken<T>) tabId.getType().getType(0)));
 				tab.setModels(wb.build(), null);
 			} else {
@@ -1702,7 +1721,7 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 			ValueContainer<ObservableCollection<?>, ObservableCollection<T>> values = tabSet.getAttributeAsCollection("values",
 				(TypeToken<T>) TypeTokens.get().WILDCARD, null);
 			String renderValueName = tabSet.getAttributeText("render-value-name");
-			ObservableModelSet.WrappedBuilder wb = ObservableModelSet.wrap(tabSet.getExpressoEnv().getModels());
+			ObservableModelSet.WrappedBuilder wb = tabSet.getExpressoEnv().getModels().wrap();
 			ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> tvp = wb.withRuntimeValue(renderValueName,
 				ModelTypes.Value.forType((TypeToken<T>) values.getType().getType(0)));
 			tabSet.setModels(wb.build(), null);

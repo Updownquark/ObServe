@@ -706,6 +706,17 @@ public abstract class ModelType<M> implements Named {
 			theConverter = converter;
 		}
 
+		public ValueContainer<?, ?> getSource() {
+			if (theSource instanceof ConvertedValue)
+				return ((ConvertedValue<?, ?, ?, ?>) theSource).getSource();
+			else
+				return theSource;
+		}
+
+		public ModelType.ModelInstanceConverter<MS, MT> getConverter() {
+			return theConverter;
+		}
+
 		@Override
 		public ModelInstanceType<MT, MVT> getType() {
 			return theType;

@@ -1,13 +1,12 @@
 package org.observe.quick;
 
-import java.awt.Component;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 import org.observe.ObservableValue;
-import org.observe.SettableValue;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.quick.QuickInterpreter.QuickSession;
@@ -23,14 +22,12 @@ public abstract class AbstractQuickComponentDef implements QuickComponentDef {
 	private final QuickElementStyle theStyle;
 	private Function<ModelSetInstance, ? extends ObservableValue<String>> theFieldName;
 	private BiConsumer<ComponentEditor<?, ?>, QuickComponent.Builder> theModifications;
-	private final ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<QuickModelValue.Satisfier>> theSatisfierPlaceholder;
-	private final Map<QuickModelValue<?>, Function<Component, ? extends ObservableValue<?>>> theModelImplementations;
+	private final Map<QuickModelValue<?>, Supplier<? extends ModelValueSupport<?>>> theModelImplementations;
 
 	public AbstractQuickComponentDef(QuickSession<?> session) {
 		theElement = session.getElement();
-		theModels = session.getLocalModels();
+		theModels = (ObservableModelSet.Wrapped) session.getExpressoEnv().getModels();
 		theStyle = session.getStyle();
-		theSatisfierPlaceholder = session.getSatisfierPlaceholder();
 		theModelImplementations = new HashMap<>();
 	}
 
@@ -74,12 +71,7 @@ public abstract class AbstractQuickComponentDef implements QuickComponentDef {
 	}
 
 	@Override
-	public ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<QuickModelValue.Satisfier>> getSatisfierPlaceholder() {
-		return theSatisfierPlaceholder;
-	}
-
-	@Override
-	public <T> QuickComponentDef support(QuickModelValue<T> modelValue, Function<Component, ObservableValue<T>> value)
+	public <T> QuickComponentDef support(QuickModelValue<T> modelValue, Supplier<ModelValueSupport<T>> value)
 		throws QonfigInterpretationException {
 		if (!theElement.isInstance(modelValue.getStyle().getElement()))
 			throw new QonfigInterpretationException("Model value " + modelValue + " does not apply to this element (" + theElement + ")");
@@ -88,12 +80,17 @@ public abstract class AbstractQuickComponentDef implements QuickComponentDef {
 	}
 
 	@Override
-	public <T> Function<Component, ObservableValue<T>> getSupport(QuickModelValue<T> modelValue) {
-		return (Function<Component, ObservableValue<T>>) theModelImplementations.get(modelValue);
+	public <T> Supplier<ModelValueSupport<T>> getSupport(QuickModelValue<T> modelValue) {
+		return (Supplier<ModelValueSupport<T>>) theModelImplementations.get(modelValue);
 	}
 
 	public void modify(ComponentEditor<?, ?> component, QuickComponent.Builder builder) {
 		if (theModifications != null)
 			theModifications.accept(component, builder);
+	}
+
+	@Override
+	public String toString() {
+		return theElement.toString();
 	}
 }
