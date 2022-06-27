@@ -344,6 +344,156 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 		}
 	}
 
+	static class MouseValueSupport extends ObservableValue.LazyObservableValue<Boolean>
+		implements ModelValueSupport<Boolean>, MouseListener {
+		private Component theComponent;
+		private final QuickModelValue<Boolean> theModelValue;
+		private final Boolean theButton;
+		private BiConsumer<Boolean, Object> theListener;
+		private boolean isListening;
+
+		public MouseValueSupport(QuickModelValue<Boolean> modelValue, Boolean button) {
+			super(TypeTokens.get().BOOLEAN, Transactable.noLock(ThreadConstraint.EDT));
+			theModelValue = modelValue;
+			theButton = button;
+		}
+
+		@Override
+		public void install(Component component) {
+			theComponent = component;
+			if (theListener != null)
+				setListening(true);
+		}
+
+		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(theComponent, theModelValue.getName());
+		}
+
+		@Override
+		protected Boolean getSpontaneous() {
+			if (theComponent == null)
+				return false;
+			boolean compVisible;
+			if (theComponent instanceof JComponent)
+				compVisible = ((JComponent) theComponent).isShowing();
+			else
+				compVisible = theComponent.isVisible();
+			if (!compVisible)
+				return false;
+			if (theButton == null) { // No button filter
+			} else if (theButton) { // Left
+				if (!isLeftPressed)
+					return false;
+			} else { // Right
+				if (!isRightPressed)
+					return false;
+			}
+			Point screenPos;
+			try {
+				screenPos = theComponent.getLocationOnScreen();
+			} catch (IllegalComponentStateException e) {
+				return false;
+			}
+			if (screenPos == null)
+				return false;
+			Point mousePos = theMouseLocation;
+			if (mousePos == null || mousePos.x < screenPos.x || mousePos.y < screenPos.y)
+				return false;
+			if (mousePos.x >= screenPos.x + theComponent.getWidth() || mousePos.y >= screenPos.y + theComponent.getHeight())
+				return false;
+			Component child = theComponent.getComponentAt(mousePos.x - screenPos.x, mousePos.y - screenPos.y);
+			return child == null || !child.isVisible();
+		}
+
+		@Override
+		protected Subscription subscribe(BiConsumer<Boolean, Object> listener) {
+			theListener = listener;
+			setListening(true);
+			return () -> setListening(false);
+		}
+
+		private void setListening(boolean listening) {
+			if (listening == isListening)
+				return;
+			if (listening && (theComponent == null || theListener == null))
+				return;
+			isListening = listening;
+			if (listening)
+				theComponent.addMouseListener(this);
+			else if (theComponent != null)
+				theComponent.removeMouseListener(this);
+			if (!listening)
+				theListener = null;
+		}
+
+		@Override
+		public void mousePressed(MouseEvent e) {
+			if (theListener == null)
+				return;
+			if (theButton == null) { // No button filter
+				return;
+			} else if (theButton) { // Left
+				if (!SwingUtilities.isLeftMouseButton(e))
+					return;
+			} else { // Right
+				if (!SwingUtilities.isRightMouseButton(e))
+					return;
+			}
+			theListener.accept(true, e);
+		}
+
+		@Override
+		public void mouseReleased(MouseEvent e) {
+			if (theListener == null)
+				return;
+			if (theButton == null) { // No button filter
+				return;
+			} else if (theButton) { // Left
+				if (!SwingUtilities.isLeftMouseButton(e))
+					return;
+			} else { // Right
+				if (!SwingUtilities.isRightMouseButton(e))
+					return;
+			}
+			theListener.accept(false, e);
+		}
+
+		@Override
+		public void mouseEntered(MouseEvent e) {
+			if (theListener == null)
+				return;
+			if (theButton == null) { // No button filter
+			} else if (theButton) { // Left
+				if (!isLeftPressed)
+					return;
+			} else { // Right
+				if (!isRightPressed)
+					return;
+			}
+			theListener.accept(true, e);
+		}
+
+		@Override
+		public void mouseExited(MouseEvent e) {
+			if (theListener == null)
+				return;
+			if (theButton == null) { // No button filter
+			} else if (theButton) { // Left
+				if (!isLeftPressed)
+					return;
+			} else { // Right
+				if (!isRightPressed)
+					return;
+			}
+			theListener.accept(false, e);
+		}
+
+		@Override
+		public void mouseClicked(MouseEvent e) {
+		}
+	}
+
 	private QuickComponentDef modifyWidget(QuickComponentDef widget, QIS session) throws QonfigInterpretationException {
 		widget.modify((editor, builder) -> editor.modifyComponent(builder::withComponent));
 		String name = session.getAttribute("name", String.class);
@@ -372,154 +522,6 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 		QuickModelValue<Boolean> rightPressed = session.getStyleModelValue("widget", "rightPressed", boolean.class);
 		initMouseListening();
 		// Install style model value support
-		class MouseValueSupport extends ObservableValue.LazyObservableValue<Boolean> implements ModelValueSupport<Boolean>, MouseListener {
-			private Component theComponent;
-			private final QuickModelValue<Boolean> theModelValue;
-			private final Boolean theButton;
-			private BiConsumer<Boolean, Object> theListener;
-			private boolean isListening;
-
-			public MouseValueSupport(QuickModelValue<Boolean> modelValue, Boolean button) {
-				super(TypeTokens.get().BOOLEAN, Transactable.noLock(ThreadConstraint.EDT));
-				theModelValue = modelValue;
-				theButton = button;
-			}
-
-			@Override
-			public void install(Component component) {
-				theComponent = component;
-				if (theListener != null)
-					setListening(true);
-			}
-
-			@Override
-			protected Object createIdentity() {
-				return Identifiable.wrap(theComponent, theModelValue.getName());
-			}
-
-			@Override
-			protected Boolean getSpontaneous() {
-				if (theComponent == null)
-					return false;
-				boolean compVisible;
-				if (theComponent instanceof JComponent)
-					compVisible = ((JComponent) theComponent).isShowing();
-				else
-					compVisible = theComponent.isVisible();
-				if (!compVisible)
-					return false;
-				if (theButton == null) { // No button filter
-				} else if (theButton) { // Left
-					if (!isLeftPressed)
-						return false;
-				} else { // Right
-					if (!isRightPressed)
-						return false;
-				}
-				Point screenPos;
-				try {
-					screenPos = theComponent.getLocationOnScreen();
-				} catch (IllegalComponentStateException e) {
-					return false;
-				}
-				if (screenPos == null)
-					return false;
-				Point mousePos = theMouseLocation;
-				if (mousePos == null || mousePos.x < screenPos.x || mousePos.y < screenPos.y)
-					return false;
-				if (mousePos.x >= screenPos.x + theComponent.getWidth() || mousePos.y >= screenPos.y + theComponent.getHeight())
-					return false;
-				Component child = theComponent.getComponentAt(mousePos.x - screenPos.x, mousePos.y - screenPos.y);
-				return child == null || !child.isVisible();
-			}
-
-			@Override
-			protected Subscription subscribe(BiConsumer<Boolean, Object> listener) {
-				theListener = listener;
-				setListening(true);
-				return () -> setListening(false);
-			}
-
-			private void setListening(boolean listening) {
-				if (listening == isListening)
-					return;
-				if (listening && (theComponent == null || theListener == null))
-					return;
-				isListening = listening;
-				if (listening)
-					theComponent.addMouseListener(this);
-				else if (theComponent != null)
-					theComponent.removeMouseListener(this);
-				if (!listening)
-					theListener = null;
-			}
-
-			@Override
-			public void mousePressed(MouseEvent e) {
-				if (theListener == null)
-					return;
-				if (theButton == null) { // No button filter
-					return;
-				} else if (theButton) { // Left
-					if (!SwingUtilities.isLeftMouseButton(e))
-						return;
-				} else { // Right
-					if (!SwingUtilities.isRightMouseButton(e))
-						return;
-				}
-				theListener.accept(true, e);
-			}
-
-			@Override
-			public void mouseReleased(MouseEvent e) {
-				if (theListener == null)
-					return;
-				if (theButton == null) { // No button filter
-					return;
-				} else if (theButton) { // Left
-					if (!SwingUtilities.isLeftMouseButton(e))
-						return;
-				} else { // Right
-					if (!SwingUtilities.isRightMouseButton(e))
-						return;
-				}
-				theListener.accept(false, e);
-			}
-
-			@Override
-			public void mouseEntered(MouseEvent e) {
-				if (theListener == null)
-					return;
-				if (theButton == null) { // No button filter
-				} else if (theButton) { // Left
-					if (!isLeftPressed)
-						return;
-				} else { // Right
-					if (!isRightPressed)
-						return;
-				}
-				theListener.accept(true, e);
-			}
-
-			@Override
-			public void mouseExited(MouseEvent e) {
-				if (theListener == null)
-					return;
-				if (theButton == null) { // No button filter
-				} else if (theButton) { // Left
-					if (!isLeftPressed)
-						return;
-				} else { // Right
-					if (!isRightPressed)
-						return;
-				}
-				theListener.accept(false, e);
-			}
-
-			@Override
-			public void mouseClicked(MouseEvent e) {
-			}
-		}
 		widget.support(hovered, () -> new MouseValueSupport(hovered, null));
 		widget.support(pressed, () -> new MouseValueSupport(pressed, true));
 		widget.support(rightPressed, () -> new MouseValueSupport(rightPressed, false));
@@ -586,22 +588,27 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 		widget.modify((comp, builder) -> {
 			// Set style
 			comp.modifyComponent(c -> {
-				boolean defaultOpaque = c instanceof JComponent && ((JComponent) c).isOpaque();
+				boolean[] preOpaque = new boolean[1];
 				ObservableValue<? extends Color> bgColor = bgColorStyle.evaluate(builder.getModels());
 				Color[] oldBG = new Color[] { c.getBackground() };
 				bgColor.changes().takeUntil(builder.getModels().getUntil()).act(evt -> {
-					if (evt.getOldValue() == null)
+					if (evt.getOldValue() == null) {
 						oldBG[0] = c.getBackground();
+						preOpaque[0] = c instanceof JComponent && ((JComponent) c).isOpaque();
+					}
 					Color colorV = evt.getNewValue();
 					if (colorV != null) {
 						c.setBackground(colorV);
 						if (c instanceof JComponent)
 							((JComponent) c).setOpaque(colorV.getAlpha() > 0);
 						c.repaint();
-					} else {
+					} else if (c.getBackground() == evt.getOldValue()) {
 						c.setBackground(oldBG[0]);
 						if (c instanceof JComponent)
-							((JComponent) c).setOpaque(defaultOpaque);
+							((JComponent) c).setOpaque(preOpaque[0]);
+					} else {
+						oldBG[0] = c.getBackground();
+						preOpaque[0] = c instanceof JComponent && ((JComponent) c).isOpaque();
 					}
 				});
 			});

@@ -71,9 +71,11 @@ public interface QuickComponentDef {
 	}
 
 	static <T> SettableValue<T> getIfSupported(ObservableValue<?> value, SimpleModelValueSupport<T> support) {
-		if (value == null || !(value instanceof SimpleModelValue) || ((SimpleModelValue<?>) value).getSupport() != support)
+		if (value != null && value.getIdentity() instanceof SimpleModelValueIdentity
+			&& ((SimpleModelValueIdentity<?>) value.getIdentity()).getSupport() == support)
+			return ((SimpleModelValueIdentity<T>) value.getIdentity()).theValue.getSettable();
+		else
 			return null;
-		return ((SimpleModelValue<T>) value).getSettable();
 	}
 
 	static class SimpleModelValueSupport<T> implements Supplier<ModelValueSupport<T>> {
@@ -100,6 +102,18 @@ public interface QuickComponentDef {
 		@Override
 		public ModelValueSupport<T> get() {
 			return new SimpleModelValue<>(this);
+		}
+	}
+
+	static class SimpleModelValueIdentity<T> {
+		final SimpleModelValue<T> theValue;
+
+		SimpleModelValueIdentity(SimpleModelValue<T> value) {
+			theValue = value;
+		}
+
+		public SimpleModelValueSupport<T> getSupport() {
+			return theValue.getSupport();
 		}
 	}
 
@@ -145,13 +159,8 @@ public interface QuickComponentDef {
 		}
 
 		@Override
-		public Object getIdentity() {
-			return init().getIdentity();
-		}
-
-		@Override
 		protected Object createIdentity() {
-			throw new IllegalStateException();
+			return new SimpleModelValueIdentity<>(this);
 		}
 
 		@Override
