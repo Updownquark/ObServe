@@ -560,7 +560,7 @@ public class ObservableSwingUtils {
 			if (!callbackLock[0]) {
 				callbackLock[0] = true;
 				try {
-					T newValue = purify.apply(evt.getNewValue());
+					T newValue = purify == null ? evt.getNewValue() : purify.apply(evt.getNewValue());
 					spinner.setValue(newValue);
 				} finally {
 					callbackLock[0] = false;

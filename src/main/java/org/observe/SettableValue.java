@@ -735,10 +735,12 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 
 		@Override
 		public ObservableValue<String> isEnabled() {
-			return transform(TypeTokens.get().STRING, tx -> tx.cache(true).map(LambdaUtils.printableFn(__ -> {
-				BiTuple<TransformedElement<S, T>, TransformationState> state = getState();
-				return state.getValue1().isEnabled(state.getValue2());
-			}, "enabled", "enabled")));
+			return ObservableValue.firstValue(TypeTokens.get().STRING, e -> e != null, () -> null, //
+				transform(TypeTokens.get().STRING, tx -> tx.cache(true).map(LambdaUtils.printableFn(__ -> {
+					BiTuple<TransformedElement<S, T>, TransformationState> state = getState();
+					return state.getValue1().isEnabled(state.getValue2());
+				}, "enabled", "enabled"))), //
+				getSource().isEnabled());
 		}
 
 		@Override
@@ -1171,7 +1173,7 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 
 	/**
 	 * Implements {@link SettableValue#firstValue(TypeToken, Predicate, Supplier, SettableValue...)}
-	 * 
+	 *
 	 * @param <T> The type of the value
 	 */
 	class FirstSettableValue<T> extends FirstObservableValue<T> implements SettableValue<T> {

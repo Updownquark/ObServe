@@ -221,7 +221,12 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 	}
 
 	/**
+	 * <p>
 	 * Connects UI models and observable structures for the use case of selecting a value from a list of possible values
+	 * </p>
+	 * <p>
+	 * This method is package-private because it assumes the given values are {@link ThreadConstraint#EDT EDT}-safe.
+	 * </p>
 	 *
 	 * @param availableValues The values to select from
 	 * @param selected The selected value
@@ -263,29 +268,31 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 		subs.add(selected.changes().act(evt -> {
 			if (callbackLock[0])
 				return;
-			ObservableSwingUtils.onEQ(() -> {
-				if (callbackLock[0])
-					return;
-				String enabled = selected.isEnabled().get();
-				callbackLock[0] = true;
-				try (Transaction avT = availableValues.lock(false, null)) {
-					CollectionElement<? extends T> found = availableValues.belongs(evt.getNewValue()) //
-						? ((ObservableCollection<T>) availableValues).getElement(evt.getNewValue(), true)//
-							: null;
-						if (found != null) {
-							currentSelectedElement[0] = found.getElementId();
-							currentSelected[0] = found.get();
-							setSelected.accept(availableValues.getElementsBefore(found.getElementId()));
-						} else {
-							currentSelectedElement[0] = null;
-							currentSelected[0] = null;
-							setSelected.accept(-1);
-						}
-				} finally {
-					callbackLock[0] = false;
+			String enabled = selected.isEnabled().get();
+			callbackLock[0] = true;
+			try (Transaction avT = availableValues.lock(false, null)) {
+				CollectionElement<? extends T> found = availableValues.belongs(evt.getNewValue()) //
+					? ((ObservableCollection<T>) availableValues).getElement(evt.getNewValue(), true)//
+					: null;
+				if (found != null) {
+					currentSelectedElement[0] = found.getElementId();
+					currentSelected[0] = found.get();
+					setSelected.accept(availableValues.getElementsBefore(found.getElementId()));
+				} else {
+					currentSelectedElement[0] = null;
+					currentSelected[0] = null;
+					setSelected.accept(-1);
 				}
-				checkEnabled.accept(enabled);
-			});
+			} finally {
+				callbackLock[0] = false;
+			}
+			checkEnabled.accept(enabled);
+		}));
+		subs.add(selected.isEnabled().noInitChanges().act(evt -> {
+			if (callbackLock[0])
+				return;
+			String enabled = selected.isEnabled().get();
+			checkEnabled.accept(enabled);
 		}));
 		// It is possible for a value to change before the availableValues collection changes to include it.
 		// In this case, the above code will find an index of zero

@@ -17,7 +17,6 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -61,8 +60,6 @@ import org.observe.util.TypeTokens;
 import org.observe.util.swing.PanelPopulationImpl.SimpleAlert;
 import org.qommons.BreakpointHere;
 import org.qommons.StringUtils;
-import org.qommons.ThreadConstraint;
-import org.qommons.Transactable;
 import org.qommons.collect.BetterList;
 import org.qommons.io.Format;
 import org.qommons.threading.QommonsTimer;
@@ -98,7 +95,7 @@ public class PanelPopulation {
 				"Calling panel population off of the EDT from " + BreakpointHere.getCodeLine(1) + "--could cause threading problems!!");
 		if (panel == null)
 			panel = (C) new ConformingPanel();
-		return new PanelPopulationImpl.MigFieldPanel<>(panel, until == null ? Observable.empty() : until, new LazyLock());
+		return new PanelPopulationImpl.MigFieldPanel<>(panel, until == null ? Observable.empty() : until);
 	}
 
 	public static <C extends Container> PanelPopulator<C, ?> populateHPanel(C panel, String layoutType, Observable<?> until) {
@@ -116,7 +113,7 @@ public class PanelPopulation {
 			panel = (C) new ConformingPanel(layout);
 		else if (layout != null)
 			panel.setLayout(layout);
-		return new PanelPopulationImpl.SimpleHPanel<>(null, panel, new LazyLock(), until == null ? Observable.empty() : until);
+		return new PanelPopulationImpl.SimpleHPanel<>(null, panel, until == null ? Observable.empty() : until);
 	}
 
 	/**
@@ -131,43 +128,17 @@ public class PanelPopulation {
 		if (!EventQueue.isDispatchThread())
 			System.err.println(
 				"Calling panel population off of the EDT from " + BreakpointHere.getCodeLine(1) + "--could cause threading problems!!");
-		return new PanelPopulationImpl.SimpleHPanel<>(null, panel, new LazyLock(), until == null ? Observable.empty() : until);
+		return new PanelPopulationImpl.SimpleHPanel<>(null, panel, until == null ? Observable.empty() : until);
 	}
 
 	public static <R> TableBuilder<R, ?> buildTable(ObservableCollection<R> rows) {
 		if (!EventQueue.isDispatchThread())
 			System.err.println(
 				"Calling panel population off of the EDT from " + BreakpointHere.getCodeLine(1) + "--could cause threading problems!!");
-		return new SimpleTableBuilder<>(rows, new LazyLock());
-	}
-
-	public static class LazyLock implements Supplier<Transactable> {
-		private final Function<Object, Transactable> theLockCreator;
-		private Transactable theLock;
-
-		public LazyLock() {
-			this(o -> Transactable.transactable(new ReentrantReadWriteLock(), o, ThreadConstraint.EDT));
-		}
-
-		public LazyLock(Function<Object, Transactable> lockCreator) {
-			theLockCreator = lockCreator;
-		}
-
-		@Override
-		public Transactable get() {
-			if (theLock == null) {
-				synchronized (this) {
-					if (theLock == null)
-						theLock = theLockCreator.apply(this);
-				}
-			}
-			return theLock;
-		}
+		return new SimpleTableBuilder<>(rows, Observable.empty());
 	}
 
 	public interface PanelPopulator<C extends Container, P extends PanelPopulator<C, P>> extends ComponentEditor<C, P> {
-		Observable<?> getUntil();
-
 		<F> P addTextField(String fieldName, SettableValue<F> field, Format<F> format,
 			Consumer<FieldEditor<ObservableTextField<F>, ?>> modify);
 
@@ -339,6 +310,8 @@ public class PanelPopulation {
 
 		P addCollapsePanel(boolean vertical, LayoutManager layout, Consumer<CollapsePanel<JXCollapsiblePane, JXPanel, ?>> panel);
 
+		P withGlassPane(LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel);
+
 		@Override
 		default Alert alert(String title, String message) {
 			return new SimpleAlert(getContainer(), title, message);
@@ -348,6 +321,8 @@ public class PanelPopulation {
 	}
 
 	public interface ComponentEditor<E, P extends ComponentEditor<E, P>> extends Tooltipped<P> {
+		Observable<?> getUntil();
+
 		E getEditor();
 
 		P visibleWhen(ObservableValue<Boolean> visible);
@@ -510,8 +485,6 @@ public class PanelPopulation {
 		ImageControl variable(ObservableValue<? extends Icon> icon);
 
 		ImageControl withSize(int width, int height);
-
-		ImageControl withOpacity(double opacity);
 	}
 
 	public interface ComboEditor<F, P extends ComboEditor<F, P>> extends FieldEditor<JComboBox<F>, P> {

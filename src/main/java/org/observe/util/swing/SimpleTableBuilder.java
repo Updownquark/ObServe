@@ -70,7 +70,6 @@ import org.qommons.IntList;
 import org.qommons.LambdaUtils;
 import org.qommons.StringUtils;
 import org.qommons.ThreadConstraint;
-import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
@@ -103,10 +102,8 @@ implements TableBuilder<R, P> {
 	private int theAdaptiveMaxRowHeight;
 	private boolean isScrollable;
 
-	private JComponent theBuiltComponent;
-
-	SimpleTableBuilder(ObservableCollection<R> rows, Supplier<Transactable> lock) {
-		super(new JTable(), lock);
+	SimpleTableBuilder(ObservableCollection<R> rows, Observable<?> until) {
+		super(new JTable(), until);
 		theAnchor = PanelPopulation.TableBuilder.DBUG.instance(this, a -> a//
 			.setField("type", rows.getType(), null)//
 			);
@@ -269,7 +266,7 @@ implements TableBuilder<R, P> {
 			}
 		}, action -> {
 			action.allowForMultiple(true).allowForEmpty(true).allowForAnyEnabled(true)//
-				.modifyButton(button -> button.withIcon(PanelPopulationImpl.getAddIcon(16)).withTooltip("Add new " + getItemName()));
+			.modifyButton(button -> button.withIcon(PanelPopulationImpl.getAddIcon(16)).withTooltip("Add new " + getItemName()));
 			if (actionMod != null)
 				actionMod.accept(action);
 		});
@@ -305,7 +302,7 @@ implements TableBuilder<R, P> {
 		}
 		return withMultiAction(null, deletion, action -> {
 			action.allowForMultiple(true).withTooltip(items -> "Remove selected " + (items.size() == 1 ? single : plural))//
-				.modifyButton(button -> button.withIcon(PanelPopulationImpl.getRemoveIcon(16)));
+			.modifyButton(button -> button.withIcon(PanelPopulationImpl.getRemoveIcon(16)));
 			if (actionMod != null)
 				actionMod.accept(action);
 		});
@@ -321,7 +318,7 @@ implements TableBuilder<R, P> {
 			String single = getItemName();
 			String plural = StringUtils.pluralize(single);
 			action.allowForMultiple(true).withTooltip(items -> "Duplicate selected " + (items.size() == 1 ? single : plural))//
-				.modifyButton(button -> button.withIcon(PanelPopulationImpl.getCopyIcon(16)));
+			.modifyButton(button -> button.withIcon(PanelPopulationImpl.getCopyIcon(16)));
 			if (actionMod != null)
 				actionMod.accept(action);
 		});
@@ -360,7 +357,7 @@ implements TableBuilder<R, P> {
 		CategoryRenderStrategy<R, Object> moveColumn = new CategoryRenderStrategy<R, Object>(up ? "\u2191" : "\u2193",
 			TypeTokens.get().OBJECT, v -> null)//
 			.withHeaderTooltip("Move row " + (up ? "up" : "down"))//
-				.decorateAll(deco -> deco.withIcon(PanelPopulationImpl.getMoveIcon(up, 16)))//
+			.decorateAll(deco -> deco.withIcon(PanelPopulationImpl.getMoveIcon(up, 16)))//
 			.withWidths(15, 20, 20)//
 			.withMutation(m -> m.mutateAttribute2((r, c) -> c)
 				.withEditor(ObservableCellEditor.<R, Object> createButtonCellEditor(__ -> null, cell -> {
@@ -382,7 +379,7 @@ implements TableBuilder<R, P> {
 					}
 					return cell.getCellValue();
 				}).decorate((cell, deco) -> {
-						deco.withIcon(PanelPopulationImpl.getMoveIcon(up, 16));
+					deco.withIcon(PanelPopulationImpl.getMoveIcon(up, 16));
 					if (up)
 						deco.enabled(cell.getRowIndex() > 0);
 					else
@@ -446,7 +443,7 @@ implements TableBuilder<R, P> {
 				enabled = theSelectionValue.map(__ -> enabledGet.get());
 			action.allowForMultiple(true)
 			.withTooltip(items -> "Move selected row" + (items.size() == 1 ? "" : "s") + " to the " + (up ? "top" : "bottom"))
-				.modifyButton(button -> button.withIcon(PanelPopulationImpl.getMoveEndIcon(up, 16)))//
+			.modifyButton(button -> button.withIcon(PanelPopulationImpl.getMoveEndIcon(up, 16)))//
 			.allowForEmpty(false).allowForAnyEnabled(false).modifyAction(a -> a.disableWith(enabled));
 		});
 	}
@@ -527,9 +524,7 @@ implements TableBuilder<R, P> {
 	}
 
 	@Override
-	public Component getOrCreateComponent(Observable<?> until) {
-		if (theBuiltComponent != null)
-			return theBuiltComponent;
+	protected Component createComponent() {
 		if (theColumns == null)
 			throw new IllegalStateException("No columns configured");
 		InstantiationTransaction instantiating = theAnchor.instantiating();
@@ -537,7 +532,7 @@ implements TableBuilder<R, P> {
 		ObservableCollection<TableContentControl.FilteredValue<R>> filtered;
 		ObservableCollection<? extends CategoryRenderStrategy<R, ?>> columns;
 		if (theFilter != null) {
-			ObservableCollection<? extends CategoryRenderStrategy<R, ?>> columns2 = theColumns.safe(ThreadConstraint.EDT, until);
+			ObservableCollection<? extends CategoryRenderStrategy<R, ?>> columns2 = theColumns.safe(ThreadConstraint.EDT, getUntil());
 			if (theFilter instanceof SettableValue) {
 				Map<CategoryRenderStrategy<R, ?>, Runnable> headerListening = new HashMap<>();
 				boolean checkType = TypeTokens.getRawType(theFilter.getType()) != TableContentControl.class;
@@ -569,24 +564,23 @@ implements TableBuilder<R, P> {
 						}
 					}
 				}, true);
-				if (until != null)
-					until.take(1).act(__ -> colClickSub.unsubscribe(true));
+				getUntil().take(1).act(__ -> colClickSub.unsubscribe(true));
 			}
 			ObservableCollection<? extends CategoryRenderStrategy<R, ?>> fColumns = TableContentControl
-				.applyColumnControl(columns2, theFilter, until);
+				.applyColumnControl(columns2, theFilter, getUntil());
 			columns = fColumns;
 			Observable<?> columnChanges = Observable.or(Observable.constant(null), fColumns.simpleChanges());
 			ObservableCollection<TableContentControl.FilteredValue<R>> rawFiltered = TableContentControl.applyRowControl(theRows,
-				() -> columns, theFilter.refresh(columnChanges), until);
-			filtered = rawFiltered.safe(ThreadConstraint.EDT, until);
+				() -> columns, theFilter.refresh(columnChanges), getUntil());
+			filtered = rawFiltered.safe(ThreadConstraint.EDT, getUntil());
 			theFilteredRows = filtered.flow()
 				.transform(theRows.getType(),
 					tx -> tx.map(LambdaUtils.printableFn(f -> f.value, "value", null)).modifySource(FilteredValue::setValue))
-				.collectActive(until);
+				.collectActive(getUntil());
 		} else {
 			filtered = null;
-			columns = theColumns.safe(ThreadConstraint.EDT, until);
-			theFilteredRows = theRows.safe(ThreadConstraint.EDT, until);
+			columns = theColumns.safe(ThreadConstraint.EDT, getUntil());
+			theFilteredRows = theRows.safe(ThreadConstraint.EDT, getUntil());
 		}
 		instantiating.watchFor(ObservableListModel.DBUG, "model");
 		model = new ObservableTableModel<>(theFilteredRows, columns);
@@ -606,8 +600,7 @@ implements TableBuilder<R, P> {
 				return fv.getMatches(column);
 			}
 		});
-		if (until != null)
-			until.take(1).act(__ -> sub.unsubscribe());
+		getUntil().take(1).act(__ -> sub.unsubscribe());
 
 		JScrollPane scroll = new JScrollPane(table);
 		if (isScrollable) {
@@ -741,7 +734,7 @@ implements TableBuilder<R, P> {
 		Supplier<List<R>> selectionGetter = () -> getSelection();
 		if (theSelectionValue != null)
 			ObservableSwingUtils.syncSelection(table, model.getRowModel(), table::getSelectionModel, model.getRows().equivalence(),
-				theSelectionValue, until, (index, cause) -> {
+				theSelectionValue, getUntil(), (index, cause) -> {
 					if (index >= getRows().size())
 						return;
 					MutableCollectionElement<R> el = (MutableCollectionElement<R>) getRows()
@@ -754,7 +747,9 @@ implements TableBuilder<R, P> {
 				}, false);
 		if (theSelectionValues != null)
 			ObservableSwingUtils.syncSelection(table, model.getRowModel(), table::getSelectionModel, model.getRows().equivalence(),
-				theSelectionValues, until);
+				theSelectionValues, getUntil());
+
+		JComponent comp;
 		if (!theActions.isEmpty()) {
 			ListSelectionListener selListener = e -> {
 				List<R> selection = selectionGetter.get();
@@ -796,13 +791,13 @@ implements TableBuilder<R, P> {
 			table.getSelectionModel().addListSelectionListener(selListener);
 			table.addPropertyChangeListener("selectionModel", selModelListener);
 			model.getRowModel().addListDataListener(dataListener);
-			until.take(1).act(__ -> {
+			getUntil().take(1).act(__ -> {
 				table.removePropertyChangeListener("selectionModel", selModelListener);
 				table.getSelectionModel().removeListSelectionListener(selListener);
 				model.getRowModel().removeListDataListener(dataListener);
 			});
-			SimpleHPanel<JPanel> buttonPanel = new SimpleHPanel<>(null,
-				new JPanel(new JustifiedBoxLayout(false).setMainAlignment(JustifiedBoxLayout.Alignment.LEADING)), theLock, until);
+			SimpleHPanel<JPanel, ?> buttonPanel = new SimpleHPanel<>(null,
+				new JPanel(new JustifiedBoxLayout(false).setMainAlignment(JustifiedBoxLayout.Alignment.LEADING)), getUntil());
 			for (Object action : theActions) {
 				if (action instanceof SimpleDataAction)
 					((SimpleDataAction<R, ?>) action).addButton(buttonPanel);
@@ -810,11 +805,11 @@ implements TableBuilder<R, P> {
 					buttonPanel.addHPanel(null, "box", (Consumer<PanelPopulator<JPanel, ?>>) action);
 			}
 			JPanel tablePanel = new JPanel(new BorderLayout());
-			tablePanel.add(buttonPanel.getOrCreateComponent(until), theActionsOnTop ? BorderLayout.NORTH : BorderLayout.SOUTH);
+			tablePanel.add(buttonPanel.getComponent(), theActionsOnTop ? BorderLayout.NORTH : BorderLayout.SOUTH);
 			tablePanel.add(scroll, BorderLayout.CENTER);
-			theBuiltComponent = tablePanel;
+			comp = tablePanel;
 		} else
-			theBuiltComponent = scroll;
+			comp = scroll;
 		table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
 
 		if (theCountTitleDisplayedText != null) {
@@ -825,7 +820,7 @@ implements TableBuilder<R, P> {
 			if (filtered != null) {
 				theRows.observeSize()
 				.transform(int[].class, tx -> tx.combineWith(filtered.observeSize()).combine((sz, f) -> new int[] { sz, f }))//
-				.changes().takeUntil(until).act(evt -> {
+				.changes().takeUntil(getUntil()).act(evt -> {
 					int sz = evt.getNewValue()[0];
 					int f = evt.getNewValue()[1];
 					String text;
@@ -842,19 +837,19 @@ implements TableBuilder<R, P> {
 					if (!theCountTitleDisplayedText.isEmpty())
 						text += " " + theCountTitleDisplayedText;
 					border.setTitle(text);
-					theBuiltComponent.repaint();
+					comp.repaint();
 				});
 			} else {
-				theRows.observeSize().changes().takeUntil(until).act(evt -> {
+				theRows.observeSize().changes().takeUntil(getUntil()).act(evt -> {
 					String text = numberFormat.format(evt.getNewValue()) + " "
 						+ (evt.getNewValue() == 1 ? singularItemName : pluralItemName);
 					if (!theCountTitleDisplayedText.isEmpty())
 						text += " " + theCountTitleDisplayedText;
 					border.setTitle(text);
-					theBuiltComponent.repaint();
+					comp.repaint();
 				});
 			}
-			theBuiltComponent.setBorder(border);
+			comp.setBorder(border);
 		}
 
 		// Set up transfer handling (DnD, copy/paste)
@@ -874,12 +869,7 @@ implements TableBuilder<R, P> {
 		}
 
 		instantiating.close();
-		return decorate(theBuiltComponent);
-	}
-
-	@Override
-	public Component getComponent() {
-		return theBuiltComponent;
+		return comp;
 	}
 
 	class TableBuilderTransferHandler extends TransferHandler {
