@@ -207,6 +207,8 @@ public class ObservableTextField<E> extends JPasswordField implements Observable
 
 	@Override
 	public Dimension getMinimumSize() {
+		if (getColumns() > 0)
+			return getPreferredSize();
 		Dimension dim = super.getMinimumSize();
 		if (dim != null)
 			dim.height = getPreferredSize().height;

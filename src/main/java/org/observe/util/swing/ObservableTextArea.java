@@ -9,7 +9,6 @@ import java.awt.RenderingHints;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.awt.event.KeyEvent;
-import java.text.ParseException;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
@@ -173,16 +172,11 @@ public class ObservableTextArea<E> extends JEditorPane implements ObservableText
 		setMinimumSize(new Dimension(getMinimumSize().width, h * rows));
 	}
 
-	/** @return The text to display (grayed) when the text field's text is empty */
 	@Override
 	public String getEmptyText() {
 		return theEmptyText;
 	}
 
-	/**
-	 * @param emptyText The text to display (grayed) when the text field's text is empty
-	 * @return This text field
-	 */
 	@Override
 	public ObservableTextArea<E> setEmptyText(String emptyText) {
 		theEmptyText = emptyText;
@@ -229,38 +223,21 @@ public class ObservableTextArea<E> extends JEditorPane implements ObservableText
 		}
 	}
 
-	/** @return Whether the user has entered text to change this field's value */
 	@Override
 	public boolean isDirty() {
 		return theEditor.isDirty();
 	}
 
-	/** Undoes any edits in this field's text, reverting to the formatted current value */
 	@Override
 	public void revertEdits() {
 		theEditor.revertEdits();
 	}
 
-	/**
-	 * Causes any edits in this field's text to take effect, parsing it and setting it in the value
-	 *
-	 * @param cause The cause of the action (e.g. a swing event)
-	 * @return Whether the edits (if any) were successfully committed to the value or were rejected. If there were no edits, this returns
-	 *         true.
-	 */
 	@Override
 	public boolean flushEdits(Object cause) {
 		return theEditor.flushEdits(cause);
 	}
 
-	/**
-	 * @return The error for the current text of this field. Specifically, either:
-	 *         <ol>
-	 *         <li>The message in the {@link ParseException} thrown by this field's {@link #getFormat() format} when the text was parsed (or
-	 *         "Invalid text" if the exception message was null) or</li>
-	 *         <li>The message reported by the value ({@link SettableValue#isAcceptable(Object)}) for the parsed value</li>
-	 *         <ol>
-	 */
 	@Override
 	public String getEditError() {
 		return theEditor.getEditError();

@@ -6,7 +6,6 @@ import java.awt.Component;
 import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.EventQueue;
-import java.awt.Graphics;
 import java.awt.Image;
 import java.awt.Insets;
 import java.awt.LayoutManager;
@@ -66,11 +65,7 @@ import javax.swing.SwingUtilities;
 import javax.swing.event.ChangeListener;
 
 import org.jdesktop.swingx.JXCollapsiblePane;
-import org.jdesktop.swingx.JXMultiThumbSlider;
 import org.jdesktop.swingx.JXPanel;
-import org.jdesktop.swingx.multislider.MultiThumbModel;
-import org.jdesktop.swingx.multislider.ThumbDataEvent;
-import org.jdesktop.swingx.multislider.ThumbDataListener;
 import org.observe.Observable;
 import org.observe.ObservableAction;
 import org.observe.ObservableValue;
@@ -108,7 +103,6 @@ import org.observe.util.swing.PanelPopulation.TreeEditor;
 import org.observe.util.swing.PanelPopulation.TreeTableEditor;
 import org.observe.util.swing.PanelPopulation.WindowBuilder;
 import org.qommons.BiTuple;
-import org.qommons.Colors;
 import org.qommons.Identifiable;
 import org.qommons.IntList;
 import org.qommons.QommonsUtils;
@@ -120,7 +114,6 @@ import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.io.Format;
-import org.qommons.threading.QommonsTimer;
 
 import com.google.common.reflect.TypeToken;
 
@@ -275,10 +268,9 @@ class PanelPopulationImpl {
 		@Override
 		default <F> P addSpinnerField(String fieldName, JSpinner spinner, SettableValue<F> value, Function<? super F, ? extends F> purifier,
 			Consumer<SteppedFieldEditor<JSpinner, F, ?>> modify) {
-			SimpleSteppedFieldEditor<JSpinner, F, ?> fieldPanel = new SimpleSteppedFieldEditor<>(fieldName, spinner,
-				stepSize -> {
-					((SpinnerNumberModel) spinner.getModel()).setStepSize((Number) stepSize);
-				}, getUntil());
+			SimpleSteppedFieldEditor<JSpinner, F, ?> fieldPanel = new SimpleSteppedFieldEditor<>(fieldName, spinner, stepSize -> {
+				((SpinnerNumberModel) spinner.getModel()).setStepSize((Number) stepSize);
+			}, getUntil());
 			ObservableSwingUtils.spinnerFor(spinner, fieldPanel.getTooltip().get(), value, purifier);
 			if (modify != null)
 				modify.accept(fieldPanel);
@@ -290,8 +282,46 @@ class PanelPopulationImpl {
 		}
 
 		@Override
+		default P addSlider(String fieldName, SettableValue<Double> value, Consumer<SliderEditor<?, ?>> modify) {
+			SimpleMultiSliderEditor<?> compEditor = SimpleMultiSliderEditor.createForValue(fieldName, value, getUntil());
+			if (modify != null)
+				modify.accept(compEditor);
+			if (compEditor.isDecorated())
+				value.noInitChanges().safe(ThreadConstraint.EDT).takeUntil(getUntil())//
+				.act(__ -> compEditor.decorate(compEditor.getComponent()));
+			doAdd(compEditor);
+			return (P) this;
+		}
+
+		@Override
 		default P addMultiSlider(String fieldName, ObservableCollection<Double> values, Consumer<SliderEditor<?, ?>> modify) {
-			SimpleMultiSliderEditor<?> compEditor = new SimpleMultiSliderEditor<>(fieldName, values, getUntil());
+			SimpleMultiSliderEditor<?> compEditor = SimpleMultiSliderEditor.createForValues(fieldName, values, getUntil());
+			if (modify != null)
+				modify.accept(compEditor);
+			if (compEditor.isDecorated())
+				values.simpleChanges().safe(ThreadConstraint.EDT).takeUntil(getUntil())//
+				.act(__ -> compEditor.decorate(compEditor.getComponent()));
+			doAdd(compEditor);
+			return (P) this;
+		}
+
+		@Override
+		default P addRangeSlider(String fieldName, SettableValue<Double> min, SettableValue<Double> max,
+			Consumer<SliderEditor<?, ?>> modify) {
+			SimpleMultiSliderEditor<?> compEditor = SimpleMultiSliderEditor.createForMinMax(fieldName, min, max, getUntil());
+			if (modify != null)
+				modify.accept(compEditor);
+			if (compEditor.isDecorated())
+				Observable.or(min.noInitChanges(), max.noInitChanges()).safe(ThreadConstraint.EDT).takeUntil(getUntil())//
+				.act(__ -> compEditor.decorate(compEditor.getComponent()));
+			doAdd(compEditor);
+			return (P) this;
+		}
+
+		@Override
+		default P addMultiRangeSlider(String fieldName, ObservableCollection<MultiRangeSlider.Range> values,
+			Consumer<SliderEditor<?, ?>> modify) {
+			SimpleMultiSliderEditor<?> compEditor = SimpleMultiSliderEditor.createForRanges(fieldName, values, getUntil());
 			if (modify != null)
 				modify.accept(compEditor);
 			if (compEditor.isDecorated())
@@ -725,13 +755,11 @@ class PanelPopulationImpl {
 	}
 
 	static class VizChanger implements Consumer<ObservableValueEvent<Boolean>> {
-		private final Component theComponent;
-		private final Component theFieldLabel;
+		private final Component[] theComponents;
 		private boolean shouldBeVisible;
 
-		public VizChanger(Component component, Component fieldLabel) {
-			theComponent = component;
-			theFieldLabel = fieldLabel;
+		public VizChanger(Component... components) {
+			theComponents = components;
 		}
 
 		@Override
@@ -749,15 +777,17 @@ class PanelPopulationImpl {
 		}
 
 		private void setVisible(boolean visible) {
-			if (visible == theComponent.isVisible())
-				return;
-			if (theFieldLabel != null)
-				theFieldLabel.setVisible(visible);
-			theComponent.setVisible(visible);
-			if (theComponent != null)
-				theComponent.setVisible(visible);
-			if (theComponent.getParent() != null)
-				theComponent.getParent().revalidate();
+			boolean effect = false;
+			for (Component c : theComponents) {
+				if (c == null || visible == c.isVisible())
+					continue;
+				effect = true;
+				c.setVisible(visible);
+			}
+			if (effect) {
+				if (theComponents[0].getParent() != null)
+					theComponents[0].getParent().revalidate();
+			}
 		}
 	}
 
@@ -827,7 +857,7 @@ class PanelPopulationImpl {
 			if (postLabel != null)
 				getContainer().add(postLabel, "wrap");
 			if (field.isVisible() != null)
-				field.isVisible().changes().takeUntil(getUntil()).act(new VizChanger(component, fieldLabel));
+				field.isVisible().changes().takeUntil(getUntil()).act(new VizChanger(component, fieldLabel, postLabel));
 		}
 
 		@Override
@@ -1108,7 +1138,7 @@ class PanelPopulationImpl {
 				getContainer().add(postLabel);
 			if (field.isVisible() != null) {
 				if (field.isVisible() != null)
-					field.isVisible().changes().takeUntil(getUntil()).act(new VizChanger(component, fieldLabel));
+					field.isVisible().changes().takeUntil(getUntil()).act(new VizChanger(component, fieldLabel, postLabel));
 			}
 		}
 
@@ -1295,189 +1325,106 @@ class PanelPopulationImpl {
 		}
 	}
 
-	static class SimpleMultiSliderEditor<P extends SimpleMultiSliderEditor<P>> extends SimpleFieldEditor<JXMultiThumbSlider<Double>, P>
-	implements SliderEditor<JXMultiThumbSlider<Double>, P> {
-		private final ObservableCollection<Double> theValues;
-		private ObservableValue<Double> theMinValue;
-		private ObservableValue<Double> theMaxValue;
-		private boolean isAdjustingBoundsForValue;
+	static class SimpleMultiSliderEditor<P extends SimpleMultiSliderEditor<P>> extends SimpleFieldEditor<MultiRangeSlider, P>
+	implements SliderEditor<MultiRangeSlider, P> {
+		private SettableValue<ObservableValue<Double>> theMinValue;
+		private SettableValue<ObservableValue<Double>> theMaxValue;
 
-		public SimpleMultiSliderEditor(String fieldName, ObservableCollection<Double> values, Observable<?> until) {
-			super(fieldName, new JXMultiThumbSlider<>(), until);
-			theValues = values;
-			theMinValue = SettableValue.build(double.class).withValue(0.0).build();
-			theMaxValue = SettableValue.build(double.class).withValue(1.0).build();
+		public static SimpleMultiSliderEditor<?> createForValue(String fieldName, SettableValue<Double> value, Observable<?> until){
+			SettableValue<ObservableValue<Double>>[] minMax = createMinMax();
+			SettableValue<MultiRangeSlider.Range> sliderBounds = createSliderBounds(until, minMax);
+			MultiRangeSlider slider = MultiRangeSlider.forValueExtent(false, sliderBounds, value,
+				SettableValue.of(double.class, 0.0, "Range is not editable"), until);
+			((MultiRangeSlider.RangeRenderer.Default) slider.getRangeRenderer()).withColor(r -> Color.blue, r -> Color.blue);
+			return new SimpleMultiSliderEditor<>(fieldName, slider, minMax, until);
+		}
+
+		public static SimpleMultiSliderEditor<?> createForMinMax(String fieldName, SettableValue<Double> min, SettableValue<Double> max,
+			Observable<?> until) {
+			SettableValue<ObservableValue<Double>>[] minMax = createMinMax();
+			SettableValue<MultiRangeSlider.Range> sliderBounds = createSliderBounds(until, minMax);
+			MultiRangeSlider slider = MultiRangeSlider.forMinMax(false, sliderBounds, min, max, until);
+			((MultiRangeSlider.RangeRenderer.Default) slider.getRangeRenderer()).withColor(r -> Color.blue, r -> Color.blue);
+			return new SimpleMultiSliderEditor<>(fieldName, slider, minMax, until);
+		}
+
+		public static SimpleMultiSliderEditor<?> createForValues(String fieldName, ObservableCollection<Double> values,
+			Observable<?> until) {
+			SettableValue<ObservableValue<Double>>[] minMax = createMinMax();
+			SettableValue<MultiRangeSlider.Range> sliderBounds = createSliderBounds(until, minMax);
+			return new SimpleMultiSliderEditor<>(fieldName, //
+				MultiRangeSlider.multi(false, sliderBounds, values.flow().transform(MultiRangeSlider.Range.class, tx -> tx.cache(false)//
+					.map(v -> MultiRangeSlider.Range.forValueExtent(v, 0))//
+					.replaceSource(r -> r.getValue(), null)//
+					).collectPassive(), //
+					until),
+				minMax, until);
+		}
+
+		public static SimpleMultiSliderEditor<?> createForRanges(String fieldName, ObservableCollection<MultiRangeSlider.Range> ranges,
+			Observable<?> until) {
+			SettableValue<ObservableValue<Double>> [] minMax=createMinMax();
+			SettableValue<MultiRangeSlider.Range> sliderBounds = createSliderBounds(until, minMax);
+			return new SimpleMultiSliderEditor<>(fieldName, //
+				MultiRangeSlider.multi(false, sliderBounds, ranges, until), //
+				minMax, until);
+		}
+
+		static SettableValue<ObservableValue<Double>> [] createMinMax(){
+			SettableValue<ObservableValue<Double>> min = SettableValue
+				.build((Class<ObservableValue<Double>>) (Class<?>) ObservableValue.class)
+				.withValue(SettableValue.build(double.class).withValue(0.0).build()).build();
+			SettableValue<ObservableValue<Double>> max = SettableValue
+				.build((Class<ObservableValue<Double>>) (Class<?>) ObservableValue.class)
+				.withValue(SettableValue.build(double.class).withValue(1.0).build()).build();
+			return new SettableValue[] {min, max};
+		}
+
+		static SettableValue<MultiRangeSlider.Range> createSliderBounds(Observable<?> until,
+			SettableValue<ObservableValue<Double>>... minMax) {
+			SettableValue<Double> flatMin = SettableValue.flattenAsSettable(minMax[0], () -> 0.0);
+			SettableValue<Double> flatMax = SettableValue.flattenAsSettable(minMax[1], () -> 1.0);
+			return MultiRangeSlider.transformToRange(flatMin, flatMax, until);
+		}
+
+		private SimpleMultiSliderEditor(String fieldName, MultiRangeSlider slider, SettableValue<ObservableValue<Double>>[] minMax,
+			Observable<?> until) {
+			super(fieldName, slider.setMaxUpdateInterval(Duration.ofMillis(100)), until);
+			theMinValue = minMax[0];
+			theMaxValue = minMax[1];
 		}
 
 		@Override
-		public P withMinimum(ObservableValue<Double> min) {
-			theMinValue = min;
-			return (P) this;
-		}
-
-		@Override
-		public P withMaximum(ObservableValue<Double> max) {
-			theMaxValue = max;
+		public P withBounds(ObservableValue<Double> min, ObservableValue<Double> max) {
+			// Can't ever have min>max
+			if (min.get() <= theMinValue.get().get()) {
+				theMinValue.set(min, null);
+				theMaxValue.set(max, null);
+			} else {
+				theMaxValue.set(max, null);
+				theMinValue.set(min, null);
+			}
 			return (P) this;
 		}
 
 		@Override
 		public P adjustBoundsForValue(boolean adjustForValue) {
-			isAdjustingBoundsForValue = adjustForValue;
+			getEditor().setAdjustingBoundsForValue(adjustForValue);
 			return (P) this;
 		}
 
 		@Override
-		protected Component createComponent() {
-			MultiThumbModel<Double> model = getEditor().getModel();
-			for (int i = model.getThumbCount() - 1; i >= 0; i--)
-				model.removeThumb(i);
-			ObservableCollection<Double> safeValues = theValues.safe(ThreadConstraint.EDT, getUntil());
-			// The JXMultiThumbSlider doesn't actually handle minimum value correctly,
-			// so we have to set it to zero and offset all the values by it.
-			theMinValue.safe(ThreadConstraint.EDT, getUntil()).changes().takeUntil(getUntil()).act(evt -> {
-				model.setMaximumValue(theMaxValue.get().floatValue() - evt.getNewValue().floatValue());
-				if (model.getThumbCount() > 0) {
-					for (int i = 0; i < safeValues.size(); i++)
-						model.getThumbAt(0).setPosition(safeValues.get(i).floatValue() - theMinValue.get().floatValue());
-				}
-			});
-			theMaxValue.safe(ThreadConstraint.EDT, getUntil()).changes().takeUntil(getUntil()).act(evt -> {
-				model.setMaximumValue(evt.getNewValue().floatValue() - theMinValue.get().floatValue());
-			});
-			JPanel trackRenderer = new JPanel() {
-				@Override
-				public void paint(Graphics g) {
-					Dimension sz = getEditor().getSize();
-					g.setColor(Color.black);
-					g.fillRect(0, 4, sz.width, 1);
-					g.fillRect(0, 1, 1, sz.height - 8);
-					g.fillRect(sz.width - 1, 1, 1, sz.height - 8);
-				}
-			};
-			boolean[] thumbSelected = new boolean[1];
-			boolean[] thumbEnabled = new boolean[1];
-			JPanel thumbRenderer = new JPanel() {
-				@Override
-				public void paint(Graphics g) {
-					if (!thumbEnabled[0])
-						g.setColor(Color.lightGray);
-					else if (thumbSelected[0])
-						g.setColor(Colors.darkSeaGreen);
-					else
-						g.setColor(Colors.antiqueWhite);
-					g.fillOval(getWidth() / 4, 0, getWidth() / 2, getHeight() - 1);
-					g.setColor(Colors.darkBlue);
-					g.drawOval(getWidth() / 4, 0, getWidth() / 2, getHeight() - 1);
-				}
-			};
-			getEditor().setTrackRenderer(slider -> trackRenderer);
-			getEditor().setThumbRenderer((slider, index, selected) -> {
-				String enabled = safeValues.mutableElement(safeValues.getElement(index).getElementId()).isEnabled();
-				thumbEnabled[0] = enabled == null;
-				thumbSelected[0] = selected;
-				if (selected)
-					slider.setToolTipText(enabled);
-				return thumbRenderer;
-			});
-			boolean[] callbackLock = new boolean[1];
-			Subscription sub = safeValues.subscribe(evt -> {
-				if (callbackLock[0])
-					return;
-				callbackLock[0] = true;
-				try {
-					switch (evt.getType()) {
-					case add:
-						double newPos = bound(evt.getNewValue(), evt);
-						model.insertThumb((float) newPos, evt.getNewValue(), evt.getIndex());
-						break;
-					case remove:
-						model.removeThumb(evt.getIndex());
-						break;
-					case set:
-						newPos = bound(evt.getNewValue(), evt);
-						model.getThumbAt(evt.getIndex()).setPosition((float) newPos);
-						break;
-					}
-				} finally {
-					callbackLock[0] = false;
-				}
-			}, true);
-			ThumbDataListener listener = new ThumbDataListener() {
-				private int theThumbIndex = -1;
-
-				@Override
-				public void positionChanged(ThumbDataEvent event) {
-					if (callbackLock[0])
-						return;
-					MutableCollectionElement<Double> element = safeValues
-						.mutableElement(safeValues.getElement(event.getIndex()).getElementId());
-					if (element.isAcceptable(theMinValue.get() + event.getThumb().getPosition()) == null) {
-						if (theThumbIndex >= 0 && theThumbIndex != event.getIndex())
-							flush();
-						theThumbIndex = event.getIndex();
-						QommonsTimer.getCommonInstance().doAfterInactivity(this, this::flush, Duration.ofMillis(100)).onEDT();
-					} else {
-						callbackLock[0] = true;
-						try {
-							model.getThumbAt(event.getIndex()).setPosition(element.get().floatValue() - theMinValue.get().floatValue());
-						} finally {
-							callbackLock[0] = false;
-						}
-					}
-				}
-
-				void flush() {
-					callbackLock[0] = true;
-					try (Transaction t = safeValues.lock(true, null)) {
-						MutableCollectionElement<Double> element = safeValues
-							.mutableElement(safeValues.getElement(theThumbIndex).getElementId());
-						double pos = model.getThumbAt(theThumbIndex).getPosition() + theMinValue.get();
-						if (element.isAcceptable(pos) == null)
-							element.set(pos);
-						else
-							model.getThumbAt(theThumbIndex).setPosition(element.get().floatValue() - theMinValue.get().floatValue());
-						theThumbIndex = -1;
-					} finally {
-						callbackLock[0] = false;
-					}
-				}
-
-				@Override
-				public void thumbAdded(ThumbDataEvent event) {
-				}
-
-				@Override
-				public void thumbRemoved(ThumbDataEvent event) {
-				}
-
-				@Override
-				public void valueChanged(ThumbDataEvent event) {
-				}
-			};
-			model.addThumbDataListener(listener);
-			getUntil().take(1).act(__ -> {
-				sub.unsubscribe();
-				model.removeThumbDataListener(listener);
-			});
-			return getEditor();
-		}
-
-		private double bound(double value, Object cause) {
-			if (value < theMinValue.get()) {
-				if (isAdjustingBoundsForValue && theMinValue instanceof SettableValue
-					&& ((SettableValue<Double>) theMinValue).isAcceptable(value) == null) {
-					((SettableValue<Double>) theMinValue).set(value, cause);
-				} else
-					value = theMinValue.get();
-			} else if (value > theMaxValue.get()) {
-				if (isAdjustingBoundsForValue && theMaxValue instanceof SettableValue
-					&& ((SettableValue<Double>) theMaxValue).isAcceptable(value) == null) {
-					((SettableValue<Double>) theMaxValue).set(value, cause);
-				} else
-					value = theMaxValue.get();
-			}
-			return value - theMinValue.get();
+		public P enforceNoOverlap(boolean noOverlap, boolean withinSliderBounds) {
+			if (noOverlap) {
+				if (withinSliderBounds)
+					getEditor().setValidator(MultiRangeSlider.RangeValidator.NO_OVERLAP_ENFORCE_RANGE);
+				else
+					getEditor().setValidator(MultiRangeSlider.RangeValidator.NO_OVERLAP);
+			} else if (withinSliderBounds)
+				getEditor().setValidator(MultiRangeSlider.RangeValidator.ENFORCE_RANGE);
+			else
+				getEditor().setValidator(MultiRangeSlider.RangeValidator.FREE);
+			return (P) this;
 		}
 	}
 
@@ -2454,7 +2401,6 @@ class PanelPopulationImpl {
 			theHeaderPanel.getComponent().addMouseListener(collapseMouseListener);
 			decorate(deco -> deco.withBorder(BorderFactory.createLineBorder(Color.black)));
 		}
-
 
 		@Override
 		public SimpleCollapsePane withCollapsed(SettableValue<Boolean> collapsed) {

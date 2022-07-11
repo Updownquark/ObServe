@@ -200,7 +200,13 @@ public class PanelPopulation {
 		<F> P addSpinnerField(String fieldName, JSpinner spinner, SettableValue<F> value, Function<? super F, ? extends F> purifier,
 			Consumer<SteppedFieldEditor<JSpinner, F, ?>> modify);
 
+		P addSlider(String fieldName, SettableValue<Double> value, Consumer<SliderEditor<?, ?>> modify);
+
 		P addMultiSlider(String fieldName, ObservableCollection<Double> values, Consumer<SliderEditor<?, ?>> modify);
+
+		P addRangeSlider(String fieldName, SettableValue<Double> min, SettableValue<Double> max, Consumer<SliderEditor<?, ?>> modify);
+
+		P addMultiRangeSlider(String fieldName, ObservableCollection<MultiRangeSlider.Range> values, Consumer<SliderEditor<?, ?>> modify);
 
 		default <F> P addComboField(String fieldName, SettableValue<F> value, Consumer<ComboEditor<F, ?>> modify, F... availableValues) {
 			return addComboField(fieldName, value, Arrays.asList(availableValues), modify);
@@ -504,11 +510,11 @@ public class PanelPopulation {
 	}
 
 	public interface SliderEditor<E, P extends SliderEditor<E, P>> extends FieldEditor<E, P> {
-		P withMinimum(ObservableValue<Double> min);
-
-		P withMaximum(ObservableValue<Double> max);
+		P withBounds(ObservableValue<Double> min, ObservableValue<Double> max);
 
 		P adjustBoundsForValue(boolean adjustForValue);
+
+		P enforceNoOverlap(boolean noOverlap, boolean withinSliderBounds);
 	}
 
 	public interface ProgressEditor<P extends ProgressEditor<P>> extends FieldEditor<JProgressBar, P> {
