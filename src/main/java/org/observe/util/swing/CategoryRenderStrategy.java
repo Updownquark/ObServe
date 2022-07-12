@@ -374,7 +374,9 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 		theMutator = new CategoryMutationStrategy();
 		isRenderDefault = true;
 		theRenderer = new ObservableCellRenderer.DefaultObservableCellRenderer<>(this::printDefault);
-		theMinWidth = thePrefWidth = theMaxWidth = -1;
+		theMinWidth = 10;
+		thePrefWidth = 100;
+		theMaxWidth = 10000;
 		isResizable = true;
 		isFilterable = true;
 	}

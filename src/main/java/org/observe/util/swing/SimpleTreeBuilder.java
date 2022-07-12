@@ -213,8 +213,9 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 
 	@Override
 	protected Component createComponent() {
+		int[] hoveredRow = new int[] { -1 };
 		if (theRenderer.getRenderer() != null)
-			getEditor().setCellRenderer(new ObservableTreeCellRenderer<>(theRenderer.getRenderer()));
+			getEditor().setCellRenderer(new ObservableTreeCellRenderer<>(theRenderer.getRenderer(), hoveredRow));
 		MouseMotionListener motion = new MouseAdapter() {
 			@Override
 			public void mouseEntered(MouseEvent e) {
@@ -222,15 +223,27 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 			}
 
 			@Override
+			public void mouseExited(MouseEvent e) {
+				hoveredRow[0] = -1;
+			}
+
+			@Override
 			public void mouseMoved(MouseEvent e) {
 				TreePath path = getEditor().getPathForLocation(e.getX(), e.getY());
-				if (path == null || theRenderer.getTooltipFn() == null)
+				int row = getEditor().getRowForLocation(e.getX(), e.getY());
+				if (row != hoveredRow[0]) {
+					if (hoveredRow[0] >= 0)
+						getEditor().repaint(getEditor().getRowBounds(hoveredRow[0]));
+					if (row >= 0)
+						getEditor().repaint(getEditor().getRowBounds(row));
+					hoveredRow[0] = row;
+				}
+				if (path == null || theRenderer.getTooltipFn() == null) {
 					getEditor().setToolTipText(null);
-				else {
-					int row = getEditor().getRowForLocation(e.getX(), e.getY());
+				} else {
 					F value = (F) path.getLastPathComponent();
 					ModelCell<BetterList<F>, F> cell = new ModelCell.Default<>(() -> ObservableTreeModel.betterPath(path), value, row, 0,
-						getEditor().getSelectionModel().isRowSelected(row), false, !getEditor().isCollapsed(row),
+						getEditor().getSelectionModel().isRowSelected(row), false, true, true, !getEditor().isCollapsed(row),
 						getEditor().getModel().isLeaf(value));
 					String tooltip = theRenderer.getTooltip(cell);
 					getEditor().setToolTipText(tooltip);
@@ -238,7 +251,9 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 			}
 		};
 		getEditor().addMouseMotionListener(motion);
-		getUntil().take(1).act(__ -> getEditor().removeMouseMotionListener(motion));
+		getUntil().take(1).act(__ -> {
+			getEditor().removeMouseMotionListener(motion);
+		});
 		ObservableTreeModel<F> model = (ObservableTreeModel<F>) getEditor().getModel();
 		if (thePathMultiSelection != null)
 			ObservableTreeModel.syncSelection(getEditor(), thePathMultiSelection, getUntil());
@@ -317,9 +332,11 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 
 	static class ObservableTreeCellRenderer<F> implements TreeCellRenderer {
 		private final ObservableCellRenderer<? super BetterList<F>, ? super F> theRenderer;
+		private final int[] theHoveredRowColumn;
 
-		ObservableTreeCellRenderer(ObservableCellRenderer<? super BetterList<F>, ? super F> renderer) {
+		ObservableTreeCellRenderer(ObservableCellRenderer<? super BetterList<F>, ? super F> renderer, int[] hoveredRowColumn) {
 			theRenderer = renderer;
+			theHoveredRowColumn = hoveredRowColumn;
 		}
 
 		@Override
@@ -331,8 +348,9 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 					? ObservableTreeModel.betterPath(path)//
 						: BetterList.of((F) tree.getModel().getRoot());
 			};
-			ModelCell<BetterList<F>, F> cell = new ModelCell.Default<>(modelValue, (F) value, row, 0, selected, hasFocus, expanded,
-				leaf);
+			boolean hovered = theHoveredRowColumn[0] == row;
+			ModelCell<BetterList<F>, F> cell = new ModelCell.Default<>(modelValue, (F) value, row, 0, selected, hasFocus,
+				hovered, hovered, expanded, leaf);
 			return theRenderer.getCellRendererComponent(tree, cell, null);
 		}
 	}

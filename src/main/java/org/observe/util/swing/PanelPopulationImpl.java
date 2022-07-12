@@ -49,6 +49,7 @@ import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
+import javax.swing.JList;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
@@ -58,6 +59,7 @@ import javax.swing.JSpinner;
 import javax.swing.JSplitPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JToggleButton;
+import javax.swing.ListCellRenderer;
 import javax.swing.ListSelectionModel;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
@@ -76,6 +78,7 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
+import org.observe.util.swing.ObservableCellRenderer.CellRenderContext;
 import org.observe.util.swing.ObservableSwingUtils.FontAdjuster;
 import org.observe.util.swing.PanelPopulation.ActionEnablement;
 import org.observe.util.swing.PanelPopulation.Alert;
@@ -339,12 +342,14 @@ class PanelPopulationImpl {
 				observableValues = (ObservableCollection<F>) availableValues;
 			else
 				observableValues = ObservableCollection.of(value.getType(), availableValues);
+
 			SimpleComboEditor<F, ?> fieldPanel = new SimpleComboEditor<>(fieldName, new JComboBox<>(), getUntil());
 			if (modify != null)
 				modify.accept(fieldPanel);
-			Subscription sub = ObservableComboBoxModel.comboFor(fieldPanel.getEditor(), fieldPanel.getTooltip(), fieldPanel::getTooltip,
-				observableValues, value);
-			getUntil().take(1).act(__ -> sub.unsubscribe());
+			ObservableComboBoxModel.ComboHookup hookup = ObservableComboBoxModel.comboFor(fieldPanel.getEditor(), fieldPanel.getTooltip(),
+				fieldPanel::getTooltip, observableValues, value);
+			fieldPanel.setHoveredItem(hookup::getHoveredItem);
+			getUntil().take(1).act(__ -> hookup.unsubscribe());
 			if (fieldPanel.isDecorated())
 				value.noInitChanges().safe(ThreadConstraint.EDT).takeUntil(getUntil())
 				.act(__ -> fieldPanel.decorate(fieldPanel.getComponent()));
@@ -1431,14 +1436,28 @@ class PanelPopulationImpl {
 	static class SimpleComboEditor<F, P extends SimpleComboEditor<F, P>> extends SimpleFieldEditor<JComboBox<F>, P>
 	implements ComboEditor<F, P> {
 		private Function<? super F, String> theValueTooltip;
+		private IntSupplier theHoveredItem;
 
 		SimpleComboEditor(String fieldName, JComboBox<F> editor, Observable<?> until) {
 			super(fieldName, editor, until);
 		}
 
+		void setHoveredItem(IntSupplier hoveredItem) {
+			theHoveredItem = hoveredItem;
+		}
+
 		@Override
 		public P renderWith(ObservableCellRenderer<F, F> renderer) {
-			getEditor().setRenderer(renderer);
+			getEditor().setRenderer(new ListCellRenderer<F>() {
+				@Override
+				public Component getListCellRendererComponent(JList<? extends F> list, F value, int index, boolean isSelected,
+					boolean cellHasFocus) {
+					boolean hovered = theHoveredItem.getAsInt() == index;
+					return renderer.getCellRendererComponent(list,
+						new ModelCell.Default<>(() -> value, value, index, 0, isSelected, cellHasFocus, hovered, hovered, true, true),
+						CellRenderContext.DEFAULT);
+				}
+			});
 			return (P) this;
 		}
 

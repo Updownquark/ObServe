@@ -13,6 +13,7 @@ import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.IntConsumer;
+import java.util.function.IntSupplier;
 
 import javax.accessibility.Accessible;
 import javax.accessibility.AccessibleContext;
@@ -94,6 +95,24 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 		return comboFor(comboBox, ObservableValue.of(TypeTokens.get().STRING, descrip), valueTooltip, availableValues, selected);
 	}
 
+	public interface ComboHookup extends Subscription {
+		int getHoveredItem();
+
+		static ComboHookup of(Subscription sub, IntSupplier hoveredItem) {
+			return new ComboHookup() {
+				@Override
+				public void unsubscribe() {
+					sub.unsubscribe();
+				}
+
+				@Override
+				public int getHoveredItem() {
+					return hoveredItem.getAsInt();
+				}
+			};
+		}
+	}
+
 	/**
 	 * Creates and installs a combo box model whose data is backed by an {@link ObservableCollection} and whose selection is governed by a
 	 * {@link SettableValue}
@@ -105,8 +124,8 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 	 * @param selected The selected value that will control the combo box's selection and report it
 	 * @return The subscription to {@link Subscription#unsubscribe() unsubscribe} to to cease listening
 	 */
-	public static <T> Subscription comboFor(JComboBox<T> comboBox, ObservableValue<String> descrip,
-		Function<? super T, String> valueTooltip, ObservableCollection<? extends T> availableValues, SettableValue<T> selected) {
+	public static <T> ComboHookup comboFor(JComboBox<T> comboBox, ObservableValue<String> descrip, Function<? super T, String> valueTooltip,
+		ObservableCollection<? extends T> availableValues, SettableValue<T> selected) {
 		SimpleObservable<Void> safeUntil = SimpleObservable.build().build();
 		List<Subscription> subs = new LinkedList<>();
 		subs.add(() -> safeUntil.onNext(null));
@@ -178,8 +197,9 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 			}
 		});
 
+		int[] hoveredItem = new int[] { -1 };
 		if (popup != null) {
-			@SuppressWarnings("cast") //In some JDKs, the return value is not generic. Keep this cast to JList<T> when saving.
+			@SuppressWarnings("cast") // In some JDKs, the return value is not generic. Keep this cast to JList<T> when saving.
 			JList<T> popupList = (JList<T>) popup.getList();
 			class PopupMouseListener extends MouseMotionAdapter {
 				private Point lastHover;
@@ -198,6 +218,7 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 
 				private void _showToolTip() {
 					int index = popupList.locationToIndex(lastHover);
+					hoveredItem[0] = index;
 					if (index < 0) {
 						popupList.setToolTipText(null);
 						return;
@@ -211,13 +232,14 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 					if (tooltip != null && !Objects.equals(oldToolTip, tooltip))
 						ObservableSwingUtils.setTooltipVisible(popupList, true);
 				}
-			};
+			}
+			;
 			PopupMouseListener popupMouseListener = new PopupMouseListener();
 			subs.add(availableValues.simpleChanges().act(__ -> popupMouseListener.showToolTip()));
 			popupList.addMouseMotionListener(popupMouseListener);
 			subs.add(() -> ObservableSwingUtils.onEQ(() -> popupList.removeMouseMotionListener(popupMouseListener)));
 		}
-		return Subscription.forAll(subs);
+		return ComboHookup.of(Subscription.forAll(subs), () -> hoveredItem[0]);
 	}
 
 	/**
@@ -273,16 +295,16 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 			try (Transaction avT = availableValues.lock(false, null)) {
 				CollectionElement<? extends T> found = availableValues.belongs(evt.getNewValue()) //
 					? ((ObservableCollection<T>) availableValues).getElement(evt.getNewValue(), true)//
-					: null;
-				if (found != null) {
-					currentSelectedElement[0] = found.getElementId();
-					currentSelected[0] = found.get();
-					setSelected.accept(availableValues.getElementsBefore(found.getElementId()));
-				} else {
-					currentSelectedElement[0] = null;
-					currentSelected[0] = null;
-					setSelected.accept(-1);
-				}
+						: null;
+					if (found != null) {
+						currentSelectedElement[0] = found.getElementId();
+						currentSelected[0] = found.get();
+						setSelected.accept(availableValues.getElementsBefore(found.getElementId()));
+					} else {
+						currentSelectedElement[0] = null;
+						currentSelected[0] = null;
+						setSelected.accept(-1);
+					}
 			} finally {
 				callbackLock[0] = false;
 			}

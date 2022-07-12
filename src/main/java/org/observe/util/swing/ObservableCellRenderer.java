@@ -14,7 +14,6 @@ import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JTable;
 import javax.swing.JTree;
-import javax.swing.ListCellRenderer;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableCellRenderer;
 import javax.swing.tree.DefaultTreeCellRenderer;
@@ -22,7 +21,7 @@ import javax.swing.tree.TreeCellRenderer;
 
 import org.qommons.LambdaUtils;
 
-public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
+public interface ObservableCellRenderer<M, C> {
 	public interface CellRenderContext {
 		public static CellRenderContext DEFAULT = new CellRenderContext() {
 			@Override
@@ -39,12 +38,6 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 	ObservableCellRenderer<M, C> decorate(CellDecorator<M, C> decorator);
 
 	Component getCellRendererComponent(Component parent, ModelCell<? extends M, ? extends C> cell, CellRenderContext ctx);
-
-	@Override
-	default Component getListCellRendererComponent(JList<? extends C> list, C value, int index, boolean isSelected, boolean cellHasFocus) {
-		return getCellRendererComponent(list,
-			new ModelCell.Default<>(() -> (M) value, value, index, 0, isSelected, cellHasFocus, true, true), CellRenderContext.DEFAULT);
-	}
 
 	public static <M, C> ObservableCellRenderer<M, C> fromTableRenderer(TableCellRenderer renderer,
 		BiFunction<? super Supplier<? extends M>, C, String> asText) {
@@ -168,7 +161,8 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 
 		@Override
 		public String renderAsText(Supplier<? extends M> modelValue, C columnValue) {
-			return theTextRenderer.apply(new ModelCell.Default<M, C>(modelValue, columnValue, 0, 0, false, false, false, false));
+			return theTextRenderer
+				.apply(new ModelCell.Default<M, C>(modelValue, columnValue, 0, 0, false, false, false, false, false, false));
 		}
 
 		@Override
@@ -251,7 +245,7 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 		@Override
 		public String renderAsText(Supplier<? extends M> modelValue, C columnValue) {
 			if (theText != null)
-				return theText.apply(new ModelCell.Default<M, C>(modelValue, columnValue, 0, 0, false, false, false, false));
+				return theText.apply(new ModelCell.Default<M, C>(modelValue, columnValue, 0, 0, false, false, false, false, false, false));
 			return String.valueOf(columnValue);
 		}
 
@@ -297,7 +291,7 @@ public interface ObservableCellRenderer<M, C> extends ListCellRenderer<C> {
 
 		@Override
 		public String renderAsText(Supplier<? extends M> modelValue, C columnValue) {
-			return theText.apply(new ModelCell.Default<M, C>(modelValue, columnValue, 0, 0, false, false, false, false));
+			return theText.apply(new ModelCell.Default<M, C>(modelValue, columnValue, 0, 0, false, false, false, false, false, false));
 		}
 
 		@Override

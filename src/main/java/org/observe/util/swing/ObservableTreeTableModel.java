@@ -2,6 +2,7 @@ package org.observe.util.swing;
 
 import java.awt.Component;
 import java.awt.EventQueue;
+import java.awt.Rectangle;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 import java.awt.event.MouseAdapter;
@@ -13,6 +14,7 @@ import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.IntSupplier;
 
 import javax.swing.JTable;
 import javax.swing.JTree;
@@ -37,6 +39,7 @@ import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.CategoryRenderStrategy.CategoryKeyListener;
 import org.observe.util.swing.ObservableTableModel.RowMouseListener;
+import org.observe.util.swing.ObservableTableModel.TableHookup;
 import org.observe.util.swing.ObservableTableModel.TableMouseListener;
 import org.observe.util.swing.ObservableTableModel.TableRenderContext;
 import org.qommons.ArrayUtils;
@@ -244,15 +247,80 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 	 * @return A subscription which, when {@link Subscription#unsubscribe() unsubscribed}, will stop the non-model control of the model over
 	 *         the table
 	 */
-	public static <R> Subscription hookUp(JXTreeTable table, ObservableTreeTableModel<R> model, TableRenderContext ctx) {
+	public static <R> TableHookup hookUp(JXTreeTable table, ObservableTreeTableModel<R> model, TableRenderContext ctx) {
 		if (table.getTreeTableModel() != model)
 			table.setTreeTableModel(model);
 		LinkedList<Subscription> subs = new LinkedList<>();
+		TableMouseListener<BetterList<R>> ml = new TableMouseListener<BetterList<R>>() {
+			@Override
+			protected ListenerList<RowMouseListener<? super BetterList<R>>> getRowListeners() {
+				return model.theRowMouseListeners;
+			}
+
+			@Override
+			protected int getModelRow(MouseEvent evt) {
+				int row = table.rowAtPoint(evt.getPoint());
+				row = row < 0 ? row : table.convertRowIndexToModel(row);
+				return row;
+			}
+
+			@Override
+			protected int getModelColumn(MouseEvent evt) {
+				int col = table.columnAtPoint(evt.getPoint());
+				col = col < 0 ? col : table.convertColumnIndexToModel(col);
+				return col;
+			}
+
+			@Override
+			protected BetterList<R> getRowValue(int rowIndex) {
+				return ObservableTreeModel.betterPath(table.getPathForRow(rowIndex));
+			}
+
+			@Override
+			protected CategoryRenderStrategy<BetterList<R>, ?> getColumn(int columnIndex) {
+				return model.getColumnModel().getElementAt(columnIndex);
+			}
+
+			@Override
+			protected boolean isRowSelected(int rowIndex) {
+				return table.isRowSelected(rowIndex);
+			}
+
+			@Override
+			protected boolean isCellSelected(int rowIndex, int columnIndex) {
+				return table.isCellSelected(rowIndex, columnIndex);
+			}
+
+			@Override
+			protected <C> void setToolTip(String tooltip, boolean header) {
+				(header ? table.getTableHeader() : table).setToolTipText(tooltip);
+			}
+
+			@Override
+			protected void hoverChanged(int preHoveredRow, int preHoveredColumn, int newHoveredRow, int newHoveredColumn) {
+				// Repaint the rows, in case they change due to hover
+				if (preHoveredRow != newHoveredRow) {
+					if (preHoveredRow >= 0) {
+						Rectangle bounds = table.getCellRect(preHoveredRow, 0, false);
+						table.repaint(0, bounds.y, table.getWidth(), bounds.height);
+					}
+					if (newHoveredRow >= 0) {
+						Rectangle bounds = table.getCellRect(newHoveredRow, 0, false);
+						table.repaint(0, bounds.y, table.getWidth(), bounds.height);
+					}
+				} else if (preHoveredColumn != newHoveredColumn) {
+					if (preHoveredColumn >= 0)
+						table.repaint(table.getCellRect(preHoveredRow, preHoveredColumn, false));
+					if (newHoveredColumn >= 0)
+						table.repaint(table.getCellRect(preHoveredRow, newHoveredColumn, false));
+				}
+			}
+		};
 		try (Transaction colT = model.getColumns().lock(false, null)) {
 			for (int c = 0; c < model.getColumnCount(); c++) {
 				CategoryRenderStrategy<BetterList<R>, ?> column = model.getColumn(c);
 				TableColumn tblColumn = table.getColumnModel().getColumn(c);
-				hookUp(table, tblColumn, column, model, ctx);
+				hookUp(table, tblColumn, column, model, ctx, ml::getHoveredRow, ml::getHoveredColumn);
 			}
 			ListDataListener columnListener = new ListDataListener() {
 				@Override
@@ -274,7 +342,7 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 					for (int i = e.getIndex0(); i <= e.getIndex1(); i++) {
 						TableColumn column = new TableColumn(i);
 						CategoryRenderStrategy<BetterList<R>, ?> category = model.getColumnModel().getElementAt(i);
-						hookUp(table, column, category, model, ctx);
+						hookUp(table, column, category, model, ctx, ml::getHoveredRow, ml::getHoveredColumn);
 						table.getColumnModel().addColumn(column);
 					}
 					for (int i = afterColumns.size() - 1; i >= 0; i--) {
@@ -293,58 +361,14 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 				public void contentsChanged(ListDataEvent e) {
 					for (int i = e.getIndex0(); i <= e.getIndex1(); i++)
 						hookUp(table, table.getColumnModel().getColumn(i),
-							(CategoryRenderStrategy<BetterList<R>, Object>) model.theColumnModel.getElementAt(i), model, ctx);
+							(CategoryRenderStrategy<BetterList<R>, Object>) model.theColumnModel.getElementAt(i), model, ctx,
+							ml::getHoveredRow, ml::getHoveredColumn);
 				}
 			};
 			model.getColumnModel().addListDataListener(columnListener);
 			subs.add(() -> {
 				model.getColumnModel().removeListDataListener(columnListener);
 			});
-			MouseAdapter ml = new TableMouseListener<BetterList<R>>() {
-				@Override
-				protected ListenerList<RowMouseListener<? super BetterList<R>>> getRowListeners() {
-					return model.theRowMouseListeners;
-				}
-
-				@Override
-				protected int getModelRow(MouseEvent evt) {
-					int row = table.rowAtPoint(evt.getPoint());
-					row = row < 0 ? row : table.convertRowIndexToModel(row);
-					return row;
-				}
-
-				@Override
-				protected int getModelColumn(MouseEvent evt) {
-					int col = table.columnAtPoint(evt.getPoint());
-					col = col < 0 ? col : table.convertColumnIndexToModel(col);
-					return col;
-				}
-
-				@Override
-				protected BetterList<R> getRowValue(int rowIndex) {
-					return ObservableTreeModel.betterPath(table.getPathForRow(rowIndex));
-				}
-
-				@Override
-				protected CategoryRenderStrategy<BetterList<R>, ?> getColumn(int columnIndex) {
-					return model.getColumnModel().getElementAt(columnIndex);
-				}
-
-				@Override
-				protected boolean isRowSelected(int rowIndex) {
-					return table.isRowSelected(rowIndex);
-				}
-
-				@Override
-				protected boolean isCellSelected(int rowIndex, int columnIndex) {
-					return table.isCellSelected(rowIndex, columnIndex);
-				}
-
-				@Override
-				protected <C> void setToolTip(String tooltip, boolean header) {
-					(header ? table.getTableHeader() : table).setToolTipText(tooltip);
-				}
-			};
 			table.addMouseListener(ml);
 			table.addMouseMotionListener(ml);
 			subs.add(() -> table.removeMouseListener(ml));
@@ -369,8 +393,11 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 					R rowValue = (R) table.getPathForRow(row).getLastPathComponent();
 					if (category.getTooltipFn() != null) {
 						boolean selected = table.isRowSelected(row);
+						boolean rowHovered = ml.getHoveredRow() == row;
+						boolean cellHovered = rowHovered && ml.getHoveredColumn() == column;
 						table.setToolTipText(category.getTooltip(new ModelCell.Default<>(() -> rowValue,
-							category.getCategoryValue(rowValue), row, column, selected, selected, true, model.isLeaf(rowValue))));
+							category.getCategoryValue(rowValue), row, column, selected, selected, rowHovered, cellHovered, true,
+							model.isLeaf(rowValue))));
 					}
 				}
 			};
@@ -443,7 +470,10 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 						return null;
 					}
 					boolean selected = table.isCellSelected(row, column);
-					ModelCell<R, C> cell = new ModelCell.Default<>(() -> rowValue, colValue, row, column, selected, selected, true, true);
+					boolean rowHovered = ml.getHoveredRow() == row;
+					boolean cellHovered = rowHovered && ml.getHoveredColumn() == column;
+					ModelCell<R, C> cell = new ModelCell.Default<>(() -> rowValue, colValue, row, column, selected, selected,
+						rowHovered, cellHovered, true, true);
 					return new KeyTypeStruct<>(cell, category.getKeyListener());
 				}
 			};
@@ -466,17 +496,17 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 			table.getTableHeader().addMouseMotionListener(headerML);
 			subs.add(() -> table.getTableHeader().removeMouseMotionListener(headerML));
 		}
-		return Subscription.forAll(subs.toArray(new Subscription[subs.size()]));
+		return TableHookup.of(Subscription.forAll(subs.toArray(new Subscription[subs.size()])), ml::getHoveredRow, ml::getHoveredColumn);
 	}
 
 	private static <R, C> void hookUp(JXTreeTable table, TableColumn tblColumn, CategoryRenderStrategy<BetterList<R>, C> column,
-		ObservableTreeTableModel<R> model, TableRenderContext ctx) {
+		ObservableTreeTableModel<R> model, TableRenderContext ctx, IntSupplier hoveredRow, IntSupplier hoveredColumn) {
 		tblColumn.setHeaderValue(column.getName());
 		if (column.getIdentifier() != null)
 			tblColumn.setIdentifier(column.getIdentifier());
 		else
 			tblColumn.setIdentifier(column);
-		ObservableTreeTableCellRenderer<R, C> renderer = new ObservableTreeTableCellRenderer<>(column, ctx);
+		ObservableTreeTableCellRenderer<R, C> renderer = new ObservableTreeTableCellRenderer<>(column, ctx, hoveredRow, hoveredColumn);
 		tblColumn.setCellRenderer(renderer);
 		if (tblColumn.getModelIndex() == table.getTreeTableModel().getHierarchicalColumn())
 			table.setTreeCellRenderer(renderer);
@@ -496,13 +526,18 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 		private final CategoryRenderStrategy<BetterList<R>, C> theColumn;
 		private final TableRenderContext theContext;
 		private ComponentDecorator theDecorator;
+		private IntSupplier theHoveredRow;
+		private IntSupplier theHoveredColumn;
 		private Runnable theRevert;
 
 		private Component theLastRender;
 
-		ObservableTreeTableCellRenderer(CategoryRenderStrategy<BetterList<R>, C> column, TableRenderContext ctx) {
+		ObservableTreeTableCellRenderer(CategoryRenderStrategy<BetterList<R>, C> column, TableRenderContext ctx, IntSupplier hoveredRow,
+			IntSupplier hoveredColumn) {
 			theColumn = column;
 			theContext = ctx;
+			theHoveredRow = hoveredRow;
+			theHoveredColumn = hoveredColumn;
 		}
 
 		@Override
@@ -533,6 +568,8 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 			}
 			ObservableCellRenderer<? super BetterList<R>, ? super C> renderer = theColumn.getRenderer() != null ? theColumn.getRenderer()
 				: new ObservableCellRenderer.DefaultObservableCellRenderer<>((r, c) -> String.valueOf(c));
+			boolean rowHovered = theHoveredRow.getAsInt() == row;
+			boolean cellHovered = rowHovered && theHoveredColumn.getAsInt() == column;
 			ModelCell<BetterList<R>, C> cell = new ModelCell.Default<>(//
 				() -> {
 					ObservableTreeTableModel<R> model;
@@ -541,7 +578,7 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 					else
 						model = (ObservableTreeTableModel<R>) ((JTree) component).getModel();
 					return model.getTreeModel().getBetterPath(modelValue, false);
-				}, (C) value, row, column, isSelected, hasFocus, expanded, leaf);
+				}, (C) value, row, column, isSelected, hasFocus, rowHovered, cellHovered, expanded, leaf);
 			Component c = renderer.getCellRendererComponent(component, cell,
 				() -> theContext == null ? null : theContext.getEmphaticRegions(modelRow, modelColumn));
 			theLastRender = c;

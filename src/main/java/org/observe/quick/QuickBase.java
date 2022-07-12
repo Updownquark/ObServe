@@ -523,7 +523,11 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 			.getModelValue("focused", boolean.class);
 		QuickModelValue<Boolean> selected = session.getInterpreter().getStyleSet()
 			.styled(BASE.get().getElementOrAddOn("renderer-value-override"), session).getModelValue("selected", boolean.class);
+		QuickModelValue<Boolean> hovered = session.getInterpreter().getStyleSet()
+			.styled(BASE.get().getElementOrAddOn("renderer-value-override"), session).getModelValue("hovered", boolean.class);
 		QuickComponentDef.SimpleModelValueSupport<Boolean> focusedSupport = new QuickComponentDef.SimpleModelValueSupport<>(boolean.class,
+			false);
+		QuickComponentDef.SimpleModelValueSupport<Boolean> hoveredSupport = new QuickComponentDef.SimpleModelValueSupport<>(boolean.class,
 			false);
 		QuickComponentDef.SimpleModelValueSupport<Boolean> selectedSupport = new QuickComponentDef.SimpleModelValueSupport<>(boolean.class,
 			false);
@@ -531,6 +535,7 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 		QuickComponentDef renderer = session.forChildren("renderer", BASE.get().getElement("label"), null).getFirst()
 			.interpret(QuickComponentDef.class);
 		renderer.support(focused, focusedSupport);
+		renderer.support(hovered, hoveredSupport);
 		renderer.support(selected, selectedSupport);
 		ColumnEditing<Object, Object> editing;
 		ExpressoSession<?> columnEdit = session.forChildren("edit").peekFirst();
@@ -547,6 +552,7 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 				throw new IllegalArgumentException(
 					"Use of '" + editorSession.getElement().getType().getName() + "' as a column editor is not implemented");
 			editor.support(focused, focusedSupport);
+			editor.support(hovered, hoveredSupport);
 			editor.support(selected, selectedSupport);
 			ColumnEditing<Object, Object> editType = columnEdit.as(columnEdit.getAttribute("type", QonfigAddOn.class))
 				.interpret(ColumnEditing.class);
@@ -561,10 +567,10 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 				ModelSetInstance editModelInst = editorModels.wrap(//
 					editor.getModels().wrap(//
 						cellModel.wrap(models)//
-							.with(valueRowVP, rowValue)//
-							.with(cellRowVP, cellValue)//
-							.with(subjectVP, editorValue)//
-							.build())//
+						.with(valueRowVP, rowValue)//
+						.with(cellRowVP, cellValue)//
+						.with(subjectVP, editorValue)//
+						.build())//
 					.withCustom(ExpressoInterpreter.PARENT_MODEL, SettableValue.of(ModelSetInstance.class, models, "Not Reversible"))//
 					.build())//
 					.with(editorValueVP, editorValue)//
@@ -574,6 +580,8 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 				QuickComponent editorComp = editor
 					.install(PanelPopulation.populateHPanel(null, new JustifiedBoxLayout(false), editModelInst.getUntil()), editorBuilder);
 				SettableValue<Boolean> focusV = QuickComponentDef.getIfSupported(focused.apply(editorBuilder.getModels()), focusedSupport);
+				SettableValue<Boolean> hoveredV = QuickComponentDef.getIfSupported(hovered.apply(editorBuilder.getModels()),
+					hoveredSupport);
 				SettableValue<Boolean> selectedV = QuickComponentDef.getIfSupported(selected.apply(editorBuilder.getModels()),
 					selectedSupport);
 				Component c = editorComp.getComponent();
@@ -611,11 +619,14 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 					}
 				}, ObservableCellEditor.editWithClicks(clicks)) {
 					@Override
-					protected void renderingValue(Object value, boolean selected2, boolean expanded, boolean leaf, int row, int column2) {
+					protected void renderingValue(Object value, boolean selected2, boolean rowHovered, boolean cellHovered,
+						boolean expanded, boolean leaf, int row, int column2) {
 						if (focusV != null)
 							focusV.set(selected2, null);
 						if (selectedV != null)
 							selectedV.set(selected2, null);
+						if (hoveredV != null)
+							hoveredV.set(rowHovered, null);
 					}
 				};
 				column.withEditor(oce);
@@ -661,6 +672,7 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 				textRender = (row, col) -> String.valueOf(col);
 			}
 			SettableValue<Boolean> focusV = QuickComponentDef.getIfSupported(focused.apply(renderBuilder.getModels()), focusedSupport);
+			SettableValue<Boolean> hoveredV = QuickComponentDef.getIfSupported(hovered.apply(renderBuilder.getModels()), hoveredSupport);
 			SettableValue<Boolean> selectedV = QuickComponentDef.getIfSupported(selected.apply(renderBuilder.getModels()), selectedSupport);
 			column.withRenderer(new ObservableCellRenderer<Object, Object>() {
 				private List<CellDecorator<Object, Object>> theDecorators;
@@ -691,6 +703,8 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 						focusV.set(cell.isSelected(), null);
 					if (selectedV != null)
 						selectedV.set(cell.isSelected(), null);
+					if (hoveredV != null)
+						hoveredV.set(cell.isRowHovered(), null);
 					ObservableCellRenderer.tryEmphasize(c, ctx);
 					return c;
 				}

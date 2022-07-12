@@ -9,6 +9,8 @@ import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
 import java.awt.datatransfer.UnsupportedFlavorException;
 import java.awt.dnd.DnDConstants;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.MouseEvent;
 import java.beans.PropertyChangeListener;
 import java.io.IOException;
@@ -693,7 +695,50 @@ implements TableBuilder<R, P> {
 				scroll.getVerticalScrollBar().getModel().addChangeListener(hal);
 				hal.adjustHeight();
 			}
-			Runnable adjustWidth = () -> {
+			Runnable layoutColumns = () -> {
+				int tableSize = scroll.getViewport().getWidth();
+				int pref = 0;
+				for (int c = 0; c < model.getColumnCount(); c++)
+					pref += model.getColumn(c).getPrefWidth();
+				if (tableSize == pref) {
+					for (int c = 0; c < model.getColumnCount(); c++)
+						table.getColumnModel().getColumn(c).setPreferredWidth(model.getColumn(c).getPrefWidth());
+					table.setSize(pref, table.getHeight());
+				} else if (tableSize < pref) {
+					int min = 0;
+					for (int c = 0; c < model.getColumnCount(); c++)
+						min += model.getColumn(c).getMinWidth();
+					if (tableSize <= min) {
+						for (int c = 0; c < model.getColumnCount(); c++)
+							table.getColumnModel().getColumn(c).setPreferredWidth(model.getColumn(c).getMinWidth());
+						table.setSize(min, table.getHeight());
+					} else {
+						float p = (tableSize - min) * 1.0f / pref;
+						for (int c = 0; c < model.getColumnCount(); c++) {
+							int colMin = model.getColumn(c).getMinWidth();
+							int colSize = colMin + Math.round(p * (model.getColumn(c).getPrefWidth() - colMin));
+							table.getColumnModel().getColumn(c).setPreferredWidth(colSize);
+						}
+					}
+				} else {
+					int max = 0;
+					for (int c = 0; c < model.getColumnCount(); c++)
+						max += model.getColumn(c).getMaxWidth();
+					if (tableSize >= max) {
+						for (int c = 0; c < model.getColumnCount(); c++)
+							table.getColumnModel().getColumn(c).setPreferredWidth(model.getColumn(c).getMaxWidth());
+						table.setSize(max, table.getHeight());
+					} else {
+						double p = (tableSize - pref) * 1.0 / (max - pref);
+						for (int c = 0; c < model.getColumnCount(); c++) {
+							int colPref = model.getColumn(c).getPrefWidth();
+							int colSize = colPref + (int) Math.round(p * (model.getColumn(c).getMaxWidth() - colPref));
+							table.getColumnModel().getColumn(c).setPreferredWidth(colSize);
+						}
+					}
+				}
+			};
+			Runnable adjustScrollWidths = () -> {
 				int minW = 0, prefW = 0, maxW = 0;
 				for (int c = 0; c < table.getColumnModel().getColumnCount(); c++) {
 					TableColumn column = table.getColumnModel().getColumn(c);
@@ -722,9 +767,16 @@ implements TableBuilder<R, P> {
 				scroll.getViewport().setMinimumSize(new Dimension(minW, min.height));
 				scroll.getViewport().setMaximumSize(new Dimension(maxW, max.height));
 				scroll.setMaximumSize(new Dimension(maxW, max.height));
+				layoutColumns.run();
 			};
-			adjustWidth.run();
-			columns.simpleChanges().act(__ -> EventQueue.invokeLater(adjustWidth));
+			adjustScrollWidths.run();
+			columns.simpleChanges().act(__ -> EventQueue.invokeLater(adjustScrollWidths));
+			scroll.addComponentListener(new ComponentAdapter() {
+				@Override
+				public void componentResized(ComponentEvent e) {
+					layoutColumns.run();
+				}
+			});
 		} else {
 			scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
 			scroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_NEVER);
@@ -1075,7 +1127,7 @@ implements TableBuilder<R, P> {
 				return false;
 			boolean selected = theTable.isRowSelected(rowIndex);
 			ModelCell<R, C> cell = new ModelCell.Default<>(rowEl::get, oldValue, rowIndex, theColumns.indexOf(column), selected, selected,
-				false, true);
+				false, false, false, true);
 			if (!column.getMutator().getDragAccepter().canAccept(cell, support, false))
 				return false;
 			BetterList<C> newColValue;

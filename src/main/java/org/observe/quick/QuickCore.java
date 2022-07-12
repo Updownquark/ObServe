@@ -345,7 +345,7 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 	}
 
 	static class MouseValueSupport extends ObservableValue.LazyObservableValue<Boolean>
-		implements ModelValueSupport<Boolean>, MouseListener {
+	implements ModelValueSupport<Boolean>, MouseListener {
 		private Component theComponent;
 		private final QuickModelValue<Boolean> theModelValue;
 		private final Boolean theButton;
@@ -522,69 +522,74 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 		QuickModelValue<Boolean> rightPressed = session.getStyleModelValue("widget", "rightPressed", boolean.class);
 		initMouseListening();
 		// Install style model value support
-		widget.support(hovered, () -> new MouseValueSupport(hovered, null));
-		widget.support(pressed, () -> new MouseValueSupport(pressed, true));
-		widget.support(rightPressed, () -> new MouseValueSupport(rightPressed, false));
-		class FocusSupport extends ObservableValue.LazyObservableValue<Boolean> implements ModelValueSupport<Boolean>, FocusListener {
-			private Component theComponent;
-			private BiConsumer<Boolean, Object> theListener;
-			private boolean isListening;
+		if (widget.getSupport(hovered) == null)
+			widget.support(hovered, () -> new MouseValueSupport(hovered, null));
+		if (widget.getSupport(pressed) == null)
+			widget.support(pressed, () -> new MouseValueSupport(pressed, true));
+		if (widget.getSupport(rightPressed) == null)
+			widget.support(rightPressed, () -> new MouseValueSupport(rightPressed, false));
+		if (widget.getSupport(focused) == null) {
+			class FocusSupport extends ObservableValue.LazyObservableValue<Boolean> implements ModelValueSupport<Boolean>, FocusListener {
+				private Component theComponent;
+				private BiConsumer<Boolean, Object> theListener;
+				private boolean isListening;
 
-			FocusSupport() {
-				super(TypeTokens.get().BOOLEAN, Transactable.noLock(ThreadConstraint.EDT));
-			}
+				FocusSupport() {
+					super(TypeTokens.get().BOOLEAN, Transactable.noLock(ThreadConstraint.EDT));
+				}
 
-			@Override
-			public void install(Component component) {
-				theComponent = component;
-				if (theListener != null)
+				@Override
+				public void install(Component component) {
+					theComponent = component;
+					if (theListener != null)
+						setListening(true);
+				}
+
+				@Override
+				protected Object createIdentity() {
+					return Identifiable.wrap(theComponent, focused.getName());
+				}
+
+				@Override
+				protected Boolean getSpontaneous() {
+					return theComponent != null && theComponent.isFocusOwner();
+				}
+
+				@Override
+				protected Subscription subscribe(BiConsumer<Boolean, Object> listener) {
+					theListener = listener;
 					setListening(true);
-			}
+					return () -> setListening(false);
+				}
 
-			@Override
-			protected Object createIdentity() {
-				return Identifiable.wrap(theComponent, focused.getName());
-			}
+				private void setListening(boolean listening) {
+					if (listening == isListening)
+						return;
+					if (listening && (theComponent == null || theListener == null))
+						return;
+					isListening = listening;
+					if (listening)
+						theComponent.addFocusListener(this);
+					else if (theComponent != null)
+						theComponent.removeFocusListener(this);
+					if (!listening)
+						theListener = null;
+				}
 
-			@Override
-			protected Boolean getSpontaneous() {
-				return theComponent != null && theComponent.isFocusOwner();
-			}
+				@Override
+				public void focusGained(FocusEvent e) {
+					if (theListener != null)
+						theListener.accept(true, e);
+				}
 
-			@Override
-			protected Subscription subscribe(BiConsumer<Boolean, Object> listener) {
-				theListener = listener;
-				setListening(true);
-				return () -> setListening(false);
+				@Override
+				public void focusLost(FocusEvent e) {
+					if (theListener != null)
+						theListener.accept(false, e);
+				}
 			}
-
-			private void setListening(boolean listening) {
-				if (listening == isListening)
-					return;
-				if (listening && (theComponent == null || theListener == null))
-					return;
-				isListening = listening;
-				if (listening)
-					theComponent.addFocusListener(this);
-				else if (theComponent != null)
-					theComponent.removeFocusListener(this);
-				if (!listening)
-					theListener = null;
-			}
-
-			@Override
-			public void focusGained(FocusEvent e) {
-				if (theListener != null)
-					theListener.accept(true, e);
-			}
-
-			@Override
-			public void focusLost(FocusEvent e) {
-				if (theListener != null)
-					theListener.accept(false, e);
-			}
+			widget.support(focused, () -> new FocusSupport());
 		}
-		widget.support(focused, () -> new FocusSupport());
 		widget.modify((comp, builder) -> {
 			// Set style
 			comp.modifyComponent(c -> {

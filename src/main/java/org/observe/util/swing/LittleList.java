@@ -327,11 +327,11 @@ public class LittleList<E> extends JComponent implements Scrollable {
 			editor = null;
 			add = false;
 		} else if (selected < theModel.getSize()) {
-			editor = (ObservableCellEditor<E, E>) theRenderStrategy.getMutator().getEditor();
+			editor = theRenderStrategy.getMutator().getEditor();
 			row = theModel.getElementAt(selected);
 			add = false;
 		} else if (theRenderStrategy.getAddRow() != null) {
-			editor = (ObservableCellEditor<E, E>) theRenderStrategy.getAddRow().getMutator().getEditor();
+			editor = theRenderStrategy.getAddRow().getMutator().getEditor();
 			row = theRenderStrategy.getAddRow().getEditSeedRow().get();
 			add = true;
 		} else {
@@ -595,10 +595,11 @@ public class LittleList<E> extends JComponent implements Scrollable {
 					renderer = (ObservableCellRenderer<E, E>) theRenderStrategy.getAddRow().getRenderer();
 				} else
 					throw new IndexOutOfBoundsException(n + " of " + getComponentCount());
+				// TODO Support hover
 				Component rendered = renderer
 					.getCellRendererComponent(LittleList.this,
 						new ModelCell.Default<>(LambdaUtils.constantSupplier(row, () -> String.valueOf(row), row), row, n, 0, //
-							theSelectionModel.isSelectedIndex(n), theSelectionModel.isSelectedIndex(n), true, true),
+							theSelectionModel.isSelectedIndex(n), theSelectionModel.isSelectedIndex(n), false, false, true, true),
 						CellRenderContext.DEFAULT);
 				boolean newBounds;
 				if (n >= bounds.size()) {
@@ -636,7 +637,7 @@ public class LittleList<E> extends JComponent implements Scrollable {
 			if (selected < theModel.getSize()) {
 				row = theModel.getElementAt(selected);
 				cell = new ModelCell.Default<>(LambdaUtils.constantSupplier(row, () -> String.valueOf(row), row), row, selected, 0, //
-					theSelectionModel.isSelectedIndex(selected), theSelectionModel.isSelectedIndex(selected), true, true);
+					theSelectionModel.isSelectedIndex(selected), theSelectionModel.isSelectedIndex(selected), false, false, true, true);
 				String tt = theRenderStrategy.getTooltip(cell);
 				if (tt != null)
 					return tt;
@@ -644,7 +645,7 @@ public class LittleList<E> extends JComponent implements Scrollable {
 			} else if (selected == theModel.getSize() && theRenderStrategy.getAddRow() != null) {
 				row = theRenderStrategy.getAddRow().getEditSeedRow().get();
 				cell = new ModelCell.Default<>(LambdaUtils.constantSupplier(row, () -> String.valueOf(row), row), row, selected, 0, //
-					theSelectionModel.isSelectedIndex(selected), theSelectionModel.isSelectedIndex(selected), true, true);
+					theSelectionModel.isSelectedIndex(selected), theSelectionModel.isSelectedIndex(selected), false, false, true, true);
 				renderer = (ObservableCellRenderer<E, E>) theRenderStrategy.getAddRow().getRenderer();
 			} else
 				throw new IndexOutOfBoundsException(selected + " of " + getComponentCount());

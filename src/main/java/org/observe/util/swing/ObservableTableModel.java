@@ -1,6 +1,7 @@
 package org.observe.util.swing;
 
 import java.awt.Component;
+import java.awt.Rectangle;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 import java.awt.event.MouseAdapter;
@@ -10,6 +11,7 @@ import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.function.Function;
+import java.util.function.IntSupplier;
 
 import javax.swing.JTable;
 import javax.swing.ListModel;
@@ -238,6 +240,31 @@ public class ObservableTableModel<R> implements TableModel {
 		return hookUp(table, model, null);
 	}
 
+	interface TableHookup extends Subscription {
+		int getHoveredRow();
+
+		int getHoveredColumn();
+
+		static TableHookup of(Subscription sub, IntSupplier hoveredRow, IntSupplier hoveredColumn) {
+			return new TableHookup() {
+				@Override
+				public void unsubscribe() {
+					sub.unsubscribe();
+				}
+
+				@Override
+				public int getHoveredRow() {
+					return hoveredRow.getAsInt();
+				}
+
+				@Override
+				public int getHoveredColumn() {
+					return hoveredColumn.getAsInt();
+				}
+			};
+		}
+	}
+
 	/**
 	 * @param <R> The row-type of the table model
 	 * @param table The JTable to link with the supplementary (more than just model) functionality of the {@link ObservableTableModel}
@@ -246,13 +273,78 @@ public class ObservableTableModel<R> implements TableModel {
 	 * @return A subscription which, when {@link Subscription#unsubscribe() unsubscribed}, will stop the non-model control of the model over
 	 *         the table
 	 */
-	public static <R> Subscription hookUp(JTable table, ObservableTableModel<R> model, TableRenderContext ctx) {
+	public static <R> TableHookup hookUp(JTable table, ObservableTableModel<R> model, TableRenderContext ctx) {
 		LinkedList<Subscription> subs = new LinkedList<>();
+		TableMouseListener<R> ml = new TableMouseListener<R>() {
+			@Override
+			protected ListenerList<RowMouseListener<? super R>> getRowListeners() {
+				return model.theRowMouseListeners;
+			}
+
+			@Override
+			protected int getModelRow(MouseEvent evt) {
+				int row = table.rowAtPoint(evt.getPoint());
+				row = row < 0 ? row : table.convertRowIndexToModel(row);
+				return row;
+			}
+
+			@Override
+			protected int getModelColumn(MouseEvent evt) {
+				int col = table.columnAtPoint(evt.getPoint());
+				col = col < 0 ? col : table.convertColumnIndexToModel(col);
+				return col;
+			}
+
+			@Override
+			protected R getRowValue(int rowIndex) {
+				return model.getRowModel().getElementAt(rowIndex);
+			}
+
+			@Override
+			protected CategoryRenderStrategy<R, ?> getColumn(int columnIndex) {
+				return model.getColumnModel().getElementAt(columnIndex);
+			}
+
+			@Override
+			protected boolean isRowSelected(int rowIndex) {
+				return table.isRowSelected(rowIndex);
+			}
+
+			@Override
+			protected boolean isCellSelected(int rowIndex, int columnIndex) {
+				return table.isCellSelected(rowIndex, columnIndex);
+			}
+
+			@Override
+			protected <C> void setToolTip(String tooltip, boolean header) {
+				(header ? table.getTableHeader() : table).setToolTipText(tooltip);
+			}
+
+			@Override
+			protected void hoverChanged(int preHoveredRow, int preHoveredColumn, int newHoveredRow, int newHoveredColumn) {
+				// Repaint the rows, in case they change due to hover
+				if (preHoveredRow != newHoveredRow) {
+					if (preHoveredRow >= 0) {
+						Rectangle bounds = table.getCellRect(preHoveredRow, 0, false);
+						table.repaint(0, bounds.y, table.getWidth(), bounds.height);
+					}
+					if (newHoveredRow >= 0) {
+						Rectangle bounds = table.getCellRect(newHoveredRow, 0, false);
+						table.repaint(0, bounds.y, table.getWidth(), bounds.height);
+					}
+				} else if (preHoveredColumn != newHoveredColumn) {
+					if (preHoveredColumn >= 0)
+						table.repaint(table.getCellRect(preHoveredRow, preHoveredColumn, false));
+					if (newHoveredColumn >= 0)
+						table.repaint(table.getCellRect(preHoveredRow, newHoveredColumn, false));
+				}
+			}
+		};
 		try (Transaction rowT = model.getRows().lock(false, null); Transaction colT = model.getColumns().lock(false, null)) {
 			for (int c = 0; c < model.getColumnCount(); c++) {
 				CategoryRenderStrategy<R, ?> column = model.getColumn(c);
 				TableColumn tblColumn = table.getColumnModel().getColumn(c);
-				hookUp(table, tblColumn, column, model, ctx);
+				hookUp(table, tblColumn, column, model, ctx, ml::getHoveredRow, ml::getHoveredColumn);
 			}
 			ListDataListener columnListener = new ListDataListener() {
 				@Override
@@ -274,7 +366,7 @@ public class ObservableTableModel<R> implements TableModel {
 					for (int i = e.getIndex0(); i <= e.getIndex1(); i++) {
 						TableColumn column = new TableColumn(i);
 						CategoryRenderStrategy<R, ?> category = model.getColumnModel().getElementAt(i);
-						hookUp(table, column, category, model, ctx);
+						hookUp(table, column, category, model, ctx, ml::getHoveredRow, ml::getHoveredColumn);
 						table.getColumnModel().addColumn(column);
 					}
 					for (int i = afterColumns.size() - 1; i >= 0; i--) {
@@ -302,58 +394,14 @@ public class ObservableTableModel<R> implements TableModel {
 				public void contentsChanged(ListDataEvent e) {
 					for (int i = e.getIndex0(); i <= e.getIndex1(); i++)
 						hookUp(table, table.getColumnModel().getColumn(i),
-							(CategoryRenderStrategy<R, Object>) model.theColumnModel.getElementAt(i), model, ctx);
+							(CategoryRenderStrategy<R, Object>) model.theColumnModel.getElementAt(i), model, ctx, ml::getHoveredRow,
+							ml::getHoveredColumn);
 				}
 			};
 			model.getColumnModel().addListDataListener(columnListener);
 			subs.add(() -> {
 				model.getColumnModel().removeListDataListener(columnListener);
 			});
-			MouseAdapter ml = new TableMouseListener<R>() {
-				@Override
-				protected ListenerList<RowMouseListener<? super R>> getRowListeners() {
-					return model.theRowMouseListeners;
-				}
-
-				@Override
-				protected int getModelRow(MouseEvent evt) {
-					int row = table.rowAtPoint(evt.getPoint());
-					row = row < 0 ? row : table.convertRowIndexToModel(row);
-					return row;
-				}
-
-				@Override
-				protected int getModelColumn(MouseEvent evt) {
-					int col = table.columnAtPoint(evt.getPoint());
-					col = col < 0 ? col : table.convertColumnIndexToModel(col);
-					return col;
-				}
-
-				@Override
-				protected R getRowValue(int rowIndex) {
-					return model.getRowModel().getElementAt(rowIndex);
-				}
-
-				@Override
-				protected CategoryRenderStrategy<R, ?> getColumn(int columnIndex) {
-					return model.getColumnModel().getElementAt(columnIndex);
-				}
-
-				@Override
-				protected boolean isRowSelected(int rowIndex) {
-					return table.isRowSelected(rowIndex);
-				}
-
-				@Override
-				protected boolean isCellSelected(int rowIndex, int columnIndex) {
-					return table.isCellSelected(rowIndex, columnIndex);
-				}
-
-				@Override
-				protected <C> void setToolTip(String tooltip, boolean header) {
-					(header ? table.getTableHeader() : table).setToolTipText(tooltip);
-				}
-			};
 			table.addMouseListener(ml);
 			table.addMouseMotionListener(ml);
 			table.getTableHeader().addMouseListener(ml);
@@ -431,27 +479,33 @@ public class ObservableTableModel<R> implements TableModel {
 						return null;
 					}
 					boolean selected = table.isCellSelected(row, column);
-					ModelCell<R, C> cell = new ModelCell.Default<>(() -> rowValue, colValue, row, column, selected, selected, true, true);
+					boolean rowHovered = ml.getHoveredRow() == row;
+					boolean cellHovered = rowHovered && ml.getHoveredColumn() == column;
+					ModelCell<R, C> cell = new ModelCell.Default<>(() -> rowValue, colValue, row, column, selected, selected,
+						rowHovered, cellHovered, true, true);
 					return new KeyTypeStruct<>(cell, category.getKeyListener());
 				}
 			};
 			table.addKeyListener(tableKL);
 			subs.add(() -> table.removeKeyListener(tableKL));
 		}
-		return Subscription.forAll(subs.toArray(new Subscription[subs.size()]));
+		return TableHookup.of(//
+			Subscription.forAll(subs.toArray(new Subscription[subs.size()])), //
+			ml::getHoveredRow, ml::getHoveredColumn);
 	}
 
 	private static <R, C> void hookUp(JTable table, TableColumn tblColumn, CategoryRenderStrategy<R, C> column,
-		ObservableTableModel<R> model, TableRenderContext ctx) {
+		ObservableTableModel<R> model, TableRenderContext ctx, IntSupplier hoveredRow, IntSupplier hoveredColumn) {
 		tblColumn.setHeaderValue(column.getName());
 		if (column.getIdentifier() != null)
 			tblColumn.setIdentifier(column.getIdentifier());
 		else
 			tblColumn.setIdentifier(column);
-		tblColumn.setCellRenderer(new ObservableTableCellRenderer<>(model, column, ctx));
+		tblColumn.setCellRenderer(new ObservableTableCellRenderer<>(model, column, ctx, hoveredRow, hoveredColumn));
 		if (column.getMutator().getEditor() != null)
 			tblColumn.setCellEditor(column.getMutator().getEditor()
-				.withCellTooltip(column.getTooltipFn()));
+				.withCellTooltip(column.getTooltipFn())//
+				.withHovering(hoveredRow, hoveredColumn));
 		if (column.getMinWidth() >= 0)
 			tblColumn.setMinWidth(column.getMinWidth());
 		if (column.getPrefWidth() >= 0)
@@ -468,13 +522,18 @@ public class ObservableTableModel<R> implements TableModel {
 		private final TableRenderContext theContext;
 		private ComponentDecorator theDecorator;
 		private Runnable theRevert;
+		private IntSupplier theHoveredRow;
+		private IntSupplier theHoveredColumn;
 
 		private Component theLastRender;
 
-		ObservableTableCellRenderer(ObservableTableModel<R> model, CategoryRenderStrategy<R, C> column, TableRenderContext ctx) {
+		ObservableTableCellRenderer(ObservableTableModel<R> model, CategoryRenderStrategy<R, C> column, TableRenderContext ctx,
+			IntSupplier hoveredRow, IntSupplier hoveredColumn) {
 			theModel = model;
 			theColumn = column;
 			theContext = ctx;
+			theHoveredRow = hoveredRow;
+			theHoveredColumn = hoveredColumn;
 		}
 
 		@Override
@@ -493,8 +552,10 @@ public class ObservableTableModel<R> implements TableModel {
 				: new ObservableCellRenderer.DefaultObservableCellRenderer<>((r, c) -> String.valueOf(c));
 			int modelRow = table.convertRowIndexToModel(row);
 			int modelColumn = table.convertColumnIndexToModel(column);
+			boolean rowHovered = theHoveredRow.getAsInt() == row;
+			boolean cellHovered = rowHovered && theHoveredColumn.getAsInt() == column;
 			ModelCell<R, C> cell = new ModelCell.Default<>(() -> theModel.getRow(modelRow), (C) value, //
-				row, column, isSelected, hasFocus, true, true);
+				row, column, isSelected, hasFocus, rowHovered, cellHovered, true, true);
 			Component c = renderer.getCellRendererComponent(table, cell,
 				() -> theContext == null ? null : theContext.getEmphaticRegions(modelRow, modelColumn));
 			theLastRender = c;
@@ -672,6 +733,8 @@ public class ObservableTableModel<R> implements TableModel {
 		}
 
 		private MouseClickStruct<?> thePrevious;
+		private int theHoveredRow = -1;
+		private int theHoveredColumn = -1;
 
 		protected abstract ListenerList<RowMouseListener<? super R>> getRowListeners();
 
@@ -688,6 +751,16 @@ public class ObservableTableModel<R> implements TableModel {
 		protected abstract boolean isCellSelected(int rowIndex, int columnIndex);
 
 		protected abstract <C> void setToolTip(String tooltip, boolean header);
+
+		protected abstract void hoverChanged(int preHoveredRow, int preHoveredColumn, int newHoveredRow, int newHoveredColumn);
+
+		public int getHoveredRow() {
+			return theHoveredRow;
+		}
+
+		public int getHoveredColumn() {
+			return theHoveredColumn;
+		}
 
 		@Override
 		public void mouseClicked(MouseEvent e) {
@@ -726,6 +799,11 @@ public class ObservableTableModel<R> implements TableModel {
 			else
 				row = getModelRow(evt);
 			int column = getModelColumn(evt);
+			if (row != theHoveredRow) {
+				hoverChanged(theHoveredRow, theHoveredColumn, row, column);
+				theHoveredRow = row;
+				theHoveredColumn = column;
+			}
 			if (row < 0) {
 				CategoryRenderStrategy<R, C> category = column < 0 ? null : (CategoryRenderStrategy<R, C>) getColumn(column);
 				return new MouseClickStruct<>(null, null, category);
@@ -735,14 +813,16 @@ public class ObservableTableModel<R> implements TableModel {
 				if (getRowListeners().isEmpty())
 					return new MouseClickStruct<>(null, null, null);
 				boolean selected = isRowSelected(row);
-				return new MouseClickStruct<>(new ModelRow.Default<>(() -> rowValue, row, selected, selected, true, true), null, null);
+				return new MouseClickStruct<>(new ModelRow.Default<>(() -> rowValue, row, selected, selected, true, true, true), null,
+					null);
 			}
 			CategoryRenderStrategy<R, C> category = (CategoryRenderStrategy<R, C>) getColumn(column);
 			if (movement && !category.getMouseListener().isMovementListener()) {
 				if (getRowListeners().isEmpty())
 					return new MouseClickStruct<>(null, null, null);
 				boolean selected = isRowSelected(row);
-				return new MouseClickStruct<>(new ModelRow.Default<>(() -> rowValue, row, selected, selected, true, true), null, null);
+				return new MouseClickStruct<>(new ModelRow.Default<>(() -> rowValue, row, selected, selected, true, true, true), null,
+					null);
 			}
 
 			C colValue = category.getCategoryValue(rowValue);
@@ -756,10 +836,12 @@ public class ObservableTableModel<R> implements TableModel {
 				if (getRowListeners().isEmpty())
 					return new MouseClickStruct<>(null, null, null);
 				boolean selected = isRowSelected(row);
-				return new MouseClickStruct<>(new ModelRow.Default<>(() -> rowValue, row, selected, selected, true, true), null, null);
+				return new MouseClickStruct<>(new ModelRow.Default<>(() -> rowValue, row, selected, selected, true, true, true), null,
+					null);
 			}
 			boolean selected = isCellSelected(row, column);
-			ModelCell<R, C> cell = new ModelCell.Default<>(() -> rowValue, colValue, row, column, selected, selected, true, true);
+			ModelCell<R, C> cell = new ModelCell.Default<>(() -> rowValue, colValue, row, column, selected, selected, true, true, true,
+				true);
 			return new MouseClickStruct<>(cell, cell, category);
 		}
 	}
