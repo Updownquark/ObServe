@@ -263,6 +263,9 @@ public class PanelPopulation {
 
 		P addButton(String buttonText, ObservableAction<?> action, Consumer<ButtonEditor<JButton, ?>> modify);
 
+		<F> P addComboButton(String buttonText, ObservableCollection<F> values, BiConsumer<? super F, Object> action,
+			Consumer<ComboButtonBuilder<F, ComboButton<F>, ?>> modify);
+
 		P addProgressBar(String fieldName, Consumer<ProgressEditor<?>> progress);
 
 		<R> P addList(ObservableCollection<R> rows, Consumer<ListBuilder<R, ?>> list);
@@ -715,6 +718,8 @@ public class PanelPopulation {
 			return withColumn(name, TypeTokens.get().of(type), accessor, column);
 		}
 
+		P withColumnHeader(boolean columnHeader);
+
 		P withAdaptiveHeight(int minRows, int prefRows, int maxRows);
 
 		P scrollable(boolean scrollable);
@@ -1071,6 +1076,22 @@ public class PanelPopulation {
 
 	public interface MenuBarBuilder<M extends MenuBarBuilder<M>> {
 		M withMenu(String menuName, Consumer<MenuBuilder<?>> menu);
+	}
+
+	public interface ComboButtonBuilder<F, B extends ComboButton<F>, P extends ComboButtonBuilder<F, B, P>> extends ButtonEditor<B, P> {
+		default P renderAs(Function<? super F, String> renderer) {
+			return renderWith(ObservableCellRenderer.formatted(renderer));
+		}
+
+		default P renderWith(ObservableCellRenderer<F, F> renderer) {
+			return render(r -> r.withRenderer(renderer));
+		}
+
+		default P withValueTooltip(Function<? super F, String> tooltip) {
+			return render(r -> r.withValueTooltip((__, f) -> tooltip.apply(f)));
+		}
+
+		P render(Consumer<CategoryRenderStrategy<F, F>> render);
 	}
 
 	// public interface

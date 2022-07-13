@@ -64,6 +64,8 @@ import javax.swing.ListSelectionModel;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
+import javax.swing.UIDefaults;
+import javax.swing.UIManager;
 import javax.swing.event.ChangeListener;
 
 import org.jdesktop.swingx.JXCollapsiblePane;
@@ -85,6 +87,7 @@ import org.observe.util.swing.PanelPopulation.Alert;
 import org.observe.util.swing.PanelPopulation.ButtonEditor;
 import org.observe.util.swing.PanelPopulation.CollapsePanel;
 import org.observe.util.swing.PanelPopulation.CollectionWidgetBuilder;
+import org.observe.util.swing.PanelPopulation.ComboButtonBuilder;
 import org.observe.util.swing.PanelPopulation.ComboEditor;
 import org.observe.util.swing.PanelPopulation.ComponentEditor;
 import org.observe.util.swing.PanelPopulation.DataAction;
@@ -395,6 +398,17 @@ class PanelPopulationImpl {
 		default P addButton(String buttonText, ObservableAction<?> action, Consumer<ButtonEditor<JButton, ?>> modify) {
 			SimpleButtonEditor<JButton, ?> field = new SimpleButtonEditor<>(null, new JButton(), buttonText, action, false, getUntil())
 				.withText(buttonText);
+			if (modify != null)
+				modify.accept(field);
+			doAdd(field);
+			return (P) this;
+		}
+
+		@Override
+		default <F> P addComboButton(String buttonText, ObservableCollection<F> values, BiConsumer<? super F, Object> action,
+			Consumer<ComboButtonBuilder<F, ComboButton<F>, ?>> modify) {
+			SimpleComboButtonEditor<F, ComboButton<F>, ?> field = new SimpleComboButtonEditor<>(null, buttonText, values, action,
+				getUntil());
 			if (modify != null)
 				modify.accept(field);
 			doAdd(field);
@@ -1275,13 +1289,19 @@ class PanelPopulationImpl {
 
 		@Override
 		protected Component createComponent() {
-			getEditor().addActionListener(evt -> theAction.act(evt));
+			if (theAction != null)
+				getEditor().addActionListener(evt -> theAction.act(evt));
 			ObservableValue<String> enabled;
 			if (theDisablement != null) {
-				enabled = ObservableValue.firstValue(TypeTokens.get().STRING, msg -> msg != null, () -> null, theDisablement,
+				if (theAction != null)
+					enabled = ObservableValue.firstValue(TypeTokens.get().STRING, msg -> msg != null, () -> null, theDisablement,
 					theAction.isEnabled());
-			} else
+				else
+					enabled = theDisablement;
+			} else if (theAction != null)
 				enabled = theAction.isEnabled();
+			else
+				enabled = ObservableValue.of(String.class, null);
 			enabled.combine((e, tt) -> e == null ? tt : e, getTooltip()).changes().takeUntil(getUntil())
 			.act(evt -> getEditor().setToolTipText(evt.getNewValue()));
 			enabled.takeUntil(getUntil()).changes().act(evt -> getEditor().setEnabled(evt.getNewValue() == null));
@@ -1545,6 +1565,35 @@ class PanelPopulationImpl {
 			});
 			getUntil().take(1).act(__ -> valueSub.unsubscribe());
 			return thePanel;
+		}
+	}
+
+	static class SimpleComboButtonEditor<F, B extends ComboButton<F>, P extends SimpleComboButtonEditor<F, B, P>>
+	extends SimpleButtonEditor<B, P> implements PanelPopulation.ComboButtonBuilder<F, B, P> {
+		public SimpleComboButtonEditor(String fieldName, String buttonText, ObservableCollection<F> values,
+			BiConsumer<? super F, Object> action, Observable<?> until) {
+			super(fieldName, (B) createButton(values, action, buttonText, until), buttonText, null, false, until);
+		}
+
+		static <F> ComboButton<F> createButton(ObservableCollection<F> values, BiConsumer<? super F, Object> action, String buttonText,
+			Observable<?> until) {
+			UIDefaults ui = UIManager.getDefaults();
+			Color defaultSelectionBackground = ui.getColor("List.selectionBackground");
+			Color defaultSelectionForeground = ui.getColor("List.selectionForeground");
+			return new ComboButton<>(values, new CategoryRenderStrategy<F, F>("Header", values.getType(), r -> r)//
+				.useRenderingForSize(true)//
+				.decorate((cell, deco) -> {
+					if (cell.isRowHovered())
+						deco.withBackground(defaultSelectionBackground).withForeground(defaultSelectionForeground);
+				}), until)//
+				.addListener(action)//
+				;
+		}
+
+		@Override
+		public P render(Consumer<CategoryRenderStrategy<F, F>> render) {
+			render.accept((CategoryRenderStrategy<F, F>) getEditor().getColumn());
+			return (P) this;
 		}
 	}
 

@@ -251,7 +251,7 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 		if (table.getTreeTableModel() != model)
 			table.setTreeTableModel(model);
 		LinkedList<Subscription> subs = new LinkedList<>();
-		TableMouseListener<BetterList<R>> ml = new TableMouseListener<BetterList<R>>() {
+		TableMouseListener<BetterList<R>> ml = new TableMouseListener<BetterList<R>>(table) {
 			@Override
 			protected ListenerList<RowMouseListener<? super BetterList<R>>> getRowListeners() {
 				return model.theRowMouseListeners;

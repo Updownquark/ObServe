@@ -367,7 +367,8 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 		public ObservableCellEditor<M, C> decorate(CellDecorator<M, C> decorator) {
 			if (theDecorator == null)
 				theDecorator = decorator;
-
+			else
+				theDecorator = theDecorator.modify(decorator);
 			return this;
 		}
 

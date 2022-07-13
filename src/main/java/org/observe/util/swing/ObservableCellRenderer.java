@@ -209,7 +209,10 @@ public interface ObservableCellRenderer<M, C> {
 
 		@Override
 		public DefaultObservableCellRenderer<M, C> decorate(CellDecorator<M, C> decorator) {
-			theDecorator = decorator;
+			if (theDecorator == null)
+				theDecorator = decorator;
+			else
+				theDecorator = theDecorator.modify(decorator);
 			return this;
 		}
 	}
@@ -251,7 +254,10 @@ public interface ObservableCellRenderer<M, C> {
 
 		@Override
 		public CheckCellRenderer<M, C> decorate(CellDecorator<M, C> decorator) {
-			theDecorator = decorator;
+			if (theDecorator == null)
+				theDecorator = decorator;
+			else
+				theDecorator = theDecorator.modify(decorator);
 			return this;
 		}
 
@@ -296,7 +302,10 @@ public interface ObservableCellRenderer<M, C> {
 
 		@Override
 		public ObservableCellRenderer<M, C> decorate(CellDecorator<M, C> decorator) {
-			theDecorator = decorator;
+			if (theDecorator == null)
+				theDecorator = decorator;
+			else
+				theDecorator = theDecorator.modify(decorator);
 			return this;
 		}
 

@@ -99,6 +99,7 @@ implements TreeTableEditor<F, P> {
 	private CategoryRenderStrategy<BetterList<F>, F> theTreeColumn;
 	private ObservableCollection<? extends CategoryRenderStrategy<BetterList<F>, ?>> theColumns;
 	private List<ObservableTableModel.RowMouseListener<? super BetterList<F>>> theMouseListeners;
+	private boolean withColumnHeader;
 	private int theAdaptiveMinRowHeight;
 	private int theAdaptivePrefRowHeight;
 	private int theAdaptiveMaxRowHeight;
@@ -269,6 +270,12 @@ implements TreeTableEditor<F, P> {
 	}
 
 	@Override
+	public P withColumnHeader(boolean columnHeader) {
+		withColumnHeader = columnHeader;
+		return (P) this;
+	}
+
+	@Override
 	public P withAdaptiveHeight(int minRows, int prefRows, int maxRows) {
 		if (minRows < 0 || minRows > prefRows || prefRows > maxRows)
 			throw new IllegalArgumentException("Required: 0<=min<=pref<=max: " + minRows + ", " + prefRows + ", " + maxRows);
@@ -306,6 +313,8 @@ implements TreeTableEditor<F, P> {
 			for (ObservableTableModel.RowMouseListener<? super BetterList<F>> listener : theMouseListeners)
 				model.addMouseListener(listener);
 		}
+		if (!withColumnHeader)
+			table.setTableHeader(null);
 		Subscription sub = ObservableTreeTableModel.hookUp(table, model);
 		getUntil().take(1).act(__ -> sub.unsubscribe());
 

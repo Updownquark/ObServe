@@ -361,6 +361,7 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 	private int theMinWidth;
 	private int thePrefWidth;
 	private int theMaxWidth;
+	private boolean usesRenderingForSize;
 	private boolean isResizable;
 
 	private Dragging.SimpleTransferSource<C> theDragSource;
@@ -617,6 +618,28 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 
 	public int getMaxWidth() {
 		return theMaxWidth;
+	}
+
+	public boolean isUsingRenderingForSize() {
+		return usesRenderingForSize;
+	}
+
+	/**
+	 * <p>
+	 * If this parameter is true, then the min/pref/max widths set on this column will not be used, but rather the width will depend on the
+	 * renderer for this column for each row in the table at the moment. This makes the behavior of this column more like a combo box, where
+	 * the width of the box is the maximum width of its rendered values.
+	 * </p>
+	 * <p>
+	 * <b>The caller should know that this setting can be extremely expensive for tables with many rows.</b>
+	 * </p>
+	 * 
+	 * @param usesRenderingForSize Whether to dynamically compute this column's size based on its renderer and values
+	 * @return This renderer
+	 */
+	public CategoryRenderStrategy<R, C> useRenderingForSize(boolean usesRenderingForSize) {
+		this.usesRenderingForSize = usesRenderingForSize;
+		return this;
 	}
 
 	public boolean isResizable() {

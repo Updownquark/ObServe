@@ -2,6 +2,8 @@ package org.observe.util.swing;
 
 import java.awt.Component;
 import java.awt.Rectangle;
+import java.awt.event.HierarchyEvent;
+import java.awt.event.HierarchyListener;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 import java.awt.event.MouseAdapter;
@@ -275,7 +277,7 @@ public class ObservableTableModel<R> implements TableModel {
 	 */
 	public static <R> TableHookup hookUp(JTable table, ObservableTableModel<R> model, TableRenderContext ctx) {
 		LinkedList<Subscription> subs = new LinkedList<>();
-		TableMouseListener<R> ml = new TableMouseListener<R>() {
+		TableMouseListener<R> ml = new TableMouseListener<R>(table) {
 			@Override
 			protected ListenerList<RowMouseListener<? super R>> getRowListeners() {
 				return model.theRowMouseListeners;
@@ -404,13 +406,19 @@ public class ObservableTableModel<R> implements TableModel {
 			});
 			table.addMouseListener(ml);
 			table.addMouseMotionListener(ml);
-			table.getTableHeader().addMouseListener(ml);
-			table.getTableHeader().addMouseMotionListener(ml);
+			if (table.getTableHeader() != null) {
+				table.getTableHeader().addMouseListener(ml);
+				table.getTableHeader().addMouseMotionListener(ml);
+			}
+			table.addHierarchyListener(ml);
 			subs.add(() -> {
 				table.removeMouseListener(ml);
 				table.removeMouseMotionListener(ml);
-				table.getTableHeader().removeMouseListener(ml);
-				table.getTableHeader().removeMouseMotionListener(ml);
+				table.removeHierarchyListener(ml);
+				if (table.getTableHeader() != null) {
+					table.getTableHeader().removeMouseListener(ml);
+					table.getTableHeader().removeMouseMotionListener(ml);
+				}
 			});
 			KeyListener tableKL = new KeyListener() {
 				class KeyTypeStruct<C> {
@@ -628,7 +636,7 @@ public class ObservableTableModel<R> implements TableModel {
 	 *
 	 * @param <R> The row type of the table
 	 */
-	public static abstract class TableMouseListener<R> extends MouseAdapter {
+	public static abstract class TableMouseListener<R> extends MouseAdapter implements HierarchyListener {
 		class MouseClickStruct<C> {
 			private final ModelRow<R> theRow;
 			private final ModelCell<R, C> theCell;
@@ -732,9 +740,14 @@ public class ObservableTableModel<R> implements TableModel {
 			}
 		}
 
+		private final Component theComponent;
 		private MouseClickStruct<?> thePrevious;
 		private int theHoveredRow = -1;
 		private int theHoveredColumn = -1;
+
+		public TableMouseListener(Component component) {
+			theComponent = component;
+		}
 
 		protected abstract ListenerList<RowMouseListener<? super R>> getRowListeners();
 
@@ -785,11 +798,25 @@ public class ObservableTableModel<R> implements TableModel {
 		@Override
 		public void mouseExited(MouseEvent e) {
 			thePrevious = getValue(e, false).exited(e, thePrevious);
+			setHover(-1, -1);
 		}
 
 		@Override
 		public void mouseMoved(MouseEvent e) {
 			thePrevious = getValue(e, false).moved(e, thePrevious);
+		}
+
+		@Override
+		public void hierarchyChanged(HierarchyEvent e) {
+			if (!theComponent.isShowing())
+				setHover(-1, -1);
+		}
+
+		private void setHover(int row, int column) {
+			if (theHoveredRow != row || theHoveredColumn != column)
+				hoverChanged(theHoveredRow, theHoveredColumn, row, column);
+			theHoveredRow = row;
+			theHoveredColumn = column;
 		}
 
 		private <C> MouseClickStruct<C> getValue(MouseEvent evt, boolean movement) {
@@ -799,11 +826,8 @@ public class ObservableTableModel<R> implements TableModel {
 			else
 				row = getModelRow(evt);
 			int column = getModelColumn(evt);
-			if (row != theHoveredRow) {
-				hoverChanged(theHoveredRow, theHoveredColumn, row, column);
-				theHoveredRow = row;
-				theHoveredColumn = column;
-			}
+			if (row != theHoveredRow)
+				setHover(row, column);
 			if (row < 0) {
 				CategoryRenderStrategy<R, C> category = column < 0 ? null : (CategoryRenderStrategy<R, C>) getColumn(column);
 				return new MouseClickStruct<>(null, null, category);

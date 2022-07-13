@@ -9,8 +9,8 @@ import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
 import java.awt.datatransfer.UnsupportedFlavorException;
 import java.awt.dnd.DnDConstants;
-import java.awt.event.ComponentAdapter;
-import java.awt.event.ComponentEvent;
+import java.awt.event.HierarchyEvent;
+import java.awt.event.HierarchyListener;
 import java.awt.event.MouseEvent;
 import java.beans.PropertyChangeListener;
 import java.io.IOException;
@@ -43,7 +43,6 @@ import javax.swing.event.ListDataEvent;
 import javax.swing.event.ListDataListener;
 import javax.swing.event.ListSelectionListener;
 import javax.swing.table.DefaultTableCellRenderer;
-import javax.swing.table.TableColumn;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
@@ -59,6 +58,7 @@ import org.observe.util.swing.Dragging.SimpleTransferAccepter;
 import org.observe.util.swing.Dragging.SimpleTransferSource;
 import org.observe.util.swing.Dragging.TransferAccepter;
 import org.observe.util.swing.Dragging.TransferSource;
+import org.observe.util.swing.ObservableCellRenderer.CellRenderContext;
 import org.observe.util.swing.ObservableTableModel.RowMouseListener;
 import org.observe.util.swing.PanelPopulation.DataAction;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
@@ -102,6 +102,7 @@ implements TableBuilder<R, P> {
 	private int theAdaptiveMinRowHeight;
 	private int theAdaptivePrefRowHeight;
 	private int theAdaptiveMaxRowHeight;
+	private boolean withColumnHeader;
 	private boolean isScrollable;
 
 	SimpleTableBuilder(ObservableCollection<R> rows, Observable<?> until) {
@@ -112,6 +113,7 @@ implements TableBuilder<R, P> {
 		theRows = rows;
 		theActions = new LinkedList<>();
 		theActionsOnTop = true;
+		withColumnHeader = true;
 		isScrollable = true;
 	}
 
@@ -220,6 +222,12 @@ implements TableBuilder<R, P> {
 	@Override
 	public ObservableCollection<R> getFilteredRows() {
 		return theFilteredRows;
+	}
+
+	@Override
+	public P withColumnHeader(boolean columnHeader) {
+		withColumnHeader = columnHeader;
+		return (P) this;
 	}
 
 	@Override
@@ -587,6 +595,8 @@ implements TableBuilder<R, P> {
 		instantiating.watchFor(ObservableListModel.DBUG, "model");
 		model = new ObservableTableModel<>(theFilteredRows, columns);
 		JTable table = getEditor();
+		if (!withColumnHeader)
+			table.setTableHeader(null);
 		table.setModel(model);
 		if(theMouseListeners!=null) {
 			for(ObservableTableModel.RowMouseListener<? super R> listener : theMouseListeners)
@@ -605,178 +615,234 @@ implements TableBuilder<R, P> {
 		getUntil().take(1).act(__ -> sub.unsubscribe());
 
 		JScrollPane scroll = new JScrollPane(table);
+		class SizeListener implements ListDataListener, ChangeListener, HierarchyListener {
+			private boolean isHSBVisible;
+			private boolean isVSBVisible;
+
+			@Override
+			public void intervalRemoved(ListDataEvent e) {
+				if (e.getIndex0() < theAdaptiveMaxRowHeight)
+					adjustHeight();
+				adjustScrollWidths();
+			}
+
+			@Override
+			public void intervalAdded(ListDataEvent e) {
+				if (e.getIndex0() < theAdaptiveMaxRowHeight)
+					adjustHeight();
+				adjustScrollWidths();
+			}
+
+			@Override
+			public void contentsChanged(ListDataEvent e) {
+				if (e.getIndex0() < theAdaptiveMaxRowHeight)
+					adjustHeight();
+				adjustScrollWidths();
+			}
+
+			@Override
+			public void stateChanged(ChangeEvent e) {
+				BoundedRangeModel hbm = scroll.getHorizontalScrollBar().getModel();
+				if (hbm.getValueIsAdjusting())
+					return;
+				if (isHSBVisible != (hbm.getExtent() < hbm.getMaximum())) {
+					adjustHeight();
+					adjustScrollWidths();
+				} else {
+					BoundedRangeModel vbm = scroll.getVerticalScrollBar().getModel();
+					if (vbm.getValueIsAdjusting())
+						return;
+					if (isVSBVisible != (vbm.getExtent() < vbm.getMaximum())) {
+						adjustHeight();
+						adjustScrollWidths();
+					}
+				}
+			}
+
+			private long theLastHE;
+			@Override
+			public void hierarchyChanged(HierarchyEvent e) {
+				if (!scroll.isShowing())
+					return;
+				long time=System.currentTimeMillis();
+				if (time - theLastHE < 5)
+					return;
+				theLastHE = time;
+				adjustScrollWidths();
+			}
+
+			void adjustScrollWidths() {
+				int spacing = table.getInsets().left + table.getInsets().right//
+					+ table.getIntercellSpacing().width * (table.getColumnCount() - 1)//
+					+ 2;
+				int minW = spacing, prefW = spacing, maxW = spacing;
+				for (int[] width : getColumnWidths()) {
+					minW += width[0];
+					prefW += width[1];
+					maxW += width[2];
+					if (maxW < 0)
+						maxW = Integer.MAX_VALUE;
+				}
+				BoundedRangeModel vbm = scroll.getVerticalScrollBar().getModel();
+
+				boolean vsbVisible = isScrollable && vbm.getExtent() < vbm.getMaximum();
+				int sbw = scroll.getVerticalScrollBar().getWidth();
+				if (vsbVisible) {
+					minW += sbw;
+					prefW += sbw;
+					maxW += sbw;
+					if (maxW < 0)
+						maxW = Integer.MAX_VALUE;
+				}
+				// Dimension psvs = table.getPreferredScrollableViewportSize();
+				Dimension min = scroll.getMinimumSize();
+				Dimension pref = scroll.getPreferredSize();
+				Dimension max = scroll.getMaximumSize();
+
+				// if (psvs.width != prefW) {
+				// if (vsbVisible)
+				// table.setPreferredScrollableViewportSize(new Dimension(prefW, psvs.height));
+				// else
+				// table.setPreferredScrollableViewportSize(new Dimension(prefW - sbw, psvs.height));
+				// }
+
+				scroll.setMinimumSize(new Dimension(minW, min.height));
+				scroll.setPreferredSize(new Dimension(prefW, pref.height));
+				scroll.setMaximumSize(new Dimension(maxW, max.height));
+				layoutColumns();
+			}
+
+			void layoutColumns() {
+				int tableSize = scroll.getViewport().getWidth()
+					- (getEditor().getColumnCount() - 1) * getEditor().getIntercellSpacing().width;
+				if (tableSize <= 0)
+					return;
+				int[][] widths = getColumnWidths(); // Min/pref/max sizes for each column
+				boolean preHsb = scroll.getHorizontalScrollBarPolicy() != JScrollPane.HORIZONTAL_SCROLLBAR_NEVER;
+				boolean hsb;
+				int totalPref = 0;
+				for (int c = 0; c < model.getColumnCount(); c++)
+					totalPref += widths[c][1];
+				if (tableSize == totalPref) {
+					for (int c = 0; c < model.getColumnCount(); c++)
+						table.getColumnModel().getColumn(c).setPreferredWidth(widths[c][1]);
+					table.setSize(totalPref, table.getHeight());
+					hsb = false;
+				} else if (tableSize < totalPref) {
+					int totalMin = 0;
+					for (int c = 0; c < model.getColumnCount(); c++)
+						totalMin += widths[c][0];
+					if (tableSize <= totalMin) {
+						for (int c = 0; c < model.getColumnCount(); c++)
+							table.getColumnModel().getColumn(c).setPreferredWidth(widths[c][0]);
+						table.setSize(totalMin, table.getHeight());
+						hsb = isScrollable;
+					} else {
+						float p = (tableSize - totalMin) * 1.0f / totalPref;
+						for (int c = 0; c < model.getColumnCount(); c++) {
+							int colSize = widths[c][0] + Math.round(p * (widths[c][1] - widths[c][0]));
+							table.getColumnModel().getColumn(c).setPreferredWidth(colSize);
+						}
+						hsb = false;
+					}
+				} else {
+					int totalMax = 0;
+					for (int c = 0; c < model.getColumnCount(); c++) {
+						totalMax += widths[c][2];
+						if (totalMax < 0) {
+							totalMax = Integer.MAX_VALUE;
+							break;
+						}
+					}
+					if (tableSize >= totalMax) {
+						for (int c = 0; c < model.getColumnCount(); c++)
+							table.getColumnModel().getColumn(c).setPreferredWidth(widths[c][2]);
+						table.setSize(totalMax, table.getHeight());
+						hsb = isScrollable;
+						scroll.setHorizontalScrollBarPolicy(
+							isScrollable ? JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED : JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+					} else {
+						double p = (tableSize - totalPref) * 1.0 / (totalMax - totalPref);
+						for (int c = 0; c < model.getColumnCount(); c++) {
+							int colSize = widths[c][1] + (int) Math.round(p * (widths[c][2] - widths[c][1]));
+							table.getColumnModel().getColumn(c).setPreferredWidth(colSize);
+						}
+						hsb = false;
+					}
+				}
+				scroll.setHorizontalScrollBarPolicy(
+					hsb ? JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED : JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+				if (preHsb != hsb)
+					adjustHeight();
+			}
+
+			void adjustHeight() {
+				if (theAdaptivePrefRowHeight <= 0)
+					return; // Not adaptive
+				int insets = table.getInsets().top + table.getInsets().bottom;
+				int minHeight = insets, prefHeight = insets, maxHeight = insets;
+				if (table.getTableHeader() != null && table.getTableHeader().isVisible()) {
+					minHeight += table.getTableHeader().getPreferredSize().height;
+					maxHeight += table.getTableHeader().getPreferredSize().height;
+				}
+				int rowCount = model.getRowCount();
+				int spacing = table.getIntercellSpacing().height;
+				for (int i = 0; i < theAdaptiveMaxRowHeight && i < rowCount; i++) {
+					int rowHeight = table.getRowHeight(i);
+					if (i > 0)
+						rowHeight += spacing;
+					if (i < theAdaptiveMinRowHeight)
+						minHeight += rowHeight;
+					if (i < theAdaptivePrefRowHeight)
+						prefHeight += rowHeight;
+					if (i < theAdaptiveMaxRowHeight)
+						maxHeight += rowHeight;
+				}
+				BoundedRangeModel hbm = scroll.getHorizontalScrollBar().getModel();
+				isHSBVisible = hbm.getExtent() < hbm.getMaximum();
+				BoundedRangeModel vbm = scroll.getVerticalScrollBar().getModel();
+				isVSBVisible = vbm.getExtent() < vbm.getMaximum();
+				if (isHSBVisible) {
+					int sbh = scroll.getHorizontalScrollBar().getHeight();
+					minHeight += sbh;
+					prefHeight += sbh;
+					maxHeight += sbh;
+				}
+				minHeight = Math.max(0, minHeight - 4);
+				prefHeight = Math.max(0, prefHeight - 4);
+				maxHeight = Math.max(0, maxHeight - 4);
+				// Dimension psvs = table.getPreferredScrollableViewportSize();
+				// if (psvs.height != prefHeight) {
+				// // int w = 0;
+				// // for (int c = 0; c < table.getColumnModel().getColumnCount(); c++)
+				// // w += table.getColumnModel().getColumn(c).getWidth();
+				// table.setPreferredScrollableViewportSize(new Dimension(psvs.width, prefHeight));
+				// }
+				Dimension pref = scroll.getPreferredSize();
+				scroll.setPreferredSize(new Dimension(pref.width, prefHeight));
+				Dimension min = scroll.getMinimumSize();
+				scroll.setMinimumSize(new Dimension(min.width, minHeight));
+				Dimension max = scroll.getMaximumSize();
+				scroll.setMaximumSize(new Dimension(max.width, maxHeight));
+				if (scroll.getParent() != null)
+					scroll.getParent().revalidate();
+			}
+		}
+		SizeListener sizeListener = new SizeListener();
+		scroll.addHierarchyListener(sizeListener);
+		columns.simpleChanges().takeUntil(getUntil()).act(__ -> EventQueue.invokeLater(sizeListener::adjustScrollWidths));
+		EventQueue.invokeLater(() -> sizeListener.adjustScrollWidths());
 		if (isScrollable) {
 			// Default scroll increments are ridiculously small
 			scroll.getVerticalScrollBar().setUnitIncrement(10);
 			scroll.getHorizontalScrollBar().setUnitIncrement(10);
 			if (theAdaptivePrefRowHeight > 0) {
-				class HeightAdjustmentListener implements ListDataListener, ChangeListener {
-					private boolean isHSBVisible;
-					private boolean isVSBVisible;
-
-					@Override
-					public void intervalRemoved(ListDataEvent e) {
-						if (e.getIndex0() < theAdaptiveMaxRowHeight)
-							adjustHeight();
-					}
-
-					@Override
-					public void intervalAdded(ListDataEvent e) {
-						if (e.getIndex0() < theAdaptiveMaxRowHeight)
-							adjustHeight();
-					}
-
-					@Override
-					public void contentsChanged(ListDataEvent e) {
-						if (e.getIndex0() < theAdaptiveMaxRowHeight)
-							adjustHeight();
-					}
-
-					@Override
-					public void stateChanged(ChangeEvent e) {
-						BoundedRangeModel hbm = scroll.getHorizontalScrollBar().getModel();
-						if (hbm.getValueIsAdjusting())
-							return;
-						if (isHSBVisible != (hbm.getExtent() > hbm.getMaximum())) {
-							adjustHeight();
-						} else {
-							BoundedRangeModel vbm = scroll.getVerticalScrollBar().getModel();
-							if (vbm.getValueIsAdjusting())
-								return;
-							if (isVSBVisible != (vbm.getExtent() > vbm.getMaximum()))
-								adjustHeight();
-						}
-					}
-
-					void adjustHeight() {
-						int minHeight = 0, prefHeight = 0, maxHeight = 0;
-						if (table.getTableHeader() != null && table.getTableHeader().isVisible()) {
-							minHeight += table.getTableHeader().getPreferredSize().height;
-							maxHeight += table.getTableHeader().getPreferredSize().height;
-						}
-						int rowCount = model.getRowCount();
-						for (int i = 0; i < theAdaptiveMaxRowHeight && i < rowCount; i++) {
-							int rowHeight = table.getRowHeight(i);
-							if (i < theAdaptiveMinRowHeight)
-								minHeight += rowHeight;
-							if (i < theAdaptivePrefRowHeight)
-								prefHeight += rowHeight;
-							if (i < theAdaptiveMaxRowHeight)
-								maxHeight += rowHeight;
-						}
-						BoundedRangeModel hbm = scroll.getHorizontalScrollBar().getModel();
-						isHSBVisible = hbm.getExtent() > hbm.getMaximum();
-						BoundedRangeModel vbm = scroll.getVerticalScrollBar().getModel();
-						isVSBVisible = vbm.getExtent() > vbm.getMaximum();
-						if (isHSBVisible) {
-							int sbh = scroll.getHorizontalScrollBar().getHeight();
-							minHeight += sbh;
-							maxHeight += sbh;
-						}
-						Dimension psvs = table.getPreferredScrollableViewportSize();
-						if (psvs.height != prefHeight) {
-							// int w = 0;
-							// for (int c = 0; c < table.getColumnModel().getColumnCount(); c++)
-							// w += table.getColumnModel().getColumn(c).getWidth();
-							table.setPreferredScrollableViewportSize(new Dimension(psvs.width, prefHeight));
-						}
-						Dimension min = scroll.getViewport().getMinimumSize();
-						scroll.getViewport().setMinimumSize(new Dimension(min.width, minHeight));
-						Dimension max = scroll.getViewport().getMaximumSize();
-						scroll.getViewport().setMaximumSize(new Dimension(max.width, maxHeight));
-						if (scroll.getParent() != null)
-							scroll.getParent().revalidate();
-					}
-				}
-				HeightAdjustmentListener hal = new HeightAdjustmentListener();
-				model.getRowModel().addListDataListener(hal);
-				model.getColumnModel().addListDataListener(hal);
-				scroll.getHorizontalScrollBar().getModel().addChangeListener(hal);
-				scroll.getVerticalScrollBar().getModel().addChangeListener(hal);
-				hal.adjustHeight();
+				model.getRowModel().addListDataListener(sizeListener);
+				model.getColumnModel().addListDataListener(sizeListener);
+				scroll.getHorizontalScrollBar().getModel().addChangeListener(sizeListener);
+				scroll.getVerticalScrollBar().getModel().addChangeListener(sizeListener);
+				sizeListener.adjustHeight();
 			}
-			Runnable layoutColumns = () -> {
-				int tableSize = scroll.getViewport().getWidth();
-				int pref = 0;
-				for (int c = 0; c < model.getColumnCount(); c++)
-					pref += model.getColumn(c).getPrefWidth();
-				if (tableSize == pref) {
-					for (int c = 0; c < model.getColumnCount(); c++)
-						table.getColumnModel().getColumn(c).setPreferredWidth(model.getColumn(c).getPrefWidth());
-					table.setSize(pref, table.getHeight());
-				} else if (tableSize < pref) {
-					int min = 0;
-					for (int c = 0; c < model.getColumnCount(); c++)
-						min += model.getColumn(c).getMinWidth();
-					if (tableSize <= min) {
-						for (int c = 0; c < model.getColumnCount(); c++)
-							table.getColumnModel().getColumn(c).setPreferredWidth(model.getColumn(c).getMinWidth());
-						table.setSize(min, table.getHeight());
-					} else {
-						float p = (tableSize - min) * 1.0f / pref;
-						for (int c = 0; c < model.getColumnCount(); c++) {
-							int colMin = model.getColumn(c).getMinWidth();
-							int colSize = colMin + Math.round(p * (model.getColumn(c).getPrefWidth() - colMin));
-							table.getColumnModel().getColumn(c).setPreferredWidth(colSize);
-						}
-					}
-				} else {
-					int max = 0;
-					for (int c = 0; c < model.getColumnCount(); c++)
-						max += model.getColumn(c).getMaxWidth();
-					if (tableSize >= max) {
-						for (int c = 0; c < model.getColumnCount(); c++)
-							table.getColumnModel().getColumn(c).setPreferredWidth(model.getColumn(c).getMaxWidth());
-						table.setSize(max, table.getHeight());
-					} else {
-						double p = (tableSize - pref) * 1.0 / (max - pref);
-						for (int c = 0; c < model.getColumnCount(); c++) {
-							int colPref = model.getColumn(c).getPrefWidth();
-							int colSize = colPref + (int) Math.round(p * (model.getColumn(c).getMaxWidth() - colPref));
-							table.getColumnModel().getColumn(c).setPreferredWidth(colSize);
-						}
-					}
-				}
-			};
-			Runnable adjustScrollWidths = () -> {
-				int minW = 0, prefW = 0, maxW = 0;
-				for (int c = 0; c < table.getColumnModel().getColumnCount(); c++) {
-					TableColumn column = table.getColumnModel().getColumn(c);
-					minW += column.getMinWidth();
-					prefW += column.getPreferredWidth();
-					maxW += column.getMaxWidth();
-					if (maxW < 0)
-						maxW = Integer.MAX_VALUE;
-				}
-				BoundedRangeModel vbm = scroll.getVerticalScrollBar().getModel();
-				boolean vsbVisible = vbm.getExtent() > vbm.getMaximum();
-				if (vsbVisible) {
-					int sbw = scroll.getVerticalScrollBar().getWidth();
-					minW += sbw;
-					maxW += sbw;
-					if (maxW < 0)
-						maxW = Integer.MAX_VALUE;
-				}
-				Dimension psvs = table.getPreferredScrollableViewportSize();
-				Dimension min = scroll.getViewport().getMinimumSize();
-				Dimension max = scroll.getViewport().getMaximumSize();
-
-				if (psvs.width != prefW)
-					table.setPreferredScrollableViewportSize(new Dimension(prefW, psvs.height));
-
-				scroll.getViewport().setMinimumSize(new Dimension(minW, min.height));
-				scroll.getViewport().setMaximumSize(new Dimension(maxW, max.height));
-				scroll.setMaximumSize(new Dimension(maxW, max.height));
-				layoutColumns.run();
-			};
-			adjustScrollWidths.run();
-			columns.simpleChanges().act(__ -> EventQueue.invokeLater(adjustScrollWidths));
-			scroll.addComponentListener(new ComponentAdapter() {
-				@Override
-				public void componentResized(ComponentEvent e) {
-					layoutColumns.run();
-				}
-			});
 		} else {
 			scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
 			scroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_NEVER);
@@ -922,6 +988,63 @@ implements TableBuilder<R, P> {
 
 		instantiating.close();
 		return comp;
+	}
+
+	private int[][] getColumnWidths() {
+		ObservableTableModel<R> model = (ObservableTableModel<R>) getEditor().getModel();
+		int[][] widths = new int[model.getColumnCount()][3];
+		for (int c = 0; c < widths.length; c++) {
+			CategoryRenderStrategy<R, ?> column = model.getColumn(c);
+			if (column.isUsingRenderingForSize()) {
+				ObservableCellRenderer<R, ?> renderer = (ObservableCellRenderer<R, ?>) column.getRenderer();
+				if (renderer == null) {
+					renderer = new ObservableCellRenderer.DefaultObservableCellRenderer<>((row, cell) -> String.valueOf(cell));
+					((CategoryRenderStrategy<R, Object>) column).withRenderer((ObservableCellRenderer<R, Object>) renderer);
+				}
+				int maxMin = 0, maxPref = 0, maxMax = 0;
+				if (withColumnHeader) {
+					Component render = getEditor().getTableHeader().getComponent(c);
+					int min = render.getMinimumSize().width;
+					int pref = render.getPreferredSize().width;
+					int max = render.getMaximumSize().width;
+					if (min > maxMin)
+						maxMin = min;
+					if (pref > maxPref)
+						maxPref = pref;
+					if (max > maxMax)
+						maxMax = max;
+				}
+				int r = 0;
+				for (R row : theFilteredRows) {
+					Object cellValue = column.getCategoryValue(row);
+					ModelCell<R, Object> cell = new ModelCell.Default<>(() -> row, cellValue, r, c, getEditor().isRowSelected(r), false,
+						false, false, false, true);
+					Component render = ((CategoryRenderStrategy<R, Object>) column).getRenderer().getCellRendererComponent(getEditor(),
+						cell, CellRenderContext.DEFAULT);
+					int min = render.getMinimumSize().width;
+					int pref = render.getPreferredSize().width;
+					int max = render.getMaximumSize().width;
+					if (min > maxMin)
+						maxMin = min;
+					if (pref > maxPref)
+						maxPref = pref;
+					if (max > maxMax)
+						maxMax = max;
+					r++;
+				}
+				// Not sure why, but these actually need just a pixel more padding
+				maxMin++;
+				maxMax++;
+				widths[c][0] = maxMin;
+				widths[c][1] = Math.max(maxPref, maxMin);
+				widths[c][2] = maxMax;
+			} else {
+				widths[c][0] = column.getMinWidth();
+				widths[c][1] = column.getPrefWidth();
+				widths[c][2] = column.getMaxWidth();
+			}
+		}
+		return widths;
 	}
 
 	class TableBuilderTransferHandler extends TransferHandler {
