@@ -35,6 +35,8 @@ import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
 import org.qommons.collect.ListenerList;
 
+import com.google.common.reflect.TypeToken;
+
 /**
  * Found this at https://stackoverflow.com/questions/36352707/actions-inside-of-another-action-like-netbeans/66303093#66303093
  *
@@ -67,6 +69,7 @@ public class ComboButton<E> extends JButton {
 
 	private JPopupMenu jpopupMenu;
 
+	private final ObservableCollection<E> theValues;
 	private final CategoryRenderStrategy<E, ?> theColumn;
 	private final ListenerList<BiConsumer<? super E, Object>> theListeners;
 
@@ -77,6 +80,8 @@ public class ComboButton<E> extends JButton {
 	 * @param icon the Icon image to display on the button
 	 */
 	public ComboButton(ObservableCollection<E> values, CategoryRenderStrategy<E, ?> column, Observable<?> until) {
+		setMargin(new Insets(2, 2, 2, 0));
+		theValues = values;
 		theColumn = column;
 
 		addMouseMotionListener(getMouseHandler());
@@ -103,8 +108,8 @@ public class ComboButton<E> extends JButton {
 		selection.noInitChanges().act(evt -> {
 			if (evt.getNewValue() == null)
 				return;
-			fire(evt.getNewValue(), evt);
 			closePopupMenu();
+			fire(evt.getNewValue(), evt);
 			EventQueue.invokeLater(() -> selection.set(null, null));
 		});
 	}
@@ -112,6 +117,10 @@ public class ComboButton<E> extends JButton {
 	private void fire(E value, Object cause) {
 		theListeners.forEach(//
 			l -> l.accept(value, cause));
+	}
+
+	public ObservableCollection<E> getValues() {
+		return theValues;
 	}
 
 	public CategoryRenderStrategy<E, ?> getColumn() {
@@ -273,7 +282,7 @@ public class ComboButton<E> extends JButton {
 	}
 
 	protected void showPopupMenu() {
-		if (getOptionsCount() > 0) {
+		if (getOptionsCount() > 0 && isEnabled()) {
 			JPopupMenu menu = getPopupMenu();
 			menu.setVisible(true); // Necessary to calculate pop-up menu width the first time it's displayed.
 			Dimension sz = menu.getLayout().preferredLayoutSize(menu);
@@ -550,15 +559,19 @@ public class ComboButton<E> extends JButton {
 		}
 	}
 
-	public static <E> ComboButton create(String text, ObservableCollection<E> available) {
+	public static <E> ComboButton<E> create(String text, ObservableCollection<E> available) {
+		return new ComboButton<>(available, createDefaultComboBoxColumn(available.getType()), Observable.empty()).withText(text);
+	}
+
+	public static <E> CategoryRenderStrategy<E, E> createDefaultComboBoxColumn(TypeToken<E> type) {
 		UIDefaults ui = UIManager.getDefaults();
 		Color defaultSelectionBackground = ui.getColor("List.selectionBackground");
 		Color defaultSelectionForeground = ui.getColor("List.selectionForeground");
-		return new ComboButton<>(available, new CategoryRenderStrategy<E, E>("Header", available.getType(), r -> r)//
+		return new CategoryRenderStrategy<E, E>("Header", type, r -> r)//
 			.useRenderingForSize(true)//
 			.decorate((cell, deco) -> {
 				if (cell.isRowHovered())
 					deco.withBackground(defaultSelectionBackground).withForeground(defaultSelectionForeground);
-			}), Observable.empty()).withText(text);
+			});
 	}
 }

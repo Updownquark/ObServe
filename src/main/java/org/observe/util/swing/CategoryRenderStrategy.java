@@ -582,18 +582,34 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 	}
 
 	public CategoryRenderStrategy<R, C> withWidth(String type, int width) {
+		if (width < 0)
+			throw new IllegalArgumentException("Bad " + type + " width: " + width);
 		switch (type.toLowerCase()) {
 		case "min":
 		case "minimum":
 			theMinWidth = width;
+			if (width > thePrefWidth) {
+				thePrefWidth = width;
+				if (width > theMaxWidth)
+					theMaxWidth = width;
+			}
 			break;
 		case "pref":
 		case "preferred":
 			thePrefWidth = width;
+			if (width < theMinWidth)
+				theMinWidth = width;
+			else if (width > theMaxWidth)
+				theMaxWidth = width;
 			break;
 		case "max":
 		case "maximum":
 			theMaxWidth = width;
+			if (width < thePrefWidth) {
+				thePrefWidth = width;
+				if (width < theMinWidth)
+					theMinWidth = width;
+			}
 			break;
 		default:
 			throw new IllegalArgumentException("Unrecognized width type: " + type + "; use min, max, or pref");
@@ -602,6 +618,8 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 	}
 
 	public CategoryRenderStrategy<R, C> withWidths(int min, int pref, int max) {
+		if (min > pref || pref > max)
+			throw new IllegalArgumentException("Bad widths: " + min + "/" + pref + "/" + max);
 		theMinWidth = min;
 		thePrefWidth = pref;
 		theMaxWidth = max;
@@ -633,7 +651,7 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 	 * <p>
 	 * <b>The caller should know that this setting can be extremely expensive for tables with many rows.</b>
 	 * </p>
-	 * 
+	 *
 	 * @param usesRenderingForSize Whether to dynamically compute this column's size based on its renderer and values
 	 * @return This renderer
 	 */

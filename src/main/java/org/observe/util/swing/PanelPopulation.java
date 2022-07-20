@@ -15,6 +15,8 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
@@ -730,6 +732,7 @@ public class PanelPopulation {
 		@SuppressWarnings("rawtypes")
 		static final DbugAnchorType<TableBuilder> DBUG = Dbug.common().anchor(TableBuilder.class, a -> a//
 			.withField("type", true, false, TypeTokens.get().keyFor(TypeToken.class).wildCard())//
+			.withEvent("create").withEvent("adjustWidth").withEvent("layoutColumns").withEvent("adjustHeight")//
 			);
 
 		default P withNameColumn(Function<? super R, String> getName, BiConsumer<? super R, String> setName, boolean unique,
@@ -759,6 +762,10 @@ public class PanelPopulation {
 		}
 
 		P withIndexColumn(String columnName, Consumer<CategoryRenderStrategy<R, Integer>> column);
+
+		<C> P withDynamicColumns(Function<? super R, ? extends Collection<? extends C>> columnValues, //
+			Comparator<? super C> columnSort, //
+			Function<? super C, CategoryRenderStrategy<R, ?>> columnCreator);
 
 		P withTableOption(Consumer<? super PanelPopulator<?, ?>> panel);
 

@@ -316,6 +316,8 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 			return comp;
 		}).build();
 		Subscription sub = subscribe(evt -> {
+			if (evt.getElementId() == null)
+				return; // Key update only, no effect on values
 			try (Transaction t = values.lock(true, evt)) {
 				switch (evt.getType()) {
 				case add:

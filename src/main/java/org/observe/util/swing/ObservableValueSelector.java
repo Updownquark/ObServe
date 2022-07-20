@@ -10,6 +10,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 import javax.swing.JButton;
@@ -32,6 +33,7 @@ import org.observe.dbug.Dbug;
 import org.observe.dbug.DbugAnchor;
 import org.observe.dbug.DbugAnchorType;
 import org.observe.util.TypeTokens;
+import org.observe.util.swing.PanelPopulation.TableBuilder;
 import org.qommons.Colors;
 import org.qommons.StringUtils;
 import org.qommons.ThreadConstraint;
@@ -173,10 +175,10 @@ public class ObservableValueSelector<T, X> extends JPanel {
 	private final DbugAnchor<ObservableValueSelector> anchor = DBUG.instance(this);
 
 	private ObservableValueSelector(ObservableCollection<T> sourceRows, //
-		ObservableCollection<? extends CategoryRenderStrategy<SelectableValue<T, X>, ?>> sourceColumns, //
-			ObservableCollection<? extends CategoryRenderStrategy<SelectableValue<T, X>, ?>> destColumns, //
-				Function<? super T, ? extends X> map, boolean reEvalOnUpdate, Observable<?> until, //
-				boolean includedByDefault, Format<TableContentControl> filterFormat, boolean commitOnType, String itemName) {
+		Consumer<PanelPopulation.TableBuilder<SelectableValue<T, X>, ?>> sourceTable,
+		Consumer<PanelPopulation.TableBuilder<SelectableValue<T, X>, ?>> destTable, //
+		Function<? super T, ? extends X> map, boolean reEvalOnUpdate, Observable<?> until, //
+		boolean includedByDefault, Format<TableContentControl> filterFormat, boolean commitOnType, String itemName) {
 		theSourceRows = sourceRows;
 		theMap = map;
 		theSelectableValues = ObservableSortedSet.create(new TypeToken<SelectableValue<T, X>>() {
@@ -207,8 +209,8 @@ public class ObservableValueSelector<T, X> extends JPanel {
 				selectableEl.get().remove();
 				break;
 			case set:
-				selectableEl = theSelectableValues
-				.getElement(new SelectableValue<>(theSourceRows.getElement(evt.getElementId()), true), true);
+				selectableEl = theSelectableValues.getElement(new SelectableValue<>(theSourceRows.getElement(evt.getElementId()), true),
+					true);
 				if (evt.getOldValue() != evt.getNewValue() || reEvalOnUpdate)
 					selectableEl.get().theDestValue = theMap.apply(evt.getNewValue());
 				selectableEl.get().update();
@@ -233,7 +235,7 @@ public class ObservableValueSelector<T, X> extends JPanel {
 				theSourceTable = srcTbl.getEditor();
 				if (itemName != null)
 					srcTbl.withItemName(itemName);
-				srcTbl.withCountTitle("available").withColumns(sourceColumns).withFiltering(theFilterText).fill();
+				sourceTable.accept(srcTbl.withCountTitle("available").withFiltering(theFilterText).fill());
 			}).fill())//
 		.addHPanel(null, new JustifiedBoxLayout(false).mainJustified().forceFill(true).crossCenter().setMargin(2, 2, 2, 2),
 			buttonPanel -> buttonPanel.withName("OVS Buttons").fillV()//
@@ -243,8 +245,7 @@ public class ObservableValueSelector<T, X> extends JPanel {
 				.addComponent(null, theExcludeButton, null)//
 				.addComponent(null, theExcludeAllButton, null)//
 				)//
-			).addHPanel(null,
-				new JustifiedBoxLayout(true).mainJustified().crossJustified().forceFill(true).setShowingInvisible(true),
+			).addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified().forceFill(true).setShowingInvisible(true),
 				destPanel -> destPanel.withName("OVS Dest")//
 				// Invisible placeholder here to make the available and included tables the same height
 				.addTextField(null, SettableValue.build(TableContentControl.class).build(),
@@ -254,7 +255,7 @@ public class ObservableValueSelector<T, X> extends JPanel {
 					theDestTable = destTbl.getEditor();
 					if (itemName != null)
 						destTbl.withItemName(itemName);
-					destTbl.withCountTitle("included").withColumns(destColumns).fill();
+					destTable.accept(destTbl.withCountTitle("included").fill());
 				}).fill());
 
 		ObservableTableModel<SelectableValue<T, X>> sourceModel = (ObservableTableModel<SelectableValue<T, X>>) theSourceTable.getModel();
@@ -589,14 +590,12 @@ public class ObservableValueSelector<T, X> extends JPanel {
 			theIncludeAllButton.setToolTipText("Include all " + excluded + " excluded " + plurItem);
 
 		theIncludeButton.setEnabled(selectedExcluded > 0);
-		theIncludeButton
-		.setToolTipText(
+		theIncludeButton.setToolTipText(
 			selectedExcluded > 0 ? "Include " + selectedExcluded + " selected " + (selectedExcluded == 1 ? singItem : plurItem)
 				: (hasSelection ? "All selected " + plurItem + " are included" : "No " + plurItem + " selected"));
 
 		theExcludeButton.setEnabled(selectedIncluded > 0);
-		theExcludeButton
-		.setToolTipText(
+		theExcludeButton.setToolTipText(
 			selectedIncluded > 0 ? "Exclude " + selectedIncluded + " selected " + (selectedIncluded == 1 ? singItem : plurItem)
 				: (hasSelection ? "No included " + plurItem + " selected" : "No " + plurItem + " selected"));
 
@@ -630,16 +629,16 @@ public class ObservableValueSelector<T, X> extends JPanel {
 	 * @param <T> The type of values to select from
 	 * @param <X> The type of selected values
 	 * @param sourceRows The collection of values to select from
-	 * @param sourceColumns The columns for the values to select from
-	 * @param destColumns The columns for the selected values
+	 * @param sourceTable Configuration for the source table
+	 * @param destTable Configuration for the destination table
 	 * @param map The function to produce selected values from selectable ones
 	 * @return The builder to build the widget
 	 */
 	public static <T, X> Builder<T, X> build(ObservableCollection<T> sourceRows, //
-		ObservableCollection<? extends CategoryRenderStrategy<SelectableValue<T, X>, ?>> sourceColumns, //
-			ObservableCollection<? extends CategoryRenderStrategy<SelectableValue<T, X>, ?>> destColumns, //
-				Function<? super T, ? extends X> map) {
-		return new Builder<>(sourceRows, sourceColumns, destColumns, map);
+		Consumer<PanelPopulation.TableBuilder<SelectableValue<T, X>, ?>> sourceTable, //
+		Consumer<PanelPopulation.TableBuilder<SelectableValue<T, X>, ?>> destTable, //
+		Function<? super T, ? extends X> map) {
+		return new Builder<>(sourceRows, sourceTable, destTable, map);
 	}
 
 	/**
@@ -650,8 +649,8 @@ public class ObservableValueSelector<T, X> extends JPanel {
 	 */
 	public static class Builder<T, X> {
 		private final ObservableCollection<T> theSourceRows;
-		private final ObservableCollection<? extends CategoryRenderStrategy<SelectableValue<T, X>, ?>> theSourceColumns;
-		private final ObservableCollection<? extends CategoryRenderStrategy<SelectableValue<T, X>, ?>> theDestColumns;
+		private Consumer<PanelPopulation.TableBuilder<SelectableValue<T, X>, ?>> theSourceTable;
+		private Consumer<PanelPopulation.TableBuilder<SelectableValue<T, X>, ?>> theDestTable;
 		private final Function<? super T, ? extends X> theMap;
 		private boolean isReEvalOnUpdate;
 		private Observable<?> theUntil;
@@ -660,13 +659,11 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		private boolean isFilterCommitOnType;
 		private String theItemName;
 
-		Builder(ObservableCollection<T> sourceRows,
-			ObservableCollection<? extends CategoryRenderStrategy<SelectableValue<T, X>, ?>> sourceColumns,
-				ObservableCollection<? extends CategoryRenderStrategy<SelectableValue<T, X>, ?>> destColumns,
-					Function<? super T, ? extends X> map) {
+		Builder(ObservableCollection<T> sourceRows, Consumer<TableBuilder<SelectableValue<T, X>, ?>> sourceTable,
+			Consumer<TableBuilder<SelectableValue<T, X>, ?>> destTable, Function<? super T, ? extends X> map) {
 			theSourceRows = sourceRows;
-			theSourceColumns = sourceColumns;
-			theDestColumns = destColumns;
+			theSourceTable = sourceTable;
+			theDestTable = destTable;
 			theMap = map;
 
 			isReEvalOnUpdate = true;
@@ -735,8 +732,8 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		/** @return The build value selector */
 		public ObservableValueSelector<T, X> build() {
 			return new ObservableValueSelector<>(theSourceRows.safe(ThreadConstraint.EDT, theUntil), //
-				theSourceColumns.safe(ThreadConstraint.EDT, theUntil), theDestColumns.safe(ThreadConstraint.EDT, theUntil),
-				theMap, isReEvalOnUpdate, theUntil, isIncludedByDefault, theFilterFormat, isFilterCommitOnType, theItemName);
+				theSourceTable, theDestTable, theMap, isReEvalOnUpdate, theUntil, isIncludedByDefault, theFilterFormat,
+				isFilterCommitOnType, theItemName);
 		}
 	}
 
@@ -830,10 +827,10 @@ public class ObservableValueSelector<T, X> extends JPanel {
 			}
 			System.out.println();
 			ObservableValueSelector<Map<String, String>, Map<String, String>> ovs = ObservableValueSelector
-				.<Map<String, String>, Map<String, String>> build(rows, columns,
-					ObservableCollection.of(columns.getType(),
+				.<Map<String, String>, Map<String, String>> build(rows, srcTable -> srcTable.withColumns(columns),
+					destTable -> destTable.withColumns(ObservableCollection.of(columns.getType(),
 						new CategoryRenderStrategy<SelectableValue<Map<String, String>, Map<String, String>>, String>("Value",
-							TypeTokens.get().STRING, m -> m.getSource().toString()).withWidths(100, 200, 300)),
+							TypeTokens.get().STRING, m -> m.getSource().toString()).withWidths(100, 200, 300))),
 					v -> v)
 				.build();
 			JFrame w = ObservableSwingUtils.buildUI()//
@@ -841,8 +838,7 @@ public class ObservableValueSelector<T, X> extends JPanel {
 				.withTitle(ObservableValueSelector.class.getSimpleName() + " Tester")//
 				.withSize(1020, 900)//
 				.withCloseAction(JFrame.EXIT_ON_CLOSE)//
-				.withHContent(new JustifiedBoxLayout(false).mainJustified().crossJustified().forceFill(true),
-					p -> p.fill().fillV()//
+				.withHContent(new JustifiedBoxLayout(false).mainJustified().crossJustified().forceFill(true), p -> p.fill().fillV()//
 					.addComponent(null, ovs, c -> c.fill().fillV()))
 				.run(null).getWindow();
 			w.setOpacity(1.0f);

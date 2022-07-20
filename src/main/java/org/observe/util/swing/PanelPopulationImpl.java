@@ -64,8 +64,6 @@ import javax.swing.ListSelectionModel;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
-import javax.swing.UIDefaults;
-import javax.swing.UIManager;
 import javax.swing.event.ChangeListener;
 
 import org.jdesktop.swingx.JXCollapsiblePane;
@@ -1472,7 +1470,7 @@ class PanelPopulationImpl {
 				@Override
 				public Component getListCellRendererComponent(JList<? extends F> list, F value, int index, boolean isSelected,
 					boolean cellHasFocus) {
-					boolean hovered = theHoveredItem.getAsInt() == index;
+					boolean hovered = theHoveredItem != null && theHoveredItem.getAsInt() == index;
 					return renderer.getCellRendererComponent(list,
 						new ModelCell.Default<>(() -> value, value, index, 0, isSelected, cellHasFocus, hovered, hovered, true, true),
 						CellRenderContext.DEFAULT);
@@ -1577,15 +1575,7 @@ class PanelPopulationImpl {
 
 		static <F> ComboButton<F> createButton(ObservableCollection<F> values, BiConsumer<? super F, Object> action, String buttonText,
 			Observable<?> until) {
-			UIDefaults ui = UIManager.getDefaults();
-			Color defaultSelectionBackground = ui.getColor("List.selectionBackground");
-			Color defaultSelectionForeground = ui.getColor("List.selectionForeground");
-			return new ComboButton<>(values, new CategoryRenderStrategy<F, F>("Header", values.getType(), r -> r)//
-				.useRenderingForSize(true)//
-				.decorate((cell, deco) -> {
-					if (cell.isRowHovered())
-						deco.withBackground(defaultSelectionBackground).withForeground(defaultSelectionForeground);
-				}), until)//
+			return new ComboButton<>(values, ComboButton.createDefaultComboBoxColumn(values.getType()), until)//
 				.addListener(action)//
 				;
 		}

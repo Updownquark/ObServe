@@ -336,7 +336,7 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 		int hIns = insets.left + insets.right + theMargin.left + theMargin.right;
 		int vIns = insets.top + insets.bottom + theMargin.top + theMargin.bottom;
 		int main = isVertical ? vIns : hIns;
-		int minOfMaxCross = computeCross ? Integer.MAX_VALUE : 0;
+		int minOfMaxCross = Integer.MAX_VALUE;
 		int maxOfMinCross = 0;
 		boolean first = true;
 		for (Component comp : parent.getComponents()) {
@@ -390,10 +390,10 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 
 	@Override
 	public void layoutContainer(Container parent) {
-		anchor.event("layout", null);
 		Dimension parentSize = parent.getSize();
 		if (parentSize.width == 0 || parentSize.height == 0)
 			return;
+		anchor.event("layout", null);
 
 		Insets insets = parent.getInsets();
 		int totalLength = isVertical//

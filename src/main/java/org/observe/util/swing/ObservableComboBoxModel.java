@@ -95,9 +95,16 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 		return comboFor(comboBox, ObservableValue.of(TypeTokens.get().STRING, descrip), valueTooltip, availableValues, selected);
 	}
 
+	/** A subscription to a combo box hookup situation which also provides the item which the mouse is currently hovering over */
 	public interface ComboHookup extends Subscription {
+		/** @return The index of the item the mouse is currently hovering over */
 		int getHoveredItem();
 
+		/**
+		 * @param sub The subscription for the hookup
+		 * @param hoveredItem The hovered item index retriever for the hookup
+		 * @return The hookup subscription
+		 */
 		static ComboHookup of(Subscription sub, IntSupplier hoveredItem) {
 			return new ComboHookup() {
 				@Override
@@ -126,6 +133,12 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 	 */
 	public static <T> ComboHookup comboFor(JComboBox<T> comboBox, ObservableValue<String> descrip, Function<? super T, String> valueTooltip,
 		ObservableCollection<? extends T> availableValues, SettableValue<T> selected) {
+		// Setting this obscure property has the effect of preventing change events when the user is using the up or down arrow keys
+		// to navigate items while the combo popup is open.
+		// The default behavior of combo box is to fire events each time the user moves to a different item in the list.
+		// Setting this property means the event will only be fired when the user presses enter on the new selection.
+		// This property does not effect mouse behavior.
+		comboBox.putClientProperty("JComboBox.isTableCellEditor", Boolean.TRUE);
 		SimpleObservable<Void> safeUntil = SimpleObservable.build().build();
 		List<Subscription> subs = new LinkedList<>();
 		subs.add(() -> safeUntil.onNext(null));
@@ -200,7 +213,7 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 		int[] hoveredItem = new int[] { -1 };
 		if (popup != null) {
 			@SuppressWarnings("cast") // In some JDKs, the return value is not generic. Keep this cast to JList<T> when saving.
-			JList<T> popupList = (JList<T>) popup.getList();
+			JList<T> popupList = popup.getList();
 			class PopupMouseListener extends MouseMotionAdapter {
 				private Point lastHover;
 

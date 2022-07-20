@@ -28,6 +28,9 @@ import javax.swing.table.TableModel;
 
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
+import org.observe.dbug.Dbug;
+import org.observe.dbug.DbugAnchor;
+import org.observe.dbug.DbugAnchorType;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.CategoryRenderStrategy.CategoryKeyListener;
 import org.qommons.IntList;
@@ -44,6 +47,10 @@ import com.google.common.reflect.TypeToken;
  * @param <R> The type of the backing row data
  */
 public class ObservableTableModel<R> implements TableModel {
+	/** {@link Dbug} anchor type for this class */
+	@SuppressWarnings("rawtypes")
+	public static final DbugAnchorType<ObservableTableModel> DBUG=Dbug.common().anchor(ObservableTableModel.class, null);
+
 	private final ObservableCollection<R> theRows;
 	private final ObservableCollection<? extends CategoryRenderStrategy<R, ?>> theColumns;
 
@@ -55,6 +62,9 @@ public class ObservableTableModel<R> implements TableModel {
 	private final List<TableModelListener> theListeners;
 
 	private final ListenerList<RowMouseListener<? super R>> theRowMouseListeners;
+
+	@SuppressWarnings("rawtypes")
+	private final DbugAnchor<ObservableTableModel> theAnchor = DBUG.instance(this);
 	/**
 	 * @param rows The backing row data
 	 * @param colNames The names for the columns
@@ -94,8 +104,12 @@ public class ObservableTableModel<R> implements TableModel {
 		theRows = rows;
 		theColumns = columns;
 
-		theRowModel = new ObservableListModel<>(rows);
-		theColumnModel = new ObservableListModel<>(columns);
+		try (Transaction t = theAnchor.instantiating()//
+			.watchFor(ObservableListModel.DBUG, "rowModel", tk -> tk.applyTo(1))//
+			.watchFor(ObservableListModel.DBUG, "columnModel", tk -> tk.skip(1))) {
+			theRowModel = new ObservableListModel<>(rows);
+			theColumnModel = new ObservableListModel<>(columns);
+		}
 		theListeners = new ArrayList<>();
 
 		theRowMouseListeners = ListenerList.build().build();
@@ -514,12 +528,12 @@ public class ObservableTableModel<R> implements TableModel {
 			tblColumn.setCellEditor(column.getMutator().getEditor()
 				.withCellTooltip(column.getTooltipFn())//
 				.withHovering(hoveredRow, hoveredColumn));
-		if (column.getMinWidth() >= 0)
-			tblColumn.setMinWidth(column.getMinWidth());
-		if (column.getPrefWidth() >= 0)
-			tblColumn.setPreferredWidth(column.getPrefWidth());
-		if (column.getMaxWidth() >= 0)
-			tblColumn.setMaxWidth(column.getMaxWidth());
+		// if (column.getMinWidth() >= 0)
+		// tblColumn.setMinWidth(column.getMinWidth());
+		// if (column.getPrefWidth() >= 0)
+		// tblColumn.setPreferredWidth(column.getPrefWidth());
+		// if (column.getMaxWidth() >= 0)
+		// tblColumn.setMaxWidth(column.getMaxWidth());
 		tblColumn.setResizable(column.isResizable());
 		// TODO Add other column stuff
 	}

@@ -5,9 +5,8 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.BiConsumer;
-import java.util.function.BiPredicate;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 import org.observe.util.TypeTokens;
 import org.qommons.Transaction;
@@ -33,7 +32,7 @@ public class DbugAnchor<A> {
 		return theType;
 	}
 
-	A getInstance() {
+	public A getInstance() {
 		return theInstance;
 	}
 
@@ -200,9 +199,9 @@ public class DbugAnchor<A> {
 	public static class DbugInstanceTokenizer<A> {
 		private final DbugAnchorType<A> theAnchorType;
 		private final String theTokenName;
-		private BiPredicate<? super DbugAnchor<? extends A>, ? super A> theFilter;
+		private Predicate<? super DbugAnchor<? extends A>> theFilter;
 		private boolean isActivating;
-		private BiConsumer<? super DbugAnchor<? extends A>, ? super A> theAction;
+		private Consumer<? super DbugAnchor<? extends A>> theAction;
 		int theRemainingSkips;
 		int theRemainingApplications;
 
@@ -221,8 +220,13 @@ public class DbugAnchor<A> {
 			return theTokenName;
 		}
 
-		public DbugInstanceTokenizer<A> filter(BiPredicate<? super DbugAnchor<? extends A>, ? super A> filter) {
-			theFilter = filter;
+		public DbugInstanceTokenizer<A> filter(Predicate<? super DbugAnchor<? extends A>> filter) {
+			if (theFilter == null)
+				theFilter = filter;
+			else {
+				Predicate<? super DbugAnchor<? extends A>> old = theFilter;
+				theFilter = a -> old.test(a) && filter.test(a);
+			}
 			return this;
 		}
 
@@ -231,8 +235,16 @@ public class DbugAnchor<A> {
 			return this;
 		}
 
-		public DbugInstanceTokenizer<A> thenDo(BiConsumer<? super DbugAnchor<? extends A>, ? super A> action) {
-			theAction = action;
+		public DbugInstanceTokenizer<A> thenDo(Consumer<? super DbugAnchor<? extends A>> action) {
+			if (theAction == null)
+				theAction = action;
+			else {
+				Consumer<? super DbugAnchor<? extends A>> old = theAction;
+				theAction = a -> {
+					old.accept(a);
+					action.accept(a);
+				};
+			}
 			return this;
 		}
 
@@ -246,8 +258,8 @@ public class DbugAnchor<A> {
 			return this;
 		}
 
-		boolean applies(DbugAnchor<? extends A> anchor, A instance) {
-			if (theFilter == null || theFilter.test(anchor, instance)) {
+		boolean applies(DbugAnchor<? extends A> anchor) {
+			if (theFilter == null || theFilter.test(anchor)) {
 				if (theRemainingSkips > 0) {
 					theRemainingSkips--;
 					return false;
@@ -256,7 +268,7 @@ public class DbugAnchor<A> {
 				if (isActivating)
 					anchor.setActive(true);
 				if (theAction != null)
-					theAction.accept(anchor, instance);
+					theAction.accept(anchor);
 				return true;
 			} else
 				return false;

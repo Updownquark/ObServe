@@ -39,7 +39,7 @@ public class ObservableListModel<E> implements ListModel<E> {
 	@SuppressWarnings("rawtypes")
 	public static final DbugAnchorType<ObservableListModel> DBUG = Dbug.common().anchor(ObservableListModel.class, a -> a//
 		.withField("type", true, false, TypeTokens.get().keyFor(TypeToken.class).wildCard())//
-		.withEvent("add").withEvent("remove").withEvent("set"));
+		.withEvent("beginListen").withEvent("endListen").withEvent("add").withEvent("remove").withEvent("set"));
 
 	@SuppressWarnings("rawtypes")
 	private final DbugAnchor<ObservableListModel> theAnchor;
@@ -88,11 +88,11 @@ public class ObservableListModel<E> implements ListModel<E> {
 
 	@Override
 	public void addListDataListener(ListDataListener l) {
-		ObservableSwingUtils.onEQ(() -> {
-			if (theListeners.isEmpty())
-				beginListening();
-			theListeners.add(l);
-		});
+		if (!EventQueue.isDispatchThread())
+			EventQueue.invokeLater(() -> addListDataListener(l));
+		if (theListeners.isEmpty())
+			beginListening();
+		theListeners.add(l);
 	}
 
 	@Override
@@ -100,6 +100,7 @@ public class ObservableListModel<E> implements ListModel<E> {
 		ObservableSwingUtils.onEQ(() -> {
 			theListeners.remove(l);
 			if (theListeners.isEmpty() && theListening != null) {
+				theAnchor.event("endListen", null);
 				theListening.unsubscribe();
 				theListening = null;
 				if (isEventing)
@@ -111,6 +112,7 @@ public class ObservableListModel<E> implements ListModel<E> {
 	}
 
 	private void beginListening() {
+		theAnchor.event("beginListen", null);
 		try (Transaction t = theWrapped.lock(false, null)) {
 			theCachedData.addAll(theWrapped);
 			theListening = theWrapped.changes().act(this::handleEvent);

@@ -433,6 +433,7 @@ public final class ObservableCollectionImpl {
 		private final Observable<?> theRefresh;
 		private Object theChangesIdentity;
 
+		private long theLastMatchStamp;
 		private ElementId theLastMatch;
 
 		/**
@@ -446,6 +447,7 @@ public final class ObservableCollectionImpl {
 			Comparator<CollectionElement<? extends E>> elementCompare, Supplier<? extends E> def, Observable<?> refresh) {
 			theCollection = collection;
 			theElementCompare = elementCompare;
+			theLastMatchStamp = -1;
 			if (def != null)
 				theDefault = def;
 			else
@@ -487,10 +489,13 @@ public final class ObservableCollectionImpl {
 		@Override
 		public ElementId getElementId() {
 			try (Transaction t = getCollection().lock(false, null)) {
-				if (theLastMatch != null && theLastMatch.isPresent() && useCachedMatch(getCollection().getElement(theLastMatch).get()))
+				long stamp = theCollection.getStamp();
+				if (stamp == theLastMatchStamp
+					|| (theLastMatch != null && theLastMatch.isPresent() && useCachedMatch(getCollection().getElement(theLastMatch).get())))
 					return theLastMatch;
 				ValueHolder<CollectionElement<E>> element = new ValueHolder<>();
 				find(el -> element.accept(new SimpleElement(el.getElementId(), el.get())));
+				theLastMatchStamp = stamp;
 				if (element.get() != null)
 					return theLastMatch = element.get().getElementId();
 				else {
@@ -503,10 +508,13 @@ public final class ObservableCollectionImpl {
 		@Override
 		public E get() {
 			try (Transaction t = getCollection().lock(false, null)) {
-				if (theLastMatch != null && theLastMatch.isPresent() && useCachedMatch(getCollection().getElement(theLastMatch).get()))
-					return getCollection().getElement(theLastMatch).get();
+				long stamp = theCollection.getStamp();
+				if (stamp == theLastMatchStamp
+					|| (theLastMatch != null && theLastMatch.isPresent() && useCachedMatch(getCollection().getElement(theLastMatch).get())))
+					return theLastMatch == null ? null : getCollection().getElement(theLastMatch).get();
 				ValueHolder<CollectionElement<E>> element = new ValueHolder<>();
 				find(el -> element.accept(new SimpleElement(el.getElementId(), el.get())));
+				theLastMatchStamp = stamp;
 				if (element.get() != null) {
 					theLastMatch = element.get().getElementId();
 					return element.get().get();
@@ -665,6 +673,7 @@ public final class ObservableCollectionImpl {
 										if (current == null || better) {
 											causeData.put("replacement", new SimpleElement(evt.getElementId(), evt.getNewValue()));
 											causeData.remove("re-search");
+											theLastMatchStamp = getCollection().getStamp();
 											theLastMatch = evt.getElementId();
 										} else if (sameElement) {
 											// The current best element is removed or replaced with an inferior value. Need to re-search.
@@ -727,6 +736,7 @@ public final class ObservableCollectionImpl {
 									e.printStackTrace();
 									newVal = null;
 								}
+								theLastMatchStamp = getCollection().getStamp();
 								if (Objects.equals(oldId, newId) && oldVal == newVal)
 									return;
 								theCurrentElement = element;

@@ -113,6 +113,12 @@ import com.google.common.reflect.TypeToken;
  */
 public class Transformation<S, T> extends XformOptions.XformDef implements Identifiable {
 	/**
+	 * Error message given by transformation reversal when {@link MappingSourceReplacingReverse#allowInexactReverse(boolean) inexact
+	 * reverse} is not allowed.
+	 */
+	public static final String INEXACT_REVERSE_MSG = "Given value does not map exactly to a source value";
+
+	/**
 	 * Contains information about a particular transformation operation
 	 *
 	 * @param <S> The source value type
@@ -889,7 +895,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 					}
 				});
 				if (!theTransformation.equivalence().elementEquals(reTransformed, newValue))
-					return ReverseQueryResult.reject(StdMsg.ILLEGAL_ELEMENT);
+					return ReverseQueryResult.reject(INEXACT_REVERSE_MSG);
 			}
 			return ReverseQueryResult.value(reversed);
 		}

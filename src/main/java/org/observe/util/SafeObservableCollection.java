@@ -127,6 +127,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 
 	private final ThreadConstraint theThreadConstraint;
 	private Object theIdentity;
+	private final AtomicBoolean isLocked;
 
 	private final Set<ElementId> theAddedElements;
 	private final List<ElementRef<E>> theRemovedElements;
@@ -152,6 +153,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 		theCollection = collection;
 		theSyntheticBacking = BetterTreeList.<ElementRef<E>> build().withThreadConstraint(threading).build();
 		theThreadConstraint = threading;
+		isLocked = new AtomicBoolean();
 
 		ObservableCollectionBuilder<ElementRef<E>, ?> builder = DefaultObservableCollection
 			.build((TypeToken<ElementRef<E>>) (TypeToken<?>) TypeTokens.get().of(ElementRef.class))//
@@ -182,7 +184,8 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 		theFlushKey = Causable.key((cause, values) -> {
 			if (threading.isEventThread()) {
 				try (Transaction t = theSyntheticCollection.lock(true, cause)) { // For causality
-					doFlush();
+					if (!isLocked.get())
+						doFlush();
 				}
 			} else
 				threading.invoke(this::doFlush);
@@ -494,10 +497,14 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 		if (write && isFinished)
 			throw new IllegalStateException(StdMsg.UNSUPPORTED_OPERATION);
 		Transaction t = Transactable.combine(theCollection, theSyntheticCollection).lock(write, cause);
+		boolean initialLock = t != null && isLocked.compareAndSet(false, true);
+		if (initialLock)
+			t = t.combine(() -> isLocked.set(false));
 		// In the case of a read lock on the event thread, this would not be safe if theSyntheticCollection actually performed locking,
 		// because we obtained a read lock on it which is not generally upgradable to a write lock that is needed by the flush.
 		// As it is, the collection's only constraint is that it is modified on the event thread, which is met.
-		if (write || theThreadConstraint.isEventThread())
+		// We can't flush if we're already locked
+		if (initialLock && (write || theThreadConstraint.isEventThread()))
 			doFlush();
 		return t;
 	}
@@ -507,7 +514,10 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 		if (write && isFinished)
 			throw new IllegalStateException(StdMsg.UNSUPPORTED_OPERATION);
 		Transaction t = Transactable.combine(theCollection, theSyntheticCollection).tryLock(write, cause);
-		if (t != null && (write || theThreadConstraint.isEventThread()))
+		boolean initialLock = t != null && isLocked.compareAndSet(false, true);
+		if (initialLock)
+			t = t.combine(() -> isLocked.set(false));
+		if (initialLock && (write || theThreadConstraint.isEventThread()))
 			doFlush();
 		return t;
 	}
