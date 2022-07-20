@@ -676,7 +676,7 @@ implements TableBuilder<R, P> {
 
 		JScrollPane scroll = new JScrollPane(table);
 		table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
-		class SizeListener implements ListDataListener, TableColumnModelListener, ChangeListener, ComponentListener, HierarchyListener,
+		class SizeListener implements TableColumnModelListener, ChangeListener, ComponentListener, HierarchyListener,
 		MouseListener, MouseMotionListener {
 			private boolean isHSBVisible;
 			private boolean isVSBVisible;
@@ -698,6 +698,19 @@ implements TableBuilder<R, P> {
 					column.setMaxWidth(widths[2]);
 					widths[3] = widths[1];
 				}
+				theFilteredRows.simpleChanges().act(__ -> {
+					if (theAdaptivePrefRowHeight >= 0)
+						adjustHeight();
+					boolean adjusted = false;
+					int c = 0;
+					for (CategoryRenderStrategy<R, ?> col : columns) {
+						if (col.isUsingRenderingForSize())
+							adjusted |= adjustColumnWidth(col, c);
+						c++;
+					}
+					if (adjusted)
+						adjustScrollWidths();
+				});
 				columns.changes().act(evt -> {
 					theResizingColumn = -1;
 					for (CollectionChangeEvent.ElementChange<? extends CategoryRenderStrategy<R, ?>> change : evt.getElements()) {
@@ -732,38 +745,6 @@ implements TableBuilder<R, P> {
 				tableColumn.setMaxWidth(newWidths[2]);
 				// TODO Adjust existing widths given constraint changes
 				return false;
-			}
-
-			@Override
-			public void intervalRemoved(ListDataEvent e) {
-				if (e.getIndex0() < theAdaptiveMaxRowHeight)
-					adjustHeight();
-				rowsChanged();
-			}
-
-			@Override
-			public void intervalAdded(ListDataEvent e) {
-				if (e.getIndex0() < theAdaptiveMaxRowHeight)
-					adjustHeight();
-				rowsChanged();
-			}
-
-			@Override
-			public void contentsChanged(ListDataEvent e) {
-				if (e.getIndex0() < theAdaptiveMaxRowHeight)
-					adjustHeight();
-				rowsChanged();
-			}
-
-			void rowsChanged() {
-				boolean adjusted = false;
-				for (int c = 0; c < columns.size(); c++) {
-					CategoryRenderStrategy<R, ?> column = columns.get(c);
-					if (column.isUsingRenderingForSize())
-						adjusted |= adjustColumnWidth(column, c);
-				}
-				if (adjusted)
-					adjustScrollWidths();
 			}
 
 			@Override
@@ -951,7 +932,7 @@ implements TableBuilder<R, P> {
 					+ 2;
 				// int minW = spacing,
 				int prefW = spacing, maxW = spacing;
-				for (int[] width : getColumnWidths()) {
+				for (int[] width : theColumnWidths) {
 					// minW += width[0];
 					prefW += width[1];
 					maxW += width[2];
@@ -1128,7 +1109,6 @@ implements TableBuilder<R, P> {
 			}
 		}
 		SizeListener sizeListener = new SizeListener();
-		model.getRowModel().addListDataListener(sizeListener);
 		table.getColumnModel().addColumnModelListener(sizeListener);
 		if (table.getTableHeader() != null) {
 			table.getTableHeader().addMouseListener(sizeListener);
@@ -1343,63 +1323,6 @@ implements TableBuilder<R, P> {
 			widths[1] = column.getPrefWidth();
 			widths[2] = column.getMaxWidth();
 		}
-	}
-
-	private int[][] getColumnWidths() {
-		ObservableTableModel<R> model = (ObservableTableModel<R>) getEditor().getModel();
-		int[][] widths = new int[model.getColumnCount()][3];
-		for (int c = 0; c < widths.length; c++) {
-			CategoryRenderStrategy<R, ?> column = model.getColumn(c);
-			if (column.isUsingRenderingForSize()) {
-				ObservableCellRenderer<R, ?> renderer = (ObservableCellRenderer<R, ?>) column.getRenderer();
-				if (renderer == null) {
-					renderer = new ObservableCellRenderer.DefaultObservableCellRenderer<>((row, cell) -> String.valueOf(cell));
-					((CategoryRenderStrategy<R, Object>) column).withRenderer((ObservableCellRenderer<R, Object>) renderer);
-				}
-				int maxMin = 0, maxPref = 0, maxMax = 0;
-				if (withColumnHeader) {
-					Component render = getEditor().getTableHeader().getComponent(c);
-					int min = render.getMinimumSize().width;
-					int pref = render.getPreferredSize().width;
-					int max = render.getMaximumSize().width;
-					if (min > maxMin)
-						maxMin = min;
-					if (pref > maxPref)
-						maxPref = pref;
-					if (max > maxMax)
-						maxMax = max;
-				}
-				int r = 0;
-				for (R row : theFilteredRows) {
-					Object cellValue = column.getCategoryValue(row);
-					ModelCell<R, Object> cell = new ModelCell.Default<>(() -> row, cellValue, r, c, getEditor().isRowSelected(r), false,
-						false, false, false, true);
-					Component render = ((CategoryRenderStrategy<R, Object>) column).getRenderer().getCellRendererComponent(getEditor(),
-						cell, CellRenderContext.DEFAULT);
-					int min = render.getMinimumSize().width;
-					int pref = render.getPreferredSize().width;
-					int max = render.getMaximumSize().width;
-					if (min > maxMin)
-						maxMin = min;
-					if (pref > maxPref)
-						maxPref = pref;
-					if (max > maxMax)
-						maxMax = max;
-					r++;
-				}
-				// Not sure why, but these actually need just a pixel more padding
-				maxMin++;
-				maxMax++;
-				widths[c][0] = maxMin;
-				widths[c][1] = Math.max(maxPref, maxMin);
-				widths[c][2] = maxMax;
-			} else {
-				widths[c][0] = column.getMinWidth();
-				widths[c][1] = column.getPrefWidth();
-				widths[c][2] = column.getMaxWidth();
-			}
-		}
-		return widths;
 	}
 
 	class TableBuilderTransferHandler extends TransferHandler {
