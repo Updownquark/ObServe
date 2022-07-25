@@ -125,7 +125,7 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 			public ObservableValue<String> isEnabled() {
 				BiFunction<String, String, String> combineFn = (str1, str2) -> str1 != null ? str1 : str2;
 				return SettableValue.this.isEnabled().combine(STRING_TYPE, combineFn,
-					value.refresh(SettableValue.this.changes().noInit()).map(STRING_TYPE, v -> isAcceptable(v)),
+					value.refresh(SettableValue.this.noInitChanges()).map(STRING_TYPE, v -> isAcceptable(v)),
 					options -> options.fireIfUnchanged(false));
 			}
 

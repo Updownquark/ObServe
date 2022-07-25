@@ -43,14 +43,9 @@ import javax.swing.JTable;
 import javax.swing.ListSelectionModel;
 import javax.swing.TransferHandler;
 import javax.swing.border.TitledBorder;
-import javax.swing.event.ChangeEvent;
-import javax.swing.event.ChangeListener;
 import javax.swing.event.ListDataEvent;
 import javax.swing.event.ListDataListener;
-import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
-import javax.swing.event.TableColumnModelEvent;
-import javax.swing.event.TableColumnModelListener;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableColumn;
 
@@ -676,15 +671,18 @@ implements TableBuilder<R, P> {
 
 		JScrollPane scroll = new JScrollPane(table);
 		table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
-		class SizeListener implements TableColumnModelListener, ChangeListener, ComponentListener, HierarchyListener,
-		MouseListener, MouseMotionListener {
-			private boolean isHSBVisible;
-			private boolean isVSBVisible;
+		class SizeListener implements ComponentListener, HierarchyListener, MouseListener, MouseMotionListener {
 			private final List<int[]> theColumnWidths;
 			private int theResizingColumn;
 			private int theResizingColumnOrigWidth;
 			private int theResizingPreColumnWidth;
 			private int theDragStart;
+
+			/**
+			 * This integer is how much the user has resized columns beyond the scroll pane.<br />
+			 * This helps us with column layout.
+			 */
+			private int theTableExtraWidth;
 
 			SizeListener() {
 				theResizingColumn = -1;
@@ -692,20 +690,70 @@ implements TableBuilder<R, P> {
 				for (int c = 0; c < columns.size(); c++) {
 					int[] widths = new int[4]; // min, pref, max, and actual
 					theColumnWidths.add(widths);
-					getColumnWidths(columns.get(c), c, widths);
+					getColumnWidths(columns.get(c), c, widths, null);
 					TableColumn column = table.getColumnModel().getColumn(table.convertColumnIndexToView(c));
 					column.setMinWidth(widths[0]);
 					column.setMaxWidth(widths[2]);
 					widths[3] = widths[1];
 				}
-				theFilteredRows.simpleChanges().act(__ -> {
-					if (theAdaptivePrefRowHeight >= 0)
+				adjustScrollWidths();
+				theFilteredRows.changes().act(evt -> {
+					if (theAdaptivePrefRowHeight > 0)
 						adjustHeight();
 					boolean adjusted = false;
 					int c = 0;
-					for (CategoryRenderStrategy<R, ?> col : columns) {
-						if (col.isUsingRenderingForSize())
-							adjusted |= adjustColumnWidth(col, c);
+					for (CategoryRenderStrategy<R, ?> column : columns) {
+						if (column.isUsingRenderingForSize()) {
+							int[] cw = theColumnWidths.get(c);
+							int[] newWidths = new int[3];
+							boolean colAdjust = false;
+							switch (evt.type) {
+							case add:
+								getColumnWidths(column, c, newWidths, evt);
+								if (newWidths[0] > cw[0]) {
+									colAdjust = true;
+									cw[0] = newWidths[0];
+								}
+								if (newWidths[1] > cw[1]) {
+									colAdjust = true;
+									cw[1] = newWidths[1];
+								}
+								if (newWidths[2] > cw[2]) {
+									colAdjust = true;
+									cw[2] = newWidths[2];
+								}
+								break;
+							case remove:
+							case set:
+								getColumnWidths(column, c, newWidths, null);
+								if (newWidths[0] != cw[0]) {
+									colAdjust = true;
+									cw[0] = newWidths[0];
+								}
+								if (newWidths[1] != cw[1]) {
+									colAdjust = true;
+									cw[1] = newWidths[1];
+								}
+								if (newWidths[2] != cw[2]) {
+									colAdjust = true;
+									cw[2] = newWidths[2];
+								}
+								break;
+							}
+							if (colAdjust) {
+								adjusted = true;
+								TableColumn tc = table.getColumnModel().getColumn(table.convertColumnIndexToView(c));
+								tc.setMinWidth(cw[0]);
+								tc.setMaxWidth(cw[2]);
+								if (cw[3] == 0)
+									cw[3] = cw[1];
+								else if (cw[3] < cw[0])
+									cw[3] = cw[0];
+								else if (cw[3] > cw[2])
+									cw[3] = cw[2];
+							}
+							break;
+						}
 						c++;
 					}
 					if (adjusted)
@@ -713,50 +761,39 @@ implements TableBuilder<R, P> {
 				});
 				columns.changes().act(evt -> {
 					theResizingColumn = -1;
+					boolean adjust = false;
 					for (CollectionChangeEvent.ElementChange<? extends CategoryRenderStrategy<R, ?>> change : evt.getElements()) {
 						switch (evt.type) {
 						case add:
 							int[] widths = new int[4];
 							theColumnWidths.add(change.index, widths);
-							getColumnWidths(change.newValue, change.index, widths);
+							getColumnWidths(change.newValue, change.index, widths, null);
 							widths[3] = widths[1];
-							// We're listening after the table model hookup, so the column should be there
-							TableColumn column = table.getColumnModel().getColumn(table.convertColumnIndexToView(change.index));
-							column.setMinWidth(widths[0]);
-							column.setMaxWidth(widths[2]);
+							adjust = true;
 							break;
 						case remove:
 							theColumnWidths.remove(change.index);
+							adjust = true;
 							break;
 						case set:
-							adjustColumnWidth(change.newValue, change.index);
+							if (!change.newValue.isUsingRenderingForSize()) {
+								int[] cw = theColumnWidths.get(change.index);
+								adjust |= cw[0] != change.newValue.getMinWidth();
+								adjust |= cw[1] != change.newValue.getPrefWidth();
+								adjust |= cw[2] != change.newValue.getMaxWidth();
+								cw[0] = change.newValue.getMinWidth();
+								cw[1] = change.newValue.getPrefWidth();
+								cw[2] = change.newValue.getMaxWidth();
+								TableColumn tc = table.getColumnModel().getColumn(table.convertColumnIndexToView(change.index));
+								tc.setMinWidth(cw[0]);
+								tc.setMaxWidth(cw[2]);
+							}
 							break;
 						}
 					}
-					adjustScrollWidths();
+					if (adjust)
+						adjustScrollWidths();
 				});
-			}
-
-			boolean adjustColumnWidth(CategoryRenderStrategy<R, ?> column, int columnIndex) {
-				int[] newWidths = new int[3];
-				getColumnWidths(column, columnIndex, newWidths);
-				TableColumn tableColumn = table.getColumnModel().getColumn(table.convertColumnIndexToView(columnIndex));
-				tableColumn.setMinWidth(newWidths[0]);
-				tableColumn.setMaxWidth(newWidths[2]);
-				// TODO Adjust existing widths given constraint changes
-				return false;
-			}
-
-			@Override
-			public void columnAdded(TableColumnModelEvent e) {
-			}
-
-			@Override
-			public void columnRemoved(TableColumnModelEvent e) {
-			}
-
-			@Override
-			public void columnMoved(TableColumnModelEvent e) {
 			}
 
 			@Override
@@ -765,83 +802,87 @@ implements TableBuilder<R, P> {
 
 			@Override
 			public void mousePressed(MouseEvent e) {
-				int preTotalW = 0;
-				for (int c = 0; c < table.getColumnModel().getColumnCount() - 1; c++) {
-					int modelIndex = table.convertColumnIndexToModel(c);
-					int[] widths = theColumnWidths.get(modelIndex);
-					if (Math.abs(e.getX() - preTotalW - widths[3]) <= 2) {
-						theResizingColumn = c;
-						theResizingColumnOrigWidth = widths[3];
-						theResizingPreColumnWidth = preTotalW;
-						theDragStart = e.getX();
-						break;
-					} else if (preTotalW > e.getX())
-						break;
-					preTotalW += widths[3];
+				TableColumn resizing = table.getTableHeader().getResizingColumn();
+				if (resizing == null) {
+					theResizingColumn = -1;
+					return;
 				}
+				theResizingColumn = resizing.getModelIndex();
+				theResizingColumnOrigWidth = resizing.getWidth();
+				theDragStart = e.getX();
+				int viewC = table.convertColumnIndexToView(theResizingColumn);
+				theResizingPreColumnWidth = viewC * table.getColumnModel().getColumnMargin();
+				for (int c = 0; c < viewC; c++)
+					theResizingPreColumnWidth += table.getColumnModel().getColumn(c).getWidth();
 			}
 
 			@Override
 			public void mouseDragged(MouseEvent e) {
-				int resizeColumn = theResizingColumn;
-				if (resizeColumn < 0)
+				int resizeModelIndex = theResizingColumn;
+				if (resizeModelIndex < 0)
 					return;
+				int resizeColumn = table.convertColumnIndexToView(resizeModelIndex);
 				int tableSize = scroll.getViewport().getWidth()
-					- (getEditor().getColumnCount() - 1) * getEditor().getIntercellSpacing().width;
+					- (table.getColumnCount() - 1) * table.getColumnModel().getColumnMargin();
 				if (tableSize <= 0)
 					return;
 				int newWidth = theResizingColumnOrigWidth + e.getX() - theDragStart;
-				int resizeModelIndex = table.convertColumnIndexToModel(resizeColumn);
 				if (newWidth < theColumnWidths.get(resizeModelIndex)[0])
 					newWidth = theColumnWidths.get(resizeModelIndex)[0];
 				else if (newWidth > theColumnWidths.get(resizeModelIndex)[2])
 					newWidth = theColumnWidths.get(resizeModelIndex)[2];
 				if (newWidth == theColumnWidths.get(resizeModelIndex)[3])
 					return;
-				// We need to determine if the new size is actually ok--if the columns to the right of the drag
-				// can be resized down enough to accommodate the user's action.
-				int[] postTotalW = new int[4];
-				for (int c = resizeColumn + 1; c < table.getColumnModel().getColumnCount(); c++) {
-					int[] widths = theColumnWidths.get(table.convertColumnIndexToModel(c));
-					postTotalW[0] += widths[0];
-					postTotalW[1] += widths[1];
-					postTotalW[2] += widths[2];
-					postTotalW[3] += widths[3];
-				}
 				int remain = tableSize - theResizingPreColumnWidth - newWidth;
-				// If not, cap the action so that the columns are at their min sizes
-				if (remain < postTotalW[0]) {
-					newWidth = tableSize - theResizingPreColumnWidth - postTotalW[0];
-					if (newWidth <= theColumnWidths.get(resizeModelIndex)[0])
-						return; // Already as small as it can be, ignore the drag
-					remain = tableSize - theResizingPreColumnWidth - newWidth;
+				int[] postTotalW = new int[4];
+				if (!isScrollable) {
+					// We need to determine if the new size is actually ok--if the columns to the right of the drag
+					// can be resized down enough to accommodate the user's action.
+					for (int c = resizeColumn + 1; c < table.getColumnModel().getColumnCount(); c++) {
+						int[] widths = theColumnWidths.get(table.convertColumnIndexToModel(c));
+						postTotalW[0] += widths[0];
+						postTotalW[1] += widths[1];
+						postTotalW[2] += widths[2];
+						postTotalW[3] += widths[3];
+						if (c > resizeColumn + 1) {
+							postTotalW[0] += table.getColumnModel().getColumnMargin();
+							postTotalW[1] += table.getColumnModel().getColumnMargin();
+							postTotalW[2] += table.getColumnModel().getColumnMargin();
+							postTotalW[3] += table.getColumnModel().getColumnMargin();
+						}
+					}
+					// If not, cap the action so that the columns are at their min sizes
+					if (remain < postTotalW[0]) {
+						newWidth = tableSize - theResizingPreColumnWidth - postTotalW[0];
+						if (newWidth <= theColumnWidths.get(resizeModelIndex)[0])
+							return; // Already as small as it can be, ignore the drag
+						remain = tableSize - theResizingPreColumnWidth - newWidth;
+					}
+					if (remain == postTotalW[3])
+						return;
 				}
-				if (remain == postTotalW[3])
-					return;
+				int wDiff = newWidth - theColumnWidths.get(resizeModelIndex)[3];
 				theColumnWidths.get(resizeModelIndex)[3] = newWidth;
-				table.getColumnModel().getColumn(resizeColumn).setWidth(newWidth);
-				table.getColumnModel().getColumn(resizeColumn).setPreferredWidth(newWidth);
-				// Then adjust all the actual sizes of columns to the right of the drag, both in the list and the model
-				isRecursive = true;
-				if (remain <= postTotalW[3]) {
-					float p = (remain - postTotalW[0]) * 1.0f / (postTotalW[3] - postTotalW[0]);
-					for (int c = resizeColumn + 1; c < table.getColumnModel().getColumnCount(); c++) {
-						int modelC = table.convertColumnIndexToModel(c);
-						int[] widths = theColumnWidths.get(modelC);
-						widths[3] = widths[0] + Math.round(p * (widths[3] - widths[0]));
-						table.getColumnModel().getColumn(c).setWidth(widths[3]);
-					}
+				if (!isScrollable) {
+					// Then adjust all the actual sizes of columns to the right of the drag
+					distributeSize(remain - postTotalW[3], resizeColumn + 1);
 				} else {
-					float p = (remain - postTotalW[3]) * 1.0f / (postTotalW[2] - postTotalW[3]);
-					if (p > 1)
-						p = 1;
-					for (int c = resizeColumn + 1; c < table.getColumnModel().getColumnCount(); c++) {
-						int modelC = table.convertColumnIndexToModel(c);
-						int[] widths = theColumnWidths.get(modelC);
-						widths[3] = widths[3] + Math.round(p * (widths[2] - widths[3]));
-						table.getColumnModel().getColumn(c).setWidth(widths[3]);
+					int newTableW = table.getColumnModel().getColumnMargin() * (table.getColumnCount() - 1);
+					for (int[] cw : theColumnWidths)
+						newTableW += cw[3];
+					table.setSize(newTableW, table.getHeight());
+					theTableExtraWidth += wDiff;
+					boolean preHSB = scroll.getHorizontalScrollBarPolicy() != JScrollPane.HORIZONTAL_SCROLLBAR_NEVER;
+					boolean hsb = newTableW > tableSize;
+					if (preHSB != hsb) {
+						scroll.setHorizontalScrollBarPolicy(
+							hsb ? JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED : JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+						if (theAdaptivePrefRowHeight > 0)
+							adjustHeight();
 					}
 				}
+				isRecursive = true;
+				applyColumnSizes();
 				isRecursive = false;
 			}
 
@@ -862,38 +903,20 @@ implements TableBuilder<R, P> {
 			public void mouseMoved(MouseEvent e) {
 			}
 
-			@Override
-			public void columnMarginChanged(ChangeEvent e) {
-				if (!isRecursive)
-					layoutColumns();
-			}
-
-			@Override
-			public void columnSelectionChanged(ListSelectionEvent e) {
-			}
-
-			@Override
-			public void stateChanged(ChangeEvent e) {
-				BoundedRangeModel hbm = scroll.getHorizontalScrollBar().getModel();
-				if (hbm.getValueIsAdjusting())
-					return;
-				if (isHSBVisible != (hbm.getExtent() < hbm.getMaximum())) {
-					adjustHeight();
-					adjustScrollWidths();
-				} else {
-					BoundedRangeModel vbm = scroll.getVerticalScrollBar().getModel();
-					if (vbm.getValueIsAdjusting())
-						return;
-					if (isVSBVisible != (vbm.getExtent() < vbm.getMaximum())) {
-						adjustHeight();
-						adjustScrollWidths();
-					}
-				}
-			}
+			private int theScrollWidth;
 
 			@Override
 			public void componentResized(ComponentEvent e) {
-				theResizingColumn = -1;
+				int newWidth = scroll.getWidth();
+				int widthDiff = newWidth - theScrollWidth;
+				// If we're resizing in a way that accommodates the cumulative growth or shrinkage of columns due to user resizing,
+				// modify the extra table width such that we don't grow or shrink columns as a result of the table resize.
+				// This has the effect of resetting the table so that the columns will fit in the scroll window if possible.
+				if (widthDiff > 0 && theTableExtraWidth > 0)
+					theTableExtraWidth = Math.max(0, theTableExtraWidth - widthDiff);
+				else if (widthDiff < 0 && theTableExtraWidth < 0)
+					theTableExtraWidth = Math.min(0, theTableExtraWidth - widthDiff);
+				theScrollWidth = newWidth;
 				adjustHeight();
 				adjustScrollWidths();
 			}
@@ -974,85 +997,147 @@ implements TableBuilder<R, P> {
 				if (isRecursive)
 					return;
 				int tableSize = scroll.getViewport().getWidth()
-					- (getEditor().getColumnCount() - 1) * getEditor().getIntercellSpacing().width;
+					- (getEditor().getColumnCount() - 1) * table.getColumnModel().getColumnMargin()//
+					+ theTableExtraWidth;
 				if (tableSize <= 0)
 					return;
 				isRecursive = true;
 				theAnchor.event("layoutColumns", null);
+				int[] total = new int[4];
+				// Figure out how things have changed--how much space the columns want compared to how much we have
+				for (int c = 0; c < theColumnWidths.size(); c++) {
+					int[] cw = theColumnWidths.get(c);
+					total[0] += cw[0];
+					total[1] += cw[1];
+					total[2] += cw[2];
+					if (total[2] < 0)
+						total[2] = Integer.MAX_VALUE;
+					total[3] += cw[3];
+				}
+				int diff = tableSize - total[3];
+				diff = distributeSize(diff, 0);
+				if (diff < 0) { // Table is too small for its columns
+					if (isScrollable)
+						total[3] = total[1];
+					else
+						total[3] = total[0];
+				} else if (diff > 0) { // Columns can't take up all the space in the table
+					total[3] = total[2];
+				} else
+					total[3] = tableSize;
+
+				applyColumnSizes();
+				if (table.getSize().width != total[3])
+					table.setSize(new Dimension(total[3], table.getHeight()));
 				boolean preHsb = scroll.getHorizontalScrollBarPolicy() != JScrollPane.HORIZONTAL_SCROLLBAR_NEVER;
-				boolean hsb;
-				int totalPref = 0;
-				for (int c = 0; c < theColumnWidths.size(); c++)
-					totalPref += theColumnWidths.get(c)[3];
-				if (totalPref <= tableSize && (tableSize - totalPref) < theColumnWidths.size()) {
-					for (int c = 0; c < model.getColumnCount() && c < table.getColumnModel().getColumnCount(); c++) {
-						int[] widths = theColumnWidths.get(table.convertColumnIndexToModel(c));
-						table.getColumnModel().getColumn(c).setWidth(widths[3]);
-						table.getColumnModel().getColumn(c).setPreferredWidth(widths[3]);
-					}
-					table.setSize(totalPref, table.getHeight());
-					hsb = false;
-				} else if (tableSize < totalPref) {
-					int totalMin = 0;
-					for (int c = 0; c < theColumnWidths.size(); c++)
-						totalMin += theColumnWidths.get(c)[0];
-					if (tableSize <= totalMin) {
-						for (int c = 0; c < model.getColumnCount() && c < table.getColumnModel().getColumnCount(); c++) {
-							int[] widths = theColumnWidths.get(table.convertColumnIndexToModel(c));
-							widths[3] = widths[0];
-							table.getColumnModel().getColumn(c).setWidth(widths[3]);
-							table.getColumnModel().getColumn(c).setPreferredWidth(widths[3]);
+				if (theTableExtraWidth > 0)
+					tableSize -= theTableExtraWidth;
+				boolean hsb = isScrollable && total[3] > tableSize;
+				if (preHsb != hsb) {
+					scroll.setHorizontalScrollBarPolicy(
+						hsb ? JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED : JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+					adjustHeight();
+				}
+				isRecursive = false;
+			}
+
+			private int distributeSize(int size, int startColumn) {
+				/* Logical flow:
+				 * If the amount of space available increases, distribute the space first to columns that are more squished,
+				 * i.e., those whose actual size is much less than their preference.  As these are relieved, distribute the space
+				 * to columns evenly such that all approach their maximum size together.
+				 * If the amount of space decreases, take the space from columns that are not squished, i.e. those whose size is much
+				 * greater than their preference.  As these become more squished, take space from all columns evenly such that all approach
+				 * their preferred size together.  Never auto-resize columns is greater than their preference in a scrollable table.
+				 * If the table is not scrollable, shrink columns together down to their minimum size.
+				 */
+				if (size == 0)
+					return 0;
+				// Figure out how squished each column is and
+				IntList squish = new IntList(theColumnWidths.size()).setSorted(true);
+				IntList columnsBySquish = new IntList(theColumnWidths.size());
+				for (int c = startColumn; c < table.getColumnCount(); c++) {
+					int modelC = table.convertColumnIndexToModel(c);
+					int[] cw = theColumnWidths.get(modelC);
+					if (size < 0) {
+						if (isScrollable) {
+							if (cw[3] <= cw[1])
+								continue;
+						} else if (cw[3] <= cw[0])
+							continue;
+					} else if (cw[3] >= cw[2])
+						continue;
+					int cSquish = cw[3] - cw[1];
+					int index = squish.indexFor(cSquish);
+					while (index < squish.size() && squish.get(index) == cSquish)
+						index++;
+					squish.add(index, cSquish);
+					columnsBySquish.add(index, modelC);
+				}
+				squish.setSorted(false); // Turn off the ordered checking
+				if (size > 0) { // Grow
+					for (int c = 0; c < squish.size() && size > 0; c++) {
+						int d = c == squish.size() - 1 ? size : Math.min((squish.get(c + 1) - squish.get(c)) * (c + 1), size);
+						int d2 = d / (c + 1);
+						int remain = d - d2 * (c + 1);
+						for (int i = c; i >= 0 && (d2 > 0 || remain > 0); i--) {
+							if (i == squish.size())
+								continue;
+							int[] cw = theColumnWidths.get(columnsBySquish.get(i));
+							int squishMod = d2;
+							if (remain > 0) {
+								squishMod++;
+								remain--;
+							}
+							if (squishMod >= cw[2] - cw[3]) {
+								squishMod = cw[2] - cw[3];
+								squish.remove(i);
+								columnsBySquish.remove(i);
+							} else
+								squish.set(i, squish.get(i) + squishMod);
+							cw[3] += squishMod;
+							size -= squishMod;
 						}
-						table.setSize(totalMin, table.getHeight());
-						hsb = isScrollable;
-					} else {
-						float p = (tableSize - totalMin) * 1.0f / (totalPref - totalMin);
-						if (p < 0)
-							p = 0;
-						for (int c = 0; c < model.getColumnCount() && c < table.getColumnModel().getColumnCount(); c++) {
-							int[] widths = theColumnWidths.get(table.convertColumnIndexToModel(c));
-							widths[3] = widths[0] + Math.round(p * (widths[3] - widths[0]));
-							table.getColumnModel().getColumn(c).setWidth(widths[3]);
-							table.getColumnModel().getColumn(c).setPreferredWidth(widths[3]);
-						}
-						hsb = false;
 					}
 				} else {
-					int totalMax = 0;
-					for (int c = 0; c < theColumnWidths.size(); c++) {
-						totalMax += theColumnWidths.get(c)[2];
-						if (totalMax < 0) {
-							totalMax = Integer.MAX_VALUE;
-							break;
+					for (int c = 0; c < squish.size() && size < 0; c++) {
+						int ci = squish.size() - c - 1;
+						int d = c == squish.size() - 1 ? -size : Math.min((squish.get(ci) - squish.get(ci - 1)) * (c + 1), -size);
+						int d2 = d / (c + 1);
+						int remain = d - d2 * (c + 1);
+						for (int i = ci; i < squish.size() && (d2 > 0 || remain > 0); i++) {
+							if (i < 0)
+								continue;
+							int[] cw = theColumnWidths.get(columnsBySquish.get(i));
+							int squishMod = d2;
+							if (remain > 0) {
+								squishMod++;
+								remain--;
+							}
+							int min = isScrollable ? cw[1] : cw[0];
+							if (squishMod >= cw[3] - min) {
+								squishMod = cw[3] - min;
+								squish.remove(i);
+								columnsBySquish.remove(i);
+							} else
+								squish.set(i, squish.get(i) - squishMod);
+							cw[3] -= squishMod;
+							size += squishMod;
 						}
-					}
-					if (tableSize >= totalMax) {
-						for (int c = 0; c < model.getColumnCount() && c < table.getColumnModel().getColumnCount(); c++) {
-							int[] widths = theColumnWidths.get(table.convertColumnIndexToModel(c));
-							widths[3] = widths[2];
-							table.getColumnModel().getColumn(c).setWidth(widths[3]);
-							table.getColumnModel().getColumn(c).setPreferredWidth(widths[3]);
-						}
-						table.setSize(totalMax, table.getHeight());
-						hsb = isScrollable;
-					} else {
-						double p = (tableSize - totalPref) * 1.0 / (totalMax - totalPref);
-						if (p > 1)
-							p = 1;
-						for (int c = 0; c < model.getColumnCount() && c < table.getColumnModel().getColumnCount(); c++) {
-							int[] widths = theColumnWidths.get(table.convertColumnIndexToModel(c));
-							widths[3] = widths[3] + (int) Math.round(p * (widths[2] - widths[3]));
-							table.getColumnModel().getColumn(c).setWidth(widths[3]);
-							table.getColumnModel().getColumn(c).setPreferredWidth(widths[3]);
-						}
-						hsb = false;
 					}
 				}
-				scroll.setHorizontalScrollBarPolicy(
-					hsb ? JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED : JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
-				if (preHsb != hsb)
-					adjustHeight();
-				isRecursive = false;
+				return size;
+			}
+
+			void applyColumnSizes() {
+				for (int c = 0; c < model.getColumnCount() && c < table.getColumnModel().getColumnCount(); c++) {
+					int[] widths = theColumnWidths.get(table.convertColumnIndexToModel(c));
+					TableColumn tc = table.getColumnModel().getColumn(c);
+					if (tc.getWidth() != widths[3])
+						tc.setWidth(widths[3]);
+					if (tc.getPreferredWidth() != widths[3])
+						tc.setPreferredWidth(widths[3]);
+				}
 			}
 
 			void adjustHeight() {
@@ -1078,11 +1163,8 @@ implements TableBuilder<R, P> {
 					if (i < theAdaptiveMaxRowHeight)
 						maxHeight += rowHeight;
 				}
-				BoundedRangeModel hbm = scroll.getHorizontalScrollBar().getModel();
-				isHSBVisible = hbm.getExtent() < hbm.getMaximum();
-				BoundedRangeModel vbm = scroll.getVerticalScrollBar().getModel();
-				isVSBVisible = vbm.getExtent() < vbm.getMaximum();
-				if (isHSBVisible) {
+				boolean hsb = scroll.getHorizontalScrollBarPolicy() != JScrollPane.HORIZONTAL_SCROLLBAR_NEVER;
+				if (hsb) {
 					int sbh = scroll.getHorizontalScrollBar().getHeight();
 					minHeight += sbh;
 					prefHeight += sbh;
@@ -1109,15 +1191,12 @@ implements TableBuilder<R, P> {
 			}
 		}
 		SizeListener sizeListener = new SizeListener();
-		table.getColumnModel().addColumnModelListener(sizeListener);
 		if (table.getTableHeader() != null) {
 			table.getTableHeader().addMouseListener(sizeListener);
 			table.getTableHeader().addMouseMotionListener(sizeListener);
 		}
 		scroll.addComponentListener(sizeListener);
 		scroll.addHierarchyListener(sizeListener);
-		scroll.getHorizontalScrollBar().getModel().addChangeListener(sizeListener);
-		scroll.getVerticalScrollBar().getModel().addChangeListener(sizeListener);
 		EventQueue.invokeLater(() -> {
 			if (isScrollable)
 				sizeListener.adjustHeight();
@@ -1274,7 +1353,7 @@ implements TableBuilder<R, P> {
 		return comp;
 	}
 
-	private void getColumnWidths(CategoryRenderStrategy<R, ?> column, int columnIndex, int[] widths) {
+	private void getColumnWidths(CategoryRenderStrategy<R, ?> column, int columnIndex, int[] widths, CollectionChangeEvent<R> rowEvent) {
 		if (column.isUsingRenderingForSize()) {
 			ObservableCellRenderer<R, ?> renderer = (ObservableCellRenderer<R, ?>) column.getRenderer();
 			if (renderer == null) {
@@ -1294,23 +1373,43 @@ implements TableBuilder<R, P> {
 				if (max > maxMax)
 					maxMax = max;
 			}
-			int r = 0;
-			for (R row : theFilteredRows) {
-				Object cellValue = column.getCategoryValue(row);
-				ModelCell<R, Object> cell = new ModelCell.Default<>(() -> row, cellValue, r, columnIndex, getEditor().isRowSelected(r),
-					false, false, false, false, true);
-				Component render = ((CategoryRenderStrategy<R, Object>) column).getRenderer().getCellRendererComponent(getEditor(), cell,
-					CellRenderContext.DEFAULT);
-				int min = render.getMinimumSize().width;
-				int pref = render.getPreferredSize().width;
-				int max = render.getMaximumSize().width;
-				if (min > maxMin)
-					maxMin = min;
-				if (pref > maxPref)
-					maxPref = pref;
-				if (max > maxMax)
-					maxMax = max;
-				r++;
+			if (rowEvent != null) {
+				for (CollectionChangeEvent.ElementChange<R> change : rowEvent.getElements()) {
+					R row = change.newValue;
+					Object cellValue = column.getCategoryValue(row);
+					ModelCell<R, Object> cell = new ModelCell.Default<>(() -> row, cellValue, change.index, columnIndex,
+						getEditor().isRowSelected(change.index), false, false, false, false, true);
+					Component render = ((CategoryRenderStrategy<R, Object>) column).getRenderer().getCellRendererComponent(getEditor(),
+						cell, CellRenderContext.DEFAULT);
+					int min = render.getMinimumSize().width;
+					int pref = render.getPreferredSize().width;
+					int max = render.getMaximumSize().width;
+					if (min > maxMin)
+						maxMin = min;
+					if (pref > maxPref)
+						maxPref = pref;
+					if (max > maxMax)
+						maxMax = max;
+				}
+			} else {
+				int r = 0;
+				for (R row : theFilteredRows) {
+					Object cellValue = column.getCategoryValue(row);
+					ModelCell<R, Object> cell = new ModelCell.Default<>(() -> row, cellValue, r, columnIndex, getEditor().isRowSelected(r),
+						false, false, false, false, true);
+					Component render = ((CategoryRenderStrategy<R, Object>) column).getRenderer().getCellRendererComponent(getEditor(),
+						cell, CellRenderContext.DEFAULT);
+					int min = render.getMinimumSize().width;
+					int pref = render.getPreferredSize().width;
+					int max = render.getMaximumSize().width;
+					if (min > maxMin)
+						maxMin = min;
+					if (pref > maxPref)
+						maxPref = pref;
+					if (max > maxMax)
+						maxMax = max;
+					r++;
+				}
 			}
 			// Not sure why, but these actually need just a pixel more padding
 			maxMin++;
