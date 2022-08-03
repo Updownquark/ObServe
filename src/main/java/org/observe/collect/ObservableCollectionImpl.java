@@ -511,17 +511,17 @@ public final class ObservableCollectionImpl {
 				long stamp = theCollection.getStamp();
 				if (stamp == theLastMatchStamp
 					|| (theLastMatch != null && theLastMatch.isPresent() && useCachedMatch(getCollection().getElement(theLastMatch).get())))
-					return theLastMatch == null ? null : getCollection().getElement(theLastMatch).get();
-				ValueHolder<CollectionElement<E>> element = new ValueHolder<>();
-				find(el -> element.accept(new SimpleElement(el.getElementId(), el.get())));
-				theLastMatchStamp = stamp;
-				if (element.get() != null) {
-					theLastMatch = element.get().getElementId();
-					return element.get().get();
-				} else {
-					theLastMatch = null;
-					return theDefault.get();
-				}
+					return theLastMatch == null ? theDefault.get() : getCollection().getElement(theLastMatch).get();
+					ValueHolder<CollectionElement<E>> element = new ValueHolder<>();
+					find(el -> element.accept(new SimpleElement(el.getElementId(), el.get())));
+					theLastMatchStamp = stamp;
+					if (element.get() != null) {
+						theLastMatch = element.get().getElementId();
+						return element.get().get();
+					} else {
+						theLastMatch = null;
+						return theDefault.get();
+					}
 			}
 		}
 
