@@ -773,7 +773,7 @@ public interface TableContentControl {
 
 		/**
 		 * Checks for a pattern match in a text string at a single start position
-		 * 
+		 *
 		 * @param matcher The text pattern to look for
 		 * @param toSearch The text to search in
 		 * @param start The start position in the text to search
@@ -940,7 +940,7 @@ public interface TableContentControl {
 				c++;
 				t++;
 			}
-			return true;
+			return c == category.length();
 		}
 
 		@Override

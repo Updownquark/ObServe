@@ -679,7 +679,7 @@ implements TableBuilder<R, P> {
 			private int theDragStart;
 
 			/**
-			 * This integer is how much the user has resized columns beyond the scroll pane.<br />
+			 * This integer is how much the user has resized columns beyond the scroll pane's width.<br />
 			 * This helps us with column layout.
 			 */
 			private int theTableExtraWidth;
@@ -951,12 +951,12 @@ implements TableBuilder<R, P> {
 			void adjustScrollWidths() {
 				theAnchor.event("adjustWidth", null);
 				int spacing = table.getInsets().left + table.getInsets().right//
-					+ table.getIntercellSpacing().width * (table.getColumnCount() - 1)//
+					+ table.getColumnModel().getColumnMargin() * (table.getColumnCount() - 1)//
 					+ 2;
-				// int minW = spacing,
+				int minW = spacing;
 				int prefW = spacing, maxW = spacing;
 				for (int[] width : theColumnWidths) {
-					// minW += width[0];
+					minW += width[0];
 					prefW += width[1];
 					maxW += width[2];
 					if (maxW < 0)
@@ -967,14 +967,14 @@ implements TableBuilder<R, P> {
 				boolean vsbVisible = isScrollable && vbm.getExtent() < vbm.getMaximum();
 				int sbw = scroll.getVerticalScrollBar().getWidth();
 				if (vsbVisible) {
-					// minW += sbw;
+					minW += sbw;
 					prefW += sbw;
 					maxW += sbw;
 					if (maxW < 0)
 						maxW = Integer.MAX_VALUE;
 				}
 				// Dimension psvs = table.getPreferredScrollableViewportSize();
-				// Dimension min = scroll.getMinimumSize();
+				Dimension min = scroll.getMinimumSize();
 				Dimension pref = scroll.getPreferredSize();
 				Dimension max = scroll.getMaximumSize();
 
@@ -985,7 +985,8 @@ implements TableBuilder<R, P> {
 				// table.setPreferredScrollableViewportSize(new Dimension(prefW - sbw, psvs.height));
 				// }
 
-				// scroll.setMinimumSize(new Dimension(minW, min.height));
+				if (!isScrollable)
+					scroll.setMinimumSize(new Dimension(minW, min.height));
 				scroll.setPreferredSize(new Dimension(prefW, pref.height));
 				scroll.setMaximumSize(new Dimension(maxW, max.height));
 				layoutColumns();
@@ -1048,7 +1049,7 @@ implements TableBuilder<R, P> {
 				 * to columns evenly such that all approach their maximum size together.
 				 * If the amount of space decreases, take the space from columns that are not squished, i.e. those whose size is much
 				 * greater than their preference.  As these become more squished, take space from all columns evenly such that all approach
-				 * their preferred size together.  Never auto-resize columns is greater than their preference in a scrollable table.
+				 * their preferred size together.  Never auto-resize columns below their preference in a scrollable table.
 				 * If the table is not scrollable, shrink columns together down to their minimum size.
 				 */
 				if (size == 0)
@@ -1291,7 +1292,6 @@ implements TableBuilder<R, P> {
 			comp = tablePanel;
 		} else
 			comp = scroll;
-		table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
 
 		if (theCountTitleDisplayedText != null) {
 			NumberFormat numberFormat = NumberFormat.getIntegerInstance();

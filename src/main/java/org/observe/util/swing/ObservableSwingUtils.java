@@ -299,32 +299,47 @@ public class ObservableSwingUtils {
 		SimpleObservable<Void> until = SimpleObservable.build().build();
 		ObservableValue<String> safeDescrip = descrip.safe(ThreadConstraint.EDT, until);
 		SettableValue<Boolean> safeSelected = selected.safe(ThreadConstraint.EDT, until);
+
+		String[] enDesc = new String[2];
+		Runnable checkEnabled = () -> {
+			if (enDesc[0] != null) {
+				if (checkBox.isEnabled())
+					checkBox.setEnabled(false);
+				checkBox.setToolTipText(enDesc[0]);
+			} else {
+				String acceptable = safeSelected.isAcceptable(!checkBox.isSelected());
+				if (acceptable != null) {
+					if (checkBox.isEnabled())
+						checkBox.setEnabled(false);
+					checkBox.setToolTipText(acceptable);
+				} else {
+					if (!checkBox.isEnabled())
+						checkBox.setEnabled(true);
+					checkBox.setToolTipText(enDesc[1]);
+				}
+			}
+		};
 		ActionListener action = evt -> {
 			safeSelected.set(checkBox.isSelected(), evt);
+			checkEnabled.run();
 		};
 		checkBox.addActionListener(action);
-		boolean[] callbackLock = new boolean[1];
-		Consumer<String> checkEnabled = enabled -> {
-			if (enabled == null) {
-				enabled = safeSelected.isAcceptable(!checkBox.isSelected());
-			}
-			checkBox.setEnabled(enabled == null);
-			checkBox.setToolTipText(enabled == null ? safeDescrip.get() : enabled);
-		};
+		Subscription enabledSub = safeSelected.isEnabled().changes().act(evt -> {
+			enDesc[0] = evt.getNewValue();
+			checkEnabled.run();
+		});
 		Subscription descripSub = safeDescrip.changes().act(evt -> {
-			if (safeSelected.isEnabled().get() == null)
-				checkBox.setToolTipText(evt.getNewValue());
+			enDesc[1] = evt.getNewValue();
+			checkEnabled.run();
 		});
-		Subscription valueSub = safeSelected.changes().act(evt -> {
-			if (!callbackLock[0])
-				checkBox.setSelected(evt.getNewValue() == null ? false : evt.getNewValue());
-			checkEnabled.accept(safeSelected.isEnabled().get());
+		Subscription selectedSub = safeSelected.changes().act(evt -> {
+			checkBox.setSelected(evt.getNewValue() != null && evt.getNewValue());
+			checkEnabled.run();
 		});
-		Subscription enabledSub = safeSelected.isEnabled().changes().act(evt -> checkEnabled.accept(evt.getNewValue()));
 		return () -> {
-			valueSub.unsubscribe();
-			enabledSub.unsubscribe();
+			selectedSub.unsubscribe();
 			descripSub.unsubscribe();
+			enabledSub.unsubscribe();
 			checkBox.removeActionListener(action);
 			until.onNext(null);
 		};
