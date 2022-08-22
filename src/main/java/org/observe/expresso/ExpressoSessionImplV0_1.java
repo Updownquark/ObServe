@@ -42,6 +42,11 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 	}
 
 	@Override
+	public Class<ExpressoQIS> getProvidedAPI() {
+		return ExpressoQIS.class;
+	}
+
+	@Override
 	public Set<Class<? extends SpecialSession<?>>> getExpectedAPIs() {
 		return Collections.emptySet(); // No dependencies
 	}

@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<quick uses:swing="quick-swing.qtd" uses:base="quick-base.qtd" with-extension="window,swing:quick" look-and-feel="system"
-	title="Super-Basic">
+<quick uses:base="Quick-Base 0.1" uses:swing="Quick-Swing 0.1" with-extension="window,swing:quick" look-and-feel="system"
+	title="`Super-Basic`">
 	<head>
 		<models>
 			<model name="appModel">
-				<constant name="const1" type="String">SOME CONSTANT</constant>
+				<constant name="const1" type="String">`SOME CONSTANT`</constant>
 				<value name="value1" type="int">0</value> <!-- Mutable value with initial value -->
 				<list name="list1" type="int">
 					<element>0</element>
@@ -16,7 +16,7 @@
 				</list>
 			</model>
 			<ext-model name="extModel"> <!-- Declaration of model which must be provided to the document -->
-				<ext-value name="value1" type="double" />
+				<value name="value1" type="double" />
 			</ext-model>
 		</models>
 	</head>
@@ -25,7 +25,7 @@
 			<label>External Value 1:</label>
 			<label value="extModel.value1" />
 		</box>
-		<table region="west" rows="appModel.list1" selection="appModel.value1" value-name="row" column-value-name="column">
+		<table region="west" rows="appModel.list1" selection="appModel.value1" value-name="row" render-value-name="column">
 			<column name="Value" />
 			<column name="Value + 1" value="row+1" />
 		</table>

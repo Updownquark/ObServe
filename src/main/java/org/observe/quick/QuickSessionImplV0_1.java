@@ -41,6 +41,11 @@ public class QuickSessionImplV0_1 implements SpecialSessionImplementation<QuickQ
 	}
 
 	@Override
+	public Class<QuickQIS> getProvidedAPI() {
+		return QuickQIS.class;
+	}
+
+	@Override
 	public Set<Class<? extends SpecialSession<?>>> getExpectedAPIs() {
 		return Collections.singleton(ExpressoQIS.class);
 	}

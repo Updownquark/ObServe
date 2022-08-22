@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<quick uses:base="../../../org/observe/quick/quick-base.qtd">
+<quick uses:base="Quick-Base 0.1">
 	<head>
 		<imports>
 			<import>org.observe.expresso.ExpressoTestEntity</import>

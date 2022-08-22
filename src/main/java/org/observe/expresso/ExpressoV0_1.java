@@ -329,8 +329,8 @@ public class ExpressoV0_1 implements QonfigInterpretation {
 			@Override
 			public ValueCreator<C, C> createValue(CoreSession session) throws QonfigInterpretationException {
 				TypeToken<Object> type = session.get(VALUE_TYPE_KEY, TypeToken.class);
-				List<ValueCreator<SettableValue<?>, SettableValue<Object>>> elCreators = session.interpretChildren("element",
-					ValueCreator.class);
+				List<ValueCreator<SettableValue<?>, SettableValue<Object>>> elCreators = session.asElement("int-list")
+					.interpretChildren("element", ValueCreator.class);
 				return () -> {
 					try {
 						prepare(type, wrap(session));
@@ -372,7 +372,7 @@ public class ExpressoV0_1 implements QonfigInterpretation {
 				TypeToken<Object> keyType = session.get(KEY_TYPE_KEY, TypeToken.class);
 				TypeToken<Object> valueType = session.get(VALUE_TYPE_KEY, TypeToken.class);
 				List<BiTuple<ValueCreator<SettableValue<?>, SettableValue<Object>>, ValueCreator<SettableValue<?>, SettableValue<Object>>>> entryCreators;
-				entryCreators = session.interpretChildren("entry", BiTuple.class);
+				entryCreators = session.asElement("int-map").interpretChildren("entry", BiTuple.class);
 				return () -> {
 					List<BiTuple<ValueContainer<SettableValue<?>, SettableValue<Object>>, ValueContainer<SettableValue<?>, SettableValue<Object>>>> entryContainers;
 					entryContainers = new ArrayList<>(entryCreators.size());
@@ -422,7 +422,7 @@ public class ExpressoV0_1 implements QonfigInterpretation {
 				TypeToken<Object> keyType = session.get(KEY_TYPE_KEY, TypeToken.class);
 				TypeToken<Object> valueType = session.get(VALUE_TYPE_KEY, TypeToken.class);
 				List<BiTuple<ValueCreator<SettableValue<?>, SettableValue<Object>>, ValueCreator<SettableValue<?>, SettableValue<Object>>>> entryCreators;
-				entryCreators = session.interpretChildren("entry", BiTuple.class);
+				entryCreators = session.asElement("int-map").interpretChildren("entry", BiTuple.class);
 				return () -> {
 					List<BiTuple<ValueContainer<SettableValue<?>, SettableValue<Object>>, ValueContainer<SettableValue<?>, SettableValue<Object>>>> entryContainers;
 					entryContainers = new ArrayList<>(entryCreators.size());

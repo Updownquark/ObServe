@@ -17,6 +17,7 @@ import java.awt.font.TextAttribute;
 import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Type;
 import java.net.URL;
 import java.text.AttributedCharacterIterator;
 import java.util.AbstractList;
@@ -323,10 +324,19 @@ public class QuickCore implements QonfigInterpretation {
 	private QuickHeadSection interpretHead(QuickQIS session) throws QonfigInterpretationException {
 		QuickQIS importSession = session.forChildren("imports").peekFirst();
 		ClassView cv = importSession == null ? null : importSession.interpret(ClassView.class);
-		if (cv == null)
-			cv = ClassView.build().withWildcardImport("java.lang").build();
+		if (cv == null) {
+			ClassView defaultCV = ClassView.build().withWildcardImport("java.lang").build();
+			TypeTokens.get().addClassRetriever(new TypeTokens.TypeRetriever() {
+				@Override
+				public Type getType(String typeName) {
+					return defaultCV.getType(typeName);
+				}
+			});
+			cv = defaultCV;
+		}
 
-		session.as(ExpressoQIS.class).setExpressoEnv(importSession.as(ExpressoQIS.class).getExpressoEnv()).setModels(null, cv);
+		if (importSession != null)
+			session.as(ExpressoQIS.class).setExpressoEnv(importSession.as(ExpressoQIS.class).getExpressoEnv()).setModels(null, cv);
 		ObservableModelSet model = session.interpretChildren("models", ObservableModelSet.class).peekFirst();
 		if (model == null)
 			model = ObservableModelSet.build(ObservableModelSet.JAVA_NAME_CHECKER).build();

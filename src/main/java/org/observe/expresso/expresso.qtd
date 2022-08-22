@@ -4,7 +4,7 @@
 	<value-types>
 		<pattern name="int">\d{1,7}</pattern> <!-- Positive integer -->
 		<pattern name="float">[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?</pattern>
-		<pattern name="identifier">^([a-zA-Z_$][a-zA-Z\\d_$]*)$</pattern>
+		<pattern name="identifier">[_a-zA-Z$][_a-zA-Z0-9$]*</pattern>
 
 		<external name="expression" />
 	</value-types>
