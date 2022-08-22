@@ -9,6 +9,7 @@ import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.LongSupplier;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -599,7 +600,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 	 * @return An observable value containing the minimum of the values, by the given comparator
 	 */
 	default ObservableElement<E> minBy(Comparator<? super E> compare, Supplier<? extends E> def, Ternian first) {
-		return new ObservableCollectionImpl.BestCollectionElement<>(this, compare, def, first, null);
+		return new ObservableCollectionImpl.BestCollectionElement<>(this, compare, def, first, null, null);
 	}
 
 	/**
@@ -1730,6 +1731,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		private Ternian theLocation;
 		private Supplier<? extends E> theDefault;
 		private Observable<?> theRefresh;
+		private LongSupplier theRefreshStamp;
 
 		public ObservableFinderBuilder(ObservableCollection<E> collection, Predicate<? super E> condition) {
 			theCollection = collection;
@@ -1794,14 +1796,25 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 
 		/**
 		 * @param refresh An observable which, when fired, will cause the finder to re-check its results
+		 * @param refreshStamp If the refresh represents an change to state that this finder's value depends on (state that is not part of
+		 *        the searched collection), a stamp must be provided that changes when the state changes.
 		 * @return This builder
 		 */
-		public ObservableFinderBuilder<E> refresh(Observable<?> refresh) {
+		public ObservableFinderBuilder<E> refresh(Observable<?> refresh, LongSupplier refreshStamp) {
 			if (refresh == null) {//
-			} else if (theRefresh != null)
-				theRefresh = Observable.or(theRefresh, refresh);
-			else
-				theRefresh = refresh;
+			} else {
+				if (theRefresh != null)
+					theRefresh = Observable.or(theRefresh, refresh);
+				else
+					theRefresh = refresh;
+				if (refreshStamp != null) {
+					if (theRefreshStamp != null) {
+						LongSupplier old = theRefreshStamp;
+						theRefreshStamp = () -> old.getAsLong() + refreshStamp.getAsLong();
+					} else
+						theRefreshStamp = refreshStamp;
+				}
+			}
 			return this;
 		}
 
@@ -1817,7 +1830,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		/** @return The finder */
 		public SettableElement<E> find() {
 			return new ObservableCollectionImpl.ObservableCollectionFinder<>(theCollection, theCondition, theDefault, theLocation,
-				theRefresh);
+				theRefresh, theRefreshStamp);
 		}
 	}
 }

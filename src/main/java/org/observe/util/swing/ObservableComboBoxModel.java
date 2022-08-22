@@ -213,7 +213,7 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 		int[] hoveredItem = new int[] { -1 };
 		if (popup != null) {
 			@SuppressWarnings("cast") // In some JDKs, the return value is not generic. Keep this cast to JList<T> when saving.
-			JList<T> popupList = popup.getList();
+			JList<T> popupList = (JList<T>) popup.getList();
 			class PopupMouseListener extends MouseMotionAdapter {
 				private Point lastHover;
 

@@ -95,7 +95,7 @@ public class ObservableSortedCollectionImpl {
 					else
 						return el1.getElementId().compareTo(el2.getElementId());// Both greater, so take the lesser of the two
 				}
-			}, () -> null, null);
+			}, () -> null, null, null);
 			theSearch = search;
 			theFilter = filter;
 		}
@@ -736,9 +736,11 @@ public class ObservableSortedCollectionImpl {
 		public PassiveDerivedSortedCollection(ObservableSortedCollection<E> source, PassiveCollectionManager<E, ?, T> flow,
 			Comparator<? super T> compare) {
 			super(source, flow);
-			theEquivalence = flow.equivalence() instanceof Equivalence.SortedEquivalence
-				? (Equivalence.SortedEquivalence<? super T>) flow.equivalence()
-					: flow.equivalence().sorted(TypeTokens.getRawType(flow.getTargetType()), compare, true);
+			if (flow.equivalence() instanceof Equivalence.SortedEquivalence
+				&& ((Equivalence.SortedEquivalence<? super T>) flow.equivalence()).comparator().equals(compare))
+				theEquivalence = (Equivalence.SortedEquivalence<? super T>) flow.equivalence();
+			else
+				theEquivalence = flow.equivalence().sorted(TypeTokens.getRawType(flow.getTargetType()), compare, true);
 		}
 
 		@Override
