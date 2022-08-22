@@ -18,6 +18,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -39,11 +40,9 @@ import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.observe.collect.ObservableCollection;
-import org.observe.expresso.Expresso;
-import org.observe.expresso.ExpressoInterpreter;
-import org.observe.expresso.ExpressoInterpreter.ExpressoSession;
+import org.observe.expresso.ExpressoQIS;
+import org.observe.expresso.ExpressoV0_1;
 import org.observe.expresso.ModelType;
-import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableExpression.MethodFinder;
@@ -53,9 +52,9 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.RuntimeValuePlaceholder;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.expresso.ObservableModelSet.ValueCreator;
+import org.observe.expresso.QonfigExpression;
 import org.observe.expresso.ops.LambdaExpression;
 import org.observe.expresso.ops.MethodReferenceExpression;
-import org.observe.quick.QuickInterpreter.QuickSession;
 import org.observe.quick.style.QuickModelValue;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.CategoryRenderStrategy;
@@ -73,16 +72,19 @@ import org.observe.util.swing.ObservableTextField;
 import org.observe.util.swing.PanelPopulation;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.observe.util.swing.PanelPopulation.TabEditor;
-import org.qommons.ArrayUtils;
+import org.qommons.QommonsUtils;
+import org.qommons.Version;
 import org.qommons.collect.BetterList;
 import org.qommons.config.QommonsConfig;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigChildDef;
 import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigInterpretation;
 import org.qommons.config.QonfigInterpretationException;
-import org.qommons.config.QonfigInterpreter;
+import org.qommons.config.QonfigInterpreterCore;
+import org.qommons.config.QonfigInterpreterCore.CoreSession;
 import org.qommons.config.QonfigToolkit;
-import org.qommons.config.QonfigToolkitAccess;
+import org.qommons.config.SpecialSession;
 import org.qommons.io.BetterFile;
 import org.qommons.io.FileUtils;
 import org.qommons.io.Format;
@@ -90,8 +92,9 @@ import org.qommons.io.SpinnerFormat;
 
 import com.google.common.reflect.TypeToken;
 
-public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
-	public static final QonfigToolkitAccess BASE = new QonfigToolkitAccess(QuickBase.class, "quick-base.qtd", QuickCore.CORE);
+public class QuickBase implements QonfigInterpretation {
+	public static final String NAME = "Quick-Base";
+	public static final Version VERSION = new Version(0, 1, 0);
 
 	public interface Column<R, C> {
 		CategoryRenderStrategy<R, C> createColumn(ModelSetInstance models);
@@ -143,55 +146,70 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 		}
 	};
 
-	@Override
-	public QuickInterpreter.Builder<QIS, ?> createInterpreter(Class<?> callingClass, QonfigToolkit... others) {
-		return super.createInterpreter(callingClass, ArrayUtils.add(others, 0, BASE.get()));
+	public QuickBase() {
 	}
 
 	@Override
-	public <B extends QonfigInterpreter.Builder<? extends QIS, B>> B configureInterpreter(B interpreter) {
-		super.configureInterpreter(interpreter);
-		QonfigToolkit base = BASE.get();
-		B tkInt = interpreter.forToolkit(base);
-		tkInt.createWith("box", QuickBox.class, this::interpretBox)//
-		.modifyWith("border", QuickBox.class, this::modifyBoxBorder)//
-		.modifyWith("simple", QuickBox.class, this::modifyBoxSimple)//
-		.modifyWith("inline", QuickBox.class, this::modifyBoxInline)//
-		.createWith("multi-value-action", ValueAction.class, this::interpretMultiValueAction)//
-		.createWith("label", QuickComponentDef.class, session -> evaluateLabel(session))//
-		.createWith("text-field", QuickComponentDef.class, this::interpretTextField)//
-		.modifyWith("editable-text-widget", QuickComponentDef.class, this::modifyTextEditor)//
-		.createWith("button", QuickComponentDef.class, this::interpretButton)//
-		.createWith("table", QuickComponentDef.class, this::interpretTable)//
-		.createWith("column", Column.class, this::interpretColumn)//
-		.createWith("modify-row-value", ColumnEditing.class, this::interpretRowModify)//
-		// .createWith("replace-row-value", ColumnEditing.class, this::interpretRowReplace) TODO
-		.createWith("columns", ValueCreator.class, this::interpretColumns)//
-		.createWith("split", QuickComponentDef.class, this::interpretSplit)//
-		.createWith("field-panel", QuickComponentDef.class, this::interpretFieldPanel)//
-		.modifyWith("field", QuickComponentDef.class, this::modifyField)//
-		.createWith("spacer", QuickComponentDef.class, this::interpretSpacer)//
-		.createWith("tree", QuickComponentDef.class, this::interpretTree)//
-		.createWith("text-area", QuickComponentDef.class, this::interpretTextArea)//
-		.createWith("check-box", QuickComponentDef.class, this::interpretCheckBox)//
-		.createWith("radio-buttons", QuickComponentDef.class, this::interpretRadioButtons)//
-		.createWith("tab-set", MultiTabSet.class, MultiTabSet::parse)//
-		.createWith("tabs", QuickComponentDef.class, this::interpretTabs)//
-		.createWith("file-button", QuickComponentDef.class, this::interpretFileButton)//
+	public Set<Class<? extends SpecialSession<?>>> getExpectedAPIs() {
+		return QommonsUtils.unmodifiableDistinctCopy(ExpressoQIS.class, QuickQIS.class);
+	}
+
+	@Override
+	public String getToolkitName() {
+		return NAME;
+	}
+
+	@Override
+	public Version getVersion() {
+		return VERSION;
+	}
+
+	QuickQIS wrap(CoreSession session) throws QonfigInterpretationException {
+		return session.as(QuickQIS.class);
+	}
+
+	@Override
+	public QonfigInterpreterCore.Builder configureInterpreter(QonfigInterpreterCore.Builder interpreter) {
+		QonfigToolkit base = interpreter.getToolkit();
+		interpreter.createWith("box", QuickBox.class, session -> interpretBox(wrap(session)))//
+		.modifyWith("border", QuickBox.class, (box, session) -> modifyBoxBorder(box, wrap(session), base))//
+		.modifyWith("simple", QuickBox.class, (box, session) -> modifyBoxSimple(box, wrap(session)))//
+		.modifyWith("inline", QuickBox.class, (box, session) -> modifyBoxInline(box, wrap(session)))//
+		.createWith("multi-value-action", ValueAction.class, session -> interpretMultiValueAction(wrap(session)))//
+		.createWith("label", QuickComponentDef.class, session -> evaluateLabel(wrap(session)))//
+		.createWith("text-field", QuickComponentDef.class, session -> interpretTextField(wrap(session)))//
+		.modifyWith("editable-text-widget", QuickComponentDef.class, (comp, session) -> modifyTextEditor(comp, wrap(session)))//
+		.createWith("button", QuickComponentDef.class, session -> interpretButton(wrap(session)))//
+		.createWith("table", QuickComponentDef.class, session -> interpretTable(wrap(session)))//
+		.createWith("column", Column.class, session -> interpretColumn(wrap(session), base))//
+		.createWith("modify-row-value", ColumnEditing.class, session -> interpretRowModify(wrap(session)))//
+		// .createWith("replace-row-value", ColumnEditing.class, session->interpretRowReplace(wrap(session))) TODO
+		.createWith("columns", ValueCreator.class, session -> interpretColumns(wrap(session)))//
+		.createWith("split", QuickComponentDef.class, session -> interpretSplit(wrap(session)))//
+		.createWith("field-panel", QuickComponentDef.class, session -> interpretFieldPanel(wrap(session)))//
+		.modifyWith("field", QuickComponentDef.class, (field, session) -> modifyField(field, wrap(session)))//
+		.createWith("spacer", QuickComponentDef.class, session -> interpretSpacer(wrap(session)))//
+		.createWith("tree", QuickComponentDef.class, session -> interpretTree(wrap(session)))//
+		.createWith("text-area", QuickComponentDef.class, session -> interpretTextArea(wrap(session)))//
+		.createWith("check-box", QuickComponentDef.class, session -> interpretCheckBox(wrap(session)))//
+		.createWith("radio-buttons", QuickComponentDef.class, session -> interpretRadioButtons(wrap(session)))//
+		.createWith("tab-set", MultiTabSet.class, session -> MultiTabSet.parse(wrap(session)))//
+		.createWith("tabs", QuickComponentDef.class, session -> interpretTabs(wrap(session), base))//
+		.createWith("file-button", QuickComponentDef.class, session -> interpretFileButton(wrap(session)))//
 		;
 		return interpreter;
 	}
 
-	private QuickBox interpretBox(QIS session) throws QonfigInterpretationException {
+	private QuickBox interpretBox(QuickQIS session) throws QonfigInterpretationException {
 		List<QuickComponentDef> children = session.interpretChildren("content", QuickComponentDef.class);
 		return new QuickBox(session, children, session.getAttributeText("layout"));
 	}
 
-	private QuickBox modifyBoxBorder(QuickBox box, ExpressoSession<?> session) throws QonfigInterpretationException {
+	private QuickBox modifyBoxBorder(QuickBox box, QuickQIS session, QonfigToolkit base) throws QonfigInterpretationException {
 		box.setLayout(BorderLayout::new);
 		for (QuickComponentDef child : box.getChildren()) {
 			String layoutConstraint;
-			String region = child.getElement().getAttributeText(BASE.get().getAttribute("border-layout-child", "region"));
+			String region = child.getElement().getAttributeText(base.getAttribute("border-layout-child", "region"));
 			switch (region) {
 			case "center":
 				layoutConstraint = BorderLayout.CENTER;
@@ -218,23 +236,31 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 		return box;
 	}
 
-	private QuickBox modifyBoxSimple(QuickBox box, ExpressoSession<?> session) throws QonfigInterpretationException {
+	private QuickBox modifyBoxSimple(QuickBox box, QuickQIS session) throws QonfigInterpretationException {
 		box.setLayout(SimpleLayout::new);
 		int c = 0;
-		for (ExpressoSession<?> child : session.forChildren()) {
+		for (ExpressoQIS child : session.as(ExpressoQIS.class).forChildren()) {
 			QuickComponentDef childComp = box.getChildren().get(c++);
-			ModelInstanceType<SettableValue<?>, SettableValue<QuickPosition>> posType = ModelTypes.Value.forType(QuickPosition.class);
-			ModelInstanceType<SettableValue<?>, SettableValue<QuickSize>> sizeType = ModelTypes.Value.forType(QuickSize.class);
-			ValueContainer<SettableValue<?>, SettableValue<QuickPosition>> leftC = child.getAttribute("left", posType, null);
-			ValueContainer<SettableValue<?>, SettableValue<QuickPosition>> rightC = child.getAttribute("right", posType, null);
-			ValueContainer<SettableValue<?>, SettableValue<QuickPosition>> topC = child.getAttribute("top", posType, null);
-			ValueContainer<SettableValue<?>, SettableValue<QuickPosition>> bottomC = child.getAttribute("bottom", posType, null);
-			ValueContainer<SettableValue<?>, SettableValue<QuickSize>> minWidthC = child.getAttribute("min-width", sizeType, null);
-			ValueContainer<SettableValue<?>, SettableValue<QuickSize>> prefWidthC = child.getAttribute("pref-width", sizeType, null);
-			ValueContainer<SettableValue<?>, SettableValue<QuickSize>> maxWidthC = child.getAttribute("max-width", sizeType, null);
-			ValueContainer<SettableValue<?>, SettableValue<QuickSize>> minHeightC = child.getAttribute("min-height", sizeType, null);
-			ValueContainer<SettableValue<?>, SettableValue<QuickSize>> prefHeightC = child.getAttribute("pref-height", sizeType, null);
-			ValueContainer<SettableValue<?>, SettableValue<QuickSize>> maxHeightC = child.getAttribute("max-height", sizeType, null);
+			Function<ModelSetInstance, SettableValue<QuickPosition>> leftC = QuickCore
+				.parsePosition(child.getAttribute("left", QonfigExpression.class), child);
+			Function<ModelSetInstance, SettableValue<QuickPosition>> rightC = QuickCore
+				.parsePosition(child.getAttribute("right", QonfigExpression.class), child);
+			Function<ModelSetInstance, SettableValue<QuickPosition>> topC = QuickCore
+				.parsePosition(child.getAttribute("top", QonfigExpression.class), child);
+			Function<ModelSetInstance, SettableValue<QuickPosition>> bottomC = QuickCore
+				.parsePosition(child.getAttribute("bottom", QonfigExpression.class), child);
+			Function<ModelSetInstance, SettableValue<QuickSize>> minWidthC = QuickCore
+				.parseSize(child.getAttribute("min-width", QonfigExpression.class), child);
+			Function<ModelSetInstance, SettableValue<QuickSize>> prefWidthC = QuickCore
+				.parseSize(child.getAttribute("pref-width", QonfigExpression.class), child);
+			Function<ModelSetInstance, SettableValue<QuickSize>> maxWidthC = QuickCore
+				.parseSize(child.getAttribute("max-width", QonfigExpression.class), child);
+			Function<ModelSetInstance, SettableValue<QuickSize>> minHeightC = QuickCore
+				.parseSize(child.getAttribute("min-height", QonfigExpression.class), child);
+			Function<ModelSetInstance, SettableValue<QuickSize>> prefHeightC = QuickCore
+				.parseSize(child.getAttribute("pref-height", QonfigExpression.class), child);
+			Function<ModelSetInstance, SettableValue<QuickSize>> maxHeightC = QuickCore
+				.parseSize(child.getAttribute("max-height", QonfigExpression.class), child);
 			childComp.modify((ch, builder) -> {
 				ObservableValue<QuickPosition> left = leftC == null ? null : leftC.apply(builder.getModels());
 				ObservableValue<QuickPosition> right = rightC == null ? null : rightC.apply(builder.getModels());
@@ -270,7 +296,7 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 		return box;
 	}
 
-	private QuickBox modifyBoxInline(QuickBox box, ExpressoSession<?> session) throws QonfigInterpretationException {
+	private QuickBox modifyBoxInline(QuickBox box, QuickQIS session) throws QonfigInterpretationException {
 		JustifiedBoxLayout layout = new JustifiedBoxLayout(session.getAttributeText("orientation").equals("vertical"));
 		String mainAlign = session.getAttributeText("main-align");
 		switch (mainAlign) {
@@ -309,29 +335,30 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 		return box.setLayout(() -> layout);
 	}
 
-	private ValueAction interpretMultiValueAction(ExpressoSession<?> session) throws QonfigInterpretationException {
+	private ValueAction interpretMultiValueAction(QuickQIS session) throws QonfigInterpretationException {
 		TypeToken<Object> valueType = (TypeToken<Object>) session.get("model-type");
 		String valueListName = session.getAttributeText("value-list-name");
-		ObservableModelSet.WrappedBuilder actionModel = session.getExpressoEnv().getModels().wrap();
+		ExpressoQIS exS = session.as(ExpressoQIS.class);
+		ObservableModelSet.WrappedBuilder actionModel = exS.getExpressoEnv().getModels().wrap();
 		RuntimeValuePlaceholder<ObservableCollection<?>, ObservableCollection<Object>> valueListNamePH = actionModel
 			.withRuntimeValue(valueListName, ModelTypes.Collection.forType(valueType));
 		ObservableModelSet.Wrapped builtActionModel = actionModel.build();
 
-		ObservableExpression nameX = session.getAttribute("name", ObservableExpression.class);
-		ObservableExpression iconX = session.getAttribute("icon", ObservableExpression.class);
-		ObservableExpression actionX = session.getAttribute("action", ObservableExpression.class);
-		ObservableExpression enabledX = session.getAttribute("enabled", ObservableExpression.class);
-		ObservableExpression tooltipX = session.getAttribute("enabled", ObservableExpression.class);
+		ObservableExpression nameX = exS.getAttributeExpression("name");
+		ObservableExpression iconX = exS.getAttributeExpression("icon");
+		ObservableExpression actionX = exS.getAttributeExpression("action");
+		ObservableExpression enabledX = exS.getAttributeExpression("enabled");
+		ObservableExpression tooltipX = exS.getAttributeExpression("enabled");
 
 		ValueContainer<SettableValue<?>, SettableValue<String>> nameV = nameX == null ? null
-			: nameX.evaluate(ModelTypes.Value.forType(String.class), session.getExpressoEnv());
-		Function<ModelSetInstance, SettableValue<Icon>> iconV = parseIcon(iconX, session, session.getExpressoEnv());
+			: nameX.evaluate(ModelTypes.Value.forType(String.class), exS.getExpressoEnv());
+		Function<ModelSetInstance, SettableValue<Icon>> iconV = QuickCore.parseIcon(iconX, exS, exS.getExpressoEnv());
 		ValueContainer<ObservableAction<?>, ObservableAction<?>> actionV = actionX.evaluate(ModelTypes.Action.any(),
-			session.getExpressoEnv().with(builtActionModel, null));
+			exS.getExpressoEnv().with(builtActionModel, null));
 		ValueContainer<SettableValue<?>, SettableValue<String>> enabledV = enabledX == null ? null
-			: enabledX.evaluate(ModelTypes.Value.forType(String.class), session.getExpressoEnv());
+			: enabledX.evaluate(ModelTypes.Value.forType(String.class), exS.getExpressoEnv());
 		ValueContainer<SettableValue<?>, SettableValue<String>> tooltipV = tooltipX == null ? null
-			: tooltipX.evaluate(ModelTypes.Value.forType(String.class), session.getExpressoEnv());
+			: tooltipX.evaluate(ModelTypes.Value.forType(String.class), exS.getExpressoEnv());
 
 		return new ValueAction(builtActionModel, valueListNamePH, nameV, iconV, actionV, enabledV, //
 			session.getAttribute("allow-for-empty", boolean.class), //
@@ -339,9 +366,10 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 			tooltipV);
 	}
 
-	private QuickComponentDef interpretTextField(QIS session) throws QonfigInterpretationException {
-		ValueContainer<SettableValue<?>, ?> value = session.getAttribute("value", ModelTypes.Value.any(), null);
-		ObservableExpression formatX = session.getAttribute("format", ObservableExpression.class);
+	private QuickComponentDef interpretTextField(QuickQIS session) throws QonfigInterpretationException {
+		ExpressoQIS exS = session.as(ExpressoQIS.class);
+		ValueContainer<SettableValue<?>, ?> value = exS.getAttribute("value", ModelTypes.Value.any(), null);
+		ObservableExpression formatX = exS.getAttributeExpression("format");
 		Function<ModelSetInstance, SettableValue<Format<Object>>> format;
 		boolean commitOnType = session.getAttribute("commit-on-type", boolean.class);
 		String columnsStr = session.getAttributeText("columns");
@@ -349,7 +377,7 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 		if (formatX != null) {
 			format = formatX.evaluate(
 				ModelTypes.Value.forType(TypeTokens.get().keyFor(Format.class).parameterized(value.getType().getType(0))),
-				session.getExpressoEnv());
+				exS.getExpressoEnv());
 		} else {
 			Class<?> type = TypeTokens.get().unwrap(TypeTokens.getRawType(value.getType().getType(0)));
 			Format<?> f;
@@ -423,7 +451,7 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 		};
 	}
 
-	private QuickComponentDef modifyTextEditor(QuickComponentDef component, QIS session) throws QonfigInterpretationException {
+	private QuickComponentDef modifyTextEditor(QuickComponentDef component, QuickQIS session) throws QonfigInterpretationException {
 		component.support(session.getStyleModelValue("editable-text-widget", "error", String.class),
 			() -> new QuickComponentDef.ProducerModelValueSupport<>(TypeTokens.get().STRING,
 				comp -> ((ObservableTextEditorWidget<?, ?>) comp).getErrorState(), null));
@@ -433,17 +461,18 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 		return component;
 	}
 
-	private QuickComponentDef interpretButton(QIS session) throws QonfigInterpretationException {
+	private QuickComponentDef interpretButton(QuickQIS session) throws QonfigInterpretationException {
+		ExpressoQIS exS = session.as(ExpressoQIS.class);
 		Function<ModelSetInstance, SettableValue<String>> buttonText;
-		ObservableExpression valueX = session.getValue(ObservableExpression.class, null);
+		ObservableExpression valueX = exS.getValueExpression();
 		if (valueX == null) {
 			String txt = session.getValueText();
 			if (txt == null)
 				throw new IllegalArgumentException("Either 'text' attribute or element value must be specified");
 			buttonText = __ -> ObservableModelSet.literal(txt, txt);
 		} else
-			buttonText = valueX.evaluate(ModelTypes.Value.forType(String.class), session.getExpressoEnv());
-		Function<ModelSetInstance, ? extends ObservableAction<?>> action = session.getExpressoEnv().getModels()
+			buttonText = valueX.evaluate(ModelTypes.Value.forType(String.class), exS.getExpressoEnv());
+		Function<ModelSetInstance, ? extends ObservableAction<?>> action = exS.getExpressoEnv().getModels()
 			.get(session.getAttributeText("action"), ModelTypes.Action);
 		return new AbstractQuickComponentDef(session) {
 			@Override
@@ -460,23 +489,24 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 		};
 	}
 
-	private Column<?, ?> interpretColumn(QIS session) throws QonfigInterpretationException {
+	private Column<?, ?> interpretColumn(QuickQIS session, QonfigToolkit base) throws QonfigInterpretationException {
+		ExpressoQIS exS = session.as(ExpressoQIS.class);
 		TypeToken<Object> modelType = (TypeToken<Object>) session.get("model-type");
 		String name = session.getAttributeText("name");
-		ObservableExpression valueX = session.getAttribute("value", ObservableExpression.class);
+		ObservableExpression valueX = exS.getAttributeExpression("value");
 		String rowValueName = (String) session.get("value-name");
 		String cellValueName = (String) session.get("render-value-name");
 		if (modelType == null || rowValueName == null || cellValueName == null)
 			throw new IllegalStateException(
 				"column intepretation expects 'model-type', 'value-name', and 'render-value-name' session values");
-		ObservableModelSet.WrappedBuilder wb = session.getExpressoEnv().getModels().wrap();
+		ObservableModelSet.WrappedBuilder wb = exS.getExpressoEnv().getModels().wrap();
 		ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>> valueRowVP = wb.withRuntimeValue(rowValueName,
 			ModelTypes.Value.forType(modelType));
 		ObservableModelSet.Wrapped valueModel = wb.build();
 		TypeToken<Object> columnType;
 		Function<ModelSetInstance, Function<Object, Object>> valueFn;
 		if (valueX instanceof LambdaExpression || valueX instanceof MethodReferenceExpression) {
-			MethodFinder<Object, Object, Object, Object> finder = valueX.findMethod(TypeTokens.get().OBJECT, session.getExpressoEnv())//
+			MethodFinder<Object, Object, Object, Object> finder = valueX.findMethod(TypeTokens.get().OBJECT, exS.getExpressoEnv())//
 				.withOption(BetterList.of(modelType), new ObservableExpression.ArgMaker<Object, Object, Object>() {
 					@Override
 					public void makeArgs(Object t, Object u, Object v, Object[] args, ModelSetInstance models) {
@@ -489,7 +519,7 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 			ValueContainer<SettableValue<?>, SettableValue<Object>> colValue = valueX.evaluate(
 				(ModelType.ModelInstanceType<SettableValue<?>, SettableValue<Object>>) (ModelType.ModelInstanceType<?, ?>) ModelTypes.Value
 				.any(),
-				session.getExpressoEnv().with(valueModel, null));
+				exS.getExpressoEnv().with(valueModel, null));
 			// MethodFinder<Object, Object, Object, Object> finder = valueX.findMethod(TypeTokens.get().OBJECT, model, cv)//
 			// .withOption(BetterList.of(modelType), new ObservableExpression.ArgMaker<Object, Object, Object>() {
 			// @Override
@@ -519,26 +549,26 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 			ModelTypes.Value.forType(columnType));
 		ObservableModelSet.Wrapped cellModel = wb.build();
 
-		QuickModelValue<Boolean> focused = session.getInterpreter().getStyleSet().styled(QuickInterpreter.WIDGET, session)
-			.getModelValue("focused", boolean.class);
-		QuickModelValue<Boolean> selected = session.getInterpreter().getStyleSet()
-			.styled(BASE.get().getElementOrAddOn("renderer-value-override"), session).getModelValue("selected", boolean.class);
-		QuickModelValue<Boolean> hovered = session.getInterpreter().getStyleSet()
-			.styled(BASE.get().getElementOrAddOn("renderer-value-override"), session).getModelValue("hovered", boolean.class);
+		QuickModelValue<Boolean> focused = session.getStyleSet().styled(session.getStyleSet().getWidget(), exS).getModelValue("focused",
+			boolean.class);
+		QuickModelValue<Boolean> selected = session.getStyleSet().styled(base.getElementOrAddOn("renderer-value-override"), exS)
+			.getModelValue("selected", boolean.class);
+		QuickModelValue<Boolean> hovered = session.getStyleSet().styled(base.getElementOrAddOn("renderer-value-override"), exS)
+			.getModelValue("hovered", boolean.class);
 		QuickComponentDef.SimpleModelValueSupport<Boolean> focusedSupport = new QuickComponentDef.SimpleModelValueSupport<>(boolean.class,
 			false);
 		QuickComponentDef.SimpleModelValueSupport<Boolean> hoveredSupport = new QuickComponentDef.SimpleModelValueSupport<>(boolean.class,
 			false);
 		QuickComponentDef.SimpleModelValueSupport<Boolean> selectedSupport = new QuickComponentDef.SimpleModelValueSupport<>(boolean.class,
 			false);
-		session.setModels(cellModel, null);
-		QuickComponentDef renderer = session.forChildren("renderer", BASE.get().getElement("label"), null).getFirst()
+		exS.setModels(cellModel, null);
+		QuickComponentDef renderer = session.forChildren("renderer", base.getElement("label"), null).getFirst()
 			.interpret(QuickComponentDef.class);
 		renderer.support(focused, focusedSupport);
 		renderer.support(hovered, hoveredSupport);
 		renderer.support(selected, selectedSupport);
 		ColumnEditing<Object, Object> editing;
-		ExpressoSession<?> columnEdit = session.forChildren("edit").peekFirst();
+		ExpressoQIS columnEdit = exS.forChildren("edit").peekFirst();
 		if (columnEdit != null) {
 			String editValueName = columnEdit.getAttributeText("edit-value-name");
 			ObservableModelSet.WrappedBuilder editorModelsB = columnEdit.getExpressoEnv().getModels().wrap();
@@ -546,7 +576,7 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 				.withRuntimeValue(editValueName, ModelTypes.Value.forType(columnType));
 			ObservableModelSet.Wrapped editorModels = editorModelsB.build();
 			columnEdit.setModels(editorModels, null);
-			ExpressoSession<?> editorSession = columnEdit.forChildren("editor").getFirst();
+			ExpressoQIS editorSession = columnEdit.forChildren("editor").getFirst();
 			QuickComponentDef editor = editorSession.interpret(QuickComponentDef.class);
 			if (!(editor instanceof QuickValueEditorDef))
 				throw new IllegalArgumentException(
@@ -554,7 +584,7 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 			editor.support(focused, focusedSupport);
 			editor.support(hovered, hoveredSupport);
 			editor.support(selected, selectedSupport);
-			ColumnEditing<Object, Object> editType = columnEdit.as(columnEdit.getAttribute("type", QonfigAddOn.class))
+			ColumnEditing<Object, Object> editType = columnEdit.asElement(columnEdit.getAttribute("type", QonfigAddOn.class))
 				.interpret(ColumnEditing.class);
 			editing = (column, models) -> {
 				// Hacky way of synthesizing the component
@@ -571,7 +601,7 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 						.with(cellRowVP, cellValue)//
 						.with(subjectVP, editorValue)//
 						.build())//
-					.withCustom(ExpressoInterpreter.PARENT_MODEL, SettableValue.of(ModelSetInstance.class, models, "Not Reversible"))//
+					.withCustom(ExpressoQIS.PARENT_MODEL, SettableValue.of(ModelSetInstance.class, models, "Not Reversible"))//
 					.build())//
 					.with(editorValueVP, editorValue)//
 					.build();
@@ -650,7 +680,7 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 			SettableValue<Object> rowValue = SettableValue.build(modelType).withDescription(rowValueName).build();
 			SettableValue<Object> cellValue = SettableValue.build(columnType).withDescription(cellValueName).build();
 			ModelSetInstance cellModelInst = cellModel.wrap(renderer.getModels().wrap(extModels)//
-				.withCustom(ExpressoInterpreter.PARENT_MODEL, SettableValue.of(ModelSetInstance.class, extModels, "Not Reversible"))//
+				.withCustom(ExpressoQIS.PARENT_MODEL, SettableValue.of(ModelSetInstance.class, extModels, "Not Reversible"))//
 				.build())//
 				.with(valueRowVP, rowValue)//
 				.with(cellRowVP, cellValue)//
@@ -723,15 +753,15 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 		};
 	}
 
-	private ColumnEditing<?, ?> interpretRowModify(QIS session) throws QonfigInterpretationException {
+	private ColumnEditing<?, ?> interpretRowModify(QuickQIS session) throws QonfigInterpretationException {
+		ExpressoQIS exS = session.as(ExpressoQIS.class);
 		System.err.println("WARNING: modify-row-value is not fully implemented!!"); // TODO
 		TypeToken<Object> modelType = (TypeToken<Object>) session.get("model-type");
 		String editValueName = (String) session.get("edit-value-name");
-		ObservableExpression commitX = session.getAttribute("commit", ObservableExpression.class);
-		ObservableExpression editableIfX = session.getAttribute("editable-if", ObservableExpression.class);
-		ObservableExpression acceptX = session.getAttribute("accept", ObservableExpression.class);
-		ValueContainer<ObservableAction<?>, ObservableAction<?>> commit = commitX.evaluate(ModelTypes.Action.any(),
-			session.getExpressoEnv());
+		ObservableExpression commitX = exS.getAttributeExpression("commit");
+		ObservableExpression editableIfX = exS.getAttributeExpression("editable-if");
+		ObservableExpression acceptX = exS.getAttributeExpression("accept");
+		ValueContainer<ObservableAction<?>, ObservableAction<?>> commit = commitX.evaluate(ModelTypes.Action.any(), exS.getExpressoEnv());
 		boolean rowUpdate = session.getAttribute("row-update", boolean.class);
 		return (column, models) -> { // TODO Not done here
 			ObservableAction<?> commitAction = commit.apply(models);
@@ -739,9 +769,10 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 		};
 	}
 
-	private ValueCreator<ObservableCollection<?>, ObservableCollection<CategoryRenderStrategy<Object, ?>>> interpretColumns(QIS session)
-		throws QonfigInterpretationException {
-		TypeToken<Object> rowType = (TypeToken<Object>) Expresso.parseType(session.getAttributeText("type"), session.getExpressoEnv());
+	private ValueCreator<ObservableCollection<?>, ObservableCollection<CategoryRenderStrategy<Object, ?>>> interpretColumns(
+		QuickQIS session) throws QonfigInterpretationException {
+		ExpressoQIS exS = session.as(ExpressoQIS.class);
+		TypeToken<Object> rowType = (TypeToken<Object>) ExpressoV0_1.parseType(session.getAttributeText("type"), exS.getExpressoEnv());
 		session.put("model-type", rowType);
 		TypeToken<CategoryRenderStrategy<Object, ?>> columnType = TypeTokens.get().keyFor(CategoryRenderStrategy.class)
 			.<CategoryRenderStrategy<Object, ?>> parameterized(rowType, TypeTokens.get().WILDCARD);
@@ -762,13 +793,14 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 		};
 	}
 
-	private QuickComponentDef interpretSplit(QIS session) throws QonfigInterpretationException {
+	private QuickComponentDef interpretSplit(QuickQIS session) throws QonfigInterpretationException {
 		if (session.getChildren("content").size() != 2)
 			throw new UnsupportedOperationException("Currently only 2 (and exactly 2) contents are supported for split");
+		ExpressoQIS exS = session.as(ExpressoQIS.class);
 		List<QuickComponentDef> children = session.interpretChildren("content", QuickComponentDef.class);
 		boolean vertical = session.getAttributeText("orientation").equals("vertical");
-		Function<ModelSetInstance, SettableValue<QuickPosition>> splitPos = parsePosition(
-			session.getAttribute("split-position", ObservableExpression.class), session.getExpressoEnv());
+		Function<ModelSetInstance, SettableValue<QuickPosition>> splitPos = QuickCore
+			.parsePosition(exS.getAttribute("split-position", QonfigExpression.class), exS);
 		return new AbstractQuickComponentDef(session) {
 			@Override
 			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
@@ -960,7 +992,7 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 		};
 	}
 
-	private QuickComponentDef interpretFieldPanel(QIS session) throws QonfigInterpretationException {
+	private QuickComponentDef interpretFieldPanel(QuickQIS session) throws QonfigInterpretationException {
 		List<QuickComponentDef> children = session.interpretChildren("content", QuickComponentDef.class);
 		System.err.println("WARNING: field-panel is not fully implemented!!"); // TODO
 		return new AbstractQuickComponentDef(session) {
@@ -979,17 +1011,18 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 		};
 	}
 
-	private QuickComponentDef modifyField(QuickComponentDef field, QIS session) throws QonfigInterpretationException {
-		ObservableExpression fieldName = session.getAttribute("field-name", ObservableExpression.class);
+	private QuickComponentDef modifyField(QuickComponentDef field, QuickQIS session) throws QonfigInterpretationException {
+		ExpressoQIS exS = session.as(ExpressoQIS.class);
+		ObservableExpression fieldName = exS.getAttributeExpression("field-name");
 		if (fieldName != null) {
-			field.setFieldName(fieldName.evaluate(ModelTypes.Value.forType(String.class), session.getExpressoEnv()));
+			field.setFieldName(fieldName.evaluate(ModelTypes.Value.forType(String.class), exS.getExpressoEnv()));
 		}
 		if (Boolean.TRUE.equals(session.getAttribute("fill", Boolean.class)))
 			field.modify((f, m) -> f.fill());
 		return field;
 	}
 
-	private QuickComponentDef interpretSpacer(QIS session) throws QonfigInterpretationException {
+	private QuickComponentDef interpretSpacer(QuickQIS session) throws QonfigInterpretationException {
 		int length = Integer.parseInt(session.getAttributeText("length"));
 		return new AbstractQuickComponentDef(session) {
 			@Override
@@ -1000,15 +1033,16 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 		};
 	}
 
-	private QuickComponentDef interpretTextArea(QIS session) throws QonfigInterpretationException {
+	private QuickComponentDef interpretTextArea(QuickQIS session) throws QonfigInterpretationException {
+		ExpressoQIS exS = session.as(ExpressoQIS.class);
 		ValueContainer<SettableValue<?>, ?> value;
-		ObservableExpression valueX = session.getAttribute("value", ObservableExpression.class);
-		ObservableExpression formatX = session.getAttribute("format", ObservableExpression.class);
+		ObservableExpression valueX = exS.getAttributeExpression("value");
+		ObservableExpression formatX = exS.getAttributeExpression("format");
 		Function<ModelSetInstance, SettableValue<Format<Object>>> format;
-		value = valueX.evaluate(ModelTypes.Value.any(), session.getExpressoEnv());
+		value = valueX.evaluate(ModelTypes.Value.any(), exS.getExpressoEnv());
 		if (formatX != null) {
 			format = formatX.evaluate(//
-				ModelTypes.Value.forType(Format.class, value.getType().getType(0)), session.getExpressoEnv());
+				ModelTypes.Value.forType(Format.class, value.getType().getType(0)), exS.getExpressoEnv());
 		} else {
 			Class<?> type = TypeTokens.get().unwrap(TypeTokens.getRawType(value.getType().getType(0)));
 			Format<?> f;
@@ -1032,13 +1066,12 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 			format = ObservableModelSet.literalContainer(ModelTypes.Value.forType((Class<Format<Object>>) (Class<?>) Format.class),
 				(Format<Object>) f, type.getSimpleName());
 		}
-		ValueContainer<SettableValue<?>, SettableValue<Integer>> rows = session.interpretAttribute("rows", ObservableExpression.class, true,
-			ex -> ex.evaluate(ModelTypes.Value.forType(Integer.class), session.getExpressoEnv()));
-		ValueContainer<SettableValue<?>, SettableValue<Boolean>> html = session.interpretAttribute("html", ObservableExpression.class, true,
-			ex -> ex.evaluate(ModelTypes.Value.forType(Boolean.class), session.getExpressoEnv()));
-		ValueContainer<SettableValue<?>, SettableValue<Boolean>> editable = session.interpretAttribute("editable",
-			ObservableExpression.class,
-			true, ex -> ex.evaluate(ModelTypes.Value.forType(Boolean.class), session.getExpressoEnv()));
+		ValueContainer<SettableValue<?>, SettableValue<Integer>> rows = exS.getAttribute("rows", ModelTypes.Value.forType(Integer.class),
+			null);
+		ValueContainer<SettableValue<?>, SettableValue<Boolean>> html = exS.getAttribute("html", ModelTypes.Value.forType(Boolean.class),
+			null);
+		ValueContainer<SettableValue<?>, SettableValue<Boolean>> editable = exS.getAttribute("editable",
+			ModelTypes.Value.forType(Boolean.class), null);
 		return new AbstractQuickField(session) {
 			@Override
 			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
@@ -1074,12 +1107,11 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 		};
 	}
 
-	private QuickComponentDef interpretCheckBox(QIS session) throws QonfigInterpretationException {
+	private QuickComponentDef interpretCheckBox(QuickQIS session) throws QonfigInterpretationException {
+		ExpressoQIS exS = session.as(ExpressoQIS.class);
 		ValueContainer<SettableValue<?>, SettableValue<Boolean>> value;
-		value = session.getAttribute("value", ObservableExpression.class).evaluate(ModelTypes.Value.forType(boolean.class),
-			session.getExpressoEnv());
-		ValueContainer<SettableValue<?>, SettableValue<String>> text = session.interpretValue(ObservableExpression.class, true,
-			ex -> ex.evaluate(ModelTypes.Value.forType(String.class), session.getExpressoEnv()));
+		value = exS.getAttribute("value", ModelTypes.Value.forType(boolean.class), null);
+		ValueContainer<SettableValue<?>, SettableValue<String>> text = exS.getValue(ModelTypes.Value.forType(String.class), null);
 		return new AbstractQuickValueEditor(session) {
 			@Override
 			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
@@ -1116,16 +1148,13 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 		};
 	}
 
-	private QuickComponentDef interpretRadioButtons(QIS session) throws QonfigInterpretationException {
+	private QuickComponentDef interpretRadioButtons(QuickQIS session) throws QonfigInterpretationException {
+		ExpressoQIS exS = session.as(ExpressoQIS.class);
 		System.err.println("WARNING: radio-buttons is not fully implemented!!"); // TODO
 		ValueContainer<SettableValue<?>, ? extends SettableValue<Object>> value;
-		value = (ValueContainer<SettableValue<?>, ? extends SettableValue<Object>>) session
-			.getAttribute("value", ObservableExpression.class)//
-			.evaluate(ModelTypes.Value.any(), session.getExpressoEnv());
-		ValueContainer<SettableValue<?>, SettableValue<Object[]>> values = session.getAttribute("values", ObservableExpression.class)
-			.evaluate(
-				ModelTypes.Value.forType((TypeToken<Object[]>) TypeTokens.get().getArrayType(value.getType().getType(0), 1)),
-				session.getExpressoEnv());
+		value = (ValueContainer<SettableValue<?>, ? extends SettableValue<Object>>) exS.getAttribute("value", ModelTypes.Value.any(), null);
+		ValueContainer<SettableValue<?>, SettableValue<Object[]>> values = exS.getAttribute("values",
+			ModelTypes.Value.forType((TypeToken<Object[]>) TypeTokens.get().getArrayType(value.getType().getType(0), 1)), null);
 		return new AbstractQuickField(session) {
 			@Override
 			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
@@ -1141,11 +1170,10 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 		};
 	}
 
-	private QuickComponentDef interpretFileButton(QIS session) throws QonfigInterpretationException {
+	private QuickComponentDef interpretFileButton(QuickQIS session) throws QonfigInterpretationException {
+		ExpressoQIS exS = session.as(ExpressoQIS.class);
 		ValueContainer<SettableValue<?>, ? extends SettableValue<Object>> value;
-		value = (ValueContainer<SettableValue<?>, ? extends SettableValue<Object>>) session
-			.getAttribute("value", ObservableExpression.class)//
-			.evaluate(ModelTypes.Value.any(), session.getExpressoEnv());
+		value = (ValueContainer<SettableValue<?>, ? extends SettableValue<Object>>) exS.getAttribute("value", ModelTypes.Value.any(), null);
 		Function<ModelSetInstance, SettableValue<File>> file;
 		Class<?> valueType = TypeTokens.getRawType(value.getType().getType(0));
 		if (File.class.isAssignableFrom(valueType))
@@ -1196,20 +1224,21 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 		};
 	}
 
-	private QuickComponentDef evaluateLabel(QIS session) throws QonfigInterpretationException {
+	private QuickComponentDef evaluateLabel(QuickQIS session) throws QonfigInterpretationException {
+		ExpressoQIS exS = session.as(ExpressoQIS.class);
 		Function<ModelSetInstance, ? extends SettableValue<?>> value;
 		TypeToken<?> valueType;
-		ObservableExpression valueEx = session.getAttribute("value", ObservableExpression.class);
+		ObservableExpression valueEx = exS.getAttributeExpression("value");
 		ValueContainer<SettableValue<?>, ?> valueX;
 		if (valueEx != null && valueEx != ObservableExpression.EMPTY)
-			valueX = valueEx.evaluate(ModelTypes.Value.any(), session.getExpressoEnv());
+			valueX = valueEx.evaluate(ModelTypes.Value.any(), exS.getExpressoEnv());
 		else if (session.getElement().getValue() == null) {
 			session.withWarning("No value for label");
 			valueX = ObservableModelSet.literalContainer(ModelTypes.Value.forType(String.class), "", "");
 		} else
 			valueX = ObservableModelSet.literalContainer(ModelTypes.Value.forType(String.class), session.getValueText(),
 				session.getValueText());
-		ObservableExpression formatX = session.getAttribute("format", ObservableExpression.class);
+		ObservableExpression formatX = exS.getAttributeExpression("format");
 		Function<ModelSetInstance, SettableValue<Format<Object>>> format;
 		if (valueX == null) {
 			if (formatX != null && formatX != ObservableExpression.EMPTY)
@@ -1227,10 +1256,10 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 			} else
 				format = formatX.evaluate(
 					ModelTypes.Value.forType(TypeTokens.get().keyFor(Format.class).parameterized(TypeTokens.get().wrap(valueType))),
-					session.getExpressoEnv());
+					exS.getExpressoEnv());
 		}
-		ObservableExpression iconEx = session.getAttribute("icon", ObservableExpression.class);
-		Function<ModelSetInstance, SettableValue<Icon>> iconX = parseIcon(iconEx, session, session.getExpressoEnv());
+		ObservableExpression iconEx = exS.getAttributeExpression("icon");
+		Function<ModelSetInstance, SettableValue<Icon>> iconX = QuickCore.parseIcon(iconEx, exS, exS.getExpressoEnv());
 		return new AbstractQuickField(session) {
 			@Override
 			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
@@ -1251,9 +1280,10 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 		};
 	}
 
-	private <T> QuickComponentDef interpretTable(QIS session) throws QonfigInterpretationException {
-		ValueContainer<ObservableCollection<?>, ? extends ObservableCollection<T>> rows = (ValueContainer<ObservableCollection<?>, ? extends ObservableCollection<T>>) session
-			.getAttribute("rows", ObservableExpression.class).evaluate(ModelTypes.Collection.any(), session.getExpressoEnv());
+	private <T> QuickComponentDef interpretTable(QuickQIS session) throws QonfigInterpretationException {
+		ExpressoQIS exS = session.as(ExpressoQIS.class);
+		ValueContainer<ObservableCollection<?>, ? extends ObservableCollection<T>> rows = (ValueContainer<ObservableCollection<?>, ? extends ObservableCollection<T>>) exS
+			.getAttribute("rows", ModelTypes.Collection.any(), null);
 		String valueName = session.getAttributeText("value-name");
 		session.put("value-name", valueName);
 		String colValueName = session.getAttributeText("render-value-name");
@@ -1261,9 +1291,9 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 
 		Function<ModelSetInstance, SettableValue<Object>> selectionV;
 		Function<ModelSetInstance, ObservableCollection<Object>> selectionC;
-		ObservableExpression selectionS = session.getAttribute("selection", ObservableExpression.class);
+		ObservableExpression selectionS = exS.getAttributeExpression("selection");
 		if (selectionS != null) {
-			ValueContainer<?, ?> selection = selectionS.evaluate(null, session.getExpressoEnv());
+			ValueContainer<?, ?> selection = selectionS.evaluate(null, exS.getExpressoEnv());
 			ModelType<?> type = selection.getType().getModelType();
 			if (type == ModelTypes.Value) {
 				selectionV = (Function<ModelSetInstance, SettableValue<Object>>) selection;
@@ -1280,12 +1310,11 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 		}
 		TypeToken<CategoryRenderStrategy<Object, ?>> columnType = TypeTokens.get().keyFor(CategoryRenderStrategy.class)
 			.<CategoryRenderStrategy<Object, ?>> parameterized(rows.getType().getType(0), TypeTokens.get().WILDCARD);
-		ObservableExpression columnsX = session.getAttribute("columns", ObservableExpression.class);
-		Function<ModelSetInstance, ObservableCollection<CategoryRenderStrategy<Object, ?>>> columnsAttr;
-		columnsAttr = columnsX == null ? null : columnsX.evaluate(ModelTypes.Collection.forType(columnType), session.getExpressoEnv());
+		Function<ModelSetInstance, ObservableCollection<CategoryRenderStrategy<Object, ?>>> columnsAttr = exS.getAttribute("columns",
+			ModelTypes.Collection.forType(columnType), null);
 		session.put("model-type", rows.getType().getType(0));
 		List<Column<Object, ?>> columns = new ArrayList<>();
-		for (ExpressoSession<?> columnEl : session.forChildren("column"))
+		for (QuickQIS columnEl : session.forChildren("column"))
 			columns.add(columnEl.interpret(Column.class));
 		// TODO Make a wrapped model set with variables for value-name and render-value-name
 		List<ValueAction> actions = session.interpretChildren("action", ValueAction.class);
@@ -1352,7 +1381,7 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 		};
 	}
 
-	private <T, E extends PanelPopulation.TreeEditor<T, E>> QuickComponentDef interpretTree(QIS session)
+	private <T, E extends PanelPopulation.TreeEditor<T, E>> QuickComponentDef interpretTree(QuickQIS session)
 		throws QonfigInterpretationException {
 		return interpretAbstractTree(session, new TreeMaker<T, E>() {
 			@Override
@@ -1375,28 +1404,28 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 			Function<? super BetterList<T>, ? extends ObservableCollection<? extends T>> children, Consumer<E> treeData);
 	}
 
-	protected <T, E extends PanelPopulation.AbstractTreeEditor<T, ?, E>> QuickComponentDef interpretAbstractTree(QIS session,
+	public static <T, E extends PanelPopulation.AbstractTreeEditor<T, ?, E>> QuickComponentDef interpretAbstractTree(QuickQIS session,
 		TreeMaker<T, E> treeMaker) throws QonfigInterpretationException {
+		ExpressoQIS exS = session.as(ExpressoQIS.class);
 		System.err.println("WARNING: " + session.getElement().getType().getName() + " is not fully implemented!!"); // TODO
-		ValueContainer<SettableValue<?>, ? extends SettableValue<T>> root = (ValueContainer<SettableValue<?>, ? extends SettableValue<T>>) session
-			.getAttribute("root", ObservableExpression.class).evaluate(ModelTypes.Value.any(), session.getExpressoEnv());
+		ValueContainer<SettableValue<?>, ? extends SettableValue<T>> root = (ValueContainer<SettableValue<?>, ? extends SettableValue<T>>) exS
+			.getAttribute("root", ModelTypes.Value.any(), null);
 		TypeToken<T> valueType = (TypeToken<T>) root.getType().getType(0);
 		TypeToken<BetterList<T>> pathType = TypeTokens.get().keyFor(BetterList.class).parameterized(valueType);
 		String valueName = session.getAttributeText("value-name");
 		session.put("value-name", valueName);
 		String renderValueName = session.getAttributeText("render-value-name");
 		session.put("render-value-name", renderValueName);
-		ObservableModelSet.WrappedBuilder wb = session.getExpressoEnv().getModels().wrap();
+		ObservableModelSet.WrappedBuilder wb = exS.getExpressoEnv().getModels().wrap();
 		ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<BetterList<T>>> pathPlaceholder = wb
 			.withRuntimeValue(valueName, ModelTypes.Value.forType(pathType));
-		ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> cellPlaceholder = wb.withRuntimeValue(
-			renderValueName,
-			ModelTypes.Value.forType(valueType));
+		ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> cellPlaceholder = wb
+			.withRuntimeValue(renderValueName, ModelTypes.Value.forType(valueType));
 		ObservableModelSet.Wrapped wModel = wb.build();
 
 		Function<ModelSetInstance, ? extends ObservableCollection<? extends T>> children;
-		children = session.getAttribute("children", ObservableExpression.class).evaluate(
-			ModelTypes.Collection.forType(TypeTokens.get().getExtendsWildcard(valueType)), session.getExpressoEnv().with(wModel, null));
+		children = exS.getAttributeExpression("children").evaluate(
+			ModelTypes.Collection.forType(TypeTokens.get().getExtendsWildcard(valueType)), exS.getExpressoEnv().with(wModel, null));
 		Column<BetterList<T>, T> treeColumn;
 		if (!session.getChildren("tree-column").isEmpty()) {
 			session.put("model-type", pathType);
@@ -1407,7 +1436,7 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 		ValueContainer<ObservableCollection<?>, ObservableCollection<BetterList<T>>> multiSelectionPath;
 		ValueContainer<SettableValue<?>, SettableValue<T>> singleSelectionV;
 		ValueContainer<SettableValue<?>, SettableValue<BetterList<T>>> singleSelectionPath;
-		ObservableExpression selectionEx = session.getAttribute("selection", ObservableExpression.class);
+		ObservableExpression selectionEx = exS.getAttributeExpression("selection");
 		if (selectionEx == null) {
 			multiSelectionV = null;
 			multiSelectionPath = null;
@@ -1415,7 +1444,7 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 			singleSelectionPath = null;
 		} else {
 			ValueContainer<?, ?> selection = selectionEx.evaluate(//
-				null, session.getExpressoEnv().with(wModel, null));
+				null, exS.getExpressoEnv().with(wModel, null));
 			ValueContainer<Object, Object> hackS = (ValueContainer<Object, Object>) selection;
 			if (selection.getType().getModelType() == ModelTypes.Value) {
 				multiSelectionV = null;
@@ -1439,9 +1468,9 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 				throw new QonfigInterpretationException(
 					"Value " + selectionEx + ", type " + selection.getType() + " cannot be used for tree selection");
 		}
-		ObservableExpression leafX = session.getAttribute("leaf", ObservableExpression.class);
+		ObservableExpression leafX = exS.getAttributeExpression("leaf");
 		ValueContainer<SettableValue<?>, SettableValue<Boolean>> leaf = leafX == null ? null
-			: leafX.evaluate(ModelTypes.Value.forType(boolean.class), session.getExpressoEnv().with(wModel, null));
+			: leafX.evaluate(ModelTypes.Value.forType(boolean.class), exS.getExpressoEnv().with(wModel, null));
 		treeMaker.configure(wModel, root);
 		return new AbstractQuickComponentDef(session) {
 			@Override
@@ -1588,62 +1617,60 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 			}
 		}
 
-		static <T> SingleTab<T> parse(ExpressoSession<?> tab) throws QonfigInterpretationException {
-			QonfigToolkit base = BASE.get();
+		static <T2> SingleTab<T2> parse(QonfigToolkit base, QuickQIS tab) throws QonfigInterpretationException {
+			ExpressoQIS exTab = tab.as(ExpressoQIS.class);
 			QuickComponentDef content = tab.interpret(QuickComponentDef.class);
-			ValueContainer<SettableValue<?>, SettableValue<T>> tabId = tab.getAttributeAsValue("tab-id",
-				(TypeToken<T>) TypeTokens.get().WILDCARD, null);
+			ValueContainer<SettableValue<?>, SettableValue<T2>> tabId = exTab.getAttributeAsValue("tab-id",
+				(TypeToken<T2>) TypeTokens.get().WILDCARD, null);
 			String renderValueName;
-			ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> tvp;
+			ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T2>> tvp;
 			if (tab.getElement().isInstance(base.getElementOrAddOn("single-rendering"))) {
 				renderValueName = tab.getAttributeText("render-value-name");
-				ObservableModelSet.WrappedBuilder wb = tab.getExpressoEnv().getModels().wrap();
-				tvp = wb.withRuntimeValue(renderValueName, ModelTypes.Value.forType((TypeToken<T>) tabId.getType().getType(0)));
-				tab.setModels(wb.build(), null);
+				ObservableModelSet.WrappedBuilder wb = exTab.getExpressoEnv().getModels().wrap();
+				tvp = wb.withRuntimeValue(renderValueName, ModelTypes.Value.forType((TypeToken<T2>) tabId.getType().getType(0)));
+				exTab.setModels(wb.build(), null);
 			} else {
 				renderValueName = null;
 				tvp = null;
 			}
 
-			ObservableExpression tabNameEx = tab.getAttribute("tab-name", ObservableExpression.class);
-			Function<ModelSetInstance, ? extends ObservableValue<String>> tabName = tab.getAttributeAsValue("tab-name", String.class,
+			Function<ModelSetInstance, ? extends ObservableValue<String>> tabName = exTab.getAttributeAsValue("tab-name", String.class,
 				() -> msi -> SettableValue.of(String.class, tabId.get(msi).get().toString(), "Not editable"));
 
-			ObservableExpression tabIconEx = tab.getAttribute("tab-icon", ObservableExpression.class);
-			Function<ModelSetInstance, SettableValue<Icon>> tabIcon = parseIcon(tab.getAttribute("tab-icon", ObservableExpression.class),
-				tab, tab.getExpressoEnv());
+			Function<ModelSetInstance, SettableValue<Icon>> tabIcon = QuickCore.parseIcon(exTab.getAttributeExpression("tab-icon"), exTab,
+				exTab.getExpressoEnv());
 
 			boolean removable = tab.getAttribute("removable", boolean.class);
 
-			ObservableExpression onRemoveEx = tab.getAttribute("on-remove", ObservableExpression.class);
-			Function<ModelSetInstance, Consumer<T>> onRemove;
+			ObservableExpression onRemoveEx = exTab.getAttributeExpression("on-remove");
+			Function<ModelSetInstance, Consumer<T2>> onRemove;
 			if (onRemoveEx != null) {
 				// TODO This should be a value, with the specified renderValueName available
 				if (!removable) {
 					tab.withWarning("on-remove specified, for tab '" + tab.getAttributeText("tab-id") + "' but tab is not removable");
 					return null;
 				} else {
-					onRemove = onRemoveEx.<T, Object, Object, Void> findMethod(Void.class, tab.getExpressoEnv())//
-						.withOption0().withOption1((TypeToken<T>) tabId.getType().getType(0), t -> t)//
+					onRemove = onRemoveEx.<T2, Object, Object, Void> findMethod(Void.class, exTab.getExpressoEnv())//
+						.withOption0().withOption1((TypeToken<T2>) tabId.getType().getType(0), t -> t)//
 						.find1().andThen(fn -> t -> fn.apply(t));
 				}
 			} else
 				onRemove = null;
 
-			Function<ModelSetInstance, ? extends Observable<?>> selectOn = tab.getAttribute("select-on",
+			Function<ModelSetInstance, ? extends Observable<?>> selectOn = exTab.getAttribute("select-on",
 				ModelTypes.Event.forType(TypeTokens.get().WILDCARD), null);
 
-			ObservableExpression onSelectEx = tab.getAttribute("on-select", ObservableExpression.class);
-			Function<ModelSetInstance, Consumer<T>> onSelect;
+			ObservableExpression onSelectEx = exTab.getAttributeExpression("on-select");
+			Function<ModelSetInstance, Consumer<T2>> onSelect;
 			if (onSelectEx != null) {
 				// TODO This should be a value, with the specified renderValueName available
-				onSelect = onSelectEx.<T, Object, Object, Void> findMethod(Void.class, tab.getExpressoEnv())//
-					.withOption0().withOption1((TypeToken<T>) tabId.getType().getType(0), t -> t)//
+				onSelect = onSelectEx.<T2, Object, Object, Void> findMethod(Void.class, exTab.getExpressoEnv())//
+					.withOption0().withOption1((TypeToken<T2>) tabId.getType().getType(0), t -> t)//
 					.find1().andThen(fn -> t -> fn.apply(t));
 			} else
 				onSelect = null;
 
-			return new SingleTab<>(tab.getExpressoEnv().getModels(), tvp, content, tabId, renderValueName, tabName, tabIcon, removable,
+			return new SingleTab<>(exTab.getExpressoEnv().getModels(), tvp, content, tabId, renderValueName, tabName, tabIcon, removable,
 				onRemove, (Function<ModelSetInstance, Observable<?>>) selectOn, onSelect);
 		}
 	}
@@ -1731,99 +1758,129 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 			}
 		}
 
-		static <T> MultiTabSet<T> parse(ExpressoSession<?> tabSet) throws QonfigInterpretationException {
-			ValueContainer<ObservableCollection<?>, ObservableCollection<T>> values = tabSet.getAttributeAsCollection("values",
+		static <T> MultiTabSet<T> parse(QuickQIS tabSet) throws QonfigInterpretationException {
+			ExpressoQIS exTabSet = tabSet.as(ExpressoQIS.class);
+			ValueContainer<ObservableCollection<?>, ObservableCollection<T>> values = exTabSet.getAttributeAsCollection("values",
 				(TypeToken<T>) TypeTokens.get().WILDCARD, null);
 			String renderValueName = tabSet.getAttributeText("render-value-name");
-			ObservableModelSet.WrappedBuilder wb = tabSet.getExpressoEnv().getModels().wrap();
+			ObservableModelSet.WrappedBuilder wb = exTabSet.getExpressoEnv().getModels().wrap();
 			ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> tvp = wb.withRuntimeValue(renderValueName,
 				ModelTypes.Value.forType((TypeToken<T>) values.getType().getType(0)));
-			tabSet.setModels(wb.build(), null);
+			exTabSet.setModels(wb.build(), null);
 
 			QuickComponentDef content = tabSet.interpretChildren("renderer", QuickComponentDef.class).getFirst();
 
-			Function<ModelSetInstance, Function<T, String>> tabName = tabSet.interpretAttribute("tab-name", ObservableExpression.class,
-				false, ex -> {
-					if (ex == null) {
-						return msi -> String::valueOf;
-					} else {
-						return ex.<T, Object, Object, String> findMethod(String.class, tabSet.getExpressoEnv()).withOption0()
-							.withOption1((TypeToken<T>) values.getType().getType(0), a -> a)//
-							.find1();
-					}
-				});
+			ObservableExpression tabNameX = exTabSet.getAttributeExpression("tab-name");
+			Function<ModelSetInstance, Function<T, String>> tabName;
+			if (tabNameX == null)
+				tabName = msi -> String::valueOf;
+				else
+					tabName = tabNameX.<T, Object, Object, String> findMethod(String.class, exTabSet.getExpressoEnv()).withOption0()
+					.withOption1((TypeToken<T>) values.getType().getType(0), a -> a)//
+					.find1();
 
-			Function<ModelSetInstance, Function<T, Icon>> tabIcon = tabSet.interpretAttribute("tab-icon", ObservableExpression.class, true,
-				ex -> {
-					MethodFinder<T, Object, Object, Object> finder = ex
-						.<T, Object, Object, Object> findMethod((TypeToken<Object>) TypeTokens.get().WILDCARD, tabSet.getExpressoEnv())
-						.withOption0().withOption1((TypeToken<T>) values.getType().getType(0), a -> a);
-					Function<ModelSetInstance, Function<T, Object>> iconFn = finder.find1();
-					Class<?> iconType = TypeTokens.getRawType(finder.getResultType());
-					if (iconType == Image.class)
-						return (Function<ModelSetInstance, Function<T, Icon>>) (Function<?, ?>) iconFn;
-					else if (iconType == URL.class) {
-						return msi -> {
-							Function<T, URL> urlFn = (Function<T, URL>) (Function<?, ?>) iconFn.apply(msi);
-							return tabValue -> {
-								URL url = urlFn.apply(tabValue);
-								if (url == null)
-									return null;
-								return new ImageIcon(url); // There's probably a better way to do this, but this is what I know
-							};
+			ObservableExpression tabIconX = exTabSet.getAttributeExpression("tab-icon");
+			Function<ModelSetInstance, Function<T, Icon>> tabIcon;
+			if (tabIconX == null)
+				tabIcon = null;
+			else {
+				MethodFinder<T, Object, Object, Object> finder = tabIconX
+					.<T, Object, Object, Object> findMethod((TypeToken<Object>) TypeTokens.get().WILDCARD, exTabSet.getExpressoEnv())
+					.withOption0().withOption1((TypeToken<T>) values.getType().getType(0), a -> a);
+				Function<ModelSetInstance, Function<T, Object>> iconFn = finder.find1();
+				Class<?> iconType = TypeTokens.getRawType(finder.getResultType());
+				if (Icon.class.isAssignableFrom(iconType))
+					tabIcon = (Function<ModelSetInstance, Function<T, Icon>>) (Function<?, ?>) iconFn;
+				else if (Image.class.isAssignableFrom(iconType)) {
+					tabIcon = msi -> {
+						Function<T, Image> imgFn = (Function<T, Image>) (Function<?, ?>) iconFn.apply(msi);
+						return tabValue -> {
+							Image img = imgFn.apply(tabValue);
+							if (img == null)
+								return null;
+							return new ImageIcon(img); // There's probably a better way to do this, but this is what I know
 						};
-					} else if (iconType == String.class) {
-						return msi -> {
-							Function<T, String> strFn = (Function<T, String>) (Function<?, ?>) iconFn.apply(msi);
-							return tabValue -> {
-								String str = strFn.apply(tabValue);
-								if (str == null)
-									return null;
-								URL url;
-								try {
-									String location = QommonsConfig.resolve(str, tabSet.getElement().getDocument().getLocation());
-									url = QommonsConfig.toUrl(location);
-								} catch (IOException e) {
-									throw new IllegalArgumentException("Could not resolve icon location '" + str + "'", e);
-								}
-								return new ImageIcon(url); // There's probably a better way to do this, but this is what I know
-							};
+					};
+				} else if (iconType == URL.class) {
+					tabIcon = msi -> {
+						Function<T, URL> urlFn = (Function<T, URL>) (Function<?, ?>) iconFn.apply(msi);
+						return tabValue -> {
+							URL url = urlFn.apply(tabValue);
+							if (url == null)
+								return null;
+							return new ImageIcon(url); // There's probably a better way to do this, but this is what I know
 						};
-					} else {
-						tabSet.withWarning("Cannot interpret tab-icon '" + tabSet.getAttributeText("tab-icon") + "', type "
-							+ finder.getResultType() + " as an image");
-						return null;
-					}
-				});
+					};
+				} else if (iconType == String.class) {
+					tabIcon = msi -> {
+						Function<T, String> strFn = (Function<T, String>) (Function<?, ?>) iconFn.apply(msi);
+						return tabValue -> {
+							String str = strFn.apply(tabValue);
+							if (str == null)
+								return null;
+							URL url;
+							try {
+								String location = QommonsConfig.resolve(str, tabSet.getElement().getDocument().getLocation());
+								url = QommonsConfig.toUrl(location);
+							} catch (IOException e) {
+								throw new IllegalArgumentException("Could not resolve icon location '" + str + "'", e);
+							}
+							return new ImageIcon(url); // There's probably a better way to do this, but this is what I know
+						};
+					};
+				} else {
+					tabSet.withWarning("Cannot interpret tab-icon '" + tabSet.getAttributeText("tab-icon") + "', type "
+						+ finder.getResultType() + " as an image");
+					tabIcon = null;
+				}
+			}
 
 			// TODO This should be a value, with the specified renderValueName available
-			Function<ModelSetInstance, Function<T, Boolean>> removable = tabSet.interpretAttribute("removable", ObservableExpression.class,
-				true, ex -> ex.<T, Object, Object, Boolean> findMethod(boolean.class, tabSet.getExpressoEnv())//
-				.withOption0().withOption1((TypeToken<T>) values.getType().getType(0), t -> t)//
-				.find1());
+			ObservableExpression removableX = exTabSet.getAttributeExpression("removable");
+			Function<ModelSetInstance, Function<T, Boolean>> removable;
+			if (removableX == null)
+				removable = null;
+			else {
+				removable = removableX.<T, Object, Object, Boolean> findMethod(boolean.class, exTabSet.getExpressoEnv())//
+					.withOption0().withOption1((TypeToken<T>) values.getType().getType(0), t -> t)//
+					.find1();
+			}
 
 			// TODO This should be a value, with the specified renderValueName available
-			Function<ModelSetInstance, Consumer<T>> onRemove = tabSet.interpretAttribute("on-remove", ObservableExpression.class, true,
-				ex -> ex.<T, Object, Object, Void> findMethod(Void.class, tabSet.getExpressoEnv())//
-				.withOption0().withOption1((TypeToken<T>) values.getType().getType(0), t -> t)//
-				.find1().andThen(fn -> t -> fn.apply(t)));
+			ObservableExpression onRemoveX = exTabSet.getAttributeExpression("on-remove");
+			Function<ModelSetInstance, Consumer<T>> onRemove;
+			if (onRemoveX == null)
+				onRemove = null;
+			else {
+				onRemove = onRemoveX.<T, Object, Object, Void> findMethod(Void.class, exTabSet.getExpressoEnv())//
+					.withOption0().withOption1((TypeToken<T>) values.getType().getType(0), t -> t)//
+					.find1().andThen(fn -> t -> fn.apply(t));
+			}
 
 			// TODO This should be a value, with the specified renderValueName available
-			Function<ModelSetInstance, Function<T, Observable<?>>> selectOn = tabSet.interpretAttribute("select-on",
-				ObservableExpression.class, true,
-				ex -> ex
-				.<T, Object, Object, Observable<?>> findMethod(TypeTokens.get().keyFor(Observable.class).<Observable<?>> wildCard(),
-					tabSet.getExpressoEnv())//
-				.withOption0().withOption1((TypeToken<T>) values.getType().getType(0), t -> t)//
-				.find1());
+			ObservableExpression selectOnX = exTabSet.getAttributeExpression("select-on");
+			Function<ModelSetInstance, Function<T, Observable<?>>> selectOn;
+			if (selectOnX == null)
+				selectOn = null;
+			else {
+				selectOn = selectOnX
+					.<T, Object, Object, Observable<?>> findMethod(TypeTokens.get().keyFor(Observable.class).<Observable<?>> wildCard(),
+						exTabSet.getExpressoEnv())//
+					.withOption0().withOption1((TypeToken<T>) values.getType().getType(0), t -> t)//
+					.find1();
+			}
 
 			// TODO This should be a value, with the specified renderValueName available
-			Function<ModelSetInstance, Consumer<T>> onSelect = tabSet.interpretAttribute("on-select", ObservableExpression.class, true,
-				ex -> ex.<T, Object, Object, Void> findMethod(Void.class, tabSet.getExpressoEnv())//
+			ObservableExpression onSelectX = exTabSet.getAttributeExpression("on-select");
+			Function<ModelSetInstance, Consumer<T>> onSelect;
+			if (onSelectX == null)
+				onSelect = null;
+			else
+				onSelect = onSelectX.<T, Object, Object, Void> findMethod(Void.class, exTabSet.getExpressoEnv())//
 				.withOption0().withOption1((TypeToken<T>) values.getType().getType(0), t -> t)//
-				.find1().andThen(fn -> t -> fn.apply(t)));
+				.find1().andThen(fn -> t -> fn.apply(t));
 
-			return new MultiTabSet<>((ObservableModelSet.Wrapped) tabSet.getExpressoEnv().getModels(), tvp, tabSet.getElement(), values,
+			return new MultiTabSet<>((ObservableModelSet.Wrapped) exTabSet.getExpressoEnv().getModels(), tvp, tabSet.getElement(), values,
 				tabSet.getAttributeText("render-value-name"), content, tabName, tabIcon, removable, onRemove, selectOn, onSelect);
 		}
 	}
@@ -1844,27 +1901,30 @@ public class QuickBase<QIS extends QuickSession<?>> extends QuickCore<QIS> {
 		}
 	}
 
-	private <T> QuickComponentDef interpretTabs(QIS session) throws QonfigInterpretationException {
-		QonfigToolkit base = BASE.get();
+	private <T> QuickComponentDef interpretTabs(QuickQIS session, QonfigToolkit base) throws QonfigInterpretationException {
+		ExpressoQIS exS = session.as(ExpressoQIS.class);
 		List<TabSet<? extends T>> tabs = new ArrayList<>();
 		QonfigChildDef.Declared tabSetDef = base.getChild("tabs", "tab-set").getDeclared();
 		QonfigChildDef.Declared widgetDef = base.getChild("tabs", "content").getDeclared();
 		List<TypeToken<? extends T>> tabTypes = new ArrayList<>();
-		for (ExpressoSession<?> child : session.forChildren()) {
+		for (QuickQIS child : session.forChildren()) {
 			if (child.getElement().getDeclaredRoles().contains(tabSetDef)) {
-				MultiTabSet<T> tabSet = MultiTabSet.parse(child.as("tab-set"));
+				MultiTabSet<T> tabSet = MultiTabSet.parse(child.asElement("tab-set"));
 				tabTypes.add((TypeToken<? extends T>) tabSet.values.getType().getType(0));
 				tabs.add(tabSet);
 			} else if (child.getElement().getDeclaredRoles().contains(widgetDef)) {
-				SingleTab<T> tab = SingleTab.parse(child.as("tab"));
+				SingleTab<T> tab = SingleTab.parse(base, child.asElement("tab"));
 				tabTypes.add((TypeToken<? extends T>) tab.tabId.getType().getType(0));
 				tabs.add(tab);
 			}
 		}
 		TypeToken<T> tabType = TypeTokens.get().getCommonType(tabTypes);
-		ValueContainer<SettableValue<?>, SettableValue<T>> selection = session.interpretAttribute("selected", ObservableExpression.class,
-			true,
-			ex -> ex.evaluate(ModelTypes.Value.forType(TypeTokens.get().getSuperWildcard(tabType)), session.getExpressoEnv()));
+		ObservableExpression selectionX = exS.getAttributeExpression("selected");
+		ValueContainer<SettableValue<?>, SettableValue<T>> selection;
+		if (selectionX == null)
+			selection = null;
+		else
+			selection = selectionX.evaluate(ModelTypes.Value.forType(TypeTokens.get().getSuperWildcard(tabType)), exS.getExpressoEnv());
 		return new AbstractQuickComponentDef(session) {
 			@Override
 			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {

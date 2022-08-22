@@ -4,13 +4,19 @@
 	<value-types>
 		<pattern name="int">\d{1,7}</pattern> <!-- Positive integer -->
 		<pattern name="float">[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?</pattern>
+		<pattern name="identifier">^([a-zA-Z_$][a-zA-Z\\d_$]*)$</pattern>
 
-		<external name="identifier" />
 		<external name="expression" />
-		<external name="expression-or-string" />
 	</value-types>
 
 	<add-ons>
+		<add-on name="expresso-parseable">
+			<child-def name="expresso-parser" type="expresso-parser" min="0" />
+			<attribute name="inherit-operators" type="boolean" default="true" />
+			<child-def name="unary-operators" type="unary-operators" min="0" max="inf" />
+			<child-def name="binary-operators" type="binary-operators" min="0" max="inf" />
+		</add-on>
+
 		<add-on name="model-element" requires="model-value">
 			<attribute name="name" type="identifier" specify="required" />
 		</add-on>
@@ -136,6 +142,18 @@
 	</add-ons>
 
 	<elements>
+		<element-def name="expresso-parser">
+			<value type="expression" specify="required" />
+		</element-def>
+		<element-def name="expresso-java" extends="expresso-parser">
+			<value-mod specify="optional" default="new org.observe.expresso.JavaExpressoParser()" />
+		</element-def>
+		<element-def name="operators" abstract="true">
+			<value type="string" specify="required" />
+		</element-def>
+		<element-def name="unary-operators" extends="operators" />
+		<element-def name="binary-operators" extends="operators" />
+
 		<element-def name="import">
 			<value type="string" specify="required" />
 		</element-def>
@@ -153,7 +171,9 @@
 			<value type="expression" specify="optional" />
 		</element-def>
 		<element-def name="event" extends="model-value" inherits="allow-ext-model" />
-		<element-def name="action" extends="model-value" inherits="allow-ext-model" />
+		<element-def name="action" extends="model-value" inherits="allow-ext-model">
+			<attribute name="disable-with" type="expression" specify="optional" />
+		</element-def>
 		<element-def name="value" extends="model-value" inherits="allow-ext-model,allow-config-model" />
 		<element-def name="list" extends="model-value" inherits="allow-ext-model,allow-config-model" />
 		<element-def name="value-set" extends="list" />

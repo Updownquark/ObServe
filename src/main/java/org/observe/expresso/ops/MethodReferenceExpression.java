@@ -2,6 +2,7 @@ package org.observe.expresso.ops;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Function;
@@ -14,6 +15,7 @@ import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
+import org.qommons.ArrayUtils;
 import org.qommons.QommonsUtils;
 import org.qommons.TriFunction;
 import org.qommons.config.QonfigInterpretationException;
@@ -69,11 +71,19 @@ public class MethodReferenceExpression implements ObservableExpression {
 						if (result != null) {
 							setResultType(result.returnType);
 							MethodOption option = theOptions.get(result.argListOption);
+							boolean isStatic = (result.method.getModifiers() & Modifier.STATIC) != 0;
 							return msi -> (p1, p2, p3) -> {
+								Object ctx;
 								Object[] args = new Object[option.size()];
 								option.getArgMaker().makeArgs(p1, p2, p3, args, msi);
+								if (isStatic) {
+									ctx = null;
+								} else {
+									ctx = p1;
+									args = ArrayUtils.remove(args, 0);
+								}
 								try {
-									T val = result.invoke(null, args, Invocation.ExecutableImpl.METHOD);
+									T val = result.invoke(ctx, args, Invocation.ExecutableImpl.METHOD);
 									return voidTarget ? null : val;
 								} catch (InvocationTargetException e) {
 									throw new IllegalStateException(MethodReferenceExpression.this + ": Could not invoke " + result,

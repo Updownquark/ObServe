@@ -1,9 +1,9 @@
 package org.observe.quick;
 
-import org.observe.quick.QuickInterpreter.QuickSession;
+import org.qommons.config.QonfigInterpretationException;
 
 public abstract class AbstractQuickValueEditor extends AbstractQuickField implements QuickValueEditorDef {
-	public AbstractQuickValueEditor(QuickSession<?> session) {
+	public AbstractQuickValueEditor(QuickQIS session) throws QonfigInterpretationException {
 		super(session);
 	}
 }

@@ -672,6 +672,8 @@ public interface ObservableModelSet {
 			private final Default theModel;
 
 			public MakerPlaceholderImpl(String path, ValueCreator<M, MV> value, Default model) {
+				if (value == null && model == null)
+					throw new NullPointerException();
 				thePath = path;
 				theValueMaker = value;
 				theModel = model;
@@ -689,15 +691,23 @@ public interface ObservableModelSet {
 
 			@Override
 			public ModelInstanceType<M, MV> getType() {
-				if (theValue == null)
+				if (theModel != null)
+					return (ModelInstanceType<M, MV>) ModelTypes.Model.instance();
+				if (theValue == null) {
 					theValue = theValueMaker.createValue();
+					if (theValue == null)
+						throw new IllegalStateException("Value maker failed to create value");
+				}
 				return theValue.getType();
 			}
 
 			@Override
 			public MV get(ModelSetInstanceBuilder modelSet, ExternalModelSet extModel) {
-				if (theValue == null)
+				if (theValue == null) {
 					theValue = theValueMaker.createValue();
+					if (theValue == null)
+						throw new IllegalStateException("Value maker failed to create value");
+				}
 				return theValue.get(modelSet);
 			}
 
@@ -901,6 +911,12 @@ public interface ObservableModelSet {
 		<M, MV extends M> WrappedBuilder withCustomValue(String name, ValueContainer<M, MV> value);
 
 		@Override
+		<M, MV extends M> WrappedBuilder with(String name, ModelInstanceType<M, MV> type, ValueGetter<MV> getter);
+
+		@Override
+		<M, MV extends M> WrappedBuilder with(String name, ValueContainer<M, MV> value);
+
+		@Override
 		Wrapped build();
 	}
 
@@ -986,6 +1002,18 @@ public interface ObservableModelSet {
 			public <M, MV extends M> WrappedBuilder withCustomValue(String name, ValueContainer<M, MV> value) {
 				checkName(name);
 				theCustomValues.put(name, value);
+				return this;
+			}
+
+			@Override
+			public <M, MV extends M> WrappedBuilder with(String name, ModelInstanceType<M, MV> type, ValueGetter<MV> getter) {
+				super.with(name, type, getter);
+				return this;
+			}
+
+			@Override
+			public <M, MV extends M> WrappedBuilder with(String name, ValueContainer<M, MV> value) {
+				super.with(name, value);
 				return this;
 			}
 

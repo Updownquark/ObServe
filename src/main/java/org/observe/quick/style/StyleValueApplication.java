@@ -12,7 +12,7 @@ import java.util.Set;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoEnv;
-import org.observe.expresso.ExpressoInterpreter;
+import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet;
@@ -153,7 +153,7 @@ public class StyleValueApplication {
 		if (theParent == null)
 			parentCond = TRUE;
 		else
-			parentCond = theParent.getCondition(ExpressoInterpreter.getParentModels(model));
+			parentCond = theParent.getCondition(ExpressoQIS.getParentModels(model));
 
 		ObservableValue<Boolean> localCond;
 		if (theCondition != null)

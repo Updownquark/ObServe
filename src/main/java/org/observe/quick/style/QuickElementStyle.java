@@ -8,8 +8,7 @@ import java.util.Set;
 
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
-import org.observe.expresso.ExpressoInterpreter;
-import org.observe.expresso.ExpressoInterpreter.ExpressoSession;
+import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
@@ -30,7 +29,7 @@ public class QuickElementStyle {
 	private final Map<QuickStyleAttribute<?>, QuickElementStyleAttribute<?>> theValues;
 
 	public QuickElementStyle(QuickStyleSet styleSet, List<QuickStyleValue<?>> declaredValues, QuickElementStyle parent,
-		QuickStyleSheet styleSheet, QonfigElement element, ExpressoSession<?> session) throws QonfigInterpretationException {
+		QuickStyleSheet styleSheet, QonfigElement element, ExpressoQIS session) throws QonfigInterpretationException {
 		theStyleSet = styleSet;
 		theParent = parent;
 		theElement = element;
@@ -139,7 +138,7 @@ public class QuickElementStyle {
 				values[i] = condition.map(pass -> new ConditionalValue<>(pass, value));
 			}
 			if (theInherited != null) {
-				ObservableValue<T> value = theInherited.evaluate(ExpressoInterpreter.getParentModels(models));
+				ObservableValue<T> value = theInherited.evaluate(ExpressoQIS.getParentModels(models));
 				values[theValues.size()] = ObservableValue.of(new ConditionalValue<>(true, value));
 			}
 			ObservableValue<ConditionalValue<T>> conditionalValue = ObservableValue.firstValue(

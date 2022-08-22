@@ -11,11 +11,10 @@ import java.util.Map;
 import java.util.Set;
 
 import org.observe.SettableValue;
-import org.observe.expresso.Expresso;
-import org.observe.expresso.ExpressoInterpreter.ExpressoSession;
+import org.observe.expresso.ExpressoV0_1;
+import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
-import org.observe.quick.QuickCore;
 import org.observe.util.TypeTokens;
 import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterHashMultiMap;
@@ -23,34 +22,52 @@ import org.qommons.collect.BetterMultiMap;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigElementDef;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
-import org.qommons.config.QonfigInterpreter;
-import org.qommons.config.QonfigInterpreter.Builder;
+import org.qommons.config.QonfigInterpreterCore;
+import org.qommons.config.QonfigToolkit;
 
 import com.google.common.reflect.TypeToken;
 
 public class QuickStyleSet {
-	public static final QonfigAddOn STYLED = QuickCore.CORE.get().getAddOn("styled");
 
 	interface StyleModelValues {
 		<T> StyleModelValues withModelValue(QuickModelValue<T> modelValue, SettableValue<T> value);
 	}
 
+	private final QonfigToolkit theCoreToolkit;
+	private final QonfigAddOn theStyledAddOn;
+	private final QonfigElementDef theWidgetEl;
 	private final Map<QonfigElementOrAddOn, QuickStyleType> theStyleTypes;
 
-	public QuickStyleSet() {
+	public QuickStyleSet(QonfigToolkit core) {
+		theCoreToolkit = core;
+		theStyledAddOn = core.getAddOn("styled");
+		theWidgetEl = core.getElement("widget");
 		theStyleTypes = new HashMap<>();
 	}
 
-	public synchronized QuickStyleType styled(QonfigElementOrAddOn element, ExpressoSession<?> session)
+	public QonfigToolkit getCoreToolkit() {
+		return theCoreToolkit;
+	}
+
+	public QonfigAddOn getStyled() {
+		return theStyledAddOn;
+	}
+
+	public QonfigElementDef getWidget() {
+		return theWidgetEl;
+	}
+
+	public synchronized QuickStyleType styled(QonfigElementOrAddOn element, ExpressoQIS session)
 		throws QonfigInterpretationException {
 		QuickStyleType styled = theStyleTypes.get(element);
 		if (styled != null)
 			return styled;
 		else if (session == null)
 			return null;
-		else if (!STYLED.isAssignableFrom(element))
+		else if (!theStyledAddOn.isAssignableFrom(element))
 			return null;
 		List<QuickStyleType> parents = new ArrayList<>();
 		QonfigElementOrAddOn superEl = element.getSuperElement();
@@ -77,16 +94,16 @@ public class QuickStyleSet {
 			BetterCollections.unmodifiableMultiMap(attributes));
 
 		QonfigElement modelEl = element.getMetadata().getRoot().getChildrenByRole()
-			.get(QuickCore.CORE.get().getAddOn("styled").getMetaSpec().getChild("widget-model").getDeclared()).peekFirst();
+			.get(theCoreToolkit.getAddOn("styled").getMetaSpec().getChild("widget-model").getDeclared()).peekFirst();
 		if (modelEl != null) {
-			QonfigInterpreter.Builder<?, ?> interpreterBuilder = QonfigInterpreter.build(QuickStyleSet.class, QuickCore.CORE.get())
-				.forToolkit(QuickCore.CORE.get());
+			QonfigInterpreterCore.Builder interpreterBuilder = QonfigInterpreterCore.build(QuickStyleSet.class, theCoreToolkit)
+				.forToolkit(theCoreToolkit);
 			configureModelInterpretation(interpreterBuilder, session);
-			QonfigAttributeDef.Declared nameAttr = Expresso.EXPRESSO.get().getAddOn("model-element").getAttribute("name").getDeclared();
-			QonfigAttributeDef.Declared typeAttr = Expresso.EXPRESSO.get().getElement("model-value").getAttribute("type").getDeclared();
-			QonfigAttributeDef.Declared priorityAttr = QuickCore.CORE.get().getAddOn("widget-model-value").getAttribute("priority")
+			QonfigAttributeDef.Declared nameAttr = theCoreToolkit.getAddOn("model-element").getAttribute("name").getDeclared();
+			QonfigAttributeDef.Declared typeAttr = theCoreToolkit.getElement("model-value").getAttribute("type").getDeclared();
+			QonfigAttributeDef.Declared priorityAttr = theCoreToolkit.getAddOn("widget-model-value").getAttribute("priority")
 				.getDeclared();
-			for (QonfigElement modelV : modelEl.getChildrenInRole(Expresso.EXPRESSO.get(), "model", "value")) {
+			for (QonfigElement modelV : modelEl.getChildrenInRole(theCoreToolkit, "model", "value")) {
 				String name = modelV.getAttributeText(nameAttr);
 				if (declaredModelValues.containsKey(name)) {
 					session.withError("Multiple model values named '" + name + "' declared");
@@ -104,20 +121,20 @@ public class QuickStyleSet {
 		}
 
 		QonfigElement stylesEl = element.getMetadata().getRoot().getChildrenByRole()
-			.get(QuickCore.CORE.get().getAddOn("styled").getMetaSpec().getChild("styles").getDeclared()).peekFirst();
+			.get(theCoreToolkit.getAddOn("styled").getMetaSpec().getChild("styles").getDeclared()).peekFirst();
 		if (stylesEl != null) {
-			QonfigAttributeDef.Declared nameAttr = QuickCore.CORE.get().getElement("style-attribute").getAttribute("name").getDeclared();
-			QonfigAttributeDef.Declared typeAttr = QuickCore.CORE.get().getElement("style-attribute").getAttribute("type").getDeclared();
-			QonfigAttributeDef.Declared trickleAttr = QuickCore.CORE.get().getElement("style-attribute").getAttribute("trickle-down")
+			QonfigAttributeDef.Declared nameAttr = theCoreToolkit.getElement("style-attribute").getAttribute("name").getDeclared();
+			QonfigAttributeDef.Declared typeAttr = theCoreToolkit.getElement("style-attribute").getAttribute("type").getDeclared();
+			QonfigAttributeDef.Declared trickleAttr = theCoreToolkit.getElement("style-attribute").getAttribute("trickle-down")
 				.getDeclared();
-			for (QonfigElement styleAttr : stylesEl.getChildrenInRole(QuickCore.CORE.get(), "styles", "style-attribute")) {
+			for (QonfigElement styleAttr : stylesEl.getChildrenInRole(theCoreToolkit, "styles", "style-attribute")) {
 				String name = styleAttr.getAttributeText(nameAttr);
 				if (declaredAttributes.containsKey(name)) {
 					session.withError("Multiple style attributes named '" + name + "' declared");
 					continue;
 				}
 				declaredAttributes.put(name, new QuickStyleAttribute<>(styled, name, //
-					Expresso.parseType(styleAttr.getAttributeText(typeAttr), session.getExpressoEnv()), //
+					ExpressoV0_1.parseType(styleAttr.getAttributeText(typeAttr), session.getExpressoEnv()), //
 					styleAttr.getAttribute(trickleAttr, boolean.class)));
 			}
 		}
@@ -137,7 +154,7 @@ public class QuickStyleSet {
 		return styled;
 	}
 
-	public Set<QuickModelValue<?>> getModelValues(QonfigElement element, ExpressoSession<?> session) throws QonfigInterpretationException {
+	public Set<QuickModelValue<?>> getModelValues(QonfigElement element, ExpressoQIS session) throws QonfigInterpretationException {
 		Set<QuickModelValue<?>> modelValues = new LinkedHashSet<>();
 		QuickStyleType type = styled(element.getType(), session);
 		if (type != null)
@@ -150,44 +167,44 @@ public class QuickStyleSet {
 		return Collections.unmodifiableSet(modelValues);
 	}
 
-	private void configureModelInterpretation(Builder<?, ?> interpreterBuilder, ExpressoSession<?> session) {
+	private void configureModelInterpretation(QonfigInterpreterCore.Builder interpreterBuilder, ExpressoQIS session) {
 		interpreterBuilder.createWith("action", ModelInstanceType.class, session2 -> {
 			return ModelTypes.Action
-				.forType(Expresso.parseType(session2.getAttributeText("type"), session.getExpressoEnv()));
+				.forType(ExpressoV0_1.parseType(session2.getAttributeText("type"), session.getExpressoEnv()));
 		}).createWith("value", ModelInstanceType.class, session2 -> {
 			return ModelTypes.Value
-				.forType(Expresso.parseType(session2.getAttributeText("type"), session.getExpressoEnv()));
+				.forType(ExpressoV0_1.parseType(session2.getAttributeText("type"), session.getExpressoEnv()));
 		}).createWith("list", ModelInstanceType.class, session2 -> {
 			return ModelTypes.Collection
-				.forType(Expresso.parseType(session2.getAttributeText("type"), session.getExpressoEnv()));
+				.forType(ExpressoV0_1.parseType(session2.getAttributeText("type"), session.getExpressoEnv()));
 		}).createWith("sorted-list", ModelInstanceType.class, session2 -> {
 			return ModelTypes.SortedCollection
-				.forType(Expresso.parseType(session2.getAttributeText("type"), session.getExpressoEnv()));
+				.forType(ExpressoV0_1.parseType(session2.getAttributeText("type"), session.getExpressoEnv()));
 		}).createWith("set", ModelInstanceType.class, session2 -> {
 			return ModelTypes.Set
-				.forType(Expresso.parseType(session2.getAttributeText("type"), session.getExpressoEnv()));
+				.forType(ExpressoV0_1.parseType(session2.getAttributeText("type"), session.getExpressoEnv()));
 		}).createWith("sorted-set", ModelInstanceType.class, session2 -> {
 			return ModelTypes.SortedSet
-				.forType(Expresso.parseType(session2.getAttributeText("type"), session.getExpressoEnv()));
+				.forType(ExpressoV0_1.parseType(session2.getAttributeText("type"), session.getExpressoEnv()));
 		}).createWith("map", ModelInstanceType.class, session2 -> {
 			return ModelTypes.Map.forType(//
-				Expresso.parseType(session2.getAttributeText("key-type"), session.getExpressoEnv()), //
-				Expresso.parseType(session2.getAttributeText("type"), session.getExpressoEnv())//
+				ExpressoV0_1.parseType(session2.getAttributeText("key-type"), session.getExpressoEnv()), //
+				ExpressoV0_1.parseType(session2.getAttributeText("type"), session.getExpressoEnv())//
 				);
 		}).createWith("sorted-map", ModelInstanceType.class, session2 -> {
 			return ModelTypes.SortedMap.forType(//
-				Expresso.parseType(session2.getAttributeText("key-type"), session.getExpressoEnv()), //
-				Expresso.parseType(session2.getAttributeText("type"), session.getExpressoEnv())//
+				ExpressoV0_1.parseType(session2.getAttributeText("key-type"), session.getExpressoEnv()), //
+				ExpressoV0_1.parseType(session2.getAttributeText("type"), session.getExpressoEnv())//
 				);
 		}).createWith("multi-map", ModelInstanceType.class, session2 -> {
 			return ModelTypes.MultiMap.forType(//
-				Expresso.parseType(session2.getAttributeText("key-type"), session.getExpressoEnv()), //
-				Expresso.parseType(session2.getAttributeText("type"), session.getExpressoEnv())//
+				ExpressoV0_1.parseType(session2.getAttributeText("key-type"), session.getExpressoEnv()), //
+				ExpressoV0_1.parseType(session2.getAttributeText("type"), session.getExpressoEnv())//
 				);
 		}).createWith("sorted-multi-map", ModelInstanceType.class, session2 -> {
 			return ModelTypes.SortedMultiMap.forType(//
-				Expresso.parseType(session2.getAttributeText("key-type"), session.getExpressoEnv()), //
-				Expresso.parseType(session2.getAttributeText("type"), session.getExpressoEnv())//
+				ExpressoV0_1.parseType(session2.getAttributeText("key-type"), session.getExpressoEnv()), //
+				ExpressoV0_1.parseType(session2.getAttributeText("type"), session.getExpressoEnv())//
 				);
 		});
 	}

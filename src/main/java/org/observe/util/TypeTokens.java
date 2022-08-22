@@ -803,6 +803,8 @@ public class TypeTokens {
 	 * @throws IllegalArgumentException If values of the right type cannot be cast to the left type in general
 	 */
 	public <S, T> TypeConverter<S, T> getCast(TypeToken<S> source, TypeToken<T> target, boolean safe) throws IllegalArgumentException {
+		if (target.getType() instanceof TypeVariable && ((TypeVariable<?>) target.getType()).getBounds().length == 1)
+			target = (TypeToken<T>) of(((TypeVariable<?>) target.getType()).getBounds()[0]);
 		if (target.isAssignableFrom(source)) {
 			if (target.isPrimitive() && !source.isPrimitive()) {
 				T safeValue = safe ? (T) SAFE_VALUES.get(getRawType(source)) : null;
@@ -816,6 +818,16 @@ public class TypeTokens {
 				});
 			} else
 				return new TypeConverter<>((TypeToken<T>) source, "no-op", v -> (T) v);
+		}
+		if (target.isArray()) {
+			if (!source.isArray() || source.isPrimitive() || target.isPrimitive())
+				throw new IllegalArgumentException("Cannot cast " + source + " to " + target);
+			try {
+				getCast(source.getComponentType(), target.getComponentType()); // Don't need the actual cast, just the check
+				return new TypeConverter<>((TypeToken<T>) source, "no-op", v -> (T) v);
+			} catch (IllegalArgumentException e) {
+				throw new IllegalArgumentException("Cannot cast " + source + " to " + target);
+			}
 		}
 		Class<?> primitiveTarget = getRawType(unwrap(target));
 		Class<?> primitiveSource = getRawType(unwrap(source));

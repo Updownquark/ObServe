@@ -9,9 +9,6 @@
 			<literal>exit</literal>
 		</one-of>
 
-		<external name="size" />
-		<external name="position" />
-
 		<pattern name="element-name">[a-zA-Z_\\-]+</pattern>
 		<pattern name="widget-name">((?&lt;ns&gt;[a-zA-Z_\\-]+)\:)?(?&lt;widget&gt;[a-zA-Z_\\-]+)</pattern>
 		<pattern name="style-attr">(((?&lt;ns&gt;[a-zA-Z_\\-]+)\:)?(?&lt;widget&gt;[a-zA-Z_\\-]+)\.)?(?&lt;attr&gt;[a-zA-Z_\\-]+)</pattern>
@@ -20,35 +17,35 @@
 
 	<add-ons>
 		<add-on name="h-positionable">
-			<attribute name="left" type="position" specify="optional" />
-			<attribute name="right" type="position" specify="optional" />
+			<attribute name="left" type="expression" specify="optional" />
+			<attribute name="right" type="expression" specify="optional" />
 		</add-on>
 		<add-on name="v-positionable">
-			<attribute name="top" type="position" specify="optional" />
-			<attribute name="bottom" type="position" specify="optional" />
+			<attribute name="top" type="expression" specify="optional" />
+			<attribute name="bottom" type="expression" specify="optional" />
 		</add-on>
 		<add-on name="h-sizeable">
-			<attribute name="width" type="size" specify="optional" />
-			<attribute name="min-width" type="size" specify="optional" />
-			<!--<attribute name="min-pref-width" type="size" specify="optional" />-->
-			<attribute name="pref-width" type="size" specify="optional" />
-			<!--<attribute name="max-pref-width" type="size" specify="optional" />-->
-			<attribute name="max-width" type="size" specify="optional" />
+			<attribute name="width" type="expression" specify="optional" />
+			<attribute name="min-width" type="expression" specify="optional" />
+			<!--<attribute name="min-pref-width" type="expression" specify="optional" />-->
+			<attribute name="pref-width" type="expression" specify="optional" />
+			<!--<attribute name="max-pref-width" type="expression" specify="optional" />-->
+			<attribute name="max-width" type="expression" specify="optional" />
 		</add-on>
 		<add-on name="v-sizeable">
-			<attribute name="height" type="size" specify="optional" />
-			<attribute name="min-height" type="size" specify="optional" />
-			<!--<attribute name="min-pref-height" type="size" specify="optional" />-->
-			<attribute name="pref-height" type="size" specify="optional" />
-			<!--<attribute name="max-pref-height" type="size" specify="optional" />-->
-			<attribute name="max-height" type="size" specify="optional" />
+			<attribute name="height" type="expression" specify="optional" />
+			<attribute name="min-height" type="expression" specify="optional" />
+			<!--<attribute name="min-pref-height" type="expression" specify="optional" />-->
+			<attribute name="pref-height" type="expression" specify="optional" />
+			<!--<attribute name="max-pref-height" type="expression" specify="optional" />-->
+			<attribute name="max-height" type="expression" specify="optional" />
 		</add-on>
 		<add-on name="generic-sizeable">
-			<attribute name="min-length" type="size" specify="optional" />
-			<attribute name="min-pref-length" type="size" specify="optional" />
-			<attribute name="pref-length" type="size" specify="optional" />
-			<attribute name="max-pref-length" type="size" specify="optional" />
-			<attribute name="max-length" type="size" specify="optional" />
+			<attribute name="min-length" type="expression" specify="optional" />
+			<attribute name="min-pref-length" type="expression" specify="optional" />
+			<attribute name="pref-length" type="expression" specify="optional" />
+			<attribute name="max-pref-length" type="expression" specify="optional" />
+			<attribute name="max-length" type="expression" specify="optional" />
 		</add-on>
 		
 		<add-on name="element-data-value" requires="model-value">

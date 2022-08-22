@@ -26,7 +26,21 @@ import org.qommons.StringUtils;
 import org.qommons.collect.BetterList;
 import org.qommons.tree.BetterTreeList;
 
-public class DefaultExpressoParser implements ExpressoParser {
+/**
+ * <p>
+ * An expresso parser that interprets java expressions as {@link ObservableExpression}s.
+ * </p>
+ * <p>
+ * This class uses <a href="https://github.com/antlr/grammars-v4/blob/master/java/java/JavaParser.g4">this</a> grammar, modified slightly
+ * for my use, including:
+ * <ol>
+ * <li>"Literal Expressions" are supported, which are sequences similar to strings, but bounded by grave accents (`). The content inside
+ * these sequences may be parsed by a {@link NonStructuredParser} depending on the expected type of the expression. This allows for easier
+ * specification of dates, durations, enums, etc., including context-sensitive parsing.</li>
+ * </ol>
+ * </p>
+ */
+public class JavaExpressoParser implements ExpressoParser {
 	@Override
 	public ObservableExpression parse(String text) throws ExpressoParseException {
 		if (text.trim().isEmpty())
@@ -50,6 +64,11 @@ public class DefaultExpressoParser implements ExpressoParser {
 		return result;
 	}
 
+	/**
+	 * @param expression The expression, pre-parsed with ANTLR, to interpret
+	 * @return The {@link ObservableExpression} represented by the expression
+	 * @throws ExpressoParseException If the expression cannot be interpreted
+	 */
 	protected ObservableExpression parse(Expression expression) throws ExpressoParseException {
 		List<String> typeArgs;
 		List<ObservableExpression> args;
@@ -312,6 +331,7 @@ public class DefaultExpressoParser implements ExpressoParser {
 	 * re-implementation was necessary. I'm leaving this here because I may not have implemented interpretation of some types of expressions
 	 * the new way, so this code may be helpful as a reference until the new parsing does everything the old parsing did.
 	 */
+	@SuppressWarnings("unused")
 	private ObservableExpression parseOld(Expression expression) throws ExpressoParseException {
 		boolean checkPassThrough = true;
 		while (checkPassThrough) {
@@ -897,7 +917,7 @@ public class DefaultExpressoParser implements ExpressoParser {
 		return names;
 	}
 
-	public static String parseType(Expression expression) throws ExpressoParseException {
+	private static String parseType(Expression expression) throws ExpressoParseException {
 		BetterList<Expression> typeType = expression.getComponents("typeType");
 		if (typeType.isEmpty())
 			typeType = expression.getComponents("pattern", "typeType");

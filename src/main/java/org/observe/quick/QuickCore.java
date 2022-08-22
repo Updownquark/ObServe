@@ -46,17 +46,17 @@ import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.expresso.ClassView;
-import org.observe.expresso.ExpressionValueType;
-import org.observe.expresso.Expresso;
+import org.observe.expresso.Expression.ExpressoParseException;
 import org.observe.expresso.ExpressoEnv;
-import org.observe.expresso.ExpressoInterpreter.ExpressoSession;
+import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.expresso.QonfigExpression;
 import org.observe.quick.QuickComponentDef.ModelValueSupport;
-import org.observe.quick.QuickInterpreter.QuickSession;
+import org.observe.quick.style.FontValueParser;
 import org.observe.quick.style.QuickElementStyle;
 import org.observe.quick.style.QuickElementStyle.QuickElementStyleAttribute;
 import org.observe.quick.style.QuickModelValue;
@@ -69,13 +69,13 @@ import org.observe.quick.style.StyleValueApplication;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.ComponentDecorator.ModifiableLineBorder;
 import org.observe.util.swing.ObservableSwingUtils;
-import org.qommons.ArrayUtils;
 import org.qommons.Colors;
 import org.qommons.Identifiable;
 import org.qommons.IdentityKey;
 import org.qommons.QommonsUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
+import org.qommons.Version;
 import org.qommons.collect.BetterHashMultiMap;
 import org.qommons.collect.MultiMap;
 import org.qommons.config.DefaultQonfigParser;
@@ -85,18 +85,15 @@ import org.qommons.config.QonfigChildDef;
 import org.qommons.config.QonfigDocument;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigElementOrAddOn;
+import org.qommons.config.QonfigInterpretation;
 import org.qommons.config.QonfigInterpretationException;
-import org.qommons.config.QonfigInterpreter;
+import org.qommons.config.QonfigInterpreterCore;
+import org.qommons.config.QonfigInterpreterCore.CoreSession;
 import org.qommons.config.QonfigParseException;
 import org.qommons.config.QonfigToolkit;
-import org.qommons.config.QonfigToolkitAccess;
+import org.qommons.config.SpecialSession;
 
-public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
-	public static final QonfigToolkitAccess CORE = new QonfigToolkitAccess(QuickCore.class, "quick-core.qtd", Expresso.EXPRESSO)
-		.withCustomValueType(//
-			new QuickPosition.PositionValueType(Expresso.EXPRESSION_PARSER), //
-			new QuickSize.SizeValueType(Expresso.EXPRESSION_PARSER));
-
+public class QuickCore implements QonfigInterpretation {
 	public interface QuickBorder {
 		ObservableValue<Border> createBorder(Component component, QuickComponent.Builder builder);
 	}
@@ -154,45 +151,114 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 		}
 	}
 
-	public static Function<ModelSetInstance, SettableValue<QuickPosition>> parsePosition(ObservableExpression expression, ExpressoEnv env)
+	@Override
+	public String getToolkitName() {
+		return QuickSessionImplV0_1.NAME;
+	}
+
+	@Override
+	public Version getVersion() {
+		return QuickSessionImplV0_1.VERSION;
+	}
+
+	@Override
+	public Set<Class<? extends SpecialSession<?>>> getExpectedAPIs() {
+		return QommonsUtils.unmodifiableDistinctCopy(ExpressoQIS.class, QuickQIS.class);
+	}
+
+	public static Function<ModelSetInstance, SettableValue<QuickPosition>> parsePosition(QonfigExpression expression, ExpressoQIS session)
 		throws QonfigInterpretationException {
 		if (expression == null)
 			return null;
-		Function<ModelSetInstance, SettableValue<QuickPosition>> positionValue;
-		Function<String, QuickPosition> colorParser = str -> {
-			try {
-				return QuickPosition.parse(str);
-			} catch (NumberFormatException e) {
-				System.err.println("Could not evaluate '" + str + "' as a position from " + expression + ": " + e.getMessage());
-				e.printStackTrace();
-				// There's really no sensible default, but this is better than causing NPEs
-				return new QuickPosition(50, QuickPosition.PositionUnit.Percent);
+		QuickPosition.PositionUnit unit = null;
+		for (QuickPosition.PositionUnit u : QuickPosition.PositionUnit.values()) {
+			if (expression.text.length() > u.name.length() && expression.text.endsWith(u.name)
+				&& Character.isWhitespace(expression.text.charAt(expression.text.length() - u.name.length() - 1))) {
+				unit = u;
+				break;
 			}
-		};
-		if (expression instanceof ExpressionValueType.Literal)
-			positionValue = expression.evaluate(ModelTypes.Value.forType(String.class), env)//
-			.andThen(v -> SettableValue.asSettable(v.map(colorParser), __ -> "Cannot reverse position"));
-		else {
-			try {
-				positionValue = expression.evaluate(ModelTypes.Value.forType(QuickPosition.class), env);
-			} catch (QonfigInterpretationException e1) {
-				// If it doesn't parse as a position, try parsing as a number.
+		}
+		Function<ModelSetInstance, SettableValue<QuickPosition>> positionValue;
+		try {
+			if (unit != null) {
+				QuickPosition.PositionUnit fUnit = unit;
+				Function<ModelSetInstance, SettableValue<Double>> num = session.getExpressoParser()
+					.parse(expression.text.substring(0, expression.text.length() - unit.name.length()))//
+					.evaluate(ModelTypes.Value.forType(double.class), session.getExpressoEnv());
+				positionValue = msi -> {
+					SettableValue<Double> numV = num.apply(msi);
+					return numV.transformReversible(QuickPosition.class, tx -> tx//
+						.map(n -> new QuickPosition(n.floatValue(), fUnit))//
+						.replaceSource(p -> (double) p.value, rev -> rev//
+							.allowInexactReverse(true).rejectWith(
+								p -> p.type == fUnit ? null : "Only positions with the same unit as the source (" + fUnit + ") can be set")//
+							)//
+						);
+				};
+			} else {
+				ObservableExpression obEx = session.getExpressoParser().parse(expression.text);
 				try {
-					positionValue = expression.evaluate(ModelTypes.Value.forType(int.class), env)//
+					positionValue = obEx.evaluate(ModelTypes.Value.forType(QuickPosition.class), session.getExpressoEnv());
+				} catch (QonfigInterpretationException e1) {
+					// If it doesn't parse as a position, try parsing as a number.
+					positionValue = obEx.evaluate(ModelTypes.Value.forType(int.class), session.getExpressoEnv())//
 						.andThen(v -> v.transformReversible(QuickPosition.class, tx -> tx
 							.map(d -> new QuickPosition(d, QuickPosition.PositionUnit.Pixels)).withReverse(pos -> Math.round(pos.value))));
-				} catch (QonfigInterpretationException e2) {
-					// If it doesn't parse as a position or a number, try parsing as a string and then parse that as a position
-					positionValue = expression.evaluate(ModelTypes.Value.forType(String.class), env)//
-						.andThen(v -> v.transformReversible(QuickPosition.class,
-							tx -> tx.map(colorParser).withReverse(QuickPosition::toString)));
 				}
 			}
+		} catch (ExpressoParseException e) {
+			throw new QonfigInterpretationException("Could not parse position expression: " + expression, e);
 		}
 		return positionValue;
 	}
 
-	public static Function<ModelSetInstance, SettableValue<Icon>> parseIcon(ObservableExpression expression, ExpressoSession<?> session,
+	public static Function<ModelSetInstance, SettableValue<QuickSize>> parseSize(QonfigExpression expression, ExpressoQIS session)
+		throws QonfigInterpretationException {
+		if (expression == null)
+			return null;
+		QuickSize.SizeUnit unit = null;
+		for (QuickSize.SizeUnit u : QuickSize.SizeUnit.values()) {
+			if (expression.text.length() > u.name.length() && expression.text.endsWith(u.name)
+				&& Character.isWhitespace(expression.text.charAt(expression.text.length() - u.name.length() - 1))) {
+				unit = u;
+				break;
+			}
+		}
+		Function<ModelSetInstance, SettableValue<QuickSize>> positionValue;
+		try {
+			if (unit != null) {
+				QuickSize.SizeUnit fUnit = unit;
+				Function<ModelSetInstance, SettableValue<Double>> num = session.getExpressoParser()
+					.parse(expression.text.substring(0, expression.text.length() - unit.name.length()))//
+					.evaluate(ModelTypes.Value.forType(double.class), session.getExpressoEnv());
+				positionValue = msi -> {
+					SettableValue<Double> numV = num.apply(msi);
+					return numV.transformReversible(QuickSize.class, tx -> tx//
+						.map(n -> new QuickSize(n.floatValue(), fUnit))//
+						.replaceSource(s -> (double) s.value, rev -> rev//
+							.allowInexactReverse(true).rejectWith(
+								p -> p.type == fUnit ? null : "Only sizes with the same unit as the source (" + fUnit + ") can be set")//
+							)//
+						);
+				};
+			} else {
+				ObservableExpression obEx = session.getExpressoParser().parse(expression.text);
+				try {
+					positionValue = obEx.evaluate(ModelTypes.Value.forType(QuickSize.class), session.getExpressoEnv());
+				} catch (QonfigInterpretationException e1) {
+					// If it doesn't parse as a position, try parsing as a number.
+					positionValue = obEx.evaluate(ModelTypes.Value.forType(int.class), session.getExpressoEnv())//
+						.andThen(v -> v.transformReversible(QuickSize.class,
+							tx -> tx.map(d -> new QuickSize(d, QuickSize.SizeUnit.Pixels)).withReverse(pos -> Math.round(pos.value))));
+				}
+			}
+		} catch (ExpressoParseException e) {
+			throw new QonfigInterpretationException("Could not parse size expression: " + expression, e);
+		}
+		return positionValue;
+	}
+
+	public static Function<ModelSetInstance, SettableValue<Icon>> parseIcon(ObservableExpression expression, ExpressoQIS session,
 		ExpressoEnv env) throws QonfigInterpretationException {
 		if (expression != null) {
 			ValueContainer<SettableValue<?>, SettableValue<?>> iconV = expression.evaluate(ModelTypes.Value.any(), env);
@@ -206,7 +272,7 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 				return msi -> SettableValue.asSettable(iconV.apply(msi).map(url -> url == null ? null : new ImageIcon((URL) url)),
 					__ -> "unsettable");
 			} else if (String.class.isAssignableFrom(iconType)) {
-				Class<?> callingClass = session.getInterpreter().getCallingClass();
+				Class<?> callingClass = session.getWrapped().getInterpreter().getCallingClass();
 				return msi -> SettableValue.asSettable(iconV.apply(msi).map(loc -> loc == null ? null//
 					: ObservableSwingUtils.getFixedIcon(callingClass, (String) loc, 16, 16)), __ -> "unsettable");
 			} else {
@@ -218,53 +284,53 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 		}
 	}
 
-	@Override
-	public QuickInterpreter.Builder<QIS, ?> createInterpreter(Class<?> callingClass, QonfigToolkit... others) {
-		return (QuickInterpreter.Builder<QIS, ?>) QuickInterpreter.build(callingClass, ArrayUtils.add(others, 0, CORE.get()));
+	QuickQIS wrap(CoreSession session) throws QonfigInterpretationException {
+		return session.as(QuickQIS.class);
 	}
 
 	@Override
-	public <B extends QonfigInterpreter.Builder<? extends QIS, B>> B configureInterpreter(B interpreter) {
-		super.configureInterpreter(interpreter);
-		B coreInterpreter = interpreter.forToolkit(CORE.get());
-		coreInterpreter//
-		.createWith("quick", QuickDocument.class, this::interpretQuick)//
-		.createWith("head", QuickHeadSection.class, this::interpretHead)//
-		.modifyWith("window", QuickDocument.class, this::modifyWindow)//
-		.modifyWith("widget", QuickComponentDef.class, this::modifyWidget)//
-		.modifyWith("text-widget", QuickComponentDef.class, this::modifyTextWidget)//
-		.createWith("line-border", QuickBorder.class, this::interpretLineBorder)//
-		.createWith("titled-border", QuickBorder.class, this::interpretTitledBorder)//
+	public QonfigInterpreterCore.Builder configureInterpreter(QonfigInterpreterCore.Builder interpreter) {
+		interpreter//
+		.createWith("quick", QuickDocument.class, session -> interpretQuick(wrap(session)))//
+		.createWith("head", QuickHeadSection.class, session -> interpretHead(wrap(session)))//
+		.modifyWith("window", QuickDocument.class, (doc, session) -> modifyWindow(doc, wrap(session)))//
+		.modifyWith("widget", QuickComponentDef.class, (comp, session) -> modifyWidget(comp, wrap(session)))//
+		.modifyWith("text-widget", QuickComponentDef.class, (txt, session) -> modifyTextWidget(txt, wrap(session)))//
+		.createWith("line-border", QuickBorder.class, session -> interpretLineBorder(wrap(session)))//
+		.createWith("titled-border", QuickBorder.class, session -> interpretTitledBorder(wrap(session)))//
 		;
-		configureStyleInterpreter(coreInterpreter);
+		configureStyleInterpreter(interpreter);
 		return interpreter;
 	}
 
-	private void configureStyleInterpreter(QonfigInterpreter.Builder<? extends QIS, ?> interpreter) {
+	private void configureStyleInterpreter(QonfigInterpreterCore.Builder interpreter) {
 		interpreter//
-		.createWith("style", StyleValues.class, this::interpretStyle)//
-		.createWith("style-sheet", QuickStyleSheet.class, this::interpretStyleSheet)//
+		.createWith("style", StyleValues.class, session -> interpretStyle(wrap(session)))//
+		.createWith("style-sheet", QuickStyleSheet.class, session -> interpretStyleSheet(wrap(session)))//
 		;
 	}
 
-	private QuickDocument interpretQuick(QIS session) throws QonfigInterpretationException {
-		QuickHeadSection head = session.interpretChildren("head", QuickHeadSection.class).getFirst();
-		session.setModels(head.getModels(), head.getImports());
+	private QuickDocument interpretQuick(QuickQIS session) throws QonfigInterpretationException {
+		QuickQIS headSession = session.forChildren("head").getFirst();
+		QuickHeadSection head = headSession.interpret(QuickHeadSection.class);
+		session.as(ExpressoQIS.class).setExpressoEnv(headSession.as(ExpressoQIS.class).getExpressoEnv());
 		session.setStyleSheet(head.getStyleSheet());
 		QuickDocument doc = new QuickDocument.QuickDocumentImpl(session.getElement(), head, //
 			session.interpretChildren("root", QuickComponentDef.class).getFirst());
 		return doc;
 	}
 
-	private QuickHeadSection interpretHead(QIS session) throws QonfigInterpretationException {
-		ClassView cv = session.interpretChildren("imports", ClassView.class).peekFirst();
+	private QuickHeadSection interpretHead(QuickQIS session) throws QonfigInterpretationException {
+		QuickQIS importSession = session.forChildren("imports").peekFirst();
+		ClassView cv = importSession == null ? null : importSession.interpret(ClassView.class);
 		if (cv == null)
 			cv = ClassView.build().withWildcardImport("java.lang").build();
-		session.setModels(null, cv);
+
+		session.as(ExpressoQIS.class).setExpressoEnv(importSession.as(ExpressoQIS.class).getExpressoEnv()).setModels(null, cv);
 		ObservableModelSet model = session.interpretChildren("models", ObservableModelSet.class).peekFirst();
 		if (model == null)
 			model = ObservableModelSet.build(ObservableModelSet.JAVA_NAME_CHECKER).build();
-		session.setModels(model, null);
+		session.as(ExpressoQIS.class).setModels(model, null);
 		QuickStyleSheet styleSheet;
 		if (session.getChildren("style-sheet").isEmpty())
 			styleSheet = QuickStyleSheet.EMPTY;
@@ -274,22 +340,19 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 		return new QuickHeadSection(cv, model, styleSheet);
 	}
 
-	private QuickDocument modifyWindow(QuickDocument doc, QIS session) throws QonfigInterpretationException {
-		ObservableExpression visibleEx = session.getAttribute("visible", ObservableExpression.class);
+	private QuickDocument modifyWindow(QuickDocument doc, QuickQIS session) throws QonfigInterpretationException {
+		ExpressoQIS exS = session.as(ExpressoQIS.class);
+		ObservableExpression visibleEx = exS.getAttributeExpression("visible");
 		if (visibleEx != null)
-			doc.setVisible(visibleEx.evaluate(ModelTypes.Value.forType(Boolean.class), session.getExpressoEnv()));
-		ObservableExpression titleEx = session.getAttribute("title", ObservableExpression.class);
+			doc.setVisible(visibleEx.evaluate(ModelTypes.Value.forType(Boolean.class), exS.getExpressoEnv()));
+		ObservableExpression titleEx = exS.getAttributeExpression("title");
 		if (titleEx != null)
-			doc.setTitle(titleEx.evaluate(ModelTypes.Value.forType(String.class), session.getExpressoEnv()));
+			doc.setTitle(titleEx.evaluate(ModelTypes.Value.forType(String.class), exS.getExpressoEnv()));
 		doc.withBounds(//
-			session.interpretAttribute("x", ObservableExpression.class, true,
-				ex -> ex.evaluate(ModelTypes.Value.forType(Integer.class), session.getExpressoEnv())), //
-			session.interpretAttribute("y", ObservableExpression.class, true,
-				ex -> ex.evaluate(ModelTypes.Value.forType(Integer.class), session.getExpressoEnv())), //
-			session.interpretAttribute("width", ObservableExpression.class, true,
-				ex -> ex.evaluate(ModelTypes.Value.forType(Integer.class), session.getExpressoEnv())), //
-			session.interpretAttribute("height", ObservableExpression.class, true,
-				ex -> ex.evaluate(ModelTypes.Value.forType(Integer.class), session.getExpressoEnv())) //
+			exS.getAttribute("x", ModelTypes.Value.forType(Integer.class), null), //
+			exS.getAttribute("y", ModelTypes.Value.forType(Integer.class), null), //
+			exS.getAttribute("width", ModelTypes.Value.forType(Integer.class), null), //
+			exS.getAttribute("height", ModelTypes.Value.forType(Integer.class), null) //
 			);
 		switch (session.getAttributeText("close-action")) {
 		case "do-nothing":
@@ -494,16 +557,15 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 		}
 	}
 
-	private QuickComponentDef modifyWidget(QuickComponentDef widget, QIS session) throws QonfigInterpretationException {
+	private QuickComponentDef modifyWidget(QuickComponentDef widget, QuickQIS session) throws QonfigInterpretationException {
+		ExpressoQIS exS = session.as(ExpressoQIS.class);
 		widget.modify((editor, builder) -> editor.modifyComponent(builder::withComponent));
 		String name = session.getAttribute("name", String.class);
-		ObservableExpression tooltipX = session.getAttribute("tooltip", ObservableExpression.class);
-		ObservableExpression visibleX = session.getAttribute("visible", ObservableExpression.class);
+		ValueContainer<SettableValue<?>, SettableValue<String>> tooltip = exS.getAttribute("tooltip",
+			ModelTypes.Value.forType(String.class), null);
+		ValueContainer<SettableValue<?>, SettableValue<Boolean>> visible = exS.getAttribute("visible",
+			ModelTypes.Value.forType(boolean.class), null);
 		QuickBorder border = session.interpretChildren("border", QuickBorder.class).peekFirst();
-		ValueContainer<SettableValue<?>, SettableValue<String>> tooltip = tooltipX == null ? null
-			: tooltipX.evaluate(ModelTypes.Value.forType(String.class), session.getExpressoEnv());
-		ValueContainer<SettableValue<?>, SettableValue<Boolean>> visible = visibleX == null ? null
-			: visibleX.evaluate(ModelTypes.Value.forType(boolean.class), session.getExpressoEnv());
 		if (name != null) {
 			widget.modify((comp, build) -> {
 				comp.modifyComponent(c -> c.setName(name));
@@ -638,7 +700,7 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 		return widget;
 	}
 
-	private QuickComponentDef modifyTextWidget(QuickComponentDef widget, QIS session) throws QonfigInterpretationException {
+	private QuickComponentDef modifyTextWidget(QuickComponentDef widget, QuickQIS session) throws QonfigInterpretationException {
 		QuickElementStyleAttribute<? extends Color> fontColorStyle = widget.getStyle()
 			.get(session.getStyleAttribute(null, "font-color", Color.class));
 		QuickElementStyleAttribute<? extends Double> fontSizeStyle = widget.getStyle()
@@ -710,7 +772,7 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 		}, /*family,*/ color, /*kerning, ligs, underline,*/ size, weight, /*strike,*/ slant);
 	}
 
-	private QuickBorder interpretLineBorder(QIS session) throws QonfigInterpretationException {
+	private QuickBorder interpretLineBorder(QuickQIS session) throws QonfigInterpretationException {
 		QuickElementStyle style = session.getStyle();
 		QuickElementStyleAttribute<? extends Color> colorStyle = style.get(session.getStyleAttribute(null, "border-color", Color.class));
 		QuickElementStyleAttribute<? extends Integer> thicknessStyle = style
@@ -718,13 +780,11 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 		return (comp, builder) -> {
 			ModifiableLineBorder border = new ModifiableLineBorder(Color.black, 1, false);
 			SettableValue<Border> borderV = SettableValue.build(Border.class).withValue(border).build();
-			colorStyle.evaluate(builder.getModels()).changes().takeUntil(builder.getModels().getUntil())
-			.act(evt -> {
+			colorStyle.evaluate(builder.getModels()).changes().takeUntil(builder.getModels().getUntil()).act(evt -> {
 				border.setColor(evt.getNewValue());
 				borderV.set(border, evt);
 			});
-			thicknessStyle.evaluate(builder.getModels()).changes().takeUntil(builder.getModels().getUntil())
-			.act(evt -> {
+			thicknessStyle.evaluate(builder.getModels()).changes().takeUntil(builder.getModels().getUntil()).act(evt -> {
 				border.setThickness(evt.getNewValue());
 				borderV.set(border, evt);
 			});
@@ -732,10 +792,9 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 		};
 	}
 
-	private QuickBorder interpretTitledBorder(QIS session) throws QonfigInterpretationException {
-		ObservableExpression titleX = session.getAttribute("title", ObservableExpression.class);
-		Function<ModelSetInstance, SettableValue<String>> title = titleX.evaluate(ModelTypes.Value.forType(String.class),
-			session.getExpressoEnv());
+	private QuickBorder interpretTitledBorder(QuickQIS session) throws QonfigInterpretationException {
+		ExpressoQIS exS = session.as(ExpressoQIS.class);
+		Function<ModelSetInstance, SettableValue<String>> title = exS.getAttribute("title", ModelTypes.Value.forType(String.class), null);
 		QuickElementStyle style = session.getStyle();
 		QuickElementStyleAttribute<? extends Color> colorStyle = style.get(session.getStyleAttribute(null, "border-color", Color.class));
 		QuickElementStyleAttribute<? extends Integer> thicknessStyle = style
@@ -767,16 +826,14 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 				comp.invalidate();
 				comp.repaint();
 			});
-			colorStyle.evaluate(builder.getModels()).changes().takeUntil(builder.getModels().getUntil())
-			.act(evt -> {
+			colorStyle.evaluate(builder.getModels()).changes().takeUntil(builder.getModels().getUntil()).act(evt -> {
 				Color c = evt.getNewValue() == null ? Color.black : evt.getNewValue();
 				lineBorder.setColor(c);
 				border.setTitleColor(c);
 				borderV.set(border, evt);
 				comp.repaint();
 			});
-			thicknessStyle.evaluate(builder.getModels()).changes().takeUntil(builder.getModels().getUntil())
-			.act(evt -> {
+			thicknessStyle.evaluate(builder.getModels()).changes().takeUntil(builder.getModels().getUntil()).act(evt -> {
 				lineBorder.setThickness(evt.getNewValue() == null ? 1 : evt.getNewValue());
 				borderV.set(border, evt);
 				comp.repaint();
@@ -785,14 +842,22 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 		};
 	}
 
-	private StyleValues interpretStyle(QIS session) throws QonfigInterpretationException {
-		QuickStyleSet styleSet = session.getInterpreter().getStyleSet();
+	private void modifyForStyle(QuickQIS session) throws QonfigInterpretationException {
+		ExpressoQIS exS = session.as(ExpressoQIS.class);
+		exS.setExpressoEnv(exS.getExpressoEnv().with(null, null)// Create a copy
+			.withNonStructuredParser(double.class, new FontValueParser()));
+	}
+
+	private StyleValues interpretStyle(QuickQIS session) throws QonfigInterpretationException {
+		ExpressoQIS exS = session.as(ExpressoQIS.class);
+		QuickStyleSet styleSet = session.getStyleSet();
 		QuickStyleSheet styleSheet = session.getStyleSheet();
 		StyleValueApplication application = session.get(STYLE_APPLICATION, StyleValueApplication.class);
 		if (application == null)
 			application = StyleValueApplication.ALL;
 		QuickStyleAttribute<?> attr = session.get(STYLE_ATTRIBUTE, QuickStyleAttribute.class);
-		QonfigElement element = (QonfigElement) session.get(QuickInterpreter.STYLE_ELEMENT);
+		QonfigElement element = (QonfigElement) session.get(QuickQIS.STYLE_ELEMENT);
+		modifyForStyle(session);
 
 		String rolePath = session.getAttributeText("child");
 		if (rolePath != null) {
@@ -825,23 +890,23 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 			}
 			application = application.forType(el);
 		}
-		ObservableExpression newCondition = session.getAttribute("condition", ObservableExpression.class);
+		ObservableExpression newCondition = exS.getAttributeExpression("condition");
 		if (newCondition != null) {
 			MultiMap<String, QuickModelValue<?>> availableModelValues = BetterHashMultiMap.<String, QuickModelValue<?>> build()
 				.buildMultiMap();
 			for (QonfigElementOrAddOn type : application.getTypes().values()) {
-				QuickStyleType styled = styleSet.styled(type, session);
+				QuickStyleType styled = styleSet.styled(type, exS);
 				availableModelValues.putAll(styled.getModelValues());
 			}
 			if (element != null) {
-				QuickStyleType styled = styleSet.styled(element.getType(), session);
+				QuickStyleType styled = styleSet.styled(element.getType(), exS);
 				availableModelValues.putAll(styled.getModelValues());
 				for (QonfigAddOn inh : element.getInheritance().values()) {
-					styled = styleSet.styled(inh, session);
+					styled = styleSet.styled(inh, exS);
 					availableModelValues.putAll(styled.getModelValues());
 				}
 			}
-			application = application.forCondition(newCondition, session.getExpressoEnv(), availableModelValues);
+			application = application.forCondition(newCondition, exS.getExpressoEnv(), availableModelValues);
 		}
 		session.put(STYLE_APPLICATION, application);
 
@@ -853,13 +918,13 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 
 			Set<QuickStyleAttribute<?>> attrs = new HashSet<>();
 			if (element != null) {
-				QuickStyleType styled = styleSet.styled(element.getType(), session);
+				QuickStyleType styled = styleSet.styled(element.getType(), exS);
 				if (styled != null)
-					attrs.addAll(styleSet.styled(element.getType(), session).getAttributes(attrName));
+					attrs.addAll(styleSet.styled(element.getType(), exS).getAttributes(attrName));
 				for (QonfigAddOn inh : element.getInheritance().values()) {
 					if (attrs.size() > 1)
 						break;
-					styled = styleSet.styled(inh, session);
+					styled = styleSet.styled(inh, exS);
 					if (styled != null)
 						attrs.addAll(styled.getAttributes(attrName));
 				}
@@ -867,7 +932,7 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 				for (QonfigElementOrAddOn type : application.getTypes().values()) {
 					if (attrs.size() > 1)
 						break;
-					QuickStyleType styled = styleSet.styled(type, session);
+					QuickStyleType styled = styleSet.styled(type, exS);
 					if (styled != null)
 						attrs.addAll(styled.getAttributes(attrName));
 				}
@@ -879,7 +944,7 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 			attr = attrs.iterator().next();
 			session.put(STYLE_ATTRIBUTE, attr);
 		}
-		ObservableExpression value = session.getValue(ObservableExpression.class, null);
+		ObservableExpression value = exS.getValueExpression();
 		if ((value != null && value != ObservableExpression.EMPTY) && attr == null)
 			throw new QonfigInterpretationException("Cannot specify a style value without an attribute");
 		String styleSetName = session.getAttributeText("style-set");
@@ -907,8 +972,7 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 			protected List<QuickStyleValue<?>> get() throws QonfigInterpretationException {
 				List<QuickStyleValue<?>> values = new ArrayList<>();
 				if (value != null && value != ObservableExpression.EMPTY)
-					values.add(
-						new QuickStyleValue<>(styleSheet, theApplication, theAttr, value, session.getExpressoEnv()));
+					values.add(new QuickStyleValue<>(styleSheet, theApplication, theAttr, value, exS.getExpressoEnv()));
 				if (styleSetRef != null)
 					values.addAll(styleSetRef);
 				for (StyleValues child : subStyles)
@@ -933,11 +997,12 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 		return str.append(')').toString();
 	}
 
-	private QuickStyleSheet interpretStyleSheet(QIS session) throws QonfigInterpretationException {
+	private QuickStyleSheet interpretStyleSheet(QuickQIS session) throws QonfigInterpretationException {
+		ExpressoQIS exS = session.as(ExpressoQIS.class);
 		// First import style sheets
 		Map<String, QuickStyleSheet> imports = new LinkedHashMap<>();
 		DefaultQonfigParser parser = null;
-		for (ExpressoSession<?> sse : session.forChildren("style-sheet-ref")) {
+		for (QuickQIS sse : session.forChildren("style-sheet-ref")) {
 			String name = sse.getAttributeText("name");
 			if (parser == null) {
 				parser = new DefaultQonfigParser();
@@ -960,20 +1025,22 @@ public class QuickCore<QIS extends QuickSession<?>> extends Expresso<QIS> {
 			} catch (QonfigParseException e) {
 				throw new QonfigInterpretationException("Malformed style-sheet reference " + ref, e);
 			}
-			if (!QuickCore.CORE.get().getElement("style-sheet").isAssignableFrom(ssDoc.getRoot().getType()))
+			if (!session.getStyleSet().getCoreToolkit().getElement("style-sheet").isAssignableFrom(ssDoc.getRoot().getType()))
 				throw new QonfigInterpretationException(
 					"Style-sheet reference does not parse to a style-sheet (" + ssDoc.getRoot().getType() + "): " + ref);
-			QuickSession<?> importSession = session.getInterpreter().interpret(ssDoc.getRoot())//
-				.put(STYLE_SHEET_REF, ref)//
-				.setModels(ObservableModelSet.build(session.getExpressoEnv().getModels().getNameChecker()).build(),
-					session.getExpressoEnv().getClassView());
+			QuickQIS importSession = session.intepretRoot(ssDoc.getRoot())//
+				.put(STYLE_SHEET_REF, ref);
+			importSession.as(ExpressoQIS.class)//
+			.setModels(ObservableModelSet.build(exS.getExpressoEnv().getModels().getNameChecker()).build(),
+				exS.getExpressoEnv().getClassView());
+			modifyForStyle(session);
 			QuickStyleSheet imported = importSession.interpret(QuickStyleSheet.class);
 			imports.put(name, imported);
 		}
 
 		// Next, compile style-sets
 		Map<String, List<QuickStyleValue<?>>> styleSets = new LinkedHashMap<>();
-		for (ExpressoSession<?> styleSetEl : session.forChildren("style-set")) {
+		for (QuickQIS styleSetEl : session.forChildren("style-set")) {
 			String name = styleSetEl.getAttributeText("name");
 			styleSetEl.put(STYLE_NAME, name);
 			styleSets.put(name, styleSetEl.interpretChildren("style", StyleValues.class).getFirst());

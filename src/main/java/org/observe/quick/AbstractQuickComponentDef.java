@@ -7,9 +7,9 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 import org.observe.ObservableValue;
+import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.quick.QuickInterpreter.QuickSession;
 import org.observe.quick.style.QuickElementStyle;
 import org.observe.quick.style.QuickModelValue;
 import org.observe.util.swing.PanelPopulation.ComponentEditor;
@@ -24,9 +24,9 @@ public abstract class AbstractQuickComponentDef implements QuickComponentDef {
 	private BiConsumer<ComponentEditor<?, ?>, QuickComponent.Builder> theModifications;
 	private final Map<QuickModelValue<?>, Supplier<? extends ModelValueSupport<?>>> theModelImplementations;
 
-	public AbstractQuickComponentDef(QuickSession<?> session) {
+	public AbstractQuickComponentDef(QuickQIS session) throws QonfigInterpretationException {
 		theElement = session.getElement();
-		theModels = (ObservableModelSet.Wrapped) session.getExpressoEnv().getModels();
+		theModels = (ObservableModelSet.Wrapped) session.as(ExpressoQIS.class).getExpressoEnv().getModels();
 		theStyle = session.getStyle();
 		theModelImplementations = new HashMap<>();
 	}

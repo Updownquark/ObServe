@@ -1,5 +1,10 @@
 package org.observe.expresso;
 
+import java.util.Collection;
+import java.util.Map;
+import java.util.Set;
+import java.util.SortedMap;
+import java.util.SortedSet;
 import java.util.function.Function;
 
 import org.observe.Observable;
@@ -21,7 +26,13 @@ import org.observe.collect.ObservableSortedCollection;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.config.ObservableValueSet;
 import org.observe.util.TypeTokens;
+import org.qommons.BiTuple;
+import org.qommons.ClassMap;
+import org.qommons.ClassMap.TypeMatch;
 import org.qommons.LambdaUtils;
+import org.qommons.collect.BetterSortedList;
+import org.qommons.collect.MultiMap;
+import org.qommons.collect.SortedMultiMap;
 
 import com.google.common.reflect.TypeToken;
 
@@ -30,6 +41,8 @@ public class ModelTypes {
 	/** Used for disabled settable values */
 	public static final Function<Object, String> NOT_REVERSIBLE = LambdaUtils.constantFn("Not reversible", "Not reversible",
 		"Not reversible");
+
+	private static final ClassMap<ModelType<?>> ALL_TYPES = new ClassMap<>();
 
 	/** A nested model in a model */
 	public static final ModelType.UnTyped<ObservableModelSet> Model = new ModelType.UnTyped<ObservableModelSet>("Model",
@@ -60,6 +73,21 @@ public class ModelTypes {
 	public static final MultiMapModelType MultiMap = new MultiMapModelType();
 	/** An {@link ObservableSortedMultiMap} */
 	public static final SortedMultiMapModelType SortedMultiMap = new SortedMultiMapModelType();
+
+	static {
+		ALL_TYPES.with(Observable.class, Event);
+		ALL_TYPES.with(ObservableAction.class, Action);
+		ALL_TYPES.with(ObservableValue.class, Value);
+		ALL_TYPES.with(Collection.class, Collection);
+		ALL_TYPES.with(BetterSortedList.class, SortedCollection);
+		ALL_TYPES.with(Set.class, Set);
+		ALL_TYPES.with(SortedSet.class, SortedSet);
+		ALL_TYPES.with(ObservableValueSet.class, ValueSet);
+		ALL_TYPES.with(Map.class, Map);
+		ALL_TYPES.with(SortedMap.class, SortedMap);
+		ALL_TYPES.with(MultiMap.class, MultiMap);
+		ALL_TYPES.with(SortedMultiMap.class, SortedMultiMap);
+	}
 
 	/** See {@link ModelTypes#Event} */
 	public static class EventModelType extends ModelType.SingleTyped<Observable<?>> {
@@ -217,11 +245,13 @@ public class ModelTypes {
 				public ModelInstanceConverter<SettableValue<?>, Observable<?>> convert(ModelInstanceType<SettableValue<?>, ?> source,
 					ModelInstanceType<Observable<?>, ?> dest) throws IllegalArgumentException {
 					if (dest.getType(0) == TypeTokens.get().VOID || TypeTokens.getRawType(dest.getType(0)) == void.class) {
-						return ModelType.converter(src -> src.noInitChanges().map(__ -> null), dest);
+						return ModelType.converter(LambdaUtils.printableFn(src -> src.noInitChanges().map(__ -> null), "changes", null),
+							dest);
 					} else {
 						TypeToken<?> oveType = TypeTokens.get().keyFor(ObservableValueEvent.class).parameterized(source.getType(0));
 						if (dest.getType(0).isAssignableFrom(oveType))
-							return ModelType.converter(src -> src.noInitChanges(), dest.getModelType().forTypes(oveType));
+							return ModelType.converter(LambdaUtils.printableFn(src -> src.noInitChanges(), "changes", null),
+								dest.getModelType().forTypes(oveType));
 						else
 							return SimpleSingleTyped.super.convert(source, dest);
 					}
@@ -237,25 +267,107 @@ public class ModelTypes {
 				}
 			});
 			builder.convertibleFromAny(new ModelConverter<Object, SettableValue<?>>() {
+				private boolean isRecursing;
+
 				@Override
 				public ModelInstanceConverter<Object, SettableValue<?>> convert(ModelInstanceType<Object, ?> source,
 					ModelInstanceType<SettableValue<?>, ?> dest) throws IllegalArgumentException {
-					TypeToken<?> valueType = TypeTokens.get().keyFor(source.getModelType().modelType).parameterized(source.getTypeList());
-					// TODO Check for type compatibility here?
-					ModelInstanceType<SettableValue<?>, ?> type = Value.forType(valueType);
-					return new ModelInstanceConverter<Object, SettableValue<?>>() {
-						@Override
-						public SettableValue<?> convert(Object sourceV) {
-							return SettableValue.asSettable(//
-								ObservableValue.of((TypeToken<Object>) valueType, sourceV), //
-								NOT_REVERSIBLE);
-						}
+					/* This converter enables the passing of actual model value holders into java code.
+					 * E.g. a method which accepts a SettableValue<Double> instead of just a double
+					 * so it can observe changes in the model value instead of just the current value. */
+					BiTuple<Class<?>, ModelType<?>> convertModel = ALL_TYPES.getEntry(TypeTokens.getRawType(dest.getType(0)),
+						TypeMatch.SUPER_TYPE);
+					if (convertModel != null) {
+						TypeToken<?>[] destParamTypes = new TypeToken[convertModel.getValue2().getTypeCount()];
+						for (int i = 0; i < destParamTypes.length; i++)
+							destParamTypes[i] = dest.getType(0).resolveType(convertModel.getValue1().getTypeParameters()[i]);
+						ModelInstanceType<?, ?> destModelType = convertModel.getValue2().forTypes(destParamTypes);
+						ModelInstanceConverter<?, ?> valueConverter = source.convert(destModelType);
+						if (valueConverter == null)
+							return null;
+						ModelInstanceType<SettableValue<?>, ?> type = Value.forType(//
+							TypeTokens.get().keyFor(valueConverter.getType().getModelType().modelType).parameterized(destParamTypes));
+						return new ModelInstanceConverter<Object, SettableValue<?>>() {
+							@Override
+							public SettableValue<?> convert(Object sourceV) {
+								return SettableValue.asSettable(//
+									ObservableValue.of((TypeToken<Object>) type.getType(0), //
+										((ModelInstanceConverter<Object, Object>) valueConverter).convert(sourceV)), //
+									NOT_REVERSIBLE);
+							}
 
-						@Override
-						public ModelInstanceType<SettableValue<?>, ?> getType() {
-							return type;
+							@Override
+							public ModelInstanceType<SettableValue<?>, ?> getType() {
+								return type;
+							}
+						};
+					} else if (isRecursing) {
+						return null;
+					} else {
+						ModelInstanceType<SettableValue<?>, ? extends SettableValue<?>> sourceType = Value.forType(//
+							TypeTokens.get().keyFor(source.getModelType().modelType).parameterized(source.getTypeList()));
+						ModelInstanceConverter<SettableValue<?>, SettableValue<?>> valueConverter;
+						// This call is prone to infinite recursion, so we must prevent that explicitly
+						isRecursing = true;
+						try {
+							valueConverter = sourceType.convert(dest);
+						} finally {
+							isRecursing = false;
 						}
-					};
+						if (valueConverter == null)
+							return null;
+						return new ModelInstanceConverter<Object, SettableValue<?>>() {
+							@Override
+							public SettableValue<?> convert(Object sourceV) {
+								return valueConverter.convert(//
+									SettableValue.of((TypeToken<Object>) sourceType.getType(0), sourceV, "Unmodifiable"));
+							}
+
+							@Override
+							public ModelInstanceType<SettableValue<?>, ?> getType() {
+								return valueConverter.getType();
+							}
+						};
+					}
+				}
+			});
+			builder.convertibleToAny(new ModelConverter<SettableValue<?>, Object>() {
+				@Override
+				public ModelInstanceConverter<SettableValue<?>, Object> convert(ModelInstanceType<SettableValue<?>, ?> source,
+					ModelInstanceType<Object, ?> dest) throws IllegalArgumentException {
+					// Let's see if the source value is a model holder
+					Class<?> rawSourceType = TypeTokens.getRawType(source.getType(0));
+					// The source type has to be convertible observably to the model
+					boolean ov = rawSourceType == ObservableValue.class;
+					if (ov && ((ModelType<?>) dest.getModelType()) == Value // This is a special case we can handle
+						|| dest.getModelType().modelType.isAssignableFrom(rawSourceType)) {
+						TypeToken<?>[] sourceParamTypes = new TypeToken[dest.getModelType().getTypeCount()];
+						BiTuple<Class<?>, ModelType<?>> convertModel = ALL_TYPES.getEntry(dest.getModelType().modelType,
+							TypeMatch.SUPER_TYPE);
+						for (int i = 0; i < sourceParamTypes.length; i++)
+							sourceParamTypes[i] = source.getType(0).resolveType(convertModel.getValue1().getTypeParameters()[i]);
+						ModelInstanceType<Object, ?> sourceModelType = dest.getModelType().forTypes(sourceParamTypes);
+						ModelInstanceConverter<Object, ?> valueConverter = sourceModelType.convert(dest);
+						if (valueConverter == null)
+							return null;
+						return new ModelInstanceConverter<SettableValue<?>, Object>() {
+							@Override
+							public Object convert(SettableValue<?> sourceV) {
+								Object v = sourceV.get();
+								if (v == null)
+									throw new IllegalStateException("A value converted to a model cannot be null");
+								if (ov)
+									v = SettableValue.asSettable((ObservableValue<Object>) v, __ -> "Not Settable");
+								return valueConverter.convert(v);
+							}
+
+							@Override
+							public ModelInstanceType<Object, ?> getType() {
+								return (ModelInstanceType<Object, ?>) valueConverter.getType();
+							}
+						};
+					}
+					return null;
 				}
 			});
 			builder.convertSelf(new ModelConverter<SettableValue<?>, SettableValue<?>>() {
@@ -367,11 +479,12 @@ public class ModelTypes {
 					ModelInstanceType<ObservableCollection<?>, ?> source, ModelInstanceType<Observable<?>, ?> dest)
 						throws IllegalArgumentException {
 					if (dest.getType(0) == TypeTokens.get().VOID || TypeTokens.getRawType(dest.getType(0)) == void.class) {
-						return ModelType.converter(src -> src.changes().map(__ -> null), dest);
+						return ModelType.converter(LambdaUtils.printableFn(src -> src.changes().map(__ -> null), "changes", null), dest);
 					} else {
 						TypeToken<?> oceType = TypeTokens.get().keyFor(ObservableCollectionEvent.class).parameterized(source.getType(0));
 						if (dest.getType(0).isAssignableFrom(oceType)) {
-							return ModelType.converter(src -> src.changes(), dest.getModelType().forTypes(oceType));
+							return ModelType.converter(LambdaUtils.printableFn(src -> src.changes(), "changes", null),
+								dest.getModelType().forTypes(oceType));
 						} else
 							throw new IllegalArgumentException("Cannot convert from " + source + " to " + dest);
 					}
@@ -444,19 +557,24 @@ public class ModelTypes {
 
 		@Override
 		protected void setupConversions(ConversionBuilder<ObservableSortedCollection<?>> builder) {
-			builder.convertibleTo(Collection, (source, dest) -> ModelType.converter(src -> src, dest))//
+			builder
+			.convertibleTo(Collection,
+				(source, dest) -> ModelType.converter(LambdaUtils.printableFn(src -> src, "trivial", "trivial"), dest))//
 			.convertibleTo(Event, new ModelConverter<ObservableSortedCollection<?>, Observable<?>>() {
 				@Override
 				public ModelInstanceConverter<ObservableSortedCollection<?>, Observable<?>> convert(
 					ModelInstanceType<ObservableSortedCollection<?>, ?> source, ModelInstanceType<Observable<?>, ?> dest)
 						throws IllegalArgumentException {
 					if (dest.getType(0) == TypeTokens.get().VOID || TypeTokens.getRawType(dest.getType(0)) == void.class) {
-						return ModelType.converter(src -> src.changes().map(__ -> null), dest);
+						return ModelType.converter(LambdaUtils.printableFn(src -> src.changes().map(__ -> null), "changes", null),
+							dest);
 					} else {
 						TypeToken<?> oceType = TypeTokens.get().keyFor(ObservableCollectionEvent.class)
 							.parameterized(source.getType(0));
 						if (dest.getType(0).isAssignableFrom(oceType))
-							return ModelType.converter(src -> src.changes(), dest.getModelType().forTypes(oceType));
+							return ModelType.converter(LambdaUtils
+								.printableFn(LambdaUtils.printableFn(src -> src.changes(), "changes", null), "changes", null),
+								dest.getModelType().forTypes(oceType));
 						else
 							throw new IllegalArgumentException("Cannot convert from " + source + " to " + dest);
 					}
@@ -519,18 +637,22 @@ public class ModelTypes {
 
 		@Override
 		protected void setupConversions(ConversionBuilder<ObservableSet<?>> builder) {
-			builder.<ObservableCollection<?>> convertibleTo(Collection, (source, dest) -> ModelType.converter(src -> src, dest))//
-				.convertibleTo(Event, new ModelConverter<ObservableSet<?>, Observable<?>>() {
+			builder
+			.<ObservableCollection<?>> convertibleTo(Collection,
+				(source, dest) -> ModelType.converter(LambdaUtils.printableFn(src -> src, "trivial", "trivial"), dest))//
+			.convertibleTo(Event, new ModelConverter<ObservableSet<?>, Observable<?>>() {
 				@Override
-					public ModelInstanceConverter<ObservableSet<?>, Observable<?>> convert(ModelInstanceType<ObservableSet<?>, ?> source,
-						ModelInstanceType<Observable<?>, ?> dest) throws IllegalArgumentException {
+				public ModelInstanceConverter<ObservableSet<?>, Observable<?>> convert(ModelInstanceType<ObservableSet<?>, ?> source,
+					ModelInstanceType<Observable<?>, ?> dest) throws IllegalArgumentException {
 					if (dest.getType(0) == TypeTokens.get().VOID || TypeTokens.getRawType(dest.getType(0)) == void.class) {
-						return ModelType.converter(src -> src.changes().map(__ -> null), dest);
+						return ModelType.converter(LambdaUtils.printableFn(src -> src.changes().map(__ -> null), "changes", null),
+							dest);
 					} else {
 						TypeToken<?> oceType = TypeTokens.get().keyFor(ObservableCollectionEvent.class)
 							.parameterized(source.getType(0));
 						if (dest.getType(0).isAssignableFrom(oceType))
-							return ModelType.converter(src -> src.changes(), dest.getModelType().forTypes(oceType));
+							return ModelType.converter(LambdaUtils.printableFn(src -> src.changes(), "changes", null),
+								dest.getModelType().forTypes(oceType));
 						else
 							throw new IllegalArgumentException("Cannot convert from " + source + " to " + dest);
 					}
@@ -596,21 +718,26 @@ public class ModelTypes {
 
 		@Override
 		protected void setupConversions(ConversionBuilder<ObservableSortedSet<?>> builder) {
-			builder.convertibleTo(Collection, (source, dest) -> ModelType.converter(src -> src, dest))//
-			.convertibleTo(SortedCollection, (source, dest) -> ModelType.converter(src -> src, dest))//
-			.convertibleTo(Set, (source, dest) -> ModelType.converter(src -> src, dest))//
-				.convertibleTo(Event, new ModelConverter<ObservableSortedSet<?>, Observable<?>>() {
+			builder
+			.convertibleTo(Collection,
+				(source, dest) -> ModelType.converter(LambdaUtils.printableFn(src -> src, "trivial", "trivial"), dest))//
+			.convertibleTo(SortedCollection,
+				(source, dest) -> ModelType.converter(LambdaUtils.printableFn(src -> src, "trivial", "trivial"), dest))//
+			.convertibleTo(Set, (source, dest) -> ModelType.converter(LambdaUtils.printableFn(src -> src, "trivial", "trivial"), dest))//
+			.convertibleTo(Event, new ModelConverter<ObservableSortedSet<?>, Observable<?>>() {
 				@Override
-					public ModelInstanceConverter<ObservableSortedSet<?>, Observable<?>> convert(
-						ModelInstanceType<ObservableSortedSet<?>, ?> source, ModelInstanceType<Observable<?>, ?> dest)
+				public ModelInstanceConverter<ObservableSortedSet<?>, Observable<?>> convert(
+					ModelInstanceType<ObservableSortedSet<?>, ?> source, ModelInstanceType<Observable<?>, ?> dest)
 						throws IllegalArgumentException {
 					if (dest.getType(0) == TypeTokens.get().VOID || TypeTokens.getRawType(dest.getType(0)) == void.class) {
-						return ModelType.converter(src -> src.changes().map(__ -> null), dest);
+						return ModelType.converter(LambdaUtils.printableFn(src -> src.changes().map(__ -> null), "changes", null),
+							dest);
 					} else {
 						TypeToken<?> oceType = TypeTokens.get().keyFor(ObservableCollectionEvent.class)
 							.parameterized(source.getType(0));
 						if (dest.getType(0).isAssignableFrom(oceType))
-							return ModelType.converter(src -> src.changes(), dest.getModelType().forTypes(oceType));
+							return ModelType.converter(LambdaUtils.printableFn(src -> src.changes(), "changes", null),
+								dest.getModelType().forTypes(oceType));
 						else
 							throw new IllegalArgumentException("Cannot convert from " + source + " to " + dest);
 					}
@@ -669,20 +796,24 @@ public class ModelTypes {
 
 		@Override
 		protected void setupConversions(ConversionBuilder<ObservableValueSet<?>> builder) {
-			builder.convertibleTo(Collection, (source, dest) -> ModelType.converter(src -> src.getValues(), // dest))//
-				Collection.forType(source.getType(0))))//
-				.convertibleTo(Event, new ModelConverter<ObservableValueSet<?>, Observable<?>>() {
+			builder//
+			.convertibleTo(Collection,
+				(source, dest) -> ModelType.converter(LambdaUtils.printableFn(src -> src.getValues(), "values", null), // dest))//
+					Collection.forType(source.getType(0))))//
+			.convertibleTo(Event, new ModelConverter<ObservableValueSet<?>, Observable<?>>() {
 				@Override
-					public ModelInstanceConverter<ObservableValueSet<?>, Observable<?>> convert(
-						ModelInstanceType<ObservableValueSet<?>, ?> source, ModelInstanceType<Observable<?>, ?> dest)
+				public ModelInstanceConverter<ObservableValueSet<?>, Observable<?>> convert(
+					ModelInstanceType<ObservableValueSet<?>, ?> source, ModelInstanceType<Observable<?>, ?> dest)
 						throws IllegalArgumentException {
 					if (dest.getType(0) == TypeTokens.get().VOID || TypeTokens.getRawType(dest.getType(0)) == void.class) {
-						return ModelType.converter(src -> src.getValues().changes().map(__ -> null), dest);
+						return ModelType.converter(
+							LambdaUtils.printableFn(src -> src.getValues().changes().map(__ -> null), "changes", null), dest);
 					} else {
 						TypeToken<?> oceType = TypeTokens.get().keyFor(ObservableCollectionEvent.class)
 							.parameterized(source.getType(0));
 						if (dest.getType(0).isAssignableFrom(oceType)) {
-							return ModelType.converter(src -> src.getValues().changes(), dest.getModelType().forTypes(oceType));
+							return ModelType.converter(LambdaUtils.printableFn(src -> src.getValues().changes(), "changes", null),
+								dest.getModelType().forTypes(oceType));
 						} else
 							throw new IllegalArgumentException("Cannot convert from " + source + " to " + dest);
 					}
@@ -755,12 +886,13 @@ public class ModelTypes {
 				public ModelInstanceConverter<ObservableMap<?, ?>, Observable<?>> convert(ModelInstanceType<ObservableMap<?, ?>, ?> source,
 					ModelInstanceType<Observable<?>, ?> dest) throws IllegalArgumentException {
 					if (dest.getType(0) == TypeTokens.get().VOID || TypeTokens.getRawType(dest.getType(0)) == void.class) {
-						return ModelType.converter(src -> src.changes().map(__ -> null), dest);
+						return ModelType.converter(LambdaUtils.printableFn(src -> src.changes().map(__ -> null), "changes", null), dest);
 					} else {
 						TypeToken<?> omeType = TypeTokens.get().keyFor(ObservableMapEvent.class).parameterized(source.getType(0),
 							source.getType(1));
 						if (dest.getType(0).isAssignableFrom(omeType))
-							return ModelType.converter(src -> src.changes(), dest.getModelType().forTypes(omeType));
+							return ModelType.converter(LambdaUtils.printableFn(src -> src.changes(), "changes", null),
+								dest.getModelType().forTypes(omeType));
 						else
 							throw new IllegalArgumentException("Cannot convert from " + source + " to " + dest);
 					}
@@ -782,8 +914,7 @@ public class ModelTypes {
 
 		@Override
 		public <K, V> ModelInstanceType.DoubleTyped<ObservableSortedMap<?, ?>, K, V, ObservableSortedMap<K, V>> forType(
-			TypeToken<K> keyType,
-			TypeToken<V> valueType) {
+			TypeToken<K> keyType, TypeToken<V> valueType) {
 			return (ModelInstanceType.DoubleTyped<ObservableSortedMap<?, ?>, K, V, ObservableSortedMap<K, V>>) super.forType(keyType,
 				valueType);
 		}
@@ -825,26 +956,28 @@ public class ModelTypes {
 
 		@Override
 		protected Function<ObservableSortedMap<?, ?>, ObservableSortedMap<?, ?>> convertType(
-			ModelInstanceType<ObservableSortedMap<?, ?>, ?> target,
-			Function<Object, Object>[] casts, Function<Object, Object>[] reverses) {
+			ModelInstanceType<ObservableSortedMap<?, ?>, ?> target, Function<Object, Object>[] casts, Function<Object, Object>[] reverses) {
 			return null; // ObservableMap doesn't have flow at the moment at least
 		}
 
 		@Override
 		protected void setupConversions(ConversionBuilder<ObservableSortedMap<?, ?>> builder) {
-			builder.convertibleTo(Map, (source, dest) -> ModelType.converter(src -> src, dest))//
-				.convertibleTo(Event, new ModelConverter<ObservableSortedMap<?, ?>, Observable<?>>() {
+			builder
+			.convertibleTo(Map, (source, dest) -> ModelType.converter(LambdaUtils.printableFn(src -> src, "trivial", "trivial"), dest))//
+			.convertibleTo(Event, new ModelConverter<ObservableSortedMap<?, ?>, Observable<?>>() {
 				@Override
-					public ModelInstanceConverter<ObservableSortedMap<?, ?>, Observable<?>> convert(
-						ModelInstanceType<ObservableSortedMap<?, ?>, ?> source, ModelInstanceType<Observable<?>, ?> dest)
+				public ModelInstanceConverter<ObservableSortedMap<?, ?>, Observable<?>> convert(
+					ModelInstanceType<ObservableSortedMap<?, ?>, ?> source, ModelInstanceType<Observable<?>, ?> dest)
 						throws IllegalArgumentException {
 					if (dest.getType(0) == TypeTokens.get().VOID || TypeTokens.getRawType(dest.getType(0)) == void.class) {
-						return ModelType.converter(src -> src.changes().map(__ -> null), dest);
+						return ModelType.converter(LambdaUtils.printableFn(src -> src.changes().map(__ -> null), "changes", null),
+							dest);
 					} else {
 						TypeToken<?> omeType = TypeTokens.get().keyFor(ObservableMapEvent.class).parameterized(source.getType(0),
 							source.getType(1));
 						if (dest.getType(0).isAssignableFrom(omeType))
-							return ModelType.converter(src -> src.changes(), dest.getModelType().forTypes(omeType));
+							return ModelType.converter(LambdaUtils.printableFn(src -> src.changes(), "changes", null),
+								dest.getModelType().forTypes(omeType));
 						else
 							throw new IllegalArgumentException("Cannot convert from " + source + " to " + dest);
 					}
@@ -908,8 +1041,7 @@ public class ModelTypes {
 
 		@Override
 		protected Function<ObservableMultiMap<?, ?>, ObservableMultiMap<?, ?>> convertType(
-			ModelInstanceType<ObservableMultiMap<?, ?>, ?> target,
-			Function<Object, Object>[] casts, Function<Object, Object>[] reverses) {
+			ModelInstanceType<ObservableMultiMap<?, ?>, ?> target, Function<Object, Object>[] casts, Function<Object, Object>[] reverses) {
 			if (casts[0] != null && reverses[0] == null)
 				return null; // Need reverse for key mapping
 			return src -> {
@@ -937,14 +1069,16 @@ public class ModelTypes {
 				@Override
 				public ModelInstanceConverter<ObservableMultiMap<?, ?>, Observable<?>> convert(
 					ModelInstanceType<ObservableMultiMap<?, ?>, ?> source, ModelInstanceType<Observable<?>, ?> dest)
-					throws IllegalArgumentException {
+						throws IllegalArgumentException {
 					if (dest.getType(0) == TypeTokens.get().VOID || TypeTokens.getRawType(dest.getType(0)) == void.class) {
-						return ModelType.converter(src -> src.changes().map(__ -> null), dest);
+						return ModelType.converter(LambdaUtils.printableFn(src -> src.changes().map(__ -> null), "changes", null), dest);
 					} else {
 						TypeToken<?> omeType = TypeTokens.get().keyFor(ObservableMultiMapEvent.class).parameterized(source.getType(0),
 							source.getType(1));
 						if (dest.getType(0).isAssignableFrom(omeType))
-							return ModelType.converter(src -> src.changes(), dest.getModelType().forTypes(omeType));
+							return ModelType.converter(
+								LambdaUtils.printableFn(LambdaUtils.printableFn(src -> src.changes(), "changes", null), "changes", null),
+								dest.getModelType().forTypes(omeType));
 						else
 							throw new IllegalArgumentException("Cannot convert from " + source + " to " + dest);
 					}
@@ -968,16 +1102,14 @@ public class ModelTypes {
 		public <K, V> ModelInstanceType.DoubleTyped<ObservableSortedMultiMap<?, ?>, K, V, ObservableSortedMultiMap<K, V>> forType(
 			TypeToken<K> keyType, TypeToken<V> valueType) {
 			return (ModelInstanceType.DoubleTyped<ObservableSortedMultiMap<?, ?>, K, V, ObservableSortedMultiMap<K, V>>) super.forType(
-				keyType,
-				valueType);
+				keyType, valueType);
 		}
 
 		@Override
 		public <K, V> ModelInstanceType.DoubleTyped<ObservableSortedMultiMap<?, ?>, K, V, ObservableSortedMultiMap<K, V>> forType(
 			Class<K> keyType, Class<V> valueType) {
 			return (ModelInstanceType.DoubleTyped<ObservableSortedMultiMap<?, ?>, K, V, ObservableSortedMultiMap<K, V>>) super.forType(
-				keyType,
-				valueType);
+				keyType, valueType);
 		}
 
 		@Override
@@ -1035,19 +1167,23 @@ public class ModelTypes {
 
 		@Override
 		protected void setupConversions(ConversionBuilder<ObservableSortedMultiMap<?, ?>> builder) {
-			builder.convertibleTo(MultiMap, (source, dest) -> ModelType.converter(src -> src, dest))//
-				.convertibleTo(Event, new ModelConverter<ObservableSortedMultiMap<?, ?>, Observable<?>>() {
+			builder
+			.convertibleTo(MultiMap,
+				(source, dest) -> ModelType.converter(LambdaUtils.printableFn(src -> src, "trivial", "trivial"), dest))//
+			.convertibleTo(Event, new ModelConverter<ObservableSortedMultiMap<?, ?>, Observable<?>>() {
 				@Override
-					public ModelInstanceConverter<ObservableSortedMultiMap<?, ?>, Observable<?>> convert(
-						ModelInstanceType<ObservableSortedMultiMap<?, ?>, ?> source, ModelInstanceType<Observable<?>, ?> dest)
+				public ModelInstanceConverter<ObservableSortedMultiMap<?, ?>, Observable<?>> convert(
+					ModelInstanceType<ObservableSortedMultiMap<?, ?>, ?> source, ModelInstanceType<Observable<?>, ?> dest)
 						throws IllegalArgumentException {
 					if (dest.getType(0) == TypeTokens.get().VOID || TypeTokens.getRawType(dest.getType(0)) == void.class) {
-						return ModelType.converter(src -> src.changes().map(__ -> null), dest);
+						return ModelType.converter(LambdaUtils.printableFn(src -> src.changes().map(__ -> null), "changes", null),
+							dest);
 					} else {
 						TypeToken<?> omeType = TypeTokens.get().keyFor(ObservableMultiMapEvent.class).parameterized(source.getType(0),
 							source.getType(1));
 						if (dest.getType(0).isAssignableFrom(omeType))
-							return ModelType.converter(src -> src.changes(), dest.getModelType().forTypes(omeType));
+							return ModelType.converter(LambdaUtils.printableFn(src -> src.changes(), "changes", null),
+								dest.getModelType().forTypes(omeType));
 						else
 							throw new IllegalArgumentException("Cannot convert from " + source + " to " + dest);
 					}

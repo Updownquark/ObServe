@@ -14,9 +14,7 @@ import org.qommons.StringUtils;
 import org.qommons.TriFunction;
 
 public class BinaryOperatorSet {
-	public static final BinaryOperatorSet STANDARD_JAVA = BinaryOperatorSet.build().withStandardJavaOps().build();
-
-	interface BinaryOp<S, T, V> {
+	public interface BinaryOp<S, T, V> {
 		Class<V> getTargetType();
 
 		V apply(S source, T other);
@@ -310,6 +308,495 @@ public class BinaryOperatorSet {
 		}
 	}
 
+	public interface BinaryOperatorConfiguration {
+		Builder configure(Builder operators);
+	}
+
+	public static Builder standardJava(Builder operators) {
+		// Do equality first, which is special
+		// First, same-type primitive equality
+		operators.with("==", Boolean.class, Boolean.class, (b1, b2) -> unwrapBool(b1) == unwrapBool(b2),
+			(s, b2, r) -> unwrapBool(b2) ? unwrapBool(r) : !unwrapBool(r), null);
+		operators.with("!=", Boolean.class, Boolean.class, (b1, b2) -> unwrapBool(b1) != unwrapBool(b2),
+			(s, b2, r) -> unwrapBool(b2) ? !unwrapBool(r) : unwrapBool(r), null);
+
+		operators.with2("==", Integer.class, Integer.class, Boolean.class, (i1, i2) -> unwrapI(i1) == unwrapI(i2), //
+			(s, i2, r) -> {
+				if (unwrapBool(r)) // Trying to make the expression true
+					return i2;
+				else if (unwrapI(s) != unwrapI(i2))
+					return s; // Leave it alone--it's already false
+				else
+					return null; // Don't make up a value to make it false--prevent with the enabled fn
+			}, (s, i2, r) -> (!unwrapBool(r) && unwrapI(s) == unwrapI(i2)) ? "Equal expression cannot be negated" : null);
+		operators.with2("!=", Integer.class, Integer.class, Boolean.class, (i1, i2) -> unwrapI(i1) != unwrapI(i2), //
+			(s, i2, r) -> {
+				if (unwrapBool(r)) {// Trying to make the expression true
+					if (unwrapI(s) == unwrapI(i2))
+						return s; // Leave it alone--it's already true
+					else
+						return null; // Don't make up a value to make it true--prevent with the enabled fn
+				} else
+					return i2;
+			}, (s, i2, r) -> (unwrapBool(r) && unwrapI(s) != unwrapI(i2)) ? "Not-equal expression cannot be made true" : null);
+		operators.with2("==", Long.class, Long.class, Boolean.class, (i1, i2) -> unwrapL(i1) == unwrapL(i2), //
+			(s, i2, r) -> {
+				if (unwrapBool(r)) // Trying to make the expression true
+					return i2;
+				else if (unwrapL(s) != unwrapL(i2))
+					return s; // Leave it alone--it's already false
+				else
+					return null; // Don't make up a value to make it false--prevent with the enabled fn
+			}, (s, i2, r) -> (!unwrapBool(r) && unwrapL(s) == unwrapL(i2)) ? "Equal expression cannot be negated" : null);
+		operators.with2("!=", Long.class, Long.class, Boolean.class, (i1, i2) -> unwrapL(i1) != unwrapL(i2), //
+			(s, i2, r) -> {
+				if (unwrapBool(r)) {// Trying to make the expression true
+					if (unwrapL(s) == unwrapL(i2))
+						return s; // Leave it alone--it's already true
+					else
+						return null; // Don't make up a value to make it true--prevent with the enabled fn
+				} else
+					return i2;
+			}, (s, i2, r) -> (unwrapBool(r) && unwrapL(s) != unwrapL(i2)) ? "Not-equal expression cannot be made true" : null);
+		operators.with2("==", Double.class, Double.class, Boolean.class, (i1, i2) -> unwrapD(i1) == unwrapD(i2), //
+			(s, i2, r) -> {
+				if (unwrapBool(r)) // Trying to make the expression true
+					return i2;
+				else if (unwrapD(s) != unwrapD(i2))
+					return s; // Leave it alone--it's already false
+				else
+					return null; // Don't make up a value to make it false--prevent with the enabled fn
+			}, (s, i2, r) -> (!unwrapBool(r) && unwrapD(s) == unwrapD(i2)) ? "Equal expression cannot be negated" : null);
+		operators.with2("!=", Double.class, Double.class, Boolean.class, (i1, i2) -> unwrapD(i1) != unwrapD(i2), //
+			(s, i2, r) -> {
+				if (unwrapBool(r)) {// Trying to make the expression true
+					if (unwrapD(s) == unwrapD(i2))
+						return s; // Leave it alone--it's already true
+					else
+						return null; // Don't make up a value to make it true--prevent with the enabled fn
+				} else
+					return i2;
+			}, (s, i2, r) -> (unwrapBool(r) && unwrapD(s) != unwrapD(i2)) ? "Not-equal expression cannot be made true" : null);
+		operators.with2("==", Float.class, Float.class, Boolean.class, (i1, i2) -> unwrapF(i1) == unwrapF(i2), //
+			(s, i2, r) -> {
+				if (unwrapBool(r)) // Trying to make the expression true
+					return i2;
+				else if (unwrapF(s) != unwrapF(i2))
+					return s; // Leave it alone--it's already false
+				else
+					return null; // Don't make up a value to make it false--prevent with the enabled fn
+			}, (s, i2, r) -> (!unwrapBool(r) && unwrapF(s) == unwrapF(i2)) ? "Equal expression cannot be negated" : null);
+		operators.with2("!=", Float.class, Float.class, Boolean.class, (i1, i2) -> unwrapF(i1) != unwrapF(i2), //
+			(s, i2, r) -> {
+				if (unwrapBool(r)) {// Trying to make the expression true
+					if (unwrapF(s) == unwrapF(i2))
+						return s; // Leave it alone--it's already true
+					else
+						return null; // Don't make up a value to make it true--prevent with the enabled fn
+				} else
+					return i2;
+			}, (s, i2, r) -> (unwrapBool(r) && unwrapF(s) != unwrapF(i2)) ? "Not-equal expression cannot be made true" : null);
+		operators.with2("==", Byte.class, Byte.class, Boolean.class, (i1, i2) -> unwrapByte(i1) == unwrapByte(i2), //
+			(s, i2, r) -> {
+				if (unwrapBool(r)) // Trying to make the expression true
+					return i2;
+				else if (unwrapByte(s) != unwrapByte(i2))
+					return s; // Leave it alone--it's already false
+				else
+					return null; // Don't make up a value to make it false--prevent with the enabled fn
+			}, (s, i2, r) -> (!unwrapBool(r) && unwrapByte(s) == unwrapByte(i2)) ? "Equal expression cannot be negated" : null);
+		operators.with2("!=", Byte.class, Byte.class, Boolean.class, (i1, i2) -> unwrapByte(i1) != unwrapByte(i2), //
+			(s, i2, r) -> {
+				if (unwrapBool(r)) {// Trying to make the expression true
+					if (unwrapByte(s) == unwrapByte(i2))
+						return s; // Leave it alone--it's already true
+					else
+						return null; // Don't make up a value to make it true--prevent with the enabled fn
+				} else
+					return i2;
+			}, (s, i2, r) -> (unwrapBool(r) && unwrapByte(s) != unwrapByte(i2)) ? "Not-equal expression cannot be made true" : null);
+		operators.with2("==", Short.class, Short.class, Boolean.class, (i1, i2) -> unwrapS(i1) == unwrapS(i2), //
+			(s, i2, r) -> {
+				if (unwrapBool(r)) // Trying to make the expression true
+					return i2;
+				else if (unwrapS(s) != unwrapS(i2))
+					return s; // Leave it alone--it's already false
+				else
+					return null; // Don't make up a value to make it false--prevent with the enabled fn
+			}, (s, i2, r) -> (!unwrapBool(r) && unwrapS(s) == unwrapS(i2)) ? "Equal expression cannot be negated" : null);
+		operators.with2("!=", Short.class, Short.class, Boolean.class, (i1, i2) -> unwrapS(i1) != unwrapS(i2), //
+			(s, i2, r) -> {
+				if (unwrapBool(r)) {// Trying to make the expression true
+					if (unwrapS(s) == unwrapS(i2))
+						return s; // Leave it alone--it's already true
+					else
+						return null; // Don't make up a value to make it true--prevent with the enabled fn
+				} else
+					return i2;
+			}, (s, i2, r) -> (unwrapBool(r) && unwrapS(s) != unwrapS(i2)) ? "Not-equal expression cannot be made true" : null);
+		operators.with2("==", Character.class, Character.class, Boolean.class, (i1, i2) -> unwrapC(i1) == unwrapC(i2), //
+			(s, i2, r) -> {
+				if (unwrapBool(r)) // Trying to make the expression true
+					return i2;
+				else if (unwrapC(s) != unwrapC(i2))
+					return s; // Leave it alone--it's already false
+				else
+					return null; // Don't make up a value to make it false--prevent with the enabled fn
+			}, (s, i2, r) -> (!unwrapBool(r) && unwrapC(s) == unwrapC(i2)) ? "Equal expression cannot be negated" : null);
+		operators.with2("!=", Character.class, Character.class, Boolean.class, (i1, i2) -> unwrapC(i1) != unwrapC(i2), //
+			(s, i2, r) -> {
+				if (unwrapBool(r)) {// Trying to make the expression true
+					if (unwrapC(s) == unwrapC(i2))
+						return s; // Leave it alone--it's already true
+					else
+						return null; // Don't make up a value to make it true--prevent with the enabled fn
+				} else
+					return i2;
+			}, (s, i2, r) -> (unwrapBool(r) && unwrapC(s) != unwrapC(i2)) ? "Not-equal expression cannot be made true" : null);
+
+		// Use the same-type equality methods above to implement cross-type primitive equal comparisons
+
+		operators.withCastOther("==", Integer.class, Byte.class, CastOp.byteInt);
+		operators.withCastOther("!=", Integer.class, Byte.class, CastOp.byteInt);
+		operators.withCastOther("==", Integer.class, Short.class, CastOp.shortInt);
+		operators.withCastOther("!=", Integer.class, Short.class, CastOp.shortInt);
+		operators.withCastOther("==", Integer.class, Character.class, CastOp.charInt);
+		operators.withCastOther("!=", Integer.class, Character.class, CastOp.charInt);
+		operators.withCastSource("==", Integer.class, Long.class, CastOp.intLong);
+		operators.withCastSource("!=", Integer.class, Long.class, CastOp.intLong);
+		operators.withCastSource("==", Integer.class, Float.class, CastOp.intFloat);
+		operators.withCastSource("!=", Integer.class, Float.class, CastOp.intFloat);
+		operators.withCastSource("==", Integer.class, Double.class, CastOp.intDouble);
+		operators.withCastSource("!=", Integer.class, Double.class, CastOp.intDouble);
+
+		operators.withCastOther("==", Long.class, Integer.class, CastOp.intLong);
+		operators.withCastOther("!=", Long.class, Integer.class, CastOp.intLong);
+		operators.withCastOther("==", Long.class, Byte.class, CastOp.byteLong);
+		operators.withCastOther("!=", Long.class, Byte.class, CastOp.byteLong);
+		operators.withCastOther("==", Long.class, Short.class, CastOp.shortLong);
+		operators.withCastOther("!=", Long.class, Short.class, CastOp.shortLong);
+		operators.withCastOther("==", Long.class, Character.class, CastOp.charLong);
+		operators.withCastOther("!=", Long.class, Character.class, CastOp.charLong);
+		operators.withCastSource("==", Long.class, Float.class, CastOp.longFloat);
+		operators.withCastSource("!=", Long.class, Float.class, CastOp.longFloat);
+		operators.withCastSource("==", Long.class, Double.class, CastOp.longDouble);
+		operators.withCastSource("!=", Long.class, Double.class, CastOp.longDouble);
+
+		operators.withCastOther("==", Short.class, Byte.class, CastOp.byteShort);
+		operators.withCastOther("!=", Short.class, Byte.class, CastOp.byteShort);
+		operators.withCastSource("==", Short.class, Integer.class, CastOp.shortInt);
+		operators.withCastSource("!=", Short.class, Integer.class, CastOp.shortInt);
+		operators.withCastSource("==", Short.class, Long.class, CastOp.shortLong);
+		operators.withCastSource("!=", Short.class, Long.class, CastOp.shortLong);
+		operators.withCastSource("==", Short.class, Character.class, CastOp.shortChar);
+		operators.withCastSource("!=", Short.class, Character.class, CastOp.shortChar);
+		operators.withCastSource("==", Short.class, Float.class, CastOp.shortFloat);
+		operators.withCastSource("!=", Short.class, Float.class, CastOp.shortFloat);
+		operators.withCastSource("==", Short.class, Double.class, CastOp.shortDouble);
+		operators.withCastSource("!=", Short.class, Double.class, CastOp.shortDouble);
+
+		operators.withCastSource("==", Byte.class, Integer.class, CastOp.byteInt);
+		operators.withCastSource("!=", Byte.class, Integer.class, CastOp.byteInt);
+		operators.withCastSource("==", Byte.class, Short.class, CastOp.byteShort);
+		operators.withCastSource("!=", Byte.class, Short.class, CastOp.byteShort);
+		operators.withCastSource("==", Byte.class, Long.class, CastOp.byteLong);
+		operators.withCastSource("!=", Byte.class, Long.class, CastOp.byteLong);
+		operators.withCastSource("==", Byte.class, Character.class, CastOp.byteChar);
+		operators.withCastSource("!=", Byte.class, Character.class, CastOp.byteChar);
+		operators.withCastSource("==", Byte.class, Float.class, CastOp.byteFloat);
+		operators.withCastSource("!=", Byte.class, Float.class, CastOp.byteFloat);
+		operators.withCastSource("==", Byte.class, Double.class, CastOp.byteDouble);
+		operators.withCastSource("!=", Byte.class, Double.class, CastOp.byteDouble);
+
+		operators.withCastOther("==", Float.class, Long.class, CastOp.longFloat);
+		operators.withCastOther("!=", Float.class, Long.class, CastOp.longFloat);
+		operators.withCastOther("==", Float.class, Integer.class, CastOp.intFloat);
+		operators.withCastOther("!=", Float.class, Integer.class, CastOp.intFloat);
+		operators.withCastOther("==", Float.class, Short.class, CastOp.shortFloat);
+		operators.withCastOther("!=", Float.class, Short.class, CastOp.shortFloat);
+		operators.withCastOther("==", Float.class, Byte.class, CastOp.byteFloat);
+		operators.withCastOther("!=", Float.class, Byte.class, CastOp.byteFloat);
+		operators.withCastOther("==", Float.class, Character.class, CastOp.charFloat);
+		operators.withCastOther("!=", Float.class, Character.class, CastOp.charFloat);
+		operators.withCastSource("==", Float.class, Double.class, CastOp.floatDouble);
+		operators.withCastSource("!=", Float.class, Double.class, CastOp.floatDouble);
+
+		operators.withCastOther("==", Double.class, Float.class, CastOp.floatDouble);
+		operators.withCastOther("!=", Double.class, Float.class, CastOp.floatDouble);
+		operators.withCastOther("==", Double.class, Long.class, CastOp.longDouble);
+		operators.withCastOther("!=", Double.class, Long.class, CastOp.longDouble);
+		operators.withCastOther("==", Double.class, Integer.class, CastOp.intDouble);
+		operators.withCastOther("!=", Double.class, Integer.class, CastOp.intDouble);
+		operators.withCastOther("==", Double.class, Short.class, CastOp.shortDouble);
+		operators.withCastOther("!=", Double.class, Short.class, CastOp.shortDouble);
+		operators.withCastOther("==", Double.class, Byte.class, CastOp.byteDouble);
+		operators.withCastOther("!=", Double.class, Byte.class, CastOp.byteDouble);
+		operators.withCastOther("==", Double.class, Character.class, CastOp.charDouble);
+		operators.withCastOther("!=", Double.class, Character.class, CastOp.charDouble);
+
+		operators.withCastOther("==", Character.class, Byte.class, CastOp.byteChar);
+		operators.withCastOther("!=", Character.class, Byte.class, CastOp.byteChar);
+		operators.withCastSource("==", Character.class, Long.class, CastOp.charLong);
+		operators.withCastSource("!=", Character.class, Long.class, CastOp.charLong);
+		operators.withCastSource("==", Character.class, Integer.class, CastOp.charInt);
+		operators.withCastSource("!=", Character.class, Integer.class, CastOp.charInt);
+		operators.withCastSource("==", Character.class, Short.class, CastOp.charShort);
+		operators.withCastSource("!=", Character.class, Short.class, CastOp.charShort);
+		operators.withCastSource("==", Character.class, Float.class, CastOp.charFloat);
+		operators.withCastSource("!=", Character.class, Float.class, CastOp.charFloat);
+		operators.withCastSource("==", Character.class, Double.class, CastOp.charDouble);
+		operators.withCastSource("!=", Character.class, Double.class, CastOp.charDouble);
+
+		// Now, non-primitive equality
+		operators.with2("==", Object.class, Object.class, Boolean.class, (o1, o2) -> o1 == o2, (s, o2, r) -> {
+			if (unwrapBool(r)) // Trying to make the expression true
+				return o2;
+			else
+				return s;
+		}, (s, o2, r) -> (!unwrapBool(r) && s != o2) ? "Equals expression cannot be made false" : null);
+		operators.with2("!=", Object.class, Object.class, Boolean.class, (o1, o2) -> o1 != o2, (s, o2, r) -> {
+			if (unwrapBool(r)) // Trying to make the expression true
+				return s;
+			else
+				return o2;
+		}, (s, o2, r) -> (unwrapBool(r) && s != o2) ? "Not-equals expression cannot be made true" : null);
+
+		// Boolean ops
+		operators.with("||", Boolean.class, Boolean.class, (b1, b2) -> unwrapBool(b1) || unwrapBool(b2), //
+			(s, b2, r) -> {
+				if (unwrapBool(r)) { // Trying to make the expression true
+					if (unwrapBool(b2))
+						return s; // Leave it alone--the expression will be true regardless
+					else
+						return true;
+				} else { // Trying to make the expression false
+					if (unwrapBool(b2))
+						return null; // Can't make it false--should be prevented by the enabled fn
+					else
+						return false;
+				}
+			}, (s, b2, r) -> (!unwrapBool(r) && unwrapBool(b2)) ? "Or expression cannot be made false" : null);
+		operators.with("|", Boolean.class, Boolean.class, (b1, b2) -> unwrapBool(b1) || unwrapBool(b2), //
+			(s, b2, r) -> {
+				if (unwrapBool(r)) { // Trying to make the expression true
+					if (unwrapBool(b2))
+						return s; // Leave it alone--the expression will be true regardless
+					else
+						return true;
+				} else { // Trying to make the expression false
+					if (unwrapBool(b2))
+						return null; // Can't make it false--should be prevented by the enabled fn
+					else
+						return false;
+				}
+			}, (s, b2, r) -> (!unwrapBool(r) && unwrapBool(b2)) ? "Or expression cannot be made false" : null);
+		operators.with("&&", Boolean.class, Boolean.class, (b1, b2) -> unwrapBool(b1) && unwrapBool(b2), //
+			(s, b2, r) -> {
+				if (unwrapBool(r)) { // Trying to make the expression true
+					if (unwrapBool(b2))
+						return true;
+					else
+						return null; // Can't make it true--should be prevented by the enabled fn
+				} else { // Trying to make the expression false
+					if (unwrapBool(b2))
+						return false;
+					else
+						return s; // Leave it alone--the expression will be false regardless
+				}
+			}, (s, b2, r) -> (!unwrapBool(b2) && unwrapBool(r)) ? "And expression cannot be made true" : null);
+		operators.with("&", Boolean.class, Boolean.class, (b1, b2) -> unwrapBool(b1) && unwrapBool(b2), //
+			(s, b2, r) -> {
+				if (unwrapBool(r)) { // Trying to make the expression true
+					if (unwrapBool(b2))
+						return true;
+					else
+						return null; // Can't make it true--should be prevented by the enabled fn
+				} else { // Trying to make the expression false
+					if (unwrapBool(b2))
+						return false;
+					else
+						return s; // Leave it alone--the expression will be false regardless
+				}
+			}, (s, b2, r) -> (!unwrapBool(b2) && unwrapBool(r)) ? "And expression cannot be made true" : null);
+		operators.with("^", Boolean.class, Boolean.class, (b1, b2) -> unwrapBool(b1) ^ unwrapBool(b2), //
+			(s, b2, r) -> {
+				if (unwrapBool(r)) { // Trying to make the expression true
+					return !unwrapBool(b2);
+				} else { // Trying to make the expression false
+					return unwrapBool(b2);
+				}
+			}, null);
+
+		// Arithmetic ops
+		operators.withIntArithmeticOp("+", (s1, s2) -> unwrapI(s1) + unwrapI(s2), (s, s2, v) -> unwrapI(v) - unwrapI(s2), null);
+		operators.withLongArithmeticOp("+", (s1, s2) -> unwrapL(s1) + unwrapL(s2), (s, s2, v) -> unwrapL(v) - unwrapL(s2), null);
+		operators.withFloatArithmeticOp("+", (s1, s2) -> unwrapF(s1) + unwrapF(s2), (s, s2, v) -> unwrapF(v) - unwrapF(s2), null);
+		operators.withDoubleArithmeticOp("+", (s1, s2) -> unwrapD(s1) + unwrapD(s2), (s, s2, v) -> unwrapD(v) - unwrapD(s2), null);
+
+		operators.withIntArithmeticOp("-", (s1, s2) -> unwrapI(s1) - unwrapI(s2), (s, s2, v) -> unwrapI(v) + unwrapI(s2), null);
+		operators.withLongArithmeticOp("-", (s1, s2) -> unwrapL(s1) - unwrapL(s2), (s, s2, v) -> unwrapL(v) + unwrapL(s2), null);
+		operators.withFloatArithmeticOp("-", (s1, s2) -> unwrapF(s1) - unwrapF(s2), (s, s2, v) -> unwrapF(v) + unwrapF(s2), null);
+		operators.withDoubleArithmeticOp("-", (s1, s2) -> unwrapD(s1) - unwrapD(s2), (s, s2, v) -> unwrapD(v) + unwrapD(s2), null);
+
+		operators.withIntArithmeticOp("*", (s1, s2) -> unwrapI(s1) * unwrapI(s2), (s, s2, v) -> unwrapI(v) / unwrapI(s2), null);
+		operators.withLongArithmeticOp("*", (s1, s2) -> unwrapL(s1) * unwrapL(s2), (s, s2, v) -> unwrapL(v) / unwrapL(s2), null);
+		operators.withFloatArithmeticOp("*", (s1, s2) -> unwrapF(s1) * unwrapF(s2), (s, s2, v) -> unwrapF(v) / unwrapF(s2), null);
+		operators.withDoubleArithmeticOp("*", (s1, s2) -> unwrapD(s1) * unwrapD(s2), (s, s2, v) -> unwrapD(v) / unwrapD(s2), null);
+
+		operators.withIntArithmeticOp("/", (s1, s2) -> unwrapI(s1) / unwrapI(s2), (s, s2, v) -> unwrapI(v) * unwrapI(s2), null);
+		operators.withLongArithmeticOp("/", (s1, s2) -> unwrapL(s1) / unwrapL(s2), (s, s2, v) -> unwrapL(v) * unwrapL(s2), null);
+		operators.withFloatArithmeticOp("/", (s1, s2) -> unwrapF(s1) / unwrapF(s2), (s, s2, v) -> unwrapF(v) * unwrapF(s2), null);
+		operators.withDoubleArithmeticOp("/", (s1, s2) -> unwrapD(s1) / unwrapD(s2), (s, s2, v) -> unwrapD(v) * unwrapD(s2), null);
+
+		operators.withIntArithmeticOp("%", (s1, s2) -> unwrapI(s1) % unwrapI(s2), (s, s2, v) -> unwrapI(v), //
+			(s, s2, v) -> Math.abs(unwrapI(v)) >= Math.abs(unwrapI(s2)) ? "Cannot set a modulus to less than the divisor" : null);
+		operators.withLongArithmeticOp("%", (s1, s2) -> unwrapL(s1) % unwrapL(s2), (s, s2, v) -> unwrapL(v) * unwrapL(s2), //
+			(s, s2, v) -> Math.abs(unwrapL(v)) >= Math.abs(unwrapL(s2)) ? "Cannot set a modulus to less than the divisor" : null);
+		operators.withFloatArithmeticOp("%", (s1, s2) -> unwrapF(s1) % unwrapF(s2), (s, s2, v) -> unwrapF(v) * unwrapF(s2), //
+			(s, s2, v) -> Math.abs(unwrapF(v)) >= Math.abs(unwrapF(s2)) ? "Cannot set a modulus to less than the divisor" : null);
+		operators.withDoubleArithmeticOp("%", (s1, s2) -> unwrapD(s1) % unwrapD(s2), (s, s2, v) -> unwrapD(v) * unwrapD(s2), //
+			(s, s2, v) -> Math.abs(unwrapD(v)) >= Math.abs(unwrapD(s2)) ? "Cannot set a modulus to less than the divisor" : null);
+
+		// Comparison ops
+		operators.withIntComparisonOp("<", (s1, s2) -> unwrapI(s1) < unwrapI(s2));
+		operators.withIntComparisonOp("<=", (s1, s2) -> unwrapI(s1) <= unwrapI(s2));
+		operators.withIntComparisonOp(">", (s1, s2) -> unwrapI(s1) > unwrapI(s2));
+		operators.withIntComparisonOp(">=", (s1, s2) -> unwrapI(s1) >= unwrapI(s2));
+
+		operators.withLongComparisonOp("<", (s1, s2) -> unwrapL(s1) < unwrapL(s2));
+		operators.withLongComparisonOp("<=", (s1, s2) -> unwrapL(s1) <= unwrapL(s2));
+		operators.withLongComparisonOp(">", (s1, s2) -> unwrapL(s1) > unwrapL(s2));
+		operators.withLongComparisonOp(">=", (s1, s2) -> unwrapL(s1) >= unwrapL(s2));
+
+		operators.withFloatComparisonOp("<", (s1, s2) -> unwrapF(s1) < unwrapF(s2));
+		operators.withFloatComparisonOp("<=", (s1, s2) -> unwrapF(s1) <= unwrapF(s2));
+		operators.withFloatComparisonOp(">", (s1, s2) -> unwrapF(s1) > unwrapF(s2));
+		operators.withFloatComparisonOp(">=", (s1, s2) -> unwrapF(s1) >= unwrapF(s2));
+
+		operators.withDoubleComparisonOp("<", (s1, s2) -> unwrapD(s1) < unwrapD(s2));
+		operators.withDoubleComparisonOp("<=", (s1, s2) -> unwrapD(s1) <= unwrapD(s2));
+		operators.withDoubleComparisonOp(">", (s1, s2) -> unwrapD(s1) > unwrapD(s2));
+		operators.withDoubleComparisonOp(">=", (s1, s2) -> unwrapD(s1) >= unwrapD(s2));
+
+		// Bit shifting
+		operators.withIntArithmeticOp("<<", (s1, s2) -> unwrapI(s1) << unwrapI(s2), (s, s2, r) -> unwrapI(r) >>> unwrapI(s2), null);
+		operators.withIntArithmeticOp(">>", (s1, s2) -> unwrapI(s1) >> unwrapI(s2), (s, s2, r) -> unwrapI(r) << unwrapI(s2), null);
+		operators.withIntArithmeticOp(">>", (s1, s2) -> unwrapI(s1) >>> unwrapI(s2), (s, s2, r) -> unwrapI(r) << unwrapI(s2), null);
+		operators.withLongArithmeticOp("<<", (s1, s2) -> unwrapL(s1) << unwrapL(s2), (s, s2, r) -> unwrapL(r) >>> unwrapL(s2), null);
+		operators.withLongArithmeticOp(">>", (s1, s2) -> unwrapL(s1) >> unwrapL(s2), (s, s2, r) -> unwrapL(r) << unwrapL(s2), null);
+		operators.withLongArithmeticOp(">>", (s1, s2) -> unwrapL(s1) >>> unwrapL(s2), (s, s2, r) -> unwrapL(r) << unwrapL(s2), null);
+
+		// Bitwise operators
+		operators.withIntArithmeticOp("|", (s1, s2) -> unwrapI(s1) | unwrapI(s2), (s, s2, r) -> unwrapI(r), (s, s2, r) -> {
+			if ((unwrapI(r) & ~unwrapI(s2)) != 0)
+				return "Invalid bitwise operator reverse";
+			return null;
+		});
+
+		// String append
+		operators.with2("+", String.class, Object.class, String.class, (s1, s2) -> s1 + s2, null,
+			(s, s2, r) -> "Cannot reverse string append");
+		operators.with2("+", Object.class, String.class, String.class, (s1, s2) -> s1 + s2, null,
+			(s, s2, r) -> "Cannot reverse string append");
+		// Unfortunately I don't support general string reversal here, but at least for some simple cases we can
+		operators.with2("+", String.class, String.class, String.class, (s1, s2) -> s1 + s2, (s, s2, r) -> {
+			return r.substring(0, r.length() - s2.length());
+		}, (s, s2, r) -> {
+			if (r == null || !r.endsWith(s2))
+				return "String does not end with \"" + s2 + "\"";
+			return null;
+		});
+		operators.with2("+", Boolean.class, String.class, String.class, (s1, s2) -> s1 + s2, (s, s2, r) -> {
+			return Boolean.valueOf(r.substring(0, r.length() - s2.length()));
+		}, (s, s2, r) -> {
+			if (r == null || !r.endsWith(s2))
+				return "String does not end with \"" + s2 + "\"";
+			String begin = r.substring(0, r.length() - s2.length());
+			switch (begin) {
+			case "true":
+			case "false":
+				return null;
+			default:
+				return "'true' or 'false' expected";
+			}
+		});
+		String MIN_INT_STR = String.valueOf(Integer.MIN_VALUE).substring(1);
+		String MAX_INT_STR = String.valueOf(Integer.MAX_VALUE);
+		operators.with2("+", Integer.class, String.class, String.class, (s1, s2) -> s1 + s2, (s, s2, r) -> {
+			return Integer.valueOf(r.substring(0, r.length() - s2.length()));
+		}, (s, s2, r) -> {
+			if (r == null || !r.endsWith(s2))
+				return "String does not end with \"" + s2 + "\"";
+			String begin = r.substring(0, r.length() - s2.length());
+			int i = 0;
+			boolean neg = i < begin.length() && begin.charAt(i) == '-';
+			if (neg)
+				i++;
+			for (; i < begin.length(); i++)
+				if (begin.charAt(i) < '0' || begin.charAt(i) > '9')
+					return "integer expected";
+			if (!neg && StringUtils.compareNumberTolerant(begin, MAX_INT_STR, false, true) > 0)
+				return "integer is too large for int type";
+			else if (neg
+				&& StringUtils.compareNumberTolerant(StringUtils.cheapSubSequence(begin, 1, begin.length()), MIN_INT_STR, false, true) > 0)
+				return "negative integer is too large for int type";
+			return null;
+		});
+		String MIN_LONG_STR = String.valueOf(Long.MIN_VALUE).substring(1);
+		String MAX_LONG_STR = String.valueOf(Long.MAX_VALUE);
+		operators.with2("+", Long.class, String.class, String.class, (s1, s2) -> s1 + s2, (s, s2, r) -> {
+			return Long.valueOf(r.substring(0, r.length() - s2.length()));
+		}, (s, s2, r) -> {
+			if (r == null || !r.endsWith(s2))
+				return "String does not end with \"" + s2 + "\"";
+			String begin = r.substring(0, r.length() - s2.length());
+			int i = 0;
+			boolean neg = i < begin.length() && begin.charAt(i) == '-';
+			if (neg)
+				i++;
+			for (; i < begin.length(); i++)
+				if (begin.charAt(i) < '0' || begin.charAt(i) > '9')
+					return "integer expected";
+			if (!neg && StringUtils.compareNumberTolerant(begin, MAX_LONG_STR, false, true) > 0)
+				return "integer is too large for long type";
+			else if (neg
+				&& StringUtils.compareNumberTolerant(StringUtils.cheapSubSequence(begin, 1, begin.length()), MIN_LONG_STR, false, true) > 0)
+				return "negative integer is too large for long type";
+			return null;
+		});
+		operators.with2("+", Double.class, String.class, String.class, (s1, s2) -> s1 + s2, (s, s2, r) -> {
+			return Double.valueOf(r.substring(0, r.length() - s2.length()));
+		}, (s, s2, r) -> {
+			if (r == null || !r.endsWith(s2))
+				return "String does not end with \"" + s2 + "\"";
+			String begin = r.substring(0, r.length() - s2.length());
+			// Can't think of a better way to do this than to just parse it twice
+			try {
+				Double.parseDouble(begin);
+				return null;
+			} catch (NumberFormatException e) {
+				return e.getMessage();
+			}
+		});
+		operators.with2("+", Float.class, String.class, String.class, (s1, s2) -> s1 + s2, (s, s2, r) -> {
+			return Float.valueOf(r.substring(0, r.length() - s2.length()));
+		}, (s, s2, r) -> {
+			if (r == null || !r.endsWith(s2))
+				return "String does not end with \"" + s2 + "\"";
+			String begin = r.substring(0, r.length() - s2.length());
+			// Can't think of a better way to do this than to just parse it twice
+			try {
+				Float.parseFloat(begin);
+				return null;
+			} catch (NumberFormatException e) {
+				return e.getMessage();
+			}
+		});
+		return operators;
+	}
+
+	public static final BinaryOperatorSet STANDARD_JAVA = standardJava(build()).build();
+
 	private final Map<String, ClassMap<ClassMap<BinaryOp<?, ?, ?>>>> theOperators;
 
 	private BinaryOperatorSet(Map<String, ClassMap<ClassMap<BinaryOp<?, ?, ?>>>> operators) {
@@ -333,6 +820,19 @@ public class BinaryOperatorSet {
 		return ops2 == null ? null : (BinaryOp<S, T, ?>) ops2.get(otherType, TypeMatch.SUPER_TYPE);
 	}
 
+	public Builder copy() {
+		Builder copy = build();
+		for (Map.Entry<String, ClassMap<ClassMap<BinaryOp<?, ?, ?>>>> op : theOperators.entrySet()) {
+			for (BiTuple<Class<?>, ClassMap<BinaryOp<?, ?, ?>>> op2 : op.getValue().getAllEntries()) {
+				for (BiTuple<Class<?>, BinaryOp<?, ?, ?>> op3 : op2.getValue2().getAllEntries()) {
+					copy.with(op.getKey(), (Class<Object>) op2.getValue1(), (Class<Object>) op3.getValue1(),
+						(BinaryOp<Object, Object, ?>) op3.getValue2());
+				}
+			}
+		}
+		return copy;
+	}
+
 	public static Builder build() {
 		return new Builder();
 	}
@@ -344,12 +844,18 @@ public class BinaryOperatorSet {
 			theOperators = new LinkedHashMap<>();
 		}
 
+		public <S, T> Builder with(String operator, Class<S> source, Class<T> other, BinaryOp<S, T, ?> op) {
+			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>())//
+			.computeIfAbsent(source, () -> new ClassMap<>())//
+			.with(other, op);
+			return this;
+		}
+
 		public <S, T> Builder with(String operator, Class<S> source, Class<T> other,
 			BiFunction<? super S, ? super T, ? extends S> op, TriFunction<? super S, ? super T, ? super S, ? extends S> reverse,
 			TriFunction<? super S, ? super T, ? super S, String> reverseEnabled) {
-			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>())//
-			.computeIfAbsent(source, () -> new ClassMap<>())//
-			.with(other, BinaryOp.of(source, op, reverse, reverseEnabled));
+			with(operator, source, other, //
+				BinaryOp.of(source, op, reverse, reverseEnabled));
 			return this;
 		}
 
@@ -390,489 +896,6 @@ public class BinaryOperatorSet {
 			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>())//
 			.computeIfAbsent(source, () -> new ClassMap<>())//
 			.with(other, castOp);
-			return this;
-		}
-
-		public Builder withStandardJavaOps() {
-			// Do equality first, which is special
-			// First, same-type primitive equality
-			with("==", Boolean.class, Boolean.class, (b1, b2) -> unwrapBool(b1) == unwrapBool(b2),
-				(s, b2, r) -> unwrapBool(b2) ? unwrapBool(r) : !unwrapBool(r),
-					null);
-			with("!=", Boolean.class, Boolean.class, (b1, b2) -> unwrapBool(b1) != unwrapBool(b2),
-				(s, b2, r) -> unwrapBool(b2) ? !unwrapBool(r) : unwrapBool(r),
-					null);
-
-			with2("==", Integer.class, Integer.class, Boolean.class, (i1, i2) -> unwrapI(i1) == unwrapI(i2), //
-				(s, i2, r) -> {
-					if (unwrapBool(r)) // Trying to make the expression true
-						return i2;
-					else if (unwrapI(s) != unwrapI(i2))
-						return s; // Leave it alone--it's already false
-					else
-						return null; // Don't make up a value to make it false--prevent with the enabled fn
-				}, (s, i2, r) -> (!unwrapBool(r) && unwrapI(s) == unwrapI(i2)) ? "Equal expression cannot be negated" : null);
-			with2("!=", Integer.class, Integer.class, Boolean.class, (i1, i2) -> unwrapI(i1) != unwrapI(i2), //
-				(s, i2, r) -> {
-					if (unwrapBool(r)) {// Trying to make the expression true
-						if (unwrapI(s) == unwrapI(i2))
-							return s; // Leave it alone--it's already true
-						else
-							return null; // Don't make up a value to make it true--prevent with the enabled fn
-					} else
-						return i2;
-				}, (s, i2, r) -> (unwrapBool(r) && unwrapI(s) != unwrapI(i2)) ? "Not-equal expression cannot be made true" : null);
-			with2("==", Long.class, Long.class, Boolean.class, (i1, i2) -> unwrapL(i1) == unwrapL(i2), //
-				(s, i2, r) -> {
-					if (unwrapBool(r)) // Trying to make the expression true
-						return i2;
-					else if (unwrapL(s) != unwrapL(i2))
-						return s; // Leave it alone--it's already false
-					else
-						return null; // Don't make up a value to make it false--prevent with the enabled fn
-				}, (s, i2, r) -> (!unwrapBool(r) && unwrapL(s) == unwrapL(i2)) ? "Equal expression cannot be negated" : null);
-			with2("!=", Long.class, Long.class, Boolean.class, (i1, i2) -> unwrapL(i1) != unwrapL(i2), //
-				(s, i2, r) -> {
-					if (unwrapBool(r)) {// Trying to make the expression true
-						if (unwrapL(s) == unwrapL(i2))
-							return s; // Leave it alone--it's already true
-						else
-							return null; // Don't make up a value to make it true--prevent with the enabled fn
-					} else
-						return i2;
-				}, (s, i2, r) -> (unwrapBool(r) && unwrapL(s) != unwrapL(i2)) ? "Not-equal expression cannot be made true" : null);
-			with2("==", Double.class, Double.class, Boolean.class, (i1, i2) -> unwrapD(i1) == unwrapD(i2), //
-				(s, i2, r) -> {
-					if (unwrapBool(r)) // Trying to make the expression true
-						return i2;
-					else if (unwrapD(s) != unwrapD(i2))
-						return s; // Leave it alone--it's already false
-					else
-						return null; // Don't make up a value to make it false--prevent with the enabled fn
-				}, (s, i2, r) -> (!unwrapBool(r) && unwrapD(s) == unwrapD(i2)) ? "Equal expression cannot be negated" : null);
-			with2("!=", Double.class, Double.class, Boolean.class, (i1, i2) -> unwrapD(i1) != unwrapD(i2), //
-				(s, i2, r) -> {
-					if (unwrapBool(r)) {// Trying to make the expression true
-						if (unwrapD(s) == unwrapD(i2))
-							return s; // Leave it alone--it's already true
-						else
-							return null; // Don't make up a value to make it true--prevent with the enabled fn
-					} else
-						return i2;
-				}, (s, i2, r) -> (unwrapBool(r) && unwrapD(s) != unwrapD(i2)) ? "Not-equal expression cannot be made true" : null);
-			with2("==", Float.class, Float.class, Boolean.class, (i1, i2) -> unwrapF(i1) == unwrapF(i2), //
-				(s, i2, r) -> {
-					if (unwrapBool(r)) // Trying to make the expression true
-						return i2;
-					else if (unwrapF(s) != unwrapF(i2))
-						return s; // Leave it alone--it's already false
-					else
-						return null; // Don't make up a value to make it false--prevent with the enabled fn
-				}, (s, i2, r) -> (!unwrapBool(r) && unwrapF(s) == unwrapF(i2)) ? "Equal expression cannot be negated" : null);
-			with2("!=", Float.class, Float.class, Boolean.class, (i1, i2) -> unwrapF(i1) != unwrapF(i2), //
-				(s, i2, r) -> {
-					if (unwrapBool(r)) {// Trying to make the expression true
-						if (unwrapF(s) == unwrapF(i2))
-							return s; // Leave it alone--it's already true
-						else
-							return null; // Don't make up a value to make it true--prevent with the enabled fn
-					} else
-						return i2;
-				}, (s, i2, r) -> (unwrapBool(r) && unwrapF(s) != unwrapF(i2)) ? "Not-equal expression cannot be made true" : null);
-			with2("==", Byte.class, Byte.class, Boolean.class, (i1, i2) -> unwrapByte(i1) == unwrapByte(i2), //
-				(s, i2, r) -> {
-					if (unwrapBool(r)) // Trying to make the expression true
-						return i2;
-					else if (unwrapByte(s) != unwrapByte(i2))
-						return s; // Leave it alone--it's already false
-					else
-						return null; // Don't make up a value to make it false--prevent with the enabled fn
-				}, (s, i2, r) -> (!unwrapBool(r) && unwrapByte(s) == unwrapByte(i2)) ? "Equal expression cannot be negated" : null);
-			with2("!=", Byte.class, Byte.class, Boolean.class, (i1, i2) -> unwrapByte(i1) != unwrapByte(i2), //
-				(s, i2, r) -> {
-					if (unwrapBool(r)) {// Trying to make the expression true
-						if (unwrapByte(s) == unwrapByte(i2))
-							return s; // Leave it alone--it's already true
-						else
-							return null; // Don't make up a value to make it true--prevent with the enabled fn
-					} else
-						return i2;
-				}, (s, i2, r) -> (unwrapBool(r) && unwrapByte(s) != unwrapByte(i2)) ? "Not-equal expression cannot be made true" : null);
-			with2("==", Short.class, Short.class, Boolean.class, (i1, i2) -> unwrapS(i1) == unwrapS(i2), //
-				(s, i2, r) -> {
-					if (unwrapBool(r)) // Trying to make the expression true
-						return i2;
-					else if (unwrapS(s) != unwrapS(i2))
-						return s; // Leave it alone--it's already false
-					else
-						return null; // Don't make up a value to make it false--prevent with the enabled fn
-				}, (s, i2, r) -> (!unwrapBool(r) && unwrapS(s) == unwrapS(i2)) ? "Equal expression cannot be negated" : null);
-			with2("!=", Short.class, Short.class, Boolean.class, (i1, i2) -> unwrapS(i1) != unwrapS(i2), //
-				(s, i2, r) -> {
-					if (unwrapBool(r)) {// Trying to make the expression true
-						if (unwrapS(s) == unwrapS(i2))
-							return s; // Leave it alone--it's already true
-						else
-							return null; // Don't make up a value to make it true--prevent with the enabled fn
-					} else
-						return i2;
-				}, (s, i2, r) -> (unwrapBool(r) && unwrapS(s) != unwrapS(i2)) ? "Not-equal expression cannot be made true" : null);
-			with2("==", Character.class, Character.class, Boolean.class, (i1, i2) -> unwrapC(i1) == unwrapC(i2), //
-				(s, i2, r) -> {
-					if (unwrapBool(r)) // Trying to make the expression true
-						return i2;
-					else if (unwrapC(s) != unwrapC(i2))
-						return s; // Leave it alone--it's already false
-					else
-						return null; // Don't make up a value to make it false--prevent with the enabled fn
-				}, (s, i2, r) -> (!unwrapBool(r) && unwrapC(s) == unwrapC(i2)) ? "Equal expression cannot be negated" : null);
-			with2("!=", Character.class, Character.class, Boolean.class, (i1, i2) -> unwrapC(i1) != unwrapC(i2), //
-				(s, i2, r) -> {
-					if (unwrapBool(r)) {// Trying to make the expression true
-						if (unwrapC(s) == unwrapC(i2))
-							return s; // Leave it alone--it's already true
-						else
-							return null; // Don't make up a value to make it true--prevent with the enabled fn
-					} else
-						return i2;
-				}, (s, i2, r) -> (unwrapBool(r) && unwrapC(s) != unwrapC(i2)) ? "Not-equal expression cannot be made true" : null);
-
-			// Use the same-type equality methods above to implement cross-type primitive equal comparisons
-
-			withCastOther("==", Integer.class, Byte.class, CastOp.byteInt);
-			withCastOther("!=", Integer.class, Byte.class, CastOp.byteInt);
-			withCastOther("==", Integer.class, Short.class, CastOp.shortInt);
-			withCastOther("!=", Integer.class, Short.class, CastOp.shortInt);
-			withCastOther("==", Integer.class, Character.class, CastOp.charInt);
-			withCastOther("!=", Integer.class, Character.class, CastOp.charInt);
-			withCastSource("==", Integer.class, Long.class, CastOp.intLong);
-			withCastSource("!=", Integer.class, Long.class, CastOp.intLong);
-			withCastSource("==", Integer.class, Float.class, CastOp.intFloat);
-			withCastSource("!=", Integer.class, Float.class, CastOp.intFloat);
-			withCastSource("==", Integer.class, Double.class, CastOp.intDouble);
-			withCastSource("!=", Integer.class, Double.class, CastOp.intDouble);
-
-			withCastOther("==", Long.class, Integer.class, CastOp.intLong);
-			withCastOther("!=", Long.class, Integer.class, CastOp.intLong);
-			withCastOther("==", Long.class, Byte.class, CastOp.byteLong);
-			withCastOther("!=", Long.class, Byte.class, CastOp.byteLong);
-			withCastOther("==", Long.class, Short.class, CastOp.shortLong);
-			withCastOther("!=", Long.class, Short.class, CastOp.shortLong);
-			withCastOther("==", Long.class, Character.class, CastOp.charLong);
-			withCastOther("!=", Long.class, Character.class, CastOp.charLong);
-			withCastSource("==", Long.class, Float.class, CastOp.longFloat);
-			withCastSource("!=", Long.class, Float.class, CastOp.longFloat);
-			withCastSource("==", Long.class, Double.class, CastOp.longDouble);
-			withCastSource("!=", Long.class, Double.class, CastOp.longDouble);
-
-			withCastOther("==", Short.class, Byte.class, CastOp.byteShort);
-			withCastOther("!=", Short.class, Byte.class, CastOp.byteShort);
-			withCastSource("==", Short.class, Integer.class, CastOp.shortInt);
-			withCastSource("!=", Short.class, Integer.class, CastOp.shortInt);
-			withCastSource("==", Short.class, Long.class, CastOp.shortLong);
-			withCastSource("!=", Short.class, Long.class, CastOp.shortLong);
-			withCastSource("==", Short.class, Character.class, CastOp.shortChar);
-			withCastSource("!=", Short.class, Character.class, CastOp.shortChar);
-			withCastSource("==", Short.class, Float.class, CastOp.shortFloat);
-			withCastSource("!=", Short.class, Float.class, CastOp.shortFloat);
-			withCastSource("==", Short.class, Double.class, CastOp.shortDouble);
-			withCastSource("!=", Short.class, Double.class, CastOp.shortDouble);
-
-			withCastSource("==", Byte.class, Integer.class, CastOp.byteInt);
-			withCastSource("!=", Byte.class, Integer.class, CastOp.byteInt);
-			withCastSource("==", Byte.class, Short.class, CastOp.byteShort);
-			withCastSource("!=", Byte.class, Short.class, CastOp.byteShort);
-			withCastSource("==", Byte.class, Long.class, CastOp.byteLong);
-			withCastSource("!=", Byte.class, Long.class, CastOp.byteLong);
-			withCastSource("==", Byte.class, Character.class, CastOp.byteChar);
-			withCastSource("!=", Byte.class, Character.class, CastOp.byteChar);
-			withCastSource("==", Byte.class, Float.class, CastOp.byteFloat);
-			withCastSource("!=", Byte.class, Float.class, CastOp.byteFloat);
-			withCastSource("==", Byte.class, Double.class, CastOp.byteDouble);
-			withCastSource("!=", Byte.class, Double.class, CastOp.byteDouble);
-
-			withCastOther("==", Float.class, Long.class, CastOp.longFloat);
-			withCastOther("!=", Float.class, Long.class, CastOp.longFloat);
-			withCastOther("==", Float.class, Integer.class, CastOp.intFloat);
-			withCastOther("!=", Float.class, Integer.class, CastOp.intFloat);
-			withCastOther("==", Float.class, Short.class, CastOp.shortFloat);
-			withCastOther("!=", Float.class, Short.class, CastOp.shortFloat);
-			withCastOther("==", Float.class, Byte.class, CastOp.byteFloat);
-			withCastOther("!=", Float.class, Byte.class, CastOp.byteFloat);
-			withCastOther("==", Float.class, Character.class, CastOp.charFloat);
-			withCastOther("!=", Float.class, Character.class, CastOp.charFloat);
-			withCastSource("==", Float.class, Double.class, CastOp.floatDouble);
-			withCastSource("!=", Float.class, Double.class, CastOp.floatDouble);
-
-			withCastOther("==", Double.class, Float.class, CastOp.floatDouble);
-			withCastOther("!=", Double.class, Float.class, CastOp.floatDouble);
-			withCastOther("==", Double.class, Long.class, CastOp.longDouble);
-			withCastOther("!=", Double.class, Long.class, CastOp.longDouble);
-			withCastOther("==", Double.class, Integer.class, CastOp.intDouble);
-			withCastOther("!=", Double.class, Integer.class, CastOp.intDouble);
-			withCastOther("==", Double.class, Short.class, CastOp.shortDouble);
-			withCastOther("!=", Double.class, Short.class, CastOp.shortDouble);
-			withCastOther("==", Double.class, Byte.class, CastOp.byteDouble);
-			withCastOther("!=", Double.class, Byte.class, CastOp.byteDouble);
-			withCastOther("==", Double.class, Character.class, CastOp.charDouble);
-			withCastOther("!=", Double.class, Character.class, CastOp.charDouble);
-
-			withCastOther("==", Character.class, Byte.class, CastOp.byteChar);
-			withCastOther("!=", Character.class, Byte.class, CastOp.byteChar);
-			withCastSource("==", Character.class, Long.class, CastOp.charLong);
-			withCastSource("!=", Character.class, Long.class, CastOp.charLong);
-			withCastSource("==", Character.class, Integer.class, CastOp.charInt);
-			withCastSource("!=", Character.class, Integer.class, CastOp.charInt);
-			withCastSource("==", Character.class, Short.class, CastOp.charShort);
-			withCastSource("!=", Character.class, Short.class, CastOp.charShort);
-			withCastSource("==", Character.class, Float.class, CastOp.charFloat);
-			withCastSource("!=", Character.class, Float.class, CastOp.charFloat);
-			withCastSource("==", Character.class, Double.class, CastOp.charDouble);
-			withCastSource("!=", Character.class, Double.class, CastOp.charDouble);
-
-			// Now, non-primitive equality
-			with2("==", Object.class, Object.class, Boolean.class, (o1, o2) -> o1 == o2, (s, o2, r) -> {
-				if (unwrapBool(r)) // Trying to make the expression true
-					return o2;
-				else
-					return s;
-			}, (s, o2, r) -> (!unwrapBool(r) && s != o2) ? "Equals expression cannot be made false" : null);
-			with2("!=", Object.class, Object.class, Boolean.class, (o1, o2) -> o1 != o2, (s, o2, r) -> {
-				if (unwrapBool(r)) // Trying to make the expression true
-					return s;
-				else
-					return o2;
-			}, (s, o2, r) -> (unwrapBool(r) && s != o2) ? "Not-equals expression cannot be made true" : null);
-
-			// Boolean ops
-			with("||", Boolean.class, Boolean.class, (b1, b2) -> unwrapBool(b1) || unwrapBool(b2), //
-				(s, b2, r) -> {
-					if (unwrapBool(r)) { // Trying to make the expression true
-						if (unwrapBool(b2))
-							return s; // Leave it alone--the expression will be true regardless
-						else
-							return true;
-					} else { // Trying to make the expression false
-						if (unwrapBool(b2))
-							return null; // Can't make it false--should be prevented by the enabled fn
-						else
-							return false;
-					}
-				}, (s, b2, r) -> (!unwrapBool(r) && unwrapBool(b2)) ? "Or expression cannot be made false" : null);
-			with("|", Boolean.class, Boolean.class, (b1, b2) -> unwrapBool(b1) || unwrapBool(b2), //
-				(s, b2, r) -> {
-					if (unwrapBool(r)) { // Trying to make the expression true
-						if (unwrapBool(b2))
-							return s; // Leave it alone--the expression will be true regardless
-						else
-							return true;
-					} else { // Trying to make the expression false
-						if (unwrapBool(b2))
-							return null; // Can't make it false--should be prevented by the enabled fn
-						else
-							return false;
-					}
-				}, (s, b2, r) -> (!unwrapBool(r) && unwrapBool(b2)) ? "Or expression cannot be made false" : null);
-			with("&&", Boolean.class, Boolean.class, (b1, b2) -> unwrapBool(b1) && unwrapBool(b2), //
-				(s, b2, r) -> {
-					if (unwrapBool(r)) { // Trying to make the expression true
-						if (unwrapBool(b2))
-							return true;
-						else
-							return null; // Can't make it true--should be prevented by the enabled fn
-					} else { // Trying to make the expression false
-						if (unwrapBool(b2))
-							return false;
-						else
-							return s; // Leave it alone--the expression will be false regardless
-					}
-				}, (s, b2, r) -> (!unwrapBool(b2) && unwrapBool(r)) ? "And expression cannot be made true" : null);
-			with("&", Boolean.class, Boolean.class, (b1, b2) -> unwrapBool(b1) && unwrapBool(b2), //
-				(s, b2, r) -> {
-					if (unwrapBool(r)) { // Trying to make the expression true
-						if (unwrapBool(b2))
-							return true;
-						else
-							return null; // Can't make it true--should be prevented by the enabled fn
-					} else { // Trying to make the expression false
-						if (unwrapBool(b2))
-							return false;
-						else
-							return s; // Leave it alone--the expression will be false regardless
-					}
-				}, (s, b2, r) -> (!unwrapBool(b2) && unwrapBool(r)) ? "And expression cannot be made true" : null);
-			with("^", Boolean.class, Boolean.class, (b1, b2) -> unwrapBool(b1) ^ unwrapBool(b2), //
-				(s, b2, r) -> {
-					if (unwrapBool(r)) { // Trying to make the expression true
-						return !unwrapBool(b2);
-					} else { // Trying to make the expression false
-						return unwrapBool(b2);
-					}
-				}, null);
-
-			// Arithmetic ops
-			withIntArithmeticOp("+", (s1, s2) -> unwrapI(s1) + unwrapI(s2), (s, s2, v) -> unwrapI(v) - unwrapI(s2), null);
-			withLongArithmeticOp("+", (s1, s2) -> unwrapL(s1) + unwrapL(s2), (s, s2, v) -> unwrapL(v) - unwrapL(s2), null);
-			withFloatArithmeticOp("+", (s1, s2) -> unwrapF(s1) + unwrapF(s2), (s, s2, v) -> unwrapF(v) - unwrapF(s2), null);
-			withDoubleArithmeticOp("+", (s1, s2) -> unwrapD(s1) + unwrapD(s2), (s, s2, v) -> unwrapD(v) - unwrapD(s2), null);
-
-			withIntArithmeticOp("-", (s1, s2) -> unwrapI(s1) - unwrapI(s2), (s, s2, v) -> unwrapI(v) + unwrapI(s2), null);
-			withLongArithmeticOp("-", (s1, s2) -> unwrapL(s1) - unwrapL(s2), (s, s2, v) -> unwrapL(v) + unwrapL(s2), null);
-			withFloatArithmeticOp("-", (s1, s2) -> unwrapF(s1) - unwrapF(s2), (s, s2, v) -> unwrapF(v) + unwrapF(s2), null);
-			withDoubleArithmeticOp("-", (s1, s2) -> unwrapD(s1) - unwrapD(s2), (s, s2, v) -> unwrapD(v) + unwrapD(s2), null);
-
-			withIntArithmeticOp("*", (s1, s2) -> unwrapI(s1) * unwrapI(s2), (s, s2, v) -> unwrapI(v) / unwrapI(s2), null);
-			withLongArithmeticOp("*", (s1, s2) -> unwrapL(s1) * unwrapL(s2), (s, s2, v) -> unwrapL(v) / unwrapL(s2), null);
-			withFloatArithmeticOp("*", (s1, s2) -> unwrapF(s1) * unwrapF(s2), (s, s2, v) -> unwrapF(v) / unwrapF(s2), null);
-			withDoubleArithmeticOp("*", (s1, s2) -> unwrapD(s1) * unwrapD(s2), (s, s2, v) -> unwrapD(v) / unwrapD(s2), null);
-
-			withIntArithmeticOp("/", (s1, s2) -> unwrapI(s1) / unwrapI(s2), (s, s2, v) -> unwrapI(v) * unwrapI(s2), null);
-			withLongArithmeticOp("/", (s1, s2) -> unwrapL(s1) / unwrapL(s2), (s, s2, v) -> unwrapL(v) * unwrapL(s2), null);
-			withFloatArithmeticOp("/", (s1, s2) -> unwrapF(s1) / unwrapF(s2), (s, s2, v) -> unwrapF(v) * unwrapF(s2), null);
-			withDoubleArithmeticOp("/", (s1, s2) -> unwrapD(s1) / unwrapD(s2), (s, s2, v) -> unwrapD(v) * unwrapD(s2), null);
-
-			withIntArithmeticOp("%", (s1, s2) -> unwrapI(s1) % unwrapI(s2), (s, s2, v) -> unwrapI(v), //
-				(s, s2, v) -> Math.abs(unwrapI(v)) >= Math.abs(unwrapI(s2)) ? "Cannot set a modulus to less than the divisor" : null);
-			withLongArithmeticOp("%", (s1, s2) -> unwrapL(s1) % unwrapL(s2), (s, s2, v) -> unwrapL(v) * unwrapL(s2), //
-				(s, s2, v) -> Math.abs(unwrapL(v)) >= Math.abs(unwrapL(s2)) ? "Cannot set a modulus to less than the divisor" : null);
-			withFloatArithmeticOp("%", (s1, s2) -> unwrapF(s1) % unwrapF(s2), (s, s2, v) -> unwrapF(v) * unwrapF(s2), //
-				(s, s2, v) -> Math.abs(unwrapF(v)) >= Math.abs(unwrapF(s2)) ? "Cannot set a modulus to less than the divisor" : null);
-			withDoubleArithmeticOp("%", (s1, s2) -> unwrapD(s1) % unwrapD(s2), (s, s2, v) -> unwrapD(v) * unwrapD(s2), //
-				(s, s2, v) -> Math.abs(unwrapD(v)) >= Math.abs(unwrapD(s2)) ? "Cannot set a modulus to less than the divisor" : null);
-
-			// Comparison ops
-			withIntComparisonOp("<", (s1, s2) -> unwrapI(s1) < unwrapI(s2));
-			withIntComparisonOp("<=", (s1, s2) -> unwrapI(s1) <= unwrapI(s2));
-			withIntComparisonOp(">", (s1, s2) -> unwrapI(s1) > unwrapI(s2));
-			withIntComparisonOp(">=", (s1, s2) -> unwrapI(s1) >= unwrapI(s2));
-
-			withLongComparisonOp("<", (s1, s2) -> unwrapL(s1) < unwrapL(s2));
-			withLongComparisonOp("<=", (s1, s2) -> unwrapL(s1) <= unwrapL(s2));
-			withLongComparisonOp(">", (s1, s2) -> unwrapL(s1) > unwrapL(s2));
-			withLongComparisonOp(">=", (s1, s2) -> unwrapL(s1) >= unwrapL(s2));
-
-			withFloatComparisonOp("<", (s1, s2) -> unwrapF(s1) < unwrapF(s2));
-			withFloatComparisonOp("<=", (s1, s2) -> unwrapF(s1) <= unwrapF(s2));
-			withFloatComparisonOp(">", (s1, s2) -> unwrapF(s1) > unwrapF(s2));
-			withFloatComparisonOp(">=", (s1, s2) -> unwrapF(s1) >= unwrapF(s2));
-
-			withDoubleComparisonOp("<", (s1, s2) -> unwrapD(s1) < unwrapD(s2));
-			withDoubleComparisonOp("<=", (s1, s2) -> unwrapD(s1) <= unwrapD(s2));
-			withDoubleComparisonOp(">", (s1, s2) -> unwrapD(s1) > unwrapD(s2));
-			withDoubleComparisonOp(">=", (s1, s2) -> unwrapD(s1) >= unwrapD(s2));
-
-			// Bit shifting
-			withIntArithmeticOp("<<", (s1, s2) -> unwrapI(s1) << unwrapI(s2), (s, s2, r) -> unwrapI(r) >>> unwrapI(s2), null);
-			withIntArithmeticOp(">>", (s1, s2) -> unwrapI(s1) >> unwrapI(s2), (s, s2, r) -> unwrapI(r) << unwrapI(s2), null);
-			withIntArithmeticOp(">>", (s1, s2) -> unwrapI(s1) >>> unwrapI(s2), (s, s2, r) -> unwrapI(r) << unwrapI(s2), null);
-			withLongArithmeticOp("<<", (s1, s2) -> unwrapL(s1) << unwrapL(s2), (s, s2, r) -> unwrapL(r) >>> unwrapL(s2), null);
-			withLongArithmeticOp(">>", (s1, s2) -> unwrapL(s1) >> unwrapL(s2), (s, s2, r) -> unwrapL(r) << unwrapL(s2), null);
-			withLongArithmeticOp(">>", (s1, s2) -> unwrapL(s1) >>> unwrapL(s2), (s, s2, r) -> unwrapL(r) << unwrapL(s2), null);
-
-			// Bitwise operators
-			withIntArithmeticOp("|", (s1, s2) -> unwrapI(s1) | unwrapI(s2), (s, s2, r) -> unwrapI(r), (s, s2, r) -> {
-				if ((unwrapI(r) & ~unwrapI(s2)) != 0)
-					return "Invalid bitwise operator reverse";
-				return null;
-			});
-
-			// String append
-			with2("+", String.class, Object.class, String.class, (s1, s2) -> s1 + s2, null, (s, s2, r) -> "Cannot reverse string append");
-			with2("+", Object.class, String.class, String.class, (s1, s2) -> s1 + s2, null, (s, s2, r) -> "Cannot reverse string append");
-			// Unfortunately I don't support general string reversal here, but at least for some simple cases we can
-			with2("+", String.class, String.class, String.class, (s1, s2) -> s1 + s2, (s, s2, r) -> {
-				return r.substring(0, r.length() - s2.length());
-			}, (s, s2, r) -> {
-				if (r == null || !r.endsWith(s2))
-					return "String does not end with \"" + s2 + "\"";
-				return null;
-			});
-			with2("+", Boolean.class, String.class, String.class, (s1, s2) -> s1 + s2, (s, s2, r) -> {
-				return Boolean.valueOf(r.substring(0, r.length() - s2.length()));
-			}, (s, s2, r) -> {
-				if (r == null || !r.endsWith(s2))
-					return "String does not end with \"" + s2 + "\"";
-				String begin = r.substring(0, r.length() - s2.length());
-				switch (begin) {
-				case "true":
-				case "false":
-					return null;
-				default:
-					return "'true' or 'false' expected";
-				}
-			});
-			String MIN_INT_STR = String.valueOf(Integer.MIN_VALUE).substring(1);
-			String MAX_INT_STR = String.valueOf(Integer.MAX_VALUE);
-			with2("+", Integer.class, String.class, String.class, (s1, s2) -> s1 + s2, (s, s2, r) -> {
-				return Integer.valueOf(r.substring(0, r.length() - s2.length()));
-			}, (s, s2, r) -> {
-				if (r == null || !r.endsWith(s2))
-					return "String does not end with \"" + s2 + "\"";
-				String begin = r.substring(0, r.length() - s2.length());
-				int i = 0;
-				boolean neg = i < begin.length() && begin.charAt(i) == '-';
-				if (neg)
-					i++;
-				for (; i < begin.length(); i++)
-					if (begin.charAt(i) < '0' || begin.charAt(i) > '9')
-						return "integer expected";
-				if (!neg && StringUtils.compareNumberTolerant(begin, MAX_INT_STR, false, true) > 0)
-					return "integer is too large for int type";
-				else if (neg && StringUtils.compareNumberTolerant(StringUtils.cheapSubSequence(begin, 1, begin.length()), MIN_INT_STR,
-					false, true) > 0)
-					return "negative integer is too large for int type";
-				return null;
-			});
-			String MIN_LONG_STR = String.valueOf(Long.MIN_VALUE).substring(1);
-			String MAX_LONG_STR = String.valueOf(Long.MAX_VALUE);
-			with2("+", Long.class, String.class, String.class, (s1, s2) -> s1 + s2, (s, s2, r) -> {
-				return Long.valueOf(r.substring(0, r.length() - s2.length()));
-			}, (s, s2, r) -> {
-				if (r == null || !r.endsWith(s2))
-					return "String does not end with \"" + s2 + "\"";
-				String begin = r.substring(0, r.length() - s2.length());
-				int i = 0;
-				boolean neg = i < begin.length() && begin.charAt(i) == '-';
-				if (neg)
-					i++;
-				for (; i < begin.length(); i++)
-					if (begin.charAt(i) < '0' || begin.charAt(i) > '9')
-						return "integer expected";
-				if (!neg && StringUtils.compareNumberTolerant(begin, MAX_LONG_STR, false, true) > 0)
-					return "integer is too large for long type";
-				else if (neg && StringUtils.compareNumberTolerant(StringUtils.cheapSubSequence(begin, 1, begin.length()), MIN_LONG_STR,
-					false, true) > 0)
-					return "negative integer is too large for long type";
-				return null;
-			});
-			with2("+", Double.class, String.class, String.class, (s1, s2) -> s1 + s2, (s, s2, r) -> {
-				return Double.valueOf(r.substring(0, r.length() - s2.length()));
-			}, (s, s2, r) -> {
-				if (r == null || !r.endsWith(s2))
-					return "String does not end with \"" + s2 + "\"";
-				String begin = r.substring(0, r.length() - s2.length());
-				// Can't think of a better way to do this than to just parse it twice
-				try {
-					Double.parseDouble(begin);
-					return null;
-				} catch (NumberFormatException e) {
-					return e.getMessage();
-				}
-			});
-			with2("+", Float.class, String.class, String.class, (s1, s2) -> s1 + s2, (s, s2, r) -> {
-				return Float.valueOf(r.substring(0, r.length() - s2.length()));
-			}, (s, s2, r) -> {
-				if (r == null || !r.endsWith(s2))
-					return "String does not end with \"" + s2 + "\"";
-				String begin = r.substring(0, r.length() - s2.length());
-				// Can't think of a better way to do this than to just parse it twice
-				try {
-					Float.parseFloat(begin);
-					return null;
-				} catch (NumberFormatException e) {
-					return e.getMessage();
-				}
-			});
 			return this;
 		}
 

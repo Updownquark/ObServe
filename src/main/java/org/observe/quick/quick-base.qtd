@@ -5,15 +5,6 @@
 	Local URL ../../../../core/src/main/resources/quick.dtd
 -->
 <qonfig-def name="Quick-Base" version="0.1" extends:core="Quick-Core v0.1">
-	<value-types>
-		<one-of name="pos-or-exp">
-			<explicit prefix="${" suffix="}">
-				<pattern name="expression" />
-			</explicit>
-			<pattern name="position" />
-		</one-of>
-	</value-types>
-
 	<add-ons>
 		<add-on name="orientation" />
 		<add-on name="horizontal" inherits="orientation" />
@@ -94,7 +85,7 @@
 		
 		<add-on name="abstract-tab">
 			<attribute name="tab-name" type="expression" specify="optional" />
-			<attribute name="tab-icon" type="expression-or-string" specify="optional" />
+			<attribute name="tab-icon" type="expression" specify="optional" />
 			<attribute name="removable" type="boolean" default="false" />
 			<attribute name="on-remove" type="expression" specify="optional" />
 			<attribute name="select-on" type="expression" specify="optional" />
@@ -102,7 +93,7 @@
 		</add-on>
 
 		<add-on name="tab" requires="widget" inherits="abstract-tab">
-			<attribute name="tab-id" type="expression-or-string" />
+			<attribute name="tab-id" type="expression" />
 		</add-on>
 	</add-ons>
 
@@ -128,7 +119,7 @@
 		<element-def name="label" extends="text-widget">
 			<value type="string" specify="optional" />
 			<attr-mod name="value-widget.value" specify="optional" default="" />
-			<attribute name="icon" type="expression-or-string" specify="optional" />
+			<attribute name="icon" type="expression" specify="optional" />
 		</element-def>
 		<element-def name="editable-text-widget" extends="text-widget">
 			<widget-model>
@@ -186,8 +177,8 @@
 			<child-def name="column" type="column" min="0" max="inf" />
 		</element-def>
 		<element-def name="value-action">
-			<attribute name="name" type="expression-or-string" specify="optional" />
-			<attribute name="icon" type="expression-or-string" specify="optional" />
+			<attribute name="name" type="expression" specify="optional" />
+			<attribute name="icon" type="expression" specify="optional" />
 			<attribute name="action" type="expression" specify="required" />
 			<attribute name="enabled" type="expression" specify="optional" />
 			<attribute name="allow-for-empty" type="boolean" default="false" />
@@ -235,7 +226,7 @@
 		</element-def>
 		<element-def name="split" extends="container">
 			<attribute name="orientation" type="orientation" specify="required" />
-			<attribute name="split-position" type="pos-or-exp" specify="optional" />
+			<attribute name="split-position" type="expression" specify="optional" />
 			<child-mod child="content" min="2" max="2" />
 		</element-def>
 	</elements>

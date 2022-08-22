@@ -8,6 +8,7 @@ import java.awt.event.MouseEvent;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
+import java.util.Set;
 import java.util.function.Function;
 
 import javax.swing.JDialog;
@@ -18,58 +19,69 @@ import javax.swing.UnsupportedLookAndFeelException;
 
 import org.observe.ObservableAction;
 import org.observe.SettableValue;
-import org.observe.expresso.Expresso;
-import org.observe.expresso.ExpressoInterpreter.ExpressoSession;
+import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelTypes;
-import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ExternalModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.quick.QuickInterpreter.QuickSession;
 import org.observe.util.TypeTokens;
-import org.qommons.ArrayUtils;
+import org.qommons.QommonsUtils;
+import org.qommons.Version;
 import org.qommons.config.DefaultQonfigParser;
 import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigInterpretation;
 import org.qommons.config.QonfigInterpretationException;
-import org.qommons.config.QonfigInterpreter;
+import org.qommons.config.QonfigInterpreterCore;
 import org.qommons.config.QonfigParseException;
 import org.qommons.config.QonfigParser;
 import org.qommons.config.QonfigToolkit;
-import org.qommons.config.QonfigToolkitAccess;
+import org.qommons.config.SpecialSession;
 
-public class QuickSwing<QIS extends QuickSession<?>> extends QuickBase<QIS> {
-	public static final QonfigToolkitAccess SWING = new QonfigToolkitAccess(QuickSwing.class, "quick-swing.qtd", CORE);
+/** Default interpretation for the Quick-Swing toolkit */
+public class QuickSwing implements QonfigInterpretation {
+	/** The name of the toolkit this interpreter is for */
+	public static final String NAME = "Quick-Swing";
+	/** The version of the toolkit this interpreter is for */
+	public static final Version VERSION = new Version(0, 1, 0);
 
 	private QuickDocument theDebugDoc;
 	private QuickDocument theDebugOverlayDoc;
 
 	@Override
-	public QuickInterpreter.Builder<QIS, ?> createInterpreter(Class<?> callingClass, QonfigToolkit... others) {
-		return super.createInterpreter(callingClass, ArrayUtils.add(others, 0, SWING.get()));
+	public Set<Class<? extends SpecialSession<?>>> getExpectedAPIs() {
+		return QommonsUtils.unmodifiableDistinctCopy(ExpressoQIS.class, QuickQIS.class);
 	}
 
 	@Override
-	public <B extends QonfigInterpreter.Builder<? extends QIS, B>> B configureInterpreter(B interpreter) {
-		super.configureInterpreter(interpreter);
-		QonfigToolkit swing = SWING.get();
-		QonfigInterpreter.Builder<? extends QIS, ?> tkInt = interpreter.forToolkit(swing);
-		tkInt.extend(CORE.get().getElement("quick"), swing.getElement("quick-debug"), QuickDocument.class, QuickDocument.class, //
-			this::extendQuickDebug)//
-		.modifyWith("quick", QuickDocument.class, this::modifyQuickDocument)//
+	public String getToolkitName() {
+		return NAME;
+	}
+
+	@Override
+	public Version getVersion() {
+		return VERSION;
+	}
+
+	@Override
+	public QonfigInterpreterCore.Builder configureInterpreter(QonfigInterpreterCore.Builder interpreter) {
+		interpreter
+		.extend(interpreter.getToolkit().getElement("quick"), interpreter.getToolkit().getElement("quick-debug"), QuickDocument.class,
+			QuickDocument.class, //
+			(doc, session) -> extendQuickDebug(doc, session.as(QuickQIS.class), interpreter.getToolkit()))//
+		.modifyWith("quick", QuickDocument.class, (doc, session) -> modifyQuickDocument(doc, session.as(QuickQIS.class)))//
 		;
 		return interpreter;
 	}
 
-	private QuickDocument extendQuickDebug(QuickDocument doc, QIS session) throws QonfigInterpretationException {
+	private QuickDocument extendQuickDebug(QuickDocument doc, QuickQIS session, QonfigToolkit swing) throws QonfigInterpretationException {
+		ExpressoQIS exS = session.as(ExpressoQIS.class);
 		if (theDebugDoc == null) {
 			synchronized (QuickSwing.this) {
 				if (theDebugDoc == null) {
-					QonfigParser debugParser = new DefaultQonfigParser().withToolkit(Expresso.EXPRESSO.get(), CORE.get(),
-						BASE.get(), SWING.get());
-					QuickInterpreter<QIS> debugInterp = createInterpreter(QuickSwing.class).build();
+					QonfigParser debugParser = new DefaultQonfigParser().withToolkit(swing);
 					URL debugXml = QuickSwing.class.getResource("quick-debug.qml");
 					try (InputStream in = debugXml.openStream()) {
-						theDebugDoc = debugInterp.interpret(debugParser.parseDocument(debugXml.toString(), in).getRoot())//
+						theDebugDoc = session.intepretRoot(debugParser.parseDocument(debugXml.toString(), in).getRoot())//
 							.interpret(QuickDocument.class);
 					} catch (IOException e) {
 						throw new QonfigInterpretationException("Could not read quick-debug.qml", e);
@@ -78,7 +90,7 @@ public class QuickSwing<QIS extends QuickSession<?>> extends QuickBase<QIS> {
 					}
 					debugXml = QuickSwing.class.getResource("quick-debug-overlay.qml");
 					try (InputStream in = debugXml.openStream()) {
-						theDebugOverlayDoc = debugInterp.interpret(debugParser.parseDocument(debugXml.toString(), in).getRoot())//
+						theDebugOverlayDoc = session.intepretRoot(debugParser.parseDocument(debugXml.toString(), in).getRoot())//
 							.interpret(QuickDocument.class);
 					} catch (IOException e) {
 						throw new QonfigInterpretationException("Could not read quick-debug.qml", e);
@@ -91,36 +103,16 @@ public class QuickSwing<QIS extends QuickSession<?>> extends QuickBase<QIS> {
 
 		Function<ModelSetInstance, SettableValue<Integer>> xVal, yVal, wVal, hVal;
 		Function<ModelSetInstance, SettableValue<Boolean>> vVal;
-		ObservableExpression x = session.getAttribute("debug-x", ObservableExpression.class);
-		ObservableExpression y = session.getAttribute("debug-y", ObservableExpression.class);
-		ObservableExpression w = session.getAttribute("debug-width", ObservableExpression.class);
-		ObservableExpression h = session.getAttribute("debug-height", ObservableExpression.class);
-		ObservableExpression v = session.getAttribute("debug-visible", ObservableExpression.class);
-		if (x != null) {
-			xVal = x.evaluate(ModelTypes.Value.forType(int.class), session.getExpressoEnv());
-		} else {
-			xVal = msi -> SettableValue.build(int.class).withDescription("x").withValue(0).build();
-		}
-		if (y != null) {
-			yVal = y.evaluate(ModelTypes.Value.forType(int.class), session.getExpressoEnv());
-		} else {
-			yVal = msi -> SettableValue.build(int.class).withDescription("y").withValue(0).build();
-		}
-		if (w != null) {
-			wVal = w.evaluate(ModelTypes.Value.forType(int.class), session.getExpressoEnv());
-		} else {
-			wVal = msi -> SettableValue.build(int.class).withDescription("w").withValue(0).build();
-		}
-		if (h != null) {
-			hVal = h.evaluate(ModelTypes.Value.forType(int.class), session.getExpressoEnv());
-		} else {
-			hVal = msi -> SettableValue.build(int.class).withDescription("h").withValue(0).build();
-		}
-		if (v != null) {
-			vVal = v.evaluate(ModelTypes.Value.forType(boolean.class), session.getExpressoEnv());
-		} else {
-			vVal = msi -> SettableValue.build(boolean.class).withDescription("v").withValue(true).build();
-		}
+		xVal = exS.getAttribute("debug-x", ModelTypes.Value.forType(int.class),
+			() -> msi -> SettableValue.build(int.class).withDescription("x").withValue(0).build());
+		yVal = exS.getAttribute("debug-y", ModelTypes.Value.forType(int.class),
+			() -> msi -> SettableValue.build(int.class).withDescription("y").withValue(0).build());
+		wVal = exS.getAttribute("debug-width", ModelTypes.Value.forType(int.class),
+			() -> msi -> SettableValue.build(int.class).withDescription("w").withValue(0).build());
+		hVal = exS.getAttribute("debug-height", ModelTypes.Value.forType(int.class),
+			() -> msi -> SettableValue.build(int.class).withDescription("h").withValue(0).build());
+		vVal = exS.getAttribute("debug-visible", ModelTypes.Value.forType(boolean.class),
+			() -> msi -> SettableValue.build(boolean.class).withDescription("v").withValue(true).build());
 
 		Function<ModelSetInstance, SettableValue<QuickComponent>> selectedComponent = theDebugDoc.getHead().getModels()
 			.get("debug.selectedComponent", ModelTypes.Value.forType(QuickComponent.class));
@@ -330,7 +322,7 @@ public class QuickSwing<QIS extends QuickSession<?>> extends QuickBase<QIS> {
 		};
 	}
 
-	private QuickDocument modifyQuickDocument(QuickDocument doc, ExpressoSession<?> session) throws QonfigInterpretationException {
+	private QuickDocument modifyQuickDocument(QuickDocument doc, QuickQIS session) throws QonfigInterpretationException {
 		String lAndFClass;
 		switch (session.getAttributeText("look-and-feel")) {
 		case "system":

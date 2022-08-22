@@ -269,19 +269,27 @@ public class WindowPopulation {
 					Rectangle bounds = new Rectangle(theWindow.getBounds());
 					if (x != null && x.get() != null) {
 						boundsObs.add(x.noInitChanges());
-						bounds.x = x.get();
+						int xv = x.get();
+						if (xv > 0)
+							bounds.x = xv;
 					}
 					if (y != null && y.get() != null) {
 						boundsObs.add(y.noInitChanges());
-						bounds.y = y.get();
+						int yv = y.get();
+						if (yv > 0)
+							bounds.y = yv;
 					}
 					if (w != null && w.get() != null) {
 						boundsObs.add(w.noInitChanges());
-						bounds.width = w.get();
+						int wv = w.get();
+						if (wv > 0)
+							bounds.width = wv;
 					}
 					if (h != null && h.get() != null) {
 						boundsObs.add(h.noInitChanges());
-						bounds.height = h.get();
+						int hv = h.get();
+						if (hv > 0)
+							bounds.height = hv;
 					}
 					bounds = ObservableSwingUtils.fitBoundsToGraphicsEnv(bounds.x, bounds.y, bounds.width, bounds.height, //
 						ObservableSwingUtils.getGraphicsBounds());

@@ -13,7 +13,7 @@ import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.collect.ObservableCollection;
-import org.observe.expresso.ExpressoInterpreter;
+import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.quick.QuickComponentDef.ModelValueSupport;
 import org.observe.quick.style.QuickModelValue;
@@ -101,7 +101,7 @@ public class QuickComponent {
 			theDefinition = definition;
 			theParent = parent;
 			theModelsInstance = theDefinition.getModels().wrap(models)//
-				.withCustom(ExpressoInterpreter.PARENT_MODEL,
+				.withCustom(ExpressoQIS.PARENT_MODEL,
 					SettableValue.of(ModelSetInstance.class, parent == null ? null : parent.getModels(), "Not Reversible"))//
 				.withCustom(QuickModelValue.SATISFIER_PLACEHOLDER,
 					SettableValue.of(QuickModelValue.Satisfier.class, this, "Not reversible"))//

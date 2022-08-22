@@ -600,6 +600,14 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 	 */
 	public static <T> ObservableValue<T> flatten(ObservableValue<? extends ObservableValue<? extends T>> ov,
 		Supplier<? extends T> defaultValue) {
+		if (ov instanceof ConstantObservableValue) {
+			TypeToken<T> vType = (TypeToken<T>) ov.getType().resolveType(ObservableValue.class.getTypeParameters()[0]);
+			ObservableValue<? extends T> v = ov.get();
+			if (v == null)
+				return ObservableValue.of(vType, defaultValue == null ? null : defaultValue.get());
+			if (v.getType().equals(vType))
+				return (ObservableValue<T>) v;
+		}
 		return new FlattenedObservableValue<>(ov, defaultValue);
 	}
 

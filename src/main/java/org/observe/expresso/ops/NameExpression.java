@@ -316,105 +316,57 @@ public class NameExpression implements ObservableExpression {
 						}
 					}
 				} else if (theNames.size() == 1) {
-					for (Method m : env.getClassView().getImportedStaticMethods(theNames.getFirst())) {
-						Method finalM = m;
-						for (MethodOption option : theOptions) {
-							switch (option.size()) {
-							case 0:
-								if (!Modifier.isStatic(m.getModifiers()))
-									continue;
-								switch (m.getParameterTypes().length) {
-								case 0:
-									if (voidTarget || targetType.isAssignableFrom(TypeTokens.get().of(m.getGenericReturnType()))) {
-										// TODO resultType
-										return msi -> (p1, p2, p3) -> {
-											try {
-												return voidTarget ? null : (T) finalM.invoke(null);
-											} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
-												throw new IllegalStateException("Could not invoke " + finalM, e);
-											}
-										};
-									} else
-										continue;
-								default:
-									continue;
-								}
-							case 1:
-							case 2:
-							default:
-								// TODO
+					Invocation.MethodResult<Method, ? extends T> result = Invocation.findMethod(//
+						env.getClassView().getImportedStaticMethods(theNames.getFirst()).toArray(new Method[0]), theNames.getFirst(), null,
+						false, theOptions, voidTarget ? null : targetType, env, Invocation.ExecutableImpl.METHOD);
+					if (result != null) {
+						setResultType(result.returnType);
+						MethodOption option = theOptions.get(result.argListOption);
+						return msi -> (p1, p2, p3) -> {
+							Object[] args = new Object[option.size()];
+							option.getArgMaker().makeArgs(p1, p2, p3, args, msi);
+							try {
+								return result.invoke(null, args, Invocation.ExecutableImpl.METHOD);
+							} catch (InvocationTargetException e) {
+								throw new IllegalStateException(NameExpression.this + ": Could not invoke " + result,
+									e.getTargetException());
+							} catch (IllegalAccessException | IllegalArgumentException | InstantiationException e) {
+								throw new IllegalStateException(NameExpression.this + ": Could not invoke " + result, e);
+							} catch (NullPointerException e) {
+								NullPointerException npe = new NullPointerException(NameExpression.this.toString()//
+									+ (e.getMessage() == null ? "" : ": " + e.getMessage()));
+								npe.setStackTrace(e.getStackTrace());
+								throw npe;
 							}
-						}
+						};
 					}
 				} else {
 					// TODO evaluate model value for names.length-1, then use that context to find a method
 					Class<?> type = env.getClassView().getType(getPath(theNames.size() - 2));
 					if (type != null) {
-						Method[] methods = type.getMethods();
-						for (Method m : methods) {
-							if (!m.getName().equals(theNames.getLast()))
-								continue;
-							if (!Modifier.isStatic(m.getModifiers()))
-								continue;
-							Method finalM = m;
-							for (MethodOption option : theOptions) {
-								switch (option.size()) {
-								case 0:
-									switch (m.getParameterTypes().length) {
-									case 1:
-										if (!m.isVarArgs())
-											continue;
-										//$FALL-THROUGH$
-									case 0:
-										if (voidTarget || targetType.isAssignableFrom(TypeTokens.get().of(m.getGenericReturnType()))) {
-											setResultType((TypeToken<T>) TypeTokens.get().of(m.getGenericReturnType()));
-											return msi -> (p1, p2, p3) -> {
-												try {
-													return voidTarget ? null : (T) finalM.invoke(null,
-														m.isVarArgs() ? new Object[] { new Object[0] } : new Object[0]);
-												} catch (IllegalAccessException | IllegalArgumentException
-													| InvocationTargetException e) {
-													throw new IllegalStateException("Could not invoke " + finalM, e);
-												}
-											};
-										} else
-											continue;
-									default:
-										continue;
-									}
-								case 1:
-									switch (m.getParameterTypes().length) {
-									case 0:
-										continue;
-									case 2:
-										if (!m.isVarArgs())
-											continue;
-										//$FALL-THROUGH$
-									case 1:
-										if (TypeTokens.get().isAssignable(TypeTokens.get().of(m.getGenericParameterTypes()[0]),
-											option.resolve(0))//
-											&& (voidTarget
-												|| targetType.isAssignableFrom(TypeTokens.get().of(m.getGenericReturnType())))) {
-											setResultType((TypeToken<T>) TypeTokens.get().of(m.getGenericReturnType()));
-											return msi -> (p1, p2, p3) -> {
-												try {
-													return voidTarget ? null : (T) finalM.invoke(null,
-														m.isVarArgs() ? new Object[] { p1, new Object[0] } : new Object[] { p1 });
-												} catch (IllegalAccessException | IllegalArgumentException
-													| InvocationTargetException e) {
-													throw new IllegalStateException("Could not invoke " + finalM, e);
-												}
-											};
-										} else
-											continue;
-									default:
-										continue;
-									}
-								case 2:
-								default:
-									// TODO
+						Invocation.MethodResult<Method, ? extends T> result = Invocation.findMethod(//
+							type.getMethods(), theNames.getFirst(), null, false, theOptions, voidTarget ? null : targetType, env,
+							Invocation.ExecutableImpl.METHOD);
+						if (result != null) {
+							setResultType(result.returnType);
+							MethodOption option = theOptions.get(result.argListOption);
+							return msi -> (p1, p2, p3) -> {
+								Object[] args = new Object[option.size()];
+								option.getArgMaker().makeArgs(p1, p2, p3, args, msi);
+								try {
+									return result.invoke(null, args, Invocation.ExecutableImpl.METHOD);
+								} catch (InvocationTargetException e) {
+									throw new IllegalStateException(NameExpression.this + ": Could not invoke " + result,
+										e.getTargetException());
+								} catch (IllegalAccessException | IllegalArgumentException | InstantiationException e) {
+									throw new IllegalStateException(NameExpression.this + ": Could not invoke " + result, e);
+								} catch (NullPointerException e) {
+									NullPointerException npe = new NullPointerException(NameExpression.this.toString()//
+										+ (e.getMessage() == null ? "" : ": " + e.getMessage()));
+									npe.setStackTrace(e.getStackTrace());
+									throw npe;
 								}
-							}
+							};
 						}
 					}
 				}

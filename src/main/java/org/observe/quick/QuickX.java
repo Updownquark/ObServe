@@ -3,49 +3,67 @@ package org.observe.quick;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
-import org.observe.expresso.ExpressoInterpreter.ExpressoSession;
+import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelTypes;
-import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.quick.QuickContainer.AbstractQuickContainer;
-import org.observe.quick.QuickInterpreter.QuickSession;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.CategoryRenderStrategy;
 import org.observe.util.swing.JustifiedBoxLayout;
 import org.observe.util.swing.PanelPopulation;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
+import org.qommons.QommonsUtils;
+import org.qommons.Version;
 import org.qommons.collect.BetterList;
+import org.qommons.config.QonfigInterpretation;
 import org.qommons.config.QonfigInterpretationException;
-import org.qommons.config.QonfigInterpreter;
-import org.qommons.config.QonfigToolkit;
-import org.qommons.config.QonfigToolkitAccess;
+import org.qommons.config.QonfigInterpreterCore;
+import org.qommons.config.SpecialSession;
 
 import com.google.common.reflect.TypeToken;
 
-public class QuickX<QIS extends QuickSession<?>> extends QuickBase<QIS> {
-	public static final QonfigToolkitAccess EXT = new QonfigToolkitAccess(QuickBase.class, "quick-ext.qtd", QuickBase.BASE);
+/** Default interpretation for the Quick-X toolkit */
+public class QuickX implements QonfigInterpretation {
+	/** The name of the toolkit this interpreter is for */
+	public static final String NAME = "Quick-X";
+	/** The version of the toolkit this interpreter is for */
+	public static final Version VERSION = new Version(0, 1, 0);
 
 	@Override
-	public <B extends QonfigInterpreter.Builder<? extends QIS, B>> B configureInterpreter(B interpreter) {
-		super.configureInterpreter(interpreter);
-		QonfigToolkit ext = EXT.get();
-		B tkInt = interpreter.forToolkit(ext);
-		tkInt.createWith("collapse-pane", QuickComponentDef.class, this::interpretCollapsePane)//
-		.createWith("tree-table", QuickComponentDef.class, this::interpretTreeTable)//
+	public String getToolkitName() {
+		return NAME;
+	}
+
+	@Override
+	public Version getVersion() {
+		return VERSION;
+	}
+
+	@Override
+	public Set<Class<? extends SpecialSession<?>>> getExpectedAPIs() {
+		return QommonsUtils.unmodifiableDistinctCopy(ExpressoQIS.class, QuickQIS.class);
+	}
+
+	@Override
+	public QonfigInterpreterCore.Builder configureInterpreter(QonfigInterpreterCore.Builder interpreter) {
+		interpreter.createWith("collapse-pane", QuickComponentDef.class, session -> interpretCollapsePane(session.as(QuickQIS.class)))//
+		.createWith("tree-table", QuickComponentDef.class, session -> interpretTreeTable(session.as(QuickQIS.class)))//
 		;
 		return interpreter;
 	}
 
-	private QuickComponentDef interpretCollapsePane(QIS session) throws QonfigInterpretationException {
-		ValueContainer<SettableValue<?>, SettableValue<Boolean>> collapsed = session.getAttributeAsValue("collapsed", boolean.class,
+	private QuickComponentDef interpretCollapsePane(QuickQIS session) throws QonfigInterpretationException {
+		ExpressoQIS exS = session.as(ExpressoQIS.class);
+		ValueContainer<SettableValue<?>, SettableValue<Boolean>> collapsed = exS.getAttributeAsValue("collapsed", boolean.class,
 			() -> mis -> SettableValue.build(boolean.class).withDescription("collapsed").build());
 		Boolean initCollapsed = session.getAttribute("init-collapsed", Boolean.class);
 		QuickComponentDef header = session.interpretChildren("header", QuickComponentDef.class).getFirst();
@@ -73,12 +91,13 @@ public class QuickX<QIS extends QuickSession<?>> extends QuickBase<QIS> {
 		};
 	}
 
-	private <T, E extends PanelPopulation.TreeTableEditor<T, E>> QuickComponentDef interpretTreeTable(QIS session)
+	private <T, E extends PanelPopulation.TreeTableEditor<T, E>> QuickComponentDef interpretTreeTable(QuickQIS session)
 		throws QonfigInterpretationException {
-		return interpretAbstractTree(session, new TreeMaker<T, E>() {
+		ExpressoQIS exS = session.as(ExpressoQIS.class);
+		return QuickBase.interpretAbstractTree(session, new QuickBase.TreeMaker<T, E>() {
 			TypeToken<CategoryRenderStrategy<BetterList<T>, ?>> columnType;
 			Function<ModelSetInstance, ObservableCollection<CategoryRenderStrategy<BetterList<T>, ?>>> columnsAttr;
-			List<Column<BetterList<T>, ?>> columns = new ArrayList<>();
+			List<QuickBase.Column<BetterList<T>, ?>> columns = new ArrayList<>();
 
 			@Override
 			public void configure(ObservableModelSet model, ValueContainer<SettableValue<?>, ? extends SettableValue<T>> root)
@@ -86,12 +105,10 @@ public class QuickX<QIS extends QuickSession<?>> extends QuickBase<QIS> {
 				TypeToken<T> type = (TypeToken<T>) root.getType().getType(0);
 				columnType = TypeTokens.get().keyFor(CategoryRenderStrategy.class).<CategoryRenderStrategy<BetterList<T>, ?>> parameterized(//
 					TypeTokens.get().keyFor(BetterList.class).parameterized(type), TypeTokens.get().WILDCARD);
-				ObservableExpression columnsX = session.getAttribute("columns", ObservableExpression.class);
-				columnsAttr = columnsX == null ? null
-					: columnsX.evaluate(ModelTypes.Collection.forType(columnType), session.getExpressoEnv());
+				columnsAttr = exS.getAttribute("columns", ModelTypes.Collection.forType(columnType), null);
 				session.put("model-type", type);
-				for (ExpressoSession<?> columnEl : session.forChildren("column"))
-					columns.add(columnEl.interpret(Column.class));
+				for (QuickQIS columnEl : session.forChildren("column"))
+					columns.add(columnEl.interpret(QuickBase.Column.class));
 			}
 
 			@Override
@@ -106,7 +123,7 @@ public class QuickX<QIS extends QuickSession<?>> extends QuickBase<QIS> {
 							columnsAttr.apply(builder.getModels()), //
 							ObservableCollection.build(columnType).build()).collect());
 					}
-					for (Column<BetterList<T>, ?> column : columns)
+					for (QuickBase.Column<BetterList<T>, ?> column : columns)
 						t.withColumn(column.createColumn(builder.getModels()));
 				});
 			}

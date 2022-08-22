@@ -489,6 +489,14 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	 * @return A settable value that represents the current value in the inner observable
 	 */
 	public static <T> SettableValue<T> flatten(ObservableValue<SettableValue<T>> value, Supplier<? extends T> defaultValue) {
+		if (value instanceof ConstantObservableValue) {
+			TypeToken<T> vType = (TypeToken<T>) value.getType().resolveType(ObservableValue.class.getTypeParameters()[0]);
+			SettableValue<? extends T> v = value.get();
+			if (v == null)
+				return SettableValue.of(vType, defaultValue == null ? null : defaultValue.get(), "Constant value");
+			if (v.getType().equals(vType))
+				return (SettableValue<T>) v;
+		}
 		return new SettableFlattenedObservableValue<>(value, defaultValue);
 	}
 
@@ -499,6 +507,18 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	 */
 	public static <T> SettableValue<T> flattenAsSettable(ObservableValue<? extends ObservableValue<T>> value,
 		Supplier<? extends T> defaultValue) {
+		if (value instanceof ConstantObservableValue) {
+			TypeToken<T> vType = (TypeToken<T>) value.getType().resolveType(ObservableValue.class.getTypeParameters()[0]);
+			ObservableValue<? extends T> v = value.get();
+			if (v == null)
+				return SettableValue.of(vType, defaultValue == null ? null : defaultValue.get(), "Constant value");
+			if (v.getType().equals(vType)) {
+				if (v instanceof SettableValue)
+					return (SettableValue<T>) v;
+				else
+					return asSettable((ObservableValue<T>) v, __ -> "Not settable");
+			}
+		}
 		return new SettableFlattenedObservableValue<>(value, defaultValue);
 	}
 

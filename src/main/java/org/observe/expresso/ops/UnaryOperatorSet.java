@@ -6,11 +6,12 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 
+import org.qommons.BiTuple;
 import org.qommons.ClassMap;
 import org.qommons.ClassMap.TypeMatch;
 
 public class UnaryOperatorSet {
-	interface UnaryOp<S, T> {
+	public interface UnaryOp<S, T> {
 		Class<T> getTargetType();
 
 		T apply(S source);
@@ -100,6 +101,58 @@ public class UnaryOperatorSet {
 		}
 	}
 
+	public interface UnaryOperatorConfiguration {
+		Builder configure(Builder operators);
+	}
+
+	public static Builder standardJava(Builder operators) {
+		operators.withSymmetric("!", Boolean.class, b -> b == null ? true : !b);
+
+		operators.withSymmetric("~", Integer.class, i -> i == null ? ~0 : ~i);
+		operators.withIdentity("+", Integer.class);
+		operators.withSymmetric("-", Integer.class, i -> i == null ? 0 : -i);
+		operators.withAction("++", Integer.class, i -> i == null ? 1 : i + 1);
+		operators.withAction("--", Integer.class, i -> i == null ? 1 : i - 1);
+
+		operators.withSymmetric("~", Long.class, i -> i == null ? ~0 : ~i);
+		operators.withIdentity("+", Long.class);
+		operators.withSymmetric("-", Long.class, i -> i == null ? 0 : -i);
+		operators.withAction("++", Long.class, i -> i == null ? 1 : i + 1);
+		operators.withAction("--", Long.class, i -> i == null ? 1 : i - 1);
+
+		operators.with2("~", Byte.class, Integer.class, i -> i == null ? ~0 : ~i, i -> (byte) (i == null ? 0 : ~i));
+		operators.with2("+", Byte.class, Integer.class, i -> i == null ? 0 : (int) i, i -> (byte) (i == null ? 0 : i));
+		operators.with2("-", Byte.class, Integer.class, i -> i == null ? 0 : -i, i -> (byte) (i == null ? 0 : -i));
+		operators.withAction("++", Byte.class, i -> (byte) (i == null ? 1 : i + 1));
+		operators.withAction("--", Byte.class, i -> (byte) (i == null ? 1 : i - 1));
+
+		operators.with2("~", Character.class, Integer.class, i -> i == null ? ~0 : ~i, i -> (char) (i == null ? 0 : ~i));
+		operators.with2("+", Character.class, Integer.class, i -> i == null ? 0 : (int) i, i -> (char) (i == null ? 0 : i));
+		operators.with2("-", Character.class, Integer.class, i -> i == null ? 0 : -i, i -> (char) (i == null ? 0 : -i));
+		operators.withAction("++", Character.class, i -> (char) (i == null ? 1 : i + 1));
+		operators.withAction("--", Character.class, i -> (char) (i == null ? 1 : i - 1));
+
+		operators.with2("~", Short.class, Integer.class, i -> i == null ? ~0 : ~i, i -> (short) (i == null ? 0 : ~i));
+		operators.with2("+", Short.class, Integer.class, i -> i == null ? 0 : (int) i, i -> (short) (i == null ? 0 : i));
+		operators.with2("-", Short.class, Integer.class, i -> i == null ? 0 : -i, i -> (short) (i == null ? 0 : -i));
+		operators.withAction("++", Short.class, i -> (short) (i == null ? 1 : i + 1));
+		operators.withAction("--", Short.class, i -> (short) (i == null ? 1 : i - 1));
+
+		operators.withIdentity("+", Double.class);
+		operators.withSymmetric("-", Double.class, i -> i == null ? 0 : -i);
+		operators.withAction("++", Double.class, i -> i == null ? 1 : i + 1);
+		operators.withAction("--", Double.class, i -> i == null ? 1 : i - 1);
+
+		operators.withIdentity("+", Float.class);
+		operators.withSymmetric("-", Float.class, i -> i == null ? 0 : -i);
+		operators.withAction("++", Float.class, i -> i == null ? 1 : i + 1);
+		operators.withAction("--", Float.class, i -> i == null ? 1 : i - 1);
+
+		return operators;
+	}
+
+	public static final UnaryOperatorSet STANDARD_JAVA = standardJava(build()).build();
+
 	private final Map<String, ClassMap<UnaryOp<?, ?>>> theOperators;
 
 	private UnaryOperatorSet(Map<String, ClassMap<UnaryOp<?, ?>>> operators) {
@@ -116,6 +169,16 @@ public class UnaryOperatorSet {
 		return ops == null ? null : (UnaryOp<T, ?>) ops.get(type, TypeMatch.SUPER_TYPE);
 	}
 
+	public Builder copy() {
+		Builder copy = build();
+		for (Map.Entry<String, ClassMap<UnaryOp<?, ?>>> op : theOperators.entrySet()) {
+			for (BiTuple<Class<?>, UnaryOp<?, ?>> op2 : op.getValue().getAllEntries()) {
+				copy.with(op.getKey(), (Class<Object>) op2.getValue1(), (UnaryOp<Object, ?>) op2.getValue2());
+			}
+		}
+		return copy;
+	}
+
 	public static Builder build() {
 		return new Builder();
 	}
@@ -127,10 +190,15 @@ public class UnaryOperatorSet {
 			theOperators = new LinkedHashMap<>();
 		}
 
+		public <S> Builder with(String operator, Class<S> type, UnaryOp<? super S, ?> op) {
+			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>()).with(type, op);
+			return this;
+		}
+
 		public <T> Builder with(String operator, Class<T> type, Function<? super T, ? extends T> op,
 			Function<? super T, ? extends T> reverse) {
-			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>()).with(type, UnaryOp.of(type, op, reverse));
-			return this;
+			return with(operator, type, //
+				UnaryOp.of(type, op, reverse));
 		}
 
 		public <S, T> Builder with2(String operator, Class<S> source, Class<T> target, Function<? super S, ? extends T> op,
@@ -151,52 +219,6 @@ public class UnaryOperatorSet {
 
 		public <T> Builder withAction(String operator, Class<T> type, Function<? super T, ? extends T> op) {
 			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>()).with(type, UnaryOp.ofAction(type, op));
-			return this;
-		}
-
-		public Builder withStandardJavaOps() {
-			withSymmetric("!", Boolean.class, b -> b == null ? true : !b);
-
-			withSymmetric("~", Integer.class, i -> i == null ? ~0 : ~i);
-			withIdentity("+", Integer.class);
-			withSymmetric("-", Integer.class, i -> i == null ? 0 : -i);
-			withAction("++", Integer.class, i -> i == null ? 1 : i + 1);
-			withAction("--", Integer.class, i -> i == null ? 1 : i - 1);
-
-			withSymmetric("~", Long.class, i -> i == null ? ~0 : ~i);
-			withIdentity("+", Long.class);
-			withSymmetric("-", Long.class, i -> i == null ? 0 : -i);
-			withAction("++", Long.class, i -> i == null ? 1 : i + 1);
-			withAction("--", Long.class, i -> i == null ? 1 : i - 1);
-
-			with2("~", Byte.class, Integer.class, i -> i == null ? ~0 : ~i, i -> (byte) (i == null ? 0 : ~i));
-			with2("+", Byte.class, Integer.class, i -> i == null ? 0 : (int) i, i -> (byte) (i == null ? 0 : i));
-			with2("-", Byte.class, Integer.class, i -> i == null ? 0 : -i, i -> (byte) (i == null ? 0 : -i));
-			withAction("++", Byte.class, i -> (byte) (i == null ? 1 : i + 1));
-			withAction("--", Byte.class, i -> (byte) (i == null ? 1 : i - 1));
-
-			with2("~", Character.class, Integer.class, i -> i == null ? ~0 : ~i, i -> (char) (i == null ? 0 : ~i));
-			with2("+", Character.class, Integer.class, i -> i == null ? 0 : (int) i, i -> (char) (i == null ? 0 : i));
-			with2("-", Character.class, Integer.class, i -> i == null ? 0 : -i, i -> (char) (i == null ? 0 : -i));
-			withAction("++", Character.class, i -> (char) (i == null ? 1 : i + 1));
-			withAction("--", Character.class, i -> (char) (i == null ? 1 : i - 1));
-
-			with2("~", Short.class, Integer.class, i -> i == null ? ~0 : ~i, i -> (short) (i == null ? 0 : ~i));
-			with2("+", Short.class, Integer.class, i -> i == null ? 0 : (int) i, i -> (short) (i == null ? 0 : i));
-			with2("-", Short.class, Integer.class, i -> i == null ? 0 : -i, i -> (short) (i == null ? 0 : -i));
-			withAction("++", Short.class, i -> (short) (i == null ? 1 : i + 1));
-			withAction("--", Short.class, i -> (short) (i == null ? 1 : i - 1));
-
-			withIdentity("+", Double.class);
-			withSymmetric("-", Double.class, i -> i == null ? 0 : -i);
-			withAction("++", Double.class, i -> i == null ? 1 : i + 1);
-			withAction("--", Double.class, i -> i == null ? 1 : i - 1);
-
-			withIdentity("+", Float.class);
-			withSymmetric("-", Float.class, i -> i == null ? 0 : -i);
-			withAction("++", Float.class, i -> i == null ? 1 : i + 1);
-			withAction("--", Float.class, i -> i == null ? 1 : i - 1);
-
 			return this;
 		}
 

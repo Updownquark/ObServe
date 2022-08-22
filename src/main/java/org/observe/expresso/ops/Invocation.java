@@ -106,7 +106,7 @@ public abstract class Invocation implements ObservableExpression {
 		ArgOption args, TypeToken<?> targetType) throws QonfigInterpretationException;
 
 	public static String printSignature(Executable method) {
-		StringBuilder str = new StringBuilder(method.getName()).append('(');
+		StringBuilder str = new StringBuilder(method.getDeclaringClass().getName()).append('.').append(method.getName()).append('(');
 		for (int i = 0; i < method.getParameterCount(); i++) {
 			if (i > 0)
 				str.append(", ");
@@ -125,7 +125,7 @@ public abstract class Invocation implements ObservableExpression {
 	public static <M extends Executable, T> Invocation.MethodResult<M, ? extends T> findMethod(M[] methods, String methodName,
 		TypeToken<?> contextType, boolean arg0Context, List<? extends Args> argOptions, TypeToken<T> targetType, ExpressoEnv env,
 		ExecutableImpl<M> impl) throws QonfigInterpretationException {
-		Class<T> rawTarget = TypeTokens.get().wrap(TypeTokens.getRawType(targetType));
+		Class<T> rawTarget = targetType == null ? (Class<T>) Void.class : TypeTokens.get().wrap(TypeTokens.getRawType(targetType));
 		boolean voidTarget = rawTarget == Void.class;
 		for (M m : methods) {
 			if (methodName != null && !m.getName().equals(methodName))
@@ -155,14 +155,6 @@ public abstract class Invocation implements ObservableExpression {
 							if (!option.matchesType(a, paramType))
 								ok = false;
 						}
-
-						if (ok) {
-							TypeToken<?> returnType = TypeTokens.get().of(impl.getReturnType(m));
-							if (!voidTarget && !TypeTokens.get().isAssignable(targetType, returnType))
-								throw new QonfigInterpretationException("Return type " + returnType + " of method "
-									+ Invocation.printSignature(m) + " cannot be assigned to type " + targetType);
-							return new Invocation.MethodResult<>(m, o, false, (TypeToken<? extends T>) returnType);
-						}
 					} else {
 						if (arg0Context) {
 							// Use the first argument as context
@@ -182,17 +174,6 @@ public abstract class Invocation implements ObservableExpression {
 								if (!option.matchesType(a, paramType))
 									ok = false;
 							}
-							if (ok) {
-								TypeToken<?> returnType;
-								if (!isStatic && contextType != null && !(contextType.getType() instanceof Class))
-									returnType = contextType.resolveType(impl.getReturnType(m));
-								else
-									returnType = TypeTokens.get().of(impl.getReturnType(m));
-								if (!voidTarget && !TypeTokens.get().isAssignable(targetType, returnType))
-									throw new QonfigInterpretationException("Return type " + returnType + " of method "
-										+ Invocation.printSignature(m) + " cannot be assigned to type " + targetType);
-								return new Invocation.MethodResult<>(m, o, true, (TypeToken<? extends T>) returnType);
-							}
 						} else {
 							// Ignore context (supplied by caller), all arguments are parameters
 							if (paramTypes == null) {
@@ -210,18 +191,19 @@ public abstract class Invocation implements ObservableExpression {
 								if (!option.matchesType(a, paramType))
 									ok = false;
 							}
-							if (ok) {
-								TypeToken<?> returnType;
-								if (!(contextType.getType() instanceof Class))
-									returnType = contextType.resolveType(impl.getReturnType(m));
-								else
-									returnType = TypeTokens.get().of(impl.getReturnType(m));
-								if (!voidTarget && !TypeTokens.get().isAssignable(targetType, returnType))
-									throw new QonfigInterpretationException("Return type " + returnType + " of method "
-										+ Invocation.printSignature(m) + " cannot be assigned to type " + targetType);
-								return new Invocation.MethodResult<>(m, o, false, (TypeToken<? extends T>) returnType);
-							}
 						}
+					}
+					if (ok) {
+						TypeToken<?> returnType;
+						if (!isStatic)
+							returnType = contextType.resolveType(impl.getReturnType(m));
+						else
+							returnType = TypeTokens.get().of(impl.getReturnType(m));
+
+						if (!voidTarget && !TypeTokens.get().isAssignable(targetType, returnType))
+							throw new QonfigInterpretationException("Return type " + returnType + " of method "
+								+ Invocation.printSignature(m) + " cannot be assigned to type " + targetType);
+						return new Invocation.MethodResult<>(m, o, false, (TypeToken<T>) returnType);
 					}
 				} catch (QonfigInterpretationException e) {
 					if (errors == null)
@@ -357,7 +339,7 @@ public abstract class Invocation implements ObservableExpression {
 	}
 
 	public static class InvocationActionContainer<X extends Executable, T>
-		extends Invocation.InvocationContainer<X, ObservableAction<?>, T, ObservableAction<T>> {
+	extends Invocation.InvocationContainer<X, ObservableAction<?>, T, ObservableAction<T>> {
 		public InvocationActionContainer(Invocation.MethodResult<X, T> method, ValueContainer<SettableValue<?>, SettableValue<?>> context,
 			List<ValueContainer<SettableValue<?>, SettableValue<?>>> arguments, Invocation.ExecutableImpl<X> impl) {
 			super(method, context, arguments, ModelTypes.Action.forType(method.returnType), impl);
@@ -382,7 +364,7 @@ public abstract class Invocation implements ObservableExpression {
 	}
 
 	public static class InvocationValueContainer<X extends Executable, T>
-		extends Invocation.InvocationContainer<X, SettableValue<?>, T, SettableValue<T>> {
+	extends Invocation.InvocationContainer<X, SettableValue<?>, T, SettableValue<T>> {
 		public InvocationValueContainer(Invocation.MethodResult<X, T> method, ValueContainer<SettableValue<?>, SettableValue<?>> context,
 			List<ValueContainer<SettableValue<?>, SettableValue<?>>> arguments, Invocation.ExecutableImpl<X> impl) {
 			super(method, context, arguments, ModelTypes.Value.forType(method.returnType), impl);
@@ -535,7 +517,8 @@ public abstract class Invocation implements ObservableExpression {
 				}
 			} else
 				parameters = args;
-			return (R) impl.execute(method, context, parameters);
+			Object retVal = impl.execute(method, context, parameters);
+			return (R) retVal;
 		}
 
 		@Override

@@ -162,6 +162,11 @@ public class BinaryOperator implements ObservableExpression {
 						}
 					};
 				}
+
+				@Override
+				public String toString() {
+					return BinaryOperator.this.toString();
+				}
 			};
 		} else {
 			if (type.getModelType() != ModelTypes.Value)
@@ -199,6 +204,11 @@ public class BinaryOperator implements ObservableExpression {
 								return ReverseQueryResult.value(op.reverse(transformValues.getCurrentSource(), rgt, newValue));
 							}
 						}));
+				}
+
+				@Override
+				public String toString() {
+					return BinaryOperator.this.toString();
 				}
 			};
 		}
@@ -368,8 +378,8 @@ public class BinaryOperator implements ObservableExpression {
 
 	private <M, MV extends M> ValueContainer<M, MV> doOperation(ModelInstanceType<M, MV> type,
 		ValueContainer<SettableValue<?>, ? extends SettableValue<?>> left,
-		ValueContainer<SettableValue<?>, ? extends SettableValue<?>> right,
-			String operator, boolean action, ObservableModelSet models, ClassView classView) {
+			ValueContainer<SettableValue<?>, ? extends SettableValue<?>> right,
+				String operator, boolean action, ObservableModelSet models, ClassView classView) {
 		// TODO Auto-generated method stub
 		return null;
 	}
@@ -497,7 +507,7 @@ public class BinaryOperator implements ObservableExpression {
 		} else
 			return new ValueContainer<SettableValue<?>, SettableValue<String>>() {
 			@Override
-				public ModelInstanceType<SettableValue<?>, SettableValue<String>> getType() {
+			public ModelInstanceType<SettableValue<?>, SettableValue<String>> getType() {
 				return ModelTypes.Value.forType(String.class);
 			}
 
@@ -515,7 +525,7 @@ public class BinaryOperator implements ObservableExpression {
 
 	private ValueContainer<SettableValue<?>, SettableValue<Boolean>> logicalOp(
 		ValueContainer<SettableValue<?>, SettableValue<Boolean>> left, ValueContainer<SettableValue<?>, SettableValue<Boolean>> right)
-		throws QonfigInterpretationException {
+			throws QonfigInterpretationException {
 		java.util.function.BinaryOperator<Boolean> op;
 		abstract class LogicalReverse implements TransformReverse<Boolean, Boolean> {
 			protected final SettableValue<Boolean> right;

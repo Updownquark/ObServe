@@ -3,14 +3,14 @@ package org.observe.quick;
 import java.util.List;
 import java.util.function.Consumer;
 
-import org.observe.quick.QuickInterpreter.QuickSession;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
+import org.qommons.config.QonfigInterpretationException;
 
 public class QuickBox extends QuickContainer.AbstractQuickContainer {
 	private final String theLayoutName;
 	private QuickLayout theLayout;
 
-	public QuickBox(QuickSession<?> session, List<QuickComponentDef> children, String layoutName) {
+	public QuickBox(QuickQIS session, List<QuickComponentDef> children, String layoutName) throws QonfigInterpretationException {
 		super(session, children);
 		theLayoutName = layoutName;
 	}
