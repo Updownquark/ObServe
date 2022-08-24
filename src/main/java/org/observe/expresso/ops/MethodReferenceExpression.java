@@ -22,25 +22,37 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * An expression representing a method to invoke. This is different than a method invocation in that the parameters are not specified,
+ * expressions of this type cannot be evaluated as values, but only as methods.
+ */
 public class MethodReferenceExpression implements ObservableExpression {
 	private final ObservableExpression theContext;
 	private final String theMethodName;
 	private final List<String> theTypeArgs;
 
+	/**
+	 * @param context The expression representing the object on which to invoke the method, or the type of the method
+	 * @param methodName The name of the method
+	 * @param typeArgs The type arguments to the method
+	 */
 	public MethodReferenceExpression(ObservableExpression context, String methodName, List<String> typeArgs) {
 		theContext = context;
 		theMethodName = methodName;
 		theTypeArgs = QommonsUtils.unmodifiableCopy(typeArgs);
 	}
 
+	/** @return The expression representing the object on which to invoke the method, or the type of the method */
 	public ObservableExpression getContext() {
 		return theContext;
 	}
 
+	/** @return The name of the method */
 	public String getMethodName() {
 		return theMethodName;
 	}
 
+	/** @return The type arguments to the method */
 	public List<String> getTypeArgs() {
 		return theTypeArgs;
 	}

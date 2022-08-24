@@ -23,19 +23,29 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * A value to be interpreted by a {@link NonStructuredParser}, not by the expresso parser itself. External literals are useful for literals
+ * of types like dates that isn't usually parsed by a programming language.
+ */
 public class ExternalLiteral implements ObservableExpression {
 	private final Expression theExpression;
 	private final String theText;
 
+	/**
+	 * @param expression The expression containing the literal
+	 * @param text The text of the literal
+	 */
 	public ExternalLiteral(Expression expression, String text) {
 		theExpression = expression;
 		theText = text;
 	}
 
+	/** @return The expression containing the literal */
 	public Expression getExpression() {
 		return theExpression;
 	}
 
+	/** @return The text of the literal */
 	public String getText() {
 		return theText;
 	}
@@ -72,6 +82,13 @@ public class ExternalLiteral implements ObservableExpression {
 		};
 	}
 
+	/**
+	 * @param <T> The type to parse the expression as
+	 * @param asType The type to parse the expression as
+	 * @param env The environment to use to parse the expression
+	 * @return The parsed expression
+	 * @throws QonfigInterpretationException If an error occurs parsing the expression
+	 */
 	public <T> ObservableValue<? extends T> parseValue(TypeToken<T> asType, ExpressoEnv env) throws QonfigInterpretationException {
 		// Get all parsers that may possibly be able to generate an appropriate value
 		List<NonStructuredParser> parsers = env.getNonStructuredParsers(TypeTokens.getRawType(asType));

@@ -15,13 +15,16 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
+/** An expression that produces a {@link Class} instance from a type literal */
 public class ClassInstanceExpression implements ObservableExpression {
 	private final String theType;
 
+	/** @param type The name of the type to get the class value for */
 	public ClassInstanceExpression(String type) {
 		theType = type;
 	}
 
+	/** @return The name of the type to get the class value for */
 	public String getType() {
 		return theType;
 	}
@@ -52,5 +55,10 @@ public class ClassInstanceExpression implements ObservableExpression {
 	public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ExpressoEnv env)
 		throws QonfigInterpretationException {
 		throw new QonfigInterpretationException("Not supported for class instance expression");
+	}
+
+	@Override
+	public String toString() {
+		return theType + ".class";
 	}
 }

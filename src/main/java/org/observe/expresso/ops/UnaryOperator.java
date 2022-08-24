@@ -19,25 +19,34 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
+/** An expression representing an operation that takes 1 input */
 public class UnaryOperator implements ObservableExpression {
 	private final String theOperator;
 	private final ObservableExpression theOperand;
 	private final boolean isPrefix;
 
+	/**
+	 * @param operator The name of the operator
+	 * @param operand The operand
+	 * @param prefix Whether the operator is a prefix or suffix operation
+	 */
 	public UnaryOperator(String operator, ObservableExpression operand, boolean prefix) {
 		theOperator = operator;
 		theOperand = operand;
 		isPrefix = prefix;
 	}
 
+	/** @return The name of the operator */
 	public String getOperator() {
 		return theOperator;
 	}
 
+	/** @return The operand of this operation */
 	public ObservableExpression getOperand() {
 		return theOperand;
 	}
 
+	/** @return Whether this is a prefix or suffix operation (whether the operator occurred before or after the operand) */
 	public boolean isPrefix() {
 		return isPrefix;
 	}
@@ -50,7 +59,7 @@ public class UnaryOperator implements ObservableExpression {
 	@Override
 	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
 		throws QonfigInterpretationException {
-		Set<Class<?>> types = env.getUnaryOperators().getSupportedSourceTypes(theOperator);
+		Set<Class<?>> types = env.getUnaryOperators().getSupportedInputTypes(theOperator);
 		TypeToken<?> targetOpType;
 		switch (types.size()) {
 		case 0:

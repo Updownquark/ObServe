@@ -18,25 +18,34 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
+/** Represents an operator that evaluates and returns the value of one expression or another depending on a boolean condition */
 public class ConditionalExpression implements ObservableExpression {
 	private final ObservableExpression theCondition;
 	private final ObservableExpression thePrimary;
 	private final ObservableExpression theSecondary;
 
+	/**
+	 * @param condition The condition to use to determine which expression to evaluate
+	 * @param primary The expression to evaluate when the condition is true
+	 * @param secondary The expression to evaluate when the condition is false
+	 */
 	public ConditionalExpression(ObservableExpression condition, ObservableExpression primary, ObservableExpression secondary) {
 		theCondition = condition;
 		thePrimary = primary;
 		theSecondary = secondary;
 	}
 
+	/** @return The condition to use to determine which expression to evaluate */
 	public ObservableExpression getCondition() {
 		return theCondition;
 	}
 
+	/** @return The expression to evaluate when the condition is true */
 	public ObservableExpression getPrimary() {
 		return thePrimary;
 	}
 
+	/** @return The expression to evaluate when the condition is false */
 	public ObservableExpression getSecondary() {
 		return theSecondary;
 	}

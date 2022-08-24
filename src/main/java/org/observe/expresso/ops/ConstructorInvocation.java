@@ -14,14 +14,21 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
+/** An expression representing the invocation of a constructor to create a new instance of a type */
 public class ConstructorInvocation extends Invocation {
 	private final String theType;
 
+	/**
+	 * @param type The string representing the type for which to create an instance
+	 * @param typeArguments The strings representing the type arguments to the constructor
+	 * @param args The arguments to pass to the constructor
+	 */
 	public ConstructorInvocation(String type, List<String> typeArguments, List<ObservableExpression> args) {
 		super(typeArguments, args);
 		theType = type;
 	}
 
+	/** @return The string representing the type for which to create an instance */
 	public String getType() {
 		return theType;
 	}
@@ -68,11 +75,10 @@ public class ConstructorInvocation extends Invocation {
 
 	@Override
 	public String toString() {
-		StringBuilder str = new StringBuilder();
-		str.append(printSignature());
-		return str.toString();
+		return printSignature();
 	}
 
+	/** @return A string representing this constructor invocation */
 	public String printSignature() {
 		StringBuilder str = new StringBuilder(theType).append('(');
 		boolean first = true;

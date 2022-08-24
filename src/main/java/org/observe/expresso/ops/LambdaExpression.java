@@ -18,19 +18,26 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
+/** An expression representing a lambda that can be evaluated as a method */
 public class LambdaExpression implements ObservableExpression {
 	private final List<String> theParameters;
 	private final ObservableExpression theBody;
 
+	/**
+	 * @param parameters The names of the parameters to the lambda
+	 * @param body The expression to evaluate for the lambda
+	 */
 	public LambdaExpression(List<String> parameters, ObservableExpression body) {
 		theParameters = parameters;
 		theBody = body;
 	}
 
+	/** @return The names of the parameters to the lambda */
 	public List<String> getParameters() {
 		return theParameters;
 	}
 
+	/** @return The expression to evaluate for the lambda */
 	public ObservableExpression getBody() {
 		return theBody;
 	}

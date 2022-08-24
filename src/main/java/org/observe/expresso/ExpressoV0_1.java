@@ -170,9 +170,12 @@ public class ExpressoV0_1 implements QonfigInterpretation {
 		}
 	}
 
+	/** Represents an application so that various models in this class can provide intelligent interaction with the user */
 	public interface AppEnvironment {
+		/** @return A function to provide the title of the application */
 		Function<ModelSetInstance, ? extends ObservableValue<String>> getTitle();
 
+		/** @return A function to provide the icon representing the application */
 		Function<ModelSetInstance, ? extends ObservableValue<Image>> getIcon();
 	}
 
@@ -2189,13 +2192,5 @@ public class ExpressoV0_1 implements QonfigInterpretation {
 		boolean isReversible();
 
 		Transformation<Object, Object> transform(TransformationPrecursor<Object, Object, ?> precursor, ModelSetInstance modelSet);
-	}
-
-	private static <E extends Enum<E>> E parseEnum(TypeToken<?> type, String text) throws ParseException {
-		try {
-			return Enum.valueOf((Class<E>) TypeTokens.getRawType(type), text);
-		} catch (IllegalArgumentException e) {
-			throw new ParseException(e.getMessage(), 0);
-		}
 	}
 }

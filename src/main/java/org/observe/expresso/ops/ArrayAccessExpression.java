@@ -16,19 +16,26 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
+/** An expression representing access to an array value by index */
 public class ArrayAccessExpression implements ObservableExpression {
 	private final ObservableExpression theArray;
 	private final ObservableExpression theIndex;
 
+	/**
+	 * @param array The expression representing the array being accessed
+	 * @param index The expression representing the index at which the array is being accessed
+	 */
 	public ArrayAccessExpression(ObservableExpression array, ObservableExpression index) {
 		theArray = array;
 		theIndex = index;
 	}
 
+	/** @return The expression representing the array being accessed */
 	public ObservableExpression getArray() {
 		return theArray;
 	}
 
+	/** @return The expression representing the index at which the array is being accessed */
 	public ObservableExpression getIndex() {
 		return theIndex;
 	}

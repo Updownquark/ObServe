@@ -17,10 +17,18 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
+/** An expression representing the invocation of a method */
 public class MethodInvocation extends Invocation {
 	private final ObservableExpression theContext;
 	private final String theMethodName;
 
+	/**
+	 * @param context The expression representing the object on which to invoke the non-static method or the type on which to invoke the
+	 *        static method
+	 * @param methodName The name of the method
+	 * @param typeArgs The type arguments for the method invocation
+	 * @param arguments The arguments to the method
+	 */
 	public MethodInvocation(ObservableExpression context, String methodName, List<String> typeArgs,
 		List<ObservableExpression> arguments) {
 		super(typeArgs, arguments);
@@ -28,10 +36,15 @@ public class MethodInvocation extends Invocation {
 		theMethodName = methodName;
 	}
 
+	/**
+	 * @return The expression representing the object on which to invoke the non-static method or the type on which to invoke the static
+	 *         method
+	 */
 	public ObservableExpression getContext() {
 		return theContext;
 	}
 
+	/** @return The name of the method */
 	public String getMethodName() {
 		return theMethodName;
 	}
@@ -139,6 +152,7 @@ public class MethodInvocation extends Invocation {
 		return str.toString();
 	}
 
+	/** @return A string representing the method signature */
 	public String printSignature() {
 		StringBuilder str = new StringBuilder(theMethodName).append('(');
 		boolean first = true;

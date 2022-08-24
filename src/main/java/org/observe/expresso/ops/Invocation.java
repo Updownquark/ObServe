@@ -29,19 +29,26 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
+/** An expression representing the invocation of a {@link MethodInvocation method} or {@link ConstructorInvocation constructor} */
 public abstract class Invocation implements ObservableExpression {
 	private final List<String> theTypeArguments;
 	private final List<ObservableExpression> theArguments;
 
+	/**
+	 * @param typeArguments The type arguments to the invocation
+	 * @param arguments The arguments to use to invoke the invokable
+	 */
 	public Invocation(List<String> typeArguments, List<ObservableExpression> arguments) {
 		theTypeArguments = typeArguments;
 		theArguments = arguments;
 	}
 
+	/** @return The type arguments to the invocation */
 	public List<String> getTypeArguments() {
 		return theTypeArguments;
 	}
 
+	/** @return The arguments to use to invoke the invokable */
 	public List<ObservableExpression> getArguments() {
 		return theArguments;
 	}
@@ -57,8 +64,10 @@ public abstract class Invocation implements ObservableExpression {
 		return evaluateInternal2(type, env, new ArgOption(env), targetType);
 	}
 
+	/** An {@link org.observe.expresso.ObservableExpression.Args} option representing a set of arguments to an invokable */
 	protected class ArgOption implements Args {
 		final ExpressoEnv theEnv;
+		/** The arguments */
 		public final List<ValueContainer<SettableValue<?>, SettableValue<?>>>[] args;
 		private final ValueContainer<SettableValue<?>, SettableValue<?>>[] resolved;
 
@@ -102,9 +111,23 @@ public abstract class Invocation implements ObservableExpression {
 		}
 	}
 
+	/**
+	 * @param <M> The model type
+	 * @param <MV> The model instance type
+	 * @param type The model instance type of the value container to create
+	 * @param env The expresso environment to use to evaluate this invocation
+	 * @param args The argument option to use to invoke
+	 * @param targetType The type to evaluate the invokable as
+	 * @return The result value container
+	 * @throws QonfigInterpretationException If an error occurs evaluating the invokable
+	 */
 	protected abstract <M, MV extends M> ValueContainer<M, MV> evaluateInternal2(ModelInstanceType<M, MV> type, ExpressoEnv env,
 		ArgOption args, TypeToken<?> targetType) throws QonfigInterpretationException;
 
+	/**
+	 * @param method The invokable to print
+	 * @return The signature of the invokable
+	 */
 	public static String printSignature(Executable method) {
 		StringBuilder str = new StringBuilder(method.getDeclaringClass().getName()).append('.').append(method.getName()).append('(');
 		for (int i = 0; i < method.getParameterCount(); i++) {
@@ -115,6 +138,12 @@ public abstract class Invocation implements ObservableExpression {
 		return str.append(')').toString();
 	}
 
+	/**
+	 * @param parameters The number of parameters in the invokable signature
+	 * @param args The number of arguments to the method
+	 * @param varArgs Whether the method is a var-args method
+	 * @return Whether the given argument count matches the parameter count
+	 */
 	public static boolean checkArgCount(int parameters, int args, boolean varArgs) {
 		if (varArgs) {
 			return args >= parameters - 1;
@@ -122,6 +151,22 @@ public abstract class Invocation implements ObservableExpression {
 			return args == parameters;
 	}
 
+	/**
+	 * Finds the method matching an invocation
+	 *
+	 * @param <M> The type of the invokable to find
+	 * @param <T> The result type of the invocation
+	 * @param methods The invokables to search through
+	 * @param methodName The name of the invokable to find
+	 * @param contextType The type that the invocation's context was evaluated to
+	 * @param arg0Context Whether the first argument of the method should be its context
+	 * @param argOptions The list of parameter options available for invocation
+	 * @param targetType The result type of the invocation
+	 * @param env The expresso environment to use for the invocation
+	 * @param impl The executable implementation corresponding to the invokable type
+	 * @return The result containing the invokable matching the given options, or null if no such invokable was found in the list
+	 * @throws QonfigInterpretationException If a suitable invokable is found, but there is an error with its invocation
+	 */
 	public static <M extends Executable, T> Invocation.MethodResult<M, ? extends T> findMethod(M[] methods, String methodName,
 		TypeToken<?> contextType, boolean arg0Context, List<? extends Args> argOptions, TypeToken<T> targetType, ExpressoEnv env,
 		ExecutableImpl<M> impl) throws QonfigInterpretationException {
@@ -221,7 +266,7 @@ public abstract class Invocation implements ObservableExpression {
 		return null;
 	}
 
-	public static abstract class InvocationContainer<X extends Executable, M, T, MV extends M> implements ValueContainer<M, MV> {
+	static abstract class InvocationContainer<X extends Executable, M, T, MV extends M> implements ValueContainer<M, MV> {
 		private final Invocation.MethodResult<X, T> theMethod;
 		private final ValueContainer<SettableValue<?>, SettableValue<?>> theContext;
 		private final List<ValueContainer<SettableValue<?>, SettableValue<?>>> theArguments;
@@ -230,7 +275,7 @@ public abstract class Invocation implements ObservableExpression {
 		private boolean isUpdatingContext;
 		private T theCachedValue;
 
-		public InvocationContainer(Invocation.MethodResult<X, T> method, ValueContainer<SettableValue<?>, SettableValue<?>> context,
+		InvocationContainer(Invocation.MethodResult<X, T> method, ValueContainer<SettableValue<?>, SettableValue<?>> context,
 			List<ValueContainer<SettableValue<?>, SettableValue<?>>> arguments, ModelInstanceType<M, MV> type,
 			Invocation.ExecutableImpl<X> impl) {
 			theMethod = method;
@@ -302,12 +347,12 @@ public abstract class Invocation implements ObservableExpression {
 			return returnValue;
 		}
 
-		protected <X> SettableValue<X> syntheticResultValue(TypeToken<X> type, SettableValue<?> ctxV, SettableValue<?>[] argVs,
+		protected <X2> SettableValue<X2> syntheticResultValue(TypeToken<X2> type, SettableValue<?> ctxV, SettableValue<?>[] argVs,
 			Observable<?> changes) {
 			return SettableValue.asSettable(//
 				ObservableValue.of(type, () -> {
 					try {
-						return (X) invoke(ctxV, argVs, false);
+						return (X2) invoke(ctxV, argVs, false);
 					} catch (Throwable e) {
 						e.printStackTrace();
 						return null;
@@ -338,9 +383,9 @@ public abstract class Invocation implements ObservableExpression {
 		}
 	}
 
-	public static class InvocationActionContainer<X extends Executable, T>
+	static class InvocationActionContainer<X extends Executable, T>
 	extends Invocation.InvocationContainer<X, ObservableAction<?>, T, ObservableAction<T>> {
-		public InvocationActionContainer(Invocation.MethodResult<X, T> method, ValueContainer<SettableValue<?>, SettableValue<?>> context,
+		InvocationActionContainer(Invocation.MethodResult<X, T> method, ValueContainer<SettableValue<?>, SettableValue<?>> context,
 			List<ValueContainer<SettableValue<?>, SettableValue<?>>> arguments, Invocation.ExecutableImpl<X> impl) {
 			super(method, context, arguments, ModelTypes.Action.forType(method.returnType), impl);
 		}
@@ -363,9 +408,9 @@ public abstract class Invocation implements ObservableExpression {
 		}
 	}
 
-	public static class InvocationValueContainer<X extends Executable, T>
+	static class InvocationValueContainer<X extends Executable, T>
 	extends Invocation.InvocationContainer<X, SettableValue<?>, T, SettableValue<T>> {
-		public InvocationValueContainer(Invocation.MethodResult<X, T> method, ValueContainer<SettableValue<?>, SettableValue<?>> context,
+		InvocationValueContainer(Invocation.MethodResult<X, T> method, ValueContainer<SettableValue<?>, SettableValue<?>> context,
 			List<ValueContainer<SettableValue<?>, SettableValue<?>>> arguments, Invocation.ExecutableImpl<X> impl) {
 			super(method, context, arguments, ModelTypes.Value.forType(method.returnType), impl);
 		}
@@ -381,9 +426,8 @@ public abstract class Invocation implements ObservableExpression {
 		}
 	}
 
-	public static class InvocationThingContainer<X extends Executable, M, MV extends M>
-	extends Invocation.InvocationContainer<X, M, MV, MV> {
-		public InvocationThingContainer(Invocation.MethodResult<X, MV> method, ValueContainer<SettableValue<?>, SettableValue<?>> context,
+	static class InvocationThingContainer<X extends Executable, M, MV extends M> extends Invocation.InvocationContainer<X, M, MV, MV> {
+		InvocationThingContainer(Invocation.MethodResult<X, MV> method, ValueContainer<SettableValue<?>, SettableValue<?>> context,
 			List<ValueContainer<SettableValue<?>, SettableValue<?>>> arguments, ModelInstanceType<M, MV> type,
 			Invocation.ExecutableImpl<X> impl) {
 			super(method, context, arguments, type, impl);
@@ -480,19 +524,42 @@ public abstract class Invocation implements ObservableExpression {
 		};
 	}
 
+	/**
+	 * Represents a suitable invokable for an invocation with some additional information needed to invoke it
+	 *
+	 * @param <M> The type of the invokable
+	 * @param <R> The return type of the invocation
+	 */
 	public static class MethodResult<M extends Executable, R> {
+		/** The invokable to invoke */
 		public final M method;
+		/**
+		 * The index of the option passed to
+		 * {@link Invocation#findMethod(Executable[], String, TypeToken, boolean, List, TypeToken, ExpressoEnv, ExecutableImpl)} whose
+		 * arguments match this invocation
+		 */
 		public final int argListOption;
 		private final boolean isArg0Context;
+		/** The return type of the invocation */
 		public final TypeToken<R> returnType;
 
-		public MethodResult(M method, int argListOption, boolean arg0Context, TypeToken<R> returnType) {
+		MethodResult(M method, int argListOption, boolean arg0Context, TypeToken<R> returnType) {
 			this.method = method;
 			this.argListOption = argListOption;
 			isArg0Context = arg0Context;
 			this.returnType = returnType;
 		}
 
+		/**
+		 * @param context The context on which to invoke the invokable
+		 * @param args The arguments to pass to the invokable
+		 * @param impl The invokable implementation to use to invoke the invokable
+		 * @return The result of the invokable
+		 * @throws IllegalAccessException If the invokable is inaccessible
+		 * @throws IllegalArgumentException If the context or any of the arguments are of an inappropriate types
+		 * @throws InvocationTargetException If the invokable itself throws an exception
+		 * @throws InstantiationException If the constructor cannot create an instance of its type
+		 */
 		public R invoke(Object context, Object[] args, ExecutableImpl<M> impl)
 			throws IllegalAccessException, IllegalArgumentException, InvocationTargetException, InstantiationException {
 			Object[] parameters;

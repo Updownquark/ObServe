@@ -20,6 +20,7 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
+/** A parsed expression that is capable of producing observable results */
 public interface ObservableExpression {
 	ObservableExpression EMPTY = new ObservableExpression() {
 		@Override

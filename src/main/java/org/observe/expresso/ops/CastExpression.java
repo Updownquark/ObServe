@@ -15,19 +15,26 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
+/** An expression intended to produce an equivalent value of a different type from a source expression */
 public class CastExpression implements ObservableExpression {
 	private final ObservableExpression theValue;
 	private final String theType;
 
+	/**
+	 * @param value The expression being cast
+	 * @param type The string representing the type to cast to
+	 */
 	public CastExpression(ObservableExpression value, String type) {
 		theValue = value;
 		theType = type;
 	}
 
+	/** @return The expression being cast */
 	public ObservableExpression getValue() {
 		return theValue;
 	}
 
+	/** @return The string representing the type to cast to */
 	public String getType() {
 		return theType;
 	}

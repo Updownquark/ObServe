@@ -13,22 +13,78 @@ import org.qommons.ClassMap.TypeMatch;
 import org.qommons.StringUtils;
 import org.qommons.TriFunction;
 
+/** A set of binary operations that a {@link BinaryOperator} can use to evaluate itself */
 public class BinaryOperatorSet {
+	/**
+	 * A binary operator that knows how to operate on 2 inputs
+	 *
+	 * @param <S> The super-type of the first input that this operator knows how to handle
+	 * @param <T> The super-type of the second input that this operator knows how to handle
+	 * @param <V> The type of output produced by this operator
+	 */
 	public interface BinaryOp<S, T, V> {
+		/** @return The type of output produced by this operator */
 		Class<V> getTargetType();
 
+		/**
+		 * Performs the operation
+		 *
+		 * @param source The first input value
+		 * @param other The second input value
+		 * @return The output value
+		 */
 		V apply(S source, T other);
 
+		/**
+		 * @param currentSource The current value of the first input
+		 * @param other The value of the second input
+		 * @param value The output value
+		 * @return Null if this operator is capable of producing a primary input value for which {@link #apply(Object, Object) apply} on
+		 *         that value and the given secondary input would produce the given output value; otherwise a reason why this is not
+		 *         possible
+		 */
 		String canReverse(S currentSource, T other, V value);
 
+		/**
+		 * @param currentSource The current value of the first input
+		 * @param other The value of the second input
+		 * @param value The output value
+		 * @return A primary input value for which {@link #apply(Object, Object) apply} on that value and the given secondary input would
+		 *         produce the given output value
+		 */
 		S reverse(S currentSource, T other, V value);
 
+		/**
+		 * Produces a binary operator whose output type is the same as that of the primary input from functions
+		 *
+		 * @param <S> The primary input and output type of the operator
+		 * @param <T> The secondary input type of the operator
+		 * @param type The primary input and output type of the operator
+		 * @param op The function to use for {@link BinaryOp#apply(Object, Object)}
+		 * @param reverse The function to use for {@link BinaryOp#reverse(Object, Object, Object)}
+		 * @param reverseEnabled The function to use for {@link BinaryOp#canReverse(Object, Object, Object)}, or null if the operator is
+		 *        always reversible
+		 * @return The binary operator composed of the given functions
+		 */
 		static <S, T> BinaryOp<S, T, S> of(Class<S> type, BiFunction<? super S, ? super T, ? extends S> op,
 			TriFunction<? super S, ? super T, ? super S, ? extends S> reverse,
 			TriFunction<? super S, ? super T, ? super S, String> reverseEnabled) {
 			return of2(type, op, reverse, reverseEnabled);
 		}
 
+		/**
+		 * Produces a binary operator from functions
+		 *
+		 * @param <S> The primary input type of the operator
+		 * @param <T> The secondary input type of the operator
+		 * @param <V> The output type of the operator
+		 * @param type The output type of the operator
+		 * @param op The function to use for {@link BinaryOp#apply(Object, Object)}
+		 * @param reverse The function to use for {@link BinaryOp#reverse(Object, Object, Object)}
+		 * @param reverseEnabled The function to use for {@link BinaryOp#canReverse(Object, Object, Object)}, or null if the operator is
+		 *        always reversible
+		 * @return The binary operator composed of the given functions
+		 */
 		static <S, T, V> BinaryOp<S, T, V> of2(Class<V> type, BiFunction<? super S, ? super T, ? extends V> op,
 			TriFunction<? super S, ? super T, ? super V, ? extends S> reverse,
 			TriFunction<? super S, ? super T, ? super V, String> reverseEnabled) {
@@ -58,15 +114,26 @@ public class BinaryOperatorSet {
 		}
 	}
 
+	/**
+	 * Represents a cast operation whereby a value of one type is transformed to an equivalent value of another type
+	 *
+	 * @param <S> The source type of the cast
+	 * @param <T> The target type of the cast
+	 */
 	public interface CastOp<S, T> {
+		/** Cast from byte to short */
 		CastOp<Byte, Short> byteShort = CastOp.of(s -> unwrapS(s),
 			v -> (v < Byte.MIN_VALUE || v > Byte.MAX_VALUE) ? "Short value is too large for a byte" : null, v -> unwrapByte(v));
+		/** Cast from byte to int */
 		CastOp<Byte, Integer> byteInt = CastOp.of(s -> unwrapI(s),
 			v -> (v < Byte.MIN_VALUE || v > Byte.MAX_VALUE) ? "Integer value is too large for a byte" : null, v -> unwrapByte(v));
+		/** Cast from byte to long */
 		CastOp<Byte, Long> byteLong = CastOp.of(s -> unwrapL(s),
 			v -> (v < Byte.MIN_VALUE || v > Byte.MAX_VALUE) ? "Long value is too large for a byte" : null, v -> unwrapByte(v));
+		/** Cast from byte to char */
 		CastOp<Byte, Character> byteChar = CastOp.of(s -> s == null ? (char) 0 : (char) s.byteValue(),
 			v -> v > Byte.MAX_VALUE ? "Character value is too large for a byte" : null, v -> v == null ? (byte) 0 : (byte) v.charValue());
+		/** Cast from byte to float */
 		CastOp<Byte, Float> byteFloat = CastOp.of(s -> unwrapF(s), v -> {
 			if (v < Byte.MIN_VALUE || v > Byte.MAX_VALUE)
 				return "Float value is too large for a byte";
@@ -75,6 +142,7 @@ public class BinaryOperatorSet {
 				return "Float value has decimal--cannot be assigned to an integer";
 			return null;
 		}, v -> unwrapByte(v));
+		/** Cast from byte to double */
 		CastOp<Byte, Double> byteDouble = CastOp.of(s -> unwrapD(s), v -> {
 			if (v < Byte.MIN_VALUE || v > Byte.MAX_VALUE)
 				return "Double value is too large for a byte";
@@ -84,13 +152,17 @@ public class BinaryOperatorSet {
 			return null;
 		}, v -> unwrapByte(v));
 
+		/** Cast from short to int */
 		CastOp<Short, Integer> shortInt = CastOp.of(s -> unwrapI(s),
 			v -> (v < Short.MIN_VALUE || v > Short.MAX_VALUE) ? "Integer value is too large for a short" : null, v -> unwrapS(v));
+		/** Cast from short to long */
 		CastOp<Short, Long> shortLong = CastOp.of(s -> unwrapL(s),
 			v -> (v < Short.MIN_VALUE || v > Short.MAX_VALUE) ? "Long value is too large for a short" : null, v -> unwrapS(v));
+		/** Cast from short to char */
 		CastOp<Short, Character> shortChar = CastOp.of(s -> s == null ? (char) 0 : (char) s.shortValue(),
 			v -> v > Short.MAX_VALUE ? "Character value is too large for a short" : null,
 				v -> v == null ? (short) 0 : (short) v.charValue());
+		/** Cast from short to float */
 		CastOp<Short, Float> shortFloat = CastOp.of(s -> unwrapF(s), v -> {
 			if (v < Short.MIN_VALUE || v > Short.MAX_VALUE)
 				return "Float value is too large for a short";
@@ -99,6 +171,7 @@ public class BinaryOperatorSet {
 				return "Float value has decimal--cannot be assigned to an integer";
 			return null;
 		}, v -> unwrapS(v));
+		/** Cast from short to double */
 		CastOp<Short, Double> shortDouble = CastOp.of(s -> unwrapD(s), v -> {
 			if (v < Short.MIN_VALUE || v > Short.MAX_VALUE)
 				return "Double value is too large for a short";
@@ -108,10 +181,13 @@ public class BinaryOperatorSet {
 			return null;
 		}, v -> unwrapS(v));
 
+		/** Cast from int to long */
 		CastOp<Integer, Long> intLong = CastOp.of(s -> unwrapL(s),
 			v -> (v < Integer.MIN_VALUE || v > Integer.MAX_VALUE) ? "Long value is too large for an integer" : null, v -> unwrapI(v));
+		/** Cast from int to char */
 		CastOp<Integer, Character> intChar = CastOp.of(s -> s == null ? (char) 0 : (char) s.intValue(), null,
 			v -> v == null ? (int) 0 : (int) v.charValue());
+		/** Cast from int to float */
 		CastOp<Integer, Float> intFloat = CastOp.of(s -> unwrapF(s), v -> {
 			if (v < Integer.MIN_VALUE || v > Integer.MAX_VALUE)
 				return "Float value is too large for an integer";
@@ -120,6 +196,7 @@ public class BinaryOperatorSet {
 				return "Float value has decimal--cannot be assigned to an integer";
 			return null;
 		}, v -> unwrapI(v));
+		/** Cast from int to double */
 		CastOp<Integer, Double> intDouble = CastOp.of(s -> unwrapD(s), v -> {
 			if (v < Integer.MIN_VALUE || v > Integer.MAX_VALUE)
 				return "Double value is too large for an integer";
@@ -129,8 +206,10 @@ public class BinaryOperatorSet {
 			return null;
 		}, v -> unwrapI(v));
 
+		/** Cast from long to char */
 		CastOp<Long, Character> longChar = CastOp.of(s -> s == null ? (char) 0 : (char) s.longValue(), null,
 			v -> v == null ? (long) 0 : (long) v.charValue());
+		/** Cast from long to float */
 		CastOp<Long, Float> longFloat = CastOp.of(s -> unwrapF(s), v -> {
 			if (v < Long.MIN_VALUE || v > Long.MAX_VALUE)
 				return "Float value is too large for a long";
@@ -139,6 +218,7 @@ public class BinaryOperatorSet {
 				return "Float value has decimal--cannot be assigned to an integer";
 			return null;
 		}, v -> unwrapL(v));
+		/** Cast from long to double */
 		CastOp<Long, Double> longDouble = CastOp.of(s -> unwrapD(s), v -> {
 			if (v < Long.MIN_VALUE || v > Long.MAX_VALUE)
 				return "Double value is too large for a long";
@@ -148,8 +228,10 @@ public class BinaryOperatorSet {
 			return null;
 		}, v -> unwrapL(v));
 
+		/** Cast from char to short */
 		CastOp<Character, Short> charShort = CastOp.of(s -> s == null ? (short) 0 : (short) s.charValue(),
 			v -> v < 0 ? "A character cannot be negative" : null, v -> v == null ? (char) 0 : (char) v.shortValue());
+		/** Cast from char to int */
 		CastOp<Character, Integer> charInt = CastOp.of(s -> s == null ? (int) 0 : (int) s.charValue(), v -> {
 			if (v < 0)
 				return "A character cannot be negative";
@@ -158,6 +240,7 @@ public class BinaryOperatorSet {
 			else
 				return null;
 		}, v -> v == null ? (char) 0 : (char) v.intValue());
+		/** Cast from char to long */
 		CastOp<Character, Long> charLong = CastOp.of(s -> s == null ? (long) 0 : (long) s.charValue(), v -> {
 			if (v < 0)
 				return "A character cannot be negative";
@@ -166,6 +249,7 @@ public class BinaryOperatorSet {
 			else
 				return null;
 		}, v -> v == null ? (char) 0 : (char) v.intValue());
+		/** Cast from char to short */
 		CastOp<Character, Float> charFloat = CastOp.of(s -> s == null ? (float) 0 : (float) s.charValue(), v -> {
 			if (v < 0)
 				return "A character cannot be negative";
@@ -176,6 +260,7 @@ public class BinaryOperatorSet {
 				return "Float value has decimal--cannot be assigned to a character";
 			return null;
 		}, v -> v == null ? (char) 0 : (char) v.intValue());
+		/** Cast from char to double */
 		CastOp<Character, Double> charDouble = CastOp.of(s -> s == null ? (double) 0 : (double) s.charValue(), v -> {
 			if (v < 0)
 				return "A character cannot be negative";
@@ -187,6 +272,7 @@ public class BinaryOperatorSet {
 			return null;
 		}, v -> v == null ? (char) 0 : (char) v.intValue());
 
+		/** Cast from float to double */
 		CastOp<Float, Double> floatDouble = CastOp.of(s -> unwrapD(s), v -> {
 			if (v < Float.MIN_VALUE || v > Float.MAX_VALUE)
 				return "Float value is too large for a byte";
@@ -196,13 +282,30 @@ public class BinaryOperatorSet {
 			return null;
 		}, v -> unwrapF(v));
 
+		/**
+		 * @param source The source value
+		 * @return A target-type value equivalent to the given source value
+		 */
 		T cast(S source);
 
+		/**
+		 * @param target The target value
+		 * @return Whether the given value can be reverse-cast to an equivalent source-type value
+		 */
 		String canReverse(T target);
 
+		/**
+		 * @param target The target value
+		 * @return A source-type value equivalent to the given target value
+		 */
 		S reverse(T target);
 
-		default <V> BinaryOp<S, T, V> castSource(BinaryOp<T, T, V> op) {
+		/**
+		 * @param <V> The output type of the operator
+		 * @param op The binary operator to convert
+		 * @return An equivalent binary operator whose primary input type is this cast's source type
+		 */
+		default <V> BinaryOp<S, T, V> castPrimary(BinaryOp<T, T, V> op) {
 			return new BinaryOp<S, T, V>() {
 				@Override
 				public Class<V> getTargetType() {
@@ -232,7 +335,12 @@ public class BinaryOperatorSet {
 			};
 		}
 
-		default <V> BinaryOp<T, S, V> castOther(BinaryOp<T, T, V> op) {
+		/**
+		 * @param <V> The output type of the operator
+		 * @param op The binary operator to convert
+		 * @return An equivalent binary operator whose secondary input type is this cast's source type
+		 */
+		default <V> BinaryOp<T, S, V> castSecondary(BinaryOp<T, T, V> op) {
 			return new BinaryOp<T, S, V>() {
 				@Override
 				public Class<V> getTargetType() {
@@ -256,6 +364,16 @@ public class BinaryOperatorSet {
 			};
 		}
 
+		/**
+		 * @param <S> The primary input type for the new operator
+		 * @param <T> The secondary input type for the new operator
+		 * @param <T2> The primary and secondary input type for the source operator
+		 * @param <V> The output type of the operator
+		 * @param op The operator to convert
+		 * @param sourceCast The cast for the primary input
+		 * @param otherCast The cast for the secondary input
+		 * @return The new operator with input types corresponding to the given casts
+		 */
 		static <S, T, T2, V> BinaryOp<S, T, V> castBoth(BinaryOp<T2, T2, V> op, CastOp<S, T2> sourceCast, CastOp<T, T2> otherCast) {
 			return new BinaryOp<S, T, V>() {
 				@Override
@@ -287,6 +405,16 @@ public class BinaryOperatorSet {
 			};
 		}
 
+		/**
+		 * Produces a cast object from functions
+		 *
+		 * @param <S> The source type for the cast
+		 * @param <T> The target type for the cast
+		 * @param cast The function to use for {@link CastOp#cast(Object)}
+		 * @param canReverse The function to use for {@link CastOp#canReverse(Object)}, or null if the cast is always reversible
+		 * @param reverse The function to use for {@link CastOp#reverse(Object)}
+		 * @return The cast backed by the given functions
+		 */
 		static <S, T> CastOp<S, T> of(Function<? super S, ? extends T> cast, Function<? super T, String> canReverse,
 			Function<? super T, ? extends S> reverse) {
 			return new CastOp<S, T>() {
@@ -308,10 +436,23 @@ public class BinaryOperatorSet {
 		}
 	}
 
+	/** Represents something that can configure a {@link Builder} to support some set of binary operations */
 	public interface BinaryOperatorConfiguration {
+		/**
+		 * Configures a binary operator set builder to support some set of binary operations
+		 *
+		 * @param operators The builder to configure
+		 * @return The builder
+		 */
 		Builder configure(Builder operators);
 	}
 
+	/**
+	 * Configures a binary operator set to support all the standard Java binary operations
+	 *
+	 * @param operators The builder to configure
+	 * @return The builder
+	 */
 	public static Builder standardJava(Builder operators) {
 		// Do equality first, which is special
 		// First, same-type primitive equality
@@ -456,96 +597,96 @@ public class BinaryOperatorSet {
 
 		// Use the same-type equality methods above to implement cross-type primitive equal comparisons
 
-		operators.withCastOther("==", Integer.class, Byte.class, CastOp.byteInt);
-		operators.withCastOther("!=", Integer.class, Byte.class, CastOp.byteInt);
-		operators.withCastOther("==", Integer.class, Short.class, CastOp.shortInt);
-		operators.withCastOther("!=", Integer.class, Short.class, CastOp.shortInt);
-		operators.withCastOther("==", Integer.class, Character.class, CastOp.charInt);
-		operators.withCastOther("!=", Integer.class, Character.class, CastOp.charInt);
-		operators.withCastSource("==", Integer.class, Long.class, CastOp.intLong);
-		operators.withCastSource("!=", Integer.class, Long.class, CastOp.intLong);
-		operators.withCastSource("==", Integer.class, Float.class, CastOp.intFloat);
-		operators.withCastSource("!=", Integer.class, Float.class, CastOp.intFloat);
-		operators.withCastSource("==", Integer.class, Double.class, CastOp.intDouble);
-		operators.withCastSource("!=", Integer.class, Double.class, CastOp.intDouble);
+		operators.withCastSecondary("==", Integer.class, Byte.class, CastOp.byteInt);
+		operators.withCastSecondary("!=", Integer.class, Byte.class, CastOp.byteInt);
+		operators.withCastSecondary("==", Integer.class, Short.class, CastOp.shortInt);
+		operators.withCastSecondary("!=", Integer.class, Short.class, CastOp.shortInt);
+		operators.withCastSecondary("==", Integer.class, Character.class, CastOp.charInt);
+		operators.withCastSecondary("!=", Integer.class, Character.class, CastOp.charInt);
+		operators.withCastPrimary("==", Integer.class, Long.class, CastOp.intLong);
+		operators.withCastPrimary("!=", Integer.class, Long.class, CastOp.intLong);
+		operators.withCastPrimary("==", Integer.class, Float.class, CastOp.intFloat);
+		operators.withCastPrimary("!=", Integer.class, Float.class, CastOp.intFloat);
+		operators.withCastPrimary("==", Integer.class, Double.class, CastOp.intDouble);
+		operators.withCastPrimary("!=", Integer.class, Double.class, CastOp.intDouble);
 
-		operators.withCastOther("==", Long.class, Integer.class, CastOp.intLong);
-		operators.withCastOther("!=", Long.class, Integer.class, CastOp.intLong);
-		operators.withCastOther("==", Long.class, Byte.class, CastOp.byteLong);
-		operators.withCastOther("!=", Long.class, Byte.class, CastOp.byteLong);
-		operators.withCastOther("==", Long.class, Short.class, CastOp.shortLong);
-		operators.withCastOther("!=", Long.class, Short.class, CastOp.shortLong);
-		operators.withCastOther("==", Long.class, Character.class, CastOp.charLong);
-		operators.withCastOther("!=", Long.class, Character.class, CastOp.charLong);
-		operators.withCastSource("==", Long.class, Float.class, CastOp.longFloat);
-		operators.withCastSource("!=", Long.class, Float.class, CastOp.longFloat);
-		operators.withCastSource("==", Long.class, Double.class, CastOp.longDouble);
-		operators.withCastSource("!=", Long.class, Double.class, CastOp.longDouble);
+		operators.withCastSecondary("==", Long.class, Integer.class, CastOp.intLong);
+		operators.withCastSecondary("!=", Long.class, Integer.class, CastOp.intLong);
+		operators.withCastSecondary("==", Long.class, Byte.class, CastOp.byteLong);
+		operators.withCastSecondary("!=", Long.class, Byte.class, CastOp.byteLong);
+		operators.withCastSecondary("==", Long.class, Short.class, CastOp.shortLong);
+		operators.withCastSecondary("!=", Long.class, Short.class, CastOp.shortLong);
+		operators.withCastSecondary("==", Long.class, Character.class, CastOp.charLong);
+		operators.withCastSecondary("!=", Long.class, Character.class, CastOp.charLong);
+		operators.withCastPrimary("==", Long.class, Float.class, CastOp.longFloat);
+		operators.withCastPrimary("!=", Long.class, Float.class, CastOp.longFloat);
+		operators.withCastPrimary("==", Long.class, Double.class, CastOp.longDouble);
+		operators.withCastPrimary("!=", Long.class, Double.class, CastOp.longDouble);
 
-		operators.withCastOther("==", Short.class, Byte.class, CastOp.byteShort);
-		operators.withCastOther("!=", Short.class, Byte.class, CastOp.byteShort);
-		operators.withCastSource("==", Short.class, Integer.class, CastOp.shortInt);
-		operators.withCastSource("!=", Short.class, Integer.class, CastOp.shortInt);
-		operators.withCastSource("==", Short.class, Long.class, CastOp.shortLong);
-		operators.withCastSource("!=", Short.class, Long.class, CastOp.shortLong);
-		operators.withCastSource("==", Short.class, Character.class, CastOp.shortChar);
-		operators.withCastSource("!=", Short.class, Character.class, CastOp.shortChar);
-		operators.withCastSource("==", Short.class, Float.class, CastOp.shortFloat);
-		operators.withCastSource("!=", Short.class, Float.class, CastOp.shortFloat);
-		operators.withCastSource("==", Short.class, Double.class, CastOp.shortDouble);
-		operators.withCastSource("!=", Short.class, Double.class, CastOp.shortDouble);
+		operators.withCastSecondary("==", Short.class, Byte.class, CastOp.byteShort);
+		operators.withCastSecondary("!=", Short.class, Byte.class, CastOp.byteShort);
+		operators.withCastPrimary("==", Short.class, Integer.class, CastOp.shortInt);
+		operators.withCastPrimary("!=", Short.class, Integer.class, CastOp.shortInt);
+		operators.withCastPrimary("==", Short.class, Long.class, CastOp.shortLong);
+		operators.withCastPrimary("!=", Short.class, Long.class, CastOp.shortLong);
+		operators.withCastPrimary("==", Short.class, Character.class, CastOp.shortChar);
+		operators.withCastPrimary("!=", Short.class, Character.class, CastOp.shortChar);
+		operators.withCastPrimary("==", Short.class, Float.class, CastOp.shortFloat);
+		operators.withCastPrimary("!=", Short.class, Float.class, CastOp.shortFloat);
+		operators.withCastPrimary("==", Short.class, Double.class, CastOp.shortDouble);
+		operators.withCastPrimary("!=", Short.class, Double.class, CastOp.shortDouble);
 
-		operators.withCastSource("==", Byte.class, Integer.class, CastOp.byteInt);
-		operators.withCastSource("!=", Byte.class, Integer.class, CastOp.byteInt);
-		operators.withCastSource("==", Byte.class, Short.class, CastOp.byteShort);
-		operators.withCastSource("!=", Byte.class, Short.class, CastOp.byteShort);
-		operators.withCastSource("==", Byte.class, Long.class, CastOp.byteLong);
-		operators.withCastSource("!=", Byte.class, Long.class, CastOp.byteLong);
-		operators.withCastSource("==", Byte.class, Character.class, CastOp.byteChar);
-		operators.withCastSource("!=", Byte.class, Character.class, CastOp.byteChar);
-		operators.withCastSource("==", Byte.class, Float.class, CastOp.byteFloat);
-		operators.withCastSource("!=", Byte.class, Float.class, CastOp.byteFloat);
-		operators.withCastSource("==", Byte.class, Double.class, CastOp.byteDouble);
-		operators.withCastSource("!=", Byte.class, Double.class, CastOp.byteDouble);
+		operators.withCastPrimary("==", Byte.class, Integer.class, CastOp.byteInt);
+		operators.withCastPrimary("!=", Byte.class, Integer.class, CastOp.byteInt);
+		operators.withCastPrimary("==", Byte.class, Short.class, CastOp.byteShort);
+		operators.withCastPrimary("!=", Byte.class, Short.class, CastOp.byteShort);
+		operators.withCastPrimary("==", Byte.class, Long.class, CastOp.byteLong);
+		operators.withCastPrimary("!=", Byte.class, Long.class, CastOp.byteLong);
+		operators.withCastPrimary("==", Byte.class, Character.class, CastOp.byteChar);
+		operators.withCastPrimary("!=", Byte.class, Character.class, CastOp.byteChar);
+		operators.withCastPrimary("==", Byte.class, Float.class, CastOp.byteFloat);
+		operators.withCastPrimary("!=", Byte.class, Float.class, CastOp.byteFloat);
+		operators.withCastPrimary("==", Byte.class, Double.class, CastOp.byteDouble);
+		operators.withCastPrimary("!=", Byte.class, Double.class, CastOp.byteDouble);
 
-		operators.withCastOther("==", Float.class, Long.class, CastOp.longFloat);
-		operators.withCastOther("!=", Float.class, Long.class, CastOp.longFloat);
-		operators.withCastOther("==", Float.class, Integer.class, CastOp.intFloat);
-		operators.withCastOther("!=", Float.class, Integer.class, CastOp.intFloat);
-		operators.withCastOther("==", Float.class, Short.class, CastOp.shortFloat);
-		operators.withCastOther("!=", Float.class, Short.class, CastOp.shortFloat);
-		operators.withCastOther("==", Float.class, Byte.class, CastOp.byteFloat);
-		operators.withCastOther("!=", Float.class, Byte.class, CastOp.byteFloat);
-		operators.withCastOther("==", Float.class, Character.class, CastOp.charFloat);
-		operators.withCastOther("!=", Float.class, Character.class, CastOp.charFloat);
-		operators.withCastSource("==", Float.class, Double.class, CastOp.floatDouble);
-		operators.withCastSource("!=", Float.class, Double.class, CastOp.floatDouble);
+		operators.withCastSecondary("==", Float.class, Long.class, CastOp.longFloat);
+		operators.withCastSecondary("!=", Float.class, Long.class, CastOp.longFloat);
+		operators.withCastSecondary("==", Float.class, Integer.class, CastOp.intFloat);
+		operators.withCastSecondary("!=", Float.class, Integer.class, CastOp.intFloat);
+		operators.withCastSecondary("==", Float.class, Short.class, CastOp.shortFloat);
+		operators.withCastSecondary("!=", Float.class, Short.class, CastOp.shortFloat);
+		operators.withCastSecondary("==", Float.class, Byte.class, CastOp.byteFloat);
+		operators.withCastSecondary("!=", Float.class, Byte.class, CastOp.byteFloat);
+		operators.withCastSecondary("==", Float.class, Character.class, CastOp.charFloat);
+		operators.withCastSecondary("!=", Float.class, Character.class, CastOp.charFloat);
+		operators.withCastPrimary("==", Float.class, Double.class, CastOp.floatDouble);
+		operators.withCastPrimary("!=", Float.class, Double.class, CastOp.floatDouble);
 
-		operators.withCastOther("==", Double.class, Float.class, CastOp.floatDouble);
-		operators.withCastOther("!=", Double.class, Float.class, CastOp.floatDouble);
-		operators.withCastOther("==", Double.class, Long.class, CastOp.longDouble);
-		operators.withCastOther("!=", Double.class, Long.class, CastOp.longDouble);
-		operators.withCastOther("==", Double.class, Integer.class, CastOp.intDouble);
-		operators.withCastOther("!=", Double.class, Integer.class, CastOp.intDouble);
-		operators.withCastOther("==", Double.class, Short.class, CastOp.shortDouble);
-		operators.withCastOther("!=", Double.class, Short.class, CastOp.shortDouble);
-		operators.withCastOther("==", Double.class, Byte.class, CastOp.byteDouble);
-		operators.withCastOther("!=", Double.class, Byte.class, CastOp.byteDouble);
-		operators.withCastOther("==", Double.class, Character.class, CastOp.charDouble);
-		operators.withCastOther("!=", Double.class, Character.class, CastOp.charDouble);
+		operators.withCastSecondary("==", Double.class, Float.class, CastOp.floatDouble);
+		operators.withCastSecondary("!=", Double.class, Float.class, CastOp.floatDouble);
+		operators.withCastSecondary("==", Double.class, Long.class, CastOp.longDouble);
+		operators.withCastSecondary("!=", Double.class, Long.class, CastOp.longDouble);
+		operators.withCastSecondary("==", Double.class, Integer.class, CastOp.intDouble);
+		operators.withCastSecondary("!=", Double.class, Integer.class, CastOp.intDouble);
+		operators.withCastSecondary("==", Double.class, Short.class, CastOp.shortDouble);
+		operators.withCastSecondary("!=", Double.class, Short.class, CastOp.shortDouble);
+		operators.withCastSecondary("==", Double.class, Byte.class, CastOp.byteDouble);
+		operators.withCastSecondary("!=", Double.class, Byte.class, CastOp.byteDouble);
+		operators.withCastSecondary("==", Double.class, Character.class, CastOp.charDouble);
+		operators.withCastSecondary("!=", Double.class, Character.class, CastOp.charDouble);
 
-		operators.withCastOther("==", Character.class, Byte.class, CastOp.byteChar);
-		operators.withCastOther("!=", Character.class, Byte.class, CastOp.byteChar);
-		operators.withCastSource("==", Character.class, Long.class, CastOp.charLong);
-		operators.withCastSource("!=", Character.class, Long.class, CastOp.charLong);
-		operators.withCastSource("==", Character.class, Integer.class, CastOp.charInt);
-		operators.withCastSource("!=", Character.class, Integer.class, CastOp.charInt);
-		operators.withCastSource("==", Character.class, Short.class, CastOp.charShort);
-		operators.withCastSource("!=", Character.class, Short.class, CastOp.charShort);
-		operators.withCastSource("==", Character.class, Float.class, CastOp.charFloat);
-		operators.withCastSource("!=", Character.class, Float.class, CastOp.charFloat);
-		operators.withCastSource("==", Character.class, Double.class, CastOp.charDouble);
-		operators.withCastSource("!=", Character.class, Double.class, CastOp.charDouble);
+		operators.withCastSecondary("==", Character.class, Byte.class, CastOp.byteChar);
+		operators.withCastSecondary("!=", Character.class, Byte.class, CastOp.byteChar);
+		operators.withCastPrimary("==", Character.class, Long.class, CastOp.charLong);
+		operators.withCastPrimary("!=", Character.class, Long.class, CastOp.charLong);
+		operators.withCastPrimary("==", Character.class, Integer.class, CastOp.charInt);
+		operators.withCastPrimary("!=", Character.class, Integer.class, CastOp.charInt);
+		operators.withCastPrimary("==", Character.class, Short.class, CastOp.charShort);
+		operators.withCastPrimary("!=", Character.class, Short.class, CastOp.charShort);
+		operators.withCastPrimary("==", Character.class, Float.class, CastOp.charFloat);
+		operators.withCastPrimary("!=", Character.class, Float.class, CastOp.charFloat);
+		operators.withCastPrimary("==", Character.class, Double.class, CastOp.charDouble);
+		operators.withCastPrimary("!=", Character.class, Double.class, CastOp.charDouble);
 
 		// Now, non-primitive equality
 		operators.with2("==", Object.class, Object.class, Boolean.class, (o1, o2) -> o1 == o2, (s, o2, r) -> {
@@ -795,6 +936,7 @@ public class BinaryOperatorSet {
 		return operators;
 	}
 
+	/** A {@link BinaryOperatorSet} that configures a builder to support the standard set of Java binary operators */
 	public static final BinaryOperatorSet STANDARD_JAVA = standardJava(build()).build();
 
 	private final Map<String, ClassMap<ClassMap<BinaryOp<?, ?, ?>>>> theOperators;
@@ -803,23 +945,42 @@ public class BinaryOperatorSet {
 		theOperators = operators;
 	}
 
-	public Set<Class<?>> getSupportedSourceTypes(String operator) {
+	/**
+	 * @param operator The name of the operator
+	 * @return All primary input types that this operator set knows of for which the given operator may be applied
+	 */
+	public Set<Class<?>> getSupportedPrimaryInputTypes(String operator) {
 		ClassMap<ClassMap<BinaryOp<?, ?, ?>>> ops = theOperators.get(operator);
 		return ops == null ? Collections.emptySet() : ops.getTopLevelKeys();
 	}
 
-	public Set<Class<?>> getSupportedOperandTypes(String operator, Class<?> sourceType) {
+	/**
+	 * @param operator The name of the operator
+	 * @param primaryType The type of the primary input
+	 * @return All secondary input types that this operator set knows of for which the given operator may be applied with the given primary
+	 *         input
+	 */
+	public Set<Class<?>> getSupportedSecondaryInputTypes(String operator, Class<?> primaryType) {
 		ClassMap<ClassMap<BinaryOp<?, ?, ?>>> ops = theOperators.get(operator);
-		ClassMap<BinaryOp<?, ?, ?>> ops2 = ops == null ? null : ops.get(sourceType, TypeMatch.SUPER_TYPE);
+		ClassMap<BinaryOp<?, ?, ?>> ops2 = ops == null ? null : ops.get(primaryType, TypeMatch.SUPER_TYPE);
 		return ops2 == null ? Collections.emptySet() : ops2.getTopLevelKeys();
 	}
 
-	public <S, T> BinaryOp<S, T, ?> getOperator(String operator, Class<S> sourceType, Class<T> otherType) {
+	/**
+	 * @param <S> The primary input type
+	 * @param <T> The secondary input type
+	 * @param operator The name of the operator
+	 * @param primaryType The type of the primary input
+	 * @param secondaryType The type of the secondary input
+	 * @return The binary operator supported by this operator set with the given operator and input types
+	 */
+	public <S, T> BinaryOp<S, T, ?> getOperator(String operator, Class<S> primaryType, Class<T> secondaryType) {
 		ClassMap<ClassMap<BinaryOp<?, ?, ?>>> ops = theOperators.get(operator);
-		ClassMap<BinaryOp<?, ?, ?>> ops2 = ops == null ? null : ops.get(sourceType, TypeMatch.SUPER_TYPE);
-		return ops2 == null ? null : (BinaryOp<S, T, ?>) ops2.get(otherType, TypeMatch.SUPER_TYPE);
+		ClassMap<BinaryOp<?, ?, ?>> ops2 = ops == null ? null : ops.get(primaryType, TypeMatch.SUPER_TYPE);
+		return ops2 == null ? null : (BinaryOp<S, T, ?>) ops2.get(secondaryType, TypeMatch.SUPER_TYPE);
 	}
 
+	/** @return A builder pre-configured for all of this operator set's operations */
 	public Builder copy() {
 		Builder copy = build();
 		for (Map.Entry<String, ClassMap<ClassMap<BinaryOp<?, ?, ?>>>> op : theOperators.entrySet()) {
@@ -833,10 +994,12 @@ public class BinaryOperatorSet {
 		return copy;
 	}
 
+	/** @return A builder that may be configured to support various binary operations */
 	public static Builder build() {
 		return new Builder();
 	}
 
+	/** A builder that may be configured to support various binary operations */
 	public static class Builder {
 		private final Map<String, ClassMap<ClassMap<BinaryOp<?, ?, ?>>>> theOperators;
 
@@ -844,68 +1007,160 @@ public class BinaryOperatorSet {
 			theOperators = new LinkedHashMap<>();
 		}
 
-		public <S, T> Builder with(String operator, Class<S> source, Class<T> other, BinaryOp<S, T, ?> op) {
+		/**
+		 * Installs support for an operator
+		 *
+		 * @param <S> The type of the primary input
+		 * @param <T> The type of the secondary input
+		 * @param operator The name of the operator
+		 * @param primary The type of the primary input
+		 * @param secondary The type of the secondary input
+		 * @param op The operator to support the given operation
+		 * @return This builder
+		 */
+		public <S, T> Builder with(String operator, Class<S> primary, Class<T> secondary, BinaryOp<S, T, ?> op) {
 			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>())//
-			.computeIfAbsent(source, () -> new ClassMap<>())//
-			.with(other, op);
+			.computeIfAbsent(primary, () -> new ClassMap<>())//
+			.with(secondary, op);
 			return this;
 		}
 
-		public <S, T> Builder with(String operator, Class<S> source, Class<T> other,
+		/**
+		 * Installs support for an operator whose output type is the same as that of the primary input
+		 *
+		 * @param <S> The type of the primary input
+		 * @param <T> The type of the secondary input
+		 * @param operator The name of the operator
+		 * @param primary The type of the primary input
+		 * @param secondary The type of the secondary input
+		 * @param op The function to apply the operation
+		 * @param reverse The function to reverse the operation
+		 * @param reverseEnabled The function to detect support for reversing the operation, or null if the operation is always reversible
+		 * @return This builder
+		 * @see BinaryOp#canReverse(Object, Object, Object)
+		 * @see BinaryOp#reverse(Object, Object, Object)
+		 */
+		public <S, T> Builder with(String operator, Class<S> primary, Class<T> secondary,
 			BiFunction<? super S, ? super T, ? extends S> op, TriFunction<? super S, ? super T, ? super S, ? extends S> reverse,
 			TriFunction<? super S, ? super T, ? super S, String> reverseEnabled) {
-			with(operator, source, other, //
-				BinaryOp.of(source, op, reverse, reverseEnabled));
+			with(operator, primary, secondary, //
+				BinaryOp.of(primary, op, reverse, reverseEnabled));
 			return this;
 		}
 
-		public <S, T, V> Builder with2(String operator, Class<S> source, Class<T> other, Class<V> target,
+		/**
+		 * Installs support for an operator
+		 *
+		 * @param <S> The type of the primary input
+		 * @param <T> The type of the secondary input
+		 * @param operator The name of the operator
+		 * @param primary The type of the primary input
+		 * @param secondary The type of the secondary input
+		 * @param target The type of the operator output
+		 * @param op The function to apply the operation
+		 * @param reverse The function to reverse the operation
+		 * @param reverseEnabled The function to detect support for reversing the operation, or null if the operation is always reversible
+		 * @return This builder
+		 * @see BinaryOp#canReverse(Object, Object, Object)
+		 * @see BinaryOp#reverse(Object, Object, Object)
+		 */
+		public <S, T, V> Builder with2(String operator, Class<S> primary, Class<T> secondary, Class<V> target,
 			BiFunction<? super S, ? super T, ? extends V> op, TriFunction<? super S, ? super T, ? super V, ? extends S> reverse,
 			TriFunction<? super S, ? super T, ? super V, String> reverseEnabled) {
 			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>())//
-			.computeIfAbsent(source, () -> new ClassMap<>())//
-			.with(other, BinaryOp.of2(target, op, reverse, reverseEnabled));
+			.computeIfAbsent(primary, () -> new ClassMap<>())//
+			.with(secondary, BinaryOp.of2(target, op, reverse, reverseEnabled));
 			return this;
 		}
 
-		public <S, T, V> Builder withCastOther(String operator, Class<S> source, Class<T> other, CastOp<T, S> cast) {
-			BinaryOp<S, S, V> sourceOp = (BinaryOp<S, S, V>) theOperators.get(operator).get(source, TypeMatch.EXACT).get(source,
+		/**
+		 * Installs support for the application of a previously-installed operator with identical primary and secondary input types to a
+		 * different primary input type via a cast
+		 *
+		 * @param <S> The type of the primary input to support
+		 * @param <T> The type of the secondary input and of the primary input of the pre-installed operator
+		 * @param <V> The output type
+		 * @param operator The name of the operator
+		 * @param primary The type of the primary input to support
+		 * @param secondary The type of the secondary input and of the primary input of the pre-installed operator
+		 * @param cast The cast to use to convert the newly supported primary input type to that matching the operator
+		 * @return This builder
+		 */
+		public <S, T, V> Builder withCastPrimary(String operator, Class<S> primary, Class<T> secondary, CastOp<S, T> cast) {
+			BinaryOp<T, T, V> otherOp = (BinaryOp<T, T, V>) theOperators.get(operator).get(secondary, TypeMatch.EXACT).get(secondary,
 				TypeMatch.EXACT);
-			BinaryOp<S, T, V> castOp = cast.castOther(sourceOp);
+			BinaryOp<S, T, V> castOp = cast.castPrimary(otherOp);
 			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>())//
-			.computeIfAbsent(source, () -> new ClassMap<>())//
-			.with(other, castOp);
+			.computeIfAbsent(primary, () -> new ClassMap<>())//
+			.with(secondary, castOp);
 			return this;
 		}
 
-		public <S, T, V> Builder withCastSource(String operator, Class<S> source, Class<T> other, CastOp<S, T> cast) {
-			BinaryOp<T, T, V> otherOp = (BinaryOp<T, T, V>) theOperators.get(operator).get(other, TypeMatch.EXACT).get(other,
+		/**
+		 * Installs support for the application of a previously-installed operator with identical primary and secondary input types to a
+		 * different secondary input type via a cast
+		 *
+		 * @param <S> The type of the primary input and of the secondary input of the pre-installed operator
+		 * @param <T> The type of the secondary input to support
+		 * @param <V> The output type
+		 * @param operator The name of the operator
+		 * @param primary The type of the primary input and of the secondary input of the pre-installed operator
+		 * @param secondary The type of the secondary input to support
+		 * @param cast The cast to use to convert the newly supported secondary input type to that matching the operator
+		 * @return This builder
+		 */
+		public <S, T, V> Builder withCastSecondary(String operator, Class<S> primary, Class<T> secondary, CastOp<T, S> cast) {
+			BinaryOp<S, S, V> sourceOp = (BinaryOp<S, S, V>) theOperators.get(operator).get(primary, TypeMatch.EXACT).get(primary,
 				TypeMatch.EXACT);
-			BinaryOp<S, T, V> castOp = cast.castSource(otherOp);
+			BinaryOp<S, T, V> castOp = cast.castSecondary(sourceOp);
 			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>())//
-			.computeIfAbsent(source, () -> new ClassMap<>())//
-			.with(other, castOp);
+			.computeIfAbsent(primary, () -> new ClassMap<>())//
+			.with(secondary, castOp);
 			return this;
 		}
 
-		public <S, T, T2, V> Builder withCastBoth(String operator, Class<S> source, Class<T> other, Class<T2> target,
-			CastOp<S, T2> sourceCast, CastOp<T, T2> otherCast) {
+		/**
+		 * Installs support for the application of a previously-installed operator with identical primary and secondary input types to
+		 * different input types via a cast
+		 *
+		 * @param <S> The type of the primary input and of the secondary input of the pre-installed operator
+		 * @param <T> The type of the secondary input to support
+		 * @param <V> The output type
+		 * @param operator The name of the operator
+		 * @param primary The type of the primary input and of the secondary input of the pre-installed operator
+		 * @param target The output type
+		 * @param secondary The type of the secondary input to support
+		 * @param primaryCast The cast to use to convert the newly supported primary input type to that matching the operator
+		 * @param secondaryCast The cast to use to convert the newly supported secondary input type to that matching the operator
+		 * @return This builder
+		 */
+		public <S, T, T2, V> Builder withCastBoth(String operator, Class<S> primary, Class<T> secondary, Class<T2> target,
+			CastOp<S, T2> primaryCast, CastOp<T, T2> secondaryCast) {
 			BinaryOp<T2, T2, V> otherOp = (BinaryOp<T2, T2, V>) theOperators.get(operator).get(target, TypeMatch.EXACT).get(target,
 				TypeMatch.EXACT);
-			BinaryOp<S, T, V> castOp = CastOp.castBoth(otherOp, sourceCast, otherCast);
+			BinaryOp<S, T, V> castOp = CastOp.castBoth(otherOp, primaryCast, secondaryCast);
 			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>())//
-			.computeIfAbsent(source, () -> new ClassMap<>())//
-			.with(other, castOp);
+			.computeIfAbsent(primary, () -> new ClassMap<>())//
+			.with(secondary, castOp);
 			return this;
 		}
 
+		/**
+		 * Installs support for an integer-type arithmetic operation, complete with casts from byte, short, and char
+		 *
+		 * @param operator The name of the operator
+		 * @param op The function to apply the operation
+		 * @param reverse The function to reverse the operation
+		 * @param canReverse The function to detect support for reversing the operation, or null if the operation is always reversible
+		 * @return This builder
+		 */
 		public Builder withIntArithmeticOp(String operator, BiFunction<Integer, Integer, Integer> op,
 			TriFunction<Integer, Integer, Integer, Integer> reverse, TriFunction<Integer, Integer, Integer, String> canReverse) {
 			with(operator, Integer.class, Integer.class, op, reverse, canReverse);
 
-			withCastOther(operator, Integer.class, Character.class, CastOp.charInt);
-			withCastOther(operator, Integer.class, Byte.class, CastOp.byteInt);
-			withCastOther(operator, Integer.class, Short.class, CastOp.shortInt);
+			withCastSecondary(operator, Integer.class, Character.class, CastOp.charInt);
+			withCastSecondary(operator, Integer.class, Byte.class, CastOp.byteInt);
+			withCastSecondary(operator, Integer.class, Short.class, CastOp.shortInt);
 
 			// Every possible combination of byte, short, and char
 			withCastBoth(operator, Byte.class, Byte.class, Integer.class, CastOp.byteInt, CastOp.byteInt);
@@ -921,61 +1176,95 @@ public class BinaryOperatorSet {
 			return this;
 		}
 
+		/**
+		 * Installs support for a long-type arithmetic operation, complete with casts from byte, short, char, and int
+		 *
+		 * @param operator The name of the operator
+		 * @param op The function to apply the operation
+		 * @param reverse The function to reverse the operation
+		 * @param canReverse The function to detect support for reversing the operation, or null if the operation is always reversible
+		 * @return This builder
+		 */
 		public Builder withLongArithmeticOp(String operator, BiFunction<Long, Long, Long> op, TriFunction<Long, Long, Long, Long> reverse,
 			TriFunction<Long, Long, Long, String> canReverse) {
 			with(operator, Long.class, Long.class, op, reverse, canReverse);
 
-			withCastOther(operator, Long.class, Character.class, CastOp.charLong);
-			withCastOther(operator, Long.class, Byte.class, CastOp.byteLong);
-			withCastOther(operator, Long.class, Short.class, CastOp.shortLong);
-			withCastOther(operator, Long.class, Integer.class, CastOp.intLong);
+			withCastSecondary(operator, Long.class, Character.class, CastOp.charLong);
+			withCastSecondary(operator, Long.class, Byte.class, CastOp.byteLong);
+			withCastSecondary(operator, Long.class, Short.class, CastOp.shortLong);
+			withCastSecondary(operator, Long.class, Integer.class, CastOp.intLong);
 
-			withCastSource(operator, Integer.class, Long.class, CastOp.intLong);
+			withCastPrimary(operator, Integer.class, Long.class, CastOp.intLong);
 
 			return this;
 		}
 
+		/**
+		 * Installs support for a float-type arithmetic operation, complete with casts from byte, short, char, int, and long
+		 *
+		 * @param operator The name of the operator
+		 * @param op The function to apply the operation
+		 * @param reverse The function to reverse the operation
+		 * @param canReverse The function to detect support for reversing the operation, or null if the operation is always reversible
+		 * @return This builder
+		 */
 		public Builder withFloatArithmeticOp(String operator, BiFunction<Float, Float, Float> op,
 			TriFunction<Float, Float, Float, Float> reverse, TriFunction<Float, Float, Float, String> canReverse) {
 			with(operator, Float.class, Float.class, op, reverse, canReverse);
 
-			withCastOther(operator, Float.class, Character.class, CastOp.charFloat);
-			withCastOther(operator, Float.class, Byte.class, CastOp.byteFloat);
-			withCastOther(operator, Float.class, Short.class, CastOp.shortFloat);
-			withCastOther(operator, Float.class, Integer.class, CastOp.intFloat);
-			withCastOther(operator, Float.class, Long.class, CastOp.longFloat);
+			withCastSecondary(operator, Float.class, Character.class, CastOp.charFloat);
+			withCastSecondary(operator, Float.class, Byte.class, CastOp.byteFloat);
+			withCastSecondary(operator, Float.class, Short.class, CastOp.shortFloat);
+			withCastSecondary(operator, Float.class, Integer.class, CastOp.intFloat);
+			withCastSecondary(operator, Float.class, Long.class, CastOp.longFloat);
 
-			withCastSource(operator, Integer.class, Float.class, CastOp.intFloat);
-			withCastSource(operator, Long.class, Float.class, CastOp.longFloat);
+			withCastPrimary(operator, Integer.class, Float.class, CastOp.intFloat);
+			withCastPrimary(operator, Long.class, Float.class, CastOp.longFloat);
 
 			return this;
 		}
 
+		/**
+		 * Installs support for a double-type arithmetic operation, complete with casts from byte, short, char, int, long, and float
+		 *
+		 * @param operator The name of the operator
+		 * @param op The function to apply the operation
+		 * @param reverse The function to reverse the operation
+		 * @param canReverse The function to detect support for reversing the operation, or null if the operation is always reversible
+		 * @return This builder
+		 */
 		public Builder withDoubleArithmeticOp(String operator, BiFunction<Double, Double, Double> op,
 			TriFunction<Double, Double, Double, Double> reverse, TriFunction<Double, Double, Double, String> canReverse) {
 			with(operator, Double.class, Double.class, op, reverse, canReverse);
 
-			withCastOther(operator, Double.class, Character.class, CastOp.charDouble);
-			withCastOther(operator, Double.class, Byte.class, CastOp.byteDouble);
-			withCastOther(operator, Double.class, Short.class, CastOp.shortDouble);
-			withCastOther(operator, Double.class, Integer.class, CastOp.intDouble);
-			withCastOther(operator, Double.class, Long.class, CastOp.longDouble);
-			withCastOther(operator, Double.class, Float.class, CastOp.floatDouble);
+			withCastSecondary(operator, Double.class, Character.class, CastOp.charDouble);
+			withCastSecondary(operator, Double.class, Byte.class, CastOp.byteDouble);
+			withCastSecondary(operator, Double.class, Short.class, CastOp.shortDouble);
+			withCastSecondary(operator, Double.class, Integer.class, CastOp.intDouble);
+			withCastSecondary(operator, Double.class, Long.class, CastOp.longDouble);
+			withCastSecondary(operator, Double.class, Float.class, CastOp.floatDouble);
 
-			withCastSource(operator, Integer.class, Double.class, CastOp.intDouble);
-			withCastSource(operator, Long.class, Double.class, CastOp.longDouble);
-			withCastSource(operator, Float.class, Double.class, CastOp.floatDouble);
+			withCastPrimary(operator, Integer.class, Double.class, CastOp.intDouble);
+			withCastPrimary(operator, Long.class, Double.class, CastOp.longDouble);
+			withCastPrimary(operator, Float.class, Double.class, CastOp.floatDouble);
 
 			return this;
 		}
 
+		/**
+		 * Installs support for an integer-type comparison operation, complete with casts from byte, short, and char
+		 *
+		 * @param operator The name of the operator
+		 * @param op The function to apply the operation
+		 * @return This builder
+		 */
 		public Builder withIntComparisonOp(String operator, BiFunction<Integer, Integer, Boolean> op) {
 			with2(operator, Integer.class, Integer.class, Boolean.class, op, null,
 				(s, s2, v) -> "Comparison operations cannot be reversed");
 
-			withCastOther(operator, Integer.class, Character.class, CastOp.charInt);
-			withCastOther(operator, Integer.class, Byte.class, CastOp.byteInt);
-			withCastOther(operator, Integer.class, Short.class, CastOp.shortInt);
+			withCastSecondary(operator, Integer.class, Character.class, CastOp.charInt);
+			withCastSecondary(operator, Integer.class, Byte.class, CastOp.byteInt);
+			withCastSecondary(operator, Integer.class, Short.class, CastOp.shortInt);
 
 			// Every possible combination of byte, short, and char
 			withCastBoth(operator, Byte.class, Byte.class, Integer.class, CastOp.byteInt, CastOp.byteInt);
@@ -991,51 +1280,73 @@ public class BinaryOperatorSet {
 			return this;
 		}
 
+		/**
+		 * Installs support for a long-type comparison operation, complete with casts from byte, short, char, and int
+		 *
+		 * @param operator The name of the operator
+		 * @param op The function to apply the operation
+		 * @return This builder
+		 */
 		public Builder withLongComparisonOp(String operator, BiFunction<Long, Long, Boolean> op) {
 			with2(operator, Long.class, Long.class, Boolean.class, op, null, (s, s2, v) -> "Comparison operations cannot be reversed");
 
-			withCastOther(operator, Long.class, Character.class, CastOp.charLong);
-			withCastOther(operator, Long.class, Byte.class, CastOp.byteLong);
-			withCastOther(operator, Long.class, Short.class, CastOp.shortLong);
-			withCastOther(operator, Long.class, Integer.class, CastOp.intLong);
+			withCastSecondary(operator, Long.class, Character.class, CastOp.charLong);
+			withCastSecondary(operator, Long.class, Byte.class, CastOp.byteLong);
+			withCastSecondary(operator, Long.class, Short.class, CastOp.shortLong);
+			withCastSecondary(operator, Long.class, Integer.class, CastOp.intLong);
 
-			withCastSource(operator, Integer.class, Long.class, CastOp.intLong);
+			withCastPrimary(operator, Integer.class, Long.class, CastOp.intLong);
 
 			return this;
 		}
 
+		/**
+		 * Installs support for a float-type comparison operation, complete with casts from byte, short, char, int, and long
+		 *
+		 * @param operator The name of the operator
+		 * @param op The function to apply the operation
+		 * @return This builder
+		 */
 		public Builder withFloatComparisonOp(String operator, BiFunction<Float, Float, Boolean> op) {
 			with2(operator, Float.class, Float.class, Boolean.class, op, null, (s, s2, v) -> "Comparison operations cannot be reversed");
 
-			withCastOther(operator, Float.class, Character.class, CastOp.charFloat);
-			withCastOther(operator, Float.class, Byte.class, CastOp.byteFloat);
-			withCastOther(operator, Float.class, Short.class, CastOp.shortFloat);
-			withCastOther(operator, Float.class, Integer.class, CastOp.intFloat);
-			withCastOther(operator, Float.class, Long.class, CastOp.longFloat);
+			withCastSecondary(operator, Float.class, Character.class, CastOp.charFloat);
+			withCastSecondary(operator, Float.class, Byte.class, CastOp.byteFloat);
+			withCastSecondary(operator, Float.class, Short.class, CastOp.shortFloat);
+			withCastSecondary(operator, Float.class, Integer.class, CastOp.intFloat);
+			withCastSecondary(operator, Float.class, Long.class, CastOp.longFloat);
 
-			withCastSource(operator, Integer.class, Float.class, CastOp.intFloat);
-			withCastSource(operator, Long.class, Float.class, CastOp.longFloat);
+			withCastPrimary(operator, Integer.class, Float.class, CastOp.intFloat);
+			withCastPrimary(operator, Long.class, Float.class, CastOp.longFloat);
 
 			return this;
 		}
 
+		/**
+		 * Installs support for a double-type comparison operation, complete with casts from byte, short, char, int, long, and float
+		 *
+		 * @param operator The name of the operator
+		 * @param op The function to apply the operation
+		 * @return This builder
+		 */
 		public Builder withDoubleComparisonOp(String operator, BiFunction<Double, Double, Boolean> op) {
 			with2(operator, Double.class, Double.class, Boolean.class, op, null, (s, s2, v) -> "Comparison operations cannot be reversed");
 
-			withCastOther(operator, Double.class, Character.class, CastOp.charDouble);
-			withCastOther(operator, Double.class, Byte.class, CastOp.byteDouble);
-			withCastOther(operator, Double.class, Short.class, CastOp.shortDouble);
-			withCastOther(operator, Double.class, Integer.class, CastOp.intDouble);
-			withCastOther(operator, Double.class, Long.class, CastOp.longDouble);
-			withCastOther(operator, Double.class, Float.class, CastOp.floatDouble);
+			withCastSecondary(operator, Double.class, Character.class, CastOp.charDouble);
+			withCastSecondary(operator, Double.class, Byte.class, CastOp.byteDouble);
+			withCastSecondary(operator, Double.class, Short.class, CastOp.shortDouble);
+			withCastSecondary(operator, Double.class, Integer.class, CastOp.intDouble);
+			withCastSecondary(operator, Double.class, Long.class, CastOp.longDouble);
+			withCastSecondary(operator, Double.class, Float.class, CastOp.floatDouble);
 
-			withCastSource(operator, Integer.class, Double.class, CastOp.intDouble);
-			withCastSource(operator, Long.class, Double.class, CastOp.longDouble);
-			withCastSource(operator, Float.class, Double.class, CastOp.floatDouble);
+			withCastPrimary(operator, Integer.class, Double.class, CastOp.intDouble);
+			withCastPrimary(operator, Long.class, Double.class, CastOp.longDouble);
+			withCastPrimary(operator, Float.class, Double.class, CastOp.floatDouble);
 
 			return this;
 		}
 
+		/** @return A binary operator set with the support installed in this builder */
 		public BinaryOperatorSet build() {
 			Map<String, ClassMap<ClassMap<BinaryOp<?, ?, ?>>>> operators = new LinkedHashMap<>();
 			for (Map.Entry<String, ClassMap<ClassMap<BinaryOp<?, ?, ?>>>> op : theOperators.entrySet()) {

@@ -15,19 +15,26 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
+/** An expression that returns a boolean for whether a given expression's value is an instance of a constant type */
 public class InstanceofExpression implements ObservableExpression {
 	private final ObservableExpression theLeft;
 	private final String theType;
 
+	/**
+	 * @param left The expression whose type to check
+	 * @param type The type to check against
+	 */
 	public InstanceofExpression(ObservableExpression left, String type) {
 		theLeft = left;
 		theType = type;
 	}
 
+	/** @return The expression whose type to check */
 	public ObservableExpression getLeft() {
 		return theLeft;
 	}
 
+	/** @return The type to check against */
 	public String getType() {
 		return theType;
 	}

@@ -33,19 +33,26 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
+/** An expression of the form 'name1.name2.name3' */
 public class NameExpression implements ObservableExpression {
 	private final ObservableExpression theContext;
 	private final BetterList<String> theNames;
 
+	/**
+	 * @param ctx The expression representing the object the model in which to get the value
+	 * @param names The subsequent names in the expression
+	 */
 	public NameExpression(ObservableExpression ctx, BetterList<String> names) {
 		theContext = ctx;
 		theNames = names;
 	}
 
+	/** @return The expression representing the object the model in which to get the value */
 	public ObservableExpression getContext() {
 		return theContext;
 	}
 
+	/** @return The subsequent names in the expression */
 	public BetterList<String> getNames() {
 		return theNames;
 	}
@@ -346,7 +353,7 @@ public class NameExpression implements ObservableExpression {
 					if (type != null) {
 						Invocation.MethodResult<Method, ? extends T> result = Invocation.findMethod(//
 							type.getMethods(), theNames.getFirst(), null, false, theOptions, voidTarget ? null : targetType, env,
-							Invocation.ExecutableImpl.METHOD);
+								Invocation.ExecutableImpl.METHOD);
 						if (result != null) {
 							setResultType(result.returnType);
 							MethodOption option = theOptions.get(result.argListOption);
@@ -375,19 +382,19 @@ public class NameExpression implements ObservableExpression {
 		};
 	}
 
-	public static class FieldValue<M, F> extends Identifiable.AbstractIdentifiable implements SettableValue<F> {
+	static class FieldValue<M, F> extends Identifiable.AbstractIdentifiable implements SettableValue<F> {
 		private final Field theField;
 		private final TypeToken<F> theType;
-		private final Function<F, M> theCast;
-		private final Function<M, F> theReverse;
+		// private final Function<F, M> theCast;
+		// private final Function<M, F> theReverse;
 		private final SimpleObservable<ObservableValueEvent<F>> theChanges;
 		private long theStamp;
 
 		FieldValue(Field field, TypeToken<F> type, Function<F, M> cast, Function<M, F> reverse) {
 			theField = field;
 			theType = type;
-			theCast = cast;
-			theReverse = reverse;
+			// theCast = cast;
+			// theReverse = reverse;
 			theChanges = SimpleObservable.build().build();
 		}
 
