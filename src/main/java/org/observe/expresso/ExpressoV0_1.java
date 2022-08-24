@@ -345,7 +345,7 @@ public class ExpressoV0_1 implements QonfigInterpretation {
 						public C get(ModelSetInstance models) {
 							C collection = (C) create(type, models).withDescription(session.get(PATH_KEY, String.class)).build();
 							for (ValueContainer<SettableValue<?>, SettableValue<Object>> value : elContainers) {
-								if (!((ObservableCollection<Object>) collection).add(value.apply(models)))
+								if (!((ObservableCollection<Object>) collection).add(value.apply(models).get()))
 									System.err.println("Warning: Value " + value + " already added to " + session.get(PATH_KEY));
 							}
 							return collection;
@@ -389,12 +389,12 @@ public class ExpressoV0_1 implements QonfigInterpretation {
 						public M get(ModelSetInstance models) {
 							M map = (M) create(keyType, valueType, models).withDescription(session.get(PATH_KEY, String.class)).buildMap();
 							for (BiTuple<ValueContainer<SettableValue<?>, SettableValue<Object>>, ValueContainer<SettableValue<?>, SettableValue<Object>>> entry : entryContainers) {
-								Object key = entry.getValue1().apply(models);
+								Object key = entry.getValue1().apply(models).get();
 								if (map.containsKey(key))
 									System.err.println(
 										"Warning: Entry for key " + entry.getValue1() + " already added to " + session.get(PATH_KEY));
 								else
-									((ObservableMap<Object, Object>) map).put(key, entry.getValue2().apply(models));
+									((ObservableMap<Object, Object>) map).put(key, entry.getValue2().apply(models).get());
 							}
 							return map;
 						}

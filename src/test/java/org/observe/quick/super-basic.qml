@@ -6,7 +6,7 @@
 		<models>
 			<model name="appModel">
 				<constant name="const1" type="String">`SOME CONSTANT`</constant>
-				<value name="value1" type="int">0</value> <!-- Mutable value with initial value -->
+				<value name="value1" type="int" init="0" /> <!-- Mutable value with initial value -->
 				<list name="list1" type="int">
 					<element>0</element>
 					<element>1</element>

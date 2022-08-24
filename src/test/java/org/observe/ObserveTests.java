@@ -7,6 +7,7 @@ import org.observe.assoc.ObservableAssocTest;
 import org.observe.collect.ObservableCollectionsTest;
 import org.observe.config.ObservableConfigTest;
 import org.observe.ds.DSTesting;
+import org.observe.expresso.ExpressoTests;
 import org.observe.util.CsvEntitySetTest;
 import org.observe.util.EntityArgumentsTest;
 import org.observe.util.EntityReflectorTest;
@@ -28,6 +29,7 @@ import org.qommons.QommonsTests;
 	DSTesting.class, //
 	TypeTokensTest.class, //
 	CsvEntitySetTest.class, //
+	ExpressoTests.class, //
 	QommonsTests.class
 })
 public class ObserveTests {

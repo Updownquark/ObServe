@@ -12,7 +12,15 @@ import org.qommons.config.QonfigApp;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigParseException;
 
+/** Some tests for Expresso functionality */
 public class ExpressoTests {
+	/**
+	 * Simple model tests
+	 *
+	 * @throws IOException If any of the files can't be found or read
+	 * @throws QonfigParseException If any of the files can't be parsed
+	 * @throws QonfigInterpretationException If the document can't be created
+	 */
 	@Test
 	public void testExpresso() throws IOException, QonfigParseException, QonfigInterpretationException {
 		ObservableModelSet.ExternalModelSetBuilder extModels = ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER);

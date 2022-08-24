@@ -1,4 +1,4 @@
-package org.observe.util.swing;
+package org.observe.quick;
 
 import java.io.IOException;
 import java.net.URL;
@@ -9,12 +9,20 @@ import org.junit.Test;
 import org.observe.SettableValue;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet;
-import org.observe.quick.QuickDocument;
 import org.qommons.config.QonfigApp;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigParseException;
 
+/** Tests for Quick */
 public class QuickTests {
+	/**
+	 * Just pops up a little UI to test some of the basic functionality of Quick. It's not a good unit test because the user has to interact
+	 * with it for the test, but it is a test.
+	 *
+	 * @throws IOException If any of the files can't be found or read
+	 * @throws QonfigParseException If any of the files can't be parsed
+	 * @throws QonfigInterpretationException If the Quick document can't be created
+	 */
 	@Test
 	public void testSuperBasic() throws IOException, QonfigParseException, QonfigInterpretationException {
 		ObservableModelSet.ExternalModelSetBuilder extModels = ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER);
