@@ -13,13 +13,8 @@ public enum DependencyServiceStage {
 	 */
 	Initializing,
 	/**
-	 * The dependency service has initialized its components, but has not transitioned any to {@link ComponentStage#Complete}. No components
-	 * should have {@link DSComponent#getStage() stage} {@link ComponentStage#Defined}.
-	 */
-	PreInitialized,
-	/**
-	 * The dependency service has finished initializing all its components. All of them should be either {@link ComponentStage#Complete} or
-	 * {@link ComponentStage#Unsatisfied}.
+	 * The dependency service has finished initializing all its components. All of them should be {@link ComponentStage#Unsatisfied},
+	 * {@link ComponentStage#Satisfied}, or {@link ComponentStage#Unavailable}.
 	 */
 	Initialized;
 }

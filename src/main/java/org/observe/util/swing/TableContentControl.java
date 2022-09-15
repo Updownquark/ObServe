@@ -58,7 +58,7 @@ public interface TableContentControl {
 
 	/**
 	 * Interface to interpret cell values from a filtering/sorting perspective. Typically a table column.
-	 * 
+	 *
 	 * @param <E> The type of values this renderer understands
 	 */
 	public interface ValueRenderer<E> extends Named {
@@ -85,7 +85,7 @@ public interface TableContentControl {
 
 	/**
 	 * A filtered table row
-	 * 
+	 *
 	 * @param <E> The type of row value
 	 */
 	public static class FilteredValue<E> implements Comparable<FilteredValue<?>> {
@@ -378,6 +378,8 @@ public interface TableContentControl {
 	 */
 	public static <F extends PanelPopulation.FieldEditor<ObservableTextField<TableContentControl>, ?>> F configureSearchField(F field,
 		boolean commitOnType) {
+		if (field.getEditor().getValue().get() == null)
+			field.getEditor().getValue().set(TableContentControl.DEFAULT, null);
 		return (F) field.fill().withTooltip(TableContentControl.TABLE_CONTROL_TOOLTIP).modifyEditor(tf2 -> tf2//
 			.setCommitOnType(commitOnType).setEmptyText("Search or Sort...")
 			.setIcon(ObservableSwingUtils.getFixedIcon(null, "/icons/search.png", 16, 16)));
@@ -463,7 +465,7 @@ public interface TableContentControl {
 			filters.add(new IntRangeFilter(filterText, m.group("i1"), m.group("i2")));
 		else {
 			FoundDouble flt = TableContentControl.tryParseDouble(filterText, 0);
-			if (flt != null) {
+			if (flt != null && flt.end == filterText.length()) {
 				if (flt.end == filterText.length())
 					filters.add(new NumberRangeFilter(filterText, flt.minValue, flt.maxValue));
 				else if (filterText.charAt(flt.end) == '-') {
@@ -475,7 +477,7 @@ public interface TableContentControl {
 		}
 		ParsedInstant time;
 		try {
-			time = TimeUtils.parseInstant(filterText, false, false, null);
+			time = TimeUtils.parseInstant(filterText, true, false, null);
 		} catch (ParseException e) {
 			throw new IllegalStateException(e); // Shouldn't happen
 		}
@@ -505,7 +507,7 @@ public interface TableContentControl {
 		if (dashIdx <= 0) {
 			ParsedDuration duration;
 			try {
-				duration = TimeUtils.parseDuration(filterText, false);
+				duration = TimeUtils.parseDuration(filterText, true);
 			} catch (ParseException e) {
 				duration = null;
 			}
@@ -606,12 +608,14 @@ public interface TableContentControl {
 								v.hasMatch = true;
 						}
 					}
-				} else
+				} else {
+					v.matches = null;
 					v.hasMatch = true; // No filtering
+				}
 				// tests[v.hasMatch ? 0 : 1]++;
 				return v;
 			}, "toFilterValue", null)))//
-			.filter(LambdaUtils.printableFn(fv -> fv.hasMatch() ? null : "No match", "match", null))//
+			.filter(LambdaUtils.printableFn(fv -> (fv != null && fv.hasMatch()) ? null : "No match", "match", null))//
 			.sorted(LambdaUtils.printableComparator((fv1, fv2) -> {
 				List<String> sorting = filter.get().getRowSorting();
 				if (sorting == null || sorting.isEmpty())
@@ -727,33 +731,74 @@ public interface TableContentControl {
 
 		@Override
 		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence toSearch) {
-			if (!category.searchGeneral())
+			if (category != null && !category.searchGeneral())
 				return null;
 			SortedMatchSet matches = null;
-			for (int s = 0; s < toSearch.length(); s++) {
-				int c = s, m = 0;
-				while (m < theMatcher.length() && c < toSearch.length()) {
-					char matchCh = theMatcher.charAt(m);
-					char testCh = toSearch.charAt(c);
-					int diff = matchCh - testCh;
-					if (diff == 0) {//
-					} else if (diff == StringUtils.a_MINUS_A && matchCh >= 'a' && matchCh <= 'z') {//
-					} else if (diff == -StringUtils.a_MINUS_A && matchCh >= 'A' && matchCh <= 'Z') {//
-					} else if (m > 0 && Character.isWhitespace(testCh) && !Character.isWhitespace(matchCh)) {
-						c++;
-						continue;
-					} else
-						break;
-					c++;
-					m++;
+			int[] match = findMatch(theMatcher, toSearch, 0);
+			if (match != null) {
+				matches = new SortedMatchSet();
+				while (match != null) {
+					matches.add(match[0], match[1]);
+					match = findMatch(theMatcher, toSearch, match[1]);
 				}
-				if (m == theMatcher.length()) {
+			}
+			for (int s = 0; s < toSearch.length(); s++) {
+				int m = matches(theMatcher, toSearch, s);
+				if (m >= 0) {
 					if (matches == null)
 						matches = new SortedMatchSet();
-					matches.add(s, c);
+					matches.add(s, m);
 				}
 			}
 			return matches;
+		}
+
+		/**
+		 * Looks for a pattern match in a text string
+		 *
+		 * @param matcher The text pattern to look for
+		 * @param toSearch The text to search in
+		 * @param start The start position in the text to search
+		 * @return The start/end position of the first match found, or null if not matches were found
+		 */
+		public static int[] findMatch(String matcher, CharSequence toSearch, int start) {
+			while (start + matcher.length() <= toSearch.length()) {
+				int end = matches(matcher, toSearch, start);
+				if (end > 0)
+					return new int[] { start, end };
+				start++;
+			}
+			return null;
+		}
+
+		/**
+		 * Checks for a pattern match in a text string at a single start position
+		 *
+		 * @param matcher The text pattern to look for
+		 * @param toSearch The text to search in
+		 * @param start The start position in the text to search
+		 * @return The end index of the match starting at the given position, or -1 if there is no match there
+		 */
+		public static int matches(String matcher, CharSequence toSearch, int start) {
+			int c = start, m = 0;
+			while (m < matcher.length() && c < toSearch.length()) {
+				char matchCh = matcher.charAt(m);
+				char testCh = toSearch.charAt(c);
+				int diff = matchCh - testCh;
+				if (diff == 0) {//
+				} else if (diff == StringUtils.a_MINUS_A && matchCh >= 'a' && matchCh <= 'z') {//
+				} else if (diff == -StringUtils.a_MINUS_A && matchCh >= 'A' && matchCh <= 'Z') {//
+				} else if (m > 0 && Character.isWhitespace(testCh) && !Character.isWhitespace(matchCh)) {
+					c++;
+					continue;
+				} else
+					break;
+				c++;
+				m++;
+			}
+			if (m == matcher.length())
+				return c;
+			return -1;
 		}
 
 		@Override
@@ -866,7 +911,7 @@ public interface TableContentControl {
 
 		@Override
 		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence text) {
-			if (!categoryMatches(theCategory, category.getName()))
+			if (category == null || !categoryMatches(theCategory, category.getName()))
 				return null;
 			return theFilter.findMatches(new UnfilteredRenderer<>(category), text);
 		}
@@ -895,7 +940,7 @@ public interface TableContentControl {
 				c++;
 				t++;
 			}
-			return true;
+			return c == category.length();
 		}
 
 		@Override
@@ -923,8 +968,6 @@ public interface TableContentControl {
 
 	/** A simple pattern filter that interprets '*' as any character sequence */
 	public static class SimplePatternFilter implements TableContentControl {
-		private static final int CASE_DIFF = 'a' - 'A';
-
 		private final List<String> theSequence;
 
 		/** @param sequence The character sequences between '*' wildcards to match */
@@ -939,58 +982,28 @@ public interface TableContentControl {
 
 		@Override
 		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence text) {
-			if (!category.searchGeneral())
+			if (category != null && !category.searchGeneral())
 				return null;
 			if (theSequence.isEmpty()) {
 				return new SortedMatchSet(1).add(0, text.length());
 			}
-			SortedMatchSet matches = null;
-			TextMatch match = find(text, 0);
-			if (match != null) {
-				matches = new SortedMatchSet();
-			}
+			return findMatch(0, text, 0, 0, null);
+		}
+
+		private SortedMatchSet findMatch(int seqIndex, CharSequence toSearch, int zeroStart, int start, SortedMatchSet matches) {
+			int[] match = SimpleFilter.findMatch(theSequence.get(seqIndex), toSearch, start);
 			while (match != null) {
-				matches.add(match);
-				match = find(text, match.end);
+				if (seqIndex == 0)
+					zeroStart = match[0];
+				if (seqIndex == theSequence.size() - 1) {
+					if (matches == null)
+						matches = new SortedMatchSet();
+					matches.add(zeroStart, match[1]);
+				} else
+					matches = findMatch(seqIndex + 1, toSearch, zeroStart, match[1], matches);
+				match = SimpleFilter.findMatch(theSequence.get(seqIndex), toSearch, match[1]);
 			}
 			return matches;
-		}
-
-		private TextMatch find(CharSequence text, int start) {
-			int end = start;
-			for (String seq : theSequence) {
-				if (seq.length() == 0)
-					continue;
-				int index = find(text, seq, end);
-				if (index < 0) {
-					start = -1;
-					break;
-				} else
-					end = index + seq.length();
-			}
-			return start >= 0 ? new TextMatch(start, end) : null;
-		}
-
-		private static int find(CharSequence text, String seq, int start) {
-			while (start + seq.length() <= text.length()) {
-				int c;
-				for (c = 0; c < seq.length(); c++) {
-					char ch1 = text.charAt(start + c);
-					char ch2 = seq.charAt(c);
-					if (ch1 == ch2)
-						continue;
-					else if (ch1 >= 'A' && ch1 <= 'Z' && ch2 - ch1 == CASE_DIFF)
-						continue;
-					else if (ch2 >= 'A' && ch2 <= 'Z' && ch1 - ch2 == CASE_DIFF)
-						continue;
-					else
-						break;
-				}
-				if (c == seq.length())
-					return start;
-				start++;
-			}
-			return -1;
 		}
 
 		@Override
@@ -1030,7 +1043,7 @@ public interface TableContentControl {
 
 		@Override
 		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence text) {
-			if (!category.searchGeneral())
+			if (category != null && !category.searchGeneral())
 				return null;
 			SortedMatchSet matches = null;
 			Matcher matcher = thePattern.matcher(text);
@@ -1216,7 +1229,7 @@ public interface TableContentControl {
 
 		@Override
 		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence text) {
-			if (!category.searchGeneral())
+			if (category != null && !category.searchGeneral())
 				return null;
 			SortedMatchSet matches = null;
 			for (int i = 0; i < text.length(); i++) {
@@ -1293,7 +1306,7 @@ public interface TableContentControl {
 
 		@Override
 		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence toSearch) {
-			if (!category.searchGeneral())
+			if (category != null && !category.searchGeneral())
 				return null;
 			SortedMatchSet matches = null;
 			int digitStart = -1;
@@ -1383,7 +1396,7 @@ public interface TableContentControl {
 
 		@Override
 		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence text) {
-			if (!category.searchGeneral())
+			if (category != null && !category.searchGeneral())
 				return null;
 			SortedMatchSet matches = null;
 			for (int i = 0; i < text.length();) {
@@ -1461,7 +1474,7 @@ public interface TableContentControl {
 
 		@Override
 		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence text) {
-			if (!category.searchGeneral())
+			if (category != null && !category.searchGeneral())
 				return null;
 			SortedMatchSet matches = null;
 			for (int i = 0; i < text.length();) {
@@ -1523,7 +1536,7 @@ public interface TableContentControl {
 
 		@Override
 		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence text) {
-			if (!category.searchGeneral())
+			if (category != null && !category.searchGeneral())
 				return null;
 			TimeUtils.ParsedDuration duration;
 			try {
@@ -1595,7 +1608,7 @@ public interface TableContentControl {
 
 		@Override
 		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence text) {
-			if (!category.searchGeneral())
+			if (category != null && !category.searchGeneral())
 				return null;
 			TimeUtils.ParsedDuration duration;
 			try {
@@ -1919,7 +1932,7 @@ public interface TableContentControl {
 
 		@Override
 		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence text) {
-			if (!theCategory.equals(category.getName()))
+			if (category == null || !theCategory.equals(category.getName()))
 				return null;
 			return theFilter.test(text) ? new SortedMatchSet(1).add(0, text.length()) : null;
 		}
@@ -2214,7 +2227,7 @@ public interface TableContentControl {
 			.withCloseAction(JFrame.EXIT_ON_CLOSE)//
 			.withVContent(p -> p.fill().fillV()//
 				// .addTextField("Categories:", categories, new Format.ListFormat<>(Format.TEXT, ",", null), f -> f.fill())//
-				.<TableContentControl> addTextField("Filter", control, FORMAT, tf -> configureSearchField(tf.fill(), true))//
+				.<TableContentControl> addTextField("Filter", control, FORMAT, tf -> configureSearchField(tf.fill(), false))//
 				.addTable(rows, table -> {
 					table.fill().fillV().withCountTitle("displayed").withItemName("row").fill().withFiltering(control)
 					.withColumns(columns)//

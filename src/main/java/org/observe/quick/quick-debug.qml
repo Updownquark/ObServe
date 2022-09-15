@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<quick
-	uses:base="quick-base.qtd"
+<quick uses:base="Quick-Base"
 	with-extension="window"
 	x="ext.x" y="ext.y" width="ext.width" height="ext.height" visible="ext.visible">
 	<head>

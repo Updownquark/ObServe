@@ -149,6 +149,11 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 	}
 
 	@Override
+	public boolean isEventing() {
+		return theNodes.isEventing() && theEdges.isEventing();
+	}
+
+	@Override
 	public ObservableCollection<ObservableGraph.Node<N, E>> getNodes() {
 		return theExposedNodes;
 	}

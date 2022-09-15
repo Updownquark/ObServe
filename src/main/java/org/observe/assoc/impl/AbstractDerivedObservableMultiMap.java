@@ -91,6 +91,11 @@ public abstract class AbstractDerivedObservableMultiMap<S, K, V> implements Obse
 	}
 
 	@Override
+	public boolean isEventing() {
+		return theSourceCollection.isEventing();
+	}
+
+	@Override
 	public boolean isLockSupported() {
 		return getKeyLocker().isLockSupported() && getValueManager().isLockSupported();
 	}

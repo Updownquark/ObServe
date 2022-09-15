@@ -286,6 +286,11 @@ public class ObservableConfigContent {
 				}
 
 				@Override
+				public boolean isEventing() {
+					return theRoot.isEventing();
+				}
+
+				@Override
 				public boolean isSafe() {
 					return theRoot.isLockSupported();
 				}
@@ -382,6 +387,11 @@ public class ObservableConfigContent {
 				@Override
 				public ThreadConstraint getThreadConstraint() {
 					return theConfigChild.theRoot.getThreadConstraint();
+				}
+
+				@Override
+				public boolean isEventing() {
+					return theConfigChild.theRoot.isEventing();
 				}
 
 				@Override
@@ -510,6 +520,11 @@ public class ObservableConfigContent {
 		@Override
 		public boolean isLockSupported() {
 			return theConfig.isLockSupported();
+		}
+
+		@Override
+		public boolean isEventing() {
+			return theConfig.isEventing();
 		}
 
 		@Override

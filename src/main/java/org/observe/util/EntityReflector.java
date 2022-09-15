@@ -26,6 +26,7 @@ import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import org.observe.Eventable;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
@@ -645,6 +646,13 @@ public class EntityReflector<E> {
 		Transactable getLock(int fieldIndex);
 
 		/**
+		 * @param fieldIndex The index of the field
+		 * @return Whether the given field may be firing an event right now
+		 * @see Eventable#isEventing()
+		 */
+		boolean isEventing(int fieldIndex);
+
+		/**
 		 * @param fieldIndex The {@link EntityReflector.ReflectedField#getFieldIndex() index} of the field
 		 * @return The {@link Stamped#getStamp() stamp} for the field's value
 		 */
@@ -911,6 +919,11 @@ public class EntityReflector<E> {
 			@Override
 			public CoreId getCoreId() {
 				return ObservableFieldImpl.this.getCoreId();
+			}
+
+			@Override
+			public boolean isEventing() {
+				return theField.theReflector.isFieldEventing(theEntity, theField.getFieldIndex());
 			}
 
 			@Override
@@ -2408,6 +2421,18 @@ public class EntityReflector<E> {
 				new IdentifiableProxyMethodHandler(backing));
 		else
 			return (E) Proxy.newProxyInstance(theRawType.getClassLoader(), new Class[] { theRawType }, new ProxyMethodHandler(backing));
+	}
+
+	/**
+	 * @param entity The entity whose field to check
+	 * @param fieldIndex The {@link EntityReflector.ReflectedField#getFieldIndex() index} of the field to check
+	 * @return Whether the given field may currently be firing an event
+	 */
+	public boolean isFieldEventing(E entity, int fieldIndex) {
+		EntityInstanceBacking backing = getHandler(entity).theBacking;
+		if (!(backing instanceof ObservableEntityInstanceBacking))
+			throw new UnsupportedOperationException("Observation is not supported by this entity's backing");
+		return ((ObservableEntityInstanceBacking<E>) backing).isEventing(fieldIndex);
 	}
 
 	/**

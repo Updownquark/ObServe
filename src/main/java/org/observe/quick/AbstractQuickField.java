@@ -1,13 +1,13 @@
 package org.observe.quick;
 
-import org.observe.expresso.ObservableModelSet;
+import org.observe.quick.style.StyleQIS;
 import org.observe.util.swing.PanelPopulation;
 import org.observe.util.swing.PanelPopulation.ComponentEditor;
-import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigInterpretationException;
 
 public abstract class AbstractQuickField extends AbstractQuickComponentDef {
-	public AbstractQuickField(QonfigElement element, ObservableModelSet.Wrapped models) {
-		super(element, models);
+	public AbstractQuickField(StyleQIS session) throws QonfigInterpretationException {
+		super(session);
 	}
 
 	@Override

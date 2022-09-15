@@ -13,7 +13,6 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
-import java.util.function.Supplier;
 
 import javax.swing.BoundedRangeModel;
 import javax.swing.DropMode;
@@ -40,14 +39,13 @@ import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
-import org.observe.util.swing.PanelPopulation.AbstractComponentEditor;
 import org.observe.util.swing.PanelPopulation.DataAction;
-import org.observe.util.swing.PanelPopulation.SimpleButtonEditor;
-import org.observe.util.swing.PanelPopulation.SimpleDataAction;
 import org.observe.util.swing.PanelPopulation.TreeTableEditor;
+import org.observe.util.swing.PanelPopulationImpl.AbstractComponentEditor;
+import org.observe.util.swing.PanelPopulationImpl.SimpleButtonEditor;
+import org.observe.util.swing.PanelPopulationImpl.SimpleDataAction;
 import org.qommons.LambdaUtils;
 import org.qommons.ThreadConstraint;
-import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterCollections;
@@ -73,14 +71,14 @@ import com.google.common.reflect.TypeToken;
  */
 class SimpleTreeTableBuilder<F, P extends SimpleTreeTableBuilder<F, P>> extends AbstractComponentEditor<JXTreeTable, P>
 implements TreeTableEditor<F, P> {
-	public static <F> SimpleTreeTableBuilder<F, ?> createTreeTable(Supplier<Transactable> lock, ObservableValue<F> root,
-		Function<? super F, ? extends ObservableCollection<? extends F>> children) {
-		return new SimpleTreeTableBuilder<>(lock, root, children, null);
+	public static <F> SimpleTreeTableBuilder<F, ?> createTreeTable(ObservableValue<F> root,
+		Function<? super F, ? extends ObservableCollection<? extends F>> children, Observable<?> until) {
+		return new SimpleTreeTableBuilder<>(root, children, null, until);
 	}
 
-	public static <F> SimpleTreeTableBuilder<F, ?> createTreeTable2(Supplier<Transactable> lock, ObservableValue<F> root,
-		Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children) {
-		return new SimpleTreeTableBuilder<>(lock, root, null, children);
+	public static <F> SimpleTreeTableBuilder<F, ?> createTreeTable2(ObservableValue<F> root,
+		Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children, Observable<?> until) {
+		return new SimpleTreeTableBuilder<>(root, null, children, until);
 	}
 
 	private final ObservableValue<F> theRoot;
@@ -101,17 +99,16 @@ implements TreeTableEditor<F, P> {
 	private CategoryRenderStrategy<BetterList<F>, F> theTreeColumn;
 	private ObservableCollection<? extends CategoryRenderStrategy<BetterList<F>, ?>> theColumns;
 	private List<ObservableTableModel.RowMouseListener<? super BetterList<F>>> theMouseListeners;
+	private boolean withColumnHeader;
 	private int theAdaptiveMinRowHeight;
 	private int theAdaptivePrefRowHeight;
 	private int theAdaptiveMaxRowHeight;
 	private boolean isScrollable;
 
-	private Component theBuiltComponent;
-
-	private SimpleTreeTableBuilder(Supplier<Transactable> lock, ObservableValue<F> root,
+	private SimpleTreeTableBuilder(ObservableValue<F> root,
 		Function<? super F, ? extends ObservableCollection<? extends F>> children1,
-			Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children2) {
-		super(new JXTreeTable(), lock);
+			Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children2, Observable<?> until) {
+		super(new JXTreeTable(), until);
 		theRoot = root;
 		theChildren1 = children1;
 		theChildren2 = children2;
@@ -273,6 +270,12 @@ implements TreeTableEditor<F, P> {
 	}
 
 	@Override
+	public P withColumnHeader(boolean columnHeader) {
+		withColumnHeader = columnHeader;
+		return (P) this;
+	}
+
+	@Override
 	public P withAdaptiveHeight(int minRows, int prefRows, int maxRows) {
 		if (minRows < 0 || minRows > prefRows || prefRows > maxRows)
 			throw new IllegalArgumentException("Required: 0<=min<=pref<=max: " + minRows + ", " + prefRows + ", " + maxRows);
@@ -289,9 +292,7 @@ implements TreeTableEditor<F, P> {
 	}
 
 	@Override
-	public Component getOrCreateComponent(Observable<?> until) {
-		if (theBuiltComponent != null)
-			return theBuiltComponent;
+	protected Component createComponent() {
 		if (theColumns == null)
 			throw new IllegalStateException("No columns configured");
 		TypeToken<CategoryRenderStrategy<BetterList<F>, ?>> columnType = TypeTokens.get().keyFor(CategoryRenderStrategy.class)
@@ -301,7 +302,7 @@ implements TreeTableEditor<F, P> {
 		if (theTreeColumn == null)
 			theTreeColumn = new CategoryRenderStrategy<>("Tree", theRoot.getType(), f -> f.getLast());
 		ObservableCollection<? extends CategoryRenderStrategy<BetterList<F>, ?>> columns = theColumns;
-		columns = columns.safe(ThreadConstraint.EDT, until);
+		columns = columns.safe(ThreadConstraint.EDT, getUntil());
 		columns = ObservableCollection.flattenCollections(columnType, //
 			ObservableCollection.of(columnType, theTreeColumn), //
 			columns).collect();
@@ -312,9 +313,10 @@ implements TreeTableEditor<F, P> {
 			for (ObservableTableModel.RowMouseListener<? super BetterList<F>> listener : theMouseListeners)
 				model.addMouseListener(listener);
 		}
+		if (!withColumnHeader)
+			table.setTableHeader(null);
 		Subscription sub = ObservableTreeTableModel.hookUp(table, model);
-		if (until != null)
-			until.take(1).act(__ -> sub.unsubscribe());
+		getUntil().take(1).act(__ -> sub.unsubscribe());
 
 		JScrollPane scroll = new JScrollPane(table);
 		if (isScrollable) {
@@ -430,20 +432,20 @@ implements TreeTableEditor<F, P> {
 
 		// Selection
 		if (thePathMultiSelection != null)
-			ObservableTreeTableModel.syncSelection(getEditor(), thePathMultiSelection, until);
+			ObservableTreeTableModel.syncSelection(getEditor(), thePathMultiSelection, getUntil());
 		if (theValueMultiSelection != null)
 			ObservableTreeTableModel.syncSelection(
-				getEditor(), theValueSingleSelection.safe(ThreadConstraint.EDT, until).transformReversible(//
+				getEditor(), theValueSingleSelection.safe(ThreadConstraint.EDT, getUntil()).transformReversible(//
 					TypeTokens.get().keyFor(BetterList.class).<BetterList<F>> parameterized(getRoot().getType()), tx -> tx
 					.map(v -> model.getTreeModel().getBetterPath(v, true)).withReverse(path -> path == null ? null : path.getLast())),
-				false, Equivalence.DEFAULT, until);
+				false, Equivalence.DEFAULT, getUntil());
 		if (thePathSingleSelection != null)
-			ObservableTreeTableModel.syncSelection(getEditor(), thePathSingleSelection, false, Equivalence.DEFAULT, until);
+			ObservableTreeTableModel.syncSelection(getEditor(), thePathSingleSelection, false, Equivalence.DEFAULT, getUntil());
 		if (theValueSingleSelection != null)
 			ObservableTreeTableModel.syncSelection(getEditor(), theValueSingleSelection.transformReversible(//
 				TypeTokens.get().keyFor(BetterList.class).<BetterList<F>> parameterized(getRoot().getType()),
 				tx -> tx.map(v -> model.getTreeModel().getBetterPath(v, true)).withReverse(path -> path == null ? null : path.getLast())),
-				false, Equivalence.DEFAULT, until);
+				false, Equivalence.DEFAULT, getUntil());
 		if (isSingleSelection)
 			getEditor().getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
 
@@ -455,10 +457,10 @@ implements TreeTableEditor<F, P> {
 				actionMenuItems[a] = new JMenuItem();
 				SimpleDataAction<BetterList<F>, ?> action = actions[a];
 				SimpleButtonEditor<?, ?> buttonEditor = new SimpleButtonEditor<>(null, actionMenuItems[a], null, action.theObservableAction,
-					getLock(), false);
+					false, getUntil());
 				if (action.theButtonMod != null)
 					action.theButtonMod.accept(buttonEditor);
-				buttonEditor.getOrCreateComponent(until);
+				buttonEditor.getComponent();
 			}
 			getEditor().getTreeSelectionModel().addTreeSelectionListener(evt -> {
 				List<BetterList<F>> selection = getSelection();
@@ -498,13 +500,8 @@ implements TreeTableEditor<F, P> {
 			table.setTransferHandler(handler);
 		}
 
-		theBuiltComponent = new JScrollPane(decorate(getEditor()));
-		return decorate(theBuiltComponent);
-	}
-
-	@Override
-	public Component getComponent() {
-		return theBuiltComponent;
+		JScrollPane scroll2 = new JScrollPane(getEditor());
+		return scroll2;
 	}
 
 	class TreeTableBuilderTransferHandler extends TransferHandler {
@@ -701,7 +698,8 @@ implements TreeTableEditor<F, P> {
 					return false;
 				boolean selected = theTable.isRowSelected(rowIndex);
 				ModelCell<BetterList<F>, C> cell = new ModelCell.Default<>(() -> BetterCollections.unmodifiableList(parentPath), oldValue,
-					rowIndex, theColumns.indexOf(column), selected, selected, theTable.isExpanded(rowIndex), theLeafTest.test(rowEl.get()));
+					rowIndex, theColumns.indexOf(column), selected, selected, false, false, theTable.isExpanded(rowIndex),
+					theLeafTest.test(rowEl.get()));
 				if (!column.getMutator().getDragAccepter().canAccept(cell, support, false))
 					return false;
 				BetterList<C> newColValue;
@@ -746,7 +744,7 @@ implements TreeTableEditor<F, P> {
 					return false;
 				boolean selected = theTable.isRowSelected(rowIndex);
 				ModelCell<BetterList<F>, C> cell = new ModelCell.Default<>(() -> root, oldValue, rowIndex, theColumns.indexOf(column),
-					selected, selected, theTable.isExpanded(rowIndex), theLeafTest.test(root.getLast()));
+					selected, selected, false, false, theTable.isExpanded(rowIndex), theLeafTest.test(root.getLast()));
 				if (!column.getMutator().getDragAccepter().canAccept(cell, support, false))
 					return false;
 				BetterList<C> newColValue;
@@ -827,7 +825,8 @@ implements TreeTableEditor<F, P> {
 
 		@Override
 		public boolean importData(TransferSupport support) {
-			try (Transaction rowT = getLock().get().lock(true, support); Transaction colT = theColumns.lock(false, null)) {
+			try (// Transaction rowT = getRoot().lock(true, support); // Don't know what to lock here
+				Transaction colT = theColumns.lock(false, null)) {
 				int rowIndex;
 				if (support.isDrop()) {
 					rowIndex = theTable.rowAtPoint(support.getDropLocation().getDropPoint());

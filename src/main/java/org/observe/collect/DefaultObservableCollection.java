@@ -15,6 +15,7 @@ import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
+import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.ValueStoredCollection;
 
@@ -68,7 +69,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			throw new UnsupportedOperationException("The backing for an ObservableCollection cannot be observable");
 		theValues = list;
 		theLock = new CausalLock(list);
-		theObservers = new org.qommons.collect.ListenerList<>(ObservableCollection.REENTRANT_EVENT_ERROR);
+		theObservers = ListenerList.build().reentrancyError(ObservableCollection.REENTRANT_EVENT_ERROR).build();
 		theElementsBySource = elementsBySource;
 		theSourceElements = sourceElements;
 		theEquivalence = equivalence == null ? Equivalence.DEFAULT : equivalence;
@@ -87,6 +88,11 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	@Override
 	public ThreadConstraint getThreadConstraint() {
 		return theValues.getThreadConstraint();
+	}
+
+	@Override
+	public boolean isEventing() {
+		return theObservers.isFiring();
 	}
 
 	@Override

@@ -470,13 +470,22 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		return getCollection().size() + getCollection().toString();
 	}
 
+	/* These are used by the ObservableMap supertester classes which are not currently in this branch
 	private CollectionOpContext getStandardContext() {
 		return new CollectionOpContext(getCollection(), false, 0, getCollection().size());
 	}
-
+	
 	public void tryAdd(T value, TestHelper helper, Function<Boolean, CollectionElement<T>> subExecute) {
 		tryAdd(getStandardContext(), value, helper, subExecute);
 	}
+
+	public void tryRemove(T value, TestHelper helper, BooleanSupplier subExecute) {
+		tryRemove(getStandardContext(), value, helper, subExecute);
+	}
+
+	public void tryClear(TestHelper helper) {
+		tryClear(getStandardContext(), helper);
+	}*/
 
 	void tryAdd(CollectionOpContext opCtx, T value, TestHelper helper, Function<Boolean, CollectionElement<T>> subExecute) {
 		CollectionOp op = new CollectionOp(opCtx, add, -1, -1, value, helper.getBoolean());
@@ -484,10 +493,6 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			System.out.println(op);
 		helper.placemark();
 		addSingle(op, helper, subExecute);
-	}
-
-	public void tryRemove(T value, TestHelper helper, BooleanSupplier subExecute) {
-		tryRemove(getStandardContext(), value, helper, subExecute);
 	}
 
 	void tryRemove(CollectionOpContext opCtx, T value, TestHelper helper, BooleanSupplier subExecute) {
@@ -506,10 +511,6 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			System.out.println("Remove " + value + ": " + op.elements.get(0));
 		helper.placemark();
 		removeSingle(op, helper, subExecute);
-	}
-
-	public void tryClear(TestHelper helper) {
-		tryClear(getStandardContext(), helper);
 	}
 
 	void tryClear(CollectionOpContext opCtx, TestHelper helper) {

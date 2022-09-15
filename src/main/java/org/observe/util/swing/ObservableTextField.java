@@ -22,15 +22,15 @@ import javax.swing.border.Border;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
+import org.observe.util.swing.ObservableTextEditor.ObservableTextEditorWidget;
 import org.qommons.io.Format;
-import org.qommons.io.SpinnerFormat;
 
 /**
  * A text field that interacts with a {@link SettableValue}
  *
  * @param <E> The type of the value
  */
-public class ObservableTextField<E> extends JPasswordField {
+public class ObservableTextField<E> extends JPasswordField implements ObservableTextEditorWidget<E, ObservableTextField<E>> {
 	private final ObservableTextEditor<E> theEditor;
 
 	// Some of this is lifted and modified from https://gmigdos.wordpress.com/2010/03/30/java-a-custom-jtextfield-for-searching/
@@ -72,119 +72,70 @@ public class ObservableTextField<E> extends JPasswordField {
 		});
 	}
 
-	/** @return The value controlled by this text field */
+	@Override
 	public SettableValue<E> getValue() {
 		return theEditor.getValue();
 	}
 
-	/** @return The format converting between value and text */
+	@Override
 	public Format<E> getFormat() {
 		return theEditor.getFormat();
 	}
 
-	/**
-	 * Configures a warning message as a function of this text field's value. The user will be allowed to enter a value with a warning but a
-	 * UI hit will be provided that there may be some problem with the value.
-	 *
-	 * @param warning The function to provide a warning message or null for no warning
-	 * @return This text field
-	 */
+	@Override
 	public ObservableTextField<E> withWarning(Function<? super E, String> warning) {
 		theEditor.withWarning(warning);
 		return this;
 	}
 
-	/**
-	 * Clears this text field's {@link #withWarning(Function) warning}
-	 *
-	 * @return This text field
-	 */
+	@Override
 	public ObservableTextField<E> clearWarning() {
 		theEditor.clearWarning();
 		return this;
 	}
 
-	/** @return Whether this text field selects all its text when it gains focus */
+	@Override
 	public boolean isSelectAllOnFocus() {
 		return theEditor.isSelectAllOnFocus();
 	}
 
-	/**
-	 * @param selectAll Whether this text field should select all its text when it gains focus
-	 * @return This text field
-	 */
+	@Override
 	public ObservableTextField<E> setSelectAllOnFocus(boolean selectAll) {
 		theEditor.setSelectAllOnFocus(selectAll);
 		return this;
 	}
 
-	/**
-	 * @param format Whether this text field should, after successful editing, replace the user-entered text with the formatted value
-	 * @return This text field
-	 */
+	@Override
 	public ObservableTextField<E> setReformatOnCommit(boolean format) {
 		theEditor.setReformatOnCommit(format);
 		return this;
 	}
 
-	/**
-	 * @param revert Whether this text field should, when it loses focus while its text is either not {@link Format#parse(CharSequence)
-	 *        parseable} or {@link SettableValue#isAcceptable(Object) acceptable}, revert its text to the formatted current model value. If
-	 *        false, the text field will remain in an error state on focus lost.
-	 * @return This text field
-	 */
+	@Override
 	public ObservableTextField<E> setRevertOnFocusLoss(boolean revert) {
 		theEditor.setRevertOnFocusLoss(revert);
 		return this;
 	}
 
-	/**
-	 * @param commit Whether this text field should update the model value with the parsed content of the text field each time the user
-	 *        types a key (assuming the text parses correctly and the value is {@link SettableValue#isAcceptable(Object) acceptable}.
-	 * @return This text field
-	 */
+	@Override
 	public ObservableTextField<E> setCommitOnType(boolean commit) {
 		theEditor.setCommitOnType(commit);
 		return this;
 	}
 
-	/**
-	 * If the {@link #getFormat() format} given to this text field is an instance of {@link SpinnerFormat}, this user can adjust the text
-	 * field's value incrementally using the up or down arrow keys. The nature and magnitude of the adjustment may depend on the particular
-	 * {@link SpinnerFormat} implementation as well as the position of the cursor.
-	 *
-	 * @param commitImmediately Whether {@link SpinnerFormat#adjust(Object, String, int, boolean) adjustments} to the value should be
-	 *        committed to the model value immediately. If false, the adjustments will only be made to the text and the value will be
-	 *        committed when the user presses enter or when focus is lost.
-	 * @return This text field
-	 */
+	@Override
 	public ObservableTextField<E> setCommitAdjustmentImmediately(boolean commitImmediately) {
 		theEditor.setCommitAdjustmentImmediately(commitImmediately);
 		return this;
 	}
 
-	/**
-	 * <p>
-	 * Sets an action to be performed when the user presses the ENTER key while focused on this text field (after a successful value
-	 * commit).
-	 * </p>
-	 *
-	 * <p>
-	 * The text field only contains one such listener, so this call replaces any that may have been previously set.
-	 * </p>
-	 *
-	 * @param action The action to perform when the user presses the ENTER key
-	 * @return This text field
-	 */
+	@Override
 	public ObservableTextField<E> onEnter(BiConsumer<? super E, ? super KeyEvent> action) {
 		theEditor.onEnter(action);
 		return this;
 	}
 
-	/**
-	 * @param tooltip The tooltip for this text field (when enabled)
-	 * @return This text field
-	 */
+	@Override
 	public ObservableTextField<E> withToolTip(String tooltip) {
 		theEditor.withToolTip(tooltip);
 		return this;
@@ -233,23 +184,15 @@ public class ObservableTextField<E> extends JPasswordField {
 		return this;
 	}
 
-	/** @return The text to display (grayed) when the text field's text is empty */
+	@Override
 	public String getEmptyText() {
 		return theEmptyText;
 	}
 
-	/**
-	 * @param emptyText The text to display (grayed) when the text field's text is empty
-	 * @return This text field
-	 */
+	@Override
 	public ObservableTextField<E> setEmptyText(String emptyText) {
 		theEmptyText = emptyText;
 		return this;
-	}
-
-	/** @return An observable value of the error state of this text field */
-	public ObservableValue<String> getErrorState() {
-		return theEditor.getErrorState();
 	}
 
 	@Override
@@ -264,6 +207,8 @@ public class ObservableTextField<E> extends JPasswordField {
 
 	@Override
 	public Dimension getMinimumSize() {
+		if (getColumns() > 0)
+			return getPreferredSize();
 		Dimension dim = super.getMinimumSize();
 		if (dim != null)
 			dim.height = getPreferredSize().height;
@@ -311,11 +256,13 @@ public class ObservableTextField<E> extends JPasswordField {
 	}
 
 	/** @return Whether the user has entered text to change this field's value */
+	@Override
 	public boolean isDirty() {
 		return theEditor.isDirty();
 	}
 
 	/** Undoes any edits in this field's text, reverting to the formatted current value */
+	@Override
 	public void revertEdits() {
 		theEditor.revertEdits();
 	}
@@ -327,6 +274,7 @@ public class ObservableTextField<E> extends JPasswordField {
 	 * @return Whether the edits (if any) were successfully committed to the value or were rejected. If there were no edits, this returns
 	 *         true.
 	 */
+	@Override
 	public boolean flushEdits(Object cause) {
 		return theEditor.flushEdits(cause);
 	}
@@ -339,8 +287,24 @@ public class ObservableTextField<E> extends JPasswordField {
 	 *         <li>The message reported by the value ({@link SettableValue#isAcceptable(Object)}) for the parsed value</li>
 	 *         <ol>
 	 */
+	@Override
 	public String getEditError() {
 		return theEditor.getEditError();
+	}
+
+	@Override
+	public String getEditWarning() {
+		return theEditor.getEditWarning();
+	}
+
+	@Override
+	public ObservableValue<String> getErrorState() {
+		return theEditor.getErrorState();
+	}
+
+	@Override
+	public ObservableValue<String> getWarningState() {
+		return theEditor.getWarningState();
 	}
 
 	/** Re-displays the parsing error message from this text field as a tooltip */

@@ -1,17 +1,15 @@
 package org.observe.quick;
 
 import java.awt.Component;
-import java.awt.Dimension;
-import java.awt.Point;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import org.observe.ObservableValue;
-import org.observe.assoc.ObservableMultiMap;
 import org.observe.collect.ObservableCollection;
+import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.qommons.config.QonfigAttributeDef;
+import org.qommons.config.QonfigInterpretationException;
 
 public class QuickComponent {
 	private final QuickComponentDef theDefinition;
@@ -19,13 +17,10 @@ public class QuickComponent {
 	private final Component theComponent;
 	private final Map<QonfigAttributeDef, Object> theAttributeValues;
 	private final ObservableCollection<QuickComponent> theChildren;
-	private ObservableMultiMap<QuickComponentDef, QuickComponent> theGroupedChildren;
-	private ObservableValue<Point> theLocation;
-	private ObservableValue<Dimension> theSize;
+	// private ObservableMultiMap<QuickComponentDef, QuickComponent> theGroupedChildren;
 
 	public QuickComponent(QuickComponentDef definition, QuickComponent.Builder parent, Component component,
 		Map<QonfigAttributeDef, Object> attributeValues, ObservableCollection<QuickComponent> children) {
-		super();
 		theDefinition = definition;
 		theParent = parent;
 		theComponent = component;
@@ -80,20 +75,25 @@ public class QuickComponent {
 
 	public static class Builder {
 		private final QuickComponentDef theDefinition;
-		private final QuickComponent.Builder theParent;
+		private final Builder theParent;
 		private final ModelSetInstance theModelsInstance;
 		private Component theComponent;
 		private final Map<QonfigAttributeDef, Object> theAttributeValues;
 		private final ObservableCollection<QuickComponent> theChildren;
 		private QuickComponent theBuilt;
 
-		public Builder(QuickComponentDef definition, QuickComponent.Builder parent, ModelSetInstance models) {
+		public Builder(QuickComponentDef definition, Builder parent, ModelSetInstance models) {
 			theDefinition = definition;
 			theParent = parent;
-			if (theDefinition.getModels() != null)
-				theModelsInstance = theDefinition.getModels().wrap(models).build();
-			else
-				theModelsInstance = models;
+			ExpressoQIS exSession;
+			definition.getSession().installParentModels(models, parent == null ? null : parent.getModels());
+			try {
+				exSession = definition.getSession().as(ExpressoQIS.class);
+			} catch (QonfigInterpretationException e) {
+				throw new IllegalStateException("Should have happened earlier", e);
+			}
+			theModelsInstance = models;
+			exSession.startInterpretingAs(Component.class, models);
 			theAttributeValues = new LinkedHashMap<>();
 			theChildren = ObservableCollection.build(QuickComponent.class).build();
 		}
@@ -121,6 +121,8 @@ public class QuickComponent {
 		}
 
 		public QuickComponent.Builder withComponent(Component component) {
+			if (theComponent == component)
+				return this;
 			if (theBuilt != null)
 				throw new IllegalStateException("Already built");
 			theComponent = component;
@@ -137,5 +139,20 @@ public class QuickComponent {
 			return new QuickComponent(theDefinition, theParent, theComponent, Collections.unmodifiableMap(theAttributeValues),
 				theChildren.flow().unmodifiable().collect());
 		}
+
+		@Override
+		public String toString() {
+			return "Building " + theDefinition.toString();
+		}
 	}
+
+	// static class DefaultModelSupport<T> extends ObservableValue.ConstantObservableValue<T> implements ModelValueSupport<T> {
+	// public DefaultModelSupport(TypeToken<T> type) {
+	// super(type, TypeTokens.get().getPrimitiveDefault(type));
+	// }
+	//
+	// @Override
+	// public void install(Component component) {
+	// }
+	// }
 }

@@ -596,7 +596,7 @@ public class CollectionDerivedValues {
 		@Override
 		protected ObservableValue<T> createValue(TestHelper h) {
 			return getSourceLink().getCollection().observeFind(v -> theConditionValue.get().apply(v) == null).at(theLocation)
-				.refresh(theConditionValue.noInitChanges())//
+				.refresh(theConditionValue.noInitChanges(), theConditionValue::getStamp)//
 				.find();
 		}
 

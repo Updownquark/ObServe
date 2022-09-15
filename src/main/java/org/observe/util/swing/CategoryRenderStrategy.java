@@ -361,6 +361,7 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 	private int theMinWidth;
 	private int thePrefWidth;
 	private int theMaxWidth;
+	private boolean usesRenderingForSize;
 	private boolean isResizable;
 
 	private Dragging.SimpleTransferSource<C> theDragSource;
@@ -374,7 +375,9 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 		theMutator = new CategoryMutationStrategy();
 		isRenderDefault = true;
 		theRenderer = new ObservableCellRenderer.DefaultObservableCellRenderer<>(this::printDefault);
-		theMinWidth = thePrefWidth = theMaxWidth = -1;
+		theMinWidth = 10;
+		thePrefWidth = 100;
+		theMaxWidth = 10000;
 		isResizable = true;
 		isFilterable = true;
 	}
@@ -529,7 +532,7 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 	public CategoryRenderStrategy<R, C> withRenderer(ObservableCellRenderer<R, C> renderer) {
 		isRenderDefault = false;
 		theRenderer = renderer;
-		if (theRenderer != null)
+		if (theRenderer != null && theDecorator != null)
 			theRenderer.decorate(theDecorator);
 		return this;
 	}
@@ -541,7 +544,7 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 			theDecorator = decorator;
 		else
 			theDecorator = theDecorator.modify(decorator);
-		if (theRenderer != null)
+		if (theRenderer != null && theDecorator != null)
 			theRenderer.decorate(theDecorator);
 		return this;
 	}
@@ -579,18 +582,34 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 	}
 
 	public CategoryRenderStrategy<R, C> withWidth(String type, int width) {
+		if (width < 0)
+			throw new IllegalArgumentException("Bad " + type + " width: " + width);
 		switch (type.toLowerCase()) {
 		case "min":
 		case "minimum":
 			theMinWidth = width;
+			if (width > thePrefWidth) {
+				thePrefWidth = width;
+				if (width > theMaxWidth)
+					theMaxWidth = width;
+			}
 			break;
 		case "pref":
 		case "preferred":
 			thePrefWidth = width;
+			if (width < theMinWidth)
+				theMinWidth = width;
+			else if (width > theMaxWidth)
+				theMaxWidth = width;
 			break;
 		case "max":
 		case "maximum":
 			theMaxWidth = width;
+			if (width < thePrefWidth) {
+				thePrefWidth = width;
+				if (width < theMinWidth)
+					theMinWidth = width;
+			}
 			break;
 		default:
 			throw new IllegalArgumentException("Unrecognized width type: " + type + "; use min, max, or pref");
@@ -599,6 +618,8 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 	}
 
 	public CategoryRenderStrategy<R, C> withWidths(int min, int pref, int max) {
+		if (min > pref || pref > max)
+			throw new IllegalArgumentException("Bad widths: " + min + "/" + pref + "/" + max);
 		theMinWidth = min;
 		thePrefWidth = pref;
 		theMaxWidth = max;
@@ -615,6 +636,28 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 
 	public int getMaxWidth() {
 		return theMaxWidth;
+	}
+
+	public boolean isUsingRenderingForSize() {
+		return usesRenderingForSize;
+	}
+
+	/**
+	 * <p>
+	 * If this parameter is true, then the min/pref/max widths set on this column will not be used, but rather the width will depend on the
+	 * renderer for this column for each row in the table at the moment. This makes the behavior of this column more like a combo box, where
+	 * the width of the box is the maximum width of its rendered values.
+	 * </p>
+	 * <p>
+	 * <b>The caller should know that this setting can be extremely expensive for tables with many rows.</b>
+	 * </p>
+	 *
+	 * @param usesRenderingForSize Whether to dynamically compute this column's size based on its renderer and values
+	 * @return This renderer
+	 */
+	public CategoryRenderStrategy<R, C> useRenderingForSize(boolean usesRenderingForSize) {
+		this.usesRenderingForSize = usesRenderingForSize;
+		return this;
 	}
 
 	public boolean isResizable() {

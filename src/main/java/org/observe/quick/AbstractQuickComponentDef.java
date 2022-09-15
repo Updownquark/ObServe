@@ -4,30 +4,37 @@ import java.util.function.BiConsumer;
 import java.util.function.Function;
 
 import org.observe.ObservableValue;
-import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.quick.style.QuickElementStyle;
+import org.observe.quick.style.StyleQIS;
 import org.observe.util.swing.PanelPopulation.ComponentEditor;
 import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigInterpretationException;
 
 public abstract class AbstractQuickComponentDef implements QuickComponentDef {
-	private final QonfigElement theElement;
-	private final ObservableModelSet.Wrapped theModels;
+	private final StyleQIS theSession;
+	private final QuickElementStyle theStyle;
 	private Function<ModelSetInstance, ? extends ObservableValue<String>> theFieldName;
 	private BiConsumer<ComponentEditor<?, ?>, QuickComponent.Builder> theModifications;
 
-	public AbstractQuickComponentDef(QonfigElement element, ObservableModelSet.Wrapped models) {
-		theElement = element;
-		theModels = models;
+	public AbstractQuickComponentDef(StyleQIS session) throws QonfigInterpretationException {
+		theSession = session;
+		theStyle = session.getStyle();
 	}
 
 	@Override
 	public QonfigElement getElement() {
-		return theElement;
+		return theSession.getElement();
 	}
 
 	@Override
-	public ObservableModelSet.Wrapped getModels() {
-		return theModels;
+	public StyleQIS getSession() {
+		return theSession;
+	}
+
+	@Override
+	public QuickElementStyle getStyle() {
+		return theStyle;
 	}
 
 	@Override
@@ -57,5 +64,10 @@ public abstract class AbstractQuickComponentDef implements QuickComponentDef {
 	public void modify(ComponentEditor<?, ?> component, QuickComponent.Builder builder) {
 		if (theModifications != null)
 			theModifications.accept(component, builder);
+	}
+
+	@Override
+	public String toString() {
+		return getElement().toString();
 	}
 }

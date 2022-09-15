@@ -9,10 +9,12 @@ import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.LongSupplier;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import org.observe.Equivalence;
+import org.observe.Eventable;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.Observer;
@@ -82,7 +84,7 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <E> The type of element in the collection
  */
-public interface ObservableCollection<E> extends BetterList<E>, TypedValueContainer<E> {
+public interface ObservableCollection<E> extends BetterList<E>, TypedValueContainer<E>, Eventable {
 	/** This class's wildcard {@link TypeToken} */
 	static TypeToken<ObservableCollection<?>> TYPE = TypeTokens.get().keyFor(ObservableCollection.class).wildCard();
 
@@ -375,15 +377,15 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 	 * @return An observable that fires a value (the {@link Causable#getRootCause() root cause} event of the change) whenever anything in
 	 *         this collection changes. Unlike {@link #changes()}, this observable will only fire 1 event per transaction.
 	 */
-	default Observable<Object> simpleChanges() {
-		class SimpleChanges extends AbstractIdentifiable implements Observable<Object> {
+	default Observable<Causable> simpleChanges() {
+		class SimpleChanges extends AbstractIdentifiable implements Observable<Causable> {
 			@Override
 			protected Object createIdentity() {
 				return Identifiable.wrap(ObservableCollection.this.getIdentity(), "simpleChanges");
 			}
 
 			@Override
-			public Subscription subscribe(Observer<Object> observer) {
+			public Subscription subscribe(Observer<? super Causable> observer) {
 				Causable.CausableKey key = Causable.key((root, values) -> {
 					observer.onNext(root);
 				});
@@ -396,6 +398,11 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 			@Override
 			public ThreadConstraint getThreadConstraint() {
 				return ObservableCollection.this.getThreadConstraint();
+			}
+
+			@Override
+			public boolean isEventing() {
+				return ObservableCollection.this.isEventing();
 			}
 
 			@Override
@@ -593,7 +600,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 	 * @return An observable value containing the minimum of the values, by the given comparator
 	 */
 	default ObservableElement<E> minBy(Comparator<? super E> compare, Supplier<? extends E> def, Ternian first) {
-		return new ObservableCollectionImpl.BestCollectionElement<>(this, compare, def, first, null);
+		return new ObservableCollectionImpl.BestCollectionElement<>(this, compare, def, first, null, null);
 	}
 
 	/**
@@ -791,6 +798,19 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 			@Override
 			public ThreadConstraint getThreadConstraint() {
 				return ThreadConstrained.getThreadConstraint(coll, coll, LambdaUtils.identity());
+			}
+
+			@Override
+			public boolean isEventing() {
+				if (coll.isEventing())
+					return true;
+				try (Transaction t = coll.lock(false, null)) {
+					for (Observable<? extends T> obs : coll) {
+						if (obs.isEventing())
+							return true;
+					}
+					return false;
+				}
 			}
 
 			@Override
@@ -1711,6 +1731,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		private Ternian theLocation;
 		private Supplier<? extends E> theDefault;
 		private Observable<?> theRefresh;
+		private LongSupplier theRefreshStamp;
 
 		public ObservableFinderBuilder(ObservableCollection<E> collection, Predicate<? super E> condition) {
 			theCollection = collection;
@@ -1775,14 +1796,25 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 
 		/**
 		 * @param refresh An observable which, when fired, will cause the finder to re-check its results
+		 * @param refreshStamp If the refresh represents an change to state that this finder's value depends on (state that is not part of
+		 *        the searched collection), a stamp must be provided that changes when the state changes.
 		 * @return This builder
 		 */
-		public ObservableFinderBuilder<E> refresh(Observable<?> refresh) {
+		public ObservableFinderBuilder<E> refresh(Observable<?> refresh, LongSupplier refreshStamp) {
 			if (refresh == null) {//
-			} else if (theRefresh != null)
-				theRefresh = Observable.or(theRefresh, refresh);
-			else
-				theRefresh = refresh;
+			} else {
+				if (theRefresh != null)
+					theRefresh = Observable.or(theRefresh, refresh);
+				else
+					theRefresh = refresh;
+				if (refreshStamp != null) {
+					if (theRefreshStamp != null) {
+						LongSupplier old = theRefreshStamp;
+						theRefreshStamp = () -> old.getAsLong() + refreshStamp.getAsLong();
+					} else
+						theRefreshStamp = refreshStamp;
+				}
+			}
 			return this;
 		}
 
@@ -1798,7 +1830,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		/** @return The finder */
 		public SettableElement<E> find() {
 			return new ObservableCollectionImpl.ObservableCollectionFinder<>(theCollection, theCondition, theDefault, theLocation,
-				theRefresh);
+				theRefresh, theRefreshStamp);
 		}
 	}
 }

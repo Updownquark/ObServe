@@ -1,6 +1,7 @@
 package org.observe.quick;
 
 import java.awt.BorderLayout;
+import java.awt.Component;
 import java.awt.Container;
 import java.awt.Window;
 
@@ -11,8 +12,8 @@ import org.observe.Observable;
 import org.observe.expresso.ObservableModelSet.ExternalModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.util.swing.PanelPopulation;
-import org.observe.util.swing.WindowPopulation;
 import org.observe.util.swing.PanelPopulation.WindowBuilder;
+import org.observe.util.swing.WindowPopulation;
 
 public class QuickUiDef {
 	private final QuickDocument theDocument;
@@ -54,6 +55,15 @@ public class QuickUiDef {
 
 	public JFrame install(JFrame frame) {
 		return install(WindowPopulation.populateWindow(frame, getUntil(), false, false)).getWindow();
+	}
+
+	public JFrame run(JFrame frame, Component relativeTo) {
+		if (frame == null)
+			frame = new JFrame();
+		PanelPopulation.WindowBuilder<JFrame, ?> window = WindowPopulation.populateWindow(frame, getUntil(), false, false);
+		install(window);
+		window.run(relativeTo);
+		return window.getWindow();
 	}
 
 	public JDialog install(JDialog dialog) {

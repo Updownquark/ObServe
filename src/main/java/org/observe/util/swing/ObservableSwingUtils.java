@@ -35,7 +35,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.IntConsumer;
 import java.util.function.Supplier;
 
 import javax.swing.ButtonGroup;
@@ -81,7 +80,6 @@ import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
 import org.qommons.collect.CollectionUtils;
-import org.qommons.collect.ReentrantNotificationException;
 import org.xml.sax.SAXException;
 
 import com.google.common.reflect.TypeToken;
@@ -301,32 +299,47 @@ public class ObservableSwingUtils {
 		SimpleObservable<Void> until = SimpleObservable.build().build();
 		ObservableValue<String> safeDescrip = descrip.safe(ThreadConstraint.EDT, until);
 		SettableValue<Boolean> safeSelected = selected.safe(ThreadConstraint.EDT, until);
+
+		String[] enDesc = new String[2];
+		Runnable checkEnabled = () -> {
+			if (enDesc[0] != null) {
+				if (checkBox.isEnabled())
+					checkBox.setEnabled(false);
+				checkBox.setToolTipText(enDesc[0]);
+			} else {
+				String acceptable = safeSelected.isAcceptable(!checkBox.isSelected());
+				if (acceptable != null) {
+					if (checkBox.isEnabled())
+						checkBox.setEnabled(false);
+					checkBox.setToolTipText(acceptable);
+				} else {
+					if (!checkBox.isEnabled())
+						checkBox.setEnabled(true);
+					checkBox.setToolTipText(enDesc[1]);
+				}
+			}
+		};
 		ActionListener action = evt -> {
 			safeSelected.set(checkBox.isSelected(), evt);
+			checkEnabled.run();
 		};
 		checkBox.addActionListener(action);
-		boolean[] callbackLock = new boolean[1];
-		Consumer<String> checkEnabled = enabled -> {
-			if (enabled == null) {
-				enabled = safeSelected.isAcceptable(!checkBox.isSelected());
-			}
-			checkBox.setEnabled(enabled == null);
-			checkBox.setToolTipText(enabled == null ? safeDescrip.get() : enabled);
-		};
+		Subscription enabledSub = safeSelected.isEnabled().changes().act(evt -> {
+			enDesc[0] = evt.getNewValue();
+			checkEnabled.run();
+		});
 		Subscription descripSub = safeDescrip.changes().act(evt -> {
-			if (safeSelected.isEnabled().get() == null)
-				checkBox.setToolTipText(evt.getNewValue());
+			enDesc[1] = evt.getNewValue();
+			checkEnabled.run();
 		});
-		Subscription valueSub = safeSelected.changes().act(evt -> {
-			if (!callbackLock[0])
-				checkBox.setSelected(evt.getNewValue() == null ? false : evt.getNewValue());
-			checkEnabled.accept(safeSelected.isEnabled().get());
+		Subscription selectedSub = safeSelected.changes().act(evt -> {
+			checkBox.setSelected(evt.getNewValue() != null && evt.getNewValue());
+			checkEnabled.run();
 		});
-		Subscription enabledSub = safeSelected.isEnabled().changes().act(evt -> checkEnabled.accept(evt.getNewValue()));
 		return () -> {
-			valueSub.unsubscribe();
-			enabledSub.unsubscribe();
+			selectedSub.unsubscribe();
 			descripSub.unsubscribe();
+			enabledSub.unsubscribe();
 			checkBox.removeActionListener(action);
 			until.onNext(null);
 		};
@@ -562,7 +575,7 @@ public class ObservableSwingUtils {
 			if (!callbackLock[0]) {
 				callbackLock[0] = true;
 				try {
-					T newValue = purify.apply(evt.getNewValue());
+					T newValue = purify == null ? evt.getNewValue() : purify.apply(evt.getNewValue());
 					spinner.setValue(newValue);
 				} finally {
 					callbackLock[0] = false;
@@ -708,7 +721,8 @@ public class ObservableSwingUtils {
 					// in the non-commit-on-type filter field and then clicks the table without pressing enter),
 					// the callbackLock will prevent the selection from updating while the contents change.
 					return;
-				}
+				} else if (safeSelection.isEventing())
+					return;
 				int selIdx = 0;
 				callbackLock[0] = true;
 				ListSelectionModel selModel = selectionModel.get();
@@ -811,7 +825,63 @@ public class ObservableSwingUtils {
 							selModel.removeSelectionInterval(0, intervalStart);
 						break;
 					case set:
-						break; // This doesn't have meaning here
+						if (evt.getOldValues().equals(evt.getValues()))
+							break; // Not relevant
+						// Remove old values
+						for (int i = model.getSize() - 1; i >= 0; i--) {
+							if (!selModel.isSelectedIndex(i)) {
+								if (intervalStart >= 0) {
+									selModel.removeSelectionInterval(i + 1, intervalStart);
+									intervalStart = -1;
+								}
+								continue;
+							}
+							boolean removed = false;
+							for (E value : evt.getOldValues()) {
+								if (!evt.getValues().contains(value) && equivalence.elementEquals(model.getElementAt(i), value)) {
+									removed = true;
+									break;
+								}
+							}
+							if (removed) {
+								if (intervalStart < 0)
+									intervalStart = i;
+							} else if (intervalStart >= 0) {
+								selModel.removeSelectionInterval(i + 1, intervalStart);
+								intervalStart = -1;
+							}
+						}
+						if (intervalStart >= 0)
+							selModel.removeSelectionInterval(0, intervalStart);
+
+						// Add new values
+						intervalStart = -1;
+						for (int i = 0; i < model.getSize(); i++) {
+							if (selModel.isSelectedIndex(i)) {
+								if (intervalStart >= 0) {
+									selModel.addSelectionInterval(intervalStart, i - 1);
+									intervalStart = -1;
+								}
+								continue;
+							}
+							boolean added = false;
+							for (E value : evt.getValues()) {
+								if (!evt.getOldValues().contains(value) && equivalence.elementEquals(model.getElementAt(i), value)) {
+									added = true;
+									break;
+								}
+							}
+							if (added) {
+								if (intervalStart < 0)
+									intervalStart = i;
+							} else if (intervalStart >= 0) {
+								selModel.addSelectionInterval(intervalStart, i - 1);
+								intervalStart = -1;
+							}
+						}
+						if (intervalStart >= 0)
+							selModel.addSelectionInterval(intervalStart, model.getSize() - 1);
+						break;
 					}
 				} finally {
 					callbackLock[0] = false;
@@ -849,6 +919,73 @@ public class ObservableSwingUtils {
 	}
 
 	/**
+	 * <p>
+	 * A cause that is injected into the cause chain to prevent loopback. When selection is updated elsewhere, the synchronization operation
+	 * updates the selected model element, and when the selected model element is updated, the sync operation updates the selection. But it
+	 * is critical that this loop terminates or an infinite loop will result.
+	 * </p>
+	 * <p>
+	 * Due to thread delegation, the causality chain may not be limited to a single thread. In addition, a single value collection or
+	 * selection may be used in multiple tables, further complicating synchronization.
+	 * </p>
+	 * <p>
+	 * Use of this class allows a sync operation to reliably track this situation across threads.
+	 * </p>
+	 */
+	public static class SyncCause extends Causable.AbstractCausable {
+		private final Object theModel;
+		private final Object theSelection;
+
+		/**
+		 * @param model The model object being synchronized
+		 * @param selection The selection object being synchronized
+		 * @param cause The cause to wrap
+		 */
+		public SyncCause(Object model, Object selection, Object cause) {
+			super(cause instanceof Causable && ((Causable) cause).isTerminated() ? Causable.broken(cause) : cause);
+			theModel = model;
+			theSelection = selection;
+		}
+
+		/**
+		 * @param cause The cause to check
+		 * @param model The model to check
+		 * @return Whether the given cause was caused by a change in the given model
+		 */
+		public static boolean isModelCause(Object cause, Object model) {
+			return cause instanceof Causable && ((Causable) cause).getCauseLike(c -> {
+				if (c instanceof SyncCause && ((SyncCause) c).theModel.equals(model))
+					return c;
+				else
+					return null;
+			}) != null;
+		}
+
+		/**
+		 * @param cause The cause to check
+		 * @param selection The selection to check
+		 * @return Whether the given cause was caused by a change in the given selection
+		 */
+		public static boolean isSelectionCause(Object cause, Object selection) {
+			return cause instanceof Causable && ((Causable) cause).getCauseLike(c -> {
+				if (c instanceof SyncCause && ((SyncCause) c).theSelection.equals(selection))
+					return c;
+				else
+					return null;
+			}) != null;
+		}
+	}
+
+	/** Updates the list model at a particular index */
+	public interface ModelUpdater {
+		/**
+		 * @param index The index in the model to update
+		 * @param cause The cause to use
+		 */
+		void update(int index, Object cause);
+	}
+
+	/**
 	 * Synchronizes selection between a UI selection model and a single value
 	 *
 	 * @param <E> The type of the model values
@@ -864,7 +1001,7 @@ public class ObservableSwingUtils {
 	 * @return The selection
 	 */
 	public static <E> SettableValue<E> syncSelection(Component component, ListModel<E> model, Supplier<ListSelectionModel> selectionModel,
-		Equivalence<? super E> equivalence, SettableValue<E> selection, Observable<?> until, IntConsumer update,
+		Equivalence<? super E> equivalence, SettableValue<E> selection, Observable<?> until, ModelUpdater update,
 		boolean enforceSingleSelection) {
 		SettableValue<E> safeSelection = selection.safe(ThreadConstraint.EDT, until);
 		if (enforceSingleSelection)
@@ -886,18 +1023,8 @@ public class ObservableSwingUtils {
 				callbackLock[0] = false;
 			}
 		};
-		/* There is the potential for a cycle here, in the case where 2 similar tables or lists are created
-		 * with the same (or same-sourced) model and selection.
-		 * E.g. if a model update on one collection causes a selection update which causes a model update on a second collection,
-		 * an ReentrantNotificationException will be thrown due to the attempted recursive modification.
-		 * I can't think of a great way to prevent the attempt from happening.
-		 * The ObservableCollection API provides the ability to determine if an element from one collection
-		 * is derived from another collection, but not if both collections are derived from a common source.
-		 * There are security issues even enabling such functionality, as it would require the ability to unroll all the sources of a
-		 * derived collection, which should not be possible.
-		 *
-		 * Since the attempt cannot be prevented and the functionality (having multiple tables with shared data and selection sources)
-		 * should not be disallowed, all I can think to do is catch and swallow the exception. */
+		Object modelObj = model instanceof ObservableListModel ? ((ObservableListModel<E>) model).getWrapped().getIdentity() : model;
+		Object selObj = selection.getIdentity();
 		ListDataListener modelListener = new ListDataListener() {
 			@Override
 			public void intervalRemoved(ListDataEvent e) {}
@@ -907,18 +1034,17 @@ public class ObservableSwingUtils {
 
 			@Override
 			public void contentsChanged(ListDataEvent e) {
-				if (callbackLock[0])
+				if (callbackLock[0] || SyncCause.isSelectionCause(e, selObj) || selection.isEventing())
 					return;
 				ListSelectionModel selModel = selectionModel.get();
 				if (selModel.getMinSelectionIndex() < 0 || selModel.getMinSelectionIndex() != selModel.getMaxSelectionIndex())
 					return;
 				flushEQCache();
 				callbackLock[0] = true;
-				try {
+				SyncCause cause = new SyncCause(modelObj, selObj, e);
+				try (Transaction t = cause.use()) {
 					if (e.getIndex0() <= selModel.getMinSelectionIndex() && e.getIndex1() >= selModel.getMinSelectionIndex())
-						selection.set(model.getElementAt(selModel.getMinSelectionIndex()), e);
-				} catch (ReentrantNotificationException ex) {
-					// See the cycle comment above
+						selection.set(model.getElementAt(selModel.getMinSelectionIndex()), cause);
 				} finally {
 					callbackLock[0] = false;
 				}
@@ -932,45 +1058,47 @@ public class ObservableSwingUtils {
 		if (component != null)
 			component.addPropertyChangeListener("selectionModel", selModelListener);
 		model.addListDataListener(modelListener);
-		safeSelection.changes().takeUntil(until).act(evt -> onEQ(() -> {
-			if (callbackLock[0])
+		safeSelection.changes().takeUntil(until).act(evt -> {
+			if (callbackLock[0] || SyncCause.isModelCause(evt, modelObj)
+				|| (model instanceof ObservableListModel && ((ObservableListModel<E>) model).getWrapped().isEventing()))
 				return;
-			flushEQCache();
-			callbackLock[0] = true;
-			try {
-				ListSelectionModel selModel = selectionModel.get();
-				if (evt.getNewValue() == null) {
-					selModel.clearSelection();
-					return;
-				} else if (evt.getOldValue() == evt.getNewValue()//
-					&& !selModel.isSelectionEmpty() && selModel.getMinSelectionIndex() == selModel.getMaxSelectionIndex()//
-					&& equivalence.elementEquals(model.getElementAt(selModel.getMinSelectionIndex()), evt.getNewValue())) {
-					if (update != null) {
-						try {
-							update.accept(selModel.getMaxSelectionIndex());
-						} catch (ReentrantNotificationException ex) {
-							// See the cycle comment above
+			onEQ(() -> {
+				flushEQCache();
+				callbackLock[0] = true;
+				try {
+					ListSelectionModel selModel = selectionModel.get();
+					if (evt.getNewValue() == null) {
+						selModel.clearSelection();
+						return;
+					} else if (evt.getOldValue() == evt.getNewValue()//
+						&& !selModel.isSelectionEmpty() && selModel.getMinSelectionIndex() == selModel.getMaxSelectionIndex()//
+						&& equivalence.elementEquals(model.getElementAt(selModel.getMinSelectionIndex()), evt.getNewValue())) {
+						if (update != null) {
+							SyncCause cause = new SyncCause(modelObj, selObj, evt);
+							try (Transaction t = cause.use()) {
+								update.update(selModel.getMaxSelectionIndex(), cause);
+							}
+						}
+						return;
+					}
+					for (int i = 0; i < model.getSize(); i++) {
+						if (equivalence.elementEquals(model.getElementAt(i), evt.getNewValue())) {
+							selModel.setSelectionInterval(i, i);
+							Rectangle rowBounds = null;
+							if (component instanceof JTable)
+								rowBounds = ((JTable) component).getCellRect(((JTable) component).convertRowIndexToModel(i), 0, false);
+							else if (component instanceof JList)
+								rowBounds = ((JList<?>) component).getCellBounds(i, i);
+							if (rowBounds != null)
+								((JComponent) component).scrollRectToVisible(rowBounds);
+							break;
 						}
 					}
-					return;
+				} finally {
+					callbackLock[0] = false;
 				}
-				for (int i = 0; i < model.getSize(); i++) {
-					if (equivalence.elementEquals(model.getElementAt(i), evt.getNewValue())) {
-						selModel.setSelectionInterval(i, i);
-						Rectangle rowBounds = null;
-						if (component instanceof JTable)
-							rowBounds = ((JTable) component).getCellRect(((JTable) component).convertRowIndexToModel(i), 0, false);
-						else if (component instanceof JList)
-							rowBounds = ((JList<?>) component).getCellBounds(i, i);
-						if (rowBounds != null)
-							((JComponent) component).scrollRectToVisible(rowBounds);
-						break;
-					}
-				}
-			} finally {
-				callbackLock[0] = false;
-			}
-		}));
+			});
+		});
 
 		until.take(1).act(__ -> {
 			if (component != null)

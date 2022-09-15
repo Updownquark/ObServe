@@ -6,6 +6,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.observe.Equivalence;
+import org.observe.Eventable;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.Transformation;
@@ -16,6 +17,7 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionOperation;
 import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
 import org.observe.collect.ObservableCollectionDataFlowImpl.MapWithParent;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ModFilterer;
+import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
@@ -44,7 +46,7 @@ public class ObservableCollectionPassiveManagers {
 	 * @param <I> An intermediate type
 	 * @param <T> The type of the derived collection that this manager can power
 	 */
-	public static interface PassiveCollectionManager<E, I, T> extends CollectionOperation<E, I, T>, Stamped {
+	public static interface PassiveCollectionManager<E, I, T> extends CollectionOperation<E, I, T>, Stamped, Eventable {
 		/** @return Whether this manager is the result of an odd number of {@link CollectionDataFlow#reverse() reverse} operations */
 		boolean isReversed();
 
@@ -157,6 +159,11 @@ public class ObservableCollectionPassiveManagers {
 		@Override
 		public ThreadConstraint getThreadConstraint() {
 			return theSource.getThreadConstraint();
+		}
+
+		@Override
+		public boolean isEventing() {
+			return theSource.isEventing();
 		}
 
 		@Override
@@ -278,6 +285,11 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
+		public boolean isEventing() {
+			return theParent.isEventing();
+		}
+
+		@Override
 		public boolean isLockSupported() {
 			return theParent.isLockSupported();
 		}
@@ -385,6 +397,11 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
+		public boolean isEventing() {
+			return theParent.isEventing();
+		}
+
+		@Override
 		public boolean isLockSupported() {
 			return theParent.isLockSupported();
 		}
@@ -473,6 +490,11 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
+		public boolean isEventing() {
+			return getParent().isEventing() || getEngine().isEventing();
+		}
+
+		@Override
 		public long getStamp() {
 			return Stamped.compositeStamp(getParent().getStamp(), getTransformation().createEngine(getParent().equivalence()).getStamp());
 		}
@@ -490,9 +512,11 @@ public class ObservableCollectionPassiveManagers {
 
 		@Override
 		public ObservableValue<? extends Function<? super E, ? extends T>> map() {
-			return getParent().map().transform(tx -> tx.combineWith(getEngine()).combine((parentMap, state) -> {
-				return new TransformedMap(parentMap, state);
-			}));
+			return getParent().map().transform(//
+				(TypeToken<Function<? super E, ? extends T>>) (TypeToken<?>) TypeTokens.get().of(Function.class), //
+				tx -> tx.combineWith(getEngine()).combine((parentMap, state) -> {
+					return new TransformedMap(parentMap, state);
+				}));
 		}
 
 		@Override
@@ -681,6 +705,11 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
+		public boolean isEventing() {
+			return theParent.isEventing() || theRefresh.isEventing();
+		}
+
+		@Override
 		public boolean isLockSupported() {
 			return theParent.isLockSupported() && theRefresh.isLockSupported();
 		}
@@ -783,6 +812,11 @@ public class ObservableCollectionPassiveManagers {
 		@Override
 		public ThreadConstraint getThreadConstraint() {
 			return theParent.getThreadConstraint();
+		}
+
+		@Override
+		public boolean isEventing() {
+			return theParent.isEventing();
 		}
 
 		@Override

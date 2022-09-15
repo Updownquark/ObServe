@@ -125,7 +125,7 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 			public ObservableValue<String> isEnabled() {
 				BiFunction<String, String, String> combineFn = (str1, str2) -> str1 != null ? str1 : str2;
 				return SettableValue.this.isEnabled().combine(STRING_TYPE, combineFn,
-					value.refresh(SettableValue.this.changes().noInit()).map(STRING_TYPE, v -> isAcceptable(v)),
+					value.refresh(SettableValue.this.noInitChanges()).map(STRING_TYPE, v -> isAcceptable(v)),
 					options -> options.fireIfUnchanged(false));
 			}
 
@@ -489,6 +489,14 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	 * @return A settable value that represents the current value in the inner observable
 	 */
 	public static <T> SettableValue<T> flatten(ObservableValue<SettableValue<T>> value, Supplier<? extends T> defaultValue) {
+		if (value instanceof ConstantObservableValue) {
+			TypeToken<T> vType = (TypeToken<T>) value.getType().resolveType(ObservableValue.class.getTypeParameters()[0]);
+			SettableValue<? extends T> v = value.get();
+			if (v == null)
+				return SettableValue.of(vType, defaultValue == null ? null : defaultValue.get(), "Constant value");
+			if (v.getType().equals(vType))
+				return (SettableValue<T>) v;
+		}
 		return new SettableFlattenedObservableValue<>(value, defaultValue);
 	}
 
@@ -499,6 +507,18 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	 */
 	public static <T> SettableValue<T> flattenAsSettable(ObservableValue<? extends ObservableValue<T>> value,
 		Supplier<? extends T> defaultValue) {
+		if (value instanceof ConstantObservableValue) {
+			TypeToken<T> vType = (TypeToken<T>) value.getType().resolveType(ObservableValue.class.getTypeParameters()[0]);
+			ObservableValue<? extends T> v = value.get();
+			if (v == null)
+				return SettableValue.of(vType, defaultValue == null ? null : defaultValue.get(), "Constant value");
+			if (v.getType().equals(vType)) {
+				if (v instanceof SettableValue)
+					return (SettableValue<T>) v;
+				else
+					return asSettable((ObservableValue<T>) v, __ -> "Not settable");
+			}
+		}
 		return new SettableFlattenedObservableValue<>(value, defaultValue);
 	}
 
@@ -735,10 +755,12 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 
 		@Override
 		public ObservableValue<String> isEnabled() {
-			return transform(TypeTokens.get().STRING, tx -> tx.cache(true).map(LambdaUtils.printableFn(__ -> {
-				BiTuple<TransformedElement<S, T>, TransformationState> state = getState();
-				return state.getValue1().isEnabled(state.getValue2());
-			}, "enabled", "enabled")));
+			return ObservableValue.firstValue(TypeTokens.get().STRING, e -> e != null, () -> null, //
+				transform(TypeTokens.get().STRING, tx -> tx.cache(true).map(LambdaUtils.printableFn(__ -> {
+					BiTuple<TransformedElement<S, T>, TransformationState> state = getState();
+					return state.getValue1().isEnabled(state.getValue2());
+				}, "enabled", "enabled"))), //
+				getSource().isEnabled());
 		}
 
 		@Override
@@ -1169,6 +1191,11 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 		}
 	}
 
+	/**
+	 * Implements {@link SettableValue#firstValue(TypeToken, Predicate, Supplier, SettableValue...)}
+	 *
+	 * @param <T> The type of the value
+	 */
 	class FirstSettableValue<T> extends FirstObservableValue<T> implements SettableValue<T> {
 		public FirstSettableValue(TypeToken<T> type, SettableValue<? extends T>[] values, Predicate<? super T> test,
 			Supplier<? extends T> def) {

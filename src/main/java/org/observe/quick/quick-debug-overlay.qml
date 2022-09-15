@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<quick
-	uses:base="quick-base.qtd">
+<quick uses:base="Quick-Base">
 	<head>
 		<models>
 			<ext-model name="selectedComponent">

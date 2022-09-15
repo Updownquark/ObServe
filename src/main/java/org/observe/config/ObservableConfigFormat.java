@@ -1475,7 +1475,7 @@ public interface ObservableConfigFormat<E> {
 			}
 		}
 
-		static class SimpleConfigFormat<T> implements ObservableConfigFormat<T> {
+		public static class SimpleConfigFormat<T> implements ObservableConfigFormat<T> {
 			public final Format<T> format;
 			public final Supplier<? extends T> defaultValue;
 
@@ -2249,6 +2249,12 @@ public interface ObservableConfigFormat<E> {
 						}
 						return listeners.add(listener, true)::run;
 					}
+				}
+
+				@Override
+				public boolean isEventing(int fieldIndex) {
+					ObservableConfig config = theContext.getConfig().get();
+					return config != null && config.isEventing();
 				}
 
 				@Override

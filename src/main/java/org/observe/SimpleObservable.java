@@ -171,6 +171,11 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 	}
 
 	@Override
+	public boolean isEventing() {
+		return theListeners.isFiring();
+	}
+
+	@Override
 	public Object getIdentity() {
 		return theIdentity;
 	}
@@ -265,6 +270,11 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 		@Override
 		public ThreadConstraint getThreadConstraint() {
 			return theWrapped.getThreadConstraint();
+		}
+
+		@Override
+		public boolean isEventing() {
+			return theWrapped.isEventing();
 		}
 
 		@Override

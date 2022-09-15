@@ -13,6 +13,9 @@ public @interface Component {
 	/** @return Whether the component should provide its services as soon as possible. Default is true. */
 	boolean loadImmediately() default true;
 
+	/** @return The status message to display to the user while the component is loading */
+	String loadStatus() default "";
+
 	/**
 	 * @return The service interfaces this component provides. Default is an empty array, which signifies that the interfaces that the class
 	 *         implements should be used.

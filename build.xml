@@ -20,14 +20,14 @@
 			<arg value="../../../target/generated-sources/antlr4/org/observe/expresso" />
 			<arg value="-package" />
 			<arg value="org.observe.expresso" />
-			<arg value="Java8Lexer.g4" />
+			<arg value="ExpressoAntlrLexer.g4" />
 		</java>
 		<java fork="true" dir="${dir.buildfile}/src/main/antlr" jar="${dir.buildfile}/lib/antlr-4.9.2-complete.jar">
 			<arg value="-o" />
 			<arg value="../../../target/generated-sources/antlr4/org/observe/expresso" />
 			<arg value="-package" />
 			<arg value="org.observe.expresso" />
-			<arg value="Java8Parser.g4" />
+			<arg value="ExpressoAntlrParser.g4" />
 		</java>
 	</target>
 	<target name="jar">

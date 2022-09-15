@@ -26,34 +26,54 @@ import org.qommons.io.FileUtils;
 import org.qommons.io.FileUtils.DirectorySyncResults;
 import org.qommons.io.Format;
 
+/** A BetterFile extension that contains utilities to be notified when file or directory contents change */
 public class ObservableFile implements BetterFile {
+	/** Controls locking and refresh strategies for ObservableFiles */
 	public static class ObservableFileSet {
 		private final DataControlAutoRefresher theRefresher;
 		private CollectionLockingStrategy theLocking;
 
+		/**
+		 * @param refresher Refresh strategy to control file rechecking behavior
+		 * @param locking Locking for the observable structures
+		 */
 		public ObservableFileSet(DataControlAutoRefresher refresher, CollectionLockingStrategy locking) {
 			theRefresher = refresher;
 		}
 
+		/** @return Locking for the observable structures provided by files */
 		public CollectionLockingStrategy getLocking() {
 			return theLocking;
 		}
 
+		/** @return Refresh strategy controlling file recheck behaviors */
 		public DataControlAutoRefresher getRefresher() {
 			return theRefresher;
 		}
 	}
 
+	/** Format object for parsing {@link ObservableFile}s from strings */
 	public static class FileFormat implements Format<ObservableFile> {
 		private final BetterFile.FileDataSource theFileSource;
 		private final ObservableFileSet theFileSet;
 		private final ObservableFile theWorkingDir;
 		private final boolean allowNull;
 
+		/**
+		 * @param fileSource The file source for parsed files
+		 * @param workingDir The working directory to use for relative paths
+		 * @param allowNull Whether to allow null files to be specified in this format (empty string)
+		 */
 		public FileFormat(BetterFile.FileDataSource fileSource, ObservableFile workingDir, boolean allowNull) {
 			this(fileSource, workingDir != null ? workingDir.getFileSet() : getDefaultFileSet(), workingDir, allowNull);
 		}
 
+		/**
+		 * @param fileSource The file source for parsed files
+		 * @param fileSet The observable file set for parsed files
+		 * @param workingDir The working directory to use for relative paths
+		 * @param allowNull Whether to allow null files to be specified in this format (empty string)
+		 */
 		public FileFormat(BetterFile.FileDataSource fileSource, ObservableFileSet fileSet, ObservableFile workingDir, boolean allowNull) {
 			theFileSource = fileSource;
 			theFileSet = fileSet;
@@ -61,6 +81,7 @@ public class ObservableFile implements BetterFile {
 			this.allowNull = allowNull;
 		}
 
+		/** @return The working directory this format uses for relative paths */
 		public BetterFile getWorkingDir() {
 			return theWorkingDir;
 		}
@@ -92,6 +113,7 @@ public class ObservableFile implements BetterFile {
 
 	private static volatile ObservableFileSet DEFAULT_FILE_REFRESHER;
 
+	/** @return A singleton default observable file set */
 	public static ObservableFileSet getDefaultFileSet() {
 		if (DEFAULT_FILE_REFRESHER == null) {
 			synchronized (ObservableFile.class) {
@@ -105,10 +127,19 @@ public class ObservableFile implements BetterFile {
 		return DEFAULT_FILE_REFRESHER;
 	}
 
+	/**
+	 * @param file The BetterFile to wrap
+	 * @return The ObservableFile for the given file
+	 */
 	public static ObservableFile observe(BetterFile file) {
 		return observe(getDefaultFileSet(), file);
 	}
 
+	/**
+	 * @param fileSet The ObservableFileSet to use for observation
+	 * @param file The BetterFile to wrap
+	 * @return The ObservableFile for the given file
+	 */
 	public static ObservableFile observe(ObservableFileSet fileSet, BetterFile file) {
 		if (file instanceof ObservableFile)
 			return (ObservableFile) file;
@@ -142,6 +173,7 @@ public class ObservableFile implements BetterFile {
 			return false;
 	}
 
+	/** @return This file's observable file set */
 	public ObservableFileSet getFileSet() {
 		return theFileSet;
 	}
@@ -311,6 +343,10 @@ public class ObservableFile implements BetterFile {
 		return theFile.toString();
 	}
 
+	/**
+	 * @param dataSource The file source to get roots for
+	 * @return Observable files representing the roots of the given file source
+	 */
 	public static DataControlledCollection<ObservableFile, ?> getRoots(FileDataSource dataSource) {
 		ObservableCollectionBuilder.SortedBuilder<ObservableFile, ?> builder = ObservableCollection.build(ObservableFile.class)
 			.sortBy(BetterFile.DISTINCT_NUMBER_TOLERANT).withLocking(ObservableFile.getDefaultFileSet().getLocking());

@@ -11,6 +11,7 @@ import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -30,6 +31,7 @@ import org.qommons.Lockable;
 import org.qommons.Stamped;
 import org.qommons.ThreadConstrained;
 import org.qommons.ThreadConstraint;
+import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
 import org.qommons.collect.ListenerList;
@@ -43,7 +45,7 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <T> The compile-time type of this observable's value
  */
-public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable {
+public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Eventable {
 	/** This class's wildcard {@link TypeToken} */
 	static TypeToken<ObservableValue<?>> TYPE = TypeTokens.get().keyFor(ObservableValue.class).wildCard();
 
@@ -68,6 +70,11 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 	@Override
 	default ThreadConstraint getThreadConstraint() {
 		return noInitChanges().getThreadConstraint();
+	}
+
+	@Override
+	default boolean isEventing() {
+		return noInitChanges().isEventing();
 	}
 
 	@Override
@@ -111,6 +118,11 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 			@Override
 			public ThreadConstraint getThreadConstraint() {
 				return ObservableValue.this.getThreadConstraint();
+			}
+
+			@Override
+			public boolean isEventing() {
+				return ObservableValue.this.isEventing();
 			}
 
 			@Override
@@ -588,6 +600,14 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 	 */
 	public static <T> ObservableValue<T> flatten(ObservableValue<? extends ObservableValue<? extends T>> ov,
 		Supplier<? extends T> defaultValue) {
+		if (ov instanceof ConstantObservableValue) {
+			TypeToken<T> vType = (TypeToken<T>) ov.getType().resolveType(ObservableValue.class.getTypeParameters()[0]);
+			ObservableValue<? extends T> v = ov.get();
+			if (v == null)
+				return ObservableValue.of(vType, defaultValue == null ? null : defaultValue.get());
+			if (v.getType().equals(vType))
+				return (ObservableValue<T>) v;
+		}
 		return new FlattenedObservableValue<>(ov, defaultValue);
 	}
 
@@ -766,6 +786,11 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 		public ObservableValueChanges(ObservableValue<T> value) {
 			theValue = value;
 			theNoInitChanges = value.noInitChanges();
+		}
+
+		@Override
+		public boolean isEventing() {
+			return theNoInitChanges.isEventing();
 		}
 
 		@Override
@@ -981,6 +1006,11 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 		public Observable<ObservableValueEvent<T>> noInitChanges() {
 			class Changes extends AbstractIdentifiable implements Observable<ObservableValueEvent<T>> {
 				@Override
+				public boolean isEventing() {
+					return theSource.isEventing() || theEngine.isEventing();
+				}
+
+				@Override
 				public Object createIdentity() {
 					return Identifiable.wrap(TransformedObservableValue.this.getIdentity(), "noInitChanges");
 				}
@@ -1096,6 +1126,11 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 		@Override
 		public Observable<ObservableValueEvent<T>> noInitChanges() {
 			return new Observable<ObservableValueEvent<T>>() {
+				@Override
+				public boolean isEventing() {
+					return getWrapped().isEventing() && theRefresh.isEventing();
+				}
+
 				@Override
 				public Object getIdentity() {
 					if (theChangesIdentity == null)
@@ -1240,6 +1275,11 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 				@Override
 				protected Object createIdentity() {
 					return Identifiable.wrap(SafeObservableValue.this, "noInitChanges");
+				}
+
+				@Override
+				public boolean isEventing() {
+					return theListeners.isFiring();
 				}
 
 				@Override
@@ -1461,6 +1501,11 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 				@Override
 				public ThreadConstraint getThreadConstraint() {
 					return theChanges.getThreadConstraint();
+				}
+
+				@Override
+				public boolean isEventing() {
+					return theChanges.isEventing();
 				}
 
 				@Override
@@ -1713,9 +1758,9 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 													if (event.isInitial() && event2.isInitial())
 														toFire = withInitialEvent
 														? retObs.createInitialEvent(event2.getNewValue(), event2.getCauses()) : null;
-													else
-														toFire = retObs.createChangeEvent(innerOld, event2.getNewValue(),
-															event2.getCauses());
+														else
+															toFire = retObs.createChangeEvent(innerOld, event2.getNewValue(),
+																event2.getCauses());
 													if (toFire != null) {
 														try (Transaction t = toFire.use()) {
 															observer.onNext(toFire);
@@ -1738,8 +1783,8 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 									ObservableValueEvent<T> toFire;
 									if (event.isInitial())
 										toFire = withInitialEvent ? retObs.createInitialEvent(newValue, event.getCauses()) : null;
-									else
-										toFire = retObs.createChangeEvent((T) old[0], newValue, event.getCauses());
+										else
+											toFire = retObs.createChangeEvent((T) old[0], newValue, event.getCauses());
 									old[0] = newValue;
 									if (toFire != null) {
 										try (Transaction t = toFire.use()) {
@@ -1783,6 +1828,14 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 					return obs == null ? ThreadConstraint.NONE : obs.getThreadConstraint();
 				}
 				return ThreadConstraint.ANY; // Can't know
+			}
+
+			@Override
+			public boolean isEventing() {
+				if (theValue.isEventing())
+					return true;
+				ObservableValue<?> content = theValue.get();
+				return content != null && content.isEventing();
 			}
 
 			@Override
@@ -2028,6 +2081,14 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 			}
 
 			@Override
+			public boolean isEventing() {
+				for (ObservableValue<? extends T> value : theValues)
+					if (value != null && value.isEventing())
+						return true;
+				return false;
+			}
+
+			@Override
 			public boolean isSafe() {
 				return true;
 			}
@@ -2047,5 +2108,143 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 				return Lockable.getCoreId(null, () -> Arrays.asList(theValues), ObservableValue::noInitChanges);
 			}
 		}
+	}
+
+	/**
+	 * A partial {@link ObservableValue} implementation that makes it as easy as possible to implement one from scratch
+	 *
+	 * @param <T> The type of the value
+	 */
+	abstract class LazyObservableValue<T> extends AbstractIdentifiable implements ObservableValue<T> {
+		private final TypeToken<T> theType;
+		private final Transactable theLock;
+		private final ListenerList<Observer<? super ObservableValueEvent<T>>> theListeners;
+		volatile boolean isValueUpToDate;
+		volatile T theLastRememberedValue;
+		volatile long theStamp;
+
+		public LazyObservableValue(TypeToken<T> type, Transactable lock) {
+			theType = type;
+			theLock = lock;
+			theStamp = -1;
+			theListeners = ListenerList.build().withInUse(new ListenerList.InUseListener() {
+				private Subscription theSub;
+
+				@Override
+				public void inUseChanged(boolean inUse) {
+					if (inUse) {
+						theSub = subscribe((value, cause) -> {
+							T oldValue = theLastRememberedValue;
+							theLastRememberedValue = value;
+							theStamp++;
+							isValueUpToDate = true;
+							ObservableValueEvent<T> event = new ObservableValueEvent<>(false, oldValue, value, cause);
+							try (Transaction t = event.use()) {
+								fire(event);
+							}
+						});
+					} else {
+						isValueUpToDate = false;
+						theSub.unsubscribe();
+						theSub = null;
+					}
+				}
+			}).build();
+		}
+
+		@Override
+		public TypeToken<T> getType() {
+			return theType;
+		}
+
+		@Override
+		public long getStamp() {
+			if (isValueUpToDate)
+				return theStamp;
+			T value = getSpontaneous();
+			if (theStamp == -1 || value != theLastRememberedValue) {
+				theLastRememberedValue = value;
+				theStamp++;
+			}
+			return theStamp;
+		}
+
+		@Override
+		public T get() {
+			if (isValueUpToDate)
+				return theLastRememberedValue;
+			T value = getSpontaneous();
+			theLastRememberedValue = value;
+			if (theStamp < 0)
+				theStamp = 0;
+			return value;
+		}
+
+		@Override
+		public Observable<ObservableValueEvent<T>> noInitChanges() {
+			class LOVChanges extends AbstractIdentifiable implements Observable<ObservableValueEvent<T>> {
+				@Override
+				protected Object createIdentity() {
+					return Identifiable.wrap(LazyObservableValue.this.getIdentity(), "noInitChanges");
+				}
+
+				@Override
+				public CoreId getCoreId() {
+					return theLock.getCoreId();
+				}
+
+				@Override
+				public ThreadConstraint getThreadConstraint() {
+					return theLock.getThreadConstraint();
+				}
+
+				@Override
+				public boolean isEventing() {
+					return theListeners.isFiring();
+				}
+
+				@Override
+				public boolean isSafe() {
+					return theLock.isLockSupported();
+				}
+
+				@Override
+				public Transaction lock() {
+					return theLock.lock(false, null);
+				}
+
+				@Override
+				public Transaction tryLock() {
+					return theLock.tryLock(false, null);
+				}
+
+				@Override
+				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+					Runnable remove = theListeners.add(observer, true);
+					return remove::run;
+				}
+			}
+			return new LOVChanges();
+		}
+
+		void fire(ObservableValueEvent<T> event) {
+			theListeners.forEach(//
+				l -> l.onNext(event));
+		}
+
+		/**
+		 * Grabs the value for this observable when it is not being listened to
+		 *
+		 * @return The current value for this observable
+		 */
+		protected abstract T getSpontaneous();
+
+		/**
+		 * Installs a listener for the value when this value is being listened to
+		 *
+		 * @param listener The listener to notify when the value of the observable changes
+		 * @return A subscription to remove the listener
+		 */
+		protected abstract Subscription subscribe(BiConsumer<T, Object> listener);
 	}
 }

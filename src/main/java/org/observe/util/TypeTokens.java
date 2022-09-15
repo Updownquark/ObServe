@@ -537,6 +537,8 @@ public class TypeTokens {
 			return (Class<T>) Short.class;
 		else if (type == char.class)
 			return (Class<T>) Character.class;
+		else if (type == void.class)
+			return (Class<T>) Void.class;
 		else
 			throw new IllegalStateException("Unrecognized primitive type: " + type);
 	}
@@ -564,6 +566,8 @@ public class TypeTokens {
 			return (Class<T>) short.class;
 		else if (type == Character.class)
 			return (Class<T>) char.class;
+		else if (type == Void.class)
+			return (Class<T>) void.class;
 		else
 			return type;
 	}
@@ -596,6 +600,42 @@ public class TypeTokens {
 			return type;
 		else
 			return of(unwrapped);
+	}
+
+	/**
+	 * @param <T> The type of value to get
+	 * @param type The type of value to get
+	 * @return A default value for the given type, accommodating primitives, which cannot be null
+	 */
+	public <T> T getPrimitiveDefault(TypeToken<T> type) {
+		return getPrimitiveDefault(getRawType(type));
+	}
+
+	/**
+	 * @param <T> The type of value to get
+	 * @param type The type of value to get
+	 * @return A default value for the given type, accommodating primitives, which cannot be null
+	 */
+	public <T> T getPrimitiveDefault(Class<T> type) {
+		type = unwrap(type);
+		if (type == boolean.class)
+			return (T) Boolean.FALSE;
+		else if (type == int.class)
+			return (T) Integer.valueOf(0);
+		else if (type == long.class)
+			return (T) Long.valueOf(0);
+		else if (type == double.class)
+			return (T) Double.valueOf(0);
+		else if (type == float.class)
+			return (T) Float.valueOf(0);
+		else if (type == char.class)
+			return (T) Character.valueOf(' ');
+		else if (type == byte.class)
+			return (T) Byte.valueOf((byte) 0);
+		else if (type == short.class)
+			return (T) Short.valueOf((short) 0);
+		else
+			return null;
 	}
 
 	/**
@@ -763,6 +803,8 @@ public class TypeTokens {
 	 * @throws IllegalArgumentException If values of the right type cannot be cast to the left type in general
 	 */
 	public <S, T> TypeConverter<S, T> getCast(TypeToken<S> source, TypeToken<T> target, boolean safe) throws IllegalArgumentException {
+		if (target.getType() instanceof TypeVariable && ((TypeVariable<?>) target.getType()).getBounds().length == 1)
+			target = (TypeToken<T>) of(((TypeVariable<?>) target.getType()).getBounds()[0]);
 		if (target.isAssignableFrom(source)) {
 			if (target.isPrimitive() && !source.isPrimitive()) {
 				T safeValue = safe ? (T) SAFE_VALUES.get(getRawType(source)) : null;
@@ -776,6 +818,16 @@ public class TypeTokens {
 				});
 			} else
 				return new TypeConverter<>((TypeToken<T>) source, "no-op", v -> (T) v);
+		}
+		if (target.isArray()) {
+			if (!source.isArray() || source.isPrimitive() || target.isPrimitive())
+				throw new IllegalArgumentException("Cannot cast " + source + " to " + target);
+			try {
+				getCast(source.getComponentType(), target.getComponentType()); // Don't need the actual cast, just the check
+				return new TypeConverter<>((TypeToken<T>) source, "no-op", v -> (T) v);
+			} catch (IllegalArgumentException e) {
+				throw new IllegalArgumentException("Cannot cast " + source + " to " + target);
+			}
 		}
 		Class<?> primitiveTarget = getRawType(unwrap(target));
 		Class<?> primitiveSource = getRawType(unwrap(source));

@@ -3,16 +3,16 @@ package org.observe.quick;
 import java.util.List;
 import java.util.function.Consumer;
 
-import org.observe.expresso.ObservableModelSet;
+import org.observe.quick.style.StyleQIS;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
-import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigInterpretationException;
 
 public class QuickBox extends QuickContainer.AbstractQuickContainer {
 	private final String theLayoutName;
 	private QuickLayout theLayout;
 
-	public QuickBox(QonfigElement element, ObservableModelSet.Wrapped models, List<QuickComponentDef> children, String layoutName) {
-		super(element, models, children);
+	public QuickBox(StyleQIS session, List<QuickComponentDef> children, String layoutName) throws QonfigInterpretationException {
+		super(session, children);
 		theLayoutName = layoutName;
 	}
 

@@ -50,7 +50,7 @@ public class DSTesting {
 		ComponentController<String> c = validate(dds.inject("C", __ -> "C")//
 			.depends(three, null)//
 			.depends(four, null)//
-			.provides(five, __ -> four)//
+			.provides(five, __ -> five)//
 			.disposeWhenInactive(__ -> {
 			})//
 			.build());
@@ -61,6 +61,7 @@ public class DSTesting {
 			})//
 			.build());
 
+		print(dds);
 		Assert.assertEquals(ComponentStage.Defined, a.getStage().get());
 		Assert.assertEquals(ComponentStage.Defined, b.getStage().get());
 		Assert.assertEquals(ComponentStage.Defined, c.getStage().get());
@@ -80,29 +81,35 @@ public class DSTesting {
 		Assert.assertEquals(ComponentStage.Defined, e.getStage().get());
 
 		dds.init();
+		print(dds);
 
-		Assert.assertEquals(ComponentStage.Complete, a.getStage().get());
-		Assert.assertEquals(ComponentStage.Complete, b.getStage().get());
-		Assert.assertEquals(ComponentStage.Complete, c.getStage().get());
-		Assert.assertEquals(ComponentStage.Complete, d.getStage().get());
-		Assert.assertEquals(ComponentStage.Complete, e.getStage().get());
+		Assert.assertEquals(ComponentStage.Satisfied, a.getStage().get());
+		Assert.assertEquals(ComponentStage.Satisfied, b.getStage().get());
+		Assert.assertEquals(ComponentStage.Satisfied, c.getStage().get());
+		Assert.assertEquals(ComponentStage.Satisfied, d.getStage().get());
+		Assert.assertEquals(ComponentStage.Satisfied, e.getStage().get());
 
+		System.out.println("Setting C to unavailable");
 		c.setAvailable(false);
+		print(dds);
 
-		Assert.assertEquals(ComponentStage.Complete, a.getStage().get());
-		Assert.assertEquals(ComponentStage.Complete, b.getStage().get());
+		Assert.assertEquals(ComponentStage.Satisfied, a.getStage().get());
+		Assert.assertEquals(ComponentStage.Satisfied, b.getStage().get());
 		Assert.assertEquals(ComponentStage.Unsatisfied, d.getStage().get());
-		Assert.assertEquals(ComponentStage.Complete, e.getStage().get());
+		Assert.assertEquals(ComponentStage.Satisfied, e.getStage().get());
 
+		System.out.println("Setting C to available");
 		c.setAvailable(true);
+		print(dds);
 
-		Assert.assertEquals(ComponentStage.Complete, a.getStage().get());
-		Assert.assertEquals(ComponentStage.Complete, b.getStage().get());
-		Assert.assertEquals(ComponentStage.Complete, c.getStage().get());
-		Assert.assertEquals(ComponentStage.Complete, d.getStage().get());
-		Assert.assertEquals(ComponentStage.Complete, e.getStage().get());
+		Assert.assertEquals(ComponentStage.Satisfied, a.getStage().get());
+		Assert.assertEquals(ComponentStage.Satisfied, b.getStage().get());
+		Assert.assertEquals(ComponentStage.Satisfied, c.getStage().get());
+		Assert.assertEquals(ComponentStage.Satisfied, d.getStage().get());
+		Assert.assertEquals(ComponentStage.Satisfied, e.getStage().get());
 
 		dds.close();
+		print(dds);
 
 		Assert.assertEquals(0, dds.getComponents().size());
 
@@ -111,6 +118,17 @@ public class DSTesting {
 		Assert.assertEquals(ComponentStage.Removed, c.getStage().get());
 		Assert.assertEquals(ComponentStage.Removed, d.getStage().get());
 		Assert.assertEquals(ComponentStage.Removed, e.getStage().get());
+	}
+
+	static void print(DependencyService<?> dds) {
+		System.out.println("DS Components:");
+		for (DSComponent<?> comp : dds.getComponents()) {
+			System.out.println(
+				comp.getName() + ": " + comp.getProvided() + (comp.isAvailable().get() ? "(" : "(x, ") + comp.getStage().get() + ")");
+			for (Dependency<?, ?> dep : comp.getDependencies().values()) {
+				System.out.println("\t" + dep + dep.getProviders());
+			}
+		}
 	}
 
 	/** Creates random numbers of randomly-configured components, exercising all functionality of the service */
@@ -134,60 +152,72 @@ public class DSTesting {
 			List<SimpleService> services = new ArrayList<>(serviceCount);
 			List<ComponentController<String>> components = new ArrayList<>(componentCount);
 
+			BetterSet<Dependency<String, ?>> path = BetterHashSet.build().build();
+			Boolean[] initialized = new Boolean[1];
 			for (int i = 0; i < serviceCount; i++)
 				services.add(new SimpleService("" + i));
 			int[] componentIndex = new int[1];
 			for (componentIndex[0] = 0; componentIndex[0] < componentCount; componentIndex[0]++) {
 				String name = "" + (char) ('A' + componentIndex[0]);
 				components.add(configureComponent(//
-					dds.inject(name, __ -> name), components.size(), services, helper));
+					dds.inject(name, __ -> name), components.size(), services, helper, initialized, path));
 			}
 
-			BetterSet<Dependency<String, ?>> path = BetterHashSet.build().build();
 			checkState(dds, false, path);
 			if (helper.isReproducing())
 				System.out.println("initializing");
 			helper.placemark();
+			initialized[0] = null;
 			dds.init();
+			initialized[0] = true;
 			if (helper.isReproducing())
 				System.out.println("initialized");
 			checkState(dds, true, path);
 
 			int ops = helper.getInt(10, 100);
-			for (int i = 0; i < ops; i++) {
-				helper.createAction()//
-				.or(1, () -> { // Toggle availability
-					if (components.isEmpty())
-						return;
-					ComponentController<String> comp = components.get(helper.getInt(0, components.size()));
-					boolean available = !comp.isAvailable().get();
+			try {
+				for (int i = 0; i < ops; i++) {
 					if (helper.isReproducing())
-						System.out.println("Changing " + comp.getName() + " to " + (available ? "" : "un") + "available");
-					comp.setAvailable(available);
-					Assert.assertEquals(available, comp.isAvailable().get());
-				}).or(0.01, () -> {// Remove component
-					if (components.isEmpty())
-						return;
-					ComponentController<String> comp = components.get(helper.getInt(0, components.size()));
-					if (helper.isReproducing())
-						System.out.println("Removing " + comp.getName());
-					comp.remove();
-					Assert.assertFalse(dds.getComponents().contains(comp));
-					components.remove(comp);
-				}).or(0.01, () -> {// Add component
-					String name = "" + (char) ('A' + componentIndex[0]);
-					if (helper.isReproducing())
-						System.out.println("Adding " + name);
-					components.add(configureComponent(dds.inject(name, __ -> name), components.size(), services, helper));
-					componentIndex[0]++;
-				})//
-				.execute("op");
-				checkState(dds, true, path);
+						print(dds);
+					helper.createAction()//
+					.or(1, () -> { // Toggle availability
+						if (components.isEmpty())
+							return;
+						ComponentController<String> comp = components.get(helper.getInt(0, components.size()));
+						boolean available = !comp.isAvailable().get();
+						if (helper.isReproducing())
+							System.out.println("Changing " + comp.getName() + " to " + (available ? "" : "un") + "available");
+						comp.setAvailable(available);
+						Assert.assertEquals(available, comp.isAvailable().get());
+					}).or(0.01, () -> {// Remove component
+						if (components.isEmpty())
+							return;
+						ComponentController<String> comp = components.get(helper.getInt(0, components.size()));
+						if (helper.isReproducing())
+							System.out.println("Removing " + comp.getName());
+						comp.remove();
+						Assert.assertFalse(dds.getComponents().contains(comp));
+						components.remove(comp);
+					}).or(0.01, () -> {// Add component
+						String name = "" + (char) ('A' + componentIndex[0]);
+						if (helper.isReproducing())
+							System.out.println("Adding " + name);
+						components.add(
+							configureComponent(dds.inject(name, __ -> name), components.size(), services, helper, initialized, path));
+						componentIndex[0]++;
+					})//
+					.execute("op");
+					checkState(dds, true, path);
+				}
+			} catch (AssertionError e) {
+				System.err.println("On error:");
+				print(dds);
+				throw e;
 			}
 		}
 
 		private ComponentController<String> configureComponent(DSComponent.Builder<String> builder, int componentCount,
-			List<SimpleService> services, TestHelper helper) {
+			List<SimpleService> services, TestHelper helper, Boolean[] initialized, BetterSet<Dependency<String, ?>> path) {
 			int satisfied = helper.getInt(0, helper.getInt(1, services.size()));
 			BitSet used = new BitSet();
 			// Random dependencies
@@ -222,6 +252,7 @@ public class DSTesting {
 			});
 			ComponentController<String> component = builder.build();
 			Assert.assertEquals(available, component.isAvailable().get());
+			component.getStage().noInitChanges().act(__ -> checkComponent(component, initialized[0], path, true));
 			return validate(component);
 		}
 
@@ -231,84 +262,88 @@ public class DSTesting {
 				dep.minimum(helper.getInt(0, helper.getInt(2, componentCount)));
 		}
 
-		private void checkState(DependencyService<String> dds, boolean initialized, BetterSet<Dependency<String, ?>> path) {
+		private void checkState(DependencyService<String> dds, Boolean initialized, BetterSet<Dependency<String, ?>> path) {
 			for (DSComponent<String> comp : dds.getComponents()) {
-				switch (comp.getStage().get()) {
-				case Defined:
-				case Satisfied:
+				checkComponent(comp, initialized, path, false);
+			}
+		}
+
+		private void checkComponent(DSComponent<String> comp, Boolean initialized, BetterSet<Dependency<String, ?>> path,
+			boolean transition) {
+			DependencyService<String> dds = comp.getDependencyService();
+			switch (comp.getStage().get()) {
+			case Defined:
+				if (initialized != null)
 					Assert.assertFalse("Component " + comp.getName() + " should not be Defined after initialization", initialized);
-					break;
-				case Complete:
+				break;
+			case Unavailable:
+			case Satisfied:
+				break;
+			case Unsatisfied:
+				if (initialized != null && comp.isAvailable().get())
 					Assert.assertTrue("Component " + comp.getName() + " should not be " + comp.getStage().get() + " before initialization",
 						initialized);
-					break;
-				case Unsatisfied:
-					if (comp.isAvailable().get())
-						Assert.assertTrue(
-							"Component " + comp.getName() + " should not be " + comp.getStage().get() + " before initialization",
-							initialized);
-					break;
+				break;
+			case PreSatisfied:
+				Assert.assertTrue("Component " + comp.getName() + " should not be PreSatisfied except during transition", transition);
+				break;
+			case Removed:
+				Assert.assertFalse("Removed component " + comp.getName() + " should not be present in the component list",
+					dds.getComponents().contains(comp));
+				Assert.assertNull(comp.getComponentValue());
+				return;
+			}
+			if (!comp.isAvailable().get()) {
+				Assert.assertNull(comp.getComponentValue());
+				switch (comp.getStage().get()) {
 				case PreSatisfied:
-					Assert.assertFalse("Component " + comp.getName() + " should not be PreSatisfied except during transition", true);
-					break;
-				case Removed:
-					Assert.assertFalse("Removed component " + comp.getName() + " should not be present in the component list", true);
-					Assert.assertNull(comp.getComponentValue());
-					return;
+				case Satisfied:
+					throw new AssertionError("Unavailable component with status " + comp.getStage().get());
+				default:
 				}
-				if (!comp.isAvailable().get()) {
-					Assert.assertNull(comp.getComponentValue());
-					switch (comp.getStage().get()) {
-					case PreSatisfied:
-					case Satisfied:
-					case Complete:
-						throw new AssertionError("Unavailable component with status " + comp.getStage().get());
+				return; // Inactive components should not be checked
+			}
+			int unsatisfied = 0;
+			for (Dependency<String, ?> dep : comp.getDependencies().values()) {
+				int count = 0;
+				for (DSComponent<String> comp2 : dds.getComponents()) {
+					if (!comp2.isAvailable().get())
+						continue;
+					switch (comp2.getStage().get()) {
+					case Defined:
+					case Removed:
+					case Unsatisfied:
+						continue;
 					default:
 					}
-					continue; // Inactive components should not be checked
+					if (comp2.getComponentValue() != comp.getComponentValue() && comp2.getProvided().contains(dep.getTarget()))
+						count++;
 				}
-				int unsatisfied = 0;
-				for (Dependency<String, ?> dep : comp.getDependencies().values()) {
-					int count = 0;
-					for (DSComponent<String> comp2 : dds.getComponents()) {
-						if (!comp2.isAvailable().get())
-							continue;
-						switch (comp2.getStage().get()) {
-						case Defined:
-						case Removed:
-						case Unsatisfied:
-							continue;
-						default:
-						}
-						if (comp2.getProvided().contains(dep.getTarget()))
-							count++;
-					}
-					if (count != dep.getProviders().size())
-						Assert.assertEquals("Incorrect providers for " + dep + " " + dep.getProviders(), count, dep.getProviders().size());
-					if (count < dep.getMinimum())
-						unsatisfied++;
+				if (!transition && count != dep.getProviders().size() && comp.getStage().get() == ComponentStage.Satisfied//
+					&& !dep.isDynamic())
+					Assert.assertEquals("Incorrect providers for " + dep + " " + dep.getProviders(), count, dep.getProviders().size());
+				if (count < dep.getMinimum())
+					unsatisfied++;
+			}
+			switch (comp.getStage().get()) {
+			case Defined:
+			case Unsatisfied:
+				if (initialized != null && initialized) {
+					Assert.assertNull(comp.getComponentValue());
+					if (!transition && unsatisfied == 0)
+						Assert.assertNotEquals(comp.getComponentValue(), 0, unsatisfied);
 				}
-				if (initialized) {
-					switch (comp.getStage().get()) {
-					case Defined:
-					case Unsatisfied:
-						Assert.assertNull(comp.getComponentValue());
-						if (unsatisfied == 0)
-							Assert.assertNotEquals(0, unsatisfied);
-						break;
-					case Satisfied:
-					case Complete:
-						if (unsatisfied != 0)
-							Assert.assertEquals(0, unsatisfied);
-						break;
-					default:// Handled at top
-					}
-				}
-				// Check for dynamic cycles that should have been activated
-				if (initialized && comp.isAvailable().get() && !comp.getStage().get().isActive()//
-					&& shouldBeSatisfied(dds, comp, path)) {
-					throw new AssertionError("Dynamic cycle detection failed: " + comp.getName() + " is not active");
-				}
+				break;
+			case Satisfied: // This should be followed regardless
+				if (unsatisfied != 0)
+					Assert.assertEquals(comp.getComponentValue(), 0, unsatisfied);
+				break;
+			default:// Handled at top
+			}
+			// Check for dynamic cycles that should have been activated
+			if (!transition && initialized != null && initialized && comp.isAvailable().get()//
+				&& comp.getStage().get().isActive() != shouldBeSatisfied(dds, comp, path)) {
+				throw new AssertionError("Dynamic cycle detection failed: " + comp.getName() + " is " + comp.getStage().get());
 			}
 		}
 
@@ -332,7 +367,7 @@ public class DSTesting {
 					for (DSComponent<String> comp2 : dds.getComponents()) {
 						if (!comp2.isAvailable().get())
 							continue;
-						if (comp2.getProvided().contains(dep.getTarget())//
+						if (comp2.getComponentValue() != comp.getComponentValue() && comp2.getProvided().contains(dep.getTarget())//
 							&& shouldBeSatisfied(dds, comp2, path)) {
 							needed--;
 							if (needed == 0)
@@ -361,7 +396,7 @@ public class DSTesting {
 			for (Dependency<String, ?> dep : comp.getDependencies().values()) {
 				for (DSComponent<String> comp2 : dep.getProviders()) {
 					if (!comp2.isAvailable().get())
-						Assert.assertTrue(comp2.isAvailable().get());
+						Assert.assertTrue("Unavailable dependency satisfier: " + dep + ": " + comp2, comp2.isAvailable().get());
 					switch (comp2.getStage().get()) {
 					case Defined:
 					case Removed:
@@ -385,18 +420,20 @@ public class DSTesting {
 			satisfied = false;
 			Assert.assertNull(comp.getComponentValue());
 			return; // Inactive components don't need to be checked
+		case Unavailable:
+			Assert.assertFalse(comp.getName(), comp.isAvailable().get());
+			break;
 		case PreSatisfied:
 			throw new AssertionError("Component " + comp.getName() + " should not be PreSatisfied outside of a transition");
 		case Satisfied:
-		case Complete:
 			satisfied = true;
 			break;
 		case Removed:
 			Assert.assertNull(comp.getComponentValue());
 			return;
 		}
-		if (!comp.isAvailable().get())
-			throw new AssertionError("Unavailable component with status " + comp.getStage().get());
+		if (!comp.isAvailable().get() && comp.getStage().get() != ComponentStage.Unavailable)
+			throw new AssertionError("Unavailable component " + comp + " with status " + comp.getStage().get());
 		boolean unsatisfied = false;
 		// All providers known to the dependencies must be available and satisfied (or pre-satisfied) at all times
 		for (Dependency<String, ?> dep : comp.getDependencies().values()) {
@@ -420,7 +457,10 @@ public class DSTesting {
 		if (satisfied) {
 			if (unsatisfied)
 				Assert.assertFalse(unsatisfied);
-			Assert.assertEquals(comp.getName(), comp.getComponentValue());
+			if (comp.isAvailable().get())
+				Assert.assertEquals(comp.getName(), comp.getComponentValue());
+			else
+				Assert.assertNull(comp.getComponentValue());
 		} else {
 			if (!unsatisfied)
 				Assert.assertTrue(unsatisfied);

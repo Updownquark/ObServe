@@ -1,8 +1,10 @@
 package org.observe.test;
 
+import java.awt.EventQueue;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
+import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.time.Instant;
@@ -285,7 +287,14 @@ class DefaultInteractiveTestSuite implements InteractiveTestSuite {
 				e.printStackTrace();
 			}
 		}
-		theContent.mutableElement(test.getElementId()).set(test.get());
+		try {
+			CollectionElement<InteractiveTestOrSuite> fTest = test;
+			EventQueue.invokeAndWait(() -> {
+				theContent.mutableElement(fTest.getElementId()).set(fTest.get());
+			});
+		} catch (InvocationTargetException | InterruptedException e) {
+			e.printStackTrace();
+		}
 	}
 
 	File getTestResultsDirectory() {

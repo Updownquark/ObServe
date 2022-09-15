@@ -399,6 +399,11 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		}
 
 		@Override
+		public boolean isEventing() {
+			return getWrapped().isEventing();
+		}
+
+		@Override
 		public boolean isLockSupported() {
 			return getWrapped().isLockSupported();
 		}

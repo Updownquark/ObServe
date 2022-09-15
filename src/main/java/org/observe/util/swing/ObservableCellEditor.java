@@ -13,6 +13,7 @@ import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.IntFunction;
+import java.util.function.IntSupplier;
 import java.util.function.Predicate;
 
 import javax.swing.DefaultCellEditor;
@@ -64,6 +65,8 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 	}
 
 	ObservableCellEditor<M, C> withCellTooltip(Function<? super ModelCell<? extends M, ? extends C>, String> tooltip);
+
+	ObservableCellEditor<M, C> withHovering(IntSupplier hoveredRow, IntSupplier hoveredColumn);
 
 	/**
 	 * @param clickCount The number of clicks to signal cell editing
@@ -335,6 +338,8 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 		private final EditorInstallation<C> theInstallation;
 		private Predicate<EventObject> theEditTest;
 		private CellDecorator<M, C> theDecorator;
+		private IntSupplier theHoveredRow;
+		private IntSupplier theHoveredColumn;
 		private Function<? super ModelCell<? extends M, ? extends C>, String> theValueTooltip;
 		private Runnable theRevert;
 
@@ -362,13 +367,21 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 		public ObservableCellEditor<M, C> decorate(CellDecorator<M, C> decorator) {
 			if (theDecorator == null)
 				theDecorator = decorator;
-
+			else
+				theDecorator = theDecorator.modify(decorator);
 			return this;
 		}
 
 		@Override
 		public ObservableCellEditor<M, C> withCellTooltip(Function<? super ModelCell<? extends M, ? extends C>, String> tooltip) {
 			theValueTooltip = tooltip;
+			return this;
+		}
+
+		@Override
+		public ObservableCellEditor<M, C> withHovering(IntSupplier hoveredRow, IntSupplier hoveredColumn) {
+			theHoveredRow = hoveredRow;
+			theHoveredColumn = hoveredColumn;
 			return this;
 		}
 
@@ -445,6 +458,8 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 				theEditorSubscription.uninstall(false);
 				theEditorSubscription = null;
 			}
+			boolean hovered = theHoveredRow != null && theHoveredRow.getAsInt() == rowIndex;
+			renderingValue(modelValue, selected, hovered, hovered, false, true, rowIndex, 0);
 			ObservableListModel<E> model = list.getModel();
 			CategoryRenderStrategy<E, E> category = list.getRenderStrategy();
 			Function<C, String> valueFilter;
@@ -472,7 +487,8 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 				};
 			}
 			if (category.getMutator().getEditorTooltip() != null || category.getTooltipFn() != null) {
-				ModelCell<E, E> cell = new ModelCell.Default<>(() -> modelValue, modelValue, rowIndex, 0, selected, selected, true, true);
+				ModelCell<E, E> cell = new ModelCell.Default<>(() -> modelValue, modelValue, rowIndex, 0, selected, selected, hovered,
+					hovered, true, true);
 				if (category.getMutator().getEditorTooltip() != null)
 					tooltip = category.getMutator().getEditorTooltip().apply(cell);
 				else
@@ -480,9 +496,10 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			} else
 				tooltip = null;
 			valueTooltip = c -> theValueTooltip
-				.apply(new ModelCell.Default<>(() -> modelValue, c, rowIndex, 0, selected, selected, true, true));
+				.apply(new ModelCell.Default<>(() -> modelValue, c, rowIndex, 0, selected, selected, hovered, hovered, true, true));
 
-			theEditingCell = new ModelCell.Default<>(() -> modelValue, (C) modelValue, rowIndex, 0, selected, selected, true, true);
+			theEditingCell = new ModelCell.Default<>(() -> modelValue, (C) modelValue, rowIndex, 0, selected, selected, hovered, hovered,
+				true, true);
 			if (theEditorValue.get() != modelValue)
 				theEditorValue.set((C) modelValue, null);
 			if (theDecorator != null) {
@@ -504,6 +521,9 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 				theEditorSubscription.uninstall(false);
 				theEditorSubscription = null;
 			}
+			boolean rowHovered = theHoveredRow != null && theHoveredRow.getAsInt() == row;
+			boolean cellHovered = rowHovered && theHoveredColumn != null && theHoveredColumn.getAsInt() == column;
+			renderingValue(value, isSelected, rowHovered, cellHovered, false, true, row, column);
 			TableModel model = table.getModel();
 			M modelValue;
 			Function<C, String> valueFilter;
@@ -522,8 +542,8 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 						return "Unacceptable value";
 				};
 				if (category.getMutator().getEditorTooltip() != null || category.getTooltipFn() != null) {
-					ModelCell<M, C> cell = new ModelCell.Default<>(() -> modelValue, (C) value, row, column, isSelected, isSelected, true,
-						true);
+					ModelCell<M, C> cell = new ModelCell.Default<>(() -> modelValue, (C) value, row, column, isSelected, isSelected,
+						rowHovered, cellHovered, true, true);
 					if (category.getMutator().getEditorTooltip() != null)
 						tooltip = category.getMutator().getEditorTooltip().apply(cell);
 					else
@@ -532,7 +552,8 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 					tooltip = null;
 				if (theValueTooltip != null) {
 					valueTooltip = c -> theValueTooltip
-						.apply(new ModelCell.Default<>(() -> modelValue, c, row, column, isSelected, isSelected, true, true));
+						.apply(new ModelCell.Default<>(() -> modelValue, c, row, column, isSelected, isSelected, rowHovered, cellHovered,
+							true, true));
 				} else
 					valueTooltip = null;
 			} else {
@@ -541,7 +562,8 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 				tooltip = null;
 				valueTooltip = null;
 			}
-			theEditingCell = new ModelCell.Default<>(() -> modelValue, (C) value, row, column, isSelected, isSelected, true, true);
+			theEditingCell = new ModelCell.Default<>(() -> modelValue, (C) value, row, column, isSelected, isSelected, rowHovered,
+				cellHovered, true, true);
 			if (theEditorValue.get() != value)
 				theEditorValue.set((C) value, null);
 			if (theDecorator != null) {
@@ -563,8 +585,11 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 				theEditorSubscription.uninstall(false);
 				theEditorSubscription = null;
 			}
+			boolean hovered = theHoveredRow != null && theHoveredRow.getAsInt() == row;
+			renderingValue(value, isSelected, hovered, hovered, expanded, leaf, row, 0);
 			// TODO See if there's a way to get the information needed for the value filter and tooltip somewhere
-			theEditingCell = new ModelCell.Default<>(() -> (M) value, (C) value, row, 0, isSelected, isSelected, expanded, leaf);
+			theEditingCell = new ModelCell.Default<>(() -> (M) value, (C) value, row, 0, isSelected, isSelected, hovered, hovered, expanded,
+				leaf);
 			theEditorValue.set((C) value, null);
 			if (theDecorator != null) {
 				ComponentDecorator cd = new ComponentDecorator();
@@ -573,6 +598,10 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			}
 			theEditorSubscription = theInstallation.install(this, tree, null, null, null);
 			return theEditorComponent;
+		}
+
+		protected void renderingValue(Object value, boolean selected, boolean rowHovered, boolean cellHovered, boolean expanded,
+			boolean leaf, int row, int column) {
 		}
 
 		public static <C> SettableValue<C> createEditorValue(Function<C, String>[] filter) {
@@ -639,6 +668,14 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			theDefaultEditor.withCellTooltip(tooltip);
 			for (ComponentEditor component : theComponents)
 				component.editor.withCellTooltip(tooltip);
+			return this;
+		}
+
+		@Override
+		public ObservableCellEditor<M, C> withHovering(IntSupplier hoveredRow, IntSupplier hoveredColumn) {
+			theDefaultEditor.withHovering(hoveredRow, hoveredColumn);
+			for (ComponentEditor component : theComponents)
+				component.editor.withHovering(hoveredRow, hoveredColumn);
 			return this;
 		}
 

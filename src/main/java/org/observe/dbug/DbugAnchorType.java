@@ -5,9 +5,13 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.WeakHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 import org.observe.util.TypeTokens;
+import org.qommons.IdentityKey;
+import org.qommons.Transaction;
 
 import com.google.common.reflect.TypeToken;
 
@@ -16,13 +20,15 @@ public class DbugAnchorType<A> {
 	private final Class<A> theType;
 	private final Map<String, DbugFieldType<A, ?>> theFields;
 	private final Map<String, DbugEventType<A>> theEvents;
-	private volatile boolean isActive;
+	private WeakHashMap<IdentityKey<A>, DbugAnchor<A>> theInstances;
+	private final AtomicInteger isActive;
 
 	private DbugAnchorType(Dbug dbug, Class<A> type, Map<String, DbugFieldType<A, ?>> fields, Map<String, DbugEventType<A>> events) {
 		theDbug = dbug;
 		theType = type;
 		theFields = fields;
 		theEvents = events;
+		isActive = new AtomicInteger();
 	}
 
 	public Dbug getDbug() {
@@ -42,12 +48,20 @@ public class DbugAnchorType<A> {
 	}
 
 	public boolean isActive() {
-		return isActive;
+		return isActive.get() > 0;
 	}
 
 	public DbugAnchorType<A> setActive(boolean active) {
-		isActive = active;
+		if (active)
+			isActive.getAndIncrement();
+		else
+			isActive.getAndDecrement();
 		return this;
+	}
+
+	public Transaction activate() {
+		isActive.getAndIncrement();
+		return isActive::getAndDecrement;
 	}
 
 	public DbugAnchor<A> instance(A value) {
@@ -55,15 +69,33 @@ public class DbugAnchorType<A> {
 	}
 
 	public DbugAnchor<A> instance(A value, Consumer<DbugAnchor<A>> configure) {
-		if (!isActive)
+		if (!isActive())
 			return (DbugAnchor<A>) DbugAnchor.VOID;
-		Set<DbugToken> tokens = new LinkedHashSet<>();
-		DbugAnchor<A> anchor = new DbugAnchor<>(this, value, Collections.unmodifiableSet(tokens));
-		if (configure != null)
-			configure.accept(anchor);
-		anchor.postInit();
-		theDbug.getTokens(anchor, tokens);
+		DbugAnchor<A> anchor;
+		synchronized (this) {
+			if (theInstances == null)
+				theInstances = new WeakHashMap<>();
+			Set<DbugToken>[] tokens = new Set[1];
+			anchor = theInstances.computeIfAbsent(new IdentityKey<>(value), __ -> {
+				tokens[0] = new LinkedHashSet<>();
+				return new DbugAnchor<>(this, value, Collections.unmodifiableSet(tokens[0]));
+			});
+			if (tokens[0] != null) { // Created just now
+				if (configure != null)
+					configure.accept(anchor);
+				anchor.postInit();
+				theDbug.getTokens(anchor, tokens[0]);
+			}
+		}
 		return anchor;
+	}
+
+	public DbugAnchor<A> getInstance(A value) {
+		if (theInstances == null)
+			return null;
+		synchronized (this) {
+			return theInstances.get(new IdentityKey<>(value));
+		}
 	}
 
 	@Override

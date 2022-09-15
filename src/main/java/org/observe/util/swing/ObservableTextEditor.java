@@ -37,6 +37,151 @@ import org.qommons.io.SpinnerFormat;
  * @param <E> The type of value edited by this text component
  */
 public class ObservableTextEditor<E> {
+	/**
+	 * A widget that is powered by an {@link ObservableTextEditor}
+	 *
+	 * @param <E> The type of value being edited
+	 * @param <W> The type of this widget
+	 */
+	public interface ObservableTextEditorWidget<E, W extends ObservableTextEditorWidget<E, W>> {
+		/** @return The value controlled by this text field */
+		SettableValue<E> getValue();
+
+		/** @return The format converting between value and text */
+		Format<E> getFormat();
+
+		/**
+		 * Configures a warning message as a function of this text field's value. The user will be allowed to enter a value with a warning
+		 * but a UI hit will be provided that there may be some problem with the value.
+		 *
+		 * @param warning The function to provide a warning message or null for no warning
+		 * @return This text field
+		 */
+		W withWarning(Function<? super E, String> warning);
+
+		/**
+		 * Clears this text field's {@link #withWarning(Function) warning}
+		 *
+		 * @return This text field
+		 */
+		W clearWarning();
+
+		/** @return Whether this text field selects all its text when it gains focus */
+		boolean isSelectAllOnFocus();
+
+		/**
+		 * @param selectAll Whether this text field should select all its text when it gains focus
+		 * @return This text field
+		 */
+		W setSelectAllOnFocus(boolean selectAll);
+
+		/**
+		 * @param format Whether this text field should, after successful editing, replace the user-entered text with the formatted value
+		 * @return This text field
+		 */
+		W setReformatOnCommit(boolean format);
+
+		/**
+		 * @param revert Whether this text field should, when it loses focus while its text is either not {@link Format#parse(CharSequence)
+		 *        parseable} or {@link SettableValue#isAcceptable(Object) acceptable}, revert its text to the formatted current model value.
+		 *        If false, the text field will remain in an error state on focus lost.
+		 * @return This text field
+		 */
+		W setRevertOnFocusLoss(boolean revert);
+
+		/**
+		 * @param commit Whether this text field should update the model value with the parsed content of the text field each time the user
+		 *        types a key (assuming the text parses correctly and the value is {@link SettableValue#isAcceptable(Object) acceptable}.
+		 * @return This text field
+		 */
+		W setCommitOnType(boolean commit);
+
+		/**
+		 * If the {@link #getFormat() format} given to this text field is an instance of {@link SpinnerFormat}, this user can adjust the
+		 * text field's value incrementally using the up or down arrow keys. The nature and magnitude of the adjustment may depend on the
+		 * particular {@link SpinnerFormat} implementation as well as the position of the cursor.
+		 *
+		 * @param commitImmediately Whether {@link SpinnerFormat#adjust(Object, String, int, boolean) adjustments} to the value should be
+		 *        committed to the model value immediately. If false, the adjustments will only be made to the text and the value will be
+		 *        committed when the user presses enter or when focus is lost.
+		 * @return This text field
+		 */
+		W setCommitAdjustmentImmediately(boolean commitImmediately);
+
+		/**
+		 * <p>
+		 * Sets an action to be performed when the user presses the ENTER key while focused on this text field (after a successful value
+		 * commit).
+		 * </p>
+		 *
+		 * <p>
+		 * The text field only contains one such listener, so this call replaces any that may have been previously set.
+		 * </p>
+		 *
+		 * @param action The action to perform when the user presses the ENTER key
+		 * @return This text field
+		 */
+		W onEnter(BiConsumer<? super E, ? super KeyEvent> action);
+
+		/**
+		 * @param tooltip The tooltip for this text field (when enabled)
+		 * @return This text field
+		 */
+		W withToolTip(String tooltip);
+
+		/** @return The text to display (grayed) when the text field's text is empty */
+		String getEmptyText();
+
+		/**
+		 * @param emptyText The text to display (grayed) when the text field's text is empty
+		 * @return This text field
+		 */
+		W setEmptyText(String emptyText);
+
+		/** @return Whether the user has entered text to change this field's value */
+		boolean isDirty();
+
+		/** Undoes any edits in this field's text, reverting to the formatted current value */
+		void revertEdits();
+
+		/**
+		 * Causes any edits in this field's text to take effect, parsing it and setting it in the value
+		 *
+		 * @param cause The cause of the action (e.g. a swing event)
+		 * @return Whether the edits (if any) were successfully committed to the value or were rejected. If there were no edits, this
+		 *         returns true.
+		 */
+		boolean flushEdits(Object cause);
+
+		/**
+		 * @return The error for the current text of this field. Specifically, either:
+		 *         <ol>
+		 *         <li>The message in the {@link ParseException} thrown by this field's {@link #getFormat() format} when the text was parsed
+		 *         (or "Invalid text" if the exception message was null) or</li>
+		 *         <li>The message reported by the value ({@link SettableValue#isAcceptable(Object)}) for the parsed value</li>
+		 *         <ol>
+		 */
+		String getEditError();
+
+		/**
+		 * @return The warning for the current text of this field--the string produced by the {@link #withWarning(Function) warning}
+		 *         function set on this editor. Will be null if no warning function is set, or if there is an {@link #getEditError() error}.
+		 */
+		String getEditWarning();
+
+		/**
+		 * @return The error message displayed to the user
+		 * @see #getEditError()
+		 */
+		ObservableValue<String> getErrorState();
+
+		/**
+		 * @return The warning message displayed to the user
+		 * @see #getEditWarning()
+		 */
+		ObservableValue<String> getWarningState();
+	}
+
 	private final JTextComponent theComponent;
 	private final Consumer<Boolean> theEnabledSetter;
 	private final Consumer<String> theTooltipSetter;
@@ -311,7 +456,10 @@ public class ObservableTextEditor<E> {
 		return this;
 	}
 
-	/** @return The error message displayed to the user */
+	/**
+	 * @return The error message displayed to the user
+	 * @see #getEditError()
+	 */
 	public ObservableValue<String> getErrorState() {
 		if (theStatusChange == null) {
 			synchronized (this) {
@@ -320,6 +468,20 @@ public class ObservableTextEditor<E> {
 			}
 		}
 		return ObservableValue.of(TypeTokens.get().STRING, () -> theError, () -> theStateStamp, theStatusChange);
+	}
+
+	/**
+	 * @return The warning message displayed to the user
+	 * @see #getEditWarning()
+	 */
+	public ObservableValue<String> getWarningState() {
+		if (theStatusChange == null) {
+			synchronized (this) {
+				if (theStatusChange == null)
+					theStatusChange = SimpleObservable.build().build();
+			}
+		}
+		return ObservableValue.of(TypeTokens.get().STRING, () -> theWarningMsg, () -> theStateStamp, theStatusChange);
 	}
 
 	/** @param enabled Whether to allow the user to modify this editor when the value is enabled */
@@ -433,6 +595,14 @@ public class ObservableTextEditor<E> {
 	 *         <ol>
 	 */
 	public String getEditError() {
+		return theError;
+	}
+
+	/**
+	 * @return The warning for the current text of this field--the string produced by the {@link #withWarning(Function) warning} function
+	 *         set on this editor. Will be null if no warning function is set, or if there is an {@link #getEditError() error}.
+	 */
+	public String getEditWarning() {
 		return theError;
 	}
 

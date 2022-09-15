@@ -4,16 +4,7 @@
 	GitHub URL https://github.com/Updownquark/Quick/releases/download/v1.0.0/quick.qtd
 	Local URL ../../../../core/src/main/resources/quick.dtd
 -->
-<qonfig-def extends:core="quick-core.qtd">
-	<value-types>
-		<one-of name="pos-or-exp">
-			<explicit prefix="${" suffix="}">
-				<pattern name="expression" />
-			</explicit>
-			<pattern name="position" />
-		</one-of>
-	</value-types>
-
+<qonfig-def name="Quick-Base" version="0.1" extends:core="Quick-Core v0.1">
 	<add-ons>
 		<add-on name="orientation" />
 		<add-on name="horizontal" inherits="orientation" />
@@ -51,20 +42,24 @@
 		</add-on>
 
 		<add-on name="renderer-value-override" requires="value-widget">
-			<attribute name="value-widget.value" default="subject" specify="optional" />
+			<element-model>
+				<value name="selected" type="boolean" priority="100" />
+			</element-model>
+			<attr-mod name="value-widget.value" default="subject" specify="optional" />
 		</add-on>
-		<add-on name="single-rendering">
-			<attribute name="render-value-name" type="identifier" />
+		<add-on name="single-rendering" inherits="styled">
+			<element-model>
+				<value name="rendered" />
+			</element-model>
 			<child-def name="renderer" type="value-widget" inherits="renderer-value-override" min="0" />
 		</add-on>
 
 		<add-on name="multi-value-renderable">
-			<attribute name="value-name" type="identifier" />
+			<element-model>
+				<value name="value" />
+			</element-model>
 		</add-on>
-		<add-on name="renderable-widget">
-			<attribute name="render-value-name" type="identifier" />
-		</add-on>
-		<add-on name="tabular-widget" requires="multi-value-widget" inherits="renderable-widget">
+		<add-on name="tabular-widget" requires="multi-value-widget">
 			<attribute name="columns" type="expression" specify="optional" />
 			<child-def name="column" type="column" min="0" max="inf" />
 		</add-on>
@@ -77,23 +72,21 @@
 			<attribute name="row-update" type="boolean" default="false" />
 		</add-on>
 		<add-on name="replace-row-value" requires="column-edit" inherits="column-edit-type">
-			<attribute name="column-edit-type.commit" type="expression" specify="optional" default="" />
+			<attr-mod name="column-edit-type.commit" specify="optional" default="" />
 		</add-on>
-		<add-on name="column-editor" requires="value-widget">
-			<attribute name="value-widget.value" specify="forbidden" default="subject" />
-		</add-on>
+		<add-on name="column-editor" requires="value-widget" inherits="renderer-value-override" />
 		<add-on name="tree-column" requires="column">
-			<attribute name="column.value" specify="forbidden" default="org.qommons.collect.BetterList::getLast" />
+			<attr-mod name="column.value" specify="forbidden" default="org.qommons.collect.BetterList::getLast" />
 		</add-on>
 
 		<add-on name="field" requires="widget">
-			<attribute name="field-name" type="expression-or-string" specify="optional" />
+			<attribute name="field-name" type="expression" specify="optional" />
 			<attribute name="fill" type="boolean" specify="optional" />
 		</add-on>
 		
 		<add-on name="abstract-tab">
-			<attribute name="tab-name" type="expression-or-string" specify="optional" />
-			<attribute name="tab-icon" type="expression-or-string" specify="optional" />
+			<attribute name="tab-name" type="expression" specify="optional" />
+			<attribute name="tab-icon" type="expression" specify="optional" />
 			<attribute name="removable" type="boolean" default="false" />
 			<attribute name="on-remove" type="expression" specify="optional" />
 			<attribute name="select-on" type="expression" specify="optional" />
@@ -101,45 +94,50 @@
 		</add-on>
 
 		<add-on name="tab" requires="widget" inherits="abstract-tab">
-			<attribute name="tab-id" type="expression-or-string" />
+			<attribute name="tab-id" type="expression" />
+		</add-on>
+
+		<add-on name="menu-container">
+			<child-def name="menu-bar" type="menu-bar" min="0" />
+		</add-on>
+		<add-on name="dialog" inherits="window">
+			<attribute name="modal" type="boolean" default="true" />
 		</add-on>
 	</add-ons>
 
 	<elements>
+		<element-def name="ext-widget" extends="widget">
+			<attribute name="ref" type="string" specify="required" />
+		</element-def>
+
 		<element-def name="spacer" extends="widget">
 			<attribute name="length" type="int" />
 		</element-def>
 		<element-def name="button" extends="widget">
-			<value type="expression-or-string" specify="optional" />
+			<value type="expression" specify="optional" />
 			<attribute name="action" type="expression" specify="required" />
 		</element-def>
 
 		<!-- Editors -->
-		<element-def name="value-widget" extends="widget" abstract="true" >
-			<attribute name="value" type="expression" specify="required" />
-			<attribute name="disable-with" type="expression" specify="optional" />
-		</element-def>
-		
 		<element-def name="check-box" extends="value-widget">
-			<value type="expression-or-string" specify="optional" />
+			<value type="expression" specify="optional" />
 		</element-def>
 		<element-def name="toggle-button" extends="value-widget">
-			<value type="expression-or-string" />
+			<value type="expression" />
 		</element-def>
 		<element-def name="file-button" extends="value-widget">
 			<attribute name="open" type="boolean" />
 		</element-def>
-		<element-def name="text-widget" extends="value-widget" abstract="true">
-			<attribute name="format" type="expression" specify="optional" />
-			<attribute name="editable" type="expression" specify="optional" />
-		</element-def>
 		<element-def name="label" extends="text-widget">
 			<value type="string" specify="optional" />
-			<attribute name="value-widget.value" specify="optional" default="" />
+			<attr-mod name="value-widget.value" specify="optional" default="" />
 			<attribute name="icon" type="expression" specify="optional" />
-			<attribute name="icon-ref" type="string" specify="optional" />
 		</element-def>
 		<element-def name="editable-text-widget" extends="text-widget">
+			<element-model>
+				<value name="error" type="String" priority="10000" />
+				<value name="warning" type="String" priority="5000" />
+			</element-model>
 			<attribute name="commit-on-type" type="boolean" default="false" />
 		</element-def>
 		<element-def name="text-field" extends="editable-text-widget">
@@ -156,7 +154,6 @@
 			<attribute name="max" type="expression" specify="required" />
 		</element-def>
 		<element-def name="render-field-panel" extends="value-widget">
-			<attribute name="subject-name" type="identifier" specify="required" />
 			<child-def name="field" type="value-widget" min="0" max="inf" />
 		</element-def>
 
@@ -175,38 +172,41 @@
 			<attribute name="values" type="expression" specify="required" />
 		</element-def>
 		<element-def name="column" inherits="single-rendering">
-			<attribute name="single-rendering.render-value-name" specify="forbidden" default="none" />
 			<attribute name="name" type="string" />
 			<!-- Unspecified value means to use the row value for the column value -->
 			<attribute name="value" type="expression" specify="optional" />
 			<child-def name="edit" type="column-edit" min="0" />
 		</element-def>
 		<element-def name="column-edit">
-			<attribute name="edit-value-name" type="identifier" />
+			<element-model>
+				<value name="editing" />
+			</element-model>
 			<attribute name="type" type="column-edit-type" />
 			<child-def name="editor" type="value-widget" inherits="column-editor" />
 			<attribute name="clicks" type="int" specify="optional" />
 		</element-def>
-		<element-def name="columns" extends="model-value" inherits="int-model-value,multi-value-renderable,renderable-widget,">
+		<element-def name="columns" extends="model-value" inherits="multi-value-renderable">
 			<child-def name="column" type="column" min="0" max="inf" />
 		</element-def>
 		<element-def name="value-action">
-			<attribute name="name" type="expression-or-string" specify="optional" />
-			<attribute name="icon" type="expression-or-string" specify="optional" />
+			<attribute name="name" type="expression" specify="optional" />
+			<attribute name="icon" type="expression" specify="optional" />
 			<attribute name="action" type="expression" specify="required" />
 			<attribute name="enabled" type="expression" specify="optional" />
 			<attribute name="allow-for-empty" type="boolean" default="false" />
 			<attribute name="allow-for-multiple" type="boolean" default="true" />
-			<attribute name="tooltip" type="expression-or-string" specify="optional" />
+			<attribute name="tooltip" type="expression" specify="optional" />
 		</element-def>
 		<element-def name="multi-value-action" extends="value-action">
-			<attribute name="value-list-name" type="identifier" specify="required" />
+			<element-model>
+				<list name="values" />
+			</element-model>
 		</element-def>
 		<element-def name="table" extends="multi-value-widget" inherits="tabular-widget">
 			<attribute name="rows" type="expression" specify="required" />
 			<child-def name="action" type="value-action" min="0" max="inf" />
 		</element-def>
-		<element-def name="tree" extends="multi-value-widget" inherits="renderable-widget">
+		<element-def name="tree" extends="multi-value-widget">
 			<attribute name="root" type="expression" specify="required" />
 			<attribute name="children" type="expression" specify="required" />
 			<attribute name="leaf" type="expression" specify="optional" />
@@ -216,9 +216,6 @@
 		</element-def>
 
 		<!-- Containers -->
-		<element-def name="container" extends="widget" abstract="true">
-			<child-def name="content" type="widget" min="0" max="inf" />
-		</element-def>
 		<element-def name="box" extends="container">
 			<attribute name="opacity" type="expression" specify="optional" />
 			<attribute name="layout" type="layout" specify="required" />
@@ -237,14 +234,35 @@
 			<child-def name="tab-set" type="tab-set" min="0" max="inf" />
 		</element-def>
 		<element-def name="tab-set" inherits="single-rendering,abstract-tab"> <!-- Renderer is the tab's content -->
-			<attribute name="value-name" type="string" />
 			<attribute name="values" type="expression" />
 			<child-mod child="single-rendering.renderer" min="1" />
 		</element-def>
 		<element-def name="split" extends="container">
 			<attribute name="orientation" type="orientation" specify="required" />
-			<attribute name="split-position" type="pos-or-exp" specify="optional" />
+			<attribute name="split-position" type="expression" specify="optional" />
 			<child-mod child="content" min="2" max="2" />
 		</element-def>
+		
+		<!-- Miscellaneous -->
+		<element-def name="menu-bar" inherits="with-text">
+			<child-def name="menu" type="menu" min="0" max="inf" />
+		</element-def>
+		<element-def name="abst-menu-item" extends="label" abstract="true">
+		</element-def>
+		<element-def name="menu" extends="abst-menu-item">
+			<child-def name="item" type="menu-item" min="0" max="inf" />
+		</element-def>
+		<element-def name="menu-item" extends="abst-menu-item">
+			<attribute name="action" type="expression" />
+		</element-def>
+		<element-def name="check-box-menu-item" extends="abst-menu-item">
+			<attribute name="selected" type="expression" />
+		</element-def>
 	</elements>
+
+	<auto-inheritance>
+		<auto-inherit inherits="menu-container">
+			<target element="quick" />
+		</auto-inherit>
+	</auto-inheritance>
 </qonfig-def>

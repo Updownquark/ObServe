@@ -32,7 +32,7 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <T> The type of values this observable provides
  */
-public interface Observable<T> extends Lockable, Identifiable {
+public interface Observable<T> extends Lockable, Identifiable, Eventable {
 	/** This class's wildcard {@link TypeToken} */
 	static TypeToken<Observable<?>> TYPE = TypeTokens.get().keyFor(Observable.class).wildCard();
 
@@ -229,6 +229,16 @@ public interface Observable<T> extends Lockable, Identifiable {
 	}
 
 	/**
+	 * @param obs The observable to watch
+	 * @return An observable that fires when the source's root causable finishes.
+	 * @see Causable#getRootCausable()
+	 * @see Causable#onFinish(org.qommons.Causable.CausableKey)
+	 */
+	public static Observable<Causable> onRootFinish(Observable<? extends Causable> obs) {
+		return new CausableRootFinish((Observable<Causable>) obs);
+	}
+
+	/**
 	 * @param <T> The type of the observable to create
 	 * @param value The value for the observable
 	 * @return An observable that pushes the given value as soon as it is subscribed to and never completes
@@ -253,6 +263,11 @@ public interface Observable<T> extends Lockable, Identifiable {
 			@Override
 			public ThreadConstraint getThreadConstraint() {
 				return ThreadConstraint.NONE;
+			}
+
+			@Override
+			public boolean isEventing() {
+				return false;
 			}
 
 			@Override
@@ -312,6 +327,11 @@ public interface Observable<T> extends Lockable, Identifiable {
 		@Override
 		public ThreadConstraint getThreadConstraint() {
 			return ThreadConstraint.NONE;
+		}
+
+		@Override
+		public boolean isEventing() {
+			return false;
 		}
 
 		@Override
@@ -390,6 +410,11 @@ public interface Observable<T> extends Lockable, Identifiable {
 		@Override
 		public ThreadConstraint getThreadConstraint() {
 			return theWrapped.getThreadConstraint();
+		}
+
+		@Override
+		public boolean isEventing() {
+			return theWrapped.isEventing();
 		}
 
 		@Override
@@ -669,6 +694,15 @@ public interface Observable<T> extends Lockable, Identifiable {
 		@Override
 		public ThreadConstraint getThreadConstraint() {
 			return ThreadConstrained.getThreadConstraint(theComposed);
+		}
+
+		@Override
+		public boolean isEventing() {
+			for (Observable<?> comp : theComposed) {
+				if (comp.isEventing())
+					return true;
+			}
+			return false;
 		}
 
 		@Override
@@ -953,6 +987,15 @@ public interface Observable<T> extends Lockable, Identifiable {
 		}
 
 		@Override
+		public boolean isEventing() {
+			for (Observable<? extends V> obs : theObservables) {
+				if (obs != null && obs.isEventing())
+					return true;
+			}
+			return false;
+		}
+
+		@Override
 		public Subscription subscribe(Observer<? super V> observer) {
 			Subscription[] subs = new Subscription[theObservables.length];
 			boolean[] init = new boolean[] { true };
@@ -1021,6 +1064,35 @@ public interface Observable<T> extends Lockable, Identifiable {
 		}
 	};
 
+	/** Implements {@link Observable#onRootFinish(Observable)} */
+	class CausableRootFinish extends WrappingObservable<Causable, Causable> {
+		public CausableRootFinish(Observable<Causable> wrapped) {
+			super(wrapped);
+		}
+
+		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getWrapped().getIdentity(), "onRootFinish");
+		}
+
+		@Override
+		public Subscription subscribe(Observer<? super Causable> observer) {
+			Causable.CausableKey key = Causable.key((cause, values) -> {
+				observer.onNext(cause);
+			});
+			return getWrapped().subscribe(new Observer<Causable>() {
+				@Override
+				public <V extends Causable> void onNext(V value) {
+					value.getRootCausable().onFinish(key);
+				}
+
+				@Override
+				public <V extends Causable> void onCompleted(V value) {
+					observer.onCompleted(value);
+				}
+			});
+		}
+	}
 	/**
 	 * Implements {@link Observable#flatten(Observable)}
 	 *
@@ -1044,6 +1116,11 @@ public interface Observable<T> extends Lockable, Identifiable {
 		@Override
 		public ThreadConstraint getThreadConstraint() {
 			return null; // We can't know
+		}
+
+		@Override
+		public boolean isEventing() {
+			return theWrapper.isEventing(); // Best guess, can't know for sure
 		}
 
 		protected Observable<? extends Observable<? extends T>> getWrapper() {
@@ -1118,7 +1195,12 @@ public interface Observable<T> extends Lockable, Identifiable {
 
 		@Override
 		public ThreadConstraint getThreadConstraint() {
-			return null;
+			return ThreadConstraint.ANY;
+		}
+
+		@Override
+		public boolean isEventing() {
+			return false;
 		}
 
 		@Override
@@ -1271,6 +1353,11 @@ public interface Observable<T> extends Lockable, Identifiable {
 				return ThreadConstraint.EDT;
 			else
 				return ThreadConstraint.ANY;
+		}
+
+		@Override
+		public boolean isEventing() {
+			return theObservers.isFiring();
 		}
 
 		@Override

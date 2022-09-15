@@ -32,13 +32,7 @@ public interface DependencyService<C> extends AutoCloseable {
 	 */
 	ObservableSet<Service<?>> getServices();
 
-	/**
-	 * TODO
-	 * 
-	 * @return Whether this service has been initialized, meaning the initial set of components has completed loading. This affects whether
-	 *         components may have {@link DSComponent#getStage() stages} of {@link ComponentStage#Defined} and
-	 *         {@link ComponentStage#Satisfied}, as opposed to {@link ComponentStage#Unsatisfied} and {@link ComponentStage#Complete}.
-	 */
+	/** @return Whether this service has been initialized, meaning the initial set of components has completed loading */
 	ObservableValue<DependencyServiceStage> getStage();
 
 	/**

@@ -1,17 +1,18 @@
 package org.observe.quick;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.Objects;
 
 import org.observe.SettableValue;
 import org.observe.expresso.Expression.ExpressoParseException;
-import org.observe.expresso.ModelType.ModelInstanceType;
-import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ValueContainer;
-import org.observe.expresso.ClassView;
+import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ExpressoParser;
+import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelSet;
+import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.config.CustomValueType;
@@ -124,23 +125,28 @@ public class QuickSize {
 			SizeUnit fUnit = unit == null ? SizeUnit.Pixels : unit;
 			return new ObservableExpression() {
 				@Override
-				public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ObservableModelSet models,
-					ClassView classView) throws QonfigInterpretationException {
+				public List<? extends ObservableExpression> getChildren() {
+					return Collections.singletonList(valueEx);
+				}
+
+				@Override
+				public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ExpressoEnv env)
+					throws QonfigInterpretationException {
 					throw new QonfigInterpretationException(StdMsg.UNSUPPORTED_OPERATION);
 				}
 
 				@Override
-				public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ObservableModelSet models,
-					ClassView classView) throws QonfigInterpretationException {
+				public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
+					throws QonfigInterpretationException {
 					if (type.getModelType() != ModelTypes.Value)
 						throw new QonfigInterpretationException("Only values are supported");
 					else if (!(TypeTokens.getRawType(type.getType(0)).isAssignableFrom(QuickSize.class)))
 						throw new QonfigInterpretationException("Cannot cast SizeUnit to " + type.getType(0));
-					ValueContainer<SettableValue, SettableValue<Double>> valueC = valueEx
-						.evaluateInternal(ModelTypes.Value.forType(double.class), models, classView);
-					return (ValueContainer<M, MV>) new ValueContainer<SettableValue, SettableValue<QuickSize>>() {
+					ValueContainer<SettableValue<?>, SettableValue<Double>> valueC = valueEx
+						.evaluateInternal(ModelTypes.Value.forType(double.class), env);
+					return (ValueContainer<M, MV>) new ValueContainer<SettableValue<?>, SettableValue<QuickSize>>() {
 						@Override
-						public ModelInstanceType<SettableValue, SettableValue<QuickSize>> getType() {
+						public ModelInstanceType<SettableValue<?>, SettableValue<QuickSize>> getType() {
 							return ModelTypes.Value.forType(QuickSize.class);
 						}
 

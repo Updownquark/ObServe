@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<qonfig-def name="Quick-Style" version="0.1" root="style-sheet" extends:expresso="Expresso v0.1">
+	<value-types>
+		<pattern name="style-name">[a-zA-Z_\\-]+</pattern>
+		<pattern name="widget-name">((?&lt;ns&gt;[a-zA-Z_\\-]+)\:)?(?&lt;widget&gt;[a-zA-Z_\\-]+)</pattern>
+		<pattern name="style-attr">(((?&lt;ns&gt;[a-zA-Z_\\-]+)\:)?(?&lt;widget&gt;[a-zA-Z_\\-]+)\.)?(?&lt;attr&gt;[a-zA-Z_\\-]+)</pattern>
+		<pattern name="role-path">([a-zA-Z_\\-]+)(\.[a-zA-Z_\\-]+)*</pattern>
+	</value-types>
+
+	<add-ons>
+		<add-on name="element-style" requires="style">
+			<attr-mod name="element" specify="forbidden" />
+			<attr-mod name="child" specify="forbidden" />
+			<child-mod child="sub-style" inherits="element-style" />
+		</add-on>
+
+		<add-on name="styled" inherits="with-element-model,with-local-model">
+			<element-meta-mod meta="with-element-model.element-model" inherits="style-model" />
+			<element-meta name="styles" type="styles" min="0" />
+			<child-def name="style" type="style" inherits="element-style" min="0" max="inf" />
+		</add-on>
+		<add-on name="style-model" requires="element-model">
+			<child-mod child="element-model.value" inherits="style-model-value" />
+		</add-on>
+		<add-on name="style-model-value" requires="model-value">
+			<attribute name="priority" type="int" specify="required" />
+		</add-on>
+	</add-ons>
+
+	<elements>
+		<!-- Some building blocks for styles, etc. -->
+		<element-def name="style-attribute">
+			<attribute name="name" type="style-name" specify="required" />
+			<attribute name="type" type="string" specify="required" />
+			<attribute name="trickle-down" type="boolean" default="false" />
+		</element-def>
+
+		<element-def name="styles">
+			<child-def name="style-attribute" type="style-attribute" min="0" max="inf" />
+		</element-def>
+
+		<element-def name="style">
+			<attribute name="element" type="widget-name" specify="optional" />
+			<attribute name="child" type="role-path" specify="optional" />
+			<attribute name="attr" type="style-attr" specify="optional" />
+			<attribute name="condition" type="expression" specify="optional" />
+			<attribute name="style-set" type="string" specify="optional" />
+			<value type="expression" specify="optional" />
+			<child-def name="sub-style" type="style" min="0" max="inf" />
+		</element-def>
+
+		<element-def name="style-set">
+			<attribute name="name" type="identifier" specify="required" />
+			<child-def name="style" type="style" />
+		</element-def>
+
+		<!-- Now the structure of the Quick document -->
+		<element-def name="import-style-sheet">
+			<attribute name="name" type="identifier" specify="required" />
+			<attribute name="ref" type="string" specify="required" />
+		</element-def>
+
+		<element-def name="style-sheet">
+			<child-def name="style-sheet-ref" type="import-style-sheet" min="0" max="inf" />
+			<child-def name="style-set" type="style-set" min="0" max="inf" />
+			<child-def name="style" type="style" min="0" max="inf" />
+		</element-def>
+	</elements>
+</qonfig-def>

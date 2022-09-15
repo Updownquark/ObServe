@@ -1,10 +1,10 @@
 package org.observe.quick;
 
-import org.observe.expresso.ObservableModelSet;
-import org.qommons.config.QonfigElement;
+import org.observe.quick.style.StyleQIS;
+import org.qommons.config.QonfigInterpretationException;
 
 public abstract class AbstractQuickValueEditor extends AbstractQuickField implements QuickValueEditorDef {
-	public AbstractQuickValueEditor(QonfigElement element, ObservableModelSet.Wrapped models) {
-		super(element, models);
+	public AbstractQuickValueEditor(StyleQIS session) throws QonfigInterpretationException {
+		super(session);
 	}
 }

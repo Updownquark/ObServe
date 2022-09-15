@@ -9,12 +9,20 @@ import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
 import java.awt.datatransfer.UnsupportedFlavorException;
 import java.awt.dnd.DnDConstants;
+import java.awt.event.ComponentEvent;
+import java.awt.event.ComponentListener;
+import java.awt.event.HierarchyEvent;
+import java.awt.event.HierarchyListener;
 import java.awt.event.MouseEvent;
+import java.awt.event.MouseListener;
+import java.awt.event.MouseMotionListener;
 import java.beans.PropertyChangeListener;
 import java.io.IOException;
 import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -35,8 +43,6 @@ import javax.swing.JTable;
 import javax.swing.ListSelectionModel;
 import javax.swing.TransferHandler;
 import javax.swing.border.TitledBorder;
-import javax.swing.event.ChangeEvent;
-import javax.swing.event.ChangeListener;
 import javax.swing.event.ListDataEvent;
 import javax.swing.event.ListDataListener;
 import javax.swing.event.ListSelectionListener;
@@ -47,6 +53,7 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.Subscription;
+import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.CollectionSubscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.dbug.DbugAnchor;
@@ -57,20 +64,20 @@ import org.observe.util.swing.Dragging.SimpleTransferAccepter;
 import org.observe.util.swing.Dragging.SimpleTransferSource;
 import org.observe.util.swing.Dragging.TransferAccepter;
 import org.observe.util.swing.Dragging.TransferSource;
+import org.observe.util.swing.ObservableCellRenderer.CellRenderContext;
 import org.observe.util.swing.ObservableTableModel.RowMouseListener;
-import org.observe.util.swing.PanelPopulation.AbstractComponentEditor;
 import org.observe.util.swing.PanelPopulation.DataAction;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
-import org.observe.util.swing.PanelPopulation.SimpleDataAction;
-import org.observe.util.swing.PanelPopulation.SimpleHPanel;
 import org.observe.util.swing.PanelPopulation.TableBuilder;
+import org.observe.util.swing.PanelPopulationImpl.AbstractComponentEditor;
+import org.observe.util.swing.PanelPopulationImpl.SimpleDataAction;
+import org.observe.util.swing.PanelPopulationImpl.SimpleHPanel;
 import org.observe.util.swing.TableContentControl.FilteredValue;
 import org.qommons.ArrayUtils;
 import org.qommons.IntList;
 import org.qommons.LambdaUtils;
 import org.qommons.StringUtils;
 import org.qommons.ThreadConstraint;
-import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
@@ -82,6 +89,19 @@ import com.google.common.reflect.TypeToken;
 
 class SimpleTableBuilder<R, P extends SimpleTableBuilder<R, P>> extends AbstractComponentEditor<JTable, P>
 implements TableBuilder<R, P> {
+	static class DynamicColumnSet<R, C> {
+		final Function<? super R, ? extends Collection<? extends C>> columnValues;
+		final Comparator<? super C> columnSort;
+		final Function<? super C, CategoryRenderStrategy<R, ?>> columnCreator;
+
+		public DynamicColumnSet(Function<? super R, ? extends Collection<? extends C>> columnValues, Comparator<? super C> columnSort,
+			Function<? super C, CategoryRenderStrategy<R, ?>> columnCreator) {
+			this.columnValues = columnValues;
+			this.columnSort = columnSort;
+			this.columnCreator = columnCreator;
+		}
+	}
+
 	@SuppressWarnings("rawtypes")
 	private final DbugAnchor<TableBuilder> theAnchor;
 	private final ObservableCollection<R> theRows;
@@ -89,9 +109,11 @@ implements TableBuilder<R, P> {
 	private String theItemName;
 	private Function<? super R, String> theNameFunction;
 	private ObservableCollection<? extends CategoryRenderStrategy<R, ?>> theColumns;
+	private final List<DynamicColumnSet<R, ?>> theDynamicColumns;
 	private SettableValue<R> theSelectionValue;
 	private ObservableCollection<R> theSelectionValues;
 	private List<Object> theActions;
+	private boolean theActionsOnTop;
 	private ObservableValue<? extends TableContentControl> theFilter;
 	private String theCountTitleDisplayedText;
 	private Dragging.SimpleTransferSource<R> theDragSource;
@@ -100,17 +122,23 @@ implements TableBuilder<R, P> {
 	private int theAdaptiveMinRowHeight;
 	private int theAdaptivePrefRowHeight;
 	private int theAdaptiveMaxRowHeight;
+	private boolean withColumnHeader;
 	private boolean isScrollable;
 
-	private JComponent theBuiltComponent;
-
-	SimpleTableBuilder(ObservableCollection<R> rows, Supplier<Transactable> lock) {
-		super(new JTable(), lock);
+	SimpleTableBuilder(ObservableCollection<R> rows, Observable<?> until) {
+		super(new JTable() {
+			@Override
+			public void doLayout() { // We do this ourselves
+			}
+		}, until);
 		theAnchor = PanelPopulation.TableBuilder.DBUG.instance(this, a -> a//
 			.setField("type", rows.getType(), null)//
 			);
 		theRows = rows;
+		theDynamicColumns = new ArrayList<>();
 		theActions = new LinkedList<>();
+		theActionsOnTop = true;
+		withColumnHeader = true;
 		isScrollable = true;
 	}
 
@@ -191,6 +219,13 @@ implements TableBuilder<R, P> {
 	}
 
 	@Override
+	public <C> P withDynamicColumns(Function<? super R, ? extends Collection<? extends C>> columnValues, Comparator<? super C> columnSort,
+		Function<? super C, CategoryRenderStrategy<R, ?>> columnCreator) {
+		theDynamicColumns.add(new DynamicColumnSet<>(columnValues, columnSort, columnCreator));
+		return (P) this;
+	}
+
+	@Override
 	public P withSelection(SettableValue<R> selection, boolean enforceSingleSelection) {
 		theSelectionValue = selection;
 		if (enforceSingleSelection)
@@ -219,6 +254,12 @@ implements TableBuilder<R, P> {
 	@Override
 	public ObservableCollection<R> getFilteredRows() {
 		return theFilteredRows;
+	}
+
+	@Override
+	public P withColumnHeader(boolean columnHeader) {
+		withColumnHeader = columnHeader;
+		return (P) this;
 	}
 
 	@Override
@@ -267,7 +308,7 @@ implements TableBuilder<R, P> {
 			}
 		}, action -> {
 			action.allowForMultiple(true).allowForEmpty(true).allowForAnyEnabled(true)//
-			.modifyButton(button -> button.withIcon(PanelPopulation.getAddIcon(16)).withTooltip("Add new " + getItemName()));
+			.modifyButton(button -> button.withIcon(PanelPopulationImpl.getAddIcon(16)).withTooltip("Add new " + getItemName()));
 			if (actionMod != null)
 				actionMod.accept(action);
 		});
@@ -303,7 +344,7 @@ implements TableBuilder<R, P> {
 		}
 		return withMultiAction(null, deletion, action -> {
 			action.allowForMultiple(true).withTooltip(items -> "Remove selected " + (items.size() == 1 ? single : plural))//
-			.modifyButton(button -> button.withIcon(PanelPopulation.getRemoveIcon(16)));
+			.modifyButton(button -> button.withIcon(PanelPopulationImpl.getRemoveIcon(16)));
 			if (actionMod != null)
 				actionMod.accept(action);
 		});
@@ -319,7 +360,7 @@ implements TableBuilder<R, P> {
 			String single = getItemName();
 			String plural = StringUtils.pluralize(single);
 			action.allowForMultiple(true).withTooltip(items -> "Duplicate selected " + (items.size() == 1 ? single : plural))//
-			.modifyButton(button -> button.withIcon(PanelPopulation.getCopyIcon(16)));
+			.modifyButton(button -> button.withIcon(PanelPopulationImpl.getCopyIcon(16)));
 			if (actionMod != null)
 				actionMod.accept(action);
 		});
@@ -358,7 +399,7 @@ implements TableBuilder<R, P> {
 		CategoryRenderStrategy<R, Object> moveColumn = new CategoryRenderStrategy<R, Object>(up ? "\u2191" : "\u2193",
 			TypeTokens.get().OBJECT, v -> null)//
 			.withHeaderTooltip("Move row " + (up ? "up" : "down"))//
-			.decorateAll(deco -> deco.withIcon(PanelPopulation.getMoveIcon(up, 16)))//
+			.decorateAll(deco -> deco.withIcon(PanelPopulationImpl.getMoveIcon(up, 16)))//
 			.withWidths(15, 20, 20)//
 			.withMutation(m -> m.mutateAttribute2((r, c) -> c)
 				.withEditor(ObservableCellEditor.<R, Object> createButtonCellEditor(__ -> null, cell -> {
@@ -380,7 +421,7 @@ implements TableBuilder<R, P> {
 					}
 					return cell.getCellValue();
 				}).decorate((cell, deco) -> {
-					deco.withIcon(PanelPopulation.getMoveIcon(up, 16));
+					deco.withIcon(PanelPopulationImpl.getMoveIcon(up, 16));
 					if (up)
 						deco.enabled(cell.getRowIndex() > 0);
 					else
@@ -444,7 +485,7 @@ implements TableBuilder<R, P> {
 				enabled = theSelectionValue.map(__ -> enabledGet.get());
 			action.allowForMultiple(true)
 			.withTooltip(items -> "Move selected row" + (items.size() == 1 ? "" : "s") + " to the " + (up ? "top" : "bottom"))
-			.modifyButton(button -> button.withIcon(PanelPopulation.getMoveEndIcon(up, 16)))//
+			.modifyButton(button -> button.withIcon(PanelPopulationImpl.getMoveEndIcon(up, 16)))//
 			.allowForEmpty(false).allowForAnyEnabled(false).modifyAction(a -> a.disableWith(enabled));
 		});
 	}
@@ -454,6 +495,12 @@ implements TableBuilder<R, P> {
 		SimpleDataAction<R, ?> ta = new SimpleDataAction<>(actionName, this, action, this::getSelection);
 		actionMod.accept(ta);
 		theActions.add(ta);
+		return (P) this;
+	}
+
+	@Override
+	public P withActionsOnTop(boolean actionsOnTop) {
+		theActionsOnTop = actionsOnTop;
 		return (P) this;
 	}
 
@@ -519,17 +566,39 @@ implements TableBuilder<R, P> {
 	}
 
 	@Override
-	public Component getOrCreateComponent(Observable<?> until) {
-		if (theBuiltComponent != null)
-			return theBuiltComponent;
+	protected Component createComponent() {
 		if (theColumns == null)
 			throw new IllegalStateException("No columns configured");
+		theAnchor.event("create", null);
 		InstantiationTransaction instantiating = theAnchor.instantiating();
 		ObservableTableModel<R> model;
 		ObservableCollection<TableContentControl.FilteredValue<R>> filtered;
 		ObservableCollection<? extends CategoryRenderStrategy<R, ?>> columns;
+		ObservableCollection<? extends CategoryRenderStrategy<R, ?>> columns2;
+		if (theDynamicColumns.isEmpty()) {
+			columns2 = theColumns;
+		} else {
+			List<ObservableCollection<? extends CategoryRenderStrategy<R, ?>>> columnSets = new ArrayList<>();
+			columnSets.add(theColumns);
+			for (DynamicColumnSet<R, ?> dc : theDynamicColumns) {
+				ObservableCollection.CollectionDataFlow<R, ?, Object> columnValueFlow = theRows.flow()//
+					.flatMap(Object.class, row -> ObservableCollection.of(Object.class, dc.columnValues.apply(row)).flow());
+				if (dc.columnSort != null)
+					columnValueFlow = columnValueFlow.distinctSorted((Comparator<Object>) dc.columnSort, false);
+				else
+					columnValueFlow = columnValueFlow.distinct();
+				ObservableCollection<CategoryRenderStrategy<R, ?>> dcc = columnValueFlow
+					.transform((Class<CategoryRenderStrategy<R, ?>>) (Class<?>) CategoryRenderStrategy.class, tx -> tx//
+						.cache(true).reEvalOnUpdate(false).fireIfUnchanged(false)//
+						.map(columnValue -> ((DynamicColumnSet<R, Object>) dc).columnCreator.apply(columnValue)))
+					.collectActive(getUntil());
+				columnSets.add(dcc);
+			}
+			columns2 = ObservableCollection.flattenCollections((TypeToken<CategoryRenderStrategy<R, ?>>) theColumns.getType(),
+				columnSets.toArray(new ObservableCollection[columnSets.size()])).collectActive(getUntil());
+		}
+		columns2 = columns2.safe(ThreadConstraint.EDT, getUntil());
 		if (theFilter != null) {
-			ObservableCollection<? extends CategoryRenderStrategy<R, ?>> columns2 = theColumns.safe(ThreadConstraint.EDT, until);
 			if (theFilter instanceof SettableValue) {
 				Map<CategoryRenderStrategy<R, ?>, Runnable> headerListening = new HashMap<>();
 				boolean checkType = TypeTokens.getRawType(theFilter.getType()) != TableContentControl.class;
@@ -552,37 +621,37 @@ implements TableBuilder<R, P> {
 							headerListening.remove(evt.getOldValue()).run();
 							headerListening.put(evt.getNewValue(),
 								evt.getNewValue().addMouseListener(new CategoryClickAdapter<R, Object>() {
-								@Override
-								public void mouseClicked(ModelCell<? extends R, ? extends Object> cell, MouseEvent e) {
+									@Override
+									public void mouseClicked(ModelCell<? extends R, ? extends Object> cell, MouseEvent e) {
 										if (cell == null) // Looking for a mouse click on the column header
 											handleColumnHeaderClick(theFilter, evt.getNewValue().getName(), checkType, e);
-								}
+									}
 								}));
 						}
 					}
 				}, true);
-				if (until != null)
-					until.take(1).act(__ -> colClickSub.unsubscribe(true));
+				getUntil().take(1).act(__ -> colClickSub.unsubscribe(true));
 			}
-			ObservableCollection<? extends CategoryRenderStrategy<R, ?>> fColumns = TableContentControl
-				.applyColumnControl(columns2, theFilter, until);
-			columns = fColumns;
-			Observable<?> columnChanges = Observable.or(Observable.constant(null), fColumns.simpleChanges());
+
+			columns = TableContentControl.applyColumnControl(columns2, theFilter, getUntil());
+			Observable<?> columnChanges = Observable.or(Observable.constant(null), columns.simpleChanges());
 			ObservableCollection<TableContentControl.FilteredValue<R>> rawFiltered = TableContentControl.applyRowControl(theRows,
-				() -> columns, theFilter.refresh(columnChanges), until);
-			filtered = rawFiltered.safe(ThreadConstraint.EDT, until);
+				() -> columns, theFilter.refresh(columnChanges), getUntil());
+			filtered = rawFiltered.safe(ThreadConstraint.EDT, getUntil());
 			theFilteredRows = filtered.flow()
 				.transform(theRows.getType(),
 					tx -> tx.map(LambdaUtils.printableFn(f -> f.value, "value", null)).modifySource(FilteredValue::setValue))
-				.collectActive(until);
+				.collectActive(getUntil());
 		} else {
 			filtered = null;
-			columns = theColumns.safe(ThreadConstraint.EDT, until);
-			theFilteredRows = theRows.safe(ThreadConstraint.EDT, until);
+			columns = columns2;
+			theFilteredRows = theRows.safe(ThreadConstraint.EDT, getUntil());
 		}
-		instantiating.watchFor(ObservableListModel.DBUG, "model");
+		instantiating.watchFor(ObservableTableModel.DBUG, "model", tk -> tk.applyTo(1));
 		model = new ObservableTableModel<>(theFilteredRows, columns);
 		JTable table = getEditor();
+		if (!withColumnHeader)
+			table.setTableHeader(null);
 		table.setModel(model);
 		if(theMouseListeners!=null) {
 			for(ObservableTableModel.RowMouseListener<? super R> listener : theMouseListeners)
@@ -598,132 +667,546 @@ implements TableBuilder<R, P> {
 				return fv.getMatches(column);
 			}
 		});
-		if (until != null)
-			until.take(1).act(__ -> sub.unsubscribe());
+		getUntil().take(1).act(__ -> sub.unsubscribe());
 
 		JScrollPane scroll = new JScrollPane(table);
-		if (isScrollable) {
-			// Default scroll increments are ridiculously small
-			scroll.getVerticalScrollBar().setUnitIncrement(10);
-			scroll.getHorizontalScrollBar().setUnitIncrement(10);
-			if (theAdaptivePrefRowHeight > 0) {
-				class HeightAdjustmentListener implements ListDataListener, ChangeListener {
-					private boolean isHSBVisible;
-					private boolean isVSBVisible;
+		table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+		class SizeListener implements ComponentListener, HierarchyListener, MouseListener, MouseMotionListener {
+			private final List<int[]> theColumnWidths;
+			private int theResizingColumn;
+			private int theResizingColumnOrigWidth;
+			private int theResizingPreColumnWidth;
+			private int theDragStart;
 
-					@Override
-					public void intervalRemoved(ListDataEvent e) {
-						if (e.getIndex0() < theAdaptiveMaxRowHeight)
-							adjustHeight();
+			/**
+			 * This integer is how much the user has resized columns beyond the scroll pane's width.<br />
+			 * This helps us with column layout.
+			 */
+			private int theTableExtraWidth;
+
+			SizeListener() {
+				theResizingColumn = -1;
+				theColumnWidths = new ArrayList<>();
+				for (int c = 0; c < columns.size(); c++) {
+					int[] widths = new int[4]; // min, pref, max, and actual
+					theColumnWidths.add(widths);
+					getColumnWidths(columns.get(c), c, widths, null);
+					TableColumn column = table.getColumnModel().getColumn(table.convertColumnIndexToView(c));
+					column.setMinWidth(widths[0]);
+					column.setMaxWidth(widths[2]);
+					widths[3] = widths[1];
+				}
+				adjustScrollWidths();
+				theFilteredRows.changes().act(evt -> {
+					if (theAdaptivePrefRowHeight > 0)
+						adjustHeight();
+					boolean adjusted = false;
+					int c = 0;
+					for (CategoryRenderStrategy<R, ?> column : columns) {
+						if (column.isUsingRenderingForSize()) {
+							int[] cw = theColumnWidths.get(c);
+							int[] newWidths = new int[3];
+							boolean colAdjust = false;
+							switch (evt.type) {
+							case add:
+								getColumnWidths(column, c, newWidths, evt);
+								if (newWidths[0] > cw[0]) {
+									colAdjust = true;
+									cw[0] = newWidths[0];
+								}
+								if (newWidths[1] > cw[1]) {
+									colAdjust = true;
+									cw[1] = newWidths[1];
+								}
+								if (newWidths[2] > cw[2]) {
+									colAdjust = true;
+									cw[2] = newWidths[2];
+								}
+								break;
+							case remove:
+							case set:
+								getColumnWidths(column, c, newWidths, null);
+								if (newWidths[0] != cw[0]) {
+									colAdjust = true;
+									cw[0] = newWidths[0];
+								}
+								if (newWidths[1] != cw[1]) {
+									colAdjust = true;
+									cw[1] = newWidths[1];
+								}
+								if (newWidths[2] != cw[2]) {
+									colAdjust = true;
+									cw[2] = newWidths[2];
+								}
+								break;
+							}
+							if (colAdjust) {
+								adjusted = true;
+								TableColumn tc = table.getColumnModel().getColumn(table.convertColumnIndexToView(c));
+								tc.setMinWidth(cw[0]);
+								tc.setMaxWidth(cw[2]);
+								if (cw[3] == 0)
+									cw[3] = cw[1];
+								else if (cw[3] < cw[0])
+									cw[3] = cw[0];
+								else if (cw[3] > cw[2])
+									cw[3] = cw[2];
+							}
+							break;
+						}
+						c++;
 					}
-
-					@Override
-					public void intervalAdded(ListDataEvent e) {
-						if (e.getIndex0() < theAdaptiveMaxRowHeight)
-							adjustHeight();
-					}
-
-					@Override
-					public void contentsChanged(ListDataEvent e) {
-						if (e.getIndex0() < theAdaptiveMaxRowHeight)
-							adjustHeight();
-					}
-
-					@Override
-					public void stateChanged(ChangeEvent e) {
-						BoundedRangeModel hbm = scroll.getHorizontalScrollBar().getModel();
-						if (hbm.getValueIsAdjusting())
-							return;
-						if (isHSBVisible != (hbm.getExtent() > hbm.getMaximum())) {
-							adjustHeight();
-						} else {
-							BoundedRangeModel vbm = scroll.getVerticalScrollBar().getModel();
-							if (vbm.getValueIsAdjusting())
-								return;
-							if (isVSBVisible != (vbm.getExtent() > vbm.getMaximum()))
-								adjustHeight();
+					if (adjusted)
+						adjustScrollWidths();
+				});
+				columns.changes().act(evt -> {
+					theResizingColumn = -1;
+					boolean adjust = false;
+					for (CollectionChangeEvent.ElementChange<? extends CategoryRenderStrategy<R, ?>> change : evt.getElements()) {
+						switch (evt.type) {
+						case add:
+							int[] widths = new int[4];
+							theColumnWidths.add(change.index, widths);
+							getColumnWidths(change.newValue, change.index, widths, null);
+							widths[3] = widths[1];
+							adjust = true;
+							break;
+						case remove:
+							theColumnWidths.remove(change.index);
+							adjust = true;
+							break;
+						case set:
+							if (!change.newValue.isUsingRenderingForSize()) {
+								int[] cw = theColumnWidths.get(change.index);
+								adjust |= cw[0] != change.newValue.getMinWidth();
+								adjust |= cw[1] != change.newValue.getPrefWidth();
+								adjust |= cw[2] != change.newValue.getMaxWidth();
+								cw[0] = change.newValue.getMinWidth();
+								cw[1] = change.newValue.getPrefWidth();
+								cw[2] = change.newValue.getMaxWidth();
+								TableColumn tc = table.getColumnModel().getColumn(table.convertColumnIndexToView(change.index));
+								tc.setMinWidth(cw[0]);
+								tc.setMaxWidth(cw[2]);
+							}
+							break;
 						}
 					}
+					if (adjust)
+						adjustScrollWidths();
+				});
+			}
 
-					void adjustHeight() {
-						int minHeight = 0, prefHeight = 0, maxHeight = 0;
-						if (table.getTableHeader() != null && table.getTableHeader().isVisible()) {
-							minHeight += table.getTableHeader().getPreferredSize().height;
-							maxHeight += table.getTableHeader().getPreferredSize().height;
+			@Override
+			public void mouseClicked(MouseEvent e) {
+			}
+
+			@Override
+			public void mousePressed(MouseEvent e) {
+				TableColumn resizing = table.getTableHeader().getResizingColumn();
+				if (resizing == null) {
+					theResizingColumn = -1;
+					return;
+				}
+				theResizingColumn = resizing.getModelIndex();
+				theResizingColumnOrigWidth = resizing.getWidth();
+				theDragStart = e.getX();
+				int viewC = table.convertColumnIndexToView(theResizingColumn);
+				theResizingPreColumnWidth = viewC * table.getColumnModel().getColumnMargin();
+				for (int c = 0; c < viewC; c++)
+					theResizingPreColumnWidth += table.getColumnModel().getColumn(c).getWidth();
+			}
+
+			@Override
+			public void mouseDragged(MouseEvent e) {
+				int resizeModelIndex = theResizingColumn;
+				if (resizeModelIndex < 0)
+					return;
+				int resizeColumn = table.convertColumnIndexToView(resizeModelIndex);
+				int tableSize = scroll.getViewport().getWidth()
+					- (table.getColumnCount() - 1) * table.getColumnModel().getColumnMargin();
+				if (tableSize <= 0)
+					return;
+				int newWidth = theResizingColumnOrigWidth + e.getX() - theDragStart;
+				if (newWidth < theColumnWidths.get(resizeModelIndex)[0])
+					newWidth = theColumnWidths.get(resizeModelIndex)[0];
+				else if (newWidth > theColumnWidths.get(resizeModelIndex)[2])
+					newWidth = theColumnWidths.get(resizeModelIndex)[2];
+				if (newWidth == theColumnWidths.get(resizeModelIndex)[3])
+					return;
+				int remain = tableSize - theResizingPreColumnWidth - newWidth;
+				int[] postTotalW = new int[4];
+				if (!isScrollable) {
+					// We need to determine if the new size is actually ok--if the columns to the right of the drag
+					// can be resized down enough to accommodate the user's action.
+					for (int c = resizeColumn + 1; c < table.getColumnModel().getColumnCount(); c++) {
+						int[] widths = theColumnWidths.get(table.convertColumnIndexToModel(c));
+						postTotalW[0] += widths[0];
+						postTotalW[1] += widths[1];
+						postTotalW[2] += widths[2];
+						postTotalW[3] += widths[3];
+						if (c > resizeColumn + 1) {
+							postTotalW[0] += table.getColumnModel().getColumnMargin();
+							postTotalW[1] += table.getColumnModel().getColumnMargin();
+							postTotalW[2] += table.getColumnModel().getColumnMargin();
+							postTotalW[3] += table.getColumnModel().getColumnMargin();
 						}
-						int rowCount = model.getRowCount();
-						for (int i = 0; i < theAdaptiveMaxRowHeight && i < rowCount; i++) {
-							int rowHeight = table.getRowHeight(i);
-							if (i < theAdaptiveMinRowHeight)
-								minHeight += rowHeight;
-							if (i < theAdaptivePrefRowHeight)
-								prefHeight += rowHeight;
-							if (i < theAdaptiveMaxRowHeight)
-								maxHeight += rowHeight;
-						}
-						BoundedRangeModel hbm = scroll.getHorizontalScrollBar().getModel();
-						isHSBVisible = hbm.getExtent() > hbm.getMaximum();
-						BoundedRangeModel vbm = scroll.getVerticalScrollBar().getModel();
-						isVSBVisible = vbm.getExtent() > vbm.getMaximum();
-						if (isHSBVisible) {
-							int sbh = scroll.getHorizontalScrollBar().getHeight();
-							minHeight += sbh;
-							maxHeight += sbh;
-						}
-						Dimension psvs = table.getPreferredScrollableViewportSize();
-						if (psvs.height != prefHeight) {
-							// int w = 0;
-							// for (int c = 0; c < table.getColumnModel().getColumnCount(); c++)
-							// w += table.getColumnModel().getColumn(c).getWidth();
-							table.setPreferredScrollableViewportSize(new Dimension(psvs.width, prefHeight));
-						}
-						Dimension min = scroll.getViewport().getMinimumSize();
-						scroll.getViewport().setMinimumSize(new Dimension(min.width, minHeight));
-						Dimension max = scroll.getViewport().getMaximumSize();
-						scroll.getViewport().setMaximumSize(new Dimension(max.width, maxHeight));
-						if (scroll.getParent() != null)
-							scroll.getParent().revalidate();
+					}
+					// If not, cap the action so that the columns are at their min sizes
+					if (remain < postTotalW[0]) {
+						newWidth = tableSize - theResizingPreColumnWidth - postTotalW[0];
+						if (newWidth <= theColumnWidths.get(resizeModelIndex)[0])
+							return; // Already as small as it can be, ignore the drag
+						remain = tableSize - theResizingPreColumnWidth - newWidth;
+					}
+					if (remain == postTotalW[3])
+						return;
+				}
+				int wDiff = newWidth - theColumnWidths.get(resizeModelIndex)[3];
+				theColumnWidths.get(resizeModelIndex)[3] = newWidth;
+				if (!isScrollable) {
+					// Then adjust all the actual sizes of columns to the right of the drag
+					distributeSize(remain - postTotalW[3], resizeColumn + 1);
+				} else {
+					int newTableW = table.getColumnModel().getColumnMargin() * (table.getColumnCount() - 1);
+					for (int[] cw : theColumnWidths)
+						newTableW += cw[3];
+					table.setSize(newTableW, table.getHeight());
+					theTableExtraWidth += wDiff;
+					boolean preHSB = scroll.getHorizontalScrollBarPolicy() != JScrollPane.HORIZONTAL_SCROLLBAR_NEVER;
+					boolean hsb = newTableW > tableSize;
+					if (preHSB != hsb) {
+						scroll.setHorizontalScrollBarPolicy(
+							hsb ? JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED : JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+						if (theAdaptivePrefRowHeight > 0)
+							adjustHeight();
 					}
 				}
-				HeightAdjustmentListener hal = new HeightAdjustmentListener();
-				model.getRowModel().addListDataListener(hal);
-				model.getColumnModel().addListDataListener(hal);
-				scroll.getHorizontalScrollBar().getModel().addChangeListener(hal);
-				scroll.getVerticalScrollBar().getModel().addChangeListener(hal);
-				hal.adjustHeight();
+				isRecursive = true;
+				applyColumnSizes();
+				isRecursive = false;
 			}
-			Runnable adjustWidth = () -> {
-				int minW = 0, prefW = 0, maxW = 0;
-				for (int c = 0; c < table.getColumnModel().getColumnCount(); c++) {
-					TableColumn column = table.getColumnModel().getColumn(c);
-					minW += column.getMinWidth();
-					prefW += column.getPreferredWidth();
-					maxW += column.getMaxWidth();
+
+			@Override
+			public void mouseReleased(MouseEvent e) {
+				theResizingColumn = -1;
+			}
+
+			@Override
+			public void mouseEntered(MouseEvent e) {
+			}
+
+			@Override
+			public void mouseExited(MouseEvent e) {
+			}
+
+			@Override
+			public void mouseMoved(MouseEvent e) {
+			}
+
+			private int theScrollWidth;
+
+			@Override
+			public void componentResized(ComponentEvent e) {
+				int newWidth = scroll.getWidth();
+				int widthDiff = newWidth - theScrollWidth;
+				// If we're resizing in a way that accommodates the cumulative growth or shrinkage of columns due to user resizing,
+				// modify the extra table width such that we don't grow or shrink columns as a result of the table resize.
+				// This has the effect of resetting the table so that the columns will fit in the scroll window if possible.
+				if (widthDiff > 0 && theTableExtraWidth > 0)
+					theTableExtraWidth = Math.max(0, theTableExtraWidth - widthDiff);
+				else if (widthDiff < 0 && theTableExtraWidth < 0)
+					theTableExtraWidth = Math.min(0, theTableExtraWidth - widthDiff);
+				theScrollWidth = newWidth;
+				adjustHeight();
+				adjustScrollWidths();
+			}
+
+			@Override
+			public void componentShown(ComponentEvent e) {
+				adjustHeight();
+				adjustScrollWidths();
+			}
+
+			@Override
+			public void componentMoved(ComponentEvent e) {
+			}
+
+			@Override
+			public void componentHidden(ComponentEvent e) {
+			}
+
+			private long theLastHE;
+			@Override
+			public void hierarchyChanged(HierarchyEvent e) {
+				if (!scroll.isShowing())
+					return;
+				long time=System.currentTimeMillis();
+				if (time - theLastHE < 5)
+					return;
+				theLastHE = time;
+				adjustHeight();
+				adjustScrollWidths();
+			}
+
+			void adjustScrollWidths() {
+				theAnchor.event("adjustWidth", null);
+				int spacing = table.getInsets().left + table.getInsets().right//
+					+ table.getColumnModel().getColumnMargin() * (table.getColumnCount() - 1)//
+					+ 2;
+				int minW = spacing;
+				int prefW = spacing, maxW = spacing;
+				for (int[] width : theColumnWidths) {
+					minW += width[0];
+					prefW += width[1];
+					maxW += width[2];
 					if (maxW < 0)
 						maxW = Integer.MAX_VALUE;
 				}
 				BoundedRangeModel vbm = scroll.getVerticalScrollBar().getModel();
-				boolean vsbVisible = vbm.getExtent() > vbm.getMaximum();
+
+				boolean vsbVisible = isScrollable && vbm.getExtent() < vbm.getMaximum();
+				int sbw = scroll.getVerticalScrollBar().getWidth();
 				if (vsbVisible) {
-					int sbw = scroll.getVerticalScrollBar().getWidth();
 					minW += sbw;
+					prefW += sbw;
 					maxW += sbw;
 					if (maxW < 0)
 						maxW = Integer.MAX_VALUE;
 				}
-				Dimension psvs = table.getPreferredScrollableViewportSize();
-				Dimension min = scroll.getViewport().getMinimumSize();
-				Dimension max = scroll.getViewport().getMaximumSize();
+				// Dimension psvs = table.getPreferredScrollableViewportSize();
+				Dimension min = scroll.getMinimumSize();
+				Dimension pref = scroll.getPreferredSize();
+				Dimension max = scroll.getMaximumSize();
 
-				if (psvs.width != prefW)
-					table.setPreferredScrollableViewportSize(new Dimension(prefW, psvs.height));
+				// if (psvs.width != prefW) {
+				// if (vsbVisible)
+				// table.setPreferredScrollableViewportSize(new Dimension(prefW, psvs.height));
+				// else
+				// table.setPreferredScrollableViewportSize(new Dimension(prefW - sbw, psvs.height));
+				// }
 
-				scroll.getViewport().setMinimumSize(new Dimension(minW, min.height));
-				scroll.getViewport().setMaximumSize(new Dimension(maxW, max.height));
+				if (!isScrollable)
+					scroll.setMinimumSize(new Dimension(minW, min.height));
+				scroll.setPreferredSize(new Dimension(prefW, pref.height));
 				scroll.setMaximumSize(new Dimension(maxW, max.height));
-			};
-			adjustWidth.run();
-			columns.simpleChanges().act(__ -> EventQueue.invokeLater(adjustWidth));
+				layoutColumns();
+			}
+
+			private boolean isRecursive;
+
+			void layoutColumns() {
+				if (isRecursive)
+					return;
+				int tableSize = scroll.getViewport().getWidth()
+					- (getEditor().getColumnCount() - 1) * table.getColumnModel().getColumnMargin()//
+					+ theTableExtraWidth;
+				if (tableSize <= 0)
+					return;
+				isRecursive = true;
+				theAnchor.event("layoutColumns", null);
+				int[] total = new int[4];
+				// Figure out how things have changed--how much space the columns want compared to how much we have
+				for (int c = 0; c < theColumnWidths.size(); c++) {
+					int[] cw = theColumnWidths.get(c);
+					total[0] += cw[0];
+					total[1] += cw[1];
+					total[2] += cw[2];
+					if (total[2] < 0)
+						total[2] = Integer.MAX_VALUE;
+					total[3] += cw[3];
+				}
+				int diff = tableSize - total[3];
+				diff = distributeSize(diff, 0);
+				if (diff < 0) { // Table is too small for its columns
+					if (isScrollable)
+						total[3] = total[1];
+					else
+						total[3] = total[0];
+				} else if (diff > 0) { // Columns can't take up all the space in the table
+					total[3] = total[2];
+				} else
+					total[3] = tableSize;
+
+				applyColumnSizes();
+				if (table.getSize().width != total[3])
+					table.setSize(new Dimension(total[3], table.getHeight()));
+				boolean preHsb = scroll.getHorizontalScrollBarPolicy() != JScrollPane.HORIZONTAL_SCROLLBAR_NEVER;
+				if (theTableExtraWidth > 0)
+					tableSize -= theTableExtraWidth;
+				boolean hsb = isScrollable && total[3] > tableSize;
+				if (preHsb != hsb) {
+					scroll.setHorizontalScrollBarPolicy(
+						hsb ? JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED : JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+					adjustHeight();
+				}
+				isRecursive = false;
+			}
+
+			private int distributeSize(int size, int startColumn) {
+				/* Logical flow:
+				 * If the amount of space available increases, distribute the space first to columns that are more squished,
+				 * i.e., those whose actual size is much less than their preference.  As these are relieved, distribute the space
+				 * to columns evenly such that all approach their maximum size together.
+				 * If the amount of space decreases, take the space from columns that are not squished, i.e. those whose size is much
+				 * greater than their preference.  As these become more squished, take space from all columns evenly such that all approach
+				 * their preferred size together.  Never auto-resize columns below their preference in a scrollable table.
+				 * If the table is not scrollable, shrink columns together down to their minimum size.
+				 */
+				if (size == 0)
+					return 0;
+				// Figure out how squished each column is and
+				IntList squish = new IntList(theColumnWidths.size()).setSorted(true);
+				IntList columnsBySquish = new IntList(theColumnWidths.size());
+				for (int c = startColumn; c < table.getColumnCount(); c++) {
+					int modelC = table.convertColumnIndexToModel(c);
+					int[] cw = theColumnWidths.get(modelC);
+					if (size < 0) {
+						if (isScrollable) {
+							if (cw[3] <= cw[1])
+								continue;
+						} else if (cw[3] <= cw[0])
+							continue;
+					} else if (cw[3] >= cw[2])
+						continue;
+					int cSquish = cw[3] - cw[1];
+					int index = squish.indexFor(cSquish);
+					while (index < squish.size() && squish.get(index) == cSquish)
+						index++;
+					squish.add(index, cSquish);
+					columnsBySquish.add(index, modelC);
+				}
+				squish.setSorted(false); // Turn off the ordered checking
+				if (size > 0) { // Grow
+					for (int c = 0; c < squish.size() && size > 0; c++) {
+						int d = c == squish.size() - 1 ? size : Math.min((squish.get(c + 1) - squish.get(c)) * (c + 1), size);
+						int d2 = d / (c + 1);
+						int remain = d - d2 * (c + 1);
+						for (int i = c; i >= 0 && (d2 > 0 || remain > 0); i--) {
+							if (i == squish.size())
+								continue;
+							int[] cw = theColumnWidths.get(columnsBySquish.get(i));
+							int squishMod = d2;
+							if (remain > 0) {
+								squishMod++;
+								remain--;
+							}
+							if (squishMod >= cw[2] - cw[3]) {
+								squishMod = cw[2] - cw[3];
+								squish.remove(i);
+								columnsBySquish.remove(i);
+							} else
+								squish.set(i, squish.get(i) + squishMod);
+							cw[3] += squishMod;
+							size -= squishMod;
+						}
+					}
+				} else {
+					for (int c = 0; c < squish.size() && size < 0; c++) {
+						int ci = squish.size() - c - 1;
+						int d = c == squish.size() - 1 ? -size : Math.min((squish.get(ci) - squish.get(ci - 1)) * (c + 1), -size);
+						int d2 = d / (c + 1);
+						int remain = d - d2 * (c + 1);
+						for (int i = ci; i < squish.size() && (d2 > 0 || remain > 0); i++) {
+							if (i < 0)
+								continue;
+							int[] cw = theColumnWidths.get(columnsBySquish.get(i));
+							int squishMod = d2;
+							if (remain > 0) {
+								squishMod++;
+								remain--;
+							}
+							int min = isScrollable ? cw[1] : cw[0];
+							if (squishMod >= cw[3] - min) {
+								squishMod = cw[3] - min;
+								squish.remove(i);
+								columnsBySquish.remove(i);
+							} else
+								squish.set(i, squish.get(i) - squishMod);
+							cw[3] -= squishMod;
+							size += squishMod;
+						}
+					}
+				}
+				return size;
+			}
+
+			void applyColumnSizes() {
+				for (int c = 0; c < model.getColumnCount() && c < table.getColumnModel().getColumnCount(); c++) {
+					int[] widths = theColumnWidths.get(table.convertColumnIndexToModel(c));
+					TableColumn tc = table.getColumnModel().getColumn(c);
+					if (tc.getWidth() != widths[3])
+						tc.setWidth(widths[3]);
+					if (tc.getPreferredWidth() != widths[3])
+						tc.setPreferredWidth(widths[3]);
+				}
+			}
+
+			void adjustHeight() {
+				if (theAdaptivePrefRowHeight <= 0)
+					return; // Not adaptive
+				theAnchor.event("adjustHeight", null);
+				int insets = table.getInsets().top + table.getInsets().bottom;
+				int spacing = table.getIntercellSpacing().height;
+				int minHeight = insets + spacing + 4, prefHeight = insets + spacing + 4, maxHeight = insets + spacing + 4;
+				if (table.getTableHeader() != null && table.getTableHeader().isVisible()) {
+					minHeight += table.getTableHeader().getPreferredSize().height;
+					maxHeight += table.getTableHeader().getPreferredSize().height;
+					minHeight += spacing;
+					maxHeight += spacing;
+				}
+				int rowCount = model.getRowCount();
+				for (int i = 0; i < theAdaptiveMaxRowHeight && i < rowCount; i++) {
+					int rowHeight = table.getRowHeight(i);
+					if (i < theAdaptiveMinRowHeight)
+						minHeight += rowHeight;
+					if (i < theAdaptivePrefRowHeight)
+						prefHeight += rowHeight;
+					if (i < theAdaptiveMaxRowHeight)
+						maxHeight += rowHeight;
+				}
+				boolean hsb = scroll.getHorizontalScrollBarPolicy() != JScrollPane.HORIZONTAL_SCROLLBAR_NEVER;
+				if (hsb) {
+					int sbh = scroll.getHorizontalScrollBar().getHeight();
+					minHeight += sbh;
+					prefHeight += sbh;
+					maxHeight += sbh;
+				}
+				minHeight = Math.max(0, minHeight - 4);
+				prefHeight = Math.max(0, prefHeight - 4);
+				maxHeight = Math.max(0, maxHeight - 4);
+				// Dimension psvs = table.getPreferredScrollableViewportSize();
+				// if (psvs.height != prefHeight) {
+				// // int w = 0;
+				// // for (int c = 0; c < table.getColumnModel().getColumnCount(); c++)
+				// // w += table.getColumnModel().getColumn(c).getWidth();
+				// table.setPreferredScrollableViewportSize(new Dimension(psvs.width, prefHeight));
+				// }
+				Dimension pref = scroll.getPreferredSize();
+				scroll.setPreferredSize(new Dimension(pref.width, prefHeight));
+				Dimension min = scroll.getMinimumSize();
+				scroll.setMinimumSize(new Dimension(min.width, minHeight));
+				Dimension max = scroll.getMaximumSize();
+				scroll.setMaximumSize(new Dimension(max.width, maxHeight));
+				if (scroll.getParent() != null)
+					scroll.getParent().revalidate();
+			}
+		}
+		SizeListener sizeListener = new SizeListener();
+		if (table.getTableHeader() != null) {
+			table.getTableHeader().addMouseListener(sizeListener);
+			table.getTableHeader().addMouseMotionListener(sizeListener);
+		}
+		scroll.addComponentListener(sizeListener);
+		scroll.addHierarchyListener(sizeListener);
+		EventQueue.invokeLater(() -> {
+			if (isScrollable)
+				sizeListener.adjustHeight();
+			sizeListener.adjustScrollWidths();
+		});
+		if (isScrollable) {
+			// Default scroll increments are ridiculously small
+			scroll.getVerticalScrollBar().setUnitIncrement(10);
+			scroll.getHorizontalScrollBar().setUnitIncrement(10);
 		} else {
 			scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
 			scroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_NEVER);
@@ -733,17 +1216,22 @@ implements TableBuilder<R, P> {
 		Supplier<List<R>> selectionGetter = () -> getSelection();
 		if (theSelectionValue != null)
 			ObservableSwingUtils.syncSelection(table, model.getRowModel(), table::getSelectionModel, model.getRows().equivalence(),
-				theSelectionValue, until, index -> {
+				theSelectionValue, getUntil(), (index, cause) -> {
 					if (index >= getRows().size())
 						return;
 					MutableCollectionElement<R> el = (MutableCollectionElement<R>) getRows()
 						.mutableElement(getRows().getElement(index).getElementId());
-					if (el.isAcceptable(el.get()) == null)
-						el.set(el.get());
+					if (el.isAcceptable(el.get()) == null) {
+						try (Transaction t = getRows().lock(true, cause)) {
+							el.set(el.get());
+						}
+					}
 				}, false);
 		if (theSelectionValues != null)
 			ObservableSwingUtils.syncSelection(table, model.getRowModel(), table::getSelectionModel, model.getRows().equivalence(),
-				theSelectionValues, until);
+				theSelectionValues, getUntil());
+
+		JComponent comp;
 		if (!theActions.isEmpty()) {
 			ListSelectionListener selListener = e -> {
 				List<R> selection = selectionGetter.get();
@@ -785,13 +1273,13 @@ implements TableBuilder<R, P> {
 			table.getSelectionModel().addListSelectionListener(selListener);
 			table.addPropertyChangeListener("selectionModel", selModelListener);
 			model.getRowModel().addListDataListener(dataListener);
-			until.take(1).act(__ -> {
+			getUntil().take(1).act(__ -> {
 				table.removePropertyChangeListener("selectionModel", selModelListener);
 				table.getSelectionModel().removeListSelectionListener(selListener);
 				model.getRowModel().removeListDataListener(dataListener);
 			});
-			SimpleHPanel<JPanel> buttonPanel = new SimpleHPanel<>(null,
-				new JPanel(new JustifiedBoxLayout(false).setMainAlignment(JustifiedBoxLayout.Alignment.LEADING)), theLock, until);
+			SimpleHPanel<JPanel, ?> buttonPanel = new SimpleHPanel<>(null,
+				new JPanel(new JustifiedBoxLayout(false).setMainAlignment(JustifiedBoxLayout.Alignment.LEADING)), getUntil());
 			for (Object action : theActions) {
 				if (action instanceof SimpleDataAction)
 					((SimpleDataAction<R, ?>) action).addButton(buttonPanel);
@@ -799,12 +1287,11 @@ implements TableBuilder<R, P> {
 					buttonPanel.addHPanel(null, "box", (Consumer<PanelPopulator<JPanel, ?>>) action);
 			}
 			JPanel tablePanel = new JPanel(new BorderLayout());
-			tablePanel.add(buttonPanel.getOrCreateComponent(until), BorderLayout.NORTH);
+			tablePanel.add(buttonPanel.getComponent(), theActionsOnTop ? BorderLayout.NORTH : BorderLayout.SOUTH);
 			tablePanel.add(scroll, BorderLayout.CENTER);
-			theBuiltComponent = tablePanel;
+			comp = tablePanel;
 		} else
-			theBuiltComponent = scroll;
-		table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+			comp = scroll;
 
 		if (theCountTitleDisplayedText != null) {
 			NumberFormat numberFormat = NumberFormat.getIntegerInstance();
@@ -814,7 +1301,7 @@ implements TableBuilder<R, P> {
 			if (filtered != null) {
 				theRows.observeSize()
 				.transform(int[].class, tx -> tx.combineWith(filtered.observeSize()).combine((sz, f) -> new int[] { sz, f }))//
-				.changes().takeUntil(until).act(evt -> {
+				.changes().takeUntil(getUntil()).act(evt -> {
 					int sz = evt.getNewValue()[0];
 					int f = evt.getNewValue()[1];
 					String text;
@@ -831,19 +1318,19 @@ implements TableBuilder<R, P> {
 					if (!theCountTitleDisplayedText.isEmpty())
 						text += " " + theCountTitleDisplayedText;
 					border.setTitle(text);
-					theBuiltComponent.repaint();
+					comp.repaint();
 				});
 			} else {
-				theRows.observeSize().changes().takeUntil(until).act(evt -> {
+				theRows.observeSize().changes().takeUntil(getUntil()).act(evt -> {
 					String text = numberFormat.format(evt.getNewValue()) + " "
 						+ (evt.getNewValue() == 1 ? singularItemName : pluralItemName);
 					if (!theCountTitleDisplayedText.isEmpty())
 						text += " " + theCountTitleDisplayedText;
 					border.setTitle(text);
-					theBuiltComponent.repaint();
+					comp.repaint();
 				});
 			}
-			theBuiltComponent.setBorder(border);
+			comp.setBorder(border);
 		}
 
 		// Set up transfer handling (DnD, copy/paste)
@@ -863,12 +1350,78 @@ implements TableBuilder<R, P> {
 		}
 
 		instantiating.close();
-		return decorate(theBuiltComponent);
+		return comp;
 	}
 
-	@Override
-	public Component getComponent() {
-		return theBuiltComponent;
+	private void getColumnWidths(CategoryRenderStrategy<R, ?> column, int columnIndex, int[] widths, CollectionChangeEvent<R> rowEvent) {
+		if (column.isUsingRenderingForSize()) {
+			ObservableCellRenderer<R, ?> renderer = (ObservableCellRenderer<R, ?>) column.getRenderer();
+			if (renderer == null) {
+				renderer = new ObservableCellRenderer.DefaultObservableCellRenderer<>((row, cell) -> String.valueOf(cell));
+				((CategoryRenderStrategy<R, Object>) column).withRenderer((ObservableCellRenderer<R, Object>) renderer);
+			}
+			int maxMin = 0, maxPref = 0, maxMax = 0;
+			if (withColumnHeader) {
+				Component render = getEditor().getTableHeader().getComponent(getEditor().convertColumnIndexToView(columnIndex));
+				int min = render.getMinimumSize().width;
+				int pref = render.getPreferredSize().width;
+				int max = render.getMaximumSize().width;
+				if (min > maxMin)
+					maxMin = min;
+				if (pref > maxPref)
+					maxPref = pref;
+				if (max > maxMax)
+					maxMax = max;
+			}
+			if (rowEvent != null) {
+				for (CollectionChangeEvent.ElementChange<R> change : rowEvent.getElements()) {
+					R row = change.newValue;
+					Object cellValue = column.getCategoryValue(row);
+					ModelCell<R, Object> cell = new ModelCell.Default<>(() -> row, cellValue, change.index, columnIndex,
+						getEditor().isRowSelected(change.index), false, false, false, false, true);
+					Component render = ((CategoryRenderStrategy<R, Object>) column).getRenderer().getCellRendererComponent(getEditor(),
+						cell, CellRenderContext.DEFAULT);
+					int min = render.getMinimumSize().width;
+					int pref = render.getPreferredSize().width;
+					int max = render.getMaximumSize().width;
+					if (min > maxMin)
+						maxMin = min;
+					if (pref > maxPref)
+						maxPref = pref;
+					if (max > maxMax)
+						maxMax = max;
+				}
+			} else {
+				int r = 0;
+				for (R row : theFilteredRows) {
+					Object cellValue = column.getCategoryValue(row);
+					ModelCell<R, Object> cell = new ModelCell.Default<>(() -> row, cellValue, r, columnIndex, getEditor().isRowSelected(r),
+						false, false, false, false, true);
+					Component render = ((CategoryRenderStrategy<R, Object>) column).getRenderer().getCellRendererComponent(getEditor(),
+						cell, CellRenderContext.DEFAULT);
+					int min = render.getMinimumSize().width;
+					int pref = render.getPreferredSize().width;
+					int max = render.getMaximumSize().width;
+					if (min > maxMin)
+						maxMin = min;
+					if (pref > maxPref)
+						maxPref = pref;
+					if (max > maxMax)
+						maxMax = max;
+					r++;
+				}
+			}
+			// Not sure why, but these actually need just a pixel more padding
+			maxMin++;
+			maxMax++;
+			widths[0] = maxMin;
+			widths[1] = Math.max(maxPref, maxMin);
+			widths[2] = maxMax;
+		} else {
+			widths[0] = column.getMinWidth();
+			widths[1] = column.getPrefWidth();
+			widths[2] = column.getMaxWidth();
+		}
 	}
 
 	class TableBuilderTransferHandler extends TransferHandler {
@@ -1074,7 +1627,7 @@ implements TableBuilder<R, P> {
 				return false;
 			boolean selected = theTable.isRowSelected(rowIndex);
 			ModelCell<R, C> cell = new ModelCell.Default<>(rowEl::get, oldValue, rowIndex, theColumns.indexOf(column), selected, selected,
-				false, true);
+				false, false, false, true);
 			if (!column.getMutator().getDragAccepter().canAccept(cell, support, false))
 				return false;
 			BetterList<C> newColValue;

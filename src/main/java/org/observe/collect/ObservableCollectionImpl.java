@@ -15,6 +15,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.LongSupplier;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -213,6 +214,11 @@ public final class ObservableCollectionImpl {
 						}
 
 						@Override
+						public boolean isEventing() {
+							return theCollection.isEventing();
+						}
+
+						@Override
 						public boolean isSafe() {
 							return theCollection.isLockSupported();
 						}
@@ -340,6 +346,11 @@ public final class ObservableCollectionImpl {
 				}
 
 				@Override
+				public boolean isEventing() {
+					return theCollection.isEventing();
+				}
+
+				@Override
 				public boolean isSafe() {
 					return theCollection.isLockSupported();
 				}
@@ -421,8 +432,10 @@ public final class ObservableCollectionImpl {
 		private final Comparator<CollectionElement<? extends E>> theElementCompare;
 		private final Supplier<? extends E> theDefault;
 		private final Observable<?> theRefresh;
+		private final LongSupplier theRefreshStamp;
 		private Object theChangesIdentity;
 
+		private long theLastMatchStamp;
 		private ElementId theLastMatch;
 
 		/**
@@ -431,16 +444,21 @@ public final class ObservableCollectionImpl {
 		 *        <code>elementCompare{@link Comparable#compareTo(Object) compareTo}(el1, el2)<0</code>, el1 will replace el2.
 		 * @param def The default value to use when no element matches this finder's condition
 		 * @param refresh The observable which, when fired, will cause this value to re-check its elements
+		 * @param refreshStamp The stamp representing the refresh state
 		 */
 		public AbstractObservableElementFinder(ObservableCollection<E> collection,
-			Comparator<CollectionElement<? extends E>> elementCompare, Supplier<? extends E> def, Observable<?> refresh) {
+			Comparator<CollectionElement<? extends E>> elementCompare, Supplier<? extends E> def, Observable<?> refresh,
+			LongSupplier refreshStamp) {
 			theCollection = collection;
 			theElementCompare = elementCompare;
+			theLastMatchStamp = -1;
 			if (def != null)
 				theDefault = def;
-			else
+			else {
 				theDefault = () -> null;
-				theRefresh = refresh;
+			}
+			theRefresh = refresh;
+			theRefreshStamp = refreshStamp;
 		}
 
 		/** @return The collection that this finder searches elements in */
@@ -471,16 +489,22 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public long getStamp() {
-			return theCollection.getStamp();
+			long stamp = theCollection.getStamp();
+			if (theRefreshStamp != null)
+				stamp += theRefreshStamp.getAsLong();
+			return stamp;
 		}
 
 		@Override
 		public ElementId getElementId() {
 			try (Transaction t = getCollection().lock(false, null)) {
-				if (theLastMatch != null && theLastMatch.isPresent() && useCachedMatch(getCollection().getElement(theLastMatch).get()))
+				long stamp = getStamp();
+				if (stamp == theLastMatchStamp
+					|| (theLastMatch != null && theLastMatch.isPresent() && useCachedMatch(getCollection().getElement(theLastMatch).get())))
 					return theLastMatch;
 				ValueHolder<CollectionElement<E>> element = new ValueHolder<>();
 				find(el -> element.accept(new SimpleElement(el.getElementId(), el.get())));
+				theLastMatchStamp = stamp;
 				if (element.get() != null)
 					return theLastMatch = element.get().getElementId();
 				else {
@@ -493,17 +517,20 @@ public final class ObservableCollectionImpl {
 		@Override
 		public E get() {
 			try (Transaction t = getCollection().lock(false, null)) {
-				if (theLastMatch != null && theLastMatch.isPresent() && useCachedMatch(getCollection().getElement(theLastMatch).get()))
-					return getCollection().getElement(theLastMatch).get();
-				ValueHolder<CollectionElement<E>> element = new ValueHolder<>();
-				find(el -> element.accept(new SimpleElement(el.getElementId(), el.get())));
-				if (element.get() != null) {
-					theLastMatch = element.get().getElementId();
-					return element.get().get();
-				} else {
-					theLastMatch = null;
-					return theDefault.get();
-				}
+				long stamp = getStamp();
+				if (stamp == theLastMatchStamp
+					|| (theLastMatch != null && theLastMatch.isPresent() && useCachedMatch(getCollection().getElement(theLastMatch).get())))
+					return theLastMatch == null ? theDefault.get() : getCollection().getElement(theLastMatch).get();
+					ValueHolder<CollectionElement<E>> element = new ValueHolder<>();
+					find(el -> element.accept(new SimpleElement(el.getElementId(), el.get())));
+					theLastMatchStamp = stamp;
+					if (element.get() != null) {
+						theLastMatch = element.get().getElementId();
+						return element.get().get();
+					} else {
+						theLastMatch = null;
+						return theDefault.get();
+					}
 			}
 		}
 
@@ -524,6 +551,11 @@ public final class ObservableCollectionImpl {
 		@Override
 		public Observable<ObservableElementEvent<E>> elementChanges() {
 			class ElementChanges extends AbstractIdentifiable implements Observable<ObservableElementEvent<E>> {
+				@Override
+				public boolean isEventing() {
+					return theCollection.isEventing() || theRefresh.isEventing();
+				}
+
 				@Override
 				protected Object createIdentity() {
 					if (theChangesIdentity == null)
@@ -650,6 +682,7 @@ public final class ObservableCollectionImpl {
 										if (current == null || better) {
 											causeData.put("replacement", new SimpleElement(evt.getElementId(), evt.getNewValue()));
 											causeData.remove("re-search");
+											theLastMatchStamp = getStamp();
 											theLastMatch = evt.getElementId();
 										} else if (sameElement) {
 											// The current best element is removed or replaced with an inferior value. Need to re-search.
@@ -712,6 +745,8 @@ public final class ObservableCollectionImpl {
 									e.printStackTrace();
 									newVal = null;
 								}
+								theLastMatchStamp = getStamp();
+								theLastMatch = newId;
 								if (Objects.equals(oldId, newId) && oldVal == newVal)
 									return;
 								theCurrentElement = element;
@@ -826,9 +861,10 @@ public final class ObservableCollectionImpl {
 		 * @param def The default value to use when no passing element is found in the collection
 		 * @param first Whether to get the first value in the collection that passes, the last value, or any passing value
 		 * @param refresh The observable which, when fired, will cause this value to re-check its elements
+		 * @param refreshStamp The stamp representing the refresh state
 		 */
 		protected ObservableCollectionFinder(ObservableCollection<E> collection, Predicate<? super E> test, Supplier<? extends E> def,
-			Ternian first, Observable<?> refresh) {
+			Ternian first, Observable<?> refresh, LongSupplier refreshStamp) {
 			super(collection, (el1, el2) -> {
 				if (first == Ternian.NONE)
 					return 0;
@@ -836,7 +872,7 @@ public final class ObservableCollectionImpl {
 				if (!first.value)
 					compare = -compare;
 				return compare;
-			}, def, refresh);
+			}, def, refresh, refreshStamp);
 			theTest = test;
 			isFirst = first;
 		}
@@ -954,6 +990,11 @@ public final class ObservableCollectionImpl {
 						}
 
 						@Override
+						public boolean isEventing() {
+							return getCollection().isEventing();
+						}
+
+						@Override
 						public boolean isSafe() {
 							return getCollection().isLockSupported();
 						}
@@ -1060,7 +1101,7 @@ public final class ObservableCollectionImpl {
 				if (!first)
 					compare = -compare;
 				return compare;
-			}, () -> null, null);
+			}, () -> null, null, null);
 			theValue = value;
 			isFirst = first;
 		}
@@ -1123,9 +1164,10 @@ public final class ObservableCollectionImpl {
 		 * @param def The default value for an empty collection
 		 * @param first Whether to use the first, last, or any element in a tie
 		 * @param refresh The observable which, when fired, will cause this value to re-check its elements
+		 * @param refreshStamp The stamp representing the refresh state
 		 */
 		public BestCollectionElement(ObservableCollection<E> collection, Comparator<? super E> compare, Supplier<? extends E> def,
-			Ternian first, Observable<?> refresh) {
+			Ternian first, Observable<?> refresh, LongSupplier refreshStamp) {
 			super(collection, (el1, el2) -> {
 				int comp = compare.compare(el1.get(), el2.get());
 				if (comp == 0 && first.value != null) {
@@ -1134,7 +1176,7 @@ public final class ObservableCollectionImpl {
 						comp = -comp;
 				}
 				return comp;
-			}, def, refresh);
+			}, def, refresh, refreshStamp);
 			theCompare = compare;
 			isFirst = first;
 		}
@@ -1216,6 +1258,11 @@ public final class ObservableCollectionImpl {
 					if (theChangesIdentity == null)
 						theChangesIdentity = Identifiable.wrap(ReducedValue.this.getIdentity(), "noInitChanges");
 					return theChangesIdentity;
+				}
+
+				@Override
+				public boolean isEventing() {
+					return theCollection.isEventing();
 				}
 
 				@Override
@@ -1630,6 +1677,11 @@ public final class ObservableCollectionImpl {
 				}
 
 				@Override
+				public boolean isEventing() {
+					return theLeft.isEventing() || theRight.isEventing();
+				}
+
+				@Override
 				public boolean isSafe() {
 					return theLeft.isLockSupported() && theRight.isLockSupported();
 				}
@@ -1807,6 +1859,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public boolean isEventing() {
+			return getWrapped().isEventing();
+		}
+
+		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
 			try (Transaction t = lock(false, null)) {
 				return getWrapped().onChange(new ReversedSubscriber(observer, size()));
@@ -1937,6 +1994,11 @@ public final class ObservableCollectionImpl {
 		@Override
 		public ThreadConstraint getThreadConstraint() {
 			return theFlow.getThreadConstraint();
+		}
+
+		@Override
+		public boolean isEventing() {
+			return theFlow.isEventing();
 		}
 
 		@Override
@@ -2521,7 +2583,7 @@ public final class ObservableCollectionImpl {
 		public ActiveDerivedCollection(ActiveCollectionManager<?, ?, T> flow, Observable<?> until) {
 			theFlow = flow;
 			theDerivedElements = BetterTreeSet.<DerivedElementHolder<T>> buildTreeSet((e1, e2) -> e1.element.compareTo(e2.element)).build();
-			theListeners = new ListenerList<>("Reentrancy not allowed");
+			theListeners = ListenerList.build().reentrancyError(ObservableCollection.REENTRANT_EVENT_ERROR).build();
 			theListenerCount = new AtomicInteger();
 			theEquivalence = flow.equivalence();
 			theStamp = new AtomicLong();
@@ -2559,7 +2621,7 @@ public final class ObservableCollectionImpl {
 									T value = element.get()==holder[0] ? oldValue : element.get().get();
 									// We know this is a move because elements are always distinct
 									fireListeners(new ObservableCollectionEvent<>(element.get(), index, CollectionChangeType.remove,
-											true, value, value, elCause));
+										true, value, value, elCause));
 									return null;
 								}
 
@@ -2694,6 +2756,11 @@ public final class ObservableCollectionImpl {
 		@Override
 		public ThreadConstraint getThreadConstraint() {
 			return theFlow.getThreadConstraint();
+		}
+
+		@Override
+		public boolean isEventing() {
+			return theListeners.isFiring();
 		}
 
 		@Override
@@ -3036,6 +3103,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public boolean isEventing() {
+			return false;
+		}
+
+		@Override
 		public Equivalence<? super E> equivalence() {
 			return Equivalence.DEFAULT;
 		}
@@ -3100,6 +3172,14 @@ public final class ObservableCollectionImpl {
 				return ThreadConstrained.getThreadConstraint(theCollectionObservable.get());
 			else
 				return ThreadConstraint.ANY; // Can't know
+		}
+
+		@Override
+		public boolean isEventing() {
+			if (theCollectionObservable.isEventing())
+				return true;
+			ObservableCollection<? extends E> coll = theCollectionObservable.get();
+			return coll != null && coll.isEventing();
 		}
 
 		@Override
@@ -3443,6 +3523,11 @@ public final class ObservableCollectionImpl {
 				}
 
 				@Override
+				public boolean isEventing() {
+					return FlattenedValueCollection.this.isEventing();
+				}
+
+				@Override
 				public boolean isSafe() {
 					return theCollectionObservable.noInitChanges().isSafe();
 				}
@@ -3471,7 +3556,7 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public Observable<Object> simpleChanges() {
+		public Observable<Causable> simpleChanges() {
 			return ObservableValue
 				.flattenObservableValue(theCollectionObservable.map(coll -> coll != null ? coll.simpleChanges() : Observable.empty()));
 		}

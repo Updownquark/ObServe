@@ -9,6 +9,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.observe.Equivalence;
+import org.observe.Eventable;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
@@ -23,6 +24,7 @@ import org.observe.collect.ObservableSet;
 import org.observe.collect.SettableElement;
 import org.observe.util.ObservableUtils.SubscriptionCause;
 import org.observe.util.TypeTokens;
+import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
@@ -46,7 +48,7 @@ import com.google.common.reflect.TypeToken;
  * @param <K> The type of keys this map uses
  * @param <V> The type of values this map stores
  */
-public interface ObservableMap<K, V> extends BetterMap<K, V> {
+public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable {
 	/** This class's wildcard {@link TypeToken} */
 	static TypeToken<ObservableMap<?, ?>> TYPE = TypeTokens.get().keyFor(ObservableMap.class).wildCard();
 
@@ -244,6 +246,11 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 					}
 
 					@Override
+					public boolean isEventing() {
+						return ObservableMap.this.isEventing();
+					}
+
+					@Override
 					public boolean isSafe() {
 						return ObservableMap.this.isLockSupported();
 					}
@@ -337,7 +344,12 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 
 							@Override
 							public ThreadConstraint getThreadConstraint() {
-								return Enabled.this.getThreadConstraint();
+								return ObservableMap.this.getThreadConstraint();
+							}
+
+							@Override
+							public boolean isEventing() {
+								return ObservableMap.this.isEventing();
 							}
 
 							@Override
@@ -445,6 +457,11 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 					}
 
 					@Override
+					public boolean isEventing() {
+						return changes.isEventing();
+					}
+
+					@Override
 					public boolean isSafe() {
 						return changes.isSafe();
 					}
@@ -474,7 +491,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 	 * @return An observable that fires a (null) value whenever anything in this structure changes. This observable will only fire 1 event
 	 *         per transaction.
 	 */
-	default Observable<Object> changes() {
+	default Observable<Causable> changes() {
 		return values().simpleChanges();
 	}
 
@@ -571,6 +588,11 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 		}
 
 		@Override
+		public boolean isEventing() {
+			return getMap().isEventing();
+		}
+
+		@Override
 		public boolean isContentControlled() {
 			return true;
 		}
@@ -633,6 +655,11 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 		@Override
 		protected ObservableMap<K, V> getMap() {
 			return (ObservableMap<K, V>) super.getMap();
+		}
+
+		@Override
+		public boolean isEventing() {
+			return getMap().isEventing();
 		}
 
 		@Override
@@ -757,6 +784,11 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 					tx -> tx.cache(false).reEvalOnUpdate(false).fireIfUnchanged(false)//
 					.map(Map.Entry::getKey).withEquivalence(keyEquivalence).withReverse(key -> new SimpleMapEntry<>(key, null, false)))
 				.collectPassive();
+		}
+
+		@Override
+		public boolean isEventing() {
+			return theEntries.isEventing();
 		}
 
 		@Override
@@ -1040,6 +1072,11 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 		}
 
 		@Override
+		public boolean isEventing() {
+			return false;
+		}
+
+		@Override
 		public Object createIdentity() {
 			return Identifiable.idFor(this, this::toString, this::hashCode, other -> other instanceof EmptyCollection);
 		}
@@ -1160,6 +1197,11 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 		public UnmodifiableObservableMap(ObservableMap<K, V> wrapped) {
 			theWrapped = wrapped;
 			theKeySet = theWrapped.keySet().flow().unmodifiable().collectPassive();
+		}
+
+		@Override
+		public boolean isEventing() {
+			return theWrapped.isEventing();
 		}
 
 		@Override

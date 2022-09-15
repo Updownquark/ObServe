@@ -27,31 +27,29 @@ import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
-import org.observe.util.swing.PanelPopulation.AbstractComponentEditor;
 import org.observe.util.swing.PanelPopulation.DataAction;
-import org.observe.util.swing.PanelPopulation.SimpleButtonEditor;
-import org.observe.util.swing.PanelPopulation.SimpleDataAction;
 import org.observe.util.swing.PanelPopulation.TreeEditor;
+import org.observe.util.swing.PanelPopulationImpl.AbstractComponentEditor;
+import org.observe.util.swing.PanelPopulationImpl.SimpleButtonEditor;
+import org.observe.util.swing.PanelPopulationImpl.SimpleDataAction;
 import org.qommons.LambdaUtils;
 import org.qommons.ThreadConstraint;
-import org.qommons.Transactable;
 import org.qommons.collect.BetterList;
 
 import com.google.common.reflect.TypeToken;
 
 public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends AbstractComponentEditor<JTree, P> implements TreeEditor<F, P> {
-	public static <F> SimpleTreeBuilder<F, ?> createTree(Supplier<Transactable> lock, ObservableValue<? extends F> root,
-		Function<? super F, ? extends ObservableCollection<? extends F>> children) {
-		return new SimpleTreeBuilder<>(root, new PPTreeModel1<>(root, children), lock);
+	public static <F> SimpleTreeBuilder<F, ?> createTree(ObservableValue<? extends F> root,
+		Function<? super F, ? extends ObservableCollection<? extends F>> children, Observable<?> until) {
+		return new SimpleTreeBuilder<>(root, new PPTreeModel1<>(root, children), until);
 	}
 
-	public static <F> SimpleTreeBuilder<F, ?> createTree2(Supplier<Transactable> lock, ObservableValue<? extends F> root,
-		Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children) {
-		return new SimpleTreeBuilder<>(root, new PPTreeModel2<>(root, children), lock);
+	public static <F> SimpleTreeBuilder<F, ?> createTree2(ObservableValue<? extends F> root,
+		Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children, Observable<?> until) {
+		return new SimpleTreeBuilder<>(root, new PPTreeModel2<>(root, children), until);
 	}
 
 	private final ObservableValue<? extends F> theRoot;
-	private JScrollPane theComponent;
 
 	private String theItemName;
 
@@ -63,8 +61,8 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 	private ObservableCollection<BetterList<F>> thePathMultiSelection;
 	private List<SimpleDataAction<BetterList<F>, ?>> theActions;
 
-	private SimpleTreeBuilder(ObservableValue<? extends F> root, ObservableTreeModel<F> model, Supplier<Transactable> lock) {
-		super(new JTree(model), lock);
+	private SimpleTreeBuilder(ObservableValue<? extends F> root, ObservableTreeModel<F> model, Observable<?> until) {
+		super(new JTree(model), until);
 		theRenderer = new CategoryRenderStrategy<>("Tree", (TypeToken<F>) root.getType(),
 			LambdaUtils.printableFn(BetterList::getLast, "BetterList::getLast", null));
 		theRoot = root;
@@ -214,11 +212,10 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 	}
 
 	@Override
-	protected Component getOrCreateComponent(Observable<?> until) {
-		if (theComponent != null)
-			return theComponent;
+	protected Component createComponent() {
+		int[] hoveredRow = new int[] { -1 };
 		if (theRenderer.getRenderer() != null)
-			getEditor().setCellRenderer(new ObservableTreeCellRenderer<>(theRenderer.getRenderer()));
+			getEditor().setCellRenderer(new ObservableTreeCellRenderer<>(theRenderer.getRenderer(), hoveredRow));
 		MouseMotionListener motion = new MouseAdapter() {
 			@Override
 			public void mouseEntered(MouseEvent e) {
@@ -226,15 +223,27 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 			}
 
 			@Override
+			public void mouseExited(MouseEvent e) {
+				hoveredRow[0] = -1;
+			}
+
+			@Override
 			public void mouseMoved(MouseEvent e) {
 				TreePath path = getEditor().getPathForLocation(e.getX(), e.getY());
-				if (path == null || theRenderer.getTooltipFn() == null)
+				int row = getEditor().getRowForLocation(e.getX(), e.getY());
+				if (row != hoveredRow[0]) {
+					if (hoveredRow[0] >= 0)
+						getEditor().repaint(getEditor().getRowBounds(hoveredRow[0]));
+					if (row >= 0)
+						getEditor().repaint(getEditor().getRowBounds(row));
+					hoveredRow[0] = row;
+				}
+				if (path == null || theRenderer.getTooltipFn() == null) {
 					getEditor().setToolTipText(null);
-				else {
-					int row = getEditor().getRowForLocation(e.getX(), e.getY());
+				} else {
 					F value = (F) path.getLastPathComponent();
 					ModelCell<BetterList<F>, F> cell = new ModelCell.Default<>(() -> ObservableTreeModel.betterPath(path), value, row, 0,
-						getEditor().getSelectionModel().isRowSelected(row), false, !getEditor().isCollapsed(row),
+						getEditor().getSelectionModel().isRowSelected(row), false, true, true, !getEditor().isCollapsed(row),
 						getEditor().getModel().isLeaf(value));
 					String tooltip = theRenderer.getTooltip(cell);
 					getEditor().setToolTipText(tooltip);
@@ -242,24 +251,27 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 			}
 		};
 		getEditor().addMouseMotionListener(motion);
-		until.take(1).act(__ -> getEditor().removeMouseMotionListener(motion));
+		getUntil().take(1).act(__ -> {
+			getEditor().removeMouseMotionListener(motion);
+		});
 		ObservableTreeModel<F> model = (ObservableTreeModel<F>) getEditor().getModel();
 		if (thePathMultiSelection != null)
-			ObservableTreeModel.syncSelection(getEditor(), thePathMultiSelection, until);
+			ObservableTreeModel.syncSelection(getEditor(), thePathMultiSelection, getUntil());
 		if (theValueMultiSelection != null)
 			ObservableTreeModel.syncSelection(getEditor(),
 				theValueMultiSelection.flow()
 				.transform(TypeTokens.get().keyFor(BetterList.class).<BetterList<F>> parameterized(getRoot().getType()),
 					tx -> tx.map(v -> model.getBetterPath(v, true)))
-				.filter(p -> p == null ? "Value not present" : null).collectActive(until),
-				until);
+				.filter(p -> p == null ? "Value not present" : null).collectActive(getUntil()),
+				getUntil());
 		if (thePathSingleSelection != null)
-			ObservableTreeModel.syncSelection(getEditor(), thePathSingleSelection, false, Equivalence.DEFAULT, until);
+			ObservableTreeModel.syncSelection(getEditor(), thePathSingleSelection, false, Equivalence.DEFAULT, getUntil());
 		if (theValueSingleSelection != null)
-			ObservableTreeModel.syncSelection(getEditor(), theValueSingleSelection.safe(ThreadConstraint.EDT, until).transformReversible(//
-				TypeTokens.get().keyFor(BetterList.class).<BetterList<F>> parameterized(getRoot().getType()),
-				tx -> tx.map(v -> model.getBetterPath(v, true)).withReverse(path -> path == null ? null : path.getLast())), false,
-				Equivalence.DEFAULT, until);
+			ObservableTreeModel.syncSelection(getEditor(),
+				theValueSingleSelection.safe(ThreadConstraint.EDT, getUntil()).transformReversible(//
+					TypeTokens.get().keyFor(BetterList.class).<BetterList<F>> parameterized(getRoot().getType()),
+					tx -> tx.map(v -> model.getBetterPath(v, true)).withReverse(path -> path == null ? null : path.getLast())),
+				false, Equivalence.DEFAULT, getUntil());
 		if (isSingleSelection)
 			getEditor().getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
 
@@ -272,10 +284,10 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 				actionMenuItems[a] = new JMenuItem();
 				SimpleDataAction<BetterList<F>, ?> action = actions[a];
 				SimpleButtonEditor<?, ?> buttonEditor = new SimpleButtonEditor<>(null, actionMenuItems[a], null, action.theObservableAction,
-					getLock(), false);
+					false, getUntil());
 				if (action.theButtonMod != null)
 					action.theButtonMod.accept(buttonEditor);
-				buttonEditor.getOrCreateComponent(until);
+				buttonEditor.getComponent();
 				actionMenuItems[a].addActionListener(evt -> action.theObservableAction.act(evt));
 			}
 			getEditor().getSelectionModel().addTreeSelectionListener(evt -> {
@@ -298,14 +310,10 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 				}
 			});
 		}
-		theComponent = new JScrollPane(decorate(getEditor()));
-		return theComponent;
+		JScrollPane scroll = new JScrollPane(decorate(getEditor()));
+		return scroll;
 	}
 
-	@Override
-	public Component getComponent() {
-		return theComponent;
-	}
 
 	@Override
 	public ObservableValue<String> getTooltip() {
@@ -324,9 +332,11 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 
 	static class ObservableTreeCellRenderer<F> implements TreeCellRenderer {
 		private final ObservableCellRenderer<? super BetterList<F>, ? super F> theRenderer;
+		private final int[] theHoveredRowColumn;
 
-		ObservableTreeCellRenderer(ObservableCellRenderer<? super BetterList<F>, ? super F> renderer) {
+		ObservableTreeCellRenderer(ObservableCellRenderer<? super BetterList<F>, ? super F> renderer, int[] hoveredRowColumn) {
 			theRenderer = renderer;
+			theHoveredRowColumn = hoveredRowColumn;
 		}
 
 		@Override
@@ -338,8 +348,9 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 					? ObservableTreeModel.betterPath(path)//
 						: BetterList.of((F) tree.getModel().getRoot());
 			};
-			ModelCell<BetterList<F>, F> cell = new ModelCell.Default<>(modelValue, (F) value, row, 0, selected, hasFocus, expanded,
-				leaf);
+			boolean hovered = theHoveredRowColumn[0] == row;
+			ModelCell<BetterList<F>, F> cell = new ModelCell.Default<>(modelValue, (F) value, row, 0, selected, hasFocus,
+				hovered, hovered, expanded, leaf);
 			return theRenderer.getCellRendererComponent(tree, cell, null);
 		}
 	}

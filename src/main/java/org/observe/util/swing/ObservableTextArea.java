@@ -9,7 +9,6 @@ import java.awt.RenderingHints;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.awt.event.KeyEvent;
-import java.text.ParseException;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
@@ -17,11 +16,17 @@ import javax.swing.JEditorPane;
 import javax.swing.UIManager;
 
 import org.observe.Observable;
+import org.observe.ObservableValue;
 import org.observe.SettableValue;
+import org.observe.util.swing.ObservableTextEditor.ObservableTextEditorWidget;
 import org.qommons.io.Format;
-import org.qommons.io.SpinnerFormat;
 
-public class ObservableTextArea<E> extends JEditorPane {
+/**
+ * A text widget that supports multiple lines
+ *
+ * @param <E> The type of value edited by the text area
+ */
+public class ObservableTextArea<E> extends JEditorPane implements ObservableTextEditorWidget<E, ObservableTextArea<E>> {
 	private final ObservableTextEditor<E> theEditor;
 	private boolean isWordWrapped;
 	private int theRows;
@@ -59,134 +64,97 @@ public class ObservableTextArea<E> extends JEditorPane {
 		isWordWrapped = true;
 	}
 
-	/** @return The value controlled by this text field */
+	@Override
 	public SettableValue<E> getValue() {
 		return theEditor.getValue();
 	}
 
-	/** @return The format converting between value and text */
+	@Override
 	public Format<E> getFormat() {
 		return theEditor.getFormat();
 	}
 
-	/**
-	 * Configures a warning message as a function of this text field's value. The user will be allowed to enter a value with a warning but a
-	 * UI hit will be provided that there may be some problem with the value.
-	 *
-	 * @param warning The function to provide a warning message or null for no warning
-	 * @return This text field
-	 */
+	@Override
 	public ObservableTextArea<E> withWarning(Function<? super E, String> warning) {
 		theEditor.withWarning(warning);
 		return this;
 	}
 
-	/**
-	 * Clears this text field's {@link #withWarning(Function) warning}
-	 *
-	 * @return This text field
-	 */
+	@Override
 	public ObservableTextArea<E> clearWarning() {
 		theEditor.clearWarning();
 		return this;
 	}
 
-	/** @return Whether this text field selects all its text when it gains focus */
+	@Override
 	public boolean isSelectAllOnFocus() {
 		return theEditor.isSelectAllOnFocus();
 	}
 
-	/**
-	 * @param selectAll Whether this text field should select all its text when it gains focus
-	 * @return This text field
-	 */
+	@Override
 	public ObservableTextArea<E> setSelectAllOnFocus(boolean selectAll) {
 		theEditor.setSelectAllOnFocus(selectAll);
 		return this;
 	}
 
-	/**
-	 * @param format Whether this text field should, after successful editing, replace the user-entered text with the formatted value
-	 * @return This text field
-	 */
+	@Override
 	public ObservableTextArea<E> setReformatOnCommit(boolean format) {
 		theEditor.setReformatOnCommit(format);
 		return this;
 	}
 
-	/**
-	 * @param revert Whether this text field should, when it loses focus while its text is either not {@link Format#parse(CharSequence)
-	 *        parseable} or {@link SettableValue#isAcceptable(Object) acceptable}, revert its text to the formatted current model value. If
-	 *        false, the text field will remain in an error state on focus lost.
-	 * @return This text field
-	 */
+	@Override
 	public ObservableTextArea<E> setRevertOnFocusLoss(boolean revert) {
 		theEditor.setRevertOnFocusLoss(revert);
 		return this;
 	}
 
-	/**
-	 * @param commit Whether this text field should update the model value with the parsed content of the text field each time the user
-	 *        types a key (assuming the text parses correctly and the value is {@link SettableValue#isAcceptable(Object) acceptable}.
-	 * @return This text field
-	 */
+	@Override
 	public ObservableTextArea<E> setCommitOnType(boolean commit) {
 		theEditor.setCommitOnType(commit);
 		return this;
 	}
 
-	/**
-	 * If the {@link #getFormat() format} given to this text field is an instance of {@link SpinnerFormat}, this user can adjust the text
-	 * field's value incrementally using the up or down arrow keys. The nature and magnitude of the adjustment may depend on the particular
-	 * {@link SpinnerFormat} implementation as well as the position of the cursor.
-	 *
-	 * @param commitImmediately Whether {@link SpinnerFormat#adjust(Object, String, int, boolean) adjustments} to the value should be
-	 *        committed to the model value immediately. If false, the adjustments will only be made to the text and the value will be
-	 *        committed when the user presses enter or when focus is lost.
-	 * @return This text field
-	 */
+	@Override
 	public ObservableTextArea<E> setCommitAdjustmentImmediately(boolean commitImmediately) {
 		theEditor.setCommitAdjustmentImmediately(commitImmediately);
 		return this;
 	}
 
-	/**
-	 * <p>
-	 * Sets an action to be performed when the user presses the ENTER key while focused on this text field (after a successful value
-	 * commit).
-	 * </p>
-	 *
-	 * <p>
-	 * The text field only contains one such listener, so this call replaces any that may have been previously set.
-	 * </p>
-	 *
-	 * @param action The action to perform when the user presses the ENTER key
-	 * @return This text field
-	 */
+	@Override
 	public ObservableTextArea<E> onEnter(BiConsumer<? super E, ? super KeyEvent> action) {
 		theEditor.onEnter(action);
 		return this;
 	}
 
-	/**
-	 * @param tooltip The tooltip for this text field (when enabled)
-	 * @return This text field
-	 */
+	@Override
 	public ObservableTextArea<E> withToolTip(String tooltip) {
 		theEditor.withToolTip(tooltip);
 		return this;
 	}
 
+	/**
+	 * @param html Whether this text area should use HTML or plain text content type
+	 * @return This text area
+	 */
 	public ObservableTextArea<E> asHtml(boolean html) {
 		setContentType(html ? "text/html" : "text/plain");
 		return this;
 	}
 
+	/**
+	 * @param wordWrap Whether this text area should wrap lines that are longer than the text area's width
+	 * @return This text area
+	 */
 	public ObservableTextArea<E> withWordWrap(boolean wordWrap) {
 		isWordWrapped = wordWrap;
 		return this;
 	}
 
+	/**
+	 * @param rows The number of rows to display in this text area at once (the height of the widget, in lines of text)
+	 * @return This text area
+	 */
 	public ObservableTextArea<E> withRows(int rows) {
 		Graphics2D g = (Graphics2D) getGraphics();
 		if (g == null) {
@@ -204,15 +172,12 @@ public class ObservableTextArea<E> extends JEditorPane {
 		setMinimumSize(new Dimension(getMinimumSize().width, h * rows));
 	}
 
-	/** @return The text to display (grayed) when the text field's text is empty */
+	@Override
 	public String getEmptyText() {
 		return theEmptyText;
 	}
 
-	/**
-	 * @param emptyText The text to display (grayed) when the text field's text is empty
-	 * @return This text field
-	 */
+	@Override
 	public ObservableTextArea<E> setEmptyText(String emptyText) {
 		theEmptyText = emptyText;
 		return this;
@@ -258,37 +223,39 @@ public class ObservableTextArea<E> extends JEditorPane {
 		}
 	}
 
-	/** @return Whether the user has entered text to change this field's value */
+	@Override
 	public boolean isDirty() {
 		return theEditor.isDirty();
 	}
 
-	/** Undoes any edits in this field's text, reverting to the formatted current value */
+	@Override
 	public void revertEdits() {
 		theEditor.revertEdits();
 	}
 
-	/**
-	 * Causes any edits in this field's text to take effect, parsing it and setting it in the value
-	 *
-	 * @param cause The cause of the action (e.g. a swing event)
-	 * @return Whether the edits (if any) were successfully committed to the value or were rejected. If there were no edits, this returns
-	 *         true.
-	 */
+	@Override
 	public boolean flushEdits(Object cause) {
 		return theEditor.flushEdits(cause);
 	}
 
-	/**
-	 * @return The error for the current text of this field. Specifically, either:
-	 *         <ol>
-	 *         <li>The message in the {@link ParseException} thrown by this field's {@link #getFormat() format} when the text was parsed (or
-	 *         "Invalid text" if the exception message was null) or</li>
-	 *         <li>The message reported by the value ({@link SettableValue#isAcceptable(Object)}) for the parsed value</li>
-	 *         <ol>
-	 */
+	@Override
 	public String getEditError() {
 		return theEditor.getEditError();
+	}
+
+	@Override
+	public String getEditWarning() {
+		return theEditor.getEditWarning();
+	}
+
+	@Override
+	public ObservableValue<String> getErrorState() {
+		return theEditor.getErrorState();
+	}
+
+	@Override
+	public ObservableValue<String> getWarningState() {
+		return theEditor.getWarningState();
 	}
 
 	/** Re-displays the parsing error message from this text field as a tooltip */

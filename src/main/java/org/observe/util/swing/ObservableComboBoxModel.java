@@ -13,6 +13,7 @@ import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.IntConsumer;
+import java.util.function.IntSupplier;
 
 import javax.accessibility.Accessible;
 import javax.accessibility.AccessibleContext;
@@ -94,6 +95,31 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 		return comboFor(comboBox, ObservableValue.of(TypeTokens.get().STRING, descrip), valueTooltip, availableValues, selected);
 	}
 
+	/** A subscription to a combo box hookup situation which also provides the item which the mouse is currently hovering over */
+	public interface ComboHookup extends Subscription {
+		/** @return The index of the item the mouse is currently hovering over */
+		int getHoveredItem();
+
+		/**
+		 * @param sub The subscription for the hookup
+		 * @param hoveredItem The hovered item index retriever for the hookup
+		 * @return The hookup subscription
+		 */
+		static ComboHookup of(Subscription sub, IntSupplier hoveredItem) {
+			return new ComboHookup() {
+				@Override
+				public void unsubscribe() {
+					sub.unsubscribe();
+				}
+
+				@Override
+				public int getHoveredItem() {
+					return hoveredItem.getAsInt();
+				}
+			};
+		}
+	}
+
 	/**
 	 * Creates and installs a combo box model whose data is backed by an {@link ObservableCollection} and whose selection is governed by a
 	 * {@link SettableValue}
@@ -105,8 +131,14 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 	 * @param selected The selected value that will control the combo box's selection and report it
 	 * @return The subscription to {@link Subscription#unsubscribe() unsubscribe} to to cease listening
 	 */
-	public static <T> Subscription comboFor(JComboBox<T> comboBox, ObservableValue<String> descrip,
-		Function<? super T, String> valueTooltip, ObservableCollection<? extends T> availableValues, SettableValue<T> selected) {
+	public static <T> ComboHookup comboFor(JComboBox<T> comboBox, ObservableValue<String> descrip, Function<? super T, String> valueTooltip,
+		ObservableCollection<? extends T> availableValues, SettableValue<T> selected) {
+		// Setting this obscure property has the effect of preventing change events when the user is using the up or down arrow keys
+		// to navigate items while the combo popup is open.
+		// The default behavior of combo box is to fire events each time the user moves to a different item in the list.
+		// Setting this property means the event will only be fired when the user presses enter on the new selection.
+		// This property does not effect mouse behavior.
+		comboBox.putClientProperty("JComboBox.isTableCellEditor", Boolean.TRUE);
 		SimpleObservable<Void> safeUntil = SimpleObservable.build().build();
 		List<Subscription> subs = new LinkedList<>();
 		subs.add(() -> safeUntil.onNext(null));
@@ -140,8 +172,8 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 		}
 		subs.add(ObservableComboBoxModel.<T> hookUpComboData(safeValues, safeSelected, index -> {
 			// Ignore update events when the popup is expanded
-			if (index != comboBox.getSelectedIndex() || (index >= 0 && comboBox.getSelectedItem() != safeValues.get(index))
-				|| !popup.isVisible())
+			if ((index != comboBox.getSelectedIndex() || (index >= 0 && comboBox.getSelectedItem() != safeValues.get(index))
+				|| !popup.isVisible()) && index < comboBox.getItemCount())
 				comboBox.setSelectedIndex(index);
 		}, listener -> {
 			ItemListener itemListener = evt -> {
@@ -178,8 +210,9 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 			}
 		});
 
+		int[] hoveredItem = new int[] { -1 };
 		if (popup != null) {
-			@SuppressWarnings("cast") //In some JDKs, the return value is not generic. Keep this cast to JList<T> when saving.
+			@SuppressWarnings("cast") // In some JDKs, the return value is not generic. Keep this cast to JList<T> when saving.
 			JList<T> popupList = (JList<T>) popup.getList();
 			class PopupMouseListener extends MouseMotionAdapter {
 				private Point lastHover;
@@ -198,6 +231,7 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 
 				private void _showToolTip() {
 					int index = popupList.locationToIndex(lastHover);
+					hoveredItem[0] = index;
 					if (index < 0) {
 						popupList.setToolTipText(null);
 						return;
@@ -211,17 +245,23 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 					if (tooltip != null && !Objects.equals(oldToolTip, tooltip))
 						ObservableSwingUtils.setTooltipVisible(popupList, true);
 				}
-			};
+			}
+			;
 			PopupMouseListener popupMouseListener = new PopupMouseListener();
 			subs.add(availableValues.simpleChanges().act(__ -> popupMouseListener.showToolTip()));
 			popupList.addMouseMotionListener(popupMouseListener);
 			subs.add(() -> ObservableSwingUtils.onEQ(() -> popupList.removeMouseMotionListener(popupMouseListener)));
 		}
-		return Subscription.forAll(subs);
+		return ComboHookup.of(Subscription.forAll(subs), () -> hoveredItem[0]);
 	}
 
 	/**
+	 * <p>
 	 * Connects UI models and observable structures for the use case of selecting a value from a list of possible values
+	 * </p>
+	 * <p>
+	 * This method is package-private because it assumes the given values are {@link ThreadConstraint#EDT EDT}-safe.
+	 * </p>
 	 *
 	 * @param availableValues The values to select from
 	 * @param selected The selected value
@@ -263,29 +303,31 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 		subs.add(selected.changes().act(evt -> {
 			if (callbackLock[0])
 				return;
-			ObservableSwingUtils.onEQ(() -> {
-				if (callbackLock[0])
-					return;
-				String enabled = selected.isEnabled().get();
-				callbackLock[0] = true;
-				try (Transaction avT = availableValues.lock(false, null)) {
-					CollectionElement<? extends T> found = availableValues.belongs(evt.getNewValue()) //
-						? ((ObservableCollection<T>) availableValues).getElement(evt.getNewValue(), true)//
-							: null;
-						if (found != null) {
-							currentSelectedElement[0] = found.getElementId();
-							currentSelected[0] = found.get();
-							setSelected.accept(availableValues.getElementsBefore(found.getElementId()));
-						} else {
-							currentSelectedElement[0] = null;
-							currentSelected[0] = null;
-							setSelected.accept(-1);
-						}
-				} finally {
-					callbackLock[0] = false;
-				}
-				checkEnabled.accept(enabled);
-			});
+			String enabled = selected.isEnabled().get();
+			callbackLock[0] = true;
+			try (Transaction avT = availableValues.lock(false, null)) {
+				CollectionElement<? extends T> found = availableValues.belongs(evt.getNewValue()) //
+					? ((ObservableCollection<T>) availableValues).getElement(evt.getNewValue(), true)//
+						: null;
+					if (found != null) {
+						currentSelectedElement[0] = found.getElementId();
+						currentSelected[0] = found.get();
+						setSelected.accept(availableValues.getElementsBefore(found.getElementId()));
+					} else {
+						currentSelectedElement[0] = null;
+						currentSelected[0] = null;
+						setSelected.accept(-1);
+					}
+			} finally {
+				callbackLock[0] = false;
+			}
+			checkEnabled.accept(enabled);
+		}));
+		subs.add(selected.isEnabled().noInitChanges().act(evt -> {
+			if (callbackLock[0])
+				return;
+			String enabled = selected.isEnabled().get();
+			checkEnabled.accept(enabled);
 		}));
 		// It is possible for a value to change before the availableValues collection changes to include it.
 		// In this case, the above code will find an index of zero
