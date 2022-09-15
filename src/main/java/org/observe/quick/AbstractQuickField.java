@@ -1,11 +1,12 @@
 package org.observe.quick;
 
+import org.observe.quick.style.StyleQIS;
 import org.observe.util.swing.PanelPopulation;
 import org.observe.util.swing.PanelPopulation.ComponentEditor;
 import org.qommons.config.QonfigInterpretationException;
 
 public abstract class AbstractQuickField extends AbstractQuickComponentDef {
-	public AbstractQuickField(QuickQIS session) throws QonfigInterpretationException {
+	public AbstractQuickField(StyleQIS session) throws QonfigInterpretationException {
 		super(session);
 	}
 

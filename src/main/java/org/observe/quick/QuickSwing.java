@@ -24,6 +24,7 @@ import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ExternalModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.quick.style.StyleQIS;
 import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
 import org.qommons.Version;
@@ -49,7 +50,7 @@ public class QuickSwing implements QonfigInterpretation {
 
 	@Override
 	public Set<Class<? extends SpecialSession<?>>> getExpectedAPIs() {
-		return QommonsUtils.unmodifiableDistinctCopy(ExpressoQIS.class, QuickQIS.class);
+		return QommonsUtils.unmodifiableDistinctCopy(ExpressoQIS.class, StyleQIS.class);
 	}
 
 	@Override
@@ -63,17 +64,21 @@ public class QuickSwing implements QonfigInterpretation {
 	}
 
 	@Override
+	public void init(QonfigToolkit toolkit) {
+	}
+
+	@Override
 	public QonfigInterpreterCore.Builder configureInterpreter(QonfigInterpreterCore.Builder interpreter) {
 		interpreter
 		.extend(interpreter.getToolkit().getElement("quick"), interpreter.getToolkit().getElement("quick-debug"), QuickDocument.class,
 			QuickDocument.class, //
-			(doc, session) -> extendQuickDebug(doc, session.as(QuickQIS.class), interpreter.getToolkit()))//
-		.modifyWith("quick", QuickDocument.class, (doc, session) -> modifyQuickDocument(doc, session.as(QuickQIS.class)))//
+				(doc, session) -> extendQuickDebug(doc, session.as(StyleQIS.class), interpreter.getToolkit()))//
+			.modifyWith("quick", QuickDocument.class, (doc, session) -> modifyQuickDocument(doc, session.as(StyleQIS.class)))//
 		;
 		return interpreter;
 	}
 
-	private QuickDocument extendQuickDebug(QuickDocument doc, QuickQIS session, QonfigToolkit swing) throws QonfigInterpretationException {
+	private QuickDocument extendQuickDebug(QuickDocument doc, StyleQIS session, QonfigToolkit swing) throws QonfigInterpretationException {
 		ExpressoQIS exS = session.as(ExpressoQIS.class);
 		if (theDebugDoc == null) {
 			synchronized (QuickSwing.this) {
@@ -322,7 +327,7 @@ public class QuickSwing implements QonfigInterpretation {
 		};
 	}
 
-	private QuickDocument modifyQuickDocument(QuickDocument doc, QuickQIS session) throws QonfigInterpretationException {
+	private QuickDocument modifyQuickDocument(QuickDocument doc, StyleQIS session) throws QonfigInterpretationException {
 		String lAndFClass;
 		switch (session.getAttributeText("look-and-feel")) {
 		case "system":

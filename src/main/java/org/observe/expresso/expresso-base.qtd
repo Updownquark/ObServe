@@ -1,52 +1,32 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<qonfig-def name="Expresso" version="0.1" root="models">
+<qonfig-def name="Expresso-Base" version="0.1" extends="core:Expresso-Core v0.1">
 	<value-types>
 		<pattern name="int">\d{1,7}</pattern> <!-- Positive integer -->
 		<pattern name="float">[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?</pattern>
-		<pattern name="identifier">[_a-zA-Z$][_a-zA-Z0-9$]*</pattern>
-
-		<external name="expression" />
 	</value-types>
 
 	<add-ons>
-		<add-on name="expresso-parseable">
-			<child-def name="expresso-parser" type="expresso-parser" min="0" />
-			<attribute name="inherit-operators" type="boolean" default="true" />
-			<child-def name="unary-operators" type="unary-operators" min="0" max="inf" />
-			<child-def name="binary-operators" type="binary-operators" min="0" max="inf" />
-		</add-on>
-
-		<add-on name="model-element" requires="model-value">
-			<attribute name="name" type="identifier" specify="required" />
-		</add-on>
-
-		<add-on name="int-model-value" requires="model-value">
-			<attr-mod name="model-value.type" specify="optional" default="" />
-		</add-on>
-		<add-on name="allow-ext-model" abstract="true" />
-		<add-on name="ext-model-value" requires="model-value">
-			<value-mod specify="forbidden" /> <!-- External values are specified by code instantiating the model -->
-		</add-on>
-		<add-on name="int-value" requires="value" inherits="int-model-value">
+		<add-on name="int-value" requires="value">
 			<attribute name="init" type="expression" specify="optional" />
 		</add-on>
-		<add-on name="int-list" requires="list" inherits="int-model-value">
+		<add-on name="int-list" requires="list">
 			<child-def name="element" type="element" min="0" max="inf" />
 		</add-on>
-		<add-on name="int-map" requires="map" inherits="int-model-value">
+		<add-on name="int-map" requires="map">
 			<attr-mod name="map.key-type" specify="optional" default="" />
 			<child-def name="entry" type="entry" min="0" max="inf" />
 		</add-on>
 		<add-on name="map-model-value" requires="model-value">
 			<attribute name="key-type" type="string" specify="required" />
+			<value-mod specify="forbidden" />
 		</add-on>
 		<add-on name="sorted" abstract="true" >
 			<attribute name="sort-with" type="expression" specify="optional" />
 		</add-on>
 
 		<add-on name="allow-config-model" abstract="true" />
-		<add-on name="config-model-value" requires="model-value">
+		<add-on name="config-model-value" requires="model-value" inherits="type-required">
 			<attribute name="config-path" type="string" specify="optional" />
 			<attribute name="format" type="expression" specify="optional" />
 		</add-on>
@@ -142,40 +122,15 @@
 	</add-ons>
 
 	<elements>
-		<element-def name="expresso-parser">
-			<value type="expression" specify="required" />
-		</element-def>
-		<element-def name="expresso-java" extends="expresso-parser">
-			<value-mod specify="optional" default="new org.observe.expresso.JavaExpressoParser()" />
-		</element-def>
-		<element-def name="operators" abstract="true">
-			<value type="string" specify="required" />
-		</element-def>
-		<element-def name="unary-operators" extends="operators" />
-		<element-def name="binary-operators" extends="operators" />
-
-		<element-def name="import">
-			<value type="string" specify="required" />
-		</element-def>
-		<element-def name="imports">
-			<child-def name="import" type="import" min="0" max="inf" />
-		</element-def>
-		
 		<!-- Models, values and transformations -->
-		<element-def name="abst-model" abstract="true">
-			<attribute name="name" type="identifier" specify="required" />
-			<child-def name="value" type="model-value" inherits="model-element" min="0" max="inf" />
-		</element-def>
-		<element-def name="model-value" abstract="true">
-			<attribute name="type" type="string" specify="required" />
-			<value type="expression" specify="optional" />
-		</element-def>
 		<element-def name="event" extends="model-value" inherits="allow-ext-model" />
 		<element-def name="action" extends="model-value" inherits="allow-ext-model">
 			<attribute name="disable-with" type="expression" specify="optional" />
 		</element-def>
 		<element-def name="value" extends="model-value" inherits="allow-ext-model,allow-config-model" />
-		<element-def name="list" extends="model-value" inherits="allow-ext-model,allow-config-model" />
+		<element-def name="list" extends="model-value" inherits="allow-ext-model,allow-config-model">
+			<value-mod specify="forbidden" />
+		</element-def>
 		<element-def name="value-set" extends="list" />
 		<element-def name="set" extends="list" />
 		<element-def name="sorted-set" extends="set" />
@@ -185,16 +140,6 @@
 		<element-def name="multi-map" extends="map" />
 		<element-def name="sorted-multi-map" extends="multi-map" />
 		
-		<!-- External models.  These serve only as markers that are later checked against the external models that are provided
-			 to the app.  Since they are only expectations of values that will be supplied externally,
-			 no values can be specified in the elements. -->
-		<element-def name="ext-model" extends="abst-model">
-			<child-def name="sub-model" type="ext-model" min="0" max="inf" requires="allow-ext-model" />
-		</element-def>
-		<!-- Internal models.  These function as variables that are defined and sometimes instantiated inside the app. -->
-		<element-def name="model" extends="abst-model">
-			<child-def name="sub-model" type="model" min="0" max="inf" />
-		</element-def>
 		<element-def name="constant" extends="model-value">
 			<value-mod type="expression" specify="required" />
 		</element-def>
@@ -204,6 +149,7 @@
 		<element-def name="entry" extends="element">
 			<attribute name="key" type="expression" />
 		</element-def>
+
 		<!-- Config models.  These function similarly to internal models, except that they represent persistent values from
 			 ObservableConfig.  Some of these allow specification of default values, but these are only used if the persistent data
 			 for the value has not been initialized. -->
@@ -211,25 +157,21 @@
 			<attribute name="config-name" type="string" specify="optional" />
 			<attribute name="config-dir" type="expression" specify="optional" />
 			<child-def name="old-config-name" type="old-config-name" min="0" max="inf" />
-			<child-mod child="abst-model.value" requires="allow-config-model" />
+			<child-mod child="abst-model.value" requires="allow-config-model" inherits="config-model-value" />
 			<attribute name="backup" type="boolean" default="true" />
 		</element-def>
 		<element-def name="old-config-name">
 			<value type="string" />
 		</element-def>
-		<element-def name="first-value" extends="model-value" inherits="int-model-value">
-			<!-- Type can be inferred from the super-type of the other values, but the user can specify it instead -->
-			<attr-mod name="model-value.type" specify="optional" default="" />
+		<element-def name="first-value" extends="model-value">
 			<value-mod specify="forbidden" />
-			<child-def name="value" type="model-value" min="1" max="inf" inherits="int-model-value" />
+			<child-def name="value" type="model-value" min="1" max="inf" />
 		</element-def>
 		
 		<!-- Transformations.  These take values supplied by other models and perform some dynamic operation on the value(s) to produce
 			 a result that is a product of the source. -->
-		<element-def name="transform" extends="model-value" inherits="int-model-value">
+		<element-def name="transform" extends="model-value">
 			<attribute name="source" type="expression" specify="required" />
-			<!-- Type can be inferred from the transformation, but the user can specify that the result is a super-type instead -->
-			<attr-mod name="int-model-value.type" specify="optional" default="" />
 			<!-- Default of this attribute is whatever the flow prefers -->
 			<attribute name="active" type="boolean" specify="optional" />
 			<child-def name="op" type="operation" min="0" max="inf" /> <!-- Allow min=0 to facilitate aliases -->
@@ -326,10 +268,6 @@
 			<child-def name="archive" type="archive-method" min="0" max="inf" />
 		</element-def>
 
-		<element-def name="models">
-			<child-def name="model" type="abst-model" min="0" max="inf" />
-		</element-def>
-
 		<element-def name="validate">
 			<attribute name="type" type="validate-type" />
 		</element-def>
@@ -351,13 +289,6 @@
 	</elements>
 
 	<auto-inheritance>
-		<auto-inherit inherits="ext-model-value">
-			<target element="model-value" role="ext-model.value" />
-		</auto-inherit>
-
-		<auto-inherit inherits="int-model-value">
-			<target element="model-value" role="model.value" />
-		</auto-inherit>
 		<auto-inherit inherits="int-value">
 			<target element="value" role="model.value" />
 		</auto-inherit>
@@ -368,9 +299,6 @@
 			<target element="map" role="model.value" />
 		</auto-inherit>
 
-		<auto-inherit inherits="config-model-value">
-			<target element="model-value" role="config.value" />
-		</auto-inherit>
 		<auto-inherit inherits="config-value">
 			<target element="value" role="config.value" />
 		</auto-inherit>

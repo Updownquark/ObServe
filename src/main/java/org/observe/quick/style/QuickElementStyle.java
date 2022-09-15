@@ -16,32 +16,31 @@ import org.qommons.collect.BetterSortedList;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
+import org.qommons.config.QonfigToolkit;
 import org.qommons.tree.SortedTreeList;
 
 import com.google.common.reflect.TypeToken;
 
 /** Represents style information for a {@link QonfigElement} */
 public class QuickElementStyle {
-	private final QuickStyleSet theStyleSet;
 	private final QuickElementStyle theParent;
 	private final QonfigElement theElement;
 	private final List<QuickStyleValue<?>> theDeclaredValues;
 	private final Map<QuickStyleAttribute<?>, QuickElementStyleAttribute<?>> theValues;
 
-	public QuickElementStyle(QuickStyleSet styleSet, List<QuickStyleValue<?>> declaredValues, QuickElementStyle parent,
-		QuickStyleSheet styleSheet, QonfigElement element, ExpressoQIS session) throws QonfigInterpretationException {
-		theStyleSet = styleSet;
+	public QuickElementStyle(List<QuickStyleValue<?>> declaredValues, QuickElementStyle parent, QuickStyleSheet styleSheet,
+		QonfigElement element, ExpressoQIS session, QonfigToolkit style) throws QonfigInterpretationException {
 		theParent = parent;
 		theElement = element;
 		theDeclaredValues = declaredValues;
 
 		Map<QuickStyleAttribute<?>, BetterSortedList<? extends QuickStyleValue<?>>> values = new HashMap<>();
 		// Compile all attributes applicable to this element
-		QuickStyleType type = theStyleSet.styled(element.getType(), session);
+		QuickStyleType type = QuickStyleType.of(element.getType(), session, style);
 		for (QuickStyleAttribute<?> attr : type.getAttributes().values())
 			values.computeIfAbsent(attr, __ -> SortedTreeList.<QuickStyleValue<?>> buildTreeList(QuickStyleValue::compareTo).build());
 		for (QonfigAddOn inh : element.getInheritance().getExpanded(QonfigAddOn::getInheritance)) {
-			type = theStyleSet.styled(inh, session);
+			type = QuickStyleType.of(inh, session, style);
 			if (type == null)
 				continue;
 			for (QuickStyleAttribute<?> attr : type.getAttributes().values())
@@ -67,10 +66,6 @@ public class QuickElementStyle {
 		while (parent != null && !parent.getAttributes().contains(attr))
 			parent = parent.getParent();
 		return parent == null ? null : parent.get(attr);
-	}
-
-	public QuickStyleSet getStyleSet() {
-		return theStyleSet;
 	}
 
 	public QuickElementStyle getParent() {
@@ -138,7 +133,7 @@ public class QuickElementStyle {
 				values[i] = condition.map(pass -> new ConditionalValue<>(pass, value));
 			}
 			if (theInherited != null) {
-				ObservableValue<T> value = theInherited.evaluate(ExpressoQIS.getParentModels(models));
+				ObservableValue<T> value = theInherited.evaluate(StyleQIS.getParentModels(models));
 				values[theValues.size()] = ObservableValue.of(new ConditionalValue<>(true, value));
 			}
 			ObservableValue<ConditionalValue<T>> conditionalValue = ObservableValue.firstValue(

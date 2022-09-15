@@ -55,6 +55,7 @@ import org.observe.expresso.ModelType.ModelInstanceConverter;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableExpression.MethodFinder;
 import org.observe.expresso.ObservableModelSet.AbstractValueContainer;
+import org.observe.expresso.ObservableModelSet.ExternalModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.expresso.ObservableModelSet.ValueCreator;
@@ -80,6 +81,7 @@ import org.qommons.config.QonfigInterpreterCore;
 import org.qommons.config.QonfigInterpreterCore.CoreSession;
 import org.qommons.config.QonfigInterpreterCore.QonfigValueCreator;
 import org.qommons.config.QonfigInterpreterCore.QonfigValueModifier;
+import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSession;
 import org.qommons.io.ArchiveEnabledFileSource;
 import org.qommons.io.BetterFile;
@@ -100,64 +102,11 @@ public class ExpressoV0_1 implements QonfigInterpretation {
 	public static final String VALUE_TYPE_KEY = "value-type";
 	public static final String KEY_TYPE_KEY = "key-type";
 
-	/**
-	 * Provided to
-	 * {@link org.qommons.config.QonfigInterpreterCore.Builder#createWith(org.qommons.config.QonfigElementOrAddOn, Class, QonfigValueCreator)}
-	 * to support using an element type as a child of an &lt;ext-model> element.
-	 *
-	 * @param <M> The model type of the result
-	 */
-	public interface ExtModelValue<M> {
-		ModelInstanceType<M, ?> getType(ExpressoQIS session) throws QonfigInterpretationException;
-
-		class SingleTyped<M> implements ExtModelValue<M> {
-			private final ModelType.SingleTyped<M> theType;
-
-			SingleTyped(ModelType.SingleTyped<M> type) {
-				theType = type;
-			}
-
-			@Override
-			public ModelInstanceType<M, ?> getType(ExpressoQIS session) throws QonfigInterpretationException {
-				return theType.forType((TypeToken<?>) session.get(VALUE_TYPE_KEY));
-			}
-		}
-
-		class DoubleTyped<M> implements ExtModelValue<M> {
-			private final ModelType.DoubleTyped<M> theType;
-
-			DoubleTyped(ModelType.DoubleTyped<M> type) {
-				theType = type;
-			}
-
-			@Override
-			public ModelInstanceType<M, ?> getType(ExpressoQIS session) throws QonfigInterpretationException {
-				return theType.forType(//
-					(TypeToken<?>) session.get(KEY_TYPE_KEY), //
-					(TypeToken<?>) session.get(VALUE_TYPE_KEY, TypeToken.class));
-			}
-		}
-	}
-
-	/**
-	 * Provided to
-	 * {@link org.qommons.config.QonfigInterpreterCore.Builder#createWith(org.qommons.config.QonfigElementOrAddOn, Class, QonfigValueCreator)}
-	 * to support using an element type as a child of a &lt;config-model> element.
-	 *
-	 * @param <M> The model type of the result
-	 * @param <MV> The value type of the result
-	 */
-	public interface ConfigModelValue<M, MV extends M> {
-		ModelInstanceType<M, MV> getType();
-
-		MV create(ObservableConfig.ObservableConfigValueBuilder<?> config, ModelSetInstance msi);
-	}
-
 	public interface ConfigFormatProducer<T> {
 		ObservableConfigFormat<T> getFormat(ModelSetInstance models);
 	}
 
-	public static abstract class AbstractConfigModelValue<M, MV extends M> implements ConfigModelValue<M, MV> {
+	public static abstract class AbstractConfigModelValue<M, MV extends M> implements Expresso.ConfigModelValue<M, MV> {
 		private final ModelInstanceType<M, MV> theType;
 
 		public AbstractConfigModelValue(ModelInstanceType<M, MV> type) {
@@ -186,12 +135,16 @@ public class ExpressoV0_1 implements QonfigInterpretation {
 
 	@Override
 	public String getToolkitName() {
-		return ExpressoSessionImplV0_1.NAME;
+		return ExpressoQIS.TOOLKIT_NAME;
 	}
 
 	@Override
 	public Version getVersion() {
 		return ExpressoSessionImplV0_1.VERSION;
+	}
+
+	@Override
+	public void init(QonfigToolkit toolkit) {
 	}
 
 	@Override
@@ -232,7 +185,7 @@ public class ExpressoV0_1 implements QonfigInterpretation {
 			ExpressoQIS expressoSession = wrap(session);
 			ObservableModelSet.Builder builder = ObservableModelSet.build(ObservableModelSet.JAVA_NAME_CHECKER);
 			for (ExpressoQIS model : expressoSession.forChildren("model")) {
-				ObservableModelSet.Builder subModel = builder.createSubModel(model.getAttributeText("name"));
+				ObservableModelSet.Builder subModel = builder.createSubModel(model.getAttributeText("named", "name"));
 				expressoSession.setModels(subModel, null);
 				model.setModels(subModel, null).interpret(ObservableModelSet.class);
 			}
@@ -287,36 +240,47 @@ public class ExpressoV0_1 implements QonfigInterpretation {
 					path.append('.').append(name);
 					String childPath = path.toString();
 					path.setLength(pathLen);
-					ExtModelValue<?> container = child.interpret(ExtModelValue.class);
+					Expresso.ExtModelValue<?> container = child.interpret(Expresso.ExtModelValue.class);
 					ModelInstanceType<Object, Object> childType = (ModelInstanceType<Object, Object>) container.getType(child);
-					model.with(name, childType, (msi, ext) -> {
-						try {
-							return ext.get(childPath, childType);
-						} catch (IllegalArgumentException | QonfigInterpretationException e) {
-							throw new IllegalArgumentException(
-								"External model " + model.getPath() + " does not match expected: " + e.getMessage(), e);
+					ValueContainer<Object, Object> defaultV = child.getAttribute("default", childType, () -> null);
+					model.withExternal(name, childType, new ObservableModelSet.ExtValueRef<Object>() {
+						@Override
+						public Object get(ExternalModelSet extModels) {
+							try {
+								return extModels.get(childPath, childType);
+							} catch (IllegalArgumentException | QonfigInterpretationException e) {
+								if (defaultV == null)
+									throw new IllegalArgumentException(
+										"External model " + model.getPath() + " does not match expected: " + e.getMessage(), e);
+							}
+							return null;
+						}
+
+						@Override
+						public Object getDefault(ModelSetInstance models) {
+							return defaultV.get(models);
 						}
 					});
 				} else if (child.fulfills(subModelRole)) {
-					ObservableModelSet.Builder subModel = model.createSubModel(child.getAttributeText("abst-model", "name"));
+					ObservableModelSet.Builder subModel = model.createSubModel(child.getAttributeText("named", "name"));
 					child.setModels(subModel, null);
 					child.interpret(ObservableModelSet.class);
 				}
 			}
 			return model;
 		})//
-		.createWith("event", ExtModelValue.class, session -> new ExtModelValue.SingleTyped<>(ModelTypes.Event))//
-		.createWith("action", ExtModelValue.class, session -> new ExtModelValue.SingleTyped<>(ModelTypes.Action))//
-		.createWith("value", ExtModelValue.class, session -> new ExtModelValue.SingleTyped<>(ModelTypes.Value))//
-		.createWith("list", ExtModelValue.class, session -> new ExtModelValue.SingleTyped<>(ModelTypes.Collection))//
-		.createWith("set", ExtModelValue.class, session -> new ExtModelValue.SingleTyped<>(ModelTypes.Set))//
-		.createWith("sorted-list", ExtModelValue.class, session -> new ExtModelValue.SingleTyped<>(ModelTypes.SortedCollection))//
-		.createWith("sorted-set", ExtModelValue.class, session -> new ExtModelValue.SingleTyped<>(ModelTypes.SortedSet))//
-		.createWith("value-set", ExtModelValue.class, session -> new ExtModelValue.SingleTyped<>(ModelTypes.ValueSet))//
-		.createWith("map", ExtModelValue.class, session -> new ExtModelValue.DoubleTyped<>(ModelTypes.Map))//
-		.createWith("sorted-map", ExtModelValue.class, session -> new ExtModelValue.DoubleTyped<>(ModelTypes.SortedMap))//
-		.createWith("multi-map", ExtModelValue.class, session -> new ExtModelValue.DoubleTyped<>(ModelTypes.MultiMap))//
-		.createWith("sorted-multi-map", ExtModelValue.class, session -> new ExtModelValue.DoubleTyped<>(ModelTypes.SortedMultiMap))//
+		.createWith("event", Expresso.ExtModelValue.class, session -> new Expresso.ExtModelValue.SingleTyped<>(ModelTypes.Event))//
+		.createWith("action", Expresso.ExtModelValue.class, session -> new Expresso.ExtModelValue.SingleTyped<>(ModelTypes.Action))//
+		.createWith("value", Expresso.ExtModelValue.class, session -> new Expresso.ExtModelValue.SingleTyped<>(ModelTypes.Value))//
+		.createWith("list", Expresso.ExtModelValue.class, session -> new Expresso.ExtModelValue.SingleTyped<>(ModelTypes.Collection))//
+		.createWith("set", Expresso.ExtModelValue.class, session -> new Expresso.ExtModelValue.SingleTyped<>(ModelTypes.Set))//
+		.createWith("sorted-list", Expresso.ExtModelValue.class, session -> new Expresso.ExtModelValue.SingleTyped<>(ModelTypes.SortedCollection))//
+		.createWith("sorted-set", Expresso.ExtModelValue.class, session -> new Expresso.ExtModelValue.SingleTyped<>(ModelTypes.SortedSet))//
+		.createWith("value-set", Expresso.ExtModelValue.class, session -> new Expresso.ExtModelValue.SingleTyped<>(ModelTypes.ValueSet))//
+		.createWith("map", Expresso.ExtModelValue.class, session -> new Expresso.ExtModelValue.DoubleTyped<>(ModelTypes.Map))//
+		.createWith("sorted-map", Expresso.ExtModelValue.class, session -> new Expresso.ExtModelValue.DoubleTyped<>(ModelTypes.SortedMap))//
+		.createWith("multi-map", Expresso.ExtModelValue.class, session -> new Expresso.ExtModelValue.DoubleTyped<>(ModelTypes.MultiMap))//
+		.createWith("sorted-multi-map", Expresso.ExtModelValue.class, session -> new Expresso.ExtModelValue.DoubleTyped<>(ModelTypes.SortedMultiMap))//
 		;
 	}
 
@@ -698,7 +662,7 @@ public class ExpressoV0_1 implements QonfigInterpretation {
 
 	void configureConfigModels(QonfigInterpreterCore.Builder interpreter) {
 		abstract class ConfigCollectionValue<C extends ObservableCollection<?>>
-		implements QonfigValueCreator<ConfigModelValue<C, C>> {
+		implements QonfigValueCreator<Expresso.ConfigModelValue<C, C>> {
 			private final ModelType<C> theType;
 
 			protected ConfigCollectionValue(ModelType<C> type) {
@@ -706,7 +670,7 @@ public class ExpressoV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
-			public ConfigModelValue<C, C> createValue(CoreSession session) throws QonfigInterpretationException {
+			public Expresso.ConfigModelValue<C, C> createValue(CoreSession session) throws QonfigInterpretationException {
 				TypeToken<Object> type = session.get(VALUE_TYPE_KEY, TypeToken.class);
 				prepare(type, wrap(session));
 				return new AbstractConfigModelValue<C, C>((ModelInstanceType<C, C>) theType.forTypes(type)) {
@@ -725,7 +689,7 @@ public class ExpressoV0_1 implements QonfigInterpretation {
 		interpreter//
 		.createWith("simple-config-format", ValueCreator.class, session -> createSimpleConfigFormat(wrap(session)))//
 		.createWith("config", ObservableModelSet.class, new ConfigModelCreator())//
-		.createWith("value", ConfigModelValue.class, session -> {
+		.createWith("value", Expresso.ConfigModelValue.class, session -> {
 			ExpressoQIS exS = wrap(session);
 			TypeToken<Object> type = session.get(VALUE_TYPE_KEY, TypeToken.class);
 			ObservableExpression defaultX = exS.asElement("config-value").getAttributeExpression("default");
@@ -764,7 +728,7 @@ public class ExpressoV0_1 implements QonfigInterpretation {
 					return built;
 				}
 			};
-		}).createWith("value-set", ConfigModelValue.class, session -> {
+		}).createWith("value-set", Expresso.ConfigModelValue.class, session -> {
 			TypeToken<Object> type = (TypeToken<Object>) session.get(VALUE_TYPE_KEY);
 			return new AbstractConfigModelValue<ObservableValueSet<?>, ObservableValueSet<Object>>(ModelTypes.ValueSet.forType(type)) {
 				@Override
@@ -772,17 +736,17 @@ public class ExpressoV0_1 implements QonfigInterpretation {
 					return (ObservableValueSet<Object>) config.buildEntitySet(null);
 				}
 			};
-		}).createWith("list", ConfigModelValue.class, new ConfigCollectionValue<ObservableCollection<?>>(ModelTypes.Collection) {
+		}).createWith("list", Expresso.ConfigModelValue.class, new ConfigCollectionValue<ObservableCollection<?>>(ModelTypes.Collection) {
 			@Override
 			protected <V> ObservableCollection<V> modify(ObservableCollection<V> collection, ModelSetInstance msi) {
 				return collection;
 			}
-		}).createWith("set", ConfigModelValue.class, new ConfigCollectionValue<ObservableSet<?>>(ModelTypes.Set) {
+		}).createWith("set", Expresso.ConfigModelValue.class, new ConfigCollectionValue<ObservableSet<?>>(ModelTypes.Set) {
 			@Override
 			protected <V> ObservableSet<V> modify(ObservableCollection<V> collection, ModelSetInstance msi) {
 				return collection.flow().distinct().collectActive(msi.getUntil());
 			}
-		}).createWith("sorted-set", ConfigModelValue.class, new ConfigCollectionValue<ObservableSortedSet<?>>(ModelTypes.SortedSet) {
+		}).createWith("sorted-set", Expresso.ConfigModelValue.class, new ConfigCollectionValue<ObservableSortedSet<?>>(ModelTypes.SortedSet) {
 			private Function<ModelSetInstance, Comparator<Object>> theComparator;
 
 			@Override
@@ -795,7 +759,7 @@ public class ExpressoV0_1 implements QonfigInterpretation {
 			protected <V> ObservableSortedSet<V> modify(ObservableCollection<V> collection, ModelSetInstance msi) {
 				return collection.flow().distinctSorted(theComparator.apply(msi), false).collectActive(msi.getUntil());
 			}
-		}).createWith("sorted-list", ConfigModelValue.class,
+		}).createWith("sorted-list", Expresso.ConfigModelValue.class,
 			new ConfigCollectionValue<ObservableSortedCollection<?>>(ModelTypes.SortedCollection) {
 			private Function<ModelSetInstance, Comparator<Object>> theComparator;
 
@@ -810,7 +774,7 @@ public class ExpressoV0_1 implements QonfigInterpretation {
 				return collection.flow().sorted(theComparator.apply(msi)).collectActive(msi.getUntil());
 			}
 		})
-		.createWith("map", ConfigModelValue.class, session -> {
+		.createWith("map", Expresso.ConfigModelValue.class, session -> {
 			ExpressoQIS exS = wrap(session);
 			TypeToken<Object> keyType = session.get(KEY_TYPE_KEY, TypeToken.class);
 			TypeToken<Object> valueType = session.get(VALUE_TYPE_KEY, TypeToken.class);
@@ -827,9 +791,9 @@ public class ExpressoV0_1 implements QonfigInterpretation {
 					return mapBuilder.buildMap(null);
 				}
 			};
-		}).createWith("sorted-map", ConfigModelValue.class, session -> {
+		}).createWith("sorted-map", Expresso.ConfigModelValue.class, session -> {
 			throw new QonfigInterpretationException("config-based sorted-maps are not yet supported");
-		}).createWith("multi-map", ConfigModelValue.class, session -> {
+		}).createWith("multi-map", Expresso.ConfigModelValue.class, session -> {
 			ExpressoQIS exS = wrap(session);
 			TypeToken<Object> keyType = session.get(KEY_TYPE_KEY, TypeToken.class);
 			TypeToken<Object> valueType = session.get(VALUE_TYPE_KEY, TypeToken.class);
@@ -843,7 +807,7 @@ public class ExpressoV0_1 implements QonfigInterpretation {
 						.buildMultiMap(null);
 				}
 			};
-		}).createWith("sorted-multi-map", ConfigModelValue.class, session -> {
+		}).createWith("sorted-multi-map", Expresso.ConfigModelValue.class, session -> {
 			throw new QonfigInterpretationException("config-based sorted-multi-maps are not yet supported");
 		});
 	}
@@ -984,7 +948,7 @@ public class ExpressoV0_1 implements QonfigInterpretation {
 							ConfigFormatProducer<Object> format = parseConfigFormat(
 								childSession.getAttributeExpression("format"), null,
 								childSession.getExpressoEnv().with(model, null), type);
-							ConfigModelValue<Object, Object> configValue = child.interpret(ConfigModelValue.class);
+							Expresso.ConfigModelValue<Object, Object> configValue = child.interpret(Expresso.ConfigModelValue.class);
 							return new ValueContainer<Object, Object>() {
 								@Override
 								public ModelInstanceType<Object, Object> getType() {

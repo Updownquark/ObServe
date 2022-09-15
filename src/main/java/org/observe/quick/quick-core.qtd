@@ -9,10 +9,7 @@
 			<literal>exit</literal>
 		</one-of>
 
-		<pattern name="element-name">[a-zA-Z_\\-]+</pattern>
 		<pattern name="widget-name">((?&lt;ns&gt;[a-zA-Z_\\-]+)\:)?(?&lt;widget&gt;[a-zA-Z_\\-]+)</pattern>
-		<pattern name="style-attr">(((?&lt;ns&gt;[a-zA-Z_\\-]+)\:)?(?&lt;widget&gt;[a-zA-Z_\\-]+)\.)?(?&lt;attr&gt;[a-zA-Z_\\-]+)</pattern>
-		<pattern name="role-path">([a-zA-Z_\\-]+)(\.[a-zA-Z_\\-]+)*</pattern>
 	</value-types>
 
 	<add-ons>
@@ -47,22 +44,6 @@
 			<attribute name="max-pref-length" type="expression" specify="optional" />
 			<attribute name="max-length" type="expression" specify="optional" />
 		</add-on>
-		
-		<add-on name="element-data-value" requires="model-value">
-			<value-mod specify="forbidden" />
-		</add-on>
-
-		<add-on name="element-style" requires="style">
-			<attr-mod name="element" specify="forbidden" />
-			<attr-mod name="child" specify="forbidden" />
-			<child-mod child="sub-style" inherits="element-style" />
-		</add-on>
-
-		<add-on name="styled">
-			<element-meta name="widget-model" type="widget-model" min="0" />
-			<element-meta name="styles" type="styles" min="0" />
-			<child-def name="style" type="style" inherits="element-style" min="0" max="inf" />
-		</add-on>
 
 		<add-on name="window">
 			<attribute name="x" type="expression" specify="optional" />
@@ -74,15 +55,6 @@
 			<attribute name="close-action" type="window-close-action" default="hide" />
 		</add-on>
 
-		<add-on name="widget-model-value" requires="model-value">
-			<attribute name="priority" type="int" specify="required" />
-			<value-mod specify="forbidden" />
-		</add-on>
-
-		<add-on name="widget-local-variables" requires="model">
-			<attr-mod name="model.name" default="$LOCAL$" />
-		</add-on>
-
 		<add-on name="with-text" inherits="styled" abstract="true">
 			<styles>
 				<style-attribute name="font-color" type="java.awt.Color" />
@@ -91,52 +63,18 @@
 				<style-attribute name="font-slant" type="double" />
 			</styles>
 		</add-on>
+
+		<add-on name="mouse-button" requires="mouse-button-listener" abstract="true" />
+		<add-on name="left-button" requires="mouse-button-listener" inherits="mouse-button" />
+		<add-on name="right-button" requires="mouse-button-listener" inherits="mouse-button" />
+		<add-on name="middle-button" requires="mouse-button-listener" inherits="mouse-button" />
 	</add-ons>
 
 	<elements>
-		<!-- Some building blocks for styles, etc. -->
-		<element-def name="widget-model" extends="abst-model">
-			<attr-mod name="abst-model.name" default="$TYPE$" />
-			<child-mod child="value" inherits="widget-model-value" />
+		<element-def name="quick">
+			<child-def name="head" type="head" min="0" />
+			<child-def name="root" type="widget" min="1" />
 		</element-def>
-
-		<element-def name="style-attribute">
-			<attribute name="name" type="element-name" specify="required" />
-			<attribute name="type" type="string" specify="required" />
-			<attribute name="trickle-down" type="boolean" default="false" />
-		</element-def>
-
-		<element-def name="styles">
-			<child-def name="style-attribute" type="style-attribute" min="0" max="inf" />
-		</element-def>
-
-		<element-def name="style">
-			<attribute name="element" type="widget-name" specify="optional" />
-			<attribute name="child" type="role-path" specify="optional" />
-			<attribute name="attr" type="style-attr" specify="optional" />
-			<attribute name="condition" type="expression" specify="optional" />
-			<attribute name="style-set" type="string" specify="optional" />
-			<value type="expression" specify="optional" />
-			<child-def name="sub-style" type="style" min="0" max="inf" />
-		</element-def>
-
-		<element-def name="style-set">
-			<attribute name="name" type="identifier" specify="required" />
-			<child-def name="style" type="style" />
-		</element-def>
-
-		<!-- Now the structure of the Quick document -->
-		<element-def name="import-style-sheet">
-			<attribute name="name" type="identifier" specify="required" />
-			<attribute name="ref" type="string" specify="required" />
-		</element-def>
-
-		<element-def name="style-sheet">
-			<child-def name="style-sheet-ref" type="import-style-sheet" min="0" max="inf" />
-			<child-def name="style-set" type="style-set" min="0" max="inf" />
-			<child-def name="style" type="style" min="0" max="inf" />
-		</element-def>
-
 		<element-def name="head">
 			<child-def name="imports" type="imports" min="0" />
 			<child-def name="models" type="models" min="0" /> <!-- Don't know what you could do without models, but whatever -->
@@ -144,26 +82,80 @@
 		</element-def>
 
 		<element-def name="widget" abstract="true" inherits="with-text">
-			<widget-model>
+			<element-model>
 				<value name="hovered" type="boolean" priority="0" />
 				<value name="focused" type="boolean" priority="0" />
 				<value name="pressed" type="boolean" priority="10" />
 				<value name="rightPressed" type="boolean" priority="11" />
-			</widget-model>
+			</element-model>
 			<styles>
 				<style-attribute name="color" type="java.awt.Color" />
 			</styles>
 			<!-- Local variables, visible to any children also -->
-			<child-def name="model" type="model" min="0" inherits="widget-local-variables" />
 			<attribute name="name" type="string" specify="optional" /> <!-- For debugging -->
 			<attribute name="tooltip" type="expression" specify="optional" />
 			<attribute name="visible" type="expression" specify="optional" />
-			<attribute name="onClick" type="expression" specify="optional" />
-			<attribute name="onHover" type="expression" specify="optional" />
-			<attribute name="onEnter" type="expression" specify="optional" />
-			<attribute name="onExit" type="expression" specify="optional" />
 			<child-def name="border" type="border" min="0" />
+			<child-def name="mouse-listener" type="mouse-listener" min="0" max="inf" />
+			<child-def name="key-listener" type="key-listener" min="0" max="inf" />
 		</element-def>
+
+		<element-def name="event-listener" inherits="with-element-model" abstract="true">
+			<element-model>
+				<value name="altPressed" type="boolean" />
+				<value name="ctrlPressed" type="boolean" />
+				<value name="shiftPressed" type="boolean" />
+			</element-model>
+			<child-def name="filter" type="event-filter" min="0" max="inf" />
+			<value type="expression" specify="required" />
+		</element-def>
+		<element-def name="event-filter">
+			<value type="expression" specify="required" />
+		</element-def>
+		<element-def name="mouse-listener" extends="event-listener" abstract="true">
+			<element-model>
+				<value name="x" type="int" />
+				<value name="y" type="int" />
+			</element-model>
+		</element-def>
+		<element-def name="mouse-button-listener" extends="mouse-listener" abstract="true">
+			<attribute name="button" type="mouse-button" specify="optional" />
+		</element-def>
+		<element-def name="on-click" extends="mouse-button-listener">
+			<element-model>
+				<value name="clickCount" type="int" />
+			</element-model>
+			<attribute name="click-count" type="expression" specify="optional" />
+		</element-def>
+		<element-def name="on-mouse-press" extends="mouse-button-listener" />
+		<element-def name="on-mouse-release" extends="mouse-button-listener" />
+		<element-def name="on-hover" extends="mouse-listener" />
+		<element-def name="on-mouse-enter" extends="mouse-listener" />
+		<element-def name="on-mouse-exit" extends="mouse-listener" />
+		<element-def name="on-scroll" extends="mouse-listener">
+			<element-model>
+				<value name="scrollAmount" type="int" />
+			</element-model>
+		</element-def>
+		<element-def name="key-listener" extends="event-listener" abstract="true" />
+		<element-def name="key-code-listener" extends="key-listener" abstract="true">
+			<element-model>
+				<value name="key" type="KeyCode" />
+			</element-model>
+		</element-def>
+		<element-def name="on-key-press" extends="key-code-listener">
+			<attribute name="key" type="identifier" />
+		</element-def>
+		<element-def name="on-key-release" extends="key-code-listener">
+			<attribute name="key" type="identifier" />
+		</element-def>
+		<element-def name="on-type" extends="key-listener">
+			<element-model>
+				<value name="typedChar" type="char" />
+			</element-model>
+			<attribute name="char" type="string" />
+		</element-def>
+
 		<element-def name="container" extends="widget" abstract="true">
 			<child-def name="content" type="widget" min="0" max="inf" />
 		</element-def>
@@ -179,13 +171,11 @@
 			<attribute name="title" type="expression" specify="required" />
 		</element-def>
 
-		<element-def name="quick">
-			<child-def name="head" type="head" min="0" />
-			<child-def name="root" type="widget" min="1" />
-		</element-def>
-
 		<!-- Now a basic outline of abstract Quick widgets -->
 		<element-def name="value-widget" extends="widget" abstract="true" >
+			<element-model>
+				<value name="value" />
+			</element-model>
 			<attribute name="value" type="expression" specify="required" />
 			<attribute name="disable-with" type="expression" specify="optional" />
 		</element-def>
@@ -194,4 +184,10 @@
 			<attribute name="editable" type="expression" specify="optional" />
 		</element-def>
 	</elements>
+
+	<auto-inheritance>
+		<auto-inherit inherits="widget-model">
+			<target element="element-model" role="widget.element-model" />
+		</auto-inherit>
+	</auto-inheritance>
 </qonfig-def>

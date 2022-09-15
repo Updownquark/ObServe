@@ -12,18 +12,19 @@ import java.util.Set;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoEnv;
-import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.expresso.SuppliedModelValue;
 import org.observe.expresso.ops.BinaryOperator;
 import org.observe.expresso.ops.NameExpression;
 import org.qommons.LambdaUtils;
 import org.qommons.MultiInheritanceSet;
 import org.qommons.collect.MultiMap;
 import org.qommons.config.QonfigAddOn;
+import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigChildDef;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigElementOrAddOn;
@@ -42,11 +43,11 @@ public class StyleValueApplication {
 	private final ObservableExpression theCondition;
 	private final ValueContainer<SettableValue<?>, SettableValue<Boolean>> theConditionValue;
 	private final int theConditionComplexity;
-	private final List<QuickModelValue<?>> theModelValues;
+	private final List<SuppliedModelValue<?, ?>> theModelValues;
 
 	private StyleValueApplication(StyleValueApplication parent, QonfigChildDef role, MultiInheritanceSet<QonfigElementOrAddOn> types,
 		ObservableExpression condition, ValueContainer<SettableValue<?>, SettableValue<Boolean>> conditionValue, int conditionComplexity,
-		List<QuickModelValue<?>> modelValues) {
+		List<SuppliedModelValue<?, ?>> modelValues) {
 		if ((parent != null) != (role != null))
 			throw new IllegalArgumentException("A role must be accompanied by a parent style application and vice-versa");
 		theParent = parent;
@@ -81,11 +82,11 @@ public class StyleValueApplication {
 			addHierarchy(inh, visited);
 	}
 
-	public static int findModelValues(ObservableExpression ex, Collection<QuickModelValue<?>> modelValues,
-		MultiMap<String, QuickModelValue<?>> availableModelValues) throws QonfigInterpretationException {
+	public static int findModelValues(ObservableExpression ex, Collection<SuppliedModelValue<?, ?>> modelValues,
+		MultiMap<String, SuppliedModelValue<?, ?>> availableModelValues) throws QonfigInterpretationException {
 		if (ex instanceof NameExpression && ((NameExpression) ex).getContext() == null) {
 			String name = ((NameExpression) ex).getNames().getFirst();
-			Collection<QuickModelValue<?>> values = availableModelValues.get(name);
+			Collection<SuppliedModelValue<?, ?>> values = availableModelValues.get(name);
 			if (values.isEmpty())
 				return 1;
 			else if (values.size() > 1)
@@ -144,7 +145,7 @@ public class StyleValueApplication {
 		return theCondition;
 	}
 
-	public List<QuickModelValue<?>> getModelValues() {
+	public List<SuppliedModelValue<?, ?>> getModelValues() {
 		return theModelValues;
 	}
 
@@ -153,7 +154,7 @@ public class StyleValueApplication {
 		if (theParent == null)
 			parentCond = TRUE;
 		else
-			parentCond = theParent.getCondition(ExpressoQIS.getParentModels(model));
+			parentCond = theParent.getCondition(StyleQIS.getParentModels(model));
 
 		ObservableValue<Boolean> localCond;
 		if (theCondition != null)
@@ -198,17 +199,18 @@ public class StyleValueApplication {
 	}
 
 	public StyleValueApplication forCondition(ObservableExpression condition, ExpressoEnv env,
-		MultiMap<String, QuickModelValue<?>> availableModelValues) throws QonfigInterpretationException {
+		MultiMap<String, SuppliedModelValue<?, ?>> availableModelValues, QonfigAttributeDef.Declared priorityAttr)
+			throws QonfigInterpretationException {
 		ObservableExpression newCondition;
 		if (theCondition == null)
 			newCondition = condition;
 		else
 			newCondition = new BinaryOperator("&&", theCondition, condition);
 
-		Set<QuickModelValue<?>> mvs = new LinkedHashSet<>();
+		Set<SuppliedModelValue<?, ?>> mvs = new LinkedHashSet<>();
 		// We don't need to worry about satisfying anything here. The model values just need to be available for the link level.
 		int complexity = findModelValues(newCondition, mvs, availableModelValues);
-		List<QuickModelValue<?>> mvList = new ArrayList<>(mvs.size() + (theParent == null ? 0 : theParent.getModelValues().size()));
+		List<SuppliedModelValue<?, ?>> mvList = new ArrayList<>(mvs.size() + (theParent == null ? 0 : theParent.getModelValues().size()));
 		mvList.addAll(mvs);
 		if (theParent != null) {
 			complexity = theParent.getConditionComplexity();
@@ -217,11 +219,12 @@ public class StyleValueApplication {
 		if (!mvs.isEmpty()) {
 			// We don't need to worry about satisfying anything here. The model values just need to be available for the link level.
 			ObservableModelSet.WrappedBuilder wrappedBuilder = env.getModels().wrap();
-			for (QuickModelValue<?> mv : mvs)
+			for (SuppliedModelValue<?, ?> mv : mvs)
 				wrappedBuilder.withCustomValue(mv.getName(), mv);
 			env = env.with(wrappedBuilder.build(), null);
 		}
-		Collections.sort(mvList, (mv1, mv2) -> -Integer.compare(mv1.getPriority(), mv2.getPriority()));
+		Collections.sort(mvList,
+			(mv1, mv2) -> -Integer.compare(QuickStyleValue.getPriority(mv1, priorityAttr), QuickStyleValue.getPriority(mv2, priorityAttr)));
 		return new StyleValueApplication(theParent, theRole, theTypes, newCondition, //
 			newCondition.evaluate(ModelTypes.Value.forType(boolean.class), env), complexity, Collections.unmodifiableList(mvList));
 	}

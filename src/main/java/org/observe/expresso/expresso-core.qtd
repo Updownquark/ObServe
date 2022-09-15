@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<qonfig-def name="Expresso-Core" version="0.1" root="models">
+	<value-types>
+		<pattern name="identifier">[_a-zA-Z$][_a-zA-Z0-9$]*</pattern>
+
+		<external name="expression" />
+	</value-types>
+
+	<add-ons>
+		<add-on name="expresso-parseable">
+			<child-def name="expresso-parser" type="expresso-parser" min="0" />
+			<attribute name="inherit-operators" type="boolean" default="true" />
+			<child-def name="unary-operators" type="unary-operators" min="0" max="inf" />
+			<child-def name="binary-operators" type="binary-operators" min="0" max="inf" />
+		</add-on>
+
+		<add-on name="named">
+			<attribute name="name" type="identifier" specify="required" />
+		</add-on>
+		<add-on name="typed">
+			<attribute name="type" type="string" specify="optional" />
+		</add-on>
+		<add-on name="type-required" inherits="typed">
+			<attr-mod name="typed.type" type="string" specify="required" />
+		</add-on>
+
+		<add-on name="model-element" requires="model-value" inherits="named" />
+
+		<!-- Elements that inherit this add-on commit to supply model values that are specific to the interpreted element value -->
+		<add-on name="with-element-model" abstract="true">
+			<element-meta name="element-model" type="element-model" min="0" />
+		</add-on>
+		<!-- Elements that inherit this add-on may specify local variables with their values in the element -->
+		<add-on name="with-local-model" abstract="true">
+			<child-def name="model" type="model" min="0" />
+		</add-on>
+		<add-on name="element-model-value" requires="model-value" abstract="true">
+			<value-mod specify="forbidden" /> <!-- External/element values are specified by code instantiating the model -->
+		</add-on>
+
+		<add-on name="allow-ext-model" abstract="true" />
+		<add-on name="ext-model-value" requires="model-value" inherits="element-model-value,type-required" abstract="true">
+			<attribute name="default" type="expression" specify="optional" />
+		</add-on>
+	</add-ons>
+
+	<elements>
+		<element-def name="expresso-parser">
+			<value type="expression" specify="required" />
+		</element-def>
+		<element-def name="expresso-java" extends="expresso-parser">
+			<value-mod specify="optional" default="new org.observe.expresso.JavaExpressoParser()" />
+		</element-def>
+		<element-def name="operators" abstract="true">
+			<value type="string" specify="required" />
+		</element-def>
+		<element-def name="unary-operators" extends="operators" />
+		<element-def name="binary-operators" extends="operators" />
+
+		<element-def name="import">
+			<value type="string" specify="required" />
+		</element-def>
+		<element-def name="imports">
+			<child-def name="import" type="import" min="0" max="inf" />
+		</element-def>
+		
+		<!-- Models, values and transformations -->
+		<element-def name="abst-model" abstract="true">
+			<child-def name="value" type="model-value" inherits="model-element" min="0" max="inf" />
+		</element-def>
+		<element-def name="model-value" abstract="true" inherits="typed">
+			<value type="expression" specify="optional" />
+		</element-def>
+
+		<element-def name="models">
+			<child-def name="model" type="abst-model" min="0" max="inf" inherits="named" />
+		</element-def>
+
+		<!-- External models.  These serve only as markers that are later checked against the external models that are provided
+			 to the app.  Since they are only expectations of values that will be supplied externally,
+			 no values can be specified in the elements. -->
+		<element-def name="ext-model" extends="abst-model">
+			<child-mod child="abst-model.value" requires="allow-ext-model" inherits="ext-model-value" />
+			<child-def name="sub-model" type="ext-model" min="0" max="inf" inherits="named" />
+		</element-def>
+
+		<!-- Internal models.  These function as variables that are defined and sometimes instantiated inside the app. -->
+		<element-def name="model" extends="abst-model">
+			<child-def name="sub-model" type="model" min="0" max="inf" inherits="named" />
+		</element-def>
+
+		<!-- Specified under an element-def declaration to define model values that must be supplied specifically for the interpreted value -->
+		<element-def name="element-model" extends="abst-model">
+			<child-mod child="abst-model.value" requires="allow-ext-model" inherits="element-model-value" />
+		</element-def>
+	</elements>
+</qonfig-def>

@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.function.Consumer;
 
 import org.observe.collect.ObservableCollection;
+import org.observe.quick.style.StyleQIS;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -33,7 +34,7 @@ public interface QuickContainer extends QuickComponentDef {
 	public abstract class AbstractQuickContainer extends AbstractQuickComponentDef implements QuickContainer {
 		private final List<QuickComponentDef> theChildren;
 
-		public AbstractQuickContainer(QuickQIS session, List<QuickComponentDef> children) throws QonfigInterpretationException {
+		public AbstractQuickContainer(StyleQIS session, List<QuickComponentDef> children) throws QonfigInterpretationException {
 			super(session);
 			theChildren = children;
 		}

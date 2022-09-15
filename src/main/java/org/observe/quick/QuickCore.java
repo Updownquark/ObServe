@@ -11,28 +11,24 @@ import java.awt.Toolkit;
 import java.awt.event.AWTEventListener;
 import java.awt.event.FocusEvent;
 import java.awt.event.FocusListener;
+import java.awt.event.KeyEvent;
+import java.awt.event.KeyListener;
+import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
+import java.awt.event.MouseWheelEvent;
 import java.awt.font.TextAttribute;
-import java.io.BufferedInputStream;
-import java.io.IOException;
-import java.io.InputStream;
 import java.lang.reflect.Type;
 import java.net.URL;
 import java.text.AttributedCharacterIterator;
-import java.util.AbstractList;
 import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import javax.swing.BorderFactory;
 import javax.swing.Icon;
@@ -43,6 +39,7 @@ import javax.swing.WindowConstants;
 import javax.swing.border.Border;
 import javax.swing.border.TitledBorder;
 
+import org.observe.ObservableAction;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.Subscription;
@@ -56,115 +53,85 @@ import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.expresso.QonfigExpression;
-import org.observe.quick.QuickComponentDef.ModelValueSupport;
-import org.observe.quick.style.FontValueParser;
+import org.observe.expresso.SuppliedModelValue;
 import org.observe.quick.style.QuickElementStyle;
 import org.observe.quick.style.QuickElementStyle.QuickElementStyleAttribute;
-import org.observe.quick.style.QuickModelValue;
-import org.observe.quick.style.QuickStyleAttribute;
-import org.observe.quick.style.QuickStyleSet;
 import org.observe.quick.style.QuickStyleSheet;
-import org.observe.quick.style.QuickStyleType;
-import org.observe.quick.style.QuickStyleValue;
-import org.observe.quick.style.StyleValueApplication;
+import org.observe.quick.style.StyleQIS;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.ComponentDecorator.ModifiableLineBorder;
 import org.observe.util.swing.ObservableSwingUtils;
+import org.qommons.Causable;
+import org.qommons.Causable.CausableInUse;
 import org.qommons.Colors;
 import org.qommons.Identifiable;
-import org.qommons.IdentityKey;
 import org.qommons.QommonsUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
+import org.qommons.Transaction;
 import org.qommons.Version;
-import org.qommons.collect.BetterHashMultiMap;
-import org.qommons.collect.MultiMap;
-import org.qommons.config.DefaultQonfigParser;
-import org.qommons.config.QommonsConfig;
-import org.qommons.config.QonfigAddOn;
-import org.qommons.config.QonfigChildDef;
-import org.qommons.config.QonfigDocument;
-import org.qommons.config.QonfigElement;
-import org.qommons.config.QonfigElementOrAddOn;
+import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.config.QonfigInterpretation;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore;
 import org.qommons.config.QonfigInterpreterCore.CoreSession;
-import org.qommons.config.QonfigParseException;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSession;
 
 public class QuickCore implements QonfigInterpretation {
+	/** The name of the Quick-Core toolkit */
+	public static final String NAME = "Quick-Core";
+	/** The supported version of the Quick-Core toolkit */
+	public static final Version VERSION = new Version(0, 1, 0);
+
 	public interface QuickBorder {
 		ObservableValue<Border> createBorder(Component component, QuickComponent.Builder builder);
 	}
 
-	public static final String STYLE_NAME = "quick-style-name";
-	public static final String STYLE_APPLICATION = "quick-parent-style-application";
-	public static final String STYLE_ATTRIBUTE = "quick-style-attribute";
-	public static final String STYLE_SHEET_REF = "quick-style-sheet-ref";
+	public interface QuickMouseListener {
+		public interface Container {
+			boolean isMotionListener();
 
-	public static abstract class StyleValues extends AbstractList<QuickStyleValue<?>> {
-		private static final ThreadLocal<LinkedHashSet<IdentityKey<StyleValues>>> STACK = ThreadLocal.withInitial(LinkedHashSet::new);
+			boolean isWheelListener();
 
-		private final String theName;
-		private List<QuickStyleValue<?>> theValues;
-
-		StyleValues(String name) {
-			theName = name;
+			QuickMouseListener createListener(ModelSetInstance models);
 		}
 
-		public StyleValues init() throws QonfigInterpretationException {
-			if (theValues != null)
-				return this;
-			LinkedHashSet<IdentityKey<StyleValues>> stack = STACK.get();
-			if (!stack.add(new IdentityKey<>(this))) {
-				StringBuilder str = new StringBuilder("Style sheet cycle detected:");
-				for (IdentityKey<StyleValues> se : stack) {
-					if (se.value.theName != null)
-						str.append(se.value.theName).append("->");
-				}
-				str.append(theName);
-				throw new QonfigInterpretationException(str.toString());
-			}
-			try {
-				theValues = get();
-			} finally {
-				stack.remove(new IdentityKey<>(this));
-			}
-			return this;
-		}
+		boolean applies(MouseEvent evt);
 
-		protected abstract List<QuickStyleValue<?>> get() throws QonfigInterpretationException;
-
-		@Override
-		public QuickStyleValue<?> get(int index) {
-			if (theValues == null)
-				throw new IllegalStateException("Not initialized");
-			return theValues.get(index);
-		}
-
-		@Override
-		public int size() {
-			if (theValues == null)
-				throw new IllegalStateException("Not initialized");
-			return theValues.size();
-		}
+		void actionPerformed(MouseEvent evt);
 	}
+
+	public interface QuickKeyListener {
+		public interface Container {
+			QuickKeyListener createListener(ModelSetInstance models);
+		}
+
+		boolean applies(KeyEvent evt);
+
+		void actionPerformed(KeyEvent evt);
+	}
+
+	private QonfigToolkit theCoreToolkit;
 
 	@Override
 	public String getToolkitName() {
-		return QuickSessionImplV0_1.NAME;
+		return NAME;
 	}
 
 	@Override
 	public Version getVersion() {
-		return QuickSessionImplV0_1.VERSION;
+		return VERSION;
+	}
+
+	@Override
+	public void init(QonfigToolkit toolkit) {
+		theCoreToolkit = toolkit;
 	}
 
 	@Override
 	public Set<Class<? extends SpecialSession<?>>> getExpectedAPIs() {
-		return QommonsUtils.unmodifiableDistinctCopy(ExpressoQIS.class, QuickQIS.class);
+		return QommonsUtils.unmodifiableDistinctCopy(ExpressoQIS.class, StyleQIS.class);
 	}
 
 	public static Function<ModelSetInstance, SettableValue<QuickPosition>> parsePosition(QonfigExpression expression, ExpressoQIS session)
@@ -285,8 +252,8 @@ public class QuickCore implements QonfigInterpretation {
 		}
 	}
 
-	QuickQIS wrap(CoreSession session) throws QonfigInterpretationException {
-		return session.as(QuickQIS.class);
+	StyleQIS wrap(CoreSession session) throws QonfigInterpretationException {
+		return session.as(StyleQIS.class);
 	}
 
 	@Override
@@ -299,20 +266,33 @@ public class QuickCore implements QonfigInterpretation {
 		.modifyWith("text-widget", QuickComponentDef.class, (txt, session) -> modifyTextWidget(txt, wrap(session)))//
 		.createWith("line-border", QuickBorder.class, session -> interpretLineBorder(wrap(session)))//
 		.createWith("titled-border", QuickBorder.class, session -> interpretTitledBorder(wrap(session)))//
+		.createWith("mouse-listener", QuickMouseListener.Container.class, session -> interpretMouseListener(wrap(session)))//
+		.modifyWith("on-click", QuickMouseListener.Container.class,
+			(listener, session) -> modifyMouseClickListener(listener, wrap(session)))//
+		.modifyWith("on-mouse-press", QuickMouseListener.Container.class,
+			(listener, session) -> modifyMouseListenerWithType(listener, MouseEvent.MOUSE_PRESSED, false))//
+		.modifyWith("on-mouse-release", QuickMouseListener.Container.class,
+			(listener, session) -> modifyMouseListenerWithType(listener, MouseEvent.MOUSE_RELEASED, false))//
+		.modifyWith("on-hover", QuickMouseListener.Container.class,
+			(listener, session) -> modifyMouseListenerWithType(listener, MouseEvent.MOUSE_MOVED, true))//
+		.modifyWith("on-mouse-enter", QuickMouseListener.Container.class,
+			(listener, session) -> modifyMouseListenerWithType(listener, MouseEvent.MOUSE_ENTERED, false))//
+		.modifyWith("on-mouse-exit", QuickMouseListener.Container.class,
+			(listener, session) -> modifyMouseListenerWithType(listener, MouseEvent.MOUSE_EXITED, false))//
+		.modifyWith("on-scroll", QuickMouseListener.Container.class,
+			(listener, session) -> modifyMouseWheelListener(listener, wrap(session)))//
+		.modifyWith("left-button", QuickMouseListener.Container.class,
+			(listener, session) -> modifyMouseButtonListener(listener, MouseEvent.BUTTON1))//
+		.modifyWith("right-button", QuickMouseListener.Container.class,
+			(listener, session) -> modifyMouseButtonListener(listener, MouseEvent.BUTTON3))//
+		.modifyWith("middle-button", QuickMouseListener.Container.class,
+			(listener, session) -> modifyMouseButtonListener(listener, MouseEvent.BUTTON2))//
 		;
-		configureStyleInterpreter(interpreter);
 		return interpreter;
 	}
 
-	private void configureStyleInterpreter(QonfigInterpreterCore.Builder interpreter) {
-		interpreter//
-		.createWith("style", StyleValues.class, session -> interpretStyle(wrap(session)))//
-		.createWith("style-sheet", QuickStyleSheet.class, session -> interpretStyleSheet(wrap(session)))//
-		;
-	}
-
-	private QuickDocument interpretQuick(QuickQIS session) throws QonfigInterpretationException {
-		QuickQIS headSession = session.forChildren("head").getFirst();
+	private QuickDocument interpretQuick(StyleQIS session) throws QonfigInterpretationException {
+		StyleQIS headSession = session.forChildren("head").getFirst();
 		QuickHeadSection head = headSession.interpret(QuickHeadSection.class);
 		session.as(ExpressoQIS.class).setExpressoEnv(headSession.as(ExpressoQIS.class).getExpressoEnv());
 		session.setStyleSheet(head.getStyleSheet());
@@ -321,8 +301,8 @@ public class QuickCore implements QonfigInterpretation {
 		return doc;
 	}
 
-	private QuickHeadSection interpretHead(QuickQIS session) throws QonfigInterpretationException {
-		QuickQIS importSession = session.forChildren("imports").peekFirst();
+	private QuickHeadSection interpretHead(StyleQIS session) throws QonfigInterpretationException {
+		StyleQIS importSession = session.forChildren("imports").peekFirst();
 		ClassView cv = importSession == null ? null : importSession.interpret(ClassView.class);
 		if (cv == null) {
 			ClassView defaultCV = ClassView.build().withWildcardImport("java.lang").build();
@@ -350,7 +330,7 @@ public class QuickCore implements QonfigInterpretation {
 		return new QuickHeadSection(cv, model, styleSheet);
 	}
 
-	private QuickDocument modifyWindow(QuickDocument doc, QuickQIS session) throws QonfigInterpretationException {
+	private QuickDocument modifyWindow(QuickDocument doc, StyleQIS session) throws QonfigInterpretationException {
 		ExpressoQIS exS = session.as(ExpressoQIS.class);
 		ObservableExpression visibleEx = exS.getAttributeExpression("visible");
 		if (visibleEx != null)
@@ -417,22 +397,20 @@ public class QuickCore implements QonfigInterpretation {
 		}
 	}
 
-	static class MouseValueSupport extends ObservableValue.LazyObservableValue<Boolean>
-	implements ModelValueSupport<Boolean>, MouseListener {
+	static class MouseValueSupport extends ObservableValue.LazyObservableValue<Boolean> implements SettableValue<Boolean>, MouseListener {
 		private Component theComponent;
-		private final QuickModelValue<Boolean> theModelValue;
+		private final SuppliedModelValue<SettableValue<?>, SettableValue<Boolean>> theModelValue;
 		private final Boolean theButton;
 		private BiConsumer<Boolean, Object> theListener;
 		private boolean isListening;
 
-		public MouseValueSupport(QuickModelValue<Boolean> modelValue, Boolean button) {
+		public MouseValueSupport(SuppliedModelValue<SettableValue<?>, SettableValue<Boolean>> modelValue, Boolean button) {
 			super(TypeTokens.get().BOOLEAN, Transactable.noLock(ThreadConstraint.EDT));
 			theModelValue = modelValue;
 			theButton = button;
 		}
 
-		@Override
-		public void install(Component component) {
+		void install(Component component) {
 			theComponent = component;
 			if (theListener != null)
 				setListening(true);
@@ -484,6 +462,36 @@ public class QuickCore implements QonfigInterpretation {
 			theListener = listener;
 			setListening(true);
 			return () -> setListening(false);
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return Transaction.NONE;
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, Object cause) {
+			return Transaction.NONE;
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return false;
+		}
+
+		@Override
+		public Boolean set(Boolean value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+		}
+
+		@Override
+		public String isAcceptable(Boolean value) {
+			return StdMsg.UNSUPPORTED_OPERATION;
+		}
+
+		@Override
+		public ObservableValue<String> isEnabled() {
+			return SettableValue.ALWAYS_DISABLED;
 		}
 
 		private void setListening(boolean listening) {
@@ -567,9 +575,12 @@ public class QuickCore implements QonfigInterpretation {
 		}
 	}
 
-	private QuickComponentDef modifyWidget(QuickComponentDef widget, QuickQIS session) throws QonfigInterpretationException {
+	private QuickComponentDef modifyWidget(QuickComponentDef widget, StyleQIS session) throws QonfigInterpretationException {
 		ExpressoQIS exS = session.as(ExpressoQIS.class);
-		widget.modify((editor, builder) -> editor.modifyComponent(builder::withComponent));
+		widget.modify((editor, builder) -> editor.modifyComponent(comp -> {
+			builder.withComponent(comp);
+			exS.installInterpretedValue(comp, builder.getModels());
+		}));
 		String name = session.getAttribute("name", String.class);
 		ValueContainer<SettableValue<?>, SettableValue<String>> tooltip = exS.getAttribute("tooltip",
 			ModelTypes.Value.forType(String.class), null);
@@ -588,20 +599,24 @@ public class QuickCore implements QonfigInterpretation {
 		}
 		QuickElementStyleAttribute<? extends Color> bgColorStyle = widget.getStyle().get(//
 			session.getStyleAttribute(null, "color", Color.class));
-		QuickModelValue<Boolean> hovered = session.getStyleModelValue("widget", "hovered", boolean.class);
-		QuickModelValue<Boolean> focused = session.getStyleModelValue("widget", "focused", boolean.class);
-		QuickModelValue<Boolean> pressed = session.getStyleModelValue("widget", "pressed", boolean.class);
-		QuickModelValue<Boolean> rightPressed = session.getStyleModelValue("widget", "rightPressed", boolean.class);
+		SuppliedModelValue<SettableValue<?>, SettableValue<Boolean>> hovered = exS.getModelValueOwner().getModelValue("hovered",
+			ModelTypes.Value.forType(boolean.class));
+		SuppliedModelValue<SettableValue<?>, SettableValue<Boolean>> focused = exS.getModelValueOwner().getModelValue("focused",
+			ModelTypes.Value.forType(boolean.class));
+		SuppliedModelValue<SettableValue<?>, SettableValue<Boolean>> pressed = exS.getModelValueOwner().getModelValue("pressed",
+			ModelTypes.Value.forType(boolean.class));
+		SuppliedModelValue<SettableValue<?>, SettableValue<Boolean>> rightPressed = exS.getModelValueOwner().getModelValue("rightPressed",
+			ModelTypes.Value.forType(boolean.class));
 		initMouseListening();
 		// Install style model value support
-		if (widget.getSupport(hovered) == null)
-			widget.support(hovered, () -> new MouseValueSupport(hovered, null));
-		if (widget.getSupport(pressed) == null)
-			widget.support(pressed, () -> new MouseValueSupport(pressed, true));
-		if (widget.getSupport(rightPressed) == null)
-			widget.support(rightPressed, () -> new MouseValueSupport(rightPressed, false));
-		if (widget.getSupport(focused) == null) {
-			class FocusSupport extends ObservableValue.LazyObservableValue<Boolean> implements ModelValueSupport<Boolean>, FocusListener {
+		if (!exS.isSatisfied(hovered, Component.class))
+			exS.satisfy(hovered, Component.class, () -> new MouseValueSupport(hovered, null), MouseValueSupport::install);
+		if (!exS.isSatisfied(pressed, Component.class))
+			exS.satisfy(pressed, Component.class, () -> new MouseValueSupport(pressed, true), MouseValueSupport::install);
+		if (!exS.isSatisfied(rightPressed, Component.class))
+			exS.satisfy(pressed, Component.class, () -> new MouseValueSupport(rightPressed, false), MouseValueSupport::install);
+		if (!exS.isSatisfied(focused, Component.class)) {
+			class FocusSupport extends ObservableValue.LazyObservableValue<Boolean> implements SettableValue<Boolean>, FocusListener {
 				private Component theComponent;
 				private BiConsumer<Boolean, Object> theListener;
 				private boolean isListening;
@@ -610,8 +625,7 @@ public class QuickCore implements QonfigInterpretation {
 					super(TypeTokens.get().BOOLEAN, Transactable.noLock(ThreadConstraint.EDT));
 				}
 
-				@Override
-				public void install(Component component) {
+				void install(Component component) {
 					theComponent = component;
 					if (theListener != null)
 						setListening(true);
@@ -632,6 +646,37 @@ public class QuickCore implements QonfigInterpretation {
 					theListener = listener;
 					setListening(true);
 					return () -> setListening(false);
+				}
+
+				@Override
+				public Transaction lock(boolean write, Object cause) {
+					return Transaction.NONE;
+				}
+
+				@Override
+				public Transaction tryLock(boolean write, Object cause) {
+					return Transaction.NONE;
+				}
+
+				@Override
+				public boolean isLockSupported() {
+					return false;
+				}
+
+				@Override
+				public Boolean set(Boolean value, Object cause)
+					throws IllegalArgumentException, UnsupportedOperationException {
+					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				}
+
+				@Override
+				public String isAcceptable(Boolean value) {
+					return StdMsg.UNSUPPORTED_OPERATION;
+				}
+
+				@Override
+				public ObservableValue<String> isEnabled() {
+					return SettableValue.ALWAYS_DISABLED;
 				}
 
 				private void setListening(boolean listening) {
@@ -660,11 +705,109 @@ public class QuickCore implements QonfigInterpretation {
 						theListener.accept(false, e);
 				}
 			}
-			widget.support(focused, () -> new FocusSupport());
+			exS.satisfy(focused, Component.class, () -> new FocusSupport(), FocusSupport::install);
 		}
+		List<QuickMouseListener.Container> mouseListeners = session.asElement("widget").interpretChildren("mouse-listener",
+			QuickMouseListener.Container.class);
+		List<QuickKeyListener.Container> keyListeners = session.asElement("widget").interpretChildren("key-listener",
+			QuickKeyListener.Container.class);
 		widget.modify((comp, builder) -> {
-			// Set style
+			// Listeners
+			List<QuickMouseListener> motionListeners = new ArrayList<>();
+			List<QuickMouseListener> nonMotionListeners = new ArrayList<>();
+			List<QuickMouseListener> wheelListeners = new ArrayList<>();
+			for (QuickMouseListener.Container ml : mouseListeners) {
+				if (ml.isWheelListener())
+					wheelListeners.add(ml.createListener(builder.getModels()));
+				else if (ml.isMotionListener())
+					motionListeners.add(ml.createListener(builder.getModels()));
+				else
+					nonMotionListeners.add(ml.createListener(builder.getModels()));
+			}
+			List<QuickKeyListener> keyListeners2 = new ArrayList<>();
+			for (QuickKeyListener.Container kl : keyListeners)
+				keyListeners2.add(kl.createListener(builder.getModels()));
+			MouseAdapter mouseListener = new MouseAdapter() {
+				@Override
+				public void mouseClicked(MouseEvent e) {
+					mouseEvent(e, nonMotionListeners);
+				}
+
+				@Override
+				public void mousePressed(MouseEvent e) {
+					mouseEvent(e, nonMotionListeners);
+				}
+
+				@Override
+				public void mouseReleased(MouseEvent e) {
+					mouseEvent(e, nonMotionListeners);
+				}
+
+				@Override
+				public void mouseEntered(MouseEvent e) {
+					mouseEvent(e, nonMotionListeners);
+				}
+
+				@Override
+				public void mouseExited(MouseEvent e) {
+					mouseEvent(e, nonMotionListeners);
+				}
+
+				@Override
+				public void mouseMoved(MouseEvent e) {
+					mouseEvent(e, motionListeners);
+				}
+
+				private void mouseEvent(MouseEvent e, List<QuickMouseListener> listeners) {
+					for (QuickMouseListener listener : listeners) {
+						if (listener.applies(e))
+							listener.actionPerformed(e);
+					}
+				}
+
+				@Override
+				public void mouseWheelMoved(MouseWheelEvent e) {
+					for (QuickMouseListener listener : wheelListeners) {
+						if (listener.applies(e))
+							listener.actionPerformed(e);
+					}
+				}
+			};
+			KeyListener keyListener = new KeyListener() {
+				@Override
+				public void keyTyped(KeyEvent e) {
+					keyEvent(e);
+				}
+
+				@Override
+				public void keyReleased(KeyEvent e) {
+					keyEvent(e);
+				}
+
+				@Override
+				public void keyPressed(KeyEvent e) {
+					keyEvent(e);
+				}
+
+				private void keyEvent(KeyEvent e) {
+					for (QuickKeyListener listener : keyListeners2) {
+						if (listener.applies(e))
+							listener.actionPerformed(e);
+					}
+				}
+			};
+
 			comp.modifyComponent(c -> {
+				if (!nonMotionListeners.isEmpty())
+					c.addMouseListener(mouseListener);
+				if (!motionListeners.isEmpty())
+					c.addMouseMotionListener(mouseListener);
+				if (!wheelListeners.isEmpty())
+					c.addMouseWheelListener(mouseListener);
+				if (!keyListeners2.isEmpty())
+					c.addKeyListener(keyListener);
+
+				// Set style
 				boolean[] preOpaque = new boolean[1];
 				ObservableValue<? extends Color> bgColor = bgColorStyle.evaluate(builder.getModels());
 				Color[] oldBG = new Color[] { c.getBackground() };
@@ -710,7 +853,7 @@ public class QuickCore implements QonfigInterpretation {
 		return widget;
 	}
 
-	private QuickComponentDef modifyTextWidget(QuickComponentDef widget, QuickQIS session) throws QonfigInterpretationException {
+	private QuickComponentDef modifyTextWidget(QuickComponentDef widget, StyleQIS session) throws QonfigInterpretationException {
 		QuickElementStyleAttribute<? extends Color> fontColorStyle = widget.getStyle()
 			.get(session.getStyleAttribute(null, "font-color", Color.class));
 		QuickElementStyleAttribute<? extends Double> fontSizeStyle = widget.getStyle()
@@ -782,7 +925,7 @@ public class QuickCore implements QonfigInterpretation {
 		}, /*family,*/ color, /*kerning, ligs, underline,*/ size, weight, /*strike,*/ slant);
 	}
 
-	private QuickBorder interpretLineBorder(QuickQIS session) throws QonfigInterpretationException {
+	private QuickBorder interpretLineBorder(StyleQIS session) throws QonfigInterpretationException {
 		QuickElementStyle style = session.getStyle();
 		QuickElementStyleAttribute<? extends Color> colorStyle = style.get(session.getStyleAttribute(null, "border-color", Color.class));
 		QuickElementStyleAttribute<? extends Integer> thicknessStyle = style
@@ -802,7 +945,7 @@ public class QuickCore implements QonfigInterpretation {
 		};
 	}
 
-	private QuickBorder interpretTitledBorder(QuickQIS session) throws QonfigInterpretationException {
+	private QuickBorder interpretTitledBorder(StyleQIS session) throws QonfigInterpretationException {
 		ExpressoQIS exS = session.as(ExpressoQIS.class);
 		Function<ModelSetInstance, SettableValue<String>> title = exS.getAttribute("title", ModelTypes.Value.forType(String.class), null);
 		QuickElementStyle style = session.getStyle();
@@ -852,231 +995,657 @@ public class QuickCore implements QonfigInterpretation {
 		};
 	}
 
-	private void modifyForStyle(QuickQIS session) throws QonfigInterpretationException {
-		ExpressoQIS exS = session.as(ExpressoQIS.class);
-		exS.setExpressoEnv(exS.getExpressoEnv().with(null, null)// Create a copy
-			.withNonStructuredParser(double.class, new FontValueParser()));
-	}
+	private QuickMouseListener.Container interpretMouseListener(StyleQIS session) throws QonfigInterpretationException {
+		ExpressoQIS exSession = session.as(ExpressoQIS.class);
+		List<ValueContainer<SettableValue<?>, SettableValue<Boolean>>> filters = new ArrayList<>();
+		for (ExpressoQIS filterS : exSession.forChildren("filter"))
+			filters.add(filterS.getValueAsValue(boolean.class, null));
+		ValueContainer<ObservableAction<?>, ObservableAction<?>> action = exSession.getValueExpression().evaluate(ModelTypes.Action.any(),
+			exSession.getExpressoEnv());
 
-	private StyleValues interpretStyle(QuickQIS session) throws QonfigInterpretationException {
-		ExpressoQIS exS = session.as(ExpressoQIS.class);
-		QuickStyleSet styleSet = session.getStyleSet();
-		QuickStyleSheet styleSheet = session.getStyleSheet();
-		StyleValueApplication application = session.get(STYLE_APPLICATION, StyleValueApplication.class);
-		if (application == null)
-			application = StyleValueApplication.ALL;
-		QuickStyleAttribute<?> attr = session.get(STYLE_ATTRIBUTE, QuickStyleAttribute.class);
-		QonfigElement element = (QonfigElement) session.get(QuickQIS.STYLE_ELEMENT);
-		modifyForStyle(session);
+		SuppliedModelValue<SettableValue<?>, SettableValue<Integer>> x = exSession.getModelValueOwner().getModelValue("x",
+			ModelTypes.Value.forType(int.class));
+		SuppliedModelValue<SettableValue<?>, SettableValue<Integer>> y = exSession.getModelValueOwner().getModelValue("y",
+			ModelTypes.Value.forType(int.class));
+		SuppliedModelValue<SettableValue<?>, SettableValue<Boolean>> alt = exSession.getModelValueOwner().getModelValue("altPressed",
+			ModelTypes.Value.forType(boolean.class));
+		SuppliedModelValue<SettableValue<?>, SettableValue<Boolean>> ctrl = exSession.getModelValueOwner().getModelValue("ctrlPressed",
+			ModelTypes.Value.forType(boolean.class));
+		SuppliedModelValue<SettableValue<?>, SettableValue<Boolean>> shift = exSession.getModelValueOwner().getModelValue("shiftPressed",
+			ModelTypes.Value.forType(boolean.class));
+		ExpressoQIS.SimpleModelValueSupport<Integer> xSupport = new ExpressoQIS.SimpleModelValueSupport<>(int.class, 0);
+		ExpressoQIS.SimpleModelValueSupport<Integer> ySupport = new ExpressoQIS.SimpleModelValueSupport<>(int.class, 0);
+		ExpressoQIS.SimpleModelValueSupport<Boolean> altSupport = new ExpressoQIS.SimpleModelValueSupport<>(boolean.class, false);
+		ExpressoQIS.SimpleModelValueSupport<Boolean> ctrlSupport = new ExpressoQIS.SimpleModelValueSupport<>(boolean.class, false);
+		ExpressoQIS.SimpleModelValueSupport<Boolean> shiftSupport = new ExpressoQIS.SimpleModelValueSupport<>(boolean.class, false);
+		exSession.satisfy(x, Component.class, xSupport, null);
+		exSession.satisfy(y, Component.class, ySupport, null);
+		exSession.satisfy(alt, Component.class, altSupport, null);
+		exSession.satisfy(ctrl, Component.class, ctrlSupport, null);
+		exSession.satisfy(shift, Component.class, shiftSupport, null);
 
-		String rolePath = session.getAttributeText("child");
-		if (rolePath != null) {
-			if (application == null)
-				throw new QonfigInterpretationException("Cannot specify a style role without a type above it");
-			for (String roleName : rolePath.split("\\.")) {
-				roleName = roleName.trim();
-				QonfigChildDef child = null;
-				if (application.getRole() != null)
-					child = application.getRole().getType().getChild(roleName);
-				for (QonfigElementOrAddOn type : application.getTypes().values()) {
-					if (child != null)
-						break;
-					child = type.getChild(roleName);
-				}
-				if (child == null)
-					throw new QonfigInterpretationException("No such role '" + roleName + "' for parent style " + application);
-				application = application.forChild(child);
-			}
-		}
-		String elName = session.getAttributeText("element");
-		if (elName != null) {
-			QonfigElementOrAddOn el;
-			try {
-				el = session.getElement().getDocument().getDocToolkit().getElementOrAddOn(elName);
-				if (el == null)
-					throw new QonfigInterpretationException("No such element found: " + elName);
-			} catch (IllegalArgumentException e) {
-				throw new QonfigInterpretationException(e.getMessage());
-			}
-			application = application.forType(el);
-		}
-		ObservableExpression newCondition = exS.getAttributeExpression("condition");
-		if (newCondition != null) {
-			MultiMap<String, QuickModelValue<?>> availableModelValues = BetterHashMultiMap.<String, QuickModelValue<?>> build()
-				.buildMultiMap();
-			for (QonfigElementOrAddOn type : application.getTypes().values()) {
-				QuickStyleType styled = styleSet.styled(type, exS);
-				availableModelValues.putAll(styled.getModelValues());
-			}
-			if (element != null) {
-				QuickStyleType styled = styleSet.styled(element.getType(), exS);
-				availableModelValues.putAll(styled.getModelValues());
-				for (QonfigAddOn inh : element.getInheritance().values()) {
-					styled = styleSet.styled(inh, exS);
-					availableModelValues.putAll(styled.getModelValues());
-				}
-			}
-			application = application.forCondition(newCondition, exS.getExpressoEnv(), availableModelValues);
-		}
-		session.put(STYLE_APPLICATION, application);
-
-		String attrName = session.getAttributeText("attr");
-		if (attrName != null) {
-			if (attr != null)
-				throw new QonfigInterpretationException(
-					"Cannot specify an attribute (" + attrName + ") if an ancestor style has (" + attr + ")");
-
-			Set<QuickStyleAttribute<?>> attrs = new HashSet<>();
-			if (element != null) {
-				QuickStyleType styled = styleSet.styled(element.getType(), exS);
-				if (styled != null)
-					attrs.addAll(styleSet.styled(element.getType(), exS).getAttributes(attrName));
-				for (QonfigAddOn inh : element.getInheritance().values()) {
-					if (attrs.size() > 1)
-						break;
-					styled = styleSet.styled(inh, exS);
-					if (styled != null)
-						attrs.addAll(styled.getAttributes(attrName));
-				}
-			} else {
-				for (QonfigElementOrAddOn type : application.getTypes().values()) {
-					if (attrs.size() > 1)
-						break;
-					QuickStyleType styled = styleSet.styled(type, exS);
-					if (styled != null)
-						attrs.addAll(styled.getAttributes(attrName));
-				}
-			}
-			if (attrs.isEmpty())
-				throw new QonfigInterpretationException("No such style attribute: '" + attrName + "'");
-			else if (attrs.size() > 1)
-				throw new QonfigInterpretationException("Multiple style attributes found matching '" + attrName + "'");
-			attr = attrs.iterator().next();
-			session.put(STYLE_ATTRIBUTE, attr);
-		}
-		ObservableExpression value = exS.getValueExpression();
-		if ((value != null && value != ObservableExpression.EMPTY) && attr == null)
-			throw new QonfigInterpretationException("Cannot specify a style value without an attribute");
-		String styleSetName = session.getAttributeText("style-set");
-		List<QuickStyleValue<?>> styleSetRef;
-		if (styleSetName != null) {
-			if (attr != null)
-				throw new QonfigInterpretationException("Cannot refer to a style set when an attribute is specified");
-			try {
-				styleSetRef = styleSheet.getStyleSet(styleSetName);
-			} catch (IllegalArgumentException e) {
-				throw new QonfigInterpretationException(e.getMessage());
-			}
-			if (styleSetRef instanceof StyleValues)
-				((StyleValues) styleSetRef).init();
-		} else
-			styleSetRef = null;
-		List<StyleValues> subStyles = session.interpretChildren("sub-style", StyleValues.class);
-		for (StyleValues subStyle : subStyles)
-			subStyle.init();
-
-		StyleValueApplication theApplication = application;
-		QuickStyleAttribute<?> theAttr = attr;
-		return new StyleValues((String) session.get(STYLE_NAME)) {
+		return new QuickMouseListener.Container() {
 			@Override
-			protected List<QuickStyleValue<?>> get() throws QonfigInterpretationException {
-				List<QuickStyleValue<?>> values = new ArrayList<>();
-				if (value != null && value != ObservableExpression.EMPTY)
-					values.add(new QuickStyleValue<>(styleSheet, theApplication, theAttr, value, exS.getExpressoEnv()));
-				if (styleSetRef != null)
-					values.addAll(styleSetRef);
-				for (StyleValues child : subStyles)
-					values.addAll(child);
-				return values;
+			public boolean isMotionListener() {
+				return false;
+			}
+
+			@Override
+			public boolean isWheelListener() {
+				return false;
+			}
+
+			@Override
+			public QuickMouseListener createListener(ModelSetInstance models) {
+				List<SettableValue<Boolean>> filterVs = filters.stream().map(f -> f.get(models)).collect(Collectors.toList());
+				ObservableAction<?> actionV = action.get(models);
+				SettableValue<Integer> xV = exSession.getIfSupported(x.apply(models), xSupport);
+				SettableValue<Integer> yV = exSession.getIfSupported(y.apply(models), ySupport);
+				SettableValue<Boolean> altV = exSession.getIfSupported(alt.apply(models), altSupport);
+				SettableValue<Boolean> ctrlV = exSession.getIfSupported(ctrl.apply(models), ctrlSupport);
+				SettableValue<Boolean> shiftV = exSession.getIfSupported(shift.apply(models), shiftSupport);
+				return new QuickMouseListener() {
+					@Override
+					public boolean applies(MouseEvent evt) {
+						for (SettableValue<Boolean> filterV : filterVs) {
+							if (filterV != null && !filterV.get())
+								return false;
+						}
+						return true;
+					}
+
+					@Override
+					public void actionPerformed(MouseEvent evt) {
+						try (CausableInUse cause = Causable.cause(evt)) {
+							xV.set(evt.getX(), cause);
+							yV.set(evt.getY(), cause);
+							altV.set(evt.isAltDown(), cause);
+							ctrlV.set(evt.isControlDown(), cause);
+							shiftV.set(evt.isShiftDown(), cause);
+							actionV.act(evt);
+						}
+					}
+				};
 			}
 		};
 	}
 
-	private static String printElOptions(Collection<QonfigElementOrAddOn> roleEls) {
-		if (roleEls.size() == 1)
-			return roleEls.iterator().next().toString();
-		StringBuilder str = new StringBuilder().append('(');
-		boolean first = true;
-		for (QonfigElementOrAddOn el : roleEls) {
-			if (first)
-				first = false;
-			else
-				str.append('|');
-			str.append(el);
-		}
-		return str.append(')').toString();
+	private QuickMouseListener.Container modifyMouseButtonListener(QuickMouseListener.Container listener, int buttonID)
+		throws QonfigInterpretationException {
+		return new QuickMouseListener.Container() {
+			@Override
+			public boolean isMotionListener() {
+				return listener.isMotionListener();
+			}
+
+			@Override
+			public boolean isWheelListener() {
+				return listener.isWheelListener();
+			}
+
+			@Override
+			public QuickMouseListener createListener(ModelSetInstance models) {
+				QuickMouseListener superL = listener.createListener(models);
+				return new QuickMouseListener() {
+					@Override
+					public boolean applies(MouseEvent evt) {
+						if (!superL.applies(evt))
+							return false;
+						else if (evt.getButton() != buttonID)
+							return false;
+						return true;
+					}
+
+					@Override
+					public void actionPerformed(MouseEvent evt) {
+						superL.actionPerformed(evt);
+					}
+				};
+			}
+		};
 	}
 
-	private QuickStyleSheet interpretStyleSheet(QuickQIS session) throws QonfigInterpretationException {
-		ExpressoQIS exS = session.as(ExpressoQIS.class);
-		// First import style sheets
-		Map<String, QuickStyleSheet> imports = new LinkedHashMap<>();
-		DefaultQonfigParser parser = null;
-		for (QuickQIS sse : session.forChildren("style-sheet-ref")) {
-			String name = sse.getAttributeText("name");
-			if (parser == null) {
-				parser = new DefaultQonfigParser();
-				for (QonfigToolkit tk : session.getElement().getDocument().getDocToolkit().getDependencies().values())
-					parser.withToolkit(tk);
+	private QuickMouseListener.Container modifyMouseClickListener(QuickMouseListener.Container listener, StyleQIS session)
+		throws QonfigInterpretationException {
+		ExpressoQIS exSession = session.as(ExpressoQIS.class);
+		ValueContainer<SettableValue<?>, SettableValue<Integer>> clickCount = exSession.getAttributeAsValue("click-count", Integer.class,
+			null);
+		SuppliedModelValue<SettableValue<?>, SettableValue<Integer>> clickCountMV = exSession.getModelValueOwner()
+			.getModelValue("clickCount", ModelTypes.Value.forType(int.class));
+		ExpressoQIS.SimpleModelValueSupport<Integer> ccSupport = new ExpressoQIS.SimpleModelValueSupport<>(int.class, 0);
+		exSession.satisfy(clickCountMV, Component.class, ccSupport, null);
+		return new QuickMouseListener.Container() {
+			@Override
+			public boolean isMotionListener() {
+				return listener.isMotionListener();
 			}
-			URL ref;
-			try {
-				String address = sse.getAttributeText("ref");
-				String urlStr = QommonsConfig.resolve(address, session.getElement().getDocument().getLocation());
-				ref = new URL(urlStr);
-			} catch (IOException e) {
-				throw new QonfigInterpretationException("Bad style-sheet reference: " + sse.getAttributeText("ref"), e);
+
+			@Override
+			public boolean isWheelListener() {
+				return listener.isWheelListener();
 			}
-			QonfigDocument ssDoc;
-			try (InputStream in = new BufferedInputStream(ref.openStream())) {
-				ssDoc = parser.parseDocument(ref.toString(), in);
-			} catch (IOException e) {
-				throw new QonfigInterpretationException("Could not access style-sheet reference " + ref, e);
-			} catch (QonfigParseException e) {
-				throw new QonfigInterpretationException("Malformed style-sheet reference " + ref, e);
+
+			@Override
+			public QuickMouseListener createListener(ModelSetInstance models) {
+				QuickMouseListener superL = listener.createListener(models);
+				ObservableValue<Integer> clickCountV = clickCount == null ? null : clickCount.get(models);
+				SettableValue<Integer> ccMV = exSession.getIfSupported(clickCountMV.apply(models), ccSupport);
+				return new QuickMouseListener() {
+					@Override
+					public boolean applies(MouseEvent evt) {
+						if (!superL.applies(evt))
+							return false;
+						else if (evt.getID() != MouseEvent.MOUSE_CLICKED)
+							return false;
+						if (clickCountV != null) {
+							Integer clockCountI = clickCountV.get();
+							if (clockCountI != null && clockCountI > 0 && evt.getClickCount() != clockCountI)
+								return false;
+						}
+						return true;
+					}
+
+					@Override
+					public void actionPerformed(MouseEvent evt) {
+						try (CausableInUse cause = Causable.cause(evt)) {
+							ccMV.set(evt.getClickCount(), cause);
+							superL.actionPerformed(evt);
+						}
+					}
+				};
 			}
-			if (!session.getStyleSet().getCoreToolkit().getElement("style-sheet").isAssignableFrom(ssDoc.getRoot().getType()))
-				throw new QonfigInterpretationException(
-					"Style-sheet reference does not parse to a style-sheet (" + ssDoc.getRoot().getType() + "): " + ref);
-			QuickQIS importSession = session.intepretRoot(ssDoc.getRoot())//
-				.put(STYLE_SHEET_REF, ref);
-			importSession.as(ExpressoQIS.class)//
-			.setModels(ObservableModelSet.build(exS.getExpressoEnv().getModels().getNameChecker()).build(),
-				exS.getExpressoEnv().getClassView());
-			modifyForStyle(session);
-			QuickStyleSheet imported = importSession.interpret(QuickStyleSheet.class);
-			imports.put(name, imported);
-		}
+		};
+	}
 
-		// Next, compile style-sets
-		Map<String, List<QuickStyleValue<?>>> styleSets = new LinkedHashMap<>();
-		for (QuickQIS styleSetEl : session.forChildren("style-set")) {
-			String name = styleSetEl.getAttributeText("name");
-			styleSetEl.put(STYLE_NAME, name);
-			styleSets.put(name, styleSetEl.interpretChildren("style", StyleValues.class).getFirst());
-		}
+	private QuickMouseListener.Container modifyMouseListenerWithType(QuickMouseListener.Container listener, int eventType, boolean motion)
+		throws QonfigInterpretationException {
+		return new QuickMouseListener.Container() {
+			@Override
+			public boolean isMotionListener() {
+				return motion || listener.isMotionListener();
+			}
 
-		// Now compile the style-sheet styles
-		String name = session.getElement().getDocument().getLocation();
-		int slash = name.lastIndexOf('/');
-		if (slash >= 0)
-			name = name.substring(slash + 1);
-		session.put(STYLE_NAME, name);
-		List<QuickStyleValue<?>> values = new ArrayList<>();
-		QuickStyleSheet styleSheet = new QuickStyleSheet((URL) session.get(STYLE_SHEET_REF), Collections.unmodifiableMap(styleSets),
-			Collections.unmodifiableList(values), Collections.unmodifiableMap(imports));
-		session.setStyleSheet(styleSheet);
-		for (StyleValues sv : session.interpretChildren("style", StyleValues.class)) {
-			sv.init();
-			values.addAll(sv);
-		}
+			@Override
+			public boolean isWheelListener() {
+				return listener.isWheelListener();
+			}
 
-		// Replace the StyleValues instances in the styleSets map with regular lists. Don't keep that silly type around.
-		// This also forces parsing of all the values if they weren't referred to internally.
-		for (Map.Entry<String, List<QuickStyleValue<?>>> ss : styleSets.entrySet()) {
-			((StyleValues) ss.getValue()).init();
-			ss.setValue(QommonsUtils.unmodifiableCopy(ss.getValue()));
+			@Override
+			public QuickMouseListener createListener(ModelSetInstance models) {
+				QuickMouseListener superL = listener.createListener(models);
+				return new QuickMouseListener() {
+					@Override
+					public boolean applies(MouseEvent evt) {
+						if (evt.getID() != eventType)
+							return false;
+						else if (!superL.applies(evt))
+							return false;
+						return true;
+					}
+
+					@Override
+					public void actionPerformed(MouseEvent evt) {
+						superL.actionPerformed(evt);
+					}
+				};
+			}
+		};
+	}
+
+	private QuickMouseListener.Container modifyMouseWheelListener(QuickMouseListener.Container listener, StyleQIS session)
+		throws QonfigInterpretationException {
+		ExpressoQIS exSession = session.as(ExpressoQIS.class);
+		SuppliedModelValue<SettableValue<?>, SettableValue<Integer>> scrollAmountMV = exSession.getModelValueOwner()
+			.getModelValue("scrollAmount", ModelTypes.Value.forType(int.class));
+		ExpressoQIS.SimpleModelValueSupport<Integer> scrollSupport = new ExpressoQIS.SimpleModelValueSupport<>(int.class, 0);
+		exSession.satisfy(scrollAmountMV, Component.class, scrollSupport, null);
+		return new QuickMouseListener.Container() {
+			@Override
+			public boolean isMotionListener() {
+				return listener.isMotionListener();
+			}
+
+			@Override
+			public boolean isWheelListener() {
+				return true;
+			}
+
+			@Override
+			public QuickMouseListener createListener(ModelSetInstance models) {
+				QuickMouseListener superL = listener.createListener(models);
+				SettableValue<Integer> scrollMV = exSession.getIfSupported(scrollAmountMV.apply(models), scrollSupport);
+				return new QuickMouseListener() {
+					@Override
+					public boolean applies(MouseEvent evt) {
+						if (!superL.applies(evt))
+							return false;
+						else if (evt.getID() != MouseEvent.MOUSE_WHEEL_EVENT_MASK)
+							return false;
+						return true;
+					}
+
+					@Override
+					public void actionPerformed(MouseEvent evt) {
+						try (CausableInUse cause = Causable.cause(evt)) {
+							scrollMV.set(((MouseWheelEvent) evt).getScrollAmount(), cause);
+							superL.actionPerformed(evt);
+						}
+					}
+				};
+			}
+		};
+	}
+
+	private QuickKeyListener.Container createKeyListener(StyleQIS session, boolean pressed) throws QonfigInterpretationException {
+		ExpressoQIS exSession = session.as(ExpressoQIS.class);
+		List<ValueContainer<SettableValue<?>, SettableValue<Boolean>>> filters = new ArrayList<>();
+		for (ExpressoQIS filterS : exSession.forChildren("filter"))
+			filters.add(filterS.getValueAsValue(boolean.class, null));
+		ValueContainer<ObservableAction<?>, ObservableAction<?>> action = exSession.getValueExpression().evaluate(ModelTypes.Action.any(),
+			exSession.getExpressoEnv());
+		ValueContainer<SettableValue<?>, SettableValue<KeyCode>> key = exSession.getAttributeAsValue("key", KeyCode.class, null);
+
+		SuppliedModelValue<SettableValue<?>, SettableValue<KeyCode>> keyMV = exSession.getModelValueOwner().getModelValue("key",
+			ModelTypes.Value.forType(KeyCode.class));
+		SuppliedModelValue<SettableValue<?>, SettableValue<Boolean>> alt = exSession.getModelValueOwner().getModelValue("altPressed",
+			ModelTypes.Value.forType(boolean.class));
+		SuppliedModelValue<SettableValue<?>, SettableValue<Boolean>> ctrl = exSession.getModelValueOwner().getModelValue("ctrlPressed",
+			ModelTypes.Value.forType(boolean.class));
+		SuppliedModelValue<SettableValue<?>, SettableValue<Boolean>> shift = exSession.getModelValueOwner().getModelValue("shiftPressed",
+			ModelTypes.Value.forType(boolean.class));
+		ExpressoQIS.SimpleModelValueSupport<KeyCode> keySupport = new ExpressoQIS.SimpleModelValueSupport<>(KeyCode.class, null);
+		ExpressoQIS.SimpleModelValueSupport<Boolean> altSupport = new ExpressoQIS.SimpleModelValueSupport<>(boolean.class, false);
+		ExpressoQIS.SimpleModelValueSupport<Boolean> ctrlSupport = new ExpressoQIS.SimpleModelValueSupport<>(boolean.class, false);
+		ExpressoQIS.SimpleModelValueSupport<Boolean> shiftSupport = new ExpressoQIS.SimpleModelValueSupport<>(boolean.class, false);
+		exSession.satisfy(keyMV, Component.class, keySupport, null);
+		exSession.satisfy(alt, Component.class, altSupport, null);
+		exSession.satisfy(ctrl, Component.class, ctrlSupport, null);
+		exSession.satisfy(shift, Component.class, shiftSupport, null);
+
+		int eventType = pressed ? KeyEvent.KEY_PRESSED : KeyEvent.KEY_RELEASED;
+		return models -> {
+			List<SettableValue<Boolean>> filterVs = filters.stream().map(f -> f.get(models)).collect(Collectors.toList());
+			SettableValue<KeyCode> keyV = key == null ? null : key.get(models);
+			ObservableAction<?> actionV = action.get(models);
+			SettableValue<KeyCode> keyMV2 = exSession.getIfSupported(keyMV.apply(models), keySupport);
+			SettableValue<Boolean> altV = exSession.getIfSupported(alt.apply(models), altSupport);
+			SettableValue<Boolean> ctrlV = exSession.getIfSupported(ctrl.apply(models), ctrlSupport);
+			SettableValue<Boolean> shiftV = exSession.getIfSupported(shift.apply(models), shiftSupport);
+			return new QuickKeyListener() {
+				@Override
+				public boolean applies(KeyEvent evt) {
+					if (evt.getID() != eventType)
+						return false;
+					else if (keyV != null && getKeyCodeFromAWT(evt.getKeyCode(), evt.getKeyLocation()) != keyV.get())
+						return false;
+					for (SettableValue<Boolean> filterV : filterVs) {
+						if (filterV != null && !filterV.get())
+							return false;
+					}
+					return true;
+				}
+
+				@Override
+				public void actionPerformed(KeyEvent evt) {
+					try (CausableInUse cause = Causable.cause(evt)) {
+						keyMV2.set(getKeyCodeFromAWT(evt.getKeyCode(), evt.getKeyLocation()), cause);
+						altV.set(evt.isAltDown(), cause);
+						ctrlV.set(evt.isControlDown(), cause);
+						shiftV.set(evt.isShiftDown(), cause);
+						actionV.act(evt);
+					}
+				}
+			};
+		};
+	}
+
+	/**
+	 * @param keyCode The key code (see java.awt.KeyEvent.VK_*, {@link KeyEvent#getKeyCode()})
+	 * @param keyLocation The key's location (see java.awt.KeyEvent.KEY_LOCATION_*, {@link KeyEvent#getKeyLocation()}
+	 * @return The Quick key code for the AWT codes
+	 */
+	public static KeyCode getKeyCodeFromAWT(int keyCode, int keyLocation) {
+		switch (keyCode) {
+		case KeyEvent.VK_ENTER:
+			return KeyCode.ENTER;
+		case KeyEvent.VK_BACK_SPACE:
+			return KeyCode.BACKSPACE;
+		case KeyEvent.VK_TAB:
+			return KeyCode.TAB;
+		case KeyEvent.VK_CANCEL:
+			return KeyCode.CANCEL;
+		case KeyEvent.VK_CLEAR:
+			return KeyCode.CLEAR;
+		case KeyEvent.VK_SHIFT:
+			if (keyLocation == KeyEvent.KEY_LOCATION_LEFT)
+				return KeyCode.SHIFT_LEFT;
+			else
+				return KeyCode.SHIFT_RIGHT;
+		case KeyEvent.VK_CONTROL:
+			if (keyLocation == KeyEvent.KEY_LOCATION_LEFT)
+				return KeyCode.CTRL_LEFT;
+			else
+				return KeyCode.CTRL_RIGHT;
+		case KeyEvent.VK_ALT:
+			if (keyLocation == KeyEvent.KEY_LOCATION_LEFT)
+				return KeyCode.ALT_LEFT;
+			else
+				return KeyCode.ALT_RIGHT;
+		case KeyEvent.VK_PAUSE:
+			return KeyCode.PAUSE;
+		case KeyEvent.VK_CAPS_LOCK:
+			return KeyCode.CAPS_LOCK;
+		case KeyEvent.VK_ESCAPE:
+			return KeyCode.ESCAPE;
+		case KeyEvent.VK_SPACE:
+			return KeyCode.SPACE;
+		case KeyEvent.VK_PAGE_UP:
+			return KeyCode.PAGE_UP;
+		case KeyEvent.VK_PAGE_DOWN:
+			return KeyCode.PAGE_DOWN;
+		case KeyEvent.VK_END:
+			return KeyCode.END;
+		case KeyEvent.VK_HOME:
+			return KeyCode.HOME;
+		case KeyEvent.VK_LEFT:
+			return KeyCode.LEFT_ARROW;
+		case KeyEvent.VK_UP:
+			return KeyCode.UP_ARROW;
+		case KeyEvent.VK_RIGHT:
+			return KeyCode.RIGHT_ARROW;
+		case KeyEvent.VK_DOWN:
+			return KeyCode.DOWN_ARROW;
+		case KeyEvent.VK_COMMA:
+		case KeyEvent.VK_LESS:
+			return KeyCode.COMMA;
+		case KeyEvent.VK_MINUS:
+			if (keyLocation == KeyEvent.KEY_LOCATION_NUMPAD)
+				return KeyCode.PAD_MINUS;
+			else
+				return KeyCode.MINUS;
+		case KeyEvent.VK_UNDERSCORE:
+			return KeyCode.MINUS;
+		case KeyEvent.VK_PERIOD:
+			if (keyLocation == KeyEvent.KEY_LOCATION_NUMPAD)
+				return KeyCode.PAD_DOT;
+			else
+				return KeyCode.DOT;
+		case KeyEvent.VK_GREATER:
+			return KeyCode.DOT;
+		case KeyEvent.VK_SLASH:
+			if (keyLocation == KeyEvent.KEY_LOCATION_NUMPAD)
+				return KeyCode.PAD_SLASH;
+			else
+				return KeyCode.FORWARD_SLASH;
+		case KeyEvent.VK_0:
+		case KeyEvent.VK_RIGHT_PARENTHESIS:
+			return KeyCode.NUM_0;
+		case KeyEvent.VK_1:
+		case KeyEvent.VK_EXCLAMATION_MARK:
+			return KeyCode.NUM_1;
+		case KeyEvent.VK_2:
+		case KeyEvent.VK_AT:
+			return KeyCode.NUM_2;
+		case KeyEvent.VK_3:
+		case KeyEvent.VK_NUMBER_SIGN:
+			return KeyCode.NUM_3;
+		case KeyEvent.VK_4:
+		case KeyEvent.VK_DOLLAR:
+			return KeyCode.NUM_4;
+		case KeyEvent.VK_5:
+			return KeyCode.NUM_5;
+		case KeyEvent.VK_6:
+		case KeyEvent.VK_CIRCUMFLEX:
+			return KeyCode.NUM_6;
+		case KeyEvent.VK_7:
+		case KeyEvent.VK_AMPERSAND:
+			return KeyCode.NUM_7;
+		case KeyEvent.VK_8:
+		case KeyEvent.VK_ASTERISK:
+			return KeyCode.NUM_8;
+		case KeyEvent.VK_9:
+		case KeyEvent.VK_LEFT_PARENTHESIS:
+			return KeyCode.NUM_9;
+		case KeyEvent.VK_SEMICOLON:
+		case KeyEvent.VK_COLON:
+			return KeyCode.SEMICOLON;
+		case KeyEvent.VK_EQUALS:
+			if (keyLocation == KeyEvent.KEY_LOCATION_NUMPAD)
+				return KeyCode.PAD_EQUAL;
+			else
+				return KeyCode.EQUAL;
+		case KeyEvent.VK_A:
+			return KeyCode.A;
+		case KeyEvent.VK_B:
+			return KeyCode.B;
+		case KeyEvent.VK_C:
+			return KeyCode.C;
+		case KeyEvent.VK_D:
+			return KeyCode.D;
+		case KeyEvent.VK_E:
+			return KeyCode.E;
+		case KeyEvent.VK_F:
+			return KeyCode.F;
+		case KeyEvent.VK_G:
+			return KeyCode.G;
+		case KeyEvent.VK_H:
+			return KeyCode.H;
+		case KeyEvent.VK_I:
+			return KeyCode.I;
+		case KeyEvent.VK_J:
+			return KeyCode.J;
+		case KeyEvent.VK_K:
+			return KeyCode.K;
+		case KeyEvent.VK_L:
+			return KeyCode.L;
+		case KeyEvent.VK_M:
+			return KeyCode.M;
+		case KeyEvent.VK_N:
+			return KeyCode.N;
+		case KeyEvent.VK_O:
+			return KeyCode.O;
+		case KeyEvent.VK_P:
+			return KeyCode.P;
+		case KeyEvent.VK_Q:
+			return KeyCode.Q;
+		case KeyEvent.VK_R:
+			return KeyCode.R;
+		case KeyEvent.VK_S:
+			return KeyCode.S;
+		case KeyEvent.VK_T:
+			return KeyCode.T;
+		case KeyEvent.VK_U:
+			return KeyCode.U;
+		case KeyEvent.VK_V:
+			return KeyCode.V;
+		case KeyEvent.VK_W:
+			return KeyCode.W;
+		case KeyEvent.VK_X:
+			return KeyCode.X;
+		case KeyEvent.VK_Y:
+			return KeyCode.Y;
+		case KeyEvent.VK_Z:
+			return KeyCode.Z;
+		case KeyEvent.VK_OPEN_BRACKET:
+		case KeyEvent.VK_BRACELEFT:
+			return KeyCode.LEFT_BRACE;
+		case KeyEvent.VK_BACK_SLASH:
+			return KeyCode.BACK_SLASH;
+		case KeyEvent.VK_CLOSE_BRACKET:
+		case KeyEvent.VK_BRACERIGHT:
+			return KeyCode.RIGHT_BRACE;
+		case KeyEvent.VK_NUMPAD0:
+			return KeyCode.PAD_0;
+		case KeyEvent.VK_NUMPAD1:
+			return KeyCode.PAD_1;
+		case KeyEvent.VK_NUMPAD2:
+		case KeyEvent.VK_KP_DOWN:
+			return KeyCode.PAD_2;
+		case KeyEvent.VK_NUMPAD3:
+			return KeyCode.PAD_3;
+		case KeyEvent.VK_NUMPAD4:
+		case KeyEvent.VK_KP_LEFT:
+			return KeyCode.PAD_4;
+		case KeyEvent.VK_NUMPAD5:
+			return KeyCode.PAD_5;
+		case KeyEvent.VK_NUMPAD6:
+		case KeyEvent.VK_KP_RIGHT:
+			return KeyCode.PAD_6;
+		case KeyEvent.VK_NUMPAD7:
+			return KeyCode.PAD_7;
+		case KeyEvent.VK_NUMPAD8:
+		case KeyEvent.VK_KP_UP:
+			return KeyCode.PAD_8;
+		case KeyEvent.VK_NUMPAD9:
+			return KeyCode.PAD_9;
+		case KeyEvent.VK_MULTIPLY:
+			return KeyCode.PAD_MULTIPLY;
+		case KeyEvent.VK_ADD:
+			return KeyCode.PAD_PLUS;
+		case KeyEvent.VK_SEPARATOR:
+			return KeyCode.PAD_SEPARATOR;
+		case KeyEvent.VK_SUBTRACT:
+			return KeyCode.PAD_MINUS;
+		case KeyEvent.VK_DECIMAL:
+			return KeyCode.PAD_DOT;
+		case KeyEvent.VK_DIVIDE:
+			return KeyCode.PAD_SLASH;
+		case KeyEvent.VK_DELETE:
+			return KeyCode.PAD_BACKSPACE;
+		case KeyEvent.VK_NUM_LOCK:
+			return KeyCode.NUM_LOCK;
+		case KeyEvent.VK_SCROLL_LOCK:
+			return KeyCode.SCROLL_LOCK;
+		case KeyEvent.VK_F1:
+			return KeyCode.F1;
+		case KeyEvent.VK_F2:
+			return KeyCode.F2;
+		case KeyEvent.VK_F3:
+			return KeyCode.F3;
+		case KeyEvent.VK_F4:
+			return KeyCode.F4;
+		case KeyEvent.VK_F5:
+			return KeyCode.F5;
+		case KeyEvent.VK_F6:
+			return KeyCode.F6;
+		case KeyEvent.VK_F7:
+			return KeyCode.F7;
+		case KeyEvent.VK_F8:
+			return KeyCode.F8;
+		case KeyEvent.VK_F9:
+			return KeyCode.F9;
+		case KeyEvent.VK_F10:
+			return KeyCode.F10;
+		case KeyEvent.VK_F11:
+			return KeyCode.F11;
+		case KeyEvent.VK_F12:
+			return KeyCode.F12;
+		case KeyEvent.VK_F13:
+			return KeyCode.F13;
+		case KeyEvent.VK_F14:
+			return KeyCode.F14;
+		case KeyEvent.VK_F15:
+			return KeyCode.F15;
+		case KeyEvent.VK_F16:
+			return KeyCode.F16;
+		case KeyEvent.VK_F17:
+			return KeyCode.F17;
+		case KeyEvent.VK_F18:
+			return KeyCode.F18;
+		case KeyEvent.VK_F19:
+			return KeyCode.F19;
+		case KeyEvent.VK_F20:
+			return KeyCode.F20;
+		case KeyEvent.VK_F21:
+			return KeyCode.F21;
+		case KeyEvent.VK_F22:
+			return KeyCode.F22;
+		case KeyEvent.VK_F23:
+			return KeyCode.F23;
+		case KeyEvent.VK_F24:
+			return KeyCode.F24;
+		case KeyEvent.VK_PRINTSCREEN:
+			return KeyCode.PRINT_SCREEN;
+		case KeyEvent.VK_INSERT:
+			return KeyCode.INSERT;
+		case KeyEvent.VK_HELP:
+			return KeyCode.HELP;
+		case KeyEvent.VK_META:
+			return KeyCode.META;
+		case KeyEvent.VK_BACK_QUOTE:
+			return KeyCode.BACK_QUOTE;
+		case KeyEvent.VK_QUOTE:
+		case KeyEvent.VK_QUOTEDBL:
+			return KeyCode.QUOTE;
+		case KeyEvent.VK_WINDOWS:
+			return KeyCode.COMMAND_KEY;
+		case KeyEvent.VK_CONTEXT_MENU:
+			return KeyCode.CONTEXT_MENU;
+		default:
+			return null;
 		}
-		return styleSheet;
+	}
+
+	private QuickKeyListener.Container createKeyTypeListener(StyleQIS session) throws QonfigInterpretationException {
+		ExpressoQIS exSession = session.as(ExpressoQIS.class);
+		List<ValueContainer<SettableValue<?>, SettableValue<Boolean>>> filters = new ArrayList<>();
+		for (ExpressoQIS filterS : exSession.forChildren("filter"))
+			filters.add(filterS.getValueAsValue(boolean.class, null));
+		ValueContainer<ObservableAction<?>, ObservableAction<?>> action = exSession.getValueExpression().evaluate(ModelTypes.Action.any(),
+			exSession.getExpressoEnv());
+		String typedChar = exSession.getAttributeText("char");
+		if (typedChar != null && typedChar.length() != 1)
+			session.withError("char attribute must only have a single character");
+
+		SuppliedModelValue<SettableValue<?>, SettableValue<Character>> charMV = exSession.getModelValueOwner().getModelValue("char",
+			ModelTypes.Value.forType(Character.class));
+		SuppliedModelValue<SettableValue<?>, SettableValue<Boolean>> alt = exSession.getModelValueOwner().getModelValue("altPressed",
+			ModelTypes.Value.forType(boolean.class));
+		SuppliedModelValue<SettableValue<?>, SettableValue<Boolean>> ctrl = exSession.getModelValueOwner().getModelValue("ctrlPressed",
+			ModelTypes.Value.forType(boolean.class));
+		SuppliedModelValue<SettableValue<?>, SettableValue<Boolean>> shift = exSession.getModelValueOwner().getModelValue("shiftPressed",
+			ModelTypes.Value.forType(boolean.class));
+		ExpressoQIS.SimpleModelValueSupport<Character> charSupport = new ExpressoQIS.SimpleModelValueSupport<>(Character.class, (char) 0);
+		ExpressoQIS.SimpleModelValueSupport<Boolean> altSupport = new ExpressoQIS.SimpleModelValueSupport<>(boolean.class, false);
+		ExpressoQIS.SimpleModelValueSupport<Boolean> ctrlSupport = new ExpressoQIS.SimpleModelValueSupport<>(boolean.class, false);
+		ExpressoQIS.SimpleModelValueSupport<Boolean> shiftSupport = new ExpressoQIS.SimpleModelValueSupport<>(boolean.class, false);
+		exSession.satisfy(charMV, Component.class, charSupport, null);
+		exSession.satisfy(alt, Component.class, altSupport, null);
+		exSession.satisfy(ctrl, Component.class, ctrlSupport, null);
+		exSession.satisfy(shift, Component.class, shiftSupport, null);
+
+		return models -> {
+			List<SettableValue<Boolean>> filterVs = filters.stream().map(f -> f.get(models)).collect(Collectors.toList());
+			ObservableAction<?> actionV = action.get(models);
+			SettableValue<Character> charMV2 = exSession.getIfSupported(charMV.apply(models), charSupport);
+			SettableValue<Boolean> altV = exSession.getIfSupported(alt.apply(models), altSupport);
+			SettableValue<Boolean> ctrlV = exSession.getIfSupported(ctrl.apply(models), ctrlSupport);
+			SettableValue<Boolean> shiftV = exSession.getIfSupported(shift.apply(models), shiftSupport);
+			return new QuickKeyListener() {
+				@Override
+				public boolean applies(KeyEvent evt) {
+					if (evt.getID() != KeyEvent.KEY_TYPED)
+						return false;
+					else if (typedChar != null && typedChar.charAt(0) != evt.getKeyChar())
+						return false;
+					for (SettableValue<Boolean> filterV : filterVs) {
+						if (filterV != null && !filterV.get())
+							return false;
+					}
+					return true;
+				}
+
+				@Override
+				public void actionPerformed(KeyEvent evt) {
+					try (CausableInUse cause = Causable.cause(evt)) {
+						charMV2.set(evt.getKeyChar(), cause);
+						altV.set(evt.isAltDown(), cause);
+						ctrlV.set(evt.isControlDown(), cause);
+						shiftV.set(evt.isShiftDown(), cause);
+						actionV.act(evt);
+					}
+				}
+			};
+		};
 	}
 }
