@@ -132,7 +132,7 @@ public class ObservableUtils {
 				t.close();
 		});
 		boolean[] isLinkChanging = new boolean[1]; // This boolean is thread-safed by the collections
-		Subscription sub1 = c1.subscribe(evt -> {
+		Consumer<ObservableCollectionEvent<? extends E1>> listener1 = evt -> {
 			if (isLinkChanging[0])
 				return;
 			// This outer transaction is because locking once for a series of changes
@@ -169,8 +169,8 @@ public class ObservableUtils {
 					isLinkChanging[0] = false;
 				}
 			}
-		}, true);
-		Subscription sub2 = c2.subscribe(evt -> {
+		};
+		Consumer<ObservableCollectionEvent<? extends E2>> listener2 = evt -> {
 			if (isLinkChanging[0])
 				return;
 			// This outer transaction is because locking once for a series of changes
@@ -207,7 +207,21 @@ public class ObservableUtils {
 					isLinkChanging[0] = false;
 				}
 			}
-		}, true);
+		};
+		Subscription sub1, sub2;
+		Causable cause = Causable.simpleCause();
+		try (Transaction ct = Causable.use(cause); //
+			Transaction t1 = c1.lock(true, cause); //
+			Transaction t2 = c2.lock(true, cause)) {
+			if (c2.isEmpty()) {
+				sub1 = c1.subscribe(listener1, true);
+				sub2 = c2.onChange(listener2);
+			} else if (c1.isEmpty()) {
+				sub2 = c2.subscribe(listener2, true);
+				sub1 = c1.onChange(listener1);
+			} else
+				throw new IllegalArgumentException("Two collections may only be linked if at least one of them is initially empty");
+		}
 		return Subscription.forAll(sub1, sub2);
 	}
 
