@@ -428,7 +428,10 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		return new SimpleChanges();
 	}
 
-	// Observable containment
+	/** @return An observable value of the first or last element in the collection */
+	default ObservableFinderBuilder<E> observeTerminal() {
+		return new ObservableFinderBuilder<>(this, __ -> true);
+	}
 
 	/**
 	 * @param value The value to observe in the collection
