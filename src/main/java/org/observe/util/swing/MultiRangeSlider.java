@@ -69,6 +69,7 @@ import org.qommons.threading.QommonsTimer;
  * </ul>
  */
 public class MultiRangeSlider extends ConformingPanel {
+	/** Represents a range of values that can be represented by a {@link MultiRangeSlider} */
 	public static class Range {
 		private final double theValue;
 		private final double theExtent;
@@ -88,28 +89,42 @@ public class MultiRangeSlider extends ConformingPanel {
 			theExtent = extent;
 		}
 
+		/**
+		 * @param value The mid-point value for the range
+		 * @param extent The extent (min - max) for the range
+		 * @return The new range
+		 */
 		public static Range forValueExtent(double value, double extent) {
 			return new Range(value, extent);
 		}
 
+		/**
+		 * @param min The minimum value for the range
+		 * @param max The maximum value for the range
+		 * @return The new range
+		 */
 		public static Range forMinMax(double min, double max) {
 			double extent = max - min;
 			double value = min + extent / 2;
 			return new Range(value, extent);
 		}
 
+		/** @return The mid-point value of the range */
 		public double getValue() {
 			return theValue;
 		}
 
+		/** @return The extent of the range (min - max) */
 		public double getExtent() {
 			return theExtent;
 		}
 
+		/** @return The minimum value of the range */
 		public double getMin() {
 			return theValue - theExtent / 2;
 		}
 
+		/** @return The maximum value of the range */
 		public double getMax() {
 			return theValue + theExtent / 2;
 		}
@@ -156,12 +171,24 @@ public class MultiRangeSlider extends ConformingPanel {
 		/** A range validator that forbids ranges from extending beyond the bounds of the slider */
 		public static final RangeValidator ENFORCE_RANGE = new NoOverlap(false, true);
 
+		/**
+		 * @param slider The slider that is requesting the validation
+		 * @param element The collection element of the range to validate in the model collection (as it is now, before any modification)
+		 * @param newValue The new value as requested by the user's interaction with the slider
+		 * @param moved The {@link RangePoint} that the user moved to cause the change
+		 * @return The new Range for the element
+		 */
 		Range validate(MultiRangeSlider slider, CollectionElement<Range> element, Range newValue, RangePoint moved);
 
+		/** A simple but useful {@link RangeValidator} that has options for preventing range overlap */
 		public static class NoOverlap implements RangeValidator {
 			private final boolean isEnforcingAdjacent;
 			private final boolean isEnforcingSliderRange;
 
+			/**
+			 * @param enforceAdjacent Whether to prevent ranges from overlapping
+			 * @param enforcingSliderRange Whether to prevent the ranges from moving beyond the slider's bounds
+			 */
 			public NoOverlap(boolean enforceAdjacent, boolean enforcingSliderRange) {
 				isEnforcingAdjacent = enforceAdjacent;
 				isEnforcingSliderRange = enforcingSliderRange;
@@ -240,11 +267,11 @@ public class MultiRangeSlider extends ConformingPanel {
 
 		/** A default {@link MRSliderRenderer} implementation that renders a slider line and up to 4 ticks and their values */
 		public static class Default extends JPanel implements MRSliderRenderer {
-			public static final NumberFormat VALUE_FORMAT = new DecimalFormat("#,##0.##");
+			private static final NumberFormat VALUE_FORMAT = new DecimalFormat("#,##0.##");
 
 			// TODO This is all best-guess and untested
-			public static final int DEFAULT_WIDTH = 20;
-			public static final int DEFAULT_TICK_WIDTH = 6;
+			private static final int DEFAULT_WIDTH = 20;
+			private static final int DEFAULT_TICK_WIDTH = 6;
 
 			private MultiRangeSlider theSlider;
 
@@ -256,6 +283,7 @@ public class MultiRangeSlider extends ConformingPanel {
 			private final FloatList theTicks;
 			private DoubleFunction<String> theValueRenderer;
 
+			/** Creates the renderer */
 			public Default() {
 				theTicks = new FloatList(10);
 				setRenderWidth(DEFAULT_WIDTH);
@@ -263,6 +291,9 @@ public class MultiRangeSlider extends ConformingPanel {
 				theValueRenderer = VALUE_FORMAT::format;
 			}
 
+			/**
+			 * @return The cross-dimension length of the rendered slider (the width of a vertical slider or the height of a horizontal one)
+			 */
 			public int getRenderWidth() {
 				return theRenderWidth;
 			}
@@ -277,6 +308,7 @@ public class MultiRangeSlider extends ConformingPanel {
 				return this;
 			}
 
+			/** @return The size of the tick marks rendered on the slider */
 			public int getTickWidth() {
 				return theTickWidth;
 			}
@@ -397,10 +429,10 @@ public class MultiRangeSlider extends ConformingPanel {
 						String text = theValueRenderer.apply(tick);
 						Rectangle2D bounds = new TextLayout(text, getFont(), ((Graphics2D) g).getFontRenderContext()).getBounds();
 						pos -= bounds.getHeight() / 2 + bounds.getMinY();
-						if (pos - bounds.getMinY() > getHeight() - 1)
-							pos = getHeight() + (int) bounds.getMinY() - 1;
-						if (pos + bounds.getMaxY() < 1)
-							pos = 1 - (int) bounds.getMaxY();
+						if (pos - bounds.getMinY() > getHeight() - 2)
+							pos = getHeight() + (int) bounds.getMinY() - 2;
+						else if (pos + bounds.getMaxY() < 2)
+							pos = 2 - (int) bounds.getMaxY();
 						((Graphics2D) g).drawString(text, getWidth() - theRenderWidth - (int) bounds.getMaxX(), pos);
 					}
 				} else {
@@ -415,10 +447,10 @@ public class MultiRangeSlider extends ConformingPanel {
 						String text = theValueRenderer.apply(tick);
 						Rectangle2D bounds = new TextLayout(text, getFont(), ((Graphics2D) g).getFontRenderContext()).getBounds();
 						pos -= bounds.getWidth() / 2 + bounds.getMinX() - 1;
-						if (pos + bounds.getMaxX() > getWidth() - 1)
-							pos = getWidth() - (int) bounds.getMaxX() - 1;
-						if (pos + bounds.getMinX() < 1)
-							pos = 1 - (int) bounds.getMinX();
+						if (pos + bounds.getMinX() < 2)
+							pos = 2 - (int) bounds.getMinX();
+						else if (pos + bounds.getMaxX() > getWidth() - 2)
+							pos = getWidth() - (int) bounds.getMaxX() - 2;
 						((Graphics2D) g).drawString(text, pos, theRenderWidth + 5 + (int) bounds.getMaxY());
 					}
 				}
@@ -426,8 +458,14 @@ public class MultiRangeSlider extends ConformingPanel {
 		}
 	}
 
+	/** A point that can be adjusted on a {@link Range} */
 	public enum RangePoint {
-		min, mid, max;
+		/** The minimum value of a range */
+		min,
+		/** The mid point of a range */
+		mid,
+		/** The maximum value of a range */
+		max;
 	}
 
 	/** Renders ranges in a slider */
@@ -463,8 +501,8 @@ public class MultiRangeSlider extends ConformingPanel {
 
 		/** A default {@link RangeRenderer} implementation that provides lots of customization for range rendering */
 		public static class Default extends JPanel implements RangeRenderer {
-			public static final int DEFAULT_WIDTH = 12;
-			public static final int DEFAULT_CIRCLE_SIZE = 8;
+			private static final int DEFAULT_WIDTH = 12;
+			private static final int DEFAULT_CIRCLE_SIZE = 8;
 			private static final Stroke NORMAL_STROKE = new BasicStroke(2, 0, 1);
 			private static final Stroke HOVERED_STROKE = new BasicStroke(3, 0, 1);
 			private static final Stroke FOCUSED_STROKE = new BasicStroke(4, 0, 1);
@@ -483,6 +521,7 @@ public class MultiRangeSlider extends ConformingPanel {
 			private RangePoint theHovered;
 			private RangePoint theFocused;
 
+			/** @param vertical Whether the slider to be rendered is horizontal or vertical */
 			public Default(boolean vertical) {
 				isVertical = vertical;
 				setRenderWidth(DEFAULT_WIDTH);
@@ -498,43 +537,75 @@ public class MultiRangeSlider extends ConformingPanel {
 					);
 			}
 
+			/** @return Whether this renderer is for horizontal or vertical sliders */
 			public boolean isVertical() {
 				return isVertical;
 			}
 
+			/**
+			 * @return The cross-dimension length to use to render ranges (the width of the range render for a vertical slider or the height
+			 *         of the range render for a horizontal one)
+			 */
 			public int getRenderWidth() {
 				return theRenderWidth;
 			}
 
+			/**
+			 * @param renderWidth The cross-dimension length to use to render ranges (the width of the range render for a vertical slider or
+			 *        the height of the range render for a horizontal one)
+			 * @return This renderer
+			 */
 			public Default setRenderWidth(int renderWidth) {
 				theRenderWidth = renderWidth;
 				return this;
 			}
 
+			/** @return The diameter of the circles used for the mid-point of ranges */
 			public int getCircleSize() {
 				return theCircleSize;
 			}
 
+			/**
+			 * @param circleSize The diameter for the circles to render for the mid-point of ranges
+			 * @return This renderer
+			 */
 			public Default setCircleSize(int circleSize) {
 				theCircleSize = circleSize;
 				return this;
 			}
 
+			/**
+			 * @param minCursor The cursor to use when the mouse hovers over a range's minimum value
+			 * @return This renderer
+			 */
 			public Default setMinCursor(Cursor minCursor) {
 				theMinCursor = minCursor;
 				return this;
 			}
 
+			/**
+			 * @param midCursor The cursor to use when the mouse hovers over a range's mid point
+			 * @return This renderer
+			 */
 			public Default setMidCursor(Cursor midCursor) {
 				theMidCursor = midCursor;
 				return this;
 			}
 
+			/**
+			 * @param maxCursor The cursor to use when the mouse hovers over a range's maximum value
+			 * @return This renderer
+			 */
 			public Default setMaxCursor(Cursor maxCursor) {
 				theMaxCursor = maxCursor;
 				return this;
 			}
 
+			/**
+			 * @param lineColor Produces a color for the render of each range in the model
+			 * @param circleColor Produces a color for the circle of each range in the model
+			 * @return This renderer
+			 */
 			public Default withColor(Function<CollectionElement<Range>, Color> lineColor,
 				Function<CollectionElement<Range>, Color> circleColor) {
 				theLineColor = lineColor;
@@ -542,15 +613,21 @@ public class MultiRangeSlider extends ConformingPanel {
 				return this;
 			}
 
+			/**
+			 * @param valueRenderer Produces text for tooltips
+			 * @return This renderer
+			 */
 			public Default setValueRenderer(DoubleFunction<String> valueRenderer) {
 				theValueRenderer = valueRenderer;
 				return this;
 			}
 
+			/** @return The {@link RangePoint} that the user is currently hovering over */
 			public RangePoint getHovered() {
 				return theHovered;
 			}
 
+			/** @return The {@link RangePoint} that the user has focused on */
 			public RangePoint getFocused() {
 				return theFocused;
 			}
@@ -632,6 +709,10 @@ public class MultiRangeSlider extends ConformingPanel {
 				((Graphics2D) g).setRenderingHint(RenderingHints.KEY_ANTIALIASING, preAA);
 			}
 
+			/**
+			 * @param point The range point to get the stroke for
+			 * @return The stroke to use for rendering the given range point
+			 */
 			protected Stroke getStroke(RangePoint point) {
 				if (point == null) {
 					if (theFocused != null)
@@ -661,6 +742,7 @@ public class MultiRangeSlider extends ConformingPanel {
 	private int theReferencePosition;
 	private double theReferenceValue;
 	private volatile MouseEvent theLastDrag;
+	private boolean isLastDragDrop;
 	private final List<int[]> theRangeRenderBounds;
 	private RangeValidator theValidator;
 	private MRSliderRenderer theRenderer;
@@ -692,9 +774,10 @@ public class MultiRangeSlider extends ConformingPanel {
 		QommonsTimer.TaskHandle[] updateTask = new QommonsTimer.TaskHandle[1];
 		theUpdateTask = updateTask[0] = QommonsTimer.getCommonInstance().build(() -> {
 			MouseEvent lastDrag = theLastDrag;
-			theLastDrag = null;
-			if (lastDrag != null)
-				moveFocus(lastDrag);
+			if (lastDrag != null//
+				&& (!moveFocus(lastDrag) || isLastDragDrop)//
+				&& theLastDrag == lastDrag)
+				theLastDrag = null;
 			updateTask[0].setActive(theLastDrag != null);
 		}, Duration.ofMillis(100), false).onEDT();
 		initListeners();
@@ -724,6 +807,7 @@ public class MultiRangeSlider extends ConformingPanel {
 					wasDragged = true;
 					if (isUpdateDelayed) {
 						theLastDrag = e;
+						isLastDragDrop = true;
 						theUpdateTask.setActive(true);
 					} else
 						moveFocus(e);
@@ -885,14 +969,17 @@ public class MultiRangeSlider extends ConformingPanel {
 		});
 	}
 
+	/** @return The bounds of this slider */
 	public ObservableValue<Range> getSliderRange() {
 		return theSliderRange;
 	}
 
+	/** @return The collection containing all the ranges rendered by this slider */
 	public ObservableCollection<Range> getRanges() {
 		return theRanges;
 	}
 
+	/** @return The maximum frequency for updates from this slider, or null if there is no maximum frequency */
 	public Duration getMaxUpdateInterval() {
 		return isUpdateDelayed ? theUpdateTask.getFrequency() : null;
 	}
@@ -911,6 +998,9 @@ public class MultiRangeSlider extends ConformingPanel {
 		return this;
 	}
 
+	/**
+	 * @return Whether this slider attempts to move its {@link #getSliderRange() range} when the user attempts to move ranges beyond them.
+	 */
 	public boolean isAdjustingBoundsForValue() {
 		return isAdjustingBoundsForValue;
 	}
@@ -926,10 +1016,12 @@ public class MultiRangeSlider extends ConformingPanel {
 		return this;
 	}
 
+	/** @return Whether this slider is rendered vertically or horizontally */
 	public boolean isVertical() {
 		return isVertical;
 	}
 
+	/** @return This slider's range validator */
 	public RangeValidator getValidator() {
 		return theValidator;
 	}
@@ -943,6 +1035,7 @@ public class MultiRangeSlider extends ConformingPanel {
 		return this;
 	}
 
+	/** @return The renderer for this slider */
 	public MRSliderRenderer getRenderer() {
 		return theRenderer;
 	}
@@ -963,6 +1056,7 @@ public class MultiRangeSlider extends ConformingPanel {
 		return this;
 	}
 
+	/** @return The renderer for ranges in this slider */
 	public RangeRenderer getRangeRenderer() {
 		return theRangeRenderer;
 	}
@@ -978,14 +1072,26 @@ public class MultiRangeSlider extends ConformingPanel {
 		return this;
 	}
 
+	/** @return The element ID of the range that the user is currently hovering over */
 	public ElementId getHoveredRange() {
 		return theHoveredRange;
 	}
 
+	/**
+	 * @return The range point that the user is currently hovering over
+	 * @see #getHoveredRange()
+	 */
 	public RangePoint getHoveredRangePoint() {
 		return theHoveredRangePoint;
 	}
 
+	/**
+	 * Overrides the hovered state of the UI
+	 *
+	 * @param hovered The element ID of the range to treat as hovered
+	 * @param point The range point to treat as hovered
+	 * @return This slider
+	 */
 	public MultiRangeSlider setHovered(ElementId hovered, RangePoint point) {
 		theRanges.getElement(hovered); // Validate the element
 		_setHovered(hovered, point);
@@ -1007,14 +1113,26 @@ public class MultiRangeSlider extends ConformingPanel {
 		}
 	}
 
+	/** @return The element ID of the range that the user has focused on (the last one clicked by the mouse typically) */
 	public ElementId getFocusedRange() {
 		return theFocusedRange;
 	}
 
+	/**
+	 * @return The range point that the user has focused on
+	 * @see #getFocusedRange()
+	 */
 	public RangePoint getFocusedRangePoint() {
 		return theFocusedRangePoint;
 	}
 
+	/**
+	 * Overrides the focused state of the UI
+	 *
+	 * @param focused The element ID of the range to treat as focused
+	 * @param point The range point to treat as focused
+	 * @return This slider
+	 */
 	public MultiRangeSlider setFocused(ElementId focused, RangePoint point) {
 		theRanges.getElement(focused); // Validate the element
 		_setFocused(focused, point);
@@ -1036,9 +1154,15 @@ public class MultiRangeSlider extends ConformingPanel {
 		}
 	}
 
-	protected void moveFocus(MouseEvent e) {
+	/**
+	 * Called when the user performs a mouse action that may be interpreted as an attempt to modify a range
+	 *
+	 * @param e The mouse event causing the move
+	 * @return If the move failed because of enablement, and the operation should be tried again
+	 */
+	protected boolean moveFocus(MouseEvent e) {
 		if (theFocusedRange == null || !theFocusedRange.isPresent())
-			return;
+			return true;
 		CollectionElement<Range> current = theRanges.getElement(theFocusedRange);
 		double value;
 		Range sliderRange2 = theSliderRange.get();
@@ -1052,25 +1176,32 @@ public class MultiRangeSlider extends ConformingPanel {
 			if (value > current.get().getMax())
 				value = current.get().getMax();
 			if (value == current.get().getMin())
-				return;
+				return false;
 			newRange = Range.forMinMax(value, current.get().getMax());
 			break;
 		case mid:
 			if (value == current.get().getValue())
-				return;
+				return false;
 			newRange = Range.forValueExtent(value, current.get().getExtent());
 			break;
 		case max:
 			if (value < current.get().getMin())
 				value = current.get().getMin();
 			if (value == current.get().getMax())
-				return;
+				return false;
 			newRange = Range.forMinMax(current.get().getMin(), value);
 			break;
 		}
-		tryMoveFocus(current, newRange, e);
+		return tryMoveFocus(current, newRange, e);
 	}
 
+	/**
+	 * Called when the user performs a keyboard action that may be interpreted as an attempt to modify a range
+	 *
+	 * @param range The collection element of the range to move
+	 * @param diff The amount for the movement
+	 * @param evt The keyboard event
+	 */
 	protected void moveFocus(CollectionElement<Range> range, double diff, KeyEvent evt) {
 		Range newRange = null;
 		double newV;
@@ -1114,7 +1245,15 @@ public class MultiRangeSlider extends ConformingPanel {
 		tryMoveFocus(range, newRange, evt);
 	}
 
-	protected void tryMoveFocus(CollectionElement<Range> range, Range newRange, Object cause) {
+	/**
+	 * Attempts to modify a range
+	 *
+	 * @param range The collection element of the range to modify
+	 * @param newRange The new value for the range
+	 * @param cause The cause of the change
+	 * @return True if the modification was rejected in a way that indicates the attempt should be reattempted
+	 */
+	protected boolean tryMoveFocus(CollectionElement<Range> range, Range newRange, Object cause) {
 		if (isAdjustingBoundsForValue && theSliderRange instanceof SettableValue) {
 			if (newRange.getMin() < theSliderRange.get().getMin()) {
 				if (newRange.getMax() > theSliderRange.get().getMax()) {
@@ -1133,15 +1272,18 @@ public class MultiRangeSlider extends ConformingPanel {
 		}
 		newRange = theValidator.validate(MultiRangeSlider.this, range, newRange, theFocusedRangePoint);
 		if (newRange == null)
-			return; // Rejected by the validator
+			return false; // Rejected by the validator
 		MutableCollectionElement<Range> mutableEl = theRanges.mutableElement(theFocusedRange);
+		if (mutableEl.isEnabled() != null)
+			return true; // Disabled--may try again later
 		String msg = mutableEl.isAcceptable(newRange);
 		if (msg != null) {
 			setToolTipText(msg);
 			ObservableSwingUtils.setTooltipVisible(MultiRangeSlider.this, true);
-			return; // Rejected by the data
+			return false; // Rejected by the data
 		}
 		mutableEl.set(newRange);
+		return false;
 	}
 
 	@Override
@@ -1263,8 +1405,10 @@ public class MultiRangeSlider extends ConformingPanel {
 			.filterAccept(r -> {
 				if (callbackLock[0])
 					return null;
-				String accept = value.isAcceptable(r.getValue());
-				if (accept == null)
+				String accept = null;
+				if (value.get() != r.getValue())
+					accept = value.isAcceptable(r.getValue());
+				if (accept == null && extent.get() != r.getExtent())
 					accept = extent.isAcceptable(r.getExtent());
 				return accept;
 			});
@@ -1337,6 +1481,14 @@ public class MultiRangeSlider extends ConformingPanel {
 		return single(vertical, sliderRange, transformToRange(min, max, until), until);
 	}
 
+	/**
+	 * Creates a range value from min/max values
+	 *
+	 * @param min The minimum value for the range
+	 * @param max The maximum value for the range
+	 * @param until An observable that will cause the synchronization between the min/max values and the result range value to cease
+	 * @return The range value defined by the given min/max values
+	 */
 	public static SettableValue<Range> transformToRange(SettableValue<Double> min, SettableValue<Double> max, Observable<?> until) {
 		boolean[] callbackLock = new boolean[1];
 		SettableValue<Range> range = SettableValue.build(Range.class).withValue(Range.forMinMax(min.get(), max.get()))//
@@ -1403,6 +1555,11 @@ public class MultiRangeSlider extends ConformingPanel {
 		return range;
 	}
 
+	/**
+	 * A simple main method that displays a couple sliders for testing and demonstration
+	 *
+	 * @param args Command-line arguments, ignored
+	 */
 	public static void main(String... args) {
 		JFrame frame = new JFrame(MultiRangeSlider.class.getSimpleName() + " Test");
 		frame.setSize(800, 640);
@@ -1410,12 +1567,12 @@ public class MultiRangeSlider extends ConformingPanel {
 		JPanel panel = new JPanel(new JustifiedBoxLayout(false).mainJustified().crossCenter());
 		ObservableCollection<Range> vRanges = ObservableCollection.build(Range.class).build();
 		MultiRangeSlider vSlider = multi(true, ObservableValue.of(Range.forMinMax(-100.0, 100.0)), vRanges, Observable.empty())//
-			// .setValidator(RangeValidator.NO_OVERLAP_ENFORCE_RANGE)//
+			.setValidator(RangeValidator.NO_OVERLAP_ENFORCE_RANGE)//
 			;
 		panel.add(vSlider);
 		ObservableCollection<Range> hRanges = ObservableCollection.build(Range.class).build();
 		MultiRangeSlider hSlider = multi(false, ObservableValue.of(Range.forMinMax(-100.0, 100.0)), hRanges, Observable.empty())//
-			// .setValidator(RangeValidator.NO_OVERLAP_ENFORCE_RANGE)//
+			.setValidator(RangeValidator.NO_OVERLAP_ENFORCE_RANGE)//
 			.setMaxUpdateInterval(Duration.ofMillis(250))//
 			;
 		panel.add(hSlider);
