@@ -1,8 +1,5 @@
 package org.observe.supertest.collect;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -18,10 +15,9 @@ import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
 import org.observe.util.TypeTokens;
 import org.qommons.LambdaUtils;
+import org.qommons.Primes;
 import org.qommons.TestHelper;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
-import org.qommons.io.CsvParser;
-import org.qommons.io.TextParseException;
 
 /** Simple flat-map test that maps integer-typed collections to the factorization of each element */
 public class FactoringFlatMapCollectionLink extends AbstractFlatMappedCollectionLink<Integer, Integer> {
@@ -143,28 +139,11 @@ public class FactoringFlatMapCollectionLink extends AbstractFlatMappedCollection
 	private static final int[] PRIME_INTS;
 
 	static {
-		List<Integer> intList = new ArrayList<>(10000);
-		try (BufferedReader reader = new BufferedReader(
-			new InputStreamReader(FactoringFlatMapCollectionLink.class.getResourceAsStream("primes.csv")))) {
-			CsvParser parser = new CsvParser(reader, ',');
-			String[] line = parser.parseNextLine();
-			while (line != null) {
-				for (String prime : line)
-					intList.add(Integer.parseInt(prime.trim()));
-				line = parser.parseNextLine();
-			}
-		} catch (IOException | TextParseException | NumberFormatException e) {
-			e.printStackTrace();
-			intList.clear();
-		}
-		if (intList.isEmpty())
-			PRIME_INTS = null;
-		else {
-			Integer[] intArray = intList.toArray(new Integer[intList.size()]);
-			PRIME_INTS = new int[intArray.length];
-			for (int i = 0; i < PRIME_INTS.length; i++)
-				PRIME_INTS[i] = intArray[i].intValue();
-		}
+		PRIME_INTS = new int[10000];
+		Primes primes = new Primes();
+		primes.generateAtLeast(PRIME_INTS.length);
+		for (int i = 0, prime = 2; i < PRIME_INTS.length; i++, prime = primes.getPrimeGTE(prime + 1))
+			PRIME_INTS[i] = prime;
 	}
 
 	static ObservableCollection<Integer> getPrimeFactors(int value) {
