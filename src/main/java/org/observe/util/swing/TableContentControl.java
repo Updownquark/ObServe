@@ -400,7 +400,7 @@ public interface TableContentControl {
 		for (int c = 0; c < controlText.length(); c++) {
 			if (controlText.charAt(c) == '"') {
 				if (quoted) {
-					splitList.add(controlText.subSequence(contentStart, c).toString().toLowerCase());
+					splitList.add(controlText.subSequence(contentStart, c).toString());
 					contentStart = c + 1;
 					continue;
 				} else if (contentStart == c) {
@@ -411,13 +411,13 @@ public interface TableContentControl {
 			}
 			if (!quoted && Character.isWhitespace(controlText.charAt(c))) {
 				if (contentStart < c) {
-					splitList.add(controlText.subSequence(contentStart, c).toString().toLowerCase());
+					splitList.add(controlText.subSequence(contentStart, c).toString());
 				}
 				contentStart = c + 1;
 			}
 		}
 		if (contentStart < controlText.length())
-			splitList.add(controlText.subSequence(contentStart, controlText.length()).toString().toLowerCase());
+			splitList.add(controlText.subSequence(contentStart, controlText.length()).toString());
 		else if (splitList.isEmpty())
 			splitList.add(controlText.toString()); // If all the text is whitespace, then search for whitespace
 		String[] split = splitList.toArray(new String[splitList.size()]);
@@ -1045,20 +1045,10 @@ public interface TableContentControl {
 		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence text) {
 			if (category != null && !category.searchGeneral())
 				return null;
-			SortedMatchSet matches = null;
 			Matcher matcher = thePattern.matcher(text);
-			int start = 0;
-			while (matcher.find(start)) {
-				if (matcher.end() == matcher.start()) { // Don't report empty matches or get stuck in the loop
-					start = matcher.end() + 1;
-					continue;
-				}
-				if (matches == null)
-					matches = new SortedMatchSet();
-				matches.add(matcher.start(), matcher.end());
-				start = matcher.end();
-			}
-			return matches;
+			if (!matcher.matches())
+				return null;
+			return new SortedMatchSet().add(0, matcher.end());
 		}
 
 		@Override
