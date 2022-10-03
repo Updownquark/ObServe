@@ -62,7 +62,7 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 	private List<SimpleDataAction<BetterList<F>, ?>> theActions;
 
 	private SimpleTreeBuilder(ObservableValue<? extends F> root, ObservableTreeModel<F> model, Observable<?> until) {
-		super(new JTree(model), until);
+		super(null, new JTree(model), until);
 		theRenderer = new CategoryRenderStrategy<>("Tree", (TypeToken<F>) root.getType(),
 			LambdaUtils.printableFn(BetterList::getLast, "BetterList::getLast", null));
 		theRoot = root;
@@ -124,6 +124,8 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 	@Override
 	public List<BetterList<F>> getSelection() {
 		TreePath[] selection = getEditor().getSelectionPaths();
+		if (selection == null)
+			return BetterList.empty();
 		return BetterList.of(Arrays.stream(selection)//
 			.map(path -> (BetterList<F>) BetterList.of(path.getPath())));
 	}

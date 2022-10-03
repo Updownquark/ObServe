@@ -1,5 +1,6 @@
 package org.observe.util.swing;
 
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Dialog.ModalityType;
@@ -9,6 +10,8 @@ import java.awt.Image;
 import java.awt.LayoutManager;
 import java.awt.LayoutManager2;
 import java.awt.Window;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 import java.io.File;
 import java.lang.reflect.Constructor;
@@ -54,6 +57,7 @@ import org.observe.Observable;
 import org.observe.ObservableAction;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
+import org.observe.SimpleObservable;
 import org.observe.collect.ObservableCollection;
 import org.observe.config.ObservableConfig;
 import org.observe.dbug.Dbug;
@@ -97,7 +101,7 @@ public class PanelPopulation {
 				"Calling panel population off of the EDT from " + BreakpointHere.getCodeLine(1) + "--could cause threading problems!!");
 		if (panel == null)
 			panel = (C) new ConformingPanel();
-		return new PanelPopulationImpl.MigFieldPanel<>(panel, until == null ? Observable.empty() : until);
+		return new PanelPopulationImpl.MigFieldPanel<>(null, panel, until == null ? Observable.empty() : until);
 	}
 
 	public static <C extends Container> PanelPopulator<C, ?> populateHPanel(C panel, String layoutType, Observable<?> until) {
@@ -138,6 +142,30 @@ public class PanelPopulation {
 			System.err.println(
 				"Calling panel population off of the EDT from " + BreakpointHere.getCodeLine(1) + "--could cause threading problems!!");
 		return new SimpleTableBuilder<>(rows, Observable.empty());
+	}
+
+	public static Alert alert(Component parent, String title, String message) {
+		return new PanelPopulationImpl.SimpleAlert(parent, title, message);
+	}
+
+	public static void showTempDialog(Component parent, Consumer<WindowBuilder<JDialog, ?>> window, Observable<?> until) {
+		SimpleObservable<Void> end = new SimpleObservable<>();
+		if (until == null)
+			until = end;
+		else
+			until = Observable.or(until, end);
+		WindowBuilder<JDialog, ?> windowBuilder = WindowPopulation.populateDialog(null, until, true)//
+			.modal(true);
+		windowBuilder.getWindow().addKeyListener(new KeyAdapter() {
+			@Override
+			public void keyPressed(KeyEvent e) {
+				if (e.getKeyCode() == KeyEvent.VK_ESCAPE)
+					windowBuilder.getWindow().setVisible(false);
+			}
+		});
+		window.accept(windowBuilder);
+		windowBuilder.run(parent);
+		end.onNext(null);
 	}
 
 	public interface PanelPopulator<C extends Container, P extends PanelPopulator<C, P>> extends ComponentEditor<C, P> {
@@ -202,13 +230,19 @@ public class PanelPopulation {
 		<F> P addSpinnerField(String fieldName, JSpinner spinner, SettableValue<F> value, Function<? super F, ? extends F> purifier,
 			Consumer<SteppedFieldEditor<JSpinner, F, ?>> modify);
 
-		P addSlider(String fieldName, SettableValue<Double> value, Consumer<SliderEditor<?, ?>> modify);
+		P addSlider(String fieldName, SettableValue<Double> value, Consumer<SliderEditor<MultiRangeSlider, ?>> modify);
 
-		P addMultiSlider(String fieldName, ObservableCollection<Double> values, Consumer<SliderEditor<?, ?>> modify);
+		P addMultiSlider(String fieldName, ObservableCollection<Double> values, Consumer<SliderEditor<MultiRangeSlider, ?>> modify);
 
-		P addRangeSlider(String fieldName, SettableValue<Double> min, SettableValue<Double> max, Consumer<SliderEditor<?, ?>> modify);
+		default P addRangeSlider(String fieldName, SettableValue<Double> min, SettableValue<Double> max,
+			Consumer<SliderEditor<MultiRangeSlider, ?>> modify) {
+			return addRangeSlider(fieldName, MultiRangeSlider.transformToRange(min, max, getUntil()), modify);
+		}
 
-		P addMultiRangeSlider(String fieldName, ObservableCollection<MultiRangeSlider.Range> values, Consumer<SliderEditor<?, ?>> modify);
+		P addRangeSlider(String fieldName, SettableValue<MultiRangeSlider.Range> range, Consumer<SliderEditor<MultiRangeSlider, ?>> modify);
+
+		P addMultiRangeSlider(String fieldName, ObservableCollection<MultiRangeSlider.Range> values,
+			Consumer<SliderEditor<MultiRangeSlider, ?>> modify);
 
 		default <F> P addComboField(String fieldName, SettableValue<F> value, Consumer<ComboEditor<F, ?>> modify, F... availableValues) {
 			return addComboField(fieldName, value, Arrays.asList(availableValues), modify);
@@ -334,6 +368,16 @@ public class PanelPopulation {
 	public interface ComponentEditor<E, P extends ComponentEditor<E, P>> extends Tooltipped<P> {
 		Observable<?> getUntil();
 
+		default P withFieldName(String fieldName) {
+			return withFieldName(fieldName == null ? null : ObservableValue.of(fieldName));
+		}
+
+		P withFieldName(ObservableValue<String> fieldName);
+
+		P modifyFieldLabel(Consumer<ObservableSwingUtils.FontAdjuster<?>> font);
+
+		P withFont(Consumer<ObservableSwingUtils.FontAdjuster<?>> font);
+
 		E getEditor();
 
 		P visibleWhen(ObservableValue<Boolean> visible);
@@ -356,6 +400,8 @@ public class PanelPopulation {
 
 		P decorate(Consumer<ComponentDecorator> decoration);
 
+		P repaintOn(Observable<?> repaint);
+
 		P modifyEditor(Consumer<? super E> modify);
 
 		P modifyComponent(Consumer<Component> component);
@@ -377,6 +423,8 @@ public class PanelPopulation {
 			}, interval, false).times(5).onEDT().runNextIn(interval);
 			return (P) this;
 		}
+
+		P withPopupMenu(Consumer<MenuBuilder<?>> menu);
 
 		P onMouse(Consumer<MouseEvent> onMouse);
 
@@ -427,12 +475,6 @@ public class PanelPopulation {
 	}
 
 	public interface FieldEditor<E, P extends FieldEditor<E, P>> extends ComponentEditor<E, P>, Tooltipped<P> {
-		default P withFieldName(String fieldName) {
-			return withFieldName(fieldName == null ? null : ObservableValue.of(fieldName));
-		}
-
-		P withFieldName(ObservableValue<String> fieldName);
-
 		default P withPostLabel(String postLabel) {
 			return withPostLabel(postLabel == null ? null : ObservableValue.of(postLabel));
 		}
@@ -460,10 +502,6 @@ public class PanelPopulation {
 		}
 
 		P withPostButton(String buttonText, ObservableAction<?> action, Consumer<ButtonEditor<JButton, ?>> modify);
-
-		P modifyFieldLabel(Consumer<ObservableSwingUtils.FontAdjuster<?>> font);
-
-		P withFont(Consumer<ObservableSwingUtils.FontAdjuster<?>> font);
 	}
 
 	public interface Iconized<I> {
@@ -515,6 +553,10 @@ public class PanelPopulation {
 	}
 
 	public interface SliderEditor<E, P extends SliderEditor<E, P>> extends FieldEditor<E, P> {
+		default P withBounds(double min, double max) {
+			return withBounds(ObservableValue.of(min), ObservableValue.of(max));
+		}
+
 		P withBounds(ObservableValue<Double> min, ObservableValue<Double> max);
 
 		P adjustBoundsForValue(boolean adjustForValue);
@@ -972,6 +1014,12 @@ public class PanelPopulation {
 
 		default <T> T input(Class<T> type, Format<T> format, T initial, Consumer<ObservableTextField<T>> modify) {
 			return input(TypeTokens.get().of(type), format, initial, modify);
+		}
+
+		Color inputColor(boolean withAlpha, Color initial, Function<Color, String> filter);
+
+		default Color inputColor(boolean withAlpha, Color initial) {
+			return inputColor(withAlpha, initial, __ -> null);
 		}
 	}
 

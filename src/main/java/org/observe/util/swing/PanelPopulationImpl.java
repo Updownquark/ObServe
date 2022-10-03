@@ -13,6 +13,8 @@ import java.awt.LayoutManager2;
 import java.awt.Point;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
@@ -50,6 +52,7 @@ import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JList;
+import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
@@ -92,6 +95,7 @@ import org.observe.util.swing.PanelPopulation.DataAction;
 import org.observe.util.swing.PanelPopulation.FieldEditor;
 import org.observe.util.swing.PanelPopulation.ImageControl;
 import org.observe.util.swing.PanelPopulation.ListBuilder;
+import org.observe.util.swing.PanelPopulation.MenuBuilder;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.observe.util.swing.PanelPopulation.ProgressEditor;
 import org.observe.util.swing.PanelPopulation.ScrollPane;
@@ -106,8 +110,10 @@ import org.observe.util.swing.PanelPopulation.ToggleEditor;
 import org.observe.util.swing.PanelPopulation.TreeEditor;
 import org.observe.util.swing.PanelPopulation.TreeTableEditor;
 import org.observe.util.swing.PanelPopulation.WindowBuilder;
+import org.observe.util.swing.WindowPopulation.AbstractMenuBuilder;
 import org.qommons.BiTuple;
 import org.qommons.Identifiable;
+import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.IntList;
 import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
@@ -117,6 +123,7 @@ import org.qommons.ValueHolder;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.MutableCollectionElement;
+import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.io.Format;
 
 import com.google.common.reflect.TypeToken;
@@ -132,11 +139,11 @@ class PanelPopulationImpl {
 
 		void doAdd(AbstractComponentEditor<?, ?> field, Component fieldLabel, Component postLabel, boolean scrolled);
 
-		default void doAdd(SimpleFieldEditor<?, ?> field) {
+		default void doAdd(AbstractComponentEditor<?, ?> field) {
 			doAdd(field, false);
 		}
 
-		default void doAdd(SimpleFieldEditor<?, ?> field, boolean scrolled) {
+		default void doAdd(AbstractComponentEditor<?, ?> field, boolean scrolled) {
 			doAdd(field, field.createFieldNameLabel(getUntil()), field.createPostLabel(getUntil()), scrolled);
 		}
 
@@ -286,7 +293,7 @@ class PanelPopulationImpl {
 		}
 
 		@Override
-		default P addSlider(String fieldName, SettableValue<Double> value, Consumer<SliderEditor<?, ?>> modify) {
+		default P addSlider(String fieldName, SettableValue<Double> value, Consumer<SliderEditor<MultiRangeSlider, ?>> modify) {
 			SimpleMultiSliderEditor<?> compEditor = SimpleMultiSliderEditor.createForValue(fieldName, value, getUntil());
 			if (modify != null)
 				modify.accept(compEditor);
@@ -298,7 +305,8 @@ class PanelPopulationImpl {
 		}
 
 		@Override
-		default P addMultiSlider(String fieldName, ObservableCollection<Double> values, Consumer<SliderEditor<?, ?>> modify) {
+		default P addMultiSlider(String fieldName, ObservableCollection<Double> values,
+			Consumer<SliderEditor<MultiRangeSlider, ?>> modify) {
 			SimpleMultiSliderEditor<?> compEditor = SimpleMultiSliderEditor.createForValues(fieldName, values, getUntil());
 			if (modify != null)
 				modify.accept(compEditor);
@@ -310,13 +318,13 @@ class PanelPopulationImpl {
 		}
 
 		@Override
-		default P addRangeSlider(String fieldName, SettableValue<Double> min, SettableValue<Double> max,
-			Consumer<SliderEditor<?, ?>> modify) {
-			SimpleMultiSliderEditor<?> compEditor = SimpleMultiSliderEditor.createForMinMax(fieldName, min, max, getUntil());
+		default P addRangeSlider(String fieldName, SettableValue<MultiRangeSlider.Range> range,
+			Consumer<SliderEditor<MultiRangeSlider, ?>> modify) {
+			SimpleMultiSliderEditor<?> compEditor = SimpleMultiSliderEditor.createForRange(fieldName, range, getUntil());
 			if (modify != null)
 				modify.accept(compEditor);
 			if (compEditor.isDecorated())
-				Observable.or(min.noInitChanges(), max.noInitChanges()).safe(ThreadConstraint.EDT).takeUntil(getUntil())//
+				range.noInitChanges().safe(ThreadConstraint.EDT).takeUntil(getUntil())//
 				.act(__ -> compEditor.decorate(compEditor.getComponent()));
 			doAdd(compEditor);
 			return (P) this;
@@ -324,7 +332,7 @@ class PanelPopulationImpl {
 
 		@Override
 		default P addMultiRangeSlider(String fieldName, ObservableCollection<MultiRangeSlider.Range> values,
-			Consumer<SliderEditor<?, ?>> modify) {
+			Consumer<SliderEditor<MultiRangeSlider, ?>> modify) {
 			SimpleMultiSliderEditor<?> compEditor = SimpleMultiSliderEditor.createForRanges(fieldName, values, getUntil());
 			if (modify != null)
 				modify.accept(compEditor);
@@ -524,16 +532,16 @@ class PanelPopulationImpl {
 
 		@Override
 		default P addVPanel(Consumer<PanelPopulator<JPanel, ?>> panel) {
-			MigFieldPanel<JPanel, ?> subPanel = new MigFieldPanel<>(new ConformingPanel(), getUntil());
+			MigFieldPanel<JPanel, ?> subPanel = new MigFieldPanel<>(null, new ConformingPanel(), getUntil());
 			if (panel != null)
 				panel.accept(subPanel);
-			doAdd(subPanel, null, null, false);
+			doAdd(subPanel);
 			return (P) this;
 		}
 
 		@Override
 		default P addSettingsMenu(Consumer<SettingsMenu<JPanel, ?>> menu) {
-			SettingsMenuImpl<JPanel, ?> settingsMenu = new SettingsMenuImpl<>(new ConformingPanel(), getUntil());
+			SettingsMenuImpl<JPanel, ?> settingsMenu = new SettingsMenuImpl<>(null, new ConformingPanel(), getUntil());
 			if (menu != null)
 				menu.accept(settingsMenu);
 			doAdd(settingsMenu, null, null, false);
@@ -554,6 +562,8 @@ class PanelPopulationImpl {
 	static abstract class AbstractComponentEditor<E, P extends AbstractComponentEditor<E, P>> implements ComponentEditor<E, P> {
 		private final Observable<?> theUntil;
 		private final E theEditor;
+		private ObservableValue<String> theFieldName;
+		private Consumer<FontAdjuster<?>> theFieldLabelModifier;
 		private Object theLayoutConstraints;
 		private boolean isFillH;
 		private boolean isFillV;
@@ -562,14 +572,19 @@ class PanelPopulationImpl {
 		private boolean isTooltipHandled;
 		private SettableValue<ObservableValue<String>> theSettableTooltip;
 		private ComponentDecorator theDecorator;
+		private List<Consumer<ComponentDecorator>> theDecorators;
+		private Observable<?> theRepaint;
 		private Consumer<MouseEvent> theMouseListener;
 		private String theName;
 		private PanelPopulator<?, ?> theGlassPane;
 		private Component theBuiltComponent;
 
+		protected Consumer<FontAdjuster<?>> theFont;
 		private ObservableValue<Boolean> isVisible;
+		private Consumer<MenuBuilder<?>> thePopupMenu;
 
-		AbstractComponentEditor(E editor, Observable<?> until) {
+		AbstractComponentEditor(String fieldName, E editor, Observable<?> until) {
+			theFieldName = fieldName == null ? null : ObservableValue.of(fieldName);
 			theEditor = editor;
 			theUntil = until == null ? Observable.empty() : until;
 			theSettableTooltip = SettableValue
@@ -585,6 +600,40 @@ class PanelPopulationImpl {
 		@Override
 		public E getEditor() {
 			return theEditor;
+		}
+
+		@Override
+		public P withFieldName(ObservableValue<String> fieldName) {
+			theFieldName = fieldName;
+			return (P) this;
+		}
+
+		@Override
+		public P modifyFieldLabel(Consumer<FontAdjuster<?>> labelModifier) {
+			if (theFieldLabelModifier == null)
+				theFieldLabelModifier = labelModifier;
+			else {
+				Consumer<FontAdjuster<?>> prev = theFieldLabelModifier;
+				theFieldLabelModifier = f -> {
+					prev.accept(f);
+					labelModifier.accept(f);
+				};
+			}
+			return (P) this;
+		}
+
+		@Override
+		public P withFont(Consumer<FontAdjuster<?>> font) {
+			if (theFont == null)
+				theFont = font;
+			else {
+				Consumer<FontAdjuster<?>> prev = theFont;
+				theFont = f -> {
+					prev.accept(f);
+					font.accept(f);
+				};
+			}
+			return (P) this;
 		}
 
 		@Override
@@ -628,9 +677,21 @@ class PanelPopulationImpl {
 
 		@Override
 		public P decorate(Consumer<ComponentDecorator> decoration) {
-			if (theDecorator == null)
+			if (theDecorator == null) {
 				theDecorator = new ComponentDecorator();
+				theDecorators = new ArrayList<>();
+			}
 			decoration.accept(theDecorator);
+			theDecorators.add(decoration);
+			return (P) this;
+		}
+
+		@Override
+		public P repaintOn(Observable<?> repaint) {
+			if (theRepaint == null)
+				theRepaint = repaint;
+			else
+				theRepaint = Observable.or(theRepaint, repaint);
 			return (P) this;
 		}
 
@@ -671,6 +732,12 @@ class PanelPopulationImpl {
 		}
 
 		@Override
+		public P withPopupMenu(Consumer<MenuBuilder<?>> menu) {
+			thePopupMenu = menu;
+			return (P) this;
+		}
+
+		@Override
 		public P onMouse(Consumer<MouseEvent> onMouse) {
 			if (theMouseListener == null)
 				theMouseListener = onMouse;
@@ -690,6 +757,24 @@ class PanelPopulationImpl {
 			return (P) this;
 		}
 
+		protected <C extends JComponent> C onFieldName(C fieldNameComponent, Consumer<String> fieldName, Observable<?> until) {
+			if (theFieldName == null)
+				return null;
+			theFieldName.changes().takeUntil(until).act(evt -> fieldName.accept(evt.getNewValue()));
+			if (fieldNameComponent != null && theFieldLabelModifier != null)
+				theFieldLabelModifier.accept(new FontAdjuster<>(fieldNameComponent));
+			if (fieldNameComponent != null && theFont != null)
+				theFont.accept(new FontAdjuster<>(fieldNameComponent));
+			return fieldNameComponent;
+		}
+
+		protected Component createFieldNameLabel(Observable<?> until) {
+			if (theFieldName == null)
+				return null;
+			JLabel fieldNameLabel = new JLabel(theFieldName.get());
+			return onFieldName(fieldNameLabel, fieldNameLabel::setText, until);
+		}
+
 		private boolean decorated = false;
 
 		protected Component decorate(Component c) {
@@ -697,38 +782,117 @@ class PanelPopulationImpl {
 				theTooltip.changes().takeUntil(getUntil()).act(evt -> ((JComponent) theEditor).setToolTipText(evt.getNewValue()));
 			if (theDecorator != null)
 				theDecorator.decorate(c);
+			if (theRepaint != null) {
+				Component fc = c;
+				theRepaint.takeUntil(theUntil).act(__ -> {
+					if (theDecorator != null) {
+						for (Consumer<ComponentDecorator> deco : theDecorators)
+							deco.accept(theDecorator);
+						theDecorator.decorate(fc);
+					}
+					fc.repaint();
+				});
+			}
 			if (decorated)
 				return c;
 			decorated = true;
 			if (theName != null)
 				c.setName(theName);
-			if (theMouseListener != null)
+			class JPMBuilder extends AbstractMenuBuilder<JPMBuilder> {
+				private final JPopupMenu popup = new JPopupMenu();
+
+				public JPMBuilder(Observable<?> until) {
+					super(until);
+				}
+
+				@Override
+				protected JComponent getComponent() {
+					return popup;
+				}
+
+				@Override
+				protected void setText(String text) {
+					// No text on a popup menu
+				}
+
+				@Override
+				protected void setIcon(Icon icon) {
+					// No icon on a popup menu
+				}
+
+				@Override
+				protected int getMenuComponentCount() {
+					return popup.getComponentCount();
+				}
+
+				@Override
+				protected Component getMenuComponent(int i) {
+					return popup.getComponent(i);
+				}
+
+				@Override
+				protected void add(JMenuItem item) {
+					popup.add(item);
+				}
+			}
+			JPMBuilder menuBuilder;
+			JPopupMenu popup;
+			if (thePopupMenu != null) {
+				menuBuilder = new JPMBuilder(getUntil());
+				thePopupMenu.accept(menuBuilder);
+				popup = (JPopupMenu) menuBuilder.install();
+			} else {
+				menuBuilder = null;
+				popup = null;
+			}
+			if (theMouseListener != null || popup != null) {
+				Component finalC = c;
 				c.addMouseListener(new MouseListener() {
 					@Override
 					public void mouseClicked(MouseEvent e) {
-						theMouseListener.accept(e);
+						if (theMouseListener != null)
+							theMouseListener.accept(e);
+						if (popup != null //
+							&& e.getClickCount() == 1 && SwingUtilities.isRightMouseButton(e)//
+							&& (menuBuilder.getVisibility() == null || menuBuilder.getVisibility().get())//
+							&& (menuBuilder.getDisabled() == null || menuBuilder.getDisabled().get() == null)) {
+							boolean anyActionsVisible = false;
+							for (Component item : popup.getComponents()) {
+								if (item.isVisible()) {
+									anyActionsVisible = true;
+									break;
+								}
+							}
+							if (anyActionsVisible)
+								popup.show(finalC, e.getX(), e.getY());
+						}
 					}
 
 					@Override
 					public void mousePressed(MouseEvent e) {
-						theMouseListener.accept(e);
+						if (theMouseListener != null)
+							theMouseListener.accept(e);
 					}
 
 					@Override
 					public void mouseReleased(MouseEvent e) {
-						theMouseListener.accept(e);
+						if (theMouseListener != null)
+							theMouseListener.accept(e);
 					}
 
 					@Override
 					public void mouseEntered(MouseEvent e) {
-						theMouseListener.accept(e);
+						if (theMouseListener != null)
+							theMouseListener.accept(e);
 					}
 
 					@Override
 					public void mouseExited(MouseEvent e) {
-						theMouseListener.accept(e);
+						if (theMouseListener != null)
+							theMouseListener.accept(e);
 					}
 				});
+			}
 			if (theComponentModifier != null)
 				theComponentModifier.accept(c);
 			if (theGlassPane != null) {
@@ -765,8 +929,6 @@ class PanelPopulationImpl {
 		protected ObservableValue<Boolean> isVisible() {
 			return isVisible;
 		}
-
-		protected abstract Component createFieldNameLabel(Observable<?> until);
 
 		protected abstract Component createPostLabel(Observable<?> until);
 	}
@@ -810,8 +972,8 @@ class PanelPopulationImpl {
 
 	static class MigFieldPanel<C extends Container, P extends MigFieldPanel<C, P>> extends AbstractComponentEditor<C, P>
 	implements PartialPanelPopulatorImpl<C, P> {
-		MigFieldPanel(C container, Observable<?> until) {
-			super(//
+		MigFieldPanel(String fieldName, C container, Observable<?> until) {
+			super(fieldName, //
 				container != null ? container
 					: (C) new ConformingPanel(PanelPopulation.createMigLayout(true, () -> "install the layout before using this class")),
 					until);
@@ -900,8 +1062,8 @@ class PanelPopulationImpl {
 		private final JLabel theMenuCloser;
 		private boolean hasShown;
 
-		SettingsMenuImpl(C container, Observable<?> until) {
-			super(container, until);
+		SettingsMenuImpl(String fieldName, C container, Observable<?> until) {
+			super(fieldName, container, until);
 			thePopup = new JPopupMenu();
 			theIcon = ObservableValue.of(Icon.class, ObservableSwingUtils.getFixedIcon(null, "icons/gear.png", 20, 20));
 			theMenuCloser = new JLabel();
@@ -1001,21 +1163,11 @@ class PanelPopulationImpl {
 
 	static class SimpleFieldEditor<E, P extends SimpleFieldEditor<E, P>> extends AbstractComponentEditor<E, P>
 	implements FieldEditor<E, P> {
-		private ObservableValue<String> theFieldName;
-		private Consumer<FontAdjuster<?>> theFieldLabelModifier;
 		private ObservableValue<String> thePostLabel;
 		private SimpleButtonEditor<JButton, ?> thePostButton;
-		private Consumer<FontAdjuster<?>> theFont;
 
 		SimpleFieldEditor(String fieldName, E editor, Observable<?> until) {
-			super(editor, until);
-			theFieldName = fieldName == null ? null : ObservableValue.of(fieldName);
-		}
-
-		@Override
-		public P withFieldName(ObservableValue<String> fieldName) {
-			theFieldName = fieldName;
-			return (P) this;
+			super(fieldName, editor, until);
 		}
 
 		@Override
@@ -1038,53 +1190,6 @@ class PanelPopulationImpl {
 			if (modify != null)
 				modify.accept(thePostButton);
 			return (P) this;
-		}
-
-		@Override
-		public P modifyFieldLabel(Consumer<FontAdjuster<?>> labelModifier) {
-			if (theFieldLabelModifier == null)
-				theFieldLabelModifier = labelModifier;
-			else {
-				Consumer<FontAdjuster<?>> prev = theFieldLabelModifier;
-				theFieldLabelModifier = f -> {
-					prev.accept(f);
-					labelModifier.accept(f);
-				};
-			}
-			return (P) this;
-		}
-
-		@Override
-		public P withFont(Consumer<FontAdjuster<?>> font) {
-			if (theFont == null)
-				theFont = font;
-			else {
-				Consumer<FontAdjuster<?>> prev = theFont;
-				theFont = f -> {
-					prev.accept(f);
-					font.accept(f);
-				};
-			}
-			return (P) this;
-		}
-
-		protected <C extends JComponent> C onFieldName(C fieldNameComponent, Consumer<String> fieldName, Observable<?> until) {
-			if (theFieldName == null)
-				return null;
-			theFieldName.changes().takeUntil(until).act(evt -> fieldName.accept(evt.getNewValue()));
-			if (fieldNameComponent != null && theFieldLabelModifier != null)
-				theFieldLabelModifier.accept(new FontAdjuster<>(fieldNameComponent));
-			if (fieldNameComponent != null && theFont != null)
-				theFont.accept(new FontAdjuster<>(fieldNameComponent));
-			return fieldNameComponent;
-		}
-
-		@Override
-		protected Component createFieldNameLabel(Observable<?> until) {
-			if (theFieldName == null)
-				return null;
-			JLabel fieldNameLabel = new JLabel(theFieldName.get());
-			return onFieldName(fieldNameLabel, fieldNameLabel::setText, until);
 		}
 
 		@Override
@@ -1382,6 +1487,15 @@ class PanelPopulationImpl {
 					).collectPassive(), //
 					until),
 				minMax, until);
+		}
+
+		public static SimpleMultiSliderEditor<?> createForRange(String fieldName, SettableValue<MultiRangeSlider.Range> range,
+			Observable<?> until) {
+			SettableValue<ObservableValue<Double>>[] minMax = createMinMax();
+			SettableValue<MultiRangeSlider.Range> sliderBounds = createSliderBounds(until, minMax);
+			MultiRangeSlider slider = MultiRangeSlider.single(false, sliderBounds, range, until);
+			((MultiRangeSlider.RangeRenderer.Default) slider.getRangeRenderer()).withColor(r -> Color.blue, r -> Color.blue);
+			return new SimpleMultiSliderEditor<>(fieldName, slider, minMax, until);
 		}
 
 		public static SimpleMultiSliderEditor<?> createForRanges(String fieldName, ObservableCollection<MultiRangeSlider.Range> ranges,
@@ -1695,7 +1809,7 @@ class PanelPopulationImpl {
 		private Tab theSelectedTab;
 
 		SimpleTabPaneEditor(Observable<?> until) {
-			super(new JTabbedPane(), until);
+			super(null, new JTabbedPane(), until);
 			theTabs = new LinkedHashMap<>();
 			theTabsByComponent = new IdentityHashMap<>();
 			theSelectedTabId = SettableValue.build(Object.class).build();
@@ -1709,7 +1823,7 @@ class PanelPopulationImpl {
 
 		@Override
 		public P withVTab(Object tabID, int tabIndex, Consumer<PanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier) {
-			MigFieldPanel<JPanel, ?> fieldPanel = new MigFieldPanel<>(null, getUntil());
+			MigFieldPanel<JPanel, ?> fieldPanel = new MigFieldPanel<>(null, null, getUntil());
 			panel.accept(fieldPanel);
 			return withTabImpl(tabID, tabIndex, fieldPanel.getContainer(), tabModifier, fieldPanel);
 		}
@@ -2051,7 +2165,7 @@ class PanelPopulationImpl {
 		private SettableValue<Double> theObsDivProportion;
 
 		SimpleSplitEditor(boolean vertical, Observable<?> until) {
-			super(new JSplitPane(vertical ? JSplitPane.VERTICAL_SPLIT : JSplitPane.HORIZONTAL_SPLIT), until);
+			super(null, new JSplitPane(vertical ? JSplitPane.VERTICAL_SPLIT : JSplitPane.HORIZONTAL_SPLIT), until);
 		}
 
 		boolean hasSetFirst;
@@ -2059,7 +2173,7 @@ class PanelPopulationImpl {
 
 		@Override
 		public P firstV(Consumer<PanelPopulator<?, ?>> vPanel) {
-			MigFieldPanel<JPanel, ?> fieldPanel = new MigFieldPanel<>(null, getUntil());
+			MigFieldPanel<JPanel, ?> fieldPanel = new MigFieldPanel<>(null, null, getUntil());
 			vPanel.accept(fieldPanel);
 			first(fieldPanel.getComponent());
 			if (fieldPanel.isVisible() != null)
@@ -2088,7 +2202,7 @@ class PanelPopulationImpl {
 
 		@Override
 		public P lastV(Consumer<PanelPopulator<?, ?>> vPanel) {
-			MigFieldPanel<JPanel, ?> fieldPanel = new MigFieldPanel<>(null, getUntil());
+			MigFieldPanel<JPanel, ?> fieldPanel = new MigFieldPanel<>(null, null, getUntil());
 			vPanel.accept(fieldPanel);
 			last(fieldPanel.getComponent());
 			if (fieldPanel.isVisible() != null)
@@ -2348,7 +2462,7 @@ class PanelPopulationImpl {
 
 		@Override
 		public P withVContent(Consumer<PanelPopulator<?, ?>> panel) {
-			MigFieldPanel<JPanel, ?> fieldPanel = new MigFieldPanel<>(null, getUntil());
+			MigFieldPanel<JPanel, ?> fieldPanel = new MigFieldPanel<>(null, null, getUntil());
 			panel.accept(fieldPanel);
 			withContent(fieldPanel.getComponent());
 			if (fieldPanel.isVisible() != null)
@@ -2419,11 +2533,11 @@ class PanelPopulationImpl {
 		private SettableValue<Boolean> isCollapsed;
 
 		SimpleCollapsePane(JXCollapsiblePane cp, Observable<?> until, boolean vertical, LayoutManager layout) {
-			super((JXPanel) cp.getContentPane(), until);
+			super(null, (JXPanel) cp.getContentPane(), until);
 			theCollapsePane = cp;
 			theCollapsePane.setLayout(layout);
 			if (vertical)
-				theContentPanel = new MigFieldPanel<>(getEditor(), getUntil());
+				theContentPanel = new MigFieldPanel<>(null, getEditor(), getUntil());
 			else
 				theContentPanel = new SimpleHPanel<>(null, getEditor(), getUntil());
 			theOuterContainer = new SimpleHPanel<>(null, new ConformingPanel(new CollapsePaneOuterLayout()), until);
@@ -2842,6 +2956,12 @@ class PanelPopulationImpl {
 				}
 
 				@Override
+				public P2 withPopupMenu(Consumer<MenuBuilder<?>> menu) {
+					System.err.println("Popup menu is not supported on a list action");
+					return (P2) this;
+				}
+
+				@Override
 				public JButton getEditor() {
 					throw new UnsupportedOperationException();
 				}
@@ -2875,6 +2995,12 @@ class PanelPopulationImpl {
 					if (theDecorator != null)
 						theDecorator = new ComponentDecorator();
 					decoration.accept(theDecorator);
+					return (P2) this;
+				}
+
+				@Override
+				public P2 repaintOn(Observable<?> repaint) {
+					System.err.println("repaintOn() is not implemented for list action");
 					return (P2) this;
 				}
 
@@ -3257,6 +3383,88 @@ class PanelPopulationImpl {
 		PLAIN, INFO, WARNING, ERROR;
 	}
 
+	static class SwitchableFilterValue<T> extends AbstractIdentifiable implements SettableValue<T> {
+		private final SettableValue<T> theWrapped;
+		private Function<? super T, String> theFilter;
+
+		SwitchableFilterValue(TypeToken<T> type, Function<? super T, String> filter) {
+			theWrapped = SettableValue.build(type).build();
+			theFilter = filter;
+		}
+
+		public SwitchableFilterValue<T> setFilter(Function<? super T, String> filter) {
+			theFilter = filter;
+			return this;
+		}
+
+		@Override
+		protected Object createIdentity() {
+			return theWrapped.getIdentity();
+		}
+
+		@Override
+		public T get() {
+			return theWrapped.get();
+		}
+
+		@Override
+		public Observable<ObservableValueEvent<T>> noInitChanges() {
+			return theWrapped.noInitChanges();
+		}
+
+		@Override
+		public long getStamp() {
+			return theWrapped.getStamp();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return theWrapped.lock(write, cause);
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, Object cause) {
+			return theWrapped.tryLock(write, cause);
+		}
+
+		@Override
+		public TypeToken<T> getType() {
+			return theWrapped.getType();
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return theWrapped.isLockSupported();
+		}
+
+		@Override
+		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+			if (theFilter != null) {
+				String msg = theFilter.apply(value);
+				if (StdMsg.UNSUPPORTED_OPERATION.equals(msg))
+					throw new UnsupportedOperationException(msg);
+				else if (msg != null)
+					throw new IllegalArgumentException(msg);
+			}
+			return theWrapped.set(value, cause);
+		}
+
+		@Override
+		public <V extends T> String isAcceptable(V value) {
+			String msg = theFilter == null ? null : theFilter.apply(value);
+			if (msg == null)
+				msg = theWrapped.isAcceptable(value);
+			return msg;
+		}
+
+		@Override
+		public ObservableValue<String> isEnabled() {
+			return theWrapped.isEnabled();
+		}
+	}
+	static ObservableColorEditor COLOR_EDITOR;
+	static JLabel COLOR_EDITING_MESSAGE;
+
 	static class SimpleAlert implements Alert {
 		private final Component theComponent;
 		private String theTitle;
@@ -3333,7 +3541,22 @@ class PanelPopulationImpl {
 				if (theMessage != null)
 					panel.addLabel(null, theMessage, null);
 				ValueHolder<ObservableTextField<T>> field = new ValueHolder<>();
-				panel.addTextField(null, value, format, f -> f.fill().modifyEditor(field));
+				panel.addTextField(null, value, format, f -> f.fill().modifyEditor(tf->{
+					field.accept(tf);
+					tf.onEnter((v, ke)->{
+						if(tf.getErrorState().get()==null) {
+							provided[0]=true;
+							dialog.getWindow().setVisible(false);
+						}
+					});
+					tf.addKeyListener(new KeyAdapter() {
+						@Override
+						public void keyReleased(KeyEvent e) {
+							if (e.getKeyCode() == KeyEvent.VK_ESCAPE)
+								dialog.getWindow().setVisible(false);
+						}
+					});
+				}));
 				if (modify != null)
 					modify.accept(field.get());
 				panel.addHPanel(null, new JustifiedBoxLayout(false).mainCenter().crossJustified(), buttons -> {
@@ -3362,6 +3585,70 @@ class PanelPopulationImpl {
 				return value.get();
 			else
 				return null;
+		}
+
+		@Override
+		public Color inputColor(boolean withAlpha, Color initial, Function<Color, String> filter) {
+			if (COLOR_EDITOR == null) {
+				SwitchableFilterValue<Color> selected = new SwitchableFilterValue<>(TypeTokens.get().of(Color.class), filter);
+				selected.set(initial, null);
+				COLOR_EDITOR = new ObservableColorEditor(selected, true,
+					SettableValue.build(boolean.class).withValue(withAlpha).build(), Observable.empty());
+				COLOR_EDITING_MESSAGE = new JLabel(theMessage, theImage == null ? null : theImage.getIcon().get(), JLabel.LEADING);
+				ObservableSwingUtils.label(COLOR_EDITING_MESSAGE).withFontSize(16);
+			} else {
+				((SwitchableFilterValue<Color>) COLOR_EDITOR.getSelectedColor()).setFilter(filter);
+				((SettableValue<Boolean>) COLOR_EDITOR.isWithAlpha()).set(withAlpha, null);
+				COLOR_EDITOR.clearLocalHistory();
+				COLOR_EDITOR.addPersistentHistory(initial);
+				COLOR_EDITOR.getSelectedColor().set(initial, null);
+				COLOR_EDITING_MESSAGE.setText(theMessage);
+				COLOR_EDITING_MESSAGE.setIcon(theImage == null ? null : theImage.getIcon().get());
+			}
+			boolean[] accept = new boolean[1];
+			Runnable setup = () -> {
+				JDialog dialog = new JDialog(theComponent == null ? null : SwingUtilities.getWindowAncestor(theComponent),
+					JDialog.ModalityType.APPLICATION_MODAL);
+				dialog.addComponentListener(new ComponentAdapter() {
+					@Override
+					public void componentHidden(ComponentEvent e) {
+						dialog.getContentPane().removeAll();
+					}
+				});
+				dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+				dialog.setTitle(theTitle);
+				dialog.getContentPane().setLayout(new JustifiedBoxLayout(true).mainJustified().crossCenter());
+				dialog.getContentPane().add(COLOR_EDITING_MESSAGE);
+				dialog.getContentPane().add(COLOR_EDITOR);
+				JPanel buttonPanel = new JPanel(new JustifiedBoxLayout(false).mainCenter());
+				JButton ok = new JButton("OK");
+				ok.addActionListener(evt -> {
+					accept[0] = true;
+					dialog.setVisible(false);
+				});
+				buttonPanel.add(ok);
+				JButton cancel = new JButton("Cancel");
+				cancel.addActionListener(evt -> dialog.setVisible(false));
+				buttonPanel.add(cancel);
+				dialog.getContentPane().add(buttonPanel);
+				dialog.pack();
+				dialog.setLocationRelativeTo(theComponent);
+				dialog.setVisible(true);
+			};
+			if (EventQueue.isDispatchThread())
+				setup.run();
+			else {
+				try {
+					EventQueue.invokeAndWait(setup);
+				} catch (InvocationTargetException e) {
+					e.getTargetException().printStackTrace();
+					return null;
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+					return null;
+				}
+			}
+			return accept[0] ? COLOR_EDITOR.getSelectedColor().get() : null;
 		}
 
 		private int getJOptionType() {

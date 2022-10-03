@@ -493,7 +493,15 @@ public class WindowPopulation {
 			return (M) this;
 		}
 
-		void install() {
+		public ObservableValue<Boolean> getVisibility() {
+			return theVisibility;
+		}
+
+		public ObservableValue<String> getDisabled() {
+			return theDisabled;
+		}
+
+		JComponent install() {
 			JComponent c = getComponent();
 			if (theVisibility != null)
 				theVisibility.changes().takeUntil(theUntil).act(evt -> c.setVisible(evt.getNewValue()));
@@ -513,15 +521,77 @@ public class WindowPopulation {
 				tooltip = theTooltip;
 			if (tooltip != null)
 				tooltip.changes().takeUntil(theUntil).act(evt -> c.setToolTipText(evt.getNewValue()));
+			return c;
 		}
 	}
 
-	static class JMenuBuilder<M extends JMenuBuilder<M>> extends AbstractMenuThingBuilder<M> implements MenuBuilder<M> {
+	static abstract class AbstractMenuBuilder<M extends AbstractMenuBuilder<M>> extends AbstractMenuThingBuilder<M>
+	implements MenuBuilder<M> {
+		protected abstract int getMenuComponentCount();
+
+		protected abstract Component getMenuComponent(int i);
+
+		protected abstract void add(JMenuItem item);
+
+		AbstractMenuBuilder(Observable<?> until) {
+			super(until);
+		}
+
+		@Override
+		public M withSubMenu(String name, Consumer<MenuBuilder<?>> subMenu) {
+			JMenu jmenu = null;
+			for (int m = 0; m < getMenuComponentCount(); m++) {
+				if (getMenuComponent(m) instanceof JMenu && ((JMenu) getMenuComponent(m)).getText().equals(name)) {
+					jmenu = (JMenu) getMenuComponent(m);
+					break;
+				}
+			}
+			boolean found = jmenu != null;
+			if (!found)
+				jmenu = new JMenu(name);
+			JMenuBuilder<?> builder = new JMenuBuilder<>(jmenu, theUntil);
+			subMenu.accept(builder);
+			builder.install();
+			if (!found)
+				add(jmenu);
+			return (M) this;
+		}
+
+		@Override
+		public M withAction(String name, Consumer<Object> action, Consumer<UiAction<?>> ui) {
+			JMenuItem item = new JMenuItem(name);
+			item.addActionListener(evt -> action.accept(evt));
+			if (ui != null) {
+				JMenuItemBuilder<?> itemBuilder = new JMenuItemBuilder<>(item, theUntil);
+				ui.accept(itemBuilder);
+				itemBuilder.install();
+			}
+			add(item);
+			return (M) this;
+		}
+	}
+
+	static class JMenuBuilder<M extends JMenuBuilder<M>> extends AbstractMenuBuilder<M> {
 		private final JMenu theMenu;
 
 		JMenuBuilder(JMenu menu, Observable<?> until) {
 			super(until);
 			theMenu = menu;
+		}
+
+		@Override
+		protected int getMenuComponentCount() {
+			return theMenu.getMenuComponentCount();
+		}
+
+		@Override
+		protected Component getMenuComponent(int i) {
+			return theMenu.getMenuComponent(i);
+		}
+
+		@Override
+		protected void add(JMenuItem item) {
+			theMenu.add(item);
 		}
 
 		@Override
@@ -537,39 +607,6 @@ public class WindowPopulation {
 		@Override
 		protected void setIcon(Icon icon) {
 			theMenu.setIcon(icon);
-		}
-
-		@Override
-		public M withSubMenu(String name, Consumer<MenuBuilder<?>> subMenu) {
-			JMenu jmenu = null;
-			for (int m = 0; m < theMenu.getMenuComponentCount(); m++) {
-				if (theMenu.getMenuComponent(m) instanceof JMenu && ((JMenu) theMenu.getMenuComponent(m)).getText().equals(name)) {
-					jmenu = (JMenu) theMenu.getMenuComponent(m);
-					break;
-				}
-			}
-			boolean found = jmenu != null;
-			if (!found)
-				jmenu = new JMenu(name);
-			JMenuBuilder<?> builder = new JMenuBuilder<>(jmenu, theUntil);
-			subMenu.accept(builder);
-			builder.install();
-			if (!found)
-				theMenu.add(jmenu);
-			return (M) this;
-		}
-
-		@Override
-		public M withAction(String name, Consumer<Object> action, Consumer<UiAction<?>> ui) {
-			JMenuItem item = new JMenuItem(name);
-			item.addActionListener(evt -> action.accept(evt));
-			if (ui != null) {
-				JMenuItemBuilder<?> itemBuilder = new JMenuItemBuilder<>(item, theUntil);
-				ui.accept(itemBuilder);
-				itemBuilder.install();
-			}
-			theMenu.add(item);
-			return (M) this;
 		}
 	}
 

@@ -108,7 +108,7 @@ implements TreeTableEditor<F, P> {
 	private SimpleTreeTableBuilder(ObservableValue<F> root,
 		Function<? super F, ? extends ObservableCollection<? extends F>> children1,
 			Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children2, Observable<?> until) {
-		super(new JXTreeTable(), until);
+		super(null, new JXTreeTable(), until);
 		theRoot = root;
 		theChildren1 = children1;
 		theChildren2 = children2;

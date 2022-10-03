@@ -625,17 +625,24 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 
 						@Override
 						public void run() {
-							if (model.getNode((T) path.getLastPathComponent(), false) != null && tree.isExpanded(path.getParentPath()))
-								selModel.setSelectionPath(path);
-							else if (++tries < path.getPathCount() + 5) {
-								for (TreePath p = path.getParentPath(); p != null; p = p.getParentPath()) {
-									if (model.getNode((T) p.getLastPathComponent(), false) != null) {
-										if (!tree.isExpanded(p))
-											tree.expandPath(p);
-										break;
+							if (callbackLock[0])
+								return;
+							callbackLock[0] = true;
+							try {
+								if (model.getNode((T) path.getLastPathComponent(), false) != null && tree.isExpanded(path.getParentPath()))
+									selModel.setSelectionPath(path);
+								else if (++tries < path.getPathCount() + 5) {
+									for (TreePath p = path.getParentPath(); p != null; p = p.getParentPath()) {
+										if (model.getNode((T) p.getLastPathComponent(), false) != null) {
+											if (!tree.isExpanded(p))
+												tree.expandPath(p);
+											break;
+										}
 									}
+									EventQueue.invokeLater(this);
 								}
-								EventQueue.invokeLater(this);
+							} finally {
+								callbackLock[0] = false;
 							}
 						}
 					};

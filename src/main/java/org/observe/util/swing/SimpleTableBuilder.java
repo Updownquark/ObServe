@@ -126,7 +126,7 @@ implements TableBuilder<R, P> {
 	private boolean isScrollable;
 
 	SimpleTableBuilder(ObservableCollection<R> rows, Observable<?> until) {
-		super(new JTable() {
+		super(null, new JTable() {
 			@Override
 			public void doLayout() { // We do this ourselves
 			}
@@ -756,8 +756,9 @@ implements TableBuilder<R, P> {
 						}
 						c++;
 					}
-					if (adjusted)
+					if (adjusted) {
 						adjustScrollWidths();
+					}
 				});
 				columns.changes().act(evt -> {
 					theResizingColumn = -1;
@@ -791,8 +792,9 @@ implements TableBuilder<R, P> {
 							break;
 						}
 					}
-					if (adjust)
+					if (adjust) {
 						adjustScrollWidths();
+					}
 				});
 			}
 
@@ -907,7 +909,7 @@ implements TableBuilder<R, P> {
 
 			@Override
 			public void componentResized(ComponentEvent e) {
-				int newWidth = scroll.getWidth();
+				int newWidth = scroll.getViewport().getWidth();
 				int widthDiff = newWidth - theScrollWidth;
 				// If we're resizing in a way that accommodates the cumulative growth or shrinkage of columns due to user resizing,
 				// modify the extra table width such that we don't grow or shrink columns as a result of the table resize.
@@ -923,8 +925,16 @@ implements TableBuilder<R, P> {
 
 			@Override
 			public void componentShown(ComponentEvent e) {
+				init();
+			}
+
+			void init() {
 				adjustHeight();
 				adjustScrollWidths();
+				theScrollWidth = scroll.getViewport().getWidth();
+				int tableSize = table.getWidth() + (getEditor().getColumnCount() - 1) * table.getColumnModel().getColumnMargin();
+				if (tableSize > theScrollWidth)
+					theTableExtraWidth = tableSize - theScrollWidth;
 			}
 
 			@Override
@@ -944,8 +954,7 @@ implements TableBuilder<R, P> {
 				if (time - theLastHE < 5)
 					return;
 				theLastHE = time;
-				adjustHeight();
-				adjustScrollWidths();
+				init();
 			}
 
 			void adjustScrollWidths() {
@@ -1350,6 +1359,7 @@ implements TableBuilder<R, P> {
 		}
 
 		instantiating.close();
+		decorate(table);
 		return comp;
 	}
 
