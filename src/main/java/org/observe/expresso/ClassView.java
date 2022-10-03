@@ -2,6 +2,7 @@ package org.observe.expresso;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -44,8 +45,18 @@ public class ClassView {
 	}
 
 	public List<Method> getImportedStaticMethods(String methodName) {
-		// TODO
-		return Collections.emptyList();
+		List<Method> methods = new ArrayList<>();
+		for (String wildcard : theWildcardImports) {
+			Class<?> type = getType(wildcard);
+			if (type == null)
+				continue;
+			for (Method method : type.getDeclaredMethods()) {
+				int mod = method.getModifiers();
+				if (Modifier.isPublic(mod) && Modifier.isStatic(mod))
+					methods.add(method);
+			}
+		}
+		return methods;
 	}
 
 	/**
