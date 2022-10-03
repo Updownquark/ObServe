@@ -35,6 +35,7 @@ import org.qommons.io.SpinnerFormat;
 
 import net.miginfocom.swing.MigLayout;
 
+/** A panel with many tools to help the user choose a color */
 public class ObservableColorEditor extends JPanel {
 	private static final Format<Color> COLOR_FORMAT = new Format<Color>() {
 		@Override
@@ -56,6 +57,12 @@ public class ObservableColorEditor extends JPanel {
 	private final ColorHistoryPanel theAllHistoryPanel;
 	private final ColorHistoryPanel thePersistentHistoryPanel;
 
+	/**
+	 * @param selectedValue The color value to edit
+	 * @param withHistory Whether to preserve color history (enabled {@link #addPersistentHistory(Color)})
+	 * @param withAlpha Whether to allow the user to edit the alpha (opacity) value as well
+	 * @param until An observable that, when it fires, will release all of this editor's listeners
+	 */
 	public ObservableColorEditor(SettableValue<Color> selectedValue, boolean withHistory, ObservableValue<Boolean> withAlpha,
 		Observable<?> until) {
 		theSelectedColor = selectedValue;
@@ -70,7 +77,7 @@ public class ObservableColorEditor extends JPanel {
 				return selectedValue.isAcceptable(color.toColor());
 			});
 		boolean[] valueCallbackLock = new boolean[1];
-		theSelectedHsbColor.noInitChanges().act(evt -> {
+		theSelectedHsbColor.noInitChanges().takeUntil(until).act(evt -> {
 			if (valueCallbackLock[0])
 				return;
 			valueCallbackLock[0] = true;
@@ -80,7 +87,7 @@ public class ObservableColorEditor extends JPanel {
 				valueCallbackLock[0] = false;
 			}
 		});
-		selectedValue.noInitChanges().act(evt -> {
+		selectedValue.noInitChanges().takeUntil(until).act(evt -> {
 			Colors.HsbColor hsb = new Colors.HsbColor(evt.getNewValue(), withAlpha.get());
 			if (valueCallbackLock[0] || theSelectedHsbColor.get().equals(hsb))
 				return;
@@ -257,10 +264,7 @@ public class ObservableColorEditor extends JPanel {
 		PanelPopulation.populateHPanel(this, (LayoutManager) null, until)//
 		.addTextField("HTML:", color, COLOR_FORMAT, f -> f.fill()//
 			.withTooltip("The HTML hex representation of the color"));
-		if (thePersistentHistoryPanel != null)
-			add(theAllHistoryPanel, "growx, wrap");
-		else
-			add(theAllHistoryPanel, "spany 2, growx, wrap");
+		add(theAllHistoryPanel, "growx, wrap");
 		PanelPopulation.populateHPanel(this, (LayoutManager) null, until)//
 		.addComboField("Name:", colorName, new ArrayList<>(Colors.getColorNames()),
 			f -> f.fill().renderWith(ObservableCellRenderer.<String, String> formatted(n -> n).decorate((cell, deco) -> {
@@ -276,7 +280,7 @@ public class ObservableColorEditor extends JPanel {
 		if (thePersistentHistoryPanel != null)
 			add(thePersistentHistoryPanel, "growx");
 
-		theSelectedHsbColor.changes().act(evt -> {
+		theSelectedHsbColor.changes().takeUntil(until).act(evt -> {
 			boolean editing = theHexPanel.isDragging;
 			for (MultiRangeSlider slider : sliders) {
 				if (editing)
@@ -289,22 +293,31 @@ public class ObservableColorEditor extends JPanel {
 		});
 	}
 
+	/** @return The color value that this editor is editing */
 	public SettableValue<Color> getSelectedColor() {
 		return theSelectedColor;
 	}
 
-	public SettableValue<Colors.HsbColor> getSelectedHsbColor() {
+	/** @return The {@link HsbColor} that this editor is editing */
+	public SettableValue<HsbColor> getSelectedHsbColor() {
 		return theSelectedHsbColor;
 	}
 
+	/** @return Whether the user is allowed to edit the alpha value in this editor */
 	public ObservableValue<Boolean> isWithAlpha() {
 		return isWithAlpha;
 	}
 
+	/** Clears all local history in this editor. Useful for using this editor in a modal dialog. */
 	public void clearLocalHistory() {
 		theAllHistoryPanel.removeAll();
 	}
 
+	/**
+	 * Adds a color into the persistent history of this editor. Useful for using this editor in a modal dialog.
+	 * 
+	 * @param color The color to add to the history
+	 */
 	public void addPersistentHistory(Color color) {
 		if (thePersistentHistoryPanel != null)
 			thePersistentHistoryPanel.selected(new HsbColor(color, false), false);
