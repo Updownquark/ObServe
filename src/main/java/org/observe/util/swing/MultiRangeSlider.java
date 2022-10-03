@@ -270,41 +270,77 @@ public class MultiRangeSlider extends ConformingPanel {
 			private static final NumberFormat VALUE_FORMAT = new DecimalFormat("#,##0.##");
 
 			// TODO This is all best-guess and untested
-			private static final int DEFAULT_WIDTH = 20;
+			private static final int DEFAULT_MAIN_SIZE = 500;
+			private static final int DEFAULT_CROSS_SIZE = 20;
 			private static final int DEFAULT_TICK_WIDTH = 6;
 
 			private MultiRangeSlider theSlider;
 
-			private int theRenderWidth;
+			private int theCrossSize;
+			private int theMainSize;
 			private int theTickWidth;
 
 			private double theMinValue;
 			private double theMaxValue;
 			private final FloatList theTicks;
+			private boolean areTicksSet;
 			private DoubleFunction<String> theValueRenderer;
 
 			/** Creates the renderer */
 			public Default() {
 				theTicks = new FloatList(10);
-				setRenderWidth(DEFAULT_WIDTH);
+				setMainSize(DEFAULT_MAIN_SIZE);
+				setCrossSize(DEFAULT_CROSS_SIZE);
 				setTickWidth(DEFAULT_TICK_WIDTH);
 				theValueRenderer = VALUE_FORMAT::format;
 			}
 
 			/**
-			 * @return The cross-dimension length of the rendered slider (the width of a vertical slider or the height of a horizontal one)
+			 * @return The main-dimension length of the rendered slider (the height of a vertical slider or the width of a horizontal one)
 			 */
-			public int getRenderWidth() {
-				return theRenderWidth;
+			public int getMainSize() {
+				return theMainSize;
 			}
 
 			/**
-			 * @param renderWidth The width (for a vertical slider) or height (for a horizontal slider) that the slider should be, in
+			 * @param mainSize The height (for a vertical slider) or width(for a horizontal slider) that the slider should be
+			 * @return This renderer
+			 */
+			public Default setMainSize(int mainSize) {
+				theMainSize = mainSize;
+				computeSizes();
+				return this;
+			}
+
+			/**
+			 * @return The cross-dimension length of the rendered slider (the width of a vertical slider or the height of a horizontal one)
+			 */
+			public int getCrossSize() {
+				return theCrossSize;
+			}
+
+			/**
+			 * @param crossSize The width (for a vertical slider) or height (for a horizontal slider) that the slider should be, in
 			 *        addition to what the tick labels require.
 			 * @return This renderer
 			 */
-			public Default setRenderWidth(int renderWidth) {
-				theRenderWidth = renderWidth;
+			public Default setCrossSize(int crossSize) {
+				theCrossSize = crossSize;
+				computeSizes();
+				return this;
+			}
+
+			/**
+			 * Overrides the tick locations for this renderer.  If this is not called, tick locations will be auto-populated.
+			 * 
+			 * @param ticks The ticks to render
+			 * @return This renderer
+			 */
+			public Default setTicks(double... ticks) {
+				theTicks.clear();
+				for (double tick : ticks)
+					theTicks.add((float) tick);
+				areTicksSet = true;
 				return this;
 			}
 
@@ -333,9 +369,9 @@ public class MultiRangeSlider extends ConformingPanel {
 			@Override
 			public int getCenter(MultiRangeSlider slider) {
 				if (slider.isVertical())
-					return slider.getWidth() - theRenderWidth / 2;
+					return slider.getWidth() - theCrossSize / 2;
 				else
-					return theRenderWidth / 2;
+					return theCrossSize / 2;
 			}
 
 			@Override
@@ -345,7 +381,7 @@ public class MultiRangeSlider extends ConformingPanel {
 			}
 
 			private void computeTicks() {
-				if (theTickWidth == 0)
+				if (theTickWidth == 0 || areTicksSet)
 					return;
 				double minValue = theSlider.getSliderRange().get().getMin(), maxValue = theSlider.getSliderRange().get().getMax();
 				if (theMinValue != minValue || theMaxValue != maxValue) {
@@ -387,9 +423,9 @@ public class MultiRangeSlider extends ConformingPanel {
 							sumH += (int) Math.ceil(bounds.getHeight());
 						}
 					}
-					setMinimumSize(new Dimension(maxW + theRenderWidth, sumH));
-					setPreferredSize(new Dimension(maxW + theRenderWidth, Math.max(sumH, 500)));
-					setMaximumSize(new Dimension(maxW + theRenderWidth, Integer.MAX_VALUE));
+					setMinimumSize(new Dimension(maxW + theCrossSize, sumH));
+					setPreferredSize(new Dimension(maxW + theCrossSize, Math.max(sumH, theMainSize)));
+					setMaximumSize(new Dimension(maxW + theCrossSize, Integer.MAX_VALUE));
 				} else {
 					int sumW = 0;
 					int maxH = 0;
@@ -402,9 +438,9 @@ public class MultiRangeSlider extends ConformingPanel {
 							sumW += (int) Math.ceil(bounds.getWidth());
 						}
 					}
-					setMinimumSize(new Dimension(sumW, maxH + theRenderWidth));
-					setPreferredSize(new Dimension(Math.max(sumW, 500), maxH + theRenderWidth));
-					setMaximumSize(new Dimension(Integer.MAX_VALUE, maxH + theRenderWidth));
+					setMinimumSize(new Dimension(sumW, maxH + theCrossSize));
+					setPreferredSize(new Dimension(Math.max(sumW, theMainSize), maxH + theCrossSize));
+					setMaximumSize(new Dimension(Integer.MAX_VALUE, maxH + theCrossSize));
 				}
 			}
 
@@ -417,15 +453,15 @@ public class MultiRangeSlider extends ConformingPanel {
 				g.setFont(getFont());
 				g.setColor(getForeground());
 				if (theSlider.isVertical()) {
-					g.drawLine(getWidth() - theRenderWidth / 2, 0, getWidth() - theRenderWidth / 2, getHeight());
-					g.drawLine(getWidth() - theRenderWidth, 0, getWidth(), 0);
-					g.drawLine(getWidth() - theRenderWidth, getHeight() - 1, getWidth(), getHeight() - 1);
+					g.drawLine(getWidth() - theCrossSize / 2, 0, getWidth() - theCrossSize / 2, getHeight());
+					g.drawLine(getWidth() - theCrossSize, 0, getWidth(), 0);
+					g.drawLine(getWidth() - theCrossSize, getHeight() - 1, getWidth(), getHeight() - 1);
 					double min = theSlider.getSliderRange().get().getMin();
 					double extent = theSlider.getSliderRange().get().getExtent();
 					for (double tick : theTicks) {
 						int pos = getHeight() - (int) Math.round((tick - min) * getHeight() / extent);
-						g.drawLine(getWidth() - theRenderWidth / 2 - theTickWidth / 2, pos,
-							getWidth() - theRenderWidth / 2 + theTickWidth / 2, pos);
+						g.drawLine(getWidth() - theCrossSize / 2 - theTickWidth / 2, pos,
+							getWidth() - theCrossSize / 2 + theTickWidth / 2, pos);
 						String text = theValueRenderer.apply(tick);
 						Rectangle2D bounds = new TextLayout(text, getFont(), ((Graphics2D) g).getFontRenderContext()).getBounds();
 						pos -= bounds.getHeight() / 2 + bounds.getMinY();
@@ -433,17 +469,17 @@ public class MultiRangeSlider extends ConformingPanel {
 							pos = getHeight() + (int) bounds.getMinY() - 2;
 						else if (pos + bounds.getMaxY() < 2)
 							pos = 2 - (int) bounds.getMaxY();
-						((Graphics2D) g).drawString(text, getWidth() - theRenderWidth - (int) bounds.getMaxX(), pos);
+						((Graphics2D) g).drawString(text, getWidth() - theCrossSize - (int) bounds.getMaxX(), pos);
 					}
 				} else {
-					g.drawLine(0, theRenderWidth / 2, getWidth(), theRenderWidth / 2);
-					g.drawLine(0, 0, 0, theRenderWidth);
-					g.drawLine(getWidth() - 1, 0, getWidth() - 1, theRenderWidth);
+					g.drawLine(0, theCrossSize / 2, getWidth(), theCrossSize / 2);
+					g.drawLine(0, 0, 0, theCrossSize);
+					g.drawLine(getWidth() - 1, 0, getWidth() - 1, theCrossSize);
 					double min = theSlider.getSliderRange().get().getMin();
 					double extent = theSlider.getSliderRange().get().getExtent();
 					for (double tick : theTicks) {
 						int pos = (int) Math.round((tick - min) * getWidth() / extent);
-						g.drawLine(pos, theRenderWidth / 2 - theTickWidth / 2, pos, theRenderWidth / 2 + theTickWidth / 2);
+						g.drawLine(pos, theCrossSize / 2 - theTickWidth / 2, pos, theCrossSize / 2 + theTickWidth / 2);
 						String text = theValueRenderer.apply(tick);
 						Rectangle2D bounds = new TextLayout(text, getFont(), ((Graphics2D) g).getFontRenderContext()).getBounds();
 						pos -= bounds.getWidth() / 2 + bounds.getMinX() - 1;
@@ -451,7 +487,7 @@ public class MultiRangeSlider extends ConformingPanel {
 							pos = 2 - (int) bounds.getMinX();
 						else if (pos + bounds.getMaxX() > getWidth() - 2)
 							pos = getWidth() - (int) bounds.getMaxX() - 2;
-						((Graphics2D) g).drawString(text, pos, theRenderWidth + 5 + (int) bounds.getMaxY());
+						((Graphics2D) g).drawString(text, pos, theCrossSize + 5 + (int) bounds.getMaxY());
 					}
 				}
 			}
@@ -753,6 +789,8 @@ public class MultiRangeSlider extends ConformingPanel {
 	private ElementId theFocusedRange;
 	private RangePoint theFocusedRangePoint;
 
+	private boolean isDragging;
+
 	private MultiRangeSlider(boolean vertical, ObservableValue<Range> sliderRange, ObservableCollection<Range> ranges,
 		Observable<?> until) {
 		super(new LayerLayout());
@@ -775,7 +813,7 @@ public class MultiRangeSlider extends ConformingPanel {
 		theUpdateTask = updateTask[0] = QommonsTimer.getCommonInstance().build(() -> {
 			MouseEvent lastDrag = theLastDrag;
 			if (lastDrag != null//
-				&& (!moveFocus(lastDrag) || isLastDragDrop)//
+				&& (!moveFocus(lastDrag, false) || isLastDragDrop)//
 				&& theLastDrag == lastDrag)
 				theLastDrag = null;
 			updateTask[0].setActive(theLastDrag != null);
@@ -785,7 +823,6 @@ public class MultiRangeSlider extends ConformingPanel {
 
 	private void initListeners() {
 		MouseAdapter mouse = new MouseAdapter() {
-			private boolean isDragging;
 			private boolean wasDragged = false;
 
 			@Override
@@ -796,9 +833,9 @@ public class MultiRangeSlider extends ConformingPanel {
 
 			@Override
 			public void mouseReleased(MouseEvent e) {
-				if (wasDragged) // Don't move anything if the user hasn't dragged it
-					moveFocus(e);
 				isDragging = false;
+				if (wasDragged) // Don't move anything if the user hasn't dragged it
+					moveFocus(e, true);
 			}
 
 			@Override
@@ -810,7 +847,7 @@ public class MultiRangeSlider extends ConformingPanel {
 						isLastDragDrop = true;
 						theUpdateTask.setActive(true);
 					} else
-						moveFocus(e);
+						moveFocus(e, false);
 				}
 			}
 
@@ -1155,12 +1192,20 @@ public class MultiRangeSlider extends ConformingPanel {
 	}
 
 	/**
+	 * @return Whether the user is currently modifying a range in this slider with an action that will have a termination, such as dragging
+	 */
+	public boolean isAdjusting() {
+		return isDragging;
+	}
+
+	/**
 	 * Called when the user performs a mouse action that may be interpreted as an attempt to modify a range
 	 *
 	 * @param e The mouse event causing the move
+	 * @param forceFire Whether to fire an update event if there is no value change
 	 * @return If the move failed because of enablement, and the operation should be tried again
 	 */
-	protected boolean moveFocus(MouseEvent e) {
+	protected boolean moveFocus(MouseEvent e, boolean forceFire) {
 		if (theFocusedRange == null || !theFocusedRange.isPresent())
 			return true;
 		CollectionElement<Range> current = theRanges.getElement(theFocusedRange);
@@ -1175,19 +1220,19 @@ public class MultiRangeSlider extends ConformingPanel {
 		case min:
 			if (value > current.get().getMax())
 				value = current.get().getMax();
-			if (value == current.get().getMin())
+			if (!forceFire && value == current.get().getMin())
 				return false;
 			newRange = Range.forMinMax(value, current.get().getMax());
 			break;
 		case mid:
-			if (value == current.get().getValue())
+			if (!forceFire && value == current.get().getValue())
 				return false;
 			newRange = Range.forValueExtent(value, current.get().getExtent());
 			break;
 		case max:
 			if (value < current.get().getMin())
 				value = current.get().getMin();
-			if (value == current.get().getMax())
+			if (!forceFire && value == current.get().getMax())
 				return false;
 			newRange = Range.forMinMax(current.get().getMin(), value);
 			break;
