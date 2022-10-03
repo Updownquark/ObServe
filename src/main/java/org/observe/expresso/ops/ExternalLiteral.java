@@ -56,6 +56,11 @@ public class ExternalLiteral implements ObservableExpression {
 	}
 
 	@Override
+	public ObservableExpression replaceAll(Function<ObservableExpression, ? extends ObservableExpression> replace) {
+		return replace.apply(this);
+	}
+
+	@Override
 	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
 		throws QonfigInterpretationException {
 		if (type.getModelType() != ModelTypes.Value)
