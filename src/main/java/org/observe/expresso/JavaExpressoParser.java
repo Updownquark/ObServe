@@ -21,6 +21,7 @@ import org.observe.expresso.ops.LambdaExpression;
 import org.observe.expresso.ops.MethodInvocation;
 import org.observe.expresso.ops.MethodReferenceExpression;
 import org.observe.expresso.ops.NameExpression;
+import org.observe.expresso.ops.ParentheticExpression;
 import org.observe.expresso.ops.UnaryOperator;
 import org.qommons.StringUtils;
 import org.qommons.collect.BetterList;
@@ -248,7 +249,7 @@ public class JavaExpressoParser implements ExpressoParser {
 			case 3:
 				switch (expression.getComponents().get(2).getText()) {
 				case ")":
-					return _parse(expression.getComponents().get(1));
+					return new ParentheticExpression(_parse(expression.getComponents().get(1)));
 				case "class":
 					child = expression.getComponents().getFirst();
 					return new ClassInstanceExpression(parseType(child));
