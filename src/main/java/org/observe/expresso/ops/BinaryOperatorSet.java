@@ -60,6 +60,7 @@ public class BinaryOperatorSet {
 		 *
 		 * @param <S> The primary input and output type of the operator
 		 * @param <T> The secondary input type of the operator
+		 * @param name The name of the operator
 		 * @param type The primary input and output type of the operator
 		 * @param op The function to use for {@link BinaryOp#apply(Object, Object)}
 		 * @param reverse The function to use for {@link BinaryOp#reverse(Object, Object, Object)}
@@ -79,6 +80,7 @@ public class BinaryOperatorSet {
 		 * @param <S> The primary input type of the operator
 		 * @param <T> The secondary input type of the operator
 		 * @param <V> The output type of the operator
+		 * @param name The name of the operator
 		 * @param type The output type of the operator
 		 * @param op The function to use for {@link BinaryOp#apply(Object, Object)}
 		 * @param reverse The function to use for {@link BinaryOp#reverse(Object, Object, Object)}
@@ -954,6 +956,7 @@ public class BinaryOperatorSet {
 
 	/**
 	 * @param operator The name of the operator
+	 * @param targetType The type of the operator's output
 	 * @return All primary input types that this operator set knows of for which the given operator may be applied
 	 */
 	public Set<Class<?>> getSupportedPrimaryInputTypes(String operator, Class<?> targetType) {
@@ -968,6 +971,7 @@ public class BinaryOperatorSet {
 
 	/**
 	 * @param operator The name of the operator
+	 * @param targetType The type of the operator's output
 	 * @param primaryType The type of the primary input
 	 * @return All secondary input types that this operator set knows of for which the given operator may be applied with the given primary
 	 *         input
@@ -988,6 +992,7 @@ public class BinaryOperatorSet {
 	 * @param <S> The primary input type
 	 * @param <T> The secondary input type
 	 * @param operator The name of the operator
+	 * @param targetType The type of the operator's output
 	 * @param primaryType The type of the primary input
 	 * @param secondaryType The type of the secondary input
 	 * @return The binary operator supported by this operator set with the given operator and input types
@@ -1099,7 +1104,7 @@ public class BinaryOperatorSet {
 			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>())//
 			.computeIfAbsent(target, () -> new ClassMap<>())//
 			.computeIfAbsent(primary, () -> new ClassMap<>())//
-				.with(secondary, BinaryOp.of2(operator, target, op, reverse, reverseEnabled));
+			.with(secondary, BinaryOp.of2(operator, target, op, reverse, reverseEnabled));
 			return this;
 		}
 
@@ -1113,6 +1118,7 @@ public class BinaryOperatorSet {
 		 * @param operator The name of the operator
 		 * @param primary The type of the primary input to support
 		 * @param secondary The type of the secondary input and of the primary input of the pre-installed operator
+		 * @param targetType The type of the operator's output
 		 * @param cast The cast to use to convert the newly supported primary input type to that matching the operator
 		 * @return This builder
 		 */
@@ -1138,6 +1144,7 @@ public class BinaryOperatorSet {
 		 * @param operator The name of the operator
 		 * @param primary The type of the primary input and of the secondary input of the pre-installed operator
 		 * @param secondary The type of the secondary input to support
+		 * @param targetType The type of the operator's output
 		 * @param cast The cast to use to convert the newly supported secondary input type to that matching the operator
 		 * @return This builder
 		 */
@@ -1163,6 +1170,7 @@ public class BinaryOperatorSet {
 		 * @param operator The name of the operator
 		 * @param primary The type of the primary input and of the secondary input of the pre-installed operator
 		 * @param castTarget The output type
+		 * @param opTarget The type of the operator's output
 		 * @param secondary The type of the secondary input to support
 		 * @param primaryCast The cast to use to convert the newly supported primary input type to that matching the operator
 		 * @param secondaryCast The cast to use to convert the newly supported secondary input type to that matching the operator

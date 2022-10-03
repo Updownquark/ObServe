@@ -46,6 +46,7 @@ public class UnaryOperatorSet {
 		 * Produces a unary operator whose output type is the same as that of the input from functions
 		 *
 		 * @param <T> The input and output type of the operator
+		 * @param name The name of the operator
 		 * @param type The input and output type of the operator
 		 * @param op The function to use for {@link UnaryOp#apply(Object)}
 		 * @param reverse The function to use for {@link UnaryOp#reverse(Object)}
@@ -60,6 +61,7 @@ public class UnaryOperatorSet {
 		 * Produces a symmetric unary operator--one whose {@link #apply(Object)} is the same as {@link #reverse(Object)}
 		 *
 		 * @param <T> The input and output type of the operator
+		 * @param name The name of the operator
 		 * @param type The input and output type of the operator
 		 * @param op The function to use for {@link UnaryOp#apply(Object)} and {@link UnaryOp#reverse(Object)}
 		 * @return The unary operator composed of the given function
@@ -73,6 +75,7 @@ public class UnaryOperatorSet {
 		 *
 		 * @param <S> The type of the input
 		 * @param <T> The type of the output
+		 * @param name The name of the operator
 		 * @param type The type of the output
 		 * @param op The function to use for {@link UnaryOp#apply(Object)}
 		 * @param reverse The function to use for {@link UnaryOp#reverse(Object)}
@@ -110,6 +113,7 @@ public class UnaryOperatorSet {
 
 		/**
 		 * @param <T> The type of the input and output
+		 * @param name The name of the operator
 		 * @param type The type of the input and output
 		 * @return A unary operator whose output is the same as the input
 		 */
