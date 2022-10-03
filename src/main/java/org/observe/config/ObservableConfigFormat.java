@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TimeZone;
+import java.util.function.BiFunction;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -34,6 +35,7 @@ import org.observe.util.EntityReflector;
 import org.observe.util.EntityReflector.FieldChange;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
+import org.qommons.Causable.AbstractCausable;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
@@ -318,20 +320,20 @@ public interface ObservableConfigFormat<E> {
 	 * @param <T> The type of value to retrieve
 	 */
 	public static class ReferenceFormatBuilder<T> {
-		private final Function<QuickMap<String, Object>, ? extends T> theRetriever;
-		private final Function<QuickMap<String, Object>, ? extends Iterable<? extends T>> theMultiRetriever;
+		private final BiFunction<ObservableConfig, QuickMap<String, Object>, ? extends T> theRetriever;
+		private final BiFunction<ObservableConfig, QuickMap<String, Object>, ? extends Iterable<? extends T>> theMultiRetriever;
 		private final Supplier<? extends T> theRetreiverDefault;
 		private BooleanSupplier isRetrieverReady;
 		private final Map<String, Impl.ReferenceFormat.FormattedField<? super T, ?>> theFields;
 
-		ReferenceFormatBuilder(Function<QuickMap<String, Object>, ? extends T> retriever) {
+		ReferenceFormatBuilder(BiFunction<ObservableConfig, QuickMap<String, Object>, ? extends T> retriever) {
 			theRetriever = retriever;
 			theMultiRetriever = null;
 			theRetreiverDefault = null;
 			theFields = new LinkedHashMap<>();
 		}
 
-		ReferenceFormatBuilder(Function<QuickMap<String, Object>, ? extends Iterable<? extends T>> multiRetriever,
+		ReferenceFormatBuilder(BiFunction<ObservableConfig, QuickMap<String, Object>, ? extends Iterable<? extends T>> multiRetriever,
 			Supplier<? extends T> defaultValue) {
 			theRetriever = null;
 			theMultiRetriever = multiRetriever;
@@ -365,14 +367,16 @@ public interface ObservableConfigFormat<E> {
 
 		/** @return The new reference format */
 		public ObservableConfigFormat<T> build() {
+			if (theFields.isEmpty())
+				System.err.println("WARNING: No fields specified for reference format");
 			QuickMap<String, Impl.ReferenceFormat.FormattedField<? super T, ?>> fields = QuickMap
 				.of(theFields, StringUtils.DISTINCT_NUMBER_TOLERANT).unmodifiable();
-			Function<QuickMap<String, Object>, ? extends T> retriever;
+			BiFunction<ObservableConfig, QuickMap<String, Object>, ? extends T> retriever;
 			if (theRetriever != null)
 				retriever = theRetriever;
 			else {
-				retriever = LambdaUtils.printableFn(fieldValues -> {
-					Iterable<? extends T> retrieved = theMultiRetriever.apply(fieldValues);
+				retriever = LambdaUtils.printableBiFn((config, fieldValues) -> {
+					Iterable<? extends T> retrieved = theMultiRetriever.apply(config, fieldValues);
 					// TODO Null check
 					for (T value : retrieved) {
 						boolean matches = true;
@@ -417,8 +421,22 @@ public interface ObservableConfigFormat<E> {
 	 * @param defaultValue The value to return if no value in the data source matches the stored reference
 	 * @return The reference format
 	 */
-	static <T> ReferenceFormatBuilder<T> buildReferenceFormat(Function<QuickMap<String, Object>, ? extends T> retriever) {
+	static <T> ReferenceFormatBuilder<T> buildReferenceFormat2(
+		BiFunction<ObservableConfig, QuickMap<String, Object>, ? extends T> retriever) {
 		return new ReferenceFormatBuilder<>(retriever);
+	}
+
+	/**
+	 * Builds a reference format, a format that does not persist all information about its target value, but only identity information used
+	 * to retrieve it from a different source.
+	 *
+	 * @param <T> The type of value to retrieve
+	 * @param retriever Retrieves the value from the data source by its identifying fields
+	 * @param defaultValue The value to return if no value in the data source matches the stored reference
+	 * @return The reference format
+	 */
+	static <T> ReferenceFormatBuilder<T> buildReferenceFormat(Function<QuickMap<String, Object>, ? extends T> retriever) {
+		return new ReferenceFormatBuilder<>(LambdaUtils.printableBiFn((cfg, ids) -> retriever.apply(ids), retriever::toString, retriever));
 	}
 
 	/**
@@ -432,7 +450,8 @@ public interface ObservableConfigFormat<E> {
 	 */
 	static <T> ReferenceFormatBuilder<T> buildReferenceFormat(Function<QuickMap<String, Object>, ? extends Iterable<? extends T>> retriever,
 		Supplier<? extends T> defaultValue) {
-		return new ReferenceFormatBuilder<>(retriever, defaultValue);
+		return new ReferenceFormatBuilder<>(LambdaUtils.printableBiFn((cfg, ids) -> retriever.apply(ids), retriever::toString, retriever),
+			defaultValue);
 	}
 
 	/**
@@ -1570,10 +1589,10 @@ public interface ObservableConfigFormat<E> {
 
 			private final QuickMap<String, FormattedField<? super T, ?>> theFields;
 			private final BooleanSupplier isRetrieverReady;
-			private final Function<QuickMap<String, Object>, ? extends T> theRetriever;
+			private final BiFunction<ObservableConfig, QuickMap<String, Object>, ? extends T> theRetriever;
 
 			ReferenceFormat(QuickMap<String, FormattedField<? super T, ?>> fields,
-				Function<QuickMap<String, Object>, ? extends T> retriever, BooleanSupplier retrieverReady) {
+				BiFunction<ObservableConfig, QuickMap<String, Object>, ? extends T> retriever, BooleanSupplier retrieverReady) {
 				theFields = fields;
 				isRetrieverReady = retrieverReady;
 				theRetriever = retriever;
@@ -1672,7 +1691,7 @@ public interface ObservableConfigFormat<E> {
 				if (usePreValue)
 					exec.value = previousValue;
 				else
-					exec.value = theRetriever.apply(fieldValues.unmodifiable());
+					exec.value = theRetriever.apply(ctx.getConfig(false, false), fieldValues.unmodifiable());
 				c.withParsedItem(ctx.getSession(), exec.value);
 				if (exec.delayed)
 					ctx.linkedReference(exec.value);
@@ -1788,6 +1807,36 @@ public interface ObservableConfigFormat<E> {
 		}
 
 		abstract static class AbstractComponentFormat<E> implements ObservableConfigFormat<E> {
+			class FormatEvent extends AbstractCausable {
+				final int field;
+
+				public FormatEvent(Object cause, int field) {
+					super(cause);
+					this.field = field;
+				}
+
+				AbstractComponentFormat<E> getFormat() {
+					return AbstractComponentFormat.this;
+				}
+
+				@Override
+				public int hashCode() {
+					return field;
+				}
+
+				@Override
+				public boolean equals(Object obj) {
+					return obj instanceof AbstractComponentFormat.FormatEvent//
+						&& AbstractComponentFormat.this == ((AbstractComponentFormat<?>.FormatEvent) obj).getFormat()//
+						&& field == ((AbstractComponentFormat<?>.FormatEvent) obj).field;
+				}
+
+				@Override
+				public String toString() {
+					return "Formatting " + theFields.get(field);
+				}
+			}
+
 			interface ComponentSetter<E, F> {
 				void set(E entity, F field, ObservableConfigEvent cause);
 			}
@@ -2055,9 +2104,12 @@ public interface ObservableConfigFormat<E> {
 				E value = create(ctx, fieldValues);
 				if (config != null)
 					config.withParsedItem(ctx.getSession(), value);
-				else
-					ctx.getConfig().noInitChanges().take(1).takeUntil(ctx.getUntil())
-					.act(evt -> evt.getNewValue().withParsedItem(ctx.getSession(), value));
+				else {
+					ctx.getConfig().noInitChanges().take(1).takeUntil(ctx.getUntil()).act(evt -> {
+						if (evt.getNewValue() != null)
+							evt.getNewValue().withParsedItem(ctx.getSession(), value);
+					});
+				}
 				return value;
 			}
 
@@ -2066,22 +2118,25 @@ public interface ObservableConfigFormat<E> {
 			protected <F> void formatField(ObservableConfigParseSession session, E value, ComponentField<E, F> field, F previousValue,
 				F fieldValue, ObservableConfig entityConfig, Consumer<F> onFieldValue, Observable<?> until, Object cause) {
 				boolean[] added = new boolean[1];
-				if (fieldValue != null || field.childName == null) {
-					ObservableConfig fieldConfig;
-					if (field.childName == null) {
-						fieldConfig = entityConfig;
+				FormatEvent formatCause = new FormatEvent(cause, field.index);
+				try (Transaction causeT = Causable.use(formatCause); Transaction t = entityConfig.lock(true, formatCause)) {
+					if (fieldValue != null || field.childName == null) {
+						ObservableConfig fieldConfig;
+						if (field.childName == null) {
+							fieldConfig = entityConfig;
+						} else {
+							fieldConfig = entityConfig.getChild(field.childName, true, fc -> {
+								added[0] = true;
+								field.format.format(session, fieldValue, fieldValue, (__, ___) -> fc, onFieldValue, until);
+							});
+						}
+						if (!added[0])
+							field.format.format(session, fieldValue, fieldValue, (__, ___) -> fieldConfig, onFieldValue, until);
 					} else {
-						fieldConfig = entityConfig.getChild(field.childName, true, fc -> {
-							added[0] = true;
-							field.format.format(session, fieldValue, fieldValue, (__, ___) -> fc, onFieldValue, until);
-						});
+						ObservableConfig fieldConfig = entityConfig.getChild(field.childName);
+						if (fieldConfig != null)
+							fieldConfig.remove();
 					}
-					if (!added[0])
-						field.format.format(session, fieldValue, fieldValue, (__, ___) -> fieldConfig, onFieldValue, until);
-				} else {
-					ObservableConfig fieldConfig = entityConfig.getChild(field.childName);
-					if (fieldConfig != null)
-						fieldConfig.remove();
 				}
 			}
 
@@ -2095,6 +2150,14 @@ public interface ObservableConfigFormat<E> {
 						field.setter.set(entity, fv, fieldChange[0]);
 				});
 				fieldChange[0] = fieldCtx.getChange();
+				if (entityCtx.getChange() != null && entityCtx.getChange().<Object> getCauseLike(evt -> {
+					if (evt instanceof AbstractComponentFormat.FormatEvent //
+						&& ((AbstractComponentFormat<?>.FormatEvent) evt).getFormat() == this//
+						&& ((AbstractComponentFormat<?>.FormatEvent) evt).field == fieldIdx)
+						return evt;
+					return null;
+				}) != null)
+					return;
 				try (Transaction t = Causable.use(fieldChange[0])) {
 					F newValue = field.format.parse(fieldCtx);
 					if (entity != null && newValue != oldValue)

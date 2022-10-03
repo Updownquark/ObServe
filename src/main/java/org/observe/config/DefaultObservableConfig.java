@@ -1,5 +1,6 @@
 package org.observe.config;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Function;
@@ -13,7 +14,6 @@ import org.qommons.Identifiable;
 import org.qommons.Lockable.CoreId;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
-import org.qommons.ValueHolder;
 import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionLockingStrategy;
@@ -26,7 +26,7 @@ import org.qommons.tree.BetterTreeList;
 class DefaultObservableConfig extends AbstractObservableConfig {
 	private ElementId theParentContentRef;
 	private final CollectionLockingStrategy theLocking;
-	private ValueHolder<Causable> theRootCausable;
+	private List<Object> theCauses;
 	private String theName;
 	private String theValue;
 	private boolean mayBeTrivial;
@@ -46,7 +46,7 @@ class DefaultObservableConfig extends AbstractObservableConfig {
 	private void initialize(DefaultObservableConfig parent, ElementId parentContentRef) {
 		super.initialize(parent);
 		theParentContentRef = parentContentRef;
-		theRootCausable = parent == null ? new ValueHolder<>() : parent.theRootCausable;
+		theCauses = parent == null ? new ArrayList<>() : parent.theCauses;
 	}
 
 	@Override
@@ -111,32 +111,38 @@ class DefaultObservableConfig extends AbstractObservableConfig {
 	}
 
 	private Transaction withCause(Transaction t, Object cause) {
-		if (t == null || theRootCausable == null) // root causable can be null during initialization
+		if (getParent() != null)
+			return getParent().withCause(t, cause);
+		if (t == null || theCauses == null) // root causable can be null during initialization
 			return t;
-		boolean causeIsRoot = theRootCausable.get() == null;
-		if (causeIsRoot) {
+		if (theCauses.isEmpty()) {
+			Causable cause2;
+			Transaction causeT;
 			if (cause instanceof Causable) {
-				theRootCausable.accept((Causable) cause);
-				return () -> {
-					theRootCausable.accept(null);
-					t.close();
-				};
+				cause2 = (Causable) cause;
+				causeT = Transaction.NONE;
 			} else {
-				Causable synCause = Causable.simpleCause(cause);
-				Transaction causeT = synCause.use();
-				theRootCausable.accept(synCause);
-				return () -> {
-					causeT.close();
-					theRootCausable.accept(null);
-					t.close();
-				};
+				cause2 = Causable.simpleCause(cause);
+				causeT = Causable.use(cause2);
 			}
+			theCauses.add(cause2);
+			return Transaction.and(t, causeT, () -> theCauses.clear());
+		} else if (cause != null) {
+			theCauses.add(cause);
+			return Transaction.and(t, () -> theCauses.remove(cause));
 		} else
 			return t;
 	}
 
 	private final Object getCurrentCause() {
-		return theRootCausable == null ? null : theRootCausable.get();
+		if (theCauses == null)
+			return getParent().getCurrentCause();
+		else if (theCauses.isEmpty())
+			return null;
+		else if (theCauses.size() == 1)
+			return theCauses.get(0);
+		else
+			return Causable.simpleDelegate(theCauses.toArray());
 	}
 
 	@Override

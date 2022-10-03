@@ -150,14 +150,14 @@ public class ObservableConfigFormatSet {
 			return (ObservableConfigFormat<T>) ObservableConfigFormat.DURATION;
 		else if (raw == Instant.class)
 			return (ObservableConfigFormat<T>) ObservableConfigFormat.DATE;
-		else if (raw.isAssignableFrom(ObservableCollection.class)) {
+		else if (raw.equals(ObservableCollection.class)) {
 			String childName = StringUtils.singularize(configName);
 			ObservableConfigFormat<?> elementFormat = getConfigFormat(type.resolveType(Collection.class.getTypeParameters()[0]), childName);
 			return (ObservableConfigFormat<T>) ObservableConfigFormat.ofCollection((TypeToken<Collection<Object>>) type,
 				(ObservableConfigFormat<Object>) elementFormat, configName, childName);
-		} else if (raw.isAssignableFrom(SyncValueSet.class)) {
+		} else if (ObservableValueSet.class.isAssignableFrom(raw) && raw.isAssignableFrom(SyncValueSet.class)) {
 			String childName = StringUtils.singularize(configName);
-			TypeToken<?> elementType = type.resolveType(SyncValueSet.class.getTypeParameters()[0]);
+			TypeToken<?> elementType = type.resolveType(ObservableValueSet.class.getTypeParameters()[0]);
 			EntityConfigFormat<Object> elementFormat = (EntityConfigFormat<Object>) getEntityFormat(elementType);
 			format = (ObservableConfigFormat<T>) ObservableConfigFormat.<Object> ofEntitySet(elementFormat, childName);
 			theFormatCache.put(type, format);
