@@ -998,6 +998,8 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 
 		@Override
 		public Transaction lock(boolean write, Object cause) {
+			if (!write)
+				return Lockable.lock(getWrapped(), getWrapped()::get);
 			return Transactable.writeLockWithOwner(getWrapped(), () -> {
 				ObservableValue<? extends T> value = getWrapped().get();
 				if (value == null)
@@ -1031,6 +1033,8 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
+			if (!write)
+				return Lockable.tryLock(getWrapped(), getWrapped()::get);
 			return Transactable.tryWriteLockWithOwner(getWrapped(), () -> {
 				ObservableValue<? extends T> value = getWrapped().get();
 				if (value == null)
