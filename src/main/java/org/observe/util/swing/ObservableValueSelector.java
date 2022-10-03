@@ -452,7 +452,7 @@ public class ObservableValueSelector<T, X> extends JPanel {
 
 		theIncludeAllButton.addActionListener(evt -> {
 			selectCallbackLock[0] = true;
-			try {
+			try (Transaction t2 = theIncludedValues.lock(true, evt); Transaction t3 = theDisplayedValues.lock(false, evt)) {
 				for (SelectableValue<T, X> sv : theDisplayedValues) {
 					if (!sv.included)
 						sv.setIncluded(true);
@@ -463,7 +463,7 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		});
 		theIncludeButton.addActionListener(evt -> {
 			selectCallbackLock[0] = true;
-			try {
+			try (Transaction t2 = theIncludedValues.lock(true, evt); Transaction t3 = theDisplayedValues.lock(false, evt)) {
 				for (SelectableValue<T, X> sv : theDisplayedValues) {
 					if (sv.selected && !sv.included)
 						sv.setIncluded(true);
@@ -474,7 +474,7 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		});
 		theExcludeButton.addActionListener(evt -> {
 			selectCallbackLock[0] = true;
-			try {
+			try (Transaction t2 = theIncludedValues.lock(true, evt); Transaction t3 = theDisplayedValues.lock(false, evt)) {
 				for (SelectableValue<T, X> sv : theIncludedValues) {
 					if (sv.selected)
 						sv.setIncluded(false);
@@ -485,7 +485,7 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		});
 		theExcludeAllButton.addActionListener(evt -> {
 			selectCallbackLock[0] = true;
-			try {
+			try (Transaction t2 = theIncludedValues.lock(true, evt); Transaction t3 = theDisplayedValues.lock(false, evt)) {
 				for (SelectableValue<T, X> sv : theIncludedValues)
 					sv.setIncluded(false);
 			} finally {

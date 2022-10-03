@@ -1164,7 +1164,7 @@ public class ObservableCollectionDataFlowImpl {
 				.map(valueType, theMap)//
 				.refreshEach(LambdaUtils.printableFn(ObservableValue::noInitChanges, "noInitChanges", "ObservableValue.noInitChanges"))//
 				.transform(getTargetType(), tx -> {
-					return tx.map(LambdaUtils.printableFn(obs -> obs == null ? null : obs.get(), () -> "flatten"))
+					return tx.cache(false).map(LambdaUtils.printableFn(obs -> obs == null ? null : obs.get(), () -> "flatten"))
 						.withReverse(new RefreshingMapReverse());
 				})//
 				.manageActive();
