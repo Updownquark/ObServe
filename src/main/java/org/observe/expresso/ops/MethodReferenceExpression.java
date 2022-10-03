@@ -63,6 +63,17 @@ public class MethodReferenceExpression implements ObservableExpression {
 	}
 
 	@Override
+	public ObservableExpression replaceAll(Function<ObservableExpression, ? extends ObservableExpression> replace) {
+		ObservableExpression replacement = replace.apply(this);
+		if (replacement != this)
+			return replacement;
+		ObservableExpression ctx = theContext.replaceAll(replace);
+		if (ctx != theContext)
+			return new MethodReferenceExpression(ctx, theMethodName, theTypeArgs);
+		return this;
+	}
+
+	@Override
 	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
 		throws QonfigInterpretationException {
 		throw new QonfigInterpretationException("Not implemented");

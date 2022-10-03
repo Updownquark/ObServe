@@ -1,6 +1,7 @@
 package org.observe.expresso.ops;
 
 import java.util.List;
+import java.util.function.Function;
 
 import org.observe.ObservableAction;
 import org.observe.SettableValue;
@@ -43,6 +44,18 @@ public class AssignmentExpression implements ObservableExpression {
 	@Override
 	public List<? extends ObservableExpression> getChildren() {
 		return QommonsUtils.unmodifiableCopy(theTarget, theValue);
+	}
+
+	@Override
+	public ObservableExpression replaceAll(Function<ObservableExpression, ? extends ObservableExpression> replace) {
+		ObservableExpression replacement = replace.apply(this);
+		if (replacement != this)
+			return replacement;
+		ObservableExpression target = theTarget.replaceAll(replace);
+		ObservableExpression value = theValue.replaceAll(replace);
+		if (target != theTarget || value != theValue)
+			return new AssignmentExpression(target, value);
+		return this;
 	}
 
 	@Override

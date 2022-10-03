@@ -4,6 +4,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
 
 import org.observe.ObservableAction;
 import org.observe.ObservableValue;
@@ -15,6 +16,7 @@ import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.expresso.ops.UnaryOperatorSet.UnaryOp;
 import org.observe.util.TypeTokens;
+import org.qommons.LambdaUtils;
 import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
@@ -54,6 +56,17 @@ public class UnaryOperator implements ObservableExpression {
 	@Override
 	public List<? extends ObservableExpression> getChildren() {
 		return Collections.singletonList(theOperand);
+	}
+
+	@Override
+	public ObservableExpression replaceAll(Function<ObservableExpression, ? extends ObservableExpression> replace) {
+		ObservableExpression replacement = replace.apply(this);
+		if (replacement != this)
+			return replacement;
+		ObservableExpression op = theOperand.replaceAll(replace);
+		if (op != theOperand)
+			return new UnaryOperator(theOperator, op, isPrefix);
+		return this;
 	}
 
 	@Override
@@ -141,10 +154,11 @@ public class UnaryOperator implements ObservableExpression {
 			type = TypeTokens.get().of(operator.getTargetType());
 		else
 			throw new QonfigInterpretationException(
-				this + " cannot be evaluated as an " + ModelTypes.Action.getName() + "<" + op.getType().getType(0) + ">");
+				this + " cannot be evaluated as a " + ModelTypes.Value.getName() + "<" + op.getType().getType(0) + ">");
 		TypeToken<T> fType = type;
 		return op.map(ModelTypes.Value.forType(type), opV -> opV.transformReversible(fType, tx -> tx//
-			.map(operator::apply).withReverse(operator::reverse)));
+			.map(LambdaUtils.printableFn(operator::apply, operator::toString, operator))//
+			.withReverse(operator::reverse)));
 	}
 
 	@Override

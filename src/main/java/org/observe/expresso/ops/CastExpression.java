@@ -3,6 +3,7 @@ package org.observe.expresso.ops;
 import java.text.ParseException;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Function;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoEnv;
@@ -42,6 +43,17 @@ public class CastExpression implements ObservableExpression {
 	@Override
 	public List<? extends ObservableExpression> getChildren() {
 		return Collections.singletonList(theValue);
+	}
+
+	@Override
+	public ObservableExpression replaceAll(Function<ObservableExpression, ? extends ObservableExpression> replace) {
+		ObservableExpression replacement = replace.apply(this);
+		if (replacement != this)
+			return replacement;
+		ObservableExpression value = theValue.replaceAll(replace);
+		if (value != theValue)
+			return new CastExpression(value, theType);
+		return this;
 	}
 
 	@Override

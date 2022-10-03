@@ -1,6 +1,7 @@
 package org.observe.expresso.ops;
 
 import java.util.List;
+import java.util.function.Function;
 
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
@@ -53,6 +54,19 @@ public class ConditionalExpression implements ObservableExpression {
 	@Override
 	public List<? extends ObservableExpression> getChildren() {
 		return QommonsUtils.unmodifiableCopy(theCondition, thePrimary, theSecondary);
+	}
+
+	@Override
+	public ObservableExpression replaceAll(Function<ObservableExpression, ? extends ObservableExpression> replace) {
+		ObservableExpression replacement = replace.apply(this);
+		if (replacement != this)
+			return replacement;
+		ObservableExpression condition = theCondition.replaceAll(replace);
+		ObservableExpression primary = thePrimary.replaceAll(replace);
+		ObservableExpression secondary = theSecondary.replaceAll(replace);
+		if (condition != theCondition || primary != thePrimary || secondary != theSecondary)
+			return new ConditionalExpression(condition, primary, secondary);
+		return this;
 	}
 
 	@Override

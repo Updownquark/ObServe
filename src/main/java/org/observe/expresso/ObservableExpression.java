@@ -29,6 +29,11 @@ public interface ObservableExpression {
 		}
 
 		@Override
+		public ObservableExpression replaceAll(Function<ObservableExpression, ? extends ObservableExpression> replace) {
+			return replace.apply(this);
+		}
+
+		@Override
 		public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
 			throws QonfigInterpretationException {
 			throw new QonfigInterpretationException("Empty expression");
@@ -47,6 +52,20 @@ public interface ObservableExpression {
 	};
 
 	List<? extends ObservableExpression> getChildren();
+
+	/**
+	 * Allows replacement of this expression or one or more of its {@link #getChildren() children}. For any expression in the hierarchy:
+	 * <ol>
+	 * <li>if the function returns a different expression, that is returned. Otherwise...</li>
+	 * <li>{@link #replaceAll(Function)} is called for each child. If any of the children are replaced with something different, a new
+	 * expression of the same kind as this is returned with the children replaced. Otherwise...</li>
+	 * <li>This expression is returned</li>
+	 * </ol>
+	 * 
+	 * @param replace The function to replace expressions in this hierarchy
+	 * @return The replaced expression
+	 */
+	ObservableExpression replaceAll(Function<ObservableExpression, ? extends ObservableExpression> replace);
 
 	default <M, MV extends M> ValueContainer<M, MV> evaluate(ModelInstanceType<M, MV> type, ExpressoEnv env)
 		throws QonfigInterpretationException {
@@ -209,6 +228,11 @@ public interface ObservableExpression {
 		@Override
 		public List<? extends ObservableExpression> getChildren() {
 			return Collections.emptyList();
+		}
+
+		@Override
+		public ObservableExpression replaceAll(Function<ObservableExpression, ? extends ObservableExpression> replace) {
+			return replace.apply(this);
 		}
 
 		@Override

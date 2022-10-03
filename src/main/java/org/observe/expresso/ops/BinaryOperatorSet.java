@@ -2,6 +2,7 @@ package org.observe.expresso.ops;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.BiFunction;
@@ -66,10 +67,10 @@ public class BinaryOperatorSet {
 		 *        always reversible
 		 * @return The binary operator composed of the given functions
 		 */
-		static <S, T> BinaryOp<S, T, S> of(Class<S> type, BiFunction<? super S, ? super T, ? extends S> op,
+		static <S, T> BinaryOp<S, T, S> of(String name, Class<S> type, BiFunction<? super S, ? super T, ? extends S> op,
 			TriFunction<? super S, ? super T, ? super S, ? extends S> reverse,
 			TriFunction<? super S, ? super T, ? super S, String> reverseEnabled) {
-			return of2(type, op, reverse, reverseEnabled);
+			return of2(name, type, op, reverse, reverseEnabled);
 		}
 
 		/**
@@ -85,7 +86,7 @@ public class BinaryOperatorSet {
 		 *        always reversible
 		 * @return The binary operator composed of the given functions
 		 */
-		static <S, T, V> BinaryOp<S, T, V> of2(Class<V> type, BiFunction<? super S, ? super T, ? extends V> op,
+		static <S, T, V> BinaryOp<S, T, V> of2(String name, Class<V> type, BiFunction<? super S, ? super T, ? extends V> op,
 			TriFunction<? super S, ? super T, ? super V, ? extends S> reverse,
 			TriFunction<? super S, ? super T, ? super V, String> reverseEnabled) {
 			return new BinaryOp<S, T, V>() {
@@ -109,6 +110,11 @@ public class BinaryOperatorSet {
 				@Override
 				public S reverse(S currentSource, T other, V value) {
 					return reverse.apply(currentSource, other, value);
+				}
+
+				@Override
+				public String toString() {
+					return name;
 				}
 			};
 		}
@@ -597,96 +603,96 @@ public class BinaryOperatorSet {
 
 		// Use the same-type equality methods above to implement cross-type primitive equal comparisons
 
-		operators.withCastSecondary("==", Integer.class, Byte.class, CastOp.byteInt);
-		operators.withCastSecondary("!=", Integer.class, Byte.class, CastOp.byteInt);
-		operators.withCastSecondary("==", Integer.class, Short.class, CastOp.shortInt);
-		operators.withCastSecondary("!=", Integer.class, Short.class, CastOp.shortInt);
-		operators.withCastSecondary("==", Integer.class, Character.class, CastOp.charInt);
-		operators.withCastSecondary("!=", Integer.class, Character.class, CastOp.charInt);
-		operators.withCastPrimary("==", Integer.class, Long.class, CastOp.intLong);
-		operators.withCastPrimary("!=", Integer.class, Long.class, CastOp.intLong);
-		operators.withCastPrimary("==", Integer.class, Float.class, CastOp.intFloat);
-		operators.withCastPrimary("!=", Integer.class, Float.class, CastOp.intFloat);
-		operators.withCastPrimary("==", Integer.class, Double.class, CastOp.intDouble);
-		operators.withCastPrimary("!=", Integer.class, Double.class, CastOp.intDouble);
+		operators.withCastSecondary("==", Integer.class, Byte.class, boolean.class, CastOp.byteInt);
+		operators.withCastSecondary("!=", Integer.class, Byte.class, boolean.class, CastOp.byteInt);
+		operators.withCastSecondary("==", Integer.class, Short.class, boolean.class, CastOp.shortInt);
+		operators.withCastSecondary("!=", Integer.class, Short.class, boolean.class, CastOp.shortInt);
+		operators.withCastSecondary("==", Integer.class, Character.class, boolean.class, CastOp.charInt);
+		operators.withCastSecondary("!=", Integer.class, Character.class, boolean.class, CastOp.charInt);
+		operators.withCastPrimary("==", Integer.class, Long.class, boolean.class, CastOp.intLong);
+		operators.withCastPrimary("!=", Integer.class, Long.class, boolean.class, CastOp.intLong);
+		operators.withCastPrimary("==", Integer.class, Float.class, boolean.class, CastOp.intFloat);
+		operators.withCastPrimary("!=", Integer.class, Float.class, boolean.class, CastOp.intFloat);
+		operators.withCastPrimary("==", Integer.class, Double.class, boolean.class, CastOp.intDouble);
+		operators.withCastPrimary("!=", Integer.class, Double.class, boolean.class, CastOp.intDouble);
 
-		operators.withCastSecondary("==", Long.class, Integer.class, CastOp.intLong);
-		operators.withCastSecondary("!=", Long.class, Integer.class, CastOp.intLong);
-		operators.withCastSecondary("==", Long.class, Byte.class, CastOp.byteLong);
-		operators.withCastSecondary("!=", Long.class, Byte.class, CastOp.byteLong);
-		operators.withCastSecondary("==", Long.class, Short.class, CastOp.shortLong);
-		operators.withCastSecondary("!=", Long.class, Short.class, CastOp.shortLong);
-		operators.withCastSecondary("==", Long.class, Character.class, CastOp.charLong);
-		operators.withCastSecondary("!=", Long.class, Character.class, CastOp.charLong);
-		operators.withCastPrimary("==", Long.class, Float.class, CastOp.longFloat);
-		operators.withCastPrimary("!=", Long.class, Float.class, CastOp.longFloat);
-		operators.withCastPrimary("==", Long.class, Double.class, CastOp.longDouble);
-		operators.withCastPrimary("!=", Long.class, Double.class, CastOp.longDouble);
+		operators.withCastSecondary("==", Long.class, Integer.class, boolean.class, CastOp.intLong);
+		operators.withCastSecondary("!=", Long.class, Integer.class, boolean.class, CastOp.intLong);
+		operators.withCastSecondary("==", Long.class, Byte.class, boolean.class, CastOp.byteLong);
+		operators.withCastSecondary("!=", Long.class, Byte.class, boolean.class, CastOp.byteLong);
+		operators.withCastSecondary("==", Long.class, Short.class, boolean.class, CastOp.shortLong);
+		operators.withCastSecondary("!=", Long.class, Short.class, boolean.class, CastOp.shortLong);
+		operators.withCastSecondary("==", Long.class, Character.class, boolean.class, CastOp.charLong);
+		operators.withCastSecondary("!=", Long.class, Character.class, boolean.class, CastOp.charLong);
+		operators.withCastPrimary("==", Long.class, Float.class, boolean.class, CastOp.longFloat);
+		operators.withCastPrimary("!=", Long.class, Float.class, boolean.class, CastOp.longFloat);
+		operators.withCastPrimary("==", Long.class, Double.class, boolean.class, CastOp.longDouble);
+		operators.withCastPrimary("!=", Long.class, Double.class, boolean.class, CastOp.longDouble);
 
-		operators.withCastSecondary("==", Short.class, Byte.class, CastOp.byteShort);
-		operators.withCastSecondary("!=", Short.class, Byte.class, CastOp.byteShort);
-		operators.withCastPrimary("==", Short.class, Integer.class, CastOp.shortInt);
-		operators.withCastPrimary("!=", Short.class, Integer.class, CastOp.shortInt);
-		operators.withCastPrimary("==", Short.class, Long.class, CastOp.shortLong);
-		operators.withCastPrimary("!=", Short.class, Long.class, CastOp.shortLong);
-		operators.withCastPrimary("==", Short.class, Character.class, CastOp.shortChar);
-		operators.withCastPrimary("!=", Short.class, Character.class, CastOp.shortChar);
-		operators.withCastPrimary("==", Short.class, Float.class, CastOp.shortFloat);
-		operators.withCastPrimary("!=", Short.class, Float.class, CastOp.shortFloat);
-		operators.withCastPrimary("==", Short.class, Double.class, CastOp.shortDouble);
-		operators.withCastPrimary("!=", Short.class, Double.class, CastOp.shortDouble);
+		operators.withCastSecondary("==", Short.class, Byte.class, boolean.class, CastOp.byteShort);
+		operators.withCastSecondary("!=", Short.class, Byte.class, boolean.class, CastOp.byteShort);
+		operators.withCastPrimary("==", Short.class, Integer.class, boolean.class, CastOp.shortInt);
+		operators.withCastPrimary("!=", Short.class, Integer.class, boolean.class, CastOp.shortInt);
+		operators.withCastPrimary("==", Short.class, Long.class, boolean.class, CastOp.shortLong);
+		operators.withCastPrimary("!=", Short.class, Long.class, boolean.class, CastOp.shortLong);
+		operators.withCastPrimary("==", Short.class, Character.class, boolean.class, CastOp.shortChar);
+		operators.withCastPrimary("!=", Short.class, Character.class, boolean.class, CastOp.shortChar);
+		operators.withCastPrimary("==", Short.class, Float.class, boolean.class, CastOp.shortFloat);
+		operators.withCastPrimary("!=", Short.class, Float.class, boolean.class, CastOp.shortFloat);
+		operators.withCastPrimary("==", Short.class, Double.class, boolean.class, CastOp.shortDouble);
+		operators.withCastPrimary("!=", Short.class, Double.class, boolean.class, CastOp.shortDouble);
 
-		operators.withCastPrimary("==", Byte.class, Integer.class, CastOp.byteInt);
-		operators.withCastPrimary("!=", Byte.class, Integer.class, CastOp.byteInt);
-		operators.withCastPrimary("==", Byte.class, Short.class, CastOp.byteShort);
-		operators.withCastPrimary("!=", Byte.class, Short.class, CastOp.byteShort);
-		operators.withCastPrimary("==", Byte.class, Long.class, CastOp.byteLong);
-		operators.withCastPrimary("!=", Byte.class, Long.class, CastOp.byteLong);
-		operators.withCastPrimary("==", Byte.class, Character.class, CastOp.byteChar);
-		operators.withCastPrimary("!=", Byte.class, Character.class, CastOp.byteChar);
-		operators.withCastPrimary("==", Byte.class, Float.class, CastOp.byteFloat);
-		operators.withCastPrimary("!=", Byte.class, Float.class, CastOp.byteFloat);
-		operators.withCastPrimary("==", Byte.class, Double.class, CastOp.byteDouble);
-		operators.withCastPrimary("!=", Byte.class, Double.class, CastOp.byteDouble);
+		operators.withCastPrimary("==", Byte.class, Integer.class, boolean.class, CastOp.byteInt);
+		operators.withCastPrimary("!=", Byte.class, Integer.class, boolean.class, CastOp.byteInt);
+		operators.withCastPrimary("==", Byte.class, Short.class, boolean.class, CastOp.byteShort);
+		operators.withCastPrimary("!=", Byte.class, Short.class, boolean.class, CastOp.byteShort);
+		operators.withCastPrimary("==", Byte.class, Long.class, boolean.class, CastOp.byteLong);
+		operators.withCastPrimary("!=", Byte.class, Long.class, boolean.class, CastOp.byteLong);
+		operators.withCastPrimary("==", Byte.class, Character.class, boolean.class, CastOp.byteChar);
+		operators.withCastPrimary("!=", Byte.class, Character.class, boolean.class, CastOp.byteChar);
+		operators.withCastPrimary("==", Byte.class, Float.class, boolean.class, CastOp.byteFloat);
+		operators.withCastPrimary("!=", Byte.class, Float.class, boolean.class, CastOp.byteFloat);
+		operators.withCastPrimary("==", Byte.class, Double.class, boolean.class, CastOp.byteDouble);
+		operators.withCastPrimary("!=", Byte.class, Double.class, boolean.class, CastOp.byteDouble);
 
-		operators.withCastSecondary("==", Float.class, Long.class, CastOp.longFloat);
-		operators.withCastSecondary("!=", Float.class, Long.class, CastOp.longFloat);
-		operators.withCastSecondary("==", Float.class, Integer.class, CastOp.intFloat);
-		operators.withCastSecondary("!=", Float.class, Integer.class, CastOp.intFloat);
-		operators.withCastSecondary("==", Float.class, Short.class, CastOp.shortFloat);
-		operators.withCastSecondary("!=", Float.class, Short.class, CastOp.shortFloat);
-		operators.withCastSecondary("==", Float.class, Byte.class, CastOp.byteFloat);
-		operators.withCastSecondary("!=", Float.class, Byte.class, CastOp.byteFloat);
-		operators.withCastSecondary("==", Float.class, Character.class, CastOp.charFloat);
-		operators.withCastSecondary("!=", Float.class, Character.class, CastOp.charFloat);
-		operators.withCastPrimary("==", Float.class, Double.class, CastOp.floatDouble);
-		operators.withCastPrimary("!=", Float.class, Double.class, CastOp.floatDouble);
+		operators.withCastSecondary("==", Float.class, Long.class, boolean.class, CastOp.longFloat);
+		operators.withCastSecondary("!=", Float.class, Long.class, boolean.class, CastOp.longFloat);
+		operators.withCastSecondary("==", Float.class, Integer.class, boolean.class, CastOp.intFloat);
+		operators.withCastSecondary("!=", Float.class, Integer.class, boolean.class, CastOp.intFloat);
+		operators.withCastSecondary("==", Float.class, Short.class, boolean.class, CastOp.shortFloat);
+		operators.withCastSecondary("!=", Float.class, Short.class, boolean.class, CastOp.shortFloat);
+		operators.withCastSecondary("==", Float.class, Byte.class, boolean.class, CastOp.byteFloat);
+		operators.withCastSecondary("!=", Float.class, Byte.class, boolean.class, CastOp.byteFloat);
+		operators.withCastSecondary("==", Float.class, Character.class, boolean.class, CastOp.charFloat);
+		operators.withCastSecondary("!=", Float.class, Character.class, boolean.class, CastOp.charFloat);
+		operators.withCastPrimary("==", Float.class, Double.class, boolean.class, CastOp.floatDouble);
+		operators.withCastPrimary("!=", Float.class, Double.class, boolean.class, CastOp.floatDouble);
 
-		operators.withCastSecondary("==", Double.class, Float.class, CastOp.floatDouble);
-		operators.withCastSecondary("!=", Double.class, Float.class, CastOp.floatDouble);
-		operators.withCastSecondary("==", Double.class, Long.class, CastOp.longDouble);
-		operators.withCastSecondary("!=", Double.class, Long.class, CastOp.longDouble);
-		operators.withCastSecondary("==", Double.class, Integer.class, CastOp.intDouble);
-		operators.withCastSecondary("!=", Double.class, Integer.class, CastOp.intDouble);
-		operators.withCastSecondary("==", Double.class, Short.class, CastOp.shortDouble);
-		operators.withCastSecondary("!=", Double.class, Short.class, CastOp.shortDouble);
-		operators.withCastSecondary("==", Double.class, Byte.class, CastOp.byteDouble);
-		operators.withCastSecondary("!=", Double.class, Byte.class, CastOp.byteDouble);
-		operators.withCastSecondary("==", Double.class, Character.class, CastOp.charDouble);
-		operators.withCastSecondary("!=", Double.class, Character.class, CastOp.charDouble);
+		operators.withCastSecondary("==", Double.class, Float.class, boolean.class, CastOp.floatDouble);
+		operators.withCastSecondary("!=", Double.class, Float.class, boolean.class, CastOp.floatDouble);
+		operators.withCastSecondary("==", Double.class, Long.class, boolean.class, CastOp.longDouble);
+		operators.withCastSecondary("!=", Double.class, Long.class, boolean.class, CastOp.longDouble);
+		operators.withCastSecondary("==", Double.class, Integer.class, boolean.class, CastOp.intDouble);
+		operators.withCastSecondary("!=", Double.class, Integer.class, boolean.class, CastOp.intDouble);
+		operators.withCastSecondary("==", Double.class, Short.class, boolean.class, CastOp.shortDouble);
+		operators.withCastSecondary("!=", Double.class, Short.class, boolean.class, CastOp.shortDouble);
+		operators.withCastSecondary("==", Double.class, Byte.class, boolean.class, CastOp.byteDouble);
+		operators.withCastSecondary("!=", Double.class, Byte.class, boolean.class, CastOp.byteDouble);
+		operators.withCastSecondary("==", Double.class, Character.class, boolean.class, CastOp.charDouble);
+		operators.withCastSecondary("!=", Double.class, Character.class, boolean.class, CastOp.charDouble);
 
-		operators.withCastSecondary("==", Character.class, Byte.class, CastOp.byteChar);
-		operators.withCastSecondary("!=", Character.class, Byte.class, CastOp.byteChar);
-		operators.withCastPrimary("==", Character.class, Long.class, CastOp.charLong);
-		operators.withCastPrimary("!=", Character.class, Long.class, CastOp.charLong);
-		operators.withCastPrimary("==", Character.class, Integer.class, CastOp.charInt);
-		operators.withCastPrimary("!=", Character.class, Integer.class, CastOp.charInt);
-		operators.withCastPrimary("==", Character.class, Short.class, CastOp.charShort);
-		operators.withCastPrimary("!=", Character.class, Short.class, CastOp.charShort);
-		operators.withCastPrimary("==", Character.class, Float.class, CastOp.charFloat);
-		operators.withCastPrimary("!=", Character.class, Float.class, CastOp.charFloat);
-		operators.withCastPrimary("==", Character.class, Double.class, CastOp.charDouble);
-		operators.withCastPrimary("!=", Character.class, Double.class, CastOp.charDouble);
+		operators.withCastSecondary("==", Character.class, Byte.class, boolean.class, CastOp.byteChar);
+		operators.withCastSecondary("!=", Character.class, Byte.class, boolean.class, CastOp.byteChar);
+		operators.withCastPrimary("==", Character.class, Long.class, boolean.class, CastOp.charLong);
+		operators.withCastPrimary("!=", Character.class, Long.class, boolean.class, CastOp.charLong);
+		operators.withCastPrimary("==", Character.class, Integer.class, boolean.class, CastOp.charInt);
+		operators.withCastPrimary("!=", Character.class, Integer.class, boolean.class, CastOp.charInt);
+		operators.withCastPrimary("==", Character.class, Short.class, boolean.class, CastOp.charShort);
+		operators.withCastPrimary("!=", Character.class, Short.class, boolean.class, CastOp.charShort);
+		operators.withCastPrimary("==", Character.class, Float.class, boolean.class, CastOp.charFloat);
+		operators.withCastPrimary("!=", Character.class, Float.class, boolean.class, CastOp.charFloat);
+		operators.withCastPrimary("==", Character.class, Double.class, boolean.class, CastOp.charDouble);
+		operators.withCastPrimary("!=", Character.class, Double.class, boolean.class, CastOp.charDouble);
 
 		// Now, non-primitive equality
 		operators.with2("==", Object.class, Object.class, Boolean.class, (o1, o2) -> o1 == o2, (s, o2, r) -> {
@@ -939,9 +945,10 @@ public class BinaryOperatorSet {
 	/** A {@link BinaryOperatorSet} that configures a builder to support the standard set of Java binary operators */
 	public static final BinaryOperatorSet STANDARD_JAVA = standardJava(build()).build();
 
-	private final Map<String, ClassMap<ClassMap<BinaryOp<?, ?, ?>>>> theOperators;
+	/** Operators by name, target type, primary type, and secondary type */
+	private final Map<String, ClassMap<ClassMap<ClassMap<BinaryOp<?, ?, ?>>>>> theOperators;
 
-	private BinaryOperatorSet(Map<String, ClassMap<ClassMap<BinaryOp<?, ?, ?>>>> operators) {
+	private BinaryOperatorSet(Map<String, ClassMap<ClassMap<ClassMap<BinaryOp<?, ?, ?>>>>> operators) {
 		theOperators = operators;
 	}
 
@@ -949,9 +956,14 @@ public class BinaryOperatorSet {
 	 * @param operator The name of the operator
 	 * @return All primary input types that this operator set knows of for which the given operator may be applied
 	 */
-	public Set<Class<?>> getSupportedPrimaryInputTypes(String operator) {
-		ClassMap<ClassMap<BinaryOp<?, ?, ?>>> ops = theOperators.get(operator);
-		return ops == null ? Collections.emptySet() : ops.getTopLevelKeys();
+	public Set<Class<?>> getSupportedPrimaryInputTypes(String operator, Class<?> targetType) {
+		ClassMap<ClassMap<ClassMap<BinaryOp<?, ?, ?>>>> ops = theOperators.get(operator);
+		if (ops == null || ops.isEmpty())
+			return Collections.emptySet();
+		Set<Class<?>> primaryTypes = new LinkedHashSet<>();
+		for (ClassMap<ClassMap<BinaryOp<?, ?, ?>>> targetOps : ops.getAll(targetType, TypeMatch.SUB_TYPE))
+			primaryTypes.addAll(targetOps.getTopLevelKeys());
+		return primaryTypes;
 	}
 
 	/**
@@ -960,10 +972,16 @@ public class BinaryOperatorSet {
 	 * @return All secondary input types that this operator set knows of for which the given operator may be applied with the given primary
 	 *         input
 	 */
-	public Set<Class<?>> getSupportedSecondaryInputTypes(String operator, Class<?> primaryType) {
-		ClassMap<ClassMap<BinaryOp<?, ?, ?>>> ops = theOperators.get(operator);
-		ClassMap<BinaryOp<?, ?, ?>> ops2 = ops == null ? null : ops.get(primaryType, TypeMatch.SUPER_TYPE);
-		return ops2 == null ? Collections.emptySet() : ops2.getTopLevelKeys();
+	public Set<Class<?>> getSupportedSecondaryInputTypes(String operator, Class<?> targetType, Class<?> primaryType) {
+		ClassMap<ClassMap<ClassMap<BinaryOp<?, ?, ?>>>> ops = theOperators.get(operator);
+		if (ops == null || ops.isEmpty())
+			return Collections.emptySet();
+		Set<Class<?>> secondaryTypes = new LinkedHashSet<>();
+		for (ClassMap<ClassMap<BinaryOp<?, ?, ?>>> targetOps : ops.getAll(targetType, TypeMatch.SUB_TYPE)) {
+			for (ClassMap<BinaryOp<?, ?, ?>> ops2 : targetOps.getAll(primaryType, TypeMatch.SUPER_TYPE))
+				secondaryTypes.addAll(ops2.getTopLevelKeys());
+		}
+		return secondaryTypes;
 	}
 
 	/**
@@ -974,20 +992,30 @@ public class BinaryOperatorSet {
 	 * @param secondaryType The type of the secondary input
 	 * @return The binary operator supported by this operator set with the given operator and input types
 	 */
-	public <S, T> BinaryOp<S, T, ?> getOperator(String operator, Class<S> primaryType, Class<T> secondaryType) {
-		ClassMap<ClassMap<BinaryOp<?, ?, ?>>> ops = theOperators.get(operator);
-		ClassMap<BinaryOp<?, ?, ?>> ops2 = ops == null ? null : ops.get(primaryType, TypeMatch.SUPER_TYPE);
-		return ops2 == null ? null : (BinaryOp<S, T, ?>) ops2.get(secondaryType, TypeMatch.SUPER_TYPE);
+	public <S, T> BinaryOp<S, T, ?> getOperator(String operator, Class<?> targetType, Class<S> primaryType, Class<T> secondaryType) {
+		ClassMap<ClassMap<ClassMap<BinaryOp<?, ?, ?>>>> ops = theOperators.get(operator);
+		if (ops == null || ops.isEmpty())
+			return null;
+		for (ClassMap<ClassMap<BinaryOp<?, ?, ?>>> targetOps : ops.getAll(targetType, TypeMatch.SUB_TYPE)) {
+			for (ClassMap<BinaryOp<?, ?, ?>> ops2 : targetOps.getAll(primaryType, TypeMatch.SUPER_TYPE)) {
+				BinaryOp<?, ?, ?> op = ops2.get(secondaryType, TypeMatch.SUPER_TYPE);
+				if (op != null)
+					return (BinaryOp<S, T, ?>) op;
+			}
+		}
+		return null;
 	}
 
 	/** @return A builder pre-configured for all of this operator set's operations */
 	public Builder copy() {
 		Builder copy = build();
-		for (Map.Entry<String, ClassMap<ClassMap<BinaryOp<?, ?, ?>>>> op : theOperators.entrySet()) {
-			for (BiTuple<Class<?>, ClassMap<BinaryOp<?, ?, ?>>> op2 : op.getValue().getAllEntries()) {
-				for (BiTuple<Class<?>, BinaryOp<?, ?, ?>> op3 : op2.getValue2().getAllEntries()) {
-					copy.with(op.getKey(), (Class<Object>) op2.getValue1(), (Class<Object>) op3.getValue1(),
-						(BinaryOp<Object, Object, ?>) op3.getValue2());
+		for (Map.Entry<String, ClassMap<ClassMap<ClassMap<BinaryOp<?, ?, ?>>>>> op : theOperators.entrySet()) {
+			for (BiTuple<Class<?>, ClassMap<ClassMap<BinaryOp<?, ?, ?>>>> op2 : op.getValue().getAllEntries()) {
+				for (BiTuple<Class<?>, ClassMap<BinaryOp<?, ?, ?>>> op3 : op2.getValue2().getAllEntries()) {
+					for (BiTuple<Class<?>, BinaryOp<?, ?, ?>> op4 : op3.getValue2().getAllEntries()) {
+						copy.with(op.getKey(), (Class<Object>) op3.getValue1(), (Class<Object>) op4.getValue1(),
+							(BinaryOp<Object, Object, ?>) op4.getValue2());
+					}
 				}
 			}
 		}
@@ -1001,7 +1029,7 @@ public class BinaryOperatorSet {
 
 	/** A builder that may be configured to support various binary operations */
 	public static class Builder {
-		private final Map<String, ClassMap<ClassMap<BinaryOp<?, ?, ?>>>> theOperators;
+		private final Map<String, ClassMap<ClassMap<ClassMap<BinaryOp<?, ?, ?>>>>> theOperators;
 
 		Builder() {
 			theOperators = new LinkedHashMap<>();
@@ -1020,6 +1048,7 @@ public class BinaryOperatorSet {
 		 */
 		public <S, T> Builder with(String operator, Class<S> primary, Class<T> secondary, BinaryOp<S, T, ?> op) {
 			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>())//
+			.computeIfAbsent(op.getTargetType(), () -> new ClassMap<>())//
 			.computeIfAbsent(primary, () -> new ClassMap<>())//
 			.with(secondary, op);
 			return this;
@@ -1044,7 +1073,7 @@ public class BinaryOperatorSet {
 			BiFunction<? super S, ? super T, ? extends S> op, TriFunction<? super S, ? super T, ? super S, ? extends S> reverse,
 			TriFunction<? super S, ? super T, ? super S, String> reverseEnabled) {
 			with(operator, primary, secondary, //
-				BinaryOp.of(primary, op, reverse, reverseEnabled));
+				BinaryOp.of(operator, primary, op, reverse, reverseEnabled));
 			return this;
 		}
 
@@ -1068,8 +1097,9 @@ public class BinaryOperatorSet {
 			BiFunction<? super S, ? super T, ? extends V> op, TriFunction<? super S, ? super T, ? super V, ? extends S> reverse,
 			TriFunction<? super S, ? super T, ? super V, String> reverseEnabled) {
 			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>())//
+			.computeIfAbsent(target, () -> new ClassMap<>())//
 			.computeIfAbsent(primary, () -> new ClassMap<>())//
-			.with(secondary, BinaryOp.of2(target, op, reverse, reverseEnabled));
+				.with(secondary, BinaryOp.of2(operator, target, op, reverse, reverseEnabled));
 			return this;
 		}
 
@@ -1086,11 +1116,13 @@ public class BinaryOperatorSet {
 		 * @param cast The cast to use to convert the newly supported primary input type to that matching the operator
 		 * @return This builder
 		 */
-		public <S, T, V> Builder withCastPrimary(String operator, Class<S> primary, Class<T> secondary, CastOp<S, T> cast) {
-			BinaryOp<T, T, V> otherOp = (BinaryOp<T, T, V>) theOperators.get(operator).get(secondary, TypeMatch.EXACT).get(secondary,
-				TypeMatch.EXACT);
+		public <S, T, V> Builder withCastPrimary(String operator, Class<S> primary, Class<T> secondary, Class<V> targetType,
+			CastOp<S, T> cast) {
+			BinaryOp<T, T, V> otherOp = (BinaryOp<T, T, V>) theOperators.get(operator).get(targetType, TypeMatch.EXACT)
+				.get(secondary, TypeMatch.EXACT).get(secondary, TypeMatch.EXACT);
 			BinaryOp<S, T, V> castOp = cast.castPrimary(otherOp);
 			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>())//
+			.computeIfAbsent(targetType, () -> new ClassMap<>())//
 			.computeIfAbsent(primary, () -> new ClassMap<>())//
 			.with(secondary, castOp);
 			return this;
@@ -1109,11 +1141,13 @@ public class BinaryOperatorSet {
 		 * @param cast The cast to use to convert the newly supported secondary input type to that matching the operator
 		 * @return This builder
 		 */
-		public <S, T, V> Builder withCastSecondary(String operator, Class<S> primary, Class<T> secondary, CastOp<T, S> cast) {
-			BinaryOp<S, S, V> sourceOp = (BinaryOp<S, S, V>) theOperators.get(operator).get(primary, TypeMatch.EXACT).get(primary,
-				TypeMatch.EXACT);
+		public <S, T, V> Builder withCastSecondary(String operator, Class<S> primary, Class<T> secondary, Class<V> targetType,
+			CastOp<T, S> cast) {
+			BinaryOp<S, S, V> sourceOp = (BinaryOp<S, S, V>) theOperators.get(operator).get(targetType, TypeMatch.EXACT)
+				.get(primary, TypeMatch.EXACT).get(primary, TypeMatch.EXACT);
 			BinaryOp<S, T, V> castOp = cast.castSecondary(sourceOp);
 			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>())//
+			.computeIfAbsent(targetType, () -> new ClassMap<>())//
 			.computeIfAbsent(primary, () -> new ClassMap<>())//
 			.with(secondary, castOp);
 			return this;
@@ -1128,18 +1162,19 @@ public class BinaryOperatorSet {
 		 * @param <V> The output type
 		 * @param operator The name of the operator
 		 * @param primary The type of the primary input and of the secondary input of the pre-installed operator
-		 * @param target The output type
+		 * @param castTarget The output type
 		 * @param secondary The type of the secondary input to support
 		 * @param primaryCast The cast to use to convert the newly supported primary input type to that matching the operator
 		 * @param secondaryCast The cast to use to convert the newly supported secondary input type to that matching the operator
 		 * @return This builder
 		 */
-		public <S, T, T2, V> Builder withCastBoth(String operator, Class<S> primary, Class<T> secondary, Class<T2> target,
-			CastOp<S, T2> primaryCast, CastOp<T, T2> secondaryCast) {
-			BinaryOp<T2, T2, V> otherOp = (BinaryOp<T2, T2, V>) theOperators.get(operator).get(target, TypeMatch.EXACT).get(target,
-				TypeMatch.EXACT);
+		public <S, T, T2, V> Builder withCastBoth(String operator, Class<S> primary, Class<T> secondary, Class<T2> castTarget,
+			Class<V> opTarget, CastOp<S, T2> primaryCast, CastOp<T, T2> secondaryCast) {
+			BinaryOp<T2, T2, V> otherOp = (BinaryOp<T2, T2, V>) theOperators.get(operator).get(opTarget, TypeMatch.EXACT)
+				.get(castTarget, TypeMatch.EXACT).get(castTarget, TypeMatch.EXACT);
 			BinaryOp<S, T, V> castOp = CastOp.castBoth(otherOp, primaryCast, secondaryCast);
 			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>())//
+			.computeIfAbsent(castTarget, () -> new ClassMap<>())//
 			.computeIfAbsent(primary, () -> new ClassMap<>())//
 			.with(secondary, castOp);
 			return this;
@@ -1158,20 +1193,20 @@ public class BinaryOperatorSet {
 			TriFunction<Integer, Integer, Integer, Integer> reverse, TriFunction<Integer, Integer, Integer, String> canReverse) {
 			with(operator, Integer.class, Integer.class, op, reverse, canReverse);
 
-			withCastSecondary(operator, Integer.class, Character.class, CastOp.charInt);
-			withCastSecondary(operator, Integer.class, Byte.class, CastOp.byteInt);
-			withCastSecondary(operator, Integer.class, Short.class, CastOp.shortInt);
+			withCastSecondary(operator, Integer.class, Character.class, int.class, CastOp.charInt);
+			withCastSecondary(operator, Integer.class, Byte.class, int.class, CastOp.byteInt);
+			withCastSecondary(operator, Integer.class, Short.class, int.class, CastOp.shortInt);
 
 			// Every possible combination of byte, short, and char
-			withCastBoth(operator, Byte.class, Byte.class, Integer.class, CastOp.byteInt, CastOp.byteInt);
-			withCastBoth(operator, Short.class, Short.class, Integer.class, CastOp.shortInt, CastOp.shortInt);
-			withCastBoth(operator, Character.class, Character.class, Integer.class, CastOp.charInt, CastOp.charInt);
-			withCastBoth(operator, Byte.class, Short.class, Integer.class, CastOp.byteInt, CastOp.shortInt);
-			withCastBoth(operator, Short.class, Byte.class, Integer.class, CastOp.shortInt, CastOp.byteInt);
-			withCastBoth(operator, Byte.class, Character.class, Integer.class, CastOp.byteInt, CastOp.charInt);
-			withCastBoth(operator, Character.class, Byte.class, Integer.class, CastOp.charInt, CastOp.byteInt);
-			withCastBoth(operator, Short.class, Character.class, Integer.class, CastOp.shortInt, CastOp.charInt);
-			withCastBoth(operator, Character.class, Short.class, Integer.class, CastOp.charInt, CastOp.shortInt);
+			withCastBoth(operator, Byte.class, Byte.class, Integer.class, Integer.class, CastOp.byteInt, CastOp.byteInt);
+			withCastBoth(operator, Short.class, Short.class, Integer.class, Integer.class, CastOp.shortInt, CastOp.shortInt);
+			withCastBoth(operator, Character.class, Character.class, Integer.class, Integer.class, CastOp.charInt, CastOp.charInt);
+			withCastBoth(operator, Byte.class, Short.class, Integer.class, Integer.class, CastOp.byteInt, CastOp.shortInt);
+			withCastBoth(operator, Short.class, Byte.class, Integer.class, Integer.class, CastOp.shortInt, CastOp.byteInt);
+			withCastBoth(operator, Byte.class, Character.class, Integer.class, Integer.class, CastOp.byteInt, CastOp.charInt);
+			withCastBoth(operator, Character.class, Byte.class, Integer.class, Integer.class, CastOp.charInt, CastOp.byteInt);
+			withCastBoth(operator, Short.class, Character.class, Integer.class, Integer.class, CastOp.shortInt, CastOp.charInt);
+			withCastBoth(operator, Character.class, Short.class, Integer.class, Integer.class, CastOp.charInt, CastOp.shortInt);
 
 			return this;
 		}
@@ -1189,12 +1224,12 @@ public class BinaryOperatorSet {
 			TriFunction<Long, Long, Long, String> canReverse) {
 			with(operator, Long.class, Long.class, op, reverse, canReverse);
 
-			withCastSecondary(operator, Long.class, Character.class, CastOp.charLong);
-			withCastSecondary(operator, Long.class, Byte.class, CastOp.byteLong);
-			withCastSecondary(operator, Long.class, Short.class, CastOp.shortLong);
-			withCastSecondary(operator, Long.class, Integer.class, CastOp.intLong);
+			withCastSecondary(operator, Long.class, Character.class, long.class, CastOp.charLong);
+			withCastSecondary(operator, Long.class, Byte.class, long.class, CastOp.byteLong);
+			withCastSecondary(operator, Long.class, Short.class, long.class, CastOp.shortLong);
+			withCastSecondary(operator, Long.class, Integer.class, long.class, CastOp.intLong);
 
-			withCastPrimary(operator, Integer.class, Long.class, CastOp.intLong);
+			withCastPrimary(operator, Integer.class, Long.class, long.class, CastOp.intLong);
 
 			return this;
 		}
@@ -1212,14 +1247,14 @@ public class BinaryOperatorSet {
 			TriFunction<Float, Float, Float, Float> reverse, TriFunction<Float, Float, Float, String> canReverse) {
 			with(operator, Float.class, Float.class, op, reverse, canReverse);
 
-			withCastSecondary(operator, Float.class, Character.class, CastOp.charFloat);
-			withCastSecondary(operator, Float.class, Byte.class, CastOp.byteFloat);
-			withCastSecondary(operator, Float.class, Short.class, CastOp.shortFloat);
-			withCastSecondary(operator, Float.class, Integer.class, CastOp.intFloat);
-			withCastSecondary(operator, Float.class, Long.class, CastOp.longFloat);
+			withCastSecondary(operator, Float.class, Character.class, float.class, CastOp.charFloat);
+			withCastSecondary(operator, Float.class, Byte.class, float.class, CastOp.byteFloat);
+			withCastSecondary(operator, Float.class, Short.class, float.class, CastOp.shortFloat);
+			withCastSecondary(operator, Float.class, Integer.class, float.class, CastOp.intFloat);
+			withCastSecondary(operator, Float.class, Long.class, float.class, CastOp.longFloat);
 
-			withCastPrimary(operator, Integer.class, Float.class, CastOp.intFloat);
-			withCastPrimary(operator, Long.class, Float.class, CastOp.longFloat);
+			withCastPrimary(operator, Integer.class, Float.class, float.class, CastOp.intFloat);
+			withCastPrimary(operator, Long.class, Float.class, float.class, CastOp.longFloat);
 
 			return this;
 		}
@@ -1237,16 +1272,16 @@ public class BinaryOperatorSet {
 			TriFunction<Double, Double, Double, Double> reverse, TriFunction<Double, Double, Double, String> canReverse) {
 			with(operator, Double.class, Double.class, op, reverse, canReverse);
 
-			withCastSecondary(operator, Double.class, Character.class, CastOp.charDouble);
-			withCastSecondary(operator, Double.class, Byte.class, CastOp.byteDouble);
-			withCastSecondary(operator, Double.class, Short.class, CastOp.shortDouble);
-			withCastSecondary(operator, Double.class, Integer.class, CastOp.intDouble);
-			withCastSecondary(operator, Double.class, Long.class, CastOp.longDouble);
-			withCastSecondary(operator, Double.class, Float.class, CastOp.floatDouble);
+			withCastSecondary(operator, Double.class, Character.class, double.class, CastOp.charDouble);
+			withCastSecondary(operator, Double.class, Byte.class, double.class, CastOp.byteDouble);
+			withCastSecondary(operator, Double.class, Short.class, double.class, CastOp.shortDouble);
+			withCastSecondary(operator, Double.class, Integer.class, double.class, CastOp.intDouble);
+			withCastSecondary(operator, Double.class, Long.class, double.class, CastOp.longDouble);
+			withCastSecondary(operator, Double.class, Float.class, double.class, CastOp.floatDouble);
 
-			withCastPrimary(operator, Integer.class, Double.class, CastOp.intDouble);
-			withCastPrimary(operator, Long.class, Double.class, CastOp.longDouble);
-			withCastPrimary(operator, Float.class, Double.class, CastOp.floatDouble);
+			withCastPrimary(operator, Integer.class, Double.class, double.class, CastOp.intDouble);
+			withCastPrimary(operator, Long.class, Double.class, double.class, CastOp.longDouble);
+			withCastPrimary(operator, Float.class, Double.class, double.class, CastOp.floatDouble);
 
 			return this;
 		}
@@ -1262,20 +1297,20 @@ public class BinaryOperatorSet {
 			with2(operator, Integer.class, Integer.class, Boolean.class, op, null,
 				(s, s2, v) -> "Comparison operations cannot be reversed");
 
-			withCastSecondary(operator, Integer.class, Character.class, CastOp.charInt);
-			withCastSecondary(operator, Integer.class, Byte.class, CastOp.byteInt);
-			withCastSecondary(operator, Integer.class, Short.class, CastOp.shortInt);
+			withCastSecondary(operator, Integer.class, Character.class, boolean.class, CastOp.charInt);
+			withCastSecondary(operator, Integer.class, Byte.class, boolean.class, CastOp.byteInt);
+			withCastSecondary(operator, Integer.class, Short.class, boolean.class, CastOp.shortInt);
 
 			// Every possible combination of byte, short, and char
-			withCastBoth(operator, Byte.class, Byte.class, Integer.class, CastOp.byteInt, CastOp.byteInt);
-			withCastBoth(operator, Short.class, Short.class, Integer.class, CastOp.shortInt, CastOp.shortInt);
-			withCastBoth(operator, Character.class, Character.class, Integer.class, CastOp.charInt, CastOp.charInt);
-			withCastBoth(operator, Byte.class, Short.class, Integer.class, CastOp.byteInt, CastOp.shortInt);
-			withCastBoth(operator, Short.class, Byte.class, Integer.class, CastOp.shortInt, CastOp.byteInt);
-			withCastBoth(operator, Byte.class, Character.class, Integer.class, CastOp.byteInt, CastOp.charInt);
-			withCastBoth(operator, Character.class, Byte.class, Integer.class, CastOp.charInt, CastOp.byteInt);
-			withCastBoth(operator, Short.class, Character.class, Integer.class, CastOp.shortInt, CastOp.charInt);
-			withCastBoth(operator, Character.class, Short.class, Integer.class, CastOp.charInt, CastOp.shortInt);
+			withCastBoth(operator, Byte.class, Byte.class, Integer.class, boolean.class, CastOp.byteInt, CastOp.byteInt);
+			withCastBoth(operator, Short.class, Short.class, Integer.class, boolean.class, CastOp.shortInt, CastOp.shortInt);
+			withCastBoth(operator, Character.class, Character.class, Integer.class, boolean.class, CastOp.charInt, CastOp.charInt);
+			withCastBoth(operator, Byte.class, Short.class, Integer.class, boolean.class, CastOp.byteInt, CastOp.shortInt);
+			withCastBoth(operator, Short.class, Byte.class, Integer.class, boolean.class, CastOp.shortInt, CastOp.byteInt);
+			withCastBoth(operator, Byte.class, Character.class, Integer.class, boolean.class, CastOp.byteInt, CastOp.charInt);
+			withCastBoth(operator, Character.class, Byte.class, Integer.class, boolean.class, CastOp.charInt, CastOp.byteInt);
+			withCastBoth(operator, Short.class, Character.class, Integer.class, boolean.class, CastOp.shortInt, CastOp.charInt);
+			withCastBoth(operator, Character.class, Short.class, Integer.class, boolean.class, CastOp.charInt, CastOp.shortInt);
 
 			return this;
 		}
@@ -1290,12 +1325,12 @@ public class BinaryOperatorSet {
 		public Builder withLongComparisonOp(String operator, BiFunction<Long, Long, Boolean> op) {
 			with2(operator, Long.class, Long.class, Boolean.class, op, null, (s, s2, v) -> "Comparison operations cannot be reversed");
 
-			withCastSecondary(operator, Long.class, Character.class, CastOp.charLong);
-			withCastSecondary(operator, Long.class, Byte.class, CastOp.byteLong);
-			withCastSecondary(operator, Long.class, Short.class, CastOp.shortLong);
-			withCastSecondary(operator, Long.class, Integer.class, CastOp.intLong);
+			withCastSecondary(operator, Long.class, Character.class, boolean.class, CastOp.charLong);
+			withCastSecondary(operator, Long.class, Byte.class, boolean.class, CastOp.byteLong);
+			withCastSecondary(operator, Long.class, Short.class, boolean.class, CastOp.shortLong);
+			withCastSecondary(operator, Long.class, Integer.class, boolean.class, CastOp.intLong);
 
-			withCastPrimary(operator, Integer.class, Long.class, CastOp.intLong);
+			withCastPrimary(operator, Integer.class, Long.class, boolean.class, CastOp.intLong);
 
 			return this;
 		}
@@ -1310,14 +1345,14 @@ public class BinaryOperatorSet {
 		public Builder withFloatComparisonOp(String operator, BiFunction<Float, Float, Boolean> op) {
 			with2(operator, Float.class, Float.class, Boolean.class, op, null, (s, s2, v) -> "Comparison operations cannot be reversed");
 
-			withCastSecondary(operator, Float.class, Character.class, CastOp.charFloat);
-			withCastSecondary(operator, Float.class, Byte.class, CastOp.byteFloat);
-			withCastSecondary(operator, Float.class, Short.class, CastOp.shortFloat);
-			withCastSecondary(operator, Float.class, Integer.class, CastOp.intFloat);
-			withCastSecondary(operator, Float.class, Long.class, CastOp.longFloat);
+			withCastSecondary(operator, Float.class, Character.class, boolean.class, CastOp.charFloat);
+			withCastSecondary(operator, Float.class, Byte.class, boolean.class, CastOp.byteFloat);
+			withCastSecondary(operator, Float.class, Short.class, boolean.class, CastOp.shortFloat);
+			withCastSecondary(operator, Float.class, Integer.class, boolean.class, CastOp.intFloat);
+			withCastSecondary(operator, Float.class, Long.class, boolean.class, CastOp.longFloat);
 
-			withCastPrimary(operator, Integer.class, Float.class, CastOp.intFloat);
-			withCastPrimary(operator, Long.class, Float.class, CastOp.longFloat);
+			withCastPrimary(operator, Integer.class, Float.class, boolean.class, CastOp.intFloat);
+			withCastPrimary(operator, Long.class, Float.class, boolean.class, CastOp.longFloat);
 
 			return this;
 		}
@@ -1332,28 +1367,32 @@ public class BinaryOperatorSet {
 		public Builder withDoubleComparisonOp(String operator, BiFunction<Double, Double, Boolean> op) {
 			with2(operator, Double.class, Double.class, Boolean.class, op, null, (s, s2, v) -> "Comparison operations cannot be reversed");
 
-			withCastSecondary(operator, Double.class, Character.class, CastOp.charDouble);
-			withCastSecondary(operator, Double.class, Byte.class, CastOp.byteDouble);
-			withCastSecondary(operator, Double.class, Short.class, CastOp.shortDouble);
-			withCastSecondary(operator, Double.class, Integer.class, CastOp.intDouble);
-			withCastSecondary(operator, Double.class, Long.class, CastOp.longDouble);
-			withCastSecondary(operator, Double.class, Float.class, CastOp.floatDouble);
+			withCastSecondary(operator, Double.class, Character.class, boolean.class, CastOp.charDouble);
+			withCastSecondary(operator, Double.class, Byte.class, boolean.class, CastOp.byteDouble);
+			withCastSecondary(operator, Double.class, Short.class, boolean.class, CastOp.shortDouble);
+			withCastSecondary(operator, Double.class, Integer.class, boolean.class, CastOp.intDouble);
+			withCastSecondary(operator, Double.class, Long.class, boolean.class, CastOp.longDouble);
+			withCastSecondary(operator, Double.class, Float.class, boolean.class, CastOp.floatDouble);
 
-			withCastPrimary(operator, Integer.class, Double.class, CastOp.intDouble);
-			withCastPrimary(operator, Long.class, Double.class, CastOp.longDouble);
-			withCastPrimary(operator, Float.class, Double.class, CastOp.floatDouble);
+			withCastPrimary(operator, Integer.class, Double.class, boolean.class, CastOp.intDouble);
+			withCastPrimary(operator, Long.class, Double.class, boolean.class, CastOp.longDouble);
+			withCastPrimary(operator, Float.class, Double.class, boolean.class, CastOp.floatDouble);
 
 			return this;
 		}
 
 		/** @return A binary operator set with the support installed in this builder */
 		public BinaryOperatorSet build() {
-			Map<String, ClassMap<ClassMap<BinaryOp<?, ?, ?>>>> operators = new LinkedHashMap<>();
-			for (Map.Entry<String, ClassMap<ClassMap<BinaryOp<?, ?, ?>>>> op : theOperators.entrySet()) {
-				ClassMap<ClassMap<BinaryOp<?, ?, ?>>> ops = new ClassMap<>();
+			Map<String, ClassMap<ClassMap<ClassMap<BinaryOp<?, ?, ?>>>>> operators = new LinkedHashMap<>();
+			for (Map.Entry<String, ClassMap<ClassMap<ClassMap<BinaryOp<?, ?, ?>>>>> op : theOperators.entrySet()) {
+				ClassMap<ClassMap<ClassMap<BinaryOp<?, ?, ?>>>> ops = new ClassMap<>();
 				operators.put(op.getKey(), ops);
-				for (BiTuple<Class<?>, ClassMap<BinaryOp<?, ?, ?>>> op2 : op.getValue().getAllEntries())
-					ops.with(op2.getValue1(), op2.getValue2().copy());
+				for (BiTuple<Class<?>, ClassMap<ClassMap<BinaryOp<?, ?, ?>>>> op2 : op.getValue().getAllEntries()) {
+					ClassMap<ClassMap<BinaryOp<?, ?, ?>>> ops2 = new ClassMap<>();
+					ops.put(op2.getValue1(), ops2);
+					for (BiTuple<Class<?>, ClassMap<BinaryOp<?, ?, ?>>> op3 : op2.getValue2().getAllEntries())
+						ops2.with(op3.getValue1(), op3.getValue2().copy());
+				}
 			}
 			return new BinaryOperatorSet(operators);
 		}

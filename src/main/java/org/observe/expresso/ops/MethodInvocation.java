@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Function;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoEnv;
@@ -56,6 +57,25 @@ public class MethodInvocation extends Invocation {
 			children.add(theContext);
 		children.addAll(getArguments());
 		return Collections.unmodifiableList(children);
+	}
+
+	@Override
+	public ObservableExpression replaceAll(Function<ObservableExpression, ? extends ObservableExpression> replace) {
+		ObservableExpression replacement = replace.apply(this);
+		if (replacement != this)
+			return replacement;
+		ObservableExpression ctx = theContext == null ? null : theContext.replaceAll(replace);
+		List<? extends ObservableExpression> children = getChildren();
+		List<ObservableExpression> newChildren = new ArrayList<>(children.size());
+		boolean different = ctx != theContext;
+		for (ObservableExpression child : children) {
+			ObservableExpression newChild = child.replaceAll(replace);
+			newChildren.add(newChild);
+			different |= newChild != child;
+		}
+		if (different)
+			return new MethodInvocation(ctx, theMethodName, getTypeArguments(), Collections.unmodifiableList(newChildren));
+		return this;
 	}
 
 	@Override

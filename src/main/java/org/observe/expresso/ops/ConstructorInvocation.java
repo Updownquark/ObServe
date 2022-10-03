@@ -1,8 +1,11 @@
 package org.observe.expresso.ops;
 
 import java.lang.reflect.Constructor;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.function.Function;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoEnv;
@@ -36,6 +39,24 @@ public class ConstructorInvocation extends Invocation {
 	@Override
 	public List<? extends ObservableExpression> getChildren() {
 		return getArguments();
+	}
+
+	@Override
+	public ObservableExpression replaceAll(Function<ObservableExpression, ? extends ObservableExpression> replace) {
+		ObservableExpression replacement = replace.apply(this);
+		if (replacement != this)
+			return replacement;
+		List<? extends ObservableExpression> children = getChildren();
+		List<ObservableExpression> newChildren = new ArrayList<>(children.size());
+		boolean different = false;
+		for (ObservableExpression child : children) {
+			ObservableExpression newChild = child.replaceAll(replace);
+			newChildren.add(newChild);
+			different |= newChild != child;
+		}
+		if (different)
+			return new ConstructorInvocation(getType(), getTypeArguments(), Collections.unmodifiableList(newChildren));
+		return this;
 	}
 
 	@Override

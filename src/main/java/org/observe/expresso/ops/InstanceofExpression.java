@@ -3,6 +3,7 @@ package org.observe.expresso.ops;
 import java.text.ParseException;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Function;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoEnv;
@@ -42,6 +43,17 @@ public class InstanceofExpression implements ObservableExpression {
 	@Override
 	public List<? extends ObservableExpression> getChildren() {
 		return Collections.singletonList(theLeft);
+	}
+
+	@Override
+	public ObservableExpression replaceAll(Function<ObservableExpression, ? extends ObservableExpression> replace) {
+		ObservableExpression replacement = replace.apply(this);
+		if (replacement != this)
+			return replacement;
+		ObservableExpression left = theLeft.replaceAll(replace);
+		if (left != theLeft)
+			return new InstanceofExpression(left, theType);
+		return this;
 	}
 
 	@Override

@@ -3,6 +3,7 @@ package org.observe.expresso.ops;
 import java.text.ParseException;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Function;
 
 import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ModelType.ModelInstanceType;
@@ -32,6 +33,11 @@ public class ClassInstanceExpression implements ObservableExpression {
 	@Override
 	public List<? extends ObservableExpression> getChildren() {
 		return Collections.emptyList();
+	}
+
+	@Override
+	public ObservableExpression replaceAll(Function<ObservableExpression, ? extends ObservableExpression> replace) {
+		return replace.apply(this);
 	}
 
 	@Override

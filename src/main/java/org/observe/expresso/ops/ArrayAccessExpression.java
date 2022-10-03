@@ -3,6 +3,7 @@ package org.observe.expresso.ops;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Function;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoEnv;
@@ -43,6 +44,18 @@ public class ArrayAccessExpression implements ObservableExpression {
 	@Override
 	public List<? extends ObservableExpression> getChildren() {
 		return Collections.unmodifiableList(Arrays.asList(theArray, theIndex));
+	}
+
+	@Override
+	public ObservableExpression replaceAll(Function<ObservableExpression, ? extends ObservableExpression> replace) {
+		ObservableExpression replacement = replace.apply(this);
+		if (replacement != this)
+			return replacement;
+		ObservableExpression array = theArray.replaceAll(replace);
+		ObservableExpression index = theIndex.replaceAll(replace);
+		if (array != theArray || index != theIndex)
+			return new ArrayAccessExpression(array, index);
+		return this;
 	}
 
 	@Override

@@ -2,6 +2,7 @@ package org.observe.expresso.ops;
 
 import java.util.List;
 import java.util.Set;
+import java.util.function.Function;
 
 import org.observe.ObservableAction;
 import org.observe.ObservableValue;
@@ -17,6 +18,7 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.expresso.ops.BinaryOperatorSet.BinaryOp;
 import org.observe.util.TypeTokens;
+import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -60,8 +62,24 @@ public class BinaryOperator implements ObservableExpression {
 	}
 
 	@Override
+	public ObservableExpression replaceAll(Function<ObservableExpression, ? extends ObservableExpression> replace) {
+		ObservableExpression replacement = replace.apply(this);
+		if (replacement != this)
+			return replacement;
+		ObservableExpression left = theLeft.replaceAll(replace);
+		ObservableExpression right = theRight.replaceAll(replace);
+		if (left != theLeft || right != theRight)
+			return new BinaryOperator(theOperator, left, right);
+		return this;
+	}
+
+	@Override
 	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
 		throws QonfigInterpretationException {
+		if (type.getModelType() == ModelTypes.Action) {//
+		} else if (type.getModelType() == ModelTypes.Value) {//
+		} else
+			throw new QonfigInterpretationException("Binary operator " + theOperator + " can only be evaluated as a value or an action");
 		boolean action = theOperator.charAt(theOperator.length() - 1) == '=';
 		if (action) {
 			switch (theOperator) {
@@ -74,7 +92,8 @@ public class BinaryOperator implements ObservableExpression {
 			}
 		}
 		String operator = action ? theOperator.substring(0, theOperator.length() - 1) : theOperator;
-		Set<Class<?>> types = env.getBinaryOperators().getSupportedPrimaryInputTypes(operator);
+		Class<?> targetType = TypeTokens.getRawType(type.getType(0));
+		Set<Class<?>> types = env.getBinaryOperators().getSupportedPrimaryInputTypes(operator, targetType);
 		TypeToken<?> targetOpType;
 		switch (types.size()) {
 		case 0:
@@ -88,7 +107,7 @@ public class BinaryOperator implements ObservableExpression {
 		}
 		ValueContainer<SettableValue<?>, ? extends SettableValue<?>> left = theLeft.evaluate(ModelTypes.Value.forType(targetOpType), env);
 		Class<?> leftType = TypeTokens.getRawType(left.getType().getType(0));
-		types = env.getBinaryOperators().getSupportedSecondaryInputTypes(operator, leftType);
+		types = env.getBinaryOperators().getSupportedSecondaryInputTypes(operator, targetType, leftType);
 		switch (types.size()) {
 		case 0:
 			throw new QonfigInterpretationException(
@@ -101,8 +120,8 @@ public class BinaryOperator implements ObservableExpression {
 			break;
 		}
 		ValueContainer<SettableValue<?>, ? extends SettableValue<?>> right = theRight.evaluate(ModelTypes.Value.forType(targetOpType), env);
-		BinaryOp<Object, Object, Object> op = (BinaryOp<Object, Object, Object>) env.getBinaryOperators().getOperator(operator, leftType, //
-			TypeTokens.getRawType(right.getType().getType(0)));
+		BinaryOp<Object, Object, Object> op = (BinaryOp<Object, Object, Object>) env.getBinaryOperators().getOperator(operator, targetType, //
+			leftType, TypeTokens.getRawType(right.getType().getType(0)));
 		if (op == null)
 			throw new QonfigInterpretationException(
 				"Binary operator '" + theOperator + "' is not supported or implemented for operand types " + left.getType().getType(0)
@@ -182,7 +201,7 @@ public class BinaryOperator implements ObservableExpression {
 					SettableValue<Object> leftV = (SettableValue<Object>) left.get(msi);
 					SettableValue<Object> rightV = (SettableValue<Object>) right.get(msi);
 					return leftV.transformReversible(resultType, tx -> tx.combineWith(rightV)//
-						.combine((lft, rgt) -> op.apply(lft, rgt))//
+						.combine(LambdaUtils.printableBiFn((lft, rgt) -> op.apply(lft, rgt), op::toString, op))//
 						.withReverse(new Transformation.TransformReverse<Object, Object>() {
 							@Override
 							public boolean isStateful() {

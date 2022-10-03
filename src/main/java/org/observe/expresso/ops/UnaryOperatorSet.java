@@ -51,8 +51,9 @@ public class UnaryOperatorSet {
 		 * @param reverse The function to use for {@link UnaryOp#reverse(Object)}
 		 * @return The unary operator composed of the given functions
 		 */
-		static <T> UnaryOp<T, T> of(Class<T> type, Function<? super T, ? extends T> op, Function<? super T, ? extends T> reverse) {
-			return of2(type, op, reverse);
+		static <T> UnaryOp<T, T> of(String name, Class<T> type, Function<? super T, ? extends T> op,
+			Function<? super T, ? extends T> reverse) {
+			return of2(name, type, op, reverse);
 		}
 
 		/**
@@ -63,8 +64,8 @@ public class UnaryOperatorSet {
 		 * @param op The function to use for {@link UnaryOp#apply(Object)} and {@link UnaryOp#reverse(Object)}
 		 * @return The unary operator composed of the given function
 		 */
-		static <T> UnaryOp<T, T> ofSym(Class<T> type, Function<T, T> op) {
-			return of2(type, op, op);
+		static <T> UnaryOp<T, T> ofSym(String name, Class<T> type, Function<T, T> op) {
+			return of2(name, type, op, op);
 		}
 
 		/**
@@ -77,7 +78,8 @@ public class UnaryOperatorSet {
 		 * @param reverse The function to use for {@link UnaryOp#reverse(Object)}
 		 * @return The unary operator composed of the given functions
 		 */
-		static <S, T> UnaryOp<S, T> of2(Class<T> type, Function<? super S, ? extends T> op, Function<? super T, ? extends S> reverse) {
+		static <S, T> UnaryOp<S, T> of2(String name, Class<T> type, Function<? super S, ? extends T> op,
+			Function<? super T, ? extends S> reverse) {
 			return new UnaryOp<S, T>() {
 				@Override
 				public Class<T> getTargetType() {
@@ -98,6 +100,11 @@ public class UnaryOperatorSet {
 				public S reverse(T value) {
 					return reverse.apply(value);
 				}
+
+				@Override
+				public String toString() {
+					return name;
+				}
 			};
 		}
 
@@ -106,7 +113,7 @@ public class UnaryOperatorSet {
 		 * @param type The type of the input and output
 		 * @return A unary operator whose output is the same as the input
 		 */
-		static <T> UnaryOp<T, T> identity(Class<T> type) {
+		static <T> UnaryOp<T, T> identity(String name, Class<T> type) {
 			return new UnaryOp<T, T>() {
 				@Override
 				public Class<T> getTargetType() {
@@ -126,6 +133,11 @@ public class UnaryOperatorSet {
 				@Override
 				public T reverse(T value) {
 					return value;
+				}
+
+				@Override
+				public String toString() {
+					return name;
 				}
 			};
 		}
@@ -307,7 +319,7 @@ public class UnaryOperatorSet {
 		public <T> Builder with(String operator, Class<T> type, Function<? super T, ? extends T> op,
 			Function<? super T, ? extends T> reverse) {
 			return with(operator, type, //
-				UnaryOp.of(type, op, reverse));
+				UnaryOp.of(operator, type, op, reverse));
 		}
 
 		/**
@@ -325,7 +337,7 @@ public class UnaryOperatorSet {
 		 */
 		public <S, T> Builder with2(String operator, Class<S> source, Class<T> target, Function<? super S, ? extends T> op,
 			Function<? super T, ? extends S> reverse) {
-			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>()).with(source, UnaryOp.of2(target, op, reverse));
+			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>()).with(source, UnaryOp.of2(operator, target, op, reverse));
 			return this;
 		}
 
@@ -340,7 +352,7 @@ public class UnaryOperatorSet {
 		 * @return This builder
 		 */
 		public <T> Builder withSymmetric(String operator, Class<T> type, Function<T, T> op) {
-			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>()).with(type, UnaryOp.ofSym(type, op));
+			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>()).with(type, UnaryOp.ofSym(operator, type, op));
 			return this;
 		}
 
@@ -353,7 +365,7 @@ public class UnaryOperatorSet {
 		 * @return This builder
 		 */
 		public <T> Builder withIdentity(String operator, Class<T> type) {
-			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>()).with(type, UnaryOp.identity(type));
+			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>()).with(type, UnaryOp.identity(operator, type));
 			return this;
 		}
 

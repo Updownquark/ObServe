@@ -48,6 +48,17 @@ public class LambdaExpression implements ObservableExpression {
 	}
 
 	@Override
+	public ObservableExpression replaceAll(Function<ObservableExpression, ? extends ObservableExpression> replace) {
+		ObservableExpression replacement = replace.apply(this);
+		if (replacement != this)
+			return replacement;
+		ObservableExpression body = theBody.replaceAll(replace);
+		if (body != theBody)
+			return new LambdaExpression(theParameters, body);
+		return this;
+	}
+
+	@Override
 	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
 		throws QonfigInterpretationException {
 		throw new QonfigInterpretationException("Not yet implemented");

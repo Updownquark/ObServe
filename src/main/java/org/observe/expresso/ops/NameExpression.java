@@ -62,6 +62,17 @@ public class NameExpression implements ObservableExpression {
 		return theContext == null ? Collections.emptyList() : QommonsUtils.unmodifiableCopy(theContext);
 	}
 
+	@Override
+	public ObservableExpression replaceAll(Function<ObservableExpression, ? extends ObservableExpression> replace) {
+		ObservableExpression replacement = replace.apply(this);
+		if (replacement != this)
+			return replacement;
+		ObservableExpression ctx = theContext == null ? null : theContext.replaceAll(replace);
+		if (ctx != theContext)
+			return new NameExpression(ctx, theNames);
+		return this;
+	}
+
 	/* Order of operations:
 	 * Model value
 	 * Statically-imported variable
