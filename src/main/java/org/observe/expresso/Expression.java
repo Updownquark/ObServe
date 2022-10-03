@@ -46,6 +46,21 @@ public interface Expression {
 		}
 
 		/**
+		 * @param errorOffset The start index of the error
+		 * @param endIndex The end index of the error
+		 * @param type The token type of the error
+		 * @param text The text content that is the source of the error
+		 * @param message The message for the exception
+		 * @param cause The cause of the exception
+		 */
+		public ExpressoParseException(int errorOffset, int endIndex, String type, String text, String message, Throwable cause) {
+			super(message + " ( " + text + ", type " + type + " ) at position " + errorOffset, errorOffset);
+			theEndIndex = endIndex;
+			theType = type;
+			theText = text;
+		}
+
+		/**
 		 * @param exp The expression
 		 * @param message The message for the exception
 		 */
@@ -153,8 +168,12 @@ public interface Expression {
 			walker.walk(compiler, expression);
 		} catch (ExpressoAntlrCompiler.InternalExpressoErrorException e) {
 			String displayType = parser.getVocabulary().getDisplayName(e.token.getType());
-			throw new ExpressoParseException(e.token.getStartIndex(), e.token.getStopIndex(), displayType, e.token.getText(),
-				e.getMessage());
+			if (e.getCause() != null && e.getCause() != e)
+				throw new ExpressoParseException(e.token.getStartIndex(), e.token.getStopIndex(), displayType, e.token.getText(),
+					e.getMessage(), e.getCause());
+			else
+				throw new ExpressoParseException(e.token.getStartIndex(), e.token.getStopIndex(), displayType, e.token.getText(),
+					e.getMessage());
 		}
 		return compiler.getRoot();
 	}
@@ -588,6 +607,11 @@ public interface Expression {
 				super(token.toString());
 				this.token = token;
 			}
+
+			public InternalExpressoErrorException(Token token, Throwable cause) {
+				super(cause);
+				this.token = token;
+			}
 		}
 
 		private final Parser theParser;
@@ -605,6 +629,8 @@ public interface Expression {
 
 		@Override
 		public void enterEveryRule(ParserRuleContext arg0) {
+			if (arg0.exception != null)
+				throw new InternalExpressoErrorException(arg0.start);
 			String ruleName = theParser.getRuleNames()[arg0.getRuleIndex()];
 			int childCount = arg0.getChildCount();
 
