@@ -1965,7 +1965,8 @@ public interface ObservableConfigFormat<E> {
 				if (c != null && "true".equalsIgnoreCase(c.get("null")))
 					return null;
 				else if (ctx.getPreviousValue() == null) {
-					return createInstance(ctx, theFields.keySet().createMap().fill(ConfigurableValueCreator.NOT_SET));
+					return createInstance(ctx, //
+						theFields.keySet().createMap().fill(ConfigurableValueCreator.NOT_SET));
 				} else {
 					EntitySubFormat<? extends E> subFormat = formatFor(c);
 					if (subFormat != null) {
@@ -2333,8 +2334,10 @@ public interface ObservableConfigFormat<E> {
 						return 0;
 					else if (getFields().get(fieldIndex).childName == null)
 						return config.getStamp();
-					else
-						return config.getChild(getFields().get(fieldIndex).childName, true, null).getStamp();
+					else {
+						ObservableConfig child = config.getChild(getFields().get(fieldIndex).childName, false, null);
+						return child == null ? 0 : child.getStamp();
+					}
 				}
 
 				@Override

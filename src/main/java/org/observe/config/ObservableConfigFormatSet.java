@@ -156,7 +156,9 @@ public class ObservableConfigFormatSet {
 			return (ObservableConfigFormat<T>) ObservableConfigFormat.ofCollection((TypeToken<Collection<Object>>) type,
 				(ObservableConfigFormat<Object>) elementFormat, configName, childName);
 		} else if (ObservableValueSet.class.isAssignableFrom(raw) && raw.isAssignableFrom(SyncValueSet.class)) {
-			String childName = StringUtils.singularize(configName);
+			String childName = StringUtils
+				.parseByCase(TypeTokens.getSimpleName(type.resolveType(ObservableValueSet.class.getTypeParameters()[0])), true)
+				.toKebabCase();
 			TypeToken<?> elementType = type.resolveType(ObservableValueSet.class.getTypeParameters()[0]);
 			EntityConfigFormat<Object> elementFormat = (EntityConfigFormat<Object>) getEntityFormat(elementType);
 			format = (ObservableConfigFormat<T>) ObservableConfigFormat.<Object> ofEntitySet(elementFormat, childName);
