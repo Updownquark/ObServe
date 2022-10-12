@@ -1,5 +1,8 @@
 package org.observe.expresso;
 
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -46,10 +49,27 @@ public class JavaExpressoParser implements ExpressoParser {
 	public ObservableExpression parse(String text) throws ExpressoParseException {
 		if (text.trim().isEmpty())
 			return ObservableExpression.EMPTY;
-		ExpressoAntlrLexer lexer = new ExpressoAntlrLexer(CharStreams.fromString(text));
-		CommonTokenStream tokens = new CommonTokenStream(lexer);
-		ExpressoAntlrParser parser = new ExpressoAntlrParser(tokens);
-		ParseTree result = parser.expressionFull();
+		// The ANTLR system writes to standard err in the background, so we have to deliberately ignore it
+		PrintStream oldErr = System.err;
+		System.setErr(new PrintStream(new OutputStream() {
+			@Override
+			public void write(int b) throws IOException {
+			}
+
+			@Override
+			public void write(byte[] b, int off, int len) throws IOException {
+			}
+		}));
+		ExpressoAntlrParser parser;
+		ParseTree result;
+		try {
+			ExpressoAntlrLexer lexer = new ExpressoAntlrLexer(CharStreams.fromString(text));
+			CommonTokenStream tokens = new CommonTokenStream(lexer);
+			parser = new ExpressoAntlrParser(tokens);
+			result = parser.expressionFull();
+		} finally {
+			System.setErr(oldErr);
+		}
 		Expression parsed = Expression.of(parser, result);
 		return _parse(parsed);
 	}
